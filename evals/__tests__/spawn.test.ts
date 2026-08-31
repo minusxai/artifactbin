@@ -1,0 +1,94 @@
+/**
+ * The spawn wrapper keeps a harness's stdout — which is also the eval's
+ * transcript. A streaming harness can emit hundreds of megabytes of partial
+ * events (Pi's `message_update` carries the WHOLE message on every token, so a
+ * long document is quadratic: one real run produced a 541 MB transcript and
+ * died with EPIPE), so lines are filtered as they arrive and the retained
+ * buffer is capped.
+ */
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { runInvocation } from '../lib/spawn';
+
+let dir: string;
+const paths = () => ({ stdoutPath: path.join(dir, 'transcript.jsonl'), stderrPath: path.join(dir, 'stderr.log') });
+beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'eval-spawn-')); });
+afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
+
+const node = (script: string) => ({ argv: ['node', '-e', script], env: {}, unsetEnv: [] });
+
+describe('runInvocation', () => {
+  it('captures stdout to the transcript and returns it', async () => {
+    const r = await runInvocation(node('console.log("a");console.log("b")'), { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toBe('a\nb\n');
+    expect(fs.readFileSync(paths().stdoutPath, 'utf8')).toBe('a\nb\n');
+    expect(r.timedOut).toBe(false);
+  });
+
+  it('applies the adapter\'s line filter — dropped lines reach neither memory nor the transcript', async () => {
+    const script = 'for (let i=0;i<3;i++){console.log(JSON.stringify({type:"noise",big:"x".repeat(50)}));console.log(JSON.stringify({type:"keep",i}))}';
+    const keepLine = (line: string) => !line.includes('"noise"');
+    const r = await runInvocation({ ...node(script), keepLine }, { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
+    expect(r.stdout.split('\n').filter(Boolean)).toHaveLength(3);
+    expect(r.stdout).not.toContain('noise');
+    expect(fs.readFileSync(paths().stdoutPath, 'utf8')).not.toContain('noise');
+  });
+
+  it('filters across chunk boundaries — a line split by the OS is still judged whole', async () => {
+    const script = 'process.stdout.write(\'{"type":"noise"}\\n{"type":"ke\');setTimeout(()=>process.stdout.write(\'ep"}\\n\'),20)';
+    const r = await runInvocation({ ...node(script), keepLine: (l) => !l.includes('noise') }, { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
+    expect(r.stdout.trim()).toBe('{"type":"keep"}');
+  });
+
+  it('caps the retained transcript and says so, rather than growing until the process dies', async () => {
+    const script = 'for(let i=0;i<200;i++)console.log("y".repeat(1000))';
+    const r = await runInvocation(node(script), { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, maxStdoutBytes: 10_000, ...paths() });
+    expect(r.stdout.length).toBeLessThanOrEqual(11_000);
+    expect(r.truncated).toBe(true);
+  });
+
+  it('reports a timeout instead of hanging, and does not throw on a non-zero exit', async () => {
+    const slow = await runInvocation(node('setTimeout(()=>{},60000)'), { cwd: dir, baseEnv: process.env, timeoutMs: 700, ...paths() });
+    expect(slow.timedOut).toBe(true);
+    const bad = await runInvocation(node('process.exit(3)'), { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
+    expect(bad.exitCode).toBe(3);
+  });
+});
+
+describe('secret redaction', () => {
+  /**
+   * The provider key is handed to the harness through its environment, and the
+   * harness's stdout becomes a TRANSCRIPT ON DISK that CI uploads as an
+   * artifact. A harness that echoes its environment — a debug flag, a crash
+   * dump, an agent running `env` — would put the key in that artifact. Nothing
+   * the driver writes may contain it.
+   */
+  it('redacts the key from the transcript and from the returned output', async () => {
+    const script = 'console.log("using key sk-secret-value-123 to authenticate")';
+    const r = await runInvocation({ ...node(script), redact: ['sk-secret-value-123'] }, { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
+    expect(r.stdout).not.toContain('sk-secret-value-123');
+    expect(r.stdout).toContain('***');
+    expect(fs.readFileSync(paths().stdoutPath, 'utf8')).not.toContain('sk-secret-value-123');
+  });
+
+  it('redacts from stderr too — a crash dump is where an environment usually lands', async () => {
+    const script = 'console.error("FATAL: env FIREWORKS_API_KEY=fw-abc-987 rejected")';
+    const r = await runInvocation({ ...node(script), redact: ['fw-abc-987'] }, { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
+    expect(fs.readFileSync(paths().stderrPath, 'utf8')).not.toContain('fw-abc-987');
+  });
+
+  it('redacts a key split across two chunks, and ignores empty secrets', async () => {
+    const script = 'process.stdout.write("head sk-sec");setTimeout(()=>process.stdout.write("ret-tail done\\n"),20)';
+    const r = await runInvocation({ ...node(script), redact: ['sk-secret-tail', ''] }, { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
+    expect(r.stdout).not.toContain('sk-secret-tail');
+    expect(r.stdout).toContain('***');
+  });
+
+  it('leaves output alone when there is nothing to redact', async () => {
+    const r = await runInvocation(node('console.log("plain")'), { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
+    expect(r.stdout).toBe('plain\n');
+  });
+});

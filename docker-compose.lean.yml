@@ -1,0 +1,225 @@
+# THE SPLIT SHAPE ON ONE HOST — four lean images behind one proxy.
+#
+# Where docker-compose.yml is the self-host default (the FULL image + Postgres,
+# one container that carries its own engine and browser), this is the shape a
+# deployment composes when it wants them apart: the proxy is the only published
+# port and the only process with an identity surface; the app holds the
+# document tree and reaches DuckDB and Chromium over service URLs; the sql and
+# browser images are the other two phases of the same repo, built from the
+# same commit — a service image built elsewhere is a second dependency tree.
+#
+#   docker compose -f docker-compose.lean.yml up -d
+#   → http://localhost:5440
+#
+# Everything a deployer must choose lives in the committed examples under
+# infra/env/ (copied per service by `env_file`); secrets come from a .env
+# beside this file (compose reads it for the ${} below). Container-to-container
+# URLs appear ONLY in `environment:` below — they name compose services and
+# can never be pointed somewhere else by a copy-pasted env file.
+#
+# The mail seam for login: EMAIL__RESEND_BASE_URL on the PROXY (from .env),
+# with `host.docker.internal` mapped by extra_hosts — a local mail sink on the
+# host (a gate's, or scripts/lib/mail-relay.mjs) is how a login code is read
+# without real Resend. CI's compose walk does not log in and needs none.
+services:
+  proxy:
+    build:
+      context: .
+      dockerfile: services/proxy/Dockerfile
+    image: artifact-bin-lean-proxy
+    restart: unless-stopped
+    networks: [edge, compute, db]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev"]
+    # The ONLY published port: everything a reader, an author or an agent
+    # reaches goes through the proxy — identity, the doors, one forwarder.
+    ports:
+      - "127.0.0.1:${LEAN_PROXY_PORT:-5440}:3000"
+    env_file:
+      - infra/env/proxy.env.example
+    environment:
+      # Container-to-container URLs — compose service names, never editable
+      # from an env file.
+      APP__UPSTREAM_URL: http://app:3000
+      # Signs the actor header on the hop to the app; the app verifies it as
+      # its own AUTH__SECRET (see the app service below) — one value, two
+      # spellings, because the two processes read it under their own name.
+      CONTRACT__ACTOR_SECRET: ${CONTRACT__ACTOR_SECRET:?Set CONTRACT__ACTOR_SECRET in .env}
+      AUTH__SECRET: ${AUTH__SECRET:?Set AUTH__SECRET in .env}
+      # Where the app's tables live (the deployment truth: schema `app`,
+      # created at the postgres volume's first init, the app's DDL pointed at
+      # it by its DATABASE_URL) — the token reader reads `app.tokens`.
+      APP__SCHEMA: app
+      DATABASE_URL: postgresql://artifact_bin:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/artifact_bin
+      # The mailer: real Resend by default (infra/env/proxy.env.example); a
+      # local sink on the host is how gates read login codes — hence the
+      # extra_hosts mapping below.
+      EMAIL__RESEND_API_KEY: ${EMAIL__RESEND_API_KEY:-}
+      EMAIL__RESEND_BASE_URL: ${EMAIL__RESEND_BASE_URL:-}
+      EMAIL__FROM: ${EMAIL__FROM:-artifact-bin <login@example.com>}
+    extra_hosts:
+      # So EMAIL__RESEND_BASE_URL can name a sink ON THE HOST (a gate's, or
+      # scripts/lib/mail-relay.mjs) — without this the login gates cannot see
+      # the mail the proxy sends.
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      app:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  app:
+    build:
+      context: .
+      dockerfile: services/app/Dockerfile
+    # The browser NAVIGATES an origin that names this container: a bare `app`
+    # host dies on Chromium's HSTS preload of the .app TLD — the alias is immune.
+    networks:
+      compute:
+        aliases: [artifactbin-app]
+      db: {}
+      # Web imports, webfonts and a remote object store need outbound access;
+      # no other compute service joins this unprivileged egress network.
+      egress: {}
+    image: artifact-bin-lean-app
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev"]
+    # No ports at all: the proxy is the only way in.
+    env_file:
+      - infra/env/app.env.example
+    environment:
+      # The lean entry's own rule: this image carries no engine and no
+      # browser, and REFUSES to boot without both URLs naming them.
+      SQL__SERVICE_URL: http://sql:8080
+      BROWSER__SERVICE_URL: http://browser:8080
+      # The browser service renders app URLs — from inside the compose
+      # network, the app's own address is its service name, never the proxy's
+      # published port.
+      EXPORT__INTERNAL_ORIGIN: http://artifactbin-app:3000
+      # The proxy's CONTRACT__ACTOR_SECRET, read under the app's own name.
+      AUTH__SECRET: ${CONTRACT__ACTOR_SECRET:?Set CONTRACT__ACTOR_SECRET in .env}
+      INTERNAL__SERVICE_SECRET: ${INTERNAL__SERVICE_SECRET:?Set INTERNAL__SERVICE_SECRET in .env}
+      # The DEPLOYMENT TRUTH shape (roles.sql/SCHEMA.sql): the app's tables
+      # live in schema `app`. The app's boot DDL is unqualified and follows
+      # the search_path its URL carries, so the schema rides the URL — and
+      # the schema itself is created by infra/postgres/init/01-schemas.sql at
+      # the volume's first init. The proxy reads `app.tokens` (APP__SCHEMA
+      # below) — the exact seam the split shape must prove.
+      DATABASE_URL: postgresql://artifact_bin:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/artifact_bin?options=-csearch_path%3Dapp
+    volumes:
+      # The local object-store fallback (OBJECT_STORE__LOCAL_DIR) — where
+      # artifact bytes live when S3_URL is unset. Unused when the laptop
+      # profile's MinIO is on and S3_URL names it.
+      - lean_objects:/app/.artifact-objects
+    depends_on:
+      postgres:
+        condition: service_healthy
+      sql:
+        condition: service_healthy
+      browser:
+        condition: service_healthy
+
+  sql:
+    build:
+      context: .
+      dockerfile: services/sql/Dockerfile
+    image: artifact-bin-lean-sql
+    restart: unless-stopped
+    networks: [compute]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev"]
+    env_file:
+      - infra/env/sql.env.example
+    environment:
+      INTERNAL__SERVICE_SECRET: ${INTERNAL__SERVICE_SECRET:?Set INTERNAL__SERVICE_SECRET in .env}
+
+  browser:
+    build:
+      context: .
+      dockerfile: services/browser/Dockerfile
+    image: artifact-bin-lean-browser
+    restart: unless-stopped
+    networks: [compute]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev"]
+    env_file:
+      - infra/env/browser.env.example
+    environment:
+      INTERNAL__SERVICE_SECRET: ${INTERNAL__SERVICE_SECRET:?Set INTERNAL__SERVICE_SECRET in .env}
+
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    networks: [db]
+    environment:
+      POSTGRES_USER: artifact_bin
+      POSTGRES_DB: artifact_bin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - lean_pg:/var/lib/postgresql/data
+      # The schemas the split shape declares (roles.sql), created on the
+      # volume's FIRST init — see the file for why the app's URL carries the
+      # search_path instead of qualified DDL.
+      - ./infra/postgres/init/01-schemas.sql:/docker-entrypoint-initdb.d/01-schemas.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U artifact_bin -d artifact_bin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # LAPTOP ONLY (docker compose --profile laptop): a local S3-compatible
+  # object store, so artifact bytes live in a volume-backed MinIO instead of
+  # the app container's local dir. Turn it on and point the app at it by
+  # setting S3_URL in .env:
+  #   S3_URL=http://minioadmin:minioadmin@minio:9000/artifacts/lean
+  # (bucket `artifacts`, prefix `lean` — created by minio-init below.)
+  minio:
+    image: minio/minio:latest
+    profiles: [laptop]
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "127.0.0.1:${MINIO_PORT:-5090}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-5091}:9001"
+    volumes:
+      - lean_minio:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio-init:
+    image: minio/mc:latest
+    profiles: [laptop]
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      mc mb --ignore-existing local/artifacts"
+
+volumes:
+  lean_pg:
+  lean_objects:
+  lean_minio:
+
+networks:
+  edge:
+    internal: false
+  compute:
+    internal: true
+  db:
+    internal: true
+  egress:
+    internal: false

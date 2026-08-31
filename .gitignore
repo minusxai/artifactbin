@@ -1,0 +1,30 @@
+node_modules/
+.next/
+/data/
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+next-env.d.ts
+# vendored runtime assets — copied from node_modules on postinstall
+**/public/monaco/
+# generated plugin for local `claude --plugin-dir ./plugin` (npm run build:plugin);
+# published to the public mirror repo by CI, never committed here
+/plugin/
+.artifact-objects/
+tmp/
+**/public/story/
+**/lib/story-runtime/dist/
+**/public/fonts/
+**/lib/data/story/story-font-manifest.json
+
+# agent evals: run output (rows, screenshots, transcripts)
+# Every run directory, not just the default one: `--out evals/.metrics-pi` is how two
+# local legs avoid clobbering each other, and a bare `evals/.metrics/` let 139 files of
+# transcripts and ledgers into a commit via `git add -A`.
+evals/.metrics*/
+
+# Build output — the image builds these; they are never committed.
+/dist/
+services/app/dist/
+services/app/data/

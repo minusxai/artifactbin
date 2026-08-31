@@ -1,0 +1,9 @@
+{
+  "id": "edit",
+  "kind": "edit",
+  "brief": "Change the document's headline to read \"Q3 revenue grew 18%\" and update the opening sentence's number to match. Change NOTHING else — every other sentence must survive exactly as written. Reply with the document's URL and nothing else.",
+  "handoff": "token",
+  "seed": "<Helmet><title>Quarterly update</title></Helmet>\n<div className=\"mx-auto max-w-2xl px-6 py-16\">\n  <h1 className=\"text-4xl font-bold\">Q3 revenue grew 4%</h1>\n  <p className=\"mt-4\">Revenue rose 4% over the quarter, ending at $2.1M.</p>\n  <p className=\"mt-4\">The support team closed 1,284 tickets with a median first response of 3 hours.</p>\n  <p className=\"mt-4\">Hiring stayed flat at 42 people, with two open roles carried into Q4.</p>\n</div>",
+  "seedKeepText": "median first response of 3 hours",
+  "checks": ["published", "used_edits_endpoint", "kept_untouched_text", "no_console_errors"]
+}

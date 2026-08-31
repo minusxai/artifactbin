@@ -1,0 +1,500 @@
+/**
+ * The eval driver.
+ *
+ *   npm run eval -- --harness <name> --model <id> --api-key-env <VAR> [--label L]
+ *                   [--price-in N --price-out N] [--no-vision]
+ *                   [--mode fetched_skill+api_action|fetched_skill+mcp_action|installed_skill+api_action|installed_skill+mcp_action]
+ *                   [--tasks x,y] [--deployment https://…] [--out dir] [--no-report]
+ *   npm run eval -- --ci …          the CI task set, exit 1 on any failed flow. A failed
+ *                                   flow gets ONE more turn and is NAMED when it passes
+ *                                   there (lib/second-attempt); `--no-retry` turns that off.
+ *
+ * ONE leg per run, described entirely on the command line, writing ONE run
+ * directory. Which agents exist and which to compare belongs to the caller —
+ * `deploys/artifact-eval.yml` owns the roster; `eval:report` merges N of these
+ * directories without knowing why there are N.
+ *
+ * Per RUN: either boot a product server from the prod build with a recording
+ * reverse proxy in front, or point a recording MITM proxy at a live deployment.
+ * Per TASK: mint a start document, hand the agent the brief plus the product's
+ * own start line, run the harness CLI in a temp workspace outside this repo,
+ * then score — the ledger (protocol), the served document (product truth),
+ * Playwright (render guards + captures), `/export` (the product's own capture)
+ * — into minusx-schema rows.
+ */
+import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
+import path from 'node:path';
+import { chromium, type Browser } from 'playwright';
+import { EvalConfigSchema, type EvalConfig, type Task } from './lib/contracts';
+import { legFromArgs, type Leg } from './lib/leg';
+import { discoverTasks, parseShard, selectTasks, shardTasks } from './lib/task-set';
+import { checksToRecord, gatedChecks, verdictFor } from './lib/score/verdict';
+import { buildPrompt, type Access } from './lib/tasks';
+import { actionTransport, installsSkills, planTransport } from './lib/mode';
+import { materializePlugin } from './lib/plugin-kit';
+import { taskCost } from './lib/price';
+import { BASELINE_FLOW, BASELINE_PROMPT, BASELINE_ROWS_ID, measureBaseline } from './lib/baseline';
+import { ledgerMetrics, parseLedger, scoredArtifactId } from './lib/ledger';
+import { adapterFor } from './lib/harness';
+import { runInvocation } from './lib/spawn';
+import { RunRecorder } from './lib/rows';
+import { serverEnv, serverPorts, startServer } from './lib/server';
+import { mapConcurrent } from './lib/pool';
+import { exitWhenDone, settleWithin, TEARDOWN_MS } from './lib/shutdown';
+import { DRIVER_HEADER, startProxy } from './lib/proxy';
+import { mintStartDocument } from './lib/retry';
+import { agentProxyEnv, startMitmProxy } from './lib/mitm';
+import { exportDocument, inspectDocument, screenshotDocument } from './lib/score/browser';
+import { dataflowRows, productMetrics } from './lib/score/product';
+import { readDotEnv } from './lib/env';
+import { parseArgs } from './lib/args';
+import { registerSecret, scrubRegistered } from './lib/secrets';
+import { createWorkspace } from './lib/workspace';
+import { collectRun, mergeRuns, renderSummaryMarkdown, writeReport } from './lib/report';
+import { VIEWPORT_WIDTH_PX } from './lib/image-variants';
+
+// The cwd contract (P3 §B.4) is enforced by evals/preload.cjs — BEFORE this
+// module graph loads; a chdir here would run after the hoisted imports already read cwd.
+
+const EVALS_DIR = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(EVALS_DIR, '..');
+
+
+function loadJson<T>(file: string, parse: (v: unknown) => T): T {
+  return parse(JSON.parse(fs.readFileSync(file, 'utf8')));
+}
+
+
+
+const log = (msg: string) => console.log(`[eval] ${msg}`);
+
+/** Read the one-time token from the product's exact paste: a `token` task's driver needs it. */
+function tokenFromPaste(startPrompt: string): string {
+  const token = /using this token: (mx_[A-Za-z0-9_-]+)/.exec(startPrompt)?.[1];
+  if (!token) throw new Error('start paste carries no token');
+  return token;
+}
+
+/** Publish the document a task asks the agent to EDIT, as the agent's own token would have. */
+async function seedDocument(base: string, id: string, token: string, markup: string): Promise<void> {
+  const res = await fetch(`${base}/api/artifacts/${id}`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, [DRIVER_HEADER]: '1' },
+    body: JSON.stringify({ markup }),
+  });
+  if (!res.ok) throw new Error(`seeding document ${id} → ${res.status} ${await res.text()}`);
+}
+
+/** A task's outcome for one leg. `null` = skipped: this harness cannot run it at all. */
+import { runSecondAttempts, verdictLine, type MergedVerdicts, type Outcome } from './lib/second-attempt';
+
+async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: string, browser: Browser): Promise<Outcome[]> {
+  const apiKey = leg.apiKey;
+  const ports = serverPorts(config.server.portBase, 0);
+  const legDir = outDir;
+  const startedAt = new Date().toISOString();
+  // main() owns the run directory and empties it once, BEFORE the first attempt.
+  // Emptying it here as well was invisible while a leg ran exactly once and
+  // destructive the moment one did not: the second attempt wiped the first
+  // attempt's kept artifacts AND every sibling task's rows, leaving a run
+  // directory that described one task and a report that had lost the rest.
+  fs.mkdirSync(legDir, { recursive: true });
+  // Two ways to reach the product, and they need OPPOSITE proxies.
+  //
+  // A server this driver boots is happy to mint its links from whatever Host it is asked on, so a
+  // reverse proxy can simply BE the base URL and see everything.
+  //
+  // A deployment is not: artifactbin.dev answers a foreign Host with a 307 to its login page, and
+  // then mints links pointing at itself — so a reverse proxy would be walked straight past. There the
+  // agent goes into a PROXIED ENVIRONMENT instead (`lib/mitm.ts`): it is handed the deployment's own
+  // real link, and its traffic is intercepted by where it is told to send it rather than by what it
+  // is told to ask for.
+  //
+  // The SERVER is per leg; the PROXY is per task. One ledger per task is what makes a leg's tasks
+  // independent — attributing a shared ledger by wall clock was the only reason they ran one at a
+  // time, and it silently mis-scored the moment two overlapped.
+  let stopServer: (() => Promise<void>) | null = null;
+  let productUrl: string;
+  if (config.deployment) {
+    productUrl = config.deployment;
+  } else {
+    log(`${leg.label}: booting server :${ports.server}`);
+    const server = await startServer({
+      repoRoot: REPO_ROOT,
+      env: serverEnv({ base: process.env, ports, dataDir: path.join(legDir, 'server'), extra: config.server.env }),
+      logPath: path.join(legDir, 'server.log'),
+    });
+    stopServer = server.stop;
+    productUrl = server.url;
+  }
+
+  /** This task's own proxy and its own ledger. Ports are ephemeral, so any number may be live at once. */
+  async function startTaskProxy(taskId: string): Promise<{ agentBase: string; agentEnv: Record<string, string>; ledgerPath: string; stop: () => Promise<void> }> {
+    const ledgerPath = path.join(legDir, 'runs', taskId, 'ledger.jsonl');
+    fs.mkdirSync(path.dirname(ledgerPath), { recursive: true });
+    if (config.deployment) {
+      const mitm = await startMitmProxy({
+        port: 0,
+        host: new URL(config.deployment).hostname,
+        ledgerPath,
+        // One CA per leg: `createCa` reuses an existing one, so every task's proxy is trusted by the
+        // same bundle and the openssl work happens once.
+        caDir: path.join(legDir, 'ca'),
+      });
+      log(`${leg.label}/${taskId}: proxying ${config.deployment} through :${mitm.port}`);
+      // The agent is given the DEPLOYMENT's own address; its traffic is caught by where it SENDS.
+      return { agentBase: config.deployment, agentEnv: agentProxyEnv(mitm.url, mitm.ca), ledgerPath, stop: mitm.stop };
+    }
+    const proxy = await startProxy({ port: 0, target: productUrl, ledgerPath });
+    log(`${leg.label}/${taskId}: proxy :${proxy.port}`);
+    // The agent is given the PROXY's address; the server mints its links from it.
+    return { agentBase: proxy.url, agentEnv: {}, ledgerPath, stop: proxy.stop };
+  }
+
+  // What this column costs BEFORE it does anything: one turn, one word, no product. It opens the
+  // report because a per-task total hides it, which is how a matrix once read an 18,454-token-per-turn
+  // harness flag as "the plugin is 3.4× more expensive". Reported, never subtracted (lib/baseline.ts).
+  try {
+    const baseDir = path.join(legDir, 'baseline');
+    const basePlugin = installsSkills(leg.mode.run)
+      ? materializePlugin(path.join(baseDir, 'plugin'), config.deployment ?? productUrl, actionTransport(leg.mode.run) === 'api' ? 'curl' : 'mcp')
+      : undefined;
+    const baseline = await measureBaseline({
+      leg, adapter: adapterFor(leg.harness), apiKey, dir: baseDir, plugin: basePlugin, timeoutMs: config.run.timeoutMs,
+    });
+    const brec = new RunRecorder(legDir, { label: leg.label, target: productUrl, harness: leg.harness, model: leg.model, startedAt, mode: leg.mode.run }, BASELINE_ROWS_ID);
+    brec.flow(BASELINE_FLOW, `${BASELINE_PROMPT} — the harness's fixed context, paid again on EVERY turn of every task below.`, { graded: false });
+    brec.record(BASELINE_FLOW, 'tokens_in', baseline.tokensIn);
+    brec.record(BASELINE_FLOW, 'tokens_out', baseline.tokensOut);
+    brec.record(BASELINE_FLOW, 'cost_usd', baseline.costUsd);
+    brec.record(BASELINE_FLOW, 'turns', baseline.turns);
+    brec.finalize(true);
+    log(`${leg.label}: baseline ${baseline.tokensIn ?? '?'} tokens_in per turn`);
+  } catch (err) {
+    // A leg whose probe fails still runs its tasks — the baseline is information, not a gate.
+    log(`${leg.label}: baseline probe failed (${err instanceof Error ? err.message : String(err)})`);
+  }
+
+  try {
+    return await mapConcurrent(tasks, config.run.concurrency, async (task) => {
+      const t = await startTaskProxy(task.id);
+      try {
+        return await runTask({ leg, task, config, apiKey, legDir, ledgerPath: t.ledgerPath, productUrl, agentBase: t.agentBase, agentEnv: t.agentEnv, browser, startedAt });
+      } catch (err) {
+        // A task's own failure is ITS failure. Letting it reject would take down the server its
+        // siblings are still running against — and their agent time is already paid for. `false`
+        // rather than `null`, because null means "deliberately not run" (a harness with no MCP
+        // client) and would drop a crashed task out of the count instead of failing it.
+        log(`${leg.label}/${task.id}: FAILED — ${scrubRegistered(String(err))}`);
+        return false;
+      } finally {
+        await t.stop();
+      }
+    });
+  } finally {
+    if (stopServer) await stopServer();
+  }
+}
+
+
+
+interface TaskRun {
+  leg: Leg; task: Task; config: EvalConfig; apiKey: string; legDir: string; ledgerPath: string; browser: Browser;
+  /** Where the DRIVER talks to the product, and where a document's public URL is rooted. */
+  productUrl: string;
+  /** The base the AGENT is given — the reverse proxy locally, the deployment itself behind a MITM. */
+  agentBase: string;
+  /** Extra environment that puts the harness behind the MITM proxy. Empty for a local run. */
+  agentEnv: Record<string, string>;
+  /** When the LEG started (ISO) — one value for every task, so the report can be named by it. */
+  startedAt: string;
+}
+
+async function runTask(r: TaskRun): Promise<Outcome> {
+  const { leg, task, config } = r;
+  const adapter = adapterFor(leg.harness);
+  // The mode is authoritative. A harness that cannot provide its action transport
+  // runs the nearest treatment and the report names the substitution.
+  const transport = planTransport(leg.harness, actionTransport(leg.mode.run));
+  if (transport.substitutedWhy) log(`${leg.label}/${task.id}: ${transport.substitutedWhy}`);
+
+  const rec = new RunRecorder(r.legDir, { label: leg.label, target: r.productUrl, harness: leg.harness, model: leg.model, startedAt: r.startedAt, mode: leg.mode.run, ...(leg.mode.substitutedWhy ? { modeSubstitutedWhy: leg.mode.substitutedWhy } : {}) }, task.id);
+  rec.flow(task.id, task.brief);
+  // The RECORD of the run stays in the repo; the agent's workspace does not (see `lib/workspace.ts`).
+  const runDir = path.join(r.legDir, 'runs', task.id);
+  fs.mkdirSync(runDir, { recursive: true });
+  const { root: wsRoot, cwd, homeDir } = createWorkspace(leg.label, task.id);
+  fs.writeFileSync(path.join(runDir, 'workspace.txt'), wsRoot);
+  for (const [rel, contents] of Object.entries(task.files ?? {})) {
+    const abs = path.join(cwd, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, contents);
+  }
+
+  // The start document is minted THROUGH the proxy: the product builds the document URL in the paste from the request's
+  // origin, so this is what puts the proxy's address in the agent's hands. The driver's own call lands in
+  // the ledger before `from` and is sliced out of the run window.
+  // Retried, because this call is the DRIVER's and the agent's turn is not: three tasks of one
+  // production leg died here on `POST /api/start → 502`, all inside 200 ms, when three proxies
+  // opened at once against a deployment mid-roll. Nothing was learned and the column had three
+  // holes. Only transient statuses retry — a 4xx is an answer (lib/retry.ts).
+  const start = await mintStartDocument(r.agentBase, DRIVER_HEADER);
+  // The paste must name the base the agent will be given, or the agent's traffic misses the ledger.
+  if (!start.prompt.includes(r.agentBase)) throw new Error(`start paste is not on ${r.agentBase}`);
+
+  // A `token` task needs the driver to hold the credential (to seed a document, or to write an MCP config),
+  // so the driver reads it from the paste; a `start-link` task passes that paste on untouched.
+  //
+  // Only fetched_skill+api_action can pass the product paste through untouched. Installed
+  // skills must exist before the turn, while MCP needs the token in the harness
+  // connection; both therefore use the driver's token handoff.
+  const installed = installsSkills(leg.mode.run);
+  let access: Access = { kind: 'start-link', startPrompt: start.prompt };
+  let mcp: { name: string; url: string; token: string } | undefined;
+  if (task.handoff === 'token' || installed || transport.run === 'mcp') {
+    const token = tokenFromPaste(start.prompt);
+    if (task.seed) await seedDocument(r.agentBase, start.id, token, task.seed);
+    access = { kind: 'token', base: r.agentBase, token, id: start.id };
+    if (transport.run === 'mcp') mcp = { name: 'artifact-bin', url: `${r.agentBase}/mcp`, token };
+  }
+  // The skills are built for the base THIS TASK will be reached on: each task has its own
+  // recording proxy on its own port, and a skill naming another one sends the traffic past
+  // this task's ledger. `lib/plugin-package` is the same generator that ships the public
+  // marketplace, so the installed vocabulary is the served vocabulary by construction.
+  // The action axis selects the API/curl or MCP/tool compilation independently.
+  const plugin = installsSkills(leg.mode.run)
+    ? materializePlugin(path.join(runDir, 'plugin'), r.agentBase, transport.run === 'api' ? 'curl' : 'mcp')
+    : undefined;
+  // The start document as served BEFORE the agent ran. `published` is answered by comparing against
+  // it, because the start document is not blank — it serves "Untitled / Waiting for your agent…", so
+  // "has content" cannot tell a written document from an untouched one.
+  const baselineRes = await fetch(`${r.productUrl}/a/${start.id}/raw?chrome=0`);
+  const baseline = { status: baselineRes.status, html: baselineRes.ok ? await baselineRes.text() : '' };
+
+  const prompt = buildPrompt(task, access, { vision: leg.vision, mode: leg.mode.run });
+  fs.writeFileSync(path.join(runDir, 'prompt.txt'), prompt);
+
+  const ctx = { leg, prompt, cwd, homeDir, apiKey: r.apiKey, maxTurns: config.run.maxTurns, maxBudgetUsd: config.run.maxBudgetUsd, mcp, plugin };
+  log(`${leg.label}/${task.id}: doc ${start.id} — running ${leg.harness} (${leg.model})`);
+  await adapter.prepare(ctx);
+  const spawned = await runInvocation({ ...adapter.invocation(ctx), redact: [r.apiKey] }, {
+    cwd,
+    baseEnv: { ...process.env, ...r.agentEnv },
+    timeoutMs: config.run.timeoutMs,
+    stdoutPath: path.join(runDir, 'transcript.jsonl'),
+    stderrPath: path.join(runDir, 'stderr.log'),
+  });
+  const result = adapter.reduce(spawned.stdout);
+  if (spawned.timedOut) { result.ok = false; result.error = `timed out after ${config.run.timeoutMs} ms`; }
+  fs.writeFileSync(path.join(runDir, 'result.json'), JSON.stringify({ ...result, exitCode: spawned.exitCode, timedOut: spawned.timedOut, truncated: spawned.truncated }, null, 2));
+  log(`${leg.label}/${task.id}: ${result.ok ? 'harness ok' : `harness error: ${result.error}`} in ${Math.round(spawned.durationMs / 1000)}s, ${result.turns ?? '?'} turns`);
+
+  // --- score: ledger
+  // The file holds exactly this task's agent traffic: its own proxy, and the driver's own setup
+  // calls marked and skipped (`DRIVER_HEADER`). No window, so nothing depends on when it ran.
+  const ledger = parseLedger(fs.readFileSync(r.ledgerPath, 'utf8'));
+  const lm = ledgerMetrics(ledger);
+  const successfulWrites = ledger.filter((e) => e.status < 300 && /^(POST|PUT)$/.test(e.method) && /^\/(api\/artifacts|mcp)/.test(e.path)).length;
+
+  // --- score: product. The agent need not have used the document the start link named — Claude Opus 5
+  // created its own, twice — so `scoredArtifactId` decides which artifact to score (its answer, then the
+  // ledger, then the start document) and `used_start_document` records whether it was the one it was given.
+  const targetId = scoredArtifactId({ finalMessage: result.finalMessage, ledger, startId: start.id });
+  const docUrl = `${r.productUrl}/a/${targetId}`;
+  const servedRes = await fetch(`${docUrl}/raw?chrome=0`);
+  const served = { status: servedRes.status, html: servedRes.ok ? await servedRes.text() : '' };
+  const pm = productMetrics({ served, baseline });
+
+  // --- score: browser (only when there is a document to look at)
+  // The browser loads through the PROXY, so the document's own data transport lands in the ledger and
+  // `query_ran` can be read from it. Those entries fall after `to`, outside the agent's slice.
+  let inspection: Awaited<ReturnType<typeof inspectDocument>> | null = null;
+  if (pm.published) {
+    inspection = await inspectDocument(r.browser, `${docUrl}/raw?chrome=0`, VIEWPORT_WIDTH_PX.mobile);
+  }
+  // The dataflow runs on the SERVER and rides the island, so the rows it produced are the evidence a
+  // `<Query>` ran — not a `/query` request, which a static document never makes.
+  const queryRows = dataflowRows(served.html);
+
+  // --- rows: numbers
+  rec.record(task.id, 'turns', result.turns);
+  rec.record(task.id, 'tool_calls', result.toolCalls);
+  // Turns spent READING docs — fetches plus every later page through a saved copy (`lib/docs-reads`).
+  rec.record(task.id, 'docs_read_calls', result.docsReadCalls);
+  rec.record(task.id, 'tokens_in', result.tokens ? result.tokens.input + result.tokens.cacheRead + result.tokens.cacheWrite : null);
+  rec.record(task.id, 'tokens_out', result.tokens ? result.tokens.output : null);
+  const cost = taskCost(result, leg.price);
+  rec.record(task.id, 'cost_usd', cost.usd);
+  rec.record(task.id, 'duration_s', Math.round(spawned.durationMs / 100) / 10);
+  rec.record(task.id, 'http_calls', lm.httpCalls);
+  rec.record(task.id, 'write_attempts', lm.writeAttempts);
+  rec.record(task.id, 'four_xx', lm.fourXx);
+  rec.record(task.id, 'invented_endpoints', lm.inventedEndpoints);
+  rec.record(task.id, 'query_rows', queryRows);
+  rec.record(task.id, 'docs_fetches', lm.docsFetches);
+  rec.record(task.id, 'docs_bytes', lm.docsBytes);
+  rec.record(task.id, 'versions', lm.observed ? 1 + successfulWrites : null);
+  // --- rows: text
+  rec.record(task.id, 'first_error', lm.firstError ?? '', 'text');
+  rec.record(task.id, 'harness_error', result.error ?? '', 'text');
+  // Where the cost came from: the harness's own figure, or our tokens × rates (a Codex run, which reports none).
+  rec.record(task.id, 'cost_source', cost.source ?? '', 'text');
+  rec.record(task.id, 'web_search_calls', result.webSearchCalls);
+  // The mode rides in the ROWS as well as the meta: a substituted cell showing skill numbers
+  // under an "mcp" heading would be a wrong comparison rather than a missing one.
+  rec.record(task.id, 'how', [
+    leg.mode.substitutedWhy ? `${leg.mode.run} (asked ${leg.mode.asked}: ${leg.mode.substitutedWhy})` : leg.mode.run,
+    transport.substitutedWhy ? `${transport.run} (asked ${transport.asked}: ${transport.substitutedWhy})` : transport.run,
+  ].join(' · '), 'text');
+  rec.record(task.id, 'title', pm.title ?? '', 'text');
+  rec.record(task.id, 'url', pm.published ? docUrl : '', 'text');
+  rec.record(task.id, 'final_message', (result.finalMessage ?? '').slice(0, 300), 'text');
+
+  // --- rows: checks
+  const checks: Record<string, boolean | null> = {
+    published: pm.published,
+    published_first_try: pm.published && lm.publishedFirstTry,
+    // Nothing to observe when the protocol arrived installed — null, never false (the
+    // same rule the unobserved-ledger case follows).
+    read_docs_before_write: installed ? null : lm.readDocsBeforeWrite,
+    no_unknown_endpoints: lm.inventedEndpoints === 0,
+    canonical_stable: lm.canonicalStable,
+    has_title: pm.hasTitle,
+    used_start_document: targetId === start.id,
+    harness_ok: result.ok,
+    no_console_errors: inspection ? inspection.consoleErrors.length === 0 : null,
+    no_failed_responses: inspection ? inspection.failedResponses.length === 0 : null,
+    fits_390px: inspection ? inspection.fits : null,
+    chart_marks_drawn: inspection ? inspection.marks > 0 : null,
+    dataset_created: lm.datasetCreated,
+    query_ran: queryRows > 0,
+    used_edits_endpoint: lm.usedEditsEndpoint,
+    // Null, not false, when this harness has no MCP client and ran the task over REST.
+    used_mcp: transport.substitutedWhy || leg.mode.substitutedWhy ? null : lm.usedMcp,
+    kept_untouched_text: task.seedKeepText ? served.html.includes(task.seedKeepText) : null,
+  };
+  // `checksToRecord` decides which checks become rows (task-specific ones only where the task grades them,
+  // so an inapplicable check reads as "—" rather than a red FAIL); only the checks the TASK lists decide the
+  // verdict (`verdictFor`). `canonical_stable`, for instance, is information about how the product
+  // canonicalized the agent's markup, not a failure of the flow.
+  const gated = gatedChecks([...task.checks], {
+    trafficObserved: lm.observed,
+    vocabularyInstalled: installed,
+    transportSubstituted: transport.substitutedWhy !== null || leg.mode.substitutedWhy !== null,
+  });
+  for (const [c, v] of Object.entries(checksToRecord(checks, gated))) {
+    rec.record(task.id, c, v, 'pass');
+  }
+  const { passed, failed } = verdictFor(checks, gated);
+  if (inspection) {
+    rec.record(task.id, 'console_errors', inspection.consoleErrors.join(' | ').slice(0, 300), 'text');
+    rec.record(task.id, 'failed_responses', inspection.failedResponses.join(' | ').slice(0, 300), 'text');
+  }
+
+  // --- rows: images (every variant the config asks for and the product can produce)
+  if (pm.published) {
+    for (const size of config.capture.sizes) {
+      for (const renderer of config.capture.renderers) {
+        const variant = { size, renderer };
+        const rel = rec.screenshotPath(task.id, 'document', variant);
+        const abs = path.join(r.legDir, rel);
+        try {
+          if (renderer === 'playwright') {
+            await screenshotDocument(r.browser, `${docUrl}/raw?chrome=0`, VIEWPORT_WIDTH_PX[size], abs);
+          } else if (size === 'laptop') {
+            // The product's export renders at its own fixed width; there is no phone-width export.
+            const png = await exportDocument(r.productUrl, targetId);
+            if (!png) continue;
+            fs.writeFileSync(abs, png);
+          } else {
+            continue;
+          }
+          rec.image(task.id, 'document', rel, variant);
+        } catch (e) {
+          log(`${leg.label}/${task.id}: capture ${size}/${renderer} failed: ${(e as Error).message}`);
+        }
+      }
+    }
+  }
+
+  rec.finalize(passed);
+  log(`${leg.label}/${task.id}: ${passed ? 'PASS' : `FAIL (${failed.join(', ')})`} — doc ${targetId}${targetId === start.id ? '' : ' (NOT the start document)'}`);
+  return passed;
+}
+
+async function main(): Promise<void> {
+  const args = parseArgs(process.argv.slice(2));
+  const parsed = loadJson(path.join(EVALS_DIR, 'config.json'), (v) => EvalConfigSchema.parse(v));
+  const config: EvalConfig = {
+    ...parsed,
+    ...(args.deployment ? { deployment: args.deployment } : {}),
+    ...(args.portBase ? { server: { ...parsed.server, portBase: args.portBase } } : {}),
+    ...(args.concurrency ? { run: { ...parsed.run, concurrency: args.concurrency } } : {}),
+  };
+
+  // The filename decides the set: `<id>.eval.json` is a report column, a plain `<id>.json` is CI-only.
+  const discovered = discoverTasks(path.join(EVALS_DIR, 'tasks'));
+  const selected = selectTasks(discovered, { set: args.ci ? 'ci' : 'eval', ids: args.tasks });
+  // `--shard i/n` splits the tasks across parallel CI jobs: a task is one agent run and cannot be shortened.
+  const tasks = (args.shard ? shardTasks(selected, parseShard(args.shard)) : selected).map((t) => t.task);
+  if (tasks.length === 0) {
+    log(`shard ${args.shard} has no tasks — nothing to do`);
+    return;
+  }
+
+  // ONE leg, described entirely on the command line. Which legs exist, and which to compare, is the
+  // caller's business — this repo runs the one it is given and writes a single run directory.
+  const keys = { ...readDotEnv(path.join(REPO_ROOT, '.env')), ...process.env } as Record<string, string>;
+  const leg = legFromArgs(args, keys);
+  registerSecret(leg.apiKey);
+
+  log(`${leg.label}: ${leg.harness} × ${leg.model} · tasks: ${tasks.map((t) => t.id).join(', ')} · out: ${args.out}`);
+  fs.rmSync(args.out, { recursive: true, force: true });
+  fs.mkdirSync(args.out, { recursive: true });
+
+  const browser = await chromium.launch();
+  let merged: MergedVerdicts = { verdicts: [], recovered: [], failed: [] };
+  try {
+    const first = await runLeg(leg, tasks, config, args.out, browser);
+    // A CI flow that failed gets ONE more turn, alone, and is named for it
+    // (lib/second-attempt). The first attempt's artifacts are kept beside the
+    // retry's rather than overwritten, so the flake can still be read.
+    merged = await runSecondAttempts(tasks, first, {
+      ci: args.ci,
+      enabled: args.retry,
+      outDir: args.out,
+      announce: (task) => log(`${leg.label}/${task.id}: failed — one more turn, alone`),
+      rerun: async (task) => (await runLeg(leg, [task], config, args.out, browser))[0],
+    });
+  } finally {
+    await settleWithin(browser.close(), TEARDOWN_MS);
+  }
+  const verdicts = merged.verdicts;
+
+  if (args.report) {
+    const html = writeReport([{ dir: args.out }], path.join(args.out, 'report'));
+    log(`report: ${html}`);
+  }
+
+  // What it cost, in the log and in the CI job summary — so the number does not live only inside an artifact.
+  const summaryMd = renderSummaryMarkdown(mergeRuns([collectRun(args.out)]));
+  console.log(`\n${summaryMd}\n`);
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Agent eval — ${leg.label}\n\n${summaryMd}\n`);
+  }
+
+  log(verdictLine(merged));
+  if (merged.recovered.length && process.env.GITHUB_STEP_SUMMARY) {
+    fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n> **Flaky**: ${merged.recovered.join(', ')} failed once and passed on a second attempt.\n`);
+  }
+  // The work and the scores are on disk by here. Anything still holding the event loop open is a
+  // socket we no longer need, and waiting on it is how a finished leg becomes a CANCELLED job with
+  // nothing uploaded — which is exactly what a 60-minute ceiling did to a run that had passed 3 of 4.
+  exitWhenDone(args.ci && merged.failed.length ? 1 : 0);
+}
+
+main().catch((e) => {
+  console.error(scrubRegistered(`[eval] ${e instanceof Error ? e.stack ?? e.message : String(e)}`));
+  process.exit(2);
+});

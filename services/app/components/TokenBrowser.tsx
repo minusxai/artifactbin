@@ -1,0 +1,574 @@
+'use client';
+
+import { Check, ChevronLeft, ChevronRight, EyeOff, FolderInput, Globe, Link2, Lock, Pencil, Search, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Tooltip } from '@/components/Tooltip';
+import { Badge, Button, dateStamp, FormatBadge, formatLabel, MicroLabel, PANEL, Spark, TABLE_ROW, timeAgo, TokenInput, VisibilityPill } from '@/components/ui';
+import RowMenu, { confirmDeleteArtifact } from '@/components/RowMenu';
+import { adoptToken } from '@/lib/browser-session';
+import type { Visibility } from '@/lib/artifacts';
+
+interface ArtifactSummary {
+  id: string;
+  url: string;
+  title: string | null;
+  format?: string;
+  version: number;
+  /** Materialized folder path ('' = root); present on session rows. */
+  folder?: string;
+  visibility?: Visibility;
+  updated_at: string;
+  /** All-time view count; present on dashboard (session) rows only. */
+  views?: number;
+  /** Server-rendered 30-day view spline (inline SVG markup), when there is anything to draw. */
+  sparkline?: string;
+}
+
+const VISIBILITY_TIPS: Record<Visibility, string> = {
+  public: 'anyone with the link · listed on your public profile',
+  unlisted: 'anyone with the link · not listed anywhere',
+  private: 'only you and invited emails',
+};
+
+/** Canonical chip order — chips are derived from the rows, these fix their sequence. */
+const FORMAT_ORDER = ['markup', 'dataset', 'viz', 'image'];
+const VISIBILITY_ORDER: Visibility[] = ['public', 'unlisted', 'private'];
+
+const VISIBILITY_GLYPHS: Record<Visibility, React.ReactNode> = {
+  public: <Globe size={10} />,
+  unlisted: <EyeOff size={10} />,
+  private: <Lock size={10} />,
+};
+
+/** Multi-select quick-filter pill. Pressed state is the whole contract. */
+function FilterChip({ value, label, active, onToggle, tip, children }: {
+  value: string;
+  label?: string;
+  active: boolean;
+  onToggle: (value: string) => void;
+  tip?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <Tooltip content={tip ?? ''} disabled={!tip}>
+      <button
+        type="button"
+        aria-label={`Filter ${value}`}
+        aria-pressed={active}
+        onClick={() => onToggle(value)}
+        className={`inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[10px] leading-none whitespace-nowrap transition-colors ${
+          active
+            ? 'border-accent bg-accent-soft text-accent'
+            : 'border-edge bg-transparent text-faint hover:border-edge-bright hover:text-muted'
+        }`}
+      >
+        {children}
+        {label ?? value}
+      </button>
+    </Tooltip>
+  );
+}
+
+/**
+ * Logged-out fallback: paste a bearer token, see that token's artifacts.
+ *
+ * The token is handed to the SERVER (POST /api/session/token) and comes back
+ * as an httpOnly cookie; this component never keeps it, and on a later visit
+ * the list simply loads because the cookie is already there. httpOnly is the
+ * point: no script on the origin can read the credential back.
+ */
+export default function TokenBrowser() {
+  const [token, setToken] = useState('');
+  const [artifacts, setArtifacts] = useState<ArtifactSummary[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  /** List what the cookie authorizes. `quiet` = the on-mount probe, which must
+   *  say nothing when this browser simply holds no token. */
+  const load = useCallback(async (quiet = false) => {
+    setError(null);
+    try {
+      const res = await fetch('/api/my/artifacts');
+      if (res.status === 401) {
+        setArtifacts(null);
+        if (!quiet) setError('Invalid or revoked token.');
+        return;
+      }
+      if (!res.ok) {
+        setArtifacts(null);
+        if (!quiet) setError(`Failed to load (${res.status}).`);
+        return;
+      }
+      const body = (await res.json()) as { artifacts: ArtifactSummary[] };
+      setArtifacts(body.artifacts);
+    } catch {
+      // A probe that cannot even run — offline, or a test environment with no
+      // document origin for a relative fetch — is "nothing listed", never an
+      // unhandled rejection that crashes the mount.
+      setArtifacts(null);
+      if (!quiet) setError('Could not reach the server.');
+    }
+  }, []);
+
+  const submit = useCallback(async (t: string) => {
+    setError(null);
+    if (!(await adoptToken(t))) {
+      setArtifacts(null);
+      setError('Invalid or revoked token.');
+      return;
+    }
+    setToken('');
+    await load();
+  }, [load]);
+
+  useEffect(() => { void load(true); }, [load]);
+
+  return (
+    <section className="mt-6">
+      <form
+        className="flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (token.trim()) void submit(token.trim());
+        }}
+      >
+        <TokenInput
+          aria-label="Token"
+          placeholder="mx_..."
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+        />
+        <Button type="submit" aria-label="Load artifacts">
+          load
+        </Button>
+      </form>
+      {error && <p className="mt-3 text-xs text-danger">{error}</p>}
+      {artifacts && artifacts.length === 0 && <p className="mt-3 text-xs text-muted">No artifacts yet.</p>}
+      {artifacts && artifacts.length > 0 && (
+        <div className="mt-4">
+          <ArtifactTable artifacts={artifacts} />
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** Icon-only row action — the label lives in the tooltip, not the row. */
+const ICON_ACTION =
+  'inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[4px] border-0 bg-transparent p-0 text-muted transition-colors';
+
+/**
+ * Rows per page when this table IS the list (the logged-out token browser):
+ * one block in a taller page, which must not grow into everything below it.
+ *
+ * As a shelf's dense tier the count is raised (SHELF_LIST_PER_PAGE) — there
+ * the hero and cards carry the recent work, so these rows are the archive and
+ * are cheap. Five is also below the count at which a pager helps anyone: it
+ * costs a click to reveal what a little scrolling would have shown, which is
+ * most of why the old dashboard list read as small.
+ */
+export const ARTIFACTS_PER_PAGE = 5;
+
+/** `manage` enables the session-scoped delete — dashboard only. History lives in the page's edit mode. */
+export function ArtifactTable({ artifacts, manage, embedded, canEdit = true, canShare = true, showViews = true, filtersInline = false, dates = 'relative', perPage = ARTIFACTS_PER_PAGE }: {
+  artifacts: ArtifactSummary[];
+  manage?: boolean;
+  /**
+   * Whether a row may be opened in the editor. Separate from `manage` because
+   * a PROFILE offers the link and nothing that changes the document, while the
+   * logged-out token browser has always offered editing without the owner's
+   * move/delete menu — two different subsets, so one boolean cannot say both.
+   */
+  canEdit?: boolean;
+  /** Whether the row offers copy-link. Asset management tables can withhold
+   * document actions while retaining their move/delete menu. */
+  canShare?: boolean;
+  /** Whether analytics telemetry belongs in this table's job. */
+  showViews?: boolean;
+  /** Keep quick filters in the search rail instead of spending a second row. */
+  filtersInline?: boolean;
+  /** Relative on the owner's surfaces, absolute on a profile — see ShelfProps. */
+  dates?: 'relative' | 'absolute';
+  /** Rows before a pager appears. */
+  perPage?: number;
+  /**
+   * Rendered as the dense tier of a `<Shelf>`, which owns the search box and
+   * has already narrowed these rows. Suppresses this component's own search
+   * header and filter chips so the page never carries two of either — the
+   * rows, the actions and the pager are the part being reused.
+   */
+  embedded?: boolean;
+}) {
+  // Folder moves land as local overrides — a metadata PATCH is too small a
+  // change to justify reloading the page the way delete does.
+  const [movedFolders, setMovedFolders] = useState<Record<string, string>>({});
+  const [movingId, setMovingId] = useState<string | null>(null);
+  const [folderDraft, setFolderDraft] = useState('');
+  const folderOf = (a: ArtifactSummary) => movedFolders[a.id] ?? a.folder ?? '';
+
+  const moveTo = async (a: ArtifactSummary) => {
+    const res = await fetch(`/api/my/artifacts/${a.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folder: folderDraft.trim() }),
+    }).catch(() => null);
+    if (res?.ok) {
+      const body = (await res.json()) as { folder: string };
+      setMovedFolders((m) => ({ ...m, [a.id]: body.folder }));
+      setMovingId(null);
+    }
+  };
+
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [page, setPage] = useState(0);
+  // Quick filters: empty selection = no constraint. Within a group values OR,
+  // the two groups AND — and both compose with the search query. The format
+  // group starts on mx-markup (documents are the deliverable; datasets and
+  // images are their supporting assets) — only when the group will actually
+  // render AND markup rows exist, so an asset-only list is never born empty.
+  const [formatPicks, setFormatPicks] = useState<string[]>(() => {
+    const formats = new Set(artifacts.map((a) => a.format ?? 'markup'));
+    return formats.size >= 2 && formats.has('markup') ? ['markup'] : [];
+  });
+  const [visibilityPicks, setVisibilityPicks] = useState<string[]>([]);
+  const togglePick = (set: React.Dispatch<React.SetStateAction<string[]>>) => (v: string) =>
+    set((picks) => (picks.includes(v) ? picks.filter((p) => p !== v) : [...picks, v]));
+
+  // Chips are derived from the rows, so a group with nothing to split on
+  // (all one format, or token rows carrying no visibility) shows no dead chips.
+  const formatChips = FORMAT_ORDER.filter((f) => artifacts.some((a) => (a.format ?? 'markup') === f));
+  const visibilityChips = VISIBILITY_ORDER.filter((v) => artifacts.some((a) => a.visibility === v));
+  const showFormatChips = formatChips.length >= 2;
+  const showVisibilityChips = visibilityChips.length >= 2;
+
+  const share = async (a: ArtifactSummary) => {
+    const url = a.url.startsWith('http') ? a.url : `${location.origin}${a.url}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedId(a.id);
+      setTimeout(() => setCopiedId((c) => (c === a.id ? null : c)), 1500);
+    } catch {
+      window.open(url, '_blank');
+    }
+  };
+
+  // The views column follows the DATA, never the permission: a page that did
+  // not ask for counts reserves no column and prints no zero. That is the same
+  // rule the shelf's ViewsMark keeps, in the one other place a count renders.
+  // The column itself is DESKTOP-only, so the spline's width comes out of the
+  // width a phone never had; there, the stacked meta line carries the count
+  // with a 12px squash of the same spline beside it.
+  const hasViews = showViews && artifacts.some((a) => a.views !== undefined);
+
+  const q = query.trim().toLowerCase();
+  const filtering = Boolean(q) || formatPicks.length > 0 || visibilityPicks.length > 0;
+  const visible = filtering
+    ? artifacts.filter(
+        (a) =>
+          (!q || `${a.title ?? ''} ${a.format ?? ''}`.toLowerCase().includes(q)) &&
+          (formatPicks.length === 0 || formatPicks.includes(a.format ?? 'markup')) &&
+          (visibilityPicks.length === 0 || (a.visibility != null && visibilityPicks.includes(a.visibility))),
+      )
+    : artifacts;
+
+  // Clamp rather than reset on search: the cursor is only ever read through this
+  // derived value, so a filter that shrinks the list under it can't strand the
+  // user on an empty page, and clearing the filter puts them back where they were.
+  const pageCount = Math.max(1, Math.ceil(visible.length / perPage));
+  const current = Math.min(page, pageCount - 1);
+  const start = current * perPage;
+  const rows = visible.slice(start, start + perPage);
+  const hasFilters = showFormatChips || showVisibilityChips;
+  const filterControls = (
+    <>
+      {showFormatChips &&
+        formatChips.map((f) => (
+          <FilterChip
+            key={f}
+            value={f}
+            label={formatLabel(f)}
+            active={formatPicks.includes(f)}
+            onToggle={togglePick(setFormatPicks)}
+          />
+        ))}
+      {showFormatChips && showVisibilityChips && <span aria-hidden="true" className="mx-1 h-3 w-px bg-edge" />}
+      {showVisibilityChips &&
+        visibilityChips.map((v) => (
+          <FilterChip
+            key={v}
+            value={v}
+            active={visibilityPicks.includes(v)}
+            onToggle={togglePick(setVisibilityPicks)}
+            tip={VISIBILITY_TIPS[v]}
+          >
+            {VISIBILITY_GLYPHS[v]}
+          </FilterChip>
+        ))}
+    </>
+  );
+
+  return (
+    <div className={PANEL}>
+      {!embedded && (
+      <div className="flex flex-wrap items-center gap-2 border-b border-edge px-4 py-2">
+        <Search size={13} className="shrink-0 text-faint" />
+        <input
+          aria-label="Search artifacts"
+          placeholder="search artifacts"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="min-w-32 flex-1 border-0 bg-transparent font-mono text-xs text-fg placeholder:text-faint focus:outline-none"
+        />
+        {filtersInline && hasFilters && (
+          <span className="ml-auto flex shrink-0 items-center gap-1.5 border-l border-edge pl-2">
+            {filterControls}
+          </span>
+        )}
+        {filtering && (
+          <span className="shrink-0 font-mono text-[10px] text-faint">
+            {visible.length} / {artifacts.length}
+          </span>
+        )}
+      </div>
+      )}
+      {!embedded && !filtersInline && hasFilters && (
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-edge px-4 py-2">
+          {filterControls}
+        </div>
+      )}
+      <table className="w-full border-collapse text-left text-sm">
+        <thead className="hidden sm:table-header-group">
+          <tr>
+            {[
+              'title',
+              ...(embedded ? [] : ['type']),
+              ...(embedded ? [] : ['ver']),
+              ...(hasViews ? ['views'] : []),
+              'updated',
+              '',
+            ].map((h, i) => (
+              <th key={i} className="px-4 py-2.5">
+                <MicroLabel>{h}</MicroLabel>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {visible.length === 0 && (
+            <tr className={TABLE_ROW}>
+              <td colSpan={(embedded ? 3 : 5) + (hasViews ? 1 : 0)} className="px-4 py-6 text-center font-mono text-xs text-faint">
+                {q ? <>nothing matches &ldquo;{query.trim()}&rdquo;</> : 'nothing matches the active filters'}
+              </td>
+            </tr>
+          )}
+          {rows.map((a, i) => (
+            <tr key={a.id} className={`${TABLE_ROW} reveal`} style={{ animationDelay: `${i * 40}ms` }}>
+              {/* w-full + max-w-0 makes this the flexible column: it absorbs
+                  the leftover width, so `truncate` on the title actually bites
+                  and the badges never wrap onto a second line. */}
+              <td className="w-full max-w-0 px-3 py-3 sm:px-4 sm:py-2.5">
+                <span className="flex min-w-0 items-center gap-2">
+                  {/* The row's own picture, tiny. A dense list is scanned by
+                      SIGHT before it is read, and these rows are the archive —
+                      the tier where a title alone is least likely to be
+                      recognised. Hidden on a phone, where the width is the
+                      scarce thing. */}
+                  {(a.format ?? 'markup') === 'markup' && (
+                    <span className="relative hidden h-[19px] w-9 shrink-0 overflow-hidden rounded-[2px] border border-edge bg-raised sm:block">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`/a/${a.id}/export?format=jpg&mode=card&v=${a.version}`}
+                        alt=""
+                        loading="lazy"
+                        className="h-full w-full object-cover"
+                      />
+                    </span>
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <a
+                        href={a.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="min-w-0 flex-1 truncate font-semibold text-fg no-underline underline-offset-4 hover:underline"
+                        aria-label={`Open ${a.title ?? a.id}`}
+                      >
+                        {a.title ?? <span className="text-faint">(untitled)</span>}
+                      </a>
+                      {manage && movingId !== a.id && folderOf(a) && (
+                        <span className="shrink-0 font-mono text-[10px] text-faint">{folderOf(a)}</span>
+                      )}
+                    </span>
+                    <span className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 font-mono text-[10px] leading-none text-faint sm:hidden">
+                      {!embedded && (
+                        <>
+                          <span>{formatLabel(a.format ?? 'markup')}</span>
+                          <span aria-hidden="true">·</span>
+                          <span>v{a.version}</span>
+                          <span aria-hidden="true">·</span>
+                        </>
+                      )}
+                      {hasViews && (
+                        <>
+                          {/* The spline rides beside the count here too — the
+                              trend is the interesting half of the number, and
+                              a 12px-tall squash of the same server-rendered
+                              SVG costs the line nothing. */}
+                          <span className="inline-flex items-center gap-1.5">
+                            {a.sparkline && <Spark svg={a.sparkline} className="h-3 w-12" />}
+                            <span>{a.views ?? 0} view{a.views === 1 ? '' : 's'}</span>
+                          </span>
+                          <span aria-hidden="true">·</span>
+                        </>
+                      )}
+                      <time dateTime={a.updated_at} suppressHydrationWarning>
+                        {dates === 'absolute' ? dateStamp(a.updated_at) : timeAgo(a.updated_at)}
+                      </time>
+                    </span>
+                  </span>
+                  {/* Every row says who can read it — an unmarked row would
+                      read as "unknown" now that the owner toggles visibility.
+                      Public gets the louder ink; unlisted and private stay faint. */}
+                  {a.visibility && <VisibilityPill compact visibility={a.visibility} name={a.title ?? a.id} />}
+                </span>
+                {manage && movingId === a.id && (
+                  <form
+                    className="mt-1 flex items-center gap-1"
+                    onSubmit={(e) => { e.preventDefault(); void moveTo(a); }}
+                  >
+                    <input
+                      aria-label="Folder path"
+                      placeholder="folder/subfolder ('' = root)"
+                      value={folderDraft}
+                      onChange={(e) => setFolderDraft(e.target.value)}
+                      className="w-48 rounded-[4px] border border-edge bg-transparent px-1.5 py-0.5 font-mono text-[11px] text-fg focus:outline-none focus:border-edge-bright"
+                    />
+                    <Tooltip content="save">
+                      <button type="submit" aria-label="Save folder" className={`${ICON_ACTION} hover:text-accent`}>
+                        <Check size={12} />
+                      </button>
+                    </Tooltip>
+                  </form>
+                )}
+              </td>
+              {/* A shelf's archive contains only markup documents; its type
+                  is guaranteed by the tier, so repeating it costs a column
+                  without adding information. Standalone tables can mix
+                  documents and assets and keep the badge. */}
+              {!embedded && (
+                <td className="hidden px-4 py-2.5 whitespace-nowrap sm:table-cell">
+                  <FormatBadge format={a.format} />
+                </td>
+              )}
+              {!embedded && (
+                <td className="hidden px-4 py-2.5 whitespace-nowrap sm:table-cell">
+                  <Badge tone="dim">v{a.version}</Badge>
+                </td>
+              )}
+              {hasViews && (
+                <td className="hidden px-4 py-2.5 whitespace-nowrap sm:table-cell">
+                  <Tooltip content="views · spline is the last 30 days">
+                    <span
+                      aria-label={`${a.title ?? a.id} views`}
+                      className="inline-flex items-center gap-1.5"
+                    >
+                      {/* The spline is server-rendered SVG (lib/viz/sparkline) — decoration
+                          next to the count, so hidden from the accessibility tree. */}
+                      {a.sparkline && <Spark svg={a.sparkline} className="h-5 w-24" />}
+                      <span className="font-mono text-xs tabular-nums text-muted">{a.views ?? 0}</span>
+                    </span>
+                  </Tooltip>
+                </td>
+              )}
+              <Tooltip content={new Date(a.updated_at).toLocaleString()}>
+                <td
+                  className="hidden px-4 py-2.5 text-xs whitespace-nowrap text-muted sm:table-cell"
+                  suppressHydrationWarning
+                >
+                  {dates === 'absolute' ? dateStamp(a.updated_at) : timeAgo(a.updated_at)}
+                </td>
+              </Tooltip>
+              <td className="px-2 py-3 text-right whitespace-nowrap sm:px-4 sm:py-2.5">
+                <span className="inline-flex items-center gap-1">
+                  {canShare && (
+                    <Tooltip content={copiedId === a.id ? 'copied!' : 'copy share link'}>
+                      <button
+                        className={`${ICON_ACTION} ${copiedId === a.id ? 'text-accent' : 'hover:text-accent'}`}
+                        aria-label={`Share ${a.title ?? a.id}`}
+                        onClick={() => void share(a)}
+                      >
+                        {copiedId === a.id ? <Check size={13} /> : <Link2 size={13} />}
+                      </button>
+                    </Tooltip>
+                  )}
+                  {canEdit && (
+                    <Tooltip content="edit">
+                      <a
+                        href={`/a/${a.id}#edit`}
+                        className={`${ICON_ACTION} no-underline hover:text-accent`}
+                        aria-label={`Edit ${a.title ?? a.id}`}
+                      >
+                        <Pencil size={13} />
+                      </a>
+                    </Tooltip>
+                  )}
+                  {manage && (
+                    <RowMenu
+                      name={a.title ?? a.id}
+                      items={[
+                        {
+                          label: `Move ${a.title ?? a.id}`,
+                          text: 'move to folder',
+                          icon: <FolderInput size={12} />,
+                          onSelect: () => { setMovingId(a.id); setFolderDraft(folderOf(a)); },
+                        },
+                        {
+                          label: `Delete ${a.title ?? a.id}`,
+                          text: 'delete',
+                          icon: <Trash2 size={12} />,
+                          danger: true,
+                          onSelect: () => {
+                            void confirmDeleteArtifact(a.id, a.title ?? a.id).then((ok) => ok && window.location.reload());
+                          },
+                        },
+                      ]}
+                    />
+                  )}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {visible.length > perPage && (
+        <div className="flex items-center justify-between border-t border-edge px-4 py-2">
+          <span aria-label="Page range" className="font-mono text-[10px] text-faint">
+            {start + 1}-{start + rows.length} of {visible.length}
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <Tooltip content="previous">
+              <button
+                className={`${ICON_ACTION} enabled:hover:text-accent disabled:cursor-default disabled:text-faint disabled:opacity-40`}
+                aria-label="Previous page"
+                disabled={current === 0}
+                onClick={() => setPage(current - 1)}
+              >
+                <ChevronLeft size={13} />
+              </button>
+            </Tooltip>
+            <Tooltip content="next">
+              <button
+                className={`${ICON_ACTION} enabled:hover:text-accent disabled:cursor-default disabled:text-faint disabled:opacity-40`}
+                aria-label="Next page"
+                disabled={current >= pageCount - 1}
+                onClick={() => setPage(current + 1)}
+              >
+                <ChevronRight size={13} />
+              </button>
+            </Tooltip>
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}

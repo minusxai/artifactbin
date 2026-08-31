@@ -1,0 +1,84 @@
+# Story authoring guidance ("mini-skills") returned with Clarify picks.
+#
+# - `templates:` — FULL definitions of the story templates (structural genres). Projected
+#   into the registry by lib/data/story/story-templates.ts; the `guidance` block is returned
+#   verbatim to the agent when the user picks that template (Clarify `type: 'template'`).
+# - `themes:` — authoring guidance ONLY for the six design themes (their code entries + CSS
+#   tokens live in lib/data/story/story-themes.ts, which must stay YAML-free so tsx scripts
+#   can import it). Returned with the Clarify `type: 'design'` pick.
+#
+# Style contract for guidance blocks (learned from claude.ai/design's system readmes):
+# a personality statement, the beat structure, the layout grammar, a SELF-DOCUMENTING skeleton
+# (placeholder copy teaches the rule it sits in), and blunt Do/Don't lists. Keep each compact.
+# Everything must respect the story platform rules: container variants (@2xl:) not viewport
+# variants, no position:fixed/sticky, every data number a live embed, Vega for every chart.
+# Motion: kit classes (animate-marquee/fade-up/…, reveal-*) OR custom @keyframes in a top-level
+# <style>{`…`}</style> block attached to classes; scroll reveals via the data-reveal +
+# [data-mx-seen] observer contract. No inline style=, no JS; utilities compile !important and
+# always beat authored CSS — see the markup-motion reference.
+
+templates:
+  editorial:
+    label: Editorial
+    description: Typeset document/report — one centered text column paced in pages by a repeated folio rule, with numbered figures as the only wide elements.
+    personality: >-
+      A printed document rendered on screen: a white paper, a memo to the board, a report you
+      could hand across a desk. One quiet centered column of measured prose, paced in PAGES —
+      every section opens under the same folio rule as if a fresh sheet were fed in — and
+      numbered figures (Vega charts, drawn SVG diagrams, images) do the showing. Minimal is
+      the register: hairlines, small caps, and numbers; the restraint is what reads as
+      authority.
+    beats:
+      - Title block (masthead rule · title · standfirst · byline/date)
+      - Summary (hairline-bounded, bold-lead findings)
+      - Numbered sections (3-6, one claim each, each opening on a fresh page and closing on a takeaway)
+      - Figures throughout (FIG-numbered — chart, diagram, or image)
+      - Closing section (the so-what) + method footer
+  deck:
+    label: Deck
+    description: Presentation deck — full-viewport slides in acts; quiet paper slides between full-bleed accent dividers.
+    personality: >-
+      A boardroom keynote rendered as a scroll: one idea per full-viewport slide, headlines you
+      could speak aloud to the room, generous emptiness as the luxury. The deck moves in ACTS —
+      quiet paper slides punctuated by full-bleed solid-accent dividers — and its structure is
+      announced (contents, numbered acts), never discovered.
+    beats:
+      - Cover
+      - Contents (mirrors the act titles)
+      - Act divider (solid accent — at least one per deck, one per act)
+      - Content slides (statement / columns / chart / table / big number)
+      - Quote or image slide (a breather per act)
+      - Timeline / roadmap
+      - Close
+  scrolly:
+    label: Scrolly
+    description: Playful scrollytelling — a pudding.cool-style data story with a conceit, ticker bands, and chapter breaks.
+    personality: >-
+      Curious, witty, second-person — and DRESSED UP: the story wears a costume (a mission
+      console, a field report, a race broadcast) and every element plays along. The scroll IS
+      the story, suspense lives between chapters, and fun, visual stunningness is the point —
+      serious about the data, theatrical about everything else. The costume itself can run
+      deadpan (a technical console, straight-faced) or full broadcast — pick the register the
+      subject can carry.
+    beats:
+      - Console hero / cold open (the conceit announces itself)
+      - Ticker band
+      - Chapters (3-5), each opened by a page-break band
+      - Twist
+      - Payoff
+      - Methodology footer
+  dashboard:
+    label: Dashboard
+    description: Operating view — a full-screen grid of live tiles obeying a shared control row; almost no prose, nothing bold.
+    personality: >-
+      A control room, not an article: the reader FILTERS and scans, and the page answers. Nothing
+      is bold and nothing is read twice — the whole page runs in the utility register, the tiles
+      carry the story, and the controls are the centerpiece of the design. It earns its keep in
+      five seconds: a quiet one-line verdict, a control row the entire page obeys, then live
+      evidence wall to wall.
+    beats:
+      - Command bar (kicker · status chip · quiet verdict · the shared controls, one compact band)
+      - KPI band (3-4 trend cards — value + delta + sparkline — in one Grid row)
+      - Evidence tiles (charts/tables on the same Grid, every query bound to the controls)
+      - Status footer (sources · window · refresh cadence)
+themes: {}

@@ -1,0 +1,143 @@
+@import 'tailwindcss';
+
+/*
+ * WHERE THE CLASSES LIVE. Tailwind v4 detects sources from the build's root,
+ * and the SPA builds with `web/` as its root — so without these the app's own
+ * components compile to nothing (measured: the document frame fell back to a
+ * bare 300×150 iframe and the menu's click-away layer to 0×0).
+ *
+ * AND WHERE THEY DO NOT. A test is not shipped UI, and it is full of strings
+ * that LOOK like classes because that is what it is asserting about: one of
+ * them, `content-['@import_url(https://e.example)']` in the banned-CSS test,
+ * compiled to a utility whose text an @import hoist then lifted to the top of
+ * the stylesheet — and the whole 74 KB file parsed to ZERO rules. Every page
+ * of the built app was unstyled, while dev was fine, because dev never runs
+ * that step. Guarded by lib/__tests__/app-stylesheet.test.ts.
+ */
+@source "../components";
+@source "../web";
+@source "../lib";
+@source not "../components/**/__tests__/**";
+@source not "../lib/**/__tests__/**";
+@source not "../web/**/__tests__/**";
+@source not "../**/*.test.ts";
+@source not "../**/*.test.tsx";
+
+/*
+ * artifact-bin — terminal-graphite design system.
+ * Dark by default (no data-theme attribute); [data-theme='light'] swaps the
+ * palette to paper-terminal. The toggle writes localStorage('mx_theme') and a
+ * pre-hydration script in the layout stamps the attribute FOUC-free.
+ */
+@theme {
+  --color-bg: #0b0e11;
+  --color-surface: #10151b;
+  --color-raised: #151c24;
+  --color-comment: #18212a;
+  --color-comment-hover: #1c2732;
+  --color-edge: #202832;
+  --color-edge-bright: #2e3947;
+  --color-fg: #e6edf3;
+  --color-muted: #7d8590;
+  --color-faint: #4d5665;
+  --color-accent: #3fe77b;
+  --color-accent-soft: #12281a;
+  --color-danger: #f85149;
+  --color-danger-soft: #2d1512;
+
+  /*
+   * The faces themselves, named exactly as the @fontsource packages web/main
+   * imports declare them. `next/font` used to define these two variables on
+   * the html element; nothing did after the SPA replaced it, and a
+   * `font-family` whose first item is an undefined `var()` is invalid at
+   * computed-value time — so the app lost its typeface entirely rather than
+   * falling through to `ui-monospace`. Guarded by lib/__tests__/app-fonts.
+   */
+  --font-jb-mono: 'JetBrains Mono Variable';
+  --font-plex-sans: 'IBM Plex Sans';
+
+  --font-mono: var(--font-jb-mono), ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+:root[data-theme='light'] {
+  --color-bg: #f6f7f8;
+  --color-surface: #ffffff;
+  --color-raised: #eef1f3;
+  --color-comment: #f9fafb;
+  --color-comment-hover: #ffffff;
+  --color-edge: #e1e6ea;
+  --color-edge-bright: #c6cfd6;
+  --color-fg: #1a2129;
+  --color-muted: #5a6572;
+  --color-faint: #939daa;
+  --color-accent: #0e9d4f;
+  --color-accent-soft: #e2f5e9;
+  --color-danger: #c93c37;
+  --color-danger-soft: #fbe9e8;
+}
+
+/* Dot color for the engineering-paper grid — light needs a darker ink than
+ * its edges or the dots vanish into the paper. */
+:root {
+  --dot: color-mix(in srgb, var(--color-edge-bright) 65%, transparent);
+}
+
+:root[data-theme='light'] {
+  --dot: color-mix(in srgb, var(--color-edge-bright) 90%, transparent);
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  /* Faint dot-grid: engineering paper, not decoration. */
+  background-image: radial-gradient(circle, var(--dot) 1px, transparent 1px);
+  background-size: 26px 26px;
+  min-height: 100vh;
+}
+
+/* A tint, and the text keeps its own color: the solid accent+bg pair measured
+ * 3.3:1 in light mode (WCAG AA needs 4.5) — __tests__/selection-contrast.test.ts. */
+::selection {
+  background: color-mix(in srgb, var(--color-accent) 30%, transparent);
+}
+
+/* Staggered row reveal on load. */
+.reveal {
+  animation: rise 0.35s ease-out backwards;
+}
+
+/* The get-started prompt's block cursor. steps(1) — a terminal caret snaps,
+ * it does not fade. */
+.caret {
+  animation: blink 1.1s steps(1) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+/* The top bar's menu pane emerging from the left edge. */
+@keyframes drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+}
+
+/* A MobileSheet rising from the bottom edge. */
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+}

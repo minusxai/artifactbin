@@ -1,0 +1,136 @@
+---
+name: markup
+description: >-
+  The vocabulary beyond the brief: the full component list, <Helmet> CSS/script/theme overrides, web fonts, layout. Read only for what the brief does not show, or a 400 the message does not settle.
+---
+## Read first
+
+`markup` is **static JSX treated as data** — parsed, validated, interpreted
+over a fixed component registry, never executed. A fault is a
+`400 {"error":"invalid_jsx","details":[…]}` with exact spans: guess and correct.
+
+- **Static JSX only**: literal props (strings, numbers, booleans, arrays,
+  `{{…}}` objects); no expressions, spreads or inline handlers (`onClick=` is
+  rejected). **But the document DOES run your JavaScript**: one `<script>` in
+  `<Helmet>` runs after hydration — `addEventListener` on your own ids.
+- **Style with Tailwind classes via `className`**, starting from a
+  `<div data-design="tw" className="@container …">` wrapper with `@2xl:`
+  container variants for responsive layout.
+- Data (`<Query>`, `<Value>`, `<Mutation>`, embeds, controls): [data](markup-data.md).
+  [motion](markup-motion.md) · [video](markup-video.md) · [svg](markup-svg.md) ·
+  [templates.md](templates.md) · [themes.md](themes.md).
+
+## Contents
+
+Skeleton · Vocabulary · `<Helmet>` · Images · Layout · Do / Don't.
+
+## Skeleton (editorial)
+
+```jsx
+<Helmet><Query name="monthly">{`select month, sum(revenue) revenue from ref_<datasetId> group by 1 order by 1`}</Query></Helmet>
+<div data-design="tw" className="@container px-6 py-12 @2xl:px-12 @2xl:py-16">
+  <header className="max-w-4xl">
+    <p className="animate-fade-in text-xs uppercase tracking-widest text-muted-foreground">Eyebrow</p>
+    <h1 className="animate-fade-up mt-4 text-5xl @2xl:text-7xl font-bold tracking-tight leading-[1.05]">The headline states the finding</h1>
+    <p className="animate-fade-up [animation-delay:200ms] mt-6 text-lg text-muted-foreground max-w-prose">The standfirst earns the scroll in one sentence.</p>
+  </header>
+  <section className="py-16">
+    <h2 className="reveal-up text-2xl font-semibold tracking-tight">01 · A claim, never a topic</h2>
+    <div className="reveal-up mt-6"><Question title="Revenue by month" data="$monthly" viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{"x":{"field":"month","type":"temporal"},"y":{"field":"revenue","type":"quantitative"}}}}} height="430px" /></div>
+  </section>
+</div>
+```
+
+## Component vocabulary (the complete allowlist)
+
+Kit components ([[ components | length ]]):
+`[[ components | join(' ') ]]`
+
+Plus the embeds `Question` `Number` and the Helmet declarations `Value`
+`Query` `Mutation`; a name outside that list is rejected with the registry
+echoed back. Component props are NOT validated; an unknown prop is ignored silently.
+
+**HTML tags: write the ordinary tag you mean** — [[ tags | length ]] are allowed
+(prose, headings, lists, tables, links, media, the bare controls `input`
+`select` `textarea` `button`, inline SVG): an unlisted tag answers `400`
+carrying the whole set in `allowed_html_tags`. Only these are refused
+outright, with no list: [% for t in refusedTags %]`[[ t ]]` [% endfor %].
+
+## `<Helmet>` — the document's own head
+
+At most ONE per document, holding at most one each of `<title>`, `<style>`
+and `<script>`, plus `<meta name content />` pairs, plus any number of the
+DATA declarations `<Value>`, `<Query>`, `<Mutation>` ([data](markup-data.md)).
+Write it anywhere; it is hoisted to the top when stored. It is the ONLY
+place for custom CSS, JS or data — any of those in the body is refused.
+
+```jsx
+<Helmet>
+  <title>Quarterly review</title>
+  <style>{`.rise { animation: rise .9s both } @keyframes rise { from { opacity: 0 } }`}</style>
+  <script>{`document.getElementById('tab-2').addEventListener('click', function () { document.getElementById('panel-2').hidden = false; });`}</script>
+</Helmet>
+```
+
+Your script runs sandboxed with an opaque origin: no cookies, no access to
+the surrounding page, and no network beyond its CSP's four paths.
+`</script` cannot appear in the text (split it: `'</scr' + 'ipt'`).
+`window.mx` is defined before it runs: `mx.params.get/set/subscribe` (a set
+re-runs dependent queries and re-renders bound embeds);
+`mx.data.get('sales')` (`{rows, columns}`) `/.pending()/.subscribe()`;
+`mx.mutate(name)`; `mx.refresh()`. **Rows arrive AFTER your script runs** (the
+document paints first, then fetches): read them in `mx.data.subscribe(fn)`,
+never on line one.
+
+- **Custom CSS lives in that `<style>` block, never inline** (`style=` is rejected).
+  Scope rules to your own class names (bare element selectors leak into chart
+  chrome); colors from theme tokens (`var(--primary)`).
+  **Utilities compile `!important`** — never fight a Tailwind class from a
+  style block. At save, `position: fixed/sticky` and external
+  `url()`/`@import` are stripped; `100vh` becomes the reader-viewport variable.
+- **Override a theme** in that block under `:root` — no theme-name selector
+  or `!important`: `:root { --background: #0c0d0e; --primary: #ff6a1f; --chart-1: #ec6100; --font-display: Georgia, serif; }`.
+  Keys: `--background --foreground --card --popover --primary --secondary
+  --muted --accent --destructive` (each with `-foreground`), `--border
+  --input --ring --radius --chart-1..5`, `--font-body --font-display --font-mono`.
+- **Subresources**: `<img src>` and `<Video poster>` take a `ref:<id>`, a
+  `data:image/` URL, or an `https://` URL imported at publish; any other
+  subresource position (`srcSet`, `background`) rejects an external URL.
+  Links (`href`) may point anywhere.
+- **Web fonts**: `<meta name="font-display" content="Lobster" />` (also
+  `font-body`, `font-mono`) names a Google family, served from this origin;
+  an unknown family fails the publish.
+- **Theme tokens first**: `text-muted-foreground`, `bg-muted`, `border-border`,
+  `bg-background` follow the active theme; hardcoded palettes fight it. ONE
+  bespoke accent (`text-[#e2483d]`) is legitimate for the one bold moment —
+  it will not follow a later theme switch.
+- `theme`, `template` and `colorMode` are top-level fields of the publish
+  call, not Helmet content. A template is a reference, not a contract (no
+  genre named → **default to `scrolly`**; torn → ask the user). `colorMode`
+  (`light | dark`) is the AUTHOR'S DEFAULT — readers flip it, so design in theme tokens.
+
+## Images and icons
+
+- `<img src="ref:<imageId>" />` — an uploaded image artifact
+  ([publishing-datasets.md](publishing-datasets.md)). `<img src="https://…/chart.png" />` — a web image,
+  IMPORTED at publish and echoed back as `ref:<id>`; a dead URL fails the
+  publish and names itself.
+- `<Icon name="chart-bar" />` — a lucide icon, inline (kebab-case names from
+  lucide.dev). Size it with a `size-*` class; it inherits `currentColor`.
+
+## Layout components
+
+- `<SlideDeck><Slide title="…">…</Slide>…</SlideDeck>` — a presentation, each
+  slide filling the viewport (the `deck` template).
+- `<Grid><GridItem x={0} y={0} w={6} h={3}>…</GridItem>…</Grid>` — the
+  12-column dashboard canvas (`dashboard`).
+
+## Do / Don't
+
+- DO cap body copy at `max-w-prose`; let CHARTS break wider. Every table is
+  already its own scroll box — never widen one with negative margins.
+- Three or more `<h2>` sections get a table of contents made from the
+  headings — write `<h2>`s as short claims. Decks and `<Grid>` dashboards get none.
+- DO put every number a viewer might question behind a `<Query>` and a
+  `<Number>`/`<Question>`/`<DataTable>` — never a typed-in figure.
+- DON'T author in markdown: there is no markdown tier; JSX is the round-trip format.

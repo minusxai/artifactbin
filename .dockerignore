@@ -1,0 +1,10 @@
+node_modules
+.next
+data
+.git
+.env
+*.log
+test
+__tests__
+scripts/parity
+vitest.config.ts

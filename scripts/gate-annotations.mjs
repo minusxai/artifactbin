@@ -1,0 +1,290 @@
+/**
+ * Gate: ANNOTATIONS — the owner pins feedback to a node, the agent answers.
+ *
+ * The loop no unit test can make, because every seam is a browser fact: the
+ * owner selects text INSIDE the sandboxed frame, the composer is PAGE chrome
+ * fed by that report, the tint is a real element the frame renders, and the
+ * agent's HTTP resolve must reach the still-open tab over the live stream and
+ * take it with it — no reload anywhere. Commenting is a LAYER: no mode is
+ * entered anywhere in this gate, the rail is a panel, and the loop that used to
+ * need four navigations (done → annotate → done → edit) is one toolbar click
+ * inside the editor — with the typing before it surviving, which is the one
+ * thing here that can lose someone's work. A logged-out context then proves a reader
+ * sees none of it (they get the bare document, which carries no pins and no
+ * chrome at all) — including the view-mode SELECTION BUBBLE, which is browser
+ * fact all the way down: a Selection inside an opaque frame, chrome the frame
+ * draws against it, and a capability only the page may grant.
+ *
+ *   usage: node scripts/gate-annotations.mjs [base]
+ */
+import { chromium } from 'playwright';
+import { becomeOwner, startDocument } from './lib/start-doc.mjs';
+
+const BASE = process.argv[2] ?? 'http://localhost:3030';
+const failures = [];
+const ok = (pass, label) => { console.log(`${pass ? '  ok ' : 'FAIL '} ${label}`); if (!pass) failures.push(label); };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function until(read, want, budgetMs = 8000) {
+  const deadline = Date.now() + budgetMs;
+  let last;
+  while (Date.now() < deadline) {
+    last = await read().catch(() => undefined);
+    if (want(last)) return last;
+    await sleep(200);
+  }
+  return last;
+}
+
+const DOC =
+  '<Helmet><title>Annotated</title></Helmet>'
+  + '<div data-design="tw" className="p-10">'
+  + '<h1>Quarterly report</h1>'
+  + '<p id="intro">An intro paragraph of ordinary prose.</p>'
+  // Nested on purpose: a breadcrumb only offers non-root ancestors, so the
+  // section is what proves the crumb renders and re-targets.
+  + '<section className="max-w-2xl"><p id="figure">Revenue grew 40% in Q3.</p></section>'
+  + '</div>';
+
+const run = async () => {
+  const { id, token } = await startDocument(BASE);
+  const put = await fetch(`${BASE}/api/artifacts/${id}`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ markup: DOC }),
+  });
+  if (!put.ok) throw new Error(`publish failed (${put.status}): ${await put.text()}`);
+
+  const browser = await chromium.launch();
+  try {
+    // ── the owner's tab ────────────────────────────────────────────────────
+    const owner = await browser.newContext();
+    const page = await owner.newPage();
+    await becomeOwner(page, BASE, token);
+    await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
+    const frame = page.frameLocator('iframe[title="artifact"]');
+    await frame.locator('#figure').waitFor({ timeout: 15000 });
+
+    // ── the view-mode selection bubble ────────────────────────────────────
+    // Highlighting words offers the next move WHERE THE WORDS ARE: inside the
+    // frame, because only the document can see a Selection at an opaque origin.
+    // Clicked-until-it-takes for the same reason as the node click below — the
+    // capability grant and the lazy chunk land a beat after the page does.
+    const bubble = frame.locator('[data-mx-selection-actions]');
+    await until(async () => {
+      await frame.locator('#figure').click({ clickCount: 3, timeout: 2000 }).catch(() => {});
+      return bubble.isVisible().catch(() => false);
+    }, (v) => v === true, 15000);
+    ok(await bubble.isVisible(), 'selecting text in view mode raises the action bubble inside the document');
+    ok(await frame.locator('[aria-label="Edit selected text"]').count() === 1
+      && await frame.locator('[aria-label="Annotate selected text"]').count() === 1,
+      'the owner is offered both edit and annotate');
+
+    // Choosing Annotate opens the composer on those exact words — and enters
+    // NOTHING. Commenting is a layer, so no hash moves and no mode opens.
+    await frame.locator('[aria-label="Annotate selected text"]').click();
+    const seeded = await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
+    ok(seeded === 1, 'the composer opens on the selected words — no second click on the same text');
+    ok(await page.evaluate(() => location.hash) === '', 'commenting enters no mode: the hash is untouched');
+    ok(await frame.locator('#figure[data-mx-annotate-selected]').count() === 1,
+      'the frame marks the node the composer is composing on');
+    ok(await page.locator('[aria-label="Select section"]').count() >= 1, 'the composer carries the selection breadcrumb');
+
+    // Write it from the composer the bubble opened.
+    await page.locator('[aria-label="Annotation comment"]').fill('this number looks wrong — check the Q3 sheet');
+    await page.locator('[aria-label="Save annotation"]').click();
+
+    // Saving tints the commented node (the Docs highlight).
+    const highlighted = frame.locator('#figure[data-mx-annotated]');
+    await highlighted.waitFor({ timeout: 8000 });
+    ok(true, 'saving tints the commented node');
+
+    // ── the rail is a PANEL, not a mode ───────────────────────────────────
+    await page.locator('[aria-label="Open artifact controls"]').click();
+    await page.locator('[aria-label="Toggle comments"]').click();
+    await page.locator('[aria-label="Annotation sidebar"]').waitFor({ timeout: 8000 });
+    ok(await page.evaluate(() => location.hash) === '', 'opening the rail moves no hash');
+    await page.locator('[aria-label="Open artifact controls"]').click();
+    ok(await page.locator('[aria-label="Edit artifact"]').count() === 1, 'edit stays offered while the rail is open');
+    await page.keyboard.press('Escape');
+    const thread = page.locator('[aria-label="Annotation thread"]');
+    ok((await thread.textContent())?.includes('Q3 sheet'), 'the saved comment appears as a rail thread');
+    ok(await page.locator('[aria-label="Artifact viewport"]').evaluate((el) => el.style.right !== '0px'),
+      'the open rail narrows the document rather than covering it');
+
+    await page.locator('[aria-label="Close comments"]').click();
+    const railGone = await until(() => page.locator('[aria-label="Annotation sidebar"]').count(), (n) => n === 0, 5000);
+    ok(railGone === 0, 'closing the rail puts the panel away');
+
+    // THE INVERSION: the tint used to leave with the mode. It is ambient now,
+    // so it stays — and a compact identity marker floats beside it.
+    const stillTinted = await until(() => frame.locator('#figure[data-mx-annotated]').count(), (n) => n === 1, 5000);
+    ok(stillTinted === 1, 'the tint is ambient: a commented node stays marked with no rail and no mode');
+    ok((await page.locator('[aria-label="Open annotation count"]').textContent()) === '1', 'the comments button carries the unresolved count');
+    const viewComments = page.locator('[aria-label="Open annotation comments"]');
+    await viewComments.waitFor({ timeout: 8000 });
+    const viewComment = page.locator('[aria-label^="Open annotation conversation by"]');
+    await viewComment.waitFor({ timeout: 8000 });
+    const compactBox = await viewComment.boundingBox();
+    ok(!!compactBox && compactBox.width <= 40 && compactBox.height <= 40,
+      'the ambient annotation is a compact identity marker');
+    ok(await page.locator('[aria-label="Artifact viewport"]').evaluate((el) => (el).style.right === '0px'),
+      'the floating marker leaves the document full-width');
+    await viewComment.hover();
+    const expandedBox = await until(() => viewComment.boundingBox(), (box) => !!box && box.width > 250, 5000);
+    ok((await viewComments.textContent())?.includes('Q3 sheet'), 'hover reveals the conversation preview');
+    const anchorBox = await frame.locator('#figure').boundingBox();
+    const commentBox = expandedBox;
+    ok(!!anchorBox && !!commentBox && Math.abs(anchorBox.y - commentBox.y) <= 4,
+      'the annotation marker follows its annotated content vertically');
+    const viewportWidth = await page.evaluate(() => innerWidth);
+    ok(!!commentBox
+      && commentBox.x >= 0
+      && commentBox.x + commentBox.width <= viewportWidth
+      && Math.abs(viewportWidth - (commentBox.x + commentBox.width) - 12) <= 2,
+    'the expanded preview stays fixed to the right and inside the viewport');
+
+    // There is no second visibility state: annotations remain ambient and the
+    // artifact controls only open the full rail.
+    await page.mouse.move(400, 20);
+    await page.locator('[aria-label="Open artifact controls"]').click();
+    ok(await page.locator('[aria-label="Hide comments"], [aria-label="Show comments"]').count() === 0,
+      'artifact controls carry no annotation visibility toggle');
+    await page.keyboard.press('Escape');
+
+    // Clicking the compact conversation opens the rail FOCUSED on that thread,
+    // ready to continue — a panel, still not a mode.
+    await viewComment.click();
+    await page.locator('[aria-label="Annotation sidebar"]').waitFor({ timeout: 8000 });
+    await frame.locator('#figure[data-mx-annotation-open]').waitFor({ timeout: 8000 });
+    ok(await page.evaluate(() => location.hash) === '', 'opening a thread never touches the URL');
+    ok((await thread.first().textContent())?.includes('Q3 sheet') && await page.locator('[aria-label="Reply to annotation"]').first().isVisible(),
+      'clicking the floating marker opens the rail focused and ready to reply');
+
+    // ── the agent's side, over plain HTTP ─────────────────────────────────
+    const wire = await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: { Authorization: `Bearer ${token}` } })).json();
+    const ann = wire.annotations?.[0];
+    ok(!!ann && ann.snippet.includes('Revenue grew 40%'), 'GET /api/artifacts/<id> inlines the annotation with its snippet');
+    ok(wire.open_annotations === 1, 'the wire carries the open count');
+    ok(typeof ann?.anchor?.key === 'string' && wire.markup.includes(`data-annotation-anchor="${ann.anchor.key}"`), 'the markup carries only the opaque annotation anchor key');
+
+    // The case the ids exist for: a full-replace PUT that keeps the attribute keeps the annotation.
+    const rewritten = wire.markup.replace('grew 40%', 'grew 34%');
+    const putRes = await fetch(`${BASE}/api/artifacts/${id}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ markup: rewritten }),
+    });
+    ok(putRes.ok, 'the agent full-replaces the document, preserving the annotation anchor');
+    const afterPut = await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: { Authorization: `Bearer ${token}` } })).json();
+    ok(afterPut.annotations?.[0]?.orphaned === false && afterPut.annotations?.[0]?.snippet.includes('34%'),
+      'the annotation survives the PUT and its snippet follows the new text');
+    const stillHighlighted = await until(() => frame.locator('#figure[data-mx-annotated]').count(), (n) => n === 1, 10000);
+    ok(stillHighlighted === 1, 'the open tab re-highlights the node after the live adopt');
+
+    const resolved = await (await fetch(`${BASE}/api/artifacts/${id}/annotations/${ann.id}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reply: 'Recomputed — it was 34%. Fixed.', resolve: true }),
+    })).json();
+    ok(resolved.status === 'resolved' && resolved.thread?.length === 2, 'the agent replies and resolves in one POST');
+
+    // The still-open owner tab loses the highlight AND the sidebar thread
+    // WITHOUT a reload (the live stream); resolved history is listed below it.
+    const gone = await until(() => frame.locator('[data-mx-annotated]').count(), (n) => n === 0, 10000);
+    ok(gone === 0, 'the resolve reaches the open tab live: the highlight lifts with no reload');
+    const threadGone = await until(() => page.locator('[aria-label="Annotation thread"]').count(), (n) => n === 0, 8000);
+    ok(threadGone === 0, 'the open-thread list empties live too');
+    const badgeGone = await until(() => page.locator('[aria-label="Open annotation count"]').count(), (n) => n === 0, 5000);
+    ok(badgeGone === 0, 'the count badge drops with the resolve');
+    const resolvedCard = await until(() => page.locator('[aria-label="Resolved annotation thread"]').count(), (n) => n === 1, 8000);
+    ok(resolvedCard === 1, 'resolved history lists the closed thread below the open list');
+
+    // The owner's delete erases the thread outright once its collapsed
+    // conversation is opened.
+    await page.locator('[aria-label="Show resolved conversation"]').click();
+    await page.locator('[aria-label="Annotation actions"]').click();
+    await page.locator('[aria-label="Delete annotation"]').click();
+    const allGone = await until(() => page.locator('[aria-label="Resolved annotation thread"]').count(), (n) => n === 0, 8000);
+    ok(allGone === 0, 'delete erases the thread from the history');
+    const wireAfter = await (await fetch(`${BASE}/api/artifacts/${id}/annotations?status=all`, { headers: { Authorization: `Bearer ${token}` } })).json();
+    ok(wireAfter.annotations?.length === 0, 'the delete reached storage — nothing left on the wire');
+
+    // ── THE POINT OF ALL OF THIS: comment WHILE editing ───────────────────
+    // Type into a paragraph, then comment on that same paragraph without
+    // leaving edit mode. The comment's anchor is a real CAS edit and the
+    // editor answers a 409 by adopting the server's document, so this is
+    // exactly where un-drained typing would be thrown away.
+    await page.locator('[aria-label="Open artifact controls"]').click();
+    await page.locator('[aria-label="Edit artifact"]').click();
+    await until(() => page.evaluate(() => location.hash), (h) => h === '#edit');
+    const editComments = await until(() => page.locator('[aria-label="Toggle comments"]').count(), (n) => n === 1, 5000);
+    ok(editComments === 1, 'the comments control survives entering edit mode');
+
+    // Clicked-until-it-takes, like every other in-frame click here: the edit
+    // chunk and the frame's re-render after the agent's PUT both land a beat
+    // after the mode does, and a click in that beat selects nothing.
+    const para = frame.locator('#figure');
+    const toolbar = page.locator('[aria-label="Typography toolbar"]');
+    await until(async () => {
+      await para.click({ timeout: 2000 }).catch(() => {});
+      return toolbar.isVisible().catch(() => false);
+    }, (v) => v === true, 20000);
+    ok(await toolbar.isVisible(), 'the editor selects the annotated paragraph');
+    await page.keyboard.press('End');
+    await page.keyboard.type(' MIDSENTENCE');
+
+    // The toolbar's Comment button keeps focus in the host on mousedown, so
+    // the typing above is still UNCOMMITTED when the composer opens.
+    await page.locator('[aria-label="Comment on selection"]').click();
+    const editComposer = await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
+    ok(editComposer === 1, 'the editor toolbar opens the composer without leaving edit mode');
+    ok(await page.evaluate(() => location.hash) === '#edit', 'commenting mid-edit stays in edit mode');
+    await page.locator('[aria-label="Annotation comment"]').fill('written without leaving the editor');
+    await page.locator('[aria-label="Save annotation"]').click();
+    await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 0, 10000);
+
+    // BOTH writes survived, in order: the drain landed the keystrokes, then
+    // the anchor was stamped against the fresh head.
+    const afterMid = await until(
+      async () => (await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: { Authorization: `Bearer ${token}` } })).json()),
+      (w) => (w?.annotations?.length ?? 0) === 1,
+      15000,
+    );
+    ok((afterMid?.annotations?.length ?? 0) === 1, 'the mid-edit comment reached storage');
+    ok(typeof afterMid?.markup === 'string' && afterMid.markup.includes('MIDSENTENCE'),
+      'the typing before it survived: the editor was drained before the anchor was stamped');
+
+    // …and the layer is ambient INSIDE the editor: the node just commented on
+    // is tinted while the document is still editable.
+    const tintWhileEditing = await until(() => frame.locator('#figure[data-mx-annotated]').count(), (n) => n === 1, 10000);
+    ok(tintWhileEditing === 1, 'commented nodes are tinted inside the editor');
+
+    await page.locator('[aria-label="Exit edit mode"]').click();
+    await until(() => page.evaluate(() => location.hash), (h) => h === '');
+
+    // ── a logged-out reader sees nothing ──────────────────────────────────
+    const strangerCtx = await browser.newContext();
+    const stranger = await strangerCtx.newPage();
+    await stranger.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
+    await sleep(1500);
+    const strangerPins = await stranger.locator('[data-mx-annotated], [data-mx-annotation-open]').count();
+    const strangerButtons = await stranger.locator('[aria-label="Toggle comments"]').count();
+    ok(strangerPins === 0 && strangerButtons === 0, 'a logged-out reader sees no pins and no annotate chrome');
+    // A reader is served the document top-level, so their selection happens in
+    // the page itself — and nothing grants them an action, so no chunk loads.
+    await stranger.locator('#figure').click({ clickCount: 3, timeout: 2000 }).catch(() => {});
+    await sleep(500);
+    ok(await stranger.locator('[data-mx-selection-actions]').count() === 0,
+      'a reader selecting text is offered nothing at all');
+    await strangerCtx.close();
+    await owner.close();
+  } finally {
+    await browser.close();
+  }
+};
+
+run().then(() => {
+  if (failures.length) { console.error(`\n${failures.length} failure(s)`); process.exit(1); }
+  console.log('\nall good');
+}).catch((err) => { console.error(err); process.exit(1); });

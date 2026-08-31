@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+DEFAULT_IMAGE="ghcr.io/minusxai/artifactbin:latest"
+IMAGE="${ARTIFACT_BIN_IMAGE:-$DEFAULT_IMAGE}"
+TARGET_INPUT=""
+PORT_OVERRIDE=""
+NO_INTERVIEW=0
+
+usage() {
+  echo "Usage: install.sh [--no-interview] [--image=<ref>] [--dir=<path>] [--port=<n>] [path]" >&2
+}
+
+for arg in "$@"; do
+  case "$arg" in
+    --no-interview) NO_INTERVIEW=1 ;;
+    --image=*) IMAGE=${arg#*=} ;;
+    --dir=*) TARGET_INPUT=${arg#*=} ;;
+    --port=*) PORT_OVERRIDE=${arg#*=} ;;
+    --help|-h) usage; exit 0 ;;
+    --*) echo "Unknown option: $arg" >&2; usage; exit 2 ;;
+    *)
+      if [[ -n "$TARGET_INPUT" ]]; then
+        echo "Only one install directory may be specified." >&2
+        exit 2
+      fi
+      TARGET_INPUT=$arg
+      ;;
+  esac
+done
+
+if [[ -n "$PORT_OVERRIDE" ]]; then
+  if ! [[ "$PORT_OVERRIDE" =~ ^[0-9]+$ ]] ||
+     (( PORT_OVERRIDE < 1 || PORT_OVERRIDE > 65535 )); then
+    echo "--port must be a number from 1 to 65535." >&2
+    exit 2
+  fi
+fi
+
+echo "[1/6] Checking Docker and system requirements"
+if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+  echo "Docker is required and must be running. Install it from https://docs.docker.com/get-docker/." >&2
+  exit 1
+fi
+if ! command -v curl >/dev/null 2>&1; then
+  echo "curl is required to check Artifact Bin's health." >&2
+  exit 1
+fi
+
+PLATFORM=""
+case "$(uname -m)" in
+  arm64|aarch64) PLATFORM=linux/amd64 ;;
+esac
+
+TARGET_INPUT=${TARGET_INPUT:-./artifact-bin}
+case "/$TARGET_INPUT/" in
+  */../*)
+    echo "The install directory must not contain '..'." >&2
+    exit 2
+    ;;
+esac
+if [[ "$TARGET_INPUT" = /* ]]; then
+  TARGET=${TARGET_INPUT%/}
+else
+  TARGET="$(pwd -P)/${TARGET_INPUT#./}"
+  TARGET=${TARGET%/}
+fi
+HOME_REAL=$(cd "$HOME" && pwd -P)
+if [[ "${ARTIFACT_BIN_ANYWHERE:-0}" != "1" ]]; then
+  case "$TARGET/" in
+    "$HOME_REAL"/*) ;;
+    *)
+      echo "The install directory must be under HOME ($HOME_REAL). Docker Desktop shares HOME by default; mounts outside it can silently receive nothing. Set ARTIFACT_BIN_ANYWHERE=1 to continue anyway." >&2
+      exit 1
+      ;;
+  esac
+fi
+
+echo "[2/6] Preparing $TARGET"
+mkdir -p "$TARGET/data"
+ENV_FILE="$TARGET/.env"
+if [[ -f "$ENV_FILE" ]]; then
+  UPGRADE=1
+  echo "Existing install found — upgrading."
+else
+  UPGRADE=0
+fi
+
+echo "[3/6] Pulling $IMAGE"
+pull_image() {
+  if [[ -n "$PLATFORM" ]]; then
+    docker pull --platform "$PLATFORM" "$IMAGE"
+  else
+    docker pull "$IMAGE"
+  fi
+}
+if ! pull_image; then
+  echo "Could not pull $IMAGE. See Docker's output above." >&2
+  exit 1
+fi
+
+echo "[4/6] Configuring Artifact Bin"
+if [[ "$UPGRADE" -eq 0 ]]; then
+  SETUP_ARGS=(node scripts/setup.mjs --out /work/.env --no-next)
+  if [[ -n "$PORT_OVERRIDE" ]]; then
+    SETUP_ARGS+=(--port "$PORT_OVERRIDE")
+  fi
+  if [[ "$NO_INTERVIEW" -eq 1 || ! -t 2 ]]; then
+    SETUP_ARGS+=(--yes)
+    if [[ -n "$PLATFORM" ]]; then
+      docker run --rm --platform "$PLATFORM" -v "$TARGET:/work" "$IMAGE" "${SETUP_ARGS[@]}"
+    else
+      docker run --rm -v "$TARGET:/work" "$IMAGE" "${SETUP_ARGS[@]}"
+    fi
+  else
+    if [[ -n "$PLATFORM" ]]; then
+      docker run --rm -it --platform "$PLATFORM" -v "$TARGET:/work" "$IMAGE" "${SETUP_ARGS[@]}" </dev/tty
+    else
+      docker run --rm -it -v "$TARGET:/work" "$IMAGE" "${SETUP_ARGS[@]}" </dev/tty
+    fi
+  fi
+fi
+
+HOST_PORT=$PORT_OVERRIDE
+if [[ -z "$HOST_PORT" ]]; then
+  HOST_PORT=$(sed -n 's/^APP__PORT=//p' "$ENV_FILE" | tail -n 1)
+  HOST_PORT=${HOST_PORT:-3030}
+fi
+
+echo "[5/6] Starting Artifact Bin"
+docker rm -f artifact-bin 2>/dev/null || true
+if [[ -n "$PLATFORM" ]]; then
+  docker run -d --name artifact-bin --restart unless-stopped --platform "$PLATFORM" \
+    -p "${ARTIFACT_BIN_BIND:-127.0.0.1}:$HOST_PORT:3000" -v "$TARGET/data:/app/data" \
+    --env-file "$ENV_FILE" -e APP__PORT=3000 "$IMAGE"
+else
+  docker run -d --name artifact-bin --restart unless-stopped \
+    -p "${ARTIFACT_BIN_BIND:-127.0.0.1}:$HOST_PORT:3000" -v "$TARGET/data:/app/data" \
+    --env-file "$ENV_FILE" -e APP__PORT=3000 "$IMAGE"
+fi
+
+echo "[6/6] Waiting for Artifact Bin"
+TIMEOUT=${ARTIFACT_BIN_HEALTH_TIMEOUT:-120}
+DEADLINE=$((SECONDS + TIMEOUT))
+until curl -fsS "http://127.0.0.1:$HOST_PORT/health" >/dev/null 2>&1; do
+  if (( SECONDS >= DEADLINE )); then
+    echo "Artifact Bin did not become healthy within ${TIMEOUT}s. Container logs:" >&2
+    docker logs --tail 40 artifact-bin >&2 || true
+    exit 1
+  fi
+  sleep 1
+done
+
+cat <<EOF
+
+Artifact Bin is ready.
+Open http://localhost:$HOST_PORT
+To publish from an agent, read http://localhost:$HOST_PORT/docs/artifact-bin/SKILL.md
+Follow logs: docker logs -f artifact-bin
+Re-run this command to upgrade.
+
+For public access, put a reverse proxy with TLS in front and set
+APP__PUBLIC_BASE_URL in artifact-bin/.env to the public URL.
+EOF

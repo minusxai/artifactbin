@@ -1,0 +1,175 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { parseJsx } from '@/lib/jsx';
+import { createFrameSelectionActions, SELECTION_ACTIONS_ATTR } from '../selection-actions';
+
+const parsed = parseJsx('<p>select these words</p>');
+if (!parsed.ok) throw new Error('fixture does not parse');
+
+let actions: ReturnType<typeof createFrameSelectionActions>;
+const onAction = vi.fn();
+
+/** Where the selected words currently sit in the viewport — moved by a scroll. */
+let rangeRect = { x: 100, y: 80, left: 100, top: 80, right: 240, bottom: 100, width: 140, height: 20 };
+
+const selectText = async () => {
+  const text = document.querySelector('p')!.firstChild!;
+  const range = document.createRange();
+  range.selectNodeContents(text);
+  Object.defineProperty(range, 'getBoundingClientRect', {
+    value: () => ({ ...rangeRect, toJSON: () => ({}) }),
+  });
+  const selection = window.getSelection()!;
+  selection.removeAllRanges();
+  selection.addRange(range);
+  document.querySelector('p')!.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
+  await Promise.resolve();
+};
+
+beforeEach(() => {
+  onAction.mockClear();
+  rangeRect = { x: 100, y: 80, left: 100, top: 80, right: 240, bottom: 100, width: 140, height: 20 };
+  document.body.innerHTML = '<p data-mx-ast="0">select these words</p>';
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    if (this.hasAttribute(SELECTION_ACTIONS_ATTR)) {
+      return { x: 0, y: 0, left: 0, top: 0, right: 132, bottom: 30, width: 132, height: 30, toJSON: () => ({}) };
+    }
+    return { x: 100, y: 80, left: 100, top: 80, right: 240, bottom: 100, width: 140, height: 20, toJSON: () => ({}) };
+  });
+  actions = createFrameSelectionActions({ win: window, onAction });
+  actions.setNodes(parsed.nodes);
+});
+
+afterEach(() => {
+  actions.dispose();
+  window.getSelection()?.removeAllRanges();
+  vi.restoreAllMocks();
+  document.body.innerHTML = '';
+});
+
+describe('view-mode text selection actions', () => {
+  /*
+   * A triple-click, and a drag that ends at the end of a line, leave the Range
+   * ENDING at offset 0 of the following block — a node the selection does not
+   * cover a single character of. Preferring the deeper endpoint then hands the
+   * action to whatever happens to sit deeper in the next subtree, which on a
+   * deck slide meant commenting on a column label three elements away from the
+   * heading that was highlighted.
+   */
+  it('ignores an endpoint the selection does not actually cover', async () => {
+    // Paths mirror the parsed source's child indices exactly, as the runtime stamps them.
+    document.body.innerHTML = '<div data-mx-ast="0">'
+      + '<h1 data-mx-ast="0.0">the heading that was selected</h1>'
+      + '<div data-mx-ast="0.1"><div data-mx-ast="0.1.0"><p data-mx-ast="0.1.0.0">1.0 · Build</p></div></div>'
+      + '</div>';
+    const deep = parseJsx('<div><h1>the heading that was selected</h1><div><div><p>1.0 · Build</p></div></div></div>');
+    if (!deep.ok) throw new Error('fixture does not parse');
+    actions.setNodes(deep.nodes);
+    actions.update({ type: 'mx:selection-actions', edit: false, annotate: true });
+
+    const heading = document.querySelector('h1')!;
+    const trailing = document.querySelector('p')!;
+    const range = document.createRange();
+    range.setStart(heading.firstChild!, 0);
+    // …ends BEFORE the paragraph's first character: zero of it is selected.
+    range.setEnd(trailing.firstChild!, 0);
+    Object.defineProperty(range, 'getBoundingClientRect', {
+      value: () => ({ ...rangeRect, toJSON: () => ({}) }),
+    });
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    heading.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
+    await Promise.resolve();
+
+    document.querySelector<HTMLButtonElement>('[aria-label="Annotate selected text"]')!.click();
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(onAction.mock.calls[0][1]).toMatchObject({ path: '0.0', tag: 'h1' });
+  });
+
+  it('shows only authorized actions and reports the containing source node', async () => {
+    actions.update({ type: 'mx:selection-actions', edit: true, annotate: false });
+    await selectText();
+
+    const toolbar = document.querySelector<HTMLElement>(`[${SELECTION_ACTIONS_ATTR}]`)!;
+    expect(toolbar).not.toHaveAttribute('hidden');
+    expect(toolbar.getAttribute('aria-label')).toBe('Text selection actions');
+    expect(toolbar.querySelector('[aria-label="Edit selected text"] .lucide-pencil')).toBeTruthy();
+    expect(toolbar.querySelector('[aria-label="Annotate selected text"]')).toBeNull();
+
+    toolbar.querySelector<HTMLButtonElement>('[aria-label="Edit selected text"]')!.click();
+    expect(onAction).toHaveBeenCalledWith('edit', expect.objectContaining({ path: '0', tag: 'p', kind: 'text' }));
+    expect(toolbar).toHaveAttribute('hidden');
+  });
+
+  it('renders annotate alone for an owner without exposing edit', async () => {
+    actions.update({ type: 'mx:selection-actions', edit: false, annotate: true });
+    await selectText();
+    const toolbar = document.querySelector<HTMLElement>(`[${SELECTION_ACTIONS_ATTR}]`)!;
+    expect(toolbar.querySelector('[aria-label="Edit selected text"]')).toBeNull();
+    expect(toolbar.querySelector('[aria-label="Annotate selected text"] .lucide-message-square')).toBeTruthy();
+  });
+
+  it('targets the deepest source element at the selection edges, not their outer ancestor', async () => {
+    const nested = parseJsx('<div><p><strong>inner</strong> outer</p></div>');
+    if (!nested.ok) throw new Error('nested fixture does not parse');
+    document.body.innerHTML = '<div data-mx-ast="0"><p data-mx-ast="0.0"><strong data-mx-ast="0.0.0">inner</strong> outer</p></div>';
+    actions.setNodes(nested.nodes);
+    actions.update({ type: 'mx:selection-actions', edit: true, annotate: false });
+
+    const strongText = document.querySelector('strong')!.firstChild!;
+    const paragraphText = document.querySelector('p')!.lastChild!;
+    const range = document.createRange();
+    range.setStart(strongText, 0);
+    range.setEnd(paragraphText, paragraphText.textContent!.length);
+    Object.defineProperty(range, 'getBoundingClientRect', {
+      value: () => ({ x: 100, y: 80, left: 100, top: 80, right: 240, bottom: 100, width: 140, height: 20, toJSON: () => ({}) }),
+    });
+    const nativeSelection = window.getSelection()!;
+    nativeSelection.removeAllRanges();
+    nativeSelection.addRange(range);
+    document.querySelector('p')!.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
+    await Promise.resolve();
+
+    document.querySelector<HTMLButtonElement>('[aria-label="Edit selected text"]')!.click();
+    expect(onAction).toHaveBeenCalledWith('edit', expect.objectContaining({ path: '0.0.0', tag: 'strong', kind: 'text' }));
+  });
+
+  it('renders nothing for a reader and dismisses an open bubble when capability is removed', async () => {
+    actions.update({ type: 'mx:selection-actions', edit: false, annotate: false });
+    await selectText();
+    expect(document.querySelector(`[${SELECTION_ACTIONS_ATTR}]`)).toBeNull();
+
+    actions.update({ type: 'mx:selection-actions', edit: true, annotate: true });
+    await selectText();
+    expect(document.querySelector(`[${SELECTION_ACTIONS_ATTR}]`)).toBeTruthy();
+    actions.update({ type: 'mx:selection-actions', edit: false, annotate: false });
+    expect(document.querySelector(`[${SELECTION_ACTIONS_ATTR}]`)).toBeNull();
+  });
+
+  it('follows the words when the document scrolls, rather than abandoning them', async () => {
+    actions.update({ type: 'mx:selection-actions', edit: true, annotate: true });
+    await selectText();
+    const toolbar = document.querySelector<HTMLElement>(`[${SELECTION_ACTIONS_ATTR}]`)!;
+    expect(toolbar.style.top).toBe('73px');
+
+    // The reader scrolls a little: the same words, 40px higher. A bubble that
+    // hid here would be gone until the next click, for a gesture that never
+    // changed what is selected.
+    rangeRect = { ...rangeRect, y: 40, top: 40, bottom: 60 };
+    window.dispatchEvent(new Event('scroll'));
+    await vi.waitFor(() => expect(toolbar.style.top).toBe('33px'));
+    expect(toolbar).not.toHaveAttribute('hidden');
+  });
+
+  it('re-measures for keys that can move a selection, and for nothing else', async () => {
+    actions.update({ type: 'mx:selection-actions', edit: true, annotate: true });
+    await selectText();
+    const look = vi.spyOn(window, 'getSelection');
+
+    document.dispatchEvent(new KeyboardEvent('keyup', { key: 'q', bubbles: true }));
+    expect(look).not.toHaveBeenCalled();
+
+    document.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowRight', shiftKey: true, bubbles: true }));
+    expect(look).toHaveBeenCalled();
+  });
+});

@@ -1,0 +1,23 @@
+{
+  "name": "@artifactbin/sql",
+  "version": "0.1.0",
+  "description": "The SQL service: DuckDB, in this process or in one of its own. Rows in, rows out; nothing persists between calls. `.` is the contract, the HTTP client and the server shell; `./shape` is the pure column inference, importable from a browser bundle; `./local` is the engine and the only entry that loads the native module.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./shape": "./src/dataset-shape.ts",
+    "./local": "./src/local.ts"
+  },
+  "files": ["src", "CONTRACT.md"],
+  "dependencies": {
+    "@artifactbin/contracts": "*",
+    "@artifactbin/utils": "*",
+    "@duckdb/node-api": "1.5.5-r.4"
+  },
+  "devDependencies": {
+    "vitest": "4.1.11"
+  }
+}

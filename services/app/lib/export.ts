@@ -1,0 +1,398 @@
+/**
+ * On-demand artifact → image rendering, the curlable screenshot path
+ * (`GET /a/<id>/export`). There is no browserless way to rasterize arbitrary
+ * HTML (Node SVG rasterizers ignore foreignObject; Satori is a flexbox subset
+ * — minusx Story_Design_V2 §13), so a real browser takes the picture.
+ *
+ * THE BROWSER IS NOT THIS MODULE'S ANY MORE. Chromium — the singleton, the
+ * serialising chain, the idle shutdown, the three capture modes — lives in
+ * `@artifactbin/browser`, and this module reaches it through the services
+ * registry (`lib/services`): an HTTP client when `BROWSER__SERVICE_URL` names
+ * a service, the local Playwright one a composition root registered
+ * otherwise. Nothing here imports Playwright, which is what lets the app
+ * image ship without it (`lib/__tests__/lean-imports.test.ts`).
+ *
+ * What stays here is everything the SERVICE must not know: which URL a row is
+ * photographed at and with which short-lived signed key, what a shot COVERS
+ * as a cache segment, the two-layer cache (in-memory LRU + the object store),
+ * the one retry, and the verdict → HTTP mapping. The service renders a URL;
+ * the product decides what to render and what a failure means.
+ */
+import { EXPORT_INTERNAL_ORIGIN } from '@/lib/config';
+import { services } from '@/lib/services';
+import { ArtifactRow } from './artifacts';
+import { CARD_HEIGHT, CARD_WIDTH } from './export-card';
+import { mintExportKey } from './export-key';
+import { json } from './http';
+import { objectStore } from './object-store';
+
+export const EXPORT_MIME = { png: 'image/png', jpg: 'image/jpeg' } as const;
+export type ExportFormat = keyof typeof EXPORT_MIME;
+
+/**
+ * What the shot covers. 'full' = the whole document, however tall — agents
+ * curl this to eyeball a page. 'card' = the top viewport at og ratio, the
+ * og:image / thumbnail shape (platforms crop tall images unpredictably; a
+ * card is already the ratio they want). The stage size lives in
+ * lib/export-card.ts, importable without this module's whole graph.
+ */
+export type ExportCapture = 'full' | 'card';
+
+/** Rendered viewport width; height follows the content (full-page capture). */
+export const EXPORT_WIDTH = 1200;
+const EXPORT_VIEWPORT_HEIGHT = 630; // og card ratio; fullPage grows past it as needed
+const RENDER_TIMEOUT_MS = 15_000;
+const PAGE_SETTLE_MS = 1500; // live /v pages: charts and embeds hydrate after mount
+/** How long to wait before the single re-render (see renderArtifactImage). */
+const RENDER_RETRY_MS = 1_000;
+
+/**
+ * WHICH RENDERER TOOK THE PICTURE. Shots are cached by artifact version, in
+ * memory and in the object store, so a version that was already shot is never
+ * re-rendered — which means a change to what a shot COVERS must change the key,
+ * or every document already published keeps serving the old picture.
+ *
+ * Generation 2: a markup document is shot from its own page (`raw?chrome=0`)
+ * rather than through the app page's iframe element, whose box is the viewport
+ * — "full" used to mean the first screen, on every document ever exported.
+ *
+ * Bump this whenever the framing changes. Old entries then go cold on their own,
+ * exactly like the card key's stage size does.
+ */
+export const EXPORT_RENDER_GENERATION = 2;
+const CACHE_MAX_ENTRIES = 24;
+
+/** `format` value → export format; null when absent or unrecognized. */
+export function parseExportFormat(value: string | null): ExportFormat | null {
+  return value === 'png' || value === 'jpg' ? value : null;
+}
+
+/** `mode` value → capture; ABSENT defaults to 'full', garbage is null (400). */
+export function parseExportCapture(value: string | null): ExportCapture | null {
+  if (value === null) return 'full';
+  return value === 'full' || value === 'card' ? value : null;
+}
+
+/**
+ * `slide` value → 1-based slide index; ABSENT is 0 (the whole document) and
+ * anything that is not a positive integer is null (400). A deck is reviewed one
+ * slide at a time, and an agent with no way to ask for slide N publishes a
+ * throwaway document holding that slide instead — measured, three extra
+ * requests and a version row per look.
+ */
+export function parseExportSlide(value: string | null): number | null {
+  if (value === null) return 0;
+  return /^[1-9][0-9]*$/.test(value) ? Number(value) : null;
+}
+
+/**
+ * What this shot IS, as a cache segment: the card carries its stage size (so
+ * resizing the card spec orphans old entries instead of serving them), a slice
+ * carries its slide number, and the whole-document shot carries the renderer
+ * generation.
+ */
+function exportCaptureKey(capture: ExportCapture, slide: number): string {
+  if (slide > 0) return `slide-${slide}-g${EXPORT_RENDER_GENERATION}`;
+  if (capture === 'card') return `card-${CARD_WIDTH}x${CARD_HEIGHT}-g${EXPORT_RENDER_GENERATION}`;
+  return `full-g${EXPORT_RENDER_GENERATION}`;
+}
+
+/** The durable cache address for one shot — version-keyed, so an edit misses naturally. */
+export function exportStoreKey(
+  artifact: Pick<ArtifactRow, 'id' | 'version'>,
+  format: ExportFormat,
+  capture: ExportCapture,
+  slide = 0,
+): string {
+  return `exports/${artifact.id}/${artifact.version}.${exportCaptureKey(capture, slide)}.${format}`;
+}
+
+export type RenderResult =
+  | { ok: true; mime: string; bytes: Buffer }
+  | { ok: false; reason: 'unavailable' | 'failed' }
+  /** The document has fewer slides than were asked for — a 404 that says how many. */
+  | { ok: false; reason: 'no_slide'; slides: number };
+
+interface ExportState {
+  /**
+   * Serialises RENDERS AT THIS DOOR — not for the browser's sake (the package
+   * has its own chain and shoots one page at a time), but so two requests for
+   * the same shot do not both take a picture: the second finds what the first
+   * cached ("a queued twin may have filled it" below).
+   */
+  chain: Promise<unknown>;
+  cache: Map<string, { mime: string; bytes: Buffer }>;
+}
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __artifact_bin_export__: ExportState | undefined;
+}
+
+function state(): ExportState {
+  if (!global.__artifact_bin_export__) {
+    global.__artifact_bin_export__ = { chain: Promise.resolve(), cache: new Map() };
+  }
+  return global.__artifact_bin_export__;
+}
+
+/**
+ * WHAT A RENDER WORKS FROM: a live page URL. Every tier renders in the app —
+ * a markup document is served as its own page, the data tiers inside the
+ * app's measure — so the exporter navigates the real page and shoots an
+ * element of it, never the app chrome.
+ *
+ * The page URL is a THUNK, not a string: it carries a short-lived signed key
+ * (lib/export-key.ts), and this render may sit behind a cold browser launch
+ * and the serialization queue. Minting at call time let the key die before
+ * navigation — and the shot then SUCCEEDED, returning a 200 PNG of a
+ * not-found page. Built here, it is always fresh at the moment it is used.
+ */
+type RenderInput = {
+  urlFor: () => string;
+  /**
+   * What to photograph on that page. A markup document lives in its own frame;
+   * the data tiers render as a table, a recipe or an image inside the app's
+   * measure. Named by the CALLER, which knows the format — the exporter waiting
+   * for a frame that a dataset page never has is a timeout, not a picture.
+   */
+  target: string;
+};
+
+/**
+ * THE ONE RENDER REQUEST. Everything the browser needs to take this picture
+ * and nothing about this product: a URL (carrying its own key), what to shoot
+ * on it, and which of the three capture modes. The service answers bytes or a
+ * VERDICT — it never throws — and this is the only place those verdicts are
+ * turned into the app's own smaller vocabulary.
+ *
+ * It answers in the SERVICE's four-verdict vocabulary, not the app's three:
+ * `navigation` and `failed` both end as a 500, but only ONE of them may be
+ * retried, so collapsing them here would quietly re-render every unreachable
+ * page. The narrowing happens after that decision, in renderArtifactImage.
+ *
+ *   ok           → the bytes                → 200
+ *   unavailable  → no browser in this image → 503 render_unavailable
+ *   navigation   → the page was not reached → 500 render_failed, NOT retried
+ *   failed       → it tried and failed      → 500 render_failed, retried once
+ *   no_slide     → fewer slides than asked  → 404 slide_not_found + the count
+ */
+type Shot =
+  | { ok: true; mime: string; bytes: Buffer }
+  // One member PER reason, so `reason === 'navigation'` narrows: a single
+  // member holding a union of reasons does not, and the compiler cannot then
+  // see that the retry branch has ruled navigation out.
+  | { ok: false; reason: 'unavailable' }
+  | { ok: false; reason: 'navigation' }
+  | { ok: false; reason: 'failed' }
+  | { ok: false; reason: 'no_slide'; slides: number };
+
+async function renderOnce(
+  input: RenderInput,
+  format: ExportFormat,
+  capture: ExportCapture,
+  slide = 0,
+): Promise<Shot> {
+  const rendered = await services().browser.render({
+    // The key is minted HERE, at the moment the request goes out — see
+    // RenderInput. A cold browser launch is unbounded, and a key that expired
+    // in the queue produced a 200 PNG of a 404 page.
+    url: input.urlFor(),
+    format,
+    ...(format === 'jpg' ? { quality: 85 } : {}),
+    viewport: capture === 'card'
+      ? { width: CARD_WIDTH, height: CARD_HEIGHT }
+      : { width: EXPORT_WIDTH, height: EXPORT_VIEWPORT_HEIGHT },
+    // BY NAME, not by position: the page also carries the document's static
+    // body (for crawlers), which may itself contain a <Video> player frame —
+    // `first()` then measured the player and cropped every card to its width.
+    selector: input.target,
+    capture: slide > 0 ? { slide } : capture,
+    // Same-origin requests are the app itself; anything cross-origin is a
+    // stray — abort it, which doubles as the CSP discipline for the surface.
+    sameOriginOnly: true,
+    // The Next dev overlay ("N issues") is fixed to the corner and lands in
+    // page-level shots on dev servers; the element doesn't exist in prod.
+    injectCss: 'nextjs-portal{display:none !important}',
+    settleMs: PAGE_SETTLE_MS,
+    timeoutMs: RENDER_TIMEOUT_MS,
+  });
+  if (rendered.ok) return { ok: true, mime: rendered.mime, bytes: Buffer.from(rendered.bytes) };
+  if (rendered.reason === 'no_slide') return { ok: false, reason: 'no_slide', slides: rendered.slides };
+  /*
+   * The caller gets a NAME (`render_failed`); the operator gets the reason.
+   * Without this the whole path was silent: a 500 with `{"error":
+   * "render_failed"}` and nothing anywhere saying whether the browser was
+   * missing, the page 404'd, or TLS refused — which is exactly what an export
+   * behind a reverse proxy looked like from the outside.
+   */
+  if (rendered.reason !== 'unavailable') console.error(`[export] render ${rendered.reason}:`, rendered.detail ?? '');
+  return { ok: false, reason: rendered.reason };
+}
+
+/**
+ * Render an artifact to image bytes. TWO cache layers sit in front of the
+ * browser, both keyed by VERSION so an edit misses naturally and no
+ * invalidation is ever run: an in-memory LRU, and the object store behind it.
+ * A hit at either costs no browser work at all — which is what makes one
+ * render serve every og unfurl and profile thumbnail for that version.
+ * `opts.pageUrl` is a thunk, minted per attempt — see RenderInput.
+ */
+export function renderArtifactImage(
+  artifact: Pick<ArtifactRow, 'id' | 'version'>,
+  format: ExportFormat,
+  // `pageUrl` is REQUIRED: every artifact is shot from its live page. The old
+  // optional shape existed so a row could be photographed from its stored HTML
+  // instead — which only the retired html tier ever had.
+  opts: { pageUrl: () => string; target: string; capture?: ExportCapture; slide?: number },
+): Promise<RenderResult> {
+  const s = state();
+  const capture = opts.capture ?? 'full';
+  const slide = opts.slide ?? 0;
+  const captureKey = exportCaptureKey(capture, slide);
+  const key = `${artifact.id}:${artifact.version}:${captureKey}:${format}`;
+  const hit = s.cache.get(key);
+  if (hit) return Promise.resolve({ ok: true, ...hit });
+
+  // The durable layer: version-keyed, so an edit misses naturally and the
+  // stale entry just goes cold — no invalidation to run, ever. One render
+  // then serves every og unfurl and profile thumbnail for that version,
+  // across restarts.
+  const storeKey = exportStoreKey(artifact, format, capture, slide);
+  const input: RenderInput = { urlFor: opts.pageUrl, target: opts.target };
+  const run = s.chain.then(async (): Promise<RenderResult> => {
+    const cached = s.cache.get(key); // a queued twin may have filled it
+    const stored = cached ?? (await objectStore().get(storeKey).then(
+      (bytes) => ({ mime: EXPORT_MIME[format], bytes }),
+      () => null,
+    ));
+    if (stored) {
+      if (!cached) remember(s, key, stored);
+      return { ok: true, ...stored };
+    }
+    /*
+     * ONE retry on a failed render: a shot taken immediately after a write can
+     * race the fresh version — the page loads, but what the exporter is waiting
+     * for is not there yet — and answers render_failed, which an agent then
+     * spends turns diagnosing (measured: two turns on a real run). Only that
+     * race is retried: a missing browser ('unavailable'), a missing slide
+     * ('no_slide') and an unreachable page ('navigation') are ANSWERS — a
+     * server that is not answering answers no faster the second time, and
+     * re-asking only doubles the wait before the caller learns.
+     *
+     * A failure that took the FULL wait already polled for what it wanted and
+     * never saw it — that is an answer too, and re-running it only doubles the
+     * time before the caller hears it. Only a FAST 'failed' looks like a race.
+     */
+    const startedAt = Date.now();
+    let rendered = await renderOnce(input, format, capture, slide);
+    if (!rendered.ok && rendered.reason === 'failed' && Date.now() - startedAt <= RENDER_TIMEOUT_MS / 2) {
+      await new Promise((r) => setTimeout(r, RENDER_RETRY_MS));
+      rendered = await renderOnce(input, format, capture, slide);
+    }
+    // Only now do the service's four verdicts become the app's three: the
+    // page could not be reached is a FAILURE, never "there is no browser here".
+    if (!rendered.ok) return rendered.reason === 'navigation' ? { ok: false, reason: 'failed' } : rendered;
+    const shot = { mime: rendered.mime, bytes: rendered.bytes };
+    // Best-effort persist: a failed put costs a re-render later, never the shot.
+    await objectStore().put(storeKey, shot.bytes, shot.mime).catch(() => {});
+    remember(s, key, shot);
+    return { ok: true, ...shot };
+  });
+  s.chain = run.catch(() => {});
+  /*
+   * The service answers a VERDICT rather than throwing, so this catch is the
+   * backstop for THIS module's own failures (the object store, a bad URL from
+   * the thunk) — not for a render that went wrong. The caller still gets a
+   * name; the operator gets the reason.
+   */
+  return run.catch((error): RenderResult => {
+    console.error('[export] render failed:', error);
+    return { ok: false, reason: 'failed' };
+  });
+}
+
+/** Keep the newest shots, drop the oldest — a small LRU in front of the store. */
+function remember(s: ExportState, key: string, shot: { mime: string; bytes: Buffer }): void {
+  if (s.cache.size >= CACHE_MAX_ENTRIES) s.cache.delete(s.cache.keys().next().value as string);
+  s.cache.set(key, shot);
+}
+
+/**
+ * The whole export answer for an ALREADY-AUTHORIZED artifact: parse the
+ * caller's format/mode/slide, render, and build the image (or refusal)
+ * Response. ONE implementation behind both doors — the `/a/<id>/export` route
+ * and the `export_artifact` MCP operation — so caps, error names and cache
+ * rules cannot fork. Authorization stays with the CALLER: only a door that
+ * has run the read ACL may call this.
+ */
+export async function exportImageResponse(
+  artifact: Pick<ArtifactRow, 'id' | 'version' | 'format'>,
+  q: { format?: string | null; mode?: string | null; slide?: string | null },
+  base: string,
+): Promise<Response> {
+  // Default png; anything unrecognized is a client error rather than a
+  // surprise format, since this path exists only to produce an image.
+  const format = parseExportFormat(q.format ?? 'png');
+  if (!format) return json({ error: 'unknown_format', allowed: ['png', 'jpg'] }, 400);
+  // Default full page (agents ask for this to see the whole document); 'card'
+  // is the 1600×840 top stage (lib/export-card) og:image uses.
+  const capture = parseExportCapture(q.mode ?? null);
+  if (!capture) return json({ error: 'unknown_mode', allowed: ['full', 'card'] }, 400);
+  // One slide of a deck, 1-based. Absent is 0 — the whole document.
+  const slide = parseExportSlide(q.slide ?? null);
+  if (slide === null) return json({ error: 'unknown_slide', hint: 'slide is a 1-based slide number, e.g. ?slide=2' }, 400);
+
+  const rendered = await renderArtifactImage(artifact, format, {
+    capture,
+    // The headless browser has no session, so a private page would 404 on
+    // itself. Mint a signed, seconds-long key scoped to this artifact —
+    // minted only AFTER the caller's ACL admitted the requester, and never a
+    // value any reader has seen. Minted lazily (see RenderInput): a cold
+    // browser launch is unbounded, and a key that expired in the queue
+    // produced a 200 PNG of a 404 page.
+    // A markup document is photographed from its OWN page (`raw?chrome=0` —
+    // the document with none of the reading chrome); the data tiers have no
+    // document of their own and render inside the app's <main>.
+    pageUrl: () => new URL(
+      artifact.format === 'markup'
+        ? `/a/${artifact.id}/raw?chrome=0&key=${mintExportKey(artifact.id)}`
+        : `/a/${artifact.id}?key=${mintExportKey(artifact.id)}`,
+      EXPORT_INTERNAL_ORIGIN ?? base,
+    ).toString(),
+    // BY NAME, not by position: a served document is the page itself.
+    target: artifact.format === 'markup' ? 'body' : 'main',
+    ...(slide > 0 ? { slide } : {}),
+  });
+  if (!rendered.ok) {
+    // A document with fewer slides than asked for is a missing RESOURCE, and
+    // the count is the one thing the caller needs to correct itself in one step.
+    if (rendered.reason === 'no_slide') return json({ error: 'slide_not_found', slides: rendered.slides }, 404);
+    const unavailable = rendered.reason === 'unavailable';
+    return json({ error: unavailable ? 'render_unavailable' : 'render_failed' }, unavailable ? 503 : 500);
+  }
+  return new Response(new Uint8Array(rendered.bytes), {
+    status: 200,
+    headers: {
+      'Content-Type': rendered.mime,
+      'X-Content-Type-Options': 'nosniff',
+      // Cards are fetched by browsers en masse (profile grids) behind a
+      // version-busted URL (&v=), so they may cache hard; full shots keep
+      // no-store — an agent re-asking after an edit must never see stale.
+      'Cache-Control': capture === 'card' ? 'public, max-age=86400' : 'no-store',
+    },
+  });
+}
+
+/**
+ * Test hook — drop the render cache and release the browser. The browser is
+ * the REGISTERED service's, so this closes whatever is registered (a local
+ * Playwright one has a `close`; an HTTP client has nothing to release and does
+ * not declare one) rather than a singleton this module owns.
+ */
+export async function resetExportRenderer(): Promise<void> {
+  const s = state();
+  s.cache.clear();
+  global.__artifact_bin_export__ = undefined;
+  await services().browser.close?.();
+}

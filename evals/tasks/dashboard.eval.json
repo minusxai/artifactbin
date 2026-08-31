@@ -1,0 +1,20 @@
+{
+  "id": "dashboard",
+  "kind": "data",
+  "order": 2,
+  "template": "dashboard",
+  "brief": "The file support.csv in your working directory holds one row per support ticket. Publish it as a dataset, then publish an operating dashboard titled \"Support load, first half\" \u2014 the TITLE being what a browser tab and a shared link preview show. It should be a grid of tiles: a few headline numbers across the top, a chart of ticket volume over time broken down by channel, and a chart comparing median resolution hours by team. Every number must come from the dataset, not be typed in. When it is published, reply with the document's URL and nothing else.",
+  "handoff": "start-link",
+  "files": {
+    "support.csv": "month,channel,team,tickets,median_resolution_hours\n2026-01,email,Core,412,18.5\n2026-01,chat,Core,880,4.2\n2026-01,email,Billing,197,26.0\n2026-01,chat,Billing,341,7.8\n2026-02,email,Core,455,17.1\n2026-02,chat,Core,905,3.9\n2026-02,email,Billing,210,24.4\n2026-02,chat,Billing,362,7.1\n2026-03,email,Core,398,15.8\n2026-03,chat,Core,1021,3.4\n2026-03,email,Billing,188,22.9\n2026-03,chat,Billing,377,6.6\n2026-04,email,Core,506,19.2\n2026-04,chat,Core,1140,4.8\n2026-04,email,Billing,233,27.3\n2026-04,chat,Billing,401,8.2\n2026-05,email,Core,473,16.4\n2026-05,chat,Core,1198,3.7\n2026-05,email,Billing,221,23.1\n2026-05,chat,Billing,430,6.9\n2026-06,email,Core,441,14.9\n2026-06,chat,Core,1265,3.1\n2026-06,email,Billing,205,21.5\n2026-06,chat,Billing,455,6.2\n"
+  },
+  "checks": [
+    "published",
+    "dataset_created",
+    "query_ran",
+    "chart_marks_drawn",
+    "has_title",
+    "no_console_errors",
+    "no_failed_responses"
+  ]
+}

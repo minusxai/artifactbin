@@ -1,0 +1,183 @@
+name: Publish Docker Image
+
+# A push to main publishes the four public images, then asks the private
+# deployment control plane to deploy this exact commit.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051
+        id: meta
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/artifactbin
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+
+      # The staging box is x86_64; building a single arch keeps this fast.
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=min
+
+  # The lean APP as an image of its own, for the split shape
+  # (`SQL__SERVICE_URL` + `BROWSER__SERVICE_URL`): the whole app tree and
+  # neither of the two natives — the build-time assertions in
+  # services/app/Dockerfile refuse an install that grows one, and the lean
+  # entry REFUSES to boot without both service URLs. Published from the SAME
+  # commit as the sql/browser images it stands beside (docker-compose.lean.yml
+  # composes exactly these).
+  publish-app:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051
+        id: meta-app
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/artifactbin-app
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+
+      # The staging box is x86_64; building a single arch keeps this fast.
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: .
+          file: services/app/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta-app.outputs.tags }}
+          labels: ${{ steps.meta-app.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=min
+
+  # The SQL service as an image of its own, for the split shape
+  # (`SQL__SERVICE_URL`): DuckDB and nothing else — the build-time assertions
+  # in services/sql/Dockerfile refuse an install that grows the wrong package.
+  # Published from the SAME commit as the app it stands beside, which is the
+  # whole point: a service image built elsewhere is a second dependency tree.
+  publish-sql:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051
+        id: meta-sql
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/artifactbin-sql
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+
+      # The staging box is x86_64; building a single arch keeps this fast.
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: .
+          file: services/sql/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta-sql.outputs.tags }}
+          labels: ${{ steps.meta-sql.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=min
+
+  # The browser service as an image of its own, for the split shape
+  # (`BROWSER__SERVICE_URL`): the headless Chromium and nothing else. Same
+  # commit as the app, same rule as the sql image above.
+  publish-browser:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051
+        id: meta-browser
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/artifactbin-browser
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+
+      # The staging box is x86_64; building a single arch keeps this fast.
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: .
+          file: services/browser/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta-browser.outputs.tags }}
+          labels: ${{ steps.meta-browser.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=min
+
+  deploy-staging:
+    needs: [publish, publish-app, publish-sql, publish-browser]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Deploy this exact published commit to OSS staging
+        env:
+          GH_TOKEN: ${{ secrets.DEPLOYS_DISPATCH_TOKEN }}
+        run: |
+          gh workflow run artifact-bin-staging-deploy.yaml \
+            --repo minusxai/deploys \
+            --ref main \
+            -f oss_sha="${GITHUB_SHA}"

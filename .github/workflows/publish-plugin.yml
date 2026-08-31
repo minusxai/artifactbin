@@ -1,0 +1,32 @@
+name: Publish Plugin
+
+# Force-forwards the generated plugin marketplace (lib/plugin-package.ts) to
+# the public mirror repo users install from. Pushes only
+# when the generated tree actually changed.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run validate
+      - run: npx vitest run --project=node services/app/lib/__tests__/plugin-package.test.ts
+      # PLUGIN_MIRROR_TOKEN: a fine-grained PAT with contents:write on the
+      # mirror repo (lib/plugin-package.ts PLUGIN_REPO).
+      - run: npx tsx -r ../../scripts/register-yaml.cjs scripts/publish-plugin.ts --token "$PLUGIN_MIRROR_TOKEN"
+        working-directory: services/app
+        env:
+          PLUGIN_MIRROR_TOKEN: ${{ secrets.PLUGIN_MIRROR_TOKEN }}

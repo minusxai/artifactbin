@@ -1,0 +1,24 @@
+{
+  "name": "@artifactbin/proxy",
+  "version": "0.1.0",
+  "description": "The OSS proxy as parts: the session (bearer/session/agent-cookie), the doors, Better Auth login, the MCP OAuth provider, the forwarding headers, and ONE forwarder over the upstream seam.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./agent-cookie": "./src/agent-cookie.ts"
+  },
+  "dependencies": {
+    "@artifactbin/contracts": "*",
+    "@artifactbin/utils": "*",
+    "better-auth": "1.7.2",
+    "hono": "4.13.5",
+    "kysely": "0.28.17",
+    "pg": "8.23.0"
+  },
+  "devDependencies": {
+    "vitest": "4.1.11"
+  }
+}

@@ -1,0 +1,293 @@
+/**
+ * Story typography class algebra (lib/data/story/typography.ts) — the pure vocabulary +
+ * class-string transforms shared by the WYSIWYG typography toolbar (live DOM mutation) and
+ * the JSX source write-back, so the two always converge.
+ */
+import { describe, it, expect } from 'vitest';
+
+import {
+  TYPOGRAPHY_GROUPS,
+  TYPOGRAPHY_SIZE_SCALE,
+  SPACE_ABOVE_SCALE,
+  SPACE_BELOW_SCALE,
+  WIDTH_SCALE,
+  STORY_WYSIWYG_CLASSES,
+  currentChoice,
+  applyTypographyChoice,
+  stepSizeClass,
+  stepSpacingClass,
+  currentSpacingStep,
+  stepPaddingClass,
+  currentPaddingStep,
+  stepWidthClass,
+  currentWidthStep,
+  stripMaxWidth,
+  crumbHint,
+  FULL_BLEED_CLASSES,
+  PAD_LEFT_SCALE,
+  PAD_RIGHT_SCALE,
+  storyColorClass,
+  currentStoryColor,
+  applyStoryColor,
+} from '@/lib/data/story/typography';
+
+describe('typography vocabulary', () => {
+  it('STORY_WYSIWYG_CLASSES is the flat union of every group (recipe-union contract)', () => {
+    for (const classes of Object.values(TYPOGRAPHY_GROUPS)) {
+      for (const cls of classes) expect(STORY_WYSIWYG_CLASSES).toContain(cls);
+    }
+    for (const cls of [...SPACE_ABOVE_SCALE, ...SPACE_BELOW_SCALE, ...WIDTH_SCALE,
+      ...PAD_LEFT_SCALE, ...PAD_RIGHT_SCALE, ...FULL_BLEED_CLASSES]) {
+      expect(STORY_WYSIWYG_CLASSES).toContain(cls);
+    }
+    // No duplicates — the CSS compile unions by Set, but the contract should be clean anyway.
+    expect(new Set(STORY_WYSIWYG_CLASSES).size).toBe(STORY_WYSIWYG_CLASSES.length);
+  });
+});
+
+describe('currentChoice', () => {
+  it('reads the group member present in the class string', () => {
+    expect(currentChoice('mt-4 text-2xl font-bold', 'size')).toBe('text-2xl');
+    expect(currentChoice('mt-4 text-2xl font-bold', 'weight')).toBe('font-bold');
+    expect(currentChoice('mt-4 text-2xl font-bold', 'align')).toBeNull();
+    expect(currentChoice('', 'size')).toBeNull();
+  });
+
+  it('does not confuse non-member tokens that share a prefix', () => {
+    // text-muted-foreground is a color utility — neither a size nor an alignment.
+    expect(currentChoice('text-muted-foreground text-left', 'size')).toBeNull();
+    expect(currentChoice('text-muted-foreground text-left', 'align')).toBe('text-left');
+  });
+});
+
+describe('picker color classes', () => {
+  it('serializes arbitrary colors as important Tailwind utilities', () => {
+    expect(storyColorClass('text', '#A1B2C3')).toBe('text-[#a1b2c3]!');
+    expect(storyColorClass('fill', '#00FF80')).toBe('bg-[#00ff80]!');
+  });
+
+  it('reads current and pre-important picker color classes', () => {
+    expect(currentStoryColor('text-lg text-[#A1B2C3]!', 'text')).toBe('#a1b2c3');
+    expect(currentStoryColor('bg-[#00ff80] p-4', 'fill')).toBe('#00ff80');
+    expect(currentStoryColor('text-primary bg-muted', 'text')).toBeNull();
+  });
+
+  it('replaces only the picker-owned override and preserves authored color classes', () => {
+    expect(applyStoryColor('text-primary dark:text-white text-[#111111]!', 'text', '#abcdef'))
+      .toBe('text-primary dark:text-white text-[#abcdef]!');
+    expect(applyStoryColor('bg-muted bg-[#111111]! p-4', 'fill', '#fedcba'))
+      .toBe('bg-muted p-4 bg-[#fedcba]!');
+  });
+
+  it('clears the manual override to reveal the authored cascade', () => {
+    expect(applyStoryColor('text-primary text-[#abcdef]!', 'text', null)).toBe('text-primary');
+    expect(applyStoryColor('bg-muted bg-[#fedcba]!', 'fill', null)).toBe('bg-muted');
+  });
+});
+
+describe('applyTypographyChoice', () => {
+  it('adds a choice to an empty class string', () => {
+    expect(applyTypographyChoice('', 'size', 'text-xl')).toBe('text-xl');
+  });
+
+  it('swaps within the group and preserves unrelated tokens in order', () => {
+    expect(applyTypographyChoice('mt-4 text-sm leading-7', 'size', 'text-2xl'))
+      .toBe('mt-4 leading-7 text-2xl');
+  });
+
+  it('null clears the group without touching anything else', () => {
+    expect(applyTypographyChoice('mt-4 text-2xl font-bold', 'size', null)).toBe('mt-4 font-bold');
+    expect(applyTypographyChoice('italic underline', 'fontStyle', null)).toBe('underline');
+  });
+
+  it('is idempotent when the choice is already applied', () => {
+    expect(applyTypographyChoice('text-xl font-bold', 'size', 'text-xl')).toBe('text-xl font-bold');
+  });
+
+  it('normalizes whitespace', () => {
+    expect(applyTypographyChoice('  mt-4   text-sm ', 'size', 'text-lg')).toBe('mt-4 text-lg');
+  });
+
+  it('size choices strip ANY font-size token — full Tailwind scale and arbitrary values', () => {
+    expect(applyTypographyChoice('text-6xl font-serif', 'size', 'text-xl')).toBe('font-serif text-xl');
+    expect(applyTypographyChoice('text-[15px] mt-2', 'size', 'text-lg')).toBe('mt-2 text-lg');
+    // ...but not color/align/arbitrary-color utilities that share the text- prefix.
+    expect(applyTypographyChoice('text-primary text-center text-[#a1b2c3] text-sm', 'size', 'text-lg'))
+      .toBe('text-primary text-center text-[#a1b2c3] text-lg');
+  });
+
+  it('an explicit set FLATTENS variant-prefixed group members (exact choice wins at all widths)', () => {
+    // The story skill mandates responsive type (`text-3xl @2xl:text-5xl`) — an explicit size
+    // pick replaces the whole responsive set, and the same holds for the other groups.
+    expect(applyTypographyChoice('text-3xl @2xl:text-5xl font-semibold', 'size', 'text-xl'))
+      .toBe('font-semibold text-xl');
+    expect(applyTypographyChoice('text-left @2xl:text-center', 'align', 'text-right')).toBe('text-right');
+    expect(applyTypographyChoice('hover:font-bold', 'weight', null)).toBe('');
+  });
+
+  it('justify is a fourth alignment choice, mutually exclusive with the others', () => {
+    expect(applyTypographyChoice('text-center', 'align', 'text-justify')).toBe('text-justify');
+    expect(currentChoice('text-justify', 'align')).toBe('text-justify');
+  });
+
+  it('independent toggles compose (bold + italic + underline)', () => {
+    let cls = applyTypographyChoice('', 'weight', 'font-bold');
+    cls = applyTypographyChoice(cls, 'fontStyle', 'italic');
+    cls = applyTypographyChoice(cls, 'decoration', 'underline');
+    expect(cls.split(' ').sort()).toEqual(['font-bold', 'italic', 'underline']);
+    // Clearing one leaves the others.
+    expect(applyTypographyChoice(cls, 'fontStyle', null).split(' ').sort())
+      .toEqual(['font-bold', 'underline']);
+  });
+});
+
+describe('stepSizeClass', () => {
+  it('steps from text-base when no explicit size is present', () => {
+    expect(stepSizeClass('mt-2', 1)).toBe('mt-2 text-lg');
+    expect(stepSizeClass('mt-2', -1)).toBe('mt-2 text-sm');
+  });
+
+  it('steps along the scale from the current size', () => {
+    expect(stepSizeClass('text-xl', 1)).toBe('text-2xl');
+    expect(stepSizeClass('text-xl', -1)).toBe('text-lg');
+  });
+
+  it('walks the full Tailwind scale (agent stories author beyond 5xl)', () => {
+    expect(stepSizeClass('text-6xl', 1)).toBe('text-7xl');
+    expect(stepSizeClass('text-9xl', -1)).toBe('text-8xl');
+  });
+
+  it('SHIFTS variant-prefixed sizes with the base — responsive ratios survive a step', () => {
+    // Skill-mandated responsive type: stepping moves the whole set, in place.
+    expect(stepSizeClass('text-3xl @2xl:text-5xl font-semibold', 1))
+      .toBe('text-4xl @2xl:text-6xl font-semibold');
+    expect(stepSizeClass('mt-2 text-5xl @2xl:text-8xl', -1)).toBe('mt-2 text-4xl @2xl:text-7xl');
+  });
+
+  it('a variant size without a base still shifts; the new base lands at the end', () => {
+    expect(stepSizeClass('@2xl:text-5xl', 1)).toBe('@2xl:text-6xl text-lg');
+  });
+
+  it('per-token clamp at the scale ends', () => {
+    expect(stepSizeClass('text-8xl @2xl:text-9xl', 1)).toBe('text-9xl @2xl:text-9xl');
+  });
+
+  it('arbitrary size values are replaced by the stepped scale (manual control takes over)', () => {
+    expect(stepSizeClass('text-[15px] mt-2', 1)).toBe('mt-2 text-lg');
+  });
+
+  it('clamps at both ends of the scale', () => {
+    const largest = TYPOGRAPHY_SIZE_SCALE[TYPOGRAPHY_SIZE_SCALE.length - 1];
+    expect(stepSizeClass(largest, 1)).toBe(largest);
+    expect(stepSizeClass('text-xs', -1)).toBe('text-xs');
+  });
+});
+
+describe('stepSpacingClass', () => {
+  it('steps up from no margin (adds the first step; mt-0 is never written for nothing)', () => {
+    expect(stepSpacingClass('text-lg', 'above', 1)).toBe('text-lg mt-1');
+    expect(stepSpacingClass('text-lg', 'above', -1)).toBe('text-lg');
+  });
+
+  it('walks the curated scale in place, skip-steps included', () => {
+    expect(stepSpacingClass('mt-4 text-lg', 'above', 1)).toBe('mt-6 text-lg');
+    expect(stepSpacingClass('mt-6 text-lg', 'above', -1)).toBe('mt-4 text-lg');
+  });
+
+  it('above and below are independent edges', () => {
+    expect(stepSpacingClass('mt-4 mb-8', 'below', 1)).toBe('mt-4 mb-10');
+    expect(stepSpacingClass('mt-4 mb-8', 'above', -1)).toBe('mt-3 mb-8');
+  });
+
+  it('shifts variant-prefixed spacing and clamps per token', () => {
+    expect(stepSpacingClass('mt-4 @2xl:mt-10', 'above', 1)).toBe('mt-6 @2xl:mt-12');
+    expect(stepSpacingClass('mt-24', 'above', 1)).toBe('mt-24');
+    expect(stepSpacingClass('mt-0', 'above', -1)).toBe('mt-0');
+  });
+
+  it('replaces arbitrary margins with the stepped scale (manual control takes over)', () => {
+    expect(stepSpacingClass('mt-[18px] text-lg', 'above', 1)).toBe('text-lg mt-1');
+  });
+
+  it('does not confuse other m-prefixed utilities', () => {
+    expect(stepSpacingClass('mx-auto -mt-2 mb-4', 'above', 1)).toBe('mx-auto -mt-2 mb-4 mt-1');
+  });
+});
+
+describe('currentSpacingStep', () => {
+  it('reads the bare spacing step for an edge (variants and other edges ignored)', () => {
+    expect(currentSpacingStep('mt-4 mb-8 @2xl:mt-10', 'above')).toBe('4');
+    expect(currentSpacingStep('mt-4 mb-8 @2xl:mt-10', 'below')).toBe('8');
+    expect(currentSpacingStep('mt-0', 'above')).toBe('0');
+  });
+
+  it('returns null when the edge has no bare scale token (absent or arbitrary)', () => {
+    expect(currentSpacingStep('text-lg', 'above')).toBeNull();
+    expect(currentSpacingStep('mt-[18px]', 'above')).toBeNull();
+    expect(currentSpacingStep('@2xl:mt-10', 'above')).toBeNull();
+  });
+});
+
+describe('width stepper algebra', () => {
+  it('stripMaxWidth removes every constraint and reports the removed tokens in order', () => {
+    expect(stripMaxWidth('max-w-sm text-lg @2xl:max-w-4xl')).toEqual({
+      className: 'text-lg',
+      removed: ['max-w-sm', '@2xl:max-w-4xl'],
+    });
+    expect(stripMaxWidth('text-lg')).toEqual({ className: 'text-lg', removed: [] });
+  });
+
+  it('an unconstrained element reads as full: decrease narrows, increase is a no-op', () => {
+    expect(stepWidthClass('text-lg', -1)).toBe('text-lg max-w-7xl');
+    expect(stepWidthClass('text-lg', 1)).toBe('text-lg');
+  });
+
+  it('walks the curated scale and clamps at both ends', () => {
+    expect(stepWidthClass('max-w-prose text-lg', 1)).toBe('text-lg max-w-2xl');
+    expect(stepWidthClass('max-w-prose text-lg', -1)).toBe('text-lg max-w-xl');
+    expect(stepWidthClass('max-w-sm', -1)).toBe('max-w-sm');
+    expect(stepWidthClass('max-w-full', 1)).toBe('max-w-full');
+  });
+
+  it('replaces variant and arbitrary constraints with the stepped scale (manual control takes over)', () => {
+    expect(stepWidthClass('max-w-sm @2xl:max-w-4xl text-lg', 1)).toBe('text-lg max-w-md');
+    expect(stepWidthClass('max-w-[42rem] text-lg', -1)).toBe('text-lg max-w-7xl');
+  });
+
+  it('currentWidthStep reads the bare scale tail, null otherwise (the toolbar shows full)', () => {
+    expect(currentWidthStep('max-w-prose text-lg')).toBe('prose');
+    expect(currentWidthStep('max-w-full')).toBe('full');
+    expect(currentWidthStep('text-lg')).toBeNull();
+    expect(currentWidthStep('max-w-[42rem]')).toBeNull();
+  });
+});
+
+describe('stepPaddingClass / currentPaddingStep', () => {
+  it('steps left and right padding independently (pl-*/pr-*), shared relative semantics', () => {
+    expect(stepPaddingClass('bg-muted', 'left', 1)).toBe('bg-muted pl-1');
+    expect(stepPaddingClass('pl-4 bg-muted', 'left', 1)).toBe('pl-6 bg-muted');
+    expect(stepPaddingClass('pl-4 pr-8', 'right', -1)).toBe('pl-4 pr-6');
+    expect(stepPaddingClass('pr-1', 'right', -1)).toBe('pr-0');
+    expect(stepPaddingClass('text-lg', 'left', -1)).toBe('text-lg'); // none → no pl-0 written
+  });
+
+  it('does not disturb axis or all-sides paddings (px/py/p-* stay authored)', () => {
+    expect(stepPaddingClass('py-14 px-6 p-4', 'left', 1)).toBe('py-14 px-6 p-4 pl-1');
+  });
+
+  it('reads the bare step per side', () => {
+    expect(currentPaddingStep('pl-6 pr-2 py-14', 'left')).toBe('6');
+    expect(currentPaddingStep('pl-6 pr-2 py-14', 'right')).toBe('2');
+    expect(currentPaddingStep('py-14 px-6', 'left')).toBeNull();
+  });
+});
+
+describe('crumbHint', () => {
+  it('surfaces the most decision-relevant class for a breadcrumb: width first, then layout', () => {
+    expect(crumbHint('mt-4 max-w-2xl text-lg')).toBe('max-w-2xl');
+    expect(crumbHint('grid gap-8 @2xl:grid-cols-3')).toBe('grid');
+    expect(crumbHint('flex flex-col py-14')).toBe('flex');
+    expect(crumbHint('bg-primary py-14')).toBe('bg-primary');
+    expect(crumbHint('py-14 border-b')).toBe('');
+  });
+});

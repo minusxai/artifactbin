@@ -1,0 +1,226 @@
+"use client"
+
+/**
+ * `<DataTable>` — the data-bound table of the story kit, and the ONE way to
+ * show a lot of rows: virtualised (only the visible window is in the DOM),
+ * declarative per-column formatting (lib/story/data-table), sortable by
+ * header, and honest about being a sample — a table over a query cut at the
+ * row cap says "N of M" and can read the rest a window at a time, sorted by
+ * the engine, through the store's page transport.
+ *
+ * Two render regimes, deliberately: before mount (SSR, the og export, and
+ * the first client render — so hydration matches) it is a
+ * plain table of the first rows inside a fixed-height scroll box; after mount,
+ * with a measured height, the same box becomes a virtual window. Chrome is
+ * token classes only (this file is globbed into the recipe union).
+ */
+import * as React from "react"
+import { useVirtualizer } from "@tanstack/react-virtual"
+
+import { cn } from "./cn"
+import {
+  barFraction, cellTint, formatCell, gridGeometry, resolveColumns, sortRows,
+  type DataTableColumnSpec, type ResolvedColumn, type SortSpec,
+} from "@/lib/story/data-table"
+import type { DatasetColumn } from "@/lib/story/dataset-shape"
+import type { Row } from "@/lib/story/dataflow"
+
+export interface DataTableProps {
+  /** Absent (the bare registry entry, with no adapter) renders the empty state. */
+  rows?: Row[]
+  columns?: DatasetColumn[]
+  /** The authored `columns` prop, parsed (lib/story/data-table parseColumnSpecs). Absent = every column. */
+  spec?: DataTableColumnSpec[] | null
+  /** Initial sort. */
+  sort?: SortSpec | null
+  /** The scroll box height in px (default 420). */
+  height?: number
+  /** Sticky header (default true). */
+  sticky?: boolean
+  /** The real row count when `rows` is a sample (the engine's cap, or a page). */
+  totalRows?: number
+  truncated?: boolean
+  /** A window read is in flight. */
+  loading?: boolean
+  /**
+   * When the rows are a SAMPLE, sorting cannot be done locally without lying:
+   * the caller re-reads with this sort. Absent, sorting is local.
+   */
+  onSortChange?: (sort: SortSpec | null) => void
+  /** When the rows are a sample: read the next window. */
+  onLoadMore?: () => void
+  className?: string
+  /**
+   * Unknown props reach the root div, like every other kit component — the
+   * interpreter's `data-mx-ast` stamp among them, which is what makes an
+   * authored <DataTable> selectable in edit mode. Destructuring everything
+   * and spreading nothing silently dropped it.
+   */
+  [key: `data-${string}`]: unknown
+}
+
+/** Rows SSR'd / rendered before the virtual window takes over. */
+const STATIC_ROWS = 50
+const ROW_H = 33
+
+export function DataTable({
+  rows = [], columns = [], spec = null, sort: initialSort = null, height = 420, sticky = true,
+  totalRows, truncated = false, loading = false, onSortChange, onLoadMore, className, ...props
+}: DataTableProps) {
+  const [sort, setSort] = React.useState<SortSpec | null>(initialSort)
+  React.useEffect(() => { setSort(initialSort) }, [initialSort?.col, initialSort?.dir]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const resolved = React.useMemo(() => resolveColumns(spec, columns, rows), [spec, columns, rows])
+  const remote = truncated && !!onSortChange
+  const ordered = React.useMemo(() => (remote ? rows : sortRows(rows, sort)), [rows, sort, remote])
+
+  const cycle = (col: string) => {
+    const next: SortSpec | null = !sort || sort.col !== col ? { col, dir: 'asc' } : sort.dir === 'asc' ? { col, dir: 'desc' } : null
+    setSort(next)
+    if (remote) onSortChange?.(next)
+  }
+
+  // Virtual only once mounted AND measured: jsdom and SSR have no size, and
+  // the first client render must equal the server's markup. The header cells
+  // are measured in the same breath, while the static table's auto layout is
+  // still on screen — those widths become the virtual grid's track floors.
+  const scrollRef = React.useRef<HTMLDivElement>(null)
+  const [virtual, setVirtual] = React.useState(false)
+  const [measured, setMeasured] = React.useState<number[] | null>(null)
+  React.useEffect(() => {
+    const el = scrollRef.current
+    if (!el || el.clientHeight === 0) return
+    setMeasured([...el.querySelectorAll('thead th')].map((th) => th.getBoundingClientRect().width))
+    setVirtual(true)
+  }, [])
+  const virtualizer = useVirtualizer({
+    count: ordered.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_H,
+    overscan: 12,
+    enabled: virtual,
+  })
+  const items = virtualizer.getVirtualItems()
+  const total = virtualizer.getTotalSize()
+
+  // Near the bottom of a sample: ask for the next window once per approach.
+  const askedAtRef = React.useRef(-1)
+  const onScroll = () => {
+    const el = scrollRef.current
+    if (!el || !truncated || !onLoadMore || loading) return
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - ROW_H * 6 && askedAtRef.current !== ordered.length) {
+      askedAtRef.current = ordered.length
+      onLoadMore()
+    }
+  }
+
+  const visible: Array<{ index: number; start: number | null }> = virtual
+    ? items.map((v) => ({ index: v.index, start: v.start }))
+    : ordered.slice(0, STATIC_ROWS).map((_, i) => ({ index: i, start: null }))
+
+  // In the virtual regime every row is positioned on its own, so a shared
+  // TABLE layout no longer keeps columns aligned with the header: header row
+  // and body rows all become the same CSS grid instead — one template, so a
+  // cell sits under its heading by construction. The measured floors and the
+  // shared minWidth let the grid grow past a narrow viewport, handing overflow
+  // to the scroll box — the page never scrolls sideways, the table does.
+  const geometry = gridGeometry(resolved, measured)
+  const rowGrid: React.CSSProperties | undefined = virtual
+    ? { display: 'grid', gridTemplateColumns: geometry.template, width: '100%', ...(geometry.minWidth ? { minWidth: `${geometry.minWidth}px` } : {}) }
+    : undefined
+
+  const count = new Intl.NumberFormat(undefined)
+  return (
+    <div data-slot="data-table" aria-label="Data grid" className={cn("flex h-full w-full flex-col overflow-hidden rounded-md border border-border bg-card text-sm", className)} {...props}>
+      <div
+        ref={scrollRef}
+        onScroll={onScroll}
+        className="relative min-h-0 w-full flex-1 overflow-auto"
+        style={{ height: `${height}px` }}
+      >
+        <table className="w-full border-collapse text-sm" style={virtual ? { display: 'block' } : undefined}>
+          <thead className={cn("bg-card text-left text-muted-foreground", sticky && "sticky top-0 z-10")} style={virtual ? { display: 'block' } : undefined}>
+            <tr className="border-b border-border" style={rowGrid}>
+              {resolved.map((c) => (
+                <th
+                  key={c.col}
+                  scope="col"
+                  aria-label={`Sort by ${c.title}`}
+                  aria-sort={sort?.col === c.col ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                  title={c.type === 'string' && !columns.some((k) => k.name === c.col) ? `"${c.col}" is not a column of this table` : undefined}
+                  onClick={() => cycle(c.col)}
+                  className="cursor-pointer select-none whitespace-nowrap px-3 py-2 font-bold"
+                  style={{ textAlign: c.align, width: c.width ? `${c.width}px` : undefined }}
+                >
+                  {c.title}
+                  {sort?.col === c.col ? <span aria-hidden="true" className="ml-1 opacity-70">{sort.dir === 'asc' ? '▲' : '▼'}</span> : null}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody style={virtual ? { display: 'block', height: `${total}px`, position: 'relative' } : undefined}>
+            {ordered.length === 0 ? (
+              <tr style={virtual ? { display: 'block' } : undefined}><td colSpan={Math.max(1, resolved.length)} className="block px-3 py-6 text-center text-muted-foreground">no rows</td></tr>
+            ) : visible.map(({ index, start }) => (
+              <DataRow
+                key={index}
+                row={ordered[index]}
+                columns={resolved}
+                style={start === null ? undefined : { ...rowGrid, position: 'absolute', top: 0, left: 0, transform: `translateY(${start}px)` }}
+                measure={virtual ? virtualizer.measureElement : undefined}
+                index={index}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {(truncated || loading || (totalRows !== undefined && totalRows > rows.length)) && (
+        <div className="flex items-center justify-between gap-3 border-t border-border px-3 py-1.5 text-xs text-muted-foreground">
+          <span aria-label="Row count">
+            {loading ? 'loading rows…' : `${count.format(rows.length)} of ${count.format(totalRows ?? rows.length)} rows`}
+          </span>
+          {truncated && onLoadMore && !loading && (
+            <button type="button" aria-label="Load more rows" onClick={onLoadMore} className="cursor-pointer font-medium underline-offset-2 hover:underline">
+              load more
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DataRow({ row, columns, style, measure, index }: {
+  row: Row
+  columns: ResolvedColumn[]
+  style?: React.CSSProperties
+  measure?: (el: HTMLElement | null) => void
+  index: number
+}) {
+  return (
+    <tr ref={measure} data-index={index} className="border-b border-border/50" style={style}>
+      {columns.map((c) => {
+        const value = row[c.col]
+        const bar = barFraction(value, c)
+        const tint = cellTint(value, c)
+        return (
+          <td
+            key={c.col}
+            className={cn("relative whitespace-nowrap px-3 py-1.5", c.type === 'number' && "tabular-nums")}
+            style={{ textAlign: c.align, width: c.width ? `${c.width}px` : undefined, ...(tint ? { background: tint } : {}) }}
+          >
+            {bar !== null && (
+              <span
+                data-bar=""
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-y-1 left-1 rounded-sm opacity-25"
+                style={{ width: `${Math.round(bar * 100)}%`, background: typeof c.bar === 'object' && c.bar.color ? c.bar.color : 'var(--chart-1)' }}
+              />
+            )}
+            <span className="relative">{formatCell(value, c)}</span>
+          </td>
+        )
+      })}
+    </tr>
+  )
+}

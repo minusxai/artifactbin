@@ -1,0 +1,118 @@
+/**
+ * Named boundary-asset registry: the MinusX-approved boundaries the
+ * vega geo recipes look up against. Vega may NOT fetch geometry from the network (the
+ * data policy rejects `data.url`), so choropleth/point recipes reference a boundary by
+ * a reserved local DATASET NAME and the render pipeline injects the resolved features
+ * via `view.data()` — exactly the mechanism that binds the query result under `main`.
+ *
+ * Only ids in this allowlist can be resolved. US/world geometry are the standard
+ * projection-clean atlas boundaries (us-atlas / world-atlas — the same Natural Earth /
+ * Census sources vega-datasets derives from, with `properties.name` baked in and proper
+ * Alaska/Hawaii antimeridian handling for albersUsa). They ship as TopoJSON (compact,
+ * shared arcs) and are converted to GeoJSON features at load; India stays a plain
+ * GeoJSON FeatureCollection. All key their region name on `properties.name`.
+ */
+import type { Feature, FeatureCollection } from 'geojson';
+import { feature as topojsonFeature } from 'topojson-client';
+
+/**
+ * The reserved dataset name a geo recipe's boundary layer references
+ * (`data: {name: GEO_BOUNDARY_DATASET}`). The renderer resolves the recipe's
+ * declared asset id and injects the features under this name.
+ */
+export const GEO_BOUNDARY_DATASET = '__mx_geo_boundary';
+
+/** A vega projection choice paired with a boundary set (vector basemap). */
+type GeoProjection = 'albersUsa' | 'mercator' | 'equalEarth';
+
+export interface GeoAsset {
+  /** Menu label. */
+  label: string;
+  /** Public file under `/geojson/<file>.json`. */
+  file: string;
+  /** GeoJSON feature `properties` key holding the region name (the lookup key). */
+  nameProp: string;
+  /** Vega projection that frames this boundary set well. */
+  projection: GeoProjection;
+  /**
+   * When set, the file is a TopoJSON Topology and this names the object to extract
+   * (`states`, `countries`); features are converted at load. Absent → plain GeoJSON.
+   */
+  topojsonObject?: string;
+}
+
+/**
+ * The approved boundary sets. `albersUsa` composites Alaska/Hawaii as insets for the
+ * US; world uses equalEarth; India keeps its lng/lat GeoJSON under mercator.
+ */
+export const GEO_ASSETS = {
+  'us-states': { label: 'US (States)', file: 'us-atlas-states-10m', nameProp: 'name', projection: 'albersUsa', topojsonObject: 'states' },
+  'us-counties': { label: 'US (Counties)', file: 'us-atlas-counties-10m', nameProp: 'name', projection: 'albersUsa', topojsonObject: 'counties' },
+  'world': { label: 'World (Countries)', file: 'world-atlas-countries-110m', nameProp: 'name', projection: 'equalEarth', topojsonObject: 'countries' },
+  'india-states': { label: 'India (States)', file: 'india-states', nameProp: 'name', projection: 'mercator' },
+} as const satisfies Record<string, GeoAsset>;
+
+type GeoAssetId = keyof typeof GEO_ASSETS;
+
+/** The default boundary when a recipe omits `mapName`. */
+const DEFAULT_GEO_ASSET: GeoAssetId = 'us-states';
+
+/** Whether `id` is an allowlisted boundary asset. */
+function isGeoAsset(id: unknown): id is GeoAssetId {
+  return typeof id === 'string' && id in GEO_ASSETS;
+}
+
+/** Resolve `id` to a known asset, falling back to the default for unknown ids. */
+export function resolveGeoAsset(id: unknown): GeoAssetId {
+  return isGeoAsset(id) ? id : DEFAULT_GEO_ASSET;
+}
+
+/**
+ * Extract GeoJSON features from a loaded boundary file per its asset config —
+ * converting TopoJSON when the asset names an object. Pure: the render pipeline's
+ * injectable seam and the unit-test entry point (no network).
+ */
+export function assetFeatures(id: string, json: unknown): Feature[] {
+  const asset: GeoAsset | undefined = isGeoAsset(id) ? GEO_ASSETS[id] : undefined;
+  if (asset?.topojsonObject) {
+    // topojson-client's Topology types are structural; the object exists by construction.
+    const topo = json as { objects: Record<string, unknown> };
+    const collection = topojsonFeature(topo as never, topo.objects[asset.topojsonObject] as never) as unknown as FeatureCollection;
+    return collection.features;
+  }
+  return (json as FeatureCollection).features;
+}
+
+const cache: Record<string, Feature[]> = {};
+
+/**
+ * How a boundary file is fetched, given its PUBLIC path (`/geojson/<file>.json`). The default is
+ * the browser fetch (same-origin static asset). Root-relative URLs are unparseable in Node, so
+ * NO-ORIGIN contexts (headless server renders — Slack images, scripts) install a filesystem
+ * fetcher via `lib/viz/geo-assets.server.ts` instead; without it, geo charts silently dropped
+ * from server images.
+ */
+type GeoAssetFetcher = (publicPath: string) => Promise<unknown>;
+
+const defaultFetcher: GeoAssetFetcher = async (publicPath) => {
+  const resp = await fetch(publicPath);
+  if (!resp.ok) throw new Error(`Failed to load boundary asset ${publicPath}`);
+  return resp.json();
+};
+
+// eslint-disable-next-line no-restricted-syntax -- module-level seam, deliberately swappable per runtime
+let assetFetcher: GeoAssetFetcher = defaultFetcher;
+
+/**
+ * Load an allowlisted boundary's features for injection. Rejects unknown ids —
+ * geometry only ever comes from the registry, never an arbitrary reference.
+ */
+export async function loadGeoFeatures(id: string): Promise<Feature[]> {
+  if (!isGeoAsset(id)) {
+    throw new Error(`unknown geo boundary "${id}" — available: ${Object.keys(GEO_ASSETS).join(', ')}`);
+  }
+  if (cache[id]) return cache[id];
+  const features = assetFeatures(id, await assetFetcher(`/geojson/${GEO_ASSETS[id].file}.json`));
+  cache[id] = features;
+  return features;
+}

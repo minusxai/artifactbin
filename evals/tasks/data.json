@@ -1,0 +1,17 @@
+{
+  "id": "data",
+  "kind": "data",
+  "brief": "The file sales.csv in your working directory holds monthly revenue by region. Publish it as a dataset, then publish a one-page document titled \"Revenue by region\" with a heading, one sentence, and ONE chart: total revenue per month, as a single line. Reply with the document's URL and nothing else.",
+  "handoff": "start-link",
+  "files": {
+    "sales.csv": "month,region,revenue\n2026-01,North,48200\n2026-01,South,31150\n2026-01,West,52400\n2026-02,North,51300\n2026-02,South,29800\n2026-02,West,55100\n2026-03,North,49750\n2026-03,South,33400\n2026-03,West,58900\n2026-04,North,54100\n2026-04,South,35200\n2026-04,West,61300\n2026-05,North,57800\n2026-05,South,34100\n2026-05,West,64750\n2026-06,North,61200\n2026-06,South,36900\n2026-06,West,68400\n"
+  },
+  "checks": [
+    "published",
+    "dataset_created",
+    "query_ran",
+    "chart_marks_drawn",
+    "no_console_errors",
+    "no_failed_responses"
+  ]
+}

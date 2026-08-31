@@ -1,0 +1,70 @@
+# The production shape: one web process + Postgres.
+# TLS terminates in front (Caddy/Traefik/your host's proxy) — the app serves
+# plain HTTP on ${APP__PORT:-3030}. Single web replica by design: the export
+# browser singleton, in-memory caches, and rate limiters assume one process.
+services:
+  web:
+    build: .
+    image: artifact-bin:latest
+    restart: unless-stopped
+    # Localhost-only by default: put a TLS-terminating proxy in front rather
+    # than exposing the app (and its bearer tokens) on plain HTTP to the
+    # network. Override with PORT_BIND=0.0.0.0 for a trusted LAN.
+    ports:
+      - "${PORT_BIND:-127.0.0.1}:${APP__PORT:-3030}:3000"
+    environment:
+      AUTH__SECRET: ${AUTH__SECRET:?Set AUTH__SECRET in .env}
+      ADMIN__SECRET: ${ADMIN__SECRET:-}
+      # THE database env. Default: the bundled postgres below (trust auth on
+      # the private compose network — it publishes no port). Set DATABASE_URL
+      # in .env to use an EXTERNAL Postgres instead (Neon, RDS, your own —
+      # your URL, your database, your schema); the bundled service then just
+      # idles (remove it from this file if you go external for good).
+      DATABASE_URL: ${DATABASE_URL:-postgresql://artifact_bin@postgres:5432/artifact_bin}
+      # Every published link is minted from this URL, so it MUST be the
+      # address the browser uses (the published host port, not port 3000 in
+      # the container).
+      APP__PUBLIC_BASE_URL: http://localhost:${APP__PORT:-3030}
+      QUOTA__ARTIFACTS_PER_TOKEN: ${QUOTA__ARTIFACTS_PER_TOKEN:-1000}
+      RATE_LIMITER__ANON_MINT_MAX: ${RATE_LIMITER__ANON_MINT_MAX:-10}
+      # Proxies in front that rewrite X-Forwarded-For. 1 = the TLS-terminating
+      # proxy this file assumes; 2 if a CDN sits in front of that. Too high and
+      # the rate limiter starts reading caller-supplied values.
+      RATE_LIMITER__TRUSTED_PROXY_HOPS: ${RATE_LIMITER__TRUSTED_PROXY_HOPS:-1}
+      EMAIL__RESEND_API_KEY: ${EMAIL__RESEND_API_KEY:-}
+      S3_URL: ${S3_URL:-}
+      SQL__MAX_ROWS: ${SQL__MAX_ROWS:-10000}
+      EMAIL__FROM: ${EMAIL__FROM:-artifact-bin <login@example.com>}
+      EXPORT__INTERNAL_ORIGIN: http://127.0.0.1:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # /health, not a document. The probe before it fetched a docs PAGE, and
+      # reported the container UNHEALTHY once the docs tree retired that
+      # address — while every page was serving correctly.
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: artifact_bin
+      POSTGRES_DB: artifact_bin
+      # Reachable only on the compose-internal network (no published port),
+      # so trust auth here means "the web container", not the world.
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - artifact_bin_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U artifact_bin -d artifact_bin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  artifact_bin_pg:

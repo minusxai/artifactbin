@@ -1,0 +1,98 @@
+'use client';
+
+/**
+ * THE OVERFLOW MENU BEHIND A ROW'S "…".
+ *
+ * Extracted because it is now needed twice — the dense tier's rows (move,
+ * delete) and a shelf's ASSET rows (delete) — and a second hand-rolled
+ * popover is how two menus start disagreeing about focus, dismissal and which
+ * side they open on.
+ *
+ * The interface is a list of items, not a set of booleans: a caller says what
+ * it offers, and nothing here knows what a folder or an artifact is. That is
+ * what lets the assets band offer a strict subset without a flag threaded
+ * through for each one.
+ */
+import { Ellipsis } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Tooltip } from '@/components/Tooltip';
+
+export interface RowMenuItem {
+  /** Reads as an aria-label, so it names the row: `Delete My doc`. */
+  label: string;
+  text: string;
+  icon: React.ReactNode;
+  onSelect: () => void;
+  danger?: boolean;
+}
+
+const ICON_ACTION =
+  'inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[4px] border-0 bg-transparent p-0 text-muted transition-colors';
+
+export default function RowMenu({ name, items }: { name: string; items: RowMenuItem[] }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLSpanElement>(null);
+
+  // A menu that outlives the click that dismissed it is the bug every
+  // hand-rolled popover ships with once.
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => {
+      if (!box.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('mousedown', away);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [open]);
+
+  if (items.length === 0) return null;
+
+  return (
+    <span ref={box} className="relative z-10 inline-flex">
+      <Tooltip content="more">
+        <button
+          type="button"
+          className={`${ICON_ACTION} ${open ? 'text-fg' : 'hover:text-accent'}`}
+          aria-label={`More actions for ${name}`}
+          aria-expanded={open}
+          onClick={() => setOpen((o) => !o)}
+        >
+          <Ellipsis size={13} />
+        </button>
+      </Tooltip>
+      {open && (
+        <div className="absolute right-0 top-full z-30 mt-1 min-w-36 whitespace-nowrap rounded-[6px] border border-edge bg-surface p-1 font-mono text-xs shadow-lg">
+          {items.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              aria-label={item.label}
+              className={`flex w-full cursor-pointer items-center gap-2 rounded-[4px] px-2 py-1 text-left text-muted hover:bg-raised ${item.danger ? 'hover:text-danger' : 'hover:text-fg'}`}
+              onClick={() => {
+                setOpen(false);
+                item.onSelect();
+              }}
+            >
+              {item.icon} {item.text}
+            </button>
+          ))}
+        </div>
+      )}
+    </span>
+  );
+}
+
+/**
+ * Deleting an artifact, with the confirmation the act deserves — the link dies
+ * and the history goes with it. Shared so the two menus cannot drift into
+ * warning about different things.
+ */
+export async function confirmDeleteArtifact(id: string, name: string): Promise<boolean> {
+  if (!confirm(`Delete "${name}"? The link dies and history is erased.`)) return false;
+  const res = await fetch(`/api/my/artifacts/${id}`, { method: 'DELETE' });
+  return res.ok;
+}

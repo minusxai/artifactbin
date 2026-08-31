@@ -1,0 +1,5 @@
+{"t":1787802578585,"ms":11,"method":"GET","path":"/docs/llm","status":200,"ua":"eval-spike/1","auth":null}
+{"t":1787802578604,"ms":20,"method":"POST","path":"/api/start","status":201,"ua":"curl/8.7.1","auth":null}
+{"t":1787802578693,"ms":8,"method":"PUT","path":"/api/artifacts/pM8QtQ","status":400,"ua":"curl/8.7.1","auth":"bearer"}
+{"t":1787802578707,"ms":30,"method":"PUT","path":"/api/artifacts/pM8QtQ","status":200,"ua":"curl/8.7.1","auth":"bearer"}
+{"t":1787802578744,"ms":7481,"method":"GET","path":"/a/pM8QtQ/export?format=png","status":200,"ua":"curl/8.7.1","auth":null}
