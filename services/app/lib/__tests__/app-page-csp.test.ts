@@ -33,6 +33,23 @@ describe('the app CSP', () => {
     }
   });
 
+  /*
+   * `worker-src` HAS NO DEFAULT OF ITS OWN: it falls back through `child-src`
+   * to `default-src`, which is `'none'` here. The source editor wires a Monaco
+   * worker and reaches for it lazily — measured, nothing has asked for it yet
+   * with only the HTML tokenizer loaded — so this directive is not what fixed
+   * `code` mode (that was self-hosting the library the CDN used to serve). It
+   * is pinned because the day something does ask, the refusal would be silent
+   * and would look like a Monaco bug. Vite emits that worker as an ordinary
+   * same-origin asset (`new Worker('/assets/editor.worker-<hash>.js')`,
+   * measured), so `'self'` is the whole permission: NOT `blob:`, which would
+   * re-admit the script-from-a-string path this policy exists to close.
+   */
+  it("admits the source editor's own worker, from this origin only", () => {
+    const workerSrc = APP_CSP.split('; ').find((d) => d.startsWith('worker-src'));
+    expect(workerSrc).toBe("worker-src 'self'");
+  });
+
   it('allows only the known app and development bootstrap scripts inline', () => {
     expect(APP_INLINE_SCRIPT_HASHES.split(' ')).toHaveLength(2);
     expect(APP_CSP.split('; ').find((directive) => directive.startsWith('script-src'))).not.toContain("'unsafe-inline'");

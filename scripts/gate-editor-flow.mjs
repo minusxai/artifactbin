@@ -120,7 +120,82 @@ const shown = await frame.locator('body').innerText();
 check(/Agent total:/.test(shown), 'the idle editor adopted the agent edit without a reload');
 check(/Edited by the gate/.test(shown), "the human's own text survived the adoption");
 
-// ── 5c. a token for a DIFFERENT artifact must not open a working editor ──
+// ── 5c. the source pane mounts a real editor, served from THIS origin ──
+/*
+ * `@monaco-editor/react` does not bundle Monaco: left to itself it injects a
+ * <script> pointing at jsdelivr, and the app's own CSP (`script-src 'self'`)
+ * refuses it — so `code` mode showed "Loading…" forever, in development and on
+ * the deployment alike. Nothing in the unit suite could see it: the editor's UI
+ * test mocks `@monaco-editor/react` outright, so the loader never runs there.
+ * The two halves of the fix are both checked here — the editor really mounts,
+ * and it did so without reaching off-origin for it.
+ */
+const offOrigin = [];
+const cspErrors = [];
+page.on('requestfailed', (r) => { if (!r.url().startsWith(BASE)) offOrigin.push(`${r.url()} (${r.failure()?.errorText})`); });
+page.on('request', (r) => { if (r.resourceType() === 'script' && !r.url().startsWith(BASE)) offOrigin.push(r.url()); });
+// script-src only: the dev server's own HMR websocket trips a connect-src
+// violation that has nothing to do with the editor.
+page.on('console', (m) => { if (m.type() === 'error' && /violates the following Content Security Policy directive: "script-src/.test(m.text())) cspErrors.push(m.text()); });
+
+await page.goto(`${BASE}/a/${doc.id}#edit`, { waitUntil: 'load' });
+await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 90_000 });
+await page.waitForTimeout(2500);
+await page.click('[aria-label="Edit the source"]');
+const mounted = await page.waitForSelector('[aria-label="Markup source"]', { timeout: 30_000 }).then(() => true).catch(() => false);
+check(mounted, 'the source pane mounts a real editor, not a permanent "Loading…"');
+check((await page.locator('[aria-label="Source pane"]').getByText('Loading...').count()) === 0,
+  'and the loading placeholder is gone');
+/*
+ * The pane is the document's own markup, not an empty buffer. Two things make a
+ * naive substring check lie: Monaco paints U+00A0 for every space, and it
+ * renders only the LINES currently on screen (and only the visible span of a
+ * long one) — so a word that is plainly there can be absent from the DOM. Check
+ * the direction that holds regardless: whatever it is showing is really a piece
+ * of this document, and it is showing something.
+ */
+const flat = (t) => t.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+const lines = await page.locator('[aria-label="Source pane"] .view-line').allTextContents();
+const stored = flat((await api(`/api/artifacts/${doc.id}`, {}, token)).markup);
+// Not a containment check on the whole pane: Monaco also virtualises a long
+// line HORIZONTALLY, so the joined text has gaps in it and matches nothing.
+// What holds is that it is showing this document, from the top.
+check(lines.length >= 3 && stored.startsWith(flat(lines[0])) && flat(lines[0]).length > 0,
+  `the pane carries the document source (${lines.length} lines from ${JSON.stringify(flat(lines[0]).slice(0, 30))})`);
+check(offOrigin.length === 0, `the editor loads no off-origin script (${offOrigin.slice(0, 2).join(', ') || 'none'})`);
+check(cspErrors.length === 0, `and trips no CSP directive (${cspErrors.slice(0, 1).join(' ') || 'none'})`);
+
+/*
+ * AND TYPING INTO IT MUST NOT LOSE CHARACTERS. A controlled <Editor value> is
+ * a race: every keystroke sets React state, and a render that lands one
+ * keystroke behind pushes that STALE string back into Monaco's model, wiping
+ * whatever was typed in between. Measured before the fix, at full speed:
+ * "typed in code mode" reached the server as "typemode", while the same words
+ * at 150ms a key arrived whole — which is exactly why no hand test would ever
+ * have found it. So this types with NO delay, and compares exactly.
+ */
+const typed = ' plus fast typing';
+await page.click('[aria-label="Source pane"] .view-lines');
+await page.keyboard.press('End');
+await page.keyboard.type(typed);            // no `delay`: the race needs speed
+await page.waitForTimeout(4000);
+const afterTyping = (await api(`/api/artifacts/${doc.id}`, {}, token)).markup;
+check(afterTyping.endsWith(typed), `fast typing in the code pane loses nothing (…${JSON.stringify(afterTyping.slice(-24))})`);
+
+// The other half of the same contract: local typing must not move the model,
+// but a replacement from OUTSIDE still must. Monaco paints U+00A0 for spaces.
+const paneHead = await api(`/api/artifacts/${doc.id}`, {}, token);
+await api(`/api/artifacts/${doc.id}/edits`, {
+  method: 'POST',
+  body: JSON.stringify({ edit_id: paneHead.edit_id, old_string: 'Agent total:', new_string: 'Agent wrote while code was open:' }),
+}, token);
+await page.waitForTimeout(6000);
+const paneAfter = ((await page.locator('[aria-label="Source pane"] .view-lines').textContent().catch(() => '')) ?? '')
+  .replace(/\u00a0/g, ' ');
+check(paneAfter.includes('Agent wrote while code was open:'), 'and the open code pane still adopts an agent edit');
+
+
+// ── 5d. a token for a DIFFERENT artifact must not open a working editor ──
 // The editor is seeded from the page for speed, so `art` exists before we know
 // whether this browser can WRITE. Without the ownership check first, a visitor
 // holding someone else's token gets a full editor whose every save fails.
