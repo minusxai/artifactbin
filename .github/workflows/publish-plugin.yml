@@ -43,7 +43,7 @@ jobs:
       - name: Publish exact deployed source to the selected channel
         working-directory: services/app
         env:
-          PLUGIN_MIRROR_TOKEN: ${{ inputs.channel == 'production' && secrets.PLUGIN_PROD_MIRROR_TOKEN || secrets.PLUGIN_OSS_MIRROR_TOKEN }}
+          PLUGIN_MIRROR_TOKEN: ${{ (inputs.channel == 'production' && secrets.PLUGIN_MIRROR_TOKEN) || (inputs.channel == 'staging' && secrets.PLUGIN_OSS_MIRROR_TOKEN) || (inputs.channel == 'staging' && secrets.PLUGIN_MIRROR_TOKEN) }}
         run: |
           npx tsx -r ../../scripts/register-yaml.cjs scripts/publish-plugin.ts \
             --channel "${{ inputs.channel }}" \
