@@ -20,7 +20,7 @@
 export const SHOWCASE_ORIGIN = 'https://artifactbin.dev';
 
 /** The shape a reader is about to open. Sets expectations before the click. */
-export type ShowcaseKind = 'report' | 'deck' | 'dashboard' | 'data story' | 'coding agent plan' | 'eda';
+export type ShowcaseKind = 'report' | 'deck' | 'dashboard' | 'data story' | 'product plan' | 'eda';
 
 export interface ShowcaseDoc {
   /**
@@ -63,12 +63,11 @@ export interface ShowcaseDoc {
 const ENTRIES: readonly ShowcaseDoc[] = [
   {
     order: 5,
-    id: 'wxeC8G',
-    placeholder: true,
-    title: 'Vol 1: Built something cool? Show HN.',
-    blurb: 'Stand-in picture — swap for the plan-annotation document.',
-    kind: 'coding agent plan',
-    use: 'review coding agent plans',
+    id: '5fN6kY',
+    title: 'Artifact Bin · 90-Day Product Plan',
+    blurb: 'A product plan connecting target outcomes, roadmap, milestones and architecture.',
+    kind: 'product plan',
+    use: 'create product plans people can align around',
   },
   {
     order: 2,
@@ -126,7 +125,7 @@ const KIND_LABELS: Record<ShowcaseKind, string> = {
   dashboard: 'dashboards',
   report: 'reports',
   'data story': 'data stories',
-  'coding agent plan': 'plans',
+  'product plan': 'product plans',
   deck: 'slides',
   eda: 'EDA'
 };

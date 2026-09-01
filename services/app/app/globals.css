@@ -262,7 +262,7 @@ body {
 .use-wheel-window {
   /* Sized for the DISPLAY face, not the mono it used to carry: the serif is set
    * far larger at the same measure, and a line box shorter than the type clips
-   * every descender — "annotate coding agent plans" has three. Tightened from
+   * every descender — "create product plans people can align around" has several. Tightened from
    * there to the point where the rows sit close enough to read as one turning
    * list, which is a good deal less leading than a paragraph would want. */
   --use-line: 1.95rem;
