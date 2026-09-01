@@ -151,7 +151,7 @@ export const REASONS: readonly Reason[] = [
   },
 ];
 /**
- * QUESTIONS — the four a stranger is still holding after the claims above.
+ * QUESTIONS — the ones a stranger is still holding after the claims above.
  *
  * Two of them are POSITIONING (why not the artifacts panel in the chat app I
  * already pay for; why not just write the HTML) and two are the universal
@@ -174,23 +174,28 @@ export interface Question {
 
 export const QUESTIONS: readonly Question[] = [
   {
-    question: 'How is this different from Claude artifacts or ChatGPT sites?',
+    question: 'How is this different from Claude Artifacts or ChatGPT Sites?',
     answer:
-      'Those are a view of one conversation, inside one vendor’s app. This is a document with its own address: any agent can pick it up and keep working on it, you and your teammates can edit and comment on it directly, and you can host the whole thing yourself.',
+      'Unlike those two, you can edit artifacts yourself, right in a WYSIWYG editor. Any agent can pick it up later, not just the one that made it, and it burns far fewer tokens on data-heavy artifacts.',
+  },
+  {
+    question: 'What about Lovable, Bolt or Replit?',
+    answer:
+      'For most reports, dashboards, stories, these solutions are overkill. Also, I love my agent, and want to use that! Artifactbin keeps the infrastructure separate from the agent, so you can bring whatever model you like (including cheap ones like DeepSeek) and swap it whenever you want.',
   },
   {
     question: 'Why not just write an HTML file?',
     answer:
-      'For a one-off page, do. The HTML was never the hard part — a link with an access list, comments pinned to a paragraph, version history, fixing a typo yourself, and charts over a dataset far too big to sit in the file are. Your agent would rebuild all of it every time, and rewrite the whole file for every small change.',
+      'For a one-off, private pages, sure. Making it look good, putting it somewhere people can open, deciding who sees it, collecting feedback/comments, editing it later: that is the part you would rebuild every single time. Artifactbin brings all the infrastructure you need, out of the box.',
   },
   {
     question: 'Who can see what I publish?',
     answer:
-      'Documents you own are private until you say otherwise. Make one public, hand out an unlisted link, or invite specific people as a reader, commenter or editor. A public or unlisted link needs no account to open.',
+      'Whoever you want. It works a lot like Google Docs: keep an artifact private, make it public, hand out an unlisted link, or invite specific people as readers, commenters or editors. Public and unlisted links open without an account.',
   },
   {
     question: 'Is it free?',
     answer:
-      'The hosted service is free today, rate-limited to keep it available, and asks for no payment details. If paid plans ever arrive we will give notice first, and nothing you already have becomes chargeable without your agreement.',
+      'Yes. Free as in beer for individuals, and free as in speech for everyone. The hosted service costs nothing today, and the whole stack is Apache-2.0, so you can always run it yourself.',
   },
 ];

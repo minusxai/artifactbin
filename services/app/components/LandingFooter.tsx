@@ -42,7 +42,7 @@ const LINKS: readonly { label: string; href: string; external?: true }[] = [
 export default function LandingFooter({ column = PAGE_COLUMN }: { column?: string }) {
   return (
     <footer className={`${column} mt-14 sm:mt-20`}>
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-edge pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-t border-edge py-4">
         {/*
           * THE LINKS GROW BUT NEVER SHRINK — `grow shrink-0 basis-64`.
           *
