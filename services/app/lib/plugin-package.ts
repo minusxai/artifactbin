@@ -75,13 +75,13 @@ This is the **${identity.channel}** release channel.
 ${pluginInstall(channel)}
 \`\`\`
 
-Local development from the artifactbin repository: `npm run build:plugin`,
-then `claude --plugin-dir ./plugin`.
+Local development from the artifactbin repository: \`npm run build:plugin\`,
+then \`claude --plugin-dir ./plugin\`.
 
 ## What you get
 
-- MCP tools (`create_artifact`, `edit_artifact`, and others) against `${base}/mcp`.
-- The `${identity.name}` skill generated from the same files served by `${base}/docs`.
+- MCP tools (\`create_artifact\`, \`edit_artifact\`, and others) against \`${base}/mcp\`.
+- The \`${identity.name}\` skill generated from the same files served by \`${base}/docs\`.
 
 ## Self-hosting
 
