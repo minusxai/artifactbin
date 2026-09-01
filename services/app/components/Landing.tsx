@@ -69,7 +69,7 @@ export default function Landing() {
       </section>
 
       <section className={`${COLUMN} mt-6`}>
-        <GetStarted reveal />
+        <GetStarted />
       </section>
 
       <section className={`${COLUMN} mt-14 sm:mt-16`}>

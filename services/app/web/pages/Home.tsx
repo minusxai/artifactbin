@@ -22,10 +22,10 @@ export function HomePage() {
     if (home.drafts?.length) {
       return (
         <main className={`${PAGE_COLUMN} mt-8 pb-24`}>
-          <h1 className="font-mono text-sm tracking-[0.14em] text-fg uppercase">Drafts held by this browser</h1>
-          <p className="mt-2 mb-6 font-sans text-sm text-muted">
-            <a className="text-accent underline underline-offset-2" href="/login">Log in to keep them</a>
-          </p>
+          <div className="mb-6 flex flex-wrap items-baseline justify-start gap-x-4 gap-y-1">
+            <h1 className="font-mono text-sm tracking-[0.14em] text-fg uppercase">Drafts held by this browser · </h1>
+            <a className="font-sans text-sm text-accent underline underline-offset-2" href="/login">Log in to keep them</a>
+          </div>
           <Shelf actions="full" rows={home.drafts} />
           <div className="mt-8"><NextSteps signedIn={false} /></div>
         </main>
