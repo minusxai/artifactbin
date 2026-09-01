@@ -139,7 +139,7 @@ export const REASONS: readonly Reason[] = [
     image: 'beautiful',
     alt: 'A crate of finished documents, each one already laid out and charted',
     demo: 'themes',
-    body: 'Hand-curated themes, templates and visualizations mean it looks designed before you touch it — and it changes when you do.',
+    body: 'Hand-curated themes, templates and visualizations look polished by default, and are infinitely customizable.',
     proof: `${STORY_THEME_NAMES.length} themes, ${STORY_TEMPLATE_NAMES.length} templates, and your own CSS over any of it.`,
   },
   {
@@ -163,7 +163,7 @@ export const REASONS: readonly Reason[] = [
     image: 'token-efficient',
     alt: 'A query lamp reading one lit row out of a wall of stored data',
     demo: 'tokens',
-    body: 'Datasets live outside the artifact, and can be queried via DuckDB SQL. 10× more token-efficient for data-heavy artifacts',
+    body: 'Datasets live outside the artifact, and can be queried via DuckDB SQL. 10× more token-efficient for data-heavy artifacts.',
     proof: 'Up to 10× more token-efficient for data-heavy artifacts.',
   },
   {
