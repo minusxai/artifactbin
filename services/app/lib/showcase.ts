@@ -83,8 +83,8 @@ const ENTRIES: readonly ShowcaseDoc[] = [
     id: 'wxeC8G',
     title: 'Vol 1: Built something cool? Show HN.',
     blurb: 'Fifteen years of Show HN: nine times the crowd, the same door.',
-    kind: 'eda',
-    use: 'perform exploratory data analysis',
+    kind: 'data story',
+    use: 'tell compelling data stories',
   },
   {
     order: 6,
@@ -108,8 +108,8 @@ const ENTRIES: readonly ShowcaseDoc[] = [
     id: 'yKcybb',
     title: 'The best language for coding agents',
     blurb: 'Verifying claims on what language is best for coding agents.',
-    kind: 'data story',
-    use: 'tell compelling data stories',
+    kind: 'eda',
+    use: 'perform exploratory data analysis',
   },
 ];
 
