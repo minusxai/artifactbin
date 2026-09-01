@@ -54,8 +54,9 @@ jobs:
         env:
           CHANNEL: ${{ inputs.channel }}
           SOURCE_SHA: ${{ inputs.source_sha }}
-          PLUGIN_MIRROR_TOKEN: ${{ (inputs.channel == 'production' && secrets.PLUGIN_MIRROR_TOKEN) || (inputs.channel == 'staging' && secrets.PLUGIN_OSS_MIRROR_TOKEN) || (inputs.channel == 'staging' && secrets.PLUGIN_MIRROR_TOKEN) }}
+          PLUGIN_MIRROR_TOKEN: ${{ (inputs.channel == 'production' && secrets.PLUGIN_MIRROR_TOKEN) || (inputs.channel == 'staging' && secrets.PLUGIN_OSS_MIRROR_TOKEN) }}
         run: |
+          test -n "$PLUGIN_MIRROR_TOKEN" || { echo "missing mirror token for $CHANNEL" >&2; exit 1; }
           npx tsx -r ../../scripts/register-yaml.cjs scripts/publish-plugin.ts \
             --channel "$CHANNEL" \
             --sha "$SOURCE_SHA" \
