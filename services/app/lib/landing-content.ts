@@ -150,3 +150,47 @@ export const REASONS: readonly Reason[] = [
     body: "Artifactbin is open source and self-hostable, so your artifacts and the infrastructure behind them stay in your hands.",
   },
 ];
+/**
+ * QUESTIONS — the four a stranger is still holding after the claims above.
+ *
+ * Two of them are POSITIONING (why not the artifacts panel in the chat app I
+ * already pay for; why not just write the HTML) and two are the universal
+ * blockers on publishing anything (who sees it, what it costs). Deliberately
+ * not a support page: everything operational — install, tokens, self-hosting —
+ * has a doc, and a landing FAQ that starts answering those is a landing page
+ * turning into one.
+ *
+ * The answers concede the honest thing FIRST where there is one ("for a
+ * one-off page, do"), because a FAQ that argues with the reader's actual
+ * objection is an ad, and reads like one. Each answer is then checkable: the
+ * ownership claims against lib/artifacts and lib/share-roles, the pricing
+ * sentence against lib/legal (`the hosted service is free today`) — it must
+ * never promise something the terms do not.
+ */
+export interface Question {
+  question: string;
+  answer: string;
+}
+
+export const QUESTIONS: readonly Question[] = [
+  {
+    question: 'How is this different from Claude artifacts or ChatGPT sites?',
+    answer:
+      'Those are a view of one conversation, inside one vendor’s app. This is a document with its own address: any agent can pick it up and keep working on it, you and your teammates can edit and comment on it directly, and you can host the whole thing yourself.',
+  },
+  {
+    question: 'Why not just write an HTML file?',
+    answer:
+      'For a one-off page, do. The HTML was never the hard part — a link with an access list, comments pinned to a paragraph, version history, fixing a typo yourself, and charts over a dataset far too big to sit in the file are. Your agent would rebuild all of it every time, and rewrite the whole file for every small change.',
+  },
+  {
+    question: 'Who can see what I publish?',
+    answer:
+      'Documents you own are private until you say otherwise. Make one public, hand out an unlisted link, or invite specific people as a reader, commenter or editor. A public or unlisted link needs no account to open.',
+  },
+  {
+    question: 'Is it free?',
+    answer:
+      'The hosted service is free today, rate-limited to keep it available, and asks for no payment details. If paid plans ever arrive we will give notice first, and nothing you already have becomes chargeable without your agreement.',
+  },
+];
