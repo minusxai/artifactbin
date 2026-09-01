@@ -323,6 +323,16 @@ body {
 
 .use-row[data-state='in'] {
   color: var(--color-accent);
+  /* One type step over its neighbours. The row that is being READ should be the
+   * biggest thing in the window, and colour alone was not carrying that: the
+   * green and the grey sat at the same size, so the ranking rested entirely on
+   * the crop. Scale rather than font-size, because the rows must stay exactly
+   * one `--use-line` apart for the track's offset to stay arithmetic — this
+   * grows the glyphs and leaves the box alone. 8% is the whole step: the live
+   * row's descenders still clear the cropped neighbour above and below, and on
+   * a 390px phone the longest phrase measures 326px scaled inside a 358px
+   * window, so nothing that fitted before now reaches the clip. */
+  transform: scale(1.2);
 }
 
 .use-shot {

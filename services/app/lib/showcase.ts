@@ -72,7 +72,7 @@ const ENTRIES: readonly ShowcaseDoc[] = [
     title: 'Vol 1: Built something cool? Show HN.',
     blurb: 'Stand-in picture — swap for the plan-annotation document.',
     kind: 'coding agent plan',
-    use: 'annotate coding agent plans',
+    use: 'review coding agent plans',
     version: 199,
   },
   {
@@ -90,7 +90,7 @@ const ENTRIES: readonly ShowcaseDoc[] = [
     title: 'Vol 1: Built something cool? Show HN.',
     blurb: 'Fifteen years of Show HN: nine times the crowd, the same door.',
     kind: 'eda',
-    use: 'explore any dataset',
+    use: 'perform exploratory data analysis',
     version: 199,
   },
   {
@@ -116,7 +116,7 @@ const ENTRIES: readonly ShowcaseDoc[] = [
     order: 3,
     id: 'yKcybb',
     title: 'The best language for coding agents',
-    blurb: 'Verifying claims on what language is best for coding agents',
+    blurb: 'Verifying claims on what language is best for coding agents.',
     kind: 'data story',
     use: 'tell compelling data stories',
     version: 103,
@@ -137,7 +137,7 @@ const KIND_LABELS: Record<ShowcaseKind, string> = {
   report: 'reports',
   'data story': 'data stories',
   'coding agent plan': 'plans',
-  deck: 'decks',
+  deck: 'slides',
   eda: 'EDA'
 };
 

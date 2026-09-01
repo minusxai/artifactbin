@@ -6,7 +6,7 @@ order: 5
 ---
 ## Read first
 
-artifact-bin: publish self-contained documents (reports, dashboards, decks, datasets, charts, images) and share the returned URL with your user — that url is the deliverable.
+artifact-bin: publish self-contained documents (reports, dashboards, slides, datasets, charts, images) and share the returned URL with your user — that url is the deliverable.
 
 Quick rules:
 - Every artifact takes exactly ONE content field: markup | dataset | viz | image.

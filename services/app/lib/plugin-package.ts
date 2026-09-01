@@ -39,7 +39,7 @@ export const PLUGIN_BASE_URL = 'https://artifactbin.dev';
 // import it all from here.
 export { MARKETPLACE_NAME, PLUGIN_INSTALL, PLUGIN_NAME, PLUGIN_REPO, PLUGIN_REPO_URL } from './plugin-id';
 
-const DESCRIPTION = 'Publish self-contained HTML artifacts (reports, dashboards, decks, datasets, charts, images) to artifact-bin and share the public link.';
+const DESCRIPTION = 'Publish self-contained HTML artifacts (reports, dashboards, slides, datasets, charts, images) to artifact-bin and share the public link.';
 
 const json = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
 

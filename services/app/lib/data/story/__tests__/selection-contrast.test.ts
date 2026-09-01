@@ -132,8 +132,11 @@ describe('::selection contrast (WCAG AA, both modes)', () => {
         [...m[1].matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map((v) => [v[1], v[2].trim()]),
       ) as Record<string, string>;
     };
-    const dark = block(/@theme\s*\{([^}]*)\}/);
-    const light = { ...dark, ...block(/:root\[data-theme='light'\]\s*\{([^}]*)\}/) };
+    // LIGHT is the default and sits on bare `:root` (the @theme block) —
+    // whichever mode is default must be, since that is what a reader gets
+    // before any script runs. Dark is the [data-theme] override on top.
+    const light = block(/@theme\s*\{([^}]*)\}/);
+    const dark = { ...light, ...block(/:root\[data-theme='dark'\]\s*\{([^}]*)\}/) };
 
     for (const [mode, vars] of [['dark', dark], ['light', light]] as const) {
       const named = {
