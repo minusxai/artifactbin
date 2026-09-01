@@ -66,7 +66,7 @@ export interface ShowcaseDoc {
  */
 const ENTRIES: readonly ShowcaseDoc[] = [
   {
-    order: 4,
+    order: 5,
     id: 'wxeC8G',
     placeholder: true,
     title: 'Vol 1: Built something cool? Show HN.',
@@ -76,7 +76,7 @@ const ENTRIES: readonly ShowcaseDoc[] = [
     version: 199,
   },
   {
-    order: 3,
+    order: 2,
     id: 'YPLu0U',
     title: 'The OpenAI-Hugging Face incident',
     blurb: 'A reported piece with its own tables, published by an agent in one pass.',
@@ -85,7 +85,7 @@ const ENTRIES: readonly ShowcaseDoc[] = [
     version: 31,
   },
   {
-    order: 2,
+    order: 4,
     id: 'wxeC8G',
     title: 'Vol 1: Built something cool? Show HN.',
     blurb: 'Fifteen years of Show HN: nine times the crowd, the same door.',
@@ -94,7 +94,7 @@ const ENTRIES: readonly ShowcaseDoc[] = [
     version: 199,
   },
   {
-    order: 5,
+    order: 6,
     id: '6bXsx3',
     placeholder: true,
     title: 'Vol 2: Show HN Hall of Fame',
@@ -113,7 +113,7 @@ const ENTRIES: readonly ShowcaseDoc[] = [
     version: 3,
   },
   {
-    order: 6,
+    order: 3,
     id: '6bXsx3',
     title: 'Vol 2: Show HN Hall of Fame',
     blurb: 'The thirty-four repeat fliers, and the top ten of every year.',

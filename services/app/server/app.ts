@@ -25,6 +25,7 @@ import { verifyExportKey } from '@/lib/export-key';
 import { ID_RE } from '@/lib/ids';
 import { runWithRequest } from '@/lib/request-context';
 import { declaresLiveData } from '@/lib/story/helmet';
+import { SHOWCASE_ORIGIN } from '@/lib/showcase';
 import { canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
 import { ownerUsername } from '@/lib/users';
 import { roleFor, sessionActor } from '@/lib/viewer';
@@ -43,13 +44,17 @@ export const withBootstrap = (html: string, data: unknown): string =>
 // Keeping the hashes explicit preserves the production policy while allowing
 // React Fast Refresh to install its hook when this server hosts Vite middleware.
 export const APP_INLINE_SCRIPT_HASHES = [
-  "'sha256-nsD8JKY/OL2XkCf1kqkfjHcd/GLFx3TvP19i7RMVNKE='", // theme bootstrap
+  "'sha256-MKCvCRsPxrVldjRT7eukzwMMAlrlAXCz+AyDpcVL9Fg='", // theme bootstrap (web/index.html — pinned by lib/__tests__/app-page-csp)
   "'sha256-Z2/iFzh9VMlVkEOar1f/oSHWwQk3ve1qk/C2WdsC4Xk='", // Vite React-refresh preamble
 ].join(' ');
 
 export const APP_CSP = [
   "default-src 'none'", `script-src 'self' ${APP_INLINE_SCRIPT_HASHES}`, "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:", "font-src 'self' data:",
+  // The showcase cards are the CANONICAL instance's own captures, addressed
+  // absolutely because a local or self-hosted install does not have those ids
+  // (lib/showcase). `'self'` admits them only when the app IS that origin, so
+  // the landing page's pictures worked on the deployment and nowhere else.
+  `img-src 'self' ${SHOWCASE_ORIGIN} data: blob:`, "font-src 'self' data:",
   "connect-src 'self' https://api-js.mixpanel.com https://api.mixpanel.com",
   "manifest-src 'self'", "frame-src 'self'", "frame-ancestors 'self'",
   "form-action 'self'", "object-src 'none'", "base-uri 'self'",

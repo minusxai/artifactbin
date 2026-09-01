@@ -24,21 +24,73 @@
  */
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { SHOWCASE, showcaseCardUrl, showcaseHref } from '@/lib/showcase';
+import {
+  SHOWCASE,
+  showcaseCardUrl,
+  showcaseHref,
+  type ShowcaseKind,
+} from '@/lib/showcase';
 
-const INTERVAL = 1500;
+/*
+ * WHAT PACES THIS IS THE PICTURE, NOT THE LINE. It ran at 1500ms, which suits
+ * a phrase on a wheel and not the full screenshot that changes with it: a
+ * reader who has not finished looking at one document is not helped by the
+ * next arriving.
+ */
+const INTERVAL = 3200;
 const ARROW =
   'absolute top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-accent/40 bg-accent-soft text-accent shadow-sm backdrop-blur-sm transition-colors hover:border-accent hover:bg-accent hover:text-bg';
 const N = SHOWCASE.length;
 /** The three copies the wheel rides on. */
 const TRIPLE = [...SHOWCASE, ...SHOWCASE, ...SHOWCASE];
 
+const FORMATS: readonly { kind: ShowcaseKind; label: string }[] = [
+  { kind: 'data story', label: 'Data stories' },
+  { kind: 'deck', label: 'Decks' },
+  { kind: 'dashboard', label: 'Dashboards' },
+  { kind: 'report', label: 'Reports' },
+  { kind: 'coding agent plan', label: 'Plans' },
+];
+
 const prefersReducedMotion = () =>
   typeof window !== 'undefined' &&
   typeof window.matchMedia === 'function' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-export default function UseCarousel() {
+/**
+ * The rail SAYS the range and MARKS where in it the wheel has got to. Without
+ * the mark it was a static list of five words beside a picture that changed —
+ * the reader had no way to tell which of the five they were looking at.
+ */
+function FormatRail({ active }: { active: ShowcaseKind }) {
+  return (
+    <div className="mt-9 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 font-mono text-[11px] sm:gap-x-3 sm:text-xs">
+      {FORMATS.map((format, index) => (
+        <span key={format.kind} className="inline-flex items-center gap-x-2 sm:gap-x-3">
+          {index > 0 && <span aria-hidden className="text-faint">/</span>}
+          <span
+            aria-current={format.kind === active ? 'true' : undefined}
+            className={
+              format.kind === active
+                ? 'text-accent underline decoration-1 underline-offset-4'
+                : 'text-muted transition-colors'
+            }
+          >
+            {format.label}
+          </span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function ShowcaseConcept({
+  autoplay = false,
+}: {
+  /** Every option in the rig now moves on its own; kept as a prop because
+    * the surviving one may well want it off somewhere. */
+  autoplay?: boolean;
+}) {
   const [active, setActive] = useState(0);
   const [held, setHeld] = useState(false);
   /**
@@ -57,10 +109,10 @@ export default function UseCarousel() {
   useEffect(() => {
     // Restarts whenever `active` changes, so a click gets a full interval
     // before the next automatic step rather than the tail of the last one.
-    if (held || prefersReducedMotion() || N < 2) return;
+    if (!autoplay || held || prefersReducedMotion() || N < 2) return;
     const id = setInterval(() => goTo((active + 1) % N), INTERVAL);
     return () => clearInterval(id);
-  }, [held, active]);
+  }, [autoplay, held, active]);
 
   /** Always keep the one after the destination warm. */
   const goTo = (index: number) => {
@@ -73,25 +125,21 @@ export default function UseCarousel() {
   };
   const pick = (index: number) => goTo(index);
   const step = (delta: number) => goTo((active + delta + N) % N);
+  const pickFormat = (kind: ShowcaseKind) => {
+    const index = SHOWCASE.findIndex((item) => item.kind === kind);
+    if (index >= 0) goTo(index);
+  };
 
   return (
-    <section
-      aria-label="What you can use it for"
+    <article
       onMouseEnter={() => setHeld(true)}
       onMouseLeave={() => setHeld(false)}
       onFocus={() => setHeld(true)}
       onBlur={() => setHeld(false)}
     >
-      {/* The stem is an EYEBROW, not half of a sentence sharing a line with
-        * the phrase. Demoting it is what gives the wheel below something to
-        * be bigger than — the two were within a pixel of each other before,
-        * and a reader could not tell the scaffolding from the payload. */}
-      <p className="text-center font-mono text-[10px] tracking-[0.18em] uppercase">
-        you can use artifactbin to
+      <p className="mt-6 text-center font-mono text-[10px] tracking-[0.18em] uppercase">
+        using artifactbin you can
       </p>
-      {/* Three rows tall, the middle one live, the whole thing centred: the
-        * phrase changes length every few seconds, and centred it re-balances
-        * around one axis instead of leaving a ragged right edge that moves. */}
       <div className="use-wheel-window mt-2">
         <div
           className="use-wheel"
@@ -177,20 +225,34 @@ export default function UseCarousel() {
         * each one is, so a second set of labels would repeat it. Stepping is
         * done on the picture. */}
       <div role="group" aria-label="Examples" className="mt-3 flex items-center gap-1.5">
-        <>
-          {SHOWCASE.map((item, index) => (
-            <button
-              key={item.order}
-              aria-label={`Show ${item.title}`}
-              aria-pressed={index === active}
-              onClick={() => pick(index)}
-              className={`h-1 flex-1 cursor-pointer rounded-full border-0 p-0 transition-colors ${
-                index === active ? 'bg-accent' : 'bg-edge-bright hover:bg-muted'
-              }`}
-            />
-          ))}
-        </>
+        {SHOWCASE.map((item, index) => (
+          <button
+            key={item.order}
+            aria-label={`Show ${item.title}`}
+            aria-pressed={index === active}
+            onClick={() => pick(index)}
+            className={`h-1 flex-1 cursor-pointer rounded-full border-0 p-0 transition-colors ${
+              index === active ? 'bg-accent' : 'bg-edge-bright hover:bg-muted'
+            }`}
+          />
+        ))}
       </div>
+      <FormatRail active={doc.kind} />
+    </article>
+  );
+}
+
+/**
+ * The section as it ships: the rail says the range and MARKS where the wheel
+ * has got to, the wheel names the use, and the picture under it is the real
+ * published document. The comparison rig that carried six other directions
+ * beside this one is gone — a page still wearing its scaffolding reads as
+ * unfinished to anyone who was not in the conversation.
+ */
+export default function UseCarousel() {
+  return (
+    <section aria-label="What you can use it for">
+      <ShowcaseConcept autoplay />
     </section>
   );
 }

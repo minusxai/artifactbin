@@ -173,11 +173,6 @@ body {
   background-color: var(--band);
   background-image: radial-gradient(circle, var(--band-dot) 1px, transparent 1px);
   background-size: 26px 26px;
-
-  /* The boundary is stated rather than left to a colour change. Cream meeting
-   * the app's cool grey with no rule read as an unfinished cut. */
-  border-top: 1px solid var(--edge);
-  border-bottom: 1px solid var(--edge);
 }
 
 :root[data-theme='dark'] .specimen-band {
