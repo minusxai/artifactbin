@@ -81,15 +81,29 @@ export function PageChromeBar({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     lastScrollY.current = Math.max(0, window.scrollY);
-    const update = (nextValue: number) => {
+    /*
+     * THE END OF THE PAGE OUTRANKS THE DIRECTION. Hiding on a downward scroll
+     * is right in the middle of a long page and wrong at the bottom of one:
+     * the reader has stopped looking for more page and started looking for the
+     * controls, the footer is what is under the bar, and there is no further
+     * downward scroll left that could bring it back. The slack absorbs
+     * subpixel rounding and the mobile URL bar, which changes `innerHeight`
+     * under us as it collapses.
+     */
+    const atPageBottom = () =>
+      window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
+    const update = (nextValue: number, bottom = false) => {
       const next = Math.max(0, nextValue);
       const delta = next - lastScrollY.current;
-      if (next <= 24) setScrollVisible(true);
+      if (next <= 24 || bottom) setScrollVisible(true);
       else if (delta >= 4 && next > 72) setScrollVisible(false);
       else if (delta <= -4) setScrollVisible(true);
       if (Math.abs(delta) >= 4 || next <= 24) lastScrollY.current = next;
     };
-    const onWindowScroll = () => update(window.scrollY);
+    // A framed artifact reports only its own scroll offset, so the page's
+    // metrics say nothing about whether IT has reached its end — that path
+    // keeps the direction rule alone rather than guessing.
+    const onWindowScroll = () => update(window.scrollY, atPageBottom());
     const onArtifactScroll = (event: Event) => update((event as CustomEvent<number>).detail);
     window.addEventListener('scroll', onWindowScroll, { passive: true });
     window.addEventListener(PAGE_CHROME_SCROLL_EVENT, onArtifactScroll);

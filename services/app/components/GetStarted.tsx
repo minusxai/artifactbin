@@ -356,7 +356,7 @@ function InstallCard({ surface, mcpUrl, docsUrl }: { surface: SurfaceKey; mcpUrl
           <CopyBlock
             text={PLUGIN_INSTALL}
             label="Copy the plugin install commands"
-            trailer='# then just ask: "make me a 5-slide deck about healthy living on artifact-bin"'
+            trailer='# then just ask: "make me a 5-slide deck about healthy living on artifactbin"'
           />
         </>
       );

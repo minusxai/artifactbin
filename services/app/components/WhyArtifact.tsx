@@ -190,7 +190,7 @@ export default function WhyArtifact() {
       onFocus={() => setHeld(true)}
       onBlur={() => setHeld(false)}
     >
-      <h2 className={EYEBROW}>why artifact-bin</h2>
+      <h2 className={EYEBROW}>why artifactbin</h2>
       <p className="mt-2 font-mono text-[clamp(1rem,1.9vw,1.25rem)] leading-snug font-semibold tracking-[-0.02em] text-fg">
         Anatomy of an artifact
       </p>

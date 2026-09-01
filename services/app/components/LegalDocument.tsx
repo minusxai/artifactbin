@@ -17,7 +17,7 @@ export default function LegalDocument({ slug }: { slug: LegalSlug }) {
   return (
     <main aria-label={doc.title} className="mx-auto max-w-2xl px-4 pt-12 pb-24 sm:px-6">
       <p className="font-mono text-[10px] tracking-[0.14em] text-faint uppercase">
-        artifact-bin · hosted service
+        artifactbin · hosted service
       </p>
       <h1 className="mt-3 font-mono text-2xl font-bold tracking-[-0.03em] text-fg sm:text-3xl">
         {doc.title}
@@ -64,7 +64,7 @@ export default function LegalDocument({ slug }: { slug: LegalSlug }) {
           minusx
         </a>
         <a href="/" className={LINK}>
-          back to artifact-bin
+          back to artifactbin
         </a>
       </nav>
     </main>

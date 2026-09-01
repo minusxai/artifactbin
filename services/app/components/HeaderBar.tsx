@@ -70,11 +70,11 @@ export default function HeaderBar({
              * and the band is 56px of nothing. So it is reserved by WIDTH rather
              * than always. */
             className="flex items-center justify-between gap-4 border-b border-edge pt-14 pb-3 sm:gap-6 sm:pb-4 min-[1080px]:pt-5">
-        <a href="/" aria-label="artifact-bin home" className="flex shrink-0 items-center gap-2.5 text-fg no-underline sm:gap-4">
+        <a href="/" aria-label="artifactbin home" className="flex shrink-0 items-center gap-2.5 text-fg no-underline sm:gap-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo-128.png" alt="" className="h-8 w-8 sm:h-20 sm:w-20" />
           <span className="flex flex-col gap-0.5">
-            <span className="text-base leading-none font-semibold tracking-tight whitespace-nowrap sm:text-xl">artifact-bin</span>
+            <span className="text-base leading-none font-semibold tracking-tight whitespace-nowrap sm:text-xl">artifactbin</span>
             <span className="hidden font-mono text-[11px] whitespace-nowrap text-muted sm:block">Google Docs for agents</span>
           </span>
         </a>
@@ -113,7 +113,7 @@ export default function HeaderBar({
               href={REPO_URL}
               target="_blank"
               rel="noreferrer"
-              aria-label="artifact-bin on GitHub"
+              aria-label="artifactbin on GitHub"
               className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap ${LINK}`}
             >
               <GitHubIcon size={12} /> open source

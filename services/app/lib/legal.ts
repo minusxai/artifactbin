@@ -3,7 +3,7 @@
  *
  * Adapted from MinusX, Inc.'s own privacy policy and terms (minusx.ai/privacy,
  * minusx.ai/terms) — same company, different product — and rewritten to
- * describe what artifact-bin ACTUALLY does. The rewrite is the point: a policy
+ * describe what artifactbin ACTUALLY does. The rewrite is the point: a policy
  * inherited whole would promise things this product has no mechanism for
  * (adtech cookies, subscriptions, model training) and stay silent about the
  * things it does that matter most (documents readable by anyone with a link,
@@ -52,13 +52,13 @@ const PRIVACY: LegalDoc = {
   slug: 'privacy',
   title: 'Privacy Policy',
   updated: UPDATED,
-  lede: `${ENTITY} operates artifact-bin, the hosted service at ${SERVICE}. This policy explains what we collect, why, and what you can ask us to do about it. We do not sell your personal information, and we do not train models on your content.`,
+  lede: `${ENTITY} operates artifactbin, the hosted service at ${SERVICE}. This policy explains what we collect, why, and what you can ask us to do about it. We do not sell your personal information, and we do not train models on your content.`,
   sections: [
     {
       heading: 'Who this covers',
       body: [
         `This policy covers the hosted service at ${SERVICE}, operated by ${ENTITY}, a Delaware corporation.`,
-        'artifact-bin is open-source software under Apache-2.0. If you or your company run your own instance, we operate nothing, receive nothing, and this policy does not apply to it — the operator of that instance is the one responsible for the data on it.',
+        'artifactbin is open-source software under Apache-2.0. If you or your company run your own instance, we operate nothing, receive nothing, and this policy does not apply to it — the operator of that instance is the one responsible for the data on it.',
       ],
     },
     {
@@ -88,7 +88,7 @@ const PRIVACY: LegalDoc = {
       heading: 'Your content and AI models',
       body: [
         'We do not use your content to train models, and we do not send it to a model provider.',
-        'artifact-bin stores and serves what your agent publishes; the agent itself runs on your machine or on your provider, under their terms and their privacy policy, not ours. What your agent reads before it publishes, and what it sends where, is between you and whoever makes it.',
+        'artifactbin stores and serves what your agent publishes; the agent itself runs on your machine or on your provider, under their terms and their privacy policy, not ours. What your agent reads before it publishes, and what it sends where, is between you and whoever makes it.',
       ],
     },
     {
@@ -181,7 +181,7 @@ const TERMS: LegalDoc = {
   slug: 'terms',
   title: 'Terms of Service',
   updated: UPDATED,
-  lede: `These terms govern the hosted service at ${SERVICE}, operated by ${ENTITY}. The artifact-bin software itself is open source under Apache-2.0 and you are free to run it yourself — these terms are about the instance we run for you.`,
+  lede: `These terms govern the hosted service at ${SERVICE}, operated by ${ENTITY}. The artifactbin software itself is open source under Apache-2.0 and you are free to run it yourself — these terms are about the instance we run for you.`,
   sections: [
     {
       heading: 'Accepting these terms',
@@ -199,7 +199,7 @@ const TERMS: LegalDoc = {
     {
       heading: 'The software is open source; this service is not the software',
       body: [
-        'artifact-bin is licensed under Apache-2.0 and the source is public. That license governs what you may do with the code, including running your own instance, and nothing here limits it.',
+        'artifactbin is licensed under Apache-2.0 and the source is public. That license governs what you may do with the code, including running your own instance, and nothing here limits it.',
         `These terms govern only the hosted instance at ${SERVICE}. If you run your own, these terms do not apply to it and we are not responsible for it.`,
       ],
     },
@@ -247,7 +247,7 @@ const TERMS: LegalDoc = {
     {
       heading: 'Our intellectual property',
       body: [
-        'The artifact-bin and MinusX names and logos are ours. The code is not — it is Apache-2.0, and the license file in the repository says what you may do with it.',
+        'The artifactbin and MinusX names and logos are ours. The code is not — it is Apache-2.0, and the license file in the repository says what you may do with it.',
         'If you send us feedback or suggestions, we may use them without owing you anything for them.',
       ],
     },

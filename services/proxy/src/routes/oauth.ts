@@ -54,7 +54,7 @@ function page(title: string, body: string, status = 200, redirectUri = ''): Resp
   button:hover { background: #1a8a4f; }
   .alt { margin: 1.25rem 0 0; font-size: 0.75rem; color: #7d8590; text-align: center; line-height: 1.6; }
   .err { color: #f85149; font-size: 0.85rem; }
-</style></head><body><main><div class="brand">artifact-bin</div>${body}</main></body></html>`,
+</style></head><body><main><div class="brand">artifactbin</div>${body}</main></body></html>`,
     { status, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Frame-Options': 'DENY', 'Content-Security-Policy': `default-src 'none'; style-src 'unsafe-inline'; form-action ${formAction}` } },
   );
 }
@@ -108,16 +108,16 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       : !codeChallenge || method !== 'S256' ? 'Missing PKCE code challenge.'
       : !isAllowedRedirectUri(redirectUri) ? 'Redirect URI not allowed.'
       : null;
-    if (problem) return page('artifact-bin — error', `<h1>Can’t connect</h1><p class="err">${esc(problem)}</p>`, 400);
+    if (problem) return page('artifactbin — error', `<h1>Can’t connect</h1><p class="err">${esc(problem)}</p>`, 400);
     const actor = c.get('actor') ?? ANONYMOUS;
     const fields = `<input type="hidden" name="redirect_uri" value="${esc(redirectUri)}"><input type="hidden" name="code_challenge" value="${esc(codeChallenge)}"><input type="hidden" name="state" value="${esc(state)}">`;
     if (actor.credential === 'session' && actor.userId) {
-      return page('artifact-bin — connect', `<h1>Connect to artifact-bin</h1>
+      return page('artifactbin — connect', `<h1>Connect to artifactbin</h1>
       <p>Your coding agent wants to publish artifacts. New artifacts will belong to <strong>${esc(actor.email ?? 'your account')}</strong>.</p>
       <form method="POST" action="/oauth/authorize/approve">${fields}<input type="hidden" name="grant" value="user"><button type="submit" aria-label="Approve connection">Approve</button></form>`, 200, redirectUri);
     }
     const retryPath = `/oauth/authorize?${q.toString()}`;
-    return page('artifact-bin — connect', `<h1>Connect to artifact-bin</h1>
+    return page('artifactbin — connect', `<h1>Connect to artifactbin</h1>
     <p>Your coding agent wants to publish artifacts — shareable pages it creates and updates. Log in with your email to connect it; artifacts will belong to your account.</p>
     <form method="GET" action="/login"><input type="hidden" name="callbackUrl" value="${esc(retryPath)}"><button type="submit" aria-label="Log in to connect">Log in with email</button></form>
     <p class="alt">No password needed — we email you a code.</p>`, 200, redirectUri);

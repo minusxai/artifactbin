@@ -91,14 +91,14 @@ describe('the shelf reads as ONE shelf on a phone', () => {
 describe('the masthead is proportionate to the screen it is on', () => {
   it('compresses the lockup — small mark, no tagline — instead of stacking the readout under it', () => {
     render(<HeaderBar email="a@b.co" stats={{ total: 2, formats: { markup: 2 } }} />);
-    const logo = screen.getByLabelText('artifact-bin home').querySelector('img')!;
+    const logo = screen.getByLabelText('artifactbin home').querySelector('img')!;
     expect(logo).toHaveClass('h-8', 'w-8', 'sm:h-20', 'sm:w-20');
     // The tagline is desktop's: for a signed-in phone it is marketing copy
     // spending a line, and beside a small mark it read as one weird run-on.
     expect(screen.getByText('Google Docs for agents')).toHaveClass('hidden', 'sm:block');
     // ONE structure at every size — brand left, readout column right — so the
     // phone is the desktop masthead scaled, not a second layout to maintain.
-    const header = screen.getByLabelText('artifact-bin home').parentElement!;
+    const header = screen.getByLabelText('artifactbin home').parentElement!;
     expect(header).toHaveClass('flex', 'items-center', 'justify-between');
   });
 

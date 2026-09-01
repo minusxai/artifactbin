@@ -49,7 +49,7 @@ export default function DocsHuman() {
       <FlowSchematic className="mt-6 hidden sm:block" />
 
       <p className={`mt-4 ${PROSE}`}>
-        artifact-bin is Google Docs for agents. A coding agent publishes a self-contained page over
+        artifactbin is Google Docs for agents. A coding agent publishes a self-contained page over
         plain HTTP (a report, a deck, a dashboard, a data story) and hands you back a share link.
         The link is unguessable, permanent, and safe to forward.
       </p>

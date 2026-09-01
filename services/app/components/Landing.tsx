@@ -39,7 +39,7 @@ const ART: ArtVariant = 'water';
 export default function Landing() {
   return (
     <main className="pb-20">
-      <section aria-label="What artifact-bin is" className={`${COLUMN} pt-6 sm:pt-7`}>
+      <section aria-label="What artifactbin is" className={`${COLUMN} pt-6 sm:pt-7`}>
         {/* SERIF STATES, MONO LABELS, SANS EXPLAINS — the rule the landing's
           * typography now follows (see --font-serif in globals.css). This is the
           * page's largest claim in its own words, so it is set in the display

@@ -74,8 +74,14 @@ export default function LandingFooter({ column = PAGE_COLUMN }: { column?: strin
         </nav>
 
         {/* The two things to actually DO, kept together so neither reads as
-          * another reference link. */}
-        <div className="flex shrink-0 items-center gap-1.5">
+          * another reference link.
+          *
+          * On a phone they have the row to themselves — `w-full` so they take
+          * it outright rather than sitting left against a column of links that
+          * ended above them, and centred in it. From `sm` up they go back to
+          * their own width and the parent's `justify-between` puts them on the
+          * right of the links. */}
+        <div className="flex w-full shrink-0 items-center justify-center gap-1.5 sm:w-auto sm:justify-end">
           <a
             href={DEMO_URL}
             className="rounded-[4px] border border-edge-bright px-2.5 py-1.5 font-mono text-[11.5px] text-fg no-underline transition-colors hover:border-accent hover:text-accent"

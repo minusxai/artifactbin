@@ -123,7 +123,7 @@ export default function FeatureSpecimens({
 }) {
   return (
     <section
-      aria-label="Why artifact-bin"
+      aria-label="Why artifactbin"
       /* The two papers travel as plain data; app/globals.css decides which is
        * used and what flips in dark mode. See `.specimen-band`. */
       style={
@@ -140,7 +140,7 @@ export default function FeatureSpecimens({
             className="font-mono text-[10px] tracking-[0.14em] uppercase"
             style={{ color: INK_QUIET }}
           >
-            why artifact-bin
+            why artifactbin
           </h2>
           {label && (
             <span
