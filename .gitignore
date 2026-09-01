@@ -17,6 +17,12 @@ tmp/
 **/lib/story-runtime/dist/
 **/public/fonts/
 **/lib/data/story/story-font-manifest.json
+# landing illustration SOURCES — 1254px PNG, ~2.8 MB each, 34 MB for the set.
+# Nothing serves them: the page references only the WebP that
+# scripts/optimise-landing-art.mjs derives from them, and those ARE committed.
+# Kept on disk rather than deleted, because they are the only thing the
+# renderings can be regenerated from if a size or a crop ever changes.
+**/public/landing/*.png
 
 # agent evals: run output (rows, screenshots, transcripts)
 # Every run directory, not just the default one: `--out evals/.metrics-pi` is how two

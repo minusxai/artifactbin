@@ -150,7 +150,7 @@ const EMAIL = `mxmx_test_appflows_${Date.now().toString(36)}@example.com`;
 await p.goto(B, { waitUntil: 'load' });
 // All navigation lives behind the hamburger.
 await p.click('[aria-label="Open menu"]');
-ok((await p.locator('[aria-label="Log in page"]').count()) === 1, 'the menu offers the login link when logged out');
+ok((await p.locator('[aria-label="Login"]').count()) === 1, 'the menu offers the login link when logged out');
 ok((await p.locator('[aria-label="Log in"]').count()) === 0, 'no duplicate "Log in" accessible name');
 await p.keyboard.press('Escape');
 // One flow for both: a verified code for an unknown address creates the account.

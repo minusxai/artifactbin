@@ -25,45 +25,21 @@
 
 /*
  * artifact-bin — terminal-graphite design system.
- * Dark by default (no data-theme attribute); [data-theme='light'] swaps the
- * palette to paper-terminal. The toggle writes localStorage('mx_theme') and a
- * pre-hydration script in the layout stamps the attribute FOUC-free.
+ * LIGHT by default (no data-theme attribute); [data-theme='dark'] swaps the
+ * palette to graphite. The toggle writes localStorage('mx_theme') and the
+ * pre-paint script in web/index.html stamps the attribute FOUC-free.
+ *
+ * The default used to be the other way round. Whichever mode is default must be
+ * the one on bare `:root`, because that is what a reader gets before any script
+ * runs and if none ever does — so flipping the default means moving the
+ * palettes, never just changing what the bootstrap stamps.
  */
 @theme {
-  --color-bg: #0b0e11;
-  --color-surface: #10151b;
-  --color-raised: #151c24;
-  --color-comment: #18212a;
-  --color-comment-hover: #1c2732;
-  --color-edge: #202832;
-  --color-edge-bright: #2e3947;
-  --color-fg: #e6edf3;
-  --color-muted: #7d8590;
-  --color-faint: #4d5665;
-  --color-accent: #3fe77b;
-  --color-accent-soft: #12281a;
-  --color-danger: #f85149;
-  --color-danger-soft: #2d1512;
-
-  /*
-   * The faces themselves, named exactly as the @fontsource packages web/main
-   * imports declare them. `next/font` used to define these two variables on
-   * the html element; nothing did after the SPA replaced it, and a
-   * `font-family` whose first item is an undefined `var()` is invalid at
-   * computed-value time — so the app lost its typeface entirely rather than
-   * falling through to `ui-monospace`. Guarded by lib/__tests__/app-fonts.
-   */
-  --font-jb-mono: 'JetBrains Mono Variable';
-  --font-plex-sans: 'IBM Plex Sans';
-
-  --font-mono: var(--font-jb-mono), ui-monospace, 'SF Mono', Menlo, monospace;
-  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
-}
-
-:root[data-theme='light'] {
   --color-bg: #f6f7f8;
   --color-surface: #ffffff;
   --color-raised: #eef1f3;
+  --color-code: #dfe5ec;
+  --color-code-edge: #cdd6e0;
   --color-comment: #f9fafb;
   --color-comment-hover: #ffffff;
   --color-edge: #e1e6ea;
@@ -75,16 +51,66 @@
   --color-accent-soft: #e2f5e9;
   --color-danger: #c93c37;
   --color-danger-soft: #fbe9e8;
+
+  /*
+   * The faces themselves, named exactly as the @fontsource packages web/main
+   * imports declare them. `next/font` used to define these two variables on
+   * the html element; nothing did after the SPA replaced it, and a
+   * `font-family` whose first item is an undefined `var()` is invalid at
+   * computed-value time — so the app lost its typeface entirely rather than
+   * falling through to `ui-monospace`. Guarded by lib/__tests__/app-fonts.
+   */
+  --font-jb-mono: 'JetBrains Mono Variable';
+  --font-plex-sans: 'IBM Plex Sans';
+  /*
+   * THE DISPLAY FACE. A Garamond, for the landing's STATEMENTS only — the
+   * headline, the use-case phrase, the band's promise. The split it introduces
+   * is the whole point and it is a rule, not a mood: SERIF STATES, MONO LABELS,
+   * SANS EXPLAINS. Eyebrows, claim titles, proofs, buttons and code stay
+   * monospace, because those are the terminal's voice and the product's; the
+   * serif speaks only where the page is making a claim in its own words.
+   *
+   * Already vendored — the `manuscript` story theme uses it — so the landing
+   * costs no new dependency and no new network request that the document
+   * renderer was not already making.
+   */
+  --font-cormorant: 'Cormorant Garamond Variable';
+
+  --font-mono: var(--font-jb-mono), ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-cormorant), 'EB Garamond', Georgia, serif;
 }
 
-/* Dot color for the engineering-paper grid — light needs a darker ink than
- * its edges or the dots vanish into the paper. */
+:root[data-theme='dark'] {
+  --color-bg: #0b0e11;
+  --color-surface: #10151b;
+  --color-raised: #151c24;
+  --color-code: #06090b;
+  --color-code-edge: #202832;
+  --color-comment: #18212a;
+  --color-comment-hover: #1c2732;
+  --color-edge: #202832;
+  --color-edge-bright: #2e3947;
+  --color-fg: #e6edf3;
+  --color-muted: #7d8590;
+  --color-faint: #4d5665;
+  --color-accent: #3fe77b;
+  --color-accent-soft: #12281a;
+  --color-danger: #f85149;
+  --color-danger-soft: #2d1512;
+}
+
+/* Dot color for the engineering-paper grid — light needs a darker ink than its
+ * edges or the dots vanish into the paper; dark's were pitched so low they read
+ * as noise rather than as paper, and once the features band carried a visibly
+ * ruled grid of its own the page above it looked blank by comparison. Lifted,
+ * not brightened into a pattern that competes with the type. */
 :root {
-  --dot: color-mix(in srgb, var(--color-edge-bright) 65%, transparent);
+  --dot: color-mix(in srgb, var(--color-edge-bright) 90%, transparent);
 }
 
-:root[data-theme='light'] {
-  --dot: color-mix(in srgb, var(--color-edge-bright) 90%, transparent);
+:root[data-theme='dark'] {
+  --dot: color-mix(in srgb, var(--color-edge-bright) 95%, transparent);
 }
 
 body {
@@ -102,6 +128,84 @@ body {
  * 3.3:1 in light mode (WCAG AA needs 4.5) — __tests__/selection-contrast.test.ts. */
 ::selection {
   background: color-mix(in srgb, var(--color-accent) 30%, transparent);
+}
+
+/*
+ * THE FEATURES BAND (components/FeatureSpecimens).
+ *
+ * The illustrations have cream paper baked into their pixels and must never be
+ * recoloured, so dark mode follows one rule: THE MOUNT STAYS PAPER, EVERYTHING
+ * OUTSIDE IT FLIPS. The sheet becomes a deep navy drawn from the art's own ink,
+ * the type on it goes warm cream — and every card or picture tile keeps its
+ * paper fill, so the art still sits on its own ground and nothing turns into a
+ * bright square floating on black. Cream cards on a dark sheet: index cards on
+ * a desk.
+ *
+ * The colours live here rather than in the component because a component can
+ * only write inline styles, and an inline style cannot answer [data-theme].
+ * What the component passes in are the two per-variant PAPERS (--paper for the
+ * sheet, --card for the mount) as plain data; these rules decide what is used.
+ */
+/*
+ * The base rule is whichever mode is DEFAULT — light — because that is what a
+ * reader gets with no attribute stamped. (Written the other way round first,
+ * against a dark default, the override matched nothing at all: there was no
+ * attribute to hook.)
+ */
+.specimen-band {
+  --ink: #1f2a3a;
+  --band: var(--paper);
+  --mount: var(--card);
+  --edge: color-mix(in srgb, #1f2a3a 14%, transparent);
+  /* Lighter than the dark side's: navy on cream reads far heavier than cream on
+   * navy at the same alpha. */
+  --band-dot: color-mix(in srgb, var(--ink) 13%, transparent);
+  color: var(--ink);
+
+  /*
+   * THE DOT GRID CARRIES THROUGH. The page is engineering paper (see `body`),
+   * and a section that paints its own background switches that texture off —
+   * which made the band read as a cream slab dropped on the page rather than as
+   * a different material on the same sheet. Same 26px pitch as the body so the
+   * two grids are one grid, in the band's own ink so it belongs to the paper it
+   * is drawn on.
+   */
+  background-color: var(--band);
+  background-image: radial-gradient(circle, var(--band-dot) 1px, transparent 1px);
+  background-size: 26px 26px;
+
+  /* The boundary is stated rather than left to a colour change. Cream meeting
+   * the app's cool grey with no rule read as an unfinished cut. */
+  border-top: 1px solid var(--edge);
+  border-bottom: 1px solid var(--edge);
+}
+
+:root[data-theme='dark'] .specimen-band {
+  --ink: #ece2cf;
+  /* Deep navy, related to the illustrations' own ink rather than to the app's
+   * graphite, so the band stays a distinct sheet laid into the page. */
+  --band: #121a25;
+  --edge: color-mix(in srgb, #f1e6d4 15%, transparent);
+  --band-dot: color-mix(in srgb, var(--ink) 20%, transparent);
+}
+
+/*
+ * Anything sitting ON the paper mount keeps the dark ink in BOTH themes: the
+ * surface under it did not flip, so its type must not either. This is what lets
+ * one set of type rules serve a card that holds its own text (frame="card") and
+ * a bare tile that holds only a picture (frame="art").
+ */
+.specimen-band :where(.specimen-mount) {
+  --ink: #1f2a3a;
+  --edge: color-mix(in srgb, #1f2a3a 12%, transparent);
+  background: var(--mount);
+  border-color: var(--edge);
+  /* `color` MUST be restated, not just `--ink`. Inheritance passes the computed
+   * colour down, not the expression that produced it — so a title with no
+   * colour of its own kept the sheet's cream and disappeared into the cream
+   * card in dark mode, while the body text (which names color-mix(var(--ink)…)
+   * inline, and so re-evaluates here) was correctly dark the whole time. */
+  color: var(--ink);
 }
 
 /* Staggered row reveal on load. */
@@ -125,6 +229,120 @@ body {
   from {
     opacity: 0;
     transform: translateY(4px);
+  }
+}
+
+/*
+ * The landing wall's drift. The track is two identical halves, so sliding
+ * exactly one half puts the same pixels back under the same edge — the reset
+ * is invisible and needs no measurement. Linear because a gallery wall moves
+ * at one speed; an eased marquee reads as a carousel. The duration is set by
+ * the component, from how much it is carrying.
+ */
+.drift {
+  animation: drift linear infinite;
+}
+
+@keyframes drift {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/*
+ * The use-case WHEEL and its illustration.
+ *
+ * THE PHRASE IS THE DISPLAY TYPE OF THIS SECTION, and the stem above it is an
+ * eyebrow. They used to be the same size on one line — 15px of scaffolding
+ * beside 16px of payload — so nothing told the eye which half was the point,
+ * and three same-sized mono rows with one green in the middle read as a
+ * loading glitch rather than as a list being scrolled.
+ *
+ * The neighbours are pushed BACK rather than merely dimmed: scaled down and
+ * well under half opacity, so the three rows read as a physical wheel turning
+ * away from the reader. Scale is a transform, so it moves nothing — the rows
+ * stay exactly one `--use-line` apart and the offset stays arithmetic, which
+ * is what lets the wheel wrap without measuring or jumping.
+ */
+.use-wheel-window {
+  /* Sized for the DISPLAY face, not the mono it used to carry: the serif is set
+   * far larger at the same measure, and a line box shorter than the type clips
+   * every descender — "annotate coding agent plans" has three. Tightened from
+   * there to the point where the rows sit close enough to read as one turning
+   * list, which is a good deal less leading than a paragraph would want. */
+  --use-line: 1.95rem;
+  /*
+   * THE NEIGHBOURS ARE CUT, NOT FADED — that is what makes it a rolodex.
+   *
+   * The window used to be exactly three rows tall, so all three were whole and
+   * the only thing separating them was dimming. Two failures came out of that:
+   * dimmed enough to rank, the neighbours vanished on the dark theme; visible
+   * enough to read, the three sat as a stack of equal lines and the wheel
+   * stopped turning. Showing about 2.1 rows crops each neighbour by ~45%, which
+   * ranks them by GEOMETRY, needs no colour to do it, and takes a third off the
+   * height the section was spending.
+   */
+  --use-visible: 2.5;
+  height: calc(var(--use-visible) * var(--use-line));
+  overflow: hidden;
+  /* Only the cut edges are softened now; the crop does the work. */
+  mask-image: linear-gradient(to bottom, transparent 0, #000 11%, #000 89%, transparent 100%);
+}
+
+@media (min-width: 640px) {
+  .use-wheel-window {
+    --use-line: 2.6rem;
+  }
+}
+
+.use-wheel {
+  /*
+   * The track's transform puts the row BEFORE the centred one at y=0, which
+   * centres the live row in a three-row window. Shortening the window would
+   * otherwise crop the bottom neighbour only, so the track is pulled up by half
+   * the rows removed — keeping the live row centred and both neighbours cut by
+   * the same amount, with no arithmetic in the component.
+   */
+  margin-top: calc((var(--use-visible) - 3) * var(--use-line) / 2);
+  transition: transform 0.5s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.use-row {
+  height: var(--use-line);
+  line-height: var(--use-line);
+  text-align: center;
+  transition:
+    color 0.3s ease,
+    opacity 0.3s ease,
+    transform 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.use-row[data-state='out'] {
+  /* Muted, not faint: `--color-faint` at a third of an opacity is a few points
+   * off the page's own background in dark mode. The row still has to be READ —
+   * pushing it back is the scale and the dimming together, not either alone. */
+  color: var(--color-muted);
+  opacity: 0.5;
+  transform: scale(0.84);
+}
+
+.use-row[data-state='in'] {
+  color: var(--color-accent);
+}
+
+.use-shot {
+  transition: opacity 0.35s ease;
+}
+
+.use-shot[data-state='out'] {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .use-wheel,
+  .use-row,
+  .use-shot {
+    transition: none;
   }
 }
 
