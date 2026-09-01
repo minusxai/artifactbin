@@ -43,15 +43,22 @@ export default function LandingFooter({ column = PAGE_COLUMN }: { column?: strin
   return (
     <footer className={`${column} mt-14 sm:mt-20`}>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-edge pb-4">
-        {/* THE LINKS YIELD, THE BUTTONS DO NOT. `flex-1 min-w-0` lets the nav
-          * take whatever is left and wrap its own links onto a second line, so
-          * the two actions stay on the right of them. Without it the nav held
-          * its full width, the outer row ran out of column, and the buttons —
-          * `shrink-0`, correctly — were the ones pushed onto a line of their
-          * own, which reads as a second footer rather than as the actions. */}
+        {/*
+          * THE LINKS GROW BUT NEVER SHRINK — `grow shrink-0 basis-64`.
+          *
+          * The nav has to yield width so the two actions can sit to its right
+          * rather than on a line of their own; `flex-1 min-w-0` does that and
+          * is wrong, because a flex item that may shrink to nothing WILL:
+          * measured on a 390px phone, the nav took the 38px the buttons left
+          * it and stacked all six links in a one-word column beside them.
+          * A floor of 16rem instead means the row runs out of space before the
+          * nav does, so the buttons wrap under it on a phone — the honest
+          * mobile layout — and on the desktop column the nav grows to fill
+          * whatever is left of the row.
+          */}
         <nav
           aria-label="About artifactbin"
-          className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2 font-mono text-[11.5px]"
+          className="flex shrink-0 grow basis-64 flex-wrap items-center gap-x-3 gap-y-2 font-mono text-[11.5px]"
         >
           {LINKS.map((link) => (
             <a
