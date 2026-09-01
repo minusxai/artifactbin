@@ -136,10 +136,10 @@ export default function FeatureSpecimens({
     >
       <div className={SHEET}>
         <div className="flex items-baseline justify-between gap-4">
-          <p className="flex items-center gap-4 font-mono text-xs tracking-[0.18em] text-muted uppercase mb-6">
-        Why use artifactbin?
-        <span aria-hidden className="h-px flex-1 bg-edge" />
-      </p>
+          <p className="mb-6 flex min-w-0 flex-1 items-center gap-4 font-mono text-xs tracking-[0.18em] text-muted uppercase">
+            Why use artifactbin?
+            <span aria-hidden className="h-px flex-1 bg-edge" />
+          </p>
           {label && (
             <span
               className="font-mono text-[10px] tracking-[0.14em] uppercase"
