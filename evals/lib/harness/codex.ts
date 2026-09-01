@@ -53,7 +53,7 @@ function run(argv: string[], home: string): Promise<void> {
 const TOOL_ITEMS = new Set(['command_execution', 'mcp_tool_call', 'file_change', 'web_search']);
 
 /** Codex reads a bearer token from an environment variable, so it never lands in config.toml. */
-const MCP_TOKEN_ENV = 'ARTIFACT_BIN_MCP_TOKEN';
+const MCP_TOKEN_ENV = 'ARTIFACTBIN_MCP_TOKEN';
 
 async function mcpAdd(home: string, mcp: McpTarget): Promise<void> {
   await new Promise<void>((resolve, reject) => {

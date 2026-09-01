@@ -282,7 +282,7 @@ describe('stream filtering (a transcript must not grow without bound)', () => {
 });
 
 describe('MCP transport support', () => {
-  const mcp = { name: 'artifact-bin', url: 'http://127.0.0.1:3101/mcp', token: 'mx_secret' };
+  const mcp = { name: 'artifactbin', url: 'http://127.0.0.1:3101/mcp', token: 'mx_secret' };
 
   it('says which harnesses can speak MCP at all — Pi ships none', () => {
     expect(claudeCode.supportsMcp).toBe(true);
@@ -297,7 +297,7 @@ describe('MCP transport support', () => {
     const i = inv.argv.indexOf('--mcp-config');
     expect(i).toBeGreaterThan(-1);
     expect(JSON.parse(inv.argv[i + 1])).toEqual({
-      mcpServers: { 'artifact-bin': { type: 'http', url: mcp.url, headers: { Authorization: `Bearer ${mcp.token}` } } },
+      mcpServers: { 'artifactbin': { type: 'http', url: mcp.url, headers: { Authorization: `Bearer ${mcp.token}` } } },
     });
     expect(inv.argv).toContain('--strict-mcp-config');
   });
@@ -308,12 +308,12 @@ describe('MCP transport support', () => {
 
   it('codex reads the bearer token from an env var, so it never lands in config.toml', () => {
     const inv = codex.invocation({ ...ctx({ harness: 'codex', model: 'gpt-5.6-terra' }), mcp });
-    expect(inv.env.ARTIFACT_BIN_MCP_TOKEN).toBe('mx_secret');
+    expect(inv.env.ARTIFACTBIN_MCP_TOKEN).toBe('mx_secret');
   });
 
   it('opencode writes the remote-server block the CLI itself writes', () => {
     expect(opencode.mcpConfig(mcp)).toEqual({
-      mcp: { 'artifact-bin': { type: 'remote', url: mcp.url, headers: { Authorization: `Bearer ${mcp.token}` } } },
+      mcp: { 'artifactbin': { type: 'remote', url: mcp.url, headers: { Authorization: `Bearer ${mcp.token}` } } },
     });
   });
 });

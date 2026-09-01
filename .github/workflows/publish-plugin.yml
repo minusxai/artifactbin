@@ -1,15 +1,28 @@
-name: Publish Plugin
+name: Publish Plugin Channel
 
-# Force-forwards the generated plugin marketplace (lib/plugin-package.ts) to
-# the public mirror repo users install from. Pushes only
-# when the generated tree actually changed.
+# A deployment controller invokes this only after the exact source commit has
+# passed the target environment smoke checks. Moving main never publishes a plugin.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+    inputs:
+      channel:
+        description: Hosted plugin release channel
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      source_sha:
+        description: Full artifactbin OSS commit SHA deployed to the channel
+        required: true
+        type: string
 
 permissions:
   contents: read
+
+concurrency:
+  group: publish-plugin-${{ inputs.channel }}
+  cancel-in-progress: false
 
 jobs:
   publish:
@@ -17,16 +30,22 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 1
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - run: npm run validate
-      - run: npx vitest run --project=node services/app/lib/__tests__/plugin-package.test.ts
-      # PLUGIN_MIRROR_TOKEN: a fine-grained PAT with contents:write on the
-      # mirror repo (lib/plugin-package.ts PLUGIN_REPO).
-      - run: npx tsx -r ../../scripts/register-yaml.cjs scripts/publish-plugin.ts --token "$PLUGIN_MIRROR_TOKEN"
+      - run: npx vitest run --project=node services/app/lib/__tests__/plugin-package.test.ts services/app/lib/__tests__/plugin-channels.test.ts
+      - name: Publish exact deployed source to the selected channel
         working-directory: services/app
         env:
-          PLUGIN_MIRROR_TOKEN: ${{ secrets.PLUGIN_MIRROR_TOKEN }}
+          PLUGIN_MIRROR_TOKEN: ${{ inputs.channel == 'production' && secrets.PLUGIN_PROD_MIRROR_TOKEN || secrets.PLUGIN_OSS_MIRROR_TOKEN }}
+        run: |
+          npx tsx -r ../../scripts/register-yaml.cjs scripts/publish-plugin.ts \
+            --channel "${{ inputs.channel }}" \
+            --sha "${{ inputs.source_sha }}" \
+            --token "$PLUGIN_MIRROR_TOKEN"

@@ -1,6 +1,6 @@
-# artifact-bin
+# artifactbin
 
-artifact-bin is Google Docs for agents: publish a self-contained document over HTTP, get a link; humans edit it in place.
+artifactbin is Google Docs for agents: publish a self-contained document over HTTP, get a link; humans edit it in place.
 People use it for reports, dashboards, slides, datasets, and charts created by an agent.
 
 Hosted instance: https://artifactbin.dev · Apache-2.0.
@@ -9,7 +9,7 @@ Hosted instance: https://artifactbin.dev · Apache-2.0.
 
 Point any agent at the hosted instance:
 
-> Read `https://artifactbin.dev/docs/artifact-bin/SKILL.md` and publish there.
+> Read `https://artifactbin.dev/docs/artifactbin/SKILL.md` and publish there.
 
 That's the entire integration. Against `https://artifactbin.dev`, the API in one breath:
 
@@ -21,7 +21,7 @@ For MCP clients, add `https://artifactbin.dev/mcp` with no credentials and the c
 
 ## Self-host
 
-Requires Docker, `curl`, and Bash. Defaults: `./artifact-bin`, port `3030`.
+Requires Docker, `curl`, and Bash. Defaults: `./artifactbin`, port `3030`.
 
 ```bash
 curl -fsSL https://artifactbin.dev/install.sh | bash
@@ -31,20 +31,20 @@ Choose the directory and port explicitly (add `--no-interview` for automation;
 run with `--help` for every option):
 
 ```bash
-curl -fsSL https://artifactbin.dev/install.sh | bash -s -- --dir="$HOME/artifact-bin" --port=3030
+curl -fsSL https://artifactbin.dev/install.sh | bash -s -- --dir="$HOME/artifactbin" --port=3030
 ```
 
 Verify with `curl -fsS http://localhost:3030/health`. Follow logs with
-`docker logs -f artifact-bin`; stop it with `docker stop artifact-bin`. Re-running
-the installer upgrades the fixed `artifact-bin` container and keeps the target's
+`docker logs -f artifactbin`; stop it with `docker stop artifactbin`. Re-running
+the installer upgrades the fixed `artifactbin` container and keeps the target's
 `.env` and `data/`. Apple Silicon currently runs the `linux/amd64` image, so its
 first 2+ GB image pull can take several minutes.
 
 Or set up and run the container manually:
 
 ```bash
-docker run --rm -it -v "$PWD/artifact-bin:/work" ghcr.io/minusxai/artifactbin node scripts/setup.mjs --out /work/.env
-docker run -d --name artifact-bin --restart unless-stopped -p 127.0.0.1:3030:3000 -v "$PWD/artifact-bin/data:/app/data" --env-file artifact-bin/.env ghcr.io/minusxai/artifactbin
+docker run --rm -it -v "$PWD/artifactbin:/work" ghcr.io/minusxai/artifactbin node scripts/setup.mjs --out /work/.env
+docker run -d --name artifactbin --restart unless-stopped -p 127.0.0.1:3030:3000 -v "$PWD/artifactbin/data:/app/data" --env-file artifactbin/.env ghcr.io/minusxai/artifactbin
 ```
 
 Data lives in `data/` (PGLite + objects). Email login needs `EMAIL__RESEND_API_KEY`; anonymous tokens work without it. Put a reverse proxy in front for TLS and set `APP__PUBLIC_BASE_URL` to the public URL.

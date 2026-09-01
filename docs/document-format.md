@@ -20,4 +20,4 @@ rail and keyboard paging, `scrolly`, `dashboard`), plus **interactive Vega
 charts** — real tooltips and hover, themed to the story, rendered by a
 runtime served from this origin (the CSP still blocks all external hosts,
 and expression evaluation uses the AST interpreter, never `eval`). The full
-component reference lives at `GET /docs/artifact-bin/references/markup.md`.
+component reference lives at `GET /docs/artifactbin/references/markup.md`.

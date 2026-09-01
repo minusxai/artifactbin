@@ -20,13 +20,13 @@ import { buildMcpInstructions, buildQuickSheet, renderDoc, renderTree, skillTree
 const BASE = 'https://example.test';
 const files = (...paths: string[]) => (base: string) => paths.map((p) => renderDoc(p, base)).join('\n');
 /** The publishing skill as one text (what /docs/llm used to be). */
-const buildSkillDoc = files('artifact-bin/references/publishing.md', 'artifact-bin/references/publishing-auth.md', 'artifact-bin/references/publishing-datasets.md', 'artifact-bin/references/publishing-annotations.md', 'artifact-bin/references/publishing-versions.md', 'artifact-bin/references/publishing-mcp.md');
-const buildMarkupDoc = files('artifact-bin/references/markup.md', 'artifact-bin/references/markup-data.md', 'artifact-bin/references/markup-motion.md', 'artifact-bin/references/markup-video.md', 'artifact-bin/references/markup-svg.md');
-const buildDesignDoc = files('artifact-bin/references/design.md');
-const buildThemesDoc = files('artifact-bin/references/themes.md');
-const buildTemplatesDoc = files('artifact-bin/references/templates.md');
-const buildThemeDoc = (name: string, base: string) => renderDoc(`artifact-bin/references/themes-${name}.md`, base);
-const buildTemplateDoc = (name: string, base: string) => renderDoc(`artifact-bin/references/templates-${name}.md`, base);
+const buildSkillDoc = files('artifactbin/references/publishing.md', 'artifactbin/references/publishing-auth.md', 'artifactbin/references/publishing-datasets.md', 'artifactbin/references/publishing-annotations.md', 'artifactbin/references/publishing-versions.md', 'artifactbin/references/publishing-mcp.md');
+const buildMarkupDoc = files('artifactbin/references/markup.md', 'artifactbin/references/markup-data.md', 'artifactbin/references/markup-motion.md', 'artifactbin/references/markup-video.md', 'artifactbin/references/markup-svg.md');
+const buildDesignDoc = files('artifactbin/references/design.md');
+const buildThemesDoc = files('artifactbin/references/themes.md');
+const buildTemplatesDoc = files('artifactbin/references/templates.md');
+const buildThemeDoc = (name: string, base: string) => renderDoc(`artifactbin/references/themes-${name}.md`, base);
+const buildTemplateDoc = (name: string, base: string) => renderDoc(`artifactbin/references/templates-${name}.md`, base);
 import { MARKUP_FIELD_GUIDANCE, MARKUP_STYLE_RULE } from '../agent-guidance';
 import { parseJsx } from '../jsx';
 import { validateJsx } from '../jsx/validate';

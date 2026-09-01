@@ -23,6 +23,7 @@ echo "docker $*" >> "${log}"
 case "$1" in
   info) [ -n "\${FAKE_DOCKER_DOWN:-}" ] && exit 1; exit 0;;
   pull) echo "fake pull progress"; exit 0;;
+  container) [ "$2" = inspect ] && [ -n "\${FAKE_LEGACY_CONTAINER:-}" ] && exit 0; exit 1;;
   rm) exit 0;;
   run)
     if printf '%s\\n' "$@" | grep -q 'setup.mjs'; then
@@ -63,7 +64,7 @@ describe('install.sh', () => {
     const r = run(['--no-interview', '--port=5211'], { FAKE_DOCKER_DOWN: '1' });
     expect(r.status).not.toBe(0);
     expect(`${r.stdout}${r.stderr}`).toMatch(/docker/i);
-    expect(fs.existsSync(path.join(home, 'artifact-bin'))).toBe(false);
+    expect(fs.existsSync(path.join(home, 'artifactbin'))).toBe(false);
   });
 
   it('fresh install: setup inside the image once, then one detached container with the mounted data dir', () => {
@@ -72,40 +73,73 @@ describe('install.sh', () => {
     const c = calls();
     const setup = c.filter((l) => l.includes('setup.mjs'));
     expect(setup).toHaveLength(1);
-    expect(setup[0]).toMatch(/docker run --rm .*-v \S+\/artifact-bin:\/work .*node scripts\/setup\.mjs --out \/work\/\.env/);
+    expect(setup[0]).toMatch(/docker run --rm .*-v \S+\/artifactbin:\/work .*node scripts\/setup\.mjs --out \/work\/\.env/);
     expect(setup[0]).toMatch(/--yes/);
     expect(setup[0]).toMatch(/--no-next/);
     expect(setup[0]).toMatch(/--port 5211|--port=5211/);
     const detached = c.find((l) => /^docker run -d /.test(l));
     expect(detached).toBeDefined();
-    expect(detached).toMatch(/--name artifact-bin /);
+    expect(detached).toMatch(/--name artifactbin /);
     expect(detached).toMatch(/--restart unless-stopped/);
     expect(detached).toMatch(/-p 127\.0\.0\.1:5211:3000/);
     expect(detached).toMatch(/-e APP__PORT=3000/);
-    expect(detached).toMatch(/-v \S+\/artifact-bin\/data:\/app\/data/);
-    expect(detached).toMatch(/--env-file \S+\/artifact-bin\/\.env/);
+    expect(detached).toMatch(/-v \S+\/artifactbin\/data:\/app\/data/);
+    expect(detached).toMatch(/--env-file \S+\/artifactbin\/\.env/);
     expect(c.some((l) => /^docker pull /.test(l))).toBe(true);
     expect(r.stdout).toContain('fake pull progress');
     expect(c.some((l) => /^curl .*127\.0\.0\.1:5211\/health/.test(l))).toBe(true);
-    expect(fs.existsSync(path.join(home, 'artifact-bin', 'data'))).toBe(true);
+    expect(fs.existsSync(path.join(home, 'artifactbin', 'data'))).toBe(true);
     expect(r.stdout).toMatch(/http:\/\/localhost:5211/);
     // nothing outside the target dir
-    expect(fs.readdirSync(home)).toEqual(['artifact-bin']);
+    expect(fs.readdirSync(home)).toEqual(['artifactbin']);
   });
 
   it('second run is an upgrade: no setup, pull + rm + run again, data kept', () => {
     expect(run(['--no-interview', '--port=5211']).status).toBe(0);
-    fs.writeFileSync(path.join(home, 'artifact-bin', 'data', 'keep.txt'), 'x');
+    fs.writeFileSync(path.join(home, 'artifactbin', 'data', 'keep.txt'), 'x');
     fs.rmSync(log);
     const r = run(['--no-interview', '--port=5211']);
     expect(r.status, r.stderr).toBe(0);
     const c = calls();
     expect(c.some((l) => l.includes('setup.mjs'))).toBe(false);
     expect(c.some((l) => /^docker pull /.test(l))).toBe(true);
-    expect(c.some((l) => /^docker rm -f artifact-bin/.test(l))).toBe(true);
+    expect(c.some((l) => /^docker rm -f artifactbin/.test(l))).toBe(true);
     expect(c.some((l) => /^docker run -d /.test(l))).toBe(true);
-    expect(fs.existsSync(path.join(home, 'artifact-bin', 'data', 'keep.txt'))).toBe(true);
+    expect(fs.existsSync(path.join(home, 'artifactbin', 'data', 'keep.txt'))).toBe(true);
     expect(r.stdout).toMatch(/upgrad/i);
+  });
+
+  it('migrates the legacy default directory and container without losing data', () => {
+    const legacyName = ['artifact', 'bin'].join('-');
+    const legacy = path.join(home, legacyName);
+    fs.mkdirSync(path.join(legacy, 'data'), { recursive: true });
+    fs.writeFileSync(path.join(legacy, '.env'), 'APP__PORT=5211\n');
+    fs.writeFileSync(path.join(legacy, 'data', 'keep.txt'), 'preserved');
+    const r = run(['--no-interview'], { FAKE_LEGACY_CONTAINER: '1' });
+    expect(r.status, r.stderr).toBe(0);
+    expect(fs.existsSync(legacy)).toBe(false);
+    expect(fs.readFileSync(path.join(home, 'artifactbin', 'data', 'keep.txt'), 'utf8')).toBe('preserved');
+    expect(calls()).toContain(`docker rm -f ${legacyName}`);
+    expect(calls().some((line) => /^docker run -d --name artifactbin /.test(line))).toBe(true);
+    expect(calls().some((line) => line.includes('setup.mjs'))).toBe(false);
+  });
+
+  it('refuses the default migration when both old and new directories exist', () => {
+    const legacyName = ['artifact', 'bin'].join('-');
+    fs.mkdirSync(path.join(home, legacyName));
+    fs.mkdirSync(path.join(home, 'artifactbin'));
+    const r = run(['--no-interview']);
+    expect(r.status).not.toBe(0);
+    expect(`${r.stdout}${r.stderr}`).toMatch(/both|ambiguous/i);
+    expect(calls().some((line) => /^docker pull /.test(line))).toBe(false);
+    expect(calls().some((line) => /^docker run /.test(line))).toBe(false);
+  });
+
+  it('refuses a legacy container with no legacy default directory', () => {
+    const r = run(['--no-interview'], { FAKE_LEGACY_CONTAINER: '1' });
+    expect(r.status).not.toBe(0);
+    expect(`${r.stdout}${r.stderr}`).toMatch(/without.*directory|ambiguous/i);
+    expect(calls().some((line) => /^docker pull /.test(line))).toBe(false);
   });
 
   it('on arm64 every docker command carries --platform linux/amd64', () => {
@@ -114,7 +148,7 @@ describe('install.sh', () => {
   });
 
   it('a failed health gate prints the container logs and exits 1', () => {
-    const r = run(['--no-interview', '--port=5211'], { FAKE_HEALTH_DOWN: '1', ARTIFACT_BIN_HEALTH_TIMEOUT: '2' });
+    const r = run(['--no-interview', '--port=5211'], { FAKE_HEALTH_DOWN: '1', ARTIFACTBIN_HEALTH_TIMEOUT: '2' });
     expect(r.status).toBe(1);
     expect(calls().some((l) => /^docker logs /.test(l))).toBe(true);
   });

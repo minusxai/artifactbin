@@ -124,7 +124,7 @@ const isSelfContained = (url: string): boolean =>
   refId(url) !== null || /^data:image\//i.test(url.replace(/[\x00-\x20]/g, '')); // eslint-disable-line no-control-regex -- mirrors browser scheme normalization
 
 /**
- * artifact-bin is STRICTER than the ported minusx validator, on purpose: an
+ * artifactbin is STRICTER than the ported minusx validator, on purpose: an
  * artifact must be self-contained. The ported gate (lib/jsx/validate) only
  * rejects dangerous SCHEMES, so `https://…` images pass it — correct for
  * minusx (an internal tool serving its own assets), wrong here, where:

@@ -56,11 +56,11 @@ describe('countDocsReads (pure)', () => {
    */
   it('counts reads of plugin skill files, greps across the skills directory, and the Skill tool', () => {
     const n = countDocsReads([
-      { name: 'Read', input: { file_path: '/tmp/mx-plugin/plugins/artifact-bin/skills/markup/SKILL.md' } },
+      { name: 'Read', input: { file_path: '/tmp/mx-plugin/plugins/artifactbin/skills/markup/SKILL.md' } },
       { name: 'bash', input: { command: 'cat .opencode/skills/publish/SKILL.md' } },
-      { name: 'bash', input: { command: "sed -n '1,120p' /Users/x/.pi/skills/artifact-bin/skills/design/SKILL.md" } },
-      { name: 'bash', input: { command: 'grep -rl SlideDeck /tmp/mx-plugin/plugins/artifact-bin/skills/' } },
-      { name: 'Skill', input: { skill: 'artifact-bin:publish' } },
+      { name: 'bash', input: { command: "sed -n '1,120p' /Users/x/.pi/skills/artifactbin/skills/design/SKILL.md" } },
+      { name: 'bash', input: { command: 'grep -rl SlideDeck /tmp/mx-plugin/plugins/artifactbin/skills/' } },
+      { name: 'Skill', input: { skill: 'artifactbin:publish' } },
       { name: 'bash', input: { command: 'ls -la && pwd' } },
       { name: 'bash', input: { command: 'cat support.csv' } },
       { name: 'Read', input: { file_path: '/tmp/work/deck.jsx' } },
@@ -69,7 +69,7 @@ describe('countDocsReads (pure)', () => {
   });
   /**
    * The tree the plugin ships is ONE skill over `references/`, so an installed
-   * skill's detail files live at `skills/artifact-bin/references/<topic>.md` —
+   * skill's detail files live at `skills/artifactbin/references/<topic>.md` —
    * one level deeper than the flat layout this rule was written for. Every
    * reference read was uncounted: on a real plugins run the seven tasks
    * reported 7 docs reads where the transcripts hold 39 (pi) and 49 (OpenCode),
@@ -77,10 +77,10 @@ describe('countDocsReads (pure)', () => {
    */
   it('counts a read of a reference file under an installed skill, at any depth', () => {
     const n = countDocsReads([
-      { name: 'Read', input: { file_path: '/tmp/mx-plugin/plugins/artifact-bin/skills/artifact-bin/references/markup.md' } },
-      { name: 'bash', input: { command: 'cat .opencode/skills/artifact-bin/references/publishing-datasets.md' } },
-      { name: 'bash', input: { command: "sed -n '1,120p' /Users/x/.pi/skills/artifact-bin/references/design.md" } },
-      { name: 'Read', input: { file_path: '/tmp/mx-plugin/plugins/artifact-bin/skills/artifact-bin/SKILL.md' } },
+      { name: 'Read', input: { file_path: '/tmp/mx-plugin/plugins/artifactbin/skills/artifactbin/references/markup.md' } },
+      { name: 'bash', input: { command: 'cat .opencode/skills/artifactbin/references/publishing-datasets.md' } },
+      { name: 'bash', input: { command: "sed -n '1,120p' /Users/x/.pi/skills/artifactbin/references/design.md" } },
+      { name: 'Read', input: { file_path: '/tmp/mx-plugin/plugins/artifactbin/skills/artifactbin/SKILL.md' } },
       { name: 'bash', input: { command: 'cat support.csv' } },
     ]);
     expect(n).toBe(4);

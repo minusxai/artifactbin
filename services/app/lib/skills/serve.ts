@@ -26,7 +26,7 @@ import { ROOT_SKILL, SKILL_FILE_NAME, type SkillDir, type SkillFile, type SkillT
 const transportQuery = (transport: DocTransport) => transport === 'mcp' ? '?transport=mcp' : '';
 
 const DOCS_LISTING_HEADER = (base: string, tree: SkillTree, transport: DocTransport = 'curl') =>
-  `# artifact-bin docs — one skill: the brief + ${tree.files.filter((f) => f.audience === 'agent' && f.ref).length} reference files; every file keeps its critical content at the TOP.
+  `# artifactbin docs — one skill: the brief + ${tree.files.filter((f) => f.audience === 'agent' && f.ref).length} reference files; every file keeps its critical content at the TOP.
 # Read ${base}/docs/${ROOT_SKILL}/${SKILL_FILE_NAME}${transportQuery(transport)} first; its dispatch table says which reference to open. Lines: URL, when to read.
 # The tree as a folder: curl -s "${base}/docs?download=true${transport === 'mcp' ? '&transport=mcp' : ''}" | tar xz   (then grep -rl <term> skills/)`;
 
@@ -37,7 +37,7 @@ export function docsListing(tree: SkillTree, base: string, dir?: SkillDir, trans
   const body = dirs
     .map((d) => `## ${d.name}\n${d.files.filter((f) => f.audience === 'agent').map((f) => line(base, f, transport)).join('\n')}`)
     .join('\n\n');
-  const head = dir ? `# artifact-bin docs — the ${dir.name} skill. Read its ${SKILL_FILE_NAME} first; the whole tree is at ${base}/docs${transportQuery(transport)}.` : DOCS_LISTING_HEADER(base, tree, transport);
+  const head = dir ? `# artifactbin docs — the ${dir.name} skill. Read its ${SKILL_FILE_NAME} first; the whole tree is at ${base}/docs${transportQuery(transport)}.` : DOCS_LISTING_HEADER(base, tree, transport);
   return `${head}\n\n${body}\n`;
 }
 
@@ -78,7 +78,7 @@ export function serveDocs({ tree, base, path, accept, download, transport = 'cur
   if (download && segments.length === 0) {
     return new Response(new Uint8Array(docsArchive(tree, base, transport)), {
       status: 200,
-      headers: { 'Content-Type': 'application/gzip', 'Content-Disposition': 'attachment; filename="artifact-bin-docs.tar.gz"', 'Cache-Control': 'no-store' },
+      headers: { 'Content-Type': 'application/gzip', 'Content-Disposition': 'attachment; filename="artifactbin-docs.tar.gz"', 'Cache-Control': 'no-store' },
     });
   }
   if (segments.length === 0) {

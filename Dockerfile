@@ -48,7 +48,7 @@ COPY scripts/setup.mjs ./scripts/setup.mjs
 COPY scripts/lib/setup-plan.mjs ./scripts/lib/setup-plan.mjs
 
 RUN test -f ./sql-server.mjs \
-    && test -d ./skills/artifact-bin \
+    && test -d ./skills/artifactbin \
     && test -f ./public/story/manifest.json \
     && node -e "const m=require('./public/story/manifest.json');for(const u of [m.entry,...(m.lazy||[])]) require('fs').accessSync('./public'+u)" \
     && mkdir -p /app/data/pglite /app/.artifact-objects \

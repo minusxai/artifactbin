@@ -26,7 +26,7 @@ services:
     build:
       context: .
       dockerfile: services/proxy/Dockerfile
-    image: artifact-bin-lean-proxy
+    image: artifactbin-lean-proxy
     restart: unless-stopped
     networks: [edge, compute, db]
     read_only: true
@@ -58,7 +58,7 @@ services:
       # extra_hosts mapping below.
       EMAIL__RESEND_API_KEY: ${EMAIL__RESEND_API_KEY:-}
       EMAIL__RESEND_BASE_URL: ${EMAIL__RESEND_BASE_URL:-}
-      EMAIL__FROM: ${EMAIL__FROM:-artifact-bin <login@example.com>}
+      EMAIL__FROM: ${EMAIL__FROM:-artifactbin <login@example.com>}
     extra_hosts:
       # So EMAIL__RESEND_BASE_URL can name a sink ON THE HOST (a gate's, or
       # scripts/lib/mail-relay.mjs) — without this the login gates cannot see
@@ -83,7 +83,7 @@ services:
       # Web imports, webfonts and a remote object store need outbound access;
       # no other compute service joins this unprivileged egress network.
       egress: {}
-    image: artifact-bin-lean-app
+    image: artifactbin-lean-app
     restart: unless-stopped
     read_only: true
     cap_drop: [ALL]
@@ -128,7 +128,7 @@ services:
     build:
       context: .
       dockerfile: services/sql/Dockerfile
-    image: artifact-bin-lean-sql
+    image: artifactbin-lean-sql
     restart: unless-stopped
     networks: [compute]
     read_only: true
@@ -144,7 +144,7 @@ services:
     build:
       context: .
       dockerfile: services/browser/Dockerfile
-    image: artifact-bin-lean-browser
+    image: artifactbin-lean-browser
     restart: unless-stopped
     networks: [compute]
     read_only: true

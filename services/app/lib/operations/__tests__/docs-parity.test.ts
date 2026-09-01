@@ -24,7 +24,7 @@ describe('docs ↔ registry parity', () => {
   });
 
   it('the MCP reference names every operation, from the registry', () => {
-    const mcpDoc = renderDoc('artifact-bin/references/publishing-mcp.md', BASE);
+    const mcpDoc = renderDoc('artifactbin/references/publishing-mcp.md', BASE);
     for (const op of OPERATIONS) expect(mcpDoc, op.name).toContain(`\`${op.name}\``);
   });
 
@@ -49,26 +49,26 @@ describe('both transports render, under the caps', () => {
   it('compiles the correct skill for all four delivery/action treatments', async () => {
     const tree = skillTree();
     const brief = (transport: 'curl' | 'mcp', delivery: 'http' | 'installed') =>
-      renderTree(tree, BASE, transport, delivery).find(({ file }) => file.path === 'artifact-bin/SKILL.md')!.text;
+      renderTree(tree, BASE, transport, delivery).find(({ file }) => file.path === 'artifactbin/SKILL.md')!.text;
 
     const httpApi = brief('curl', 'http');
     expect(httpApi).toContain('curl -X POST');
-    expect(httpApi).toContain(`${BASE}/docs/artifact-bin/references/`);
+    expect(httpApi).toContain(`${BASE}/docs/artifactbin/references/`);
 
-    const httpMcpResponse = serveDocs({ tree, base: BASE, path: 'artifact-bin/SKILL.md', accept: '', download: false, transport: 'mcp' });
+    const httpMcpResponse = serveDocs({ tree, base: BASE, path: 'artifactbin/SKILL.md', accept: '', download: false, transport: 'mcp' });
     const httpMcp = await httpMcpResponse.text();
     expect(httpMcp).toContain('create_artifact({');
-    expect(httpMcp).toContain(`${BASE}/docs/artifact-bin/references/<file>?transport=mcp`);
+    expect(httpMcp).toContain(`${BASE}/docs/artifactbin/references/<file>?transport=mcp`);
 
     const installedApi = brief('curl', 'installed');
     expect(installedApi).toContain('curl -X POST');
     expect(installedApi).toContain('files sit under `references/` beside this skill');
-    expect(installedApi).not.toContain(`${BASE}/docs/artifact-bin/references/`);
+    expect(installedApi).not.toContain(`${BASE}/docs/artifactbin/references/`);
 
     const installedMcp = brief('mcp', 'installed');
     expect(installedMcp).toContain('create_artifact({');
     expect(installedMcp).toContain('files sit under `references/` beside this skill');
-    expect(installedMcp).not.toContain(`${BASE}/docs/artifact-bin/references/`);
+    expect(installedMcp).not.toContain(`${BASE}/docs/artifactbin/references/`);
   });
 
   it('the plugin brief opens with a TOOL CALL; the served brief with curl', () => {
@@ -77,7 +77,7 @@ describe('both transports render, under the caps', () => {
     expect(served).toContain('curl -X POST');
     // The served brief teaches HTTP only — tool syntax belongs to the plugin.
     expect(served).not.toMatch(/create_artifact\(|edit_artifact\(|get_artifact/);
-    const plugin = renderTree(tree, BASE, 'mcp').find(({ file }) => file.path === 'artifact-bin/SKILL.md')!.text;
+    const plugin = renderTree(tree, BASE, 'mcp').find(({ file }) => file.path === 'artifactbin/SKILL.md')!.text;
     expect(plugin).toContain('create_artifact({');
     expect(plugin).toContain('edit_artifact({');
     expect(plugin).toContain('get_artifact');

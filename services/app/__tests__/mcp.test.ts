@@ -33,9 +33,9 @@ describe('MCP server', () => {
     const res = await rpc(t.token, { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'x', version: '0' } } });
     expect(res.status).toBe(200);
     const body = (await res.json()) as { result: { instructions?: string } };
-    expect(body.result.instructions).toContain(`${PUBLIC_BASE_URL}/docs/artifact-bin/SKILL.md`);
-    expect(body.result.instructions).toContain(`${PUBLIC_BASE_URL}/docs/artifact-bin/references/markup.md`);
-    expect(body.result.instructions).toContain(`${PUBLIC_BASE_URL}/docs/artifact-bin/references/templates-<name>.md`);
+    expect(body.result.instructions).toContain(`${PUBLIC_BASE_URL}/docs/artifactbin/SKILL.md`);
+    expect(body.result.instructions).toContain(`${PUBLIC_BASE_URL}/docs/artifactbin/references/markup.md`);
+    expect(body.result.instructions).toContain(`${PUBLIC_BASE_URL}/docs/artifactbin/references/templates-<name>.md`);
     expect(body.result.instructions).toContain('themes-<name>.md');
     expect(body.result.instructions).toContain(`${PUBLIC_BASE_URL}/docs`);
   });

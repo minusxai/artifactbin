@@ -45,7 +45,7 @@ const goneText = (base: string) => [
   '',
   'You do not need it to continue:',
   `  POST ${base}/api/tokens/anonymous   → a token, no account needed`,
-  `  GET  ${base}/docs/artifact-bin/references/publishing.md → the whole API`,
+  `  GET  ${base}/docs/artifactbin/references/publishing.md → the whole API`,
   '',
   'For the original document, ask the person who sent the link for a fresh one.',
 ].join('\n');

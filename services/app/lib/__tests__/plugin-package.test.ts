@@ -25,10 +25,10 @@ describe('buildPluginFiles', () => {
     expect(paths).toContain('.codex-plugin/plugin.json');
     expect(paths).toContain('.mcp.json');
     expect(paths).toContain('README.md');
-    expect(paths).toContain('skills/artifact-bin/SKILL.md');
+    expect(paths).toContain('skills/artifactbin/SKILL.md');
     // ONE preloaded skill: every other skills/ path is a reference inside it.
-    expect(paths.filter((p) => p.startsWith('skills/') && p !== 'skills/artifact-bin/SKILL.md')
-      .every((p) => p.startsWith('skills/artifact-bin/references/'))).toBe(true);
+    expect(paths.filter((p) => p.startsWith('skills/') && p !== 'skills/artifactbin/SKILL.md')
+      .every((p) => p.startsWith('skills/artifactbin/references/'))).toBe(true);
     // No loose file at the skills root: every loader treats a SUBDIRECTORY as a skill.
     expect(paths.filter((p) => /^skills\/[^/]+$/.test(p))).toEqual([]);
   });
@@ -39,8 +39,8 @@ describe('buildPluginFiles', () => {
     for (const { file, text } of renderTree(skillTree(), PLUGIN_BASE_URL, 'mcp')) {
       expect(files[`skills/${file.path}`]).toBe(skillFileWithFrontmatter(file, text));
     }
-    for (const t of STORY_THEMES) expect(files[`skills/artifact-bin/references/themes-${t.name}.md`]).toBeTruthy();
-    for (const t of STORY_TEMPLATES) expect(files[`skills/artifact-bin/references/templates-${t.name}.md`]).toBeTruthy();
+    for (const t of STORY_THEMES) expect(files[`skills/artifactbin/references/themes-${t.name}.md`]).toBeTruthy();
+    for (const t of STORY_TEMPLATES) expect(files[`skills/artifactbin/references/templates-${t.name}.md`]).toBeTruthy();
     expect(Object.keys(files).filter((p) => p.startsWith('skills/'))).toHaveLength(skillTree().files.length);
   });
 
@@ -77,7 +77,7 @@ describe('buildPluginFiles', () => {
     for (const [p, text] of Object.entries(other)) expect(text, p).not.toContain(PLUGIN_BASE_URL);
     // The mcp rendering publishes by tool call, so the base rides the
     // deliverable URL rather than an /api address.
-    expect(other['skills/artifact-bin/SKILL.md']).toContain('https://self.example.org/a/');
+    expect(other['skills/artifactbin/SKILL.md']).toContain('https://self.example.org/a/');
   });
 });
 
@@ -90,8 +90,15 @@ describe('buildMirrorFiles (the minusx org marketplace)', () => {
       expect(mirror[`plugins/${PLUGIN_NAME}/${rel}`]).toBe(pluginFiles[rel]);
     }
     expect(Object.keys(mirror).sort()).toEqual(
-      ['README.md', '.claude-plugin/marketplace.json', ...Object.keys(pluginFiles).map((p) => `plugins/${PLUGIN_NAME}/${p}`)].sort(),
+      ['README.md', '.artifactbin-release.json', '.claude-plugin/marketplace.json', ...Object.keys(pluginFiles).map((p) => `plugins/${PLUGIN_NAME}/${p}`)].sort(),
     );
+    expect(JSON.parse(mirror['.artifactbin-release.json'])).toMatchObject({
+      channel: 'production',
+      plugin: 'artifactbin',
+      baseUrl: PLUGIN_BASE_URL,
+      sourceRepository: 'minusxai/artifactbin',
+      sourceSha: 'development',
+    });
   });
 
   it('is named for the org (the install suffix), listing the plugin from its subdirectory', () => {
@@ -121,7 +128,7 @@ describe('buildMirrorFiles (the minusx org marketplace)', () => {
  */
 describe('the root skill is a briefing, not the whole manual', () => {
   const files = buildPluginFiles(BASE);
-  const brief = files['skills/artifact-bin/SKILL.md'];
+  const brief = files['skills/artifactbin/SKILL.md'];
 
   it('is under the always-read cap, and every other file is too', () => {
     expect(Buffer.byteLength(brief)).toBeLessThan(8_700); // 8,192 + frontmatter
@@ -148,7 +155,7 @@ describe('the root skill is a briefing, not the whole manual', () => {
     // never be sent over HTTP for a file it already holds on disk.
     expect(brief).toContain('`markup-data.md`');
     expect(brief).toContain('references/');
-    expect(brief).not.toContain(`${BASE}/docs/artifact-bin/references/`);
+    expect(brief).not.toContain(`${BASE}/docs/artifactbin/references/`);
     expect(brief).not.toContain('download=true');
   });
 

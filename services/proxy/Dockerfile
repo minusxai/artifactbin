@@ -7,7 +7,7 @@
 #
 # Build from the REPO ROOT — the builder installs the whole workspace tree
 # (the bundler needs the toolchain), the runtime only this package:
-#   docker build -f services/proxy/Dockerfile -t artifact-bin-proxy .
+#   docker build -f services/proxy/Dockerfile -t artifactbin-proxy .
 
 FROM node:22 AS builder
 

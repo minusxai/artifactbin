@@ -173,7 +173,7 @@ describe('the quick sheet', () => {
 
   it('points at the full reference as an ESCAPE HATCH — the sheet never claims to be complete', () => {
     expect(sheet).toContain(`${base}/docs`);
-    expect(sheet).toContain(`${base}/docs/artifact-bin/references/`);
+    expect(sheet).toContain(`${base}/docs/artifactbin/references/`);
     expect(sheet).toMatch(/only if|not covered|beyond/i);
   });
 

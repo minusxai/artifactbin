@@ -11,8 +11,8 @@
 import { describe, it, expect } from 'vitest';
 import { renderDoc } from '@/lib/skills';
 
-/** A genre's authoring guidance is its docs file — `skills/artifact-bin/references/templates-<name>.md`, the one copy agents read. */
-const guidanceOf = (name: string) => renderDoc(`artifact-bin/references/templates-${name}.md`, 'https://example.test');
+/** A genre's authoring guidance is its docs file — `skills/artifactbin/references/templates-<name>.md`, the one copy agents read. */
+const guidanceOf = (name: string) => renderDoc(`artifactbin/references/templates-${name}.md`, 'https://example.test');
 import { STORY_TEMPLATES, STORY_TEMPLATE_NAMES, getStoryTemplate } from '../story-templates';
 
 describe('STORY_TEMPLATES registry', () => {

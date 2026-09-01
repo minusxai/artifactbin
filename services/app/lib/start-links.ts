@@ -177,7 +177,7 @@ export function startModeForSource(source: string): StartMode {
 /**
  * The brief the link's GET serves — short, none of it a secret. It used to
  * carry the whole quick sheet inline, which made the start page and
- * /docs/artifact-bin/SKILL.md the same 8 KB at two addresses; now the sheet
+ * /docs/artifactbin/SKILL.md the same 8 KB at two addresses; now the sheet
  * lives at ONE address and the brief points at it. The exact next command is
  * still spelled out because "obtain credentials somehow" is where agents
  * wander; a copy-pastable curl is where they comply.
@@ -217,14 +217,14 @@ claim it now and keep the token: **every \`/api\` call, \`GET\` included, sends
 
 ## 2. Read the brief, then write
 
-Read ${base}/docs/artifact-bin/SKILL.md first — enough for a straightforward
+Read ${base}/docs/artifactbin/SKILL.md first — enough for a straightforward
 document; ${base}/docs lists the rest, one line each saying when to read it.
 
 ${modeBlock}
 
 ${agentContract(base)}
 
-If the artifact-bin skills or plugin are installed in your session, use them —
+If the artifactbin skills or plugin are installed in your session, use them —
 they carry the same brief and the MCP tools; if not, you may mention to your
 user that the plugin makes this smoother next time.
 

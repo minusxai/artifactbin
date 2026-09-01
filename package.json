@@ -1,5 +1,5 @@
 {
-  "name": "artifact-bin",
+  "name": "artifactbin",
   "private": true,
   "type": "module",
   "version": "0.1.0",
@@ -13,7 +13,7 @@
     "dev:app": "node scripts/dev-app.mjs",
     "build": "npm run build -w services/app && node scripts/build-server.mjs dist/proxy-server.mjs",
     "start": "NODE_ENV=production node dist/proxy-server.mjs",
-    "validate": "npm run validate -w services/app",
+    "validate": "npm run check:residual-names && npm run validate -w services/app",
     "test": "npm test -w services/app",
     "test:watch": "vitest",
     "mint": "node scripts/mint.mjs",
@@ -29,7 +29,8 @@
     "eval": "tsx evals/run.ts",
     "eval:report": "tsx evals/report-cli.ts",
     "generate:routes": "npm run generate:routes -w services/app",
-    "render:schema": "node scripts/render-schema.mjs"
+    "render:schema": "node scripts/render-schema.mjs",
+    "check:residual-names": "node scripts/check-residual-names.mjs"
   },
   "dependencies": {
     "@artifactbin/browser": "0.1.0",

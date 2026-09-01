@@ -63,7 +63,7 @@ describe('the preview flag has no route to point at', () => {
 
   it('the docs teach the same thing (it is the protocol an agent reads)', async () => {
     const { renderDoc } = await import('@/lib/skills');
-    const doc = renderDoc('artifact-bin/references/publishing-datasets.md', 'https://artifactbin.dev');
+    const doc = renderDoc('artifactbin/references/publishing-datasets.md', 'https://artifactbin.dev');
     expect(doc).toContain(`?${PREVIEW_PARAM}=${PREVIEW_VERSION}`);
     expect(doc).not.toContain('/preview');
   });

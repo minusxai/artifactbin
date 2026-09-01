@@ -256,7 +256,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     const token = tokenFromPaste(start.prompt);
     if (task.seed) await seedDocument(r.agentBase, start.id, token, task.seed);
     access = { kind: 'token', base: r.agentBase, token, id: start.id };
-    if (transport.run === 'mcp') mcp = { name: 'artifact-bin', url: `${r.agentBase}/mcp`, token };
+    if (transport.run === 'mcp') mcp = { name: 'artifactbin', url: `${r.agentBase}/mcp`, token };
   }
   // The skills are built for the base THIS TASK will be reached on: each task has its own
   // recording proxy on its own port, and a skill naming another one sends the traffic past

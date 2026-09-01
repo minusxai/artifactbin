@@ -27,14 +27,14 @@ const markdown = async (res: Response) => {
 
 describe('the auth doc', () => {
   it('tells the user how to keep anonymous work under an account', () => {
-    const doc = renderDoc('artifact-bin/references/publishing-auth.md', BASE);
+    const doc = renderDoc('artifactbin/references/publishing-auth.md', BASE);
     expect(doc).toMatch(new RegExp(`log in at ${BASE}`, 'i'));
     expect(doc).toContain('/api/tokens/anonymous');
     expect(doc).not.toContain('[[');
   });
 
   it('counts the vocabulary instead of restating it', () => {
-    const doc = renderDoc('artifact-bin/references/markup.md', BASE);
+    const doc = renderDoc('artifactbin/references/markup.md', BASE);
     expect(doc).toContain(`${STORY_HTML_TAGS.length} are allowed`);
     expect(doc).toContain(`Kit components (${STORY_UI_COMPONENT_NAME_LIST.length})`);
   });
@@ -46,7 +46,7 @@ describe('the auth doc', () => {
  */
 describe('agent-readable delivery', () => {
   it('serves the listing, a skill, and every file as text/plain, never text/markdown', async () => {
-    for (const path of ['', '/artifact-bin', '/artifact-bin/references', ...skillTree().files.map((f) => `/${f.path}`)]) {
+    for (const path of ['', '/artifactbin', '/artifactbin/references', ...skillTree().files.map((f) => `/${f.path}`)]) {
       const res = await docsResponse(path);
       expect(res.status, path).toBe(200);
       expect(res.headers.get('Content-Type'), path).toBe('text/plain; charset=utf-8');
@@ -66,7 +66,7 @@ describe('the listing', () => {
    * negotiation), not by the UA guess in `lib/client-identity`.
    */
   it('sends a browser to the human tour, from /docs and from a skill', async () => {
-    for (const path of ['', '/artifact-bin']) {
+    for (const path of ['', '/artifactbin']) {
       const res = await docsResponse(path, { accept: 'text/html,application/xhtml+xml' });
       expect(res.status, path).toBe(307);
       expect(res.headers.get('location')).toContain('/docs/human');
@@ -76,7 +76,7 @@ describe('the listing', () => {
   it('answers anything else with one line per file — URL and when to read it — the brief first, and no second copy of any doc', async () => {
     const text = await markdown(await docsResponse(''));
     const urls = text.split('\n').filter((l) => l.includes('\t')).map((l) => l.split('\t')[0]);
-    expect(urls[0]).toBe(`${BASE}/docs/artifact-bin/SKILL.md`);
+    expect(urls[0]).toBe(`${BASE}/docs/artifactbin/SKILL.md`);
     expect(urls).toHaveLength(skillTree().files.length);
     for (const f of skillTree().files) expect(urls).toContain(`${BASE}/docs/${f.path}`);
     expect(text).toContain('download=true');
@@ -85,17 +85,17 @@ describe('the listing', () => {
   });
 
   it('the skill lists its own files, its SKILL.md first', async () => {
-    const text = await markdown(await docsResponse('/artifact-bin'));
+    const text = await markdown(await docsResponse('/artifactbin'));
     const urls = text.split('\n').filter((l) => l.includes('\t')).map((l) => l.split('\t')[0]);
-    expect(urls[0]).toBe(`${BASE}/docs/artifact-bin/SKILL.md`);
-    expect(urls.slice(1).every((u) => u.startsWith(`${BASE}/docs/artifact-bin/references/`))).toBe(true);
-    expect(urls.length).toBe(skillTree().dir('artifact-bin')!.files.length);
+    expect(urls[0]).toBe(`${BASE}/docs/artifactbin/SKILL.md`);
+    expect(urls.slice(1).every((u) => u.startsWith(`${BASE}/docs/artifactbin/references/`))).toBe(true);
+    expect(urls.length).toBe(skillTree().dir('artifactbin')!.files.length);
   });
 });
 
 describe('files', () => {
   it('renders a file with the caller\'s own base baked in and no template syntax', async () => {
-    const text = await markdown(await docsResponse('/artifact-bin/references/publishing.md'));
+    const text = await markdown(await docsResponse('/artifactbin/references/publishing.md'));
     expect(text).toContain(`POST ${BASE}/api/artifacts`);
     expect(text).toContain('Authorization: Bearer mx_');
     expect(text).not.toMatch(/\[\[|\]\]|\[%/);
@@ -103,29 +103,29 @@ describe('files', () => {
   });
 
   it('serves one theme and one template in full, and their indexes name every one', async () => {
-    const themes = await markdown(await docsResponse('/artifact-bin/references/themes.md'));
+    const themes = await markdown(await docsResponse('/artifactbin/references/themes.md'));
     for (const name of STORY_THEME_NAMES) expect(themes).toContain(`](themes-${name}.md)`);
     expect(themes).not.toContain('Charts:');
-    expect(await markdown(await docsResponse('/artifact-bin/references/themes-modernist.md'))).toContain('Charts:');
-    const templates = await markdown(await docsResponse('/artifact-bin/references/templates.md'));
+    expect(await markdown(await docsResponse('/artifactbin/references/themes-modernist.md'))).toContain('Charts:');
+    const templates = await markdown(await docsResponse('/artifactbin/references/templates.md'));
     for (const name of STORY_TEMPLATE_NAMES) expect(templates).toContain(`](templates-${name}.md)`);
     expect(templates).not.toContain('Beats:');
-    const editorial = await markdown(await docsResponse('/artifact-bin/references/templates-editorial.md'));
+    const editorial = await markdown(await docsResponse('/artifactbin/references/templates-editorial.md'));
     expect(editorial).toContain('Beats:');
     expect(editorial).toContain('Type register');
   });
 
   it('names the fix on a miss: the nearest directory\'s children, as JSON', async () => {
-    const missing = await docsResponse('/artifact-bin/references/themes-vaporwave.md');
+    const missing = await docsResponse('/artifactbin/references/themes-vaporwave.md');
     expect(missing.status).toBe(404);
     const body = (await missing.json()) as { error: string; children: string[] };
     expect(body.error).toBe('not_found');
-    expect(body.children).toContain(`${BASE}/docs/artifact-bin/references/themes.md`);
-    expect(body.children).toContain(`${BASE}/docs/artifact-bin/references/themes-modernist.md`);
+    expect(body.children).toContain(`${BASE}/docs/artifactbin/references/themes.md`);
+    expect(body.children).toContain(`${BASE}/docs/artifactbin/references/themes-modernist.md`);
     const noSkill = await docsResponse('/zines');
     expect(noSkill.status).toBe(404);
-    expect(((await noSkill.json()) as { children: string[] }).children).toContain(`${BASE}/docs/artifact-bin/SKILL.md`);
-    expect((await docsResponse('/artifact-bin/references/markup-data.md/deeper')).status).toBe(404);
+    expect(((await noSkill.json()) as { children: string[] }).children).toContain(`${BASE}/docs/artifactbin/SKILL.md`);
+    expect((await docsResponse('/artifactbin/references/markup-data.md/deeper')).status).toBe(404);
   });
 
   it('retired addresses are 404s that name the tree, never silent aliases', async () => {
@@ -159,17 +159,17 @@ describe('/docs?download=true', () => {
         const body = tar.subarray(at + 512, at + 512 + size).toString('utf8');
         expect(body.startsWith('---\nname: '), name).toBe(true);
         expect(body, name).not.toMatch(/\[\[|\[%/);
-        if (name === 'skills/artifact-bin/SKILL.md') expect(body).toContain(BASE);
+        if (name === 'skills/artifactbin/SKILL.md') expect(body).toContain(BASE);
       }
       at += 512 + Math.ceil(size / 512) * 512;
     }
-    expect(names).toContain('skills/artifact-bin/SKILL.md');
-    expect(names).toContain('skills/artifact-bin/references/markup-data.md');
+    expect(names).toContain('skills/artifactbin/SKILL.md');
+    expect(names).toContain('skills/artifactbin/references/markup-data.md');
     expect(names).toHaveLength(skillTree().files.length);
     const again = await docs(new Request(`${BASE}/docs?download=true`), { params: Promise.resolve({ path: undefined }) });
     expect(Buffer.from(await again.arrayBuffer()).equals(Buffer.from(await (await docs(new Request(`${BASE}/docs?download=true`), { params: Promise.resolve({ path: undefined }) })).arrayBuffer()))).toBe(true);
     // Only the whole tree downloads; a file is a file.
-    const file = await docs(new Request(`${BASE}/docs/artifact-bin/references/markup-data.md?download=true`), { params: Promise.resolve({ path: 'artifact-bin/references/markup-data.md' }) });
+    const file = await docs(new Request(`${BASE}/docs/artifactbin/references/markup-data.md?download=true`), { params: Promise.resolve({ path: 'artifactbin/references/markup-data.md' }) });
     expect(file.headers.get('Content-Type')).toBe('text/plain; charset=utf-8');
   });
 });

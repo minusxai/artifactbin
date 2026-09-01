@@ -163,7 +163,7 @@ describe('<GetStarted>', () => {
     expect(
       screen.getByLabelText('Step 2: Add → Marketplace → Add from repository'),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText('Step 3: Artifact Bin → Install')).toBeInTheDocument();
+    expect(screen.getByLabelText('Step 3: artifactbin → Install')).toBeInTheDocument();
     expect(screen.getByLabelText('Step 4: Connector → Connect')).toBeInTheDocument();
     expect(body).toContain('Make me a quick report about daylight savings');
     expect(screen.getByLabelText('Create a live document for my agent')).toBeInTheDocument();
@@ -188,7 +188,7 @@ describe('<GetStarted>', () => {
     expect(
       screen.getByLabelText('Step 2: + on the right → Add marketplace'),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText('Step 3: Artifact Bin → Install')).toBeInTheDocument();
+    expect(screen.getByLabelText('Step 3: artifactbin → Install')).toBeInTheDocument();
     expect(screen.getByLabelText('Step 4: Connector → Connect')).toBeInTheDocument();
     expect(body).toContain('Make me a quick report about daylight savings');
     // Path one lives on the panel above, so the button is always present.
@@ -246,7 +246,7 @@ describe('<GetStarted>', () => {
     expect(firstStep).toHaveClass('grid-cols-[1.5rem_minmax(0,1fr)]');
     expect(firstStep).not.toHaveClass('min-h-32');
     expect(
-      screen.getByLabelText('Step 2: Open the marketplace → Artifact Bin → Install'),
+      screen.getByLabelText('Step 2: Open the marketplace → artifactbin → Install'),
     ).toBeInTheDocument();
     expect(
       screen.getByLabelText('Step 3: Browser opens automatically → Log in → Authorized'),
@@ -267,12 +267,12 @@ describe('<GetStarted>', () => {
   });
 
   it.each([
-    ['Pi', 'Pi CLI', '~/.pi/agent', '~/.pi/agent/skills/artifact-bin'],
+    ['Pi', 'Pi CLI', '~/.pi/agent', '~/.pi/agent/skills/artifactbin'],
     [
       'OpenCode',
       'OpenCode CLI',
       '~/.config/opencode',
-      '~/.config/opencode/skills/artifact-bin',
+      '~/.config/opencode/skills/artifactbin',
     ],
   ] as const)(
     'gives %s a no-install path or a global skills install',

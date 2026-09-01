@@ -52,11 +52,11 @@ describe('STORY_THEMES registry', () => {
     }
   });
 
-  // A theme's authoring guidance is its docs file — `skills/artifact-bin/references/themes-<name>.md`,
+  // A theme's authoring guidance is its docs file — `skills/artifactbin/references/themes-<name>.md`,
   // the one copy agents read — never a field on the StoryTheme entry.
   it("every theme has authoring guidance; retired themes have none", () => {
     for (const name of STORY_THEME_NAMES) {
-      const guidance = renderDoc(`artifact-bin/references/themes-${name}.md`, 'https://example.test');
+      const guidance = renderDoc(`artifactbin/references/themes-${name}.md`, 'https://example.test');
       expect(guidance, `${name} guidance`).toBeDefined();
       expect(guidance.length, `${name} guidance`).toBeGreaterThan(200);
       expect(guidance, `${name} Don't section`).toContain("Don't");
@@ -65,7 +65,7 @@ describe('STORY_THEMES registry', () => {
       expect(guidance, `${name} legacy class attr`).not.toMatch(/\bclass="/i);
     }
     for (const name of Object.keys(RETIRED_STORY_THEMES)) {
-      expect(skillTree().get(`artifact-bin/references/themes-${name}.md`), `${name} guidance retired`).toBeUndefined();
+      expect(skillTree().get(`artifactbin/references/themes-${name}.md`), `${name} guidance retired`).toBeUndefined();
     }
   });
 

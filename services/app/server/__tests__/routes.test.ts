@@ -42,7 +42,7 @@ describe('handlers through Hono', () => {
   mountRoutes(app);
 
   it('serves the docs, refuses an unknown document uniformly, and creates then reads an artifact with a bearer', async () => {
-    expect((await app.request('/docs/artifact-bin/references/publishing.md')).status).toBe(200);
+    expect((await app.request('/docs/artifactbin/references/publishing.md')).status).toBe(200);
     expect((await app.request('/docs')).status).toBe(200);
     expect((await app.request('/a/nope00/raw')).status).toBe(404);
     const t = await mintToken('t');

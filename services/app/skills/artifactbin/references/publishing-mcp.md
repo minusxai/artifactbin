@@ -6,7 +6,7 @@ order: 5
 ---
 ## Read first
 
-artifact-bin: publish self-contained documents (reports, dashboards, slides, datasets, charts, images) and share the returned URL with your user — that url is the deliverable.
+artifactbin: publish self-contained documents (reports, dashboards, slides, datasets, charts, images) and share the returned URL with your user — that url is the deliverable.
 
 Quick rules:
 - Every artifact takes exactly ONE content field: markup | dataset | viz | image.
@@ -15,9 +15,9 @@ Quick rules:
 - update_artifact fully replaces content at a stable URL; every save is versioned and revertible; edit_artifact changes one node and needs the edit_id from your last read.
 
 Before authoring, read the docs over plain HTTP (no auth needed) — small files, critical content at the top of each:
-- [[ base ]]/docs/artifact-bin/SKILL.md — the brief: everything a straightforward document needs. Read it first.
-- [[ base ]]/docs/artifact-bin/references/markup.md — the document vocabulary; markup-data.md beside it is the data grammar in full.
-- [[ base ]]/docs/artifact-bin/references/templates-<name>.md and …/themes-<name>.md — AFTER picking a template and a theme, the chosen one in full.
+- [[ base ]]/docs/artifactbin/SKILL.md — the brief: everything a straightforward document needs. Read it first.
+- [[ base ]]/docs/artifactbin/references/markup.md — the document vocabulary; markup-data.md beside it is the data grammar in full.
+- [[ base ]]/docs/artifactbin/references/templates-<name>.md and …/themes-<name>.md — AFTER picking a template and a theme, the chosen one in full.
 - [[ base ]]/docs — the whole tree listed with a one-line "when to read" per file.
 
 ## The MCP server
@@ -29,7 +29,7 @@ where your user logs in with their email (a one-time code — no password) and
 approves. Artifacts published through the connection belong to that account:
 
 ```
-claude mcp add --transport http artifact-bin [[ base ]]/mcp
+claude mcp add --transport http artifactbin [[ base ]]/mcp
 ```
 
 Already have an `mx_` token? Skip the browser: pass it as a header instead

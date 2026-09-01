@@ -19,8 +19,8 @@
 import { describe, it, expect } from 'vitest';
 import { buildQuickSheet, renderDoc } from '../skills';
 
-const buildThemeDoc = (base: string, name: string) => renderDoc(`artifact-bin/references/themes-${name}.md`, base);
-const buildTemplateDoc = (base: string, name: string) => renderDoc(`artifact-bin/references/templates-${name}.md`, base);
+const buildThemeDoc = (base: string, name: string) => renderDoc(`artifactbin/references/themes-${name}.md`, base);
+const buildTemplateDoc = (base: string, name: string) => renderDoc(`artifactbin/references/templates-${name}.md`, base);
 import { STORY_THEMES } from '../data/story/story-themes';
 import { STORY_TEMPLATES } from '../data/story/story-templates';
 

@@ -11,7 +11,7 @@ import { GET as listArtifactsRoute, POST as createArtifactRoute } from '@/app/ap
 import { GET as docsRoute } from '@/app/docs/[[...path]]/route';
 
 const docsPath = (p: string) => docsRoute(request(`/docs${p ? '/' + p : ''}`), { params: Promise.resolve({ path: p }) });
-const getDoc = (_r: Request) => docsPath('artifact-bin/references/publishing.md');
+const getDoc = (_r: Request) => docsPath('artifactbin/references/publishing.md');
 import { GET as getLlmsTxt } from '@/app/llms.txt/route';
 const docsIndexRoute = (_r: Request) => docsPath('');
 // Minting and revoking are the APP's own routes (app/api/tokens/**) — the real
@@ -212,12 +212,12 @@ describe('/llms.txt', () => {
     const [a, b, full] = await Promise.all([
       getLlmsTxt(request('/llms.txt')).then((r) => r.text()),
       docsIndexRoute(request('/docs')).then((r: Response) => r.text()),
-      getDoc(request('/docs/artifact-bin/references/publishing.md')).then((r: Response) => r.text()),
+      getDoc(request('/docs/artifactbin/references/publishing.md')).then((r: Response) => r.text()),
     ]);
     expect(a).toBe(b);
     expect(a).not.toBe(full);
     expect(Buffer.byteLength(a)).toBeLessThan(6200);
-    expect(a).toContain(`${BASE}/docs/artifact-bin/references/publishing.md`);
+    expect(a).toContain(`${BASE}/docs/artifactbin/references/publishing.md`);
   });
 
   it('answers as markdown, uncached', async () => {
@@ -246,7 +246,7 @@ describe('skill doc', () => {
    */
   it('every ```json example it teaches is a payload the API accepts', async () => {
     const { token } = await mint('doc-examples');
-    const doc = await (await docsPath('artifact-bin/references/publishing-datasets.md')).text();
+    const doc = await (await docsPath('artifactbin/references/publishing-datasets.md')).text();
     const blocks = [...doc.matchAll(/```json\n([\s\S]*?)```/g)].map((m) => m[1]);
     // `viz` is the one tier whose shape (description/engine/bindings[]/
     // template{}) prose cannot convey, so the doc must carry a working
@@ -296,7 +296,7 @@ describe('skill doc', () => {
     const res = await getDoc(request('/docs/llm'));
     const text = await res.text();
     const index = await (await docsIndexRoute(request('/docs'))).text();
-    for (const path of ['/docs/artifact-bin/SKILL.md', '/docs/artifact-bin/references/publishing.md', '/docs/artifact-bin/references/markup.md', '/docs/artifact-bin/references/themes.md', '/docs/artifact-bin/references/templates.md', '/docs/artifact-bin/references/design.md']) {
+    for (const path of ['/docs/artifactbin/SKILL.md', '/docs/artifactbin/references/publishing.md', '/docs/artifactbin/references/markup.md', '/docs/artifactbin/references/themes.md', '/docs/artifactbin/references/templates.md', '/docs/artifactbin/references/design.md']) {
       expect(index).toContain(`${BASE}${path}`);
     }
     expect(text).not.toContain(`${BASE}/api/markup`);

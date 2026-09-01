@@ -14,7 +14,7 @@ plumbing — editing is a mode the served document enters IN PLACE (`lib/story-r
 
 > PORTED from MinusX along with the code it documents, and edited to match this repo.
 > Paths are repo-relative (MinusX's `frontend/` prefix is dropped). There is no capture
-> tier here — artifact-bin rasterizes a served document with headless Chromium instead
+> tier here — artifactbin rasterizes a served document with headless Chromium instead
 > (`lib/export.ts`). The root `CLAUDE.md` carries the system overview and the principles
 > that apply everywhere.
 

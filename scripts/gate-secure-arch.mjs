@@ -176,8 +176,8 @@ const ratio = Math.min(pubBytes.length, privBytes.length) / Math.max(pubBytes.le
 check(ratio > 0.9, `a PRIVATE doc exports the same image its PUBLIC twin does (size ratio ${ratio.toFixed(2)}) — not a 404 page`);
 
 // ── 4. /raw is internal ───────────────────────────────────────────────────
-const llm = await (await fetch(`${BASE}/docs/artifact-bin/references/publishing.md`)).text();
-check(!llm.includes('/raw'), '/docs/artifact-bin/references/publishing.md no longer teaches /raw');
+const llm = await (await fetch(`${BASE}/docs/artifactbin/references/publishing.md`)).text();
+check(!llm.includes('/raw'), '/docs/artifactbin/references/publishing.md no longer teaches /raw');
 const rawResp = await readerCtx.request.get(`${BASE}/a/${doc.id}/raw`);
 check(rawResp.status() === 200, '/raw still answers (internal address for the iframe/embeds)');
 

@@ -295,7 +295,7 @@ export const MAX_IMAGE_BYTES = Number(env('IMAGES', 'MAX_BYTES') ?? '5000000');
 export const RESEND_API_KEY = env('EMAIL', 'RESEND_API_KEY');
 
 /** Sender for login codes. Must be a domain verified in Resend, or sends fail. */
-export const LOGIN_EMAIL_FROM = env('EMAIL', 'FROM') ?? 'artifact-bin <login@example.com>';
+export const LOGIN_EMAIL_FROM = env('EMAIL', 'FROM') ?? 'artifactbin <login@example.com>';
 
 /**
  * Where the Resend API lives. Overridable so a browser gate can point sends at

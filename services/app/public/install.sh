@@ -3,8 +3,9 @@
 set -euo pipefail
 
 DEFAULT_IMAGE="ghcr.io/minusxai/artifactbin:latest"
-IMAGE="${ARTIFACT_BIN_IMAGE:-$DEFAULT_IMAGE}"
+IMAGE="${ARTIFACTBIN_IMAGE:-$DEFAULT_IMAGE}"
 TARGET_INPUT=""
+TARGET_EXPLICIT=0
 PORT_OVERRIDE=""
 NO_INTERVIEW=0
 
@@ -16,7 +17,7 @@ for arg in "$@"; do
   case "$arg" in
     --no-interview) NO_INTERVIEW=1 ;;
     --image=*) IMAGE=${arg#*=} ;;
-    --dir=*) TARGET_INPUT=${arg#*=} ;;
+    --dir=*) TARGET_INPUT=${arg#*=}; TARGET_EXPLICIT=1 ;;
     --port=*) PORT_OVERRIDE=${arg#*=} ;;
     --help|-h) usage; exit 0 ;;
     --*) echo "Unknown option: $arg" >&2; usage; exit 2 ;;
@@ -26,6 +27,7 @@ for arg in "$@"; do
         exit 2
       fi
       TARGET_INPUT=$arg
+      TARGET_EXPLICIT=1
       ;;
   esac
 done
@@ -44,7 +46,7 @@ if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
   exit 1
 fi
 if ! command -v curl >/dev/null 2>&1; then
-  echo "curl is required to check Artifact Bin's health." >&2
+  echo "curl is required to check artifactbin's health." >&2
   exit 1
 fi
 
@@ -53,7 +55,42 @@ case "$(uname -m)" in
   arm64|aarch64) PLATFORM=linux/amd64 ;;
 esac
 
-TARGET_INPUT=${TARGET_INPUT:-./artifact-bin}
+if [[ "$TARGET_EXPLICIT" -eq 1 && -z "$TARGET_INPUT" ]]; then
+  echo "The custom install directory must not be empty." >&2
+  exit 2
+fi
+
+# Migration is deliberately limited to the default target. An explicit
+# --dir/path is never redirected or moved behind the caller's back.
+if [[ "$TARGET_EXPLICIT" -eq 0 ]]; then
+  NEW_DEFAULT="$(pwd -P)/artifactbin"
+  LEGACY_DEFAULT="$(pwd -P)/artifact-bin"
+  LEGACY_CONTAINER=0
+  if docker container inspect artifact-bin >/dev/null 2>&1; then
+    LEGACY_CONTAINER=1
+  fi
+
+  if [[ -e "$NEW_DEFAULT" && -e "$LEGACY_DEFAULT" ]]; then
+    echo "Both the legacy and canonical default install directories exist; refusing an ambiguous migration." >&2
+    exit 1
+  fi
+  if [[ -e "$LEGACY_DEFAULT" && ! -d "$LEGACY_DEFAULT" ]]; then
+    echo "The legacy default install path exists but is not a directory; refusing migration." >&2
+    exit 1
+  fi
+  if [[ -d "$LEGACY_DEFAULT" ]]; then
+    if [[ "$LEGACY_CONTAINER" -eq 1 ]]; then
+      echo "Removing the legacy container before migrating its mounted data."
+      docker rm -f artifact-bin
+    fi
+    echo "Migrating the existing default install to $NEW_DEFAULT"
+    mv "$LEGACY_DEFAULT" "$NEW_DEFAULT"
+  elif [[ "$LEGACY_CONTAINER" -eq 1 ]]; then
+    echo "The legacy container exists without its expected default install directory; refusing ambiguous migration." >&2
+    exit 1
+  fi
+  TARGET_INPUT=./artifactbin
+fi
 case "/$TARGET_INPUT/" in
   */../*)
     echo "The install directory must not contain '..'." >&2
@@ -67,11 +104,11 @@ else
   TARGET=${TARGET%/}
 fi
 HOME_REAL=$(cd "$HOME" && pwd -P)
-if [[ "${ARTIFACT_BIN_ANYWHERE:-0}" != "1" ]]; then
+if [[ "${ARTIFACTBIN_ANYWHERE:-0}" != "1" ]]; then
   case "$TARGET/" in
     "$HOME_REAL"/*) ;;
     *)
-      echo "The install directory must be under HOME ($HOME_REAL). Docker Desktop shares HOME by default; mounts outside it can silently receive nothing. Set ARTIFACT_BIN_ANYWHERE=1 to continue anyway." >&2
+      echo "The install directory must be under HOME ($HOME_REAL). Docker Desktop shares HOME by default; mounts outside it can silently receive nothing. Set ARTIFACTBIN_ANYWHERE=1 to continue anyway." >&2
       exit 1
       ;;
   esac
@@ -100,7 +137,7 @@ if ! pull_image; then
   exit 1
 fi
 
-echo "[4/6] Configuring Artifact Bin"
+echo "[4/6] Configuring artifactbin"
 if [[ "$UPGRADE" -eq 0 ]]; then
   SETUP_ARGS=(node scripts/setup.mjs --out /work/.env --no-next)
   if [[ -n "$PORT_OVERRIDE" ]]; then
@@ -128,25 +165,25 @@ if [[ -z "$HOST_PORT" ]]; then
   HOST_PORT=${HOST_PORT:-3030}
 fi
 
-echo "[5/6] Starting Artifact Bin"
-docker rm -f artifact-bin 2>/dev/null || true
+echo "[5/6] Starting artifactbin"
+docker rm -f artifactbin 2>/dev/null || true
 if [[ -n "$PLATFORM" ]]; then
-  docker run -d --name artifact-bin --restart unless-stopped --platform "$PLATFORM" \
-    -p "${ARTIFACT_BIN_BIND:-127.0.0.1}:$HOST_PORT:3000" -v "$TARGET/data:/app/data" \
+  docker run -d --name artifactbin --restart unless-stopped --platform "$PLATFORM" \
+    -p "${ARTIFACTBIN_BIND:-127.0.0.1}:$HOST_PORT:3000" -v "$TARGET/data:/app/data" \
     --env-file "$ENV_FILE" -e APP__PORT=3000 "$IMAGE"
 else
-  docker run -d --name artifact-bin --restart unless-stopped \
-    -p "${ARTIFACT_BIN_BIND:-127.0.0.1}:$HOST_PORT:3000" -v "$TARGET/data:/app/data" \
+  docker run -d --name artifactbin --restart unless-stopped \
+    -p "${ARTIFACTBIN_BIND:-127.0.0.1}:$HOST_PORT:3000" -v "$TARGET/data:/app/data" \
     --env-file "$ENV_FILE" -e APP__PORT=3000 "$IMAGE"
 fi
 
-echo "[6/6] Waiting for Artifact Bin"
-TIMEOUT=${ARTIFACT_BIN_HEALTH_TIMEOUT:-120}
+echo "[6/6] Waiting for artifactbin"
+TIMEOUT=${ARTIFACTBIN_HEALTH_TIMEOUT:-120}
 DEADLINE=$((SECONDS + TIMEOUT))
 until curl -fsS "http://127.0.0.1:$HOST_PORT/health" >/dev/null 2>&1; do
   if (( SECONDS >= DEADLINE )); then
-    echo "Artifact Bin did not become healthy within ${TIMEOUT}s. Container logs:" >&2
-    docker logs --tail 40 artifact-bin >&2 || true
+    echo "artifactbin did not become healthy within ${TIMEOUT}s. Container logs:" >&2
+    docker logs --tail 40 artifactbin >&2 || true
     exit 1
   fi
   sleep 1
@@ -154,12 +191,12 @@ done
 
 cat <<EOF
 
-Artifact Bin is ready.
+artifactbin is ready.
 Open http://localhost:$HOST_PORT
-To publish from an agent, read http://localhost:$HOST_PORT/docs/artifact-bin/SKILL.md
-Follow logs: docker logs -f artifact-bin
+To publish from an agent, read http://localhost:$HOST_PORT/docs/artifactbin/SKILL.md
+Follow logs: docker logs -f artifactbin
 Re-run this command to upgrade.
 
 For public access, put a reverse proxy with TLS in front and set
-APP__PUBLIC_BASE_URL in artifact-bin/.env to the public URL.
+APP__PUBLIC_BASE_URL in artifactbin/.env to the public URL.
 EOF

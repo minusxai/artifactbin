@@ -60,7 +60,7 @@ describe('retired themes are dead names', () => {
   });
 
   it('the theme docs (references/themes-*.md) teach only the surviving six', () => {
-    const files = readdirSync(path.join(ROOT, 'skills/artifact-bin/references'))
+    const files = readdirSync(path.join(ROOT, 'skills/artifactbin/references'))
       .filter((f) => f.startsWith('themes-'))
       .map((f) => f.replace(/^themes-/, '').replace(/\.md$/, ''))
       .sort();

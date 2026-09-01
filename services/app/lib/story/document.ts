@@ -291,9 +291,9 @@ const renderReaderChrome = (signIn?: StoryDocumentInput['signIn']): string =>
   + `<button type="button" class="mx-reader-trigger mx-reader-trigger--right" data-mx-reader-trigger="controls" aria-label="Open artifact controls" aria-expanded="false">${ICON_SLIDERS}${ICON_X}<span class="mx-reader-label" data-mobile-label>controls</span></button>`
   + '<button type="button" class="mx-reader-scrim" data-mx-reader-scrim aria-label="Close page controls" hidden></button>'
   + '<nav class="mx-reader-panel mx-reader-panel--menu" data-mx-reader-panel="menu" aria-label="Menu" hidden>'
-  + '<a class="mx-reader-brand" href="/" target="_top"><img src="/logo-128.png" alt="">artifact-bin</a>'
+  + '<a class="mx-reader-brand" href="/" target="_top"><img src="/logo-128.png" alt="">artifactbin</a>'
   + '<a href="/" target="_top">Artifacts</a><a href="/account" target="_top">Account</a>'
-  + '<a href="/docs" target="_top">Human Docs</a><a href="/docs/artifact-bin/SKILL.md" target="_top">Agent docs</a>'
+  + '<a href="/docs" target="_top">Human Docs</a><a href="/docs/artifactbin/SKILL.md" target="_top">Agent docs</a>'
   + '</nav>'
   + '<section class="mx-reader-panel mx-reader-panel--controls" data-mx-reader-panel="controls" aria-label="Artifact controls" hidden>'
   + '<h2>artifact controls</h2><h3>appearance</h3>'

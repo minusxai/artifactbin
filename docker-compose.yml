@@ -5,7 +5,7 @@
 services:
   web:
     build: .
-    image: artifact-bin:latest
+    image: artifactbin:latest
     restart: unless-stopped
     # Localhost-only by default: put a TLS-terminating proxy in front rather
     # than exposing the app (and its bearer tokens) on plain HTTP to the
@@ -34,7 +34,7 @@ services:
       EMAIL__RESEND_API_KEY: ${EMAIL__RESEND_API_KEY:-}
       S3_URL: ${S3_URL:-}
       SQL__MAX_ROWS: ${SQL__MAX_ROWS:-10000}
-      EMAIL__FROM: ${EMAIL__FROM:-artifact-bin <login@example.com>}
+      EMAIL__FROM: ${EMAIL__FROM:-artifactbin <login@example.com>}
       EXPORT__INTERNAL_ORIGIN: http://127.0.0.1:3000
     depends_on:
       postgres:

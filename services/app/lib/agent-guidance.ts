@@ -52,8 +52,8 @@ export const SHEET_URL_FIELD_GUIDANCE =
   'A PUBLIC Google Sheets link ("anyone with the link can view"). ' +
   // ChatGPT refused a sheet import and asked the user to connect Google Drive,
   // believing it had to read the sheet itself. It does not: pass the URL and
-  // artifact-bin fetches it server-side. Say so first, before anything else.
-  'YOU DO NOT NEED ACCESS TO THE SHEET AND MUST NOT FETCH IT YOURSELF — pass the URL here and artifact-bin ' +
+  // artifactbin fetches it server-side. Say so first, before anything else.
+  'YOU DO NOT NEED ACCESS TO THE SHEET AND MUST NOT FETCH IT YOURSELF — pass the URL here and artifactbin ' +
   'downloads it server-side. No Google account, connector or file access is required on your side. ' +
   'The #gid in the URL selects the tab. Private sheets are rejected with a clear error — there is no sign-in.';
 
@@ -64,14 +64,14 @@ export const SHEET_URL_FIELD_GUIDANCE =
  */
 export const IMAGE_URL_FIELD_GUIDANCE =
   'image tier from a URL: any public image on the web. ' +
-  'YOU DO NOT NEED TO DOWNLOAD IT — pass the URL and artifact-bin fetches it server-side, ' +
+  'YOU DO NOT NEED TO DOWNLOAD IT — pass the URL and artifactbin fetches it server-side, ' +
   'stores a copy, and serves it from its own origin (the document never hotlinks). ' +
   'You can also just write <img src="https://…"> in markup: publish imports it and echoes ' +
   'your markup rewritten to ref:<id>. Returns an artifact id to reference as ref:<id>.';
 
 export const CSV_URL_FIELD_GUIDANCE =
   'dataset tier from a URL: any PUBLIC CSV link (S3, raw GitHub, a data portal — not only Google Sheets). ' +
-  'YOU DO NOT NEED TO DOWNLOAD IT — pass the URL and artifact-bin fetches it server-side. ' +
+  'YOU DO NOT NEED TO DOWNLOAD IT — pass the URL and artifactbin fetches it server-side. ' +
   'Types are inferred per column, same as the dataset field.';
 
 export const MARKUP_FIELD_GUIDANCE = [
@@ -80,7 +80,7 @@ export const MARKUP_FIELD_GUIDANCE = [
   'Open with <div data-design="tw" className="@container …"> and style every child (spacing, type, colour).',
   'Inline style=/onClick= rejected: ONE <Helmet> carries <style> (theme vars on :root) and <script>, which RUNS — use addEventListener.',
   'Prefer theme tokens (text-muted-foreground, bg-muted) over hex so themes apply.',
-  `Read ${PUBLIC_BASE_URL}/docs/artifact-bin/references/markup.md for the vocabulary first.`,
+  `Read ${PUBLIC_BASE_URL}/docs/artifactbin/references/markup.md for the vocabulary first.`,
   'Data: <Helmet><Query name="q">{`select … from ref_<datasetId>`}</Query></Helmet>, then <Question data="$q" viz={{"kind":"vega-lite","spec":{…}}} />.',
   'Filters: <Value name="x" /> in Helmet, <select value="$x" options="$q" /> in the body, $x in SQL. data="ref:…" and Param are RETIRED.',
   COMPUTED_FIGURE_RULE,

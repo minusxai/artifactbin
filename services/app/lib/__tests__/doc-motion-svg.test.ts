@@ -10,10 +10,10 @@ import { renderDoc } from '../skills';
 
 const B = 'https://example.test';
 /** The markup skill as one text: its SKILL.md plus the motion, svg and data files it links. */
-const buildMarkupDoc = (base: string) => ['artifact-bin/references/markup.md', 'artifact-bin/references/markup-data.md', 'artifact-bin/references/markup-motion.md', 'artifact-bin/references/markup-svg.md', 'artifact-bin/references/markup-video.md'].map((p) => renderDoc(p, base)).join('\n');
-const buildDesignDoc = (base: string) => renderDoc('artifact-bin/references/design.md', base);
-const buildTemplatesDoc = (base: string) => renderDoc('artifact-bin/references/templates.md', base);
-const buildTemplateDoc = (base: string, name: string) => renderDoc(`artifact-bin/references/templates-${name}.md`, base);
+const buildMarkupDoc = (base: string) => ['artifactbin/references/markup.md', 'artifactbin/references/markup-data.md', 'artifactbin/references/markup-motion.md', 'artifactbin/references/markup-svg.md', 'artifactbin/references/markup-video.md'].map((p) => renderDoc(p, base)).join('\n');
+const buildDesignDoc = (base: string) => renderDoc('artifactbin/references/design.md', base);
+const buildTemplatesDoc = (base: string) => renderDoc('artifactbin/references/templates.md', base);
+const buildTemplateDoc = (base: string, name: string) => renderDoc(`artifactbin/references/templates-${name}.md`, base);
 void B;
 
 const BASE = 'https://example.test';

@@ -1,6 +1,6 @@
 /**
- * THE DOCS ARE ONE SKILL — `skills/artifact-bin/SKILL.md` (the brief, with a
- * dispatch table) over `skills/artifact-bin/references/*.md` (the topic
+ * THE DOCS ARE ONE SKILL — `skills/artifactbin/SKILL.md` (the brief, with a
+ * dispatch table) over `skills/artifactbin/references/*.md` (the topic
  * files, flat), laid out exactly as Claude's Agent Skills convention has it,
  * so the repo folder IS the plugin folder and `/docs` is a listing of it.
  * One preloaded name + description triggers the whole surface; every topic
@@ -51,9 +51,9 @@ const SKILL_READ_FIRST_MAX_BYTES = 2500;
 export type SkillAudience = 'agent' | 'human';
 
 export interface SkillFile {
-  /** Tree-relative path: `artifact-bin/SKILL.md` or `artifact-bin/references/markup-data.md`. */
+  /** Tree-relative path: `artifactbin/SKILL.md` or `artifactbin/references/markup-data.md`. */
   path: string;
-  /** The skill (top-level directory) it belongs to: `artifact-bin`. */
+  /** The skill (top-level directory) it belongs to: `artifactbin`. */
   dir: string;
   /** The file name: `SKILL.md` or `markup-data.md`. */
   file: string;
@@ -132,7 +132,7 @@ export function buildSkillTree(sources: Record<string, string>): SkillTree {
 }
 
 /** The skill every agent reads first — today's brief. */
-export const ROOT_SKILL = 'artifact-bin';
+export const ROOT_SKILL = 'artifactbin';
 
 export function expectedSkillName(f: Pick<SkillFile, 'dir' | 'file' | 'ref'>): string {
   return f.ref ? f.file.replace(/\.md$/, '') : f.dir;

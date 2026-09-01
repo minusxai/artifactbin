@@ -25,7 +25,7 @@ type BootOutcome = {
 };
 
 async function availablePort(offset: number): Promise<number> {
-  const configuredBase = Number(process.env.ARTIFACT_BIN_TEST_PORT_BASE);
+  const configuredBase = Number(process.env.ARTIFACTBIN_TEST_PORT_BASE);
   if (Number.isInteger(configuredBase) && configuredBase > 0) return configuredBase + offset;
   return await new Promise<number>((resolve, reject) => {
     const server = net.createServer();

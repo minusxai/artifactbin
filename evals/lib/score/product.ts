@@ -74,7 +74,7 @@ const ISLAND_ID = 'mx-story-data';
 /**
  * How many rows the document's queries produced, read from the island.
  *
- * artifact-bin runs the dataflow SERVER-SIDE and ships the results with the
+ * artifactbin runs the dataflow SERVER-SIDE and ships the results with the
  * document, so a static document never calls its own `/query` endpoint — waiting
  * for that request is waiting for something that only happens when a `<Value>`
  * changes. The island is the direct evidence that a `<Query>` ran and returned

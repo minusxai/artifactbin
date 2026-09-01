@@ -67,7 +67,7 @@ describe('the app CSP', () => {
   });
 
   it('never lands on an artifact address or a machine surface', async () => {
-    for (const path of ['/a/Ab3xK9/raw', '/a/Ab3xK9/export', '/api/artifacts', '/docs/artifact-bin/references/publishing.md']) {
+    for (const path of ['/a/Ab3xK9/raw', '/a/Ab3xK9/export', '/api/artifacts', '/docs/artifactbin/references/publishing.md']) {
       const res = await app.request(path);
       expect(res.headers.get('content-security-policy'), path).not.toBe(APP_CSP);
     }

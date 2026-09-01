@@ -30,7 +30,7 @@ describe('/llms.txt and /docs are ONE small listing — never a second copy of a
     expect(Buffer.byteLength(index)).toBeLessThanOrEqual(DOCS_INDEX_MAX_BYTES);
   });
   it('lists every skill, the brief first, then the API', () => {
-    const pages = ['/docs/artifact-bin/SKILL.md', '/docs/artifact-bin/references/design.md', '/docs/artifact-bin/references/markup.md', '/docs/artifact-bin/references/publishing.md', '/docs/artifact-bin/references/templates.md', '/docs/artifact-bin/references/themes.md'];
+    const pages = ['/docs/artifactbin/SKILL.md', '/docs/artifactbin/references/design.md', '/docs/artifactbin/references/markup.md', '/docs/artifactbin/references/publishing.md', '/docs/artifactbin/references/templates.md', '/docs/artifactbin/references/themes.md'];
     let last = -1;
     for (const page of pages) {
       const at = index.indexOf(`${BASE}${page}`);
@@ -49,7 +49,7 @@ describe('/llms.txt and /docs are ONE small listing — never a second copy of a
 });
 
 describe('the publishing skill opens with the essentials', () => {
-  const doc = renderDoc('artifact-bin/references/publishing.md', BASE);
+  const doc = renderDoc('artifactbin/references/publishing.md', BASE);
   it('the first 2,000 bytes carry the publish call, the bearer rule, and where the rest is', () => {
     within(doc, 2000, `POST ${BASE}/api/artifacts`);
     within(doc, 2000, 'Every `/api` call, `GET` included');
@@ -66,7 +66,7 @@ describe('the publishing skill opens with the essentials', () => {
 });
 
 describe('the markup skill teaches vocabulary before configuration', () => {
-  const doc = renderDoc('artifact-bin/references/markup.md', BASE);
+  const doc = renderDoc('artifactbin/references/markup.md', BASE);
   it('the wrapper, the skeleton and both allowlists sit inside the first 5,000 bytes', () => {
     within(doc, 5000, 'data-design="tw"');
     within(doc, 5000, '## Skeleton');
@@ -79,17 +79,17 @@ describe('the markup skill teaches vocabulary before configuration', () => {
 
 describe('the templates and themes indexes lead with their links', () => {
   it('templates: the first link is within 400 bytes', () => {
-    within(renderDoc('artifact-bin/references/templates.md', BASE), 400, '](templates-editorial.md)');
+    within(renderDoc('artifactbin/references/templates.md', BASE), 400, '](templates-editorial.md)');
   });
   it('themes: the first link is within 400 bytes', () => {
-    within(renderDoc('artifact-bin/references/themes.md', BASE), 400, '](themes-modernist.md)');
+    within(renderDoc('artifactbin/references/themes.md', BASE), 400, '](themes-modernist.md)');
   });
 });
 
 describe('each template file puts the skeleton — the thing that gets copied — in its top half', () => {
   for (const t of STORY_TEMPLATES) {
     it(`${t.name}`, () => {
-      const doc = renderDoc(`artifact-bin/references/templates-${t.name}.md`, BASE);
+      const doc = renderDoc(`artifactbin/references/templates-${t.name}.md`, BASE);
       const lines = doc.split('\n');
       const first = lines.findIndex((l) => /^\s{2,}</.test(l));
       expect(first, `${t.name} has no skeleton block`).toBeGreaterThan(-1);
@@ -101,7 +101,7 @@ describe('each template file puts the skeleton — the thing that gets copied �
 describe('each theme file leads with its identity', () => {
   for (const t of STORY_THEMES) {
     it(`${t.name}: description, fonts and default mode in the first 400 bytes`, () => {
-      const doc = renderDoc(`artifact-bin/references/themes-${t.name}.md`, BASE);
+      const doc = renderDoc(`artifactbin/references/themes-${t.name}.md`, BASE);
       within(doc, 400, t.description);
       within(doc, 400, 'Fonts:');
       within(doc, 400, 'Default mode:');
@@ -110,7 +110,7 @@ describe('each theme file leads with its identity', () => {
 });
 
 describe('the design skill leads with the rules an agent can act on', () => {
-  const doc = renderDoc('artifact-bin/references/design.md', BASE);
+  const doc = renderDoc('artifactbin/references/design.md', BASE);
   it('the supported web-font route is taught, and inside the first 1,500 bytes', () => {
     within(doc, 1500, 'name="font-display"');
   });

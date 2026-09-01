@@ -83,7 +83,7 @@ describe('GET /a/<id>/start?k= — the brief', () => {
 
   /**
    * The brief used to CARRY the whole quick sheet, which made the start page
-   * and /docs/artifact-bin/SKILL.md the same 8 KB at two addresses. Phase D:
+   * and /docs/artifactbin/SKILL.md the same 8 KB at two addresses. Phase D:
    * the sheet lives at ONE address and the brief points at it — the cost is
    * exactly one fetch, and the brief itself stays a page an agent reads in one
    * screenful.
@@ -92,7 +92,7 @@ describe('GET /a/<id>/start?k= — the brief', () => {
     const s = await start();
     const text = await (await startBrief(request(s.startPath), params(s.id))).text();
     expect(text).not.toContain('<SlideDeck>');       // the sheet's grammar lives in the sheet
-    expect(text).toContain('/docs/artifact-bin/SKILL.md');
+    expect(text).toContain('/docs/artifactbin/SKILL.md');
     expect(text).not.toMatch(/mx_[A-Za-z0-9_-]{20,}/);
   });
 
@@ -175,7 +175,7 @@ describe('GET /a/<id>/start?k= — the brief', () => {
     const body = await (await startBrief(request(`/a/${s.id}/start?k=nope`), params(s.id))).text();
     expect(body).toMatch(/copied|mistyp|character/i);
     expect(body).toContain('/api/tokens/anonymous');
-    expect(body).toContain('/docs/artifact-bin/references/publishing.md');
+    expect(body).toContain('/docs/artifactbin/references/publishing.md');
   });
 
   it('410s a handle presented against a DIFFERENT artifact', async () => {

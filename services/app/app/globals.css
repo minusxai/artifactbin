@@ -24,7 +24,7 @@
 @source not "../**/*.test.tsx";
 
 /*
- * artifact-bin — terminal-graphite design system.
+ * artifactbin — terminal-graphite design system.
  * LIGHT by default (no data-theme attribute); [data-theme='dark'] swaps the
  * palette to graphite. The toggle writes localStorage('mx_theme') and the
  * pre-paint script in web/index.html stamps the attribute FOUC-free.

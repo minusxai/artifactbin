@@ -48,13 +48,13 @@ describe('materializePlugin', () => {
   });
 
   it('bakes the base it was given into the skill, so a task\'s traffic reaches its own proxy', () => {
-    const skill = fs.readFileSync(path.join(kit.pluginDir, 'skills', 'artifact-bin', 'SKILL.md'), 'utf8');
+    const skill = fs.readFileSync(path.join(kit.pluginDir, 'skills', 'artifactbin', 'SKILL.md'), 'utf8');
     expect(skill).toContain('https://example.test');
     expect(skill).not.toContain('artifactbin.dev');
   });
 
   it('names each skill directory, for a harness that loads them one at a time', () => {
-    expect(kit.skillDirs.map((d) => path.basename(d)).sort()).toEqual(['artifact-bin']);
+    expect(kit.skillDirs.map((d) => path.basename(d)).sort()).toEqual(['artifactbin']);
   });
 });
 
@@ -63,7 +63,7 @@ describe('claude-code', () => {
    * `--bare` skips CLAUDE.md, hooks, plugins and MCP discovery — which is what
    * makes the ordinary run hermetic, and is ALSO what stops a plugin loading.
    * Verified against the CLI: with `--bare` it lists its tools when asked for
-   * its skills; without it, the three artifact-bin skills are there. It still
+   * its skills; without it, the three artifactbin skills are there. It still
    * authenticates from the API key alone either way.
    */
   it('never passes --bare, in ANY mode — the flag must not vary with what is being compared', () => {
@@ -97,7 +97,7 @@ describe('opencode', () => {
     const c = ctx('opencode', true);
     fs.mkdirSync(c.cwd, { recursive: true });
     await adapterFor('opencode').prepare(c);
-    expect(fs.existsSync(path.join(c.cwd, '.opencode', 'skills', 'artifact-bin', 'SKILL.md'))).toBe(true);
+    expect(fs.existsSync(path.join(c.cwd, '.opencode', 'skills', 'artifactbin', 'SKILL.md'))).toBe(true);
   });
 });
 
@@ -105,7 +105,7 @@ describe('codex', () => {
   /**
    * Verified by running both: `plugin marketplace add <pluginDir>` is refused
    * ("marketplace root does not contain a supported manifest"), and `plugin
-   * add artifact-bin` without the marketplace suffix is refused too ("requires
+   * add artifactbin` without the marketplace suffix is refused too ("requires
    * --marketplace") even with exactly one configured.
    */
   it('adds the MARKETPLACE, then installs the plugin naming it', () => {
@@ -126,13 +126,13 @@ describe('the transport a materialization teaches', () => {
   it('installed API gets curl-teaching skills; installed MCP gets the tool-first rendering', () => {
     const curlDir = path.join(root, 'kit-curl');
     const curl = materializePlugin(curlDir, 'http://127.0.0.1:4242', 'curl');
-    const curlBrief = fs.readFileSync(path.join(curl.pluginDir, 'skills/artifact-bin/SKILL.md'), 'utf8');
+    const curlBrief = fs.readFileSync(path.join(curl.pluginDir, 'skills/artifactbin/SKILL.md'), 'utf8');
     expect(curlBrief).toContain('curl -X POST');
     expect(curlBrief).not.toContain('create_artifact({');
 
     const mcpDir = path.join(root, 'kit-mcp');
     const mcp = materializePlugin(mcpDir, 'http://127.0.0.1:4242', 'mcp');
-    const mcpBrief = fs.readFileSync(path.join(mcp.pluginDir, 'skills/artifact-bin/SKILL.md'), 'utf8');
+    const mcpBrief = fs.readFileSync(path.join(mcp.pluginDir, 'skills/artifactbin/SKILL.md'), 'utf8');
     expect(mcpBrief).toContain('create_artifact({');
     expect(mcpBrief).not.toContain('curl -X POST');
     // The credential-less server config is stripped in BOTH: the MCP action mode wires
@@ -146,7 +146,7 @@ describe('copySkillsInto', () => {
   it('lands every skill under the discovery directory', () => {
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'oc-cwd-'));
     const dest = copySkillsInto(kit, cwd);
-    expect(fs.readdirSync(dest).sort()).toEqual(['artifact-bin']);
+    expect(fs.readdirSync(dest).sort()).toEqual(['artifactbin']);
   });
 });
 
@@ -207,12 +207,12 @@ describe('the prompt a mode gives', () => {
   });
 
   it('still sends a fetched_skill agent to the docs — that is its handoff', () => {
-    expect(buildPrompt(task, access, { mode: 'fetched_skill+api_action' })).toContain('/docs/artifact-bin/SKILL.md');
+    expect(buildPrompt(task, access, { mode: 'fetched_skill+api_action' })).toContain('/docs/artifactbin/SKILL.md');
   });
 
   it('tells an mcp agent to use the tools, and keeps the token out of the prompt', () => {
     const p = buildPrompt(task, access, { mode: 'fetched_skill+mcp_action' });
-    expect(p).toContain('/docs/artifact-bin/SKILL.md?transport=mcp');
+    expect(p).toContain('/docs/artifactbin/SKILL.md?transport=mcp');
     expect(p).not.toContain('mx_t');
     expect(p).toMatch(/tools/i);
   });

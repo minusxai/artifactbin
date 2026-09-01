@@ -177,7 +177,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.DEPLOYS_DISPATCH_TOKEN }}
         run: |
-          gh workflow run artifact-bin-staging-deploy.yaml \
+          gh workflow run artifactbin-staging-deploy.yaml \
             --repo minusxai/deploys \
             --ref main \
             -f oss_sha="${GITHUB_SHA}"

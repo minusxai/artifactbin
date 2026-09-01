@@ -49,8 +49,8 @@ describe('/docs/human', () => {
     // Getting-started leads with the path that needs no setup; the
     // nine-surface picker and its install commands are one fold deeper.
     fireEvent.click(screen.getByLabelText('Install for my agent'));
-    expect(text()).toContain('/plugin marketplace add minusxai/minusx-plugins');
-    expect(text()).toContain('/plugin install artifact-bin@minusx');
+    expect(text()).toContain('/plugin marketplace add minusxai/artifactbin-plugins');
+    expect(text()).toContain('/plugin install artifactbin@minusx');
   });
 
   it('uses no em dashes', async () => {

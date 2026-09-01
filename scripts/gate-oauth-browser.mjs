@@ -51,7 +51,7 @@ await new Promise((r) => sink.listen(SINK_PORT, '127.0.0.1', r));
 const verifier = randomBytes(32).toString('base64url');
 const challenge = createHash('sha256').update(verifier).digest('base64url');
 const authorizeUrl = `${BASE}/oauth/authorize?${new URLSearchParams({
-  response_type: 'code', client_id: 'artifact-bin-mcp', redirect_uri: REDIRECT,
+  response_type: 'code', client_id: 'artifactbin-mcp', redirect_uri: REDIRECT,
   code_challenge: challenge, code_challenge_method: 'S256', state: 'gate-state',
 })}`;
 
@@ -99,7 +99,7 @@ check(cspViolations.length === 0, `no CSP violation blocks the submission${cspVi
   const v2 = randomBytes(32).toString('base64url');
   const c2 = createHash('sha256').update(v2).digest('base64url');
   await page.goto(`${BASE}/oauth/authorize?${new URLSearchParams({
-    response_type: 'code', client_id: 'artifact-bin-mcp', redirect_uri: REDIRECT,
+    response_type: 'code', client_id: 'artifactbin-mcp', redirect_uri: REDIRECT,
     code_challenge: c2, code_challenge_method: 'S256', state: 'user-state',
   })}`, { waitUntil: 'load' });
   const signedIn = await page.locator('body').innerText();
@@ -116,7 +116,7 @@ check(cspViolations.length === 0, `no CSP violation blocks the submission${cspVi
   if (code2) {
     const tok2 = await (await fetch(`${BASE}/oauth/token`, {
       method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: 'authorization_code', code: code2, redirect_uri: REDIRECT, client_id: 'artifact-bin-mcp', code_verifier: v2 }),
+      body: new URLSearchParams({ grant_type: 'authorization_code', code: code2, redirect_uri: REDIRECT, client_id: 'artifactbin-mcp', code_verifier: v2 }),
     })).json();
     check(/^mx_/.test(tok2.access_token ?? ''), 'the account-bound grant exchanges for a token');
 

@@ -119,7 +119,7 @@ export default function HeaderBar({
               <GitHubIcon size={12} /> open source
             </a>
             <span className="shrink-0 whitespace-nowrap text-muted">
-              <a href="/docs/artifact-bin/SKILL.md" className={LINK}>
+              <a href="/docs/artifactbin/SKILL.md" className={LINK}>
                 agent docs
               </a>
               {' / '}
