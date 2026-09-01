@@ -25,9 +25,14 @@ describe('<NextSteps connectOnly>', () => {
     expect(screen.queryByLabelText('Add data')).toBeNull();
   });
 
-  it('opens the full agent picker in place', () => {
+  it('opens the two start paths in place, with the picker one fold deeper', () => {
     render(<NextSteps connectOnly />);
     fireEvent.click(screen.getByLabelText('Connect an agent'));
+    // Path one needs no choice made first, so it is what unfolding shows.
+    expect(screen.getByLabelText('Create a live document for my agent')).toBeTruthy();
+    expect(screen.queryByLabelText('Agent families')).toBeNull();
+
+    fireEvent.click(screen.getByLabelText('Install for my agent'));
     expect(screen.getByLabelText('Agent families')).toBeTruthy();
     expect(screen.getByLabelText('Agent surfaces')).toBeTruthy();
     expect(screen.getByLabelText('Use in Claude Code CLI')).toBeTruthy();

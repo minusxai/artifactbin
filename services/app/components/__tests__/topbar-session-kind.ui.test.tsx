@@ -32,7 +32,7 @@ describe('the session control', () => {
     openMenu();
     expect(screen.getByLabelText('Sign out')).toBeInTheDocument();
     expect(screen.queryByLabelText('Disconnect this browser')).toBeNull();
-    expect(screen.queryByLabelText('Log in page')).toBeNull();
+    expect(screen.queryByLabelText('Login')).toBeNull();
   });
 
   it('an anonymous session gets Disconnect — never account Sign out', () => {
@@ -61,7 +61,7 @@ describe('the session control', () => {
   it('no credential offers Log in', () => {
     render(<PageMenu authed={false} />);
     openMenu();
-    expect(screen.getByLabelText('Log in page')).toBeInTheDocument();
+    expect(screen.getByLabelText('Login')).toBeInTheDocument();
     expect(screen.queryByLabelText('Disconnect this browser')).toBeNull();
   });
 });

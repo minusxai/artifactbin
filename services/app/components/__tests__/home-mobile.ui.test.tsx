@@ -95,7 +95,7 @@ describe('the masthead is proportionate to the screen it is on', () => {
     expect(logo).toHaveClass('h-8', 'w-8', 'sm:h-20', 'sm:w-20');
     // The tagline is desktop's: for a signed-in phone it is marketing copy
     // spending a line, and beside a small mark it read as one weird run-on.
-    expect(screen.getByText('pastebin for agents')).toHaveClass('hidden', 'sm:block');
+    expect(screen.getByText('Google Docs for agents')).toHaveClass('hidden', 'sm:block');
     // ONE structure at every size — brand left, readout column right — so the
     // phone is the desktop masthead scaled, not a second layout to maintain.
     const header = screen.getByLabelText('artifact-bin home').parentElement!;

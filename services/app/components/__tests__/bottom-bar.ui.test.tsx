@@ -26,11 +26,13 @@ describe('PageControls', () => {
   it('changes and persists the app appearance', () => {
     render(<PageControls />);
     fireEvent.click(screen.getByLabelText('Open page controls'));
+    // Light is the DEFAULT, so it is the absence of the attribute; dark is what
+    // gets stamped. Both still persist the choice.
     fireEvent.click(screen.getByLabelText('Light mode'));
-    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(document.documentElement.dataset.theme).toBeUndefined();
     expect(localStorage.getItem('mx_theme')).toBe('light');
     fireEvent.click(screen.getByLabelText('Dark mode'));
-    expect(document.documentElement.dataset.theme).toBeUndefined();
+    expect(document.documentElement.dataset.theme).toBe('dark');
   });
 
   it('uses a controlled appearance for a document', () => {
@@ -40,10 +42,10 @@ describe('PageControls', () => {
     expect(screen.getByLabelText('Light mode')).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getByLabelText('Dark mode'));
     expect(pick).toHaveBeenCalledWith('dark');
-    expect(document.documentElement.dataset.theme).toBeUndefined();
+    expect(document.documentElement.dataset.theme).toBe('dark');
     expect(localStorage.getItem('mx_theme')).toBe('dark');
     fireEvent.click(screen.getByLabelText('Light mode'));
-    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(document.documentElement.dataset.theme).toBeUndefined();
     expect(pick).toHaveBeenLastCalledWith('light');
   });
 

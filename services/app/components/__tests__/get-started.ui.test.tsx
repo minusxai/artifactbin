@@ -23,6 +23,14 @@ import {
 } from '@/lib/plugin-id';
 
 const card = () => screen.getByLabelText('Setup instructions');
+/** The nine-surface picker is folded away until someone asks to install. */
+const openInstall = () => fireEvent.click(screen.getByLabelText('Install for my agent'));
+/** Render with the install path already unfolded — most cases are about it. */
+const renderInstalling = () => {
+  const r = render(<GetStarted />);
+  openInstall();
+  return r;
+};
 const pick = (label: string) => fireEvent.click(screen.getByLabelText(`Use in ${label}`));
 const chooseFamily = (label: string) =>
   fireEvent.click(screen.getByLabelText(`Choose ${label} agent family`));
@@ -38,7 +46,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('<GetStarted>', () => {
   it('groups every surface by agent family and leads with Claude Code CLI', () => {
-    render(<GetStarted />);
+    renderInstalling();
     for (const family of AGENT_FAMILIES) {
       expect(screen.getByLabelText(`Choose ${family.label} agent family`)).toBeInTheDocument();
     }
@@ -74,7 +82,7 @@ describe('<GetStarted>', () => {
   });
 
   it('auto-selects the first surface whenever the family changes', () => {
-    render(<GetStarted />);
+    renderInstalling();
     pick('claude.ai');
     chooseFamily('OpenAI');
     expect(screen.getByLabelText('Use in Codex CLI')).toHaveAttribute('aria-pressed', 'true');
@@ -84,7 +92,7 @@ describe('<GetStarted>', () => {
   });
 
   it('shows the matching icon on every surface choice', () => {
-    render(<GetStarted />);
+    renderInstalling();
     for (const family of AGENT_FAMILIES) {
       chooseFamily(family.label);
       for (const surface of SURFACES.filter((item) => item.family === family.key)) {
@@ -93,31 +101,46 @@ describe('<GetStarted>', () => {
     }
   });
 
-  it('shows exactly one card: Claude Code gets try-it-now first, then the plugin', () => {
+  it('offers the two paths up front, and folds the picker away until asked', () => {
     render(<GetStarted />);
-    expect(screen.getAllByLabelText('Setup instructions')).toHaveLength(1);
-    // Option 1 is NO setup — the one-click document — because trying it must
-    // cost less than installing it. The plugin is the upgrade, after an "or".
-    const body = card().textContent ?? '';
+    const panel = screen.getByLabelText('Get started');
+    const body = panel.textContent ?? '';
+    // Both paths are NAMED and numbered once, by the panel — trying it must
+    // cost less than installing it, so path one needs no choice made first.
+    expect(body.toLowerCase()).toContain('option 1');
+    expect(body.toLowerCase()).toContain('no installation');
+    expect(body).toContain('works with any agent');
     expect(screen.getByLabelText('Create a live document for my agent')).toBeInTheDocument();
+    expect(body.toLowerCase()).toContain('option 2');
+    expect(body.toLowerCase()).toContain('install for your agent');
+    expect(body.indexOf('option 1')).toBeLessThan(body.indexOf('option 2'));
+    // Nine surfaces is a form to fill in before the reader knows what they
+    // are choosing between, so nothing about them exists until they ask.
+    const install = screen.getByLabelText('Install for my agent');
+    expect(install).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByLabelText('Agent families')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Setup instructions')).not.toBeInTheDocument();
+  });
+
+  it('opening the install path reveals the picker and its surface card', () => {
+    renderInstalling();
+    expect(screen.getByLabelText('Install for my agent')).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByLabelText('Agent families')).toBeInTheDocument();
+    expect(screen.getAllByLabelText('Setup instructions')).toHaveLength(1);
+    // The card is INSTALL-only now: path one is above it, not inside it.
+    const body = card().textContent ?? '';
     // Quoted from the plugin package, never retyped: a stale command here
     // fails in the reader's terminal, where nothing guards it.
     expect(body).toContain(PLUGIN_INSTALL);
     expect(screen.getByLabelText('Copy the plugin install commands')).toBeInTheDocument();
-    expect(body.indexOf('create an artifact')).toBeLessThan(body.indexOf(PLUGIN_INSTALL));
-    // The two paths are NAMED, so "or" separates option 1 from option 2
-    // rather than two unlabeled blobs of instruction — and each says what it
-    // IS: no-install offers HTTP skills + tools via API, while the plugin ships
-    // MCP tools + skills.
-    expect(body.toLowerCase()).toContain('option 1');
-    expect(body.toLowerCase()).toContain('option 2');
-    expect(body).toContain('Recommended - Install plugin');
-    expect(body).toContain('HTTP Skills + Tools via API');
+    expect(body).toContain('Install plugin');
     expect(body.toLowerCase()).toContain('out of the box');
+    expect(body).not.toContain('works with any agent');
+    expect(body.toLowerCase()).not.toContain('option 1');
   });
 
   it('switching the pick swaps the card rather than stacking another', () => {
-    render(<GetStarted />);
+    renderInstalling();
     pick('claude.ai');
     expect(screen.getAllByLabelText('Setup instructions')).toHaveLength(1);
     expect(card().textContent).not.toContain(PLUGIN_INSTALL);
@@ -125,16 +148,12 @@ describe('<GetStarted>', () => {
   });
 
   it('keeps no-install first in Claude Code App, then recommends the numbered plugin flow', () => {
-    render(<GetStarted />);
+    renderInstalling();
     pick('Claude Code App');
     const body = card().textContent ?? '';
     expect(body).toContain(PLUGIN_REPO_URL);
     expect(body).not.toContain(PLUGIN_INSTALL);
-    expect(body.indexOf('HTTP Skills + Tools via API')).toBeLessThan(
-      body.indexOf('Recommended - Install plugin'),
-    );
-    expect(body.toLowerCase()).toContain('option 1');
-    expect(body.toLowerCase()).toContain('option 2');
+    expect(body).toContain('Install plugin');
     const firstStep = screen.getByLabelText(
       'Step 1: Under the chat box, click + → Plugins → Manage Plugins',
     );
@@ -151,7 +170,7 @@ describe('<GetStarted>', () => {
   });
 
   it('gives claude.ai the plugin guide without separate HTTP or MCP paths', () => {
-    render(<GetStarted />);
+    renderInstalling();
     pick('claude.ai');
     const body = card().textContent ?? '';
     expect(body).toContain(PLUGIN_REPO_URL);
@@ -172,29 +191,30 @@ describe('<GetStarted>', () => {
     expect(screen.getByLabelText('Step 3: Artifact Bin → Install')).toBeInTheDocument();
     expect(screen.getByLabelText('Step 4: Connector → Connect')).toBeInTheDocument();
     expect(body).toContain('Make me a quick report about daylight savings');
-    expect(screen.queryByLabelText('Create a live document for my agent')).not.toBeInTheDocument();
+    // Path one lives on the panel above, so the button is always present.
+    expect(screen.getByLabelText('Create a live document for my agent')).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText('Copy the plugin marketplace URL'));
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(PLUGIN_REPO_URL);
   });
 
-  it('keeps chatgpt.com on the no-install option for now', () => {
-    render(<GetStarted />);
+  it('says chatgpt.com has nothing to install rather than repeating path one', () => {
+    renderInstalling();
     chooseFamily('OpenAI');
     pick('chatgpt.com');
+    const body = card().textContent ?? '';
+    expect(body.toLowerCase()).toContain('nothing to install');
+    expect(body).not.toContain(MCP_URL);
+    // Path one is still on the panel — it is simply not restated in here.
     expect(screen.getByLabelText('Create a live document for my agent')).toBeInTheDocument();
-    expect(card().textContent).toContain('option 1');
-    expect(card().textContent).toContain('no installation');
-    expect(card().textContent).not.toContain('option 2');
-    expect(card().textContent).not.toContain(MCP_URL);
+    expect(body).not.toContain('works with any agent');
   });
 
   it('gives Codex App no-install first, then the numbered marketplace flow', () => {
-    render(<GetStarted />);
+    renderInstalling();
     chooseFamily('OpenAI');
     pick('Codex App');
     const body = card().textContent ?? '';
-    expect(body).toContain('HTTP Skills + Tools via API');
-    expect(body).toContain('Recommended - Install plugin');
+    expect(body).toContain('Install plugin');
     expect(body).toContain(CODEX_APP_PLUGIN_REPO_URL);
     expect(body).toContain(CODEX_APP_PLUGIN_REF);
     expect(body).not.toContain(MCP_URL);
@@ -212,12 +232,11 @@ describe('<GetStarted>', () => {
   });
 
   it('gives Codex CLI no-install first, then the interactive plugin installer', () => {
-    render(<GetStarted />);
+    renderInstalling();
     chooseFamily('OpenAI');
     const body = card().textContent ?? '';
     expect(screen.getByLabelText('Create a live document for my agent')).toBeInTheDocument();
-    expect(body).toContain('HTTP Skills + Tools via API');
-    expect(body).toContain('Recommended - Install plugin');
+    expect(body).toContain('Install plugin');
     expect(body).toContain(PLUGIN_REPO_URL);
     expect(body).not.toContain(MCP_URL);
     const firstStep = screen.getByLabelText(
@@ -236,13 +255,11 @@ describe('<GetStarted>', () => {
   });
 
   it('gives "others" a no-install path or the MCP server URL', () => {
-    render(<GetStarted />);
+    renderInstalling();
     chooseFamily('Others');
     expect(screen.getByLabelText('Use in Any agent')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByLabelText('Create a live document for my agent')).toBeInTheDocument();
     const body = card().textContent ?? '';
-    expect(body).toContain('option 1');
-    expect(body).toContain('option 2');
     expect(body).toContain('connect the MCP server');
     expect(body).toContain(MCP_URL);
     fireEvent.click(screen.getByLabelText('Copy the connector URL'));
@@ -260,15 +277,12 @@ describe('<GetStarted>', () => {
   ] as const)(
     'gives %s a no-install path or a global skills install',
     (family, surface, installRoot, installedPath) => {
-      render(<GetStarted />);
+      renderInstalling();
       chooseFamily(family);
       expect(screen.getByLabelText(`Use in ${surface}`)).toHaveAttribute('aria-pressed', 'true');
       expect(screen.getByLabelText('Create a live document for my agent')).toBeInTheDocument();
       const body = card().textContent ?? '';
       const install = `mkdir -p ${installRoot} && curl -fsSL "${DOCS_DOWNLOAD_URL}" | tar -xz -C ${installRoot}`;
-      expect(body).toContain('HTTP Skills + Tools via API');
-      expect(body).toContain('option 1');
-      expect(body).toContain('option 2');
       expect(body).toContain('install the skills');
       expect(body).toContain(installedPath);
       expect(body).toContain(install);
@@ -279,14 +293,14 @@ describe('<GetStarted>', () => {
   );
 
   it('remembers the pick across a reload', () => {
-    const first = render(<GetStarted />);
+    const first = renderInstalling();
     chooseFamily('OpenAI');
     pick('chatgpt.com');
     first.unmount();
-    render(<GetStarted />);
+    renderInstalling();
     expect(screen.getByLabelText('Choose OpenAI agent family')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByLabelText('Use in chatgpt.com')).toHaveAttribute('aria-pressed', 'true');
-    expect(card().textContent).toContain('no installation');
+    expect(card().textContent).toContain('nothing to install');
     expect(card().textContent).not.toContain(MCP_URL);
   });
 });

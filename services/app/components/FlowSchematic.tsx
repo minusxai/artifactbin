@@ -32,7 +32,7 @@ export default function FlowSchematic({ className = '' }: { className?: string }
         <line x1="8" x2="16" y1="12" y2="12" />
       </g>
       <text x="436" y="26" fontSize="12.5" fill="var(--color-fg)">
-        a sharable link
+        a shareable link
       </text>
     </svg>
   );

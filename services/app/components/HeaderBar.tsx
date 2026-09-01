@@ -1,6 +1,8 @@
 'use client';
 
+import { GitHubIcon } from '@/components/brand-icons';
 import { FORMAT_COLORS, formatLabel, LINK, PAGE_COLUMN } from '@/components/ui';
+import { REPO_URL } from '@/lib/repo';
 
 export interface HeaderStats {
   /** Count per normalized format, insertion order = display order. */
@@ -61,13 +63,19 @@ export default function HeaderBar({
   const formats = Object.entries(stats?.formats ?? {}).filter(([, n]) => n > 0);
   return (
     <div className={PAGE_COLUMN}>
-      <header className="flex items-center justify-between gap-4 border-b border-edge pt-16 pb-3 sm:gap-6 sm:pb-5">
+      <header /* The top band exists only to clear the FLOATING corner controls, which
+             * are fixed 12px from each edge and 36px tall. They collide with the
+             * masthead only while the reading column is wide enough to reach the
+             * gutters — past ~1080px the centred column starts well inside them,
+             * and the band is 56px of nothing. So it is reserved by WIDTH rather
+             * than always. */
+            className="flex items-center justify-between gap-4 border-b border-edge pt-14 pb-3 sm:gap-6 sm:pb-4 min-[1080px]:pt-5">
         <a href="/" aria-label="artifact-bin home" className="flex shrink-0 items-center gap-2.5 text-fg no-underline sm:gap-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo-128.png" alt="" className="h-8 w-8 sm:h-20 sm:w-20" />
           <span className="flex flex-col gap-0.5">
             <span className="text-base leading-none font-semibold tracking-tight whitespace-nowrap sm:text-xl">artifact-bin</span>
-            <span className="hidden font-mono text-[11px] whitespace-nowrap text-muted sm:block">pastebin for agents</span>
+            <span className="hidden font-mono text-[11px] whitespace-nowrap text-muted sm:block">Google Docs for agents</span>
           </span>
         </a>
         <div className="flex min-w-0 flex-col items-end gap-1 text-right font-mono text-[11px] leading-4">
@@ -91,13 +99,25 @@ export default function HeaderBar({
             {email ? (
               <span className="min-w-0 truncate text-faint">{email}</span>
             ) : (
-              /* Not aria-label "Log in page"/"Log in": the sidebar owns the
+              /* Not aria-label "Login"/"Log in": the sidebar owns the
                * first and the login form's submit button owns the second
                * (gate-app-flows counts both). */
               <a href="/login" aria-label="Log in from header" className={LINK}>
                 log in
               </a>
             )}
+            {/* The masthead is where a visitor looks for "is this a real,
+              * inspectable thing" — so the source sits with the sign-in door
+              * rather than being a footer link they have to scroll for. */}
+            <a
+              href={REPO_URL}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="artifact-bin on GitHub"
+              className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap ${LINK}`}
+            >
+              <GitHubIcon size={12} /> open source
+            </a>
             <span className="shrink-0 whitespace-nowrap text-muted">
               <a href="/docs/artifact-bin/SKILL.md" className={LINK}>
                 agent docs

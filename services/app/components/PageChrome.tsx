@@ -276,7 +276,7 @@ export function PageMenu({
             Disconnect this browser
           </button>
         ) : (
-          link('/login', 'Log in page', <LogIn size={15} strokeWidth={1.5} />, pathname === '/login')
+          link('/login', 'Login', <LogIn size={15} strokeWidth={1.5} />, pathname === '/login')
         )}
       </nav>
     </>
@@ -339,7 +339,9 @@ function AppearancePicker({ mode, onPick }: { mode: AppearanceMode; onPick: (mod
  * artifact runtime. Keeping the app write here means controlled document
  * controls cannot accidentally skip the shell preference. */
 function applyAppAppearance(mode: AppearanceMode) {
-  if (mode === 'light') document.documentElement.dataset.theme = 'light';
+  // Light is the default and carries NO attribute (app/globals.css puts it on
+  // bare `:root`), so dark is the one that gets stamped.
+  if (mode === 'dark') document.documentElement.dataset.theme = 'dark';
   else delete document.documentElement.dataset.theme;
   try { localStorage.setItem('mx_theme', mode); } catch { /* private mode */ }
 }
