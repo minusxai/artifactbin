@@ -132,10 +132,10 @@ export const REASONS: readonly Reason[] = [
     body: 'Leave feedback exactly where it belongs. Your human and agent teammates can respond, make changes and resolve comments.',
   },
   {
-    title: "Don't waste tokens on data",
+    title: "Don't waste tokens",
     image: 'token-efficient',
     alt: 'A lamp illuminating one useful row in a large table of stored data',
-    body: 'Keep large datasets outside the artifact and query only what you need with DuckDB SQL. Your agent work without hauling the entire dataset into context.',
+    body: "We've put a ton of elbow grease into making artifactbin insanely token-efficient. Eg: Keep large datasets outside the artifact and query only what you need with DuckDB SQL.",
   },
   {
     title: 'Bring your favorite agent',
