@@ -16,6 +16,7 @@
  * words; the name of the thing is the terminal's own voice, and it keeps the
  * identity anchored where the display face cannot follow.
  */
+import AgentLink from '@/components/AgentLink';
 import { GitHubIcon } from '@/components/brand-icons';
 import { LINK, PAGE_COLUMN } from '@/components/ui';
 import { REPO_URL } from '@/lib/repo';
@@ -41,10 +42,16 @@ const LINKS: readonly { label: string; href: string; external?: true }[] = [
 export default function LandingFooter({ column = PAGE_COLUMN }: { column?: string }) {
   return (
     <footer className={`${column} mt-14 sm:mt-20`}>
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b border-edge pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-edge pb-4">
+        {/* THE LINKS YIELD, THE BUTTONS DO NOT. `flex-1 min-w-0` lets the nav
+          * take whatever is left and wrap its own links onto a second line, so
+          * the two actions stay on the right of them. Without it the nav held
+          * its full width, the outer row ran out of column, and the buttons —
+          * `shrink-0`, correctly — were the ones pushed onto a line of their
+          * own, which reads as a second footer rather than as the actions. */}
         <nav
-          aria-label="About artifact-bin"
-          className="flex flex-wrap items-center gap-x-5 gap-y-2 font-mono text-[11.5px]"
+          aria-label="About artifactbin"
+          className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2 font-mono text-[11.5px]"
         >
           {LINKS.map((link) => (
             <a
@@ -61,19 +68,17 @@ export default function LandingFooter({ column = PAGE_COLUMN }: { column?: strin
 
         {/* The two things to actually DO, kept together so neither reads as
           * another reference link. */}
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5">
           <a
             href={DEMO_URL}
-            className="rounded-[4px] border border-edge-bright px-3 py-1.5 font-mono text-[11.5px] text-fg no-underline transition-colors hover:border-accent hover:text-accent"
+            className="rounded-[4px] border border-edge-bright px-2.5 py-1.5 font-mono text-[11.5px] text-fg no-underline transition-colors hover:border-accent hover:text-accent"
           >
             book a demo
           </a>
-          <a
-            href="#top"
-            className="rounded-[4px] bg-accent px-3 py-1.5 font-mono text-[11.5px] font-semibold text-bg no-underline transition-opacity hover:opacity-90"
-          >
-            create an artifact
-          </a>
+          {/* THE SAME BUTTON AS THE TOP OF THE PAGE, not a link back to it: a
+            * reader who got this far and decided should not be sent to the top
+            * to find the real control. One AgentLink, two sizes. */}
+          <AgentLink frame={false} docsLink={false} size="inline" />
         </div>
       </div>
 
@@ -100,7 +105,7 @@ export default function LandingFooter({ column = PAGE_COLUMN }: { column?: strin
             height={256}
             className="h-[0.92em] w-[0.92em] shrink-0 -translate-y-[0.04em]"
           />
-          artifact-bin
+          artifactbin
         </span>
         <span className="font-mono text-[10.5px] whitespace-nowrap text-faint">
           open source · Apache-2.0

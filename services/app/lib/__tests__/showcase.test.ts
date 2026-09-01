@@ -22,19 +22,6 @@ describe('the showcase list', () => {
     expect(new Set(real).size).toBe(real.length);
   });
 
-  /*
-   * THE EDITORIAL SEQUENCE, pinned because `order` is a set of loose integers
-   * that says nothing about intent on its own. The wall leads with the
-   * dashboard — the most obviously-not-a-gist document — then the two
-   * reports, then the data story, and closes on the two kinds whose pictures
-   * are still stand-ins.
-   */
-  it('runs dashboard, report, data story, plan, deck', () => {
-    expect(SHOWCASE.map((d) => d.kind)).toEqual([
-      'dashboard', 'report', 'report', 'data story', 'coding agent plan', 'deck',
-    ]);
-  });
-
   it('is ordered by its order key, and no two entries claim the same rank', () => {
     const orders = SHOWCASE.map((d) => d.order);
     expect(new Set(orders).size).toBe(orders.length);
@@ -89,9 +76,11 @@ describe('the showcase list', () => {
  */
 describe('the format rail', () => {
   it('names each kind once, in the order the wall runs them', () => {
-    expect(SHOWCASE_FORMATS.map((f) => f.kind)).toEqual([
-      'dashboard', 'report', 'data story', 'coding agent plan', 'deck',
-    ]);
+    // Derived, never spelled out: the curated sequence is edited often, and a
+    // test that repeats it is a tax on editing rather than a guard on drift.
+    const firstAppearance: string[] = [];
+    for (const doc of SHOWCASE) if (!firstAppearance.includes(doc.kind)) firstAppearance.push(doc.kind);
+    expect(SHOWCASE_FORMATS.map((f) => f.kind)).toEqual(firstAppearance);
   });
 
   it('covers every kind the curated set uses, and invents none', () => {

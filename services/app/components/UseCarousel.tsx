@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * "You can use artifact-bin to ___" — a picker wheel, with the real published
+ * "You can use artifactbin to ___" — a picker wheel, with the real published
  * document that IS that example sitting under it.
  *
  * THE NEIGHBOURS ARE VISIBLE, and that is the whole reason it is a wheel
@@ -23,7 +23,7 @@
  * the carousel feel dead after any interaction.)
  */
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   SHOWCASE,
   SHOWCASE_FORMATS,
@@ -87,7 +87,22 @@ function ShowcaseConcept({
     * the surviving one may well want it off somewhere. */
   autoplay?: boolean;
 }) {
-  const [active, setActive] = useState(0);
+  /**
+   * WHERE THE TRACK IS, as a row of TRIPLE — not derived from which document
+   * is showing. That derivation (`N + active`) was the wrap: stepping off the
+   * last document put the position back at the top of the copy, and the
+   * reader watched half a second of the whole list rewinding past them, once
+   * a lap. The track only ever moves by the delta it was asked for, so
+   * forwards is always forwards; the position is re-seated into the middle
+   * copy AFTER the movement lands, with the transition off, which is the one
+   * frame nobody can see.
+   */
+  const [at, setAt] = useState(N);
+  /** True for the single frame the re-seat is painted in. */
+  const [seating, setSeating] = useState(false);
+  /** The move waiting for the re-seat to land, so it can animate from there. */
+  const queued = useRef<number | null>(null);
+  const active = ((at % N) + N) % N;
   const [held, setHeld] = useState(false);
   /**
    * WHICH CAPTURES HAVE BEEN ASKED FOR. Every card is a ~160 KB screenshot,
@@ -99,32 +114,72 @@ function ShowcaseConcept({
    */
   const [mounted, setMounted] = useState<ReadonlySet<number>>(() => new Set([0, 1 % N]));
   const doc = SHOWCASE[active];
-  /** The centred row lives in the middle copy. */
-  const centre = N + active;
 
   useEffect(() => {
     // Restarts whenever `active` changes, so a click gets a full interval
     // before the next automatic step rather than the tail of the last one.
     if (!autoplay || held || prefersReducedMotion() || N < 2) return;
-    const id = setInterval(() => goTo((active + 1) % N), INTERVAL);
+    const id = setInterval(() => step(1), INTERVAL);
     return () => clearInterval(id);
-  }, [autoplay, held, active]);
+  }, [autoplay, held, at]);
 
-  /** Always keep the one after the destination warm. */
-  const goTo = (index: number) => {
-    setActive(index);
+  /**
+   * Move by exactly `delta` rows, in that direction, and keep the capture
+   * after the destination warm.
+   *
+   * THE RE-SEAT IS LAZY — it happens before the NEXT move, not after this one.
+   * Waiting for `transitionend` was the obvious hook and does not fire here at
+   * all (measured in Chrome: zero events on a track that visibly animates), so
+   * the track ran off the end of TRIPLE and the wheel went blank after about
+   * forty seconds. Instead, a move that starts from outside the middle copy
+   * first snaps back onto it with the transition suppressed — the same visual
+   * row, so nothing moves — and the real move rides the next frame from there.
+   */
+  const step = (delta: number) => {
+    const index = ((at + delta) % N + N) % N;
     setMounted((seen) =>
       seen.has(index) && seen.has((index + 1) % N)
         ? seen
         : new Set([...seen, index, (index + 1) % N]),
     );
+    if (at >= N && at < 2 * N) {
+      setAt(at + delta);
+      return;
+    }
+    queued.current = delta;
+    setSeating(true);
+    setAt(N + active);
+  };
+
+  /**
+   * A named destination takes the SHORT way round — the reader asked for that
+   * document, not for a tour of the four between here and it.
+   */
+  const goTo = (index: number) => {
+    const forward = ((index - active) % N + N) % N;
+    step(forward > N / 2 ? forward - N : forward);
   };
   const pick = (index: number) => goTo(index);
-  const step = (delta: number) => goTo((active + delta + N) % N);
   const pickFormat = (kind: ShowcaseKind) => {
     const index = SHOWCASE.findIndex((item) => item.kind === kind);
     if (index >= 0) goTo(index);
   };
+
+  /*
+   * The frame boundary the re-seat needs: the snapped position is committed
+   * and painted, THEN the queued move starts from it. Both happen in one
+   * commit, so the browser animates only the move.
+   */
+  useEffect(() => {
+    if (!seating) return undefined;
+    const id = requestAnimationFrame(() => {
+      setSeating(false);
+      const delta = queued.current;
+      queued.current = null;
+      if (delta) setAt((row) => row + delta);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [seating]);
 
   return (
     <article
@@ -146,14 +201,17 @@ function ShowcaseConcept({
       <div className="use-wheel-window mt-2">
         <div
           className="use-wheel"
-          style={{ transform: `translateY(calc(-1 * ${centre - 1} * var(--use-line)))` }}
+          style={{
+            transform: `translateY(calc(-1 * ${at - 1} * var(--use-line)))`,
+            ...(seating ? { transition: 'none' } : {}),
+          }}
         >
           {TRIPLE.map((item, index) => (
             <span
               key={index}
               data-use-row=""
-              data-state={index === centre ? 'in' : 'out'}
-              aria-hidden={index === centre ? undefined : true}
+              data-state={index === at ? 'in' : 'out'}
+              aria-hidden={index === at ? undefined : true}
               className="use-row block truncate px-2 font-serif text-[clamp(1.6rem,3.6vw,2.4rem)] font-medium tracking-[-0.005em]"
             >
               {item.use}

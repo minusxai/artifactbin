@@ -27,8 +27,18 @@ export default function AgentLink({
   docsLink = true,
   frame = true,
   reveal = false,
+  size = 'panel',
 }: {
   docsLink?: boolean;
+  /**
+   * HOW BIG THE BUTTON IS, and nothing else. `panel` fills the getting-started
+   * card, which is the page's primary action; `inline` matches the footer's
+   * own row of small controls, where the same act is offered again to a reader
+   * who has finished reading. The BEHAVIOUR is deliberately not a prop — the
+   * two surfaces mint the same way, or they will drift into meaning different
+   * things.
+   */
+  size?: 'panel' | 'inline';
   /** false = just the button and its status line, for hosts with their own chrome. */
   frame?: boolean;
   /**
@@ -101,14 +111,18 @@ export default function AgentLink({
           onClick={() => void start()}
           disabled={state === 'working'}
           aria-label="Create a live document for my agent"
-          className="mt-2 flex w-full cursor-pointer items-center justify-center gap-2 rounded-[4px] border border-accent bg-accent px-2.5 py-2 font-mono text-xs font-semibold text-bg transition-all hover:brightness-110 disabled:opacity-60"
+          className={`flex cursor-pointer items-center justify-center rounded-[4px] border border-accent bg-accent font-semibold text-bg transition-all hover:brightness-110 disabled:opacity-60 ${
+            size === 'inline'
+              ? 'gap-1.5 px-2.5 py-1.5 font-mono text-[11.5px]'
+              : 'mt-2 w-full gap-2 px-2.5 py-2 font-mono text-xs'
+          }`}
         >
           <span className="min-w-0 break-words">
             {state === 'working'
               ? 'creating your document…'
               : state === 'done'
                 ? message
-                : 'create an artifact + copy the agent instruction'}
+                : 'copy agent instructions'}
           </span>
           {state === 'working' ? (
             <Loader2 size={13} className="shrink-0 animate-spin" />

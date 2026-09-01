@@ -35,6 +35,29 @@ describe('PageControls', () => {
     expect(document.documentElement.dataset.theme).toBe('dark');
   });
 
+  /*
+   * THE CONTROL REPORTS THE PAGE, IT DOES NOT ASSERT IT. Its initial state was
+   * the constant 'dark', left behind when the default was flipped to light —
+   * so a reader who had never touched the toggle opened it on a light page and
+   * was told they were in dark mode. The pre-paint script in web/index.html
+   * has already stamped the stored choice by the time React mounts, so the
+   * document is the only honest source, and it stays honest through another
+   * flip of the default.
+   */
+  it('opens showing the mode the page is actually in', () => {
+    delete document.documentElement.dataset.theme;
+    render(<PageControls />);
+    fireEvent.click(screen.getByLabelText('Open page controls'));
+    expect(screen.getByLabelText('Light mode')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('Dark mode')).toHaveAttribute('aria-pressed', 'false');
+    cleanup();
+
+    document.documentElement.dataset.theme = 'dark';
+    render(<PageControls />);
+    fireEvent.click(screen.getByLabelText('Open page controls'));
+    expect(screen.getByLabelText('Dark mode')).toHaveAttribute('aria-pressed', 'true');
+  });
+
   it('uses a controlled appearance for a document', () => {
     const pick = vi.fn();
     render(<PageControls label="Artifact controls" mode="light" onModeChange={pick} />);

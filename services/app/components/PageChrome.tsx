@@ -223,12 +223,12 @@ export function PageMenu({
         </button>
         <a
           href="/"
-          aria-label="Hosted at artifact-bin"
+          aria-label="Hosted at artifactbin"
           className="mb-3 flex items-center gap-2.5 px-2 font-mono text-sm font-semibold text-fg no-underline transition-colors hover:text-accent"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo-128.png" alt="" className="h-7 w-7" />
-          artifact-bin
+          artifactbin
         </a>
 
         {trail.length > 0 && (
@@ -335,6 +335,18 @@ function AppearancePicker({ mode, onPick }: { mode: AppearanceMode; onPick: (mod
   );
 }
 
+/**
+ * WHAT THE PAGE IS RIGHT NOW. The pre-paint script in web/index.html has
+ * already stamped the reader's stored choice by the time React mounts, so the
+ * document is the only honest source for the control's opening state — a
+ * constant here can only disagree with what the reader is looking at, and did:
+ * it still said 'dark' after the default was flipped to light, so anyone who
+ * had never touched the toggle was told they were in dark mode on a light
+ * page. Reading the attribute also survives the default being flipped again.
+ */
+const currentAppAppearance = (): AppearanceMode =>
+  typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+
 /** One reader choice, two surfaces: the app shell and (when supplied) the
  * artifact runtime. Keeping the app write here means controlled document
  * controls cannot accidentally skip the shell preference. */
@@ -370,13 +382,17 @@ export function PageControls({
   const phone = useIsPhoneViewport();
   const [open, setOpen] = useState(false);
   const mobileBar = useMobileBarLayer(open);
-  const [appMode, setAppMode] = useState<AppearanceMode>('dark');
+  const [appMode, setAppMode] = useState<AppearanceMode>(currentAppAppearance);
   const toggle = useExclusiveLayer(open, setOpen);
   const mode = controlledMode ?? appMode;
 
+  // Re-reads the page when a controlled document hands the control back. The
+  // question "what mode is this" is asked HERE and in the initial state, and
+  // it used to be spelled out twice — the second copy still tested for a
+  // 'light' attribute that light, being the default, never carries.
   useEffect(() => {
     if (controlledMode) return;
-    setAppMode(document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
+    setAppMode(currentAppAppearance());
   }, [controlledMode]);
 
   useEffect(() => {
