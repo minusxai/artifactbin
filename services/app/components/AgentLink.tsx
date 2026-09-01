@@ -5,14 +5,28 @@
  * the instruction to paste into an agent — then opens that document, so the
  * page in front of the user is the one the agent is about to write.
  *
+ * ONE BEHAVIOUR, EVERY SURFACE. The landing hero used to opt out of the
+ * navigation (a `reveal` prop that showed the instruction and stayed put)
+ * while the landing FOOTER, the docs page and the signed-in home all
+ * navigated — the same button, drawn three times on two pages, meaning two
+ * different things. There is no prop for it now: mint, copy, say so, count
+ * the reader down, go. The instruction is on the document page too
+ * (`CopyAgentPrompt`), which is where the clipboard-failed wording already
+ * sent people, so arriving there loses nothing.
+ *
+ * THE PAUSE IS NARRATED. A beat before navigating is what makes the "copied"
+ * feedback land, but an unexplained one reads as a hang and the move that
+ * follows reads as the page going somewhere on its own. Counting it out —
+ * beside the message, on the same row — makes it something the reader was
+ * told about before it happened.
+ *
  * The document is created on CLICK, never on page view: creating one per
  * visitor would burn the anonymous-mint rate limit on people who are only
  * reading. Until then this is just a button.
  */
 import { Check, Copy, Loader2 } from 'lucide-react';
 import { useRouter } from '@/lib/navigation';
-import { useState } from 'react';
-import CopyBlock from '@/components/CopyBlock';
+import { useEffect, useRef, useState } from 'react';
 import { Tooltip } from '@/components/Tooltip';
 import { LINK } from '@/components/ui';
 
@@ -23,10 +37,12 @@ interface StartResponse {
   error?: string;
 }
 
+/** Seconds between the copy landing and the page changing under it. */
+const COUNTDOWN_S = 3;
+
 export default function AgentLink({
   docsLink = true,
   frame = true,
-  reveal = false,
   size = 'panel',
 }: {
   docsLink?: boolean;
@@ -41,28 +57,22 @@ export default function AgentLink({
   size?: 'panel' | 'inline';
   /** false = just the button and its status line, for hosts with their own chrome. */
   frame?: boolean;
-  /**
-   * SHOW THE INSTRUCTION RATHER THAN ONLY COPYING IT.
-   *
-   * A button that silently fills the clipboard and navigates away asks for
-   * trust it has not earned — the reader never sees what they just put in
-   * their paste buffer, and one of the two shapes carries a TOKEN. With this
-   * on, the real text is shown after the click and the page does NOT navigate
-   * away from what it just revealed. A redacted PREVIEW before the click was
-   * tried and removed: it cost four lines of the panel to show a sentence
-   * with its two interesting parts blanked out.
-   */
-  reveal?: boolean;
-  /** The idle status line; a host can prefix its own context onto it. */
 }) {
   const router = useRouter();
   const [state, setState] = useState<'idle' | 'working' | 'done' | 'error'>('idle');
   const [message, setMessage] = useState('');
-  const [prompt, setPrompt] = useState('');
-  const [docUrl, setDocUrl] = useState('');
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // The countdown outlives nothing: a reader who navigates away by some other
+  // route must not be yanked back by a timer the unmounted button left behind.
+  useEffect(() => () => { if (timer.current) clearInterval(timer.current); }, []);
 
   const start = async () => {
-    if (state === 'working') return;
+    // Idle or a failed attempt may be clicked; a run in flight and a document
+    // already counting down may not — a second click on a visible countdown
+    // would mint a second document and abandon the first.
+    if (state === 'working' || state === 'done') return;
     setState('working');
     try {
       // The cookie rides along, so the server can attribute the new document
@@ -77,27 +87,36 @@ export default function AgentLink({
       }
       // The server decides the paste from the caller's session state; this
       // client only copies that decision and keeps no second wording rule.
-      setDocUrl(`/a/${body.id}`);
-      if (typeof body.prompt === 'string') setPrompt(body.prompt);
       try {
         if (typeof body.prompt !== 'string') throw new Error('start response did not include an agent paste');
         await navigator.clipboard.writeText(body.prompt);
-        setMessage('copied! now paste it to your agent');
+        setMessage('copied! paste it in the agent');
       } catch {
+        // The document page carries the prompt too, so this wording and the
+        // navigation that follows it agree.
         setMessage('created! copy the prompt from the document page');
       }
       setState('done');
-      // Land on the live document — after a beat. Navigating the same tick
-      // swallows the "copied" feedback, and a copy nobody saw happen might as
-      // well not have happened. When the instruction is REVEALED there is
-      // something on screen worth staying for, so the reader leaves by
-      // choosing to.
-      if (!reveal) setTimeout(() => router.push(`/a/${body.id}`), 1200);
+      // Land on the live document — after a narrated beat. Navigating the
+      // same tick swallows the "copied" feedback, and a copy nobody saw
+      // happen might as well not have happened.
+      setCountdown(COUNTDOWN_S);
+      let left = COUNTDOWN_S;
+      timer.current = setInterval(() => {
+        left -= 1;
+        if (left > 0) { setCountdown(left); return; }
+        if (timer.current) clearInterval(timer.current);
+        timer.current = null;
+        router.push(`/a/${body.id}`);
+      }, 1000);
     } catch {
       setState('error');
       setMessage('could not reach the server');
     }
   };
+
+  const label =
+    state === 'working' ? 'creating your document…' : state === 'done' ? message : 'copy agent instructions';
 
   const body = (
     <>
@@ -111,25 +130,31 @@ export default function AgentLink({
           onClick={() => void start()}
           disabled={state === 'working'}
           aria-label="Create a live document for my agent"
-          className={`flex cursor-pointer items-center justify-center rounded-[4px] border border-accent bg-accent font-semibold text-bg transition-all hover:brightness-110 disabled:opacity-60 ${
+          className={`flex cursor-pointer items-center rounded-[4px] border border-accent bg-accent font-semibold text-bg transition-all hover:brightness-110 disabled:opacity-60 ${
+            countdown === null ? 'justify-center' : 'justify-between'
+          } ${
             size === 'inline'
               ? 'gap-1.5 px-2.5 py-1.5 font-mono text-[11.5px]'
               : 'mt-2 w-full gap-2 px-2.5 py-2 font-mono text-xs'
           }`}
         >
-          <span className="min-w-0 break-words">
-            {state === 'working'
-              ? 'creating your document…'
-              : state === 'done'
-                ? message
-                : 'copy agent instructions'}
+          <span className={`flex min-w-0 items-center ${size === 'inline' ? 'gap-1.5' : 'gap-2'}`}>
+            <span className="min-w-0 break-words">{label}</span>
+            {state === 'working' ? (
+              <Loader2 size={13} className="shrink-0 animate-spin" />
+            ) : state === 'done' ? (
+              <Check size={13} className="shrink-0" />
+            ) : (
+              <Copy size={13} className="shrink-0" />
+            )}
           </span>
-          {state === 'working' ? (
-            <Loader2 size={13} className="shrink-0 animate-spin" />
-          ) : state === 'done' ? (
-            <Check size={13} className="shrink-0" />
-          ) : (
-            <Copy size={13} className="shrink-0" />
+          {/* The other half of the row: what is about to happen, and when.
+            * `tabular-nums` so the digit changing does not shuffle the words
+            * beside it. */}
+          {countdown !== null && (
+            <span className="shrink-0 font-normal tabular-nums opacity-75">
+              going to the artifact in {countdown}…
+            </span>
           )}
         </button>
       </Tooltip>
@@ -137,17 +162,6 @@ export default function AgentLink({
         <p role="alert" className="mt-1.5 font-mono text-[11px] text-danger">
           {message}
         </p>
-      )}
-      {reveal && state === 'done' && prompt && (
-        <div className="mt-2">
-          <CopyBlock className="mt-0" text={prompt} label="Copy the agent instruction again" />
-          <p className="mt-1.5 font-mono text-[11px] text-muted">
-            <a href={docUrl} className={LINK}>
-              open your document →
-            </a>{' '}
-            empty until your agent writes to it
-          </p>
-        </div>
       )}
     </>
   );

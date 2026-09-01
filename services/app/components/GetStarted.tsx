@@ -412,13 +412,10 @@ function InstallCard({ surface, mcpUrl, docsUrl }: { surface: SurfaceKey; mcpUrl
 export default function GetStarted({
   heading = true,
   frame = true,
-  reveal = false,
 }: {
   heading?: boolean;
   /** false = no panel chrome, for hosts that already draw a card around it. */
   frame?: boolean;
-  /** Show the agent instruction rather than only copying it (AgentLink). */
-  reveal?: boolean;
 }) {
   const [surface, setSurface] = useState<SurfaceKey>('claude-code');
   const [installOpen, setInstallOpen] = useState(false);
@@ -477,7 +474,7 @@ export default function GetStarted({
         {/* PATH ONE. Trying it must cost less than installing it, so the
           * no-setup document leads and needs no choice made first. */}
         <OptionHeader n={1} title="no installation" note={HTTP_OPTION_NOTE} />
-        <AgentLink frame={false} docsLink={false} reveal={reveal} />
+        <AgentLink frame={false} docsLink={false} />
 
         <OrDivider />
 
