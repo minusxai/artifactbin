@@ -46,7 +46,7 @@ export const claudeCode: HarnessAdapter = {
     //
     // It skips CLAUDE.md, hooks, plugins and MCP discovery, and it is also the reason a plugin
     // cannot load: with `--bare`, "list your skills" answers with the TOOLS; without it, the
-    // three artifact-bin skills are there. So plugin mode had to drop it — and making the flag
+    // three artifactbin skills are there. So plugin mode had to drop it — and making the flag
     // depend on the mode silently made the modes incomparable. Measured on a one-word prompt:
     // `--bare` is 1,735 tokens of base context, without it 20,189, and adding the plugin on top
     // is 20,206. The PLUGIN costs 17 tokens. The FLAG costs 18,454, on every turn.

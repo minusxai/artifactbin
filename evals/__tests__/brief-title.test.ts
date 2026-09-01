@@ -1,7 +1,7 @@
 /**
  * A task that GATES `has_title` must say what a title IS.
  *
- * artifact-bin has two different things an author can call a title: the document's
+ * artifactbin has two different things an author can call a title: the document's
  * `<title>` (what a browser tab and a link preview show) and an on-page `<h1>`.
  * An agent told a document is "titled X" often writes the heading and leaves the
  * document titled `artifact` — which is exactly how the `mcp` smoke task failed

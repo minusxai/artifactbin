@@ -44,7 +44,7 @@ const BASE = PUBLIC_BASE_URL;
  * exists to prevent.
  */
 function buildServer(request: Request, author: AnnotationAuthor): McpServer {
-  const server = new McpServer({ name: 'artifact-bin', version: '0.1.0' }, { instructions: buildMcpInstructions(BASE) });
+  const server = new McpServer({ name: 'artifactbin', version: '0.1.0' }, { instructions: buildMcpInstructions(BASE) });
   for (const op of OPERATIONS) {
     server.registerTool(
       op.name,

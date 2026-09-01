@@ -1,0 +1,44 @@
+[
+  {
+    "path": "evals/__tests__/fixtures/pi.error.jsonl",
+    "value": "artifact-bin",
+    "count": 1,
+    "reason": "Historical captured agent fixture"
+  },
+  {
+    "path": "evals/__tests__/fixtures/pi.events.jsonl",
+    "value": "artifact-bin",
+    "count": 1,
+    "reason": "Historical captured agent fixture"
+  },
+  {
+    "path": "services/app/lib/__tests__/agent-contract.test.ts",
+    "value": "artifact-bin",
+    "count": 1,
+    "reason": "Persisted local authentication configuration path"
+  },
+  {
+    "path": "services/app/lib/__tests__/skill-tree.test.ts",
+    "value": "artifact-bin",
+    "count": 1,
+    "reason": "Persisted local authentication configuration path"
+  },
+  {
+    "path": "services/app/lib/agent-contract.ts",
+    "value": "artifact-bin",
+    "count": 2,
+    "reason": "Persisted local authentication configuration path"
+  },
+  {
+    "path": "services/app/public/install.sh",
+    "value": "artifact-bin",
+    "count": 3,
+    "reason": "Default-install migration compatibility"
+  },
+  {
+    "path": "services/app/skills/artifactbin/references/publishing-auth.md",
+    "value": "artifact-bin",
+    "count": 1,
+    "reason": "Persisted local authentication configuration path"
+  }
+]

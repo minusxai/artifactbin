@@ -130,7 +130,7 @@ export async function publishJsx(body: Record<string, unknown>, sourceIn: string
   }
 
   // Gate 1: the ported three-gate pipeline (registry, handlers, URL schemes).
-  // Gate 2 (artifact-bin's own): every subresource must be self-contained —
+  // Gate 2 (artifactbin's own): every subresource must be self-contained —
   // see findExternalSubresources for why this can't live in the ported engine.
   // The Helmet subtree is validated by ITS grammar (lib/story/helmet.ts) and
   // split out before the generic gate — lib/jsx never learns Helmet exists,

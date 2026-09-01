@@ -1,7 +1,7 @@
 {
   "name": "@artifactbin/contracts",
   "version": "0.1.0",
-  "description": "The types every artifact-bin service speaks: parts, the upstream seam, actors, the sql and browser services, a queryable database. Types and pure constants only — no runtime, no dependencies.",
+  "description": "The types every artifactbin service speaks: parts, the upstream seam, actors, the sql and browser services, a queryable database. Types and pure constants only — no runtime, no dependencies.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./src/index.ts",

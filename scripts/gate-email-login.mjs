@@ -109,7 +109,7 @@ check(cookies.some((c) => /better-auth.*session_token|authjs.session-token/.test
 
 // ── OAuth consent now recognises the session ────────────────────────────────
 const consentQuery = new URLSearchParams({
-  client_id: 'artifact-bin-mcp',
+  client_id: 'artifactbin-mcp',
   response_type: 'code',
   redirect_uri: 'https://chatgpt.com/connector_platform_oauth_redirect',
   code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',

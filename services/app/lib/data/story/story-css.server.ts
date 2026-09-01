@@ -52,12 +52,12 @@ function loadTailwindSheets(): Promise<Map<TailwindSheetName, string>> {
 async function tailwindCompiler(input: string) {
   const sheets = await loadTailwindSheets();
   return compile(input, {
-    base: '/artifact-bin-tailwind',
+    base: '/artifactbin-tailwind',
     loadStylesheet: async (id) => {
       const name = (id === 'tailwindcss' ? 'index.css' : path.basename(id)) as TailwindSheetName;
       const content = sheets.get(name);
       if (!content) throw new Error(`story-css: unsupported Tailwind stylesheet ${JSON.stringify(id)}`);
-      return { path: `/artifact-bin-tailwind/${name}`, base: '/artifact-bin-tailwind', content };
+      return { path: `/artifactbin-tailwind/${name}`, base: '/artifactbin-tailwind', content };
     },
   });
 }

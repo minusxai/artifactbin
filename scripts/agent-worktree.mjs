@@ -8,7 +8,7 @@
  * be committed (`info/exclude`, `.gitignore`).
  *
  *   node scripts/agent-worktree.mjs --phase p2 --brief ../p2-brief.md            # from the repo the agent works in
- *   node scripts/agent-worktree.mjs --phase p4 --brief b.md --pin-submodule services/artifact-bin=<commit>
+ *   node scripts/agent-worktree.mjs --phase p4 --brief b.md --pin-submodule services/artifactbin=<commit>
  *   node scripts/agent-worktree.mjs --phase p2 --remove                          # tear it down (branch kept)
  *
  * Options: --base <branch> (default simple-split) · --dir <path> (default ../<repo>-<phase>) · --install (npm install there)

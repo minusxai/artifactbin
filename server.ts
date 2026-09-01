@@ -134,7 +134,7 @@ async function main(): Promise<void> {
     const mailer = resendMailer({
       apiKey: readEnv(env, 'EMAIL__RESEND_API_KEY'),
       baseUrl: readEnv(env, 'EMAIL__RESEND_BASE_URL'),
-      from: readEnv(env, 'EMAIL__FROM') ?? 'artifact-bin <login@example.com>',
+      from: readEnv(env, 'EMAIL__FROM') ?? 'artifactbin <login@example.com>',
     });
     const loginProviders = loginProvidersOf(env);
     human = await createHumanAuth({

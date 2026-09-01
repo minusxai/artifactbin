@@ -37,7 +37,7 @@ describe('the markup field description', () => {
   });
 
   it('points at the full reference by an absolute, fetchable path', () => {
-    expect(text).toMatch(/\/docs\/artifact-bin\/references\/markup\.md/);
+    expect(text).toMatch(/\/docs\/artifactbin\/references\/markup\.md/);
   });
 
   it('stays short enough to survive in a tool schema', () => {
@@ -76,7 +76,7 @@ describe('figures must be computed, not typed', () => {
   });
 
   it('and in the component reference, for an agent that fetches docs instead', () => {
-    expect(renderDoc('artifact-bin/references/markup-data.md', 'https://example.test')).toContain(COMPUTED_FIGURE_RULE);
+    expect(renderDoc('artifactbin/references/markup-data.md', 'https://example.test')).toContain(COMPUTED_FIGURE_RULE);
   });
 });
 

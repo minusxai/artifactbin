@@ -104,7 +104,7 @@ function docsMoreLine(base: string, transport: DocTransport, delivery: SkillDeli
   }
   const query = transport === 'mcp' ? '?transport=mcp' : '';
   const archiveQuery = transport === 'mcp' ? '&transport=mcp' : '';
-  return `Fetch \`${base}/docs/artifact-bin/references/<file>${query}\`; the whole folder:\n\`curl -s "${base}/docs?download=true${archiveQuery}" | tar xz\`, then \`grep -rl\` it.\nNo OpenAPI, no Swagger, no \`/api/docs\`: a guess is a 404.`;
+  return `Fetch \`${base}/docs/artifactbin/references/<file>${query}\`; the whole folder:\n\`curl -s "${base}/docs?download=true${archiveQuery}" | tar xz\`, then \`grep -rl\` it.\nNo OpenAPI, no Swagger, no \`/api/docs\`: a guess is a 404.`;
 }
 
 /** Where the file list lives (the dispatch-table intro's parenthetical). */

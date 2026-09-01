@@ -1,7 +1,7 @@
 ---
-name: artifact-bin
+name: artifactbin
 description: >-
-  Publish documents to artifact-bin over HTTP and share the link. Read first, always: everything a straightforward document needs. Use when asked to publish, share or host a page, report, dashboard, deck, dataset, chart or image.
+  Publish documents to artifactbin over HTTP and share the link. Read first, always: everything a straightforward document needs. Use when asked to publish, share or host a page, report, dashboard, deck, dataset, chart or image.
 read_first_max: 8192
 ---
 ## Read first — everything a straightforward document needs

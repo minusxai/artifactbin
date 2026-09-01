@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react';
 import yaml from '@rollup/plugin-yaml';
 
 // Three projects:
-//  - api:  artifact-bin's original suite (root __tests__, PGLite + route handlers)
+//  - api:  artifactbin's original suite (root __tests__, PGLite + route handlers)
 //  - node: the ported minusx engine's pure tests (lib/**/__tests__)
 //         + scripts/**/__tests__ (CLI scripts driven as child processes)
 //  - ui:   the ported *.ui.test.* files (jsdom) — mirrors minusx vitest.config.ts

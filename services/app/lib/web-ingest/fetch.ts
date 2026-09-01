@@ -100,7 +100,7 @@ const oneHop = (
       lookup: guardedLookup(policy),
       headers: {
         Accept: opts.accept ?? '*/*',
-        'User-Agent': opts.userAgent ?? 'artifact-bin-ingest/1 (+https://artifactbin.dev)',
+        'User-Agent': opts.userAgent ?? 'artifactbin-ingest/1 (+https://artifactbin.dev)',
         'Accept-Encoding': 'identity',
       },
     }, (res) => {

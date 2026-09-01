@@ -1,6 +1,6 @@
 /**
- * The docs became a skills tree, then ONE skill (`skills/artifact-bin/` over
- * `references/`, served at `/docs/artifact-bin/…`). Two generations of old
+ * The docs became a skills tree, then ONE skill (`skills/artifactbin/` over
+ * `references/`, served at `/docs/artifactbin/…`). Two generations of old
  * addresses answer 404 with no alias: the pre-tree pages (`/docs/llm`,
  * `/docs/artifact-design`, …) and the six-skill tree's directories
  * (`/docs/publishing`, `/docs/markup`, `/docs/themes`, `/docs/templates`,
@@ -32,7 +32,7 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
  * The retired addresses. The pre-tree pages died bare or with a query; the
  * six-skill directories died with their WHOLE subtree (`/docs/markup`,
  * `/docs/markup/SKILL.md`, `/docs/templates/deck.md`, …) — everything under
- * `/docs/` except `artifact-bin` and `human` is dead.
+ * `/docs/` except `artifactbin` and `human` is dead.
  */
 const RETIRED = /\/docs\/(?:llm|artifact-design|publishing|markup|themes|templates|design)(?![\w-])/;
 

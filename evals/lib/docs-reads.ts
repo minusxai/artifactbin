@@ -26,13 +26,13 @@ export interface ToolInvocation {
 const DOCS_URL = /https?:\/\/[^\s'"]+\/(?:docs(?:\/[^\s'"]*)?|llms\.txt)\b/;
 /**
  * The same docs as FILES — the plugin's `skills/<skill>/…/<file>.md`, wherever
- * a harness installed it (`plugins/artifact-bin/skills/`, `.opencode/skills/`,
+ * a harness installed it (`plugins/artifactbin/skills/`, `.opencode/skills/`,
  * pi's skill dir). A read of one, or a grep across the directory, is a turn
  * spent reading docs; the production baseline read 0 for every installed_skill
  * run because only URLs counted.
  *
  * The path is matched at ANY DEPTH under the skill, because a skill's detail
- * files live in `references/`: the tree is one skill (`skills/artifact-bin/`)
+ * files live in `references/`: the tree is one skill (`skills/artifactbin/`)
  * whose topics are `references/<topic>.md`, and a rule that admitted exactly
  * one segment counted the brief and nothing else. Measured on one real plugins
  * run of the seven tasks: 7 reads counted where the transcripts hold 39 (pi)

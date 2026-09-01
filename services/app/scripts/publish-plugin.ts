@@ -1,59 +1,58 @@
 /**
- * Publishes the generated plugin to the public mirror repo (PLUGIN_REPO):
- * clone → replace the whole tree with buildMirrorFiles() → commit + push if
- * anything changed. The mirror is pure build output — no hand-edits, no
- * merges, history is append-only from here.
+ * Publish one generated plugin channel from an exact checked-out OSS commit.
  *
- * Usage: tsx -r ./scripts/register-yaml.cjs scripts/publish-plugin.ts \
- *          [--base <url>] [--repo <owner/name>] [--token <push token>]
- * Without --token, git's ambient credentials are used (gh auth locally,
- * a configured deploy credential in CI).
+ * Usage:
+ *   tsx -r ../../scripts/register-yaml.cjs scripts/publish-plugin.ts \
+ *     --channel <production|staging> --sha <40-char commit> [--token <token>]
  */
-import { execFileSync } from 'child_process';
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'fs';
-import { tmpdir } from 'os';
-import path from 'path';
-import { buildMirrorFiles, PLUGIN_BASE_URL, PLUGIN_REPO, PLUGIN_VERSION } from '../lib/plugin-package';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { buildMirrorFiles, PLUGIN_VERSION, type PluginChannel, pluginChannel } from '../lib/plugin-package';
 
 const arg = (flag: string): string | undefined => {
-  const i = process.argv.indexOf(flag);
-  return i !== -1 ? process.argv[i + 1] : undefined;
+  const index = process.argv.indexOf(flag);
+  return index === -1 ? undefined : process.argv[index + 1];
 };
 
-const base = arg('--base') ?? PLUGIN_BASE_URL;
-const repo = arg('--repo') ?? PLUGIN_REPO;
+const channelArg = arg('--channel');
+if (channelArg !== 'production' && channelArg !== 'staging') throw new Error('--channel must be production or staging');
+const channel = channelArg as PluginChannel;
+const sourceSha = arg('--sha') ?? '';
+if (!/^[0-9a-f]{40}$/.test(sourceSha)) throw new Error('--sha must be a full 40-character lowercase commit SHA');
+
+const actualSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+if (actualSha !== sourceSha) throw new Error(`checked-out source ${actualSha} does not match requested --sha ${sourceSha}`);
+
+const identity = pluginChannel(channel);
 const token = arg('--token');
-if (!/^https?:\/\//.test(base)) throw new Error(`--base must be an http(s) URL, got: ${base}`);
-// --repo takes owner/name (GitHub) or a full git remote (testing, self-hosting).
-const isSlug = /^[\w.-]+\/[\w.-]+$/.test(repo);
-const remote = isSlug
-  ? (token ? `https://x-access-token:${token}@github.com/${repo}.git` : `https://github.com/${repo}.git`)
-  : repo;
-const work = mkdtempSync(path.join(tmpdir(), 'plugin-mirror-'));
-const git = (...args: string[]) => execFileSync('git', ['-C', work, ...args], { stdio: ['ignore', 'pipe', 'inherit'] }).toString().trim();
+const remote = token
+  ? `https://x-access-token:${token}@github.com/${identity.repo}.git`
+  : `https://github.com/${identity.repo}.git`;
+const work = mkdtempSync(path.join(tmpdir(), `artifactbin-${channel}-plugin-`));
+const git = (...args: string[]): string => execFileSync('git', ['-C', work, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
 try {
-  execFileSync('git', ['clone', '--depth=1', remote, work], { stdio: ['ignore', 'pipe', 'inherit'] });
-
-  // Full replace: everything except .git goes, then the generated tree lands.
+  execFileSync('git', ['clone', '--branch', identity.branch, '--single-branch', remote, work], { stdio: ['ignore', 'pipe', 'pipe'] });
   for (const entry of readdirSync(work)) {
     if (entry !== '.git') rmSync(path.join(work, entry), { recursive: true, force: true });
   }
-  const files = buildMirrorFiles(base);
-  for (const [rel, content] of Object.entries(files)) {
-    const full = path.join(work, rel);
-    mkdirSync(path.dirname(full), { recursive: true });
-    writeFileSync(full, content);
+  for (const [rel, content] of Object.entries(buildMirrorFiles(identity.baseUrl, 'mcp', channel, sourceSha))) {
+    const target = path.join(work, rel);
+    mkdirSync(path.dirname(target), { recursive: true });
+    writeFileSync(target, content);
   }
-
   git('add', '--all');
-  if (git('status', '--porcelain') === '') {
-    console.log(`mirror ${repo} already up to date (v${PLUGIN_VERSION}, ${base})`);
-  } else {
-    git('-c', 'user.name=artifact-bin publish', '-c', 'user.email=noreply@minusx.ai', 'commit', '-m', `publish v${PLUGIN_VERSION} for ${base}`);
-    git('push', 'origin', 'HEAD');
-    console.log(`published v${PLUGIN_VERSION} (${Object.keys(files).length} files) to ${repo} for ${base}`);
+  if (!git('status', '--porcelain')) {
+    console.log(`${identity.name} already matches artifactbin@${sourceSha}`);
+    process.exit(0);
   }
+  git('config', 'user.name', 'artifactbin release bot');
+  git('config', 'user.email', 'artifactbin-release-bot@users.noreply.github.com');
+  git('commit', '-m', `Publish ${identity.name} v${PLUGIN_VERSION} from ${sourceSha}`);
+  git('push', 'origin', `HEAD:${identity.branch}`);
+  console.log(`Published ${identity.name} from artifactbin@${sourceSha} to ${identity.repo}`);
 } finally {
   rmSync(work, { recursive: true, force: true });
 }

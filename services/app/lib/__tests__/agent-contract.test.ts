@@ -17,7 +17,7 @@ import { startBrief } from '@/lib/start-links';
 
 const B = 'https://x.test';
 const contract = () => agentContract(B);
-const publishingAuth = () => renderDoc('artifact-bin/references/publishing-auth.md', B);
+const publishingAuth = () => renderDoc('artifactbin/references/publishing-auth.md', B);
 
 describe('the contract itself', () => {
   it('names the token file, and says to check it first', () => {

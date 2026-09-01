@@ -12,10 +12,10 @@
 import { describe, it, expect } from 'vitest';
 import { buildQuickSheet, renderDoc } from '../skills';
 
-const buildSkillDoc = (base: string) => ['artifact-bin/references/publishing.md', 'artifact-bin/references/publishing-annotations.md', 'artifact-bin/references/publishing-datasets.md', 'artifact-bin/references/publishing-versions.md'].map((p) => renderDoc(p, base)).join('\n');
-const buildMarkupDoc = (base: string) => ['artifact-bin/references/markup.md', 'artifact-bin/references/markup-data.md', 'artifact-bin/references/markup-video.md'].map((p) => renderDoc(p, base)).join('\n');
-const buildDesignDoc = (base: string) => renderDoc('artifact-bin/references/design.md', base);
-const buildTemplateDoc = (base: string, name: string) => renderDoc(`artifact-bin/references/templates-${name}.md`, base);
+const buildSkillDoc = (base: string) => ['artifactbin/references/publishing.md', 'artifactbin/references/publishing-annotations.md', 'artifactbin/references/publishing-datasets.md', 'artifactbin/references/publishing-versions.md'].map((p) => renderDoc(p, base)).join('\n');
+const buildMarkupDoc = (base: string) => ['artifactbin/references/markup.md', 'artifactbin/references/markup-data.md', 'artifactbin/references/markup-video.md'].map((p) => renderDoc(p, base)).join('\n');
+const buildDesignDoc = (base: string) => renderDoc('artifactbin/references/design.md', base);
+const buildTemplateDoc = (base: string, name: string) => renderDoc(`artifactbin/references/templates-${name}.md`, base);
 import { startBrief } from '../start-links';
 import { publishJsx } from '../story/jsx-tier';
 

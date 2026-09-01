@@ -18,7 +18,7 @@ describe('README.md', () => {
   it('is short and has exactly the six sections, in order', () => {
     expect(readme().split('\n').length).toBeLessThanOrEqual(90);
     expect(readme().split('\n').filter((l) => /^## /.test(l))).toEqual(['## Use it now', '## Self-host', '## Develop', '## Docs', '## License']);
-    expect(readme().split('\n')[0]).toBe('# artifact-bin');
+    expect(readme().split('\n')[0]).toBe('# artifactbin');
   });
   it('carries the two one-liners, the hosted instance and the license', () => {
     expect(readme()).toContain('curl -fsSL https://artifactbin.dev/install.sh | bash');

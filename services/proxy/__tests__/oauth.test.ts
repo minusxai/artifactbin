@@ -58,14 +58,14 @@ beforeEach(async () => { await resetTestDb(); session = null; });
 const asUser = (userId = 'usr_1', email = 'u@example.com') => { session = { userId, email }; return { cookie: 'sess=1' }; };
 
 describe('the oauth provider routes', () => {
-  const authorizeUrl = `/oauth/authorize?response_type=code&client_id=artifact-bin-mcp&redirect_uri=${encodeURIComponent('http://127.0.0.1:9987/cb')}&code_challenge=${s256(verifier)}&code_challenge_method=S256&state=st`;
+  const authorizeUrl = `/oauth/authorize?response_type=code&client_id=artifactbin-mcp&redirect_uri=${encodeURIComponent('http://127.0.0.1:9987/cb')}&code_challenge=${s256(verifier)}&code_challenge_method=S256&state=st`;
 
   it('serves metadata from the request host and registers any client as the one client', async () => {
     const md = await (await app.request('http://artifactbin.test/.well-known/oauth-authorization-server')).json();
     expect((md as Record<string, string>).token_endpoint).toBe('http://artifactbin.test/oauth/token');
     const reg = await app.request('/oauth/register', { method: 'POST', body: JSON.stringify({ client_name: 'x' }) });
     expect(reg.status).toBe(201);
-    expect(((await reg.json()) as Record<string, string>).client_id).toBe('artifact-bin-mcp');
+    expect(((await reg.json()) as Record<string, string>).client_id).toBe('artifactbin-mcp');
   });
   it('refuses a bad request on the consent page, sends a stranger to log in, offers a session the approval — and NO guest grant', async () => {
     expect((await app.request('/oauth/authorize?client_id=nope')).status).toBe(400);

@@ -26,7 +26,7 @@ import { MUTATION_TAG, QUERY_TAG, VALUE_TAG } from '@/lib/story/dataflow';
 const ROOT = path.resolve(__dirname, '../..');
 
 /** The surfaces an agent actually reads to learn what it may write. */
-const AGENT_FACING = ['skills/artifact-bin/references/markup.md', 'skills/artifact-bin/references/markup-data.md', 'skills/artifact-bin/SKILL.md', 'app/mcp/route.ts'];
+const AGENT_FACING = ['skills/artifactbin/references/markup.md', 'skills/artifactbin/references/markup-data.md', 'skills/artifactbin/SKILL.md', 'app/mcp/route.ts'];
 
 /**
  * The vocabulary is taken from the PUBLISH DOOR (`JSX_TIER_COMPONENTS`), not

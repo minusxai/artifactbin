@@ -163,7 +163,7 @@ export function loadConfig(source: Record<string, string | undefined>, opts: Loa
   const mail = {
     ...(env('EMAIL', 'RESEND_API_KEY') ? { apiKey: env('EMAIL', 'RESEND_API_KEY') } : {}),
     ...(env('EMAIL', 'RESEND_BASE_URL') ? { baseUrl: env('EMAIL', 'RESEND_BASE_URL') } : {}),
-    from: env('EMAIL', 'FROM') || 'artifact-bin <login@example.com>',
+    from: env('EMAIL', 'FROM') || 'artifactbin <login@example.com>',
   };
   const secureRaw = env('PROXY', 'SECURE_COOKIES') || '';
   const secure = TRUTHY.has(secureRaw.toLowerCase()) || !!publicBaseUrl?.startsWith('https://');

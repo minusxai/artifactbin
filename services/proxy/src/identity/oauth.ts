@@ -8,7 +8,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { CodeStore } from '@artifactbin/contracts';
 
-export const OAUTH_CLIENT_ID = 'artifact-bin-mcp';
+export const OAUTH_CLIENT_ID = 'artifactbin-mcp';
 export const AUTH_CODE_TTL_MS = 5 * 60 * 1000;
 
 export function isAllowedRedirectUri(uri: string): boolean {

@@ -51,7 +51,7 @@ Either way the bytes are stored once (content-addressed) and served from
 URL is resolved for you — you never write one.
 
 **Already on the web? Just use the URL.** `{ "imageUrl": "https://…" }`
-makes the artifact from a URL — artifact-bin fetches it server-side, so YOU
+makes the artifact from a URL — artifactbin fetches it server-side, so YOU
 DO NOT NEED TO DOWNLOAD IT. And in markup you can simply write
 `<img src="https://example.com/chart.png" />`: the publish IMPORTS it,
 stores a copy, and echoes your markup rewritten to `ref:<id>`. The document

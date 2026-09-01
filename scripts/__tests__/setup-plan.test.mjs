@@ -61,7 +61,7 @@ describe('buildEnvFile()', () => {
   it('a Resend key sets both mail names with a from derived from the public URL host', () => {
     const text = buildEnvFile({ ...defaultAnswers(), publicUrl: 'https://bin.example.com', email: 're_123' }, { generated: gen });
     expect(text).toMatch(/^EMAIL__RESEND_API_KEY=re_123$/m);
-    expect(text).toMatch(/^EMAIL__FROM=artifact-bin <login@bin\.example\.com>$/m);
+    expect(text).toMatch(/^EMAIL__FROM=artifactbin <login@bin\.example\.com>$/m);
   });
   it('a port override makes the default public URL follow that port', () => {
     const answers = defaultAnswers({ port: 5299 });

@@ -63,19 +63,19 @@ function accessLine(_task: Task, access: Access, mode: EvalMode): string {
   if (installed && actions === 'mcp') {
     // The full plugin treatment: MCP-compiled skills installed and the server
     // connected. The token rides the MCP configuration, never the prompt.
-    return `The artifact-bin MCP server is already connected as "artifact-bin" and authenticated. Work on document ${access.id} through its tools. The artifact-bin skill is installed in this session — start with its SKILL.md; its dispatch table names the reference files beside it.`;
+    return `The artifactbin MCP server is already connected as "artifactbin" and authenticated. Work on document ${access.id} through its tools. The artifactbin skill is installed in this session — start with its SKILL.md; its dispatch table names the reference files beside it.`;
   }
   if (actions === 'mcp') {
     // Fetched, MCP-compiled skills: the query parameter selects the tool
     // vocabulary rather than the default API/curl rendering.
-    return `The artifact-bin MCP server is already connected as "artifact-bin" and authenticated. Work on document ${access.id} through its tools. Read ${access.base}/docs/artifact-bin/SKILL.md?transport=mcp first; it is the MCP-tool brief, and ${access.base}/docs?transport=mcp lists its references.`;
+    return `The artifactbin MCP server is already connected as "artifactbin" and authenticated. Work on document ${access.id} through its tools. Read ${access.base}/docs/artifactbin/SKILL.md?transport=mcp first; it is the MCP-tool brief, and ${access.base}/docs?transport=mcp lists its references.`;
   }
   if (installed) {
     // The vocabulary is INSTALLED. Naming the skills is not a thumb on the scale — it is
     // what a person with the plugin gets, since a harness matches a skill by its description
-    // and the eval's brief never mentions artifact-bin. What would be a thumb on the scale is
+    // and the eval's brief never mentions artifactbin. What would be a thumb on the scale is
     // the HTTP line below, which sends it to fetch what it is already holding.
-    return `The artifact store is at ${access.base}. Your API token is ${access.token} — send it as \`Authorization: Bearer <token>\`. You are working on document ${access.id}. The artifact-bin skill is installed in this session — start with its SKILL.md; its dispatch table names the reference files for anything it does not cover.`;
+    return `The artifact store is at ${access.base}. Your API token is ${access.token} — send it as \`Authorization: Bearer <token>\`. You are working on document ${access.id}. The artifactbin skill is installed in this session — start with its SKILL.md; its dispatch table names the reference files for anything it does not cover.`;
   }
-  return `The artifact store is at ${access.base}. Your API token is ${access.token} — send it as \`Authorization: Bearer <token>\`. You are working on document ${access.id}. Read ${access.base}/docs/artifact-bin/SKILL.md first; it is the API-action brief, and it names the rest of the docs.`;
+  return `The artifact store is at ${access.base}. Your API token is ${access.token} — send it as \`Authorization: Bearer <token>\`. You are working on document ${access.id}. Read ${access.base}/docs/artifactbin/SKILL.md first; it is the API-action brief, and it names the rest of the docs.`;
 }

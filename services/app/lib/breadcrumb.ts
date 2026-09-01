@@ -6,13 +6,13 @@
  * that was already a link home. Two pieces of chrome saying two halves of one
  * thing: the mark said where you are hosted, the name said which page, and
  * nothing said how they related or offered the step between them. A trail says
- * both at once and is navigable — `artifact-bin › @vivek › My doc` gets you
+ * both at once and is navigable — `artifactbin › @vivek › My doc` gets you
  * back to the profile in one tap, which on a phone is the difference between
  * navigation and the back button.
  *
  * The ROOT is not in this list. The brand mark IS the root crumb and the bar
  * renders it unconditionally, so this function answers only "what comes after
- * artifact-bin".
+ * artifactbin".
  *
  * TWO RULES, both about the 390px screen this is drawn on:
  *

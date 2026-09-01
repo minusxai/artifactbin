@@ -48,7 +48,7 @@ export function materializePlugin(dir: string, base: string, transport: 'curl' |
     fs.writeFileSync(full, contents);
   }
   const pluginDir = path.join(dir, 'plugins', PLUGIN_NAME);
-  // The plugin ships a `.mcp.json` naming the artifact-bin MCP server with NO credentials —
+  // The plugin ships a `.mcp.json` naming the artifactbin MCP server with NO credentials —
   // right for a person, who authenticates it through OAuth in their browser. Here it is a
   // trap: installed_skill modes drop `--bare`, which is exactly what turns MCP discovery on, so
   // Claude Code loaded the server, reported `"status":"needs-auth"`, and left a 401 in every

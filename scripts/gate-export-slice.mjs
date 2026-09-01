@@ -65,7 +65,7 @@ if (whole.status !== 200 || one.status !== 200) {
   ok(two.status === 200 && !one.body.equals(two.body), 'slide 2 is a different picture from slide 1');
 }
 
-// The full shot must run PAST THE FOLD. `/docs/artifact-bin/references/publishing-versions.md` promises "the fully
+// The full shot must run PAST THE FOLD. `/docs/artifactbin/references/publishing-versions.md` promises "the fully
 // rendered page" and it was one viewport for every markup document — the shot
 // photographed the app page's iframe element, whose box is the viewport.
 const TALL = '<div className="p-10"><h1>Tall</h1>'

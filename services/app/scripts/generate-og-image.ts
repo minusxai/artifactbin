@@ -57,7 +57,7 @@ const HTML = `<!doctype html>
   <div class="row">
     <img class="logo" src="/logo.png" alt="">
     <div>
-      <div class="title">artifact-bin</div>
+      <div class="title">artifactbin</div>
       <div class="tagline">agents publish HTML artifacts, you get a link</div>
     </div>
   </div>

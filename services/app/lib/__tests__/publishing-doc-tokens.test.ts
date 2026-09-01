@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const doc = () => readFileSync(new URL('../../skills/artifact-bin/references/publishing.md', import.meta.url), 'utf8');
+const doc = () => readFileSync(new URL('../../skills/artifactbin/references/publishing.md', import.meta.url), 'utf8');
 
 describe('publishing.md and tokens', () => {
   it('points at publishing-auth.md and /tokens/new where it mentions getting a token', () => {

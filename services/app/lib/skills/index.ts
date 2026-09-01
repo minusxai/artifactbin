@@ -5,7 +5,7 @@
  *
  * - `renderDoc(path, base)` — one file, rendered for a caller's origin;
  * - `buildQuickSheet(base)` — the brief every agent reads
- *   (`artifact-bin/SKILL.md`), at its ONE address;
+ *   (`artifactbin/SKILL.md`), at its ONE address;
  * - `buildMcpInstructions(base)` — what an MCP client is told at `initialize`
  *   (the `publishing/mcp.md` Read-first block, which is written for it);
  * - `buildDocsIndex(base)` — the `/docs` and `/llms.txt` listing.
@@ -45,8 +45,8 @@ export function buildQuickSheet(base: string): string {
 }
 
 export function buildMcpInstructions(base: string): string {
-  const block = readFirstBlock(renderDoc('artifact-bin/references/publishing-mcp.md', base));
-  if (!block) throw new Error('skills/artifact-bin/references/publishing-mcp.md has no Read first block');
+  const block = readFirstBlock(renderDoc('artifactbin/references/publishing-mcp.md', base));
+  if (!block) throw new Error('skills/artifactbin/references/publishing-mcp.md has no Read first block');
   return `${block.trim()}\n\n${agentContract(base)}\n`;
 }
 

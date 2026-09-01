@@ -89,7 +89,7 @@ describe('publish.yml: the image set as a whole', () => {
     }
     expect(allImages).toHaveLength(4);
     expect(wf.jobs['publish-proxy']).toBeUndefined();
-    expect(allImages.some((i) => i.includes('artifact-bin-proxy'))).toBe(false);
+    expect(allImages.some((i) => i.includes('artifactbin-proxy'))).toBe(false);
   });
   it('carries no stale multi-target vocabulary (app-lean / target:)', () => {
     const publish = readFileSync(publishPath, 'utf8');
@@ -106,7 +106,7 @@ describe('publish.yml: the image set as a whole', () => {
   it('dispatches the exact commit only after every public image is published', () => {
     const publish = readFileSync(publishPath, 'utf8');
     expect(publish).toContain('needs: [publish, publish-app, publish-sql, publish-browser]');
-    expect(publish).toContain('gh workflow run artifact-bin-staging-deploy.yaml');
+    expect(publish).toContain('gh workflow run artifactbin-staging-deploy.yaml');
     expect(publish).toContain('-f oss_sha="${GITHUB_SHA}"');
   });
 });
@@ -114,7 +114,7 @@ describe('publish.yml: the image set as a whole', () => {
 describe('the public repository boundary', () => {
   it('contains no proprietary deployment identifiers in any tracked source file', () => {
     const files = execFileSync('git', ['ls-files', '-z'], { cwd: root }).toString().split('\0').filter(Boolean);
-    const markers = [['artifact-bin', 'prod'].join('-'), ['afbin', 'prod'].join('_')];
+    const markers = [['artifactbin', 'prod'].join('-'), ['afbin', 'prod'].join('_')];
     const leaks = files.flatMap((file) => {
       const full = path.join(root, file);
       let text = ''; try { text = readFileSync(full, 'utf8'); } catch { return []; }

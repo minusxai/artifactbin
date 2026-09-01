@@ -36,7 +36,7 @@ describe('buildPrompt — token handoff', () => {
     expect(prompt).toContain('http://127.0.0.1:3101');
     expect(prompt).toContain('mx_secret');
     expect(prompt).toContain('abc123');
-    expect(prompt).toContain('/docs/artifact-bin/SKILL.md');
+    expect(prompt).toContain('/docs/artifactbin/SKILL.md');
   });
 
   it('installed_skill+mcp_action names both halves of the full plugin treatment', () => {

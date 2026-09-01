@@ -13,7 +13,7 @@ import { GET as exportImage } from '@/app/a/[id]/export/route';
 import { GET as serveRaw } from '@/app/a/[id]/raw/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as docsRoute } from '@/app/docs/[[...path]]/route';
-const getDoc = (r: Request) => docsRoute(r, { params: Promise.resolve({ path: 'artifact-bin/references/publishing-versions.md' }) });
+const getDoc = (r: Request) => docsRoute(r, { params: Promise.resolve({ path: 'artifactbin/references/publishing-versions.md' }) });
 import { POST as mintTokenRoute } from '@/app/api/tokens/route';
 import { EXPORT_RENDER_GENERATION, exportStoreKey, parseExportCapture, parseExportFormat, parseExportSlide, resetExportRenderer } from '@/lib/export';
 import { objectStore } from '@/lib/object-store';
@@ -149,7 +149,7 @@ describe('GET /a/:id/export', () => {
 
 describe('skill doc', () => {
   it('teaches the export URL', async () => {
-    const text = await (await getDoc(request('/docs/artifact-bin/references/publishing-versions.md'))).text();
+    const text = await (await getDoc(request('/docs/artifactbin/references/publishing-versions.md'))).text();
     expect(text).toContain('/export');
   });
 });

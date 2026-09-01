@@ -99,7 +99,7 @@ describe('jsx tier publish', () => {
   });
 
   /**
-   * artifact-bin is stricter than the ported minusx validator on purpose: an
+   * artifactbin is stricter than the ported minusx validator on purpose: an
    * artifact must be SELF-CONTAINED. An external subresource makes a shared
    * document phone home with every viewer's IP, breaks when that host dies,
    * and — because ?export=png renders the page in our own headless browser —

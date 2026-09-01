@@ -59,7 +59,7 @@ function publicUrlFromPort(port) {
 }
 
 function fromAddress(publicUrl) {
-  return `artifact-bin <login@${new URL(publicUrl).hostname}>`;
+  return `artifactbin <login@${new URL(publicUrl).hostname}>`;
 }
 
 export function defaultAnswers(answerOverrides = {}) {

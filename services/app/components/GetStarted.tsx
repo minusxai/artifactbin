@@ -224,7 +224,7 @@ function ClaudePluginInstallGuide({ surface }: { surface: 'app' | 'web' }) {
             className="mt-0"
           />
         </PluginListStep>
-        <PluginListStep n={3} ariaLabel="Artifact Bin → Install" label="Artifact Bin → Install" />
+        <PluginListStep n={3} ariaLabel="artifactbin → Install" label="artifactbin → Install" />
         <PluginListStep n={4} ariaLabel="Connector → Connect" label="Connector → Connect" />
       </ol>
       <p className={FOOT}>
@@ -253,8 +253,8 @@ function CodexCliPluginGuide() {
         </PluginListStep>
         <PluginListStep
           n={2}
-          ariaLabel="Open the marketplace → Artifact Bin → Install"
-          label="Open the marketplace → Artifact Bin → Install"
+          ariaLabel="Open the marketplace → artifactbin → Install"
+          label="Open the marketplace → artifactbin → Install"
         />
         <PluginListStep
           n={3}
@@ -386,7 +386,7 @@ function InstallCard({ surface, mcpUrl, docsUrl }: { surface: SurfaceKey; mcpUrl
           agent="Pi"
           docsUrl={docsUrl}
           installRoot="~/.pi/agent"
-          installedPath="~/.pi/agent/skills/artifact-bin"
+          installedPath="~/.pi/agent/skills/artifactbin"
         />
       );
     case 'opencode':
@@ -395,7 +395,7 @@ function InstallCard({ surface, mcpUrl, docsUrl }: { surface: SurfaceKey; mcpUrl
           agent="OpenCode"
           docsUrl={docsUrl}
           installRoot="~/.config/opencode"
-          installedPath="~/.config/opencode/skills/artifact-bin"
+          installedPath="~/.config/opencode/skills/artifactbin"
         />
       );
     case 'other':
