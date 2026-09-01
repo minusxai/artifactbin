@@ -45,7 +45,7 @@ export interface ShowcaseDoc {
   kind: ShowcaseKind;
   /**
    * What this document is an example of, phrased to complete the sentence
-   * "You can use artifact-bin to …". A use case with a real published
+   * "You can use artifactbin to …". A use case with a real published
    * document under it is an argument; one without is a claim, which is why
    * this rides the showcase entry rather than living in its own list.
    *
@@ -64,7 +64,7 @@ const ENTRIES: readonly ShowcaseDoc[] = [
   {
     order: 5,
     id: '5fN6kY',
-    title: 'Artifact Bin · 90-Day Product Plan',
+    title: 'artifactbin · 90-Day Product Plan',
     blurb: 'A product plan connecting target outcomes, roadmap, milestones and architecture.',
     kind: 'product plan',
     use: 'create product plans people can align around',
