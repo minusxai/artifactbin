@@ -50,7 +50,7 @@ describe('/docs/human', () => {
     // nine-surface picker and its install commands are one fold deeper.
     fireEvent.click(screen.getByLabelText('Install for my agent'));
     expect(text()).toContain('/plugin marketplace add minusxai/artifactbin-plugins');
-    expect(text()).toContain('/plugin install artifactbin@minusx');
+    expect(text()).toContain('/plugin install artifactbin@artifactbin');
   });
 
   it('uses no em dashes', async () => {
