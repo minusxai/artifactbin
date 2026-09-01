@@ -11,7 +11,7 @@
  * the vitest `ui` project includes.)
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 
 vi.mock('@/auth', () => ({ auth: async () => ({ user: { id: 'usr_docs', email: 'v@minusx.ai' } }) }));
 
@@ -46,6 +46,9 @@ describe('/docs/human', () => {
 
   it('tells you how to install the plugin into a coding agent', async () => {
     render(DocsHuman());
+    // Getting-started leads with the path that needs no setup; the
+    // nine-surface picker and its install commands are one fold deeper.
+    fireEvent.click(screen.getByLabelText('Install for my agent'));
     expect(text()).toContain('/plugin marketplace add minusxai/minusx-plugins');
     expect(text()).toContain('/plugin install artifact-bin@minusx');
   });

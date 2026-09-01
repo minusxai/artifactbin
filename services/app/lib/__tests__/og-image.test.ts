@@ -31,7 +31,7 @@ describe('generic og image for non-artifact pages', () => {
 
   it('the SPA\'s document head names it, absolute, with the title and description', () => {
     const html = readFileSync(path.join(ROOT, 'web', 'index.html'), 'utf8');
-    expect(html).toContain('<title>artifact-bin</title>');
+    expect(html).toContain('<title>artifactbin</title>');
     expect(html).toContain('name="description"');
     // The absolute og:image is stamped by the server from the request's own
     // origin (lib/http publicOrigin), so the page itself carries the file name.

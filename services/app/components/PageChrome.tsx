@@ -81,15 +81,29 @@ export function PageChromeBar({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     lastScrollY.current = Math.max(0, window.scrollY);
-    const update = (nextValue: number) => {
+    /*
+     * THE END OF THE PAGE OUTRANKS THE DIRECTION. Hiding on a downward scroll
+     * is right in the middle of a long page and wrong at the bottom of one:
+     * the reader has stopped looking for more page and started looking for the
+     * controls, the footer is what is under the bar, and there is no further
+     * downward scroll left that could bring it back. The slack absorbs
+     * subpixel rounding and the mobile URL bar, which changes `innerHeight`
+     * under us as it collapses.
+     */
+    const atPageBottom = () =>
+      window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
+    const update = (nextValue: number, bottom = false) => {
       const next = Math.max(0, nextValue);
       const delta = next - lastScrollY.current;
-      if (next <= 24) setScrollVisible(true);
+      if (next <= 24 || bottom) setScrollVisible(true);
       else if (delta >= 4 && next > 72) setScrollVisible(false);
       else if (delta <= -4) setScrollVisible(true);
       if (Math.abs(delta) >= 4 || next <= 24) lastScrollY.current = next;
     };
-    const onWindowScroll = () => update(window.scrollY);
+    // A framed artifact reports only its own scroll offset, so the page's
+    // metrics say nothing about whether IT has reached its end — that path
+    // keeps the direction rule alone rather than guessing.
+    const onWindowScroll = () => update(window.scrollY, atPageBottom());
     const onArtifactScroll = (event: Event) => update((event as CustomEvent<number>).detail);
     window.addEventListener('scroll', onWindowScroll, { passive: true });
     window.addEventListener(PAGE_CHROME_SCROLL_EVENT, onArtifactScroll);
@@ -223,12 +237,12 @@ export function PageMenu({
         </button>
         <a
           href="/"
-          aria-label="Hosted at artifact-bin"
+          aria-label="Hosted at artifactbin"
           className="mb-3 flex items-center gap-2.5 px-2 font-mono text-sm font-semibold text-fg no-underline transition-colors hover:text-accent"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo-128.png" alt="" className="h-7 w-7" />
-          artifact-bin
+          artifactbin
         </a>
 
         {trail.length > 0 && (
@@ -276,7 +290,7 @@ export function PageMenu({
             Disconnect this browser
           </button>
         ) : (
-          link('/login', 'Log in page', <LogIn size={15} strokeWidth={1.5} />, pathname === '/login')
+          link('/login', 'Login', <LogIn size={15} strokeWidth={1.5} />, pathname === '/login')
         )}
       </nav>
     </>
@@ -335,11 +349,25 @@ function AppearancePicker({ mode, onPick }: { mode: AppearanceMode; onPick: (mod
   );
 }
 
+/**
+ * WHAT THE PAGE IS RIGHT NOW. The pre-paint script in web/index.html has
+ * already stamped the reader's stored choice by the time React mounts, so the
+ * document is the only honest source for the control's opening state — a
+ * constant here can only disagree with what the reader is looking at, and did:
+ * it still said 'dark' after the default was flipped to light, so anyone who
+ * had never touched the toggle was told they were in dark mode on a light
+ * page. Reading the attribute also survives the default being flipped again.
+ */
+const currentAppAppearance = (): AppearanceMode =>
+  typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+
 /** One reader choice, two surfaces: the app shell and (when supplied) the
  * artifact runtime. Keeping the app write here means controlled document
  * controls cannot accidentally skip the shell preference. */
 function applyAppAppearance(mode: AppearanceMode) {
-  if (mode === 'light') document.documentElement.dataset.theme = 'light';
+  // Light is the default and carries NO attribute (app/globals.css puts it on
+  // bare `:root`), so dark is the one that gets stamped.
+  if (mode === 'dark') document.documentElement.dataset.theme = 'dark';
   else delete document.documentElement.dataset.theme;
   try { localStorage.setItem('mx_theme', mode); } catch { /* private mode */ }
 }
@@ -368,13 +396,17 @@ export function PageControls({
   const phone = useIsPhoneViewport();
   const [open, setOpen] = useState(false);
   const mobileBar = useMobileBarLayer(open);
-  const [appMode, setAppMode] = useState<AppearanceMode>('dark');
+  const [appMode, setAppMode] = useState<AppearanceMode>(currentAppAppearance);
   const toggle = useExclusiveLayer(open, setOpen);
   const mode = controlledMode ?? appMode;
 
+  // Re-reads the page when a controlled document hands the control back. The
+  // question "what mode is this" is asked HERE and in the initial state, and
+  // it used to be spelled out twice — the second copy still tested for a
+  // 'light' attribute that light, being the default, never carries.
   useEffect(() => {
     if (controlledMode) return;
-    setAppMode(document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
+    setAppMode(currentAppAppearance());
   }, [controlledMode]);
 
   useEffect(() => {

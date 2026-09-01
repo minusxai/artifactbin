@@ -7,6 +7,7 @@ import { AccountPage } from './pages/Account';
 import { ArtifactPage } from './pages/Artifact';
 import { DocsPage } from './pages/Docs';
 import { HomePage } from './pages/Home';
+import { PrivacyPage, TermsPage } from './pages/Legal';
 import { LoginPage } from './pages/Login';
 import { NotFoundPage } from './pages/NotFound';
 import { ProfilePage } from './pages/Profile';
@@ -25,6 +26,10 @@ export function App() {
       <Routes>
         <Route element={<Shell />}>
           <Route path="/" element={<HomePage />} />
+          {/* Landing designs under review, side by side. Static paths, so
+            * they outrank the `/:user/*` profile route. Delete the losers. */}
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/terms" element={<TermsPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/account" element={<AccountPage />} />
           <Route path="/tokens" element={<Navigate to="/account" replace />} />

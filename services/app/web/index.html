@@ -3,11 +3,12 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>artifact-bin</title>
-    <meta name="description" content="A tiny artifact store: agents upload HTML, users get a sharable link." />
+    <title>artifactbin</title>
+    <meta name="description" content="Google Docs for agents. Your agents publish interactive HTML documents you can edit, annotate and share." />
     <link rel="icon" href="/favicon.ico" />
-    <!-- The theme is stamped BEFORE paint, from the same localStorage key the toggle writes. -->
-    <script>try{if(localStorage.getItem('mx_theme')==='light')document.documentElement.dataset.theme='light'}catch(e){}</script>
+    <!-- The theme is stamped BEFORE paint, from the same localStorage key the toggle writes.
+         LIGHT is the default and carries no attribute, so only dark is stamped. -->
+    <script>try{if(localStorage.getItem('mx_theme')==='dark')document.documentElement.dataset.theme='dark'}catch(e){}</script>
   </head>
   <body>
     <div id="root"></div>

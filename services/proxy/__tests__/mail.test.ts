@@ -8,7 +8,7 @@ describe('resendMailer', () => {
     const m = resendMailer({ apiKey: 're_test', baseUrl: 'http://127.0.0.1:4600', from: 'artifact-bin <login@example.com>', fetch: f });
     await m.send({ to: 'a@example.com', kind: 'otp', subject: 'x', text: 'x', otp: '123456' });
     expect(calls[0].url).toBe('http://127.0.0.1:4600/emails');
-    expect(calls[0].body).toMatchObject({ from: 'artifact-bin <login@example.com>', to: ['a@example.com'], subject: '123456 is your artifact-bin login code' });
+    expect(calls[0].body).toMatchObject({ from: 'artifact-bin <login@example.com>', to: ['a@example.com'], subject: '123456 is your artifactbin login code' });
     expect(String(calls[0].body.text)).toContain('123456');
   });
   it('refuses to send without a key, and reports a failed send with its status', async () => {

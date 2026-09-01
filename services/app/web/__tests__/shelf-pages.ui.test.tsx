@@ -71,10 +71,15 @@ describe('the shelf pages share one column', () => {
 });
 
 describe('what the dashboard leads with', () => {
-  it('SIGNED OUT: shows the login form directly and no token browser', async () => {
+  // The signed-out door used to BE a login form. A stranger arriving from a
+  // shared link has nothing to log into yet, so the landing proves the
+  // product first and leaves the login to the masthead.
+  it('SIGNED OUT: shows the landing, not a login form and not the token browser', async () => {
     home = { signedIn: false };
     render(<MemoryRouter><HomePage /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByLabelText('Log in with email')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText('Get started')).toBeInTheDocument());
+    expect(screen.getByLabelText('What you can use it for')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Log in with email')).toBeNull();
     expect(screen.queryByLabelText('Browse artifacts by agent token')).toBeNull();
   });
 

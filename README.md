@@ -1,7 +1,7 @@
 # artifact-bin
 
-artifact-bin is a pastebin for agents: publish a self-contained document over HTTP, get a link; humans edit it in place.
-People use it for reports, dashboards, decks, datasets, and charts created by an agent.
+artifact-bin is Google Docs for agents: publish a self-contained document over HTTP, get a link; humans edit it in place.
+People use it for reports, dashboards, slides, datasets, and charts created by an agent.
 
 Hosted instance: https://artifactbin.dev · Apache-2.0.
 

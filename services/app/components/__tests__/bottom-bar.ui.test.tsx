@@ -5,11 +5,16 @@ import { notifyPageChromeScroll, PageChromeBar, PageControls, PageMenu } from '@
 
 const setWidth = (width: number) => Object.defineProperty(window, 'innerWidth', { value: width, configurable: true });
 const setScrollY = (scrollY: number) => Object.defineProperty(window, 'scrollY', { value: scrollY, configurable: true });
+const setPageHeight = (height: number) => {
+  Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+  Object.defineProperty(document.documentElement, 'scrollHeight', { value: height, configurable: true });
+};
 
 afterEach(() => {
   cleanup();
   setWidth(1024);
   setScrollY(0);
+  setPageHeight(2000);
   vi.unstubAllGlobals();
 });
 
@@ -26,11 +31,36 @@ describe('PageControls', () => {
   it('changes and persists the app appearance', () => {
     render(<PageControls />);
     fireEvent.click(screen.getByLabelText('Open page controls'));
+    // Light is the DEFAULT, so it is the absence of the attribute; dark is what
+    // gets stamped. Both still persist the choice.
     fireEvent.click(screen.getByLabelText('Light mode'));
-    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(document.documentElement.dataset.theme).toBeUndefined();
     expect(localStorage.getItem('mx_theme')).toBe('light');
     fireEvent.click(screen.getByLabelText('Dark mode'));
-    expect(document.documentElement.dataset.theme).toBeUndefined();
+    expect(document.documentElement.dataset.theme).toBe('dark');
+  });
+
+  /*
+   * THE CONTROL REPORTS THE PAGE, IT DOES NOT ASSERT IT. Its initial state was
+   * the constant 'dark', left behind when the default was flipped to light —
+   * so a reader who had never touched the toggle opened it on a light page and
+   * was told they were in dark mode. The pre-paint script in web/index.html
+   * has already stamped the stored choice by the time React mounts, so the
+   * document is the only honest source, and it stays honest through another
+   * flip of the default.
+   */
+  it('opens showing the mode the page is actually in', () => {
+    delete document.documentElement.dataset.theme;
+    render(<PageControls />);
+    fireEvent.click(screen.getByLabelText('Open page controls'));
+    expect(screen.getByLabelText('Light mode')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('Dark mode')).toHaveAttribute('aria-pressed', 'false');
+    cleanup();
+
+    document.documentElement.dataset.theme = 'dark';
+    render(<PageControls />);
+    fireEvent.click(screen.getByLabelText('Open page controls'));
+    expect(screen.getByLabelText('Dark mode')).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('uses a controlled appearance for a document', () => {
@@ -40,10 +70,10 @@ describe('PageControls', () => {
     expect(screen.getByLabelText('Light mode')).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getByLabelText('Dark mode'));
     expect(pick).toHaveBeenCalledWith('dark');
-    expect(document.documentElement.dataset.theme).toBeUndefined();
+    expect(document.documentElement.dataset.theme).toBe('dark');
     expect(localStorage.getItem('mx_theme')).toBe('dark');
     fireEvent.click(screen.getByLabelText('Light mode'));
-    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(document.documentElement.dataset.theme).toBeUndefined();
     expect(pick).toHaveBeenLastCalledWith('light');
   });
 
@@ -98,6 +128,10 @@ describe('PageControls', () => {
 
   it('hides with downward page scroll and returns on reverse scroll', () => {
     setWidth(390);
+    // A page with room left below: the direction rule only applies away from
+    // the end (jsdom's default document has no height, which now reads as
+    // "already at the bottom" — correctly, but not what this test is about).
+    setPageHeight(2000);
     render(
       <PageChromeBar>
         <PageMenu authed />
@@ -111,6 +145,53 @@ describe('PageControls', () => {
     setScrollY(90);
     fireEvent.scroll(window);
     expect(bar).toHaveAttribute('data-scroll-hidden', 'false');
+  });
+
+  /*
+   * THE FOOTER IS THE END OF THE PAGE, AND THE BAR MUST NOT SIT ON IT. The
+   * hide-on-down rule is right in the middle of a long page and wrong at the
+   * bottom of one: a reader who has scrolled all the way down has stopped
+   * looking for more page and started looking for the controls, and there is
+   * no further downward scroll left to bring them back.
+   */
+  it('stays up once the page can scroll no further', () => {
+    setWidth(390);
+    setPageHeight(2000);
+    render(
+      <PageChromeBar>
+        <PageMenu authed />
+        <PageControls />
+      </PageChromeBar>,
+    );
+    const bar = screen.getByRole('toolbar', { name: 'Page actions' });
+    setScrollY(400);
+    fireEvent.scroll(window);
+    expect(bar).toHaveAttribute('data-scroll-hidden', 'true');
+    // 2000 - 800 = 1200 is the last scrollable pixel.
+    setScrollY(1200);
+    fireEvent.scroll(window);
+    expect(bar).toHaveAttribute('data-scroll-hidden', 'false');
+  });
+
+  it('hides again when the reader scrolls back up off the bottom', () => {
+    setWidth(390);
+    setPageHeight(2000);
+    render(
+      <PageChromeBar>
+        <PageMenu authed />
+        <PageControls />
+      </PageChromeBar>,
+    );
+    const bar = screen.getByRole('toolbar', { name: 'Page actions' });
+    setScrollY(1200);
+    fireEvent.scroll(window);
+    expect(bar).toHaveAttribute('data-scroll-hidden', 'false');
+    // Away from the bottom, going DOWN again hides it as before.
+    setScrollY(600);
+    fireEvent.scroll(window);
+    setScrollY(700);
+    fireEvent.scroll(window);
+    expect(bar).toHaveAttribute('data-scroll-hidden', 'true');
   });
 
   it('uses framed artifact scroll samples and stays out of an open sheet', () => {

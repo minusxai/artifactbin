@@ -1,5 +1,5 @@
 /**
- * The product as a pipeline: agent → artifact-bin → permalink. Decorative
+ * The product as a pipeline: agent → artifactbin → permalink. Decorative
  * (aria-hidden) — every page that draws it must carry the same sentence as
  * real text. Server-safe: pure SVG on theme tokens, no client code.
  */
@@ -21,7 +21,7 @@ export default function FlowSchematic({ className = '' }: { className?: string }
       </text>
       <rect x="195" y="6.5" width="112" height="31" rx="5" fill="var(--color-accent-soft)" stroke="var(--color-accent)" />
       <text x="251" y="26" fontSize="12.5" textAnchor="middle" fill="var(--color-accent)">
-        artifact-bin
+        artifactbin
       </text>
       <line x1="315" y1="22" x2="395" y2="22" stroke="var(--color-faint)" markerEnd="url(#mx-flow-arrow)" />
       {/* The deliverable, dressed as what it is: a permalink chip. */}
@@ -32,7 +32,7 @@ export default function FlowSchematic({ className = '' }: { className?: string }
         <line x1="8" x2="16" y1="12" y2="12" />
       </g>
       <text x="436" y="26" fontSize="12.5" fill="var(--color-fg)">
-        a sharable link
+        a shareable link
       </text>
     </svg>
   );

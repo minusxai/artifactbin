@@ -15,7 +15,7 @@
  * the wrong host fails in the reader's client where nothing guards it. The
  * install commands come from lib/plugin-id, same reason.
  */
-import { Bot } from 'lucide-react';
+import { BookOpen, Bot, Cable, ChevronDown, Zap } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import AgentLink from '@/components/AgentLink';
 import {
@@ -28,7 +28,7 @@ import {
   PiIcon,
 } from '@/components/brand-icons';
 import CopyBlock from '@/components/CopyBlock';
-import { Badge, MicroLabel } from '@/components/ui';
+import { Badge } from '@/components/ui';
 import {
   CODEX_APP_PLUGIN_REF,
   CODEX_APP_PLUGIN_REPO_URL,
@@ -104,7 +104,14 @@ const isSurface = (v: string | null): v is SurfaceKey => SURFACES.some((s) => s.
 /** Matches AgentLink's status line exactly — the two option foot lines sit a
  * block apart and must read as the same voice. */
 const FOOT = 'mt-1.5 font-mono text-[11px] text-muted';
-const HTTP_OPTION_NOTE = 'HTTP Skills + Tools via API; paste this in your agent and watch it cook!';
+const HTTP_OPTION_NOTE = 'skills + tools over HTTP; works with any agent';
+/** What installing buys, as three marks rather than a sentence. The first two
+ * are what lands on disk; the third is why it is worth landing. */
+const INSTALL_BENEFITS = [
+  { icon: BookOpen, label: 'installed skills' },
+  { icon: Cable, label: 'mcp tools' },
+  { icon: Zap, label: '1.5\u00d7 token efficient' },
+] as const;
 const PICKER_GROUP = 'grid gap-px overflow-hidden rounded-[4px] border border-edge bg-edge';
 const PICKER_BUTTON =
   'flex h-9 cursor-pointer items-center justify-center gap-1 px-1.5 py-0.5 font-mono text-[10px] leading-[1.1] transition-colors duration-150 focus-visible:z-10';
@@ -123,18 +130,9 @@ function OptionHeader({ n, title, note }: { n: number; title: string; note: stri
   );
 }
 
-function HttpOption({ n = 1 }: { n?: number }) {
-  return (
-    <>
-      <OptionHeader n={n} title="no installation" note={HTTP_OPTION_NOTE} />
-      <AgentLink frame={false} docsLink={false} />
-    </>
-  );
-}
-
 function OrDivider() {
   return (
-    <div aria-hidden className="my-4 flex items-center gap-3">
+    <div aria-hidden className="my-3 flex items-center gap-3">
       <span className="h-px flex-1 bg-edge" />
       <span className="font-mono text-[11px] tracking-[0.14em] text-faint uppercase">or</span>
       <span className="h-px flex-1 bg-edge" />
@@ -142,21 +140,20 @@ function OrDivider() {
   );
 }
 
-function PluginGuideHeader({ n }: { n?: number }) {
-  return n === undefined ? (
+/** An install guide's own masthead. No option badge: the two paths are
+ * numbered once, by the outer structure, and a guide that renumbered itself
+ * used to say "option 2" inside something already labelled option 2. */
+function GuideHeader({ title, note }: { title: string; note: string }) {
+  return (
     <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-      <span className="font-mono text-[11px] tracking-[0.14em] text-fg uppercase">
-        Recommended - Install plugin
-      </span>
-      <span className="font-mono text-[11px] text-muted">skills + tools together; install once</span>
+      <span className="font-mono text-[11px] tracking-[0.14em] text-fg uppercase">{title}</span>
+      <span className="font-mono text-[11px] text-muted">{note}</span>
     </div>
-  ) : (
-    <OptionHeader
-      n={n}
-      title="Recommended - Install plugin"
-      note="skills + tools together; install once"
-    />
   );
+}
+
+function PluginGuideHeader() {
+  return <GuideHeader title="Install plugin" note="skills + tools together; install once" />;
 }
 
 const CLAUDE_AI_PLUGIN_DIRECTORY = 'https://claude.ai/new#directory/plugins';
@@ -191,7 +188,7 @@ function ClaudePluginInstallGuide({ surface }: { surface: 'app' | 'web' }) {
 
   return (
     <>
-      {web ? <PluginGuideHeader /> : <PluginGuideHeader n={2} />}
+      <PluginGuideHeader />
       <ol aria-label="Plugin installation steps" className="mt-3">
         {web ? (
           <PluginListStep
@@ -241,7 +238,7 @@ function ClaudePluginInstallGuide({ surface }: { surface: 'app' | 'web' }) {
 function CodexCliPluginGuide() {
   return (
     <>
-      <PluginGuideHeader n={2} />
+      <PluginGuideHeader />
       <ol aria-label="Plugin installation steps" className="mt-3">
         <PluginListStep
           n={1}
@@ -276,7 +273,7 @@ function CodexCliPluginGuide() {
 function CodexAppPluginGuide() {
   return (
     <>
-      <PluginGuideHeader n={2} />
+      <PluginGuideHeader />
       <ol aria-label="Plugin installation steps" className="mt-3">
         <PluginListStep
           n={1}
@@ -328,10 +325,7 @@ function SkillsInstallGuide({
 
   return (
     <>
-      <HttpOption />
-      <OrDivider />
-      <OptionHeader
-        n={2}
+      <GuideHeader
         title="install the skills"
         note={`global ${agent} skills folder; install once`}
       />
@@ -344,53 +338,46 @@ function SkillsInstallGuide({
   );
 }
 
-function Card({ surface, mcpUrl, docsUrl }: { surface: SurfaceKey; mcpUrl: string; docsUrl: string }) {
+/**
+ * What INSTALLING looks like on the chosen surface — and only that. The
+ * no-installation path used to live inside every branch of this switch, which
+ * meant nine copies of one decision and a card that answered a question the
+ * reader had already been asked above it.
+ */
+function InstallCard({ surface, mcpUrl, docsUrl }: { surface: SurfaceKey; mcpUrl: string; docsUrl: string }) {
   switch (surface) {
     case 'claude-code':
-      // Trying it must cost less than installing it: the no-setup document
-      // leads, and the plugin is the upgrade after the "or".
       return (
         <>
-          <HttpOption />
-          <OrDivider />
-          <OptionHeader
-            n={2}
-            title="Recommended - Install plugin"
+          <GuideHeader
+            title="Install plugin"
             note="ships MCP tools + skills out of the box; no HTTP wrangling"
           />
           <CopyBlock
             text={PLUGIN_INSTALL}
             label="Copy the plugin install commands"
-            trailer='# then just ask: "make me a 5-slide deck about healthy living on artifact-bin"'
+            trailer='# then just ask: "make me a 5-slide deck about healthy living on artifactbin"'
           />
         </>
       );
     case 'claude-code-app':
-      return (
-        <>
-          <HttpOption />
-          <OrDivider />
-          <ClaudePluginInstallGuide surface="app" />
-        </>
-      );
+      return <ClaudePluginInstallGuide surface="app" />;
     case 'codex':
-      return (
-        <>
-          <HttpOption />
-          <OrDivider />
-          <CodexCliPluginGuide />
-        </>
-      );
+      return <CodexCliPluginGuide />;
     case 'codex-app':
+      return <CodexAppPluginGuide />;
+    case 'chatgpt':
+      // The one surface with nothing to install. Saying so is the answer;
+      // re-showing the no-installation path would pretend it is a choice.
       return (
         <>
-          <HttpOption />
-          <OrDivider />
-          <CodexAppPluginGuide />
+          <GuideHeader title="nothing to install" note="chatgpt.com takes no plugin or skills" />
+          <p className={FOOT}>
+            Use the no-installation path above — paste the instruction into the chat and it will
+            read the docs and publish.
+          </p>
         </>
       );
-    case 'chatgpt':
-      return <HttpOption />;
     case 'claude-ai':
       return <ClaudePluginInstallGuide surface="web" />;
     case 'pi':
@@ -414,13 +401,7 @@ function Card({ surface, mcpUrl, docsUrl }: { surface: SurfaceKey; mcpUrl: strin
     case 'other':
       return (
         <>
-          <HttpOption />
-          <OrDivider />
-          <OptionHeader
-            n={2}
-            title="connect the MCP server"
-            note="for any MCP-compatible agent"
-          />
+          <GuideHeader title="connect the MCP server" note="for any MCP-compatible agent" />
           <CopyBlock text={mcpUrl} label="Copy the connector URL" />
           <p className={FOOT}>paste it into your agent’s MCP settings, then approve the connection</p>
         </>
@@ -431,12 +412,16 @@ function Card({ surface, mcpUrl, docsUrl }: { surface: SurfaceKey; mcpUrl: strin
 export default function GetStarted({
   heading = true,
   frame = true,
+  reveal = false,
 }: {
   heading?: boolean;
   /** false = no panel chrome, for hosts that already draw a card around it. */
   frame?: boolean;
+  /** Show the agent instruction rather than only copying it (AgentLink). */
+  reveal?: boolean;
 }) {
   const [surface, setSurface] = useState<SurfaceKey>('claude-code');
+  const [installOpen, setInstallOpen] = useState(false);
   // Empty until hydration, so server and client render the same relative URL;
   // the absolute one lands with the first client paint.
   const [origin, setOrigin] = useState('');
@@ -479,83 +464,166 @@ export default function GetStarted({
 
   return (
     <section aria-label="Get started">
-      {/* Off where the host page brings its own section header (/docs/human). */}
-      {heading && (
-        <h2 className="mb-3">
-          <MicroLabel>getting started</MicroLabel>
-        </h2>
-      )}
-      <div className={frame ? 'rounded-[6px] border border-edge bg-surface px-4 py-4' : undefined}>
-      <p className="font-mono text-xs text-fg">
-        <span className="text-accent">$</span> choose your agent ...
-        <span aria-hidden className="caret ml-1 inline-block h-3 w-[7px] translate-y-[2px] bg-accent" />
-      </p>
-      <div className="mt-3 grid grid-cols-[3.75rem_minmax(0,1fr)] items-stretch gap-x-2 gap-y-1.5">
-        <span className="flex items-center font-mono text-[10px] tracking-[0.12em] text-faint uppercase">
-          family
-        </span>
-        <div
-          role="group"
-          aria-label="Agent families"
-          className={`${PICKER_GROUP} grid-cols-3 sm:grid-cols-5`}
-        >
-          {AGENT_FAMILIES.map((item) => (
-            <button
-              key={item.key}
-              aria-label={`Choose ${item.label} agent family`}
-              aria-pressed={item.key === activeFamily.key}
-              onClick={() => pickFamily(item.key)}
-              className={`${PICKER_BUTTON} ${
-                item.key === activeFamily.key
-                  ? 'bg-accent-soft text-accent'
-                  : 'bg-surface text-muted hover:bg-raised hover:text-fg'
-              }`}
-            >
-              <span className="shrink-0 text-fg">
-                <item.icon size={item.iconSize} />
-              </span>
-              <span className="min-w-0 max-h-[2.2em] overflow-hidden text-center">{item.label}</span>
-            </button>
-          ))}
-        </div>
+      <div className={frame ? 'rounded-[6px] border border-edge bg-surface px-4 py-3.5' : undefined}>
+        {/* The panel names itself. It used to open with a terminal prompt —
+          * `$ choose your agent ...` — which described the widget below it
+          * rather than saying what this block IS. */}
+        {heading && (
+          <p className="mb-2.5 font-mono text-[11px] tracking-[0.14em] text-fg uppercase text-muted">
+            Getting started
+          </p>
+        )}
 
-        <span className="flex items-center font-mono text-[10px] tracking-[0.12em] text-faint uppercase">
-          surface
-        </span>
-        <div
-          role="group"
-          aria-label="Agent surfaces"
-          className={`${PICKER_GROUP} ${surfaceColumns}`}
+        {/* PATH ONE. Trying it must cost less than installing it, so the
+          * no-setup document leads and needs no choice made first. */}
+        <OptionHeader n={1} title="no installation" note={HTTP_OPTION_NOTE} />
+        <AgentLink frame={false} docsLink={false} reveal={reveal} />
+
+        <OrDivider />
+
+        {/* PATH TWO, FOLDED. The nine-surface picker used to be the first
+          * thing on the page: a form to fill in before the reader knew what
+          * they were choosing between, and irrelevant to everyone taking path
+          * one. It opens when someone asks for it. */}
+        <button
+          aria-label="Install for my agent"
+          aria-expanded={installOpen}
+          onClick={() => setInstallOpen((open) => !open)}
+          // A DOOR, NOT A CAPTION. Option 1 is a solid button and option 2
+          // was bare text on the panel's own ground: offered as equal choices,
+          // drawn as a button beside a footnote. It gets its own raised
+          // ground, and the border arrives on hover so it is a target without
+          // being a box inside a box.
+          className="group/inst w-full cursor-pointer rounded-[5px] border border-transparent bg-raised px-3 py-2 text-left transition-colors hover:border-accent/40 hover:bg-comment"
         >
-          {visibleSurfaces.map((item) => (
-            <button
-              key={item.key}
-              aria-label={`Use in ${item.label}`}
-              aria-pressed={item.key === surface}
-              onClick={() => pick(item.key)}
-              className={`${PICKER_BUTTON} ${
-                item.key === surface
-                  ? 'bg-accent-soft text-accent'
-                  : 'bg-surface text-muted hover:bg-raised hover:text-fg'
-              }`}
-            >
-              <span className="shrink-0 text-fg">
-                <item.icon size={item.iconSize} />
+          <span className="flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+            <span className="flex items-center gap-2.5">
+              <Badge tone="accent">option 2</Badge>
+              <span className="font-mono text-[11px] tracking-[0.14em] text-fg uppercase">
+                install for your agent
               </span>
-              <span className="min-w-0 max-h-[2.2em] overflow-hidden text-center">{item.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-      {/* Keyed so the reveal replays on every pick — the swap should read as
-        * an answer arriving, not text quietly mutating in place. */}
-      <div key={surface} aria-label="Setup instructions" className="reveal mt-4 border-t border-edge pt-4">
-        <Card
-          surface={surface}
-          mcpUrl={`${origin}/mcp`}
-          docsUrl={`${origin}/docs?download=true`}
-        />
-      </div>
+            </span>
+            <span className="flex min-w-0 flex-1 items-center justify-end gap-3">
+              <span
+                aria-hidden
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-accent/40 bg-accent-soft text-accent transition-colors group-hover/inst:border-accent group-hover/inst:bg-accent group-hover/inst:text-bg"
+              >
+                <ChevronDown
+                  size={15}
+                  className={`transition-transform duration-200 ${installOpen ? 'rotate-180' : ''}`}
+                />
+              </span>
+            </span>
+          </span>
+
+          <span className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            {/* WHICH agents, in their own marks — the row promises a per-agent
+              * setup and this is the shortest way to show it is kept. Held
+              * BACK at rest: eight brand marks at full saturation are a scatter
+              * of unrelated colours, and the row's job at rest is to be one
+              * thing. They come up together when the row is engaged. */}
+            <span
+              aria-hidden
+              className="flex items-center gap-3 text-fg opacity-55 transition-opacity duration-200 group-hover/inst:opacity-100"
+            >
+              {AGENT_MARKS.map((mark) => (
+                <mark.icon key={mark.key} size={mark.iconSize - 3} />
+              ))}
+            </span>
+            {/* Three facts, so three objects. Separated only by whitespace
+              * they scanned as one run-on phrase. */}
+            <span className="flex flex-wrap items-center gap-1.5">
+              {INSTALL_BENEFITS.map((benefit, index) => (
+                <span
+                  key={benefit.label}
+                  className={`items-center gap-1.5 rounded-[3px] border border-edge px-1.5 py-1 font-mono text-[10px] whitespace-nowrap text-muted ${
+                    // The last one is the reason; the other two are the parts.
+                    // A phone keeps the reason and drops the inventory.
+                    index === INSTALL_BENEFITS.length - 1 ? 'inline-flex' : 'hidden sm:inline-flex'
+                  }`}
+                >
+                  <benefit.icon size={11} className="shrink-0 text-accent" />
+                  {benefit.label}
+                </span>
+              ))}
+            </span>
+          </span>
+        </button>
+
+        {installOpen && (
+          <div className="reveal mt-2.5">
+            <div className="grid grid-cols-[3.75rem_minmax(0,1fr)] items-stretch gap-x-2 gap-y-1.5">
+              <span className="flex items-center font-mono text-[10px] tracking-[0.12em] text-faint uppercase">
+                family
+              </span>
+              <div
+                role="group"
+                aria-label="Agent families"
+                className={`${PICKER_GROUP} grid-cols-3 sm:grid-cols-5`}
+              >
+                {AGENT_FAMILIES.map((item) => (
+                  <button
+                    key={item.key}
+                    aria-label={`Choose ${item.label} agent family`}
+                    aria-pressed={item.key === activeFamily.key}
+                    onClick={() => pickFamily(item.key)}
+                    className={`${PICKER_BUTTON} ${
+                      item.key === activeFamily.key
+                        ? 'bg-accent-soft text-accent'
+                        : 'bg-surface text-muted hover:bg-raised hover:text-fg'
+                    }`}
+                  >
+                    <span className="shrink-0 text-fg">
+                      <item.icon size={item.iconSize} />
+                    </span>
+                    <span className="min-w-0 max-h-[2.2em] overflow-hidden text-center">
+                      {item.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              <span className="flex items-center font-mono text-[10px] tracking-[0.12em] text-faint uppercase">
+                surface
+              </span>
+              <div role="group" aria-label="Agent surfaces" className={`${PICKER_GROUP} ${surfaceColumns}`}>
+                {visibleSurfaces.map((item) => (
+                  <button
+                    key={item.key}
+                    aria-label={`Use in ${item.label}`}
+                    aria-pressed={item.key === surface}
+                    onClick={() => pick(item.key)}
+                    className={`${PICKER_BUTTON} ${
+                      item.key === surface
+                        ? 'bg-accent-soft text-accent'
+                        : 'bg-surface text-muted hover:bg-raised hover:text-fg'
+                    }`}
+                  >
+                    <span className="shrink-0 text-fg">
+                      <item.icon size={item.iconSize} />
+                    </span>
+                    <span className="min-w-0 max-h-[2.2em] overflow-hidden text-center">
+                      {item.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Keyed so the reveal replays on every pick — the swap should read
+              * as an answer arriving, not text quietly mutating in place. */}
+            <div
+              key={surface}
+              aria-label="Setup instructions"
+              className="reveal mt-3 border-t border-edge pt-3"
+            >
+              <InstallCard
+                surface={surface}
+                mcpUrl={`${origin}/mcp`}
+                docsUrl={`${origin}/docs?download=true`}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );

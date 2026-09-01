@@ -61,7 +61,7 @@ const cspViolations = [];
 page.on('console', (m) => { if (/Content Security Policy|form-action/i.test(m.text())) cspViolations.push(m.text().slice(0, 160)); });
 
 await page.goto(authorizeUrl, { waitUntil: 'load' });
-check(/Connect to artifact-bin/.test(await page.locator('body').innerText()), 'the consent screen renders');
+check(/Connect to artifactbin/.test(await page.locator('body').innerText()), 'the consent screen renders');
 
 // The guest grant is gone: a token minted here would go to the CLIENT and never
 // be shown to the human, so nothing could ever claim what it publishes.

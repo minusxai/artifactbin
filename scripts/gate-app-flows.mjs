@@ -150,7 +150,7 @@ const EMAIL = `mxmx_test_appflows_${Date.now().toString(36)}@example.com`;
 await p.goto(B, { waitUntil: 'load' });
 // All navigation lives behind the hamburger.
 await p.click('[aria-label="Open menu"]');
-ok((await p.locator('[aria-label="Log in page"]').count()) === 1, 'the menu offers the login link when logged out');
+ok((await p.locator('[aria-label="Login"]').count()) === 1, 'the menu offers the login link when logged out');
 ok((await p.locator('[aria-label="Log in"]').count()) === 0, 'no duplicate "Log in" accessible name');
 await p.keyboard.press('Escape');
 // One flow for both: a verified code for an unknown address creates the account.
@@ -250,12 +250,16 @@ ok(before !== after, 'a bound select re-runs the query and the live Number follo
 ok((await surface().locator('svg.marks, canvas').count()) > 0, 'chart renders');
 await p.click('[aria-label="Open artifact controls"]');
 ok((await p.locator('[aria-label="Edit artifact"]').count()) === 1, 'artifact controls offer Edit to the owner');
+// LIGHT is the app's default and carries NO attribute (app/globals.css puts
+// it on bare `:root`), so DARK is the one that gets stamped — the reverse of
+// what this read when dark was the default, which is exactly the shape of
+// drift a gate reading the attribute is here to catch.
 await p.click('[aria-label="Light mode"]');
-await p.waitForFunction(() => document.documentElement.dataset.theme === 'light');
+await p.waitForFunction(() => !document.documentElement.dataset.theme);
 await surface().locator('html:not(.dark)').waitFor({ timeout: 8000 });
 ok(true, 'one appearance choice turns both the app and document light');
 await p.click('[aria-label="Dark mode"]');
-await p.waitForFunction(() => !document.documentElement.dataset.theme);
+await p.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
 await surface().locator('html.dark').waitFor({ timeout: 8000 });
 ok(true, 'the same appearance choice turns both the app and document dark');
 await p.keyboard.press('Escape');

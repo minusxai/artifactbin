@@ -67,7 +67,7 @@ describe('page menu', () => {
   it('offers log in when there is no session', () => {
     render(<PageMenu authed={false} />);
     fireEvent.click(screen.getByLabelText('Open menu'));
-    expect(screen.getByLabelText('Log in page')).toBeInTheDocument();
+    expect(screen.getByLabelText('Login')).toBeInTheDocument();
     expect(screen.queryByLabelText('Sign out')).toBeNull();
   });
 });

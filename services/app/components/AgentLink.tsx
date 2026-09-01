@@ -12,6 +12,7 @@
 import { Check, Copy, Loader2 } from 'lucide-react';
 import { useRouter } from '@/lib/navigation';
 import { useState } from 'react';
+import CopyBlock from '@/components/CopyBlock';
 import { Tooltip } from '@/components/Tooltip';
 import { LINK } from '@/components/ui';
 
@@ -24,16 +25,41 @@ interface StartResponse {
 
 export default function AgentLink({
   docsLink = true,
-  frame = true
+  frame = true,
+  reveal = false,
+  size = 'panel',
 }: {
   docsLink?: boolean;
+  /**
+   * HOW BIG THE BUTTON IS, and nothing else. `panel` fills the getting-started
+   * card, which is the page's primary action; `inline` matches the footer's
+   * own row of small controls, where the same act is offered again to a reader
+   * who has finished reading. The BEHAVIOUR is deliberately not a prop — the
+   * two surfaces mint the same way, or they will drift into meaning different
+   * things.
+   */
+  size?: 'panel' | 'inline';
   /** false = just the button and its status line, for hosts with their own chrome. */
   frame?: boolean;
+  /**
+   * SHOW THE INSTRUCTION RATHER THAN ONLY COPYING IT.
+   *
+   * A button that silently fills the clipboard and navigates away asks for
+   * trust it has not earned — the reader never sees what they just put in
+   * their paste buffer, and one of the two shapes carries a TOKEN. With this
+   * on, the real text is shown after the click and the page does NOT navigate
+   * away from what it just revealed. A redacted PREVIEW before the click was
+   * tried and removed: it cost four lines of the panel to show a sentence
+   * with its two interesting parts blanked out.
+   */
+  reveal?: boolean;
   /** The idle status line; a host can prefix its own context onto it. */
 }) {
   const router = useRouter();
   const [state, setState] = useState<'idle' | 'working' | 'done' | 'error'>('idle');
   const [message, setMessage] = useState('');
+  const [prompt, setPrompt] = useState('');
+  const [docUrl, setDocUrl] = useState('');
 
   const start = async () => {
     if (state === 'working') return;
@@ -51,6 +77,8 @@ export default function AgentLink({
       }
       // The server decides the paste from the caller's session state; this
       // client only copies that decision and keeps no second wording rule.
+      setDocUrl(`/a/${body.id}`);
+      if (typeof body.prompt === 'string') setPrompt(body.prompt);
       try {
         if (typeof body.prompt !== 'string') throw new Error('start response did not include an agent paste');
         await navigator.clipboard.writeText(body.prompt);
@@ -61,8 +89,10 @@ export default function AgentLink({
       setState('done');
       // Land on the live document — after a beat. Navigating the same tick
       // swallows the "copied" feedback, and a copy nobody saw happen might as
-      // well not have happened.
-      setTimeout(() => router.push(`/a/${body.id}`), 1200);
+      // well not have happened. When the instruction is REVEALED there is
+      // something on screen worth staying for, so the reader leaves by
+      // choosing to.
+      if (!reveal) setTimeout(() => router.push(`/a/${body.id}`), 1200);
     } catch {
       setState('error');
       setMessage('could not reach the server');
@@ -81,14 +111,18 @@ export default function AgentLink({
           onClick={() => void start()}
           disabled={state === 'working'}
           aria-label="Create a live document for my agent"
-          className="mt-2 flex w-full cursor-pointer items-center justify-center gap-2 rounded-[4px] border border-accent bg-accent px-2.5 py-2 font-mono text-xs font-semibold text-bg transition-all hover:brightness-110 disabled:opacity-60"
+          className={`flex cursor-pointer items-center justify-center rounded-[4px] border border-accent bg-accent font-semibold text-bg transition-all hover:brightness-110 disabled:opacity-60 ${
+            size === 'inline'
+              ? 'gap-1.5 px-2.5 py-1.5 font-mono text-[11.5px]'
+              : 'mt-2 w-full gap-2 px-2.5 py-2 font-mono text-xs'
+          }`}
         >
           <span className="min-w-0 break-words">
             {state === 'working'
               ? 'creating your document…'
               : state === 'done'
                 ? message
-                : 'create an artifact + copy the agent instruction'}
+                : 'copy agent instructions'}
           </span>
           {state === 'working' ? (
             <Loader2 size={13} className="shrink-0 animate-spin" />
@@ -103,6 +137,17 @@ export default function AgentLink({
         <p role="alert" className="mt-1.5 font-mono text-[11px] text-danger">
           {message}
         </p>
+      )}
+      {reveal && state === 'done' && prompt && (
+        <div className="mt-2">
+          <CopyBlock className="mt-0" text={prompt} label="Copy the agent instruction again" />
+          <p className="mt-1.5 font-mono text-[11px] text-muted">
+            <a href={docUrl} className={LINK}>
+              open your document →
+            </a>{' '}
+            empty until your agent writes to it
+          </p>
+        </div>
       )}
     </>
   );
