@@ -110,51 +110,43 @@ export interface Reason {
   /** What the illustration DEPICTS — never a repeat of the title. */
   alt: string;
   body: string;
-  /** A checkable fact — a number or a hard rule. Never a superlative. */
-  proof: string;
 }
 
 export const REASONS: readonly Reason[] = [
   {
-    title: 'Ship beautiful work',
+    title: "Make work you're proud to share",
     image: 'beautiful',
-    alt: 'A crate of finished documents, each one already laid out and charted',
-    body: 'Hand-curated themes, templates and visualizations look polished by default, and are infinitely customizable.',
-    proof: `${STORY_THEME_NAMES.length} themes, ${STORY_TEMPLATE_NAMES.length} templates, and your own CSS over any of it.`,
+    alt: 'A crate filled with beautifully finished documents, charts and presentations',
+    body: "You shouldn't have to settle for slop-looking artifacts. Start with thoughtfully designed themes, templates and visualizations, then make every detail your own.",
   },
   {
-    title: 'Make changes directly',
+    title: 'Change it with your own hands',
     image: 'human_editable',
-    alt: 'A hand lifting a chart tile out of a document and setting it somewhere else',
-    body: 'A built-in visual editor lets you edit the text, restyle a section and refine a chart without another round of prompting.',
-    proof: 'A full visual editor, built into every artifact.',
+    alt: 'A hand lifting a chart from a document and moving it into place',
+    body: "Sometimes it's easier to just fix the thing yourself than have a million back-and-forths with your agent.",
   },
   {
-    title: 'Collaborate in context',
+    title: 'Work on it together',
     image: 'collaboration',
-    alt: 'Two hands and two robot arms pinning comments to the same document',
-    body: 'Inline annotations give teammates and agents one shared place to review, respond, and resolve feedback.',
-    proof: 'Humans and agents collaborate on the same artifact.',
+    alt: 'Two people and two robot arms leaving notes on the same document',
+    body: 'Leave feedback exactly where it belongs. Your human and agent teammates can respond, make changes and resolve comments.',
   },
   {
-    title: 'Spend fewer tokens',
+    title: "Don't waste tokens on data",
     image: 'token-efficient',
-    alt: 'A query lamp reading one lit row out of a wall of stored data',
-    body: 'Datasets live outside the artifact, and can be queried via DuckDB SQL. 10× more token-efficient for data-heavy artifacts.',
-    proof: 'Up to 10× more token-efficient for data-heavy artifacts.',
+    alt: 'A lamp illuminating one useful row in a large table of stored data',
+    body: 'Keep large datasets outside the artifact and query only what you need with DuckDB SQL. Your agent work without hauling the entire dataset into context.',
   },
   {
-    title: 'Use any agent, any harness',
+    title: 'Bring your favorite agent',
     image: 'anyagent',
-    alt: 'A terminal, a robot and other machines all feeding one shared bin of documents',
-    body: 'A simple HTTP protocol works with Claude Code, Codex, Pi, Opencode, plain curl, and whatever comes next.',
-    proof: 'One URL teaches any agent the entire integration.',
+    alt: 'Different coding agents and tools feeding work into one shared bin',
+    body: 'Use Claude Code, Codex, Pi, OpenCode, plain curl or whatever you try next. If it can make an HTTP request, it can publish to Artifactbin.',
   },
   {
-    title: 'Own the whole stack',
+    title: 'Artifactbin is truly yours',
     image: 'bin',
-    alt: 'A crate holding every kind of published document at once',
-    body: 'An Apache-2.0, self-hostable stack keeps your artifacts and infrastructure under your control.',
-    proof: 'Open source, self-hosted, and free from vendor lock-in.',
+    alt: 'A sturdy crate holding every kind of published artifact',
+    body: "Artifactbin is open source and self-hostable, so your artifacts and the infrastructure behind them stay in your hands.",
   },
 ];

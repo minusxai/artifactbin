@@ -8,10 +8,8 @@
  * document's picture is always the document — there is no second asset to
  * keep in step with it, and nothing to re-shoot when its author edits it.
  *
- * `version` pins the picture rather than describing it: the capture is cached
- * for a day by artifact and version (lib/export), so bumping this number is
- * how a stale card is retired. Leave it at the version you curated and the
- * wall keeps showing what you looked at.
+ * The address carries no version: the card is whatever the document looks
+ * like now, so an author's edit needs nothing curated here to follow it.
  *
  * A document earns a place here by being worth OPENING — the wall is a row of
  * links, not decoration, so every entry needs a title a stranger can act on

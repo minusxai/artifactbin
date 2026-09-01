@@ -56,12 +56,11 @@ describe('the showcase list', () => {
     }
   });
 
-  it('pictures a document with the document — its own public card capture, version-pinned', () => {
+  it('pictures a document with the document — its own public card capture', () => {
     for (const doc of SHOWCASE) {
       const url = showcaseCardUrl(doc);
       expect(url.startsWith(`${SHOWCASE_ORIGIN}/a/${doc.id}/export`)).toBe(true);
       expect(url).toContain('mode=card');
-      expect(url).toContain(`v=${doc.version}`);
       // A 1600×840 PNG is ~800 KB for a picture drawn at 380px wide.
       expect(url).toContain('format=jpg');
     }
