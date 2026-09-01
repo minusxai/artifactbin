@@ -364,3 +364,38 @@ body {
     transform: translateY(100%);
   }
 }
+
+/*
+ * THE FAQ DISCLOSURES OPEN BY SLIDING, not by snapping.
+ *
+ * A <details> normally jumps to its full height because `auto` is not an
+ * animatable value. `interpolate-size: allow-keywords` makes it one — set HERE
+ * rather than on :root, because it is inherited and a global switch would opt
+ * every `auto` transition on the site into a behaviour nobody asked for.
+ *
+ * PROGRESSIVE, NEVER LOAD-BEARING: a browser without ::details-content or
+ * interpolate-size simply opens the answer instantly, which is the plain
+ * <details> behaviour and is completely fine. Nothing about whether the text is
+ * reachable depends on any of this.
+ */
+.faq-item {
+  interpolate-size: allow-keywords;
+}
+
+.faq-item::details-content {
+  block-size: 0;
+  overflow: hidden;
+  transition:
+    block-size 220ms ease,
+    content-visibility 220ms allow-discrete;
+}
+
+.faq-item[open]::details-content {
+  block-size: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .faq-item::details-content {
+    transition: none;
+  }
+}
