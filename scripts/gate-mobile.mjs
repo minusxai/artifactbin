@@ -189,6 +189,36 @@ const cols = await wide.evaluate(() => {
   return getComputedStyle(el).gridTemplateColumns.split(' ').length;
 });
 ok(cols >= 2, `desktop: the popover keeps its multi-column grid (${cols} columns)`);
+
+/*
+ * AND IT MUST BE REACHABLE, NOT MERELY PRESENT. The toolbar's left group is a
+ * scroller so the controls can slide on a phone; `overflow-x: auto` makes the
+ * OTHER axis `auto` too, turning that group into a ~26px clip box, and an
+ * `absolute top-full` panel opened straight into it. Everything above still
+ * passed — the panel had a real bounding box, two grid columns and no
+ * horizontal overflow — while painting nothing and letting every click fall
+ * through to the document iframe. So the check is a hit test: whatever is at
+ * the middle of the first card has to BE the card.
+ */
+const reachable = (page, sel) => page.evaluate((s) => {
+  const el = document.querySelector(s);
+  if (!el) return { found: false };
+  const r = el.getBoundingClientRect();
+  const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  return { found: true, reachable: !!(hit && el.contains(hit)), hit: hit?.tagName ?? null };
+}, sel);
+
+const card = await reachable(wide, '[aria-label^="Theme "]');
+ok(card.reachable, `desktop: a theme card can actually be clicked (hit ${card.hit})`);
+await wide.keyboard.press('Escape');
+await wide.waitForTimeout(300);
+
+// The mode dropdown shares the scroller and so shared the bug.
+await wide.locator('[aria-label="Color mode"]').click({ timeout: 30_000 });
+await wide.waitForSelector('[aria-label="Color modes"]', { timeout: 10_000 });
+await wide.waitForTimeout(200);
+const option = await reachable(wide, '[aria-label="Color mode dark"]');
+ok(option.reachable, `desktop: a colour-mode option can actually be clicked (hit ${option.hit})`);
 await wide.close();
 
 await browser.close();

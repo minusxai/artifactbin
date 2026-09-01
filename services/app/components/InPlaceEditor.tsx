@@ -50,7 +50,9 @@ import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import type { StoryEditSelection, StoryIslandDataflow } from '@/lib/story-runtime/contract';
 
 
-const MonacoEditor = dynamic(() => import('@monaco-editor/react'), { ssr: false });
+// Monaco is multiple megabytes and belongs to `code` mode alone; the module
+// behind this import also self-hosts it (components/SourceEditor).
+const SourceEditor = dynamic(() => import('@/components/SourceEditor'), { ssr: false });
 
 export interface EditorArtifact {
   id: string;
@@ -219,8 +221,16 @@ export default function InPlaceEditor({
   }, [showInDocument]);
 
   // ── persistence (unchanged protocol) ──────────────────────────────────────
+  /*
+   * The ONE path that replaces the source from outside. The code pane cannot
+   * tell that apart from an echo of its own typing by looking at the text (both
+   * are just "a different string arrived"), and guessing costs keystrokes — so
+   * it is told, and this counter is the telling.
+   */
+  const [sourceRevision, setSourceRevision] = useState(0);
   const onRemoteDocument = useCallback((next: string) => {
     setSource(next);
+    setSourceRevision((n) => n + 1);
     showInDocument(next);
   }, [showInDocument]);
 
@@ -699,22 +709,12 @@ export default function InPlaceEditor({
           style={{ top: EDIT_BAR_H }}
           aria-label="Source pane"
         >
-          <MonacoEditor
-            height="100%"
-            defaultLanguage="html"
+          <SourceEditor
             value={source}
-            onChange={(next) => {
-              const text = next ?? '';
+            revision={sourceRevision}
+            onChange={(text) => {
               setSource(text);
               queue({ source: text });
-            }}
-            theme="vs-dark"
-            options={{
-              minimap: { enabled: false }, fontSize: 12, wordWrap: 'on',
-              scrollBeyondLastLine: false, automaticLayout: true,
-              // Every interactive element gets a label (house rule); Monaco's
-              // own textarea takes it from here.
-              ariaLabel: 'Markup source',
             }}
           />
         </div>

@@ -131,14 +131,26 @@ describe('ThemePicker', () => {
       expect(panel.className).not.toContain('w-[26rem]');
     });
 
-    it('keeps hanging off the trigger on a wide one', () => {
+    /**
+     * Still anchored to the trigger on a wide screen — but PORTALLED there
+     * rather than `absolute` inside it. The old in-place panel was clipped out
+     * of existence by the editor toolbar's `overflow-x-auto` scroller, which
+     * has no visible symptom at all: right box, right columns, no page
+     * overflow, and nothing painted (see AnchoredPanel, and the hit test in
+     * scripts/gate-mobile.mjs). So the assertion moved off `absolute` — the
+     * mechanism that caused it — and onto what makes the panel reachable: it
+     * is not a sheet, it is not inside the box that rendered it, and it still
+     * lays the cards out in two columns.
+     */
+    it('keeps hanging off the trigger on a wide one, portalled out of it', () => {
       setWidth(1280);
-      render(<ThemePicker value={null} onPick={vi.fn()} />);
+      const { container } = render(<ThemePicker value={null} onPick={vi.fn()} />);
       fireEvent.click(screen.getByLabelText('Theme'));
 
       const panel = screen.getByLabelText('Themes');
-      expect(panel.style.position).toBe('');
-      expect(panel.className).toContain('absolute');
+      expect(panel.getAttribute('role')).toBe('group');
+      expect(container.contains(panel)).toBe(false);
+      expect(document.body.contains(panel)).toBe(true);
       expect(panel.className).toContain('grid-cols-2');
     });
   });

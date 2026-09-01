@@ -16,9 +16,8 @@
  * the document's explicit colorMode, else each theme's own default.
  */
 import { Check, ChevronDown, X } from 'lucide-react';
-import { useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react';
-import MobileSheet, { isPhoneViewport } from '@/components/MobileSheet';
-import { Tooltip } from '@/components/Tooltip';
+import { useState } from 'react';
+import AnchoredPanel from '@/components/AnchoredPanel';
 import { getStoryTheme, resolveStoryMode } from '@/lib/data/story/story-themes';
 import { STORY_THEME_NAMES, type StoryThemeName } from '@/lib/validation/atlas-schemas';
 
@@ -54,30 +53,6 @@ const ThemeDot = ({ theme, colorMode = null, className = '' }: { theme: StoryThe
   );
 };
 
-/** Desktop popovers share one outside-pointer/Escape dismissal contract. */
-function usePopoverDismiss(
-  boxRef: RefObject<HTMLDivElement | null>,
-  open: boolean,
-  sheet: boolean,
-  setOpen: Dispatch<SetStateAction<boolean>>,
-) {
-  useEffect(() => {
-    if (!open || sheet) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (!boxRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('pointerdown', onPointerDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [boxRef, open, setOpen, sheet]);
-}
-
 /**
  * The AUTHOR'S DEFAULT color mode, as a dropdown beside the theme picker.
  * Three states, because null is real: an explicit light, an explicit dark, or
@@ -92,13 +67,6 @@ export const ModeChip = ({ mode, themeDefault, onPick }: {
   onPick: (mode: 'light' | 'dark' | null) => void;
 }) => {
   const [open, setOpen] = useState(false);
-  /** On a phone the options open as a bottom sheet (the ThemePicker rule). */
-  const [sheet, setSheet] = useState(false);
-  const boxRef = useRef<HTMLDivElement>(null);
-
-  // Not while the SHEET is up: it portals to <body>, so every tap inside it
-  // is "outside" this box — its own dismissal owns closing there.
-  usePopoverDismiss(boxRef, open, sheet, setOpen);
 
   const options: Array<{ value: 'light' | 'dark' | null; label: string; aria: string }> = [
     { value: null, label: `theme default (${themeDefault})`, aria: 'Color mode theme default' },
@@ -107,63 +75,47 @@ export const ModeChip = ({ mode, themeDefault, onPick }: {
   ];
 
   return (
-    <div ref={boxRef} className="relative">
-      <Tooltip content="The mode the document opens in">
+    <AnchoredPanel
+      label="Color modes"
+      open={open}
+      onOpenChange={setOpen}
+      className="flex w-max flex-col p-1"
+      tooltip="The mode the document opens in"
+      trigger={
         <button
           type="button"
           aria-label="Color mode"
           aria-expanded={open}
-          onClick={() => { setSheet(isPhoneViewport()); setOpen((v) => !v); }}
           className="inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-[4px] border border-edge px-2 font-mono text-xs text-fg hover:bg-raised"
         >
           <span className="normal-case opacity-60">Mode:</span>
           {mode ?? themeDefault}
           <ChevronDown size={12} className="shrink-0 opacity-60" />
         </button>
-      </Tooltip>
-      {open && (() => {
-        const rows = options.map((o) => (
-          <button
-            key={o.aria}
-            type="button"
-            aria-label={o.aria}
-            aria-pressed={mode === o.value}
-            onClick={() => {
-              setOpen(false);
-              onPick(o.value);
-            }}
-            className={`flex items-center justify-between gap-3 rounded-[4px] px-2 py-1 text-left font-mono text-xs hover:bg-raised ${
-              mode === o.value ? 'text-fg' : 'text-muted'
-            }`}
-          >
-            {o.label}
-            {mode === o.value && <Check size={11} className="shrink-0" />}
-          </button>
-        ));
-        return sheet ? (
-          <MobileSheet label="Color modes" onClose={() => setOpen(false)}>
-            <div role="group" className="flex flex-col">{rows}</div>
-          </MobileSheet>
-        ) : (
-          <div
-            role="group"
-            aria-label="Color modes"
-            className="absolute left-0 top-full z-20 mt-1 flex w-max flex-col rounded-[6px] border border-edge bg-surface p-1 shadow-lg"
-          >
-            {rows}
-          </div>
-        );
-      })()}
-    </div>
+      }
+    >
+      {options.map((o) => (
+        <button
+          key={o.aria}
+          type="button"
+          aria-label={o.aria}
+          aria-pressed={mode === o.value}
+          onClick={() => {
+            setOpen(false);
+            onPick(o.value);
+          }}
+          className={`flex items-center justify-between gap-3 rounded-[4px] px-2 py-1 text-left font-mono text-xs hover:bg-raised ${
+            mode === o.value ? 'text-fg' : 'text-muted'
+          }`}
+        >
+          {o.label}
+          {mode === o.value && <Check size={11} className="shrink-0" />}
+        </button>
+      ))}
+    </AnchoredPanel>
   );
 };
 
-/**
- * The template, named read-only beside the picker. A template is chosen at
- * publish time and stored in meta; there is no re-templating flow, so this is
- * information, not an affordance — and it renders nothing when the row carries
- * none ("Template: none" would be a permanent chip on most documents).
- */
 export const TemplateChip = ({ template }: { template: string | null }) => {
   if (!template) return null;
   return (
@@ -197,128 +149,79 @@ export interface ThemePickerProps {
  */
 export default function ThemePicker({ value, colorMode = null, onPick }: ThemePickerProps) {
   const [open, setOpen] = useState(false);
-  const boxRef = useRef<HTMLDivElement>(null);
-  /**
-   * On a phone the panel is a bottom sheet. The trigger sits wherever the bar
-   * happens to put it — mid-row — so a 26rem two-column card anchored to it
-   * (`absolute left-0`) started 180px in and ran 200px past the screen,
-   * clipping half the themes and giving the page a horizontal scrollbar.
-   */
-  const [sheet, setSheet] = useState(false);
-
-  // Dismiss like any menu. `pointerdown` (not click) so a press anywhere else
-  // closes before that press turns into an action on what is underneath.
-  // Not while the SHEET is up: it portals to <body>, so every tap inside it is
-  // "outside" this box — its backdrop owns dismissal there.
-  usePopoverDismiss(boxRef, open, sheet, setOpen);
-
   return (
-    <div ref={boxRef} className="relative">
-      <button
-        type="button"
-        aria-label="Theme"
-        aria-expanded={open}
+    <AnchoredPanel
+      label="Themes"
+      open={open}
+      onOpenChange={setOpen}
+      // One column on a phone (two 13rem cards cannot both fit), two in the
+      // anchored popover. `sm:` IS the fork — the sheet exists only below it.
+      className="grid grid-cols-1 gap-2 sm:w-[26rem] sm:grid-cols-2"
+      sheetHeader={
+        <div className="flex items-center gap-2 px-1 pb-1">
+          <h2 className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-faint">themes</h2>
+          <button
+            type="button"
+            aria-label="Close themes"
+            onClick={() => setOpen(false)}
+            className="ml-auto inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[3px] text-muted hover:bg-raised hover:text-fg"
+          >
+            <X size={14} strokeWidth={1.8} />
+          </button>
+        </div>
+      }
+      trigger={
         // No tooltip: the trigger already names the current theme, and a tip
         // would render over the panel it opens.
-        onClick={() => {
-          setSheet(isPhoneViewport());
-          setOpen((v) => !v);
-        }}
-        className="inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-[4px] border border-edge px-2 font-mono text-xs text-fg capitalize hover:bg-raised" 
-      >
-        <ThemeDot theme={value} colorMode={colorMode} />
-        <span className="hidden normal-case opacity-60 sm:inline">Theme:</span>
-        <span className="hidden sm:inline">{value ?? 'none'}</span>
-        <ChevronDown size={12} className="shrink-0 opacity-60" />
-      </button>
-
-      {open && (
-        <ThemePanel sheet={sheet} onClose={() => setOpen(false)}>
-          {STORY_THEME_NAMES.map((name) => {
-            const current = value === name;
-            return (
-              <button
-                key={name}
-                type="button"
-                aria-label={`Theme ${name}`}
-                aria-pressed={current}
-                onClick={() => {
-                  setOpen(false);
-                  onPick(name);
-                }}
-                className={`cursor-pointer overflow-hidden rounded-[4px] border text-left ${
-                  current ? 'border-accent' : 'border-edge hover:border-edge-bright'
-                }`}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element -- a static
-                    preview of a fixed size; the optimizer would add a request per
-                    theme for six images that never change. */}
-                <img
-                  src={`/story-themes/${name}${effectiveMode(name, colorMode) === 'dark' ? '-dark' : ''}.png`}
-                  alt=""
-                  width={640}
-                  height={400}
-                  className="block h-auto w-full"
-                />
-                <span
-                  className="flex items-center justify-between px-2 py-1 font-mono text-[11px] text-muted capitalize" 
-                >
-                  <span className="flex items-center gap-1.5">
-                    <ThemeDot theme={name} colorMode={colorMode} />
-                    {name}
-                  </span>
-                  {current && <Check size={11} className="shrink-0" />}
-                </span>
-              </button>
-            );
-          })}
-        </ThemePanel>
-      )}
-    </div>
-  );
-}
-
-/**
- * The cards' two homes: a bottom sheet on a phone (one column — two 13rem
- * cards cannot both fit), the anchored two-column popover on desktop. The
- * sheet carries the `Themes` label so the mobile gate's geometry check needs
- * no new vocabulary.
- */
-function ThemePanel({ sheet, onClose, children }: {
-  sheet: boolean;
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  if (sheet) {
-    return (
-      <MobileSheet
-        label="Themes"
-        onClose={onClose}
-        header={
-          <div className="flex items-center gap-2 px-1 pb-1">
-            <h2 className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-faint">themes</h2>
-            <button
-              type="button"
-              aria-label="Close themes"
-              onClick={onClose}
-              className="ml-auto inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[3px] text-muted hover:bg-raised hover:text-fg"
-            >
-              <X size={14} strokeWidth={1.8} />
-            </button>
-          </div>
-        }
-      >
-        <div role="group" className="grid grid-cols-1 gap-2">{children}</div>
-      </MobileSheet>
-    );
-  }
-  return (
-    <div
-      role="group"
-      aria-label="Themes"
-      className="absolute left-0 top-full z-20 mt-1 grid w-[26rem] grid-cols-2 gap-2 rounded-[6px] border border-edge bg-surface p-2 shadow-lg"
+        <button
+          type="button"
+          aria-label="Theme"
+          aria-expanded={open}
+          className="inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-[4px] border border-edge px-2 font-mono text-xs text-fg capitalize hover:bg-raised"
+        >
+          <ThemeDot theme={value} colorMode={colorMode} />
+          <span className="hidden normal-case opacity-60 sm:inline">Theme:</span>
+          <span className="hidden sm:inline">{value ?? 'none'}</span>
+          <ChevronDown size={12} className="shrink-0 opacity-60" />
+        </button>
+      }
     >
-      {children}
-    </div>
+      {STORY_THEME_NAMES.map((name) => {
+        const current = value === name;
+        return (
+          <button
+            key={name}
+            type="button"
+            aria-label={`Theme ${name}`}
+            aria-pressed={current}
+            onClick={() => {
+              setOpen(false);
+              onPick(name);
+            }}
+            className={`cursor-pointer overflow-hidden rounded-[4px] border text-left ${
+              current ? 'border-accent' : 'border-edge hover:border-edge-bright'
+            }`}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element -- a static
+                preview of a fixed size; the optimizer would add a request per
+                theme for six images that never change. */}
+            <img
+              src={`/story-themes/${name}${effectiveMode(name, colorMode) === 'dark' ? '-dark' : ''}.png`}
+              alt=""
+              width={640}
+              height={400}
+              className="block h-auto w-full"
+            />
+            <span className="flex items-center justify-between px-2 py-1 font-mono text-[11px] text-muted capitalize">
+              <span className="flex items-center gap-1.5">
+                <ThemeDot theme={name} colorMode={colorMode} />
+                {name}
+              </span>
+              {current && <Check size={11} className="shrink-0" />}
+            </span>
+          </button>
+        );
+      })}
+    </AnchoredPanel>
   );
 }
