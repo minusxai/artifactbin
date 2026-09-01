@@ -332,7 +332,7 @@ body {
    * row's descenders still clear the cropped neighbour above and below, and on
    * a 390px phone the longest phrase measures 326px scaled inside a 358px
    * window, so nothing that fitted before now reaches the clip. */
-  transform: scale(1.2);
+  transform: scale(1.1);
 }
 
 .use-shot {

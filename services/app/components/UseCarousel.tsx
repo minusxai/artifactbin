@@ -193,9 +193,9 @@ function ShowcaseConcept({
         * in the gap doing nothing structural — so the rule runs the column
         * and the label breaks it, rather than adding a divider and keeping a
         * loose caption above it. */}
-      <p className="flex items-center gap-4 font-mono text-[10px] tracking-[0.18em] text-muted uppercase">
-        <span aria-hidden className="h-px flex-1 bg-edge" />
-        using artifactbin you can
+      <p className="flex items-center gap-4 font-mono text-xs tracking-[0.18em] text-muted uppercase my-10">
+        {/* <span aria-hidden className="h-px flex-1 bg-edge" /> */}
+        What can you do with artifactbin?
         <span aria-hidden className="h-px flex-1 bg-edge" />
       </p>
       <div className="use-wheel-window mt-2">

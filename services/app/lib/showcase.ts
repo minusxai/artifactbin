@@ -56,8 +56,6 @@ export interface ShowcaseDoc {
    * reading is the one thing the wheel exists to say.
    */
   use: string;
-  /** The version the card picture was curated at; pins the capture cache. */
-  version: number;
 }
 
 /**
@@ -73,7 +71,6 @@ const ENTRIES: readonly ShowcaseDoc[] = [
     blurb: 'Stand-in picture — swap for the plan-annotation document.',
     kind: 'coding agent plan',
     use: 'review coding agent plans',
-    version: 199,
   },
   {
     order: 2,
@@ -82,7 +79,6 @@ const ENTRIES: readonly ShowcaseDoc[] = [
     blurb: 'A reported piece with its own tables, published by an agent in one pass.',
     kind: 'report',
     use: 'write detailed incident reports',
-    version: 31,
   },
   {
     order: 4,
@@ -91,7 +87,6 @@ const ENTRIES: readonly ShowcaseDoc[] = [
     blurb: 'Fifteen years of Show HN: nine times the crowd, the same door.',
     kind: 'eda',
     use: 'perform exploratory data analysis',
-    version: 199,
   },
   {
     order: 6,
@@ -101,7 +96,6 @@ const ENTRIES: readonly ShowcaseDoc[] = [
     blurb: 'Stand-in picture — swap for a real deck.',
     kind: 'deck',
     use: 'design polished presentations',
-    version: 103,
   },
   {
     order: 1,
@@ -110,7 +104,6 @@ const ENTRIES: readonly ShowcaseDoc[] = [
     blurb: 'A payroll dashboard whose tiles query the data in your own browser.',
     kind: 'dashboard',
     use: 'build interactive dashboards',
-    version: 3,
   },
   {
     order: 3,
@@ -119,7 +112,6 @@ const ENTRIES: readonly ShowcaseDoc[] = [
     blurb: 'Verifying claims on what language is best for coding agents.',
     kind: 'data story',
     use: 'tell compelling data stories',
-    version: 103,
   },
 ];
 
@@ -165,4 +157,4 @@ export const showcaseHref = (doc: ShowcaseDoc): string => `${SHOWCASE_ORIGIN}/a/
  * card, for a picture that is never drawn wider than 380px.
  */
 export const showcaseCardUrl = (doc: ShowcaseDoc): string =>
-  `${SHOWCASE_ORIGIN}/a/${doc.id}/export?format=jpg&mode=card&v=${doc.version}`;
+  `${SHOWCASE_ORIGIN}/a/${doc.id}/export?format=jpg&mode=card`;

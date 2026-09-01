@@ -16,16 +16,6 @@
 import { STORY_TEMPLATE_NAMES, STORY_THEME_NAMES } from '@/lib/validation/atlas-schemas';
 
 /**
- * WHICH PART OF THE DOCUMENT PROVES THIS CLAIM. The why section is one
- * artifact with the four claims pinned onto it (WhyArtifact), so a claim does
- * not carry a figure of its own — it carries the NAME of the thing on the
- * plate that demonstrates it. That is what keeps the four honest: a claim with
- * nothing to point at has no business on a page whose pitch is that it shows
- * rather than tells.
- */
-export type ReasonDemo = 'tokens' | 'themes' | 'edit' | 'annotate';
-
-/**
  * THE TWO RENDERINGS OF THE ART. Every illustration exists as a solid felt-craft
  * render and as a watercolour of the same scene, and the landing carries both
  * so the two can be compared in place rather than described. The suffix IS the
@@ -82,9 +72,6 @@ export const ART_GROUND: Record<string, Record<ArtVariant, string>> = {
   'token-efficient': { felt: '#ede2d2', water: '#f9f2e0' },
 };
 
-/** The ink in the art — its navy — used for type and rules on the paper band. */
-export const ART_INK = '#1f2a3a';
-
 /**
  * ONE COLOUR PER SPECIMEN, none repeated. The first four are the colours the
  * illustrations are actually painted in — red, yellow, green, blue over navy —
@@ -122,12 +109,6 @@ export interface Reason {
   image: string;
   /** What the illustration DEPICTS — never a repeat of the title. */
   alt: string;
-  /**
-   * The pinned part of the anatomy plate that runs this claim, where the plate
-   * carries one. A claim can be true and illustrated without being something a
-   * single mock document can act out, which is why this is optional.
-   */
-  demo?: ReasonDemo;
   body: string;
   /** A checkable fact — a number or a hard rule. Never a superlative. */
   proof: string;
@@ -138,7 +119,6 @@ export const REASONS: readonly Reason[] = [
     title: 'Ship beautiful work',
     image: 'beautiful',
     alt: 'A crate of finished documents, each one already laid out and charted',
-    demo: 'themes',
     body: 'Hand-curated themes, templates and visualizations look polished by default, and are infinitely customizable.',
     proof: `${STORY_THEME_NAMES.length} themes, ${STORY_TEMPLATE_NAMES.length} templates, and your own CSS over any of it.`,
   },
@@ -146,7 +126,6 @@ export const REASONS: readonly Reason[] = [
     title: 'Make changes directly',
     image: 'human_editable',
     alt: 'A hand lifting a chart tile out of a document and setting it somewhere else',
-    demo: 'edit',
     body: 'A built-in visual editor lets you edit the text, restyle a section and refine a chart without another round of prompting.',
     proof: 'A full visual editor, built into every artifact.',
   },
@@ -154,7 +133,6 @@ export const REASONS: readonly Reason[] = [
     title: 'Collaborate in context',
     image: 'collaboration',
     alt: 'Two hands and two robot arms pinning comments to the same document',
-    demo: 'annotate',
     body: 'Inline annotations give teammates and agents one shared place to review, respond, and resolve feedback.',
     proof: 'Humans and agents collaborate on the same artifact.',
   },
@@ -162,7 +140,6 @@ export const REASONS: readonly Reason[] = [
     title: 'Spend fewer tokens',
     image: 'token-efficient',
     alt: 'A query lamp reading one lit row out of a wall of stored data',
-    demo: 'tokens',
     body: 'Datasets live outside the artifact, and can be queried via DuckDB SQL. 10× more token-efficient for data-heavy artifacts.',
     proof: 'Up to 10× more token-efficient for data-heavy artifacts.',
   },

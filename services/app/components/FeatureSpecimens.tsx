@@ -136,12 +136,10 @@ export default function FeatureSpecimens({
     >
       <div className={SHEET}>
         <div className="flex items-baseline justify-between gap-4">
-          <h2
-            className="font-mono text-[10px] tracking-[0.14em] uppercase"
-            style={{ color: INK_QUIET }}
-          >
-            why artifactbin
-          </h2>
+          <p className="flex items-center gap-4 font-mono text-xs tracking-[0.18em] text-muted uppercase mb-6">
+        Why use artifactbin?
+        <span aria-hidden className="h-px flex-1 bg-edge" />
+      </p>
           {label && (
             <span
               className="font-mono text-[10px] tracking-[0.14em] uppercase"
