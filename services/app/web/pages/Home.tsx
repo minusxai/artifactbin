@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRefreshable } from '@/lib/navigation';
 import ClaimBanner from '@/components/ClaimBanner';
+import Landing from '@/components/Landing';
 import NextSteps from '@/components/NextSteps';
 import SharedWithYou from '@/components/SharedWithYou';
 import Shelf from '@/components/Shelf';
@@ -9,13 +10,6 @@ import { PAGE_COLUMN } from '@/components/ui';
 type Home =
   | { signedIn: false; drafts?: Parameters<typeof Shelf>[0]['rows'] }
   | { signedIn: true; artifacts: Array<Record<string, unknown> & { id: string }>; shared: Parameters<typeof SharedWithYou>[0]['items'] };
-
-const Pitch = () => (
-  <p className="mt-12 mb-14 text-center font-mono text-xs leading-relaxed text-fg">
-    Your agent <span className="text-accent">publishes</span> self-contained HTML artifacts here,
-    and hands you back a <span className="text-accent">sharable link</span>.
-  </p>
-);
 
 export function HomePage() {
   const [home, setHome] = useState<Home | null>(null);
@@ -37,7 +31,9 @@ export function HomePage() {
         </main>
       );
     }
-    return <main className={`${PAGE_COLUMN} mt-8 pb-24`}><Pitch /><NextSteps signedIn={false} /></main>;
+    // A stranger has nothing to log into yet: the landing proves the product
+    // and hands over the instruction; the masthead keeps the login door.
+    return <Landing />;
   }
   return (
     <main className={`${PAGE_COLUMN} mt-8 pb-24`}>
