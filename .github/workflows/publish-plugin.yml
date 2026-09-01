@@ -31,8 +31,17 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ inputs.source_sha }}
-          fetch-depth: 1
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify and check out an exact commit from trusted main
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'source_sha must be a full lowercase commit SHA' >&2; exit 1; }
+          git cat-file -e "$SOURCE_SHA^{commit}"
+          git merge-base --is-ancestor "$SOURCE_SHA" origin/main || { echo 'source_sha must be an ancestor of origin/main' >&2; exit 1; }
+          git checkout --detach "$SOURCE_SHA"
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
@@ -43,9 +52,11 @@ jobs:
       - name: Publish exact deployed source to the selected channel
         working-directory: services/app
         env:
+          CHANNEL: ${{ inputs.channel }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
           PLUGIN_MIRROR_TOKEN: ${{ (inputs.channel == 'production' && secrets.PLUGIN_MIRROR_TOKEN) || (inputs.channel == 'staging' && secrets.PLUGIN_OSS_MIRROR_TOKEN) || (inputs.channel == 'staging' && secrets.PLUGIN_MIRROR_TOKEN) }}
         run: |
           npx tsx -r ../../scripts/register-yaml.cjs scripts/publish-plugin.ts \
-            --channel "${{ inputs.channel }}" \
-            --sha "${{ inputs.source_sha }}" \
+            --channel "$CHANNEL" \
+            --sha "$SOURCE_SHA" \
             --token "$PLUGIN_MIRROR_TOKEN"
