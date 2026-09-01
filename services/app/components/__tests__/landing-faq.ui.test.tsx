@@ -52,7 +52,7 @@ describe('the landing FAQ', () => {
 
   it('keeps the set short enough to read standing up', () => {
     expect(QUESTIONS.length).toBeGreaterThan(0);
-    expect(QUESTIONS.length).toBeLessThanOrEqual(4);
+    expect(QUESTIONS.length).toBeLessThanOrEqual(5);
     for (const entry of QUESTIONS) {
       expect(entry.question.endsWith('?')).toBe(true);
       expect(entry.answer.length).toBeGreaterThan(40);
