@@ -53,6 +53,7 @@ describe('the app declares as runtime only what it imports at runtime', () => {
 });
 
 describe('every env name a service reads is documented, and retired names are not read', () => {
+  const intentionallyOmitted = new Set(['MIXPANEL__TOKEN', 'MIXPANEL__HOST']);
   const readNames = (file: string): Set<string> => {
     const src = read(file);
     const names = new Set<string>();
@@ -61,8 +62,11 @@ describe('every env name a service reads is documented, and retired names are no
   };
   const documented = read('.env.example');
   it('the app config', () => {
-    const undocumented = [...readNames('services/app/lib/config.ts')].filter((n) => !new RegExp(`^#?\\s*${n}=`, 'm').test(documented) && !documented.includes(n));
+    const undocumented = [...readNames('services/app/lib/config.ts')]
+      .filter((n) => !intentionallyOmitted.has(n))
+      .filter((n) => !new RegExp(`^#?\\s*${n}=`, 'm').test(documented) && !documented.includes(n));
     expect(undocumented).toEqual([]);
+    for (const name of intentionallyOmitted) expect(documented).not.toContain(name);
   });
   it('the standalone proxy config', () => {
     const undocumented = [...readNames('services/proxy/src/config.ts')].filter((n) => !documented.includes(n));
