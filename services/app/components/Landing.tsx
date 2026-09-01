@@ -19,6 +19,7 @@ import GetStarted from '@/components/GetStarted';
 import LandingFooter from '@/components/LandingFooter';
 import UseCarousel from '@/components/UseCarousel';
 import FeatureSpecimens from '@/components/FeatureSpecimens';
+import LandingFaq from '@/components/LandingFaq';
 import { type ArtVariant } from '@/lib/landing-content';
 
 const COLUMN = 'mx-auto max-w-3xl px-4 sm:px-6';
@@ -81,6 +82,11 @@ export default function Landing() {
       <div className="mt-14 sm:mt-16">
         <FeatureSpecimens variant={ART} />
       </div>
+
+      {/* Answers to the band directly above it, so it comes straight off the
+        * paper and back into the reading column — which is also what gives the
+        * full-bleed sheet a visible end. */}
+      <LandingFaq column={`${COLUMN} mt-14 sm:mt-16`} />
 
       <LandingFooter column={COLUMN} />
     </main>
