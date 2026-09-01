@@ -43,9 +43,9 @@ const renderPath = (path: string) => {
 
 describe('artifact pages carry no app chrome', () => {
   it('the chrome lives in the SPA shell, and only there', () => {
-    expect(renderPath('/login')).toContain('pastebin for agents');
-    expect(renderPath('/a/abc123')).not.toContain('pastebin for agents');
-    expect(renderPath('/@owner/abc123-document')).not.toContain('pastebin for agents');
+    expect(renderPath('/login')).toContain('Google Docs for agents');
+    expect(renderPath('/a/abc123')).not.toContain('Google Docs for agents');
+    expect(renderPath('/@owner/abc123-document')).not.toContain('Google Docs for agents');
   });
 
   it('the artifact page is the shell around the document, and nothing else', () => {
@@ -53,7 +53,7 @@ describe('artifact pages carry no app chrome', () => {
     expect(html).toContain('aria-label="Artifact viewport"');
     expect(html).toContain('<iframe');
     expect(html).toContain('src="/a/abc123/raw?edit=1"');
-    expect(html).not.toContain('pastebin for agents');
+    expect(html).not.toContain('Google Docs for agents');
   });
 
   it('both artifact addresses render through that ONE page', () => {
@@ -71,6 +71,6 @@ describe('artifact pages carry no app chrome', () => {
     );
     expect(response.status).toBe(307);
     expect(response.headers.get('location')).toBe('https://example.test/docs/human');
-    expect(renderPath('/docs/human')).toContain('pastebin for agents');
+    expect(renderPath('/docs/human')).toContain('Google Docs for agents');
   });
 });
