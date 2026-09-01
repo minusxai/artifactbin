@@ -63,8 +63,9 @@ npm run setup
 npm run dev
 ```
 
-Then open http://localhost:3030. For another port, use
-`npm run setup -- --yes --port <port>` (omit `--yes` for the interactive setup).
+Then open http://localhost:3030. Setup safely reuses `.env`: it keeps current/custom
+values and fills missing secrets. Enter keeps a value; secret input is hidden and `-` clears it. Skip questions with
+`npm run setup -- --yes --port <port>`; `--force` rebuilds from scratch.
 
 ```bash
 npm test

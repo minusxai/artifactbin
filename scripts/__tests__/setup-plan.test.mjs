@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
-import { buildEnvFile, defaultAnswers, parseArgs, questions } from '../lib/setup-plan.mjs';
+import { buildEnvFile, defaultAnswers, existingAnswers, mergeEnvFile, parseArgs, questions } from '../lib/setup-plan.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SCRIPT = path.join(ROOT, 'scripts', 'setup.mjs');
@@ -27,6 +27,12 @@ describe('questions()', () => {
     expect(typeof q.find((x) => x.key === 'emailFrom').when).toBe('function');
     expect(typeof q.find((x) => x.key === 'databaseUrl').when).toBe('function');
     expect(typeof q.find((x) => x.key === 's3Url').when).toBe('function');
+    expect(q.find((x) => x.key === 'publicUrl').prompt).toContain('APP__PUBLIC_BASE_URL');
+    expect(q.find((x) => x.key === 'email').prompt).toContain('EMAIL__RESEND_API_KEY');
+    expect(q.find((x) => x.key === 'email').clearable).toBe(true);
+    expect(q.find((x) => x.key === 'databaseUrl').clearable).not.toBe(true);
+    expect(q.find((x) => x.key === 'database').prompt).toContain('DATABASE_URL');
+    expect(q.find((x) => x.key === 'objects').prompt).toContain('S3_URL');
   });
 });
 
@@ -66,6 +72,53 @@ describe('buildEnvFile()', () => {
   });
 });
 
+describe('existing environment files', () => {
+  const old = [
+    'AUTH__SECRET=keep-auth',
+    'APP__PUBLIC_BASE_URL=http://localhost:4040',
+    'EMAIL__FROM=old@example.com',
+    'EMAIL__RESEND_API_KEY=keep-email',
+    'DATABASE_URL=postgresql://u:p@db/app',
+    'S3_URL=s3://key:secret@objects/bucket',
+    'MY_CUSTOM_SETTING=keep-me',
+    '',
+  ].join('\n');
+
+  it('derives editable choices from current names without exposing secrets as defaults', () => {
+    expect(existingAnswers(old)).toMatchObject({
+      publicUrl: 'http://localhost:4040', port: 4040, email: 'keep-email',
+      emailFrom: 'old@example.com', database: 'postgres', databaseUrl: 'postgresql://u:p@db/app',
+      objects: 's3', s3Url: 's3://key:secret@objects/bucket',
+    });
+  });
+
+  it('preserves values and custom settings and fills missing secrets', () => {
+    const merged = mergeEnvFile(old, {}, { generated: gen });
+    expect(merged).toMatch(/^AUTH__SECRET=keep-auth$/m);
+    expect(merged).toMatch(/^APP__PUBLIC_BASE_URL=http:\/\/localhost:4040$/m);
+    expect(merged).toMatch(/^EMAIL__FROM=old@example\.com$/m);
+    expect(merged).toMatch(/^EMAIL__RESEND_API_KEY=keep-email$/m);
+    expect(merged).toMatch(/^MY_CUSTOM_SETTING=keep-me$/m);
+    expect(merged).toMatch(/^ADMIN__SECRET=b{43}$/m);
+  });
+
+  it('changes only explicit choices and can deliberately disable optional services', () => {
+    const merged = mergeEnvFile(old, { port: 5050, email: '', objects: 'local' }, { generated: gen, supplied: new Set(['port', 'email', 'objects']) });
+    expect(merged).toMatch(/^APP__PORT=5050$/m);
+    expect(merged).toMatch(/^APP__PUBLIC_BASE_URL=http:\/\/localhost:4040$/m);
+    expect(merged).toMatch(/^# EMAIL__RESEND_API_KEY=$/m);
+    expect(merged).toMatch(/^# S3_URL=/m);
+    expect(merged).toMatch(/^OBJECT_STORE__LOCAL_DIR=\.\/data\/objects$/m);
+    expect(merged).toMatch(/^MY_CUSTOM_SETTING=keep-me$/m);
+  });
+
+  it('retains an unchanged driver-specific URL even when the editor would not create it', () => {
+    const existing = 'DATABASE_URL=postgresql:///socket-db\n';
+    expect(() => mergeEnvFile(existing, {}, { generated: gen })).not.toThrow();
+    expect(mergeEnvFile(existing, {}, { generated: gen })).toMatch(/^DATABASE_URL=postgresql:\/\/\/socket-db$/m);
+  });
+});
+
 describe('parseArgs()', () => {
   it('maps every flag', () => {
     const r = parseArgs(['--yes', '--out', '/x/.env', '--force', '--public-url', 'https://a.b', '--port', '4000', '--resend-key', 'k', '--email-from', 'f', '--database-url', 'postgresql://x', '--s3-url', 's3://y', '--print']);
@@ -79,7 +132,7 @@ describe('parseArgs()', () => {
 });
 
 describe('scripts/setup.mjs (child process)', () => {
-  it('--yes writes a 0600 .env with no dev-only secret, refuses to overwrite, --force overwrites, --print masks', () => {
+  it('--yes writes a 0600 .env, safely reuses it, --force replaces it, and --print masks', () => {
     const out = path.join(TMP, '.env');
     const first = run(['--yes', '--out', out]);
     expect(first.status, first.stderr).toBe(0);
@@ -90,7 +143,8 @@ describe('scripts/setup.mjs (child process)', () => {
     expect(text).not.toContain('dev-only-secret');
     expect(first.stdout).toMatch(/npm run dev/);
     const again = run(['--yes', '--out', out]);
-    expect(again.status).toBe(2);
+    expect(again.status, again.stderr).toBe(0);
+    expect(again.stdout).toMatch(/already configured/i);
     expect(fs.readFileSync(out, 'utf8')).toBe(text);
     const forced = run(['--yes', '--out', out, '--force']);
     expect(forced.status).toBe(0);

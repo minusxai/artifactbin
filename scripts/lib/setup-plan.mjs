@@ -82,16 +82,43 @@ export function defaultAnswers(answerOverrides = {}) {
   return answers;
 }
 
+function activeEnv(text) {
+  const values = new Map();
+  for (const line of String(text).split('\n')) {
+    const match = /^([A-Z][A-Z0-9_]*)=(.*)$/.exec(line);
+    if (match) values.set(match[1], match[2]);
+  }
+  return values;
+}
+
+/** The setup choices represented by an existing file. */
+export function existingAnswers(text) {
+  const values = activeEnv(text);
+  const publicUrl = values.get('APP__PUBLIC_BASE_URL') || DEFAULT_PUBLIC_URL;
+  const databaseUrl = values.get('DATABASE_URL') || '';
+  const s3Url = values.get('S3_URL') || '';
+  return defaultAnswers({
+    publicUrl,
+    port: values.has('APP__PORT') ? Number(values.get('APP__PORT')) : portFromPublicUrl(publicUrl),
+    email: values.get('EMAIL__RESEND_API_KEY') || '',
+    emailFrom: values.get('EMAIL__FROM') || '',
+    database: databaseUrl ? 'postgres' : 'pglite',
+    databaseUrl,
+    objects: s3Url ? 's3' : 'local',
+    s3Url,
+  });
+}
+
 export function questions() {
   return [
-    { key: 'publicUrl', prompt: 'Public URL people will reach this on', default: DEFAULT_PUBLIC_URL, validate: httpUrlError },
-    { key: 'port', prompt: 'Port to listen on', default: (answers) => portFromPublicUrl(answers.publicUrl), validate: portError },
-    { key: 'email', prompt: 'Login mail: Resend API key (blank = no email login; anonymous tokens still work)', default: '', validate: () => undefined, secret: true },
-    { key: 'emailFrom', prompt: 'From address', default: (answers) => fromAddress(answers.publicUrl), validate: (value) => String(value).trim() ? undefined : 'From address must not be blank', when: (answers) => Boolean(answers.email) },
-    { key: 'database', prompt: 'Database: [1] embedded PGLite (zero config)  [2] my own Postgres URL', default: '1', validate: (value) => ['1', '2', 'pglite', 'postgres'].includes(String(value)) ? undefined : 'Database must be 1 or 2' },
-    { key: 'databaseUrl', prompt: 'Postgres URL', default: '', validate: postgresUrlError, secret: true, when: (answers) => answers.database === 'postgres' || answers.database === '2' },
-    { key: 'objects', prompt: 'Objects: [1] local directory  [2] S3-compatible URL', default: '1', validate: (value) => ['1', '2', 'local', 's3'].includes(String(value)) ? undefined : 'Objects must be 1 or 2' },
-    { key: 's3Url', prompt: 'S3-compatible URL', default: '', validate: s3UrlError, secret: true, when: (answers) => answers.objects === 's3' || answers.objects === '2' },
+    { key: 'publicUrl', prompt: 'APP__PUBLIC_BASE_URL — public URL people will use', default: DEFAULT_PUBLIC_URL, validate: httpUrlError },
+    { key: 'port', prompt: 'APP__PORT — local port to listen on', default: (answers) => portFromPublicUrl(answers.publicUrl), validate: portError },
+    { key: 'email', prompt: 'EMAIL__RESEND_API_KEY — login email (optional)', default: '', validate: () => undefined, secret: true, clearable: true },
+    { key: 'emailFrom', prompt: 'EMAIL__FROM — sender address', default: (answers) => fromAddress(answers.publicUrl), validate: (value) => String(value).trim() ? undefined : 'From address must not be blank', when: (answers) => Boolean(answers.email) },
+    { key: 'database', prompt: 'DATABASE_URL — storage: [1] embedded PGLite  [2] Postgres URL', default: '1', validate: (value) => ['1', '2', 'pglite', 'postgres'].includes(String(value)) ? undefined : 'Database must be 1 or 2' },
+    { key: 'databaseUrl', prompt: 'DATABASE_URL — Postgres URL', default: '', validate: postgresUrlError, secret: true, when: (answers) => answers.database === 'postgres' || answers.database === '2' },
+    { key: 'objects', prompt: 'S3_URL — object storage: [1] local directory  [2] S3-compatible URL', default: '1', validate: (value) => ['1', '2', 'local', 's3'].includes(String(value)) ? undefined : 'Objects must be 1 or 2' },
+    { key: 's3Url', prompt: 'S3_URL — S3-compatible URL', default: '', validate: s3UrlError, secret: true, when: (answers) => answers.objects === 's3' || answers.objects === '2' },
   ];
 }
 
@@ -162,9 +189,9 @@ function validateAnswers(answers) {
   }
 }
 
-export function buildEnvFile(answerOverrides, { generated }) {
+export function buildEnvFile(answerOverrides, { generated, validate = true }) {
   const answers = defaultAnswers(answerOverrides);
-  validateAnswers(answers);
+  if (validate) validateAnswers(answers);
   for (const name of ['AUTH__SECRET', 'ADMIN__SECRET', 'CONTRACT__ACTOR_SECRET', 'INTERNAL__SERVICE_SECRET']) {
     if (!generated?.[name]) throw new Error(`Missing generated ${name}`);
   }
@@ -195,6 +222,44 @@ export function buildEnvFile(answerOverrides, { generated }) {
       .replace(/^OBJECT_STORE__LOCAL_DIR=.*$/m, '# OBJECT_STORE__LOCAL_DIR=./data/objects');
   } else {
     text = text.replace(/^OBJECT_STORE__LOCAL_DIR=.*$/m, 'OBJECT_STORE__LOCAL_DIR=./data/objects');
+  }
+  return text.endsWith('\n') ? text : `${text}\n`;
+}
+
+const MANAGED_ENV = {
+  publicUrl: ['APP__PUBLIC_BASE_URL'], port: ['APP__PORT'],
+  email: ['EMAIL__RESEND_API_KEY', 'EMAIL__FROM'], emailFrom: ['EMAIL__FROM'],
+  database: ['DATABASE_URL'], databaseUrl: ['DATABASE_URL'],
+  objects: ['S3_URL', 'OBJECT_STORE__LOCAL_DIR'], s3Url: ['S3_URL', 'OBJECT_STORE__LOCAL_DIR'],
+};
+
+function replaceEnvLine(text, name, value) {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`^#?[ \\t]*${escaped}=.*$`, 'm');
+  if (pattern.test(text)) return text.replace(pattern, `${name}=${value}`);
+  return `${text.trimEnd()}\n${name}=${value}\n`;
+}
+
+/**
+ * Rebuild against the current example while retaining every configured value.
+ * Only choices explicitly supplied by the caller replace existing values.
+ */
+export function mergeEnvFile(existingText, answerOverrides, { generated, supplied = new Set(Object.keys(answerOverrides)) }) {
+  const current = activeEnv(existingText);
+  const prior = existingAnswers(existingText);
+  const explicit = Object.fromEntries([...supplied].filter((key) => key in answerOverrides).map((key) => [key, answerOverrides[key]]));
+  const answers = defaultAnswers({ ...prior, ...explicit });
+  const secrets = { ...generated };
+  for (const name of ['AUTH__SECRET', 'ADMIN__SECRET', 'CONTRACT__ACTOR_SECRET', 'INTERNAL__SERVICE_SECRET']) {
+    if (current.get(name)) secrets[name] = current.get(name);
+  }
+  // Explicit replacements were validated at the CLI/interview boundary.
+  // Existing values are preserved verbatim, even when the editor would not
+  // create them (for example a driver-specific connection-string spelling).
+  let text = buildEnvFile(answers, { generated: secrets, validate: false });
+  const replaced = new Set([...supplied].flatMap((key) => MANAGED_ENV[key] ?? []));
+  for (const [name, value] of current) {
+    if (!replaced.has(name)) text = replaceEnvLine(text, name, value);
   }
   return text.endsWith('\n') ? text : `${text}\n`;
 }

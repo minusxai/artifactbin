@@ -12,7 +12,9 @@ Read `CLAUDE.md` first — it is the project's design record, and every rule in 
 
 ## The dev flow
 
-Run `npm run setup` before `npm run dev` (`npm run setup -- --yes` accepts the defaults).
+Run `npm run setup` before `npm run dev`. It safely edits an existing `.env` and
+keeps current values when you press Enter; `npm run setup -- --yes` creates or
+repairs it with defaults without asking questions.
 
 Two ways to run the app in development, mirroring the two deployment shapes:
 

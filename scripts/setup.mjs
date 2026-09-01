@@ -3,9 +3,8 @@
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createInterface } from 'node:readline';
-import { Writable } from 'node:stream';
-import { buildEnvFile, defaultAnswers, parseArgs, questions } from './lib/setup-plan.mjs';
+import { createInterface } from 'node:readline/promises';
+import { buildEnvFile, defaultAnswers, existingAnswers, mergeEnvFile, parseArgs, questions } from './lib/setup-plan.mjs';
 
 const SECRET_NAMES = ['AUTH__SECRET', 'ADMIN__SECRET', 'CONTRACT__ACTOR_SECRET', 'INTERNAL__SERVICE_SECRET', 'EMAIL__RESEND_API_KEY', 'DATABASE_URL', 'S3_URL'];
 
@@ -33,61 +32,81 @@ function normaliseChoice(key, value) {
   return value;
 }
 
-function openTty() {
-  let readFd;
-  let writeFd;
+const CANCELLED = Symbol('setup-cancelled');
+
+async function visibleAnswer(prompt) {
+  const readline = createInterface({ input: process.stdin, output: process.stdout });
   try {
-    readFd = fs.openSync('/dev/tty', 'r');
-    writeFd = fs.openSync('/dev/tty', 'w');
-    return {
-      input: fs.createReadStream('/dev/tty', { fd: readFd, autoClose: true }),
-      output: fs.createWriteStream('/dev/tty', { fd: writeFd, autoClose: true }),
-    };
-  } catch {
-    if (readFd !== undefined) fs.closeSync(readFd);
-    if (writeFd !== undefined) fs.closeSync(writeFd);
-    return undefined;
+    return await Promise.race([
+      readline.question(prompt),
+      new Promise((resolve) => readline.once('SIGINT', () => resolve(CANCELLED))),
+    ]);
+  } finally {
+    readline.close();
   }
 }
 
-async function interview(initialAnswers, supplied) {
-  const tty = openTty();
-  if (!tty) return initialAnswers;
-
-  let muted = false;
-  const readlineOutput = new Writable({
-    write(chunk, encoding, callback) {
-      if (!muted) tty.output.write(chunk, encoding);
-      callback();
-    },
+function secretAnswer(prompt) {
+  process.stdout.write(prompt);
+  process.stdin.setRawMode(true);
+  process.stdin.resume();
+  return new Promise((resolve) => {
+    let answer = '';
+    const finish = (value) => {
+      process.stdin.off('data', onData);
+      process.stdin.setRawMode(false);
+      process.stdin.pause();
+      process.stdout.write('\n');
+      resolve(value);
+    };
+    const onData = (chunk) => {
+      for (const byte of Buffer.from(chunk)) {
+        if (byte === 3) return finish(CANCELLED); // Ctrl-C
+        if (byte === 13 || byte === 10) return finish(answer);
+        if (byte === 8 || byte === 127) {
+          if (answer) {
+            answer = answer.slice(0, -1);
+            process.stdout.write('\b \b');
+          }
+        } else if (byte >= 32 && byte <= 126) {
+          answer += String.fromCharCode(byte);
+          process.stdout.write('*');
+        }
+      }
+    };
+    process.stdin.on('data', onData);
   });
-  const readline = createInterface({ input: tty.input, output: readlineOutput, terminal: true });
+}
+
+async function interview(initialAnswers, supplied) {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) return initialAnswers;
   const answers = { ...initialAnswers };
 
-  try {
-    for (const question of questions()) {
-      if (supplied.has(question.key) || (question.when && !question.when(answers))) continue;
-      const fallback = typeof question.default === 'function' ? question.default(answers) : question.default;
-      while (true) {
-        const suffix = fallback === '' || fallback === undefined ? '' : ` [${fallback}]`;
-        tty.output.write(`${question.prompt}${suffix}: `);
-        muted = Boolean(question.secret);
-        const entered = await new Promise((resolve) => readline.question('', resolve));
-        muted = false;
-        if (question.secret) tty.output.write('\n');
-        const value = entered === '' ? fallback : entered;
-        const error = question.validate(value, answers);
-        if (!error) {
-          answers[question.key] = normaliseChoice(question.key, value);
-          break;
-        }
-        tty.output.write(`${error}\n`);
+  for (const question of questions()) {
+    if (supplied.has(question.key) || (question.when && !question.when(answers))) continue;
+    const fallback = typeof question.default === 'function' ? question.default(answers) : question.default;
+    const current = answers[question.key] ?? fallback;
+    while (true) {
+      const suffix = question.secret
+        ? (current
+            ? ` [configured; Enter keeps it${question.clearable ? ', type - to clear' : ''}]`
+            : ` [${question.clearable ? 'Enter to skip; ' : ''}input is hidden]`)
+        : (current === '' || current === undefined ? '' : ` [${current}]`);
+      const prompt = `${question.prompt}${suffix}: `;
+      const entered = question.secret ? await secretAnswer(prompt) : await visibleAnswer(prompt);
+      if (entered === CANCELLED) return null;
+      const keeping = entered === '';
+      const value = keeping ? current : (question.clearable && entered === '-' ? '' : entered);
+      // A rerun must be able to retain a value accepted by the application,
+      // even if this setup version's stricter editor would not create it.
+      const error = keeping ? undefined : question.validate(value, answers);
+      if (!error) {
+        answers[question.key] = normaliseChoice(question.key, value);
+        supplied.add(question.key);
+        break;
       }
+      process.stdout.write(`${error}\n`);
     }
-  } finally {
-    readline.close();
-    tty.input.destroy();
-    tty.output.end();
   }
   return answers;
 }
@@ -102,12 +121,30 @@ async function main() {
     return;
   }
 
-  let answers = defaultAnswers(options.answers);
-  if (!options.yes) answers = await interview(answers, new Set(Object.keys(options.answers)));
+  // --print is a clean preview of the requested choices, independent of a
+  // checkout's current file. Writing without --force is the merge/edit path.
+  const existingText = !options.print && fs.existsSync(options.out) ? fs.readFileSync(options.out, 'utf8') : '';
+  const supplied = new Set(Object.keys(options.answers));
+  let answers = existingText && !options.force
+    ? { ...existingAnswers(existingText), ...options.answers }
+    : defaultAnswers(options.answers);
+  if (!options.yes) {
+    if (existingText && !options.force) {
+      process.stdout.write(`Existing ${options.out} found.\nPress Enter to keep a value, or type a replacement; type - to clear an optional secret.\n\n`);
+    }
+    answers = await interview(answers, supplied);
+    if (answers === null) {
+      process.stdout.write('\nSetup cancelled; .env was not changed.\n');
+      process.exitCode = 130;
+      return;
+    }
+  }
 
   let text;
   try {
-    text = buildEnvFile(answers, { generated: generatedSecrets() });
+    text = existingText && !options.force
+      ? mergeEnvFile(existingText, answers, { generated: generatedSecrets(), supplied })
+      : buildEnvFile(answers, { generated: generatedSecrets() });
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 3;
@@ -118,9 +155,8 @@ async function main() {
     process.stdout.write(maskSecrets(text));
     return;
   }
-  if (fs.existsSync(options.out) && !options.force) {
-    process.stderr.write(`Refusing to overwrite ${options.out} without --force.\nWould write:\n${maskSecrets(text)}`);
-    process.exitCode = 2;
+  if (existingText === text) {
+    process.stdout.write(`${options.out} is already configured; no changes made.\n${noNext ? '' : 'Next: npm run dev\n'}`);
     return;
   }
 
