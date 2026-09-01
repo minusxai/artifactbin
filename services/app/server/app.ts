@@ -39,8 +39,16 @@ const safeJson = (value: unknown): string => JSON.stringify(value).replace(/</g,
 export const withBootstrap = (html: string, data: unknown): string =>
   html.replace('</head>', `  <script type="application/json" id="${BOOTSTRAP_ID}">${safeJson(data)}</script>\n  </head>`);
 
+// Inline scripts emitted by our source HTML and Vite's development transform.
+// Keeping the hashes explicit preserves the production policy while allowing
+// React Fast Refresh to install its hook when this server hosts Vite middleware.
+export const APP_INLINE_SCRIPT_HASHES = [
+  "'sha256-nsD8JKY/OL2XkCf1kqkfjHcd/GLFx3TvP19i7RMVNKE='", // theme bootstrap
+  "'sha256-Z2/iFzh9VMlVkEOar1f/oSHWwQk3ve1qk/C2WdsC4Xk='", // Vite React-refresh preamble
+].join(' ');
+
 export const APP_CSP = [
-  "default-src 'none'", "script-src 'self' 'sha256-nsD8JKY/OL2XkCf1kqkfjHcd/GLFx3TvP19i7RMVNKE='", "style-src 'self' 'unsafe-inline'",
+  "default-src 'none'", `script-src 'self' ${APP_INLINE_SCRIPT_HASHES}`, "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:", "font-src 'self' data:",
   "connect-src 'self' https://api-js.mixpanel.com https://api.mixpanel.com",
   "manifest-src 'self'", "frame-src 'self'", "frame-ancestors 'self'",
