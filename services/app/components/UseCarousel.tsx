@@ -26,6 +26,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import {
   SHOWCASE,
+  SHOWCASE_FORMATS,
   showcaseCardUrl,
   showcaseHref,
   type ShowcaseKind,
@@ -44,14 +45,6 @@ const N = SHOWCASE.length;
 /** The three copies the wheel rides on. */
 const TRIPLE = [...SHOWCASE, ...SHOWCASE, ...SHOWCASE];
 
-const FORMATS: readonly { kind: ShowcaseKind; label: string }[] = [
-  { kind: 'data story', label: 'Data stories' },
-  { kind: 'deck', label: 'Decks' },
-  { kind: 'dashboard', label: 'Dashboards' },
-  { kind: 'report', label: 'Reports' },
-  { kind: 'coding agent plan', label: 'Plans' },
-];
-
 const prefersReducedMotion = () =>
   typeof window !== 'undefined' &&
   typeof window.matchMedia === 'function' &&
@@ -62,22 +55,25 @@ const prefersReducedMotion = () =>
  * the mark it was a static list of five words beside a picture that changed —
  * the reader had no way to tell which of the five they were looking at.
  */
-function FormatRail({ active }: { active: ShowcaseKind }) {
+function FormatRail({ active, onPick }: { active: ShowcaseKind; onPick: (kind: ShowcaseKind) => void }) {
   return (
     <div className="mt-9 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 font-mono text-[11px] sm:gap-x-3 sm:text-xs">
-      {FORMATS.map((format, index) => (
+      {SHOWCASE_FORMATS.map((format, index) => (
         <span key={format.kind} className="inline-flex items-center gap-x-2 sm:gap-x-3">
           {index > 0 && <span aria-hidden className="text-faint">/</span>}
-          <span
+          <button
+            type="button"
+            aria-label={`Show ${format.label}`}
             aria-current={format.kind === active ? 'true' : undefined}
-            className={
+            onClick={() => onPick(format.kind)}
+            className={`cursor-pointer border-0 bg-transparent p-0 font-mono text-[11px] transition-colors sm:text-xs ${
               format.kind === active
                 ? 'text-accent underline decoration-1 underline-offset-4'
-                : 'text-muted transition-colors'
-            }
+                : 'text-muted hover:text-fg'
+            }`}
           >
             {format.label}
-          </span>
+          </button>
         </span>
       ))}
     </div>
@@ -137,8 +133,15 @@ function ShowcaseConcept({
       onFocus={() => setHeld(true)}
       onBlur={() => setHeld(false)}
     >
-      <p className="mt-6 text-center font-mono text-[10px] tracking-[0.18em] uppercase">
+      {/* THE LABEL IS THE SEPARATOR. The section needed an edge against the
+        * getting-started card above it, and the eyebrow was already floating
+        * in the gap doing nothing structural — so the rule runs the column
+        * and the label breaks it, rather than adding a divider and keeping a
+        * loose caption above it. */}
+      <p className="flex items-center gap-4 font-mono text-[10px] tracking-[0.18em] text-muted uppercase">
+        <span aria-hidden className="h-px flex-1 bg-edge" />
         using artifactbin you can
+        <span aria-hidden className="h-px flex-1 bg-edge" />
       </p>
       <div className="use-wheel-window mt-2">
         <div
@@ -237,7 +240,7 @@ function ShowcaseConcept({
           />
         ))}
       </div>
-      <FormatRail active={doc.kind} />
+      <FormatRail active={doc.kind} onPick={pickFormat} />
     </article>
   );
 }

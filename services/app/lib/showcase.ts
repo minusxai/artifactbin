@@ -22,7 +22,7 @@
 export const SHOWCASE_ORIGIN = 'https://artifactbin.dev';
 
 /** The shape a reader is about to open. Sets expectations before the click. */
-export type ShowcaseKind = 'report' | 'deck' | 'dashboard' | 'data story' | 'coding agent plan';
+export type ShowcaseKind = 'report' | 'deck' | 'dashboard' | 'data story' | 'coding agent plan' | 'eda';
 
 export interface ShowcaseDoc {
   /**
@@ -81,16 +81,16 @@ const ENTRIES: readonly ShowcaseDoc[] = [
     title: 'The OpenAI-Hugging Face incident',
     blurb: 'A reported piece with its own tables, published by an agent in one pass.',
     kind: 'report',
-    use: 'write incident reports',
+    use: 'write detailed incident reports',
     version: 31,
   },
   {
-    order: 4,
+    order: 3,
     id: 'wxeC8G',
     title: 'Vol 1: Built something cool? Show HN.',
     blurb: 'Fifteen years of Show HN: nine times the crowd, the same door.',
     kind: 'data story',
-    use: 'create beautiful data stories',
+    use: 'tell compelling data stories',
     version: 199,
   },
   {
@@ -100,7 +100,7 @@ const ENTRIES: readonly ShowcaseDoc[] = [
     title: 'Vol 2: Show HN Hall of Fame',
     blurb: 'Stand-in picture — swap for a real deck.',
     kind: 'deck',
-    use: 'create enviable presentations',
+    use: 'design polished presentations',
     version: 103,
   },
   {
@@ -109,22 +109,52 @@ const ENTRIES: readonly ShowcaseDoc[] = [
     title: 'San Francisco City Payroll',
     blurb: 'A payroll dashboard whose tiles query the data in your own browser.',
     kind: 'dashboard',
-    use: 'create stunning data-backed dashboards',
+    use: 'build interactive dashboards',
     version: 3,
   },
   {
-    order: 3,
+    order: 4,
     id: '6bXsx3',
     title: 'Vol 2: Show HN Hall of Fame',
     blurb: 'The thirty-four repeat fliers, and the top ten of every year.',
-    kind: 'report',
-    use: 'rank and profile any dataset',
+    kind: 'eda',
+    use: 'explore any dataset',
     version: 103,
   },
 ];
 
 /** The wheel reads this, so `order` is the only thing that decides sequence. */
 export const SHOWCASE: readonly ShowcaseDoc[] = [...ENTRIES].sort((a, b) => a.order - b.order);
+
+/**
+ * THE PLURAL FORM OF A KIND — the only part of the rail that is not derivable
+ * from the entries themselves, so it is the only part written by hand, and it
+ * lives HERE rather than in the component because this file is where a
+ * showcased document's vocabulary is decided.
+ */
+const KIND_LABELS: Record<ShowcaseKind, string> = {
+  dashboard: 'dashboards',
+  report: 'reports',
+  'data story': 'data stories',
+  'coding agent plan': 'plans',
+  deck: 'decks',
+  eda: 'EDA'
+};
+
+/**
+ * WHAT THE FORMAT RAIL NAMES — every kind the wall actually carries, once
+ * each, IN THE WALL'S OWN ORDER. It was a hand-written list in the component
+ * with an order of its own, which is exactly the drift this file exists to
+ * prevent: reordering `ENTRIES` left the wheel and the rail beside it reading
+ * two different sequences, silently. A kind is on the rail because a document
+ * has it — adding one is still a single entry, with no second list to touch.
+ */
+export const SHOWCASE_FORMATS: readonly { kind: ShowcaseKind; label: string }[] = SHOWCASE.reduce<
+  { kind: ShowcaseKind; label: string }[]
+>((formats, doc) => {
+  if (!formats.some((f) => f.kind === doc.kind)) formats.push({ kind: doc.kind, label: KIND_LABELS[doc.kind] });
+  return formats;
+}, []);
 
 /** Where the card's click goes: the live document, on the instance that has it. */
 export const showcaseHref = (doc: ShowcaseDoc): string => `${SHOWCASE_ORIGIN}/a/${doc.id}`;

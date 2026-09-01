@@ -10,7 +10,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { ID_RE } from '@/lib/ids-shape';
-import { SHOWCASE, SHOWCASE_ORIGIN, showcaseCardUrl, showcaseHref } from '@/lib/showcase';
+import { SHOWCASE, SHOWCASE_FORMATS, SHOWCASE_ORIGIN, showcaseCardUrl, showcaseHref } from '@/lib/showcase';
 
 describe('the showcase list', () => {
   it('names real artifact ids, each one once', () => {
@@ -78,5 +78,28 @@ describe('the showcase list', () => {
       // A 1600×840 PNG is ~800 KB for a picture drawn at 380px wide.
       expect(url).toContain('format=jpg');
     }
+  });
+});
+
+/**
+ * THE RAIL IS DERIVED, NEVER TYPED. It was a hand-written list in its own
+ * order, so reordering the wall left the two disagreeing: the wheel ran
+ * dashboard-first while the rail beside it still read data-story-first, and
+ * nothing failed. A kind earns its place on the rail by a document HAVING it.
+ */
+describe('the format rail', () => {
+  it('names each kind once, in the order the wall runs them', () => {
+    expect(SHOWCASE_FORMATS.map((f) => f.kind)).toEqual([
+      'dashboard', 'report', 'data story', 'coding agent plan', 'deck',
+    ]);
+  });
+
+  it('covers every kind the curated set uses, and invents none', () => {
+    const used = new Set(SHOWCASE.map((d) => d.kind));
+    expect(new Set(SHOWCASE_FORMATS.map((f) => f.kind))).toEqual(used);
+  });
+
+  it('gives every one a plural label', () => {
+    for (const format of SHOWCASE_FORMATS) expect(format.label).toBeTruthy();
   });
 });
