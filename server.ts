@@ -38,7 +38,7 @@ import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { getRequestListener } from '@hono/node-server';
 import { assemble, createTokenReader, inProcess } from '@artifactbin/utils';
-import { ensureProxySchema, proxyEnvNamesRead, proxyParts, readEnv, resendMailer, createHumanAuth, loginProvidersOf, sessionStoreOf } from '@artifactbin/proxy';
+import { ensureProxySchema, proxyEnvNamesRead, proxyParts, readEnv, mailerForRuntime, createHumanAuth, loginProvidersOf, sessionStoreOf } from '@artifactbin/proxy';
 
 async function main(): Promise<void> {
   const env = process.env;
@@ -131,10 +131,11 @@ async function main(): Promise<void> {
     authSecret = readEnv(env, 'AUTH__SECRET') ?? generatedAuthSecret();
     const authSchema = readEnv(env, 'AUTH__SCHEMA') ?? 'auth';
     await ensureProxySchema(queryable, authSchema);
-    const mailer = resendMailer({
+    const mailer = mailerForRuntime({
       apiKey: readEnv(env, 'EMAIL__RESEND_API_KEY'),
-      baseUrl: readEnv(env, 'EMAIL__RESEND_BASE_URL'),
       from: readEnv(env, 'EMAIL__FROM') ?? 'artifactbin <login@example.com>',
+      publicBaseUrl: baseURL,
+      devOutboxPath: readEnv(env, 'EMAIL__DEV_OUTBOX_PATH'),
     });
     const loginProviders = loginProvidersOf(env);
     human = await createHumanAuth({

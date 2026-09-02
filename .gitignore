@@ -12,6 +12,7 @@ next-env.d.ts
 # published to the public mirror repo by CI, never committed here
 /plugin/
 .artifact-objects/
+.artifactbin/
 tmp/
 **/public/story/
 **/lib/story-runtime/dist/

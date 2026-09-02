@@ -15,13 +15,13 @@
  *      the plain document — no edit button
  *
  * Two logged-in contexts, one mail sink. usage:
- *   EMAIL__RESEND_API_KEY=x EMAIL__RESEND_BASE_URL=http://127.0.0.1:4612 npm run dev
+ * Local dev writes login mail to `.artifactbin/dev-mail.jsonl`; use `npm run dev:otp -- <email>`.
+
  *   node scripts/gate-collab-edit.mjs [base]
  */
 import { chromium } from 'playwright';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 
-const SINK_PORT = 4612;
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const failures = [];
 /*
@@ -44,7 +44,7 @@ const OWNER_EMAIL = `mxmx_test_collab_owner_${stamp}@example.com`;
 const EDITOR_EMAIL = `mxmx_test_collab_editor_${stamp}@example.com`;
 const COMMENTER_EMAIL = `mxmx_test_collab_commenter_${stamp}@example.com`;
 
-const sink = await startMailSink(SINK_PORT);
+const sink = await startMailSink();
 const browser = await chromium.launch();
 const ownerCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
 const editorCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });

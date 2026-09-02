@@ -112,7 +112,7 @@ const scratch = path.join(os.tmpdir(), `artifact-gates-${process.pid}`);
  * secret, the mail endpoint, S3 if the caller set one — is inherited, because
  * a gate run is only as honest as the environment it runs against.
  */
-async function bootServer(index, mailBase) {
+async function bootServer(index, mailOutbox) {
   if (!existsSync(BUNDLE)) {
     console.error(`--servers needs a build: ${path.relative(ROOT, BUNDLE)} is missing. Run \`npm run build\`.`);
     process.exit(2);
@@ -145,27 +145,12 @@ async function bootServer(index, mailBase) {
       // server refuses to fetch one (lib/web-ingest/guard) — the same reason
       // the mint ceiling is raised here rather than in the gate.
       WEB_INGEST__ALLOW_PRIVATE: process.env.WEB_INGEST__ALLOW_PRIVATE ?? '1',
-      ...(mailBase ? { EMAIL__RESEND_BASE_URL: mailBase } : {}),
+      ...(mailOutbox ? { EMAIL__DEV_OUTBOX_PATH: mailOutbox } : {}),
     },
   });
   started.push(child);
   await waitForServer(base, child);
   return base;
-}
-
-/**
- * The mail sink fan-out (scripts/lib/mail-relay.mjs). Every login gate binds
- * its own sink port and the relay copies each message to all of them, so N
- * servers can share ONE mail endpoint and each gate still finds its own code.
- * An auto-server run owns this relay too, so a seeded .env's fixed relay URL
- * cannot couple it to another process or worktree.
- */
-async function bootMailRelay() {
-  const port = await freePort();
-  const child = spawn(process.execPath, [path.join(HERE, 'lib/mail-relay.mjs'), String(port)],
-    { cwd: ROOT, stdio: ['ignore', 'ignore', 'inherit'] });
-  started.push(child);
-  return `http://127.0.0.1:${port}`;
 }
 
 const stopAll = () => { for (const child of started) { try { child.kill('SIGTERM'); } catch { /* gone */ } } };
@@ -178,15 +163,15 @@ if (servers > 0 && bases.length > 0) {
 }
 
 let targets = bases;
+const needsMail = selected.some((gate) => specFor(gate.name).needsMail);
+const mailOutbox = needsMail && servers > 0 ? path.join(scratch, 'dev-mail.jsonl') : null;
 if (servers > 0) {
   // The servers this boots are the real thing: they want the auth secret, the
   // mail key and whatever store the caller configured, all of which live where
   // `npm run dev` finds them.
   loadDotEnv();
-  const needsMail = selected.some((gate) => specFor(gate.name).needsMail);
-  const mailBase = needsMail ? await bootMailRelay() : null;
   process.stdout.write(`booting ${servers} server(s)`);
-  targets = await Promise.all(Array.from({ length: servers }, (_, i) => bootServer(i, mailBase)));
+  targets = await Promise.all(Array.from({ length: servers }, (_, i) => bootServer(i, mailOutbox)));
   console.log(` — ${targets.join(' ')}\n`);
 }
 if (targets.length === 0) targets = ['http://localhost:3040'];
@@ -198,7 +183,10 @@ if (targets.length === 0) targets = ['http://localhost:3040'];
  */
 const run = (gate, base, timeoutMs) => new Promise((resolve) => {
   const started_at = Date.now();
-  const child = spawn(process.execPath, [path.join(HERE, gate.file), base], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [path.join(HERE, gate.file), base], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, ...(mailOutbox ? { EMAIL__DEV_OUTBOX_PATH: mailOutbox } : {}) },
+  });
   let output = '';
   let settled = false;
   child.stdout.on('data', (b) => { output += b; });

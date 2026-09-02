@@ -15,7 +15,7 @@ import type { Part, Queryable, TokenReader, Upstream } from '@artifactbin/contra
 import { createHumanAuth, type HumanAuthOptions, type Mailer } from './auth/human';
 import type { ProxyConfig } from './config';
 import { sessionStoreOf } from './index';
-import { resendMailer } from './mail';
+import { DEV_OUTBOX_DEFAULT_PATH, mailerForRuntime, usesDevOutbox } from './mail';
 import { proxyParts, type SessionStore } from './parts';
 import { ensureProxySchema } from './schema';
 
@@ -108,7 +108,10 @@ export async function buildDeps(config: ProxyConfig): Promise<BuiltDeps> {
   const db = poolQueryable(pool);
   await ensureProxySchema(db, config.authSchema);
   const human = await createHumanAuth({
-    ...humanAuthOptionsFor(config, resendMailer(config.mail)),
+    ...humanAuthOptionsFor(config, mailerForRuntime({
+      ...config.mail,
+      publicBaseUrl: config.publicBaseUrl ?? `http://localhost:${config.port}`,
+    })),
     pool,
   });
   return {
@@ -132,7 +135,9 @@ export async function runStandalone(config: ProxyConfig, overrides: StandaloneOv
   for (const name of config.unknownNames) boot.warn(`${name} is set but nothing reads it`);
   if (config.authSecretGenerated) boot.warn('AUTH__SECRET unset — generated per boot; sessions and the agent cookie do not survive a restart');
   if (!config.databaseUrl) boot.warn('DATABASE_URL unset — session-less: no login, no OAuth, bearer tokens unresolved');
-  if (!config.mail.apiKey) boot.warn('EMAIL__RESEND_API_KEY unset — the mailer refuses to send; there is no log-the-code fallback');
+  const publicBaseUrl = config.publicBaseUrl ?? `http://localhost:${config.port}`;
+  if (usesDevOutbox(publicBaseUrl)) boot.info(`development mail → ${config.mail.devOutboxPath ?? DEV_OUTBOX_DEFAULT_PATH}`);
+  else if (!config.mail.apiKey) boot.warn('EMAIL__RESEND_API_KEY unset — production login mail cannot be sent');
 
   const deps = await buildDeps(config);
   const proxy = createStandaloneProxy(config, deps, overrides);

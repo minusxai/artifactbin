@@ -85,9 +85,7 @@ const env = execFileSync(process.execPath, [path.join(HERE, 'port-block.mjs'), '
 const secrets = flag('--secrets')
   ? `AUTH__SECRET=${randomBytes(32).toString('base64url')}\nCONTRACT__ACTOR_SECRET=${randomBytes(32).toString('base64url')}\n`
   : '';
-const relay = env.match(/MAIL_RELAY_PORT=(\d+)/)?.[1];
-const mail = relay ? `EMAIL__RESEND_API_KEY=x\nEMAIL__RESEND_BASE_URL=http://127.0.0.1:${relay}\n` : '';
-fs.writeFileSync(path.join(dir, '.env'), `${env}${secrets}${mail}`, { mode: 0o600 });
+fs.writeFileSync(path.join(dir, '.env'), `${env}${secrets}`, { mode: 0o600 });
 
 // 4. the brief, with the block appended, excluded from git for good
 fs.mkdirSync(path.join(dir, '.agent'), { recursive: true });

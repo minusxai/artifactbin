@@ -11,7 +11,7 @@ import { GATE_SPECS, checkManifest, specFor } from '../gates.manifest.mjs';
 const SCRIPTS = path.resolve(import.meta.dirname, '..');
 const onDisk = readdirSync(SCRIPTS).filter((f) => f.startsWith('gate-') && f.endsWith('.mjs')).map((f) => f.slice(5, -4)).sort();
 const source = (name) => readFileSync(path.join(SCRIPTS, `gate-${name}.mjs`), 'utf8');
-const MAIL = /mail-relay|\/mail\b|mailSink|MAIL_SINK|readCode|latestCode|EMAIL__RESEND/;
+const MAIL = /dev-mail|DEV_OUTBOX|startMailSink|\/mail\b|mailSink|MAIL_SINK|readCode|latestCode/;
 
 describe('the manifest and the disk are one set', () => {
   it('1. every gate file has a row and every row has a file', () => {

@@ -6,19 +6,17 @@
  * NextAuth credentials round trip, the session cookie actually landing, and the
  * OAuth consent screen recognising that session. That seam is the feature.
  *
- * The code is read from a local MAIL SINK: the gate serves a Resend-compatible
- * endpoint and the dev server is pointed at it, so the real send path runs and
- * the gate reads the actual email. That is deliberately how it gets the code —
+ * The code is read from the development mail outbox written by the real send
+ * path. That is deliberately how the gate gets the code —
  * no endpoint anywhere in the app reveals a live one, not even to an admin.
  *
  *   usage:
- *     EMAIL__RESEND_API_KEY=x EMAIL__RESEND_BASE_URL=http://127.0.0.1:4599 npm run dev
+ * Local dev writes login mail to `.artifactbin/dev-mail.jsonl`; use `npm run dev:otp -- <email>`.
+
  *     node scripts/gate-email-login.mjs [base]
  */
-import { createServer } from 'http';
 import { chromium } from 'playwright';
-
-const SINK_PORT = 4599;
+import { startMailSink } from './lib/mail-login.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const failures = [];
@@ -26,31 +24,19 @@ const check = (ok, label) => { console.log(`${ok ? '  ok ' : 'FAIL '} ${label}`)
 
 const EMAIL = `mxmx_test_login_${Date.now().toString(36)}@example.com`;
 
-/** Every email the app tried to send, newest last. */
-const inbox = [];
-const sink = createServer((req, res) => {
-  let body = '';
-  req.on('data', (c) => { body += c; });
-  req.on('end', () => {
-    try { inbox.push(JSON.parse(body)); } catch { /* not our shape; ignore */ }
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ id: 'sink' }));
-  });
-});
-await new Promise((resolve) => sink.listen(SINK_PORT, '127.0.0.1', resolve));
+const sink = await startMailSink();
 
 /**
- * This run's own mail. The relay copies every message to every gate's sink, so
- * the inbox is not ours alone — the ADDRESS is, which is the thing the fan-out
- * was always safe by, and the thing a count has to be taken over.
+ * This run's own mail. Parallel gates share the outbox, so the inbox is not
+ * ours alone; the unique address is the ownership boundary.
  */
-const mine = () => inbox.filter((m) => m.to?.includes?.(EMAIL));
+const mine = () => sink.inbox.filter((m) => m.to === EMAIL);
 
 /** The 6 digits as the user would read them out of the email. */
 const codeFromInbox = () => {
   const last = mine().at(-1);
   if (!last) throw new Error('no email was sent — is the dev server pointed at the sink?');
-  return /\b(\d{6})\b/.exec(last.text)?.[1] ?? null;
+  return last.otp ?? /\b(\d{6})\b/.exec(last.text)?.[1] ?? null;
 };
 
 const browser = await chromium.launch();
@@ -81,8 +67,8 @@ await page.waitForSelector('[aria-label="Login code"]', { timeout: 10_000 });
 
 // ── The code arrives by EMAIL and only by email ─────────────────────────────
 if (mine().length === 0) {
-  console.log('\nNo email reached the sink. Start the dev server with');
-  console.log(`  EMAIL__RESEND_API_KEY=x EMAIL__RESEND_BASE_URL=http://127.0.0.1:${SINK_PORT} npm run dev`);
+  console.log('\nNo email reached the development outbox. Request a code, then run');
+  console.log(`  npm run dev:otp -- ${EMAIL}`);
   await browser.close();
   sink.close();
   process.exit(1);

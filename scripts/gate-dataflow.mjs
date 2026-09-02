@@ -23,7 +23,8 @@
  *  6. an unknown id is the uniform 404 either way.
  *
  *   usage: node scripts/gate-dataflow.mjs [base]
- *   (the dev server must point RESEND_BASE_URL at this gate's mail sink, 4606)
+ *   (local dev and gates read the protected development outbox)
+
  */
 import { chromium } from 'playwright';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
@@ -163,7 +164,7 @@ ok(pageErrors.length === 0, `no page errors (${pageErrors.length})`);
 // shares it with a reader. Reader: a second account. The reader's page must be
 // the SHELL (iframe) and its re-runs the PAGE's relay POST — the anonymous GET
 // is a 404 for a private document.
-const sink = await startMailSink(4606);
+const sink = await startMailSink();
 const stamp = Date.now().toString(36);
 const ownerCtx = await b.newContext();
 const owner = await ownerCtx.newPage();

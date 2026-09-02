@@ -17,10 +17,9 @@
 # URLs appear ONLY in `environment:` below — they name compose services and
 # can never be pointed somewhere else by a copy-pasted env file.
 #
-# The mail seam for login: EMAIL__RESEND_BASE_URL on the PROXY (from .env),
-# with `host.docker.internal` mapped by extra_hosts — a local mail sink on the
-# host (a gate's, or scripts/lib/mail-relay.mjs) is how a login code is read
-# without real Resend. CI's compose walk does not log in and needs none.
+# Public deployments send login mail through Resend. Loopback development uses
+# the co-hosted server's protected file outbox; this split Compose shape has no
+# configurable mail endpoint.
 services:
   proxy:
     build:
@@ -53,17 +52,9 @@ services:
       # it by its DATABASE_URL) — the token reader reads `app.tokens`.
       APP__SCHEMA: app
       DATABASE_URL: postgresql://artifact_bin:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/artifact_bin
-      # The mailer: real Resend by default (infra/env/proxy.env.example); a
-      # local sink on the host is how gates read login codes — hence the
-      # extra_hosts mapping below.
+      # Public login mail uses Resend's fixed API endpoint.
       EMAIL__RESEND_API_KEY: ${EMAIL__RESEND_API_KEY:-}
-      EMAIL__RESEND_BASE_URL: ${EMAIL__RESEND_BASE_URL:-}
       EMAIL__FROM: ${EMAIL__FROM:-artifactbin <login@example.com>}
-    extra_hosts:
-      # So EMAIL__RESEND_BASE_URL can name a sink ON THE HOST (a gate's, or
-      # scripts/lib/mail-relay.mjs) — without this the login gates cannot see
-      # the mail the proxy sends.
-      - "host.docker.internal:host-gateway"
     depends_on:
       app:
         condition: service_healthy

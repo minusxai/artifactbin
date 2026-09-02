@@ -22,7 +22,13 @@ export async function runDev({ appOnly, args = [] }) {
     console.warn(`⚠ binding :${port} but PUBLIC_BASE_URL says :${declared} — links the app emits will point at :${declared}`);
   }
 
-  const env = { ...process.env };
+  const env = {
+    ...process.env,
+    // One dependable mailbox for a human or coding agent even when somebody
+    // else owns the dev-server terminal. Never persisted in .env.
+    EMAIL__DEV_OUTBOX_PATH: path.join(ROOT, '.artifactbin', 'dev-mail.jsonl'),
+  };
+  delete env.EMAIL__RESEND_BASE_URL;
   if (appOnly) {
     const carried = ['SQL__SERVICE_URL', 'BROWSER__SERVICE_URL'].filter((name) => env[name] !== undefined);
     for (const name of carried) delete env[name];

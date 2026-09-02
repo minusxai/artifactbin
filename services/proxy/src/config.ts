@@ -13,8 +13,9 @@
  * OAuth codes, no token reads; resolve-and-forward only) · AUTH__SECRET ·
  * AUTH__SCHEMA (auth) · APP__SCHEMA (app — the deployment truth in
  * SCHEMA.sql: the app's tables, `tokens` included, live there) ·
- * APP__PUBLIC_BASE_URL · EMAIL__RESEND_API_KEY / EMAIL__RESEND_BASE_URL /
- * EMAIL__FROM (the login mailer) · PROXY__SECURE_COOKIES.
+ * APP__PUBLIC_BASE_URL · EMAIL__RESEND_API_KEY / EMAIL__FROM (the production
+ * login mailer) · EMAIL__DEV_OUTBOX_PATH (local/test process coordination) ·
+ * PROXY__SECURE_COOKIES.
  *
  * Every optional name is read EAGERLY here so the audit is honest: a
  * MODULE__NAME-shaped name nobody asked for is a typo that looks live, and
@@ -43,8 +44,8 @@ const LOGIN_PROVIDER_ENV_NAME_SET = new Set<string>(Object.values(LOGIN_PROVIDER
 export interface ProxyMailConfig {
   /** EMAIL__RESEND_API_KEY — absent means the mailer refuses to send (no log-the-code fallback). */
   apiKey?: string;
-  /** EMAIL__RESEND_BASE_URL — pointed at a local sink by every gate. */
-  baseUrl?: string;
+  /** EMAIL__DEV_OUTBOX_PATH — local/test only; public origins always use Resend. */
+  devOutboxPath?: string;
   /** EMAIL__FROM. */
   from: string;
 }
@@ -162,7 +163,7 @@ export function loadConfig(source: Record<string, string | undefined>, opts: Loa
   const appSchema = env('APP', 'SCHEMA') || 'app';
   const mail = {
     ...(env('EMAIL', 'RESEND_API_KEY') ? { apiKey: env('EMAIL', 'RESEND_API_KEY') } : {}),
-    ...(env('EMAIL', 'RESEND_BASE_URL') ? { baseUrl: env('EMAIL', 'RESEND_BASE_URL') } : {}),
+    ...(env('EMAIL', 'DEV_OUTBOX_PATH') ? { devOutboxPath: env('EMAIL', 'DEV_OUTBOX_PATH') } : {}),
     from: env('EMAIL', 'FROM') || 'artifactbin <login@example.com>',
   };
   const secureRaw = env('PROXY', 'SECURE_COOKIES') || '';

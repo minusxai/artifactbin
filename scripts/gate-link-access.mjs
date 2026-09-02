@@ -22,13 +22,13 @@
  *   7. flipped back to `can view` → the stranger loses all of it on reload
  *
  * Two logged-in contexts and one logged-out, one mail sink. usage:
- *   EMAIL__RESEND_API_KEY=x EMAIL__RESEND_BASE_URL=http://127.0.0.1:4613 npm run dev
+ * Local dev writes login mail to `.artifactbin/dev-mail.jsonl`; use `npm run dev:otp -- <email>`.
+
  *   node scripts/gate-link-access.mjs [base]
  */
 import { chromium } from 'playwright';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 
-const SINK_PORT = 4613;
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const failures = [];
 const check = (ok, label) => { console.log(`${ok ? '  ok ' : 'FAIL '} ${label}`); if (!ok) failures.push(label); };
@@ -82,7 +82,7 @@ const closeControls = async (page) => {
   await page.locator(CONTROLS).waitFor({ state: 'hidden', timeout: 15000 });
 };
 
-const sink = await startMailSink(SINK_PORT);
+const sink = await startMailSink();
 const browser = await chromium.launch();
 try {
   const ownerCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
