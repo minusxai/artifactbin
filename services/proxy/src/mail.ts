@@ -1,5 +1,6 @@
 /** Outgoing mail: a local, file-backed development outbox or fixed-endpoint Resend. */
 import { appendFileSync, chmodSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import type { Mailer, OutgoingMail } from './auth/human';
 
@@ -11,6 +12,7 @@ export interface RuntimeMailerOptions extends ResendOptions { publicBaseUrl: str
 export interface DevOutboxOptions { path?: string; reset?: boolean; log?: (line: string) => void }
 
 export const DEV_OUTBOX_RELATIVE_PATH = '.artifactbin/dev-mail.jsonl';
+export const DEV_OUTBOX_DEFAULT_PATH = resolve(tmpdir(), 'artifactbin-dev-mail.jsonl');
 const RESEND_API_URL = 'https://api.resend.com';
 const OTP_TTL_MS = 10 * 60 * 1000;
 
@@ -37,7 +39,7 @@ export function resendMailer(opts: ResendOptions): Mailer {
 }
 
 export function devOutboxMailer(opts: DevOutboxOptions = {}): Mailer {
-  const outboxPath = resolve(opts.path ?? DEV_OUTBOX_RELATIVE_PATH);
+  const outboxPath = resolve(opts.path ?? DEV_OUTBOX_DEFAULT_PATH);
   mkdirSync(dirname(outboxPath), { recursive: true, mode: 0o700 });
   if (opts.reset !== false) writeFileSync(outboxPath, '', { mode: 0o600 });
   chmodSync(outboxPath, 0o600);

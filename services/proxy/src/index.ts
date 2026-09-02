@@ -18,7 +18,7 @@ export { PROXY_TABLES, ensureProxySchema } from './schema';
 export { createHumanAuth, humanAuthOptions, type HumanAuth, type HumanAuthOptions, type BetterAuthOptions, type Mailer, type OutgoingMail } from './auth/human';
 export {
   resendMailer, devOutboxMailer, mailerForRuntime, usesDevOutbox,
-  DEV_OUTBOX_RELATIVE_PATH, MailNotConfigured, MailSendFailed,
+  DEV_OUTBOX_RELATIVE_PATH, DEV_OUTBOX_DEFAULT_PATH, MailNotConfigured, MailSendFailed,
 } from './mail';
 export { proxyEnvNamesRead, readEnv } from './env';
 export { loginProvidersOf, loadConfig, loadProcessConfig, type LoginProviders, type LoadConfigOptions, type ProxyConfig } from './config';
