@@ -97,7 +97,10 @@ export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string;
   clearTimeout(timer);
   if (pending) retain(scrub(inv.keepLine && !inv.keepLine(pending) ? '' : pending)); // a final line with no newline
   if (errCarry) errOut.write(scrub(errCarry));
-  out.end();
-  errOut.end();
+  const finish = (stream: fs.WriteStream) => new Promise<void>((resolve, reject) => {
+    stream.once('error', reject);
+    stream.end(resolve);
+  });
+  await Promise.all([finish(out), finish(errOut)]);
   return { stdout, exitCode, timedOut, durationMs: Date.now() - started, truncated };
 }
