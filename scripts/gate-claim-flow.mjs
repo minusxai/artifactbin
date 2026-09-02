@@ -12,7 +12,8 @@
  *
  * The dev server must point its mail at this gate's sink:
  *
- *   EMAIL__RESEND_API_KEY=x EMAIL__RESEND_BASE_URL=http://127.0.0.1:4604 npm run dev
+ * Local dev writes login mail to `.artifactbin/dev-mail.jsonl`; use `npm run dev:otp -- <email>`.
+
  *
  *   usage: node scripts/gate-claim-flow.mjs [base]
  */
@@ -32,7 +33,7 @@ const api = async (path, init = {}, token) => {
   return res.json();
 };
 
-const sink = await startMailSink(4604);
+const sink = await startMailSink();
 const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: 1400, height: 1000 } });
 

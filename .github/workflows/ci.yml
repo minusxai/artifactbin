@@ -313,14 +313,11 @@ jobs:
       - if: steps.playwright.outputs.cache-hit == 'true'
         run: npx playwright install chromium
       - run: npm run build
-      # The runner boots the servers and the mail relay in front of them, so
-      # the only thing this has to supply is the identity secret and a mail key
-      # the relay never spends. Everything else it defaults for a gate rig.
+      # The runner boots the servers with one protected per-run mail outbox.
       - name: every gate, four servers
         run: node scripts/gates.mjs --servers=4
         env:
           AUTH__SECRET: gates-ci-${{ github.run_id }}
-          EMAIL__RESEND_API_KEY: ci
 
   # THE IMAGE IS THE ARTIFACT THAT DEPLOYS, and nothing else here proves it
   # builds or runs. `npm run build` produces the bundle from the FULL
@@ -358,7 +355,7 @@ jobs:
         run: |
           docker run -d --name ab -p 3399:3000 \
             -e DATABASE_URL=pglite://memory -e AUTH__SECRET=$(openssl rand -base64 32) \
-            -e EMAIL__RESEND_API_KEY=ci -e APP__PUBLIC_BASE_URL=http://127.0.0.1:3399 \
+            -e APP__PUBLIC_BASE_URL=http://127.0.0.1:3399 \
             -e ARTIFACTS__ALLOW_PUBLIC=1 -e RATE_LIMITER__ANON_MINT_MAX=500 \
             artifactbin:ci
           for i in $(seq 1 60); do

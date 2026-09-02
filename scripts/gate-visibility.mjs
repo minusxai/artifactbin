@@ -17,20 +17,20 @@
  * The login code is read from the same local MAIL SINK gate-email-login uses:
  *
  *   usage:
- *     EMAIL__RESEND_API_KEY=x EMAIL__RESEND_BASE_URL=http://127.0.0.1:4605 npm run dev
+ * Local dev writes login mail to `.artifactbin/dev-mail.jsonl`; use `npm run dev:otp -- <email>`.
+
  *     node scripts/gate-visibility.mjs [base]
  */
 import { chromium } from 'playwright';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 
-const SINK_PORT = 4605;
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const failures = [];
 const check = (ok, label) => { console.log(`${ok ? '  ok ' : 'FAIL '} ${label}`); if (!ok) failures.push(label); };
 
 const EMAIL = `mxmx_test_vis_${Date.now().toString(36)}@example.com`;
 
-const sink = await startMailSink(SINK_PORT);
+const sink = await startMailSink();
 
 const browser = await chromium.launch();
 const owner = await browser.newContext({ viewport: { width: 1400, height: 950 } });

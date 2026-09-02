@@ -127,7 +127,7 @@ const gridDoc = (await J('/api/artifacts', { method: 'POST', body: JSON.stringif
 <GridItem x={4} y={0} w={4} h={2}><Card className="h-full"><CardHeader><CardTitle>Tile B</CardTitle></CardHeader></Card></GridItem>
 </Grid></div>` }) }, T)).body;
 
-const sink = await startMailSink(4602);
+const sink = await startMailSink();
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 1500, height: 950 } });
 const p = await ctx.newPage();

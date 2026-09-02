@@ -18,19 +18,19 @@
  *   7. Cookie-authenticated mutations reject a cross-site Origin.
  *
  * Runs against a dev server started with the mail sink:
- *   EMAIL__RESEND_API_KEY=x EMAIL__RESEND_BASE_URL=http://127.0.0.1:4611 npm run dev
+ * Local dev writes login mail to `.artifactbin/dev-mail.jsonl`; use `npm run dev:otp -- <email>`.
+
  *   node scripts/gate-secure-arch.mjs [base]
  */
 import { chromium } from 'playwright';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 
-const SINK_PORT = 4611;
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const failures = [];
 const check = (ok, label) => { console.log(`${ok ? '  ok ' : 'FAIL '} ${label}`); if (!ok) failures.push(label); };
 const ts = Date.now().toString(36);
 
-const sink = await startMailSink(SINK_PORT);
+const sink = await startMailSink();
 const browser = await chromium.launch();
 
 // ── owner session A, stranger session B ───────────────────────────────────

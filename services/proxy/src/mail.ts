@@ -1,17 +1,18 @@
-/**
- * Outgoing mail — Resend over HTTP, ported from the app's lib/email. The base
- * URL is configurable ON PURPOSE: every browser gate points it at a local sink
- * and reads the login code out of the captured POST, because there is
- * deliberately no endpoint that exposes a live code. Unconfigured (no API key)
- * = refuse to send; there is no log-the-code fallback (a code in a log is an
- * auth bypass).
- */
+/** Outgoing mail: a local, file-backed development outbox or fixed-endpoint Resend. */
+import { appendFileSync, chmodSync, mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import type { Mailer, OutgoingMail } from './auth/human';
 
 export class MailNotConfigured extends Error { constructor() { super('mail is not configured (EMAIL__RESEND_API_KEY)'); } }
 export class MailSendFailed extends Error { constructor(public readonly status: number, body: string) { super(`mail send failed: ${status} ${body.slice(0, 200)}`); } }
 
-export interface ResendOptions { apiKey?: string; baseUrl?: string; from: string; fetch?: typeof fetch }
+export interface ResendOptions { apiKey?: string; from: string; fetch?: typeof fetch }
+export interface RuntimeMailerOptions extends ResendOptions { publicBaseUrl: string; devOutboxPath?: string }
+export interface DevOutboxOptions { path?: string; reset?: boolean; log?: (line: string) => void }
+
+export const DEV_OUTBOX_RELATIVE_PATH = '.artifactbin/dev-mail.jsonl';
+const RESEND_API_URL = 'https://api.resend.com';
+const OTP_TTL_MS = 10 * 60 * 1000;
 
 const html = (m: OutgoingMail): string =>
   m.kind === 'otp'
@@ -20,13 +21,12 @@ const html = (m: OutgoingMail): string =>
 
 export function resendMailer(opts: ResendOptions): Mailer {
   const doFetch = opts.fetch ?? fetch;
-  const base = (opts.baseUrl ?? 'https://api.resend.com').replace(/\/$/, '');
   return {
     async send(mail) {
       if (!opts.apiKey) throw new MailNotConfigured();
       const subject = mail.kind === 'otp' ? `${mail.otp} is your artifactbin login code` : mail.subject;
       const text = mail.kind === 'otp' ? `Your artifactbin login code is ${mail.otp}\n\nIt expires in 10 minutes. If you didn't ask to log in, ignore this email.` : mail.text;
-      const res = await doFetch(`${base}/emails`, {
+      const res = await doFetch(`${RESEND_API_URL}/emails`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${opts.apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ from: opts.from, to: [mail.to], subject, html: html(mail), text }),
@@ -34,4 +34,37 @@ export function resendMailer(opts: ResendOptions): Mailer {
       if (!res.ok) throw new MailSendFailed(res.status, await res.text().catch(() => ''));
     },
   };
+}
+
+export function devOutboxMailer(opts: DevOutboxOptions = {}): Mailer {
+  const outboxPath = resolve(opts.path ?? DEV_OUTBOX_RELATIVE_PATH);
+  mkdirSync(dirname(outboxPath), { recursive: true, mode: 0o700 });
+  if (opts.reset !== false) writeFileSync(outboxPath, '', { mode: 0o600 });
+  chmodSync(outboxPath, 0o600);
+  const report = opts.log ?? console.info;
+  return {
+    async send(mail) {
+      const createdAt = new Date();
+      appendFileSync(outboxPath, `${JSON.stringify({
+        ...mail,
+        createdAt: createdAt.toISOString(),
+        ...(mail.kind === 'otp' ? { expiresAt: new Date(createdAt.getTime() + OTP_TTL_MS).toISOString() } : {}),
+      })}\n`, { mode: 0o600 });
+      if (mail.kind === 'otp' && mail.otp) report(`[dev-mail] otp email=${mail.to} code=${mail.otp}`);
+    },
+  };
+}
+
+export function usesDevOutbox(publicBaseUrl: string): boolean {
+  try {
+    const host = new URL(publicBaseUrl).hostname;
+    return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
+  } catch {
+    return false;
+  }
+}
+
+export function mailerForRuntime(opts: RuntimeMailerOptions): Mailer {
+  if (usesDevOutbox(opts.publicBaseUrl)) return devOutboxMailer({ path: opts.devOutboxPath });
+  return resendMailer(opts);
 }

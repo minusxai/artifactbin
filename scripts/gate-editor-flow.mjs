@@ -55,7 +55,7 @@ const markup = `<Helmet>
 </div>`;
 const doc = await api('/api/artifacts', { method: 'POST', body: JSON.stringify({ title: 'Editor gate', markup }) }, token);
 
-const sink = await startMailSink(4601);
+const sink = await startMailSink();
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
 const page = await ctx.newPage();

@@ -2,35 +2,23 @@
  * Logging in, for gates.
  *
  * Auth is email + a one-time code, so every gate that needs a session needs a
- * mailbox. This serves a Resend-compatible sink and points the app's REAL send
- * path at it, which is deliberate: it means no endpoint in the app has to
- * expose a live login code, not even to an admin.
- *
- * The dev server must be started pointed at the sink:
- *
- *   EMAIL__RESEND_API_KEY=x EMAIL__RESEND_BASE_URL=http://127.0.0.1:<port> npm run dev
- *
- * Ports differ per gate so two can run at once without stealing each other's
- * mail — and because the relay in front of them fans every message out to all
- * of them, a code is read by the ADDRESS it was sent to, never by arrival
- * order (scripts/gates.mjs runs the set against parallel servers).
+ * mailbox. Local and gate servers write their real outgoing messages to a
+ * protected JSONL outbox. A code is read by the ADDRESS it was sent to, never
+ * by arrival order, so parallel gates cannot steal each other's mail.
  */
-import { createServer } from 'http';
+import fs from 'node:fs';
+import path from 'node:path';
 
-export async function startMailSink(port) {
-  const inbox = [];
-  const server = createServer((req, res) => {
-    let body = '';
-    req.on('data', (c) => { body += c; });
-    req.on('end', () => {
-      try { inbox.push(JSON.parse(body)); } catch { /* not an email payload */ }
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end('{}');
-    });
-  });
-  await new Promise((resolve) => server.listen(port, '127.0.0.1', resolve));
+const ROOT = path.resolve(import.meta.dirname, '../..');
+const outboxPath = () => process.env.EMAIL__DEV_OUTBOX_PATH ?? path.join(ROOT, '.artifactbin', 'dev-mail.jsonl');
+const inbox = () => {
+  try { return fs.readFileSync(outboxPath(), 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line)); }
+  catch (error) { if (error?.code === 'ENOENT') return []; throw error; }
+};
+
+export async function startMailSink() {
   return {
-    inbox,
+    get inbox() { return inbox(); },
     /**
      * The 6 digits from the most recent email, as a user would read them —
      * addressed to `address` when one is given.
@@ -43,10 +31,12 @@ export async function startMailSink(port) {
      * always ours (mxmx_test_<gate>_<ts>), so it is what we read by.
      */
     lastCode: (address) => {
-      const mine = address ? inbox.filter((m) => m.to?.includes?.(address)) : inbox;
-      return /\b(\d{6})\b/.exec(mine.at(-1)?.text ?? '')?.[1] ?? null;
+      const messages = inbox();
+      const mine = address ? messages.filter((m) => m.to === address) : messages;
+      const latest = mine.at(-1);
+      return latest?.otp ?? /\b(\d{6})\b/.exec(latest?.text ?? '')?.[1] ?? null;
     },
-    close: () => server.close(),
+    close: () => {},
   };
 }
 
@@ -69,8 +59,8 @@ export async function loginViaEmail(page, base, sink, email) {
   const code = sink.lastCode(email);
   if (!code) {
     throw new Error(
-      'No login code reached the sink. Start the dev server with ' +
-      'EMAIL__RESEND_API_KEY=x EMAIL__RESEND_BASE_URL=http://127.0.0.1:<port> npm run dev',
+      `No login code reached the development outbox ${outboxPath()}. ` +
+      `Request a new code, then run: npm run dev:otp -- ${email}`,
     );
   }
   await page.fill('[aria-label="Login code"]', code);

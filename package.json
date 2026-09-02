@@ -10,6 +10,7 @@
   "scripts": {
     "setup": "node scripts/setup.mjs",
     "dev": "node scripts/dev.mjs",
+    "dev:otp": "node scripts/dev-otp.mjs",
     "dev:app": "node scripts/dev-app.mjs",
     "build": "npm run build -w services/app && node scripts/build-server.mjs dist/proxy-server.mjs",
     "start": "NODE_ENV=production node dist/proxy-server.mjs",

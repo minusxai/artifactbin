@@ -14,7 +14,8 @@
  * The last leg needs a session, so the dev server must point its mail at this
  * gate's sink:
  *
- *   EMAIL__RESEND_API_KEY=x EMAIL__RESEND_BASE_URL=http://127.0.0.1:4603 npm run dev
+ * Local dev writes login mail to `.artifactbin/dev-mail.jsonl`; use `npm run dev:otp -- <email>`.
+
  *
  *   usage: node scripts/gate-viz-editor.mjs [base]
  */
@@ -274,7 +275,7 @@ ok((await p.locator('[aria-label="Chart editor"]').count()) === 0, 'close shuts 
 // picker has to offer the whole shelf. Same panel, so the same journey must
 // work with no stored token anywhere.
 try {
-  const sink = await startMailSink(4603);
+  const sink = await startMailSink();
   const page = await b.newPage({ viewport: { width: 1500, height: 1000 } });
   const email = `mxmx_test_viz_${Date.now().toString(36)}@example.com`;
   await loginViaEmail(page, B, sink, email);
@@ -316,8 +317,7 @@ try {
   sink.close();
 } catch (err) {
   // Reported, never swallowed: a leg that could not run is not a leg that passed.
-  ok(false, `the signed-in leg could not run — start the dev server with `
-    + `EMAIL__RESEND_BASE_URL=http://127.0.0.1:4603 (${String(err).split('\n').slice(0,4).join(' | ')})`);
+  ok(false, `the signed-in leg could not run — read its OTP with npm run dev:otp -- <email> (${String(err).split('\n').slice(0,4).join(' | ')})`);
 }
 
 // ── a chart INSIDE A GRID selects on the FIRST click ────────────────────────

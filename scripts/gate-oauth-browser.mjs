@@ -18,7 +18,8 @@
  * a user does: email → one-time code, read from a local mail sink. Start the
  * dev server pointed at it:
  *
- *   EMAIL__RESEND_API_KEY=x EMAIL__RESEND_BASE_URL=http://127.0.0.1:4598 npm run dev
+ * Local dev writes login mail to `.artifactbin/dev-mail.jsonl`; use `npm run dev:otp -- <email>`.
+
  */
 import { createServer } from 'http';
 import { createHash, randomBytes } from 'crypto';
@@ -35,7 +36,6 @@ const server = createServer((req, res) => { callbacks.push(new URL(req.url, `htt
 await new Promise((r) => server.listen(PORT, '127.0.0.1', r));
 
 // Local Resend-compatible sink: the login code arrives by the real send path.
-const SINK_PORT = 4598;
 const inbox = [];
 const sink = createServer((req, res) => {
   let body = '';

@@ -71,7 +71,7 @@ export const RETIRED_ENV_NAMES: Readonly<Record<string, string>> = {
   PUBLIC_BASE_URL: 'APP__PUBLIC_BASE_URL',
   QUERY_TIMEOUT_MS: 'SQL__QUERY_TIMEOUT_MS',
   RESEND_API_KEY: 'EMAIL__RESEND_API_KEY',
-  RESEND_BASE_URL: 'EMAIL__RESEND_BASE_URL',
+  RESEND_BASE_URL: 'removed (the Resend API endpoint is fixed)',
   TRUSTED_PROXY_HOPS: 'RATE_LIMITER__TRUSTED_PROXY_HOPS',
   WEB_INGEST_ALLOW_PRIVATE: 'WEB_INGEST__ALLOW_PRIVATE',
   WEB_INGEST_MAX_PER_HOUR: 'WEB_INGEST__MAX_PER_HOUR',
@@ -210,10 +210,9 @@ export const ANON_MINT_MAX = Number(env('RATE_LIMITER', 'ANON_MINT_MAX') ?? (IS_
 export const TRUSTED_PROXY_HOPS = Math.max(1, Math.trunc(Number(env('RATE_LIMITER', 'TRUSTED_PROXY_HOPS') ?? '1')) || 1);
 
 /**
- * Resend credentials for the login-code email. There is NO fallback: without a
- * key, requesting a code fails loudly rather than printing it to a log, because
- * a login code in a log file is an auth bypass for anyone who can read logs.
- * Email is therefore a hard requirement for running this app — see .env.example.
+ * Public deployments require Resend credentials for login-code email. A
+ * loopback development origin instead uses the protected local outbox owned by
+ * the proxy composition; the application itself never exposes a live code.
  */
 /**
  * Object storage as ONE connection string (see lib/object-store/url.ts):
@@ -296,14 +295,6 @@ export const RESEND_API_KEY = env('EMAIL', 'RESEND_API_KEY');
 
 /** Sender for login codes. Must be a domain verified in Resend, or sends fail. */
 export const LOGIN_EMAIL_FROM = env('EMAIL', 'FROM') ?? 'artifactbin <login@example.com>';
-
-/**
- * Where the Resend API lives. Overridable so a browser gate can point sends at
- * a local sink and read the code it would have emailed — which is why there is
- * no endpoint anywhere that reveals a live login code. Also lets a self-hoster
- * front Resend with a compatible proxy.
- */
-export const RESEND_BASE_URL = env('EMAIL', 'RESEND_BASE_URL') ?? 'https://api.resend.com';
 
 /**
  * The externally-visible origin, for absolute URLs built OUTSIDE a request

@@ -12,13 +12,13 @@
  * no endpoint anywhere in the app reveals a live one, not even to an admin.
  *
  *   usage:
- *     EMAIL__RESEND_API_KEY=x EMAIL__RESEND_BASE_URL=http://127.0.0.1:4599 npm run dev
+ * Local dev writes login mail to `.artifactbin/dev-mail.jsonl`; use `npm run dev:otp -- <email>`.
+
  *     node scripts/gate-email-login.mjs [base]
  */
 import { createServer } from 'http';
 import { chromium } from 'playwright';
 
-const SINK_PORT = 4599;
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const failures = [];
@@ -81,8 +81,8 @@ await page.waitForSelector('[aria-label="Login code"]', { timeout: 10_000 });
 
 // ── The code arrives by EMAIL and only by email ─────────────────────────────
 if (mine().length === 0) {
-  console.log('\nNo email reached the sink. Start the dev server with');
-  console.log(`  EMAIL__RESEND_API_KEY=x EMAIL__RESEND_BASE_URL=http://127.0.0.1:${SINK_PORT} npm run dev`);
+  console.log('\nNo email reached the development outbox. Request a code, then run');
+  console.log(`  npm run dev:otp -- `);
   await browser.close();
   sink.close();
   process.exit(1);

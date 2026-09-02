@@ -110,7 +110,7 @@ Several agents may run at once, on the SAME laptop, and must never share a check
   `--env` prints it as the lines below, which `agent-worktree.mjs` writes into the tree's `.env` and brief):
   ```
   APP__PORT=<base>            APP__HMR_PORT=<base+1>      APP__PUBLIC_BASE_URL=http://localhost:<base>
-  SQL__SERVICE_URL / BROWSER__SERVICE_URL / postgres / minio / mail relay / compose host bindings: <base+10 …>
+  SQL__SERVICE_URL / BROWSER__SERVICE_URL / postgres / minio / compose host bindings: <base+10 …>
   ```
   `APP__HMR_PORT` defaults to `APP__PORT + 1` (`lib/config resolveHmrPort`); the origin defaults
   (``EXPORT__INTERNAL_ORIGIN`) follow `APP__PORT`; data dirs are relative paths.
@@ -196,7 +196,7 @@ under that load gets one more turn ALONE and is NAMED in the summary when it
 passes there: four browsers on one machine can lose a race that is not a
 broken contract, and a retry nobody is told about is how a real intermittent
 bug hides. They need a running server (and, where they log in,
-`EMAIL__RESEND_BASE_URL` pointed at their mail sink), which is why `npm test` does not
+development mail written to their protected outbox), which is why `npm test` does not
 run them — but CI DOES: the `browser gates` job builds and runs the whole set
 against four of its own servers and is part of the `test` roll-up, so a
 "guarded by `scripts/gate-…`" note in this file is enforced on every PR rather
@@ -429,5 +429,5 @@ the driver strips `*_API_KEY` from the product server's environment.
 - UI tests locate elements by `aria-label` only; every interactive element gets one.
 - **Tooltips use `components/Tooltip.tsx` everywhere in app chrome** — and the story registry imports the SAME module, which is why it does not live in `components/kit/`: that directory is the story component layer, and the reader graph is not allowed to reach it (`lib/__tests__/reader-bundle-hygiene.test.ts`, which the annotation work turned red by importing the tooltip from there). It composes `clsx`/`tailwind-merge` directly for the same reason. They portal by default so fixed, transformed, and overflow-hidden ancestors cannot clip them; use `positioning.placement` for edge controls. The sandboxed story runtime keeps its small standalone `data-tip` implementation because it cannot share the app's React portal. Never use the native `title` attribute for tooltips — it's slow and unstyled.
 - **Test accounts are named `mxmx_test_*`** — every browser gate mints its login email as `mxmx_test_<gate>_<ts>@example.com`, so the account (and its auto-assigned handle) is identifiable as disposable wherever it lands. A gate run against a SHARED environment leaves users behind; this is what makes them safe to prune later without guessing which are real.
-- **A login code is READ FROM THE MAIL SINK, never from the app.** Auth is email + a one-time code, so every gate that needs a session needs a mailbox — and there is deliberately no endpoint that exposes a live code, not even to an admin (the proxy's mailer has no log-the-code fallback). Instead `EMAIL__RESEND_BASE_URL` (`.env`; `lib/config.ts` → the proxy's mailer posts to `${RESEND_BASE_URL}/emails`) points the app's REAL send path at a local HTTP server, and the gate reads the 6 digits out of the POST body it captured (`scripts/lib/mail-login.mjs`, `startMailSink`/`lastCode`). **To get an OTP by hand, look up `EMAIL__RESEND_BASE_URL` in `.env` and watch that port** — the email arrives there as JSON. Each gate binds its OWN sink port (4598–4611) so two can run at once, but the app has a single `EMAIL__RESEND_BASE_URL`: point it at `scripts/lib/mail-relay.mjs` (4600), which fans every message out to all of them, and ONE dev-server restart covers every mail gate. Unset, codes go to real Resend and every login-based gate times out waiting for `[aria-label="Login code"]`.
+- **A local login code is read from the protected development outbox, never from an app endpoint.** `npm run dev` writes outgoing local mail to `.artifactbin/dev-mail.jsonl` and prints the OTP for a human; `npm run dev:otp -- <email>` lets a coding agent retrieve the newest unexpired code even when somebody else owns the server terminal. Browser gates give their throwaway servers one per-run outbox and read by exact recipient, so parallel logins cannot steal each other's code. Public origins always use Resend's fixed API endpoint.
 - Keep tests calling the real route handlers in-process (no mock HTTP layer) against in-memory PGLite; reset state in `beforeEach` (`resetRateLimit()`, wipe tables).

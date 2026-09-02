@@ -42,7 +42,6 @@ BROWSER__SERVICE_URL=http://127.0.0.1:${p(11)}
 POSTGRES_PORT=${p(32)}
 MINIO_PORT=${p(90)}
 MINIO_CONSOLE_PORT=${p(91)}
-MAIL_RELAY_PORT=${p(98)}
 # ${p(20)}–${p(29)} free for throwaway servers; ${p(40)}–${p(89)} free for compose host bindings
 `);
 }
