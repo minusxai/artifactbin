@@ -2,7 +2,8 @@
 // container, one mounted data dir, every question delegated to setup.mjs
 // inside the image. Driven with a FAKE docker/curl/uname on PATH that record
 // their argv. Seeded RED by the orchestrator.
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { once } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -98,7 +99,7 @@ describe('install.sh', () => {
     expect(run(['--no-interview', '--port=5211']).status).toBe(0);
     fs.writeFileSync(path.join(home, 'artifactbin', 'data', 'keep.txt'), 'x');
     fs.rmSync(log);
-    const r = run(['--no-interview', '--port=5211']);
+    const r = run(['--no-interview']);
     expect(r.status, r.stderr).toBe(0);
     const c = calls();
     expect(c.some((l) => l.includes('setup.mjs'))).toBe(false);
@@ -107,6 +108,15 @@ describe('install.sh', () => {
     expect(c.some((l) => /^docker run -d /.test(l))).toBe(true);
     expect(fs.existsSync(path.join(home, 'artifactbin', 'data', 'keep.txt'))).toBe(true);
     expect(r.stdout).toMatch(/upgrad/i);
+  });
+
+  it('reconfigures an existing install when its host port is explicitly changed', () => {
+    expect(run(['--no-interview', '--port=5211']).status).toBe(0);
+    fs.rmSync(log);
+    const r = run(['--no-interview', '--port=5212']);
+    expect(r.status, r.stderr).toBe(0);
+    expect(calls().filter((line) => line.includes('setup.mjs'))).toHaveLength(1);
+    expect(calls().some((line) => /setup\.mjs.*--port 5212/.test(line))).toBe(true);
   });
 
   it('migrates the legacy default directory and container without losing data', () => {
@@ -135,16 +145,34 @@ describe('install.sh', () => {
     expect(calls().some((line) => /^docker run /.test(line))).toBe(false);
   });
 
-  it('refuses a legacy container with no legacy default directory', () => {
+  it('leaves an unrelated legacy-named container alone when its cwd-relative directory is absent', () => {
+    const legacyName = ['artifact', 'bin'].join('-');
     const r = run(['--no-interview'], { FAKE_LEGACY_CONTAINER: '1' });
-    expect(r.status).not.toBe(0);
-    expect(`${r.stdout}${r.stderr}`).toMatch(/without.*directory|ambiguous/i);
-    expect(calls().some((line) => /^docker pull /.test(line))).toBe(false);
+    expect(r.status, r.stderr).toBe(0);
+    expect(`${r.stdout}${r.stderr}`).toMatch(/leaving it untouched/i);
+    expect(calls()).not.toContain(`docker rm -f ${legacyName}`);
+    expect(calls().some((line) => /^docker run -d --name artifactbin /.test(line))).toBe(true);
   });
 
   it('on arm64 every docker command carries --platform linux/amd64', () => {
     expect(run(['--no-interview', '--port=5211'], { FAKE_ARCH: 'arm64' }).status).toBe(0);
     for (const l of calls().filter((l) => /^docker (pull|run) /.test(l))) expect(l).toMatch(/--platform linux\/amd64/);
+  });
+
+  it('reports a busy host port with a concrete free-port recovery command', async () => {
+    const blocker = spawn(process.execPath, ['-e', "require('net').createServer().listen(0, '127.0.0.1', function () { process.stdout.write(String(this.address().port) + '\\n') })"], { stdio: ['ignore', 'pipe', 'ignore'] });
+    const [chunk] = await once(blocker.stdout, 'data');
+    const port = Number(String(chunk).trim());
+    try {
+      const r = run(['--no-interview', `--port=${port}`]);
+      expect(r.status).toBe(1);
+      expect(`${r.stdout}${r.stderr}`).toContain(`Port ${port} is already in use`);
+      expect(`${r.stdout}${r.stderr}`).toMatch(/Re-run with a free port:.*--port=\d+/);
+      expect(calls().some((line) => /^docker run -d /.test(line))).toBe(false);
+    } finally {
+      blocker.kill('SIGTERM');
+      await once(blocker, 'exit');
+    }
   });
 
   it('a failed health gate prints the container logs and exits 1', () => {

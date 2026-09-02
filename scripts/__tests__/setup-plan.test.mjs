@@ -48,6 +48,7 @@ describe('buildEnvFile()', () => {
     expect(text).toMatch(/^#\s*DATABASE_URL=/m);
     expect(text).toMatch(/^#\s*S3_URL=/m);
     expect(text).toMatch(/^OBJECT_STORE__LOCAL_DIR=\.\/data\/objects$/m);
+    expect(text).toMatch(/^# EMAIL__DEV_OUTBOX_PATH=$/m);
     expect(text).toMatch(/^APP__PUBLIC_BASE_URL=http:\/\/localhost:3030$/m);
     expect(text).toMatch(/^APP__PORT=3030$/m);
     expect(text).not.toContain('dev-only-secret');

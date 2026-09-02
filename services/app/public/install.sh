@@ -86,8 +86,7 @@ if [[ "$TARGET_EXPLICIT" -eq 0 ]]; then
     echo "Migrating the existing default install to $NEW_DEFAULT"
     mv "$LEGACY_DEFAULT" "$NEW_DEFAULT"
   elif [[ "$LEGACY_CONTAINER" -eq 1 ]]; then
-    echo "The legacy container exists without its expected default install directory; refusing ambiguous migration." >&2
-    exit 1
+    echo "Found legacy container ${LEGACY_DEFAULT##*/} without $LEGACY_DEFAULT; leaving it untouched."
   fi
   TARGET_INPUT=./artifactbin
 fi
@@ -138,7 +137,7 @@ if ! pull_image; then
 fi
 
 echo "[4/6] Configuring artifactbin"
-if [[ "$UPGRADE" -eq 0 ]]; then
+if [[ "$UPGRADE" -eq 0 || -n "$PORT_OVERRIDE" ]]; then
   SETUP_ARGS=(node scripts/setup.mjs --out /work/.env --no-next)
   if [[ -n "$PORT_OVERRIDE" ]]; then
     SETUP_ARGS+=(--port "$PORT_OVERRIDE")
@@ -163,6 +162,22 @@ HOST_PORT=$PORT_OVERRIDE
 if [[ -z "$HOST_PORT" ]]; then
   HOST_PORT=$(sed -n 's/^APP__PORT=//p' "$ENV_FILE" | tail -n 1)
   HOST_PORT=${HOST_PORT:-3030}
+fi
+
+port_is_busy() {
+  (exec 3<>"/dev/tcp/127.0.0.1/$1") >/dev/null 2>&1
+}
+
+if port_is_busy "$HOST_PORT" && ! docker container inspect artifactbin >/dev/null 2>&1; then
+  SUGGESTED_PORT=$((HOST_PORT + 1))
+  while (( SUGGESTED_PORT <= 65535 )) && port_is_busy "$SUGGESTED_PORT"; do
+    SUGGESTED_PORT=$((SUGGESTED_PORT + 1))
+  done
+  echo "Port $HOST_PORT is already in use; artifactbin was not started." >&2
+  if (( SUGGESTED_PORT <= 65535 )); then
+    echo "Re-run with a free port: curl -fsSL https://artifactbin.dev/install.sh | bash -s -- --dir=\"$TARGET\" --port=$SUGGESTED_PORT" >&2
+  fi
+  exit 1
 fi
 
 echo "[5/6] Starting artifactbin"

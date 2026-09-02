@@ -13,6 +13,7 @@ export interface DevOutboxOptions { path?: string; reset?: boolean; log?: (line:
 
 export const DEV_OUTBOX_RELATIVE_PATH = '.artifactbin/dev-mail.jsonl';
 export const DEV_OUTBOX_DEFAULT_PATH = resolve(tmpdir(), 'artifactbin-dev-mail.jsonl');
+export const resolveDevOutboxPath = (value?: string): string => resolve(value?.trim() || DEV_OUTBOX_DEFAULT_PATH);
 const RESEND_API_URL = 'https://api.resend.com';
 const OTP_TTL_MS = 10 * 60 * 1000;
 
@@ -39,7 +40,7 @@ export function resendMailer(opts: ResendOptions): Mailer {
 }
 
 export function devOutboxMailer(opts: DevOutboxOptions = {}): Mailer {
-  const outboxPath = resolve(opts.path ?? DEV_OUTBOX_DEFAULT_PATH);
+  const outboxPath = resolveDevOutboxPath(opts.path);
   mkdirSync(dirname(outboxPath), { recursive: true, mode: 0o700 });
   if (opts.reset !== false) writeFileSync(outboxPath, '', { mode: 0o600 });
   chmodSync(outboxPath, 0o600);
