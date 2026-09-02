@@ -66,6 +66,8 @@ CREATE TABLE IF NOT EXISTS app.tokens (
   token_hash TEXT NOT NULL,
   user_id TEXT,
   client_harness TEXT,
+  audience TEXT,
+  scope TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   revoked_at TIMESTAMPTZ,
   expires_at TIMESTAMPTZ,
@@ -82,6 +84,10 @@ ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS token_hash TEXT NOT NULL;
 ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS user_id TEXT;
 
 ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS client_harness TEXT;
+
+ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS audience TEXT;
+
+ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS scope TEXT;
 
 ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
@@ -405,4 +411,63 @@ ALTER TABLE auth.codes ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ NOT NULL;
 ALTER TABLE auth.codes ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_codes_kind_subject ON auth.codes (kind, subject);
+
+CREATE TABLE IF NOT EXISTS auth.oauth_clients (
+  client_id TEXT NOT NULL,
+  client_name TEXT NOT NULL,
+  redirect_uris JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (client_id)
+);
+
+ALTER TABLE auth.oauth_clients ADD COLUMN IF NOT EXISTS client_id TEXT NOT NULL;
+
+ALTER TABLE auth.oauth_clients ADD COLUMN IF NOT EXISTS client_name TEXT NOT NULL;
+
+ALTER TABLE auth.oauth_clients ADD COLUMN IF NOT EXISTS redirect_uris JSONB NOT NULL;
+
+ALTER TABLE auth.oauth_clients ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE TABLE IF NOT EXISTS auth.oauth_refresh_tokens (
+  token_hash TEXT NOT NULL,
+  family_id TEXT NOT NULL,
+  client_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  resource TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  access_token_id TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ,
+  revoked_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (token_hash)
+);
+
+ALTER TABLE auth.oauth_refresh_tokens ADD COLUMN IF NOT EXISTS token_hash TEXT NOT NULL;
+
+ALTER TABLE auth.oauth_refresh_tokens ADD COLUMN IF NOT EXISTS family_id TEXT NOT NULL;
+
+ALTER TABLE auth.oauth_refresh_tokens ADD COLUMN IF NOT EXISTS client_id TEXT NOT NULL;
+
+ALTER TABLE auth.oauth_refresh_tokens ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
+
+ALTER TABLE auth.oauth_refresh_tokens ADD COLUMN IF NOT EXISTS resource TEXT NOT NULL;
+
+ALTER TABLE auth.oauth_refresh_tokens ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL;
+
+ALTER TABLE auth.oauth_refresh_tokens ADD COLUMN IF NOT EXISTS access_token_id TEXT NOT NULL;
+
+ALTER TABLE auth.oauth_refresh_tokens ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ NOT NULL;
+
+ALTER TABLE auth.oauth_refresh_tokens ADD COLUMN IF NOT EXISTS used_at TIMESTAMPTZ;
+
+ALTER TABLE auth.oauth_refresh_tokens ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;
+
+ALTER TABLE auth.oauth_refresh_tokens ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE INDEX IF NOT EXISTS idx_oauth_refresh_family ON auth.oauth_refresh_tokens (family_id);
+
+CREATE INDEX IF NOT EXISTS idx_oauth_refresh_client ON auth.oauth_refresh_tokens (client_id);
+
+CREATE INDEX IF NOT EXISTS idx_oauth_refresh_expiry ON auth.oauth_refresh_tokens (expires_at);
 

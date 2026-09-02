@@ -33,7 +33,7 @@ describe('the rendered schema', () => {
   });
   it('every table has exactly one owning package, and the declared set is the literal below', () => {
     const owners = rendered().tables;
-    expect(Object.keys(owners).sort()).toEqual(['app.annotations', 'app.artifact_edits', 'app.artifact_shares', 'app.artifact_versions', 'app.artifacts', 'app.analytics_events', 'app.codes', 'app.tokens', 'app.users', 'app.webfonts', 'auth.codes'].sort());
+    expect(Object.keys(owners).sort()).toEqual(['app.annotations', 'app.artifact_edits', 'app.artifact_shares', 'app.artifact_versions', 'app.artifacts', 'app.analytics_events', 'app.codes', 'app.tokens', 'app.users', 'app.webfonts', 'auth.codes', 'auth.oauth_clients', 'auth.oauth_refresh_tokens'].sort());
     expect(new Set(Object.values(owners))).toEqual(new Set(['app', 'proxy']));
   });
 });

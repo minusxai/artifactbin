@@ -17,7 +17,7 @@
  * wave-2c base this is RED on purpose: both sides still declare it, and the
  * proxy still declares `tokens`. That red is this test doing its job — it is
  * the message to the app wave (delete RATE_LIMIT_HITS from lib/schema.ts) and
- * the proxy wave (reduce the proxy's declarations to `codes`).
+ * the proxy wave (keep the proxy's declarations inside its own `auth` schema).
  */
 import { describe, expect, it } from 'vitest';
 import { renderedSchema } from '@/__tests__/rendered-schema';
@@ -38,6 +38,8 @@ const DECLARED_SET = [
   'app.users',
   'app.webfonts',
   'auth.codes',
+  'auth.oauth_clients',
+  'auth.oauth_refresh_tokens',
 ];
 
 describe('table ownership', () => {

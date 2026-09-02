@@ -7,7 +7,7 @@
  *   (i)  the SELECT carries the expiry clause  — `expires_at IS NULL OR expires_at > now()`;
  *   (ii) a cache entry never outlives its token — an entry for a token expiring in 300 ms is gone at 400 ms
  *        (clamp the entry's TTL to the remaining lifetime at remember(), or check per hit; either passes).
- * TokenRecord (the contract) does not change; the reader's own SELECT gains expires_at. The fake database
+ * The reader's SELECT includes expiry and optional OAuth audience metadata. The fake database
  * below applies the clause's SEMANTICS on the reader's clock, so a stale cache hit is the only way to be wrong.
  */
 import { describe, expect, it } from 'vitest';

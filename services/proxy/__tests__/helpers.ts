@@ -21,6 +21,8 @@ const TOKENS_DDL = [
      token_hash TEXT NOT NULL,
      user_id TEXT,
      client_harness TEXT,
+     audience TEXT,
+     scope TEXT,
      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
      revoked_at TIMESTAMPTZ,
      expires_at TIMESTAMPTZ,
@@ -41,7 +43,7 @@ export async function ensureTestSchema(): Promise<void> {
 export async function resetTestDb(): Promise<void> {
   await ensureTestSchema();
   const { pg } = testDb();
-  await pg().exec('DELETE FROM tokens; DELETE FROM auth.codes');
+  await pg().exec('DELETE FROM tokens; DELETE FROM auth.codes; DELETE FROM auth.oauth_refresh_tokens; DELETE FROM auth.oauth_clients');
 }
 
 /** A ready token row, answered the way the app would mint it (hash only, never the secret). */

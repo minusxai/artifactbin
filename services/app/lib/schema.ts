@@ -46,6 +46,10 @@ const TOKENS: Table = {
     // Last branded MCP initialize for display attribution on later stateless calls.
     // Self-reported telemetry only — never used for authorization.
     { name: 'client_harness', type: 'TEXT' },
+    // OAuth-issued MCP access tokens are accepted only at this exact resource.
+    // NULL keeps manual and grandfathered tokens general-purpose.
+    { name: 'audience', type: 'TEXT' },
+    { name: 'scope', type: 'TEXT' },
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
     { name: 'revoked_at', type: 'TIMESTAMPTZ' }, // NULL = live (soft revoke)
     // Nullable so the additive boot DDL is the migration: existing tokens are

@@ -21,7 +21,8 @@ import {
 } from '@artifactbin/contracts';
 import { Hono, type Context } from 'hono';
 import { assemble, cookieName, createCodeStore, createLimiter, decodeAgentSession, doorsEnv, memoryBackend, readCookie } from '@artifactbin/utils';
-import { mountOAuthRoutes } from './routes/oauth';
+import { baseUrlOf, mountOAuthRoutes } from './routes/oauth';
+import { createOAuthStore } from './identity/oauth';
 import { readEnv } from './env';
 
 /** What the session part resolves an account to. */
@@ -53,8 +54,10 @@ export interface ProxyOptions {
   cookieSecret: string;
   /** Cookies carry Secure (production / https). */
   secure?: boolean;
-  /** The proxy's own `codes` table (OAuth); given = the OAuth routes mount. */
+  /** The proxy's own OAuth tables; given = the OAuth routes mount. */
   identityDb?: Queryable;
+  /** APP__SCHEMA as resolved by the composition; absent means the connection's default schema. */
+  appSchema?: string;
   /**
    * Handshake deadline for `forward`: an upstream that refuses, or accepts and never answers, is a 502
    * `{ error: 'upstream_unavailable' }` inside this many ms — never a hang. Unset = no clock. The clock
@@ -71,6 +74,7 @@ export type ProxyApp = Hono<ProxyEnv>;
 export function doorFor(method: string, pathname: string): DoorName | null {
   if (pathname === '/api/tokens/anonymous' || pathname === '/api/start') return 'ANON_MINT';
   if (pathname.startsWith('/api/auth/sign-in') || pathname.startsWith('/api/auth/email-otp/verify')) return 'LOGIN_VERIFY';
+  if (pathname === '/oauth/register') return 'OAUTH_REGISTER';
   if (pathname === '/oauth/token') return 'OAUTH_TOKEN';
   if (/^\/a\/[A-Za-z0-9]+\/mutate$/.test(pathname)) return 'MUTATE';
   if (/^\/a\/[A-Za-z0-9]+\/query$/.test(pathname) || pathname === '/api/query') return 'QUERY';
@@ -177,15 +181,22 @@ export function loginRoutes(o: ProxyOptions): Part<ProxyEnv> {
   };
 }
 
-/** THE MCP OAUTH PROVIDER — /oauth/* and /.well-known/*, over the proxy's own `auth.codes`; mounted only when identityDb is given. */
+/** THE MCP OAUTH PROVIDER — /oauth/* and /.well-known/*, over the proxy's own `auth` schema; mounted only when identityDb is given. */
 export function oauthRoutes(o: ProxyOptions): Part<ProxyEnv> {
   return {
     name: 'oauthRoutes',
     mount: (app) => {
       if (!o.identityDb) return;
       const schema = readEnv(o.env, 'AUTH__SCHEMA') ?? 'auth';
+      const appSchema = o.appSchema ?? readEnv(o.env, 'APP__SCHEMA');
       const codes = createCodeStore(o.identityDb, { schema });
-      mountOAuthRoutes(app, { codes, upstream: o.upstream, trustedHops: trustedHopsOf(o.env) });
+      mountOAuthRoutes(app, {
+        codes,
+        oauth: createOAuthStore(o.identityDb, schema, appSchema),
+        upstream: o.upstream,
+        trustedHops: trustedHopsOf(o.env),
+        publicBaseUrl: readEnv(o.env, 'APP__PUBLIC_BASE_URL'),
+      });
     },
   };
 }
@@ -209,7 +220,7 @@ async function resolveActor(request: Request, o: ProxyOptions): Promise<Actor> {
   const presented = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
   if (presented) {
     const token = await o.tokens.byToken(presented);
-    if (token) return { credential: 'bearer', tokenId: token.id, ...(token.userId ? { userId: token.userId } : {}) };
+    if (token && tokenFitsRequest(token, request, o)) return { credential: 'bearer', tokenId: token.id, ...(token.userId ? { userId: token.userId } : {}) };
     return ANONYMOUS;
   }
   const secure = o.secure ?? false;
@@ -228,9 +239,17 @@ async function resolveActor(request: Request, o: ProxyOptions): Promise<Actor> {
   const lastHeld = held?.tokenIds[held.tokenIds.length - 1];
   if (lastHeld !== undefined) {
     const token = await o.tokens.byId(lastHeld);
-    if (token) return { credential: 'agent-cookie', tokenId: token.id, ...(token.userId ? { userId: token.userId } : {}), ...heldIds };
+    if (token && tokenFitsRequest(token, request, o)) return { credential: 'agent-cookie', tokenId: token.id, ...(token.userId ? { userId: token.userId } : {}), ...heldIds };
   }
   return ANONYMOUS;
+}
+
+/** OAuth access tokens are capabilities for one exact MCP resource and scope. */
+function tokenFitsRequest(token: { audience?: string; scope?: string }, request: Request, o: ProxyOptions): boolean {
+  if (!token.audience) return true;
+  const origin = baseUrlOf(request, trustedHopsOf(o.env), readEnv(o.env, 'APP__PUBLIC_BASE_URL'));
+  const target = `${origin}${new URL(request.url).pathname}`;
+  return token.audience === target && (token.scope?.split(/\s+/).includes('artifacts') ?? false);
 }
 
 /**

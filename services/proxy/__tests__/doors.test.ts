@@ -101,6 +101,6 @@ describe('doorsEnv (the environment-dependent default)', () => {
     expect(doorsEnv({ RATE_LIMITER__MUTATE_MAX: '9' }).RATE_LIMITER__MUTATE_MAX).toBe('9');
   });
   it('names every door the contracts do — the vocabulary is shared, not copied', () => {
-    expect(Object.keys(DOORS).sort()).toEqual(['ANON_MINT', 'EDIT', 'EVENTS_STREAMS', 'EXPORT', 'GLOBAL', 'LOGIN_SEND', 'LOGIN_VERIFY', 'MUTATE', 'OAUTH_TOKEN', 'PUBLISH', 'QUERY', 'START_LINK']);
+    expect(Object.keys(DOORS).sort()).toEqual(['ANON_MINT', 'EDIT', 'EVENTS_STREAMS', 'EXPORT', 'GLOBAL', 'LOGIN_SEND', 'LOGIN_VERIFY', 'MUTATE', 'OAUTH_REGISTER', 'OAUTH_TOKEN', 'PUBLISH', 'QUERY', 'START_LINK']);
   });
 });

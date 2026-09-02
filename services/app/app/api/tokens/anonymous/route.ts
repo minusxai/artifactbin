@@ -22,14 +22,28 @@ export async function POST(request: Request) {
   // route's to change.
   const actor = await sessionActor(request);
   const userId = actor.credential === 'session' ? actor.viewer?.userId ?? null : null;
-  const body = (await request.json().catch(() => ({}))) as { expiresInHours?: unknown };
+  const body = (await request.json().catch(() => ({}))) as { expiresInHours?: unknown; audience?: unknown; scope?: unknown };
   let expiresInMs: number | undefined;
   if (body.expiresInHours !== undefined) {
     if (typeof body.expiresInHours !== 'number' || !Number.isFinite(body.expiresInHours)) return json({ error: 'invalid_expiry' }, 400);
     expiresInMs = body.expiresInHours * 60 * 60 * 1000;
     if (expiresInMs < MIN_TOKEN_TTL_MS || expiresInMs > MAX_TOKEN_TTL_MS) return json({ error: 'invalid_expiry' }, 400);
   }
-  const minted = await mintToken(sourcedTokenName('api'), userId, undefined, { expiresInMs });
+  let audience: string | undefined;
+  let scope: string | undefined;
+  if (body.audience !== undefined || body.scope !== undefined) {
+    if (actor.credential !== 'session' || typeof body.audience !== 'string' || body.scope !== 'artifacts') return json({ error: 'invalid_audience' }, 400);
+    try {
+      const target = new URL(body.audience);
+      const loopback = target.protocol === 'http:' && ['localhost', '127.0.0.1', '::1', '[::1]'].includes(target.hostname);
+      if ((target.protocol !== 'https:' && !loopback) || target.pathname !== '/mcp' || target.search || target.hash || target.username || target.password) return json({ error: 'invalid_audience' }, 400);
+      audience = target.href;
+      scope = body.scope;
+    } catch {
+      return json({ error: 'invalid_audience' }, 400);
+    }
+  }
+  const minted = await mintToken(sourcedTokenName('api'), userId, undefined, { expiresInMs, audience, scope });
   return json(
     {
       id: minted.id,
