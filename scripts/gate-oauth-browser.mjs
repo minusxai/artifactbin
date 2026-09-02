@@ -15,8 +15,7 @@
  * arrive at a real listener on the client side.
  *
  * Connecting the MCP now requires an ACCOUNT, so the gate also logs in the way
- * a user does: email → one-time code, read from a local mail sink. Start the
- * dev server pointed at it:
+ * a user does: email → one-time code, read from the development mail outbox:
  *
  * Local dev writes login mail to `.artifactbin/dev-mail.jsonl`; use `npm run dev:otp -- <email>`.
 
@@ -24,6 +23,7 @@
 import { createServer } from 'http';
 import { createHash, randomBytes } from 'crypto';
 import { chromium } from 'playwright';
+import { startMailSink } from './lib/mail-login.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const failures = [];
@@ -35,18 +35,7 @@ const callbacks = [];
 const server = createServer((req, res) => { callbacks.push(new URL(req.url, `http://127.0.0.1:${PORT}`)); res.end('ok'); });
 await new Promise((r) => server.listen(PORT, '127.0.0.1', r));
 
-// Local Resend-compatible sink: the login code arrives by the real send path.
-const inbox = [];
-const sink = createServer((req, res) => {
-  let body = '';
-  req.on('data', (c) => { body += c; });
-  req.on('end', () => {
-    try { inbox.push(JSON.parse(body)); } catch { /* not our shape */ }
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end('{}');
-  });
-});
-await new Promise((r) => sink.listen(SINK_PORT, '127.0.0.1', r));
+const sink = await startMailSink();
 
 const verifier = randomBytes(32).toString('base64url');
 const challenge = createHash('sha256').update(verifier).digest('base64url');
@@ -88,7 +77,7 @@ check(cspViolations.length === 0, `no CSP violation blocks the submission${cspVi
   await page.click('[aria-label="Log in with email"]');
   await page.waitForSelector('[aria-label="Login code"]', { timeout: 10_000 });
 
-  const code0 = /\b(\d{6})\b/.exec(inbox.at(-1)?.text ?? '')?.[1];
+  const code0 = sink.lastCode(email);
   check(!!code0, 'the login code arrived by email');
   await page.fill('[aria-label="Login code"]', code0 ?? '');
   await page.click('[aria-label="Verify code"]');

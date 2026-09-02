@@ -23,12 +23,8 @@ export async function startMailSink() {
      * The 6 digits from the most recent email, as a user would read them —
      * addressed to `address` when one is given.
      *
-     * The relay copies EVERY message to EVERY gate's sink, so this inbox has
-     * never been ours alone; while the set ran one gate at a time nothing else
-     * was sending, and `at(-1)` was our own mail by luck. Running the gates
-     * against parallel servers spends that luck: another gate's code can land
-     * last, and this would hand it over. The address is the thing that was
-     * always ours (mxmx_test_<gate>_<ts>), so it is what we read by.
+     * Parallel gates share one outbox, so another gate's code may land last.
+     * The unique address (mxmx_test_<gate>_<ts>) is the ownership boundary.
      */
     lastCode: (address) => {
       const messages = inbox();
