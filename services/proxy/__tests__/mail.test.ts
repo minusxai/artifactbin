@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MailNotConfigured, MailSendFailed, devOutboxMailer, mailerForRuntime, resendMailer } from '../src/mail';
+import { DEV_OUTBOX_DEFAULT_PATH, MailNotConfigured, MailSendFailed, devOutboxMailer, mailerForRuntime, resendMailer, resolveDevOutboxPath } from '../src/mail';
 
 describe('resendMailer', () => {
   it('posts the Resend shape — the login code in the subject and the text, never logged', async () => {
@@ -21,6 +21,10 @@ describe('resendMailer', () => {
     await m.send({ to: 'dev@example.com', kind: 'otp', subject: 'x', text: 'x', otp: '123456' });
     expect(JSON.parse(readFileSync(file, 'utf8').trim())).toMatchObject({ to: 'dev@example.com', otp: '123456' });
     expect(log).toHaveBeenCalledWith('[dev-mail] otp email=dev@example.com code=123456');
+  });
+  it('treats a blank optional outbox path as unset, never as the process directory', () => {
+    expect(resolveDevOutboxPath('')).toBe(DEV_OUTBOX_DEFAULT_PATH);
+    expect(resolveDevOutboxPath('   ')).toBe(DEV_OUTBOX_DEFAULT_PATH);
   });
   it('selects the local outbox only for loopback origins', () => {
     expect(mailerForRuntime({ publicBaseUrl: 'http://localhost:3030', from: 'x', devOutboxPath: join(tmpdir(), 'artifactbin-local-mail') })).toBeTruthy();

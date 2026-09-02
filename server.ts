@@ -213,6 +213,14 @@ async function main(): Promise<void> {
   const server = http.createServer(
     vite ? (req, res) => vite!.middlewares(req, res, () => void listener(req, res)) : listener,
   );
+  server.once('error', (error: NodeJS.ErrnoException) => {
+    if (error.code === 'EADDRINUSE') {
+      console.error(`[boot] Port ${port} is already in use.${dev ? ' Choose a free app/HMR pair with: npm run setup -- --yes --port <port>' : ''}`);
+      process.exit(1);
+    }
+    console.error('[boot] listener failed:', error);
+    process.exit(1);
+  });
   server.listen(port, () => {
     console.log(`[boot] ${appOnly ? 'app-only' : 'proxy + app'} on ${baseURL} (${dev ? 'dev' : 'production'}, db ${raw.kind})`);
     if (hmrPort !== null) console.log(`[boot] vite hmr websocket on ws://localhost:${hmrPort} (defaults to APP__PORT + 1; APP__HMR_PORT overrides)`);

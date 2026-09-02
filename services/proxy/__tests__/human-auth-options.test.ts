@@ -8,9 +8,9 @@
  */
 import { PGlite } from '@electric-sql/pglite';
 import { Kysely } from 'kysely';
-import { KyselyPGlite } from 'kysely-pglite';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { humanAuthOptions } from '../src/auth/human';
+import { pgliteDialect } from '../src/auth/pglite';
 
 let pg: PGlite;
 beforeAll(async () => { pg = new PGlite(); });
@@ -20,7 +20,7 @@ describe('humanAuthOptions', () => {
   it('is pure: it opens no schema, runs no migration and fetches no discovery', async () => {
     const before = await pg.query<{ nspname: string }>("select nspname from pg_namespace where nspname not in ('pg_catalog','information_schema','pg_toast')");
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('humanAuthOptions must not fetch'));
-    const dialect = new KyselyPGlite(pg as ConstructorParameters<typeof KyselyPGlite>[0]).dialect;
+    const dialect = pgliteDialect(pg);
     const db = new Kysely<Record<string, unknown>>({ dialect });
     const options = humanAuthOptions(
       {

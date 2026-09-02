@@ -31,7 +31,7 @@ beforeAll(async () => {
   execFileSync('node', ['scripts/build-server.mjs', bundle, 'services/sql/src/server.ts'], { cwd: ROOT, stdio: 'pipe' });
   child = spawn('node', [bundle], { env: { ...process.env, APP__PORT: String(PORT) }, stdio: 'inherit' });
   for (let i = 0; i < 60; i++) {
-    const ok = await fetch(`${serviceUrl}/run`, { method: 'POST', body: '{}' }).then(() => true).catch(() => false);
+    const ok = await fetch(`${serviceUrl}/health`).then((response) => response.ok).catch(() => false);
     if (ok) return;
     await new Promise((r) => setTimeout(r, 250));
   }

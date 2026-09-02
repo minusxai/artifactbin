@@ -56,7 +56,15 @@ afterEach(async () => {
 
 // Mute known jsdom noise
 const originalError = console.error.bind(console);
+const preventJsdomNavigation = (event: MouseEvent) => {
+  const target = event.target instanceof Element ? event.target.closest('a[href]') : null;
+  if (target) event.preventDefault();
+};
 beforeAll(() => {
+  // React handlers run at their root before this document-level listener, so
+  // link behavior is still exercised; only jsdom's unsupported default
+  // full-document navigation is cancelled afterward.
+  document.addEventListener('click', preventJsdomNavigation);
   console.error = (...args: any[]) => {
     const msg = typeof args[0] === 'string' ? args[0] : '';
     if (msg.includes('Warning: ReactDOM.render') || msg.includes('act(') || msg.includes('Not implemented: navigation')) return;
@@ -64,5 +72,6 @@ beforeAll(() => {
   };
 });
 afterAll(() => {
+  document.removeEventListener('click', preventJsdomNavigation);
   console.error = originalError;
 });
