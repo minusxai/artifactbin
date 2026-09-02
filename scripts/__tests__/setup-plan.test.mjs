@@ -18,6 +18,21 @@ afterAll(() => fs.rmSync(TMP, { recursive: true, force: true }));
 const gen = { AUTH__SECRET: 'a'.repeat(43), ADMIN__SECRET: 'b'.repeat(43), CONTRACT__ACTOR_SECRET: 'c'.repeat(43), INTERNAL__SERVICE_SECRET: 'd'.repeat(43) };
 const run = (args, opts = {}) => spawnSync(process.execPath, [SCRIPT, ...args], { cwd: TMP, encoding: 'utf8', ...opts });
 
+describe('full runtime image setup closure', () => {
+  it('copies setup.mjs and every local module it imports', () => {
+    const dockerfile = fs.readFileSync(path.join(ROOT, 'Dockerfile'), 'utf8');
+    const setup = fs.readFileSync(SCRIPT, 'utf8');
+    const sources = [
+      'scripts/setup.mjs',
+      ...[...setup.matchAll(/from ['"](\.\/[^'"]+\.mjs)['"]/g)]
+        .map((match) => path.posix.normalize(path.posix.join('scripts', match[1]))),
+    ];
+    for (const source of sources) {
+      expect(dockerfile, `${source} is missing from the runtime image`).toMatch(new RegExp(`^COPY ${source.replaceAll('.', '\\.')} `, 'm'));
+    }
+  });
+});
+
 describe('questions()', () => {
   it('asks at most the decided things, in order, with defaults', () => {
     const q = questions();
