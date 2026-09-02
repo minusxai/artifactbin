@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Queryable, Table } from '@artifactbin/contracts';
 import { ensureTable, renderSchema } from '@artifactbin/utils';
 
-const T: Table = { name: 'widgets', columns: [{ name: 'id', type: 'TEXT' }, { name: 'n', type: 'INTEGER', notNull: true, default: '0' }, { name: 'old', type: 'TEXT', retired: true }], primaryKey: ['id'], indexes: [{ name: 'idx_widgets_n', columns: ['n'] }] };
+const T: Table = { name: 'widgets', columns: [{ name: 'id', type: 'TEXT' }, { name: 'n', type: 'INTEGER', notNull: true, default: '0' }, { name: 'old', type: 'TEXT', retired: true }], primaryKey: ['id'], indexes: [{ name: 'idx_widgets_n', columns: ['n'], where: 'n > 0' }] };
 let pg: PGlite; let db: Queryable;
 beforeAll(async () => { pg = new PGlite(); await pg.exec('CREATE SCHEMA app'); db = { query: async (sql, params) => ({ rows: (await pg.query(sql, params as unknown[])).rows as never }) }; });
 afterAll(() => pg.close());
@@ -16,7 +16,7 @@ describe('renderSchema', () => {
     expect(s[0]).toMatch(/PRIMARY KEY \(id\)/);
     expect(s.filter((x) => /ADD COLUMN IF NOT EXISTS/.test(x))).toHaveLength(3);
     expect(s).toContainEqual('ALTER TABLE widgets ALTER COLUMN old DROP NOT NULL');
-    expect(s.at(-1)).toBe('CREATE INDEX IF NOT EXISTS idx_widgets_n ON widgets (n)');
+    expect(s.at(-1)).toBe('CREATE INDEX IF NOT EXISTS idx_widgets_n ON widgets (n) WHERE n > 0');
   });
   it('qualifies every statement with the schema when asked', () => {
     for (const s of renderSchema([T], { schema: 'app' })) expect(s).toMatch(/app\.widgets/);

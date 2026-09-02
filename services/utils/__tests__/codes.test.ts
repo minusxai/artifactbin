@@ -8,8 +8,8 @@ const DDL = (t: string) => `CREATE TABLE ${t} (kind TEXT NOT NULL, code_hash TEX
 let pg: PGlite; let db: Queryable;
 beforeAll(async () => {
   pg = new PGlite();
-  await pg.exec('CREATE SCHEMA app; CREATE SCHEMA auth;');
-  await pg.exec(DDL('app.codes')); await pg.exec(DDL('auth.codes'));
+  await pg.exec('CREATE SCHEMA app; CREATE SCHEMA other;');
+  await pg.exec(DDL('app.codes')); await pg.exec(DDL('other.codes'));
   db = { query: async (sql, params) => ({ rows: (await pg.query(sql, params as unknown[])).rows as never }) };
 });
 afterAll(() => pg.close());
@@ -27,7 +27,7 @@ describe('createCodeStore', () => {
     expect(await s.claimByHash({ kind: 'start', code: 'sekret-2', now: 1_002_000 })).toBeNull();
   });
   it('claimBySubject counts attempts and exhausts at the cap; the right code before the cap wins', async () => {
-    const s = createCodeStore(db, { schema: 'auth' });
+    const s = createCodeStore(db, { schema: 'other' });
     await s.issue({ kind: 'login', secret: '123456', subject: 'a@example.com', payload: { email: 'a@example.com' }, ttlMs: 60_000 });
     expect(await s.claimBySubject({ kind: 'login', subject: 'a@example.com', code: '000000', maxAttempts: 3 })).toEqual({ ok: false, reason: 'mismatch' });
     expect(await s.claimBySubject({ kind: 'login', subject: 'a@example.com', code: '000000', maxAttempts: 3 })).toEqual({ ok: false, reason: 'mismatch' });
@@ -43,9 +43,9 @@ describe('createCodeStore', () => {
     expect(await s.claimByHash({ kind: 'chunk', code: 'sekret-3' })).toEqual({ n: 1 });
   });
   it('two stores on two tables never see each other\'s codes', async () => {
-    const app = createCodeStore(db, { schema: 'app' }); const auth = createCodeStore(db, { schema: 'auth' });
+    const app = createCodeStore(db, { schema: 'app' }); const other = createCodeStore(db, { schema: 'other' });
     await app.issue({ kind: 'start', secret: 'only-app', ttlMs: 60_000 });
-    expect(await auth.peekByHash({ kind: 'start', code: 'only-app' })).toBeNull();
+    expect(await other.peekByHash({ kind: 'start', code: 'only-app' })).toBeNull();
     expect(await app.peekByHash({ kind: 'start', code: 'only-app' })).toEqual({});
   });
   it('stores a hash, never the secret', async () => {

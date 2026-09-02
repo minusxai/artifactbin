@@ -1,7 +1,7 @@
 /** End-to-end OAuth provider tests over the proxy's real PGlite stores. */
 import { PGlite } from '@electric-sql/pglite';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { assemble, createCodeStore, createTokenReader, hashToken } from '@artifactbin/utils';
+import { assemble, createTokenReader, hashToken } from '@artifactbin/utils';
 import { createHumanAuth, type HumanAuth } from '../src/auth/human';
 import { consumeAuthCode, createAuthCode, createOAuthStore, isAllowedRedirectUri, sameRedirectTarget, s256 } from '../src/identity/oauth';
 import { proxyParts, type ProxyOptions } from '../src/parts';
@@ -92,7 +92,7 @@ describe('the oauth provider routes', () => {
     expect(first).toMatch(/^mcp_/);
     expect(second).not.toBe(first);
     const { query } = testDb();
-    expect((await query('SELECT client_id FROM auth.oauth_clients')).rows).toHaveLength(2);
+    expect((await query('SELECT id FROM auth.clients')).rows).toHaveLength(2);
   });
 
   it('rejects unsafe registration metadata and an unregistered redirect', async () => {
@@ -141,7 +141,7 @@ describe('the oauth provider routes', () => {
     expect(await createTokenReader({ db: { query } }).byToken(first.access_token)).toMatchObject({ userId: 'usr_1', audience: RESOURCE, scope: 'artifacts' });
     expect(await (await app.request(`${RESOURCE}`, { headers: { authorization: `Bearer ${first.access_token}` } })).json()).toMatchObject({ credential: 'bearer' });
     expect(await (await app.request(`${BASE}/api/artifacts`, { headers: { authorization: `Bearer ${first.access_token}` } })).json()).toMatchObject({ credential: 'none' });
-    expect((await query('SELECT token_hash FROM auth.oauth_refresh_tokens')).rows[0]).not.toMatchObject({ token_hash: first.refresh_token });
+    expect((await query("SELECT credential_hash FROM auth.credentials WHERE kind = 'refresh_token'")).rows[0]).not.toMatchObject({ credential_hash: first.refresh_token });
 
     const refreshed = await app.request('/oauth/token', {
       method: 'POST',
@@ -171,7 +171,7 @@ describe('the oauth provider routes', () => {
 describe('oauth code and redirect binding', () => {
   it('spends a PKCE code once and binds it to client, redirect, and resource', async () => {
     const { query } = testDb();
-    const store = createCodeStore({ query }, { schema: 'auth' });
+    const store = createOAuthStore({ query }, 'auth');
     const grant = { userId: 'usr_1', clientId: 'mcp_client', redirectUri: REDIRECT, resource: RESOURCE, scope: 'artifacts' };
     const code = await createAuthCode(store, grant, s256(verifier));
     expect(await consumeAuthCode(store, { code, clientId: 'other', redirectUri: REDIRECT, resource: RESOURCE, codeVerifier: verifier })).toBeNull();
@@ -196,5 +196,47 @@ describe('oauth code and redirect binding', () => {
     const refreshToken = await oauth.issueRefresh({ clientId: 'mcp_client', userId: 'usr_1', resource: RESOURCE, scope: 'artifacts', accessTokenId: 'tok_revocable' });
     await query('UPDATE tokens SET revoked_at = now() WHERE id = $1', ['tok_revocable']);
     expect(await oauth.rotateRefresh(refreshToken, 'mcp_client', RESOURCE)).toBeNull();
+  });
+});
+
+describe('auth schema migration', () => {
+  it('renames auth.codes to auth.credentials in place and preserves existing rows', async () => {
+    const legacy = new PGlite();
+    const query = async <T = Record<string, unknown>>(sql: string, params: unknown[] = []) =>
+      (await legacy.query<T>(sql, params)) as { rows: T[] };
+    try {
+      await legacy.exec(`
+        CREATE SCHEMA auth;
+        CREATE TABLE auth.codes (
+          kind TEXT NOT NULL,
+          code_hash TEXT NOT NULL,
+          subject TEXT,
+          payload JSONB NOT NULL DEFAULT '{}',
+          attempts INTEGER NOT NULL DEFAULT 0,
+          expires_at TIMESTAMPTZ NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY (kind, code_hash)
+        );
+        CREATE UNIQUE INDEX idx_codes_kind_subject ON auth.codes (kind, subject);
+        INSERT INTO auth.codes (kind, code_hash, subject, payload, expires_at)
+        VALUES ('oauth', 'legacy-hash', 'usr_1', '{"x":1}', now() + interval '5 minutes');
+      `);
+      await ensureProxySchema({ query }, 'auth');
+      const tables = (await query<{ table_name: string }>(
+        "SELECT table_name FROM information_schema.tables WHERE table_schema = 'auth' ORDER BY table_name",
+      )).rows.map((row) => row.table_name);
+      expect(tables).toEqual(['clients', 'credentials']);
+      const row = (await query<{ kind: string; credential_hash: string; subject_id: string; payload: Record<string, unknown> }>(
+        'SELECT kind, credential_hash, subject_id, payload FROM auth.credentials',
+      )).rows[0];
+      expect(row).toMatchObject({ kind: 'oauth', credential_hash: 'legacy-hash', subject_id: 'usr_1', payload: { x: 1 } });
+      const columns = (await query<{ column_name: string }>(
+        "SELECT column_name FROM information_schema.columns WHERE table_schema = 'auth' AND table_name = 'credentials'",
+      )).rows.map((entry) => entry.column_name);
+      expect(columns).not.toContain('attempts');
+      expect(columns).toEqual(expect.arrayContaining(['group_id', 'consumed_at', 'revoked_at']));
+    } finally {
+      await legacy.close();
+    }
   });
 });

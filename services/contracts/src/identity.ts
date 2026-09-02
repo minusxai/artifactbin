@@ -32,7 +32,7 @@ export interface TokenReaderOptions {
   now?: () => number;
 }
 
-/** ONE implementation of the one-time-code store; each owner binds it to its own table (app.codes, auth.codes). */
+/** ONE implementation of an app-owned one-time-code store; auth credentials have their own broader lifecycle. */
 export type ClaimResult =
   | { ok: true; payload: Record<string, unknown> }
   | { ok: false; reason: 'expired' | 'exhausted' | 'mismatch' | 'unknown' };

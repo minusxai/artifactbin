@@ -20,7 +20,7 @@ import {
   type Actor, type DoorName, type Limiter, type Part, type Queryable, type TokenReader, type Upstream,
 } from '@artifactbin/contracts';
 import { Hono, type Context } from 'hono';
-import { assemble, cookieName, createCodeStore, createLimiter, decodeAgentSession, doorsEnv, memoryBackend, readCookie } from '@artifactbin/utils';
+import { assemble, cookieName, createLimiter, decodeAgentSession, doorsEnv, memoryBackend, readCookie } from '@artifactbin/utils';
 import { baseUrlOf, mountOAuthRoutes } from './routes/oauth';
 import { createOAuthStore } from './identity/oauth';
 import { readEnv } from './env';
@@ -189,9 +189,7 @@ export function oauthRoutes(o: ProxyOptions): Part<ProxyEnv> {
       if (!o.identityDb) return;
       const schema = readEnv(o.env, 'AUTH__SCHEMA') ?? 'auth';
       const appSchema = o.appSchema ?? readEnv(o.env, 'APP__SCHEMA');
-      const codes = createCodeStore(o.identityDb, { schema });
       mountOAuthRoutes(app, {
-        codes,
         oauth: createOAuthStore(o.identityDb, schema, appSchema),
         upstream: o.upstream,
         trustedHops: trustedHopsOf(o.env),

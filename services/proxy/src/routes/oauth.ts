@@ -3,7 +3,7 @@
  * authorization-code + PKCE consent, and rotating refresh tokens. Access
  * token minting remains app-owned and runs as the consenting session actor.
  */
-import { ANONYMOUS, type CodeStore, type Upstream } from '@artifactbin/contracts';
+import { ANONYMOUS, type Upstream } from '@artifactbin/contracts';
 import {
   ACCESS_TOKEN_TTL_SECONDS,
   authServerMetadata,
@@ -64,7 +64,6 @@ function page(title: string, body: string, status = 200, redirectUri = ''): Resp
 }
 
 export interface OAuthRoutesOptions {
-  codes: CodeStore;
   oauth: OAuthStore;
   upstream: Upstream;
   trustedHops: number;
@@ -152,7 +151,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     const actor = c.get('actor') ?? ANONYMOUS;
     if (actor.credential !== 'session' || !actor.userId) return c.json({ error: 'unauthorized' }, 401);
     const url = new URL(redirectUri);
-    url.searchParams.set('code', await createAuthCode(o.codes, { userId: actor.userId, clientId, redirectUri, resource: requestedResource, scope }, codeChallenge));
+    url.searchParams.set('code', await createAuthCode(o.oauth, { userId: actor.userId, clientId, redirectUri, resource: requestedResource, scope }, codeChallenge));
     if (typeof state === 'string' && state) url.searchParams.set('state', state);
     return Response.redirect(url, 303);
   });
@@ -178,7 +177,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       if (!body.redirect_uri) return oauthError('invalid_request', 'Missing redirect_uri');
       const requestedResource = body.resource || expectedResource;
       if (requestedResource !== expectedResource) return oauthError('invalid_target', 'Invalid MCP resource');
-      const grant = await consumeAuthCode(o.codes, { code: body.code, clientId: body.client_id, redirectUri: body.redirect_uri, resource: requestedResource, codeVerifier: body.code_verifier });
+      const grant = await consumeAuthCode(o.oauth, { code: body.code, clientId: body.client_id, redirectUri: body.redirect_uri, resource: requestedResource, codeVerifier: body.code_verifier });
       if (!grant?.userId) return oauthError('invalid_grant', 'Invalid, expired, or already-used authorization code');
       try {
         const minted = await mintFor(o, c.req.raw, { userId: grant.userId, resource: grant.resource, scope: grant.scope });

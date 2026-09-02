@@ -385,89 +385,60 @@ ALTER TABLE app.webfonts ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NUL
 
 -- schema "auth" — owned by the proxy role; tables declared by the proxy's schema module
 
-CREATE TABLE IF NOT EXISTS auth.codes (
+CREATE TABLE IF NOT EXISTS auth.clients (
+  id TEXT NOT NULL,
   kind TEXT NOT NULL,
-  code_hash TEXT NOT NULL,
-  subject TEXT,
+  metadata JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  revoked_at TIMESTAMPTZ,
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE auth.clients ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE auth.clients ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL;
+
+ALTER TABLE auth.clients ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}';
+
+ALTER TABLE auth.clients ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE auth.clients ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE auth.clients ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;
+
+CREATE TABLE IF NOT EXISTS auth.credentials (
+  kind TEXT NOT NULL,
+  credential_hash TEXT NOT NULL,
+  subject_id TEXT,
+  group_id TEXT,
   payload JSONB NOT NULL DEFAULT '{}',
-  attempts INTEGER NOT NULL DEFAULT 0,
   expires_at TIMESTAMPTZ NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (kind, code_hash)
-);
-
-ALTER TABLE auth.codes ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL;
-
-ALTER TABLE auth.codes ADD COLUMN IF NOT EXISTS code_hash TEXT NOT NULL;
-
-ALTER TABLE auth.codes ADD COLUMN IF NOT EXISTS subject TEXT;
-
-ALTER TABLE auth.codes ADD COLUMN IF NOT EXISTS payload JSONB NOT NULL DEFAULT '{}';
-
-ALTER TABLE auth.codes ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0;
-
-ALTER TABLE auth.codes ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ NOT NULL;
-
-ALTER TABLE auth.codes ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_codes_kind_subject ON auth.codes (kind, subject);
-
-CREATE TABLE IF NOT EXISTS auth.oauth_clients (
-  client_id TEXT NOT NULL,
-  client_name TEXT NOT NULL,
-  redirect_uris JSONB NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (client_id)
-);
-
-ALTER TABLE auth.oauth_clients ADD COLUMN IF NOT EXISTS client_id TEXT NOT NULL;
-
-ALTER TABLE auth.oauth_clients ADD COLUMN IF NOT EXISTS client_name TEXT NOT NULL;
-
-ALTER TABLE auth.oauth_clients ADD COLUMN IF NOT EXISTS redirect_uris JSONB NOT NULL;
-
-ALTER TABLE auth.oauth_clients ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
-CREATE TABLE IF NOT EXISTS auth.oauth_refresh_tokens (
-  token_hash TEXT NOT NULL,
-  family_id TEXT NOT NULL,
-  client_id TEXT NOT NULL,
-  user_id TEXT NOT NULL,
-  resource TEXT NOT NULL,
-  scope TEXT NOT NULL,
-  access_token_id TEXT NOT NULL,
-  expires_at TIMESTAMPTZ NOT NULL,
-  used_at TIMESTAMPTZ,
+  consumed_at TIMESTAMPTZ,
   revoked_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (token_hash)
+  PRIMARY KEY (kind, credential_hash)
 );
 
-ALTER TABLE auth.oauth_refresh_tokens ADD COLUMN IF NOT EXISTS token_hash TEXT NOT NULL;
+ALTER TABLE auth.credentials ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL;
 
-ALTER TABLE auth.oauth_refresh_tokens ADD COLUMN IF NOT EXISTS family_id TEXT NOT NULL;
+ALTER TABLE auth.credentials ADD COLUMN IF NOT EXISTS credential_hash TEXT NOT NULL;
 
-ALTER TABLE auth.oauth_refresh_tokens ADD COLUMN IF NOT EXISTS client_id TEXT NOT NULL;
+ALTER TABLE auth.credentials ADD COLUMN IF NOT EXISTS subject_id TEXT;
 
-ALTER TABLE auth.oauth_refresh_tokens ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
+ALTER TABLE auth.credentials ADD COLUMN IF NOT EXISTS group_id TEXT;
 
-ALTER TABLE auth.oauth_refresh_tokens ADD COLUMN IF NOT EXISTS resource TEXT NOT NULL;
+ALTER TABLE auth.credentials ADD COLUMN IF NOT EXISTS payload JSONB NOT NULL DEFAULT '{}';
 
-ALTER TABLE auth.oauth_refresh_tokens ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL;
+ALTER TABLE auth.credentials ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ NOT NULL;
 
-ALTER TABLE auth.oauth_refresh_tokens ADD COLUMN IF NOT EXISTS access_token_id TEXT NOT NULL;
+ALTER TABLE auth.credentials ADD COLUMN IF NOT EXISTS consumed_at TIMESTAMPTZ;
 
-ALTER TABLE auth.oauth_refresh_tokens ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ NOT NULL;
+ALTER TABLE auth.credentials ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;
 
-ALTER TABLE auth.oauth_refresh_tokens ADD COLUMN IF NOT EXISTS used_at TIMESTAMPTZ;
+ALTER TABLE auth.credentials ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
-ALTER TABLE auth.oauth_refresh_tokens ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_auth_credentials_group ON auth.credentials (group_id) WHERE group_id IS NOT NULL;
 
-ALTER TABLE auth.oauth_refresh_tokens ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
-CREATE INDEX IF NOT EXISTS idx_oauth_refresh_family ON auth.oauth_refresh_tokens (family_id);
-
-CREATE INDEX IF NOT EXISTS idx_oauth_refresh_client ON auth.oauth_refresh_tokens (client_id);
-
-CREATE INDEX IF NOT EXISTS idx_oauth_refresh_expiry ON auth.oauth_refresh_tokens (expires_at);
+CREATE INDEX IF NOT EXISTS idx_auth_credentials_expiry ON auth.credentials (expires_at);
 

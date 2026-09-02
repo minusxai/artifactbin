@@ -43,7 +43,7 @@ export async function ensureTestSchema(): Promise<void> {
 export async function resetTestDb(): Promise<void> {
   await ensureTestSchema();
   const { pg } = testDb();
-  await pg().exec('DELETE FROM tokens; DELETE FROM auth.codes; DELETE FROM auth.oauth_refresh_tokens; DELETE FROM auth.oauth_clients');
+  await pg().exec('DELETE FROM tokens; DELETE FROM auth.credentials; DELETE FROM auth.clients');
 }
 
 /** A ready token row, answered the way the app would mint it (hash only, never the secret). */

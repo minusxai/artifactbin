@@ -2,10 +2,8 @@
  * ONE OWNER PER TABLE (CORE TEST 8). Each package declares its own tables and
  * nobody declares anybody else's: the app owns `app.*` (its DDL in
  * lib/schema.ts), the proxy owns `auth.*` (its DDL in its own schema module),
- * and the ONE deliberate overlap is `codes` — two tables, one per schema
- * (P2 §G.2: the app's `start`/`chunk` kinds and the proxy's `oauth` kinds are
- * different one-time secrets with identical DDL, so the generic store is
- * shared and the TABLES are not).
+ * with no duplicated table concept across the boundary: app one-time codes
+ * are `app.codes`; auth lifecycle state is `auth.credentials`.
  *
  * The declared set is read through the schema renderer — the ONE resolver of what is declared, the same one
  * __tests__/schema-sql-fresh.test.ts uses — so this test and the freshness
@@ -37,13 +35,12 @@ const DECLARED_SET = [
   'app.tokens',
   'app.users',
   'app.webfonts',
-  'auth.codes',
-  'auth.oauth_clients',
-  'auth.oauth_refresh_tokens',
+  'auth.clients',
+  'auth.credentials',
 ];
 
 describe('table ownership', () => {
-  it('every declared table has exactly one owner — only codes may exist on both sides, one table per schema', () => {
+  it('every declared table has exactly one owner and no table concept is duplicated across schemas', () => {
     const tables = declared();
     const byName = new Map<string, Set<string>>();
     for (const [qualified, owner] of Object.entries(tables)) {
@@ -53,12 +50,8 @@ describe('table ownership', () => {
       byName.set(name, sides);
     }
     const shared = [...byName.entries()].filter(([, sides]) => sides.size > 1).map(([name]) => name);
-    // `codes` is the ONE deliberate two-table overlap (§G.2); anything else
-    // declared by both sides is two owners for one table — the pre-split bug
-    // where two boot DDLs raced (lib/tokens.ts documents what that cost).
-    expect(shared).toEqual(['codes']);
-    // And the proxy's side of the overlap is its own schema, never the app's.
-    expect(tables['auth.codes']).toBe('proxy');
+    expect(shared).toEqual([]);
+    expect(tables['auth.credentials']).toBe('proxy');
     expect(tables['app.codes']).toBe('app');
   });
 
