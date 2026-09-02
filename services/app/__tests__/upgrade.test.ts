@@ -66,11 +66,11 @@ describe('the additive DDL is replay-safe', () => {
         INSERT INTO tokens (id, token_hash) VALUES ('tok_legacy', 'legacy-hash');
       `);
       for (const stmt of SCHEMA_STATEMENTS) await legacy.exec(stmt);
-      const rows = await legacy.query<{ id: string; expires_at: Date | null; last_used_at: Date | null }>(
-        'SELECT id, expires_at, last_used_at FROM tokens WHERE id = $1',
+      const rows = await legacy.query<{ id: string; expires_at: Date | null; last_used_at: Date | null; audience: string | null; scope: string | null }>(
+        'SELECT id, expires_at, last_used_at, audience, scope FROM tokens WHERE id = $1',
         ['tok_legacy'],
       );
-      expect(rows.rows).toEqual([{ id: 'tok_legacy', expires_at: null, last_used_at: null }]);
+      expect(rows.rows).toEqual([{ id: 'tok_legacy', expires_at: null, last_used_at: null, audience: null, scope: null }]);
     } finally {
       await legacy.close();
     }
@@ -107,7 +107,7 @@ describe('the additive DDL is replay-safe', () => {
       `SELECT column_name FROM information_schema.columns
        WHERE table_schema = current_schema() AND table_name = 'tokens'`,
     );
-    expect(tokenColumns.rows.map((row) => row.column_name)).toContain('client_harness');
+    expect(tokenColumns.rows.map((row) => row.column_name)).toEqual(expect.arrayContaining(['client_harness', 'audience', 'scope']));
     await fresh.close();
   });
 

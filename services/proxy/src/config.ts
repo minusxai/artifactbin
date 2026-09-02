@@ -10,7 +10,7 @@
  *
  * Optional: APP__PORT (3000) · APP__HOST · DATABASE_URL (the identity
  * database — without it the proxy boots SESSION-LESS: no login handler, no
- * OAuth codes, no token reads; resolve-and-forward only) · AUTH__SECRET ·
+ * OAuth state, no token reads; resolve-and-forward only) · AUTH__SECRET ·
  * AUTH__SCHEMA (auth) · APP__SCHEMA (app — the deployment truth in
  * SCHEMA.sql: the app's tables, `tokens` included, live there) ·
  * APP__PUBLIC_BASE_URL · EMAIL__RESEND_API_KEY / EMAIL__FROM (the production

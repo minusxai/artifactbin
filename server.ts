@@ -26,7 +26,8 @@
  *
  * Boot: the database opens and applies its schema; the object-store canary
  * runs (a bad S3_URL fails HERE, with the store named); the proxy's own
- * `auth.codes` is ensured; human login (Better Auth) is composed from env;
+ * proxy-owned OAuth tables in the `auth` schema are ensured; human login
+ * (Better Auth) is composed from env;
  * the token reader (the proxy's one SELECT over the app-owned `tokens`) is
  * pointed at the shared database; the parts are assembled around
  * `inProcess(app)` — all of that is the FULL shape, skipped whole by
@@ -178,6 +179,7 @@ async function main(): Promise<void> {
       cookieSecret: authSecret!,
       secure: baseURL.startsWith('https://'),
       identityDb: queryable,
+      appSchema: readEnv(env, 'APP__SCHEMA'),
     })).fetch);
 
   /*

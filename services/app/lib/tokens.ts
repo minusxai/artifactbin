@@ -55,6 +55,10 @@ export interface MintOptions {
    * RangeError — the route turns that into a 400.
    */
   expiresInMs?: number | null;
+  /** Exact OAuth resource restriction. Omitted for ordinary/manual tokens. */
+  audience?: string | null;
+  /** Space-delimited OAuth scope, present only with an audience. */
+  scope?: string | null;
 }
 
 /** Derived, never stored twice: revoked wins over expired; NULL expires_at never expires (grandfathered rows). */
@@ -86,12 +90,14 @@ export async function mintToken(
   const id = generateTokenId();
   const token = TOKEN_PREFIX + crypto.randomBytes(32).toString('base64url');
   const expiresAt = expiresInMs === null ? null : new Date(Date.now() + expiresInMs).toISOString();
-  await runner.query('INSERT INTO tokens (id, name, token_hash, user_id, expires_at) VALUES ($1, $2, $3, $4, $5)', [
+  await runner.query('INSERT INTO tokens (id, name, token_hash, user_id, expires_at, audience, scope) VALUES ($1, $2, $3, $4, $5, $6, $7)', [
     id,
     name ?? null,
     sha256(token),
     userId ?? null,
     expiresAt,
+    options.audience ?? null,
+    options.scope ?? null,
   ]);
   return { id, name: name ?? null, token, expiresAt };
 }

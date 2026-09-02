@@ -6,7 +6,14 @@ import type { Queryable } from './db';
  * cache, never an HTTP call. utils names no credential policy: the caller says which credential it is
  * building an Actor for.
  */
-export interface TokenRecord { id: string; userId: string | null }
+export interface TokenRecord {
+  id: string;
+  userId: string | null;
+  /** OAuth resource restriction; absent on ordinary/manual tokens. */
+  audience?: string;
+  /** Space-delimited OAuth scope; absent on ordinary/manual tokens. */
+  scope?: string;
+}
 export interface TokenReader {
   /** The bearer path. Refuses a value that is not token-shaped BEFORE hashing or touching the database. */
   byToken(presented: string): Promise<TokenRecord | null>;
@@ -25,7 +32,7 @@ export interface TokenReaderOptions {
   now?: () => number;
 }
 
-/** ONE implementation of the one-time-code store; each owner binds it to its own table (app.codes, auth.codes). */
+/** ONE implementation of an app-owned one-time-code store; auth credentials have their own broader lifecycle. */
 export type ClaimResult =
   | { ok: true; payload: Record<string, unknown> }
   | { ok: false; reason: 'expired' | 'exhausted' | 'mismatch' | 'unknown' };

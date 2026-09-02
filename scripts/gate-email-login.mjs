@@ -94,10 +94,17 @@ const cookies = await page.context().cookies();
 check(cookies.some((c) => /better-auth.*session_token|authjs.session-token/.test(c.name)), 'a session cookie was set');
 
 // ── OAuth consent now recognises the session ────────────────────────────────
+const redirectUri = 'https://chatgpt.com/connector_platform_oauth_redirect';
+const registration = await (await fetch(`${BASE}/oauth/register`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ client_name: 'Email login gate', redirect_uris: [redirectUri] }),
+})).json();
+check(/^mcp_/.test(registration.client_id ?? ''), 'the login gate dynamically registered its client');
 const consentQuery = new URLSearchParams({
-  client_id: 'artifactbin-mcp',
+  client_id: registration.client_id,
   response_type: 'code',
-  redirect_uri: 'https://chatgpt.com/connector_platform_oauth_redirect',
+  redirect_uri: redirectUri,
   code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
   code_challenge_method: 'S256',
   state: 'gate',

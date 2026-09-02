@@ -75,7 +75,7 @@ describe('createTokenReader', () => {
     const r = createTokenReader({ db });
     await r.byToken(LIVE); await r.byId('tok_live'); r.invalidate();
     for (const s of db.statements) {
-      expect(s.sql).toMatch(/^\s*SELECT id, user_id, expires_at FROM tokens WHERE (token_hash|id) = \$1 AND revoked_at IS NULL AND \(expires_at IS NULL OR expires_at > now\(\)\)\s*$/);
+      expect(s.sql).toMatch(/^\s*SELECT id, user_id, audience, scope, expires_at FROM tokens WHERE (token_hash|id) = \$1 AND revoked_at IS NULL AND \(expires_at IS NULL OR expires_at > now\(\)\)\s*$/);
     }
   });
 });

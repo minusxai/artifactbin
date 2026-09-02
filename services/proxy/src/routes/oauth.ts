@@ -1,31 +1,35 @@
 /**
- * OAuth 2.1 for `/mcp` — the provider side: metadata, dynamic registration,
- * the consent page (a ROUTE, so it sets its own anti-clickjacking headers),
- * approval (CSRF-guarded by the SameSite session cookie; no guest grant,
- * ever), and the token exchange. The exchange ends in a mint, and every mint
- * is the APP's: it is performed through the ONE upstream seam as the
- * consenting session actor (`POST /api/tokens/anonymous` under a session
- * actor binds the token to that user) — the proxy's tokens are read-only by
- * construction, so there is no other way, and no `/internal` route to bring
- * back.
+ * OAuth 2.1 provider for `/mcp`: discovery, dynamic client registration,
+ * authorization-code + PKCE consent, and rotating refresh tokens. Access
+ * token minting remains app-owned and runs as the consenting session actor.
  */
-import { ANONYMOUS, type CodeStore, type Upstream } from '@artifactbin/contracts';
-import { authServerMetadata, clientRegistration, consumeAuthCode, createAuthCode, isAllowedRedirectUri, OAUTH_CLIENT_ID, protectedResourceMetadata } from '../identity/oauth';
+import { ANONYMOUS, type Upstream } from '@artifactbin/contracts';
+import {
+  ACCESS_TOKEN_TTL_SECONDS,
+  authServerMetadata,
+  consumeAuthCode,
+  createAuthCode,
+  isAllowedRedirectUri,
+  isValidCodeChallenge,
+  isValidCodeVerifier,
+  MCP_SCOPE,
+  type OAuthStore,
+  protectedResourceMetadata,
+  sameRedirectTarget,
+} from '../identity/oauth';
 import type { ProxyApp } from '../parts';
 
 type App = ProxyApp;
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
+const NO_STORE = { 'Cache-Control': 'no-store', Pragma: 'no-cache' };
 
-/**
- * Where the CLIENT thinks we are. Behind a trusted hop the hop's
- * `x-forwarded-{host,proto}` are the truth (it is where the client is); with
- * none trusted, an inbound value is text the caller typed, and what we
- * RECEIVED is the answer — the metadata tells MCP clients where to go, so a
- * spoofed issuer misdirects every one of them.
- */
-export function baseUrlOf(request: Request, trustedHops: number): string {
+/** The configured public origin wins, avoiding bad forwarded-proto metadata. */
+export function baseUrlOf(request: Request, trustedHops: number, publicBaseUrl?: string): string {
+  if (publicBaseUrl) {
+    try { return new URL(publicBaseUrl).origin; } catch { /* configuration validation reports this elsewhere */ }
+  }
   const url = new URL(request.url);
   const forwardedHost = trustedHops > 0 ? request.headers.get('x-forwarded-host') : null;
   const forwardedProto = trustedHops > 0 ? request.headers.get('x-forwarded-proto') : null;
@@ -60,57 +64,66 @@ function page(title: string, body: string, status = 200, redirectUri = ''): Resp
 }
 
 export interface OAuthRoutesOptions {
-  codes: CodeStore;
+  oauth: OAuthStore;
   upstream: Upstream;
   trustedHops: number;
+  publicBaseUrl?: string;
 }
 
-/**
- * The mint the exchange ends in — the APP's, performed as the consenting user
- * through the one forwarder. The app's anonymous mint under a `session`
- * actor binds the token to that user; anything the app refuses propagates as
- * a 502 (the grant was consumed either way, which is correct: a code spent on
- * a refused mint is spent).
- */
-async function mintFor(o: OAuthRoutesOptions, request: Request, userId: string): Promise<string> {
-  const mint = new Request(new URL('/api/tokens/anonymous', request.url), { method: 'POST' });
-  const res = await o.upstream(mint, { credential: 'session', userId });
+async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId: string; resource: string; scope: string }): Promise<{ id: string; token: string; expiresAt?: string }> {
+  const mint = new Request(new URL('/api/tokens/anonymous', request.url), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ expiresInHours: ACCESS_TOKEN_TTL_SECONDS / 3600, audience: grant.resource, scope: grant.scope }),
+  });
+  const res = await o.upstream(mint, { credential: 'session', userId: grant.userId });
   if (!res.ok) throw new Error(`oauth exchange: the app refused the mint (${res.status})`);
-  const body = await res.json().catch(() => null) as { token?: string } | null;
-  if (!body?.token) throw new Error('oauth exchange: the app minted no token');
-  return body.token;
+  const body = await res.json().catch(() => null) as { id?: string; token?: string; expiresAt?: string } | null;
+  if (!body?.id || !body.token) throw new Error('oauth exchange: the app minted no token');
+  return { id: body.id, token: body.token, ...(body.expiresAt ? { expiresAt: body.expiresAt } : {}) };
 }
 
 export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
+  const base = (request: Request) => baseUrlOf(request, o.trustedHops, o.publicBaseUrl);
+  const resource = (request: Request) => `${base(request)}/mcp`;
   const meta = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600', 'Access-Control-Allow-Origin': '*' } });
-  app.get('/.well-known/oauth-authorization-server', (c) => meta(authServerMetadata(baseUrlOf(c.req.raw, o.trustedHops))));
-  app.get('/.well-known/oauth-protected-resource', (c) => meta(protectedResourceMetadata(baseUrlOf(c.req.raw, o.trustedHops))));
-  app.get('/.well-known/oauth-protected-resource/mcp', (c) => meta(protectedResourceMetadata(baseUrlOf(c.req.raw, o.trustedHops))));
+  app.get('/.well-known/oauth-authorization-server', (c) => meta(authServerMetadata(base(c.req.raw))));
+  app.get('/.well-known/oauth-protected-resource', (c) => meta(protectedResourceMetadata(base(c.req.raw))));
+  app.get('/.well-known/oauth-protected-resource/mcp', (c) => meta(protectedResourceMetadata(base(c.req.raw))));
 
-  // Spread, never the object itself: the Node server writes Content-Length
-  // back into whatever headers object a Response was given.
   app.options('/oauth/register', () => new Response(null, { status: 204, headers: { ...CORS } }));
   app.post('/oauth/register', async (c) => {
-    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-    return new Response(JSON.stringify(clientRegistration(body ?? {})), { status: 201, headers: { 'Content-Type': 'application/json', ...CORS } });
+    const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
+    if (!body) return new Response(JSON.stringify({ error: 'invalid_client_metadata', error_description: 'Malformed JSON body' }), { status: 400, headers: { 'Content-Type': 'application/json', ...NO_STORE, ...CORS } });
+    try {
+      return new Response(JSON.stringify(await o.oauth.register(body)), { status: 201, headers: { 'Content-Type': 'application/json', ...NO_STORE, ...CORS } });
+    } catch (error) {
+      return new Response(JSON.stringify({ error: 'invalid_client_metadata', error_description: error instanceof Error ? error.message : 'Invalid client metadata' }), { status: 400, headers: { 'Content-Type': 'application/json', ...NO_STORE, ...CORS } });
+    }
   });
 
   app.get('/oauth/authorize', async (c) => {
     const q = new URL(c.req.url).searchParams;
-    const clientId = q.get('client_id');
+    const clientId = q.get('client_id') ?? '';
     const redirectUri = q.get('redirect_uri') ?? '';
     const codeChallenge = q.get('code_challenge') ?? '';
-    const method = q.get('code_challenge_method') ?? 'S256';
+    const method = q.get('code_challenge_method') ?? '';
     const state = q.get('state') ?? '';
+    const expectedResource = resource(c.req.raw);
+    const requestedResource = q.get('resource') ?? expectedResource;
+    const scope = q.get('scope') || MCP_SCOPE;
+    const client = clientId ? await o.oauth.client(clientId) : null;
     const problem =
-      clientId !== OAUTH_CLIENT_ID ? 'Unknown client.'
+      !client ? 'Unknown client.'
       : q.get('response_type') !== 'code' ? 'Unsupported response type.'
-      : !codeChallenge || method !== 'S256' ? 'Missing PKCE code challenge.'
-      : !isAllowedRedirectUri(redirectUri) ? 'Redirect URI not allowed.'
+      : !isValidCodeChallenge(codeChallenge) || method !== 'S256' ? 'Invalid PKCE code challenge.'
+      : !isAllowedRedirectUri(redirectUri) || !client.redirectUris.some((registered) => sameRedirectTarget(registered, redirectUri)) ? 'Redirect URI not registered.'
+      : requestedResource !== expectedResource ? 'Invalid MCP resource.'
+      : scope !== MCP_SCOPE ? 'Unsupported scope.'
       : null;
     if (problem) return page('artifactbin — error', `<h1>Can’t connect</h1><p class="err">${esc(problem)}</p>`, 400);
     const actor = c.get('actor') ?? ANONYMOUS;
-    const fields = `<input type="hidden" name="redirect_uri" value="${esc(redirectUri)}"><input type="hidden" name="code_challenge" value="${esc(codeChallenge)}"><input type="hidden" name="state" value="${esc(state)}">`;
+    const fields = `<input type="hidden" name="client_id" value="${esc(clientId)}"><input type="hidden" name="redirect_uri" value="${esc(redirectUri)}"><input type="hidden" name="code_challenge" value="${esc(codeChallenge)}"><input type="hidden" name="resource" value="${esc(requestedResource)}"><input type="hidden" name="scope" value="${esc(scope)}"><input type="hidden" name="state" value="${esc(state)}">`;
     if (actor.credential === 'session' && actor.userId) {
       return page('artifactbin — connect', `<h1>Connect to artifactbin</h1>
       <p>Your coding agent wants to publish artifacts. New artifacts will belong to <strong>${esc(actor.email ?? 'your account')}</strong>.</p>
@@ -125,21 +138,27 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
 
   app.post('/oauth/authorize/approve', async (c) => {
     const form = await c.req.formData();
+    const clientId = String(form.get('client_id') ?? '');
     const redirectUri = String(form.get('redirect_uri') ?? '');
     const codeChallenge = String(form.get('code_challenge') ?? '');
+    const requestedResource = String(form.get('resource') ?? '');
+    const scope = String(form.get('scope') ?? '');
     const state = form.get('state');
-    if (!isAllowedRedirectUri(redirectUri) || !codeChallenge) return c.json({ error: 'invalid_request' }, 400);
+    const client = clientId ? await o.oauth.client(clientId) : null;
+    if (!client || !isAllowedRedirectUri(redirectUri) || !client.redirectUris.some((registered) => sameRedirectTarget(registered, redirectUri)) || !isValidCodeChallenge(codeChallenge) || requestedResource !== resource(c.req.raw) || scope !== MCP_SCOPE) {
+      return c.json({ error: 'invalid_request' }, 400);
+    }
     const actor = c.get('actor') ?? ANONYMOUS;
     if (actor.credential !== 'session' || !actor.userId) return c.json({ error: 'unauthorized' }, 401);
     const url = new URL(redirectUri);
-    url.searchParams.set('code', await createAuthCode(o.codes, actor.userId, redirectUri, codeChallenge));
+    url.searchParams.set('code', await createAuthCode(o.oauth, { userId: actor.userId, clientId, redirectUri, resource: requestedResource, scope }, codeChallenge));
     if (typeof state === 'string' && state) url.searchParams.set('state', state);
     return Response.redirect(url, 303);
   });
 
   app.options('/oauth/token', () => new Response(null, { status: 204, headers: { ...CORS } }));
   app.post('/oauth/token', async (c) => {
-    const oauthJson = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...CORS } });
+    const oauthJson = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...NO_STORE, ...CORS } });
     const oauthError = (error: string, description?: string) => oauthJson({ error, ...(description ? { error_description: description } : {}) }, 400);
     let body: Record<string, string>;
     if ((c.req.header('content-type') || '').includes('application/json')) {
@@ -147,16 +166,43 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     } else {
       body = Object.fromEntries((await c.req.formData()).entries()) as Record<string, string>;
     }
-    if (body.grant_type !== 'authorization_code') return oauthError('unsupported_grant_type', `Grant type "${body.grant_type}" is not supported`);
-    if (!body.code) return oauthError('invalid_request', 'Missing code');
-    if (!body.code_verifier) return oauthError('invalid_request', 'Missing code_verifier (PKCE required)');
-    if (!body.redirect_uri) return oauthError('invalid_request', 'Missing redirect_uri');
-    const grant = await consumeAuthCode(o.codes, body.code, body.redirect_uri, body.code_verifier);
-    if (!grant?.userId) return oauthError('invalid_grant', 'Invalid, expired, or already-used authorization code');
-    try {
-      return oauthJson({ access_token: await mintFor(o, c.req.raw, grant.userId), token_type: 'Bearer' });
-    } catch (error) {
-      return oauthJson({ error: 'temporarily_unavailable', error_description: error instanceof Error ? error.message : 'mint failed' }, 503);
+    const expectedResource = resource(c.req.raw);
+    if (!body.client_id) return oauthError('invalid_request', 'Missing client_id');
+    if (!await o.oauth.client(body.client_id)) return oauthError('invalid_client', 'Unknown client');
+
+    if (body.grant_type === 'authorization_code') {
+      if (!body.code) return oauthError('invalid_request', 'Missing code');
+      if (!body.code_verifier) return oauthError('invalid_request', 'Missing code_verifier (PKCE required)');
+      if (!isValidCodeVerifier(body.code_verifier)) return oauthError('invalid_request', 'Invalid code_verifier');
+      if (!body.redirect_uri) return oauthError('invalid_request', 'Missing redirect_uri');
+      const requestedResource = body.resource || expectedResource;
+      if (requestedResource !== expectedResource) return oauthError('invalid_target', 'Invalid MCP resource');
+      const grant = await consumeAuthCode(o.oauth, { code: body.code, clientId: body.client_id, redirectUri: body.redirect_uri, resource: requestedResource, codeVerifier: body.code_verifier });
+      if (!grant?.userId) return oauthError('invalid_grant', 'Invalid, expired, or already-used authorization code');
+      try {
+        const minted = await mintFor(o, c.req.raw, { userId: grant.userId, resource: grant.resource, scope: grant.scope });
+        const refreshToken = await o.oauth.issueRefresh({ clientId: grant.clientId, userId: grant.userId, resource: grant.resource, scope: grant.scope, accessTokenId: minted.id });
+        return oauthJson({ access_token: minted.token, token_type: 'Bearer', expires_in: ACCESS_TOKEN_TTL_SECONDS, refresh_token: refreshToken, scope: grant.scope });
+      } catch (error) {
+        return oauthJson({ error: 'temporarily_unavailable', error_description: error instanceof Error ? error.message : 'mint failed' }, 503);
+      }
     }
+
+    if (body.grant_type === 'refresh_token') {
+      if (!body.refresh_token) return oauthError('invalid_request', 'Missing refresh_token');
+      const requestedResource = body.resource || expectedResource;
+      if (requestedResource !== expectedResource) return oauthError('invalid_target', 'Invalid MCP resource');
+      const grant = await o.oauth.rotateRefresh(body.refresh_token, body.client_id, requestedResource);
+      if (!grant) return oauthError('invalid_grant', 'Invalid, expired, revoked, or already-used refresh token');
+      try {
+        const minted = await mintFor(o, c.req.raw, { userId: grant.userId, resource: grant.resource, scope: grant.scope });
+        await o.oauth.bindRefresh(grant.token, minted.id);
+        return oauthJson({ access_token: minted.token, token_type: 'Bearer', expires_in: ACCESS_TOKEN_TTL_SECONDS, refresh_token: grant.token, scope: grant.scope });
+      } catch (error) {
+        return oauthJson({ error: 'temporarily_unavailable', error_description: error instanceof Error ? error.message : 'mint failed' }, 503);
+      }
+    }
+
+    return oauthError('unsupported_grant_type', `Grant type "${body.grant_type}" is not supported`);
   });
 }

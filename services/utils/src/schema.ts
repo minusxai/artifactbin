@@ -29,7 +29,7 @@ function renderTable(table: Table, qualified: (name: string) => string): string[
       .filter((c) => c.retired)
       .map((c) => `ALTER TABLE ${name} ALTER COLUMN ${c.name} DROP NOT NULL`),
     ...(table.indexes ?? []).map(
-      (i) => `CREATE ${i.unique ? 'UNIQUE ' : ''}INDEX IF NOT EXISTS ${i.name} ON ${name} (${i.columns.join(', ')})`,
+      (i) => `CREATE ${i.unique ? 'UNIQUE ' : ''}INDEX IF NOT EXISTS ${i.name} ON ${name} (${i.columns.join(', ')})${i.where ? ` WHERE ${i.where}` : ''}`,
     ),
   ];
 }

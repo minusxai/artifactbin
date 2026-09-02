@@ -6,8 +6,8 @@ export const TOKEN_RE = /^mx_[A-Za-z0-9_-]{40,50}$/;
 export const hashToken = (presented: string): string => createHash('sha256').update(presented).digest('hex');
 
 /**
- * SELECT id, user_id, expires_at FROM <schema>.tokens WHERE token_hash = $1 AND revoked_at IS NULL   -- byToken
- * SELECT id, user_id, expires_at FROM <schema>.tokens WHERE id = $1        AND revoked_at IS NULL     -- byId
+ * SELECT id, user_id, audience, scope, expires_at FROM <schema>.tokens WHERE token_hash = $1 AND revoked_at IS NULL   -- byToken
+ * SELECT id, user_id, audience, scope, expires_at FROM <schema>.tokens WHERE id = $1        AND revoked_at IS NULL     -- byId
  * Only ever SELECT: the caller's role has that grant and no other. Cached by hash and by id with a positive
  * TTL (5 s) and a shorter negative one (1 s); insertion-ordered eviction past maxEntries (5 000).
  */
@@ -35,16 +35,24 @@ export function createTokenReader(o: TokenReaderOptions): TokenReader {
   };
 
   const read = async (sql: string, param: unknown): Promise<{ value: TokenRecord | null; expiresAt: number | null }> => {
-    const { rows } = await o.db.query<{ id: string; user_id: string | null; expires_at: string | Date | number | null }>(sql, [param]);
+    const { rows } = await o.db.query<{ id: string; user_id: string | null; audience?: string | null; scope?: string | null; expires_at: string | Date | number | null }>(sql, [param]);
     const row = rows[0];
     if (!row) return { value: null, expiresAt: null };
     const expiresAt = row.expires_at === null ? null : new Date(row.expires_at).getTime();
-    return { value: { id: row.id, userId: row.user_id ?? null }, expiresAt };
+    return {
+      value: {
+        id: row.id,
+        userId: row.user_id ?? null,
+        ...(row.audience ? { audience: row.audience } : {}),
+        ...(row.scope ? { scope: row.scope } : {}),
+      },
+      expiresAt,
+    };
   };
   const table = `${schema ? `${schema}.` : ''}tokens`;
   const liveClause = 'AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now())';
-  const byHashSql = `SELECT id, user_id, expires_at FROM ${table} WHERE token_hash = $1 ${liveClause}`;
-  const byIdSql = `SELECT id, user_id, expires_at FROM ${table} WHERE id = $1 ${liveClause}`;
+  const byHashSql = `SELECT id, user_id, audience, scope, expires_at FROM ${table} WHERE token_hash = $1 ${liveClause}`;
+  const byIdSql = `SELECT id, user_id, audience, scope, expires_at FROM ${table} WHERE id = $1 ${liveClause}`;
 
   return {
     async byToken(presented: string): Promise<TokenRecord | null> {

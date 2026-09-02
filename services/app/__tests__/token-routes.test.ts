@@ -61,6 +61,15 @@ describe('token routes served by the app', () => {
     const { rows } = await (await harness.db()).query<{ user_id: string | null }>('SELECT user_id FROM tokens WHERE id = $1', [owned.id]);
     expect(rows[0]?.user_id).toBe(user.id);
   });
+  it('only a session mint may create an MCP audience-bound access token', async () => {
+    const grant = { audience: 'https://artifactbin.example/mcp', scope: 'artifacts' };
+    expect((await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST', json: grant }))).status).toBe(400);
+    const user = await createUser({ email: 'oauth@example.com' });
+    const actor = { credential: 'session' as const, userId: user.id, email: 'oauth@example.com', emailVerified: true };
+    const minted = await json(await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST', actor, json: grant })));
+    const { rows } = await (await harness.db()).query<{ audience: string | null; scope: string | null }>('SELECT audience, scope FROM tokens WHERE id = $1', [minted.id]);
+    expect(rows[0]).toEqual(grant);
+  });
   it('GET /api/my/tokens lists only this account\'s live tokens; 401 without a session', async () => {
     expect((await listMine(request('/api/my/tokens'))).status).toBe(401);
     const user = await createUser({ email: 'b@example.com' });

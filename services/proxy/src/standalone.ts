@@ -71,6 +71,7 @@ export function createStandaloneProxy(config: ProxyConfig, deps: StandaloneDeps,
       cookieSecret: config.authSecret,
       ...(config.secure ? { secure: true } : {}),
       ...(deps.identityDb ? { identityDb: deps.identityDb } : {}),
+      appSchema: config.appSchema,
       upstreamDeadlineMs: config.upstreamDeadlineMs,
     }),
   ];

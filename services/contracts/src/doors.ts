@@ -17,6 +17,7 @@ export const DOORS = {
   QUERY: { max: 600, windowSeconds: 60, burst: 1, key: 'ip' },
   EXPORT: { max: 30, windowSeconds: 60, burst: 1, key: 'actor' },
   EVENTS_STREAMS: { max: 20, windowSeconds: 0, burst: 1, key: 'ip' },
+  OAUTH_REGISTER: { max: 30, windowSeconds: 60, burst: 1, key: 'ip' },
   OAUTH_TOKEN: { max: 30, windowSeconds: 60, burst: 1, key: 'ip' },
 } as const satisfies Record<string, DoorConfig>;
 
