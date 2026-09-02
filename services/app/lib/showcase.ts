@@ -88,9 +88,8 @@ const ENTRIES: readonly ShowcaseDoc[] = [
   {
     order: 6,
     id: 'EN6QaQ',
-    placeholder: true,
     title: 'What is Artifactbin?',
-    blurb: 'What is Artifactbin?',
+    blurb: 'A deck on artifactbin itself: publishing from any agent, then editing it by hand.',
     kind: 'deck',
     use: 'design polished presentations',
   },
