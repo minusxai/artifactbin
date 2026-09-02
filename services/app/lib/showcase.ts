@@ -87,10 +87,10 @@ const ENTRIES: readonly ShowcaseDoc[] = [
   },
   {
     order: 6,
-    id: '6bXsx3',
+    id: 'EN6QaQ',
     placeholder: true,
-    title: 'Vol 2: Show HN Hall of Fame',
-    blurb: 'Stand-in picture — swap for a real deck.',
+    title: 'What is Artifactbin?',
+    blurb: 'What is Artifactbin?',
     kind: 'deck',
     use: 'design polished presentations',
   },
