@@ -45,6 +45,7 @@ COPY --from=builder /app/services/app/orchestrator ./orchestrator
 COPY --from=builder /app/services/app/skills ./skills
 COPY --from=builder /app/services/app/lib/story-runtime/dist ./lib/story-runtime/dist
 COPY scripts/setup.mjs ./scripts/setup.mjs
+COPY scripts/lib/dev-ports.mjs ./scripts/lib/dev-ports.mjs
 COPY scripts/lib/setup-plan.mjs ./scripts/lib/setup-plan.mjs
 
 RUN test -f ./sql-server.mjs \
