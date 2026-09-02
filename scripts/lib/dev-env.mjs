@@ -37,6 +37,12 @@ export function resolvePort(env = process.env) {
   return declaredPort(env) ?? DEFAULT_DEV_PORT;
 }
 
+/** Vite's websocket uses an explicit override or the adjacent port. */
+export function resolveHmrPort(appPort, env = process.env) {
+  const explicit = Number(env.APP__HMR_PORT);
+  return Number.isInteger(explicit) && explicit > 0 && explicit < 65536 ? explicit : appPort + 1;
+}
+
 /**
  * The port PUBLIC_BASE_URL spells out, or null. Only an EXPLICIT port counts:
  * URL.port is '' for a scheme's default, and a production PUBLIC_BASE_URL

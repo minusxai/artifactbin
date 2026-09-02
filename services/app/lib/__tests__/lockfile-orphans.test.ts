@@ -5,8 +5,8 @@
  * `npm ci` kept installing it — 155 MB of framework, plus `sharp` and its 23
  * platform binaries (Next's image optimiser), `styled-jsx`, `client-only` and
  * eight `@next/swc-*`. Every one of them shipped in the image. Nothing
- * referenced them: `better-auth` names `next` as an OPTIONAL peer, which npm
- * does not install; the entries were simply left behind.
+ * referenced them: `better-auth` names `next` as an OPTIONAL peer, but no
+ * matching package appears in the lock; the entries were simply left behind.
  *
  * A dependency the lockfile installs but nothing declares is invisible in
  * review — package.json reads clean — so the check is against the SOURCE OF
@@ -49,9 +49,10 @@ describe('package-lock.json', () => {
       reached.add(name);
       for (const meta of byName.get(name) ?? []) {
         stack.push(...Object.keys(meta.dependencies ?? {}), ...Object.keys(meta.optionalDependencies ?? {}));
-        for (const peer of Object.keys(meta.peerDependencies ?? {})) {
-          if (!meta.peerDependenciesMeta?.[peer]?.optional) stack.push(peer);
-        }
+        // npm records and installs a satisfiable optional peer by default
+        // (nunjucks → chokidar is one). If it is present, it is reachable;
+        // if absent, adding its name to the traversal has no package to admit.
+        stack.push(...Object.keys(meta.peerDependencies ?? {}));
       }
     }
     // Workspace links (`packages/*`) appear under node_modules by name too.

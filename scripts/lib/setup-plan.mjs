@@ -22,9 +22,9 @@ function httpUrlError(value) {
 }
 
 function portError(value) {
-  return Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 65535
+  return Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) < 65535
     ? undefined
-    : 'Port must be an integer from 1 to 65535';
+    : 'Port must be an integer from 1 to 65534 so the adjacent HMR port is valid';
 }
 
 function postgresUrlError(value) {
@@ -52,10 +52,24 @@ function portFromPublicUrl(publicUrl) {
   }
 }
 
-function publicUrlFromPort(port) {
-  const url = new URL(DEFAULT_PUBLIC_URL);
+export function publicUrlWithPort(publicUrl, port) {
+  const url = new URL(publicUrl);
   url.port = String(port);
   return url.origin;
+}
+
+function publicUrlFromPort(port) {
+  return publicUrlWithPort(DEFAULT_PUBLIC_URL, port);
+}
+
+export function loopbackPublicUrlFollowsPort(publicUrl, port) {
+  try {
+    const url = new URL(publicUrl);
+    const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]';
+    return loopback && Number(url.port) === Number(port);
+  } catch {
+    return false;
+  }
 }
 
 function fromAddress(publicUrl) {
@@ -247,7 +261,12 @@ function replaceEnvLine(text, name, value) {
 export function mergeEnvFile(existingText, answerOverrides, { generated, supplied = new Set(Object.keys(answerOverrides)) }) {
   const current = activeEnv(existingText);
   const prior = existingAnswers(existingText);
-  const explicit = Object.fromEntries([...supplied].filter((key) => key in answerOverrides).map((key) => [key, answerOverrides[key]]));
+  const effectiveSupplied = new Set(supplied);
+  const explicit = Object.fromEntries([...effectiveSupplied].filter((key) => key in answerOverrides).map((key) => [key, answerOverrides[key]]));
+  if (effectiveSupplied.has('port') && !effectiveSupplied.has('publicUrl') && loopbackPublicUrlFollowsPort(prior.publicUrl, prior.port)) {
+    explicit.publicUrl = publicUrlWithPort(prior.publicUrl, answerOverrides.port);
+    effectiveSupplied.add('publicUrl');
+  }
   const answers = defaultAnswers({ ...prior, ...explicit });
   const secrets = { ...generated };
   for (const name of ['AUTH__SECRET', 'ADMIN__SECRET', 'CONTRACT__ACTOR_SECRET', 'INTERNAL__SERVICE_SECRET']) {
@@ -257,7 +276,7 @@ export function mergeEnvFile(existingText, answerOverrides, { generated, supplie
   // Existing values are preserved verbatim, even when the editor would not
   // create them (for example a driver-specific connection-string spelling).
   let text = buildEnvFile(answers, { generated: secrets, validate: false });
-  const replaced = new Set([...supplied].flatMap((key) => MANAGED_ENV[key] ?? []));
+  const replaced = new Set([...effectiveSupplied].flatMap((key) => MANAGED_ENV[key] ?? []));
   for (const [name, value] of current) {
     if (!replaced.has(name)) text = replaceEnvLine(text, name, value);
   }

@@ -11,7 +11,7 @@
  * `Cannot find package 'vega-lite'`.
  */
 export const EXTERNALS = [
-  'pg', '@electric-sql/pglite', 'kysely-pglite',
+  'pg', '@electric-sql/pglite',
   'playwright', 'playwright-core',
   '@duckdb/node-api',
   'vega', 'vega-lite', 'vega-interpreter',

@@ -32,7 +32,6 @@ import { fileURLToPath } from 'node:url';
 import { tsImport } from 'tsx/esm/api';
 import { PGlite } from '@electric-sql/pglite';
 import { Kysely } from 'kysely';
-import { KyselyPGlite } from 'kysely-pglite';
 import { getMigrations } from 'better-auth/db/migration';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -164,7 +163,8 @@ async function betterAuthSide() {
   const pg = new PGlite();
   try {
     await pg.exec(`CREATE SCHEMA IF NOT EXISTS ${AUTH_SCHEMA}`);
-    const kysely = new Kysely({ dialect: new KyselyPGlite(pg).dialect });
+    const { pgliteDialect } = await tsImport('../services/proxy/src/auth/pglite.ts', import.meta.url);
+    const kysely = new Kysely({ dialect: pgliteDialect(pg) });
     const { humanAuthOptions } = await tsImport('../services/proxy/src/auth/human.ts', import.meta.url);
     const cfg = {
       secret: 'schema-renderer-secret-schema-renderer-secret',

@@ -15,7 +15,6 @@ import { afterAll, describe, expect, it } from 'vitest';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const APP_ROOT = path.join(ROOT, 'services', 'app');
 const SERVER_TS = path.join(ROOT, 'server.ts');
-const TSX = path.join(ROOT, 'node_modules', '.bin', 'tsx');
 const scratch = mkdtempSync(path.join(os.tmpdir(), 'boot-env-'));
 
 type BootOutcome = {
@@ -55,7 +54,9 @@ function bootEnvironment(port: number, overrides: Record<string, string>): Recor
 }
 
 async function runBoot(port: number, overrides: Record<string, string>): Promise<BootOutcome> {
-  const child = spawn(TSX, [SERVER_TS], {
+  // Run the server in the child itself. A CLI wrapper may spawn a grandchild,
+  // which survives when a timed-out worker kills only the wrapper.
+  const child = spawn(process.execPath, ['--import', 'tsx', SERVER_TS], {
     cwd: APP_ROOT,
     env: bootEnvironment(port, overrides),
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -83,10 +84,19 @@ async function runBoot(port: number, overrides: Record<string, string>): Promise
         }
       }).catch(() => undefined);
     }, 100);
-    const deadline = setTimeout(() => finish({ kind: 'timed-out', code: child.exitCode, output }), 20_000);
+    const deadline = setTimeout(() => finish({ kind: 'timed-out', code: child.exitCode, output }), 60_000);
   });
 
-  if (child.exitCode === null) child.kill('SIGTERM');
+  if (child.exitCode === null && child.signalCode === null) {
+    const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
+    child.kill('SIGTERM');
+    await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 5_000))]);
+    if (child.exitCode === null && child.signalCode === null) {
+      const killed = new Promise<void>((resolve) => child.once('exit', () => resolve()));
+      child.kill('SIGKILL');
+      await killed;
+    }
+  }
   return outcome;
 }
 
@@ -120,8 +130,27 @@ describe('production boot environment', () => {
     const port = await availablePort(2);
     const result = await runBoot(port, { NODE_ENV: 'development' });
 
-    expect(result.kind).toBe('listened');
+    expect(result.kind, result.output).toBe('listened');
     expect(result.output).toContain('[boot] AUTH__SECRET unset — generated per boot');
     expect(result.output).toContain(`[boot] proxy + app on http://localhost:${port} (dev, db pglite)`);
-  });
+  }, 90_000);
+
+  it('turns an occupied port into an actionable error without an unhandled stack', async () => {
+    const port = await availablePort(3);
+    const blocker = net.createServer((socket) => socket.destroy());
+    await new Promise<void>((resolve, reject) => {
+      blocker.once('error', reject);
+      blocker.listen(port, resolve);
+    });
+    try {
+      const result = await runBoot(port, { NODE_ENV: 'development' });
+      expect(result.kind, result.output).toBe('exited');
+      expect(result.code).toBe(1);
+      expect(result.output).toContain(`[boot] Port ${port} is already in use.`);
+      expect(result.output).toContain('npm run setup -- --yes --port <port>');
+      expect(result.output).not.toContain("Unhandled 'error' event");
+    } finally {
+      await new Promise<void>((resolve) => blocker.close(() => resolve()));
+    }
+  }, 90_000);
 });

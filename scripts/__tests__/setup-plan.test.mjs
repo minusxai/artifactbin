@@ -102,14 +102,21 @@ describe('existing environment files', () => {
     expect(merged).toMatch(/^ADMIN__SECRET=b{43}$/m);
   });
 
-  it('changes only explicit choices and can deliberately disable optional services', () => {
+  it('keeps a loopback public URL coupled to an explicitly changed app port', () => {
     const merged = mergeEnvFile(old, { port: 5050, email: '', objects: 'local' }, { generated: gen, supplied: new Set(['port', 'email', 'objects']) });
     expect(merged).toMatch(/^APP__PORT=5050$/m);
-    expect(merged).toMatch(/^APP__PUBLIC_BASE_URL=http:\/\/localhost:4040$/m);
+    expect(merged).toMatch(/^APP__PUBLIC_BASE_URL=http:\/\/localhost:5050$/m);
     expect(merged).toMatch(/^# EMAIL__RESEND_API_KEY=$/m);
     expect(merged).toMatch(/^# S3_URL=/m);
     expect(merged).toMatch(/^OBJECT_STORE__LOCAL_DIR=\.\/data\/objects$/m);
     expect(merged).toMatch(/^MY_CUSTOM_SETTING=keep-me$/m);
+  });
+
+  it('preserves an intentionally different public deployment URL when the local port changes', () => {
+    const existing = 'APP__PUBLIC_BASE_URL=https://bin.example.com\nAPP__PORT=4040\n';
+    const merged = mergeEnvFile(existing, { port: 5050 }, { generated: gen, supplied: new Set(['port']) });
+    expect(merged).toMatch(/^APP__PORT=5050$/m);
+    expect(merged).toMatch(/^APP__PUBLIC_BASE_URL=https:\/\/bin\.example\.com$/m);
   });
 
   it('retains an unchanged driver-specific URL even when the editor would not create it', () => {
@@ -127,6 +134,7 @@ describe('parseArgs()', () => {
   });
   it('rejects a bad port or URL', () => {
     expect(parseArgs(['--port', 'abc']).error).toMatch(/port/i);
+    expect(parseArgs(['--port', '65535']).error).toMatch(/hmr/i);
     expect(parseArgs(['--public-url', 'not a url']).error).toMatch(/url/i);
   });
 });
@@ -160,6 +168,20 @@ describe('scripts/setup.mjs (child process)', () => {
     expect(printed.status, printed.stderr).toBe(0);
     expect(printed.stdout).toMatch(/^APP__PUBLIC_BASE_URL=http:\/\/localhost:5299$/m);
     expect(printed.stdout).toMatch(/^APP__PORT=5299$/m);
+  });
+  it('--port also updates an existing matching localhost public URL and prints the resolved summary', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-port-update-'));
+    const out = path.join(dir, '.env');
+    expect(run(['--yes', '--out', out, '--port', '5298']).status).toBe(0);
+    const changed = run(['--yes', '--out', out, '--port', '5398']);
+    expect(changed.status, changed.stderr).toBe(0);
+    expect(fs.readFileSync(out, 'utf8')).toMatch(/^APP__PUBLIC_BASE_URL=http:\/\/localhost:5398$/m);
+    expect(changed.stdout).toContain('Public URL: http://localhost:5398');
+    expect(changed.stdout).toContain('App port: 5398');
+    expect(changed.stdout).toContain('HMR port: 5399');
+    expect(changed.stdout).toContain('Database: embedded PGLite');
+    expect(changed.stdout).toContain('Object storage: local directory');
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 });
 

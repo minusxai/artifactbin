@@ -63,15 +63,15 @@ npm run setup
 npm run dev
 ```
 
-Then open http://localhost:3030. Setup safely reuses `.env`: it keeps current/custom
-values and fills missing secrets. Enter keeps a value; secret input is hidden and `-` clears it. Skip questions with
-`npm run setup -- --yes --port <port>`; `--force` rebuilds from scratch.
+Then open http://localhost:3030. Setup safely reuses `.env`, retaining custom values and filling missing secrets; Enter keeps a value, hidden secret input accepts `-` to clear it, and `--force` rebuilds from scratch.
+Skip questions with `npm run setup -- --yes --port <port>`. A localhost public URL follows an explicitly changed port, while a custom deployment URL is preserved. Setup checks the app and HMR ports and suggests a free pair; `npm run dev` also reports an exact recovery command if either becomes busy.
 
 ```bash
 npm test
 npm run validate
 ```
 
+Run these sequentially; both start resource-intensive workers.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the development flow.
 
 ## Docs

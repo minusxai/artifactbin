@@ -27,6 +27,7 @@ import { emailOTP, genericOAuth } from 'better-auth/plugins';
 import { Kysely, PostgresDialect } from 'kysely';
 import { randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
+import { pgliteDialect } from './pglite';
 
 export interface OutgoingMail { to: string; kind: 'otp' | 'verify-email' | 'change-email' | 'other'; subject: string; text: string; otp?: string; url?: string }
 export interface Mailer { send(mail: OutgoingMail): Promise<void> }
@@ -169,7 +170,7 @@ export function humanAuthOptions(opts: HumanAuthOptions, db: Kysely<Record<strin
 export async function createHumanAuth(opts: HumanAuthOptions): Promise<HumanAuth> {
   if (!opts.pglite && !opts.pool) throw new Error('createHumanAuth: a PGLite instance or a pg pool is required');
   const dialect = opts.pglite
-    ? new (await import('kysely-pglite')).KyselyPGlite(opts.pglite as never).dialect
+    ? pgliteDialect(opts.pglite as Parameters<typeof pgliteDialect>[0])
     : new PostgresDialect({ pool: opts.pool! });
   /*
    * WHERE identity lives. `auth` by default; a deployment that shares one

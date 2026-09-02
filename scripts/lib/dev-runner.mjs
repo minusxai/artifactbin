@@ -1,7 +1,8 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 
-import { declaredPort, loadDotEnv, resolvePort } from './dev-env.mjs';
+import { declaredPort, loadDotEnv, resolveHmrPort, resolvePort } from './dev-env.mjs';
+import { nextAvailableDevelopmentPair, unavailableDevelopmentPorts } from './dev-ports.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const APP_ROOT = path.join(ROOT, 'services', 'app');
@@ -16,6 +17,16 @@ const APP_ROOT = path.join(ROOT, 'services', 'app');
 export async function runDev({ appOnly, args = [] }) {
   loadDotEnv();
   const port = resolvePort();
+  const hmrPort = resolveHmrPort(port);
+
+  const unavailable = await unavailableDevelopmentPorts(port, hmrPort);
+  if (unavailable.length > 0) {
+    const pair = await nextAvailableDevelopmentPair(port);
+    const roles = unavailable.map((value) => `${value}${value === port ? ' (app)' : ' (HMR)'}`).join(', ');
+    console.error(`[dev] Port ${roles} unavailable.${pair ? ` Choose a free pair with: npm run setup -- --yes --port ${pair.appPort}` : ' No adjacent app/HMR pair is available.'}`);
+    process.exitCode = 1;
+    return;
+  }
 
   const declared = declaredPort();
   if (declared && declared !== port) {
