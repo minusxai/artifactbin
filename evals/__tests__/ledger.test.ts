@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { ledgerMetrics, parseLedger, scoredArtifactId, targetArtifactId } from '../lib/ledger';
+import { isDocsAddress, ledgerMetrics, parseLedger, scoredArtifactId, targetArtifactId } from '../lib/ledger';
 import type { LedgerEntry } from '../lib/contracts';
 
 const text = fs.readFileSync(path.join(__dirname, 'fixtures/ledger.jsonl'), 'utf8');
@@ -203,5 +203,34 @@ describe('scoredArtifactId', () => {
     expect(scoredArtifactId({ finalMessage: 'Done: https://artifactbin.dev/a/stated1', ledger: written, startId: 'start1' })).toBe('stated1');
     expect(scoredArtifactId({ finalMessage: 'Done.', ledger: written, startId: 'start1' })).toBe('ledger1');
     expect(scoredArtifactId({ finalMessage: null, ledger: [], startId: 'start1' })).toBe('start1');
+  });
+});
+
+/**
+ * Production run 33702277600 (2026-09-03), claude-code deck leg: the agent read /llms.txt, /docs and the
+ * /docs?download=true tarball BEFORE its first write, and the scorer said it had not read the docs at all,
+ * because only `/docs/<file>` counted. Every address the product serves docs from is a docs read.
+ */
+describe('docs addresses', () => {
+  const deck = parseLedger(fs.readFileSync(path.join(__dirname, 'fixtures/claude-code.deck.ledger.jsonl'), 'utf8'));
+  it('names the listing, the tarball and llms.txt as docs, and nothing else', () => {
+    expect(isDocsAddress('/docs')).toBe(true);
+    expect(isDocsAddress('/docs?download=true')).toBe(true);
+    expect(isDocsAddress('/llms.txt')).toBe(true);
+    expect(isDocsAddress('/docs/artifactbin/SKILL.md')).toBe(true);
+    expect(isDocsAddress('/docs-human')).toBe(false);
+    expect(isDocsAddress('/api/docs')).toBe(false);
+    expect(isDocsAddress('/a/PH4c1F')).toBe(false);
+  });
+  it('the real deck ledger: docs were read before the first write, four fetches, bytes counted, five invented endpoints', () => {
+    const m = ledgerMetrics(deck);
+    expect(m.readDocsBeforeWrite).toBe(true);
+    expect(m.docsFetches).toBe(4);
+    expect(m.docsBytes).toBeGreaterThan(0);
+    expect(m.inventedEndpoints).toBe(5);
+  });
+  it('llms.txt and the human docs page are routes the product has, never invented endpoints', () => {
+    const e = (path: string): LedgerEntry => ({ t: 0, ms: 1, method: 'GET', path, status: 404, ua: 'curl', auth: 'none', error: null } as unknown as LedgerEntry);
+    expect(ledgerMetrics([e('/llms.txt'), e('/docs-human')]).inventedEndpoints).toBe(0);
   });
 });
