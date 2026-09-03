@@ -46,10 +46,10 @@ import { mapConcurrent } from './lib/pool';
 import { exitWhenDone, settleWithin, TEARDOWN_MS } from './lib/shutdown';
 import { DRIVER_HEADER, startProxy } from './lib/proxy';
 import { mintStartDocument, mintStartDocumentAs } from './lib/retry';
-import { acquireCredential, credentialSourceFor, deploymentLoginEmail, localLoginEmail, memoizeCredential, shareForScoring, writeArtifactbinEnv, type Credential } from './lib/credential';
+import { acquireCredential, credentialSourceFor, deploymentLoginEmail, localLoginEmail, memoizeCredential, shareForScoring, writeArtifactbinEnv, type Credential, type CredentialSource } from './lib/credential';
 import { agentProxyEnv, startMitmProxy } from './lib/mitm';
 import { exportDocument, inspectDocument, screenshotDocument } from './lib/score/browser';
-import { dataflowRows, productMetrics } from './lib/score/product';
+import { dataflowRows, productMetrics, type ServedDocument } from './lib/score/product';
 import { credentialEnv, readDotEnv } from './lib/env';
 import { parseArgs } from './lib/args';
 import { registerSecret, scrubRegistered } from './lib/secrets';
@@ -79,6 +79,12 @@ function tokenFromPaste(startPrompt: string): string {
   return token;
 }
 
+/** A document as the product SERVES it — the shape both product-truth reads take, and the one `productMetrics` grades. */
+async function servedDocument(url: string): Promise<ServedDocument> {
+  const res = await fetch(url);
+  return { status: res.status, html: res.ok ? await res.text() : '' };
+}
+
 /** Publish the document a task asks the agent to EDIT, as the agent's own token would have. */
 async function seedDocument(base: string, id: string, token: string, markup: string): Promise<void> {
   const res = await fetch(`${base}/api/artifacts/${id}`, {
@@ -102,6 +108,12 @@ interface LegRun {
    * not the one the driver dials — a booted server publishes the leg's proxy as its public base URL.
    */
   credentialFor: (base: string, origin?: string) => Promise<Credential | null>;
+  /**
+   * WHICH source that came from. `credentialFor` answers null for two very different reasons — `paste`
+   * (the product hands its token straight to the agent) and `none` (nobody hands the agent anything) —
+   * and the second one changes what this driver may do BEFORE the turn, so the reason travels.
+   */
+  credentialSource: CredentialSource;
 }
 
 async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: string, browser: Browser, run: LegRun): Promise<Outcome[]> {
@@ -210,7 +222,7 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
     return await mapConcurrent(tasks, config.run.concurrency, async (task) => {
       const t = await startTaskProxy(task.id);
       try {
-        return await runTask({ leg, task, config, apiKey, legDir, ledgerPath: t.ledgerPath, productUrl, agentBase: t.agentBase, agentEnv: t.agentEnv, browser, startedAt, credential, ...(runAs ? { runAs } : {}) });
+        return await runTask({ leg, task, config, apiKey, legDir, ledgerPath: t.ledgerPath, productUrl, agentBase: t.agentBase, agentEnv: t.agentEnv, browser, startedAt, credential, credentialSource: run.credentialSource, ...(runAs ? { runAs } : {}) });
       } catch (err) {
         // A task's own failure is ITS failure. Letting it reject would take down the server its
         // siblings are still running against — and their agent time is already paid for. `false`
@@ -243,6 +255,8 @@ interface TaskRun {
   runAs?: string;
   /** The account this leg publishes as, or null when the product's own paste hands the token over. */
   credential: Credential | null;
+  /** Why `credential` is what it is — `none` is the token-less leg (`LegRun.credentialSource`). */
+  credentialSource: CredentialSource;
 }
 
 async function runTask(r: TaskRun): Promise<Outcome> {
@@ -277,11 +291,19 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // document would belong to somebody other than the token the agent was given. The driver creates the
   // start document itself, as that account, `unlisted` so every anonymous product-truth read below is
   // unchanged (measured — lib/retry.mintStartDocumentAs).
-  const start = r.credential
-    ? await mintStartDocumentAs(r.agentBase, DRIVER_HEADER, r.credential.token)
-    : await mintStartDocument(r.agentBase, DRIVER_HEADER);
+  //
+  // The TOKEN-LESS leg mints nothing at all: `/api/start` hands out an anonymous token, and a driver that
+  // spent it would be handing the agent the very credential the leg exists to withhold. So `start` is
+  // null there, and every reader below says what it means with no start document rather than inventing one.
+  const tokenless = r.credentialSource === 'none';
+  if (tokenless && task.seed) throw new Error(`${task.id} needs a seeded document, which needs a token — it cannot run with --credential none`);
+  const start = tokenless
+    ? null
+    : r.credential
+      ? await mintStartDocumentAs(r.agentBase, DRIVER_HEADER, r.credential.token)
+      : await mintStartDocument(r.agentBase, DRIVER_HEADER);
   // The paste must name the base the agent will be given, or the agent's traffic misses the ledger.
-  if (!r.credential && !start.prompt.includes(r.agentBase)) throw new Error(`start paste is not on ${r.agentBase}`);
+  if (start && !r.credential && !start.prompt.includes(r.agentBase)) throw new Error(`start paste is not on ${r.agentBase}`);
 
   // A `token` task needs the driver to hold the credential (to seed a document, or to write an MCP config),
   // so the driver reads it from the paste; a `start-link` task passes that paste on untouched.
@@ -290,9 +312,13 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // skills must exist before the turn, while MCP needs the token in the harness
   // connection; both therefore use the driver's token handoff.
   const installed = installsSkills(leg.mode.run);
-  let access: Access = { kind: 'start-link', startPrompt: start.prompt };
+  let access: Access = start ? { kind: 'start-link', startPrompt: start.prompt } : { kind: 'none', base: r.agentBase };
   let mcp: { name: string; url: string; token: string } | undefined;
-  if (r.credential) {
+  if (!start) {
+    // The token-less leg (`start` is null exactly when `tokenless`). Deliberately nothing: no
+    // `~/.artifactbin.env`, no MCP configuration, no document — the agent is given a task and a base URL,
+    // and what it does about the missing credential is the measurement.
+  } else if (r.credential) {
     const token = r.credential.token;
     if (task.seed) await seedDocument(r.agentBase, start.id, token, task.seed);
     access = { kind: 'token', base: r.agentBase, token, id: start.id };
@@ -322,15 +348,20 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // The start document as served BEFORE the agent ran. `published` is answered by comparing against
   // it, because the start document is not blank — it serves "Untitled / Waiting for your agent…", so
   // "has content" cannot tell a written document from an untouched one.
-  const baselineRes = await fetch(`${r.productUrl}/a/${start.id}/raw?chrome=0`);
-  const baseline = { status: baselineRes.status, html: baselineRes.ok ? await baselineRes.text() : '' };
+  // With no start document there is nothing to compare against, and `productMetrics` says so itself:
+  // a null baseline falls back to "does the served document have content".
+  const baseline = start ? await servedDocument(`${r.productUrl}/a/${start.id}/raw?chrome=0`) : null;
 
   const prompt = buildPrompt(task, access, { vision: leg.vision, mode: leg.mode.run });
   fs.writeFileSync(path.join(runDir, 'prompt.txt'), prompt);
 
   const ctx = { leg, prompt, cwd, homeDir, apiKey: r.apiKey, maxTurns: config.run.maxTurns, maxBudgetUsd: config.run.maxBudgetUsd, mcp, plugin };
-  log(`${leg.label}/${task.id}: doc ${start.id} — running ${leg.harness} (${leg.model})`);
+  log(`${leg.label}/${task.id}: ${start ? `doc ${start.id}` : 'no credential, no document'} — running ${leg.harness} (${leg.model})`);
   await adapter.prepare(ctx);
+  // The anchor `ms_to_first_publish` is measured from: the moment the human's wait begins. Taken here,
+  // beside the spawn, rather than read off the ledger — whose first entry is already past the agent's
+  // boot, and therefore only a floor. After `prepare`, which is the driver's setup, not the agent's time.
+  const startedAtMs = Date.now();
   const spawned = await runInvocation({ ...adapter.invocation(ctx), redact: [r.apiKey] }, {
     cwd,
     baseEnv: { ...process.env, ...r.agentEnv },
@@ -353,13 +384,13 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // The file holds exactly this task's agent traffic: its own proxy, and the driver's own setup
   // calls marked and skipped (`DRIVER_HEADER`). No window, so nothing depends on when it ran.
   const ledger = parseLedger(fs.readFileSync(r.ledgerPath, 'utf8'));
-  const lm = ledgerMetrics(ledger);
+  const lm = ledgerMetrics(ledger, { startedAtMs });
   const successfulWrites = ledger.filter((e) => e.status < 300 && /^(POST|PUT)$/.test(e.method) && /^\/(api\/artifacts|mcp)/.test(e.path)).length;
 
   // --- score: product. The agent need not have used the document the start link named — Claude Opus 5
   // created its own, twice — so `scoredArtifactId` decides which artifact to score (its answer, then the
   // ledger, then the start document) and `used_start_document` records whether it was the one it was given.
-  const targetId = scoredArtifactId({ finalMessage: result.finalMessage, ledger, startId: start.id });
+  const targetId = scoredArtifactId({ finalMessage: result.finalMessage, ledger, startId: start?.id ?? null });
 
   // AND THEN THE PERSON SHARES IT. Under an account credential every document the agent made is born
   // PRIVATE, while every read below is anonymous — the reader's view is the whole point of the score —
@@ -372,22 +403,24 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     const shared = await shareForScoring({
       base: r.agentBase,
       cookie: r.credential.cookie,
-      ids: [...writtenArtifactIds(ledger), targetId],
+      ids: [...writtenArtifactIds(ledger), ...(targetId ? [targetId] : [])],
       headers: { [DRIVER_HEADER]: '1' },
     });
     log(`${leg.label}/${task.id}: shared ${shared.length} artifact(s) for scoring`);
   }
 
-  const docUrl = `${r.productUrl}/a/${targetId}`;
-  const servedRes = await fetch(`${docUrl}/raw?chrome=0`);
-  const served = { status: servedRes.status, html: servedRes.ok ? await servedRes.text() : '' };
+  // No target is the token-less leg's real possible answer: an agent that never got a credential and
+  // never took one published nothing, and there is no document to read. A 404-shaped blank scores as
+  // unpublished, which is exactly what happened.
+  const docUrl = targetId ? `${r.productUrl}/a/${targetId}` : null;
+  const served = docUrl ? await servedDocument(`${docUrl}/raw?chrome=0`) : { status: 404, html: '' };
   const pm = productMetrics({ served, baseline });
 
   // --- score: browser (only when there is a document to look at)
   // The browser loads through the PROXY, so the document's own data transport lands in the ledger and
   // `query_ran` can be read from it. Those entries fall after `to`, outside the agent's slice.
   let inspection: Awaited<ReturnType<typeof inspectDocument>> | null = null;
-  if (pm.published) {
+  if (pm.published && docUrl) {
     inspection = await inspectDocument(r.browser, `${docUrl}/raw?chrome=0`, VIEWPORT_WIDTH_PX.mobile);
   }
   // The dataflow runs on the SERVER and rides the island, so the rows it produced are the evidence a
@@ -416,6 +449,18 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   rec.record(task.id, 'query_rows', queryRows);
   rec.record(task.id, 'docs_fetches', lm.docsFetches);
   rec.record(task.id, 'docs_bytes', lm.docsBytes);
+  // --- rows: m1 instrumentation. Recorded on EVERY run, as plain rows rather than through `checks`:
+  // the check map is gated by what each task grades, and these are observations about the agent, not
+  // things it can pass or fail.
+  //
+  // Did it take a token nobody gave it (`self_minted`), how long did its human wait for a link
+  // (`ms_to_first_publish`, from process spawn — agent boot included), when could they first CLICK one
+  // (`ms_to_first_url`, off the agent's own stdout), and was the thing that arrived a document or a
+  // placeholder (`skeleton_sections`).
+  rec.record(task.id, 'self_minted', lm.selfMinted, 'pass');
+  rec.record(task.id, 'ms_to_first_publish', lm.msToFirstPublish);
+  rec.record(task.id, 'ms_to_first_url', spawned.firstUrlAtMs);
+  rec.record(task.id, 'skeleton_sections', lm.skeletonSections);
   rec.record(task.id, 'versions', lm.observed ? 1 + successfulWrites : null);
   // --- rows: text
   rec.record(task.id, 'first_error', lm.firstError ?? '', 'text');
@@ -443,7 +488,9 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     no_unknown_endpoints: lm.inventedEndpoints === 0,
     canonical_stable: lm.canonicalStable,
     has_title: pm.hasTitle,
-    used_start_document: targetId === start.id,
+    // Null, never false, when there was no start document to use (the token-less leg) — the same rule
+    // every unobservable check in this map follows.
+    used_start_document: start ? targetId === start.id : null,
     harness_ok: result.ok,
     no_console_errors: inspection ? inspection.consoleErrors.length === 0 : null,
     no_failed_responses: inspection ? inspection.failedResponses.length === 0 : null,
@@ -479,7 +526,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   }
 
   // --- rows: images (every variant the config asks for and the product can produce)
-  if (pm.published) {
+  if (pm.published && targetId && docUrl) {
     for (const size of config.capture.sizes) {
       for (const renderer of config.capture.renderers) {
         const variant = { size, renderer };
@@ -505,7 +552,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   }
 
   rec.finalize(passed);
-  log(`${leg.label}/${task.id}: ${passed ? 'PASS' : `FAIL (${failed.join(', ')})`} — doc ${targetId}${targetId === start.id ? '' : ' (NOT the start document)'}`);
+  log(`${leg.label}/${task.id}: ${passed ? 'PASS' : `FAIL (${failed.join(', ')})`} — doc ${targetId ?? 'none'}${!start || targetId === start.id ? '' : ' (NOT the start document)'}`);
   return passed;
 }
 
@@ -567,7 +614,7 @@ async function main(): Promise<void> {
   const browser = await chromium.launch();
   let merged: MergedVerdicts = { verdicts: [], recovered: [], failed: [] };
   try {
-    const first = await runLeg(leg, tasks, config, args.out, browser, { credentialFor, ...(args.runAs ? { runAs: args.runAs } : {}) });
+    const first = await runLeg(leg, tasks, config, args.out, browser, { credentialFor, credentialSource: source, ...(args.runAs ? { runAs: args.runAs } : {}) });
     // A CI flow that failed gets ONE more turn, alone, and is named for it
     // (lib/second-attempt). The first attempt's artifacts are kept beside the
     // retry's rather than overwritten, so the flake can still be read.
@@ -576,7 +623,7 @@ async function main(): Promise<void> {
       enabled: args.retry,
       outDir: args.out,
       announce: (task) => log(`${leg.label}/${task.id}: failed — one more turn, alone`),
-      rerun: async (task) => (await runLeg(leg, [task], config, args.out, browser, { credentialFor, ...(args.runAs ? { runAs: args.runAs } : {}) }))[0],
+      rerun: async (task) => (await runLeg(leg, [task], config, args.out, browser, { credentialFor, credentialSource: source, ...(args.runAs ? { runAs: args.runAs } : {}) }))[0],
     });
   } finally {
     await settleWithin(browser.close(), TEARDOWN_MS);
