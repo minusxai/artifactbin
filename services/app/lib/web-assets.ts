@@ -32,6 +32,7 @@ import { sniffImageType, sniffFontType } from '@/lib/web-ingest/sniff';
 import { canonicalAssetUrl, urlHash } from '@/lib/story/asset-url';
 import { collectExternalAssetUrls } from '@/lib/story/external-images';
 import { assetByteQuotaExceeded } from '@/lib/asset-quota';
+import { webIngestRateLimited } from '@/lib/auth';
 
 /** What kind of asset a caller expects the URL to hold — the sniff and the optimiser follow it. */
 export type WebAssetKind = 'image' | 'font';
@@ -172,18 +173,48 @@ export async function importWebAsset(url: string, by: WebAssetImporter, kind: We
  * picture until that entry expires. Everyone who has not is served the new one.
  *
  * A URL nobody holds yet is simply imported, so a caller need not ask first.
+ *
+ * WHO PAYS, and WHAT BECOMES OF THE OLD OBJECT
+ *
+ * This is a door that turns a URL into STORED BYTES, so it asks the byte quota
+ * exactly as `importWebAsset` does — a refresher already over their cap is
+ * refused before anything is fetched. Without that, the cap this milestone
+ * exists to add was bypassable through the route this milestone added: repoint,
+ * repoint, repoint, and every new object is invisible to a sum over the rows.
+ *
+ * When the object MOVES, the row's payer moves with it: the row's `bytes` are
+ * now the bytes the REFRESHER caused, so they are the refresher's to answer
+ * for, and the original importer stops carrying a number that no longer
+ * describes anything they own. When the key is unchanged — the source really is
+ * the same bytes — nothing was stored and nobody is charged.
+ *
+ * The SUPERSEDED object STAYS in the store. It is content-addressed, so it may
+ * be the very same object another URL resolves to, and this store has never
+ * deleted anything (`ObjectUnavailable` is the whole of its error vocabulary —
+ * there is no reference count to consult and a delete would be a guess). It is
+ * not free, either: every object in the store was charged to whoever caused it
+ * to be stored, at the moment it was stored — the importer for the first copy,
+ * the refresher for each one after. What a refresh does NOT do is keep charging
+ * the original importer for a copy nobody serves any more.
  */
 export async function refreshWebAsset(url: string, by: WebAssetImporter, kind: WebAssetKind = 'image'): Promise<WebAssetRow> {
   const hash = urlHash(url);
   const existing = await webAssetByHash(hash);
   if (!existing) return importWebAsset(url, by, kind);
 
+  if (by.tokenId && await assetByteQuotaExceeded(by.tokenId)) {
+    throw new WebAssetRefused('quota_exceeded', 'this account is over its stored-byte quota — delete assets you no longer need', url);
+  }
+
   const stored = await fetchAsset(url, kind);
+  if (stored.object_key === existing.object_key) return existing; // same bytes: nothing stored, nobody charged
   const db = await getDb();
   await db.query(
     `update web_assets set object_key = $2, content_type = $3, bytes = $4, width = $5, height = $6,
-       placeholder = $7, fetched_at = now() where url_hash = $1`,
-    [hash, stored.object_key, stored.content_type, stored.bytes, stored.width, stored.height, stored.placeholder],
+       placeholder = $7, fetched_at = now(), fetched_by_token_id = $8, fetched_by_user_id = $9
+     where url_hash = $1`,
+    [hash, stored.object_key, stored.content_type, stored.bytes, stored.width, stored.height, stored.placeholder,
+      by.tokenId, by.userId],
   );
   return (await webAssetByHash(hash))!;
 }
@@ -256,6 +287,17 @@ export const kindOfRow = (row: WebAssetRow): WebAssetKind => (row.content_type.s
 export async function refreshWebAssets(urls: readonly string[], by: WebAssetImporter): Promise<AssetRefreshResult> {
   const out: AssetRefreshResult = { refreshed: [], unchanged: [], failed: [] };
   for (const url of urls) {
+    /*
+     * PER URL, like the publish door (lib/artifacts assetImporterFor) and on
+     * the same bucket. The allowance counts fetch ATTEMPTS because probing is
+     * the abuse shape — so a refresh of N urls is N attempts, and a single call
+     * cannot buy N outbound fetches for one slot at a host of the caller's
+     * choosing.
+     */
+    if (by.tokenId && webIngestRateLimited(`ingest:${by.tokenId}`)) {
+      out.failed.push({ code: 'rate_limited', url, fix: 'too many web imports this hour — try again later' });
+      continue;
+    }
     const held = await webAssetByHash(urlHash(url));
     if (!held) {
       out.failed.push({ code: 'not_cached', url, fix: 'nothing is stored for that URL — publish a document that names it and it is imported' });

@@ -26,7 +26,10 @@ import { createUser } from '@/lib/users';
 import { getDb } from '@/lib/db';
 import { objectStore } from '@/lib/object-store';
 import { setAssetByteQuotaForTests } from '@/lib/asset-quota';
-import { importWebAsset, refreshWebAsset, lookupWebAssets, webAssetByHash, WebAssetRefused } from '@/lib/web-assets';
+import { importWebAsset, refreshWebAsset, refreshWebAssets, lookupWebAssets, webAssetByHash, WebAssetRefused } from '@/lib/web-assets';
+import { assetBytesForToken } from '@/lib/asset-quota';
+import { webIngestRateLimited } from '@/lib/auth';
+import { WEB_INGEST_MAX_PER_HOUR } from '@/lib/config';
 
 useAppHarness();
 
@@ -44,8 +47,9 @@ let photoColour = '#204080';
 
 beforeAll(async () => {
   server = await withHttpServer(async (req, res) => {
-    hits.push(req.url ?? '');
-    switch (req.url) {
+    hits.push((req.url ?? '').split('?')[0]);
+    // The path decides; a query string only makes a DIFFERENT cache key.
+    switch ((req.url ?? '').split('?')[0]) {
       case '/photo.png':
         res.writeHead(200, { 'Content-Type': 'image/png' });
         res.end(await png(64, photoColour));
@@ -196,5 +200,76 @@ describe('refreshWebAsset', () => {
     allowLocal();
     const row = await refreshWebAsset(`${base}/logo.svg`, await anonToken());
     expect(row.content_type).toBe('image/svg+xml');
+  });
+});
+
+/**
+ * S1 — REFRESH IS A DOOR THAT STORES BYTES, so it asks the cap exactly as
+ * import does, and the bytes it stores are charged to whoever asked for them.
+ *
+ * The review measured the hole: `refreshWebAsset` stored a new object without
+ * asking the quota, and the row's `bytes` moved while its payer did not — so a
+ * token already over its cap could keep causing objects to be stored for ever,
+ * against a host it controls.
+ */
+describe('a refresh is charged', () => {
+  it('refuses a refresher who is already over the cap', async () => {
+    allowLocal();
+    const payer = await anonToken();
+    await importWebAsset(`${base}/photo.png`, payer);
+    setAssetByteQuotaForTests(1);
+    photoColour = '#0f0f0f';
+    await expect(refreshWebAsset(`${base}/photo.png`, payer)).rejects.toMatchObject({ code: 'quota_exceeded' });
+    photoColour = '#204080';
+  });
+
+  it("charges the REFRESHER the new object's bytes when the object moves", async () => {
+    allowLocal();
+    const first = await anonToken();
+    const second = await anonToken();
+    photoColour = '#204080';
+    await importWebAsset(`${base}/photo.png`, first);
+    expect(await assetBytesForToken(first.tokenId)).toBeGreaterThan(0);
+    expect(await assetBytesForToken(second.tokenId)).toBe(0);
+
+    photoColour = '#aa1111';
+    await refreshWebAsset(`${base}/photo.png`, second);
+    // The row now holds the bytes the SECOND token caused, so they are the
+    // second token's to answer for.
+    expect(await assetBytesForToken(second.tokenId)).toBeGreaterThan(0);
+    expect(await assetBytesForToken(first.tokenId)).toBe(0);
+    photoColour = '#204080';
+  });
+
+  it('charges nothing when the source is the same bytes — an unchanged key is free', async () => {
+    allowLocal();
+    const first = await anonToken();
+    const second = await anonToken();
+    photoColour = '#204080';
+    await importWebAsset(`${base}/photo.png`, first);
+    const before = await assetBytesForToken(first.tokenId);
+
+    await refreshWebAsset(`${base}/photo.png`, second);
+    expect(await assetBytesForToken(second.tokenId)).toBe(0);
+    expect(await assetBytesForToken(first.tokenId)).toBe(before);
+  });
+});
+
+/**
+ * S2 — the hourly web-import allowance is per ATTEMPT, and a refresh of N urls
+ * is N attempts. One call was buying N fetches for one slot, which is the
+ * publish door's rule inverted at the door publish shares a bucket with.
+ */
+describe('refreshWebAssets charges the hourly bucket PER URL', () => {
+  it('reports the URLs it could not pay for, rather than fetching them all on one slot', async () => {
+    allowLocal();
+    const actor = await anonToken();
+    for (const n of [1, 2, 3]) await importWebAsset(`${base}/photo.png?n=${n}`, actor);
+    // Two slots left in this token's hour.
+    for (let i = 0; i < WEB_INGEST_MAX_PER_HOUR - 2; i++) webIngestRateLimited(`ingest:${actor.tokenId}`);
+
+    const out = await refreshWebAssets([1, 2, 3].map((n) => `${base}/photo.png?n=${n}`), actor);
+    expect(out.failed).toEqual([expect.objectContaining({ code: 'rate_limited', url: `${base}/photo.png?n=3` })]);
+    expect(out.refreshed.length + out.unchanged.length).toBe(2);
   });
 });
