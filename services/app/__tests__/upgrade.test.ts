@@ -102,7 +102,20 @@ describe('the additive DDL is replay-safe', () => {
       'author_kind', 'author_token_id', 'author_user_id', 'author_label',
       'author_transport',
       'status', 'resolved_at', 'anchor_key', 'anchor_version', 'snippet', 'created_at',
+      // The exact selection, appended LAST: an older database grows these two
+      // by ALTER TABLE on boot, so their ordinal position is after created_at.
+      'quote', 'range',
     ]);
+    // Provenance is APPENDED, never inserted: a fork's parent is a column the
+    // additive DDL adds on the next boot, with nothing to backfill (NULL is
+    // "authored here", which every existing row is).
+    const artifactColumns = await fresh.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = current_schema() AND table_name = 'artifacts'
+       ORDER BY ordinal_position`,
+    );
+    expect(artifactColumns.rows.map((row) => row.column_name)).toEqual(expect.arrayContaining(['forked_from']));
+    expect(artifactColumns.rows[artifactColumns.rows.length - 1].column_name).toBe('forked_from');
     const tokenColumns = await fresh.query<{ column_name: string }>(
       `SELECT column_name FROM information_schema.columns
        WHERE table_schema = current_schema() AND table_name = 'tokens'`,

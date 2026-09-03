@@ -18,6 +18,7 @@ import {
   STORY_HELLO_MESSAGE, STORY_ISLAND_ID, STORY_MODE_HOOK, STORY_READY_EVENT, STORY_ROOT_ID, STORY_SESSION_MESSAGE,
   STORY_EDIT_MODE_MESSAGE, isEditParentMessage, STORY_ANNOTATIONS_MESSAGE, STORY_SELECT_MESSAGE,
   STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, type StoryAnnotationsMessage, type StorySelectionActionsMessage,
+  STORY_VALUES_HOOK, STORY_VALUES_MESSAGE, type StoryValuesMessage,
   type StoryDocumentUpdate, type StoryIslandData,
 } from './contract';
 import { capturePristine, type PristineChannel } from './pristine';
@@ -29,6 +30,7 @@ import { readerMode } from './reader-mode';
 import { createDataflowStore, type DataflowStore } from './store';
 import { installMx } from './mx';
 import { createDocumentTransport } from './document-transport';
+import { syncValuesToUrl } from './url-values-sync';
 import { EMPTY_DATAFLOW } from '@/lib/story/dataflow';
 
 /**
@@ -203,6 +205,31 @@ if (island?.textContent && root) {
      * query URL survive an update that does not mention them.
      */
     let current = data;
+
+    /*
+     * THE LINK FOLLOWS THE READER (lib/story-runtime/url-values-sync).
+     *
+     * A dashboard is only shareable if the address says what the reader
+     * narrowed it to — and WHERE that address lives is the one thing that
+     * differs by how this document is served. Top-level it is the reader's own
+     * address bar, reached through the single narrow capability the history
+     * prelude leaves open. Framed it is the FRAME's url, which nobody can see
+     * or copy, so the choice is reported to the page instead and the page —
+     * which holds the flow and the session — writes.
+     *
+     * The flow is asked for rather than captured: an agent's write replaces
+     * the declarations under a document that is still open.
+     */
+    if (current.dataflow) {
+      const values = (window as unknown as { [STORY_VALUES_HOOK]?: (p: Record<string, string | null>) => void })[STORY_VALUES_HOOK];
+      syncValuesToUrl(
+        store,
+        () => current.dataflow?.flow ?? EMPTY_DATAFLOW,
+        channel
+          ? { post: (v) => channel.post({ type: STORY_VALUES_MESSAGE, nonce: channel.nonce, values: v } satisfies StoryValuesMessage) }
+          : { hook: values ?? null },
+      );
+    }
 
     /**
      * The reader's mode override (the served document's toggle, wired by

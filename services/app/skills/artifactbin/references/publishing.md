@@ -1,29 +1,26 @@
 ---
 name: publishing
 description: >-
-  The HTTP API beyond the brief: replace, the edit_id protocol in full, read back, list, the error table. Read when a call is refused or a human may be editing the same page.
+  The HTTP API beyond the brief: replace, the edit_id protocol, read back, list, fork, the error table. Read when a call is refused or a human may be editing the same page.
 ---
 ## Read first
 
 Upload a self-contained document, get back a **link** to share with your user.
 
-- **Publish** is one `POST [[ base ]]/api/artifacts` with `{ "title", "markup" }`
-  (+ optional `theme`, `template`, `colorMode`); the deliverable is the `url`.
+- **Publish** is one `POST [[ base ]]/api/artifacts`; the deliverable is the `url`.
 - **Every `/api` call, `GET` included, sends `Authorization: Bearer mx_...`.**
   No token? Read [auth](publishing-auth.md): use a pasted token or start link,
   send your user to `[[ base ]]/tokens/new`, or without a human `POST
   [[ base ]]/api/tokens/anonymous`.
-- A document is **static JSX**, not HTML: HTML tags plus a component kit,
-  under the JSX rules — every tag closes (`<br />`), comments are `{/* … */}`,
-  no `<html>`/`<head>`/`<body>` (`<title>`, `<style>`, `<script>` go in
-  `<Helmet>`), style with `className`: [markup.md](markup.md).
+- A document is **static JSX**, not HTML — the tags, the components and the
+  JSX rules are [markup.md](markup.md).
 - Datasets, images and chart recipes are their own artifacts, created first:
-  [datasets](publishing-datasets.md). Pinned feedback: [annotations](publishing-annotations.md).
-  History, revert, delete, PNG export: [versions](publishing-versions.md). MCP: [mcp](publishing-mcp.md).
+  [datasets](publishing-datasets.md). Also [annotations](publishing-annotations.md),
+  [versions](publishing-versions.md), [mcp](publishing-mcp.md).
 
 ## Contents
 
-Rules every document lives by · Endpoints (create, update, edit, read, list) · Errors.
+Rules every document lives by · Endpoints (create, update, edit, fork, read, list) · Errors.
 
 ## Rules every document lives by
 
@@ -31,12 +28,11 @@ A document is served sandboxed with an opaque origin under a strict
 per-document Content-Security-Policy: **no outbound network except the
 same-origin endpoints it names** — `/a/<id>/query` (data), `/a/<id>/events`
 and `/a/<id>/events/frame` (live stream), `/a/<id>/mutate` (declared writes),
-`/geojson/` (map boundaries). So: ONE self-contained document — no CDN
-`<script src>`, no external stylesheet, no `fetch`/XHR beyond those (a 400 at
-publish; a runtime `fetch()` elsewhere is blocked silently); CSS and JS in
-`<Helmet>` only; an image is a `data:` URI, a `ref:<id>`, or an `https://` URL
-IMPORTED at publish; a web font names a Google family in a `<Helmet>`
-`<meta>`. Max [[ maxContentBytes ]] bytes.
+`/geojson/` (map boundaries). So a CDN `<script src>`, an external stylesheet
+or any other `fetch`/XHR is a 400 at publish (a runtime `fetch()` elsewhere is
+blocked silently); CSS and JS live in `<Helmet>` only, and an image is a
+`data:` URI, a `ref:<id>` or an imported `https://` URL.
+Max [[ maxContentBytes ]] bytes.
 
 ## Endpoints
 
@@ -49,20 +45,17 @@ POST [[ base ]]/api/artifacts
 ```
 
 `markup` is one of four content fields — `markup | dataset | viz | image`;
-every endpoint takes exactly ONE. Give `url` to your user — the deliverable.
-Every write answers `markup_changed`: true means storing rewrote the document
-(formatting normalized, a `<Helmet>` hoisted to the top, a `<p>` holding
-block content turned into a `<div>`) and the CANONICAL `markup` comes back;
-false means it stored unchanged, byte-for-byte. Edit against the echo. (`/edits` always
-returns the resulting `markup`: you sent a splice.)
+every endpoint takes exactly ONE. `markup_changed` true means storing rewrote
+the document and the CANONICAL `markup` comes back; false means it stored
+unchanged, byte-for-byte. Edit against the echo (`/edits` always returns the
+resulting `markup`: you sent a splice).
 
 **Visibility (who can open that url).** An account-owned token publishes
 `private` by default — **when your user wants a link for OTHER people, pass
 `"visibility": "public"` or `"unlisted"` on create or PUT.** `public` =
 anyone with the link, listed on the owner's `/@username`; `unlisted` = the
-same link, listed nowhere; `private` = the owner plus emails invited on the
-share page (as an **editor**, or a **commenter** who may annotate but not
-edit) — a document shared with your user is reachable as if they owned it.
+same link, listed nowhere; `private` = the owner plus the emails invited on
+the share page ([auth](publishing-auth.md): what a share reaches).
 Anonymous tokens publish `public`, images and datasets
 `unlisted`; `private` without an account is `400 private_requires_account`,
 never a silent downgrade.
@@ -107,6 +100,21 @@ you read. Concurrency is per NODE, not per document, so most edits just apply:
 
 You may also set `title`, `theme`, or `colorMode` in the same request, with
 or without a text change: they are document-level and never conflict.
+
+### Fork an artifact (adapt one you can read)
+
+```
+POST [[ base ]]/api/artifacts/<id>/fork
+{ "title": "My copy", "visibility": "unlisted", "folder": "2026/forks" }  ← all optional
+→ 201 { "id": "<new id>", "url", "version": 1, "edit_id", "markup", "forked_from": "<id>" }
+```
+
+**To adapt a document you can read, fork it, then edit the copy** — your own,
+one shared with your account, or any public/unlisted one. The reply is the
+create reply: `id` and `edit_id` go straight into the edit loop. Content and
+settings travel; history, comments and shares do not, the original is
+untouched, and refs are re-checked as YOU (someone else's `<Mutation>` target
+is `400 invalid_refs`).
 
 ### Read one back (before editing)
 

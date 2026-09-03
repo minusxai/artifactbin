@@ -119,6 +119,7 @@ CREATE TABLE IF NOT EXISTS app.artifacts (
   actor_token_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  forked_from TEXT,
   PRIMARY KEY (id)
 );
 
@@ -159,6 +160,8 @@ ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS actor_token_id TEXT;
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS forked_from TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_artifacts_token_updated ON app.artifacts (token_id, updated_at DESC);
 
@@ -275,6 +278,8 @@ CREATE TABLE IF NOT EXISTS app.annotations (
   anchor_version INTEGER,
   snippet TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  quote TEXT,
+  range TEXT,
   PRIMARY KEY (id)
 );
 
@@ -309,6 +314,10 @@ ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS anchor_version INTEGER;
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS snippet TEXT NOT NULL DEFAULT '';
 
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS quote TEXT;
+
+ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS range TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_annotations_artifact_seq ON app.annotations (artifact_id, seq);
 

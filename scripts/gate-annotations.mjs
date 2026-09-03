@@ -135,8 +135,12 @@ const run = async () => {
     ok((await viewComments.textContent())?.includes('Q3 sheet'), 'hover reveals the conversation preview');
     const anchorBox = await frame.locator('#figure').boundingBox();
     const commentBox = expandedBox;
-    ok(!!anchorBox && !!commentBox && Math.abs(anchorBox.y - commentBox.y) <= 4,
-      'the annotation marker follows its annotated content vertically');
+    // The marker follows the WORDS now (F3: a comment keeps its selection, and
+    // its rect is the union of the highlighted ranges), so it sits on the text
+    // LINE rather than on the paragraph box — half-leading apart, a handful of
+    // pixels. It is still the annotated content it follows.
+    ok(!!anchorBox && !!commentBox && Math.abs(anchorBox.y - commentBox.y) <= 12,
+      `the annotation marker follows its annotated content vertically (${Math.round(Math.abs((anchorBox?.y ?? 0) - (commentBox?.y ?? 0)))}px apart)`);
     const viewportWidth = await page.evaluate(() => innerWidth);
     ok(!!commentBox
       && commentBox.x >= 0
@@ -279,10 +283,411 @@ const run = async () => {
       'a reader selecting text is offered nothing at all');
     await strangerCtx.close();
     await owner.close();
+
+    // ── the comment keeps the exact selection ─────────────────────────────
+    await quoteLeg(browser);
+    // ── an agent's reply is READ as markdown ──────────────────────────────
+    await markdownLeg(browser);
+    // ── a long reply folds; a resolved card reads as resolved ─────────────
+    await foldLeg(browser);
   } finally {
     await browser.close();
   }
 };
+
+/**
+ * A COMMENT KEEPS THE WORDS, NOT JUST THE NODE (F3).
+ *
+ * Every seam here is browser fact and nothing below the browser can see it: a
+ * REAL drag from the middle of one paragraph into the next (a Selection inside
+ * an opaque frame), the parts it produces relative to the anchored block, the
+ * CSS Custom Highlight API painting them across two paragraphs after a RELOAD
+ * — no DOM surgery, so there is no element for a unit test to find — and the
+ * fallback to the whole-node tint once an agent writes the words away.
+ */
+const QUOTE_DOC =
+  '<Helmet><title>Quoted</title></Helmet>'
+  + '<div data-design="tw" className="p-10">'
+  + '<h1>Two paragraphs</h1>'
+  + '<p id="first">Revenue grew 40% in Q3, ahead of plan.</p>'
+  + '<p id="second">Costs fell 8% over the same period.</p>'
+  + '</div>';
+const FIRST_TEXT = 'Revenue grew 40% in Q3, ahead of plan.';
+const SECOND_TEXT = 'Costs fell 8% over the same period.';
+
+async function quoteLeg(browser) {
+  const { id, token } = await startDocument(BASE);
+  const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const published = await fetch(`${BASE}/api/artifacts/${id}`, { method: 'PUT', headers: auth, body: JSON.stringify({ markup: QUOTE_DOC }) });
+  if (!published.ok) throw new Error(`quote leg publish failed (${published.status}): ${await published.text()}`);
+
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  await becomeOwner(page, BASE, token);
+  await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
+  const frame = page.frameLocator('iframe[title="artifact"]');
+  await frame.locator('#second').waitFor({ timeout: 15000 });
+  const raw = await until(async () => page.frame({ url: (u) => u.pathname.includes('/raw') }), (f) => !!f, 15000);
+
+  /*
+   * The drag: from one CHARACTER inside the first paragraph to one inside the
+   * second. Aimed by measuring the character rather than by taking a fraction
+   * of the element's box — a paragraph's box is the whole column, so 45% of it
+   * lands past the end of a short sentence and the drag starts on nothing.
+   */
+  const frameBox = await page.locator('iframe[title="artifact"]').boundingBox();
+  const pointAt = async (selector, index) => {
+    const inFrame = await raw.evaluate(([sel, at]) => {
+      const range = document.createRange();
+      range.setStart(document.querySelector(sel).firstChild, at);
+      range.setEnd(document.querySelector(sel).firstChild, at + 1);
+      const box = range.getBoundingClientRect();
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    }, [selector, index]);
+    return { x: frameBox.x + inFrame.x, y: frameBox.y + inFrame.y };
+  };
+  const dragAcross = async () => {
+    const from = await pointAt('#first', 24);   // inside "ahead of plan."
+    const to = await pointAt('#second', 12);    // inside "8% over"
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    // A nudge before the long move: press-then-jump is delivered as a CLICK at
+    // the destination and selects nothing at all (measured — the drag looked
+    // right and the Range came back collapsed at its end point).
+    await page.mouse.move(from.x + 6, from.y, { steps: 3 });
+    await page.mouse.move(to.x, to.y, { steps: 20 });
+    await page.mouse.up();
+  };
+  const bubble = frame.locator('[data-mx-selection-actions]');
+  await until(async () => {
+    await dragAcross().catch(() => {});
+    return bubble.isVisible().catch(() => false);
+  }, (v) => v === true, 20000);
+  ok(await bubble.isVisible(), 'a drag across two paragraphs raises the bubble');
+
+  await frame.locator('[aria-label="Annotate selected text"]').click();
+  await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
+  await page.locator('[aria-label="Annotation comment"]').fill('does this hold for both?');
+  await page.locator('[aria-label="Save annotation"]').click();
+
+  // (a) THE WIRE: the quote and a two-part range, the second addressed as the
+  // anchor's next sibling — never an absolute path, which would rot.
+  const read = async () => (await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: { Authorization: `Bearer ${token}` } })).json());
+  const wire = await until(read, (w) => (w?.annotations?.length ?? 0) === 1, 15000);
+  const ann = wire.annotations?.[0];
+  const parts = ann?.range?.parts ?? [];
+  ok(parts.length === 2 && parts[0].rel === '' && parts[1].rel === '+1',
+    `the range is two parts, "" then "+1" (got ${JSON.stringify(parts.map((p) => p.rel))})`);
+  ok(FIRST_TEXT.endsWith(parts[0]?.text ?? 'x') && SECOND_TEXT.startsWith(parts[1]?.text ?? 'x'),
+    'each part is exactly the run it covers in its own node');
+  ok(ann?.quote === `${parts[0]?.text} ${parts[1]?.text}`, 'the quote is the parts, one space between blocks');
+  ok(ann?.quote_found === true, 'the quoted words are still in the document');
+  ok(ann?.snippet === FIRST_TEXT, 'the snippet is still the whole anchored node — a different thing, kept');
+
+  // (b) THE PAINT, AFTER A RELOAD: nothing about it is stored in the DOM, so a
+  // reload is the honest test that the range alone can re-find the words.
+  await page.reload({ waitUntil: 'load' });
+  const reloaded = await until(async () => page.frame({ url: (u) => u.pathname.includes('/raw') }), (f) => !!f && f !== raw, 15000);
+  const paint = await until(
+    () => reloaded.evaluate((name) => {
+      const highlight = window.CSS?.highlights?.get(name);
+      if (!highlight) return { has: false };
+      const rects = [...highlight].map((range) => range.getBoundingClientRect());
+      const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+      const inside = (rect, p) => rect.top >= p.top - 3 && rect.bottom <= p.bottom + 3 && rect.width > 0;
+      return {
+        has: true,
+        count: rects.length,
+        first: rects.some((rect) => inside(rect, box('#first'))),
+        second: rects.some((rect) => inside(rect, box('#second'))),
+        ranged: !!document.querySelector('#first[data-mx-annotation-ranged]'),
+      };
+    }, `mx-annotation-${ann.id}`).catch(() => ({ has: false })),
+    (p) => p?.has === true,
+    15000,
+  );
+  ok(paint.has, 'the frame registers a CSS highlight for the thread after a reload');
+  ok(paint.first && paint.second, 'the highlight covers words in BOTH paragraphs');
+  ok(paint.ranged, 'the anchored node gives up its own tint while its words are painted');
+
+  // (c) AN AGENT REWORDS THE FIRST PARAGRAPH: the thread stays anchored, the
+  // quote no longer reads as it did, and the paint falls back to the tint.
+  const current = await read();
+  const rewritten = current.markup.replace(FIRST_TEXT, 'Revenue was flat in Q3, behind plan.');
+  const put = await fetch(`${BASE}/api/artifacts/${id}`, { method: 'PUT', headers: auth, body: JSON.stringify({ markup: rewritten }) });
+  ok(put.ok, 'the agent rewords the annotated paragraph, keeping the anchor');
+  const after = await until(read, (w) => w?.annotations?.[0]?.quote_found === false, 15000);
+  ok(after?.annotations?.[0]?.quote_found === false, 'quote_found turns false when the words are written away');
+  ok(after?.annotations?.[0]?.orphaned === false, 'the thread is still anchored — the node is still there');
+  ok(after?.annotations?.[0]?.quote === ann.quote, 'the quote itself is never recomputed');
+  const fallback = await until(
+    () => reloaded.evaluate((name) => ({
+      highlighted: !!window.CSS?.highlights?.get(name),
+      tinted: !!document.querySelector('#first[data-mx-annotated]'),
+      ranged: !!document.querySelector('#first[data-mx-annotation-ranged]'),
+    }), `mx-annotation-${ann.id}`).catch(() => null),
+    (state) => state?.highlighted === false,
+    15000,
+  );
+  ok(fallback?.highlighted === false && fallback?.tinted === true && fallback?.ranged === false,
+    `the live frame falls back to the whole-node tint (got ${JSON.stringify(fallback)})`);
+  await ctx.close();
+}
+
+/**
+ * AN AGENT'S REPLY IS PROSE WITH CODE IN IT (F5).
+ *
+ * The body is plain TEXT on the wire and stays that way — what changed is the
+ * READING. Only a browser can show that: the rail renders a real `<pre>` for a
+ * fenced block, and it has to arrive over the LIVE annotations stream, with no
+ * reload, because the whole point is a comment answered while its reader is
+ * looking at it. A collapsed thread would show the plain text, so the thread is
+ * opened first: that is the surface under test.
+ */
+const MD_DOC =
+  '<Helmet><title>Markdown comments</title></Helmet>'
+  + '<div data-design="tw" className="p-10">'
+  + '<h1>The cap</h1>'
+  + '<p id="cap">The cap is 5 today.</p>'
+  + '</div>';
+
+const AGENT_REPLY = [
+  'Fixed in `lib/config.ts` — the cap was **10**:',
+  '',
+  '```ts',
+  'const MAX = 10;',
+  '```',
+  '',
+  '- bumped the cap',
+  '- added a test',
+].join('\n');
+
+async function markdownLeg(browser) {
+  const { id, token } = await startDocument(BASE);
+  const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const published = await fetch(`${BASE}/api/artifacts/${id}`, { method: 'PUT', headers: auth, body: JSON.stringify({ markup: MD_DOC }) });
+  if (!published.ok) throw new Error(`markdown leg publish failed (${published.status}): ${await published.text()}`);
+
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  await becomeOwner(page, BASE, token);
+  await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
+  const frame = page.frameLocator('iframe[title="artifact"]');
+  await frame.locator('#cap').waitFor({ timeout: 15000 });
+
+  // The comment itself through the browser door, with the session the page
+  // already holds — the selection dance is the leg above's subject, not this
+  // one's. `0.1` is the paragraph: BODY paths, the Helmet already hoisted off.
+  const head = await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: auth })).json();
+  const created = await page.evaluate(async ([docId, editId]) => {
+    const res = await fetch(`/api/my/artifacts/${docId}/annotations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: '0.1', edit_id: editId, body: 'why is the cap 5?' }),
+    });
+    return { status: res.status, body: await res.text() };
+  }, [id, head.edit_id]);
+  ok(created.status === 201, `the owner leaves a comment (${created.status} ${created.body.slice(0, 120)})`);
+
+  // Open the rail, and open the thread inside it: the compact surfaces show
+  // the plain text on purpose, so only the opened thread renders the tree.
+  await page.locator('[aria-label="Open artifact controls"]').click();
+  await page.locator('[aria-label="Toggle comments"]').click();
+  await page.locator('[aria-label="Annotation sidebar"]').waitFor({ timeout: 8000 });
+  await page.keyboard.press('Escape');
+  const thread = page.locator('[aria-label="Annotation thread"]').first();
+  await thread.waitFor({ timeout: 8000 });
+  await page.locator('[aria-label="Open annotation thread"]').first().click();
+  ok(await page.locator('[aria-label="Reply to annotation"]').first().isVisible(), 'the thread opens ready to reply');
+  ok(await page.locator('[aria-label="Bold"]').first().isVisible(), 'the reply box carries the markdown toolbar');
+
+  // THE AGENT ANSWERS over plain HTTP, with a fenced block in the reply.
+  const wire = await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: auth })).json();
+  const ann = wire.annotations?.[0];
+  ok(!!ann, 'the comment is on the wire for the agent to answer');
+  const replied = await fetch(`${BASE}/api/artifacts/${id}/annotations/${ann.id}`, {
+    method: 'POST', headers: auth, body: JSON.stringify({ reply: AGENT_REPLY }),
+  });
+  ok(replied.ok, 'the agent replies with a fenced block over plain HTTP');
+
+  // …and it is READ, in the still-open tab, with no reload.
+  const rendered = await until(
+    () => thread.evaluate((el) => {
+      const pre = el.querySelector('pre');
+      return {
+        pre: pre?.textContent ?? null,
+        items: [...el.querySelectorAll('[data-markdown] li')].map((li) => li.textContent),
+        code: [...el.querySelectorAll('code')].map((c) => c.textContent),
+        strong: [...el.querySelectorAll('strong')].map((c) => c.textContent),
+        fence: el.textContent.includes('```'),
+        wider: el.scrollWidth > el.clientWidth + 1,
+      };
+    }).catch(() => null),
+    (state) => typeof state?.pre === 'string',
+    15000,
+  );
+  ok(rendered?.pre === 'const MAX = 10;', `the fenced block arrives live as a <pre> (got ${JSON.stringify(rendered?.pre)})`);
+  ok(rendered?.items?.join('|') === 'bumped the cap|added a test', `the list arrives as <li>s (got ${JSON.stringify(rendered?.items)})`);
+  ok(rendered?.code?.includes('lib/config.ts'), 'a backticked identifier is a <code>, not a backtick');
+  ok(rendered?.strong?.includes('10'), 'the emphasis is a <strong>');
+  ok(rendered?.fence === false, 'the fence markers themselves are gone');
+  ok(rendered?.wider === false, 'the code block scrolls inside the rail rather than widening it');
+
+  // The wire NEVER carries the rendering — the body is the text as written.
+  const after = await (await fetch(`${BASE}/api/artifacts/${id}/annotations?status=all`, { headers: auth })).json();
+  ok(after.annotations?.[0]?.thread?.[1]?.body === AGENT_REPLY, 'the stored body is still the exact markdown text the agent sent');
+  await ctx.close();
+}
+
+/**
+ * A LONG REPLY MUST NOT PUSH THE SHORT ONE OFF THE RAIL (F6) — and a resolved
+ * card must READ as resolved (F7).
+ *
+ * The failure this exists for is a LAYOUT fact and nothing below a browser can
+ * see it: sixty lines of agent answer, a phone whose comment sheet is half the
+ * screen, and the human's own two-line reply somewhere below the bottom of it.
+ * So the measurement is the real one — the reply's rect against the sheet's —
+ * and the fold is measured the same way the product measures it, from what was
+ * actually laid out. The muting is read as a COMPUTED opacity for the same
+ * reason: a class name in the markup proves nothing about what Tailwind built.
+ */
+const FOLD_DOC =
+  '<Helmet><title>Folding comments</title></Helmet>'
+  + '<div data-design="tw" className="p-10">'
+  + '<h1>The cap</h1>'
+  + '<p id="cap">The cap is 5 today.</p>'
+  + '</div>';
+
+const LONG_AGENT_REPLY = Array.from({ length: 60 }, (_, i) => `line ${i + 1} of the agent's answer`).join('\n');
+const HUMAN_LAST_WORD = 'ship it — thanks';
+
+async function foldLeg(browser) {
+  const { id, token } = await startDocument(BASE);
+  const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const published = await fetch(`${BASE}/api/artifacts/${id}`, { method: 'PUT', headers: auth, body: JSON.stringify({ markup: FOLD_DOC }) });
+  if (!published.ok) throw new Error(`fold leg publish failed (${published.status}): ${await published.text()}`);
+
+  // A PHONE: the rail is a half-height bottom sheet there, which is where a
+  // long comment costs the most.
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  await becomeOwner(page, BASE, token);
+  await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
+  const frame = page.frameLocator('iframe[title="artifact"]');
+  await frame.locator('#cap').waitFor({ timeout: 15000 });
+
+  const head = await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: auth })).json();
+  const created = await page.evaluate(async ([docId, editId]) => {
+    const res = await fetch(`/api/my/artifacts/${docId}/annotations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: '0.1', edit_id: editId, body: 'why is the cap 5?' }),
+    });
+    return { status: res.status, body: await res.text() };
+  }, [id, head.edit_id]);
+  ok(created.status === 201, `the owner leaves a comment (${created.status} ${created.body.slice(0, 120)})`);
+
+  const wire = await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: auth })).json();
+  const ann = wire.annotations?.[0];
+  // The screenshot case: the agent answers at length, the human answers shortly.
+  const replied = await fetch(`${BASE}/api/artifacts/${id}/annotations/${ann.id}`, {
+    method: 'POST', headers: auth, body: JSON.stringify({ reply: LONG_AGENT_REPLY }),
+  });
+  ok(replied.ok, 'the agent answers with sixty lines over plain HTTP');
+  const lastWord = await page.evaluate(async ([docId, annId, body]) => {
+    const res = await fetch(`/api/my/artifacts/${docId}/annotations/${annId}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reply: body }),
+    });
+    return res.status;
+  }, [id, ann.id, HUMAN_LAST_WORD]);
+  ok(lastWord === 200, `the human answers shortly underneath (${lastWord})`);
+
+  await page.locator('[aria-label="Open artifact controls"]').click();
+  await page.locator('[aria-label="Toggle comments"]').click();
+  // No Escape here, unlike the desktop legs: on a phone the rail IS a sheet,
+  // and Escape is how a sheet closes.
+  await page.locator('[aria-label="Annotation sidebar"]').waitFor({ timeout: 8000 });
+  await page.locator('[aria-label="Open annotation thread"]').first().click({ timeout: 15000 });
+  await page.locator('[aria-label="Reply to annotation"]').first().waitFor({ timeout: 8000 });
+
+  const read = () => page.evaluate((reply) => {
+    const sheet = document.querySelector('[aria-label="Annotation sidebar"]');
+    const thread = document.querySelector('[aria-label="Annotation thread"]');
+    if (!sheet || !thread) return null;
+    const node = [...thread.querySelectorAll('p, li, div')]
+      .reverse()
+      .find((el) => el.textContent?.trim() === reply);
+    // The page's own action bar FLOATS OVER the bottom of the sheet on a
+    // phone, so the sheet's rect is not what a reader can see. Measure against
+    // what is left of it.
+    const bar = document.querySelector('[aria-label="Page actions"][data-scroll-hidden="false"]');
+    const barTop = bar?.getBoundingClientRect().top ?? Infinity;
+    const sheetBox = sheet.getBoundingClientRect();
+    const replyBox = node?.getBoundingClientRect() ?? null;
+    // The agent's answer is the second message; its TOP is what says whether
+    // the conversation still reads as one.
+    const answer = thread.querySelectorAll('li')[1]?.getBoundingClientRect() ?? null;
+    return {
+      clamped: !!thread.querySelector('[data-folded-body="clamped"]'),
+      control: thread.querySelector('[aria-label="Show whole comment"]')?.textContent ?? null,
+      hasLastLine: thread.textContent.includes("line 60 of the agent's answer"),
+      barMeasured: Number.isFinite(barTop),
+      sheet: { top: sheetBox.top, bottom: Math.min(sheetBox.bottom, barTop) },
+      reply: replyBox && { top: replyBox.top, bottom: replyBox.bottom },
+      answerTop: answer?.top ?? null,
+    };
+  }, HUMAN_LAST_WORD);
+
+  const folded = await until(read, (s) => s?.clamped === true, 10000);
+  ok(folded?.clamped === true, 'the sixty-line agent answer arrives folded');
+  // Without this, a hidden bar makes the bound below the SHEET's rect again —
+  // the bound that passed while the reply sat invisible behind the bar.
+  ok(folded?.barMeasured === true, 'the action bar is up: the bound below is the visible area, not the sheet rect');
+  ok(/^show more \(\d+ lines\)$/.test(folded?.control ?? ''), `the fold offers to open itself (${JSON.stringify(folded?.control)})`);
+  ok(folded?.hasLastLine === true, 'clamped, not truncated: the whole answer is still in the document');
+  ok(!!folded?.reply
+    && folded.reply.top >= folded.sheet.top - 1
+    && folded.reply.bottom <= folded.sheet.bottom + 1,
+  `the human's own reply is visible without scrolling the sheet (reply ${JSON.stringify(folded?.reply)} in sheet ${JSON.stringify(folded?.sheet)})`);
+  ok(typeof folded?.answerTop === 'number' && folded.answerTop >= folded.sheet.top - 1,
+    `the agent's answer BEGINS on screen too — the fold is what fits both (answer top ${folded?.answerTop}, sheet top ${folded?.sheet.top})`);
+
+  await page.locator('[aria-label="Show whole comment"]').first().click();
+  const opened = await until(read, (s) => s?.clamped === false, 5000);
+  ok(opened?.clamped === false, 'tapping "show whole comment" expands it');
+  ok(await page.locator('[aria-label="Show less of comment"]').first().isVisible(), 'and offers to fold it back');
+  // THE A/B, so nothing above can pass vacuously: opened, the same sixty lines
+  // push the human's reply straight off the sheet. That is what the fold buys,
+  // measured on the same thread a moment apart.
+  ok(!!opened?.reply && opened.reply.top > opened.sheet.bottom,
+    `unfolded, the sixty lines push the human's reply off the sheet (reply ${JSON.stringify(opened?.reply)} vs sheet ${JSON.stringify(opened?.sheet)})`);
+  await page.locator('[aria-label="Show less of comment"]').first().click();
+  const refolded = await until(read, (s) => s?.clamped === true, 5000);
+  ok(!!refolded?.reply && refolded.reply.bottom <= refolded.sheet.bottom + 1, 'folding it back brings the reply home');
+
+  // ── F7: a resolved card reads as resolved ─────────────────────────────
+  const resolvedRes = await fetch(`${BASE}/api/artifacts/${id}/annotations/${ann.id}`, {
+    method: 'POST', headers: auth, body: JSON.stringify({ resolve: true }),
+  });
+  ok(resolvedRes.ok, 'the agent resolves the thread over plain HTTP');
+  const muted = await until(
+    () => page.evaluate(() => {
+      const card = document.querySelector('[aria-label="Resolved annotation thread"]');
+      const open = document.querySelector('[aria-label="Annotation thread"]');
+      return card
+        ? { opacity: Number(getComputedStyle(card).opacity), open: open ? Number(getComputedStyle(open).opacity) : null }
+        : null;
+    }),
+    (state) => typeof state?.opacity === 'number',
+    12000,
+  );
+  ok(!!muted && muted.opacity > 0.4 && muted.opacity < 0.8,
+    `the resolved card is muted rather than identical to an open one (opacity ${muted?.opacity})`);
+  ok(muted?.open === null || muted.open === 1, `an open card beside it stays at full opacity (${muted?.open})`);
+  ok(await page.locator('[aria-label="Show resolved conversation"]').first().isVisible(),
+    'muted is not disabled: the resolved card still offers its conversation');
+  await ctx.close();
+}
 
 run().then(() => {
   if (failures.length) { console.error(`\n${failures.length} failure(s)`); process.exit(1); }

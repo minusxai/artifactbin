@@ -35,7 +35,11 @@ export function ArtifactPage({ id: given }: { id?: string } = {}) {
   if (page === 'missing') return <NotFoundPage />;
   return (
     <ArtifactShell role={page.role}>
-      <ArtifactSurface {...page.surface} />
+      {/* The reader's `<Value>` selection travels in this page's own query
+          string (`?$region=west`); the surface forwards its `$` params into
+          the document it frames. From the ROUTER, never `window.location` —
+          nothing may read that during render. */}
+      <ArtifactSurface {...page.surface} search={search} />
     </ArtifactShell>
   );
 }

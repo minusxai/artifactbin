@@ -20,6 +20,7 @@ import { chartTokenRangeFromElement, resolveCssVarColors } from '@/lib/viz/chart
 import { themeTileUrl } from '@/lib/viz/viz-templates';
 import { buildTooltipPlan, buildTooltipData, renderSharedTooltipHtml, tooltipEntryMatchesFacet, type TooltipPlan, type TooltipEntry } from '@/lib/viz/tooltip-plan';
 import { SharedTooltip } from '@/lib/viz/shared-tooltip';
+import { hideVegaTooltip, releaseVegaTooltipDismiss } from '@/lib/viz/vega-tooltip-handler';
 import { injectGuideMark, GUIDE_WIDTH, GUIDE_OPACITY, GUIDE_BAND_OPACITY } from '@/lib/viz/guide-mark';
 import { findFacetCellAtPoint } from '@/lib/viz/facet-tooltip';
 import { isInteractiveMapEnvelope } from '@/lib/viz/interactive-map';
@@ -274,7 +275,7 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
           const plan = tooltipPlan;
           // Capture LOCALS in the handler (not tooltipRef) so a StrictMode/rebuild race can't
           // null it out. `holder.data` is re-indexed on row change.
-          const controller = new SharedTooltip(colorMode, el.ownerDocument);
+          const controller = new SharedTooltip(colorMode, el.ownerDocument, el);
           const holder = { data: buildTooltipData(rowsRef.current, plan) };
           const formatX = makeXFormatter(plan);
           const v = view; // default per-mark tooltip already suppressed pre-run (above)
@@ -369,10 +370,13 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
           const onLeave = () => { if (raf) { cancelAnimationFrame(raf); raf = 0; } pending = null; hideAll(); };
           el.addEventListener('pointermove', onMove);
           el.addEventListener('pointerleave', onLeave);
+          // A touch that becomes a scroll ends in `pointercancel` and NEVER in pointerleave.
+          el.addEventListener('pointercancel', onLeave);
           tooltipRef.current = { plan, controller, holder, cleanup: () => {
             if (raf) cancelAnimationFrame(raf);
             el.removeEventListener('pointermove', onMove);
             el.removeEventListener('pointerleave', onLeave);
+            el.removeEventListener('pointercancel', onLeave);
           } };
         }
         // Interactive maps (point_map / choropleth) expose an `mxViewParams` signal —
@@ -409,6 +413,14 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
     return () => {
       cancelled = true;
       viewRef.current = null;
+      // The per-mark card is a document-level singleton with no owner once this view is
+      // finalized: a rebuild with it up would leave it pinned there forever. Its dismiss policy
+      // goes with it — a rebuild re-installs one, and the LAST chart's teardown must leave the
+      // document as it found it.
+      if (el.ownerDocument) {
+        hideVegaTooltip(el.ownerDocument);
+        releaseVegaTooltipDismiss(el.ownerDocument, el);
+      }
       tooltipRef.current?.cleanup();
       tooltipRef.current?.controller.destroy();
       tooltipRef.current = null;

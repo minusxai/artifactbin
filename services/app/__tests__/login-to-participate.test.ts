@@ -92,7 +92,10 @@ describe('the served document offers a guest the door', () => {
       expect(html).toContain(label);
       // Back to the document afterwards, or the invitation ends on the home
       // page and the person has to find their way back to what they were sent.
-      expect(html).toContain(`href="/login?callbackUrl=%2Fa%2F${row.id}"`);
+      // And back to it DOING what the door offered: a person who logged in to
+      // comment returns to an open conversation, not to a document that has
+      // forgotten why they left (lib/intent).
+      expect(html).toContain(`href="/login?callbackUrl=%2Fa%2F${row.id}%3Fintent%3Dcomment"`);
     }
   });
 
@@ -148,5 +151,46 @@ describe('the door itself', () => {
     // not a reason to download one. The door is an anchor, nothing more.
     expect(withDoor).not.toContain('type="module"');
     expect(withDoor).toMatch(new RegExp(`<a[^>]*${SIGN_IN}[^>]*target="_top"`));
+  });
+});
+
+/**
+ * FORK, in the reader's own controls. A reader may fork anything they can
+ * read — so unlike the sign-in door, which appears only where an account would
+ * change something, this is on EVERY markup document served with chrome.
+ *
+ * It is an anchor and nothing else: the served document is sandboxed with an
+ * opaque origin and holds no session, so it cannot POST the fork itself. It
+ * carries the ASK instead, and the shell on the other side performs it — which
+ * is why the two hrefs differ by exactly one thing: whether this request had a
+ * viewer to be asked.
+ */
+describe('the reader may take a copy', () => {
+  const FORK = 'data-mx-fork';
+
+  it('offers a signed-out reader the login door, returning here still asking to fork', async () => {
+    const owner = await account('mxmx_test_owner@example.com');
+    const row = await docOf(owner, 'public');
+    const html = await serve(row.id);
+    expect(html).toContain(FORK);
+    expect(html).toContain(`href="/login?callbackUrl=%2Fa%2F${row.id}%3Fintent%3Dfork"`);
+    expect(html).toMatch(new RegExp(`<a[^>]*${FORK}[^>]*target="_top"`));
+    expect(html).toContain('aria-label="Fork artifact"');
+  });
+
+  it('sends a signed-in reader straight back to the document, asking', async () => {
+    const owner = await account('mxmx_test_owner@example.com');
+    const stranger = await account('mxmx_test_stranger@example.com');
+    const row = await docOf(owner, 'public');
+    sessionUser.id = stranger.user.id;
+    sessionUser.email = stranger.user.email!;
+    const html = await serve(row.id);
+    expect(html).toContain(`href="/a/${row.id}?intent=fork"`);
+    expect(html).not.toContain('callbackUrl');
+  });
+
+  it('never appears on a capture — /export photographs that frame', async () => {
+    const owner = await account('mxmx_test_owner@example.com');
+    expect(await serve((await docOf(owner, 'public')).id, '?chrome=0')).not.toContain(FORK);
   });
 });

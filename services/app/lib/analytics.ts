@@ -41,6 +41,8 @@ export type AnalyticsEvent =
   /** A reader wrote rows to a dataset through a document's <Mutation>. */
   | 'mutate'
   | 'revert'
+  /** Someone took a copy of this artifact — recorded against the ORIGINAL. */
+  | 'fork'
   | 'delete';
 
 /** Fire-and-forget: never rejects. Callers write `void trackEvent(...)`; tests may await it. */

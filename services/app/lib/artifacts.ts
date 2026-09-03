@@ -7,10 +7,11 @@
  */
 import { cache } from 'react';
 import { trackEvent } from './analytics';
+import { sourceWithoutAnchors } from './annotation-anchors';
 import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN } from './config';
 import { getDb, type Queryable } from './db';
 import { generateFileId } from './ids';
-import type { ArtifactFormat } from './story/input';
+import { parseContentInput, type ArtifactFormat } from './story/input';
 import { canonicalizeMarkup, publishJsx } from './story/jsx-tier';
 import { imageRawUrl } from './story/ref-data';
 import { ingestImageFromUrl } from './web-ingest/image';
@@ -31,6 +32,7 @@ import type { RanDataflow, StoryIslandDataflow } from '@/lib/story-runtime/contr
 import type { RefLoader, ResolvedRef } from '@/lib/story/refs';
 import type { DatasetColumn } from '@/lib/story/data-tiers';
 import { checkDocumentData } from '@/lib/story/data-checks';
+import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { ANONYMOUS_CEILING, canRead, capRole, maxRole, shareRolesAtLeast, type ArtifactRole, type ShareEntry, type ShareRole } from './share-roles';
 
 /**
@@ -96,6 +98,13 @@ export interface ArtifactRow {
   actor_token_id: string | null;
   created_at: string;
   updated_at: string;
+  /**
+   * PROVENANCE: the artifact this one was FORKED from — the immediate parent,
+   * never a chain. NULL is "authored here", which is every row that predates
+   * forking. Written once at creation and never updated: a fork's own life
+   * (versions, comments, shares) is its own from the first save.
+   */
+  forked_from: string | null;
 }
 
 /** Who is looking, as far as the serving paths know. Null = no session. */
@@ -215,7 +224,7 @@ async function namedRoleFor(
 // `link_role` is deliberately absent: SUMMARY_COLS does not select it, and a
 // listing is an index rather than a bulk read. The general-access role is read
 // through the sharing surface, where it is edited.
-export type ArtifactSummary = Omit<ArtifactRow, 'content' | 'source' | 'token_id' | 'user_id' | 'actor_user_id' | 'actor_token_id' | 'link_role'>;
+export type ArtifactSummary = Omit<ArtifactRow, 'content' | 'source' | 'token_id' | 'user_id' | 'actor_user_id' | 'actor_token_id' | 'link_role' | 'forked_from'>;
 
 /** The stored representation of one artifact state (built by parseContentInput). */
 export interface ArtifactInput {
@@ -256,6 +265,19 @@ export async function createArtifact(
   tokenId: string,
   userId: string | null,
   input: ArtifactInput,
+  /**
+   * What only CREATION may set, deliberately NOT fields on ArtifactInput: that
+   * shape is shared with the replace path, and neither of these is a thing a
+   * content write may change.
+   *   forkedFrom — provenance; written once and never updated.
+   *   linkRole   — GENERAL ACCESS, the role the LINK grants. Every other
+   *                creation leaves it NULL (which `linkRoleOf` reads as
+   *                'viewer') and the sharing surface owns it afterwards; a
+   *                FORK carries the source's, exactly as it carries visibility
+   *                and access — the same axis, and carrying the tier while
+   *                resetting the role would be incoherent.
+   */
+  atCreation: { forkedFrom?: string; linkRole?: ShareRole | null } = {},
 ): Promise<ArtifactRow> {
   const db = await getDb();
   // Birthday collisions at 62^6 are routine once the table is large, so the
@@ -269,8 +291,8 @@ export async function createArtifact(
         // ordinary (if empty) base, not an unknown one. Data-modifying CTEs
         // always execute, so the log row lands even though nothing reads it.
         `WITH created AS (
-           INSERT INTO artifacts (id, token_id, user_id, title, description, format, content, source, meta, visibility, folder, edit_id, access, actor_user_id, actor_token_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $3, $2) RETURNING *
+           INSERT INTO artifacts (id, token_id, user_id, title, description, format, content, source, meta, visibility, link_role, folder, edit_id, access, forked_from, actor_user_id, actor_token_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $3, $2) RETURNING *
          ), genesis AS (
            INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, actor_user_id, actor_token_id)
            SELECT id, edit_id, 0, '', COALESCE(source, content), 0, 0, $3, $2 FROM created
@@ -294,12 +316,16 @@ export async function createArtifact(
           input.visibility ??
             (!userId ? (ALLOW_PUBLIC_VISIBILITY ? 'public' : 'unlisted')
               : input.format === 'image' || input.format === 'dataset' ? 'unlisted' : 'private'),
+          // NULL is the pre-column shape and reads as 'viewer' (linkRoleOf), so
+          // every ordinary creation stays exactly as it was.
+          atCreation.linkRole ?? null,
           input.folder ?? '',
           newEditId(),
           // Read-only unless the caller asked otherwise: a dataset that could
           // be written by default would make every existing document's data
           // mutable without anyone choosing it.
           input.access ?? 'read',
+          atCreation.forkedFrom ?? null,
         ],
       );
       void trackEvent('create', r.rows[0].id, { userId });
@@ -310,6 +336,103 @@ export async function createArtifact(
       throw error;
     }
   }
+}
+
+/**
+ * What a forker may change about the copy AS IT IS MADE — the three fields an
+ * owner reaches for first. Every value here is already validated by the
+ * caller through the shared parsers (lib/artifact-wire
+ * `parseVisibilityValue`/`parseFolderField`), so this door does not
+ * re-decide, for instance, whether an anonymous token may go private.
+ */
+export interface ForkOverrides {
+  title?: string;
+  visibility?: Visibility;
+  folder?: string;
+}
+
+/**
+ * FORK — the same artifact under a NEW OWNER and a new id, and nothing else.
+ *
+ * What travels is the CONTENT: format, title, description, visibility, access,
+ * the whole meta (theme, template, compiled CSS, refs, dataset columns and
+ * object key, image dimensions). Object-store bytes are REFERENCED rather than
+ * re-uploaded — every key is content-addressed, so the copy's row names the
+ * same one and a fork of a 27 MB sheet costs no bytes.
+ *
+ * What does not travel belongs to the ORIGINAL'S LIFE rather than its content:
+ * version history (the copy is version 1 with its own genesis edit), comments
+ * (every `data-annotation-anchor` is stripped — a copy starts with no
+ * conversation), shares, and the folder it was filed in.
+ *
+ * A markup document is RE-PUBLISHED as the forker rather than row-copied, and
+ * that is the whole point of the function: refs are resolved through
+ * `refLoaderForActor(actor)` — the person taking the copy — so a document whose
+ * <Mutation> writes the original owner's dataset is refused BY NAME at this
+ * door instead of publishing and then failing every write at run time
+ * (`writerFor` resolves as the document's owner, which the copy no longer is),
+ * and one reading the owner's PRIVATE image or dataset is refused rather than
+ * rendering broken for its new owner. The refusal Response passes through
+ * verbatim. The data tiers have nothing to re-validate — their content is bytes
+ * behind a key — so they are copied straight across.
+ *
+ * `overrides` are the three things a forker changes FIRST (the browser door
+ * passes none; the agent operation passes what its caller sent, already
+ * validated by the shared parsers). They are applied to the copy's stored
+ * state rather than written afterwards: a post-hoc title would be a second
+ * write, rotating the `edit_id` the create reply just handed back.
+ */
+export async function forkArtifact(
+  actor: TokenActor,
+  source: ArtifactRow,
+  overrides: ForkOverrides = {},
+): Promise<ArtifactRow | Response> {
+  if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded' }, 403);
+  const input = await forkInput(actor, source, overrides);
+  if (input instanceof Response) return input;
+  const row = await createArtifact(actor.tokenId, actor.userId, input, { forkedFrom: source.id, linkRole: source.link_role });
+  // Against the SOURCE: "this was forked" is a fact about the original, and the
+  // forker is who did it. Never inside a transaction (PGLite deadlock).
+  void trackEvent('fork', source.id, { userId: actor.userId });
+  return row;
+}
+
+/** The copy's stored state, as the forker would have published it. */
+async function forkInput(actor: TokenActor, source: ArtifactRow, overrides: ForkOverrides): Promise<ArtifactInput | Response> {
+  // Everything the copy keeps that is not the content itself, with the
+  // forker's overrides winning. `link_role` is carried too, but through
+  // createArtifact's creation-only argument rather than here: it is not part
+  // of ArtifactInput, which the replace path shares. With no `folder`
+  // override, createArtifact's default puts the copy at the forker's root,
+  // which is the only place they could have filed it.
+  const carried = {
+    title: overrides.title ?? source.title,
+    description: source.description,
+    visibility: overrides.visibility ?? source.visibility,
+    access: source.access,
+    ...(overrides.folder !== undefined ? { folder: overrides.folder } : {}),
+  };
+  if (source.format !== 'markup') {
+    return { ...carried, format: source.format, content: source.content, source: source.source, meta: source.meta };
+  }
+  const meta = source.meta as { theme?: string; template?: string; colorMode?: 'light' | 'dark' | null };
+  // Publish the LIVE vocabulary, exactly as the wire echo does: a stored
+  // retired theme would otherwise make an old document unforkable for a reason
+  // nobody could act on.
+  const design = resolveStoredStoryDesign(meta.theme, meta.colorMode ?? null);
+  const parsed = await parseContentInput({
+    markup: sourceWithoutAnchors(source.source ?? ''),
+    theme: design.theme,
+    template: meta.template ?? null,
+    colorMode: design.colorMode,
+  }, {
+    loadRef: refLoaderForActor(actor),
+    ingestImage: imageIngestorFor(actor.tokenId, actor.userId),
+    resolveFont: fontResolver(),
+  });
+  if (parsed instanceof Response) return parsed;
+  const { derivedTitle: _derived, ...stored } = parsed;
+  return { ...carried, ...stored };
 }
 
 async function getArtifact(tokenId: string, id: string): Promise<ArtifactRow | null> {

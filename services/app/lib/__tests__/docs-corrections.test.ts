@@ -35,6 +35,14 @@ describe('the publishing skill', () => {
     const row = doc.split('\n').find((l: string) => l.includes('invalid_annotation_action'))!;
     expect(row).toContain('reopen');
   });
+  it('§1.6b the annotation markdown subset says what an image DOES — it is a link, not a picture', () => {
+    // `![alt](url)` parses as a literal "!" plus a link (lib/markdown-lite has
+    // no image node at all), so "images are shown as the characters you typed"
+    // was a claim the parser does not honour.
+    expect(doc).not.toMatch(/raw HTML, images and headings are\s*\n?shown as the characters/);
+    expect(doc).toContain('is not an image');
+    expect(doc).toContain('A comment cannot embed a picture.');
+  });
   it('§1.7 the create response example shows edit_id and markup_changed, and does not promise markup', () => {
     const line = doc.split('\n').find((l: string) => l.includes('→ 201 {') && l.includes('"url"'))!;
     expect(line).toContain('"edit_id"');
@@ -43,6 +51,44 @@ describe('the publishing skill', () => {
   });
   it('§2.1 one bullet no longer says "read the full reference first" AND "guess rather than look up"', () => {
     expect(doc).not.toContain('for the full reference before authoring');
+  });
+  /*
+   * ADDED (F3). `snippet` is the ANNOTATED NODE's text, recomputed on every
+   * read; the words the person selected are `quote`, stored once and never
+   * recomputed. The doc called the snippet "the text they selected", which sent
+   * an agent looking for a sentence in a paragraph's worth of text.
+   */
+  it('§1.8 snippet is the node\'s text; the SELECTION is `quote`', () => {
+    const snippet = doc.split('\n').find((l: string) => l.includes('"snippet"'))!;
+    expect(snippet).not.toContain('the text they selected');
+    expect(snippet).toContain('node');
+    const quote = doc.split('\n').find((l: string) => l.includes('"quote"'))!;
+    expect(quote).toContain('selected');
+    expect(doc).toContain('quote_found');
+  });
+  /*
+   * ADDED (docs phase). The ONE rule the anchor design leaves resting on the
+   * agent: an anchor lives in the markup, and a regenerated document that drops
+   * the attribute orphans every comment on that node. CLAUDE.md has said for
+   * two phases that this file pins that sentence — it did not, and a guarantee
+   * nothing checks is how the sentence goes missing in the next edit that needs
+   * a few bytes back.
+   */
+  it('§1.9 the anchor attribute is preserved, moved with the content, and never authored', () => {
+    const text = doc.replace(/\s+/g, ' ');
+    expect(text).toContain('That attribute IS the anchor. Preserve it when you edit');
+    expect(text).toContain('move it with the content');
+    expect(text).toContain('Never add, change, or reuse `data-annotation-anchor` values yourself.');
+  });
+  /*
+   * ADDED (F8). Forking became an AGENT verb, and the thing an agent needs is
+   * not the address — the registry renders that — but WHEN to reach for it:
+   * the create/edit loop is where a document that already exists gets adapted.
+   */
+  it('§F8 teaches forking as the way to adapt a document you can read', () => {
+    expect(doc).toContain(`POST ${BASE}/api/artifacts/<id>/fork`);
+    expect(doc.replace(/\s+/g, ' ')).toContain('To adapt a document you can read, fork it, then edit the copy');
+    expect(doc).toContain('"forked_from"');
   });
   it('§1 error table carries image_fetch_failed and dataset_read_only', () => {
     expect(doc).toContain('image_fetch_failed');
@@ -72,6 +118,20 @@ describe('the markup skill', () => {
   });
   it('§1.5 the CSP paragraph names the four endpoints', () => {
     expect(doc).not.toContain('the one URL its CSP admits');
+  });
+  /*
+   * ADDED (F8 round 2). The JSX MICRO-RULES — a tag closes, a comment is
+   * `{/* … *\/}`, and there is no document shell — were carried by
+   * publishing.md's orientation bullet and were DELETED with it rather than
+   * folded into their owner. They are the two mistakes an HTML-habit model
+   * makes on its first write (`<br>`, `<!-- -->`), and the only thing left to
+   * catch them was a 400 round trip. They live in markup.md, which owns the
+   * vocabulary.
+   */
+  it('§F8 the JSX micro-rules are documented: closing tags, JSX comments, no document shell', () => {
+    expect(doc).toContain('every tag closes (`<br />`)');
+    expect(doc).toContain('{/* … */}');
+    expect(doc).toContain('`<html>`');
   });
 });
 
@@ -122,5 +182,19 @@ describe('the start brief and quick sheet', () => {
   it('§9.3 the brief and the sheet agree on the second write: /edits, not a whole-document PUT', () => {
     const brief = startBrief(BASE, 'ABC123', 'secret');
     expect(brief).not.toContain('simply replace');
+  });
+});
+
+/**
+ * F2 — the docs teach the reader's link, because it is the whole point of the
+ * feature: an agent that knows `?$name=value` can hand its user a document
+ * already narrowed to what they asked about, instead of one they must narrow
+ * themselves.
+ */
+describe('the markup skill teaches the $ link', () => {
+  const doc = buildMarkupDoc(BASE);
+  it('names the URL form, the empty value, and that a reader\'s own picks travel', () => {
+    expect(doc).toMatch(/\?\$region=/);
+    expect(doc).toMatch(/pre-filtered link/);
   });
 });

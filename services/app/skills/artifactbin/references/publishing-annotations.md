@@ -30,7 +30,9 @@ POST [[ base ]]/api/artifacts/<id>/annotations/<annotation_id>
 ```
 "annotations": [ {
   "id": "ann_…", "status": "open",
-  "snippet": "Revenue grew 40% in Q3",           ← the text they selected
+  "snippet": "Revenue grew 40% in Q3",           ← the annotated node's text, as it reads NOW
+  "quote": "grew 40% in Q3",                      ← the words they actually selected (null if none)
+  "quote_found": true,                            ← are those words still in the document?
   "anchor": { "key": "a1a2b3c4", "path": "0.3", "spanStart": 812, "spanEnd": 964 },
   "anchor_version": 7,                            ← the version it was made against
   "orphaned": false,
@@ -40,12 +42,24 @@ POST [[ base ]]/api/artifacts/<id>/annotations/<annotation_id>
 } ]
 ```
 
-Read them before editing; `snippet` + `anchor.key` tell you which node
-each one is about (find `data-annotation-anchor="a1a2b3c4"` in the markup). An
+Read them before editing. `quote` is the comment's subject — the exact words —
+while `snippet` is the whole node they sit in, recomputed on every read;
+`anchor.key` tells you which node that is (find
+`data-annotation-anchor="a1a2b3c4"` in the markup). `"quote_found": false`
+means those words are already gone from the current version. An
 `"orphaned": true` annotation's node is not in the current version — the
 snippet still says what it pointed at.
 
 ## Reply, resolve, reopen
+
+A comment body is plain TEXT on the wire, and your user reads it through a
+small markdown subset: `**bold**`, `_italic_`, `` `code` ``, fenced ``` blocks
+(with a language), `-` and `1.` lists, `>` quotes, and `[label](url)` links to
+`http`/`https`/`mailto` only. Write a reply the way you would write it in a
+terminal — name files and identifiers in backticks and put a diff or a command
+in a fence. Nothing else is interpreted: raw HTML and headings are shown as
+the characters you typed, and `![alt](url)` is not an image — it renders as a
+literal `!` followed by an ordinary link. A comment cannot embed a picture.
 
 `reply` alone keeps the thread open (say why, or ask back); `resolve` alone
 closes silently; `{ "reopen": true }` returns a resolved thread to the open

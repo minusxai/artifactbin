@@ -118,11 +118,21 @@ ok(start === 1, `the watcher starts at ramen=1 (got ${start})`);
 const startRows = await until(() => totalRows(dash), (v) => typeof v === 'number');
 ok(startRows === 1, `the dashboard starts at rows=1 (got ${startRows})`);
 
-// Nobody reloads for the rest of this gate: a reload would hide every bug here.
-let watcherReloads = 0;
-let dashReloads = 0;
-watcher.on('framenavigated', (f) => { if (f === watcher.mainFrame()) watcherReloads++; });
-dash.on('framenavigated', (f) => { if (f === dash.mainFrame()) dashReloads++; });
+/*
+ * Nobody reloads for the rest of this gate: a reload would hide every bug here.
+ *
+ * Measured by a SENTINEL on the window rather than by counting navigation
+ * events. A reload is what wipes it, and only a reload — where `framenavigated`
+ * also fires for a SAME-DOCUMENT history write, which a reader's `<Value>` pick
+ * now makes (their choice travels in the address bar: lib/story/url-values).
+ * That counted the feature as a reload and failed this line for a document that
+ * had not been re-fetched at all. The sentinel is also the stricter test: it
+ * catches a reload however it happened.
+ */
+const sentinel = async (page) => page.evaluate(() => { window.__mxNoReload = 1; });
+const stillAlive = async (page) => page.evaluate(() => window.__mxNoReload === 1);
+await sentinel(watcher);
+await sentinel(dash);
 
 // The WATCHER makes a choice of their own first — it must survive the write.
 await watcher.getByRole('button', { name: /tacos/i }).click().catch(() => {});
@@ -136,11 +146,11 @@ ok(voterAfter === 2, `the VOTER's own chart redraws on the click (got ${voterAft
 
 const watcherAfter = await until(() => votes(watcher), (v) => v === 2);
 ok(watcherAfter === 2, `the WATCHER sees ramen=2 without a reload (got ${watcherAfter})`);
-ok(watcherReloads === 0, `the watcher never reloaded (${watcherReloads})`);
+ok(await stillAlive(watcher), 'the watcher never reloaded (its window survived the write)');
 
 const dashAfter = await until(() => totalRows(dash), (v) => v === 2);
 ok(dashAfter === 2, `a DIFFERENT document reading the same dataset redraws (rows=${dashAfter})`);
-ok(dashReloads === 0, `the dashboard never reloaded (${dashReloads})`);
+ok(await stillAlive(dash), 'the dashboard never reloaded (its window survived the write)');
 
 // The reader's own selection is theirs, not the document's to reset.
 const kept = await watcher.evaluate(() => !!document.querySelector('[aria-pressed="true"]')?.textContent?.match(/tacos/i));

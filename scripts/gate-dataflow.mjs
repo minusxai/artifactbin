@@ -201,6 +201,77 @@ await pf.selectOption('select[aria-label="Region"]', 'NA');
 await pf.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent === '$20', null, { timeout: 15000 }).catch(() => {});
 ok((await pf.textContent('[aria-label="Live number"]')) === '$20', 'the reader\'s re-run works through the PAGE');
 ok(readerRelay.length >= 1 && readerDirect.length === 0, `…as the relay POST with the session (${readerRelay.length} relayed, ${readerDirect.length} direct)`);
+
+// ── 5b. THE READER'S SELECTION TRAVELS IN THE LINK (F2) ─────────────────────
+// `?$region=west` is parsed on the SERVER and seeded through the island's
+// third dataflow field, so the control is already right at FIRST PAINT and the
+// document's one paint-first run goes out WITH the selection — never a run at
+// the defaults followed by a correcting second one. Then the address follows
+// the reader: top-level through the document's own narrow history capability,
+// and — because an owner is served the SHELL, where `location` inside the
+// frame is the frame's — through a message to the page for everyone else.
+const uds = await j(await fetch(`${B}/api/artifacts`, { method: 'POST', headers: OH, body: JSON.stringify({ dataset: [{ region: 'west', revenue: 10 }, { region: 'east', revenue: 25 }] }) }));
+const udocSrc = `<Helmet><title>URL values gate</title><Value name="region" type="string" />
+<Query name="regions">{\`select distinct region from ref_${uds.id} order by 1\`}</Query>
+<Query name="sales">{\`select region, sum(revenue) revenue from ref_${uds.id} where $region is null or region = $region group by 1 order by 1\`}</Query>
+</Helmet><div data-design="tw" className="@container p-8"><h1 className="text-3xl font-bold">Regions</h1>
+<select aria-label="Region" value="$region" options="$regions" />
+<p>Total <Number data="$sales" col="revenue" agg="sum" prefix="$" /></p></div>`;
+const udoc = await j(await fetch(`${B}/api/artifacts`, { method: 'POST', headers: OH, body: JSON.stringify({ markup: udocSrc, visibility: 'public' }) }));
+ok(!!udoc.id, `the URL-values document published (${udoc.url ?? udoc.error})`);
+
+// (a) TOP-LEVEL: a stranger's page, no session — served the document itself.
+const up = await b.newPage({ viewport: { width: 1200, height: 900 } });
+const upErrors = [];
+up.on('pageerror', (e) => upErrors.push(e.message));
+const upQueries = [];
+up.on('request', (r) => { if (r.url().includes(`/a/${udoc.id}/query`)) upQueries.push(r.url()); });
+await up.goto(`${B}/a/${udoc.id}?$region=west`, { waitUntil: 'load' });
+const uf = up.mainFrame();
+await uf.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent?.startsWith('$'), null, { timeout: 20000 }).catch(() => {});
+ok((await uf.$eval('select[aria-label="Region"]', (el) => el.value)) === 'west', `the link's selection is what the control shows at first paint (${await uf.$eval('select[aria-label="Region"]', (el) => el.value)})`);
+ok((await uf.textContent('[aria-label="Live number"]')) === '$10', 'and the numbers are the SELECTED ones, not the defaults corrected a moment later');
+ok(upQueries.length === 1, `the document ran its queries ONCE, with the selection (${upQueries.length} query request(s))`);
+ok(upQueries[0].includes('west'), 'and that one run carried it');
+ok(!upErrors.some((e) => /hydrat/i.test(e)), 'no hydration error: the SSR control and the hydrated store agree by construction');
+// (b) the address follows the reader
+await uf.selectOption('select[aria-label="Region"]', 'east');
+await uf.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent === '$25', null, { timeout: 15000 }).catch(() => {});
+await up.waitForFunction(() => location.search.includes('east'), null, { timeout: 5000 }).catch(() => {});
+ok(up.url().includes('$region=east'), `picking rewrites the address (${new URL(up.url()).search})`);
+ok(!up.url().includes('west'), 'and replaces the old selection rather than appending to it');
+// (c) …and the link it produced is the document it describes
+await up.reload({ waitUntil: 'load' });
+await up.mainFrame().waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent === '$25', null, { timeout: 20000 }).catch(() => {});
+ok((await up.mainFrame().$eval('select[aria-label="Region"]', (el) => el.value)) === 'east', 'a reload of the copied address is the same document');
+ok((await up.mainFrame().textContent('[aria-label="Live number"]')) === '$25', '…with the same numbers');
+await up.close();
+
+// (d) THE OWNER'S SHELL, where the document is FRAMED. `location` in there is
+// the frame's, so the document reports its picks up the signed channel and the
+// PAGE writes the address — and the frame must NOT be re-navigated by that,
+// which would be a full document reload once per pick.
+let frameLoads = 0;
+owner.on('framenavigated', (f) => { if (f !== owner.mainFrame() && f.url().includes(`/a/${udoc.id}/raw`)) frameLoads++; });
+await owner.goto(`${B}/a/${udoc.id}?$region=west`, { waitUntil: 'load' });
+const ownerFrame = await (await owner.waitForSelector('iframe[title="artifact"]')).contentFrame();
+await ownerFrame.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent?.startsWith('$'), null, { timeout: 20000 }).catch(() => {});
+ok(ownerFrame.url().includes('$region=west'), `the shell seeds its frame with the link's selection (${new URL(ownerFrame.url()).search})`);
+ok((await ownerFrame.$eval('select[aria-label="Region"]', (el) => el.value)) === 'west', 'the framed control shows it');
+const loadsBefore = frameLoads;
+await ownerFrame.selectOption('select[aria-label="Region"]', 'east');
+await ownerFrame.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent === '$25', null, { timeout: 15000 }).catch(() => {});
+await owner.waitForFunction(() => location.search.includes('east'), null, { timeout: 5000 }).catch(() => {});
+ok(owner.url().includes('$region=east'), `picking inside the frame rewrites the PAGE's address (${new URL(owner.url()).search})`);
+ok(frameLoads === loadsBefore, `…and the document was not reloaded to do it (${frameLoads - loadsBefore} frame navigation(s))`);
+
+// (e) the EXPORT photographs the selection — and is not the cached default shot.
+const shot = async (search) => Buffer.from(await (await fetch(`${B}/a/${udoc.id}/export${search}`, { headers: { Authorization: `Bearer ${ownerTok}` } })).arrayBuffer());
+const shotDefault = await shot('');
+const shotWest = await shot('?$region=west');
+ok(shotDefault.length > 1000 && shotWest.length > 1000, `both exports rendered (${shotDefault.length} B, ${shotWest.length} B)`);
+ok(!shotDefault.equals(shotWest), 'the selected export is a different picture from the default one');
+
 await ownerCtx.close(); await readerCtx.close();
 sink.close();
 await b.close();

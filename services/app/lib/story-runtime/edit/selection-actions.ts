@@ -12,10 +12,26 @@ import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import type { JsxNode } from '@/lib/jsx';
 import type { StoryEditSelection, StorySelectionActionsMessage } from '../contract';
 import { describeSelection } from './describe-selection';
+import { anchorFor, describeRange } from './selection-range';
 
 export const SELECTION_ACTIONS_ATTR = 'data-mx-selection-actions';
+/** Stamped on the buttons when the pointer is coarse; the sheet grows them to a touch target. */
+export const SELECTION_ACTION_COARSE_CLASS = 'mx-selection-action--coarse';
 const SELECTION_ACTION_ATTR = 'data-mx-selection-action';
 const SELECTION_ACTIONS_CSS_ATTR = 'data-mx-selection-actions-css';
+/**
+ * The reader's bottom dock, rendered into the served document itself
+ * (lib/story/document renderReaderChrome). Named by its attribute rather than
+ * imported: nothing in the reader's bundle may reach the server modules.
+ */
+const READER_CHROME_ATTR = 'data-mx-reader-chrome';
+/**
+ * How long a touch selection must sit still before the bubble appears.
+ * Dragging a handle fires `selectionchange` continuously, and the bubble
+ * belongs where the gesture ENDED — chasing every intermediate selection would
+ * also make it flicker under the platform's own menu while that settles.
+ */
+const TOUCH_SETTLE_MS = 200;
 
 const SELECTION_ACTIONS_CSS = `
 [${SELECTION_ACTIONS_ATTR}] {
@@ -36,6 +52,7 @@ const SELECTION_ACTIONS_CSS = `
   all: unset; box-sizing: border-box; display: inline-flex; align-items: center;
   gap: 5px; min-height: 28px; padding: 0 9px; cursor: pointer; color: inherit;
 }
+[${SELECTION_ACTIONS_ATTR}] button.${SELECTION_ACTION_COARSE_CLASS} { min-height: 44px; padding: 0 14px; gap: 7px; }
 [${SELECTION_ACTIONS_ATTR}] svg { display: block; width: 13px; height: 13px; flex: none; }
 [${SELECTION_ACTIONS_ATTR}] button + button { border-left: 1px solid rgba(148, 163, 184, .32); }
 [${SELECTION_ACTIONS_ATTR}] button:hover,
@@ -56,6 +73,13 @@ const changesSelection = (event: KeyboardEvent) =>
   || event.key === 'Shift'
   || ((event.key === 'a' || event.key === 'A') && (event.ctrlKey || event.metaKey));
 
+/**
+ * A touch device, asked the only way a document can ask. jsdom answers no
+ * matchMedia at all, so the call is optional and an unanswerable query keeps
+ * the mouse placement.
+ */
+const isCoarsePointer = (win: Window) => win.matchMedia?.('(pointer: coarse)')?.matches === true;
+
 export interface FrameSelectionActions {
   update(capabilities: StorySelectionActionsMessage): void;
   setNodes(nodes: JsxNode[]): void;
@@ -74,7 +98,15 @@ export function createFrameSelectionActions({
   let capabilities: StorySelectionActionsMessage = {
     type: 'mx:selection-actions', edit: false, annotate: false,
   };
+  /**
+   * ONE Range, TWO answers. Edit opens on the deepest element the user touched
+   * — the caret's own target — while a comment belongs to the BLOCK that holds
+   * the whole selection, with the selected words travelling beside it. Both are
+   * captured while the Range is live (the toolbar preserves the Selection, but
+   * the two questions are asked of the geometry, not of the click).
+   */
   let activeSelection: StoryEditSelection | null = null;
+  let activeAnnotation: StoryEditSelection | null = null;
   let toolbar: HTMLDivElement | null = null;
   let receivedCapabilities = false;
 
@@ -83,8 +115,18 @@ export function createFrameSelectionActions({
   style.textContent = SELECTION_ACTIONS_CSS;
   doc.head.appendChild(style);
 
+  /** The pending touch settle, if a selection is still moving. */
+  let settle = 0;
+  const cancelSettle = () => {
+    if (!settle) return;
+    win.clearTimeout(settle);
+    settle = 0;
+  };
+
   const hide = () => {
+    cancelSettle();
     activeSelection = null;
+    activeAnnotation = null;
     if (toolbar) toolbar.hidden = true;
   };
 
@@ -93,6 +135,8 @@ export function createFrameSelectionActions({
     button.type = 'button';
     button.setAttribute(SELECTION_ACTION_ATTR, action);
     button.setAttribute('aria-label', action === 'edit' ? 'Edit selected text' : 'Annotate selected text');
+    // A 28px row is under every touch-target floor there is; a thumb gets 44.
+    if (isCoarsePointer(win)) button.classList.add(SELECTION_ACTION_COARSE_CLASS);
     // These are Lucide's Pencil and MessageSquare glyphs. Build their tiny SVG
     // nodes directly because this view-mode module deliberately has no React
     // dependency and stays a separate tiny lazy chunk.
@@ -135,7 +179,7 @@ export function createFrameSelectionActions({
         if (!activeSelection || (action !== 'edit' && action !== 'annotate')) return;
         event.preventDefault();
         event.stopPropagation();
-        const chosen = activeSelection;
+        const chosen = (action === 'annotate' ? activeAnnotation : null) ?? activeSelection;
         hide();
         onAction(action, chosen);
       });
@@ -145,6 +189,21 @@ export function createFrameSelectionActions({
     if (capabilities.edit) toolbar.appendChild(makeButton('edit'));
     if (capabilities.annotate) toolbar.appendChild(makeButton('annotate'));
     return toolbar;
+  };
+
+  /*
+   * The bottom of the space a touch bubble may occupy. The reader's dock is
+   * `display: none` while the document is framed and only `position: fixed`
+   * under 640px, so it counts only when it is really parked at the bottom of
+   * the viewport — a dock in ordinary flow, scrolled into the upper half, must
+   * not pull the bubble up off its words.
+   */
+  const clampToTouchSpace = (top: number, height: number) => {
+    const dock = doc.querySelector(`[${READER_CHROME_ATTR}]`)?.getBoundingClientRect();
+    const floor = dock && dock.height > 0 && dock.top > win.innerHeight / 2
+      ? Math.min(win.innerHeight - 8, dock.top - 8)
+      : win.innerHeight - 8;
+    return Math.max(8, Math.min(top, floor - height));
   };
 
   const showForSelection = () => {
@@ -213,25 +272,89 @@ export function createFrameSelectionActions({
     if (rect.width <= 0 || rect.height <= 0) { hide(); return; }
 
     activeSelection = described;
+    /*
+     * The comment's own target: the block containing the selection, described
+     * through the same door (so a stale path is still refused), plus the quote
+     * and its anchor-relative parts. Null when the block is not in the source —
+     * the annotate action then falls back to the edit target rather than
+     * offering nothing.
+     */
+    const anchor = anchorFor(range);
+    const annotated = anchor && !anchor.closest('.mx-rail, .mx-present') ? describeSelection(anchor, nodes) : null;
+    if (annotated && anchor) {
+      const captured = describeRange(range, anchor);
+      annotated.quote = captured.quote;
+      annotated.range = captured.range;
+    }
+    activeAnnotation = annotated;
     const surface = ensureToolbar();
     surface.hidden = false;
     const surfaceRect = surface.getBoundingClientRect();
+    /*
+     * ABOVE THE SELECTION IS THE PHONE'S OWN SPACE. Android and iOS draw their
+     * Copy/Share menu there, and a multi-line selection's bounding box starts
+     * at its FIRST line — so on a coarse pointer the bubble hangs below the
+     * LAST line the gesture covered, where the thumb already is. A mouse keeps
+     * today's placement, where above is out of the words' way and nothing else
+     * is painted.
+     *
+     * Degenerate rects are skipped for the same reason `coversText` exists: a
+     * Range ending at offset 0 of the following block carries a zero-width rect
+     * belonging to a block the user selected nothing of, and anchoring to it
+     * would drop the bubble far below the words.
+     */
+    const coarse = isCoarsePointer(win);
+    const lines = coarse ? Array.from(range.getClientRects() ?? []) : [];
+    const anchorRect = lines.filter((line) => line.width > 0 && line.height > 0).at(-1) ?? rect;
     const half = surfaceRect.width / 2;
-    const left = Math.min(Math.max(rect.left + rect.width / 2, half + 8), win.innerWidth - half - 8);
-    const above = rect.top >= surfaceRect.height + 10;
+    const left = Math.min(Math.max(anchorRect.left + anchorRect.width / 2, half + 8), win.innerWidth - half - 8);
+    const above = !coarse && rect.top >= surfaceRect.height + 10;
+    const top = above ? rect.top - 7 : anchorRect.bottom + 7;
     surface.style.left = `${Math.round(left)}px`;
-    surface.style.top = `${Math.round(above ? rect.top - 7 : rect.bottom + 7)}px`;
+    surface.style.top = `${Math.round(coarse ? clampToTouchSpace(top, surfaceRect.height) : top)}px`;
     surface.style.transform = above ? 'translate(-50%, -100%)' : 'translate(-50%, 0)';
   };
 
+  /*
+   * IS A BUTTON DOWN RIGHT NOW? A mouse drag fires `selectionchange` the whole
+   * way, so a drag that pauses for the settle raised the bubble mid-gesture —
+   * into the path of the cursor, where a release can land on it. The settle
+   * exists for the gesture that has NO other event; a mouse already has
+   * `pointerup` and a keyboard `keyup`, so it buys them nothing. Tracked as a
+   * held button rather than as a `pointerType` branch: the flag is simply
+   * false until a `pointerdown` arrives, and a touch keeps the settle anyway.
+   */
+  let buttonHeld = false;
+  const onPointerDown = () => { buttonHeld = true; };
+  const releaseButton = () => { buttonHeld = false; };
   const onPointerUp = (event: PointerEvent) => {
+    buttonHeld = false;
     if ((event.target as Element | null)?.closest?.(`[${SELECTION_ACTIONS_ATTR}]`)) return;
     win.queueMicrotask(showForSelection);
   };
   const onKeyUp = (event: KeyboardEvent) => { if (changesSelection(event)) showForSelection(); };
+  /*
+   * THE ONLY EVENT A TOUCH SELECTION FIRES. Android hands the long-press to its
+   * own selection UI (the page sees `pointercancel` at best) and dragging the
+   * handles is browser chrome that never reaches the page — so neither
+   * `pointerup` nor a key ever arrives, and this listener, wired only to hide,
+   * is what made the bubble unreachable on a phone. It SHOWS now, after a
+   * settle that every further change re-arms, so a drag raises the bubble once,
+   * where it ended. Collapsing still hides at once: a settle would leave the
+   * bubble hanging over words that are no longer selected.
+   */
   const onSelectionChange = () => {
+    // Free for a reader and inside the editor, where nothing is granted: this
+    // fires on every drag frame and every caret move, and reading a Selection
+    // is the cost the keyup filter above exists to avoid paying per keystroke.
+    if (!capabilities.edit && !capabilities.annotate) return;
     const selection = win.getSelection();
-    if (!selection || selection.isCollapsed) hide();
+    if (!selection || selection.isCollapsed) { hide(); return; }
+    if (!selection.toString().trim()) return;
+    // A drag still in progress: the release that ends it is the event to answer.
+    if (buttonHeld && !isCoarsePointer(win)) return;
+    cancelSettle();
+    settle = win.setTimeout(() => { settle = 0; showForSelection(); }, TOUCH_SETTLE_MS);
   };
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key !== 'Escape' || !toolbar || toolbar.hidden) return;
@@ -255,7 +378,12 @@ export function createFrameSelectionActions({
     });
   };
 
+  doc.addEventListener('pointerdown', onPointerDown);
   doc.addEventListener('pointerup', onPointerUp);
+  // A drag can also end where no `pointerup` is delivered: the browser taking
+  // the gesture over, or the window losing focus mid-drag.
+  doc.addEventListener('pointercancel', releaseButton);
+  win.addEventListener('blur', releaseButton);
   doc.addEventListener('keyup', onKeyUp);
   doc.addEventListener('selectionchange', onSelectionChange);
   doc.addEventListener('keydown', onKeyDown);
@@ -285,7 +413,10 @@ export function createFrameSelectionActions({
       if (scheduled) win.cancelAnimationFrame(scheduled);
       toolbar?.remove();
       style.remove();
+      doc.removeEventListener('pointerdown', onPointerDown);
       doc.removeEventListener('pointerup', onPointerUp);
+      doc.removeEventListener('pointercancel', releaseButton);
+      win.removeEventListener('blur', releaseButton);
       doc.removeEventListener('keyup', onKeyUp);
       doc.removeEventListener('selectionchange', onSelectionChange);
       doc.removeEventListener('keydown', onKeyDown);
