@@ -14,7 +14,6 @@ import { generateFileId } from './ids';
 import { parseContentInput, type ArtifactFormat } from './story/input';
 import { canonicalizeMarkup, publishJsx } from './story/jsx-tier';
 import { imageRawUrl } from './story/ref-data';
-import { ingestImageFromUrl } from './web-ingest/image';
 import { assetWarningFor, importWebAsset, WebAssetRefused, type AssetWarning, type WebAssetKind } from './web-assets';
 import { resolveWebFont, UnknownFontError } from './webfonts';
 import { webIngestRateLimited } from './auth';
@@ -1246,14 +1245,6 @@ export function fontResolver(): (family: string) => Promise<Response | null> {
     }
   };
 }
-
-/** "…/team-logo.png" → "team-logo": the dashboard row needs a name, not a hash. */
-const imageTitleFallback = (url: string): string | null => {
-  try {
-    const last = new URL(url).pathname.split('/').filter(Boolean).pop() ?? '';
-    return decodeURIComponent(last).replace(/\.[a-z0-9]+$/i, '').trim() || null;
-  } catch { return null; }
-};
 
 // ── The bearer actor ─────────────────────────────────────────────────────────
 //

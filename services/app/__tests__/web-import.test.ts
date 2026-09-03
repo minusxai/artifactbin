@@ -185,6 +185,9 @@ describe('the agent door — external <img src> is imported and the URL is KEPT'
       markup: `<div><img src="${web}/photo.jpg" /></div>`,
     } }), params({ id: made.id }));
     expect(put.status).toBe(200);
+    // The URL is still the URL — the mapping is serve-time, so a mapped tree
+    // must never find its way back into storage through any write door.
+    expect((await getArtifactById(made.id))!.source).toContain(`${web}/photo.jpg`);
     const html = await (await rawRoute(request(`/a/${made.id}/raw`), params({ id: made.id }))).text();
     expect(html).toContain(assetUrlFor(`${web}/photo.jpg`));
   });
@@ -198,6 +201,7 @@ describe('the agent door — external <img src> is imported and the URL is KEPT'
       new_string: `<p>hello</p><img src="${web}/logo.png" />`,
     } }), params({ id: made.id }));
     expect(res.status).toBe(200);
+    expect((await getArtifactById(made.id))!.source).toContain(`${web}/logo.png`);
     const html = await (await rawRoute(request(`/a/${made.id}/raw`), params({ id: made.id }))).text();
     expect(html).toContain(assetUrlFor(`${web}/logo.png`));
   });

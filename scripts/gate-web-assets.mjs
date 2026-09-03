@@ -98,7 +98,15 @@ hits = [];
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
 const outbound = [];
+/* Every FONT the document actually loaded, with where it came from and whether
+ * it arrived — the only proof that `font-src 'self'` admits the mapped url. A
+ * face the CSP refused yields no successful response, and the fetch precedes
+ * the parse, so this holds however minimal the file is. */
+const fontResponses = [];
 page.on('request', (r) => { if (r.url().startsWith(WEB)) outbound.push(r.url()); });
+page.on('response', (r) => {
+  if (r.request().resourceType() === 'font') fontResponses.push(`${r.status()} ${new URL(r.url()).pathname}`);
+});
 await becomeOwner(page, B, owner.token);
 await page.goto(`${B}/a/${owner.id}`, { waitUntil: 'networkidle' });
 
@@ -136,6 +144,11 @@ ok(probe.blur.startsWith('url(') && probe.blur.includes('data:image/'), 'the blu
 ok(/^\/assets\/[0-9a-f]{64}$/.test(probe.svgSrc ?? ''), `the SVG <img> is served from our origin (${probe.svgSrc})`);
 ok(probe.svgNatural[0] > 0, `the SVG paints as an image despite the attachment header (${probe.svgNatural.join('×')})`);
 ok(probe.sheet.includes('/assets/') && !probe.sheet.includes(WEB), 'the @font-face src was rewritten to our origin');
+ok(probe.fontFamily.includes('Probe'), `the paragraph asks for the imported face (${probe.fontFamily})`);
+ok(
+  fontResponses.some((f) => /^200 \/assets\/[0-9a-f]{64}$/.test(f)),
+  `the browser LOADED a font from /assets (${fontResponses.join(', ') || 'no font request at all'})`,
+);
 
 // THE HEADLINE: nothing on the page reached the source host.
 ok(outbound.length === 0 && hits.length === 0, `zero requests to the source host while reading (${outbound.length} browser, ${hits.length} server-side)`);

@@ -42,18 +42,31 @@ const imageAttrsOf = (el: JsxElement): Array<{ attr: JsxElement['attributes'][nu
     .map(([, attr]) => el.attributes.find((a) => a.name.toLowerCase() === attr.toLowerCase()))
     .flatMap((a) => (a && a.value.static && typeof a.value.json === 'string' ? [{ attr: a, value: a.value.json }] : []));
 
-/** Every web URL in an image position, deduplicated, in document order. */
-export function collectExternalImageUrls(source: string): string[] {
+/**
+ * Both kinds at once, in the shape the importer and the serve-time lookup want.
+ *
+ * ONE parse: this runs on EVERY read of every document (the raw route and the
+ * live frame ask it before they render), including the overwhelming majority
+ * that name nothing external, so parsing the source twice to answer two
+ * questions about the same tree is a per-read cost paid by documents that do
+ * not use the feature at all.
+ */
+export function collectExternalAssetUrls(source: string): { images: string[]; fonts: string[]; all: string[] } {
   const parsed = parseJsx(source);
-  if (!parsed.ok) return []; // the jsx validator owns reporting a parse failure
-  const urls: string[] = [];
+  if (!parsed.ok) return { images: [], fonts: [], all: [] }; // the jsx validator owns reporting a parse failure
+  const images: string[] = [];
   walk(parsed.nodes, (el) => {
     for (const { value } of imageAttrsOf(el)) {
-      if (WEB_URL.test(value) && !urls.includes(value)) urls.push(value);
+      if (WEB_URL.test(value) && !images.includes(value)) images.push(value);
     }
   });
-  return urls;
+  const style = splitHelmet(parsed.nodes).content.style;
+  const fonts = style ? externalCssUrls(style) : [];
+  return { images, fonts, all: [...new Set([...images, ...fonts])] };
 }
+
+/** Every web URL in an image position, deduplicated, in document order. */
+export const collectExternalImageUrls = (source: string): string[] => collectExternalAssetUrls(source).images;
 
 /**
  * Every web URL in an `@font-face` `src` in the document's own stylesheet.
@@ -63,16 +76,4 @@ export function collectExternalImageUrls(source: string): string[] {
  * dropping it — published a document that looked like it worked and had lost
  * its typeface.
  */
-export function collectExternalFontUrls(source: string): string[] {
-  const parsed = parseJsx(source);
-  if (!parsed.ok) return [];
-  const style = splitHelmet(parsed.nodes).content.style;
-  return style ? externalCssUrls(style) : [];
-}
-
-/** Both kinds at once, in the shape the importer and the serve-time lookup both want. */
-export function collectExternalAssetUrls(source: string): { images: string[]; fonts: string[]; all: string[] } {
-  const images = collectExternalImageUrls(source);
-  const fonts = collectExternalFontUrls(source);
-  return { images, fonts, all: [...new Set([...images, ...fonts])] };
-}
+export const collectExternalFontUrls = (source: string): string[] => collectExternalAssetUrls(source).fonts;
