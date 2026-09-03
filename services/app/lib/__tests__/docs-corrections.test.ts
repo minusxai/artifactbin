@@ -35,6 +35,14 @@ describe('the publishing skill', () => {
     const row = doc.split('\n').find((l: string) => l.includes('invalid_annotation_action'))!;
     expect(row).toContain('reopen');
   });
+  it('§1.6b the annotation markdown subset says what an image DOES — it is a link, not a picture', () => {
+    // `![alt](url)` parses as a literal "!" plus a link (lib/markdown-lite has
+    // no image node at all), so "images are shown as the characters you typed"
+    // was a claim the parser does not honour.
+    expect(doc).not.toMatch(/raw HTML, images and headings are\s*\n?shown as the characters/);
+    expect(doc).toContain('is not an image');
+    expect(doc).toContain('A comment cannot embed a picture.');
+  });
   it('§1.7 the create response example shows edit_id and markup_changed, and does not promise markup', () => {
     const line = doc.split('\n').find((l: string) => l.includes('→ 201 {') && l.includes('"url"'))!;
     expect(line).toContain('"edit_id"');
