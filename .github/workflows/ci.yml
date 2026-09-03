@@ -179,8 +179,11 @@ jobs:
 
   # A real coding agent, end to end: mints a start document, reads /docs,
   # publishes, and the served document passes the render guards — the manual
-  # pre-merge hole the gates leave. It runs the CI-ONLY tasks (data, edit, mcp),
-  # never the creative comparison briefs, which are not a per-PR question.
+  # pre-merge hole the gates leave. It runs the CI-ONLY tasks (comment, data,
+  # edit, mcp), never the creative comparison briefs, which are not a per-PR
+  # question. `comment` is on the api_action row only: it was measured on THIS
+  # harness and model first (opencode × minimax-m3, PASS, $0.021 a leg), because
+  # a gate no weak model has passed becomes a red check on every PR.
   #
   # The harness and model are named HERE rather than in the repo: `evals/` knows
   # how to run one leg, not which legs exist (see evals/lib/leg.ts). OpenCode ×
@@ -193,7 +196,7 @@ jobs:
   # it never blocks a merge. Forks carry no secret, so they skip too.
   # Deliberately NOT in the `test` roll-up until it has been green for weeks.
   agent-smoke:
-    # Exercise the real two-axis treatments explicitly. API modes run the data/edit
+    # Exercise the real two-axis treatments explicitly. API modes run the comment/data/edit
     # regressions; MCP modes run the MCP regression. A task never changes transport behind
     # the mode's back, so every job's name describes what the harness actually received.
     name: agent smoke (${{ matrix.mode }})
@@ -204,7 +207,7 @@ jobs:
       matrix:
         include:
           - mode: fetched_skill+api_action
-            tasks: data,edit
+            tasks: comment,data,edit
           - mode: fetched_skill+mcp_action
             tasks: mcp
           - mode: installed_skill+api_action
