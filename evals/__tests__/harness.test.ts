@@ -129,6 +129,31 @@ describe('codex', () => {
     expect(r.toolCalls).toBe(0);
   });
 
+  /**
+   * Codex emits ONE turn.started/turn.completed per user prompt, so a whole run read
+   * `turns: 1` beside 16 tool calls (production run 33702277600, 2026-09-03). The figure
+   * comparable to a Claude Code turn (one assistant message) is the count of assistant
+   * ITEMS it emitted. This fixture is that run's deck transcript, verbatim.
+   */
+  it('codex turns are the items it emitted, not its one turn.completed', () => {
+    const r = codex.reduce(fx('codex.deck.jsonl'));
+    expect(r.ok).toBe(true);
+    expect(r.turns).toBe(19); // 3 agent_message + 12 command_execution + 3 file_change + 1 web_search
+    expect(r.toolCalls).toBe(16);
+    expect(r.webSearchCalls).toBe(1);
+    expect(r.tokens).not.toBeNull();
+  });
+
+  it('turns is telemetry and ok is completion: items without a turn.completed count, but do not make the run ok', () => {
+    const items = [
+      { type: 'item.completed', item: { id: 'i0', type: 'agent_message', text: 'starting' } },
+      { type: 'item.completed', item: { id: 'i1', type: 'command_execution', command: 'ls', aggregated_output: '', exit_code: 0, status: 'completed' } },
+    ].map((e) => JSON.stringify(e));
+    const r = codex.reduce(items.join('\n'));
+    expect(r.ok).toBe(false);
+    expect(r.turns).toBe(2);
+  });
+
   it('splits input_tokens into ordinary, cached and cache-written — OpenAI counts both INSIDE the total', () => {
     const r = codex.reduce(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 100, cached_input_tokens: 40, cache_write_input_tokens: 35, output_tokens: 7 } }));
     expect(r.tokens).toEqual({ input: 25, cacheRead: 40, cacheWrite: 35, output: 7 });
