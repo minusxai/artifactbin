@@ -71,12 +71,73 @@ export function chownArgv(user: string, dirs: string[]): string[] {
   return ['sudo', '-n', 'chown', '-R', user, ...dirs];
 }
 
-/** The two ways a directory takes part in the switch: the agent OWNS it, or the driver keeps it and merely lets the agent walk through. */
+/** The three ways a path takes part in the switch: the agent OWNS it, the driver keeps it and merely lets the agent walk THROUGH it, or the driver keeps it and merely lets the agent READ it. */
 export interface RunAsDirs {
   /** The agent's own directories — its cwd and its config home. Handed over with `chownArgv`. */
   chown: string[];
   /** Directories the DRIVER keeps and only makes traversable (`+x`), because it still writes inside them. */
   traverse: string[];
+  /** Files the DRIVER keeps and only makes readable (`o+r`) — the CA the environment tells the harness to trust, the outbox it is told to read. */
+  read?: string[];
+}
+
+/** The paths a harness's ENVIRONMENT tells it to open, and the directories it must walk to reach them. */
+export interface ReadablePlan {
+  /** Absolute file paths named by the environment, deduped — `lib/mitm` points three variables at one bundle. */
+  files: string[];
+  /** Every ancestor directory of those files and of the run's cwd/home/root, excluding `/` — deduped, deepest last. */
+  dirs: string[];
+}
+
+/**
+ * Environment variables whose value is a FILE the harness will open. The CA four are what `lib/mitm`
+ * exports so a harness trusts the recording proxy (Node reads `NODE_EXTRA_CA_CERTS`, curl
+ * `CURL_CA_BUNDLE`, OpenSSL `SSL_CERT_FILE`, python-requests `REQUESTS_CA_BUNDLE`); the outbox is where a
+ * locally booted server writes the login mail (`lib/server devOutboxPath`).
+ */
+const READABLE_PATH_VARS = ['NODE_EXTRA_CA_CERTS', 'CURL_CA_BUNDLE', 'SSL_CERT_FILE', 'REQUESTS_CA_BUNDLE', 'EMAIL__DEV_OUTBOX_PATH'] as const;
+
+/**
+ * WHAT THE ENVIRONMENT PROMISES THE HARNESS IT CAN READ — planned here, performed by `handOverRunAsDirs`.
+ *
+ * Measured on runs 33778280906 / 33778294018 (`--run-as=agent`, ubuntu-latest): every harness logged
+ * `Ignoring extra certs from '<out>/ca/ca.crt', load failed: … Permission denied`. `createCa` leaves the CA
+ * directory 0755 and the files 0644, so the unreadable component is an ANCESTOR the driver made with the
+ * runner's umask — the out directory itself. A harness that only honours `NODE_EXTRA_CA_CERTS` would
+ * otherwise not trust the proxy at all.
+ *
+ * A relative value is skipped rather than resolved: it would resolve against the DRIVER's working
+ * directory, which is precisely what run-as exists to keep out of the agent's reach.
+ */
+export function readableForAgent(env: Record<string, string | undefined>, opts: { cwd: string; homeDir?: string; workspaceRoot?: string }): ReadablePlan {
+  const absolute = (p: string | undefined): p is string => typeof p === 'string' && p.length > 0 && path.isAbsolute(p);
+  const files = [...new Set(READABLE_PATH_VARS.map((key) => env[key]).filter(absolute))];
+  const dirs = new Set<string>();
+  for (const target of [...files, opts.cwd, opts.homeDir, opts.workspaceRoot].filter(absolute)) {
+    // Stops at the filesystem root: `path.dirname('/')` is `'/'`, and `/` is nobody's to change.
+    for (let dir = path.dirname(target); dir !== path.dirname(dir); dir = path.dirname(dir)) dirs.add(dir);
+  }
+  const depth = (p: string) => p.split(path.sep).length;
+  return { files, dirs: [...dirs].sort((a, b) => depth(a) - depth(b) || a.localeCompare(b)) };
+}
+
+/**
+ * Widen one path's mode by `bits`, but only if the DRIVER owns it and it is actually there. A planned
+ * ancestor can be neither: `/home/runner` is the runner's (already traversable, and not ours to change),
+ * and an ancestor named by the environment need not exist. Skipping is the point — this step runs with NO
+ * sudo, so touching a path the driver does not own would only throw EPERM and kill the run.
+ */
+function grantMode(target: string, bits: number): void {
+  let mode: number;
+  try {
+    const stat = fs.statSync(target);
+    const uid = process.getuid?.();
+    if (uid !== undefined && stat.uid !== uid) return; // not ours to change
+    mode = stat.mode & 0o7777;
+  } catch {
+    return; // not there — nothing to hand over
+  }
+  fs.chmodSync(target, mode | bits);
 }
 
 /**
@@ -103,12 +164,14 @@ export function prepareRunAsDirs(opts: { workspaceRoot?: string; cwd: string; ho
 }
 
 /**
- * Perform the switch's filesystem half: `+x` on the directories the driver keeps (it owns them, so no
- * sudo is needed), then `chown` on the agent's own. In that order — the driver can only chmod what it
- * still owns. `exec` runs the privileged step, so the plan can be asserted without a sudoer.
+ * Perform the switch's filesystem half: `+x` on the directories the driver keeps and `o+r` on the files it
+ * keeps (it owns them, so no sudo is needed), then `chown` on the agent's own. In that order — the driver
+ * can only chmod what it still owns. `exec` runs the privileged step, so the plan can be asserted without
+ * a sudoer.
  */
 export function handOverRunAsDirs(user: string, dirs: RunAsDirs, exec: (argv: string[]) => void): void {
-  for (const dir of dirs.traverse) fs.chmodSync(dir, (fs.statSync(dir).mode & 0o7777) | 0o011);
+  for (const dir of dirs.traverse) grantMode(dir, 0o011);
+  for (const file of dirs.read ?? []) grantMode(file, 0o004);
   if (dirs.chown.length > 0) exec(chownArgv(user, dirs.chown));
 }
 
@@ -136,12 +199,22 @@ export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string;
   // adapter's own environment, since no adapter sets HOME and the driver's choice of home is the one
   // that must win; it is also the precondition for `--run-as`, whose chown covers exactly this directory.
   if (opts.homeDir) env.HOME = opts.homeDir;
+  // A child's environment must describe the directory it RUNS in. `spawn` sets the child's cwd, but not
+  // its `PWD`, and under `sudo -E` the DRIVER's `PWD`/`OLDPWD` ride across: Bun resolves its working
+  // directory from `$PWD` and lstats it, so opencode died on `EACCES … lstat '/home/runner/work/deploys/
+  // deploys'` — the checkout, the one directory run-as exists to keep it out of (runs 33778280906 /
+  // 33778294018). Unconditional: it is the right environment with or without the switch.
+  env.PWD = opts.cwd;
+  delete env.OLDPWD;
 
   // No `--run-as`, no sudo: a laptop run is untouched by any of this. Only argv changes —
   // the line filter, the redaction list and the environment are the same launch either way.
   let argv = inv.argv;
   if (opts.runAs) {
-    handOverRunAsDirs(opts.runAs, prepareRunAsDirs(opts), (chown) => {
+    const owned = prepareRunAsDirs(opts);
+    // Planned from the FINAL environment — the CA and outbox paths the child will be told to open.
+    const readable = readableForAgent(env, opts);
+    handOverRunAsDirs(opts.runAs, { ...owned, traverse: [...new Set([...readable.dirs, ...owned.traverse])], read: readable.files }, (chown) => {
       const done = spawnSync(chown[0], chown.slice(1), { stdio: 'inherit' });
       if (done.status !== 0) throw new Error(`--run-as ${opts.runAs}: \`${chown.join(' ')}\` exited ${String(done.status ?? done.signal ?? done.error?.message)}`);
     });

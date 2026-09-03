@@ -10,7 +10,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { chownArgv, handOverRunAsDirs, prepareRunAsDirs, runInvocation, wrapRunAs } from '../lib/spawn';
+import { chownArgv, handOverRunAsDirs, prepareRunAsDirs, readableForAgent, runInvocation, wrapRunAs } from '../lib/spawn';
 
 let dir: string;
 const paths = () => ({ stdoutPath: path.join(dir, 'transcript.jsonl'), stderrPath: path.join(dir, 'stderr.log') });
@@ -243,5 +243,56 @@ describe('readableForAgent', () => {
     expect(plan.dirs).toEqual(expect.arrayContaining(['/out', '/out/ca', '/out/server', '/tmp', '/tmp/ws']));
     expect(new Set(plan.dirs).size).toBe(plan.dirs.length);
     expect(plan.dirs.indexOf('/out')).toBeLessThan(plan.dirs.indexOf('/out/ca'));
+  });
+});
+
+/**
+ * `lib/mitm` points THREE variables (`CURL_CA_BUNDLE`, `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`) at one
+ * bundle, and a relative value would resolve against the DRIVER's working directory — the checkout the
+ * switch exists to keep out of reach.
+ */
+describe('readableForAgent deduplicates and refuses a relative path', () => {
+  it('names one bundle once, and skips a value that is not absolute', () => {
+    const plan = readableForAgent(
+      { CURL_CA_BUNDLE: '/out/ca/bundle.pem', SSL_CERT_FILE: '/out/ca/bundle.pem', REQUESTS_CA_BUNDLE: '/out/ca/bundle.pem', NODE_EXTRA_CA_CERTS: 'ca/ca.crt', EMAIL__DEV_OUTBOX_PATH: '' },
+      { cwd: '/tmp/ws/cwd' },
+    );
+    expect(plan.files).toEqual(['/out/ca/bundle.pem']);
+    expect(plan.dirs).toEqual(['/out', '/tmp', '/out/ca', '/tmp/ws']);
+  });
+});
+
+/**
+ * The performing half of the same fix: the driver widens what IT owns and steps over what it does not.
+ * There is no sudo in this step (the run has none to spend on a chmod), so an unowned path must be
+ * skipped rather than attempted — `chmod` on the runner's own `/home/runner` would throw EPERM and kill
+ * the run. `/usr` is root's on every runner and every laptop, which is the only unowned directory a test
+ * can name without sudo; the assertion vacates if the suite itself runs as root.
+ */
+describe('handOverRunAsDirs opens what the harness is told to read', () => {
+  it('chmods a planned file o+r and an owned ancestor o+x, and leaves a directory it does not own alone', () => {
+    const out = path.join(dir, 'out');
+    const caDir = path.join(out, 'ca');
+    const ca = path.join(caDir, 'ca.crt');
+    fs.mkdirSync(caDir, { recursive: true });
+    fs.writeFileSync(ca, 'cert');
+    fs.chmodSync(out, 0o700); // the out directory as the runner's umask leaves it
+    fs.chmodSync(caDir, 0o755);
+    fs.chmodSync(ca, 0o640);
+
+    const foreign = '/usr';
+    const foreignStat = fs.statSync(foreign);
+    const unowned = foreignStat.uid !== process.getuid!();
+    const missing = path.join(dir, 'not', 'there');
+
+    const ran: string[][] = [];
+    handOverRunAsDirs('agent', { chown: [], traverse: [...(unowned ? [foreign] : []), missing, out, caDir], read: [ca] }, (argv) => ran.push(argv));
+
+    expect(fs.statSync(ca).mode & 0o777).toBe(0o644); // o+r, nothing else granted
+    expect(fs.statSync(out).mode & 0o777).toBe(0o711);
+    expect(fs.statSync(caDir).mode & 0o777).toBe(0o755);
+    if (unowned) expect(fs.statSync(foreign).mode & 0o7777).toBe(foreignStat.mode & 0o7777);
+    expect(fs.existsSync(missing)).toBe(false); // planned ancestors are never created here
+    expect(ran).toEqual([]); // still no sudo for any of it
   });
 });
