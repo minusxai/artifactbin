@@ -30,7 +30,7 @@ import { IS_DEV } from '@/lib/config';
 import { parseJsx } from '@/lib/jsx';
 import { EMPTY_HELMET_CONTENT, splitHelmet, type HelmetContent } from '@/lib/story/helmet';
 import { fixHtmlNesting } from '@/lib/story/nesting';
-import { AUTHOR_SCRIPT_TYPE, STORY_HELLO_MESSAGE, STORY_ISLAND_ID, STORY_PAINTED_MESSAGE, STORY_ROOT_ID, type StoryIslandData, type StoryIslandDataflow, type StorySsrBundle } from '@/lib/story-runtime/contract';
+import { AUTHOR_SCRIPT_TYPE, STORY_HELLO_MESSAGE, STORY_VALUES_HOOK, STORY_ISLAND_ID, STORY_PAINTED_MESSAGE, STORY_ROOT_ID, type StoryIslandData, type StoryIslandDataflow, type StorySsrBundle } from '@/lib/story-runtime/contract';
 import type { JsxNode } from '@/lib/jsx';
 import type { RefDataMap } from '@/lib/story/ref-data';
 import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
@@ -284,7 +284,7 @@ export const HISTORY_PRELUDE =
   + 'n(null,"",location.pathname+(q?"?"+q:"")+location.hash)'
   + '}catch(g){}};'
   + 'Object.freeze(f);'
-  + 'Object.defineProperty(window,"__mxValues",{value:f,writable:false,configurable:false,enumerable:false});'
+  + `Object.defineProperty(window,"${STORY_VALUES_HOOK}",{value:f,writable:false,configurable:false,enumerable:false});`
   + '}catch(z){}})()';
 
 /**
