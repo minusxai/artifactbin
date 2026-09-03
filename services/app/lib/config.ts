@@ -174,6 +174,18 @@ export const AUTH_SECRET = env('AUTH', 'SECRET') ?? 'dev-only-secret-change-me';
 export const ARTIFACT_QUOTA_PER_TOKEN = Number(env('QUOTA', 'ARTIFACTS_PER_TOKEN') ?? '1000');
 
 /**
+ * THE BYTE CAP — how many stored bytes one importer may cause (uploaded images
+ * plus the URLs they were the first to import). 0 disables it.
+ *
+ * A separate question from ARTIFACT_QUOTA_PER_TOKEN, which counts ROWS and so
+ * bounds nothing expensive: a thousand artifacts can be five gigabytes or five
+ * kilobytes. URL-kept assets make bytes the thing worth capping, and the charge
+ * is the importer's, once — a second document naming an already-cached URL
+ * fetches nothing and stores nothing (lib/asset-quota).
+ */
+export const ASSETS_MAX_BYTES_PER_TOKEN = Number(env('ASSETS', 'MAX_BYTES_PER_TOKEN') ?? '536870912');
+
+/**
  * Anonymous-mint ceiling, per IP per hour — the abuse valve on the endpoints
  * that hand out a capability for free (`/api/tokens/anonymous`, `/api/start`,
  * and the login-code request).

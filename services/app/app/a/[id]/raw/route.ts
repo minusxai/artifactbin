@@ -30,6 +30,7 @@ import { ID_RE } from '@/lib/ids';
 import { loadDatasetRows } from '@/lib/story/dataset-store';
 import { ObjectUnavailable } from '@/lib/object-store';
 import { loadImage } from '@/lib/story/image-store';
+import { webAssetsForSource } from '@/lib/web-assets';
 import { buildStoryDocument } from '@/lib/story/document';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
@@ -244,7 +245,11 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       const search = new URL(request.url).search;
       const urlValues = declared ? readUrlValues(search, declared.flow) : {};
       const hasUrlValues = Object.keys(urlValues).length > 0;
-      const [refData, dataflow, creatorUsername, forkedFrom] = await Promise.all([
+      const [assetUrls, refData, dataflow, creatorUsername, forkedFrom] = await Promise.all([
+        // Our copies of the web URLs this document names (lib/web-assets): the
+        // served <img> points at them, with the box and the blur the row
+        // recorded, and the reader's browser reaches no third party.
+        webAssetsForSource(artifact.source),
         refDataForRow(artifact),
         chrome
           ? Promise.resolve(declared && hasUrlValues ? { ...declared, values: urlValues } : declared)
@@ -254,6 +259,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       ]);
       const runtime = storyRuntimeAssets();
       const html = await buildStoryDocument({
+        assetUrls,
         chrome,
         editable,
         commenting,

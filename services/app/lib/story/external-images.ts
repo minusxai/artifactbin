@@ -1,18 +1,24 @@
 /**
- * Publish-time image importing, the PURE half: which web URLs a document
- * carries in its IMAGE positions, and the rewrite once they have been
- * ingested. Position-scoped to `<img src>` and `<Video poster>` — the two
- * places refs.ts treats as image refs. A web URL anywhere else keeps whatever
- * meaning the validator gives it (`href` is navigation; other subresource
- * attrs stay rejected as non-self-contained).
+ * WHICH EXTERNAL URLs A DOCUMENT NAMES — the pure half of importing them.
  *
- * The DOOR (jsx-tier) runs collect → ingest (lib/artifacts imageIngestorFor)
- * → rewrite, before validation, so the validated and stored document already
- * reads `ref:<id>` — the same rewritten-not-rejected stance as the `<p><div>`
- * canonicalization, and for the same reason: agents emit web image URLs
- * constantly, and the echo teaches them what their document became.
+ * Two positions hold an image the document must own: `<img src>` and
+ * `<Video poster>`, the two places refs.ts treats as image refs. A web URL
+ * anywhere else keeps whatever meaning the validator gives it (`href` is
+ * navigation; other subresource attributes stay rejected as non-self-contained)
+ * — and ONE css position holds a face the document self-hosts:
+ * `@font-face { src: url(https://…) }` inside the author's own `<Helmet>`
+ * stylesheet.
+ *
+ * The DOOR (jsx-tier) collects these and IMPORTS them (lib/web-assets) before
+ * validation. It does NOT rewrite the source: the URL an author wrote stays in
+ * the stored document, and the serve-time mapping (lib/story/asset-url) points
+ * the served copy at ours. That replaced a rewrite to `ref:<id>`, which created
+ * an image artifact the agent never asked for and made the document's own
+ * markup unrecognisable to whoever wrote it.
  */
-import { parseJsx, serializeJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
+import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
+import { splitHelmet } from '@/lib/story/helmet';
+import { externalCssUrls } from '@/lib/story/asset-url';
 
 const WEB_URL = /^https?:\/\//i;
 
@@ -49,20 +55,24 @@ export function collectExternalImageUrls(source: string): string[] {
   return urls;
 }
 
-/** The same positions, each URL replaced by the ref it became. */
-export function rewriteExternalImages(source: string, refs: Map<string, string>): string {
-  if (refs.size === 0) return source;
+/**
+ * Every web URL in an `@font-face` `src` in the document's own stylesheet.
+ * Scoped to `@font-face` because that is the only external url() the door
+ * admits at all (lib/data/story/banned-css): everything else in authored CSS is
+ * still stripped, and a font is the one case where the alternative — silently
+ * dropping it — published a document that looked like it worked and had lost
+ * its typeface.
+ */
+export function collectExternalFontUrls(source: string): string[] {
   const parsed = parseJsx(source);
-  if (!parsed.ok) return source;
-  let touched = false;
-  walk(parsed.nodes, (el) => {
-    for (const { attr, value } of imageAttrsOf(el)) {
-      const id = refs.get(value);
-      if (id) {
-        attr.value = { static: true, json: `ref:${id}` };
-        touched = true;
-      }
-    }
-  });
-  return touched ? serializeJsx(parsed.nodes) : source;
+  if (!parsed.ok) return [];
+  const style = splitHelmet(parsed.nodes).content.style;
+  return style ? externalCssUrls(style) : [];
+}
+
+/** Both kinds at once, in the shape the importer and the serve-time lookup both want. */
+export function collectExternalAssetUrls(source: string): { images: string[]; fonts: string[]; all: string[] } {
+  const images = collectExternalImageUrls(source);
+  const fonts = collectExternalFontUrls(source);
+  return { images, fonts, all: [...new Set([...images, ...fonts])] };
 }

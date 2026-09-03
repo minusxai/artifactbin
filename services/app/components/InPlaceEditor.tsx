@@ -37,6 +37,7 @@ import { useLiveArtifact } from '@/lib/story/use-live-artifact';
 import { useInPlaceEdit } from '@/lib/story/use-in-place-edit';
 import { useArtifactVersions, type ArtifactVersionSnapshot } from '@/lib/story/use-versions';
 import { storyUpdateParts } from '@/lib/story/update-parts';
+import { isWebUrl } from '@/lib/story/asset-url';
 import { imageRawUrl, type RefDataMap } from '@/lib/story/ref-data';
 import { bodyPathToSourcePath } from '@/lib/story/edit-compose';
 import { insertImageInJsx, removeJsxNodeAtPath } from '@/lib/data/story/jsx-edit';
@@ -48,6 +49,21 @@ import { storyThemeDefaultMode } from '@/lib/data/story/story-themes';
 import type { DataflowState } from '@/lib/story/dataflow';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import type { StoryEditSelection, StoryIslandDataflow } from '@/lib/story-runtime/contract';
+
+/**
+ * WHICH EXTERNAL URLs THE SERVER HOLDS, from the editor's side: all of them.
+ *
+ * The page cannot see the `web_assets` rows, and it does not need to. Every
+ * literal URL in a stored document was imported by the write that stored it
+ * (the publish door runs on the edit path too), so mapping every web URL to
+ * `/assets/<hash>` is right for everything the editor is looking at. The one
+ * case it gets wrong is a URL whose import FAILED — which the served document
+ * draws as a broken image either way — and the next frame from the server
+ * corrects it. Not mapping at all is the worse trade: every external image in
+ * the document would vanish the moment a structural edit pushed a tree, because
+ * the document's own CSP will not load an off-origin `<img>`.
+ */
+const HELD_ASSETS = isWebUrl;
 
 
 // Monaco is multiple megabytes and belongs to `code` mode alone; the module
@@ -173,7 +189,7 @@ export default function InPlaceEditor({
    * can never describe a different tree than a reload of the same source would.
    */
   const showInDocument = useCallback((next: string, over?: { compiledCss?: string | null; colorMode?: 'light' | 'dark'; refData?: RefDataMap }) => {
-    const parts = storyUpdateParts(next);
+    const parts = storyUpdateParts(next, HELD_ASSETS);
     if (!parts) return;   // mid-keystroke source that does not parse yet
     const declarationsChanged = parts.declarations !== pushedDeclarations.current;
     frameRef.current?.contentWindow?.postMessage({
@@ -547,7 +563,7 @@ export default function InPlaceEditor({
             // The document carries its own design attributes; tell it directly
             // rather than making it wait for the save to come back around. With
             // no author pick the MODE follows the new theme's declared default.
-            frameRef.current?.contentWindow?.postMessage({ type: 'mx:document', nodes: storyUpdateParts(sourceRef.current)?.nodes ?? [], theme: t, colorMode: colorMode ?? storyThemeDefaultMode(t) ?? 'light' }, '*');
+            frameRef.current?.contentWindow?.postMessage({ type: 'mx:document', nodes: storyUpdateParts(sourceRef.current, HELD_ASSETS)?.nodes ?? [], theme: t, colorMode: colorMode ?? storyThemeDefaultMode(t) ?? 'light' }, '*');
           }}
         />
         <TemplateChip template={art.template} />

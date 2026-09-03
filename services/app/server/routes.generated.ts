@@ -47,12 +47,13 @@ import * as r43 from '@/app/api/tokens/claim/route';
 import * as r44 from '@/app/api/tokens/claimable/route';
 import * as r45 from '@/app/api/tokens/reject/route';
 import * as r46 from '@/app/api/tokens/route';
-import * as r47 from '@/app/docs/[[...path]]/route';
-import * as r48 from '@/app/health/route';
-import * as r49 from '@/app/llms.txt/route';
-import * as r50 from '@/app/mcp/route';
-import * as r51 from '@/app/tiles/[...tile]/route';
-import * as r52 from '@/app/webfonts/[file]/route';
+import * as r47 from '@/app/assets/[hash]/route';
+import * as r48 from '@/app/docs/[[...path]]/route';
+import * as r49 from '@/app/health/route';
+import * as r50 from '@/app/llms.txt/route';
+import * as r51 from '@/app/mcp/route';
+import * as r52 from '@/app/tiles/[...tile]/route';
+import * as r53 from '@/app/webfonts/[file]/route';
 
 export interface RouteEntry { path: string; dir: string; methods: string[]; module: Record<string, unknown> }
 export const ROUTES: RouteEntry[] = [
@@ -103,10 +104,11 @@ export const ROUTES: RouteEntry[] = [
   { path: "/api/tokens/claimable", dir: "/api/tokens/claimable", methods: ["POST"], module: r44 },
   { path: "/api/tokens/reject", dir: "/api/tokens/reject", methods: ["POST"], module: r45 },
   { path: "/api/tokens", dir: "/api/tokens", methods: ["POST"], module: r46 },
-  { path: "/docs/:path{.*}?", dir: "/docs/[[...path]]", methods: ["GET"], module: r47 },
-  { path: "/health", dir: "/health", methods: ["GET"], module: r48 },
-  { path: "/llms.txt", dir: "/llms.txt", methods: ["GET"], module: r49 },
-  { path: "/mcp", dir: "/mcp", methods: ["GET","POST","DELETE"], module: r50 },
-  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r51 },
-  { path: "/webfonts/:file", dir: "/webfonts/[file]", methods: ["GET"], module: r52 },
+  { path: "/assets/:hash", dir: "/assets/[hash]", methods: ["GET"], module: r47 },
+  { path: "/docs/:path{.*}?", dir: "/docs/[[...path]]", methods: ["GET"], module: r48 },
+  { path: "/health", dir: "/health", methods: ["GET"], module: r49 },
+  { path: "/llms.txt", dir: "/llms.txt", methods: ["GET"], module: r50 },
+  { path: "/mcp", dir: "/mcp", methods: ["GET","POST","DELETE"], module: r51 },
+  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r52 },
+  { path: "/webfonts/:file", dir: "/webfonts/[file]", methods: ["GET"], module: r53 },
 ];

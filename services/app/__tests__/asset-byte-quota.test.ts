@@ -17,16 +17,17 @@ import { describe, expect, it, beforeEach } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
 import { mintToken } from '@/lib/tokens';
 import { getDb } from '@/lib/db';
+import { createUser } from '@/lib/users';
 import { assetBytesForToken, assetByteQuotaExceeded, setAssetByteQuotaForTests } from '@/lib/asset-quota';
 
 useAppHarness();
 
-const seedWebAsset = async (tokenId: string, url: string, bytes: number) => {
+const seedWebAsset = async (tokenId: string, url: string, bytes: number, userId: string | null = null) => {
   const db = await getDb();
   await db.query(
-    `insert into web_assets (url_hash, url, object_key, content_type, bytes, fetched_by_token_id)
-     values ($1,$2,$3,$4,$5,$6) on conflict (url_hash) do nothing`,
-    [`h${url}`.padEnd(64, '0').slice(0, 64), url, 'webasset/x', 'image/webp', bytes, tokenId],
+    `insert into web_assets (url_hash, url, object_key, content_type, bytes, fetched_by_token_id, fetched_by_user_id)
+     values ($1,$2,$3,$4,$5,$6,$7) on conflict (url_hash) do nothing`,
+    [`h${url}`.padEnd(64, '0').slice(0, 64), url, 'webasset/x', 'image/webp', bytes, tokenId, userId],
   );
 };
 
@@ -56,5 +57,38 @@ describe('asset byte quota', () => {
     await seedWebAsset(a.id, 'https://a.example/paid.png', 2_000_000);
     expect(await assetByteQuotaExceeded(a.id)).toBe(true);
     expect(await assetByteQuotaExceeded(b.id)).toBe(false);
+  });
+});
+
+/**
+ * R9 — a per-TOKEN cap is bypassed by minting a second token, because a claimed
+ * token already acts account-wide everywhere else. So the cap follows the
+ * ACCOUNT when there is one, and the token only when there is not (an anonymous
+ * token has no account to key on).
+ */
+describe('who the cap belongs to', () => {
+  beforeEach(() => setAssetByteQuotaForTests(null));
+
+  it('two tokens of one account share one cap', async () => {
+    const user = await createUser({ email: 'mxmx_test_quota@example.com' });
+    const first = await mintToken('a', user.id);
+    const second = await mintToken('b', user.id);
+    setAssetByteQuotaForTests(1_000_000);
+
+    await seedWebAsset(first.id, 'https://a.example/acct.png', 2_000_000, user.id);
+    expect(await assetBytesForToken(first.id)).toBe(2_000_000);
+    // The second token never imported anything, and is refused all the same.
+    expect(await assetBytesForToken(second.id)).toBe(2_000_000);
+    expect(await assetByteQuotaExceeded(second.id)).toBe(true);
+  });
+
+  it('an anonymous token is keyed on itself, and is unaffected by an account over its cap', async () => {
+    const user = await createUser({ email: 'mxmx_test_quota2@example.com' });
+    const owned = await mintToken('owned', user.id);
+    const anon = await mintToken('anon');
+    setAssetByteQuotaForTests(1_000_000);
+    await seedWebAsset(owned.id, 'https://a.example/theirs.png', 2_000_000, user.id);
+    expect(await assetByteQuotaExceeded(owned.id)).toBe(true);
+    expect(await assetByteQuotaExceeded(anon.id)).toBe(false);
   });
 });

@@ -1,12 +1,16 @@
 /**
- * The pure half of publish-time image importing: find the web URLs a document
- * carries in its image positions, and rewrite them to the refs they became.
- * Position-scoped on purpose — `<img src>` and `<Video poster>` are the two
- * places refs.ts already treats as image refs; a web URL anywhere else stays
- * whatever the validator says it is.
+ * The pure half of importing: WHICH external URLs a document names. Positions
+ * are scoped on purpose — `<img src>` and `<Video poster>` are the two places
+ * refs.ts already treats as image refs, and an `@font-face` `src` is the one
+ * css position that may name one; a web URL anywhere else stays whatever the
+ * validator says it is.
+ *
+ * There is no rewrite half any more: the URL an author wrote STAYS in the
+ * stored document (lib/web-assets imports the bytes, lib/story/asset-url points
+ * the served copy at ours).
  */
 import { describe, expect, it } from 'vitest';
-import { collectExternalImageUrls, rewriteExternalImages } from '../external-images';
+import { collectExternalAssetUrls, collectExternalFontUrls, collectExternalImageUrls } from '../external-images';
 
 describe('collectExternalImageUrls', () => {
   it('finds https URLs on img src and Video poster, deduplicated, in order', () => {
@@ -38,24 +42,27 @@ describe('collectExternalImageUrls', () => {
   });
 });
 
-describe('rewriteExternalImages', () => {
-  it('replaces each URL with its ref and leaves everything else byte-relevant intact', () => {
-    const src = '<div className="p-4"><img src="https://a.example/one.png" alt="a" /><Video src="https://www.youtube.com/watch?v=x" poster="https://a.example/two.jpg" /></div>';
-    const out = rewriteExternalImages(src, new Map([
-      ['https://a.example/one.png', 'abc123'],
-      ['https://a.example/two.jpg', 'def456'],
-    ]));
-    expect(out).toContain('src="ref:abc123"');
-    expect(out).toContain('poster="ref:def456"');
-    expect(out).not.toContain('a.example');
-    expect(out).toContain('className="p-4"');
-    expect(out).toContain('alt="a"');
-    // The Video SRC is an allowlisted embed, not an image — untouched.
-    expect(out).toContain('youtube.com/watch');
+describe('collectExternalFontUrls', () => {
+  const doc = (css: string) => `<Helmet><style>{\`${css}\`}</style></Helmet><p>x</p>`;
+
+  it('finds an @font-face src in the document\'s own stylesheet', () => {
+    expect(collectExternalFontUrls(doc("@font-face{font-family:F;src:url(https://f.example/a.woff2) format('woff2')}")))
+      .toEqual(['https://f.example/a.woff2']);
   });
 
-  it('touches nothing when the map is empty', () => {
-    const src = '<div><img src="ref:abc123" /></div>';
-    expect(rewriteExternalImages(src, new Map())).toBe(src);
+  it('finds nothing in a document with no stylesheet, and nothing in a local url', () => {
+    expect(collectExternalFontUrls('<p>x</p>')).toEqual([]);
+    expect(collectExternalFontUrls(doc('@font-face{src:url(/local.woff2)}'))).toEqual([]);
+  });
+});
+
+describe('collectExternalAssetUrls', () => {
+  it('is both kinds, deduplicated', () => {
+    const src = `<Helmet><style>{\`@font-face{src:url(https://f.example/a.woff2)}\`}</style></Helmet><img src="https://a.example/one.png" />`;
+    expect(collectExternalAssetUrls(src)).toEqual({
+      images: ['https://a.example/one.png'],
+      fonts: ['https://f.example/a.woff2'],
+      all: ['https://a.example/one.png', 'https://f.example/a.woff2'],
+    });
   });
 });

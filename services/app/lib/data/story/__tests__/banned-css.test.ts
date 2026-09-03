@@ -62,9 +62,31 @@ describe('sanitizeCssText — declaration-level strip', () => {
     expect(out).not.toContain('y.png');
   });
 
-  it('strips src() function tokens with external targets (e.g. @font-face src)', () => {
+  /**
+   * R7 — the ONE relaxation: a face a document self-hosts.
+   *
+   * This used to be stripped, so a publish answered 201 and the document
+   * quietly lost its typeface. The URL is now IMPORTED at publish
+   * (lib/web-assets) and rewritten to our own origin on the way out
+   * (lib/story/asset-url), so keeping it here costs the reader nothing: the
+   * served CSS never names the upstream host, and a face we failed to import is
+   * refused by the document's own `font-src 'self' data:` anyway.
+   *
+   * Narrow on purpose: `src` INSIDE an `@font-face`, and nothing else.
+   */
+  it('keeps an @font-face src url — the document self-hosting a face', () => {
     const out = sanitizeCssText('@font-face{font-family:X;src:url(https://cdn.example/x.woff2)}');
-    expect(out).not.toContain('cdn.example');
+    expect(out).toContain('cdn.example');
+  });
+
+  it('…and nothing else in that block, nor a src outside one', () => {
+    expect(sanitizeCssText('@font-face{font-family:X;background:url(https://evil.example/x.png)}'))
+      .not.toContain('evil.example');
+    expect(sanitizeCssText('.a{src:url(https://evil.example/x.woff2)}')).not.toContain('evil.example');
+    expect(sanitizeCssText('@media print{.a{src:url(https://evil.example/x.woff2)}}')).not.toContain('evil.example');
+    // The face still may not reach for anything but a font url.
+    expect(sanitizeCssText('@font-face{font-family:X;src:url(https://cdn.example/x.woff2)}.b{background:url(https://evil.example/y.png)}'))
+      .not.toContain('evil.example');
   });
 
   it('is not fooled by CSS escapes or case tricks', () => {

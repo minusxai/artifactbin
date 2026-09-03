@@ -16,6 +16,7 @@ import { json } from '../http';
 import { publishJsx } from './jsx-tier';
 import { ingestDataset, IngestError } from '@/lib/data-ingest';
 import { ingestImageFromUrl } from '@/lib/web-ingest/image';
+import type { AssetWarning, WebAssetKind } from '@/lib/web-assets';
 import { publishDataset, publishVizRecipe, publishImage } from './data-tiers';
 
 
@@ -39,6 +40,13 @@ export interface StoredContent {
   meta: Record<string, unknown>;
   /** Title derived from the source's first heading — used only when the body has no title. */
   derivedTitle: string | null;
+  /**
+   * External URLs the document names that could NOT be imported (lib/web-assets).
+   * Never a refusal: the document publishes and the reply says what failed and
+   * how to fix it, because losing a whole document over one dead image link is
+   * the worse answer. Absent when everything imported.
+   */
+  warnings?: AssetWarning[];
 }
 
 function tooLarge(value: string): Response | null {
@@ -61,12 +69,12 @@ export interface ContentInputCtx {
   /** Resolve a `ref:<id>` against the caller's own artifacts. Absent ⇒ ref checks skipped (preview). */
   loadRef?: import('./refs').RefLoader;
   /**
-   * Import one external image URL as an image artifact under the caller's
-   * identity, answering its id — lib/artifacts imageIngestorFor. Absent ⇒ the
-   * publish door leaves web image URLs in place unfetched (preview: a draft
-   * that previews must publish, and the transform belongs to publish alone).
+   * Import one external URL into the global asset cache under the caller's
+   * identity (lib/artifacts assetImporterFor), answering null on success or the
+   * warning to report. Absent ⇒ the door fetches nothing (preview: a draft that
+   * previews must publish, and importing belongs to publish alone).
    */
-  ingestImage?: (url: string) => Promise<{ id: string } | Response>;
+  importAsset?: (url: string, kind: WebAssetKind) => Promise<AssetWarning | null>;
   /**
    * Resolve one font family the document names, answering a Response only when
    * it cannot be had. Absent ⇒ no resolution (preview): the door still

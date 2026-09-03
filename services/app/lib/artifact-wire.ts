@@ -10,7 +10,7 @@
  * answer with the same shape (`edit_id` and refresh `warnings` included).
  */
 import {
-  DATASET_ACCESS, SHARE_ROLES, artifactQuotaExceeded, canWriteDataset, createArtifact, fontResolver, getArtifactFor, imageIngestorFor, isVersionConflict, refLoaderForActor, refreshWarningsFor, replaceArtifactFor, writerFor,
+  DATASET_ACCESS, SHARE_ROLES, artifactQuotaExceeded, canWriteDataset, createArtifact, fontResolver, getArtifactFor, assetImporterFor, isVersionConflict, refLoaderForActor, refreshWarningsFor, replaceArtifactFor, writerFor,
   type ArtifactInput, type ArtifactRow, type ArtifactSummary, type DatasetAccess, type EditInput, type EditOutcome, type ReplaceOpts, type ShareEntry, type ShareRole, type TokenActor, type Visibility,
 } from '@/lib/artifacts';
 import { actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type AnnotationAction, type AnnotationAuthor } from '@/lib/annotations';
@@ -306,7 +306,7 @@ export async function replaceArtifactWithBody(
   const current = await getArtifactFor(actor, id);
   if (!current) return json({ error: 'not_found' }, 404);
   const owner = writerFor(current);
-  const parsed = await parseContentInput(body, { loadRef: refLoaderForActor(owner), ingestImage: imageIngestorFor(owner.tokenId, owner.userId), resolveFont: fontResolver() });
+  const parsed = await parseContentInput(body, { loadRef: refLoaderForActor(owner), importAsset: assetImporterFor(owner.tokenId, owner.userId), resolveFont: fontResolver() });
   if (parsed instanceof Response) return parsed;
 
   const visibility = parseVisibility(body, !!actor.userId);
@@ -330,9 +330,17 @@ export async function replaceArtifactWithBody(
   if (isVersionConflict(row)) return json({ error: 'version_conflict', currentVersion: row.currentVersion }, 409);
   if (!row) return json({ error: 'not_found' }, 404);
 
-  // Dataset/viz refresh: warn about dependents whose bindings no longer
-  // resolve (warnings, never blocks).
-  const warnings = await refreshWarningsFor(actor, row);
+  /*
+   * WARNINGS — one array, two kinds, both "this write went through and here is
+   * what you should know": an external URL that would not import
+   * (lib/web-assets, carrying `code`/`url`/`fix`) and a dependent document
+   * whose bindings this dataset write broke (carrying `id`/`title`/`details`).
+   * Neither ever blocks the write.
+   */
+  const warnings = [
+    ...(parsed.warnings ?? []),
+    ...await refreshWarningsFor(actor, row),
+  ];
   return json({
     id: row.id, url: `${base}/a/${row.id}`, version: row.version, visibility: row.visibility,
     // A replace moves the head pointer — hand back the new one so the caller
@@ -362,7 +370,7 @@ export async function createArtifactFromBody(
   request: Request,
 ): Promise<Response> {
   if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded' }, 403);
-  const parsed = await parseContentInput(body, { loadRef: refLoaderForActor(actor), ingestImage: imageIngestorFor(actor.tokenId, actor.userId), resolveFont: fontResolver() });
+  const parsed = await parseContentInput(body, { loadRef: refLoaderForActor(actor), importAsset: assetImporterFor(actor.tokenId, actor.userId), resolveFont: fontResolver() });
   if (parsed instanceof Response) return parsed;
   const visibility = parseVisibility(body, !!actor.userId);
   if (visibility instanceof Response) return visibility;
@@ -379,7 +387,12 @@ export async function createArtifactFromBody(
     ...(access ? { access } : {}),
     ...(folder !== undefined ? { folder } : {}),
   });
-  return json(createdArtifactWire(row, base, body.markup), 201);
+  return json({
+    ...createdArtifactWire(row, base, body.markup),
+    // External URLs that would not import (lib/web-assets): the document is
+    // published, one asset is missing, and the author is told which and why.
+    ...(parsed.warnings?.length ? { warnings: parsed.warnings } : {}),
+  }, 201);
 }
 
 /**
