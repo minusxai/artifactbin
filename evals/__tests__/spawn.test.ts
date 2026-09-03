@@ -219,3 +219,29 @@ describe('handOverRunAsDirs', () => {
     expect(ran).toEqual([]);
   });
 });
+
+/**
+ * Measured on a CI runner under --run-as (deploys runs 33778280906 / 33778294018): opencode died on
+ * `lstat '/home/runner/work/deploys/deploys'` — the checkout, reached only through the driver's inherited $PWD —
+ * and both harnesses could not read the proxy CA the environment pointed them at. Seeded RED by the orchestrator.
+ */
+describe("the child's environment describes its own workspace", () => {
+  it('PWD is the cwd and OLDPWD is gone', async () => {
+    const r = await runInvocation(node('console.log(JSON.stringify([process.env.PWD, process.env.OLDPWD ?? null]))'), { cwd: dir, baseEnv: { ...process.env, PWD: '/somewhere/else', OLDPWD: '/elsewhere' }, timeoutMs: 20_000, ...paths() });
+    expect(JSON.parse(r.stdout.trim())).toEqual([dir, null]);
+  });
+});
+
+describe('readableForAgent', () => {
+  it('lists every file the environment tells the harness to read, and their ancestors deepest-last, never /', () => {
+    const plan = readableForAgent(
+      { NODE_EXTRA_CA_CERTS: '/out/ca/ca.crt', CURL_CA_BUNDLE: '/out/ca/bundle.pem', EMAIL__DEV_OUTBOX_PATH: '/out/server/dev-mail.jsonl', UNRELATED: '/nope' },
+      { cwd: '/tmp/ws/cwd', homeDir: '/tmp/ws/home', workspaceRoot: '/tmp/ws' },
+    );
+    expect(plan.files.sort()).toEqual(['/out/ca/bundle.pem', '/out/ca/ca.crt', '/out/server/dev-mail.jsonl']);
+    expect(plan.dirs).not.toContain('/');
+    expect(plan.dirs).toEqual(expect.arrayContaining(['/out', '/out/ca', '/out/server', '/tmp', '/tmp/ws']));
+    expect(new Set(plan.dirs).size).toBe(plan.dirs.length);
+    expect(plan.dirs.indexOf('/out')).toBeLessThan(plan.dirs.indexOf('/out/ca'));
+  });
+});
