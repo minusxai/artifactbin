@@ -71,22 +71,45 @@ export function chownArgv(user: string, dirs: string[]): string[] {
   return ['sudo', '-n', 'chown', '-R', user, ...dirs];
 }
 
+/** The two ways a directory takes part in the switch: the agent OWNS it, or the driver keeps it and merely lets the agent walk through. */
+export interface RunAsDirs {
+  /** The agent's own directories — its cwd and its config home. Handed over with `chownArgv`. */
+  chown: string[];
+  /** Directories the DRIVER keeps and only makes traversable (`+x`), because it still writes inside them. */
+  traverse: string[];
+}
+
 /**
- * The directories that must exist and change hands before the switch — created here, so ownership
- * moves at spawn time rather than at creation, when the driver still needs to write to them.
+ * The directories that must exist before the switch, split by who ends up owning them — created here,
+ * so ownership moves at spawn time rather than at creation, when the driver still needs to write to them.
  *
- * The workspace ROOT is in the list, and that is the whole fix: `createWorkspace` uses `mkdtemp`,
- * which yields a 0700 directory owned by the DRIVER, so chowning only the cwd and the home beneath it
- * left the other user unable to traverse into either. Measured on production run 33758791539
- * (`--run-as agent`, ubuntu-latest): every harness died before its first turn —
- * `EACCES: permission denied, mkdir '/tmp/artifact-eval-pi-…/home'`,
- * `EACCES … mkdir '…/home/xdg-data/opencode'`, and for the baseline probe
- * `EACCES … mkdir '…/eval-out/baseline/home'`.
+ * The agent gets exactly its own directories. The workspace ROOT is NOT one of them: `createWorkspace`
+ * uses `mkdtemp`, so the root is a 0700 directory owned by the DRIVER, which keeps writing the run's
+ * transcript, stderr and result beside the agent's cwd. Chowning it away broke that — measured on
+ * production runs 33774034598 / 33774046050 (`--run-as agent`, ubuntu-latest), where the isolation proofs
+ * passed and the driver then died on its own output file:
+ * `Error: EACCES: permission denied, open '/home/runner/work/_temp/eval-out/baseline/transcript.jsonl'`.
+ *
+ * Leaving the root alone is what broke the run BEFORE that (run 33758791539: every harness died with
+ * `EACCES … mkdir '/tmp/artifact-eval-pi-…/home'`), so the root is not simply dropped: it goes in
+ * `traverse`, and `+x` for group and other is all the agent needs to reach its own cwd and home beneath it.
  */
-export function prepareRunAsDirs(opts: { workspaceRoot?: string; cwd: string; homeDir?: string }): string[] {
-  const dirs = [...new Set([...(opts.workspaceRoot ? [opts.workspaceRoot] : []), opts.cwd, ...(opts.homeDir ? [opts.homeDir] : [])])];
-  for (const dir of dirs) fs.mkdirSync(dir, { recursive: true });
-  return dirs;
+export function prepareRunAsDirs(opts: { workspaceRoot?: string; cwd: string; homeDir?: string }): RunAsDirs {
+  const chown = [...new Set([opts.cwd, ...(opts.homeDir ? [opts.homeDir] : [])])];
+  // A root that IS the agent's cwd is already handed over; chmodding it after the chown would fail — the driver no longer owns it.
+  const traverse = opts.workspaceRoot && !chown.includes(opts.workspaceRoot) ? [opts.workspaceRoot] : [];
+  for (const dir of [...traverse, ...chown]) fs.mkdirSync(dir, { recursive: true });
+  return { chown, traverse };
+}
+
+/**
+ * Perform the switch's filesystem half: `+x` on the directories the driver keeps (it owns them, so no
+ * sudo is needed), then `chown` on the agent's own. In that order — the driver can only chmod what it
+ * still owns. `exec` runs the privileged step, so the plan can be asserted without a sudoer.
+ */
+export function handOverRunAsDirs(user: string, dirs: RunAsDirs, exec: (argv: string[]) => void): void {
+  for (const dir of dirs.traverse) fs.chmodSync(dir, (fs.statSync(dir).mode & 0o7777) | 0o011);
+  if (dirs.chown.length > 0) exec(chownArgv(user, dirs.chown));
 }
 
 /** First executable named `cmd` on `PATH`. Named error, never a bare fallback: a bare name is exactly what sudo's secure_path would lose. */
@@ -118,9 +141,10 @@ export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string;
   // the line filter, the redaction list and the environment are the same launch either way.
   let argv = inv.argv;
   if (opts.runAs) {
-    const chown = chownArgv(opts.runAs, prepareRunAsDirs(opts));
-    const done = spawnSync(chown[0], chown.slice(1), { stdio: 'inherit' });
-    if (done.status !== 0) throw new Error(`--run-as ${opts.runAs}: \`${chown.join(' ')}\` exited ${String(done.status ?? done.signal ?? done.error?.message)}`);
+    handOverRunAsDirs(opts.runAs, prepareRunAsDirs(opts), (chown) => {
+      const done = spawnSync(chown[0], chown.slice(1), { stdio: 'inherit' });
+      if (done.status !== 0) throw new Error(`--run-as ${opts.runAs}: \`${chown.join(' ')}\` exited ${String(done.status ?? done.signal ?? done.error?.message)}`);
+    });
     argv = wrapRunAs(inv, opts.runAs, (cmd) => resolveOnPath(cmd, env.PATH)).argv;
   }
 
