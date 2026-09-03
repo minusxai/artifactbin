@@ -66,6 +66,16 @@ describe('the publishing skill', () => {
     expect(quote).toContain('selected');
     expect(doc).toContain('quote_found');
   });
+  /*
+   * ADDED (F8). Forking became an AGENT verb, and the thing an agent needs is
+   * not the address — the registry renders that — but WHEN to reach for it:
+   * the create/edit loop is where a document that already exists gets adapted.
+   */
+  it('§F8 teaches forking as the way to adapt a document you can read', () => {
+    expect(doc).toContain(`POST ${BASE}/api/artifacts/<id>/fork`);
+    expect(doc.replace(/\s+/g, ' ')).toContain('To adapt a document you can read, fork it, then edit the copy');
+    expect(doc).toContain('"forked_from"');
+  });
   it('§1 error table carries image_fetch_failed and dataset_read_only', () => {
     expect(doc).toContain('image_fetch_failed');
     expect(doc).toContain('dataset_read_only');
@@ -94,6 +104,20 @@ describe('the markup skill', () => {
   });
   it('§1.5 the CSP paragraph names the four endpoints', () => {
     expect(doc).not.toContain('the one URL its CSP admits');
+  });
+  /*
+   * ADDED (F8 round 2). The JSX MICRO-RULES — a tag closes, a comment is
+   * `{/* … *\/}`, and there is no document shell — were carried by
+   * publishing.md's orientation bullet and were DELETED with it rather than
+   * folded into their owner. They are the two mistakes an HTML-habit model
+   * makes on its first write (`<br>`, `<!-- -->`), and the only thing left to
+   * catch them was a 400 round trip. They live in markup.md, which owns the
+   * vocabulary.
+   */
+  it('§F8 the JSX micro-rules are documented: closing tags, JSX comments, no document shell', () => {
+    expect(doc).toContain('every tag closes (`<br />`)');
+    expect(doc).toContain('{/* … */}');
+    expect(doc).toContain('`<html>`');
   });
 });
 

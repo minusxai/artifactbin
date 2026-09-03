@@ -379,22 +379,34 @@ export async function createArtifactFromBody(
     ...(access ? { access } : {}),
     ...(folder !== undefined ? { folder } : {}),
   });
-  const meta = parsed.meta as { columns?: unknown; rowCount?: unknown; slots?: unknown };
-  return json({
+  return json(createdArtifactWire(row, base, body.markup), 201);
+}
+
+/**
+ * WHAT A FRESHLY MADE ARTIFACT ANSWERS — the create reply, built from the
+ * stored row alone so every door that makes one speaks it: `create_artifact`
+ * and `fork_artifact` (which adds `forked_from` to it). An agent's next call
+ * after either is the same edit loop, so the two replies must not differ in
+ * shape — a fork that answered its own vocabulary would make the copy a
+ * second thing to learn.
+ */
+export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: unknown): Record<string, unknown> {
+  const meta = row.meta as { columns?: unknown; rowCount?: unknown; slots?: unknown };
+  return {
     id: row.id, url: `${base}/a/${row.id}`, version: row.version, visibility: row.visibility,
     // The read-proof for the edit protocol: an agent can start editing straight
     // after create, without a round trip to learn the head pointer.
     edit_id: row.edit_id,
-    format: row.format, title: row.title,
-    ...markupEcho(body.markup, row.source),
+    format: row.format, title: row.title, folder: row.folder,
+    ...markupEcho(sentMarkup, row.source),
     // Echoes teach the agent its bindable surface without a second round trip.
-    ...(parsed.format === 'dataset' ? datasetCreateFields(row.id, meta.columns, meta.rowCount, meta as { totalRows?: number; truncated?: boolean }, row.access) : {}),
-    ...(parsed.format === 'viz' ? { slots: meta.slots } : {}),
+    ...(row.format === 'dataset' ? datasetCreateFields(row.id, meta.columns, meta.rowCount, meta as { totalRows?: number; truncated?: boolean }, row.access) : {}),
+    ...(row.format === 'viz' ? { slots: meta.slots } : {}),
     // Where the BYTES are, for a caller that must render the image before it
     // has re-read the document (lib/story/ref-data owns the shape, so this
     // cannot drift from the render path).
-    ...(parsed.format === 'image' ? { rawUrl: imageRawUrl(row.id, row.version) } : {}),
-  }, 201);
+    ...(row.format === 'image' ? { rawUrl: imageRawUrl(row.id, row.version) } : {}),
+  };
 }
 
 /** Body → EditInput; null = malformed (both content forms, neither change nor meta, wrong types). */

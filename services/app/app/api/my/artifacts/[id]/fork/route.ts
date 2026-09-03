@@ -8,11 +8,16 @@ import { canonicalArtifactPath } from '@/lib/urls';
 import { baseUrl, json } from '@/lib/http';
 
 /**
- * POST /api/my/artifacts/:id/fork — "make this mine".
+ * POST /api/my/artifacts/:id/fork — "make this mine", from the PAGE.
  *
- * A BROWSER credential only: forking is a person's act from the page, not an
- * agent verb, which is why it is deliberately absent from the operations
- * registry (and so from the bearer routes and MCP) in this phase.
+ * Forking has two doors over one `forkArtifact`: this one, which a person
+ * clicks (a session credential, no overrides — the copy opens in the editor,
+ * where renaming and filing it are the next thing they do), and the
+ * `fork_artifact` OPERATION (lib/operations/registry), which a bearer agent
+ * calls and which carries the title/visibility/folder overrides an agent has
+ * no editor to apply. The two differ in exactly three ways — the credential,
+ * the 409 below, and the shape of the answer — and in nothing else, because
+ * everything a fork MEANS lives in `forkArtifact`.
  *
  * Reach is READ, not ownership — you fork what you can see, so the miss is the
  * uniform 404 for an id that is unknown AND for one this viewer may not read;
@@ -22,7 +27,8 @@ import { baseUrl, json } from '@/lib/http';
  *
  * The copy is owned by the session's own account token (ensureUserToken, as
  * every other browser create does), and the URL handed back is the canonical
- * one for its NEW owner.
+ * one for its NEW owner — where the operation answers the create reply, since
+ * an agent's next call is the edit loop rather than a navigation.
  */
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const actor = await browserActor(request);

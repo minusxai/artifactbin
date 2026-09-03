@@ -142,7 +142,7 @@ describe('MCP server', () => {
     const res = await rpc(t.token, { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
     const body = (await res.json()) as { result: { tools: Array<{ name: string; description?: string }> } };
     const names = body.result.tools.map((x) => x.name);
-    for (const n of ['create_artifact', 'update_artifact', 'edit_artifact', 'get_artifact', 'annotate', 'list_artifacts', 'list_versions', 'get_version', 'revert_artifact', 'delete_artifact']) {
+    for (const n of ['create_artifact', 'update_artifact', 'edit_artifact', 'fork_artifact', 'get_artifact', 'annotate', 'list_artifacts', 'list_versions', 'get_version', 'revert_artifact', 'delete_artifact']) {
       expect(names).toContain(n);
     }
     const getDescription = body.result.tools.find((tool) => tool.name === 'get_artifact')?.description ?? '';
@@ -183,6 +183,44 @@ describe('MCP server', () => {
     const other = await mintToken('other');
     const denied = await mcpCall(other.token, 'get_artifact', { id: story.data.id as string });
     expect(denied.isError).toBe(true);
+  });
+
+  /**
+   * FORK over MCP, end to end and on the branch production takes (the proxy
+   * vouched for the bearer and attached the actor). The reach is READ, so the
+   * forker is a different token entirely — and the copy is its own.
+   */
+  it('fork_artifact copies a public document as the CALLING token, create-shaped plus forked_from', async () => {
+    const owner = await mintToken('owner');
+    const doc = await mcpCall(owner.token, 'create_artifact', {
+      title: 'Payroll', visibility: 'public',
+      markup: '<div data-design="tw"><h1 className="text-2xl">Payroll</h1></div>',
+    });
+    expect(doc.isError).toBe(false);
+
+    const forker = await mintToken('forker');
+    const copy = await mcpCallAs(forker.id, 'fork_artifact', { id: doc.data.id as string, title: 'My copy' });
+    expect(copy.isError, JSON.stringify(copy.data)).toBe(false);
+    expect(copy.data.id).not.toBe(doc.data.id);
+    expect(copy.data.forked_from).toBe(doc.data.id);
+    expect(copy.data.version).toBe(1);
+    expect(copy.data.title).toBe('My copy');
+    expect(String(copy.data.markup)).toContain('Payroll');
+    // The copy is the FORKER's — and the original is untouched for its owner.
+    const mine = await mcpCallAs(forker.id, 'list_artifacts', {});
+    expect((mine.data.artifacts as Array<{ id: string }>).map((a) => a.id)).toEqual([copy.data.id]);
+    const theirs = await mcpCall(owner.token, 'get_artifact', { id: doc.data.id as string });
+    expect(theirs.data.title).toBe('Payroll');
+    expect(theirs.data.version).toBe(1);
+  });
+
+  it('fork_artifact answers the uniform not_found for what the token cannot read', async () => {
+    const owner = await mintToken('owner');
+    const doc = await mcpCall(owner.token, 'create_artifact', { markup: '<p>secret</p>', visibility: 'unlisted' });
+    const stranger = await mintToken('stranger');
+    // Unlisted reads by link, so the refusal is proved on an id that exists nowhere.
+    expect((await mcpCallAs(stranger.id, 'fork_artifact', { id: 'zzzzzz' })).data.error).toBe('not_found');
+    expect((await mcpCallAs(stranger.id, 'fork_artifact', { id: doc.data.id as string })).isError).toBe(false);
   });
 
   it('a retired theme is a real tool result carrying the successor hint, not a schema error', async () => {
