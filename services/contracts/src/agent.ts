@@ -32,9 +32,14 @@ export type DeclaredAgentSlug = (typeof DECLARED_AGENT_SLUGS)[number];
 /** The header an HTTP agent names itself in. */
 export const AGENT_HEADER = 'Artifactbin-Agent';
 
-/** Is this exactly one of the declarations we accept? Trimmed and lowercased first; anything else is null. */
+/**
+ * Is this one of the declarations we accept? Trimmed, lowercased, and whitespace/underscores folded to the
+ * hyphen we spell them with, so `Claude Code` and `claude_code` are the same declaration as `claude-code`.
+ * That normalization lives HERE and not in either caller: the app tags the 401 body and the proxy tags the
+ * refused door, and a header that tagged one but not the other would be a bug nobody sees.
+ */
 export function declaredAgentSlug(value: unknown): DeclaredAgentSlug | null {
   if (typeof value !== 'string') return null;
-  const slug = value.trim().toLowerCase();
+  const slug = value.trim().toLowerCase().replace(/[\s_]+/g, '-');
   return (DECLARED_AGENT_SLUGS as readonly string[]).includes(slug) ? (slug as DeclaredAgentSlug) : null;
 }

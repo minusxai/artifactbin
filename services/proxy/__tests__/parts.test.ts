@@ -2,11 +2,11 @@
 import { describe, expect, it } from 'vitest';
 import { assemble } from '@artifactbin/utils';
 import { proxyParts, type ProxyOptions } from '../src/parts';
-import { testProxyOptions } from './helpers';
+import { BROWSER_MINT_HEADERS, testProxyOptions } from './helpers';
 
 describe('proxyParts', () => {
-  it('names are exactly ["session","rateLimit","anonMintDoor","loginRoutes","oauthRoutes","forwardedHeaders","forward"] in that order', async () => {
-    expect((await proxyParts(await testProxyOptions())).map((p) => p.name)).toEqual(['session', 'rateLimit', 'anonMintDoor', 'loginRoutes', 'oauthRoutes', 'forwardedHeaders', 'forward']);
+  it('names are exactly ["session","anonMintDoor","rateLimit","loginRoutes","oauthRoutes","forwardedHeaders","forward"] in that order', async () => {
+    expect((await proxyParts(await testProxyOptions())).map((p) => p.name)).toEqual(['session', 'anonMintDoor', 'rateLimit', 'loginRoutes', 'oauthRoutes', 'forwardedHeaders', 'forward']);
   });
   it('forward is LAST — positional ownership replaces the hand-kept prefix list', async () => {
     const parts = await proxyParts(await testProxyOptions());
@@ -20,12 +20,12 @@ describe('proxyParts', () => {
     } });
     const parts = await proxyParts(options);
     const limited = assemble(parts);
-    expect((await limited.request('/api/tokens/anonymous', { method: 'POST' })).status).not.toBe(429);
-    expect((await limited.request('/api/tokens/anonymous', { method: 'POST' })).status).toBe(429);
+    expect((await limited.request('/api/tokens/anonymous', { method: 'POST', headers: BROWSER_MINT_HEADERS })).status).not.toBe(429);
+    expect((await limited.request('/api/tokens/anonymous', { method: 'POST', headers: BROWSER_MINT_HEADERS })).status).toBe(429);
 
     const withoutDoor = assemble(await proxyParts(await testProxyOptions({ env: options.env })), { rateLimit: null });
-    expect((await withoutDoor.request('/api/tokens/anonymous', { method: 'POST' })).status).not.toBe(429);
-    expect((await withoutDoor.request('/api/tokens/anonymous', { method: 'POST' })).status).not.toBe(429);
+    expect((await withoutDoor.request('/api/tokens/anonymous', { method: 'POST', headers: BROWSER_MINT_HEADERS })).status).not.toBe(429);
+    expect((await withoutDoor.request('/api/tokens/anonymous', { method: 'POST', headers: BROWSER_MINT_HEADERS })).status).not.toBe(429);
   });
   it('assemble refuses two parts with one name over the real list', async () => {
     const parts = await proxyParts(await testProxyOptions());

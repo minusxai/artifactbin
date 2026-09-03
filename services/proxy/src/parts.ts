@@ -2,9 +2,11 @@
  * THE PROXY AS PARTS. One ordered literal — `proxyParts(o)` — is the whole
  * proxy: `session` resolves who is asking (bearer → the token reader; Better
  * Auth session; the agent cookie by id) and is the ONLY part that may touch
- * the actor; `rateLimit` is the doors; `anonMintDoor` refuses the anonymous
- * mint to anything that is not a browser (these TWO are the proxy's own
- * verdicts — everything else the app answers); `loginRoutes` is Better Auth behind the invite gate; `oauthRoutes`
+ * the actor; `anonMintDoor` refuses the anonymous mint to anything that is not
+ * a browser, and sits BEFORE `rateLimit` on purpose — a refusal must not spend
+ * the per-IP budget its own advice sends the human back to use; `rateLimit` is
+ * the doors (these TWO are the proxy's own verdicts — everything else the app
+ * answers); `loginRoutes` is Better Auth behind the invite gate; `oauthRoutes`
  * the MCP OAuth provider; `forwardedHeaders` owns the forwarding headers
  * (x-mx-actor and x-real-ip dropped inbound, x-forwarded-{for,host,proto}
  * ours); `forward` is LAST — everything not matched above reaches the app
@@ -96,16 +98,22 @@ export function doorFor(method: string, pathname: string): DoorName | null {
  * equality would refuse the product's own page. `sec-fetch-site` is Fetch Metadata — the browser sets it and
  * page JavaScript cannot — so its ABSENCE is the reliable half of the signal.
  *
+ * SEVERAL hosts may be ours, and that is the difference between a door and an outage: an instance reached on
+ * `127.0.0.1` when `APP__PUBLIC_BASE_URL` says `localhost` (or on any alternate/preview hostname) would
+ * otherwise refuse its OWN page, and the only symptom a person sees is "Could not generate a token".
+ *
  * Honestly: this is not a security boundary. Any client can type these two headers, and one that does gets
  * through. It is a door that TEACHES — it catches the agent mid-mistake and hands it the ladder — while the
  * real fix is that no agent-facing surface names this address any more (app `lib/agent-contract`).
  */
-export function isBrowserContext(headers: Headers, origin: string): boolean {
+export function isBrowserContext(headers: Headers, origin: string | readonly string[]): boolean {
   const site = headers.get('sec-fetch-site');
   if (site !== 'same-origin' && site !== 'same-site') return false;
   const declared = headers.get('origin');
-  const here = hostOf(origin);
-  return !!declared && here !== null && hostOf(declared) === here;
+  if (!declared) return false;
+  const from = hostOf(declared);
+  const ours = (typeof origin === 'string' ? [origin] : origin).map(hostOf).filter((h): h is string => h !== null);
+  return from !== null && ours.includes(from);
 }
 
 const hostOf = (value: string): string | null => {
@@ -152,9 +160,12 @@ export function anonMintDoor(o: ProxyOptions): Part<ProxyEnv> {
     mount: (app) => app.use('*', async (c, next) => {
       const { pathname } = new URL(c.req.url);
       if (c.req.method === 'POST' && pathname === '/api/tokens/anonymous') {
-        const origin = baseUrlOf(c.req.raw, trustedHopsOf(o.env), readEnv(o.env, 'APP__PUBLIC_BASE_URL'));
-        if (!isBrowserContext(c.req.raw.headers, origin)) {
-          return anonMintRefusal(origin, c.req.raw.headers.get(AGENT_HEADER));
+        const hops = trustedHopsOf(o.env);
+        // What we CALL ourselves, and what this request actually reached us on — a browser on either is ours.
+        const configured = baseUrlOf(c.req.raw, hops, readEnv(o.env, 'APP__PUBLIC_BASE_URL'));
+        const observed = baseUrlOf(c.req.raw, hops);
+        if (!isBrowserContext(c.req.raw.headers, [configured, observed])) {
+          return anonMintRefusal(configured, c.req.raw.headers.get(AGENT_HEADER));
         }
       }
       await next();
@@ -284,7 +295,7 @@ export function oauthRoutes(o: ProxyOptions): Part<ProxyEnv> {
  * list). A downstream replaces a part BY NAME through utils' `assemble`.
  */
 export function proxyParts(o: ProxyOptions): Part<ProxyEnv>[] {
-  return [session(o), rateLimit(o), anonMintDoor(o), loginRoutes(o), oauthRoutes(o), forwardedHeaders({ trustedHops: trustedHopsOf(o.env), ...(o.secure ? { secure: true } : {}) }), forward(o.upstream, o)];
+  return [session(o), anonMintDoor(o), rateLimit(o), loginRoutes(o), oauthRoutes(o), forwardedHeaders({ trustedHops: trustedHopsOf(o.env), ...(o.secure ? { secure: true } : {}) }), forward(o.upstream, o)];
 }
 
 /** The proxy, assembled from its parts. */

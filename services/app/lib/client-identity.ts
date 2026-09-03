@@ -22,7 +22,7 @@
  * trivially forged. Nothing may gate access on them.
  */
 
-import { declaredAgentSlug, type DeclaredAgentSlug } from '@artifactbin/contracts';
+import { AGENT_HEADER, declaredAgentSlug, type DeclaredAgentSlug } from '@artifactbin/contracts';
 
 export type Harness =
   | 'chatgpt'
@@ -129,13 +129,14 @@ const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? 
  * Identify the caller. An explicit supported declaration wins, then
  * `clientInfo`, then UA. A runtime UA cannot distinguish agents sharing it.
  */
-export const ARTIFACTBIN_AGENT_HEADER = 'Artifactbin-Agent';
+/** The header's name, re-exported under this module's older name — contracts spells it once. */
+export const ARTIFACTBIN_AGENT_HEADER = AGENT_HEADER;
 
 /** A supported explicit HTTP declaration, or null when the value is absent/unknown. */
 export function declaredAgentHarness(value: unknown): Harness | null {
   const declared = str(value);
   if (!declared) return null;
-  const slug = declaredAgentSlug(declared.replace(/[\s_]+/g, '-'));
+  const slug = declaredAgentSlug(declared);
   return slug ? DECLARED_AGENT_HARNESSES[slug] : null;
 }
 

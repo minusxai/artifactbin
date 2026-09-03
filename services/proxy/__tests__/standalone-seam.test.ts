@@ -98,7 +98,7 @@ describe('createStandaloneProxy(config, deps, { parts })', () => {
     const config = loadConfig(BASE);
     let seen: string[] = [];
     const replaced = createStandaloneProxy(config, deps, { parts: (assembled) => { seen = assembled.map((p) => p.name); return assembled.map((p) => (p.name === 'forward' ? teapot : p)); } });
-    expect(seen).toEqual(['health', 'session', 'rateLimit', 'anonMintDoor', 'loginRoutes', 'oauthRoutes', 'forwardedHeaders', 'forward']);
+    expect(seen).toEqual(['health', 'session', 'anonMintDoor', 'rateLimit', 'loginRoutes', 'oauthRoutes', 'forwardedHeaders', 'forward']);
     expect((await replaced.request('http://proxy/anything')).status).toBe(418);
     expect((await replaced.request('http://proxy/health')).status).toBe(200);
     const inserted = createStandaloneProxy(config, deps, { parts: (assembled) => [assembled[0]!, banner, ...assembled.slice(1)] });
