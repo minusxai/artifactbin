@@ -189,7 +189,14 @@ export interface LedgerMetricsOptions {
   startedAtMs?: number;
 }
 
-export function ledgerMetrics(entries: LedgerEntry[], _opts: LedgerMetricsOptions = {}): LedgerMetrics {
+/**
+ * Opening `<h1>`/`<h2>`/`<h3>` tags. Opening only — `</h1>` closes a heading rather than adding one —
+ * and bounded, so `<h4>`, `<header>` and `<hgroup>` are not headings that were never there. The
+ * boundary class allows attributes (`<h2 class="x">`) and a newline inside the tag.
+ */
+const HEADING_TAG = /<h[123][\s/>]/gi;
+
+export function ledgerMetrics(entries: LedgerEntry[], opts: LedgerMetricsOptions = {}): LedgerMetrics {
   const writes = entries.filter(isWrite);
   const firstWriteIdx = entries.findIndex(isWrite);
   const firstErr = entries.find((e) => e.status >= 400);
@@ -205,6 +212,13 @@ export function ledgerMetrics(entries: LedgerEntry[], _opts: LedgerMetricsOption
   const docsBytes = docsGets.length && docsGets.every((e) => typeof e.bytes === 'number')
     ? docsGets.reduce((a, e) => a + (e.bytes ?? 0), 0)
     : null;
+  // WHEN the human got a link, and WHAT arrived. Both are read off the first write that ANSWERED 2xx:
+  // the earlier attempts are the agent still learning the protocol, and a 4xx published nothing.
+  const firstGoodWrite = writes.find((w) => w.status < 300);
+  // The anchor is the caller's — process spawn — because agent boot is part of the wait. Falling back to
+  // the ledger's own first entry measures from the agent's first HTTP call instead, which is a FLOOR.
+  const anchor = opts.startedAtMs ?? entries[0]?.t;
+  const msToFirstPublish = firstGoodWrite && anchor !== undefined ? firstGoodWrite.t - anchor : null;
   return {
     observed,
     httpCalls: entries.length,
@@ -224,9 +238,12 @@ export function ledgerMetrics(entries: LedgerEntry[], _opts: LedgerMetricsOption
     usedMcp: judged(entries.some((e) => e.status < 300 && pathOnly(e.path) === '/mcp' && e.method === 'POST')),
     docsFetches: judged(docsGets.length),
     docsBytes,
-    // m1: implement — the three below are the whole point of this phase.
-    selfMinted: null,
-    msToFirstPublish: null,
-    skeletonSections: null,
+    // The ATTEMPT is the behaviour, not the grant: the OSS default caps anonymous minting at 0/hour, so
+    // an agent reaching for its own token most often shows up as a 429. Judged like its neighbours —
+    // a ledger that saw nothing did not see the agent decline to mint.
+    selfMinted: judged(entries.some((e) => e.method === 'POST' && pathOnly(e.path) === '/api/tokens/anonymous')),
+    msToFirstPublish,
+    // Naturally null rather than `judged()`: no write, no markup, nothing to count.
+    skeletonSections: firstGoodWrite?.reqMarkup === undefined ? null : (firstGoodWrite.reqMarkup.match(HEADING_TAG) ?? []).length,
   };
 }
