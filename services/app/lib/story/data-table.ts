@@ -50,6 +50,28 @@ export interface ResolvedColumn extends DataTableColumnSpec {
 const ALIGNS = new Set(['left', 'right', 'center']);
 const SCALES = new Set(['sequential', 'diverging']);
 
+/** The default scroll-box ceiling in px, shared by the parser's fallback and the component's prop default. */
+export const DEFAULT_TABLE_HEIGHT = 420;
+
+/**
+ * Parse the authored `height` prop into a pixel CEILING.
+ *
+ * The docs teach `height="420px"` while the prop was typed `number`, so a
+ * string reached the component and it emitted `420pxpx` — a declaration the
+ * browser drops. One parser, so the docs and the component agree on what a
+ * height is: a positive number, a numeric string, or a `"<n>px"` string.
+ * Anything else (absent, 0, negative, NaN, `"abc"`, a percentage or any other
+ * unit) falls back — a length this component cannot honour is not a length.
+ */
+export function parseTableHeight(raw: unknown, fallback: number = DEFAULT_TABLE_HEIGHT): number {
+  if (typeof raw === 'number') return Number.isFinite(raw) && raw > 0 ? raw : fallback;
+  if (typeof raw !== 'string') return fallback;
+  const m = /^\s*(\d+(?:\.\d+)?)\s*(?:px)?\s*$/i.exec(raw);
+  if (!m) return fallback;
+  const n = Number(m[1]);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
 /** Parse the authored `columns` prop; unknown/malformed entries are dropped, and a spec naming a column the table lacks is kept (it renders empty and says so). */
 export function parseColumnSpecs(raw: unknown): DataTableColumnSpec[] | null {
   if (!Array.isArray(raw)) return null;

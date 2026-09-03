@@ -4,7 +4,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  barFraction, cellTint, formatCell, gridGeometry, parseColumnSpecs, parseSortSpec, resolveColumns, sortRows,, parseTableHeight } from '@/lib/story/data-table';
+  barFraction, cellTint, formatCell, gridGeometry, parseColumnSpecs, parseSortSpec, parseTableHeight, resolveColumns, sortRows,
+} from '@/lib/story/data-table';
 import type { DatasetColumn } from '@/lib/story/dataset-shape';
 
 const COLUMNS: DatasetColumn[] = [

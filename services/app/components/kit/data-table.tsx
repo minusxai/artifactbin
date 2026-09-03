@@ -10,7 +10,7 @@
  *
  * Two render regimes, deliberately: before mount (SSR, the og export, and
  * the first client render — so hydration matches) it is a
- * plain table of the first rows inside a fixed-height scroll box; after mount,
+ * plain table of the first rows inside a height-capped scroll box; after mount,
  * with a measured height, the same box becomes a virtual window. Chrome is
  * token classes only (this file is globbed into the recipe union).
  */
@@ -19,7 +19,7 @@ import { useVirtualizer } from "@tanstack/react-virtual"
 
 import { cn } from "./cn"
 import {
-  barFraction, cellTint, formatCell, gridGeometry, resolveColumns, sortRows,
+  barFraction, cellTint, formatCell, gridGeometry, parseTableHeight, resolveColumns, sortRows,
   type DataTableColumnSpec, type ResolvedColumn, type SortSpec,
 } from "@/lib/story/data-table"
 import type { DatasetColumn } from "@/lib/story/dataset-shape"
@@ -33,8 +33,12 @@ export interface DataTableProps {
   spec?: DataTableColumnSpec[] | null
   /** Initial sort. */
   sort?: SortSpec | null
-  /** The scroll box height in px (default 420). */
-  height?: number
+  /**
+   * The scroll box CEILING in px; default 420. Accepts a number or the string
+   * the docs teach (`420` or `"420px"`). Short tables hug their rows — the box
+   * is a maximum, never a reserved height.
+   */
+  height?: number | string
   /** Sticky header (default true). */
   sticky?: boolean
   /** The real row count when `rows` is a sample (the engine's cap, or a page). */
@@ -64,9 +68,14 @@ const STATIC_ROWS = 50
 const ROW_H = 33
 
 export function DataTable({
-  rows = [], columns = [], spec = null, sort: initialSort = null, height = 420, sticky = true,
+  rows = [], columns = [], spec = null, sort: initialSort = null, height, sticky = true,
   totalRows, truncated = false, loading = false, onSortChange, onLoadMore, className, ...props
 }: DataTableProps) {
+  // A CEILING, not a reserved height: a three-row table hugs its rows and a
+  // long one scrolls inside the cap, because `overflow-auto` gives the
+  // virtualizer's scroll element clientHeight = min(content, boxHeight).
+  const boxHeight = parseTableHeight(height)
+
   const [sort, setSort] = React.useState<SortSpec | null>(initialSort)
   React.useEffect(() => { setSort(initialSort) }, [initialSort?.col, initialSort?.dir]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -136,7 +145,7 @@ export function DataTable({
         ref={scrollRef}
         onScroll={onScroll}
         className="relative min-h-0 w-full flex-1 overflow-auto"
-        style={{ height: `${height}px` }}
+        style={{ maxHeight: `${boxHeight}px` }}
       >
         <table className="w-full border-collapse text-sm" style={virtual ? { display: 'block' } : undefined}>
           <thead className={cn("bg-card text-left text-muted-foreground", sticky && "sticky top-0 z-10")} style={virtual ? { display: 'block' } : undefined}>
