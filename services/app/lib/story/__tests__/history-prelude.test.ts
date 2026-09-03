@@ -50,3 +50,135 @@ describe('the history prelude', () => {
     expect(/\bhistory\.(pushState|replaceState)\b/.test(runtime)).toBe(false);
   });
 });
+
+/*
+ * SPIKE S2 (F2 — `<Value>` selections in the URL, risk R5).
+ *
+ * The freeze above is what makes a served document's URL bar trustworthy, and
+ * F2 needs the URL to change anyway: a reader who picks "west" should be able
+ * to copy the address bar and hand someone that document. So the prelude keeps
+ * every door shut and opens ONE window: a function bound to the NATIVE
+ * `replaceState` before the overwrite, exposed as a frozen, non-writable own
+ * property of `window`, which can rewrite `$`-prefixed query params on the
+ * CURRENT pathname and nothing else.
+ *
+ * Narrow by CONSTRUCTION rather than by escaping: there is no argument for a
+ * path, a host or a hash; `location.pathname`/`location.hash` are read fresh
+ * at call time; a key that is not a plain identifier is dropped rather than
+ * encoded; and the search is rebuilt with `URLSearchParams`, so a crafted
+ * `toString` on a value produces an encoded VALUE and can reach nothing else.
+ */
+import { JSDOM } from 'jsdom';
+
+const START = 'http://localhost:3030/@sree/reports/AbC123-q3';
+
+/** A fresh realm with the prelude already run — the document's own situation. */
+const realm = (url = START) => {
+  const dom = new JSDOM('<!doctype html><body><p>doc</p></body>', { url, runScripts: 'dangerously' });
+  dom.window.eval(HISTORY_PRELUDE);
+  return dom.window as unknown as Window & {
+    __mxValues?: (v: Record<string, unknown>) => void;
+    eval(code: string): unknown;
+  };
+};
+
+describe('the narrow URL capability the prelude exposes (spike S2)', () => {
+  it('still leaves history.replaceState inert — the freeze is unchanged', () => {
+    const w = realm();
+    w.eval('history.replaceState(null,"","/evil")');
+    w.eval('history.pushState(null,"","/evil2")');
+    expect(w.location.href).toBe(START);
+  });
+
+  it('still freezes the prototype, so the native cannot be put back', () => {
+    const w = realm();
+    expect(w.eval('Object.isFrozen(History.prototype)')).toBe(true);
+    w.eval('try{History.prototype.replaceState=function(){location.pathname="/evil"}}catch(e){}');
+    w.eval('history.replaceState(null,"","/evil")');
+    expect(w.location.href).toBe(START);
+  });
+
+  it('writes a $ param on the current path and leaves pathname and hash alone', () => {
+    const w = realm(`${START}#section-2`);
+    w.__mxValues!({ season: '2024-25' });
+    expect(w.location.pathname).toBe('/@sree/reports/AbC123-q3');
+    expect(w.location.search).toBe('?$season=2024-25');
+    expect(w.location.hash).toBe('#section-2');
+  });
+
+  it('removes a $ param when the value is null or undefined', () => {
+    const w = realm();
+    w.__mxValues!({ season: '2024-25', region: 'west' });
+    expect(w.location.search).toContain('season=2024-25');
+    w.__mxValues!({ season: null });
+    expect(w.location.search).not.toContain('season');
+    expect(w.location.search).toContain('region=west');
+    w.__mxValues!({ region: undefined });
+    expect(w.location.search).toBe('');
+  });
+
+  it('leaves every param that is not ours untouched — ?v=2 survives', () => {
+    const w = realm(`${START}?v=2`);
+    w.__mxValues!({ season: '2024-25' });
+    expect(new URLSearchParams(w.location.search).get('v')).toBe('2');
+    w.__mxValues!({ season: null });
+    expect(new URLSearchParams(w.location.search).get('v')).toBe('2');
+  });
+
+  it('cannot be reassigned or deleted, and fails silently in sloppy mode', () => {
+    const w = realm();
+    const before = w.__mxValues;
+    w.eval('try{window.__mxValues=function(){location.pathname="/evil"}}catch(e){}');
+    expect(w.__mxValues).toBe(before);
+    expect(w.eval('(function(){try{return delete window.__mxValues}catch(e){return "threw"}})()')).toBe(false);
+    expect(w.__mxValues).toBe(before);
+    expect(w.eval('Object.isFrozen(window.__mxValues)')).toBe(true);
+  });
+
+  it('takes no path, host or hash — a crafted value is encoded, never smuggled', () => {
+    const w = realm(`${START}#keep`);
+    w.eval(`window.__mxValues({ season: { toString: function(){ return "x#/evil?a=b&c=d" } } })`);
+    expect(w.location.pathname).toBe('/@sree/reports/AbC123-q3');
+    expect(w.location.hash).toBe('#keep');
+    expect(w.location.host).toBe('localhost:3030');
+    expect(new URLSearchParams(w.location.search).get('$season')).toBe('x#/evil?a=b&c=d');
+    expect([...new URLSearchParams(w.location.search).keys()]).toEqual(['$season']);
+  });
+
+  it('ignores a key that is not a plain value name', () => {
+    const w = realm();
+    w.eval('window.__mxValues({ "a&b=c": "x", "../evil": "y", "__proto__": "z", "ok": "1" })');
+    expect([...new URLSearchParams(w.location.search).keys()]).toEqual(['$ok']);
+  });
+
+  it('reads only the object\'s own enumerable keys, so a polluted prototype injects nothing', () => {
+    const w = realm();
+    w.eval('Object.prototype.injected = "1"; try{ window.__mxValues({ ok: "1" }) } finally { delete Object.prototype.injected }');
+    expect([...new URLSearchParams(w.location.search).keys()]).toEqual(['$ok']);
+  });
+
+  it('survives a non-object argument, a throwing getter and a symbol value', () => {
+    const w = realm();
+    w.eval('window.__mxValues(null); window.__mxValues("nope"); window.__mxValues();');
+    expect(w.location.href).toBe(START);
+    w.eval('window.__mxValues(Object.defineProperty({ ok: "1" }, "bad", { enumerable: true, get(){ throw new Error("x") } }))');
+    expect(w.location.href).toBe(START); // one bad key aborts the whole rewrite, loudly to nobody
+    w.eval('window.__mxValues({ ok: Symbol("s") })');
+    expect(w.location.href).toBe(START);
+  });
+
+  it('reveals nothing exploitable in its source — no captured path, no second verb', () => {
+    const w = realm();
+    const src = String(w.eval('String(window.__mxValues)'));
+    expect(src).not.toContain('pushState');
+    expect(/History\s*\.\s*prototype/.test(src)).toBe(false);
+    // The native it holds is a CLOSURE variable; toString cannot hand it out.
+    expect(w.eval('typeof window.__mxValues.caller')).not.toBe('function');
+  });
+
+  it('is shipped in the served document, before the author script', async () => {
+    const html = await build('<Helmet><script>{`window.__mxValues({a:"1"})`}</script></Helmet><h1>hi</h1>');
+    expect(html).toContain('__mxValues');
+    expect(html.indexOf(HISTORY_PRELUDE)).toBeLessThan(html.indexOf('window.__mxValues({a:"1"})'));
+  });
+});
