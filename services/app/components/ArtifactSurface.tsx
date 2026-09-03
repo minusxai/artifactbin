@@ -18,8 +18,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useArtifactOwner, useCanAnnotateArtifact, useCanEditArtifact } from '@/components/ArtifactShell';
 import AnnotationLayer from '@/components/AnnotationLayer';
 import CopyAgentPrompt from '@/components/CopyAgentPrompt';
+import ForkArtifact, { ForkConfirm } from '@/components/ForkArtifact';
 import ShareLink from '@/components/ShareLink';
 import type { AnnotationWire } from '@/lib/annotations';
+import { readIntent, stripIntent } from '@/lib/intent';
 import { notifyPageChromeScroll, PageChromeBar, PageControls, PageMenu, type AppearanceMode } from '@/components/PageChrome';
 import { useIsPhoneViewport } from '@/components/MobileSheet';
 /* The editing bar's height is RESERVED by this page, never measured — and it
@@ -158,6 +160,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * the hash is precisely the mistake this replaced.
    */
   const [railOpen, setRailOpen] = useState(false);
+  /** `?intent=fork` asked for a copy; the dialog asks the person (lib/intent). */
+  const [forkAsked, setForkAsked] = useState(false);
   /** Desktop comments reserve a rail; on a phone the same surface is a sheet. */
   const phone = useIsPhoneViewport();
   /** A reading preference, separate from the author's stored default. */
@@ -213,6 +217,41 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * paragraph they are editing without leaving to do it.
    */
   const showViewComments = canAnnotate && openAnnotationCount > 0;
+
+  /**
+   * `?intent=` — ONE instruction, carried out ONCE, then taken off the address.
+   *
+   * It is how a door that leads OUT of a document leads back INTO it doing the
+   * thing that was asked: "fork this" and "log in to comment" both go through
+   * /login, and a person who comes back to a document that has forgotten what
+   * they pressed does the work twice.
+   *
+   * Three things make it safe to act on a URL:
+   *  - the ALLOWLIST is the whole parser (lib/intent). This rides on a link
+   *    anyone may hand over and anyone may append to, so an unknown value is
+   *    silence, and `fork` — the one that writes — ASKS before it does.
+   *  - it runs from a ref, ONCE, rather than from a `search`-keyed effect. A
+   *    bare replaceState does not move react-router's location, so the `search`
+   *    prop still names the intent afterwards; without the ref the page would
+   *    re-prompt on every render that reads it.
+   *  - the strip is against the LIVE address and keeps everything else byte for
+   *    byte — the reader's `$` values (F2) are in this same query string, and
+   *    their place in the document is in the hash.
+   */
+  const intentDone = useRef(false);
+  useEffect(() => {
+    if (intentDone.current) return;
+    intentDone.current = true;
+    const intent = readIntent(search || window.location.search);
+    if (intent === 'fork') setForkAsked(true);
+    // Exactly the comments row's effect, and gated by exactly its capability:
+    // opening a rail for someone who may not comment is an empty panel.
+    else if (intent === 'comment' && canAnnotate) setRailOpen(true);
+    const next = stripIntent(window.location.search);
+    if (next !== window.location.search) {
+      window.history.replaceState(null, '', window.location.pathname + next + window.location.hash);
+    }
+  }, [search, canAnnotate]);
 
   // The authorized page — never the sandbox — decides which selection actions
   // exist. Whoever may edit gets Edit; whoever may annotate — owner, editor
@@ -868,38 +907,51 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
 
   /** Everything about THIS document lives behind one control. Navigation is
    * separate on the left; appearance, discussion, editing and owner handoff
-   * are grouped here and capability-gated exactly as their old buttons were. */
+   * are grouped here and capability-gated exactly as their old buttons were.
+   *
+   * There is no longer a "does this viewer have any document action at all"
+   * question either — `fork` is offered to everyone this page is served to, on
+   * every format, so the sheet always has contents and the old
+   * `hasDocumentControls` gate went with the answer it used to compute. */
   const documentControls = (close: () => void) => (
     <div className="space-y-4">
-      {(canAnnotate || canEdit) && format === 'markup' && (
-        <section aria-label="Document actions">
-          <h2 className="mb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">Artifact</h2>
-          {canAnnotate && (
-            <button
-              type="button"
-              aria-label="Toggle comments"
-              aria-pressed={railOpen}
-              onClick={() => { close(); setRailOpen((open) => !open); }}
-              className={`${CONTROL_ROW} ${railOpen ? 'bg-accent-soft text-accent' : ''}`}
-            >
-              <MessageSquare size={14} strokeWidth={1.75} />
-              <span className="flex-1">{railOpen ? 'close comments' : 'comments'}</span>
-              {openAnnotationCount > 0 && <span className="text-accent">{openAnnotationCount}</span>}
-            </button>
-          )}
-          {canEdit && (
-            <button
-              type="button"
-              aria-label="Edit artifact"
-              onClick={() => { close(); enterEdit(); }}
-              className={CONTROL_ROW}
-            >
-              <Pencil size={14} strokeWidth={1.75} />
-              edit artifact
-            </button>
-          )}
-        </section>
-      )}
+      {/* UNCONDITIONAL, and `fork` is why. Every other row here is capability
+          chrome — edit needs write, comments need annotate, both need a markup
+          document — but forking needs only the right to READ, which is exactly
+          what everyone holding this page already has (the door decides on the
+          read ACL, not on ownership). So the guards moved down onto the rows
+          that still need them, and a DATASET gets an Artifact section for the
+          first time. */}
+      <section aria-label="Document actions">
+        <h2 className="mb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">Artifact</h2>
+        {canAnnotate && format === 'markup' && (
+          <button
+            type="button"
+            aria-label="Toggle comments"
+            aria-pressed={railOpen}
+            onClick={() => { close(); setRailOpen((open) => !open); }}
+            className={`${CONTROL_ROW} ${railOpen ? 'bg-accent-soft text-accent' : ''}`}
+          >
+            <MessageSquare size={14} strokeWidth={1.75} />
+            <span className="flex-1">{railOpen ? 'close comments' : 'comments'}</span>
+            {openAnnotationCount > 0 && <span className="text-accent">{openAnnotationCount}</span>}
+          </button>
+        )}
+        {/* Everyone the shell is served to — owner, editor, commenter — may
+            take a copy of what they can read. */}
+        <ForkArtifact id={id} variant="menu" />
+        {canEdit && format === 'markup' && (
+          <button
+            type="button"
+            aria-label="Edit artifact"
+            onClick={() => { close(); enterEdit(); }}
+            className={CONTROL_ROW}
+          >
+            <Pencil size={14} strokeWidth={1.75} />
+            edit artifact
+          </button>
+        )}
+      </section>
 
       {owner && (
         <section aria-label="Owner actions">
@@ -920,7 +972,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       )}
     </div>
   );
-  const hasDocumentControls = owner || (format === 'markup' && (canAnnotate || canEdit));
 
   /** A document is full-bleed. Reading chrome floats over its safe corners;
    * only the contextual editing toolbar reserves any document space. */
@@ -941,7 +992,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
               active={railOpen}
               badge={openAnnotationCount}
             >
-              {hasDocumentControls ? documentControls : undefined}
+              {documentControls}
             </PageControls>
           </PageChromeBar>
         )}
@@ -1070,6 +1121,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             commentCount={openAnnotationCount}
           />
         )}
+        {forkAsked && <ForkConfirm id={id} title={shownTitle} onClose={() => setForkAsked(false)} />}
       </>
     );
   }
@@ -1081,7 +1133,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       <PageChromeBar>
         <PageMenu authed={accountSession} anon={anonSession} title={shownTitle} fixed />
         <PageControls fixed label="Artifact controls">
-          {hasDocumentControls ? documentControls : undefined}
+          {documentControls}
         </PageControls>
       </PageChromeBar>
       <main className="mx-auto w-full max-w-5xl px-4 pt-16 pb-6">
@@ -1135,6 +1187,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       )}
 
       </main>
+      {forkAsked && <ForkConfirm id={id} title={shownTitle} onClose={() => setForkAsked(false)} />}
     </>
   );
 }

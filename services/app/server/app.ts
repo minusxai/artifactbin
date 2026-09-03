@@ -113,6 +113,21 @@ export async function servesDocumentDirectly(request: Request): Promise<string |
   if (url.searchParams.has('key')) return null;
   const actor = await sessionActor(request).catch(() => null);
   const anonymous = !actor || (!actor.viewer && !actor.tokenId);
+  /*
+   * `?intent=` is an instruction only the SHELL can carry out (fork, comment —
+   * lib/intent), so an address carrying one has to reach the shell.
+   *
+   * Scoped to a viewer who is NOT anonymous, and that scope is the whole
+   * safety of it: `intent` rides on a link anyone may hand over and anyone may
+   * append to, so unscoped it would let a stranger — or a crawler — turn every
+   * public document's fast path into the app page by typing six characters.
+   * Someone with no credential can neither fork nor comment, so there is
+   * nothing for the shell to do for them either.
+   *
+   * Above the row read, beside the `key` bypass, so a credential-less reader
+   * still reaches the document without touching the database.
+   */
+  if (!anonymous && url.searchParams.has('intent')) return null;
   const artifact = await getArtifactById(found.id);
   if (!artifact || artifact.format !== 'markup') return null;
   const needsSessionForData = declaresLiveData(artifact.source) && !(await canReadArtifact(artifact, null));

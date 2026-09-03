@@ -388,3 +388,153 @@ describe('the view-mode selection bubble is granted, and re-checked, by the page
     expect(window.location.hash).toBe('#edit');
   });
 });
+
+/**
+ * FORK — the one document action that is offered to EVERYONE the shell is
+ * served to, and the only one that is. Every other row here is capability
+ * chrome (edit needs write, comments need annotate); forking needs the right
+ * to READ, which everyone holding this page already has — the door agrees,
+ * refusing on the read ACL rather than on ownership.
+ *
+ * So this describe exists to hold the two halves the row could get wrong: WHO
+ * is offered it (owner, editor, commenter — and a dataset, which has no
+ * "Artifact" section of its own until now), and what each of the door's three
+ * answers does.
+ */
+describe('the fork row', () => {
+  const forkResponse = (status: number, body: unknown) => vi.fn(async () => ({
+    ok: status === 201, status, json: async () => body,
+  })) as unknown as typeof fetch;
+
+  /** Assign is observed the way login-form does it: a location whose href setter is a spy. */
+  const withLocation = async (run: (assign: ReturnType<typeof vi.fn>) => Promise<void> | void, search = '') => {
+    const assign = vi.fn();
+    const original = window.location;
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...original, pathname: '/a/story1', search, hash: '', origin: 'http://localhost:3000', set href(v: string) { assign(v); } },
+    });
+    try {
+      await run(assign);
+    } finally {
+      Object.defineProperty(window, 'location', { configurable: true, value: original });
+    }
+  };
+
+  it('is offered to owner, editor and commenter alike — and on a dataset', () => {
+    for (const role of ['owner', 'editor', 'commenter'] as const) {
+      const { unmount } = render(
+        <ArtifactShell role={role}>
+          <ArtifactSurface {...surfaceProps({})} />
+        </ArtifactShell>,
+      );
+      openDocumentControls();
+      expect(screen.getByLabelText('Fork artifact'), role).toBeInTheDocument();
+      expect(screen.getByLabelText('Fork artifact').querySelector('.lucide-git-fork'), role).toBeTruthy();
+      expect(screen.getByLabelText('Fork artifact')).toHaveTextContent('fork');
+      unmount();
+    }
+
+    // A dataset had no "Artifact" section at all — the row widens it rather
+    // than living in a second place.
+    render(
+      <ArtifactShell role="owner">
+        <ArtifactSurface {...surfaceProps({ format: 'dataset', content: '[]', columns: [] })} />
+      </ArtifactShell>,
+    );
+    openDocumentControls();
+    expect(screen.getByLabelText('Fork artifact')).toBeInTheDocument();
+  });
+
+  it('sits directly under the comments row', () => {
+    render(
+      <ArtifactShell role="owner">
+        <ArtifactSurface {...surfaceProps({})} />
+      </ArtifactShell>,
+    );
+    openDocumentControls();
+    const section = screen.getByLabelText('Document actions');
+    const labels = [...section.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'));
+    expect(labels.indexOf('Fork artifact')).toBe(labels.indexOf('Toggle comments') + 1);
+  });
+
+  it('POSTs the fork and goes to the copy', async () => {
+    const fetchMock = forkResponse(201, { id: 'copy01', url: 'http://localhost:3000/@me/copy01-doc' });
+    vi.stubGlobal('fetch', fetchMock);
+    await withLocation(async (assign) => {
+      render(
+        <ArtifactShell role="owner">
+          <ArtifactSurface {...surfaceProps({})} />
+        </ArtifactShell>,
+      );
+      openDocumentControls();
+      fireEvent.click(screen.getByLabelText('Fork artifact'));
+      await waitFor(() => expect(assign).toHaveBeenCalledWith('http://localhost:3000/@me/copy01-doc'));
+      // The owner's sheet also loads its sharing state, so the fork call is
+      // found by its address rather than by being first.
+      const forkCall = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls
+        .find((call) => String(call[0]).endsWith('/fork'));
+      expect(forkCall?.[0]).toBe('/api/my/artifacts/story1/fork');
+      expect(forkCall?.[1]).toMatchObject({ method: 'POST' });
+    });
+  });
+
+  it('forks ONCE however fast it is pressed — a double click is not two copies', async () => {
+    const fetchMock = forkResponse(201, { id: 'copy01', url: 'http://localhost:3000/@me/copy01-doc' });
+    vi.stubGlobal('fetch', fetchMock);
+    await withLocation(async (assign) => {
+      render(
+        <ArtifactShell role="owner">
+          <ArtifactSurface {...surfaceProps({})} />
+        </ArtifactShell>,
+      );
+      openDocumentControls();
+      const row = screen.getByLabelText('Fork artifact');
+      // BOTH clicks inside one act(), which is the hazard: React has not
+      // re-rendered, so `busy` is still false and `disabled` has not applied.
+      // A guard that READS state lets both through — and this door creates a
+      // real artifact each time.
+      act(() => { row.click(); row.click(); });
+      await waitFor(() => expect(assign).toHaveBeenCalled());
+      const forkCalls = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls
+        .filter((call) => String(call[0]).endsWith('/fork'));
+      expect(forkCalls.length).toBe(1);
+    });
+  });
+
+  it('shows the door\'s own refusal, and lets it be dismissed', async () => {
+    vi.stubGlobal('fetch', forkResponse(400, { error: 'unownable_mutation', details: ['ref_ab12cd is not yours to write'] }));
+    await withLocation(async (assign) => {
+      render(
+        <ArtifactShell role="owner">
+          <ArtifactSurface {...surfaceProps({})} />
+        </ArtifactShell>,
+      );
+      openDocumentControls();
+      fireEvent.click(screen.getByLabelText('Fork artifact'));
+      const notice = await screen.findByLabelText('Fork refused');
+      expect(notice).toHaveTextContent('ref_ab12cd is not yours to write');
+      expect(assign).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByLabelText('Dismiss fork refusal'));
+      await waitFor(() => expect(screen.queryByLabelText('Fork refused')).toBeNull());
+    });
+  });
+
+  it('sends a browser with no account to login, and back here still asking to fork', async () => {
+    vi.stubGlobal('fetch', forkResponse(409, { error: 'sign_in_required' }));
+    await withLocation(async (assign) => {
+      render(
+        <ArtifactShell role="owner">
+          <ArtifactSurface {...surfaceProps({})} />
+        </ArtifactShell>,
+      );
+      openDocumentControls();
+      fireEvent.click(screen.getByLabelText('Fork artifact'));
+      await waitFor(() => expect(assign).toHaveBeenCalled());
+      // The reader's own selection travels with them — the callback is this
+      // address plus the intent, never a bare path.
+      expect(String(assign.mock.calls[0][0]))
+        .toBe(`/login?callbackUrl=${encodeURIComponent('/a/story1?$region=west&intent=fork')}`);
+    }, '?$region=west');
+  });
+});

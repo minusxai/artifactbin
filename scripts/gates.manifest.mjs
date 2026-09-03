@@ -64,6 +64,12 @@ export const GATE_SPECS = Object.freeze([
   { name: 'export-slice', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
   // measured: implementer 5s; orchestrator 5s
   { name: 'fonts', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
+  // measured: implementer 5s; orchestrator 5s
+  {
+    name: 'fork', start: 'custom',
+    why: 'Drives two browser contexts and logs the second in ON the /login page the fork anchor produced — the callbackUrl round trip is the thing under test, so the shared start helper (which navigates to /login itself) would throw it away.',
+    needsMail: true, needsClipboard: false, timeoutMs: 60_000,
+  },
   // measured: implementer 17s; orchestrator 23s
   { name: 'full-kit', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 69_000 },
   // measured: implementer 7s; orchestrator 7s

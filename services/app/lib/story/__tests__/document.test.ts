@@ -56,6 +56,42 @@ describe('buildStoryDocument', () => {
     expect(html).toContain('src="/logo-128.png"');
   });
 
+  /**
+   * PROVENANCE. A fork is a copy of someone else's work, so the copy says so —
+   * in the credits, beside "made with ♥ by", where the document's other facts
+   * about itself already live. The markup is never touched: forking already
+   * strips what belongs to the original's LIFE (comments, history), and
+   * writing a line into the copy's source would hand the next agent a sentence
+   * it is free to delete.
+   *
+   * The second shape is the load-bearing one. A source that is private, or
+   * gone, must produce output that says NOTHING about which — "forked from a
+   * private document" is the same words for both, with no link and no id, or
+   * the credit line is an existence oracle for every private document anyone
+   * ever forked.
+   */
+  it('names the source it was forked from, and links it', async () => {
+    const html = await doc({ credits: { creatorUsername: 'ada', forkedFrom: { label: '@grace/ab12cd-first-draft', href: '/@grace/ab12cd-first-draft' } } });
+    expect(html).toContain('data-mx-forked-from');
+    expect(html).toContain('href="/@grace/ab12cd-first-draft" target="_top"');
+    expect(html).toContain('forked from');
+    expect(html).toContain('@grace/ab12cd-first-draft');
+  });
+
+  it('says only that there WAS a source when the reader may not have it', async () => {
+    const html = await doc({ credits: { creatorUsername: 'ada', forkedFrom: { label: 'a private document', href: null } } });
+    expect(html).toContain('data-mx-forked-from');
+    expect(html).toContain('forked from a private document');
+    // No link, no id, nothing that separates "private" from "deleted".
+    expect(html).not.toMatch(/<a[^>]*data-mx-forked-from/);
+    expect(html).not.toContain('ab12cd');
+  });
+
+  it('leaves a document that was not forked with the credits it always had', async () => {
+    expect(await doc({ credits: { creatorUsername: 'ada' } })).not.toContain('data-mx-forked-from');
+    expect(await doc({ chrome: false, credits: { creatorUsername: 'ada', forkedFrom: { label: '@grace/ab12cd-x', href: '/@grace/ab12cd-x' } } })).not.toContain('data-mx-forked-from');
+  });
+
   it('keeps anonymous hosting credits but omits all credits from chrome-less documents', async () => {
     const anonymous = await doc({ credits: { creatorUsername: null } });
     expect(anonymous).toContain('aria-label="Hosted on artifactbin"');

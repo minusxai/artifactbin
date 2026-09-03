@@ -291,3 +291,52 @@ describe('a PRIVATE document whose data is LIVE keeps its parent page; a public 
     expect(await servedBy(readerRequest(`/a/${row.id}`))).toBe('page');
   });
 });
+
+/**
+ * `?intent=` — an instruction the SHELL carries out, so an address that has
+ * one has to reach the shell.
+ *
+ * The condition is scoped to a viewer who is NOT anonymous, and that scope is
+ * the whole safety of it: `intent` is a parameter on a shared link, so a
+ * stranger — or a crawler — appending it must not be able to turn every public
+ * document's fast path into the app page. Someone with no credential cannot
+ * fork or comment anyway; there is nothing for the shell to do for them.
+ */
+describe('an address carrying an intent', () => {
+  it('still serves the DOCUMENT to a stranger — a shared link is not a lever', async () => {
+    const t = await mintToken('t');
+    const row = await publish(t.id, null);
+    for (const q of ['?intent=fork', '?intent=comment', '?intent=delete']) {
+      expect(await servedBy(readerRequest(`/a/${row.id}${q}`)), q).toBe(`/a/${row.id}/raw`);
+    }
+  });
+
+  it('serves the SHELL to a signed-in plain viewer, who has something to be asked', async () => {
+    const owner = await createUser({ email: 'owner@example.com' });
+    const other = await createUser({ email: 'other@example.com' });
+    const t = await mintToken('t', owner.id);
+    const row = await publish(t.id, owner.id, { visibility: 'public' });
+    sessionUser.id = other.id;
+    sessionUser.email = other.email!;
+    // Without the parameter this exact viewer is served the document — which is
+    // what makes the parameter, and nothing else, the thing being tested.
+    expect(await servedBy(readerRequest(`/a/${row.id}`))).toBe(`/a/${row.id}/raw`);
+    expect(await servedBy(readerRequest(`/a/${row.id}?intent=fork`))).toBe('page');
+    expect(await servedBy(readerRequest(`/a/${row.id}?intent=comment`))).toBe('page');
+  });
+
+  it('serves the SHELL to a browser holding an agent cookie — a credential is a credential', async () => {
+    const mine = await mintToken('mine');
+    const theirs = await mintToken('theirs');
+    const row = await publish(theirs.id, null);
+    const cookie = await agentCookie([mine.id]);
+    expect(await servedBy(readerRequest(`/a/${row.id}`, cookie))).toBe(`/a/${row.id}/raw`);
+    expect(await servedBy(readerRequest(`/a/${row.id}?intent=fork`, cookie))).toBe('page');
+  });
+
+  it('keeps the exporter on the page, key first — an intent never reaches a capture', async () => {
+    const t = await mintToken('t');
+    const row = await publish(t.id, null);
+    expect(await servedBy(readerRequest(`/a/${row.id}?key=whatever&intent=fork`))).toBe('page');
+  });
+});

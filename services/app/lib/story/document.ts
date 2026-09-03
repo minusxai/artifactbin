@@ -121,8 +121,21 @@ export interface StoryDocumentInput {
    * the runtime would otherwise be downloaded to draw a tint.
    */
   commenting?: boolean;
-  /** Platform attribution appended after the artifact; null/absent for exports. */
-  credits?: { creatorUsername: string | null } | null;
+  /**
+   * Platform attribution appended after the artifact; null/absent for exports.
+   *
+   * `forkedFrom` is PROVENANCE, resolved per render rather than written into
+   * the markup: an agent that regenerates the document cannot delete the
+   * attribution, and nothing about the source is baked into bytes that outlive
+   * its ACL. The ROUTE decides both fields — it holds the viewer and the rows —
+   * and a source the reader may not have produces a label with NO href and no
+   * id, identical for private and for deleted, because two different answers
+   * there would be an existence oracle for every private document.
+   */
+  credits?: {
+    creatorUsername: string | null;
+    forkedFrom?: { label: string; href: string | null } | null;
+  } | null;
   /**
    * Link-unfurl cards for THIS document. A reader is served the document
    * itself rather than the app page, so if these are not in its head a shared
@@ -140,6 +153,19 @@ export interface StoryDocumentInput {
    * for a viewer-only link, and for a capture: /export photographs this frame.
    */
   signIn?: { unlocks: 'commenter' | 'editor'; callbackUrl: string } | null;
+  /**
+   * "make this mine", in the reader's own controls. Unlike {@link signIn} it is
+   * offered on EVERY chrome-bearing markup document, because a reader may fork
+   * anything they can read and the door agrees (it decides on the read ACL).
+   *
+   * An anchor and nothing else, for the reason the sign-in door is one: the
+   * document is sandboxed with an opaque origin and holds no session, so it
+   * cannot POST the fork itself. It carries the ASK, and the shell on the
+   * other side performs it — which is why the ROUTE decides where it points
+   * (login-and-back for a request with no viewer, the document itself for one
+   * with).
+   */
+  fork?: { href: string } | null;
 }
 
 /**
@@ -333,12 +359,24 @@ const SIGN_IN_LABEL: Record<'commenter' | 'editor', string> = {
   editor: 'log in to edit',
 };
 
+/**
+ * FORK, beside the sign-in door and for the same structural reason: an opaque
+ * document cannot act, so it carries the ask and the app performs it.
+ * `target="_top"` is what makes it work — a sandboxed document's one way out
+ * is a user-activated top navigation.
+ */
+const FORK_LABEL = 'Fork artifact';
+const ICON_FORK = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9"/><path d="M12 12v3"/></svg>';
+
+const renderFork = (fork: NonNullable<StoryDocumentInput['fork']>): string =>
+  `<a class="mx-reader-signin" data-mx-fork href="${escapeHtml(fork.href)}"`
+  + ` target="_top" aria-label="${FORK_LABEL}">${ICON_FORK}fork</a>`;
+
 const renderSignIn = (signIn: NonNullable<StoryDocumentInput['signIn']>): string =>
-  '<h3>this document</h3>'
-  + `<a class="mx-reader-signin" data-mx-signin href="/login?callbackUrl=${escapeHtml(encodeURIComponent(signIn.callbackUrl))}"`
+  `<a class="mx-reader-signin" data-mx-signin href="/login?callbackUrl=${escapeHtml(encodeURIComponent(signIn.callbackUrl))}"`
   + ` target="_top" aria-label="${escapeHtml(SIGN_IN_LABEL[signIn.unlocks])}">${escapeHtml(SIGN_IN_LABEL[signIn.unlocks])}</a>`;
 
-const renderReaderChrome = (signIn?: StoryDocumentInput['signIn']): string =>
+const renderReaderChrome = (signIn?: StoryDocumentInput['signIn'], fork?: StoryDocumentInput['fork']): string =>
   '<div class="mx-reader-chrome" data-mx-reader-chrome>'
   + `<button type="button" class="mx-reader-trigger mx-reader-trigger--left" data-mx-reader-trigger="menu" aria-label="Open menu" aria-expanded="false">${ICON_MENU}${ICON_X}<span class="mx-reader-label" data-mobile-label>menu</span></button>`
   + `<a class="mx-reader-home" href="/" target="_top" aria-label="Home">${ICON_HOME}<span class="mx-reader-label" data-mobile-label>home</span></a>`
@@ -355,7 +393,9 @@ const renderReaderChrome = (signIn?: StoryDocumentInput['signIn']): string =>
   + `<button type="button" data-mx-mode-choice="light" aria-label="Light mode">${ICON_SUN}light</button>`
   + `<button type="button" data-mx-mode-choice="dark" aria-label="Dark mode">${ICON_MOON}dark</button>`
   + '</div>'
+  + (signIn || fork ? '<h3>this document</h3>' : '')
   + (signIn ? renderSignIn(signIn) : '')
+  + (fork ? renderFork(fork) : '')
   + '</section></div>';
 
 const escapeHtml = (s: string): string =>
@@ -379,7 +419,7 @@ body[data-mx-story-root] > #mx-story-root {
 .mx-artifact-credits {
   display: flex !important; flex-direction: column !important;
   align-items: center !important; justify-content: center !important;
-  gap: 4px !important; width: 100% !important; height: 52px !important;
+  gap: 4px !important; width: 100% !important; min-height: 52px !important;
   box-sizing: border-box !important; margin: 0 !important; padding: 0 12px !important;
   border: 0 !important; border-top: 1px solid #202832 !important;
   background: #10151b !important; color: #e6edf3 !important;
@@ -399,11 +439,34 @@ body[data-mx-story-root] > #mx-story-root {
   font-size: 13px !important; line-height: 1 !important;
 }
 .mx-artifact-credits__host { gap: 6px !important; }
+.mx-artifact-credits__forked { color: #8b949e !important; font: inherit !important; }
+.mx-artifact-credits__forked a { display: inline !important; color: #8b949e !important; text-decoration: underline !important; }
+.mx-artifact-credits__forked a:hover { color: #3fe77b !important; }
 .mx-artifact-credits__logo {
   display: block !important; width: 14px !important; height: 14px !important;
   margin: 0 !important; padding: 0 !important; border: 0 !important;
 }
 `;
+
+/**
+ * PROVENANCE, said in the credits and nowhere else.
+ *
+ * Two shapes, and the second is the load-bearing one: with an href it names
+ * and links the source; without one it says only that there WAS a source. The
+ * label is the route's, not this module's, precisely so that "private" and
+ * "deleted" arrive here already indistinguishable — a line that could tell
+ * them apart is an existence oracle for every private document anyone forked.
+ */
+const renderForkedFrom = (forkedFrom: NonNullable<NonNullable<StoryDocumentInput['credits']>['forkedFrom']>): string => {
+  const label = escapeHtml(forkedFrom.label);
+  // With no href the label is plain TEXT rather than an element of its own:
+  // "forked from a private document" has to read as one sentence, and nothing
+  // in the DOM should mark where the name would have been.
+  const inner = forkedFrom.href
+    ? `<a href="${escapeHtml(forkedFrom.href)}" target="_top" aria-label="Open the artifact this was forked from">${label}</a>`
+    : label;
+  return `<span class="mx-artifact-credits__forked" data-mx-forked-from>forked from ${inner}</span>`;
+};
 
 const renderCredits = (credits: NonNullable<StoryDocumentInput['credits']>): string => {
   const username = credits.creatorUsername;
@@ -411,13 +474,14 @@ const renderCredits = (credits: NonNullable<StoryDocumentInput['credits']>): str
     ? `<a href="/@${escapeHtml(username)}" target="_top" aria-label="View @${escapeHtml(username)}'s profile">`
       + `made with <span class="mx-artifact-credits__heart" aria-hidden="true">&hearts;</span> by @${escapeHtml(username)}</a>`
     : '';
-  return `<footer class="mx-artifact-credits" aria-label="Artifact credits">${creator}`
+  const forked = credits.forkedFrom ? renderForkedFrom(credits.forkedFrom) : '';
+  return `<footer class="mx-artifact-credits" aria-label="Artifact credits">${creator}${forked}`
     + `<a class="mx-artifact-credits__host" href="/" target="_top" aria-label="Hosted on artifactbin">`
     + `<img class="mx-artifact-credits__logo" src="/logo-128.png" alt="">hosted on artifactbin</a></footer>`;
 };
 
 export async function buildStoryDocument(input: StoryDocumentInput): Promise<string> {
-  const { source, compiledCss, theme, template = null, colorMode, refData, runtimeSrc, anchorSrc, commentSrc, live = null, chrome = true, social = null, help = null, signIn = null } = input;
+  const { source, compiledCss, theme, template = null, colorMode, refData, runtimeSrc, anchorSrc, commentSrc, live = null, chrome = true, social = null, help = null, signIn = null, fork = null } = input;
   const dataflow = input.dataflow ?? null;
   // Chrome-less documents are capture inputs. Keep the omission structural so
   // a future caller cannot accidentally burn attribution into an export by
@@ -606,7 +670,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
     // this document's own stream (lib/story-runtime/anchor-entry).
     `<body ${STORY_ROOT_ATTR}${live ? ` data-mx-live-id="${escapeHtml(live.id)}" data-mx-live-edit="${escapeHtml(live.editId)}"` : ''}>` +
     `<div id="${STORY_ROOT_ID}">${bodyHtml}</div>` +
-    (chrome ? renderReaderChrome(signIn) : '') +
+    (chrome ? renderReaderChrome(signIn, fork) : '') +
     (credits ? renderCredits(credits) : '') +
     /*
      * The page holds its own copy of this text until we say we have painted,

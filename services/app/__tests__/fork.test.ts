@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { agentCookie, useAppHarness } from './harness';
 import { POST as forkRoute } from '@/app/api/my/artifacts/[id]/fork/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as getMineRoute } from '@/app/api/my/artifacts/[id]/route';
 import { GET as getSharingRoute, PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { GET as versionsMineRoute } from '@/app/api/my/artifacts/[id]/versions/route';
@@ -263,5 +264,57 @@ describe('POST /api/my/artifacts/:id/fork — what does not travel', () => {
     expect((await crossSite(w.doc.id)).status).toBe(403);
     // Same-site, the same session forks.
     expect((await fork(w.doc.id)).status).toBe(201);
+  });
+});
+
+/**
+ * THE CREDIT LINE — the copy says where it came from, in the served document's
+ * own footer, and says it WITHOUT becoming an existence oracle.
+ *
+ * The provenance is a fact about the copy, so it is resolved at render from
+ * `forked_from` rather than written into the markup: an agent that rewrites
+ * the document cannot delete the attribution, and nothing about the source is
+ * baked into bytes that outlive its ACL. Which means the ACL is re-asked on
+ * every render, against the STRANGER (`canReadArtifact(row, null)`) — a
+ * document's readers are strangers, and resolving it as the current viewer
+ * would make the same page say different things to different people about a
+ * document neither of them may open.
+ */
+describe('the fork credit line', () => {
+  const served = async (id: string, query = '') =>
+    (await rawRoute(new Request(`${BASE}/a/${id}/raw${query}`), params(id))).text();
+
+  it('names and links a source anyone may read', async () => {
+    const w = await world();
+    asSession({ id: w.bob.id, email: w.bob.email });
+    const copy = (await (await fork(w.doc.id)).json()) as { id: string };
+    noSession();
+    const html = await served(copy.id);
+    expect(html).toContain('data-mx-forked-from');
+    expect(html).toContain('forked from');
+    // The source is NAMED and reachable — the canonical address it would be
+    // shared at (the handle and slug are decoration the resolver adds when the
+    // owner has them; the id is what makes it an address).
+    expect(html).toMatch(new RegExp(`<a href="[^"]*${w.doc.id}[^"]*" target="_top" aria-label="Open the artifact this was forked from"`));
+  });
+
+  it('says only "a private document" when the source is not the reader\'s to see', async () => {
+    const w = await world(PROSE, 'private');
+    // The owner's own agent may still fork what it created…
+    asSession({ id: w.owner.id, email: w.owner.email });
+    const copy = (await (await fork(w.doc.id)).json()) as { id: string };
+    // …and the copy, made public, must not become a way to learn the id exists.
+    const db = await getDb();
+    await db.query('UPDATE artifacts SET visibility = $2 WHERE id = $1', [copy.id, 'public']);
+    noSession();
+    const html = await served(copy.id);
+    expect(html).toContain('forked from a private document');
+    expect(html).not.toContain(w.doc.id);
+  });
+
+  it('a document nobody forked keeps the credits it always had', async () => {
+    const w = await world();
+    noSession();
+    expect(await served(w.doc.id)).not.toContain('data-mx-forked-from');
   });
 });
