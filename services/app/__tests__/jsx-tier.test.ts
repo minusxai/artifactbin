@@ -137,8 +137,8 @@ describe('jsx tier publish', () => {
     );
     expect(imported.status).toBe(201);
     const importedBody = await imported.json();
-    expect(importedBody.warnings[0].url).toBe('https://evil.test/p.png');
-    expect(String(importedBody.warnings[0].fix).length).toBeGreaterThan(0);
+    expect(importedBody.asset_warnings[0].url).toBe('https://evil.test/p.png');
+    expect(String(importedBody.asset_warnings[0].fix).length).toBeGreaterThan(0);
   });
 
   it('allows the self-contained sources: ref: and inline data:image', async () => {

@@ -160,8 +160,8 @@ describe('a web URL in the same position', () => {
     expect(res.status).toBe(201);
     const body = await res.json();
     // Losing a whole document over one dead link is the worse answer — the
-    // milestone-1 rule, and the same warning shape.
-    const warnings = (body.asset_warnings ?? body.warnings) as Array<{ code: string; url: string; fix: string }>;
+    // milestone-1 rule, and the same key an image's refusal comes back under.
+    const warnings = body.asset_warnings as Array<{ code: string; url: string; fix: string }>;
     expect(warnings.map((w) => w.url)).toContain(url);
     expect(warnings.find((w) => w.url === url)!.code).toBe('bad_status');
   });

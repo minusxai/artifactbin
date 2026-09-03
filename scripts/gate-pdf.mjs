@@ -95,14 +95,19 @@ ok(card.target === '_blank', 'the link opens in a new tab');
  * either a popup page or a download; headless Chromium always chooses the
  * download for application/pdf, which is why both are accepted here.
  */
+// Every request the whole context makes, so the address the click reached is
+// readable even when the popup becomes a download (headless always downloads a
+// PDF, and a download that began in a sandboxed context reports no url).
+const asked = [];
+context.on('request', (r) => asked.push(r.url()));
 const [popup, download] = await Promise.all([
   page.waitForEvent('popup', { timeout: 8_000 }).catch(() => null),
   page.waitForEvent('download', { timeout: 8_000 }).catch(() => null),
   page.click('[data-slot="file-link"]'),
 ]);
-const openedUrl = popup ? popup.url() : download ? download.url() : null;
-ok(openedUrl !== null, 'a real click opened the file');
-ok((openedUrl ?? '').endsWith(`/a/${file.id}/raw?v=1`), `…at the file's own address (${openedUrl})`);
+ok(popup !== null || download !== null, 'a real click opened the file');
+ok(asked.some((u) => u.endsWith(`/a/${file.id}/raw?v=1`)),
+  `…at the file's own address (${JSON.stringify(asked.slice(-3))})`);
 if (download) {
   // The name the browser would save it under: `Quarterly review.pdf` comes from
   // Content-Disposition, `raw.pdf` or `raw` would be the URL's own last
@@ -113,20 +118,24 @@ if (download) {
   ok(true, 'the popup rendered rather than downloading — a viewer is present (headful)');
 }
 
-// The headers as the wire carries them, fetched from the reader's own page.
-const headers = await page.evaluate(async (url) => {
-  const res = await fetch(url);
-  return {
-    status: res.status,
-    type: res.headers.get('content-type'),
-    disposition: res.headers.get('content-disposition'),
-    csp: res.headers.get('content-security-policy'),
-    nosniff: res.headers.get('x-content-type-options'),
-    ranges: res.headers.get('accept-ranges'),
-    cache: res.headers.get('cache-control'),
-    length: (await res.arrayBuffer()).byteLength,
-  };
-}, `${B}/a/${file.id}/raw?v=1`);
+/*
+ * The headers as the wire carries them — through the CONTEXT's own request
+ * client, not `fetch` inside the page. The reader's page IS the sandboxed
+ * document, whose CSP is `default-src 'none'` with a connect-src naming only
+ * its own three endpoints, so a fetch from in there is refused. (Which is
+ * itself the design working, and cost this gate one rewrite.)
+ */
+const res = await context.request.get(`${B}/a/${file.id}/raw?v=1`);
+const headers = {
+  status: res.status(),
+  type: res.headers()['content-type'],
+  disposition: res.headers()['content-disposition'],
+  csp: res.headers()['content-security-policy'],
+  nosniff: res.headers()['x-content-type-options'],
+  ranges: res.headers()['accept-ranges'],
+  cache: res.headers()['cache-control'],
+  length: (await res.body()).byteLength,
+};
 ok(headers.type === 'application/pdf', `served as application/pdf (${headers.type})`);
 ok(headers.disposition === 'inline; filename="Quarterly review.pdf"', `inline, named after the document (${headers.disposition})`);
 ok(headers.csp === 'sandbox', `sandboxed, so the response context is opaque (${headers.csp})`);
@@ -136,18 +145,19 @@ ok((headers.cache ?? '').includes('immutable'), `the versioned address is immuta
 ok(headers.length === PDF.byteLength, `the whole file arrived (${headers.length} of ${PDF.byteLength})`);
 
 // A SEEK: the last 32 bytes, which is where a viewer starts (the xref table).
-const seek = await page.evaluate(async (url) => {
-  const res = await fetch(url, { headers: { Range: 'bytes=-32' } });
-  const buf = new Uint8Array(await res.arrayBuffer());
-  return { status: res.status, range: res.headers.get('content-range'), bytes: [...buf].map((b) => String.fromCharCode(b)).join('') };
-}, `${B}/a/${file.id}/raw?v=1`);
+const seekRes = await context.request.get(`${B}/a/${file.id}/raw?v=1`, { headers: { Range: 'bytes=-32' } });
+const seek = {
+  status: seekRes.status(),
+  range: seekRes.headers()['content-range'],
+  bytes: (await seekRes.body()).toString('latin1'),
+};
 ok(seek.status === 206, `a range request is answered 206 (${seek.status})`);
 ok(seek.range === `bytes ${PDF.byteLength - 32}-${PDF.byteLength - 1}/${PDF.byteLength}`, `…with the right range (${seek.range})`);
 ok(seek.bytes === PDF.subarray(PDF.byteLength - 32).toString('latin1'), 'the bytes are the file\'s own last 32');
 
 // The document's CSP is UNCHANGED by any of this: a link is navigation, and
 // nothing here asked for a new connect-src, frame-src or object-src.
-const docCsp = await page.evaluate(async () => (await fetch(location.href)).headers.get('content-security-policy'));
+const docCsp = (await context.request.get(`${B}/a/${owner.id}`)).headers()['content-security-policy'];
 ok(!/object-src|frame-src/.test(docCsp ?? ''), 'the document needed no new CSP allowance for the card');
 
 await context.close();

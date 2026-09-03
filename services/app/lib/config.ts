@@ -295,6 +295,15 @@ export const WEB_INGEST_TIMEOUT_MS = Number(env('WEB_INGEST', 'TIMEOUT_MS') ?? '
 export const WEB_INGEST_MAX_PER_HOUR = Number(env('WEB_INGEST', 'MAX_PER_HOUR') ?? '300');
 /** External images one publish may import — bounds publish latency, not storage. */
 export const MAX_EXTERNAL_IMAGES_PER_PUBLISH = Number(env('WEB_INGEST', 'MAX_IMAGES_PER_PUBLISH') ?? '8');
+/**
+ * External ASSETS one publish may import in total — images AND the `@font-face`
+ * urls in its stylesheet. The image cap above counts images alone, which left
+ * the number of outbound fetches a single document could cause up to whoever
+ * wrote the document: twelve faces named twelve hosts and no cap saw them.
+ * Over this, the excess is NAMED in the reply and not fetched; the document
+ * still publishes, because a cap is not a reason to lose someone's work.
+ */
+export const MAX_EXTERNAL_ASSETS_PER_PUBLISH = Number(env('WEB_INGEST', 'MAX_ASSETS_PER_PUBLISH') ?? '16');
 
 /**
  * The biggest image an artifact may hold. Decoupled from MAX_CONTENT_BYTES (the

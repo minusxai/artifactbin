@@ -56,6 +56,16 @@ describe('the refresh row', () => {
     expect(screen.getByLabelText('Refresh result')).toHaveTextContent('check it is public');
   });
 
+  it('says that a reader who already loaded the image may still see the old one', async () => {
+    vi.stubGlobal('fetch', answering(200, { refreshed: ['https://a.example/one.png'], unchanged: [], failed: [] }));
+    render(<RefreshAssets id="story1" variant="menu" />);
+    fireEvent.click(screen.getByLabelText('Refresh external images'));
+    // The address is derived from the url and served `immutable`, so a browser
+    // that has the old bytes keeps them. Saying so here is the whole mitigation
+    // until the cache-busting address lands (milestone 4).
+    await waitFor(() => expect(screen.getByLabelText('Refresh result')).toHaveTextContent('already loaded'));
+  });
+
   it('does not fire twice on a double click', async () => {
     vi.stubGlobal('fetch', answering(200, { refreshed: [], unchanged: [], failed: [] }));
     render(<RefreshAssets id="story1" variant="menu" />);

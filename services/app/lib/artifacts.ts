@@ -814,7 +814,8 @@ export interface EditInput {
  * Response unchanged (same shape as parseContentInput).
  */
 export type EditOutcome =
-  | { applied: true; row: ArtifactRow }
+  /** `warnings`: external URLs the candidate named that would not import (lib/web-assets). */
+  | { applied: true; row: ArtifactRow; warnings?: AssetWarning[] }
   | { applied: false; reason: 'stale_edit_id' | 'doc_changed'; head: { editId: string; source: string; version: number } }
   | { applied: false; reason: 'bad_diff'; detail: 'no_match' | 'multiple_matches' | 'identical' }
   | { applied: false; reason: 'not_editable' }; // data tiers are values, not documents
@@ -1020,7 +1021,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     );
     if (updated.rows[0]) {
       void trackEvent('edit', updated.rows[0].id, { userId: updated.rows[0].user_id });
-      return { applied: true, row: updated.rows[0] };
+      return { applied: true, row: updated.rows[0], ...(published.warnings?.length ? { warnings: published.warnings } : {}) };
     }
     // Lost the CAS: someone landed between our read and our write. Re-read and
     // redo — our base is now an ordinary stale base, so the node-scope check

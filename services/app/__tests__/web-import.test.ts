@@ -41,7 +41,9 @@ let web: string; // the "public web" this suite serves
 
 beforeAll(async () => {
   server = await withHttpServer((req, res) => {
-    switch (req.url) {
+    // The path alone decides: tests distinguish URLs by a query string (the
+    // cache is keyed by the whole URL), and every one of them wants these bytes.
+    switch ((req.url ?? '').split('?')[0]) {
       case '/logo.png': res.writeHead(200, { 'Content-Type': 'image/png' }); res.end(PNG); return;
       case '/photo.jpg': res.writeHead(200, { 'Content-Type': 'image/jpeg' }); res.end(JPG); return;
       case '/rows.csv': res.writeHead(200, { 'Content-Type': 'text/csv' }); res.end(CSV); return;
@@ -138,8 +140,12 @@ describe('the agent door — external <img src> is imported and the URL is KEPT'
     } }));
     expect(res.status).toBe(201);
     const body = await res.json();
-    expect(body.warnings).toEqual([expect.objectContaining({ code: 'bad_status', url: `${web}/gone.png` })]);
-    expect(String(body.warnings[0].fix).length).toBeGreaterThan(0);
+    // ASSET warnings have their own key: `warnings` keeps the dataset-dependent
+    // shape ({id,title,details}) it has always had, and a markup PUT can carry
+    // both — one key with two shapes is a wire an agent cannot parse.
+    expect(body.asset_warnings).toEqual([expect.objectContaining({ code: 'bad_status', url: `${web}/gone.png` })]);
+    expect(String(body.asset_warnings[0].fix).length).toBeGreaterThan(0);
+    expect(body.warnings).toBeUndefined();
     // The good one still maps; the dead one keeps its URL, and the browser
     // draws the alt text (the document's CSP never reaches the host for it).
     const html = await (await rawRoute(request(`/a/${body.id}/raw`), params({ id: body.id }))).text();
@@ -153,9 +159,27 @@ describe('the agent door — external <img src> is imported and the URL is KEPT'
       markup: `<div><img src="${web}/page.html" /></div>`,
     } }));
     expect(res.status).toBe(201);
-    expect((await res.json()).warnings[0].code).toBe('unsupported_type');
+    expect((await res.json()).asset_warnings[0].code).toBe('unsupported_type');
     const db = await getDb();
     expect((await db.query<{ n: string }>('select count(*)::text as n from web_assets')).rows[0].n).toBe('0');
+  });
+
+  it('caps the TOTAL external assets one publish imports, and names the excess', async () => {
+    const t = await mintToken('t');
+    // Seven images and twelve faces: under the image cap, far over the total.
+    const imgs = Array.from({ length: 7 }, (_, i) => `<img src="${web}/logo.png?i=${i}" />`).join('');
+    const faces = Array.from({ length: 12 }, (_, i) =>
+      `@font-face{font-family:F${i};src:url(${web}/face.woff2?f=${i}) format('woff2')}`).join('');
+    const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: {
+      markup: `<Helmet><style>{\`${faces}\`}</style></Helmet><div>${imgs}</div>`,
+    } }));
+    expect(res.status).toBe(201);
+    const warned = (await res.json()).asset_warnings as Array<{ code: string; url: string }>;
+    // 19 named, 16 imported, 3 warned — by name, so the author can act.
+    expect(warned.filter((w) => w.code === 'too_many_external_assets')).toHaveLength(3);
+    expect(warned.at(-1)!.url).toBe(`${web}/face.woff2?f=11`);
+    const db = await getDb();
+    expect((await db.query<{ n: string }>('select count(*)::text as n from web_assets')).rows[0].n).toBe('16');
   });
 
   it('caps the imports one publish may make', async () => {
@@ -190,6 +214,20 @@ describe('the agent door — external <img src> is imported and the URL is KEPT'
     expect((await getArtifactById(made.id))!.source).toContain(`${web}/photo.jpg`);
     const html = await (await rawRoute(request(`/a/${made.id}/raw`), params({ id: made.id }))).text();
     expect(html).toContain(assetUrlFor(`${web}/photo.jpg`));
+  });
+
+  it('the EDITS door REPORTS what it could not import, like create and PUT', async () => {
+    const t = await mintToken('t');
+    const made = await (await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<div><p>hello</p></div>' } }))).json();
+    const res = await editsRoute(request(`/api/artifacts/${made.id}/edits`, { method: 'POST', token: t.token, json: {
+      edit_id: made.edit_id,
+      old_string: '<p>hello</p>',
+      new_string: `<p>hello</p><img src="${web}/gone.png" alt="missing" />`,
+    } }), params({ id: made.id }));
+    expect(res.status).toBe(200);
+    // The edit path runs the SAME publish door, so it must answer the same way:
+    // a dead link is news wherever the write came in.
+    expect((await res.json()).asset_warnings).toEqual([expect.objectContaining({ code: 'bad_status', url: `${web}/gone.png` })]);
   });
 
   it('the EDITS door imports too — an agent pasting a web image mid-edit', async () => {
@@ -230,7 +268,7 @@ describe('a self-hosted font', () => {
       markup: `<Helmet><style>{\`${css}\`}</style></Helmet><p>words</p>`,
     } }));
     expect(res.status).toBe(201);
-    expect((await res.json()).warnings[0].url).toBe(`${web}/gone.woff2`);
+    expect((await res.json()).asset_warnings[0].url).toBe(`${web}/gone.woff2`);
   });
 });
 
