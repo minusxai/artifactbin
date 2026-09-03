@@ -9,6 +9,7 @@
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { DEFAULT_MODE, parseMode, type EvalMode } from './mode';
+import { parseCredentialSource, type CredentialSource } from './credential';
 
 export interface Args {
   /** The single leg this run drives — see `lib/leg.ts`. */
@@ -32,6 +33,12 @@ export interface Args {
   vision: boolean;
   /** How the agent REACHES the product — see `lib/mode.ts`. */
   mode: EvalMode;
+  /**
+   * WHERE this leg's token comes from, overriding what the mode would choose (`lib/credential.ts`):
+   * `paste` (the product's own copy-text handoff), `inbox-oauth` (log in with an emailed code and
+   * grant like an MCP client) or `secret` (a pre-provisioned account token in `EVAL_ACCOUNT_TOKEN`).
+   */
+  credential?: CredentialSource;
   tasks?: string[];
   out: string;
   ci: boolean;
@@ -109,6 +116,7 @@ export function parseArgs(argv: string[]): Args {
       case '--price-web-search': args.priceWebSearch = rate(value(), '--price-web-search'); break;
       case '--no-vision': args.vision = false; break;
       case '--mode': args.mode = parseMode(value()); break;
+      case '--credential': args.credential = parseCredentialSource(value()); break;
       case '--tasks': args.tasks = list(value()); break;
       case '--shard': args.shard = value(); break;
       case '--deployment': args.deployment = deploymentUrl(value()); break;

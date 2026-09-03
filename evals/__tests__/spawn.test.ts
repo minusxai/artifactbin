@@ -10,7 +10,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { chownArgv, runInvocation, wrapRunAs } from '../lib/spawn';
+import { chownArgv, prepareRunAsDirs, runInvocation, wrapRunAs } from '../lib/spawn';
 
 let dir: string;
 const paths = () => ({ stdoutPath: path.join(dir, 'transcript.jsonl'), stderrPath: path.join(dir, 'stderr.log') });
@@ -134,5 +134,37 @@ describe('HOME is the per-run harness home', () => {
     const r = await runInvocation(node('console.log(process.env.HOME)'), { cwd: dir, homeDir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
     expect(r.exitCode).toBe(0);
     expect(r.stdout.trim()).toBe(homeDir);
+  });
+});
+
+/**
+ * ISOLATION, measured: production run 33758791539 (`--run-as agent`, ubuntu-latest) proved the switch
+ * and then could not start a harness — the workspace ROOT is a 0700 mkdtemp directory owned by the
+ * driver, so the agent user could not traverse into the cwd and home beneath it:
+ *
+ *   Credential store read failed for fireworks: EACCES: permission denied, mkdir '/tmp/artifact-eval-pi-…/home'
+ *   EACCES: permission denied, mkdir '…/home/xdg-data/opencode'
+ *   EACCES: permission denied, mkdir '/home/runner/work/_temp/eval-out/baseline/home'   (the baseline probe)
+ *
+ * So the ROOT is handed over too, and every directory exists before ownership moves.
+ */
+describe('prepareRunAsDirs', () => {
+  it('hands over the workspace ROOT as well as the cwd and the home — the root is what could not be traversed', () => {
+    const root = path.join(dir, 'ws');
+    const dirs = prepareRunAsDirs({ workspaceRoot: root, cwd: path.join(root, 'cwd'), homeDir: path.join(root, 'home') });
+    expect(dirs).toEqual([root, path.join(root, 'cwd'), path.join(root, 'home')]);
+    expect(chownArgv('agent', dirs)).toEqual(['sudo', '-n', 'chown', '-R', 'agent', root, path.join(root, 'cwd'), path.join(root, 'home')]);
+  });
+
+  it('creates every directory it is about to hand over — the baseline probe’s home did not exist', () => {
+    const root = path.join(dir, 'baseline');
+    const dirs = prepareRunAsDirs({ workspaceRoot: root, cwd: path.join(root, 'cwd'), homeDir: path.join(root, 'home') });
+    for (const d of dirs) expect(fs.statSync(d).isDirectory()).toBe(true);
+  });
+
+  it('names each directory once, and drops the ones this run does not have', () => {
+    const cwd = path.join(dir, 'only-cwd');
+    expect(prepareRunAsDirs({ workspaceRoot: cwd, cwd })).toEqual([cwd]);
+    expect(prepareRunAsDirs({ cwd })).toEqual([cwd]);
   });
 });

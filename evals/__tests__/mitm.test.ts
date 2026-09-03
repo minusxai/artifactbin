@@ -184,3 +184,20 @@ describe('shutdown', () => {
     await new Promise<void>((r) => keepAlive.close(() => r()));
   });
 });
+
+/**
+ * The agent runs as ANOTHER unix user under `--run-as`, and it must trust this CA to reach the
+ * product at all. Measured on run 33758791539: `Warning: Ignoring extra certs from '…/ca/ca.crt',
+ * load failed: … Permission denied`. The certificate is public by nature; the KEY never is.
+ */
+describe('createCa file modes — the agent user must read the certificate, never the key', () => {
+  it('leaves the certificate and the bundle world-readable in a traversable directory, and the key private', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'eval-ca-modes-'));
+    const ca = createCa(dir);
+    expect(fs.statSync(ca.caPath).mode & 0o044).toBe(0o044);
+    expect(fs.statSync(ca.bundlePath).mode & 0o044).toBe(0o044);
+    expect(fs.statSync(dir).mode & 0o055).toBe(0o055);
+    expect(fs.statSync(path.join(dir, 'ca.key')).mode & 0o077).toBe(0);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});

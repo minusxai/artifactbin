@@ -71,6 +71,24 @@ export function chownArgv(user: string, dirs: string[]): string[] {
   return ['sudo', '-n', 'chown', '-R', user, ...dirs];
 }
 
+/**
+ * The directories that must exist and change hands before the switch — created here, so ownership
+ * moves at spawn time rather than at creation, when the driver still needs to write to them.
+ *
+ * The workspace ROOT is in the list, and that is the whole fix: `createWorkspace` uses `mkdtemp`,
+ * which yields a 0700 directory owned by the DRIVER, so chowning only the cwd and the home beneath it
+ * left the other user unable to traverse into either. Measured on production run 33758791539
+ * (`--run-as agent`, ubuntu-latest): every harness died before its first turn —
+ * `EACCES: permission denied, mkdir '/tmp/artifact-eval-pi-…/home'`,
+ * `EACCES … mkdir '…/home/xdg-data/opencode'`, and for the baseline probe
+ * `EACCES … mkdir '…/eval-out/baseline/home'`.
+ */
+export function prepareRunAsDirs(opts: { workspaceRoot?: string; cwd: string; homeDir?: string }): string[] {
+  const dirs = [...new Set([...(opts.workspaceRoot ? [opts.workspaceRoot] : []), opts.cwd, ...(opts.homeDir ? [opts.homeDir] : [])])];
+  for (const dir of dirs) fs.mkdirSync(dir, { recursive: true });
+  return dirs;
+}
+
 /** First executable named `cmd` on `PATH`. Named error, never a bare fallback: a bare name is exactly what sudo's secure_path would lose. */
 function resolveOnPath(cmd: string, PATH: string | undefined): string {
   for (const dir of (PATH ?? '').split(path.delimiter).filter(Boolean)) {
@@ -85,17 +103,22 @@ function resolveOnPath(cmd: string, PATH: string | undefined): string {
   throw new Error(`--run-as: cannot find "${cmd}" on PATH`);
 }
 
-export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string; baseEnv: Record<string, string | undefined>; timeoutMs: number; stdoutPath: string; stderrPath: string; maxStdoutBytes?: number; runAs?: string; homeDir?: string }): Promise<SpawnResult> {
+export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string; baseEnv: Record<string, string | undefined>; timeoutMs: number; stdoutPath: string; stderrPath: string; maxStdoutBytes?: number; runAs?: string; homeDir?: string; workspaceRoot?: string }): Promise<SpawnResult> {
   const cap = opts.maxStdoutBytes ?? DEFAULT_MAX_STDOUT_BYTES;
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(opts.baseEnv)) if (v !== undefined && !inv.unsetEnv.includes(k)) env[k] = v;
   Object.assign(env, inv.env);
+  // HOME is the per-run harness home: `~/.artifactbin.env` — the connection file the skill reads —
+  // resolves there, and nothing a CLI writes under $HOME lands in the runner's real home. Set after the
+  // adapter's own environment, since no adapter sets HOME and the driver's choice of home is the one
+  // that must win; it is also the precondition for `--run-as`, whose chown covers exactly this directory.
+  if (opts.homeDir) env.HOME = opts.homeDir;
 
   // No `--run-as`, no sudo: a laptop run is untouched by any of this. Only argv changes —
   // the line filter, the redaction list and the environment are the same launch either way.
   let argv = inv.argv;
   if (opts.runAs) {
-    const chown = chownArgv(opts.runAs, [opts.cwd, ...(opts.homeDir ? [opts.homeDir] : [])]);
+    const chown = chownArgv(opts.runAs, prepareRunAsDirs(opts));
     const done = spawnSync(chown[0], chown.slice(1), { stdio: 'inherit' });
     if (done.status !== 0) throw new Error(`--run-as ${opts.runAs}: \`${chown.join(' ')}\` exited ${String(done.status ?? done.signal ?? done.error?.message)}`);
     argv = wrapRunAs(inv, opts.runAs, (cmd) => resolveOnPath(cmd, env.PATH)).argv;

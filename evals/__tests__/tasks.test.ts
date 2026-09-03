@@ -53,10 +53,13 @@ describe('buildPrompt — token handoff', () => {
     expect(prompt).not.toContain('mx_secret'); // the token is in the harness config, not the agent's prompt
   });
 
-  it('installed_skill+api_action names the installed skill and passes the API token', () => {
+  it('installed_skill+api_action names the installed skill and the saved connection, never the token', () => {
     const prompt = buildPrompt(task({ handoff: 'token' }), access, { mode: 'installed_skill+api_action' });
     expect(prompt).toContain('skill is installed');
-    expect(prompt).toContain('mx_secret');
+    // The token is in `~/.artifactbin.env` in the agent's HOME — the skill's own contract, written by
+    // the driver before the turn (decided 2026-09-03); a person with the plugin never pastes one.
+    expect(prompt).not.toContain('mx_secret');
+    expect(prompt).toContain('~/.artifactbin.env');
     expect(prompt).not.toContain('/docs/');
   });
 });

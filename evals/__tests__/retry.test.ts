@@ -3,7 +3,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import http from 'node:http';
-import { isTransientStatus, mintStartDocument, withRetry } from '../lib/retry';
+import { isTransientStatus, mintStartDocument, mintStartDocumentAs, withRetry } from '../lib/retry';
 
 const noSleep = { sleep: async () => {} };
 
@@ -89,5 +89,58 @@ describe('mintStartDocument against a genuinely failing server', () => {
     await expect(mintStartDocument(`http://127.0.0.1:${port}`, 'x-driver', { delayMs: 1 })).rejects.toThrow(/400/);
     expect(hits).toBe(1);
     await new Promise<void>((r) => server.close(() => r()));
+  });
+});
+
+/**
+ * A leg with an ACCOUNT credential does not spend `/api/start` — that mints an ANONYMOUS token, and
+ * the whole point is that the agent's documents belong to the eval's account. The driver creates the
+ * start document itself, as that account, and the ledger skips the call (`DRIVER_HEADER`).
+ */
+describe('mintStartDocumentAs — the account-owned start document', () => {
+  it('creates an unlisted placeholder as the account, marked as the driver’s own call', async () => {
+    const seen: { auth: string | undefined; driver: string | undefined; body: unknown }[] = [];
+    const server = http.createServer((req, res) => {
+      let body = '';
+      req.on('data', (c) => { body += c; });
+      req.on('end', () => {
+        seen.push({ auth: req.headers.authorization, driver: req.headers['x-driver'] as string, body: JSON.parse(body) });
+        res.writeHead(201, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ id: 'acct01', url: 'http://x/a/acct01', visibility: 'unlisted' }));
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const port = (server.address() as { port: number }).port;
+
+    const doc = await mintStartDocumentAs(`http://127.0.0.1:${port}`, 'x-driver', 'mx_account', { delayMs: 1 });
+    expect(doc.id).toBe('acct01');
+    expect(seen).toHaveLength(1);
+    expect(seen[0].auth).toBe('Bearer mx_account');
+    expect(seen[0].driver).toBe('1');
+    expect(seen[0].body).toMatchObject({ visibility: 'unlisted' });
+    // Placeholder markup, so `published` still compares the agent's document against a document it did not write.
+    expect(String((seen[0].body as { markup: string }).markup).length).toBeGreaterThan(0);
+    await new Promise<void>((r) => server.close(() => r()));
+  });
+
+  it('rides out a 502 the same way the anonymous mint does, and surfaces a 4xx at once', async () => {
+    let hits = 0;
+    const server = http.createServer((_req, res) => {
+      hits++;
+      if (hits === 1) { res.writeHead(502); res.end(); return; }
+      res.writeHead(201, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ id: 'acct02' }));
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const port = (server.address() as { port: number }).port;
+    expect((await mintStartDocumentAs(`http://127.0.0.1:${port}`, 'x-driver', 'mx_account', { delayMs: 1 })).id).toBe('acct02');
+    expect(hits).toBe(2);
+    await new Promise<void>((r) => server.close(() => r()));
+
+    const refusing = http.createServer((_req, res) => { res.writeHead(403); res.end(); });
+    await new Promise<void>((r) => refusing.listen(0, '127.0.0.1', r));
+    const p2 = (refusing.address() as { port: number }).port;
+    await expect(mintStartDocumentAs(`http://127.0.0.1:${p2}`, 'x-driver', 'mx_account', { delayMs: 1 })).rejects.toThrow(/403/);
+    await new Promise<void>((r) => refusing.close(() => r()));
   });
 });
