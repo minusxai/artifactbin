@@ -54,8 +54,12 @@ const TOOLTIP_CSS = `
  * The close button a touch-opened card carries (lib/viz/tooltip-dismiss). The CARD stays
  * pointer-transparent — it must never steal the hover it describes — and only this subtree is
  * tappable; a pointer-events:auto descendant of a pointer-events:none box is hit-testable.
- * Sized to Apple's 44px touch target by its own padding, offset so it overhangs the card's
- * top-right corner rather than covering its first line.
+ * It overhangs the card's top-right corner rather than covering its first line.
+ *
+ * DRAWN at 26px and TAPPED at 44px: a dot big enough for a thumb would cover the card it sits
+ * on, so the ::before below is a transparent 44x44 target centred on the button — the size
+ * Apple's HIG and Material both ask for. It is absolutely positioned inside an absolutely
+ * positioned button, so it adds the target without moving anything: no layout, no paint.
  */
 #vg-tooltip-element .mx-tt-close,
 #mx-shared-tooltip .mx-tt-close {
@@ -78,6 +82,16 @@ const TOOLTIP_CSS = `
   color: inherit;
   background: inherit;
   box-shadow: 0 2px 10px -2px rgba(20, 27, 45, 0.35), inset 0 0 0 0.5px rgba(127, 140, 160, 0.35);
+}
+#vg-tooltip-element .mx-tt-close::before,
+#mx-shared-tooltip .mx-tt-close::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
 }
 #vg-tooltip-element:has(.mx-tt-close),
 #mx-shared-tooltip:has(.mx-tt-close) {

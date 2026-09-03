@@ -5,7 +5,7 @@
  * finger that opened the card).
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { createVegaTooltipHandler } from '@/lib/viz/vega-tooltip-handler';
+import { createVegaTooltipHandler, releaseVegaTooltipDismiss } from '@/lib/viz/vega-tooltip-handler';
 import {
   installTooltipDismiss,
   lastPointerType,
@@ -160,5 +160,47 @@ describe('the per-mark handler installs ONE policy per document', () => {
     createVegaTooltipHandler(chart, 'dark');
     const scrolls = add.mock.calls.filter(([type]) => type === 'scroll').length;
     expect(scrolls).toBe(1);
+  });
+
+  /*
+   * …and it does not KEEP one after the last chart goes. A document's policy is released when a
+   * DIFFERENT chart scopes it, so the last chart to unmount used to leave five capture-phase
+   * listeners and a strong reference to a detached element behind for the document's lifetime.
+   * `VegaChart`'s cleanup releases it by name, and only when the policy is still ITS own.
+   */
+  it('releases the whole listener set when the last chart tears down', () => {
+    document.body.innerHTML = '<div id="chart"><svg></svg></div>';
+    const chart = document.getElementById('chart')!;
+    const add = vi.spyOn(document, 'addEventListener');
+    createVegaTooltipHandler(chart, 'light');
+    const installed = add.mock.calls.filter(([type]) => type !== 'pointerdown').length;
+    expect(installed).toBeGreaterThan(0);
+
+    // The spy starts HERE: scoping to a new chart releases the previous one, and those removals
+    // belong to the re-scope, not to the teardown this test is about.
+    const remove = vi.spyOn(document, 'removeEventListener');
+    releaseVegaTooltipDismiss(document, chart);
+    const released = remove.mock.calls.filter(([type]) => type !== 'pointerdown').length;
+    expect(released).toBe(installed);
+
+    // A later scroll must reach nothing at all — the set is gone, not merely inert.
+    const before = remove.mock.calls.length;
+    document.dispatchEvent(new Event('scroll', { bubbles: true }));
+    expect(remove.mock.calls.length).toBe(before);
+    createVegaTooltipHandler(chart, 'light');
+    expect(add.mock.calls.filter(([type]) => type === 'scroll').length).toBe(2);
+  });
+
+  it('a chart that is no longer the scoped one releases nothing', () => {
+    document.body.innerHTML = '<div id="a"></div><div id="b"></div>';
+    const a = document.getElementById('a')!;
+    const b = document.getElementById('b')!;
+    createVegaTooltipHandler(a, 'light');
+    createVegaTooltipHandler(b, 'light');           // b now owns the document's policy
+    const remove = vi.spyOn(document, 'removeEventListener');
+    releaseVegaTooltipDismiss(document, a);          // a's teardown must not take b's listeners
+    expect(remove.mock.calls.filter(([type]) => type === 'scroll').length).toBe(0);
+    releaseVegaTooltipDismiss(document, b);
+    expect(remove.mock.calls.filter(([type]) => type === 'scroll').length).toBe(1);
   });
 });

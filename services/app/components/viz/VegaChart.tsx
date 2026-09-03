@@ -20,7 +20,7 @@ import { chartTokenRangeFromElement, resolveCssVarColors } from '@/lib/viz/chart
 import { themeTileUrl } from '@/lib/viz/viz-templates';
 import { buildTooltipPlan, buildTooltipData, renderSharedTooltipHtml, tooltipEntryMatchesFacet, type TooltipPlan, type TooltipEntry } from '@/lib/viz/tooltip-plan';
 import { SharedTooltip } from '@/lib/viz/shared-tooltip';
-import { hideVegaTooltip } from '@/lib/viz/vega-tooltip-handler';
+import { hideVegaTooltip, releaseVegaTooltipDismiss } from '@/lib/viz/vega-tooltip-handler';
 import { injectGuideMark, GUIDE_WIDTH, GUIDE_OPACITY, GUIDE_BAND_OPACITY } from '@/lib/viz/guide-mark';
 import { findFacetCellAtPoint } from '@/lib/viz/facet-tooltip';
 import { isInteractiveMapEnvelope } from '@/lib/viz/interactive-map';
@@ -414,8 +414,13 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
       cancelled = true;
       viewRef.current = null;
       // The per-mark card is a document-level singleton with no owner once this view is
-      // finalized: a rebuild with it up would leave it pinned there forever.
-      if (el.ownerDocument) hideVegaTooltip(el.ownerDocument);
+      // finalized: a rebuild with it up would leave it pinned there forever. Its dismiss policy
+      // goes with it — a rebuild re-installs one, and the LAST chart's teardown must leave the
+      // document as it found it.
+      if (el.ownerDocument) {
+        hideVegaTooltip(el.ownerDocument);
+        releaseVegaTooltipDismiss(el.ownerDocument, el);
+      }
       tooltipRef.current?.cleanup();
       tooltipRef.current?.controller.destroy();
       tooltipRef.current = null;

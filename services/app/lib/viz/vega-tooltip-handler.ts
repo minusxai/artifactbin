@@ -66,6 +66,20 @@ function scopeDismissTo(doc: Document, chart: Element): void {
   policies.set(doc, { chart, release: installTooltipDismiss(doc, chart, () => hideVegaTooltip(doc)) });
 }
 
+/**
+ * Release the document's policy when `chart` tears down — and ONLY while the policy is still
+ * its own. A re-scope releases the chart it replaces, so the last chart in a document was the
+ * one nothing released: its listener set and a strong reference to the now-detached element
+ * outlived it. `VegaChart` calls this from the same cleanup as `hideVegaTooltip`; a chart that
+ * has since handed the scope to a sibling must take nothing away from it.
+ */
+export function releaseVegaTooltipDismiss(doc: Document, chart: Element): void {
+  const current = policies.get(doc);
+  if (current?.chart !== chart) return;
+  current.release();
+  policies.delete(doc);
+}
+
 /** Create a Vega tooltip callback scoped to the rendered chart's document. */
 export function createVegaTooltipHandler(
   container: HTMLElement,

@@ -1,18 +1,26 @@
 /**
  * The dismiss policy every chart tooltip CARD obeys. Browser-only, pure DOM, no React.
  *
- * A hover card is written for a mouse: it appears on `mousemove` and leaves on `mouseout`.
- * A finger produces neither reliably — Chromium synthesises a compatibility `mousemove` for a
- * tap (so the card OPENS) and no `mouseout` until the next tap somewhere else (so it never
- * CLOSES). The card is `position: fixed` (it cannot scroll away) and `pointer-events: none`
- * (it cannot be tapped away), so on a phone it stays pinned over the document indefinitely.
+ * A hover card is written for a mouse: Vega opens it when a pointer MOVES onto a mark and closes
+ * it on the scenegraph's `mouseout`. A finger reliably produces neither.
  *
- * The policy is therefore about the ways a gesture can END that the hover model does not see:
- * a touch that turned into a scroll (`pointercancel`, `touchmove`), the page moving under the
- * card (`scroll`), the reader's attention going elsewhere (`pointerdown` outside the chart),
- * and the keyboard's universal exit (Escape). It is UNCONDITIONAL — a mouse reader gets it too,
- * because "the page moved, so the thing pinned to a viewport point is stale" is not a fact
- * about fingers.
+ * What was MEASURED here (headless Chromium, `hasTouch`, a real emulated tap on a mark — the
+ * event log is in the phase report): `pointerdown → pointerup → pointerleave → touchend →
+ * mousemove`, no `pointermove` at any point, and no card opened at all. What is REPORTED, from a
+ * real device and NOT reproduced in this environment: a finger — which is never quite stationary
+ * — does open the card, and it then stays up until a different mark is tapped. Treat the opening
+ * half as the bug report's claim rather than as something this module's author watched happen.
+ *
+ * The dismissal half needs no such caveat, because the card that is up cannot be got rid of by
+ * any means a phone has: it is `position: fixed` (it cannot scroll away) and `pointer-events:
+ * none` (it cannot be tapped away). So the policy below is UNCONDITIONAL about how the card was
+ * opened — it dismisses whatever is up, however it got there.
+ *
+ * It covers the ways a gesture can END that the hover model does not see: a touch that turned
+ * into a scroll (`pointercancel`, `touchmove`), the page moving under the card (`scroll`), the
+ * reader's attention going elsewhere (`pointerdown` outside the chart), and the keyboard's
+ * universal exit (Escape). A mouse reader gets all of it too — "the page moved, so a thing
+ * pinned to a viewport point is stale" is not a fact about fingers.
  *
  * The one touch-only part is the affordance: a card opened by touch carries a close button,
  * because a finger has no "move away" gesture and the tap-outside rule is invisible. A card

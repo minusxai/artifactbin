@@ -285,7 +285,12 @@ const markPoint = (page) => page.evaluate(() => {
   return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
 });
 
-/** Open the card the way a finger does: a touch pointer that moved onto the mark. */
+/**
+ * Open the card the way a finger does: LIFT the previous touch, then a touch pointer that moved
+ * onto the mark. The lift matters — Vega calls the tooltip handler only when the hovered ITEM
+ * changes, so re-touching the same mark while it still believes that mark is hovered opens
+ * nothing (the measured tap log ends in `pointerleave`, which is exactly this).
+ */
 const touchMark = (page) => page.evaluate(() => {
   const path = [...document.querySelectorAll('[aria-label="Question embed"] svg path')]
     .find((p) => p.__data__?.mark?.marktype === 'arc' && p.__data__?.datum);
@@ -293,6 +298,9 @@ const touchMark = (page) => page.evaluate(() => {
   const r = path.getBoundingClientRect();
   const init = { bubbles: true, cancelable: true, view: window, clientX: Math.round(r.x + r.width / 2), clientY: Math.round(r.y + r.height / 2) };
   const touch = { ...init, pointerType: 'touch', isPrimary: true };
+  path.dispatchEvent(new PointerEvent('pointerout', touch));
+  path.dispatchEvent(new PointerEvent('pointerleave', { ...touch, bubbles: false }));
+  path.dispatchEvent(new MouseEvent('mouseout', init));
   path.dispatchEvent(new PointerEvent('pointerdown', touch));
   path.dispatchEvent(new PointerEvent('pointermove', touch));
   path.dispatchEvent(new MouseEvent('mousemove', init));
@@ -337,13 +345,72 @@ ok(tip.cardEvents === 'none' && tip.closeEvents !== 'none',
 await phone.evaluate(() => window.scrollBy(0, 300));
 ok(await cardShown(phone, false), 'tooltip: scrolling the document puts it away');
 
-await phone.evaluate(() => window.scrollTo(0, 0));
+/*
+ * …and the scroll back has to SETTLE before the next touch. A `scroll` event is delivered on a
+ * later frame than the call that caused it, so scrolling and touching in the same breath opens
+ * the card and then dismisses it with the scroll that is still in flight — the product working,
+ * and a false red. Wait for 200ms of scroll silence, which is what a thumb does anyway.
+ */
+const scrollSettled = (page, to) => page.evaluate((y) => new Promise((resolve) => {
+  let timer = setTimeout(finish, 200);
+  function finish() { window.removeEventListener('scroll', onScroll); resolve(); }
+  function onScroll() { clearTimeout(timer); timer = setTimeout(finish, 200); }
+  window.addEventListener('scroll', onScroll);
+  window.scrollTo(0, y);
+}), to);
+
+await scrollSettled(phone, 0);
 await touchMark(phone);
 ok(await cardShown(phone, true), 'tooltip: it opens again after the scroll');
-const closeBox = await phone.locator('button[aria-label="Dismiss tooltip"]').boundingBox().catch(() => null);
-ok(!!closeBox && closeBox.width >= 20 && closeBox.height >= 20,
-  `tooltip: the close button is a real target (${closeBox ? `${Math.round(closeBox.width)}x${Math.round(closeBox.height)}` : 'missing'})`);
-if (closeBox) await phone.touchscreen.tap(closeBox.x + closeBox.width / 2, closeBox.y + closeBox.height / 2);
+/*
+ * A 26px button is a 26px THUMB TARGET, which is half of what a phone needs. The visual stays
+ * 26px — a bigger dot would cover the card it sits on — and the TARGET is grown to 44×44 under
+ * it. Both halves are checked: the declared area, and a real HIT TEST at all four corners 20px
+ * out — inside the enlarged square, outside the drawn button, and (down-and-left) over the card
+ * itself, which is `pointer-events: none` and would otherwise let the tap fall to the document.
+ * Polled, like every other state this leg turns on, rather than sampled once.
+ *
+ * Everything here is measured IN THE PAGE, never through a Playwright locator: `boundingBox()`
+ * scrolls its element into view, and a scroll is precisely what this feature dismisses on — so
+ * asking Playwright where the button is could put the card away before the hit test looks.
+ */
+const targetHittable = await phone.waitForFunction(() => {
+  const b = document.querySelector('button[aria-label="Dismiss tooltip"]');
+  if (!b) return false;
+  const r = b.getBoundingClientRect();
+  const cx = r.left + r.width / 2;
+  const cy = r.top + r.height / 2;
+  // Every corner 20px out — inside the 44x44 target, outside the 26px button.
+  return [[-20, -20], [20, -20], [-20, 20], [20, 20]].every(([dx, dy]) => {
+    const el = document.elementFromPoint(cx + dx, cy + dy);
+    return !!el && (el === b || b.contains(el));
+  });
+}, null, { timeout: 15_000 }).then(() => true).catch(() => false);
+
+const target = await phone.evaluate(() => {
+  const b = document.querySelector('button[aria-label="Dismiss tooltip"]');
+  if (!b) return null;
+  const r = b.getBoundingClientRect();
+  const area = getComputedStyle(b, '::before');
+  const at = (dx, dy) => {
+    const el = document.elementFromPoint(r.left + r.width / 2 + dx, r.top + r.height / 2 + dy);
+    return el ? (el === b || b.contains(el) ? 'button' : el.tagName) : 'nothing';
+  };
+  return {
+    visual: `${Math.round(r.width)}x${Math.round(r.height)}`,
+    area: `${area.width}x${area.height}`,
+    width: parseFloat(area.width), height: parseFloat(area.height),
+    around: [at(-20, -20), at(20, -20), at(-20, 20), at(20, 20)].join(','),
+    card: getComputedStyle(document.getElementById('vg-tooltip-element')).visibility,
+    x: r.left + r.width / 2, y: r.top + r.height / 2,
+  };
+});
+ok(!!target && target.width >= 44 && target.height >= 44,
+  `tooltip: the close button's tap target is at least 44x44 (${target ? `${target.area} around a ${target.visual} button` : 'missing'})`);
+ok(targetHittable,
+  `tooltip: and a tap 20px outside the drawn button still lands on it (corners ${target?.around}, card ${target?.card})`);
+// Tap 18px down-left of the centre: the enlarged target, NOT the drawn button.
+if (target) await phone.touchscreen.tap(target.x - 18, target.y + 18);
 ok(await cardShown(phone, false), 'tooltip: and tapping it dismisses the card');
 await phone.close();
 
