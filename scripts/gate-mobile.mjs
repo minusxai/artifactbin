@@ -221,6 +221,122 @@ const option = await reachable(wide, '[aria-label="Color mode dark"]');
 ok(option.reachable, `desktop: a colour-mode option can actually be clicked (hit ${option.hit})`);
 await wide.close();
 
+/*
+ * ── 5. the selection bubble on a TOUCH device ──────────────────────────────
+ *
+ * The bubble used to appear from `pointerup` or a selection key, and a touch
+ * selection fires neither: Android takes the long-press over for its own
+ * selection UI (the page sees `pointercancel` at best) and dragging the
+ * handles is browser chrome the page never hears about. So on a phone the
+ * owner's Edit/Annotate bubble was simply unreachable, while every desktop
+ * check stayed green.
+ *
+ * Playwright cannot drive the native handles either, so the gesture is
+ * reproduced by its RESULT — a Range set inside the frame plus the
+ * `selectionchange` that a touch selection does fire, and no pointer event at
+ * all. What the browser alone can answer is everything after that: the media
+ * query the placement branches on, where the bubble lands against the last
+ * line of real wrapped text, its size against a thumb, and whether tapping it
+ * opens the composer.
+ */
+const touch = await browser.newPage({ viewport: PHONE, hasTouch: true });
+await becomeOwner(touch, B, st.token);
+await touch.goto(`${B}/a/${st.id}`, { waitUntil: 'load' });
+await touch.waitForSelector('iframe[title="artifact"]', { timeout: 30_000 });
+const docFrame = await (await touch.$('iframe[title="artifact"]')).contentFrame();
+await docFrame.waitForSelector('p', { timeout: 30_000 });
+
+// A coarse pointer is the whole premise: a leg that silently took the mouse
+// path would pass the "below the words" check by accident near the top of the
+// viewport and test nothing.
+ok(await docFrame.evaluate(() => matchMedia('(pointer: coarse)').matches),
+  'touch: the emulated phone reports a coarse pointer');
+
+/** The Range a touch selection leaves behind, and the one event it fires. */
+const touchSelect = () => docFrame.evaluate(() => {
+  const paragraph = document.querySelectorAll('p')[2];
+  const range = document.createRange();
+  range.selectNodeContents(paragraph.firstChild);
+  const selection = getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+  document.dispatchEvent(new Event('selectionchange'));
+});
+const bubble = docFrame.locator('[data-mx-selection-actions]');
+// The capability grant and this tiny lazy chunk land a beat after the page, so
+// the gesture is repeated until it takes — the same reason gate-annotations
+// clicks in a loop.
+for (let attempt = 0; attempt < 20; attempt += 1) {
+  await touchSelect();
+  await touch.waitForTimeout(600);
+  if (await bubble.isVisible().catch(() => false)) break;
+}
+ok(await bubble.isVisible(), 'touch: the owner is offered the bubble on a phone at all');
+
+/*
+ * …and now the module is WARM, which is the only way to ask the real question.
+ * On the first grant it recovers a still-live Range once (the selection can
+ * finish while the chunk is loading), so a bubble that appears above proves
+ * nothing about touch. Collapse it, select again with no pointer event, and
+ * only `selectionchange` is left to raise it.
+ */
+await docFrame.evaluate(() => {
+  getSelection().removeAllRanges();
+  document.dispatchEvent(new Event('selectionchange'));
+});
+await touch.waitForTimeout(400);
+ok(!(await bubble.isVisible().catch(() => false)), 'touch: collapsing the selection puts the bubble away at once');
+await touchSelect();
+let raised = false;
+for (let attempt = 0; attempt < 20 && !raised; attempt += 1) {
+  await touch.waitForTimeout(250);
+  raised = await bubble.isVisible().catch(() => false);
+}
+ok(raised, 'touch: a selection that fires NO pointerup raises the bubble — selectionchange is all a touch gesture gives');
+
+const placed = await docFrame.evaluate(() => {
+  const surface = document.querySelector('[data-mx-selection-actions]');
+  const box = surface.getBoundingClientRect();
+  const lines = [...getSelection().getRangeAt(0).getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+  const last = lines.at(-1);
+  return {
+    top: box.top, bottom: box.bottom, left: box.left, right: box.right,
+    lastBottom: last.bottom, lastTop: last.top, lines: lines.length,
+    buttons: [...surface.querySelectorAll('button')].map((b) => Math.round(b.getBoundingClientRect().height)),
+    width: window.innerWidth, height: window.innerHeight,
+  };
+});
+ok(placed.top >= placed.lastBottom - 1,
+  `touch: the bubble hangs BELOW the last line of the selection (top ${Math.round(placed.top)} vs line bottom ${Math.round(placed.lastBottom)}, ${placed.lines} lines)`);
+ok(placed.bottom > placed.top && placed.right > placed.left
+  && placed.top >= -1 && placed.bottom <= placed.height + 1 && placed.left >= -1 && placed.right <= placed.width + 1,
+  `touch: the bubble is inside the viewport (${Math.round(placed.left)}..${Math.round(placed.right)} x ${Math.round(placed.top)}..${Math.round(placed.bottom)} of ${placed.width}x${placed.height})`);
+ok(placed.buttons.length > 0 && placed.buttons.every((h) => h >= 44),
+  `touch: every action is a 44px touch target (${placed.buttons.join(', ')}px)`);
+
+// The dock is the page's on an owner's shell (the document's own copy is
+// display:none while framed), so the two boxes are compared in PAGE space.
+const overDock = await touch.evaluate((box) => {
+  const frameBox = document.querySelector('iframe[title="artifact"]').getBoundingClientRect();
+  const dock = document.querySelector('[data-mx-reader-chrome], [aria-label="Page actions"]');
+  const dockBox = dock?.getBoundingClientRect();
+  return { bubbleBottom: frameBox.top + box.bottom, dockTop: dockBox?.top ?? null };
+}, { bottom: placed.bottom });
+ok(placed.bottom > placed.top && (overDock.dockTop === null || overDock.bubbleBottom <= overDock.dockTop + 1),
+  `touch: and it stays clear of the bottom dock (bubble bottom ${Math.round(overDock.bubbleBottom)} vs dock top ${overDock.dockTop === null ? 'none' : Math.round(overDock.dockTop)})`);
+
+// A tap, not a click: the whole point is the finger.
+await docFrame.locator('[aria-label="Annotate selected text"]').tap();
+const composer = await (async () => {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    if (await touch.locator('[aria-label="Annotation comment"]').count() === 1) return true;
+    await touch.waitForTimeout(250);
+  }
+  return false;
+})();
+ok(composer, 'touch: tapping Annotate opens the composer on those words');
+await touch.close();
+
 await browser.close();
 const failed = out.filter((l) => l.startsWith('FAIL')).length;
 console.log(failed ? `\n${failed} FAILED` : `\nall ${out.length} checks passed`);
