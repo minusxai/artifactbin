@@ -1,3 +1,4 @@
+import { AGENT_HEADER, declaredAgentSlug } from '@artifactbin/contracts';
 import { currentHeaders } from './request-context';
 import { PUBLIC_BASE_URL } from '@/lib/config';
 
@@ -41,11 +42,22 @@ export function json(body: unknown, status = 200, headers: Record<string, string
   });
 }
 
-/** The uniform bearer/browser refusal, with the two recovery addresses an agent needs. */
+/**
+ * The uniform bearer/browser refusal, with the two recovery addresses an agent needs.
+ *
+ * `tokens` is the HUMAN's door, and it is SOURCE-TAGGED when the caller declared a harness
+ * (`Artifactbin-Agent`), so the person who ends up on `/tokens/new` arrives on a page that knows which
+ * agent sent them. The declaration is self-reported and only ever decides copy — never access.
+ */
 export function unauthorized(request: Request): Response {
   const base = baseUrl(request);
+  const source = declaredAgentSlug(request.headers.get(AGENT_HEADER));
   return json(
-    { error: 'unauthorized', docs: `${base}/docs`, tokens: `${base}/tokens/new` },
+    {
+      error: 'unauthorized',
+      docs: `${base}/docs`,
+      tokens: `${base}/tokens/new${source ? `?source=${source}` : ''}`,
+    },
     401,
     { 'Cache-Control': 'no-store' },
   );

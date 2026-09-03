@@ -21,6 +21,7 @@
  */
 import { chromium } from 'playwright';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
+import { mintAnon } from './lib/mint-anon.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const failures = [];
@@ -57,7 +58,7 @@ await loginViaEmail(editor, BASE, sink, EDITOR_EMAIL);
 check(Boolean((await editorCtx.cookies(BASE)).find((c) => /better-auth/.test(c.name))), 'editor logged in');
 
 // The owner's token: minted anonymously, claimed by the session.
-const anon = await (await fetch(`${BASE}/api/tokens/anonymous`, { method: 'POST' })).json();
+const anon = await mintAnon(BASE);
 const claimed = await owner.evaluate(async (t) => (await fetch('/api/tokens/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }) })).status, anon.token);
 check(claimed === 200, 'owner claimed the token');
 const api = async (path, init = {}) => {

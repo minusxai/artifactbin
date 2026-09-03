@@ -20,6 +20,7 @@
 import { chromium } from 'playwright';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
+import { mintAnon } from './lib/mint-anon.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3000';
 const failures = [];
@@ -35,7 +36,7 @@ const api = async (path, init = {}, token) => {
 };
 
 // ── 1. seed: a document with a bound select, a Number and a chart over a query ──
-const { token } = await api('/api/tokens/anonymous', { method: 'POST' });
+const { token } = await mintAnon(BASE);
 const dataset = await api('/api/artifacts', {
   method: 'POST',
   body: JSON.stringify({ title: 'Editor gate dataset', dataset: [
@@ -203,7 +204,7 @@ check(paneAfter.includes('Agent wrote while code was open:'), 'and the open code
   // A fresh CONTEXT, so it carries none of this one's cookies.
   const strangerCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
   const stranger = await strangerCtx.newPage();
-  const other = await api('/api/tokens/anonymous', { method: 'POST' });
+  const other = await mintAnon(BASE);
   // Holding SOMEONE ELSE's token: a credential, but not for this document.
   await becomeOwner(stranger, BASE, other.token);
   await stranger.goto(`${BASE}/a/${doc.id}#edit`, { waitUntil: 'load' });

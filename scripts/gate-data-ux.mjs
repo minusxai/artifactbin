@@ -17,6 +17,7 @@
  */
 import { chromium } from 'playwright';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
+import { mintAnon } from './lib/mint-anon.mjs';
 const B = process.argv[2] ?? 'http://localhost:3030';
 const out = [];
 const ok = (c, l) => { out.push(`${c ? '  ok ' : 'FAIL'} ${l}`); return c; };
@@ -26,7 +27,7 @@ await p.goto(B, { waitUntil: 'load' });
 await p.evaluate(() => localStorage.clear());
 
 // ── a CSV with a typed name, through the same ingest the form posts to ──────
-const tok = (await (await fetch(`${B}/api/tokens/anonymous`, { method: 'POST' })).json()).token;
+const tok = (await mintAnon(B)).token;
 // A browser's credential is the httpOnly session cookie now, not a
 // localStorage token — and the shell it unlocks belongs to the owner.
 await becomeOwner(p, B, tok);

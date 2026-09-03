@@ -165,16 +165,25 @@ describe('GET /a/<id>/start?k= — the brief', () => {
    * thought to mint one. 35 turns and 7 4xx on a task its sibling did in 6.
    *
    * The old text said only "ask the person who sent it", which is advice an
-   * agent cannot act on: there is no person in the loop mid-run. So the
-   * tombstone now names the two ways forward it actually has — mint an
-   * anonymous token, read the protocol doc — and names mistyping as a cause,
-   * since that is the one the agent can fix by itself.
+   * agent cannot act on mid-run. So the tombstone names mistyping as a cause,
+   * since that is the one thing the agent can fix by itself.
+   *
+   * m2 INVERTED the rest of it. The old answer was "mint an anonymous token" —
+   * and this is the single worst place we said that, because it is read by an
+   * agent that is stuck and will take any way in. A token it mints for itself
+   * publishes where its human cannot reach, so being unblocked here is worse
+   * than being stuck. The way out of a spent link is a PERSON, and the
+   * tombstone now says so — while still naming the protocol doc, which is the
+   * one thing it can usefully read on its own.
    */
-  it('the tombstone hands an agent a way forward instead of a person to ask', async () => {
+  it('the tombstone names the cause it can fix, and a human for the rest — never a self-mint', async () => {
     const s = await start();
     const body = await (await startBrief(request(`/a/${s.id}/start?k=nope`), params(s.id))).text();
     expect(body).toMatch(/copied|mistyp|character/i);
-    expect(body).toContain('/api/tokens/anonymous');
+    expect(body).not.toContain('tokens/anonymous');
+    expect(body).toMatch(/your human|ask them/i);
+    expect(body).toMatch(/mcp|plugin/i);
+    expect(body).toContain('/tokens/new');
     expect(body).toContain('/docs/artifactbin/references/publishing.md');
   });
 

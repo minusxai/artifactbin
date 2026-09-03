@@ -4,7 +4,7 @@ import { assemble, createTokenReader, inProcess } from '@artifactbin/utils';
 import { getDb, resetDb } from '@/lib/db';
 import { createAppServer } from '@/server/app';
 import { proxyParts } from '../src/parts';
-import { testProxyOptions } from './helpers';
+import { BROWSER_MINT_HEADERS, testProxyOptions } from './helpers';
 
 const ADMIN = 'admin-secret-for-tests';
 process.env.ADMIN__SECRET = ADMIN;
@@ -20,7 +20,7 @@ describe('revocation through the composed proxy', () => {
   });
   afterAll(() => resetDb());
   it('mint through the app, resolve through the proxy, revoke through the app: the very next request is nobody', async () => {
-    const minted = await (await proxy.request('/api/tokens/anonymous', { method: 'POST' })).json() as { id: string; token: string };
+    const minted = await (await proxy.request('/api/tokens/anonymous', { method: 'POST', headers: BROWSER_MINT_HEADERS })).json() as { id: string; token: string };
     expect(minted.token).toMatch(/^mx_/);
     expect((await proxy.request('/api/artifacts', { headers: { authorization: `Bearer ${minted.token}` } })).status).toBe(200);
     expect((await proxy.request(`/api/tokens/${minted.id}`, { method: 'DELETE', headers: { authorization: `Bearer ${ADMIN}` } })).status).toBe(204);
