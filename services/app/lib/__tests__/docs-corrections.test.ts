@@ -124,3 +124,17 @@ describe('the start brief and quick sheet', () => {
     expect(brief).not.toContain('simply replace');
   });
 });
+
+/**
+ * F2 — the docs teach the reader's link, because it is the whole point of the
+ * feature: an agent that knows `?$name=value` can hand its user a document
+ * already narrowed to what they asked about, instead of one they must narrow
+ * themselves.
+ */
+describe('the markup skill teaches the $ link', () => {
+  const doc = buildMarkupDoc(BASE);
+  it('names the URL form, the empty value, and that a reader\'s own picks travel', () => {
+    expect(doc).toMatch(/\?\$region=/);
+    expect(doc).toMatch(/pre-filtered link/);
+  });
+});
