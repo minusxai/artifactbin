@@ -181,7 +181,10 @@ describe('the rules, each seen to fire on a literal tree', () => {
 describe('the real tree (skills/) obeys every rule', () => {
   const tree = skillTree();
   it('validates clean — every problem is printed', () => {
-    expect(validateSkillTree(tree, render, Buffer.byteLength(buildDocsIndex(BASE)))).toEqual([]);
+    // The listing's size goes in at SIZE_BASE, because `render` above already
+    // measures every FILE there: judging one half at the short test base was
+    // the hole that let a 6,178 B listing render green (see the case below).
+    expect(validateSkillTree(tree, render, Buffer.byteLength(buildDocsIndex(SIZE_BASE)))).toEqual([]);
   });
   it('is ONE skill — the brief over its references, nothing else preloaded', () => {
     expect(tree.dirs.map((d) => d.name)).toEqual(['artifactbin']);
@@ -209,6 +212,19 @@ describe('the real tree (skills/) obeys every rule', () => {
       const expected = family ? `\`${family[1]}-<name>.md\`` : `\`${f.file}\``;
       expect(sheet, `${f.file} missing from the dispatch table`).toContain(expected);
     }
+  });
+  /**
+   * THE LISTING IS MEASURED AT THE PRODUCTION BASE, like every file above it.
+   *
+   * Every URL in the listing carries the base, so the listing grows by ~1 B per
+   * file per base character: measured at the 20-char `https://example.test` it
+   * is 81 B smaller than at `https://artifactbin.dev`, and F8's round-2
+   * front-matter wording landed in exactly that gap — 6,124 B in the suite,
+   * 6,178 B on the deployment, green here and over the cap there. Its own case
+   * rather than an edit to the one below, because the two bases are two facts.
+   */
+  it('the listing fits at the PRODUCTION base, not only at the test one', () => {
+    expect(Buffer.byteLength(buildDocsIndex(SIZE_BASE))).toBeLessThanOrEqual(DOCS_INDEX_MAX_BYTES);
   });
   it('the listing is small and names every agent file, the brief first', () => {
     const index = buildDocsIndex(BASE);
