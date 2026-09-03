@@ -274,11 +274,16 @@ describe('POST /api/my/artifacts/:id/fork — what does not travel', () => {
  * The provenance is a fact about the copy, so it is resolved at render from
  * `forked_from` rather than written into the markup: an agent that rewrites
  * the document cannot delete the attribution, and nothing about the source is
- * baked into bytes that outlive its ACL. Which means the ACL is re-asked on
- * every render, against the STRANGER (`canReadArtifact(row, null)`) — a
- * document's readers are strangers, and resolving it as the current viewer
- * would make the same page say different things to different people about a
- * document neither of them may open.
+ * baked into bytes that outlive its ACL.
+ *
+ * The test is VISIBILITY, and deliberately not "may a stranger read it".
+ * `unlisted` is stranger-READABLE — that is the whole tier — but it exists to
+ * be listed NOWHERE, and a credit line that names it republishes its canonical
+ * address in every public fork, chosen by the forker rather than by the person
+ * who picked the tier. So only `public` is named; `unlisted`, `private` and
+ * GONE all produce the same neutral sentence with no link and no id, which is
+ * also what keeps the line from being an existence oracle: there is no branch
+ * for a reader to tell those three apart with.
  */
 describe('the fork credit line', () => {
   const served = async (id: string, query = '') =>
@@ -298,7 +303,22 @@ describe('the fork credit line', () => {
     expect(html).toMatch(new RegExp(`<a href="[^"]*${w.doc.id}[^"]*" target="_top" aria-label="Open the artifact this was forked from"`));
   });
 
-  it('says only "a private document" when the source is not the reader\'s to see', async () => {
+  it('says nothing about an UNLISTED source — a fork is not a listing surface', async () => {
+    const w = await world();
+    asSession({ id: w.bob.id, email: w.bob.email });
+    const copy = (await (await fork(w.doc.id)).json()) as { id: string };
+    // The owner narrows the source AFTER the fork — the copy is public and its
+    // credits must stop naming it, because `unlisted` means listed nowhere and
+    // the forker is not the person who chose that.
+    const db = await getDb();
+    await db.query('UPDATE artifacts SET visibility = $2 WHERE id = $1', [w.doc.id, 'unlisted']);
+    noSession();
+    const html = await served(copy.id);
+    expect(html).toContain('forked from a document that is not public');
+    expect(html).not.toContain(w.doc.id);
+  });
+
+  it('says the SAME thing for a private source, and for one that is gone', async () => {
     const w = await world(PROSE, 'private');
     // The owner's own agent may still fork what it created…
     asSession({ id: w.owner.id, email: w.owner.email });
@@ -308,8 +328,13 @@ describe('the fork credit line', () => {
     await db.query('UPDATE artifacts SET visibility = $2 WHERE id = $1', [copy.id, 'public']);
     noSession();
     const html = await served(copy.id);
-    expect(html).toContain('forked from a private document');
+    expect(html).toContain('forked from a document that is not public');
     expect(html).not.toContain(w.doc.id);
+
+    // …and DELETED is byte-identical to private. One branch, so there is
+    // nothing here for a reader to tell the two apart with.
+    await db.query('DELETE FROM artifacts WHERE id = $1', [w.doc.id]);
+    expect(await served(copy.id)).toBe(html);
   });
 
   it('a document nobody forked keeps the credits it always had', async () => {

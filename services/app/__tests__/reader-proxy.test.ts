@@ -325,6 +325,24 @@ describe('an address carrying an intent', () => {
     expect(await servedBy(readerRequest(`/a/${row.id}?intent=comment`))).toBe('page');
   });
 
+  it('serves the DOCUMENT for an intent the page was never designed to be asked', async () => {
+    // The two halves must agree. The PAGE's allowlist is `fork | comment`
+    // (lib/intent), so an `intent` outside it is silence there — and a serving
+    // condition that merely asks "is the key present" pushes a signed-in
+    // reader onto the shell's slower path to have nothing happen on it.
+    const owner = await createUser({ email: 'owner@example.com' });
+    const other = await createUser({ email: 'other@example.com' });
+    const t = await mintToken('t', owner.id);
+    const row = await publish(t.id, owner.id, { visibility: 'public' });
+    sessionUser.id = other.id;
+    sessionUser.email = other.email!;
+    for (const q of ['?intent=garbage', '?intent=delete', '?intent=', '?intent=FORK']) {
+      expect(await servedBy(readerRequest(`/a/${row.id}${q}`)), q).toBe(`/a/${row.id}/raw`);
+    }
+    // …while the two the page DOES act on still reach the shell.
+    expect(await servedBy(readerRequest(`/a/${row.id}?intent=fork`))).toBe('page');
+  });
+
   it('serves the SHELL to a browser holding an agent cookie — a credential is a credential', async () => {
     const mine = await mintToken('mine');
     const theirs = await mintToken('theirs');

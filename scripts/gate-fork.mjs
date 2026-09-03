@@ -138,6 +138,25 @@ const creditText = await credit.innerText();
 check(creditText.toLowerCase().includes('forked from'), `the copy's credits name its source ("${creditText.trim()}")`);
 check(creditText.includes(doc.id), 'and the source is named by its address, not vaguely');
 
+// ── 6b. the naming follows the SOURCE's tier, re-asked on every render ────
+// The owner narrows the source AFTER the fork. `unlisted` exists to be listed
+// nowhere, so a copy that somebody else made public must stop republishing its
+// address — measured as a STRANGER, which is who reads a shared copy, and this
+// is the exact shape a review measured in a browser before the rule existed.
+const narrowed = await owner.evaluate(
+  async (id) => (await fetch(`/api/my/artifacts/${id}/sharing`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ visibility: 'unlisted' }),
+  })).status,
+  doc.id,
+);
+check(narrowed === 200, 'the owner narrowed the source to unlisted');
+const strangerCopy = await (await fetch(`${BASE}/a/${copyId}/raw`)).text();
+check(!strangerCopy.includes(doc.id), "a stranger reading the copy no longer sees the unlisted source's address");
+check(strangerCopy.includes('forked from a document that is not public'), '…and gets the same neutral sentence a private or deleted source gets');
+
 // ── 7. `intent=comment` opens the conversation for an invited commenter ───
 const invited = await owner.evaluate(
   async ([id, email]) => (await fetch(`/api/my/artifacts/${id}/sharing`, {

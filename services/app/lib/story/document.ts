@@ -127,10 +127,11 @@ export interface StoryDocumentInput {
    * `forkedFrom` is PROVENANCE, resolved per render rather than written into
    * the markup: an agent that regenerates the document cannot delete the
    * attribution, and nothing about the source is baked into bytes that outlive
-   * its ACL. The ROUTE decides both fields — it holds the viewer and the rows —
-   * and a source the reader may not have produces a label with NO href and no
-   * id, identical for private and for deleted, because two different answers
-   * there would be an existence oracle for every private document.
+   * its ACL. The ROUTE decides both fields — it holds the rows — and anything
+   * that is not a PUBLIC source produces a label with NO href and no id,
+   * identical for unlisted, private and deleted: one branch, so the line can be
+   * neither an existence oracle nor a listing surface for a tier whose whole
+   * point is being listed nowhere.
    */
   credits?: {
     creatorUsername: string | null;
@@ -453,9 +454,10 @@ body[data-mx-story-root] > #mx-story-root {
  *
  * Two shapes, and the second is the load-bearing one: with an href it names
  * and links the source; without one it says only that there WAS a source. The
- * label is the route's, not this module's, precisely so that "private" and
- * "deleted" arrive here already indistinguishable — a line that could tell
- * them apart is an existence oracle for every private document anyone forked.
+ * label is the route's, not this module's, precisely so that "unlisted",
+ * "private" and "deleted" arrive here already indistinguishable — a line that
+ * could tell them apart is an existence oracle, and one that names an unlisted
+ * source is a listing surface for a tier that exists to have none.
  */
 const renderForkedFrom = (forkedFrom: NonNullable<NonNullable<StoryDocumentInput['credits']>['forkedFrom']>): string => {
   const label = escapeHtml(forkedFrom.label);

@@ -23,6 +23,7 @@ import { actorReceiver } from '@artifactbin/utils';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { verifyExportKey } from '@/lib/export-key';
 import { ID_RE } from '@/lib/ids';
+import { readIntent } from '@/lib/intent';
 import { runWithRequest } from '@/lib/request-context';
 import { declaresLiveData } from '@/lib/story/helmet';
 import { SHOWCASE_ORIGIN } from '@/lib/showcase';
@@ -124,10 +125,15 @@ export async function servesDocumentDirectly(request: Request): Promise<string |
    * Someone with no credential can neither fork nor comment, so there is
    * nothing for the shell to do for them either.
    *
+   * Read through the SAME allowlist the page acts on, rather than by asking
+   * whether the key is merely present: the two halves have to agree, or a
+   * signed-in reader at `?intent=garbage` is pushed onto the shell's slower
+   * path for an instruction that will then correctly do nothing there.
+   *
    * Above the row read, beside the `key` bypass, so a credential-less reader
    * still reaches the document without touching the database.
    */
-  if (!anonymous && url.searchParams.has('intent')) return null;
+  if (!anonymous && readIntent(url.search) !== null) return null;
   const artifact = await getArtifactById(found.id);
   if (!artifact || artifact.format !== 'markup') return null;
   const needsSessionForData = declaresLiveData(artifact.source) && !(await canReadArtifact(artifact, null));

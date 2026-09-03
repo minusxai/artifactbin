@@ -58,18 +58,29 @@ const notFound = () =>
 /**
  * WHERE THIS COPY CAME FROM, as the credit line may say it.
  *
- * The ACL is re-asked here against the STRANGER (`canReadArtifact(row, null)`)
- * and never against the current viewer: a document's readers are strangers, and
- * resolving it per viewer would make the same page say different things to
- * different people about a document neither of them may open. A source that is
- * private, or gone, produces the SAME words with no link and no id — "forked
- * from a private document" — because a line that could tell those apart is an
- * existence oracle for every private document anybody ever forked.
+ * The test is VISIBILITY — `public`, exactly — and deliberately NOT "may a
+ * stranger read it". `unlisted` is stranger-readable, which is the whole tier,
+ * but it exists to be listed NOWHERE: naming it here republishes its canonical
+ * address in the credits of every public fork, and the person who forked is not
+ * the person who chose the tier. Measured before this rule existed: an owner
+ * who narrowed a source to `unlisted` after someone forked it kept handing the
+ * full linked address to every stranger reading the copy.
+ *
+ * So there is ONE branch, and everything that is not public takes it —
+ * unlisted, private, and gone alike, with no link and no id. That is also what
+ * keeps the line from being an existence oracle: a reader has nothing here to
+ * tell those three apart with.
+ *
+ * Resolved per render rather than per viewer, and never written into the
+ * markup: an agent that rewrites the document cannot delete the attribution,
+ * and nothing about the source is baked into bytes that outlive its ACL.
  */
+const NOT_PUBLIC_SOURCE = { label: 'a document that is not public', href: null } as const;
+
 async function forkedFromCredit(sourceId: string | null): Promise<{ label: string; href: string | null } | null> {
   if (!sourceId) return null;
   const source = await getArtifactById(sourceId);
-  if (!source || !(await canReadArtifact(source, null))) return { label: 'a private document', href: null };
+  if (!source || source.visibility !== 'public') return NOT_PUBLIC_SOURCE;
   const href = canonicalArtifactPath(source, await ownerUsername(source.user_id));
   return { label: href.replace(/^\//, ''), href };
 }

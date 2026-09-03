@@ -64,11 +64,11 @@ describe('buildStoryDocument', () => {
    * writing a line into the copy's source would hand the next agent a sentence
    * it is free to delete.
    *
-   * The second shape is the load-bearing one. A source that is private, or
-   * gone, must produce output that says NOTHING about which — "forked from a
-   * private document" is the same words for both, with no link and no id, or
-   * the credit line is an existence oracle for every private document anyone
-   * ever forked.
+   * The second shape is the load-bearing one. Everything that is not PUBLIC —
+   * unlisted, private, deleted — must produce output that says nothing about
+   * which: the same sentence, no link, no id. That is what keeps the line from
+   * being an existence oracle, and what keeps a fork from becoming a listing
+   * surface for a tier whose whole point is being listed nowhere.
    */
   it('names the source it was forked from, and links it', async () => {
     const html = await doc({ credits: { creatorUsername: 'ada', forkedFrom: { label: '@grace/ab12cd-first-draft', href: '/@grace/ab12cd-first-draft' } } });
@@ -78,10 +78,10 @@ describe('buildStoryDocument', () => {
     expect(html).toContain('@grace/ab12cd-first-draft');
   });
 
-  it('says only that there WAS a source when the reader may not have it', async () => {
-    const html = await doc({ credits: { creatorUsername: 'ada', forkedFrom: { label: 'a private document', href: null } } });
+  it('says only that there WAS a source when the source is not public', async () => {
+    const html = await doc({ credits: { creatorUsername: 'ada', forkedFrom: { label: 'a document that is not public', href: null } } });
     expect(html).toContain('data-mx-forked-from');
-    expect(html).toContain('forked from a private document');
+    expect(html).toContain('forked from a document that is not public');
     // No link, no id, nothing that separates "private" from "deleted".
     expect(html).not.toMatch(/<a[^>]*data-mx-forked-from/);
     expect(html).not.toContain('ab12cd');
