@@ -1,0 +1,26 @@
+{"t": 1788397662564, "ms": 133, "method": "GET", "path": "/a/PH4c1F", "status": 200, "ua": "curl/8.5.0", "auth": "bearer", "error": null, "bytes": 84357}
+{"t": 1788397668930, "ms": 44, "method": "GET", "path": "/llms.txt", "status": 200, "ua": "curl/8.5.0", "auth": "bearer", "error": null, "bytes": 6140}
+{"t": 1788397668999, "ms": 43, "method": "GET", "path": "/api", "status": 404, "ua": "curl/8.5.0", "auth": "bearer", "error": null, "bytes": 891}
+{"t": 1788397669198, "ms": 42, "method": "GET", "path": "/api/docs", "status": 404, "ua": "curl/8.5.0", "auth": "bearer", "error": null, "bytes": 891}
+{"t": 1788397669413, "ms": 43, "method": "GET", "path": "/skill", "status": 404, "ua": "curl/8.5.0", "auth": "bearer", "error": null, "bytes": 891}
+{"t": 1788397669640, "ms": 43, "method": "GET", "path": "/.well-known/agent.json", "status": 404, "ua": "curl/8.5.0", "auth": "bearer", "error": null, "bytes": 891}
+{"t": 1788397669882, "ms": 42, "method": "GET", "path": "/docs", "status": 200, "ua": "curl/8.5.0", "auth": "bearer", "error": null, "bytes": 6140}
+{"t": 1788397670123, "ms": 43, "method": "GET", "path": "/api/v1", "status": 404, "ua": "curl/8.5.0", "auth": "bearer", "error": null, "bytes": 891}
+{"t": 1788397673937, "ms": 299, "method": "GET", "path": "/docs?download=true", "status": 200, "ua": "curl/8.5.0", "auth": null, "error": null, "bytes": 42846}
+{"t": 1788397674269, "ms": 43, "method": "GET", "path": "/llms.txt", "status": 200, "ua": "curl/8.5.0", "auth": null, "error": null, "bytes": 6140}
+{"t": 1788397750771, "ms": 260, "method": "POST", "path": "/api/artifacts", "status": 201, "ua": "curl/8.5.0", "auth": "bearer", "error": null, "bytes": 972, "artifactId": "PP38L3", "reqFormat": "dataset"}
+{"t": 1788397990554, "ms": 196, "method": "POST", "path": "/api/artifacts", "status": 400, "ua": "curl/8.5.0", "auth": "bearer", "error": "invalid_jsx", "bytes": 174, "reqFormat": "markup"}
+{"t": 1788397999758, "ms": 362, "method": "POST", "path": "/api/artifacts", "status": 201, "ua": "curl/8.5.0", "auth": "bearer", "error": null, "bytes": 15492, "markupUnchanged": false, "artifactId": "soo1WU", "reqFormat": "markup"}
+{"t": 1788398007865, "ms": 206, "method": "GET", "path": "/api/artifacts/PH4c1F", "status": 200, "ua": "curl/8.5.0", "auth": "bearer", "error": null, "bytes": 985, "artifactId": "PH4c1F"}
+{"t": 1788398021189, "ms": 158, "method": "PUT", "path": "/api/artifacts/PH4c1F", "status": 200, "ua": "curl/8.5.0", "auth": "bearer", "error": null, "bytes": 15452, "artifactId": "PH4c1F", "markupUnchanged": false, "reqFormat": "markup"}
+{"t": 1788398021392, "ms": 49, "method": "DELETE", "path": "/api/artifacts/soo1WU", "status": 200, "ua": "curl/8.5.0", "auth": "bearer", "error": null, "bytes": 11, "artifactId": "soo1WU"}
+{"t": 1788398027119, "ms": 2366, "method": "GET", "path": "/a/PH4c1F/export?slide=1", "status": 200, "ua": "curl/8.5.0", "auth": "bearer", "error": null, "bytes": 43871}
+{"t": 1788398029511, "ms": 2266, "method": "GET", "path": "/a/PH4c1F/export?slide=2", "status": 200, "ua": "curl/8.5.0", "auth": "bearer", "error": null, "bytes": 42055}
+{"t": 1788398031801, "ms": 2180, "method": "GET", "path": "/a/PH4c1F/export?slide=3", "status": 200, "ua": "curl/8.5.0", "auth": "bearer", "error": null, "bytes": 41435}
+{"t": 1788398034006, "ms": 2248, "method": "GET", "path": "/a/PH4c1F/export?slide=4", "status": 200, "ua": "curl/8.5.0", "auth": "bearer", "error": null, "bytes": 50784}
+{"t": 1788398036278, "ms": 2327, "method": "GET", "path": "/a/PH4c1F/export?slide=5", "status": 200, "ua": "curl/8.5.0", "auth": "bearer", "error": null, "bytes": 52244}
+{"t": 1788398038630, "ms": 2261, "method": "GET", "path": "/a/PH4c1F/export?slide=6", "status": 200, "ua": "curl/8.5.0", "auth": "bearer", "error": null, "bytes": 64981}
+{"t": 1788398040915, "ms": 2170, "method": "GET", "path": "/a/PH4c1F/export?mode=card", "status": 200, "ua": "curl/8.5.0", "auth": "bearer", "error": null, "bytes": 47226}
+{"t": 1788398099681, "ms": 390, "method": "PUT", "path": "/api/artifacts/PH4c1F", "status": 200, "ua": "curl/8.5.0", "auth": "bearer", "error": null, "bytes": 15647, "artifactId": "PH4c1F", "markupUnchanged": false, "reqFormat": "markup"}
+{"t": 1788398104016, "ms": 2342, "method": "GET", "path": "/a/PH4c1F/export?slide=2", "status": 200, "ua": "curl/8.5.0", "auth": "bearer", "error": null, "bytes": 49624}
+{"t": 1788398106382, "ms": 2372, "method": "GET", "path": "/a/PH4c1F/export?slide=5", "status": 200, "ua": "curl/8.5.0", "auth": "bearer", "error": null, "bytes": 52498}

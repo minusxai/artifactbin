@@ -37,6 +37,9 @@ const pathOnly = (p: string) => p.split('?')[0];
  */
 const KNOWN_ROUTES: RegExp[] = [
   /^\/docs\//,
+  /^\/docs$/,
+  /^\/docs-human$/,
+  /^\/llms\.txt$/,
   /^\/api\/tokens\/anonymous$/,
   /^\/api\/start$/,
   /^\/api\/preview$/,
@@ -69,10 +72,22 @@ function isWrite(e: LedgerEntry): boolean {
   return false;
 }
 
-/** Reading the protocol: the agent doc, its siblings, or the start link's instructions. */
+/**
+ * An address that serves the protocol docs: the listing `/docs`, the tarball
+ * `/docs?download=true`, any page under `/docs/`, and `/llms.txt`. These are
+ * the product's own entry points, so a run that read any of them read the
+ * docs — scoring only `/docs/<file>` called a real docs-first run docs-blind.
+ * The query is stripped, so the tarball counts as the listing does.
+ */
+export function isDocsAddress(path: string): boolean {
+  const p = pathOnly(path);
+  return p === '/docs' || p.startsWith('/docs/') || p === '/llms.txt';
+}
+
+/** Reading the protocol: any docs address, or the start link's instructions. */
 function isDocsRead(e: LedgerEntry): boolean {
   const p = pathOnly(e.path);
-  return e.method === 'GET' && (p.startsWith('/docs/') || /^\/a\/[A-Za-z0-9]+\/start$/.test(p));
+  return e.method === 'GET' && (isDocsAddress(p) || /^\/a\/[A-Za-z0-9]+\/start$/.test(p));
 }
 
 /**
@@ -125,7 +140,7 @@ export interface LedgerMetrics {
   usedEditsEndpoint: boolean | null;
   /** At least one write went through the MCP transport. */
   usedMcp: boolean | null;
-  /** GETs of `/docs/*` — what the docs path cost this agent. Counts stay observed-only like everything above. */
+  /** GETs of a docs address — what the docs path cost this agent. Counts stay observed-only like everything above. */
   docsFetches: number | null;
   /** Bytes those fetches returned; null when the ledger predates `bytes` or saw nothing. */
   docsBytes: number | null;
@@ -140,10 +155,10 @@ export function ledgerMetrics(entries: LedgerEntry[]): LedgerMetrics {
   // judgement about the agent becomes null rather than a false that reads as an accusation.
   const observed = entries.length > 0;
   const judged = <T>(v: T): T | null => (observed ? v : null);
-  // What the docs path cost: every GET under /docs/. Bytes only when the ledger
-  // recorded them (older ledgers predate the field) — a partial sum would read
-  // as a smaller corpus, not an unknown one.
-  const docsGets = entries.filter((e) => e.method === 'GET' && pathOnly(e.path).startsWith('/docs/'));
+  // What the docs path cost: every GET of a docs address. Bytes only when the
+  // ledger recorded them (older ledgers predate the field) — a partial sum would
+  // read as a smaller corpus, not an unknown one.
+  const docsGets = entries.filter((e) => e.method === 'GET' && isDocsAddress(e.path));
   const docsBytes = docsGets.length && docsGets.every((e) => typeof e.bytes === 'number')
     ? docsGets.reduce((a, e) => a + (e.bytes ?? 0), 0)
     : null;
