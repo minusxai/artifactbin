@@ -8,7 +8,7 @@ order: 5
 
 artifactbin: publish self-contained documents (reports, dashboards, slides, datasets, charts, images) and share the returned URL with your user — that url is the deliverable.
 
-Publish before you polish: make your FIRST create_artifact a SKELETON — the real title, the theme and template you picked, the document's section headings, stubbed — and hand your user that url at once, saying it is live and still filling in. It is: an edit reaches an open reader in seconds, so they watch the sections land. Only then read the docs below, and fill each section with edit_artifact as you go. The reading path never precedes the first publish.
+Publish before you polish: make your FIRST create_artifact a SKELETON — the real title, the theme and template you picked, the document's section headings, stubbed — and hand your user that url at once, saying it is live and still filling in. It is: an edit reaches an open reader in seconds, so they watch the sections land. Only then read the docs below, and fill each section with edit_artifact as you go. The reading path never precedes the first publish. (Rows, images and viz recipes are the one thing that goes up before the skeleton that binds them.)
 
 Quick rules:
 - Every artifact takes exactly ONE content field: markup | dataset | viz | image.
