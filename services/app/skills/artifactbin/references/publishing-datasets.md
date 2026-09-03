@@ -93,7 +93,11 @@ viewer. `title="…"` names it something other than the artifact's title. A
 public URL works in the same position (`<File src="https://…/paper.pdf" />`):
 publish imports a copy and LEAVES YOUR URL in the document, exactly as an
 `<img>` URL behaves, and a URL that will not fetch is a warning rather than a
-refused publish.
+refused publish. It counts against the same
+`[[ maxExternalAssets ]]`-asset import cap images and faces do.
+
+A pdf cannot be PREVIEWED (`400 pdf_not_previewable`): storing the file is what
+publishing it means, so send it to `POST [[ base ]]/api/artifacts`.
 
 ## Writable datasets (preview)
 

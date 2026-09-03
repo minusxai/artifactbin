@@ -33,10 +33,18 @@ const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 9, 9
 
 let server: RunningServer;
 let web: string;
+/** Every path the "public web" was asked for — the cap's real subject. */
+const asked: string[] = [];
+
+const WOFF2 = Buffer.concat([Buffer.from('wOF2'), Buffer.alloc(64, 3)]);
 
 beforeAll(async () => {
   server = await withHttpServer((req, res) => {
-    switch (req.url) {
+    const path = (req.url ?? '').split('?')[0];
+    asked.push(path);
+    if (path.startsWith('/img')) { res.writeHead(200, { 'Content-Type': 'image/png' }); res.end(PNG); return; }
+    if (path.startsWith('/face')) { res.writeHead(200, { 'Content-Type': 'font/woff2' }); res.end(WOFF2); return; }
+    switch (path) {
       case '/report.pdf': res.writeHead(200, { 'Content-Type': 'application/pdf' }); res.end(samplePdf(2)); return;
       case '/gone.pdf': res.writeHead(404); res.end(); return;
       default: res.writeHead(500); res.end();
@@ -151,6 +159,37 @@ describe('a web URL in the same position', () => {
     const html = await (await rawRoute(request(`/a/${id}/raw`), params(id))).text();
     expect(html).toContain(`href="${assetUrlFor(url)}"`);
     expect(html).not.toContain(url);
+  });
+
+  it('counts against the SAME total cap as images and faces, and the excess is named not fetched', async () => {
+    /*
+     * MAX_EXTERNAL_ASSETS_PER_PUBLISH (16) bounds what one document can make
+     * this server fetch. A PDF is an outbound fetch like any other — and the
+     * biggest of them — so it counts. The merge that brought the cap in left
+     * the PDF loop OUTSIDE it, which would have made <File> the way around it.
+     *
+     * The per-image cap is 8, so the sixteen are eight images and eight faces;
+     * the PDF is the seventeenth and is the one named.
+     */
+    const t = await mintToken('t');
+    const run = `?run=${Date.now()}`;
+    const images = Array.from({ length: 8 }, (_, i) => `${web}/img${i}.png${run}`);
+    const faces = Array.from({ length: 8 }, (_, i) => `${web}/face${i}.woff2${run}`);
+    const pdfUrl = `${web}/report.pdf${run}`;
+    const source = `<Helmet><style>{\`${faces.map((u, i) => `@font-face{font-family:F${i};src:url(${u})}`).join('')}\`}</style></Helmet>`
+      + `<div data-design="tw" className="p-8">${images.map((u) => `<img src="${u}" alt="i" />`).join('')}`
+      + `<File src="${pdfUrl}" /></div>`;
+
+    asked.length = 0;
+    const res = await create(t.token, { markup: source, visibility: 'public' });
+    expect(res.status).toBe(201);
+    const warnings = (await res.json()).asset_warnings as Array<{ code: string; url: string }>;
+    const excess = warnings.find((w) => w.url === pdfUrl);
+    expect(excess?.code).toBe('too_many_external_assets');
+    // Named, not fetched: the whole point of the cap is the outbound request
+    // that never happens.
+    expect(asked.filter((u) => u.startsWith('/report.pdf'))).toEqual([]);
+    expect(asked.length).toBe(16);
   });
 
   it('reports a URL it cannot fetch as a warning and publishes anyway', async () => {

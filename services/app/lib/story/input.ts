@@ -149,9 +149,25 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
    * PDF shapes at once — the upload and the import — because the cost is the
    * same 25 MB either way. Asked BEFORE the fetch, so a caller over their cap
    * cannot spend our bandwidth either.
+   *
+   * NO HOOK, NO TIER. Every other optional ctx member degrades to "do less"
+   * for /api/preview, whose whole promise is that a draft stores nothing. That
+   * promise is not one this tier can keep: storing the bytes IS what publishing
+   * a PDF is, and the object would then exist with no artifact row to reference
+   * it — and THE DB IS THE ONLY INDEX, so nothing could ever find it again,
+   * bill it, or delete it. Any credential could have filled the disk 25 MB at a
+   * time. So a caller with no quota to charge is refused the tier rather than
+   * quietly given it for free. (The image tier has the same shape at a fifth
+   * the size; that is booked, not fixed here.)
    */
   if (kind === 'pdf' || kind === 'pdfUrl') {
-    if (ctx.overByteQuota && await ctx.overByteQuota()) {
+    if (!ctx.overByteQuota) {
+      return json({
+        error: 'pdf_not_previewable',
+        details: ['a pdf cannot be previewed — previewing stores nothing, and storing the file IS publishing it. POST it to /api/artifacts instead.'],
+      }, 400);
+    }
+    if (await ctx.overByteQuota()) {
       return json({ error: 'quota_exceeded', details: ['this account is over its stored-byte quota — delete assets you no longer need'] }, 403);
     }
     if (kind === 'pdfUrl') {

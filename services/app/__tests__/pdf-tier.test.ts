@@ -15,8 +15,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { samplePdf, samplePdfDataUrl } from '../../../scripts/lib/sample-pdf.mjs';
 import { POST as bearerCreate } from '@/app/api/artifacts/route';
+import { POST as preview } from '@/app/api/preview/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { setAssetByteQuotaForTests } from '@/lib/asset-quota';
+import { LOCAL_OBJECT_DIR } from '@/lib/config';
 import { objectStore } from '@/lib/object-store';
 import { mintToken } from '@/lib/tokens';
 import { createUser } from '@/lib/users';
@@ -63,6 +65,13 @@ beforeEach(() => setAssetByteQuotaForTests(null));
 
 const create = (token: string, body: Record<string, unknown>) =>
   bearerCreate(request('/api/artifacts', { method: 'POST', token, json: body }));
+
+/** How many objects the local store holds — the disk, counted, since the DB is the only index. */
+async function storedObjectCount(): Promise<number> {
+  const { readdir } = await import('node:fs/promises');
+  const files = await readdir(LOCAL_OBJECT_DIR, { recursive: true, withFileTypes: true }).catch(() => []);
+  return files.filter((f) => f.isFile()).length;
+}
 
 describe('a PDF as a data: URL', () => {
   it('is stored as its own format, with the object key, the bytes and the page count in meta', async () => {
@@ -191,6 +200,32 @@ describe('a PDF by URL', () => {
     } finally {
       setWebIngestPolicyForTests({ allowPrivate: true, allowHttp: true });
     }
+  });
+});
+
+describe('the preview door', () => {
+  it('refuses a pdf outright, because previewing one would STORE it and bill nobody', async () => {
+    /*
+     * /api/preview is a pure render with no importer and no quota hook — "a
+     * draft that previews stores nothing". For a PDF that sentence was FALSE:
+     * publishPdf puts the bytes in the object store, and with no artifact row
+     * to reference them, THE DB IS THE ONLY INDEX means nothing can ever find
+     * or delete them. Any credential could have filled the disk 25 MB at a
+     * time, unbilled. So the tier requires the hook and refuses without it.
+     */
+    const t = await mintToken('t');
+    const before = await storedObjectCount();
+    const res = await preview(request('/api/preview', { method: 'POST', token: t.token, json: { pdf: samplePdfDataUrl(1) } }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('pdf_not_previewable');
+    expect(await storedObjectCount()).toBe(before);
+  });
+
+  it('still previews markup, which is what the route is for', async () => {
+    const t = await mintToken('t');
+    const res = await preview(request('/api/preview', { method: 'POST', token: t.token, json: { markup: '<div data-design="tw" className="p-8"><h1 className="text-2xl">Draft</h1></div>' } }));
+    expect(res.status).toBe(200);
+    expect((await res.json()).format).toBe('markup');
   });
 });
 
