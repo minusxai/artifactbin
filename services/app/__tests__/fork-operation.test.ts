@@ -1,0 +1,169 @@
+/**
+ * F8 — agents can fork: `fork_artifact` on the operations registry (SEEDED RED by the orchestrator).
+ *
+ * The registry entry IS the surface: the bearer route is a translation layer over
+ * it and the MCP tool renders from it. An agent may fork what its token can READ;
+ * the copy is the token's own (account-wide for a claimed token), with three
+ * optional overrides applied after the copy; the reply is create-shaped plus
+ * `forked_from`; every refusal is the existing vocabulary.
+ */
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useAppHarness } from './harness';
+import { POST as forkOpRoute } from '@/app/api/artifacts/[id]/fork/route';
+import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import { PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
+import { OPERATIONS as operations } from '@/lib/operations/registry';
+import { getArtifactById } from '@/lib/artifacts';
+import { mintToken } from '@/lib/tokens';
+import { claimToken, createUser } from '@/lib/users';
+
+const BASE = 'http://localhost:3000';
+useAppHarness();
+const sessionUser = { id: '', email: '' };
+vi.mock('@/auth', () => ({
+  auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null),
+}));
+
+const params = (id: string) => ({ params: Promise.resolve({ id }) });
+const jreq = (path: string, method: string, body?: unknown, token?: string) =>
+  new Request(`${BASE}${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  });
+const create = async (token: string, body: Record<string, unknown>) => {
+  const res = await createArtifactRoute(jreq('/api/artifacts?v=2', 'POST', body, token));
+  expect(res.status, await res.clone().text()).toBe(201);
+  return (await res.json()) as { id: string; edit_id: string; version: number };
+};
+const fork = (id: string, token?: string, body: Record<string, unknown> = {}) =>
+  forkOpRoute(jreq(`/api/artifacts/${id}/fork`, 'POST', body, token), params(id));
+const head = async (id: string) => (await getArtifactById(id))!;
+
+const PROSE = '<div><h1>Payroll</h1><p data-annotation-anchor="a1b2c3d4e">hello</p></div>';
+const MUTATING = (ds: string) =>
+  '<Helmet><Value name="choice" type="string" default="ramen" />'
+  + `<Mutation name="vote">{\`insert into ref_${ds} (choice) values ($choice)\`}</Mutation></Helmet>`
+  + '<div><Button run="$vote">Vote</Button></div>';
+
+beforeEach(() => { sessionUser.id = ''; sessionUser.email = ''; });
+
+async function world(visibility: 'public' | 'private' = 'public') {
+  const ta = await mintToken('a');
+  const owner = await createUser({ email: 'owner@x.com' });
+  await claimToken(owner.id, ta.token);
+  const tb = await mintToken('b');
+  const bob = await createUser({ email: 'bob@x.com' });
+  await claimToken(bob.id, tb.token);
+  const anon = await mintToken('anon');
+  const doc = await create(ta.token, { markup: PROSE, visibility, title: 'The NBA payroll stack', description: 'for the dashboard', theme: 'industry' });
+  return { ta, tb, anon, owner, bob, doc };
+}
+
+describe('fork_artifact on the operations registry', () => {
+  it('carries the decided contract: address, a plain write, the three overrides, the shared error vocabulary', () => {
+    const op = operations.find((o) => o.name === 'fork_artifact');
+    expect(op).toBeDefined();
+    expect(op!.http).toEqual({ method: 'POST', path: '/api/artifacts/{id}/fork' });
+    expect(op!.annotations.readOnly ?? false).toBe(false);
+    expect(op!.annotations.destructive ?? false).toBe(false);
+    expect(Object.keys(op!.input).sort()).toEqual(['folder', 'id', 'title', 'visibility']);
+    const codes = op!.errors.map((e) => e.code);
+    expect(codes).toContain('not_found');
+    expect(codes).toContain('quota_exceeded');
+    expect(op!.description.length).toBeGreaterThan(80);
+    expect(op!.example.input).toMatchObject({ id: expect.any(String) });
+  });
+});
+
+describe('POST /api/artifacts/:id/fork (bearer)', () => {
+  it('a token forks a public document it can read: a create-shaped reply plus forked_from, the copy its own', async () => {
+    const w = await world();
+    const res = await fork(w.doc.id, w.anon.token);
+    expect(res.status, await res.clone().text()).toBe(201);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.id).not.toBe(w.doc.id);
+    expect(body.forked_from).toBe(w.doc.id);
+    expect(typeof body.edit_id).toBe('string');
+    expect(body.version).toBe(1);
+    expect(String(body.url)).toContain(String(body.id));
+    expect(String(body.markup)).toContain('Payroll');
+    expect(String(body.markup)).not.toContain('data-annotation-anchor');
+    const copy = await head(String(body.id));
+    expect(copy.token_id).toBe(w.anon.id);
+    expect(copy.user_id).toBeNull();
+    expect(copy.title).toBe('The NBA payroll stack');
+    const source = await head(w.doc.id);
+    expect(source.version).toBe(w.doc.version);
+    expect(source.edit_id).toBe(w.doc.edit_id);
+  });
+
+  it('a claimed token forks account-wide, and the three overrides land on the copy only', async () => {
+    const w = await world();
+    const res = await fork(w.doc.id, w.tb.token, { title: 'My copy', visibility: 'unlisted', folder: '2026/forks' });
+    expect(res.status, await res.clone().text()).toBe(201);
+    const body = (await res.json()) as { id: string; visibility: string; title: string; folder: string };
+    expect(body.title).toBe('My copy');
+    expect(body.visibility).toBe('unlisted');
+    expect(body.folder).toBe('2026/forks');
+    const copy = await head(body.id);
+    expect(copy.user_id).toBe(w.bob.id);
+    expect(copy.title).toBe('My copy');
+    expect(copy.visibility).toBe('unlisted');
+    expect(copy.folder).toBe('2026/forks');
+    const source = await head(w.doc.id);
+    expect(source.title).toBe('The NBA payroll stack');
+    expect(source.folder).toBe('');
+  });
+
+  it('an anonymous token cannot make the copy private: the existing visibility rule, never a silent downgrade', async () => {
+    const w = await world();
+    const res = await fork(w.doc.id, w.anon.token, { visibility: 'private' });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBeTruthy();
+  });
+
+  it('unreadable and unknown are the uniform 404; no credential is 401', async () => {
+    const w = await world('private');
+    expect((await fork(w.doc.id, w.tb.token)).status).toBe(404);
+    expect((await fork(w.doc.id, w.anon.token)).status).toBe(404);
+    expect((await fork('zzzzzz', w.tb.token)).status).toBe(404);
+    expect((await fork(w.doc.id)).status).toBe(401);
+  });
+
+  it('a private document shared to the account is reachable through the account\'s token', async () => {
+    const w = await world('private');
+    sessionUser.id = w.owner.id; sessionUser.email = w.owner.email;
+    const shared = await putSharingRoute(jreq(`/api/my/artifacts/${w.doc.id}/sharing`, 'PUT', { shares: [{ email: 'bob@x.com', role: 'viewer' }] }), params(w.doc.id));
+    expect(shared.status, await shared.clone().text()).toBe(200);
+    sessionUser.id = ''; sessionUser.email = '';
+    const res = await fork(w.doc.id, w.tb.token);
+    expect(res.status, await res.clone().text()).toBe(201);
+    const copy = await head(((await res.json()) as { id: string }).id);
+    expect(copy.user_id).toBe(w.bob.id);
+    expect(copy.visibility).toBe('private');
+  });
+
+  it('a document that writes another owner\'s dataset is refused by name, not copied broken', async () => {
+    const w = await world();
+    const ds = await create(w.ta.token, { dataset: [{ choice: 'ramen' }], access: 'readwrite', visibility: 'public' });
+    const doc = await create(w.ta.token, { markup: MUTATING(ds.id), visibility: 'public' });
+    const res = await fork(doc.id, w.tb.token);
+    expect(res.status).toBe(400);
+    const text = await res.text();
+    expect(text).toMatch(/invalid_refs/);
+    expect(text).toMatch(/not yours to write/);
+  });
+
+  it('every format forks; a dataset copy shares the object key', async () => {
+    const w = await world();
+    const ds = await create(w.ta.token, { dataset: [{ month: '2026-01', revenue: 120 }], visibility: 'public' });
+    const res = await fork(ds.id, w.tb.token);
+    expect(res.status, await res.clone().text()).toBe(201);
+    const copy = await head(((await res.json()) as { id: string }).id);
+    const source = await head(ds.id);
+    expect(copy.format).toBe('dataset');
+    expect(copy.meta.objectKey).toBe(source.meta.objectKey);
+    expect(copy.forked_from).toBe(ds.id);
+  });
+});
