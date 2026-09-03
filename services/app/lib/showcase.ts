@@ -67,7 +67,7 @@ const ENTRIES: readonly ShowcaseDoc[] = [
     title: 'artifactbin · 90-Day Product Plan',
     blurb: 'A product plan connecting target outcomes, roadmap, milestones and architecture.',
     kind: 'product plan',
-    use: 'create product plans people can align around',
+    use: 'create product plans teams align on',
   },
   {
     order: 2,

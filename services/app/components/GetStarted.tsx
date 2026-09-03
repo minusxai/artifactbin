@@ -121,8 +121,8 @@ const PICKER_BUTTON =
  * right — one row, no separate foot line. */
 function OptionHeader({ n, title, note }: { n: number; title: string; note: string }) {
   return (
-    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-      <span className="flex items-baseline gap-2">
+    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border border-transparent px-2.5">
+      <span className="flex items-baseline gap-2.5">
         <Badge tone="accent">option {n}</Badge>
         <span className="font-mono text-[11px] tracking-[0.14em] text-fg uppercase">{title}</span>
       </span>
@@ -504,7 +504,7 @@ export default function GetStarted({
           * rather than saying what this block IS. */}
         {heading && (
           <p className="mb-2.5 font-mono text-[11px] tracking-[0.14em] text-fg uppercase text-muted">
-            Getting started
+            Getting started {`(<30 secs)`}
           </p>
         )}
 
@@ -528,7 +528,7 @@ export default function GetStarted({
           // drawn as a button beside a footnote. It gets its own raised
           // ground, and the border arrives on hover so it is a target without
           // being a box inside a box.
-          className="group/inst w-full cursor-pointer rounded-[5px] border border-transparent bg-raised px-3 py-2 text-left transition-colors hover:border-accent/40 hover:bg-comment"
+          className="group/inst w-full cursor-pointer rounded-[5px] border border-transparent bg-raised px-2.5 py-2 text-left transition-colors hover:border-accent/40 hover:bg-comment"
         >
           <span className="flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
             <span className="flex items-center gap-2.5">

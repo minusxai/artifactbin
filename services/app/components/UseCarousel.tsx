@@ -41,6 +41,7 @@ import {
 const INTERVAL = 3200;
 const ARROW =
   'absolute top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-accent/40 bg-accent-soft text-accent shadow-sm backdrop-blur-sm transition-colors hover:border-accent hover:bg-accent hover:text-bg';
+const DEFAULT_LABEL = 'What can you do with artifactbin?';
 const N = SHOWCASE.length;
 /** The three copies the wheel rides on. */
 const TRIPLE = [...SHOWCASE, ...SHOWCASE, ...SHOWCASE];
@@ -82,10 +83,16 @@ function FormatRail({ active, onPick }: { active: ShowcaseKind; onPick: (kind: S
 
 function ShowcaseConcept({
   autoplay = false,
+  label = DEFAULT_LABEL,
+  wheel = true,
 }: {
   /** Every option in the rig now moves on its own; kept as a prop because
     * the surviving one may well want it off somewhere. */
   autoplay?: boolean;
+  /** The eyebrow that both names the section and rules it off. */
+  label?: string;
+  /** false = the documents alone. See UseCarousel's own note. */
+  wheel?: boolean;
 }) {
   /**
    * WHERE THE TRACK IS, as a row of TRIPLE — not derived from which document
@@ -195,30 +202,32 @@ function ShowcaseConcept({
         * loose caption above it. */}
       <p className="flex items-center gap-4 font-mono text-xs tracking-[0.18em] text-muted uppercase my-10">
         {/* <span aria-hidden className="h-px flex-1 bg-edge" /> */}
-        What can you do with artifactbin?
+        {label}
         <span aria-hidden className="h-px flex-1 bg-edge" />
       </p>
-      <div className="use-wheel-window mt-2">
-        <div
-          className="use-wheel"
-          style={{
-            transform: `translateY(calc(-1 * ${at - 1} * var(--use-line)))`,
-            ...(seating ? { transition: 'none' } : {}),
-          }}
-        >
-          {TRIPLE.map((item, index) => (
-            <span
-              key={index}
-              data-use-row=""
-              data-state={index === at ? 'in' : 'out'}
-              aria-hidden={index === at ? undefined : true}
-              className="use-row block truncate px-2 font-serif text-[clamp(1.6rem,3.6vw,2.4rem)] font-medium tracking-[-0.005em]"
-            >
-              {item.use}
-            </span>
-          ))}
+      {wheel && (
+        <div className="use-wheel-window mt-2">
+          <div
+            className="use-wheel"
+            style={{
+              transform: `translateY(calc(-1 * ${at - 1} * var(--use-line)))`,
+              ...(seating ? { transition: 'none' } : {}),
+            }}
+          >
+            {TRIPLE.map((item, index) => (
+              <span
+                key={index}
+                data-use-row=""
+                data-state={index === at ? 'in' : 'out'}
+                aria-hidden={index === at ? undefined : true}
+                className="use-row block truncate px-2 font-serif text-[clamp(1.6rem,3.6vw,2.4rem)] font-medium tracking-[-0.005em]"
+              >
+                {item.use}
+              </span>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* The document that IS that example. One picture, swapped — a strip of
         * six would be a gallery again and would stop illustrating the line. */}
@@ -310,10 +319,23 @@ function ShowcaseConcept({
  * beside this one is gone — a page still wearing its scaffolding reads as
  * unfinished to anyone who was not in the conversation.
  */
-export default function UseCarousel() {
+export default function UseCarousel({
+  label,
+  wheel,
+}: {
+  /**
+   * ONE CAROUSEL, TWO HOSTS. The landing asks a stranger what the product is
+   * FOR, so the wheel of uses is the point there. The signed-in empty library
+   * has already made that sale and wants only the documents, under its own
+   * name — so the eyebrow and the wheel are props rather than a second copy of
+   * this file with one line changed.
+   */
+  label?: string;
+  wheel?: boolean;
+} = {}) {
   return (
     <section aria-label="What you can use it for">
-      <ShowcaseConcept autoplay />
+      <ShowcaseConcept autoplay label={label} wheel={wheel} />
     </section>
   );
 }

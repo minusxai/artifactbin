@@ -83,25 +83,57 @@ describe('what the dashboard leads with', () => {
     expect(screen.queryByLabelText('Browse artifacts by agent token')).toBeNull();
   });
 
-  it('WITH artifacts: the connect door and the shelf, not the teaching rail', async () => {
+  // ONE DOOR, ONE NAME, EVERY SURFACE. The dashboard used to fold the same
+  // panel into a strip of its own called "connect an agent" while the landing
+  // showed it open and called it "getting started" — one thing wearing two
+  // names, and the reader had to open the strip to find out they were the
+  // same. There is one presentation now, so these assertions are about the
+  // landing's panel appearing on a signed-in page.
+  it('WITH artifacts: the getting-started panel and the shelf, not the teaching rail', async () => {
     home = { signedIn: true, artifacts: [doc('a')], shared: [] };
     render(<MemoryRouter><HomePage /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('Doc a')).toBeInTheDocument());
-    expect(screen.getByLabelText(/connect an agent/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('Get started')).toBeInTheDocument();
+    expect(document.body.textContent?.toLowerCase()).not.toContain('connect an agent');
+    // Examples are for a page with nothing of the reader's own on it.
+    expect(screen.queryByLabelText('What you can use it for')).toBeNull();
     // The once-ever utilities are not permanent furniture.
     expect(screen.queryByText(/claim an agent's artifacts/i)).toBeNull();
   });
 
-  it('WITHOUT owned artifacts: connect still leads shared work and account utilities stay away', async () => {
+  it('EMPTY: names the first artifact, then the panel, then other people\u2019s work', async () => {
+    home = { signedIn: true, artifacts: [], shared: [] };
+    render(<MemoryRouter><HomePage /></MemoryRouter>);
+    // Greeted by name, from the session the page chrome already reads — the
+    // accessible name IS the visible line, so this matches its stable half.
+    const heading = await screen.findByLabelText(/create your first artifact/i);
+    expect(heading).toHaveTextContent("hi c, let\u2019s create your first artifact!");
+    const panel = screen.getByLabelText('Get started');
+    const examples = screen.getByLabelText('What you can use it for');
+    // Its own name here, and the documents WITHOUT the landing's wheel of
+    // use-phrases: this reader has already bought the pitch.
+    expect(examples).toHaveTextContent('Inspiration Zone');
+    expect(examples.querySelector('[data-use-row]')).toBeNull();
+    // The SAME door, open, with both paths on the page: an empty library must
+    // not be a page whose only content is a closed strip.
+    expect(screen.getByLabelText('Create a live document for my agent')).toBeInTheDocument();
+    expect(screen.getByLabelText('Install for my agent')).toBeInTheDocument();
+    expect(heading.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(panel.compareDocumentPosition(examples) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('WITHOUT owned artifacts: the panel still leads shared work and account utilities stay away', async () => {
     home = {
       signedIn: true,
       artifacts: [],
       shared: [{ ...doc('shared'), description: null, role: 'viewer', owner_username: 'alice' }],
     };
     render(<MemoryRouter><HomePage /></MemoryRouter>);
-    const connect = await screen.findByLabelText('Connect an agent');
+    const connect = await screen.findByLabelText('Get started');
     const shared = await screen.findByLabelText('Open shared artifact shared');
     expect(connect.compareDocumentPosition(shared) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Work shared WITH someone is still a library, so it is not the empty page.
+    expect(screen.queryByLabelText('Create your first artifact')).toBeNull();
     expect(screen.queryByLabelText('Claim a token')).toBeNull();
     expect(screen.queryByLabelText('Add data')).toBeNull();
   });
