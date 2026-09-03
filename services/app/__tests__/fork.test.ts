@@ -15,7 +15,8 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as getMineRoute } from '@/app/api/my/artifacts/[id]/route';
 import { PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { GET as versionsMineRoute } from '@/app/api/my/artifacts/[id]/versions/route';
-import { getArtifactById } from '@/lib/artifacts';
+import { getArtifactById, getSharingFor } from '@/lib/artifacts';
+import { getDb } from '@/lib/db';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser } from '@/lib/users';
 
@@ -177,5 +178,77 @@ describe('POST /api/my/artifacts/:id/fork', () => {
     expect(copy.meta.objectKey).toBe(source.meta.objectKey);
     expect(copy.meta.columns).toEqual(source.meta.columns);
     expect(copy.user_id).toBe(w.bob.id);
+  });
+});
+
+/**
+ * What the seed does not reach: the sidecar state that must NOT travel, the
+ * provenance event, and the same-site rule the browser door owes.
+ */
+describe('POST /api/my/artifacts/:id/fork — what does not travel', () => {
+  it('shares do not travel: the copy is shared with nobody', async () => {
+    const w = await world(PROSE, 'private');
+    asSession({ id: w.owner.id, email: w.owner.email });
+    const shared = await putSharingRoute(jreq(`/api/my/artifacts/${w.doc.id}/sharing`, 'PUT', { shares: [{ email: 'bob@x.com', role: 'editor' }] }), params(w.doc.id));
+    expect(shared.status, await shared.clone().text()).toBe(200);
+
+    asSession({ id: w.bob.id, email: w.bob.email });
+    const res = await fork(w.doc.id);
+    expect(res.status, await res.clone().text()).toBe(201);
+    const copyId = ((await res.json()) as { id: string }).id;
+
+    const bob = { tokenId: '', userId: w.bob.id };
+    expect((await getSharingFor(bob, copyId))?.shares).toEqual([]);
+    // The original's list is untouched by being forked.
+    const owner = { tokenId: '', userId: w.owner.id };
+    expect((await getSharingFor(owner, w.doc.id))?.shares).toEqual([{ email: 'bob@x.com', role: 'editor' }]);
+  });
+
+  it('a folder does not travel: the copy is at the forker\'s root', async () => {
+    const w = await world();
+    const filed = await create(w.ta.token, { markup: '<div><p>filed</p></div>', visibility: 'public', folder: '2026/08' });
+    expect((await head(filed.id)).folder).toBe('2026/08');
+    asSession({ id: w.bob.id, email: w.bob.email });
+    const res = await fork(filed.id);
+    expect(res.status, await res.clone().text()).toBe(201);
+    expect((await head(((await res.json()) as { id: string }).id)).folder).toBe('');
+  });
+
+  it('records a fork event against the SOURCE, with the forker as the user', async () => {
+    const w = await world();
+    asSession({ id: w.bob.id, email: w.bob.email });
+    const res = await fork(w.doc.id);
+    expect(res.status, await res.clone().text()).toBe(201);
+    const copyId = ((await res.json()) as { id: string }).id;
+
+    // trackEvent is fire-and-forget (never awaited by a route), so poll.
+    const db = await getDb();
+    let rows: Array<{ artifact_id: string; user_id: string | null }> = [];
+    for (let i = 0; i < 40 && rows.length === 0; i++) {
+      rows = (await db.query<{ artifact_id: string; user_id: string | null }>(
+        "SELECT artifact_id, user_id FROM analytics_events WHERE event = 'fork'",
+      )).rows;
+      if (rows.length === 0) await new Promise((r) => setTimeout(r, 25));
+    }
+    expect(rows).toEqual([{ artifact_id: w.doc.id, user_id: w.bob.id }]);
+    expect(rows[0].artifact_id).not.toBe(copyId);
+  });
+
+  it('a cookie-authorized fork must be SAME-SITE — both browser credentials', async () => {
+    const w = await world();
+    const crossSite = (id: string, cookie?: string) =>
+      forkRoute(new Request(`${BASE}/api/my/artifacts/${id}/fork`, {
+        method: 'POST',
+        headers: { Origin: 'https://evil.example', ...(cookie ? { Cookie: cookie } : {}) },
+      }), params(id));
+
+    // The anonymous browser (agent cookie) …
+    expect((await crossSite(w.doc.id, await agentCookie([w.anon.id]))).status).toBe(403);
+    // … and the LOGGED-IN one, which is the credential a tokenId-keyed guard
+    // would wave straight through.
+    asSession({ id: w.bob.id, email: w.bob.email });
+    expect((await crossSite(w.doc.id)).status).toBe(403);
+    // Same-site, the same session forks.
+    expect((await fork(w.doc.id)).status).toBe(201);
   });
 });
