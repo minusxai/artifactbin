@@ -65,7 +65,9 @@ describe('a bound src is a binding, not an external URL', () => {
     const { res, body } = await publish(`${HELMET}<div><img src="${web}/{$pick}.png" alt="a" /></div>`);
     expect(res.status).toBe(201);
     expect(hits).toEqual([]);
-    expect(body.warnings ?? []).toEqual([]);
+    // Key-agnostic: milestone 1's review may move asset warnings to their own
+    // key; either way, a template must produce none, because nothing was fetched.
+    expect([...(body.warnings as unknown[] ?? []), ...(body.asset_warnings as unknown[] ?? [])]).toEqual([]);
     expect((await getArtifactById(body.id as string))!.source).toContain('{$pick}');
     const db = await getDb();
     expect((await db.query<{ n: string }>('select count(*)::text as n from web_assets')).rows[0].n).toBe('0');
@@ -107,9 +109,32 @@ describe('the served document', () => {
     const { body } = await publish(`${HELMET}<div><img src="$pick" alt="the pick" /></div>`);
     const page = await rawRoute(request(`/a/${body.id}/raw`), params({ id: body.id as string }));
     const html = await page.text();
-    expect(html).toContain(`/a/${body.id}/assets`);
+    expect(html).toContain(`"assetsUrl":"/a/${body.id}/assets"`);
     // The reference itself never reaches the served markup.
     expect(html).not.toContain('src="$pick"');
+  });
+
+  /*
+   * The SSR STRING, not only the island. The two are rendered from separate
+   * prop lists, and a prop that reaches one but not the other is a hydration
+   * mismatch — which React 19 answers by discarding the whole server tree.
+   * `assetsUrl` is the first island field that CHANGES WHAT IS DRAWN
+   * (queryUrl/mutateUrl only name a transport), and it was missing from the SSR
+   * call: the served document painted no image at all until hydration.
+   */
+  it('resolves the bound image IN THE SSR BODY, not only after hydration', async () => {
+    const url = `${web}/default.png`;
+    const helmet = `<Helmet><Value name="pick" type="string" default="${url}" /></Helmet>`;
+    const { body } = await publish(`${helmet}<div><img src="$pick" alt="the pick" /></div>`);
+    const page = await rawRoute(request(`/a/${body.id}/raw`), params({ id: body.id as string }));
+    const html = await page.text();
+    const tag = /<img[^>]*alt="the pick"[^>]*>/.exec(html)?.[0] ?? '';
+    expect(tag).toContain(`src="/a/${body.id}/assets?u=${encodeURIComponent(url)}"`);
+    expect(tag).not.toContain('data-mx-bound');
+    // …and the renderer's own preload hint follows the same mapped address, so
+    // the first thing the reader's browser asks for is ours and not the source.
+    expect(html).toContain(`rel="preload" as="image" href="/a/${body.id}/assets?u=${encodeURIComponent(url)}"`);
+    expect(html).not.toContain(`href="${url}"`);
   });
 
   it('has a CSP unchanged by this milestone — an <img> load needs no connect-src', async () => {

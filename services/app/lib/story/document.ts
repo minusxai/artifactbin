@@ -535,8 +535,16 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    */
   const glyphs = split ? loadSsrBundle().glyphsForNodes(split.body) : {};
 
+  /*
+   * The SSR string and the island below are built from SEPARATE prop lists, and
+   * an island field that CHANGES WHAT IS DRAWN must appear in both or React
+   * discards the whole server tree at hydration (#418). `assetsUrl` is the
+   * first such field — `queryUrl`/`mutateUrl` only name a transport, so their
+   * absence here is correct, while a bound `<img src="$pick">` has nowhere to
+   * import from without this and rendered as a bare alt until hydration.
+   */
   const bodyHtml = split
-    ? loadSsrBundle().renderStoryBody({ nodes: split.body, refData, glyphs, ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome })
+    ? loadSsrBundle().renderStoryBody({ nodes: split.body, refData, glyphs, ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}) })
     : `<pre>${escapeHtml(source)}</pre>`;
 
   // Style order mirrors the engine's injection order (compiled Tailwind → bare

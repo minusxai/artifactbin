@@ -128,7 +128,19 @@ function RuntimeBoundSource({ props, template }: BoundSourceProps) {
   const { state } = useContext(RuntimeEmbedContext);
   const { endpoint, seen } = useContext(RuntimeAssetContext);
   const [refused, setRefused] = useState<ReadonlySet<string>>(EMPTY_REFUSED);
+  const el = useRef<HTMLImageElement | null>(null);
   const url = resolveRefTemplate(template, (name) => state.values[name]);
+  /*
+   * The image the SERVER rendered has usually finished loading before React
+   * hydrates, and a `load` that already fired is a `load` no listener will ever
+   * hear — so the first picture a reader sees would never be recorded, and
+   * coming back to it would ask the endpoint again. `complete` is the same fact
+   * asked rather than awaited. (Only a real browser can show this: jsdom loads
+   * no images, so the gate is its test.)
+   */
+  useEffect(() => {
+    if (url && isWebUrl(url) && el.current?.complete && el.current.naturalWidth > 0) seen.add(url);
+  }, [url, seen]);
   const mapped = url === null ? null : runtimeAssetUrl(url, (u) => seen.has(u), endpoint);
   // A web URL that came back unchanged is one there is no endpoint to import
   // it through — a rail preview, a canvas. It renders STATIC rather than
@@ -141,6 +153,7 @@ function RuntimeBoundSource({ props, template }: BoundSourceProps) {
   return (
     <img
       {...props}
+      ref={el}
       src={mapped ?? undefined}
       onLoad={() => { if (isWebUrl(url)) seen.add(url); }}
       onError={() => setRefused((prev) => new Set([...prev, url]))}
