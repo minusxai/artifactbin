@@ -20,9 +20,14 @@
  *   · A LINK is `http:`, `https:` or `mailto:` and nothing else. Any other
  *     scheme renders as the literal source it was written as, so a
  *     `javascript:` URL is visible rather than clickable.
- *   · BOUNDED. Linear in the input: a delimiter search that fails caches its
- *     failure (there is no closer later if there is none now), so a body of
- *     10,000 lone asterisks costs one scan rather than ten thousand.
+ *   · BOUNDED, and measured rather than asserted. A delimiter search that
+ *     fails caches its failure (there is no closer later if there is none
+ *     now), so 10,000 lone asterisks cost one scan rather than ten thousand;
+ *     a BACKTICK run is measured once and answered from a table, because its
+ *     needle length differs at every position inside the run and no cache
+ *     keyed by the needle could ever hit. 16,000 inline backticks went from
+ *     417 ms to 0.4 ms when that was fixed — the `bounded` tests hold the
+ *     line, on the path the parser actually walks.
  *
  * Pure — no DOM, no React. `components/MarkdownLite.tsx` is the renderer;
  * `plainText` is what the COMPACT surfaces show (a preview clamped to two
@@ -83,6 +88,15 @@ export function safeHref(url: string): string | null {
  * A failed delimiter search is FINAL: if there is no closing run after `from`,
  * there is none after any later position either. Caching that is what keeps a
  * pathological body (`'*'.repeat(10_000)`) linear instead of quadratic.
+ *
+ * SOUND ONLY BECAUSE `from` NEVER GOES BACKWARDS. `parseInline` is the only
+ * caller and its `i` only grows, so "not found after `from`" stays true for
+ * every later query. A backward search through the same Scanner would get a
+ * silently wrong -1 — if one is ever wanted, it needs its own instance.
+ *
+ * The BACKTICK delimiter is deliberately NOT served here: its needle is a run
+ * of n backticks whose length differs at every position inside a run, so a
+ * cache keyed by the needle can never hit. See `backtickClosers`.
  */
 class Scanner {
   private readonly exhausted = new Set<string>();
@@ -97,11 +111,79 @@ class Scanner {
   }
 }
 
-/** How many `ch` repeat at `at`. */
-function runLength(src: string, at: number, ch: string): number {
-  let n = 0;
-  while (src[at + n] === ch) n += 1;
-  return n;
+const EMPTY_CLOSERS = new Int32Array(0);
+
+/**
+ * EVERY BACKTICK RUN IN THE SOURCE, and the longest one at or after each.
+ *
+ * Built once, lazily — a paragraph with no backtick in it never pays for this.
+ * `longestAfter` is what makes the closer search bounded rather than merely
+ * faster: it says, before any scanning, the longest fence that COULD still
+ * close, so a run asking for a longer one is answered -1 immediately and a run
+ * asking for a shorter one stops the moment it meets a run that long.
+ * Without it, a body of runs with strictly decreasing lengths made every run
+ * scan the whole remainder (measured: 22 ms at 113 KB, 170 ms at 452 KB).
+ */
+interface BacktickRuns {
+  start: Int32Array;
+  end: Int32Array;
+  /** The longest run at index r or later — 0 past the last run. */
+  longestAfter: Int32Array;
+  count: number;
+}
+
+function indexBacktickRuns(src: string): BacktickRuns {
+  const start: number[] = [];
+  const end: number[] = [];
+  for (let j = 0; j < src.length; j += 1) {
+    if (src[j] !== '`') continue;
+    const from = j;
+    while (j < src.length && src[j] === '`') j += 1;
+    start.push(from);
+    end.push(j);
+  }
+  const count = start.length;
+  const longestAfter = new Int32Array(count + 1);
+  for (let r = count - 1; r >= 0; r -= 1) longestAfter[r] = Math.max(longestAfter[r + 1], end[r] - start[r]);
+  return { start: Int32Array.from(start), end: Int32Array.from(end), longestAfter, count };
+}
+
+/**
+ * WHERE EVERY LENGTH OF FENCE CLOSES, for ONE backtick run, in one pass.
+ *
+ * A run of n backticks asks n questions — the fence at its first position is n
+ * long, at its second n-1, and so on down to 1 — and every one of them searches
+ * from the SAME place: just past the run. Answering them one at a time is what
+ * made this quadratic: the old code rebuilt an n, n-1, n-2 … character needle
+ * at every position (a 3,000-backtick run constructed 4.5 million characters
+ * and retained them all in the Scanner's cache), then re-scanned for each.
+ *
+ * So the run is measured ONCE and answered as a table: `closers[len]` is the
+ * first index at or after the run holding `len` consecutive backticks, or -1.
+ * The walk fills every length each following run can serve and stops at the
+ * longest one still reachable — a closing run of that many backticks answers
+ * every shorter question too, since they all start where it does.
+ *
+ * The table is why the run may NOT simply be skipped when its full fence finds
+ * nothing: a shorter fence inside it can still close (`` ``x` `` is a literal
+ * backtick followed by `<code>x</code>`), and skipping would produce a
+ * different tree. Same answers as the character-by-character search, one pass.
+ *
+ * `r0` is the first run after this one — the caller advances it monotonically,
+ * so finding it costs nothing. A run's own `from` is never inside another run
+ * (it is the character after a maximal run), so every candidate is whole.
+ */
+function backtickClosers(runs: BacktickRuns, r0: number, maxLen: number): Int32Array {
+  const closers = new Int32Array(maxLen + 1).fill(-1);
+  const cap = Math.min(maxLen, runs.longestAfter[Math.min(r0, runs.count)]);
+  let filled = 0;
+  for (let r = r0; r < runs.count && filled < cap; r += 1) {
+    const reach = Math.min(runs.end[r] - runs.start[r], cap);
+    // Only the lengths nobody has answered yet: an earlier run is closer.
+    for (let len = filled + 1; len <= reach; len += 1) closers[len] = runs.start[r];
+    if (reach > filled) filled = reach;
+  }
+  return closers;
 }
 
 function pushText(out: MdInline[], text: string): void {
@@ -134,6 +216,13 @@ export function parseInline(src: string): MdInline[] {
   let plain = 0;
   let i = 0;
   const flush = (upto: number) => { pushText(out, src.slice(plain, upto)); };
+  // The backtick run `i` is currently inside, measured once on entry. `i` only
+  // grows, so `i >= runEnd` is exactly "this is a run we have not measured";
+  // `nextRun` walks the run index forward and never back.
+  let runs: BacktickRuns | null = null;
+  let nextRun = 0;
+  let runEnd = -1;
+  let closers: Int32Array = EMPTY_CLOSERS;
 
   while (i < src.length) {
     const ch = src[i];
@@ -154,13 +243,21 @@ export function parseInline(src: string): MdInline[] {
     }
 
     if (ch === '`') {
-      const fence = '`'.repeat(runLength(src, i, '`'));
-      const close = scanner.find(fence, i + fence.length);
+      if (i >= runEnd) {
+        runs ??= indexBacktickRuns(src);
+        while (nextRun < runs.count && runs.end[nextRun] <= i) nextRun += 1;
+        runEnd = runs.end[nextRun];
+        closers = backtickClosers(runs, nextRun + 1, runEnd - i);
+      }
+      // O(1) here, always: the fence is `runEnd - i` backticks and the table
+      // already knows where one of that length is. No needle is built.
+      const len = runEnd - i;
+      const close = closers[len];
       // A backtick with no partner is a backtick.
-      if (close > i + fence.length) {
+      if (close > runEnd) {
         flush(i);
-        out.push({ kind: 'code', text: src.slice(i + fence.length, close).trim() });
-        i = close + fence.length;
+        out.push({ kind: 'code', text: src.slice(runEnd, close).trim() });
+        i = close + len;
         plain = i;
         continue;
       }

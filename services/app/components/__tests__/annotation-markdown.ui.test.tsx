@@ -145,6 +145,9 @@ describe('the rail renders the comment whole', () => {
     const code = within(thread).getByText('lib/config.ts');
     expect(code.tagName).toBe('CODE');
     expect(code.className).toContain('font-mono');
+    // A long identifier has no box to scroll in — it must WRAP, or it is cut
+    // off at the rail's edge with no affordance at all.
+    expect(code.className).toContain('break-all');
     expect(within(thread).getByText('10').tagName).toBe('STRONG');
     const prose = thread.querySelector('[data-markdown]');
     expect(prose?.className).toContain('font-sans');
