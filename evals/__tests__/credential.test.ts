@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { acquireCredential, callbackCode, codeFromMail, credentialSourceFor, pickLoginMail, pkcePair, writeArtifactbinEnv } from '../lib/credential';
+import { acquireCredential, callbackCode, codeFromMail, credentialSourceFor, localLoginEmail, memoizeCredential, pickLoginMail, pkcePair, writeArtifactbinEnv, codeFromOutbox } from '../lib/credential';
 
 describe('credential source per mode', () => {
   const inbox = { RESEND_EVAL_API_KEY: 're_x', EVAL_LOGIN_EMAIL: 'mxmx_eval@social-worm.resend.app' };
@@ -63,6 +63,21 @@ describe('acquireCredential', () => {
   const env = { RESEND_EVAL_API_KEY: 're_x', EVAL_LOGIN_EMAIL: 'mxmx_eval@social-worm.resend.app' };
   const BASE = 'https://x.test';
 
+  /**
+   * The Resend host, matched by ORIGIN — never by substring: `https://api.resend.com.evil.test/…`
+   * starts with the string too, which is exactly what CodeQL's "incomplete URL substring
+   * sanitization" is about (flagged high on the first version of this file).
+   */
+  const RESEND_ORIGIN = 'https://api.resend.com';
+  const isResend = (raw: string, prefix?: string): boolean => {
+    try {
+      const url = new URL(raw);
+      return url.origin === RESEND_ORIGIN && (prefix === undefined || url.pathname.startsWith(prefix));
+    } catch {
+      return false;
+    }
+  };
+
   interface Seen { url: string; method: string; body: string; headers: Record<string, string> }
 
   function stubFetch(seen: Seen[], over: { code?: string } = {}) {
@@ -73,10 +88,10 @@ describe('acquireCredential', () => {
       const body = typeof init?.body === 'string' ? init.body : init?.body ? String(init.body) : '';
       seen.push({ url, method, body, headers });
       if (url.startsWith(`${BASE}/api/auth/email-otp/send-verification-otp`)) return new Response('{}', { status: 200 });
-      if (url.startsWith('https://api.resend.com/emails/receiving/')) {
+      if (isResend(url, '/emails/receiving/')) {
         return new Response(JSON.stringify({ text: `Your code is ${over.code ?? '424242'}` }), { status: 200 });
       }
-      if (url.startsWith('https://api.resend.com/emails/receiving')) {
+      if (isResend(url, '/emails/receiving')) {
         return new Response(JSON.stringify({ data: [{ id: 'mail_1', to: [env.EVAL_LOGIN_EMAIL], created_at: new Date().toISOString(), subject: 'Your login code' }] }), { status: 200 });
       }
       if (url.startsWith(`${BASE}/api/auth/sign-in/email-otp`)) {
@@ -109,7 +124,7 @@ describe('acquireCredential', () => {
     const verify = seen.find((s) => s.url.includes('/sign-in/email-otp'))!;
     expect(JSON.parse(verify.body)).toEqual({ email: env.EVAL_LOGIN_EMAIL, otp: '424242' });
     // The inbox is read with the eval's own key, never the product's.
-    expect(seen.find((s) => s.url.startsWith('https://api.resend.com'))!.headers.authorization).toBe('Bearer re_x');
+    expect(seen.find((s) => isResend(s.url))!.headers.authorization).toBe('Bearer re_x');
   });
 
   it('carries the session cookie into the consent screen and posts the form back verbatim', async () => {
@@ -149,6 +164,90 @@ describe('acquireCredential', () => {
     expect(await acquireCredential('paste', { base: BASE, env, fetch: stubFetch(seen), sleep: async () => {} })).toBeNull();
     expect(seen).toEqual([]);
   });
+
+  /**
+   * The SAME dance against a server this driver booted: only the code reader changes. The mail is in the
+   * file the local server writes instead of sending (`services/proxy/src/mail.ts devOutboxMailer`), so
+   * nothing may reach Resend — a local server has no key and must never need one.
+   */
+  it('a local server: the code is read off its dev outbox and the same OAuth dance follows', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'eval-outbox-'));
+    const outbox = path.join(dir, 'dev-mail.jsonl');
+    const address = 'mxmx_eval_claude_code_sonnet@example.com';
+    const line = (mail: Record<string, unknown>) => `${JSON.stringify(mail)}\n`;
+    fs.writeFileSync(outbox, [
+      // A previous run's code, superseded — using it would burn an attempt.
+      line({ kind: 'otp', to: address, otp: '111111', createdAt: new Date(Date.now() - 3_600_000).toISOString() }),
+      // Another leg's mail in a shared outbox.
+      line({ kind: 'otp', to: 'mxmx_eval_other@example.com', otp: '222222', createdAt: new Date().toISOString() }),
+      line({ kind: 'otp', to: address, otp: '909090', text: 'Your artifactbin login code is 909090', createdAt: new Date().toISOString() }),
+    ].join(''));
+
+    const seen: Seen[] = [];
+    const got = await acquireCredential('outbox-oauth', {
+      base: BASE, env: {}, localOutbox: outbox, email: address, fetch: stubFetch(seen), sleep: async () => {},
+    });
+    expect(got).toEqual({ token: 'mx_granted', owner: 'account', email: address });
+
+    const send = seen.find((s) => s.url.includes('send-verification-otp'))!;
+    expect(JSON.parse(send.body)).toEqual({ email: address, type: 'sign-in' });
+    const verify = seen.find((s) => s.url.includes('/sign-in/email-otp'))!;
+    expect(JSON.parse(verify.body)).toEqual({ email: address, otp: '909090' });
+    expect(seen.some((s) => isResend(s.url))).toBe(false);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  /**
+   * MEASURED against a locally booted server (`.agent/`, ports 5222/5223): every write the login makes
+   * came back `403 {"code":"INVALID_ORIGIN"}`, because Better Auth trusts exactly the product's PUBLIC
+   * base URL (`services/proxy/src/standalone.ts humanAuthOptionsFor` → `baseURL`) — which for a server
+   * this driver boots is the leg's PROXY, not the server port the driver dials. So the origin is stated,
+   * not assumed to be the base.
+   */
+  it('declares the origin the product trusts, which need not be the address the driver dials', async () => {
+    const seen: Seen[] = [];
+    const ORIGIN = 'http://127.0.0.1:3101';
+    await acquireCredential('inbox-oauth', { base: BASE, env, origin: ORIGIN, fetch: stubFetch(seen), sleep: async () => {} });
+    for (const url of ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp', '/oauth/authorize/approve']) {
+      expect(seen.find((s) => s.url === `${BASE}${url}`)?.headers.origin, url).toBe(ORIGIN);
+    }
+  });
+
+  it('the origin defaults to the base — a deployment is reached on the address it mints links from', async () => {
+    const seen: Seen[] = [];
+    await acquireCredential('inbox-oauth', { base: BASE, env, fetch: stubFetch(seen), sleep: async () => {} });
+    expect(seen.find((s) => s.url === `${BASE}/api/auth/sign-in/email-otp`)?.headers.origin).toBe(BASE);
+  });
+
+  it('outbox-oauth says what is missing rather than silently logging in as nobody', async () => {
+    const seen: Seen[] = [];
+    await expect(acquireCredential('outbox-oauth', { base: BASE, env: {}, fetch: stubFetch(seen), sleep: async () => {} }))
+      .rejects.toThrow(/outbox/i);
+    expect(seen).toEqual([]);
+  });
+});
+
+/**
+ * ONE login per SERVER, which is not the same as one per run: `--ci` gives a failed flow a second attempt,
+ * and that attempt boots a NEW server (`pglite://memory`, a fresh `AUTH__SECRET`, a truncated outbox), so
+ * a token memoized across attempts names an account that no longer exists. Seen only now, because before
+ * this phase a locally booted server could not hold an account at all.
+ */
+describe('memoizeCredential', () => {
+  const mint = () => {
+    let n = 0;
+    return async (base: string) => ({ token: `mx_${++n}`, owner: 'account' as const, email: base });
+  };
+  it('a deployment outlives the run: one login, reused by every attempt', async () => {
+    const once = memoizeCredential(mint(), { reusable: true });
+    expect((await once('https://x.test'))?.token).toBe('mx_1');
+    expect((await once('https://x.test'))?.token).toBe('mx_1');
+  });
+  it('a server the driver booted is new on every attempt, and so is its account', async () => {
+    const each = memoizeCredential(mint(), { reusable: false });
+    expect((await each('http://127.0.0.1:3100'))?.token).toBe('mx_1');
+    expect((await each('http://127.0.0.1:3100'))?.token).toBe('mx_2');
+  });
 });
 
 describe('writeArtifactbinEnv', () => {
@@ -159,5 +258,35 @@ describe('writeArtifactbinEnv', () => {
     expect(fs.readFileSync(file, 'utf8')).toBe('ARTIFACTBIN_URL=https://x.test\nARTIFACTBIN_TOKEN=mx_secret\n');
     expect(fs.statSync(file).mode & 0o077).toBe(0);
     fs.rmSync(home, { recursive: true, force: true });
+  });
+});
+
+/**
+ * A LOCAL eval server (CI's agent smoke, a laptop) has no Resend inbox: it writes its login mail to the dev outbox the
+ * browser gates read. The driver logs in through that file — same OAuth dance, a different code reader. Seeded RED.
+ */
+describe('a local server logs in through its dev outbox', () => {
+  it('the account modes pick outbox-oauth when the driver booted the server, before any inbox or secret', () => {
+    const local = { localOutbox: '/tmp/x/dev-mail.jsonl' };
+    for (const m of ['installed_skill+api_action', 'fetched_skill+mcp_action', 'installed_skill+mcp_action'] as const) {
+      expect(credentialSourceFor(m, {}, local), m).toBe('outbox-oauth');
+      expect(credentialSourceFor(m, { EVAL_ACCOUNT_TOKEN: 'mx_abc' }, local), m).toBe('outbox-oauth');
+    }
+    expect(credentialSourceFor('fetched_skill+api_action', {}, local)).toBe('paste');
+  });
+  it('reads the newest code addressed to the eval account that landed after the request', () => {
+    const since = Date.parse('2026-09-03T13:00:00Z');
+    const lines = [
+      { to: 'mxmx_eval_x@example.com', text: 'Your code is 111111', otp: '111111', at: '2026-09-03T12:59:00Z' },
+      { to: 'someone@example.com', text: 'Your code is 222222', otp: '222222', at: '2026-09-03T13:00:05Z' },
+      { to: 'mxmx_eval_x@example.com', text: 'Your code is 333333', at: '2026-09-03T13:00:10Z' },
+    ];
+    expect(codeFromOutbox(lines, { to: 'mxmx_eval_x@example.com', since })).toBe('333333');
+    expect(codeFromOutbox(lines.slice(0, 2), { to: 'mxmx_eval_x@example.com', since })).toBeNull();
+  });
+  it('the local account is a throwaway named after the leg, unless the caller named one', () => {
+    expect(localLoginEmail('claude_code × sonnet', {})).toBe('mxmx_eval_claude-code-sonnet@example.com');
+    expect(localLoginEmail('claude_code × sonnet', { EVAL_LOGIN_EMAIL: 'mxmx_eval@social-worm.resend.app' }))
+      .toBe('mxmx_eval@social-worm.resend.app');
   });
 });
