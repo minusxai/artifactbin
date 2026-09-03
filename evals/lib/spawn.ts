@@ -285,3 +285,15 @@ export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string;
   await Promise.all([finish(out), finish(errOut)]);
   return { stdout, exitCode, timedOut, durationMs: Date.now() - started, truncated };
 }
+
+/**
+ * THE LAST STEP OF THE RUN-AS CONTRACT — after the child has exited, the directories `handOverRunAsDirs`
+ * chowned to the agent go back to the driver's own uid:gid, recursively, so whatever the harness created
+ * there (any owner, any mode — pi's 0600 `models-store.json` broke the runner's upload, deploys run
+ * 33781714008) is the driver's again. The run directory is the driver's deliverable. Nothing handed over →
+ * nothing to exec. Same `sudo -n chown -R` shape as `chownArgv`.
+ */
+export function reclaimRunAsDirs(dirs: RunAsDirs, exec: (argv: string[]) => void, owner?: string): void {
+  void dirs; void exec; void owner;
+  throw new Error('runas-reclaim: implement');
+}

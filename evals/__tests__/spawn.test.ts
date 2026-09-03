@@ -10,7 +10,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { chownArgv, handOverRunAsDirs, prepareRunAsDirs, readableForAgent, runInvocation, wrapRunAs } from '../lib/spawn';
+import { chownArgv, handOverRunAsDirs, prepareRunAsDirs, readableForAgent, reclaimRunAsDirs, runInvocation, wrapRunAs } from '../lib/spawn';
 
 let dir: string;
 const paths = () => ({ stdoutPath: path.join(dir, 'transcript.jsonl'), stderrPath: path.join(dir, 'stderr.log') });
@@ -294,5 +294,21 @@ describe('handOverRunAsDirs opens what the harness is told to read', () => {
     if (unowned) expect(fs.statSync(foreign).mode & 0o7777).toBe(foreignStat.mode & 0o7777);
     expect(fs.existsSync(missing)).toBe(false); // planned ancestors are never created here
     expect(ran).toEqual([]); // still no sudo for any of it
+  });
+});
+
+describe('reclaimRunAsDirs — the driver takes back what it lent', () => {
+  it('chowns exactly the handed-over directories back to the driver’s numeric uid:gid, recursively, via sudo -n', () => {
+    const execs: string[][] = [];
+    reclaimRunAsDirs({ chown: ['/w/run/cwd', '/w/run/home'], traverse: ['/w'] }, (argv) => execs.push(argv));
+    expect(execs).toEqual([['sudo', '-n', 'chown', '-R', `${process.getuid!()}:${process.getgid!()}`, '/w/run/cwd', '/w/run/home']]);
+  });
+
+  it('takes an explicit owner, and reclaims nothing when nothing was handed over', () => {
+    const execs: string[][] = [];
+    reclaimRunAsDirs({ chown: ['/w/run/cwd'], traverse: [] }, (argv) => execs.push(argv), 'runner:docker');
+    expect(execs).toEqual([['sudo', '-n', 'chown', '-R', 'runner:docker', '/w/run/cwd']]);
+    reclaimRunAsDirs({ chown: [], traverse: ['/w'], read: ['/w/ca.crt'] }, (argv) => execs.push(argv));
+    expect(execs).toHaveLength(1);
   });
 });
