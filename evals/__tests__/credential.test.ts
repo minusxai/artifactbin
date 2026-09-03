@@ -117,7 +117,7 @@ describe('acquireCredential', () => {
   it('logs in with the emailed code and comes back with an ACCOUNT token', async () => {
     const seen: Seen[] = [];
     const got = await acquireCredential('inbox-oauth', { base: BASE, env, fetch: stubFetch(seen), sleep: async () => {} });
-    expect(got).toEqual({ token: 'mx_granted', owner: 'account', email: env.EVAL_LOGIN_EMAIL });
+    expect(got).toEqual({ token: 'mx_granted', owner: 'account', email: env.EVAL_LOGIN_EMAIL, cookie: '__Secure-better-auth.session_token=sess_1' });
 
     const send = seen.find((s) => s.url.includes('send-verification-otp'))!;
     expect(JSON.parse(send.body)).toEqual({ email: env.EVAL_LOGIN_EMAIL, type: 'sign-in' });
@@ -150,6 +150,21 @@ describe('acquireCredential', () => {
     expect(exchange.get('grant_type')).toBe('authorization_code');
     expect(exchange.get('code')).toBe('auth_code_1');
     expect(createHash('sha256').update(exchange.get('code_verifier') ?? '').digest('base64url')).toBe(challenge);
+  });
+
+  /**
+   * The cookie is not a detail of the login — it is the CREDENTIAL. An account's documents are born
+   * private, and the only door that makes one unlisted is the owner's own browser door
+   * (`/api/my/artifacts/<id>/sharing`), which takes a session and never a bearer. So the session the
+   * driver already held travels with the token. A pre-provisioned `EVAL_ACCOUNT_TOKEN` names no
+   * session at all — nothing was logged in — and says so by carrying no cookie.
+   */
+  it('the OAuth credential carries the session cookie; a pre-provisioned token carries none', async () => {
+    const seen: Seen[] = [];
+    const granted = await acquireCredential('inbox-oauth', { base: BASE, env, fetch: stubFetch(seen), sleep: async () => {} });
+    expect(granted?.cookie).toBe('__Secure-better-auth.session_token=sess_1');
+    const pre = await acquireCredential('secret', { base: BASE, env: { EVAL_ACCOUNT_TOKEN: 'mx_pre' }, fetch: stubFetch(seen), sleep: async () => {} });
+    expect(pre?.cookie).toBeUndefined();
   });
 
   it('a pre-provisioned account token is used as-is, with no login at all', async () => {
@@ -187,7 +202,7 @@ describe('acquireCredential', () => {
     const got = await acquireCredential('outbox-oauth', {
       base: BASE, env: {}, localOutbox: outbox, email: address, fetch: stubFetch(seen), sleep: async () => {},
     });
-    expect(got).toEqual({ token: 'mx_granted', owner: 'account', email: address });
+    expect(got).toEqual({ token: 'mx_granted', owner: 'account', email: address, cookie: '__Secure-better-auth.session_token=sess_1' });
 
     const send = seen.find((s) => s.url.includes('send-verification-otp'))!;
     expect(JSON.parse(send.body)).toEqual({ email: address, type: 'sign-in' });

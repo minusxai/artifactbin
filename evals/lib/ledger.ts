@@ -99,9 +99,29 @@ function isDocsRead(e: LedgerEntry): boolean {
  * rendering, and DELETEs it — the last write, and a 404 to score.
  */
 export function targetArtifactId(entries: LedgerEntry[]): string | null {
-  const deleted = new Set(entries.filter((e) => e.method === 'DELETE' && e.status < 300 && e.artifactId).map((e) => e.artifactId));
-  const written = entries.filter((e) => isWrite(e) && e.status < 300 && e.artifactId && !deleted.has(e.artifactId));
+  const written = survivingWrites(entries);
   return written.length ? written[written.length - 1].artifactId! : null;
+}
+
+/** The successful writes whose artifact still exists — an agent's own scratch document is deleted again. */
+function survivingWrites(entries: LedgerEntry[]): LedgerEntry[] {
+  const deleted = new Set(entries.filter((e) => e.method === 'DELETE' && e.status < 300 && e.artifactId).map((e) => e.artifactId));
+  return entries.filter((e) => isWrite(e) && e.status < 300 && e.artifactId && !deleted.has(e.artifactId));
+}
+
+/**
+ * EVERY artifact this run made and kept, in the order it first touched them — not just the one it is
+ * scored on. A run makes more than its deliverable (the data task creates a dataset and then a document
+ * that queries it), and under an ACCOUNT token all of them are born private while the scorer reads
+ * anonymously. So the driver hands out links to the lot (`lib/credential shareForScoring`), and this is
+ * the list. Deduplicated, because a document written five times is one document.
+ */
+export function writtenArtifactIds(entries: LedgerEntry[]): string[] {
+  const ids: string[] = [];
+  for (const e of survivingWrites(entries)) {
+    if (!ids.includes(e.artifactId!)) ids.push(e.artifactId!);
+  }
+  return ids;
 }
 
 /**

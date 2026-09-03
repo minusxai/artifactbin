@@ -36,7 +36,7 @@ import { actionTransport, installsSkills, planTransport } from './lib/mode';
 import { materializePlugin } from './lib/plugin-kit';
 import { taskCost } from './lib/price';
 import { BASELINE_FLOW, BASELINE_PROMPT, BASELINE_ROWS_ID, measureBaseline } from './lib/baseline';
-import { ledgerMetrics, parseLedger, scoredArtifactId } from './lib/ledger';
+import { ledgerMetrics, parseLedger, scoredArtifactId, writtenArtifactIds } from './lib/ledger';
 import { adapterFor } from './lib/harness';
 import { runInvocation } from './lib/spawn';
 import { countCheckoutReads } from './lib/local-reads';
@@ -46,7 +46,7 @@ import { mapConcurrent } from './lib/pool';
 import { exitWhenDone, settleWithin, TEARDOWN_MS } from './lib/shutdown';
 import { DRIVER_HEADER, startProxy } from './lib/proxy';
 import { mintStartDocument, mintStartDocumentAs } from './lib/retry';
-import { acquireCredential, credentialSourceFor, localLoginEmail, memoizeCredential, writeArtifactbinEnv, type Credential } from './lib/credential';
+import { acquireCredential, credentialSourceFor, localLoginEmail, memoizeCredential, shareForScoring, writeArtifactbinEnv, type Credential } from './lib/credential';
 import { agentProxyEnv, startMitmProxy } from './lib/mitm';
 import { exportDocument, inspectDocument, screenshotDocument } from './lib/score/browser';
 import { dataflowRows, productMetrics } from './lib/score/product';
@@ -360,6 +360,24 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // created its own, twice — so `scoredArtifactId` decides which artifact to score (its answer, then the
   // ledger, then the start document) and `used_start_document` records whether it was the one it was given.
   const targetId = scoredArtifactId({ finalMessage: result.finalMessage, ledger, startId: start.id });
+
+  // AND THEN THE PERSON SHARES IT. Under an account credential every document the agent made is born
+  // PRIVATE, while every read below is anonymous — the reader's view is the whole point of the score —
+  // so a flawless run read as `published: false` (PR #16 CI, the `data` task). Before the first of those
+  // reads the driver does what the person behind the agent does next: makes the run's artifacts unlisted
+  // through the owner's own sharing door. The start document is already unlisted and datasets and images
+  // are born unlisted, so this only ever moves the ones the agent created for itself. A pre-provisioned
+  // `EVAL_ACCOUNT_TOKEN` names no session, so there is no door to knock on and the run is left alone.
+  if (r.credential?.owner === 'account' && r.credential.cookie) {
+    const shared = await shareForScoring({
+      base: r.agentBase,
+      cookie: r.credential.cookie,
+      ids: [...writtenArtifactIds(ledger), targetId],
+      headers: { [DRIVER_HEADER]: '1' },
+    });
+    log(`${leg.label}/${task.id}: shared ${shared.length} artifact(s) for scoring`);
+  }
+
   const docUrl = `${r.productUrl}/a/${targetId}`;
   const servedRes = await fetch(`${docUrl}/raw?chrome=0`);
   const served = { status: servedRes.status, html: servedRes.ok ? await servedRes.text() : '' };
