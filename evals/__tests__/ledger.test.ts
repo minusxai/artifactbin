@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { isDocsAddress, ledgerMetrics, parseLedger, scoredArtifactId, targetArtifactId } from '../lib/ledger';
+import { isDocsAddress, ledgerMetrics, parseLedger, scoredArtifactId, targetArtifactId, writtenArtifactIds } from '../lib/ledger';
 import type { LedgerEntry } from '../lib/contracts';
 
 const text = fs.readFileSync(path.join(__dirname, 'fixtures/ledger.jsonl'), 'utf8');
@@ -232,5 +232,15 @@ describe('docs addresses', () => {
   it('llms.txt and the human docs page are routes the product has, never invented endpoints', () => {
     const e = (path: string): LedgerEntry => ({ t: 0, ms: 1, method: 'GET', path, status: 404, ua: 'curl', auth: 'none', error: null } as unknown as LedgerEntry);
     expect(ledgerMetrics([e('/llms.txt'), e('/docs-human')]).inventedEndpoints).toBe(0);
+  });
+});
+
+describe('writtenArtifactIds', () => {
+  it('names every artifact a successful write touched, and drops the ones deleted afterwards', () => {
+    const deck = parseLedger(fs.readFileSync(path.join(__dirname, 'fixtures/claude-code.deck.ledger.jsonl'), 'utf8'));
+    const ids = writtenArtifactIds(deck);
+    expect(ids).toContain('PH4c1F');
+    expect(ids).not.toContain('soo1WU'); // created, exported, then DELETEd — a scratch document
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });
