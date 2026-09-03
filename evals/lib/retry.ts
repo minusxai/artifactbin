@@ -88,3 +88,41 @@ export async function mintStartDocument(
     return (await res.json()) as StartDocument;
   }, opts);
 }
+
+/**
+ * The start document for a leg that holds an ACCOUNT credential.
+ *
+ * `/api/start` mints an ANONYMOUS token and a document that belongs to it — which is the copy-text
+ * product, and exactly what the plugin treatments are not: their token belongs to the eval's account,
+ * so their start document must too, or the agent is handed a document its own credential cannot write.
+ * The driver creates it as that account instead, with the same placeholder shape the start document
+ * has (so `published` still compares the agent's work against a document it did not write), and
+ * `unlisted` so every anonymous product-truth read — `/a/<id>/raw?chrome=0`, `/export`, the browser
+ * checks — keeps working exactly as before. Measured on artifactbin.dev: an account-owned unlisted
+ * document reads anonymously (89 KB of HTML, placeholder visible).
+ *
+ * Marked with the driver header for the same reason the anonymous mint is: it is the DRIVER's call and
+ * must not land in the agent's ledger. Retried for the same reason too.
+ */
+export const START_PLACEHOLDER_MARKUP = '<div data-design="tw" className="@container p-8"><h1 className="text-2xl font-bold">Untitled</h1><p>Waiting for your agent…</p></div>';
+
+export async function mintStartDocumentAs(
+  agentBase: string,
+  driverHeader: string,
+  token: string,
+  opts: RetryOptions = {},
+): Promise<StartDocument> {
+  return withRetry(`POST ${agentBase}/api/artifacts (as the eval account)`, async () => {
+    const res = await fetch(`${agentBase}/api/artifacts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, [driverHeader]: '1' },
+      body: JSON.stringify({ markup: START_PLACEHOLDER_MARKUP, title: 'Untitled', visibility: 'unlisted' }),
+    });
+    if (isTransientStatus(res.status)) return null;
+    if (!res.ok) throw new FatalError(`POST /api/artifacts (as the eval account) → ${res.status}`);
+    const body = (await res.json()) as { id?: string };
+    if (!body.id) throw new FatalError('POST /api/artifacts (as the eval account) returned no id');
+    // No paste: the agent is handed the base, the id and its own saved connection instead.
+    return { id: body.id, prompt: '' };
+  }, opts);
+}

@@ -53,10 +53,13 @@ describe('buildPrompt — token handoff', () => {
     expect(prompt).not.toContain('mx_secret'); // the token is in the harness config, not the agent's prompt
   });
 
-  it('installed_skill+api_action names the installed skill and passes the API token', () => {
+  it('installed_skill+api_action names the installed skill and the saved connection, never the token', () => {
     const prompt = buildPrompt(task({ handoff: 'token' }), access, { mode: 'installed_skill+api_action' });
     expect(prompt).toContain('skill is installed');
-    expect(prompt).toContain('mx_secret');
+    // The token is in `~/.artifactbin.env` in the agent's HOME — the skill's own contract, written by
+    // the driver before the turn (decided 2026-09-03); a person with the plugin never pastes one.
+    expect(prompt).not.toContain('mx_secret');
+    expect(prompt).toContain('~/.artifactbin.env');
     expect(prompt).not.toContain('/docs/');
   });
 });
@@ -70,5 +73,23 @@ describe('buildPrompt — a model that cannot see', () => {
     // model 400s on it, and should not spend its run finding that out.
     expect(blind).toMatch(/cannot view images/i);
     expect(blind.startsWith(task().brief)).toBe(true);
+  });
+});
+
+/**
+ * Plugin mode without MCP: a person mints a token at /tokens/new and the skill reads it from ~/.artifactbin.env —
+ * the driver writes that file; the prompt never carries the token (decided 2026-09-03). Seeded RED by the orchestrator.
+ */
+describe('the installed-skill prompt carries no token', () => {
+  it('names the saved connection file instead of the secret', () => {
+    const prompt = buildPrompt(task(), { kind: 'token', base: 'https://x.test', token: 'mx_SECRET_VALUE', id: 'abc123' }, { mode: 'installed_skill+api_action' });
+    expect(prompt).not.toContain('mx_');
+    expect(prompt).toContain('~/.artifactbin.env');
+  });
+  it('the MCP prompts stay token-free too', () => {
+    for (const mode of ['fetched_skill+mcp_action', 'installed_skill+mcp_action'] as const) {
+      const prompt = buildPrompt(task(), { kind: 'token', base: 'https://x.test', token: 'mx_SECRET_VALUE', id: 'abc123' }, { mode });
+      expect(prompt, mode).not.toContain('mx_');
+    }
   });
 });

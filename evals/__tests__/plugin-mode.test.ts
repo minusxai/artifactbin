@@ -187,7 +187,10 @@ describe('the prompt a mode gives', () => {
     const installed = buildPrompt(task, access, { mode: 'installed_skill+api_action' });
     expect(installed).not.toContain('/docs/');
     expect(installed).toMatch(/skills?/i);
-    expect(installed).toContain('mx_t');
+    // …and it names the saved connection rather than the secret (2026-09-03): the driver writes
+    // `~/.artifactbin.env` into the harness's home, exactly as connecting once would have.
+    expect(installed).toContain('~/.artifactbin.env');
+    expect(installed).not.toContain('mx_t');
   });
 
   /**

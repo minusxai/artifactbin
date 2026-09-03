@@ -58,6 +58,15 @@ export function createCa(dir: string): Ca {
   const bundlePath = path.join(dir, 'bundle.pem');
   const roots = SYSTEM_ROOTS.find((p) => fs.existsSync(p));
   fs.writeFileSync(bundlePath, (roots ? fs.readFileSync(roots, 'utf8') : '') + fs.readFileSync(caPath, 'utf8'));
+  // The AGENT must trust this CA, and under `--run-as` the agent is another unix account: the
+  // certificate and the bundle are public by nature, and the directory has to be traversable to reach
+  // them. Measured on production run 33758791539: `Warning: Ignoring extra certs from '…/ca/ca.crt',
+  // load failed: … Permission denied` — the harness then verified nothing this proxy served. The KEY
+  // stays the driver's alone; only this process ever signs with it.
+  fs.chmodSync(dir, 0o755);
+  fs.chmodSync(caPath, 0o644);
+  fs.chmodSync(bundlePath, 0o644);
+  fs.chmodSync(keyPath, 0o600);
   return { dir, caPath, bundlePath };
 }
 
