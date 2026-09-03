@@ -265,25 +265,28 @@ await cdp.send('Network.emulateNetworkConditions', {
 });
 await reader.goto(`${B}/a/${chart.id}`, { waitUntil: 'commit' });
 
-/** What has arrived so far, by resource timing — `responseEnd` is 0 while a request is in flight. */
+/*
+ * Downloaded is not RUN — an `async` module still waits for the parser to reach
+ * its own tag, which is at the end of <body>. So the probe is a side effect
+ * only that module has: it stamps `aria-pressed` on the appearance choices the
+ * server renders WITHOUT one. `responseEnd` is 0 while a request is in flight,
+ * which is how the runtime entry is caught mid-air.
+ */
 const loaded = () => reader.evaluate(() => {
-  const seen = (fragment) => performance.getEntriesByType('resource').find((e) => e.name.includes(fragment));
-  const anchor = seen('/story/anchor-');
-  const entry = seen('/story/entry-');
+  const entry = performance.getEntriesByType('resource').find((e) => e.name.includes('/story/entry-'));
   return {
-    chrome: !!document.querySelector('.mx-reader-chrome'),
-    anchor: !!anchor && anchor.responseEnd > 0,
+    ran: !!document.querySelector('[data-mx-mode-choice][aria-pressed]'),
     entry: !!entry && entry.responseEnd > 0,
   };
-}).catch(() => ({ chrome: false, anchor: false, entry: false }));
+}).catch(() => ({ ran: false, entry: false }));
 
-let ready = { chrome: false, anchor: false, entry: false };
-for (let i = 0; i < 400 && !(ready.chrome && ready.anchor); i++) {
+let ready = { ran: false, entry: false };
+for (let i = 0; i < 400 && !ready.ran && !ready.entry; i++) {
   ready = await loaded();
-  if (ready.entry) break;
+  if (ready.ran || ready.entry) break;
   await reader.waitForTimeout(50);
 }
-ok(ready.chrome && ready.anchor, `slow reader: the reader chrome and its ~8 KB module are ready (chrome ${ready.chrome}, anchor ${ready.anchor})`);
+ok(ready.ran, `slow reader: the reader's own ~8 KB module has RUN (${ready.ran})`);
 ok(!ready.entry, 'slow reader: and the ~1 MB runtime entry is STILL IN FLIGHT — which is what makes the next check mean anything');
 
 const scrolledAt = Date.now();
