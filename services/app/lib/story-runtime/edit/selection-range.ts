@@ -273,3 +273,21 @@ export function resolveParts(anchor: Element, parts: AnnotationRangePart[]): Ran
   }
   return out;
 }
+
+/**
+ * The LIVE text selection inside `element`, described from it — the editor's
+ * door to the same capture the view-mode bubble makes from its own Range. Null
+ * when nothing is selected there, which is the common case: this rides every
+ * caret move, and a caret has selected nothing.
+ */
+export function captureSelection(win: Window, element: Element): { quote: string; range: AnnotationRange } | null {
+  const selection = win.getSelection();
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null;
+  const range = selection.getRangeAt(0);
+  if (!range.toString().trim()) return null;
+  // Only this element's own selection: a Range that starts elsewhere is not
+  // what the caller is describing, and addressing it from here would lie.
+  if (element !== range.startContainer && !element.contains(range.startContainer)) return null;
+  const described = describeRange(range, element);
+  return described.range.parts.length > 0 ? described : null;
+}

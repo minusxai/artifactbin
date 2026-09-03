@@ -29,6 +29,7 @@ import {
   type StoryEditParentMessage, type StoryEditSelection,
 } from '../contract';
 import { describeSelection } from './describe-selection';
+import { captureSelection } from './selection-range';
 import { EditableHost } from './editable-host';
 import { GridEdit } from './grid-edit';
 import { imageFileFromTransfer } from './image-drop';
@@ -100,6 +101,24 @@ export function createFrameEditSession({ win, channel, requestRender }: FrameEdi
     el.setAttribute(kind === 'embed' ? EDIT_EMBED_SELECTED_ATTR : EDIT_SELECTED_ATTR, '');
   };
 
+  /**
+   * An element described for the parent, WITH the words the user has selected
+   * inside it when there are any. The editor's "Comment on selection" reaches
+   * the same composer as the view-mode bubble, so it must hand it the same
+   * quote — a comment made from the toolbar used to keep the node and lose the
+   * sentence. Absent for a bare caret, which has selected nothing.
+   */
+  const describeWithQuote = (el: Element): StoryEditSelection | null => {
+    const selection = describeSelection(el, nodes);
+    if (!selection) return null;
+    const captured = captureSelection(win, el);
+    if (captured) {
+      selection.quote = captured.quote;
+      selection.range = captured.range;
+    }
+    return selection;
+  };
+
   const reportSelection = (selection: StoryEditSelection | null) => {
     selectedPath = selection?.path ?? null;
     stampSelection();
@@ -111,7 +130,7 @@ export function createFrameEditSession({ win, channel, requestRender }: FrameEdi
     if (!selectedPath && !active) return;
     const path = active?.path ?? selectedPath!;
     const el = doc.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(path)}"]`);
-    const selection = el ? describeSelection(el, nodes) : null;
+    const selection = el ? describeWithQuote(el) : null;
     post({ type: STORY_SELECTION_MESSAGE, selection });
   };
 
@@ -136,7 +155,7 @@ export function createFrameEditSession({ win, channel, requestRender }: FrameEdi
     isEditing: (path: string) => active?.path === path,
     onFocus(path: string, el: HTMLElement) {
       active = { path, el, snapshot: channel.innerHtmlOf(el), userEdited: false };
-      reportSelection(describeSelection(el, nodes));
+      reportSelection(describeWithQuote(el));
     },
     onInput(_path: string) {
       if (active) active.userEdited = true;
@@ -179,7 +198,7 @@ export function createFrameEditSession({ win, channel, requestRender }: FrameEdi
     if (target.closest('.mx-rail, .mx-present')) return;
     const stamped = target.closest(`[${AST_PATH_ATTR}]`);
     if (!stamped) { reportSelection(null); return; }
-    const selection = describeSelection(stamped, nodes);
+    const selection = describeWithQuote(stamped);
     // A focused text host owns its own selection (reported on focus).
     if (selection?.kind === 'text' && active?.path === selection.path) return;
     reportSelection(selection);
@@ -362,7 +381,7 @@ export function createFrameEditSession({ win, channel, requestRender }: FrameEdi
         case STORY_SELECT_MESSAGE: {
           if (!message.path) { reportSelection(null); break; }
           const el = doc.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(message.path)}"]`);
-          reportSelection(el ? describeSelection(el, nodes) : null);
+          reportSelection(el ? describeWithQuote(el) : null);
           break;
         }
         default:

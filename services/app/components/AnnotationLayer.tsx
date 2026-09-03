@@ -660,7 +660,12 @@ export default function AnnotationLayer({
       // Annotations are ambient whenever this capability exists. The frame
       // decides how pins/tints coexist with view and edit mode.
       mode: 'on',
-      pins: annotations.filter((a) => !a.orphaned && a.anchor).map((a) => ({ id: a.id, path: a.anchor!.path, key: a.anchor!.key })),
+      pins: annotations
+        .filter((a) => !a.orphaned && a.anchor)
+        // The range travels with the pin so the frame can paint the words
+        // themselves; ids, body paths and the words' own positions are still
+        // the only annotation data that enters that realm — never the comment.
+        .map((a) => ({ id: a.id, path: a.anchor!.path, key: a.anchor!.key, range: a.range })),
       openId,
       hoverId,
       selectedPath: selection?.path ?? null,
@@ -766,7 +771,14 @@ export default function AnnotationLayer({
       await beforeCreateRef.current?.();
       const post = (editId: string) => fetch(`/api/my/artifacts/${id}/annotations`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: selection.path, edit_id: editId, body: draft }),
+        // The exact words ride along when there are any: the frame captured
+        // them from the live Range, and the page is the only side that can
+        // store them. A caret comment simply carries neither key.
+        body: JSON.stringify({
+          path: selection.path, edit_id: editId, body: draft,
+          ...(selection.quote ? { quote: selection.quote } : {}),
+          ...(selection.range ? { range: selection.range } : {}),
+        }),
       });
       // The drain may itself have moved the head; the 409 path below covers it.
       let res = await post(currentEditIdRef.current);

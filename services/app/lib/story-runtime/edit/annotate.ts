@@ -28,6 +28,7 @@ import {
   type StoryAnnotationsMessage,
 } from '../contract';
 import { describeSelection } from './describe-selection';
+import { resolveParts } from './selection-range';
 
 /** Marks every node carrying an open annotation, in every mode the layer is on for. */
 export const ANNOTATED_ATTR = 'data-mx-annotated';
@@ -37,6 +38,15 @@ export const ANNOTATION_OPEN_ATTR = 'data-mx-annotation-open';
 export const ANNOTATION_HOVER_ATTR = 'data-mx-annotation-hover';
 /** Marks the node the owner is currently COMPOSING on (annotate mode's selection). */
 export const ANNOTATE_SELECTED_ATTR = 'data-mx-annotate-selected';
+/**
+ * Marks a node whose comment's own WORDS are painted instead of the whole
+ * node. The behaviour attributes above stay exactly as they were — a click on
+ * the paragraph still opens the thread — this only takes the node's background
+ * away, because the highlight underneath it is more precise.
+ */
+export const ANNOTATION_RANGED_ATTR = 'data-mx-annotation-ranged';
+/** One CSS highlight per thread: `mx-annotation-<id>`, so a rule can name it. */
+export const ANNOTATION_HIGHLIGHT_PREFIX = 'mx-annotation-';
 
 // Persistent annotation chrome is a tint, while the transient cross-surface
 // hover gets an outline so the relationship is unmistakable without shifting
@@ -54,7 +64,64 @@ export const ANNOTATE_CSS = [
   `[${ANNOTATION_OPEN_ATTR}] { background: rgba(245, 158, 11, 0.26); border-radius: 3px; }`,
   `[${ANNOTATION_HOVER_ATTR}] { background: rgba(245, 158, 11, 0.18); outline: 2px solid rgba(245, 158, 11, 0.82); outline-offset: 3px; border-radius: 3px; }`,
   `[${ANNOTATE_SELECTED_ATTR}] { outline: 2px solid rgba(245, 158, 11, 0.85); outline-offset: 3px; border-radius: 3px; }`,
+  // A node whose words are painted gives up its own background — the tint is
+  // what a comment looks like when we cannot find the words, not as well as.
+  `[${ANNOTATED_ATTR}][${ANNOTATION_RANGED_ATTR}],`
+    + `[${ANNOTATED_ATTR}][${ANNOTATION_RANGED_ATTR}]:hover,`
+    + `[${ANNOTATION_OPEN_ATTR}][${ANNOTATION_RANGED_ATTR}],`
+    + `[${ANNOTATION_HOVER_ATTR}][${ANNOTATION_RANGED_ATTR}] { background: transparent; }`,
 ].join('\n');
+
+/** What a thread's own words look like, by the state the page put it in. */
+const HIGHLIGHT_FILL = {
+  base: 'rgba(245, 158, 11, 0.28)',
+  hover: 'rgba(245, 158, 11, 0.42)',
+  open: 'rgba(245, 158, 11, 0.52)',
+};
+
+/**
+ * THE CSS CUSTOM HIGHLIGHT API, or nothing. It paints a live Range without
+ * touching the DOM, which is the whole reason a comment can highlight the
+ * exact words at all: a wrapping span would be read straight back into the
+ * source by the editor's write-back. Where it is missing (jsdom, an older
+ * browser) every thread simply keeps the whole-node tint.
+ */
+interface HighlightRegistry {
+  set(name: string, highlight: object): void;
+  delete(name: string): boolean;
+  has(name: string): boolean;
+}
+type HighlightConstructor = new (...ranges: Range[]) => object;
+
+const highlightApi = (win: Window): { registry: HighlightRegistry; Highlight: HighlightConstructor } | null => {
+  const scope = win as unknown as { CSS?: { highlights?: HighlightRegistry }; Highlight?: HighlightConstructor };
+  const registry = scope.CSS?.highlights;
+  const Highlight = scope.Highlight;
+  return registry && Highlight ? { registry, Highlight } : null;
+};
+
+/** A highlight name is a CSS identifier: anything else in an id cannot be selected. */
+const highlightNameFor = (id: string): string => ANNOTATION_HIGHLIGHT_PREFIX + id.replace(/[^A-Za-z0-9_-]/g, '-');
+
+/**
+ * The union of a set of ranges' boxes — one rect per thread, still. `Range`'s
+ * own `getBoundingClientRect` is CSSOM View: every browser has it and jsdom
+ * does not, so a missing method means "cannot measure", which falls back to the
+ * node rect exactly like a range that was not found.
+ */
+function unionRect(ranges: Range[]): { x: number; y: number; top: number; width: number; height: number } | null {
+  const rects = ranges
+    .filter((range) => typeof range.getBoundingClientRect === 'function')
+    .map((range) => range.getBoundingClientRect());
+  const real = rects.filter((rect) => rect.width > 0 || rect.height > 0);
+  if (real.length === 0) return null;
+  const left = Math.min(...real.map((r) => r.left));
+  const top = Math.min(...real.map((r) => r.top));
+  const right = Math.max(...real.map((r) => r.right));
+  const bottom = Math.max(...real.map((r) => r.bottom));
+  // `top` beside `y` so a union reads like the DOMRect the callers already take.
+  return { x: left, y: top, top, width: right - left, height: bottom - top };
+}
 
 const ANNOTATE_CSS_ATTR = 'data-mx-annotate-css';
 
@@ -88,6 +155,10 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
   let reportedHoverId: string | null = null;
   /** The openId whose node was last scrolled to — scroll once per open, not per re-apply. */
   let scrolledTo: string | null = null;
+  /** The ranges currently painted for each thread — the layout rect follows the WORDS when there are any. */
+  let painted = new Map<string, Range[]>();
+  /** Highlight names this session registered, so it can take back exactly its own. */
+  const registeredHighlights = new Set<string>();
   let rafPending = false;
 
   const post = (message: Record<string, unknown>) => channel.post({ ...message, nonce: channel.nonce });
@@ -115,14 +186,62 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
       ? mainElementMatching(`[data-annotation-anchor="${CSS.escape(pin.key)}"]`)
       : null) ?? elementFor(pin.path);
 
-  const ensureCss = (on: boolean) => {
+  /**
+   * The layer's stylesheet, base rules plus one `::highlight()` rule per
+   * painted thread. Regenerated with the state rather than patched: a highlight
+   * name cannot be matched by a wildcard, so the rules ARE the state, and the
+   * open/hovered thread simply gets a stronger fill in its own rule.
+   */
+  const ensureCss = (on: boolean, highlightRules: string[] = []) => {
     const existing = doc.head.querySelector(`style[${ANNOTATE_CSS_ATTR}]`);
     if (!on) return void existing?.remove();
-    if (existing) return;
-    const style = doc.createElement('style');
-    style.setAttribute(ANNOTATE_CSS_ATTR, '');
-    style.textContent = ANNOTATE_CSS;
-    doc.head.appendChild(style);
+    const style = existing ?? doc.createElement('style');
+    const next = [ANNOTATE_CSS, ...highlightRules].join('\n');
+    if (style.textContent !== next) style.textContent = next;
+    if (!existing) {
+      style.setAttribute(ANNOTATE_CSS_ATTR, '');
+      doc.head.appendChild(style);
+    }
+  };
+
+  /** Take back every highlight this session registered — on 'off', on dispose, and before each rebuild. */
+  const clearHighlights = () => {
+    const api = highlightApi(win);
+    for (const name of registeredHighlights) api?.registry.delete(name);
+    registeredHighlights.clear();
+    painted = new Map();
+  };
+
+  /**
+   * Paint each thread's own words, REBUILT FROM THE STORED RANGE EVERY TIME.
+   * Never set once: a Highlight holds live Ranges, and a live update replaces
+   * the text nodes underneath them, so a highlight that is not rebuilt after an
+   * adopt points at nodes the document no longer has. This runs from
+   * `applyState`, which is also what re-stamps the pins after a re-render.
+   */
+  const paintRanges = (): string[] => {
+    clearHighlights();
+    const api = highlightApi(win);
+    if (!api || !state || state.mode === 'off') return [];
+    const rules: string[] = [];
+    for (const pin of state.pins) {
+      const el = pin.range ? elementForPin(pin) : null;
+      if (!el || !pin.range) continue;
+      const ranges = resolveParts(el, pin.range.parts);
+      // Not found is not an error: the words were edited away, and the node
+      // tint says "there is a comment here" just as it always did.
+      if (ranges.length === 0) continue;
+      const name = highlightNameFor(pin.id);
+      api.registry.set(name, new api.Highlight(...ranges));
+      registeredHighlights.add(name);
+      painted.set(pin.id, ranges);
+      el.setAttribute(ANNOTATION_RANGED_ATTR, '');
+      const fill = state.openId === pin.id
+        ? HIGHLIGHT_FILL.open
+        : state.hoverId === pin.id ? HIGHLIGHT_FILL.hover : HIGHLIGHT_FILL.base;
+      rules.push(`::highlight(${name}) { background-color: ${fill}; }`);
+    }
+    return rules;
   };
 
   /**
@@ -135,7 +254,11 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
     const positions = state.pins.flatMap((pin) => {
       const el = elementForPin(pin);
       if (!el) return [];
-      const rect = el.getBoundingClientRect();
+      // The card belongs beside the WORDS when we found them; the node is what
+      // a comment is about only when we could not.
+      const words = painted.get(pin.id);
+      const union = words ? unionRect(words) : null;
+      const rect = union ?? el.getBoundingClientRect();
       return [{ id: pin.id, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } }];
     });
     post({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions });
@@ -143,13 +266,17 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
 
   /** Stamp idempotent state: all annotate-mode tints, or only the transient view-mode hover. */
   const applyState = () => {
-    for (const el of doc.querySelectorAll(`[${ANNOTATED_ATTR}], [${ANNOTATION_OPEN_ATTR}], [${ANNOTATION_HOVER_ATTR}], [${ANNOTATE_SELECTED_ATTR}]`)) {
+    for (const el of doc.querySelectorAll(`[${ANNOTATED_ATTR}], [${ANNOTATION_OPEN_ATTR}], [${ANNOTATION_HOVER_ATTR}], [${ANNOTATE_SELECTED_ATTR}], [${ANNOTATION_RANGED_ATTR}]`)) {
       el.removeAttribute(ANNOTATED_ATTR);
       el.removeAttribute(ANNOTATION_OPEN_ATTR);
       el.removeAttribute(ANNOTATION_HOVER_ATTR);
       el.removeAttribute(ANNOTATE_SELECTED_ATTR);
+      el.removeAttribute(ANNOTATION_RANGED_ATTR);
     }
-    if (!state || state.mode === 'off') return;
+    if (!state || state.mode === 'off') {
+      clearHighlights();
+      return;
+    }
     for (const pin of state.pins) {
       const el = elementForPin(pin);
       if (!el) continue;
@@ -159,6 +286,8 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
     if (selectedPath) elementFor(selectedPath)?.setAttribute(ANNOTATE_SELECTED_ATTR, '');
     const hovered = state.hoverId ? state.pins.find((pin) => pin.id === state!.hoverId) : null;
     if (hovered) elementForPin(hovered)?.setAttribute(ANNOTATION_HOVER_ATTR, '');
+    // The words last, so their rules follow the state that was just stamped.
+    ensureCss(true, paintRanges());
   };
 
   /** Keep the page-level draft popover attached while the document moves. */
@@ -266,7 +395,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
       state = message;
       if (message.mode === 'off') selectedPath = null;
       else if (message.selectedPath !== undefined) selectedPath = message.selectedPath;
-      ensureCss(message.mode !== 'off');
+      if (message.mode === 'off') ensureCss(false);
       applyState();
       if (message.mode === 'off') post({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [] });
       else reportLayout();
@@ -279,7 +408,8 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
         const pin = message.pins.find((p) => p.id === message.openId);
         const el = pin ? elementForPin(pin) : null;
         if (el) {
-          const r = el.getBoundingClientRect();
+          const words = pin ? painted.get(pin.id) : undefined;
+          const r = (words ? unionRect(words) : null) ?? el.getBoundingClientRect();
           win.scrollTo({ top: r.top + win.scrollY - (win.innerHeight - r.height) / 2, behavior: 'smooth' });
         }
       }
@@ -298,6 +428,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
       state = null;
       selectedPath = null;
       reportedHoverId = null;
+      clearHighlights();
       ensureCss(false);
       applyState();
       doc.removeEventListener('click', onClick, true);

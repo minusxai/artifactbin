@@ -44,6 +44,20 @@ describe('the publishing skill', () => {
   it('§2.1 one bullet no longer says "read the full reference first" AND "guess rather than look up"', () => {
     expect(doc).not.toContain('for the full reference before authoring');
   });
+  /*
+   * ADDED (F3). `snippet` is the ANNOTATED NODE's text, recomputed on every
+   * read; the words the person selected are `quote`, stored once and never
+   * recomputed. The doc called the snippet "the text they selected", which sent
+   * an agent looking for a sentence in a paragraph's worth of text.
+   */
+  it('§1.8 snippet is the node\'s text; the SELECTION is `quote`', () => {
+    const snippet = doc.split('\n').find((l: string) => l.includes('"snippet"'))!;
+    expect(snippet).not.toContain('the text they selected');
+    expect(snippet).toContain('node');
+    const quote = doc.split('\n').find((l: string) => l.includes('"quote"'))!;
+    expect(quote).toContain('selected');
+    expect(doc).toContain('quote_found');
+  });
   it('§1 error table carries image_fetch_failed and dataset_read_only', () => {
     expect(doc).toContain('image_fetch_failed');
     expect(doc).toContain('dataset_read_only');

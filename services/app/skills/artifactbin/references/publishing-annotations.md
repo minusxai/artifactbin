@@ -30,7 +30,9 @@ POST [[ base ]]/api/artifacts/<id>/annotations/<annotation_id>
 ```
 "annotations": [ {
   "id": "ann_…", "status": "open",
-  "snippet": "Revenue grew 40% in Q3",           ← the text they selected
+  "snippet": "Revenue grew 40% in Q3",           ← the annotated node's text, as it reads NOW
+  "quote": "grew 40% in Q3",                      ← the words they actually selected (null if none)
+  "quote_found": true,                            ← are those words still in the document?
   "anchor": { "key": "a1a2b3c4", "path": "0.3", "spanStart": 812, "spanEnd": 964 },
   "anchor_version": 7,                            ← the version it was made against
   "orphaned": false,
@@ -40,8 +42,11 @@ POST [[ base ]]/api/artifacts/<id>/annotations/<annotation_id>
 } ]
 ```
 
-Read them before editing; `snippet` + `anchor.key` tell you which node
-each one is about (find `data-annotation-anchor="a1a2b3c4"` in the markup). An
+Read them before editing. `quote` is the comment's subject — the exact words —
+while `snippet` is the whole node they sit in, recomputed on every read;
+`anchor.key` tells you which node that is (find
+`data-annotation-anchor="a1a2b3c4"` in the markup). `"quote_found": false`
+means those words are already gone from the current version. An
 `"orphaned": true` annotation's node is not in the current version — the
 snippet still says what it pointed at.
 

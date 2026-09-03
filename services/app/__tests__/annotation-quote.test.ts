@@ -163,3 +163,87 @@ describe('a comment keeps its quote and range', () => {
     expect(ann.quote!.length).toBeLessThanOrEqual(2000);
   });
 });
+
+/*
+ * ADDED BY THE IMPLEMENTER (F3). The seeds cannot see either of these: their
+ * fixture's anchored paragraph opens with its `<strong>`, so the element child
+ * and the AST child happen to be the same index, and every part of it is
+ * separated by real spaces, so a joiner between tags is invisible too.
+ */
+const RE_ANCHOR_DOC =
+  '<p>An intro paragraph here.</p>'
+  + '<p>Lead in <strong>Revenue grew</strong> 40% in Q3.</p>'
+  + '<p>Costs fell too.</p>';
+
+async function setupWith(markup: string) {
+  const t = await mintToken('agent');
+  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup } }));
+  expect(res.status, await res.clone().text()).toBe(201);
+  const doc = (await res.json()) as { id: string; edit_id: string; version: number };
+  return { t, doc, cookie: await agentCookie([t.id]) };
+}
+
+describe('resolving a range against the SOURCE', () => {
+  it('counts ELEMENT children and ELEMENT siblings — text between the tags is not a step', async () => {
+    const w = await setupWith(RE_ANCHOR_DOC);
+    // The anchored <p> is `[text "Lead in ", <strong>, text " 40% in Q3."]`:
+    // element child 0 is the <strong>, AST child 0 is the text before it.
+    const made = await myCreateAnnotationRoute(
+      request(`/api/my/artifacts/${w.doc.id}/annotations`, {
+        method: 'POST', cookie: w.cookie,
+        json: {
+          path: '1', edit_id: w.doc.edit_id, body: 'which quarter?',
+          quote: 'grew 40% in Q3. Costs fell too.',
+          range: {
+            v: 1,
+            parts: [
+              { rel: '0', start: 8, end: 12, text: 'grew' },
+              { rel: '', start: 20, end: 32, text: ' 40% in Q3.' },
+              { rel: '+1', start: 0, end: 15, text: 'Costs fell too.' },
+            ],
+          },
+        },
+      }),
+      params({ id: w.doc.id }),
+    );
+    expect(made.status, await made.clone().text()).toBe(201);
+    const [ann] = await list(w.t.token, w.doc.id);
+    expect(ann.quote_found).toBe(true);
+
+    // Each address alone, so a wrong step cannot hide behind a right one.
+    for (const part of [
+      { rel: '0', start: 8, end: 12, text: 'grew' },
+      { rel: '+1', start: 0, end: 15, text: 'Costs fell too.' },
+    ]) {
+      const { edit_id } = await head(w.t.token, w.doc.id);
+      const one = await myCreateAnnotationRoute(
+        request(`/api/my/artifacts/${w.doc.id}/annotations`, {
+          method: 'POST', cookie: w.cookie,
+          json: { path: '1', edit_id, body: `only ${part.rel}`, quote: part.text, range: { v: 1, parts: [part] } },
+        }),
+        params({ id: w.doc.id }),
+      );
+      expect(one.status, await one.clone().text()).toBe(201);
+      expect(((await one.json()) as Wire).quote_found, `rel "${part.rel}" must resolve`).toBe(true);
+    }
+  });
+
+  it('reads a node the way the DOM does: the text either side of a tag joins with NOTHING', async () => {
+    const w = await setupWith('<p>Untouched.</p><p>Total<strong>42</strong>units sold.</p>');
+    const made = await myCreateAnnotationRoute(
+      request(`/api/my/artifacts/${w.doc.id}/annotations`, {
+        method: 'POST', cookie: w.cookie,
+        json: {
+          path: '1', edit_id: w.doc.edit_id, body: 'is that right?',
+          quote: 'Total42units',
+          // textContent is "Total42units sold." — a joiner between the tags
+          // would read "Total 42 units sold." and never find this.
+          range: { v: 1, parts: [{ rel: '', start: 0, end: 12, text: 'Total42units' }] },
+        },
+      }),
+      params({ id: w.doc.id }),
+    );
+    expect(made.status, await made.clone().text()).toBe(201);
+    expect(((await made.json()) as Wire).quote_found).toBe(true);
+  });
+});
