@@ -378,3 +378,21 @@ describe('runInvocation gives the run directory back', () => {
     expect(plain).toEqual([]); // a laptop run is untouched by any of this
   });
 });
+
+describe('firstUrlAtMs — when the human could first click something (m1)', () => {
+  it('timestamps the first /a/<id> the agent prints, not the last', async () => {
+    const script = 'setTimeout(()=>console.log("published https://x.test/a/ab3cd9"),150);'
+      + 'setTimeout(()=>console.log("and https://x.test/a/zz9yy8"),400);'
+      + 'setTimeout(()=>{},600)';
+    const r = await runInvocation(node(script), { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
+    expect(r.firstUrlAtMs).not.toBeNull();
+    expect(r.firstUrlAtMs!).toBeGreaterThanOrEqual(100);
+    expect(r.firstUrlAtMs!).toBeLessThan(390);
+    expect(r.firstUrlAtMs!).toBeLessThan(r.durationMs);
+  });
+
+  it('is null when the agent never named a document', async () => {
+    const r = await runInvocation(node('console.log("I could not publish anything")'), { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
+    expect(r.firstUrlAtMs).toBeNull();
+  });
+});

@@ -18,7 +18,13 @@ const PASTE_TOKEN = /using this token: mx_[A-Za-z0-9_-]+/;
 
 export type Access =
   | { kind: 'start-link'; startPrompt: string }
-  | { kind: 'token'; base: string; token: string; id: string };
+  | { kind: 'token'; base: string; token: string; id: string }
+  /**
+   * NO credential at all — the token-less leg. There is no start document to name (minting one needs a
+   * credential), so the agent is told where the store is and nothing else. What it does next — ask its
+   * human, or mint its own token — is the measurement.
+   */
+  | { kind: 'none'; base: string };
 
 export interface PromptOptions {
   /** False for a model that cannot read an image — see `Leg.vision`. */
@@ -50,6 +56,7 @@ export function buildPrompt(task: Task, access: Access, opts: PromptOptions = {}
 
 function accessLine(_task: Task, access: Access, mode: EvalMode): string {
   const actions = actionTransport(mode);
+  if (access.kind === 'none') throw new Error('m1: implement — the no-credential access line');
   const installed = installsSkills(mode);
   if (access.kind === 'start-link') {
     if (actions === 'mcp' || installed) {

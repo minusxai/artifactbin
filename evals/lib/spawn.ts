@@ -30,6 +30,12 @@ export interface SpawnResult {
   durationMs: number;
   /** The stream outgrew `maxStdoutBytes`: the transcript holds the head, `stdout` the tail. */
   truncated: boolean;
+  /**
+   * Ms from spawn to the first `/a/<id>` the agent PRINTED — the moment its human could click something.
+   * Measured on the stream, not scanned off the transcript afterwards, because the timestamp is the point.
+   * Null when the agent never named a document.
+   */
+  firstUrlAtMs: number | null;
 }
 
 /** Backstop for a harness with no line filter, or one that streams something unforeseen. */
@@ -292,7 +298,8 @@ export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string;
       stream.end(resolve);
     });
     await Promise.all([finish(out), finish(errOut)]);
-    return { stdout, exitCode, timedOut, durationMs: Date.now() - started, truncated };
+    // m1: implement — firstUrlAtMs must be set from the stdout `data` handler above.
+    return { stdout, exitCode, timedOut, durationMs: Date.now() - started, truncated, firstUrlAtMs: null };
   } finally {
     // The last step of the contract, and it must not be able to lose the run: a reclaim that fails is
     // reported on the run's own stderr and the result stands.

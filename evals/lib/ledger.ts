@@ -164,9 +164,32 @@ export interface LedgerMetrics {
   docsFetches: number | null;
   /** Bytes those fetches returned; null when the ledger predates `bytes` or saw nothing. */
   docsBytes: number | null;
+  /**
+   * The agent minted its OWN token (`POST /api/tokens/anonymous`) instead of asking its human for one.
+   * An anonymous token publishes documents the human cannot reach, so this is the behaviour the token
+   * ladder exists to remove — and until now the eval never watched, because a credential was always supplied.
+   */
+  selfMinted: boolean | null;
+  /**
+   * Ms from the RUN ANCHOR to the first write answering 2xx — how long the human waited for a URL they
+   * could open. The anchor is `opts.startedAtMs` (process spawn); with none it degrades to the first
+   * ledger entry's `t`, which hides agent boot and is therefore only a floor.
+   */
+  msToFirstPublish: number | null;
+  /**
+   * Headings carried by that first successful write. The guardrail on "publish early": a skeleton with a
+   * real title and real sections is a document arriving; an empty stub is a fast placeholder that games
+   * the timing. Null when the first successful write carried no markup.
+   */
+  skeletonSections: number | null;
 }
 
-export function ledgerMetrics(entries: LedgerEntry[]): LedgerMetrics {
+/** What the caller knows that the ledger cannot: when the agent's process actually started. */
+export interface LedgerMetricsOptions {
+  startedAtMs?: number;
+}
+
+export function ledgerMetrics(entries: LedgerEntry[], _opts: LedgerMetricsOptions = {}): LedgerMetrics {
   const writes = entries.filter(isWrite);
   const firstWriteIdx = entries.findIndex(isWrite);
   const firstErr = entries.find((e) => e.status >= 400);
@@ -201,5 +224,9 @@ export function ledgerMetrics(entries: LedgerEntry[]): LedgerMetrics {
     usedMcp: judged(entries.some((e) => e.status < 300 && pathOnly(e.path) === '/mcp' && e.method === 'POST')),
     docsFetches: judged(docsGets.length),
     docsBytes,
+    // m1: implement — the three below are the whole point of this phase.
+    selfMinted: null,
+    msToFirstPublish: null,
+    skeletonSections: null,
   };
 }
