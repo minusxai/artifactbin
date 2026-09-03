@@ -173,14 +173,14 @@ const sink = await startMailSink();
 const email = `mxmx_test_boundassets_${Date.now()}@example.com`;
 const holder = await browser.newPage();
 await loginViaEmail(holder, B, sink, email);
-const mine = await holder.evaluate(async () => {
+const mine = await holder.evaluate(async (u) => {
   const created = await fetch('/api/my/artifacts', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ markup: '<Helmet><Value name="pick" type="string" /></Helmet><div><img src="$pick" alt="a" /></div>', title: 'private' }),
+    body: JSON.stringify({ markup: `<Helmet><Value name="pick" type="string" default="${u}" /></Helmet><div><img src="$pick" alt="a" /></div>`, title: 'private' }),
   });
   return { status: created.status, body: await created.json().catch(() => ({})) };
-});
+}, ONE);
 if (mine.status !== 201) {
   ok(false, `could not create a private document as a signed-in user (${mine.status} ${JSON.stringify(mine.body)})`);
 } else {
@@ -189,6 +189,32 @@ if (mine.status !== 201) {
   const asStranger = await fetch(`${B}/a/${mine.body.id}/assets?u=${encodeURIComponent(ONE)}`, { redirect: 'manual' });
   ok(asStranger.status === 404, `a stranger's call to a private document's asset endpoint is the uniform 404 (${asStranger.status})`);
   ok(hits.filter((h) => h === '/pic1.png').length === 1, 'and nothing was fetched on their behalf');
+
+  /*
+   * THE BOUNDARY, stated rather than implied. A served document is sandboxed
+   * without allow-same-origin, so the `<img>` it loads carries no cookie — the
+   * endpoint sees an anonymous caller from inside every document, its OWNER'S
+   * framed copy included. On a private document that is the uniform 404, so a
+   * bound source there shows its alt text and nothing else. This asserts what
+   * actually happens (the refused placeholder, drawn for a failure that landed
+   * before hydration) instead of pretending the case works.
+   */
+  await holder.goto(`${B}/a/${mine.body.id}`, { waitUntil: 'networkidle' });
+  const own = await (await holder.waitForSelector('iframe[title="artifact"]', { timeout: 30_000 })).contentFrame();
+  const owned = await own.evaluate(async () => {
+    const deadline = Date.now() + 8000;
+    const read = () => {
+      const img = document.querySelector('img[alt="a"]');
+      return { src: img?.getAttribute('src') ?? null, mark: img?.getAttribute('data-mx-asset') ?? null, natural: img ? img.naturalWidth : -1 };
+    };
+    while (Date.now() < deadline) {
+      const s = read();
+      if (s.mark || s.natural > 0) return s;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return read();
+  });
+  ok(owned.mark === 'refused' && owned.src === null, `a private document's own owner sees the alt placeholder, because the frame presents no session (${JSON.stringify(owned)})`);
 }
 
 await browser.close();

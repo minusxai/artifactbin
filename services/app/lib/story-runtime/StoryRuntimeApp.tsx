@@ -131,15 +131,21 @@ function RuntimeBoundSource({ props, template }: BoundSourceProps) {
   const el = useRef<HTMLImageElement | null>(null);
   const url = resolveRefTemplate(template, (name) => state.values[name]);
   /*
-   * The image the SERVER rendered has usually finished loading before React
-   * hydrates, and a `load` that already fired is a `load` no listener will ever
-   * hear — so the first picture a reader sees would never be recorded, and
-   * coming back to it would ask the endpoint again. `complete` is the same fact
-   * asked rather than awaited. (Only a real browser can show this: jsdom loads
-   * no images, so the gate is its test.)
+   * The image the SERVER rendered has usually finished — or failed — before
+   * React hydrates, and an event that already fired is one no listener will
+   * ever hear. Both halves matter: without this the first picture a reader sees
+   * is never recorded (so coming back to it asks the endpoint again), and a
+   * first picture the endpoint REFUSED never gets its mark, so the document
+   * shows an empty box instead of the alt text. `complete` is the same pair of
+   * facts asked rather than awaited — done with pixels is a load, done without
+   * them is an error. (Only a real browser can show this: jsdom fetches no
+   * images at all, so the gate is this rule's test.)
    */
   useEffect(() => {
-    if (url && isWebUrl(url) && el.current?.complete && el.current.naturalWidth > 0) seen.add(url);
+    const img = el.current;
+    if (!url || !img || !img.complete) return;
+    if (img.naturalWidth > 0) { if (isWebUrl(url)) seen.add(url); return; }
+    setRefused((prev) => (prev.has(url) ? prev : new Set([...prev, url])));
   }, [url, seen]);
   const mapped = url === null ? null : runtimeAssetUrl(url, (u) => seen.has(u), endpoint);
   // A web URL that came back unchanged is one there is no endpoint to import
