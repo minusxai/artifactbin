@@ -113,14 +113,22 @@ describe('the edges the seed did not pin', () => {
     expect(ledgerMetrics([]).msToFirstPublish).toBeNull();
   });
 
-  it('skeletonSections is null when the FIRST successful write was a dataset, even though a later one has markup', () => {
-    // The data task writes its dataset first. The brief pins the FIRST successful write, so this reads
-    // null rather than borrowing the document's headings — the guardrail refuses to guess.
+  it('skeletonSections reaches PAST a dataset-first write to the document that was actually published', () => {
+    // data / dashboard / deck / scrolly all upload their rows before they write their document. Reading
+    // the first 2xx write full stop would leave the guardrail null on four of seven tasks — catching
+    // nothing, which is the opposite of a guardrail. It reads the first 2xx write that CARRIED MARKUP.
     const m = ledgerMetrics([
       entry({ t: 1_000, method: 'POST', path: '/api/artifacts', status: 201, reqFormat: 'dataset', artifactId: 'ds1111' }),
-      entry({ t: 2_000, method: 'POST', path: '/api/artifacts', status: 201, reqMarkup: '<h1>a</h1><h2>b</h2>', artifactId: 'ab3cd9' }),
+      entry({ t: 2_000, method: 'POST', path: '/api/artifacts', status: 201, reqMarkup: '<h1>a</h1><h2>b</h2><h3>c</h3>', artifactId: 'ab3cd9' }),
+      entry({ t: 3_000, method: 'PUT', path: '/api/artifacts/ab3cd9', status: 200, reqMarkup: '<h1>a</h1>', artifactId: 'ab3cd9' }),
     ]);
-    expect(m.skeletonSections).toBeNull();
+    expect(m.skeletonSections).toBe(3);
+    // …and the CLOCK does not move with it. The dataset upload is a real publish — it is when the human
+    // first had a URL — so `msToFirstPublish` still answers from the first 2xx write of any kind.
+    expect(ledgerMetrics([
+      entry({ t: 1_000, method: 'POST', path: '/api/artifacts', status: 201, reqFormat: 'dataset', artifactId: 'ds1111' }),
+      entry({ t: 2_000, method: 'POST', path: '/api/artifacts', status: 201, reqMarkup: '<h1>a</h1>', artifactId: 'ab3cd9' }),
+    ], { startedAtMs: 500 }).msToFirstPublish).toBe(500);
   });
 
   it('skeletonSections skips the FAILED first attempt and counts the first write that worked', () => {

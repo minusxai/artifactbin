@@ -177,12 +177,21 @@ export interface LedgerMetrics {
    * Ms from the RUN ANCHOR to the first write answering 2xx — how long the human waited for a URL they
    * could open. The anchor is `opts.startedAtMs` (process spawn); with none it degrades to the first
    * ledger entry's `t`, which hides agent boot and is therefore only a floor.
+   *
+   * ANY successful write, markup or not — unlike `skeletonSections` below. A dataset upload is a real
+   * publish: it is the moment a URL exists, which is what this measures.
    */
   msToFirstPublish: number | null;
   /**
-   * Headings carried by that first successful write. The guardrail on "publish early": a skeleton with a
-   * real title and real sections is a document arriving; an empty stub is a fast placeholder that games
-   * the timing. Null when the first successful write carried no markup.
+   * Headings carried by the first successful write THAT CARRIED MARKUP — which is not always the first
+   * successful write. The guardrail on "publish early": a skeleton with a real title and real sections is
+   * a document arriving; an empty stub is a fast placeholder that games the timing.
+   *
+   * Markup rather than merely first, because a dataset-first task writes its ROWS before its document —
+   * `data`, `dashboard`, `deck` and `scrolly` all do — and their leading `POST /api/artifacts` carries no
+   * markup at all. Reading that write would leave this null on four of seven tasks, and a guardrail that
+   * is blank wherever the work is hardest catches nothing. Null only when NO successful write ever
+   * carried markup.
    */
   skeletonSections: number | null;
 }
@@ -215,9 +224,13 @@ export function ledgerMetrics(entries: LedgerEntry[], opts: LedgerMetricsOptions
   const docsBytes = docsGets.length && docsGets.every((e) => typeof e.bytes === 'number')
     ? docsGets.reduce((a, e) => a + (e.bytes ?? 0), 0)
     : null;
-  // WHEN the human got a link, and WHAT arrived. Both are read off the first write that ANSWERED 2xx:
-  // the earlier attempts are the agent still learning the protocol, and a 4xx published nothing.
+  // WHEN the human got a link, and WHAT arrived — two different writes, on purpose. Both skip the failed
+  // attempts (the agent still learning the protocol; a 4xx published nothing), but the CLOCK stops at the
+  // first 2xx write of any kind, because a dataset upload is already a URL, while the CONTENT is read off
+  // the first 2xx write that carried markup — a dataset-first task writes its rows before its document,
+  // and grading the rows upload would leave the guardrail blank on exactly those tasks.
   const firstGoodWrite = writes.find((w) => w.status < 300);
+  const firstGoodMarkupWrite = writes.find((w) => w.status < 300 && w.reqMarkup !== undefined);
   // The anchor is the caller's — process spawn — because agent boot is part of the wait. Falling back to
   // the ledger's own first entry measures from the agent's first HTTP call instead, which is a FLOOR.
   const anchor = opts.startedAtMs ?? entries[0]?.t;
@@ -246,7 +259,7 @@ export function ledgerMetrics(entries: LedgerEntry[], opts: LedgerMetricsOptions
     // a ledger that saw nothing did not see the agent decline to mint.
     selfMinted: judged(entries.some((e) => e.method === 'POST' && pathOnly(e.path) === '/api/tokens/anonymous')),
     msToFirstPublish,
-    // Naturally null rather than `judged()`: no write, no markup, nothing to count.
-    skeletonSections: firstGoodWrite?.reqMarkup === undefined ? null : (firstGoodWrite.reqMarkup.match(HEADING_TAG) ?? []).length,
+    // Naturally null rather than `judged()`: no successful write ever carried markup, nothing to count.
+    skeletonSections: firstGoodMarkupWrite === undefined ? null : (firstGoodMarkupWrite.reqMarkup!.match(HEADING_TAG) ?? []).length,
   };
 }
