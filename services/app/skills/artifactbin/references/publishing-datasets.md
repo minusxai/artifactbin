@@ -53,11 +53,20 @@ URL is resolved for you — you never write one.
 **Already on the web? Just use the URL.** `{ "imageUrl": "https://…" }`
 makes the artifact from a URL — artifactbin fetches it server-side, so YOU
 DO NOT NEED TO DOWNLOAD IT. And in markup you can simply write
-`<img src="https://example.com/chart.png" />`: the publish IMPORTS it,
-stores a copy, and echoes your markup rewritten to `ref:<id>`. The document
-ends up self-contained either way — a reader never talks to the original
-host, and the image cannot rot from under you. Max `[[ maxImageBytes ]]` bytes
-(png|jpeg|webp|gif|svg+xml).
+`<img src="https://example.com/chart.png" />`: the publish IMPORTS a copy and
+LEAVES YOUR URL in the document — you read back what you wrote, while readers
+are served our copy, so nobody talks to the original host and the picture
+cannot rot from under you. A URL that will not fetch does not fail the
+publish: the reply carries `warnings: [{code, url, fix}]` and that one image
+shows its alt text. Max `[[ maxImageBytes ]]` bytes (png|jpeg|webp|gif|svg+xml).
+The same happens to a `<Video poster>` and to an `@font-face { src: url(…) }`
+in your `<Helmet>` `<style>`.
+
+Source changed? `POST [[ base ]]/api/artifacts/assets/refresh` with
+`{"id": "<document id>"}` (every external url that document names) or
+`{"url": "https://…"}` (one already-stored url); naming neither is
+`nothing_to_refresh`. It answers `{refreshed, unchanged, failed}` and touches
+nothing else — no new version, and your markup keeps the url it has.
 
 ## Writable datasets (preview)
 

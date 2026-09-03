@@ -25,6 +25,9 @@ import { json, readJson } from '@/lib/http';
 import { parseFolder } from '@/lib/urls';
 import { loadDatasetRows } from '@/lib/story/dataset-store';
 import { parseContentInput } from '@/lib/story/input';
+import { collectExternalAssetUrls } from '@/lib/story/external-images';
+import { refreshWebAssets, type WebAssetImporter } from '@/lib/web-assets';
+import { webIngestRateLimited } from '@/lib/auth';
 
 const safeJson = (s: string): unknown => { try { return JSON.parse(s); } catch { return null; } };
 
@@ -562,4 +565,47 @@ export async function respondToMutate(
     return json({ error: 'invalid_sql', details: [result.detail] }, 400);
   }
   return json({ id: result.row.id, version: result.row.version, affected: result.affected, rowCount: result.rowCount });
+}
+
+/**
+ * REFRESH — one pipeline, two doors (the `refresh_asset` operation and the
+ * owner's menu row), because a bearer agent and a person clicking a menu must
+ * not be able to mean different things by it.
+ *
+ * `url` refreshes one URL we hold. `id` refreshes every external URL a DOCUMENT
+ * names — the shape a person actually wants ("this deck's pictures are stale"),
+ * and the one an agent can call without first knowing which URLs are in there.
+ * Reach for the document form is the WRITE scope, not the read one: refreshing
+ * changes bytes every reader of every document naming that URL will see, so it
+ * belongs to someone who may change the document, and the miss is the uniform
+ * 404 that every other door answers.
+ *
+ * The hourly web-import allowance is the same bucket a publish spends
+ * (lib/auth), because these are the same fetches.
+ */
+export async function refreshAssetsFor(
+  actor: TokenActor,
+  input: { url?: unknown; id?: unknown },
+): Promise<Response> {
+  const url = typeof input.url === 'string' && input.url ? input.url : null;
+  const id = typeof input.id === 'string' && input.id ? input.id : null;
+  if (!url && !id) return json({ error: 'nothing_to_refresh', details: ['name a url, or the id of a document whose external urls should be refreshed'] }, 400);
+  if (webIngestRateLimited(`ingest:${actor.tokenId}`)) {
+    return json({ error: 'rate_limited', details: ['too many web imports this hour — try again later'] }, 429);
+  }
+
+  let urls: string[];
+  let by: WebAssetImporter = { tokenId: actor.tokenId, userId: actor.userId };
+  if (id) {
+    const row = await getArtifactFor(actor, id);
+    if (!row) return json({ error: 'not_found' }, 404);
+    urls = collectExternalAssetUrls(row.source ?? '').all;
+    // The bytes belong to whoever the DOCUMENT belongs to, exactly as they did
+    // when publish imported them — an editor refreshing does not take them over.
+    const owner = writerFor(row);
+    by = { tokenId: owner.tokenId, userId: owner.userId };
+  } else {
+    urls = [url!];
+  }
+  return json(await refreshWebAssets(urls, by));
 }

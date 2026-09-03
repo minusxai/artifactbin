@@ -232,3 +232,42 @@ const FIXES: Readonly<Record<string, string>> = {
  */
 export const assetWarningFor = (error: WebAssetRefused): AssetWarning =>
   ({ code: error.code, url: error.url, fix: FIXES[error.code] ?? error.message });
+
+/** What a refresh moved, what it left alone, and what it could not do. */
+export interface AssetRefreshResult {
+  refreshed: string[];
+  unchanged: string[];
+  failed: AssetWarning[];
+}
+
+/** A URL's kind, read back from what we stored for it. */
+export const kindOfRow = (row: WebAssetRow): WebAssetKind => (row.content_type.startsWith('font/') ? 'font' : 'image');
+
+/**
+ * Re-fetch a set of URLs we already hold and report what moved.
+ *
+ * UNCHANGED is not a failure and not a refresh: the object is content-addressed,
+ * so identical bytes land on the identical key, and saying so is what lets a
+ * caller tell "the source really did change" from "we looked". A URL we do NOT
+ * hold is reported rather than imported — importing is what publishing a
+ * document that names it does, and a refresh door that also imported would be a
+ * fetch primitive wearing a refresh's name.
+ */
+export async function refreshWebAssets(urls: readonly string[], by: WebAssetImporter): Promise<AssetRefreshResult> {
+  const out: AssetRefreshResult = { refreshed: [], unchanged: [], failed: [] };
+  for (const url of urls) {
+    const held = await webAssetByHash(urlHash(url));
+    if (!held) {
+      out.failed.push({ code: 'not_cached', url, fix: 'nothing is stored for that URL — publish a document that names it and it is imported' });
+      continue;
+    }
+    try {
+      const after = await refreshWebAsset(url, by, kindOfRow(held));
+      (after.object_key === held.object_key ? out.unchanged : out.refreshed).push(url);
+    } catch (error) {
+      if (error instanceof WebAssetRefused) out.failed.push(assetWarningFor(error));
+      else throw error;
+    }
+  }
+  return out;
+}

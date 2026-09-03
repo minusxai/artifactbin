@@ -6,7 +6,7 @@
  * not-logged-in readers holding a token that owns other artifacts.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 /*
  * The layer renders nothing here — this file is about the PAGE's chrome and
@@ -401,6 +401,37 @@ describe('the view-mode selection bubble is granted, and re-checked, by the page
  * "Artifact" section of its own until now), and what each of the door's three
  * answers does.
  */
+/**
+ * REFRESH EXTERNAL IMAGES — owner chrome, unlike the fork row beside it.
+ *
+ * A refresh re-fetches bytes that every reader of every document naming that
+ * URL will then be served, so it belongs to the person whose document named it
+ * — not to an editor's neighbour, and certainly not to everyone who can read.
+ */
+describe('the refresh row', () => {
+  it('is offered to the owner and to nobody else', () => {
+    render(
+      <ArtifactShell role="owner">
+        <ArtifactSurface {...surfaceProps({})} />
+      </ArtifactShell>,
+    );
+    openDocumentControls();
+    expect(screen.getByLabelText('Refresh external images')).toBeInTheDocument();
+    cleanup();
+
+    for (const role of ['editor', 'commenter'] as const) {
+      render(
+        <ArtifactShell role={role}>
+          <ArtifactSurface {...surfaceProps({})} />
+        </ArtifactShell>,
+      );
+      openDocumentControls();
+      expect(screen.queryByLabelText('Refresh external images'), role).not.toBeInTheDocument();
+      cleanup();
+    }
+  });
+});
+
 describe('the fork row', () => {
   const forkResponse = (status: number, body: unknown) => vi.fn(async () => ({
     ok: status === 201, status, json: async () => body,

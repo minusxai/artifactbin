@@ -18,10 +18,10 @@ describe('the registry is curated, not generated', () => {
     for (const n of names) expect(n).toMatch(/^[a-z]+(_[a-z]+)*$/);
   });
 
-  it('carries the thirteen operations of the protocol', () => {
+  it('carries the fourteen operations of the protocol', () => {
     expect(OPERATIONS.map((o) => o.name).sort()).toEqual([
       'annotate', 'create_artifact', 'delete_artifact', 'edit_artifact', 'export_artifact', 'fork_artifact', 'get_artifact',
-      'get_version', 'list_artifacts', 'list_versions', 'mutate_dataset', 'revert_artifact', 'update_artifact',
+      'get_version', 'list_artifacts', 'list_versions', 'mutate_dataset', 'refresh_asset', 'revert_artifact', 'update_artifact',
     ]);
   });
 

@@ -18,6 +18,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useArtifactOwner, useCanAnnotateArtifact, useCanEditArtifact } from '@/components/ArtifactShell';
 import AnnotationLayer from '@/components/AnnotationLayer';
 import CopyAgentPrompt from '@/components/CopyAgentPrompt';
+import RefreshAssets from '@/components/RefreshAssets';
 import ForkArtifact, { ForkConfirm } from '@/components/ForkArtifact';
 import ShareLink from '@/components/ShareLink';
 import type { AnnotationWire } from '@/lib/annotations';
@@ -957,6 +958,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
         <section aria-label="Owner actions">
           <h2 className="mb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">owner</h2>
           <CopyAgentPrompt id={id} variant="menu" />
+          {/* Owner chrome, unlike the fork row above: a refresh re-fetches
+              bytes that every reader of every document naming those URLs is
+              then served. Only for a markup document — it is the only format
+              that can name an external url at all. */}
+          {format === 'markup' && <RefreshAssets id={id} variant="menu" />}
           {format === 'dataset' && (
             <button
               type="button"
