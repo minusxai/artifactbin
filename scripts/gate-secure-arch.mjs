@@ -320,12 +320,12 @@ check(!after.some((a) => /PWNED/.test(a.title ?? '')), 'and no artifact was forg
 // off-origin — remote script, image, font, or connect are all refused. The
 // browser's own CSP-violation console messages are the deterministic signal
 // (they fire whether or not the test host has internet).
-// LAYER 1 — no STORED document ever names a remote host declaratively. Two
-// different mechanisms reach that one property, and both are checked here:
-//   • an <img src> is IMPORTED at publish — fetched server-side once, stored,
-//     and the source rewritten to ref:<id> (lib/web-ingest). The reader still
-//     loads it from this origin, which is the property that matters; the
-//     network-level proof lives in gate-web-import.
+// LAYER 1 — no SERVED document ever fetches from a remote host. Two different
+// mechanisms reach that one property, and both are checked here:
+//   • an <img src> is IMPORTED at publish (lib/web-assets) and the URL is KEPT
+//     in the stored document — what changes is the SERVED copy, which is
+//     pointed at /assets/<hash> on this origin. That, not the stored bytes, is
+//     the property that matters; the network-level proof is in gate-web-import.
 //   • every OTHER external subresource position is still refused outright.
 const declImg = await fetch(`${BASE}/api/artifacts`, {
   method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${anon.token}` },
@@ -333,9 +333,23 @@ const declImg = await fetch(`${BASE}/api/artifacts`, {
 });
 const declBody = await declImg.json().catch(() => ({}));
 if (declImg.status === 201) {
-  check(!JSON.stringify(declBody.markup ?? '').includes('picsum.photos'),
-    'an imported <img src> leaves NO remote host in the stored document');
-  check(/src="ref:/.test(declBody.markup ?? ''), 'it was rewritten to a ref: this origin serves');
+  const declStored = (await (await fetch(`${BASE}/api/artifacts/${declBody.id}`, {
+    headers: { Authorization: `Bearer ${anon.token}` },
+  })).json()).markup ?? '';
+  check(declStored.includes('picsum.photos'), 'the URL an author wrote is KEPT in the stored document');
+  // With the credential: this token is CLAIMED, so its documents are born
+  // private and a session-less read of one is the uniform 404 by design.
+  const declServed = await (await fetch(`${BASE}/a/${declBody.id}/raw`, {
+    headers: { Authorization: `Bearer ${anon.token}` },
+  })).text();
+  const mapped = /src="\/assets\/[0-9a-f]{64}"/.test(declServed);
+  // A host this machine cannot reach is a WARNING rather than a refusal, and
+  // the unmapped URL is then refused by the document's own CSP (layer 2 below)
+  // — so the gate needs no internet to mean something.
+  const warned = Array.isArray(declBody.warnings) && declBody.warnings.some((w) => String(w.url).includes('picsum.photos'));
+  check(mapped || warned, mapped
+    ? 'and the SERVED document is pointed at our copy on this origin'
+    : 'and an import this host could not reach was reported as a warning, never a refusal');
 } else {
   // No outbound access from this host: the import cannot complete, and the
   // publish fails closed — which is equally acceptable for this gate.

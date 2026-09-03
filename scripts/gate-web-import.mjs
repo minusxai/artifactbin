@@ -2,7 +2,7 @@
  * Gate: an asset imported FROM THE WEB paints, and the reader never touches
  * the origin host.
  *
- * The unit suite proves the bytes are fetched, stored and rewritten. Only a
+ * The unit suite proves the bytes are fetched and stored. Only a
  * browser can prove the two things that actually matter to a reader:
  *   1. the imported image PAINTS inside the sandboxed document (naturalWidth
  *      > 0 — the exact failure mode gate-ref-image exists for), and
@@ -62,8 +62,12 @@ const put = await fetch(`${B}/api/artifacts/${started.id}`, {
 });
 const body = await put.json();
 ok(put.status === 200, `the publish imported rather than refused (${put.status})`);
-ok(/src="ref:[A-Za-z0-9]+"/.test(body.markup ?? ''), 'the echo carries the rewrite to ref:<id>');
-ok(!(body.markup ?? '').includes('127.0.0.1'), 'and the stored source no longer names the origin host');
+// The URL is KEPT: the author wrote one and reads one back, so the echo is not
+// news (`markup_changed: false`) and the stored source still names the host.
+// What changes is what a READER is served — checked in the browser below.
+ok(body.markup_changed === false, `nothing was rewritten, so the echo carries no markup (markup_changed ${body.markup_changed})`);
+const storedSource = (await (await fetch(`${B}/api/artifacts/${started.id}`, { headers: auth })).json()).markup ?? '';
+ok(storedSource.includes(`${WEB}/logo.png`), 'the stored source still carries the URL its author wrote');
 
 const fetchesBeforeRead = hostHits;
 
