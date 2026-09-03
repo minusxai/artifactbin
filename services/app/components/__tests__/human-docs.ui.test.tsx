@@ -1,5 +1,5 @@
 /**
- * The human tour at /docs/human, guarded against DRIFT.
+ * The human tour at /docs-human, guarded against DRIFT.
  *
  * It went stale invisibly: it advertised a template called "report" (there is no
  * such template — the four are editorial/deck/scrolly/dashboard), described
@@ -20,7 +20,7 @@ import { STORY_TEMPLATE_NAMES, STORY_THEME_NAMES } from '@/lib/validation/atlas-
 
 const text = () => screen.getByRole('main').textContent ?? '';
 
-describe('/docs/human', () => {
+describe('/docs-human', () => {
   it('names every real theme and every real template', async () => {
     render(DocsHuman());
     for (const name of STORY_THEME_NAMES) expect(text()).toContain(name);

@@ -24,7 +24,7 @@ const head = (html: string) => html.slice(0, html.indexOf('</head>'));
 describe('the agent help pointer in <head>', () => {
   it('renders a help link and a one-line agent meta when the platform passes them', async () => {
     const h = head(await doc({ help: HELP }));
-    expect(h).toContain('<link rel="help" href="https://x.test/docs">');
+    expect(h).toContain('<link rel="help" href="https://x.test/docs" title="Agents: read this first to edit any artifact here">');
     expect(h).toContain('<meta name="artifactbin:agent" content="To edit this artifact with an agent, read https://x.test/docs — tokens at https://x.test/tokens/new">');
   });
   it('escapes the URLs like every other head value', async () => {

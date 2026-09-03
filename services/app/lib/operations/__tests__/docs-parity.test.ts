@@ -55,7 +55,7 @@ describe('both transports render, under the caps', () => {
     expect(httpApi).toContain('curl -X POST');
     expect(httpApi).toContain(`${BASE}/docs/artifactbin/references/`);
 
-    const httpMcpResponse = serveDocs({ tree, base: BASE, path: 'artifactbin/SKILL.md', accept: '', download: false, transport: 'mcp' });
+    const httpMcpResponse = serveDocs({ tree, base: BASE, path: 'artifactbin/SKILL.md', download: false, transport: 'mcp' });
     const httpMcp = await httpMcpResponse.text();
     expect(httpMcp).toContain('create_artifact({');
     expect(httpMcp).toContain(`${BASE}/docs/artifactbin/references/<file>?transport=mcp`);

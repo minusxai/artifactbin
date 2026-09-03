@@ -23,6 +23,7 @@ describe('crumbsFor — the app pages', () => {
     // The human tour and the agent protocol doc are two readings of one thing,
     // and a bar 44px tall is not where that distinction earns its keep.
     expect(crumbsFor('/docs')).toEqual([{ label: 'docs' }]);
+    expect(crumbsFor('/docs-human')).toEqual([{ label: 'docs' }]);
     expect(crumbsFor('/docs/human')).toEqual([{ label: 'docs' }]);
     expect(crumbsFor('/docs/llm')).toEqual([{ label: 'docs' }]);
   });

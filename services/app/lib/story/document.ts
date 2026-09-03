@@ -84,7 +84,7 @@ export interface StoryDocumentInput {
   lazyChunks?: string[] | null;
   /**
    * Where an AGENT that fetched this document learns how to edit it (discover): rendered as
-   * `<link rel="help" href={docs}>` and `<meta name="artifactbin:agent" content="To edit this artifact with an agent,
+   * `<link rel="help" href={docs} title="…">` and `<meta name="artifactbin:agent" content="To edit this artifact with an agent,
    * read {docs} — tokens at {tokens}">` in <head>, right after the platform's social tags. Null/absent ⇒ nothing.
    */
   help?: { docs: string; tokens: string } | null;
@@ -293,7 +293,7 @@ const renderReaderChrome = (signIn?: StoryDocumentInput['signIn']): string =>
   + '<nav class="mx-reader-panel mx-reader-panel--menu" data-mx-reader-panel="menu" aria-label="Menu" hidden>'
   + '<a class="mx-reader-brand" href="/" target="_top"><img src="/logo-128.png" alt="">artifactbin</a>'
   + '<a href="/" target="_top">Artifacts</a><a href="/account" target="_top">Account</a>'
-  + '<a href="/docs" target="_top">Human Docs</a><a href="/docs/artifactbin/SKILL.md" target="_top">Agent docs</a>'
+  + '<a href="/docs-human" target="_top">Human Docs</a><a href="/docs/artifactbin/SKILL.md" target="_top">Agent docs</a>'
   + '</nav>'
   + '<section class="mx-reader-panel mx-reader-panel--controls" data-mx-reader-panel="controls" aria-label="Artifact controls" hidden>'
   + '<h2>artifact controls</h2><h3>appearance</h3>'
@@ -532,7 +532,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
         + '<meta name="twitter:card" content="summary_large_image">'
       : '') +
     (help
-      ? `<link rel="help" href="${escapeHtml(help.docs)}">`
+      ? `<link rel="help" href="${escapeHtml(help.docs)}" title="Agents: read this first to edit any artifact here">`
         + `<meta name="artifactbin:agent" content="To edit this artifact with an agent, read ${escapeHtml(help.docs)} — tokens at ${escapeHtml(help.tokens)}">`
       : '') +
     // First script in the document: the author's runs at the end of <body>,
