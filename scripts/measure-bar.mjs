@@ -2,7 +2,7 @@
 // relative to navigation start, on a chart-heavy public document at a phone
 // viewport with throttled CPU + network. Also logs when the runtime entry and
 // the anchor entry modules finished loading (resource timing).
-import { chromium } from '/Users/ppsreejith/projects/artifactbin-spikes/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 
 const url = process.argv[2] ?? 'https://artifactbin.dev/a/WiwhwI';
 const browser = await chromium.launch();
