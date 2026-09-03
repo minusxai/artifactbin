@@ -40,12 +40,12 @@ await fetch(`${B}/api/artifacts/${st.id}`, {
 
 const browser = await chromium.launch();
 
-const open = async (viewport, hash = '') => {
+const open = async (viewport, hash = '', id = st.id) => {
   const page = await browser.newPage({ viewport });
   // The shell belongs to the OWNER (a reader is served the bare document), and
   // ownership is the httpOnly session cookie now — not a localStorage token.
   await becomeOwner(page, B, st.token);
-  await page.goto(`${B}/a/${st.id}${hash}`, { waitUntil: 'load' });
+  await page.goto(`${B}/a/${id}${hash}`, { waitUntil: 'load' });
   return page;
 };
 
@@ -111,12 +111,13 @@ ok(
 );
 ok(dock.labels.join(',') === 'menu,home,controls', `viewer: tiny labels read menu / home / controls (${dock.labels.join(', ')})`);
 
-const dockHidden = () => view.evaluate(() => {
+const hiddenOn = (page) => page.evaluate(() => {
   const action = document.querySelector('[aria-label="Open menu"]');
   const host = action?.closest('[data-mx-reader-chrome], [aria-label="Page actions"]');
   return host?.getAttribute('data-scroll-hidden') === 'true'
     || host?.classList.contains('mx-reader-chrome--hidden') === true;
 });
+const dockHidden = () => hiddenOn(view);
 // An owner reads through the sandboxed artifact frame; a public reader may be
 // served the document itself. Exercise whichever window actually scrolls.
 const readingFrame = view.frames().find((frame) => frame !== view.mainFrame()) ?? view.mainFrame();
@@ -220,6 +221,99 @@ await wide.waitForTimeout(200);
 const option = await reachable(wide, '[aria-label="Color mode dark"]');
 ok(option.reachable, `desktop: a colour-mode option can actually be clicked (hit ${option.hit})`);
 await wide.close();
+
+
+// ── 5. the bar answers a scroll BEFORE the runtime has loaded ──────────────
+/*
+ * THE READER IS ON THE DOCUMENT LONG BEFORE THE RUNTIME IS. The document is
+ * server-rendered, so it paints at parse time; the runtime entry and its chart
+ * chunk are ~1 MB behind it. The module that owns the reader's chrome — this
+ * bar's scroll relay — is ~8 KB, and it used to execute LAST, in the module
+ * queue behind that megabyte, because a module script without `async` runs in
+ * tree order. So on a chart document at phone speeds the bar sat on the words
+ * for seconds and answered nothing (measured: first hide ~4.7-5.2 s against a
+ * document on screen at ~1.6 s). `async` plus a modulepreload is the fix, and
+ * this is the only place it can be seen: every unit test in the suite runs the
+ * module directly, which is precisely the ordering the bug lived in.
+ *
+ * The measurement is only worth something while the runtime is STILL IN
+ * FLIGHT, so that is asserted as a check of its own — on a fast machine the
+ * entry can finish before the scroll and the timing check becomes a tautology
+ * the regression would sail straight through.
+ */
+const CHART_DOC = '<Helmet><Value name="rows" type="table" value={[{"m":"Jan","v":12},{"m":"Feb","v":18},{"m":"Mar","v":9},{"m":"Apr","v":22}]} /></Helmet>'
+  + '<div data-design="tw" className="p-10"><h1 className="text-3xl font-bold">Chart</h1>'
+  + '<Question data="$rows" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"m","type":"nominal"},"y":{"field":"v","type":"quantitative"}}}}} />'
+  + Array.from({ length: 40 }, (_, i) => `<p className="mt-4 text-lg">Read on a phone while the runtime is still on its way. ${i + 1}</p>`).join('')
+  + '</div>';
+
+const chart = await (await fetch(`${B}/api/artifacts`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${st.token}` },
+  body: JSON.stringify({ title: 'mobile gate — chart', markup: CHART_DOC, theme: 'manuscript' }),
+})).json();
+if (!chart.id) throw new Error(`the chart document did not publish: ${JSON.stringify(chart)}`);
+
+// A READER, not the owner: no shell to hydrate first, so the only race left is
+// the one under test — the reader's own chrome against the runtime. A fresh
+// context, because `open()` carries the owner's session cookie.
+const slow = await browser.newContext({ viewport: PHONE });
+const reader = await slow.newPage();
+const cdp = await slow.newCDPSession(reader);
+await cdp.send('Network.emulateNetworkConditions', {
+  offline: false, latency: 150, downloadThroughput: 1.5 * 1024 * 1024 / 8, uploadThroughput: 750 * 1024 / 8,
+});
+await reader.goto(`${B}/a/${chart.id}`, { waitUntil: 'commit' });
+
+/** What has arrived so far, by resource timing — `responseEnd` is 0 while a request is in flight. */
+const loaded = () => reader.evaluate(() => {
+  const seen = (fragment) => performance.getEntriesByType('resource').find((e) => e.name.includes(fragment));
+  const anchor = seen('/story/anchor-');
+  const entry = seen('/story/entry-');
+  return {
+    chrome: !!document.querySelector('.mx-reader-chrome'),
+    anchor: !!anchor && anchor.responseEnd > 0,
+    entry: !!entry && entry.responseEnd > 0,
+  };
+}).catch(() => ({ chrome: false, anchor: false, entry: false }));
+
+let ready = { chrome: false, anchor: false, entry: false };
+for (let i = 0; i < 400 && !(ready.chrome && ready.anchor); i++) {
+  ready = await loaded();
+  if (ready.entry) break;
+  await reader.waitForTimeout(50);
+}
+ok(ready.chrome && ready.anchor, `slow reader: the reader chrome and its ~8 KB module are ready (chrome ${ready.chrome}, anchor ${ready.anchor})`);
+ok(!ready.entry, 'slow reader: and the ~1 MB runtime entry is STILL IN FLIGHT — which is what makes the next check mean anything');
+
+const scrolledAt = Date.now();
+await reader.evaluate(() => window.scrollBy(0, 300));
+let hidAfter = null;
+for (let i = 0; i < 20 && hidAfter === null; i++) {
+  if (await hiddenOn(reader)) hidAfter = Date.now() - scrolledAt;
+  else await reader.waitForTimeout(25);
+}
+ok(hidAfter !== null && hidAfter <= 500,
+  `slow reader: the chrome leaves within 500ms of the first scroll, runtime or no runtime (${hidAfter === null ? 'never' : `${hidAfter}ms`})`);
+await slow.close();
+
+/*
+ * AND THE FRAMED SHAPE KEEPS THE END-OF-PAGE RULE. The owner reads through an
+ * opaque frame, so the page cannot measure where that document ends — it used
+ * to compare the frame's offsets against its own metrics, which never move,
+ * and the rule that keeps the bar off the footer was simply absent. The sample
+ * carries the answer now (StoryScrollMessage.atBottom).
+ */
+const framedView = await open(PHONE, '', chart.id);
+await framedView.waitForTimeout(2500);
+const chartFrame = framedView.frames().find((frame) => frame !== framedView.mainFrame()) ?? framedView.mainFrame();
+await chartFrame.evaluate(() => window.scrollTo(0, 400));
+await framedView.waitForTimeout(400);
+ok(await hiddenOn(framedView), 'framed: the dock leaves on a downward scroll inside the frame');
+await chartFrame.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+await framedView.waitForTimeout(400);
+ok(!(await hiddenOn(framedView)), 'framed: and comes back at the END of the document, where the footer is and there is no further scroll');
+await framedView.close();
 
 await browser.close();
 const failed = out.filter((l) => l.startsWith('FAIL')).length;

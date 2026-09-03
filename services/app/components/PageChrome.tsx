@@ -37,8 +37,19 @@ const MOBILE_BAR_LABEL = 'font-mono text-[8px] leading-none tracking-[0.04em] sm
  * event so the bar can use the same policy for both scrolling surfaces. */
 export const PAGE_CHROME_SCROLL_EVENT = 'mx:page-chrome-scroll';
 
-export function notifyPageChromeScroll(scrollY: number) {
-  window.dispatchEvent(new CustomEvent<number>(PAGE_CHROME_SCROLL_EVENT, { detail: scrollY }));
+/** What a framed document can say about its own scroll port, which is all the
+ * page knows: where the reader is, and whether there is anything below them.
+ * The second is the document's answer because the page cannot measure an
+ * opaque frame (lib/story-runtime/contract StoryScrollMessage). */
+export interface PageChromeScrollSample {
+  scrollY: number;
+  atBottom: boolean;
+}
+
+export function notifyPageChromeScroll(scrollY: number, atBottom = false) {
+  window.dispatchEvent(
+    new CustomEvent<PageChromeScrollSample>(PAGE_CHROME_SCROLL_EVENT, { detail: { scrollY, atBottom } }),
+  );
 }
 
 interface MobileBarContextValue {
@@ -67,6 +78,9 @@ export function PageChromeBar({ children }: { children: React.ReactNode }) {
   const [scrollVisible, setScrollVisible] = useState(true);
   const [openLayers, setOpenLayers] = useState<Set<string>>(() => new Set());
   const lastScrollY = useRef(0);
+  /** Whether a framed document has told us where it is yet. Its offsets and
+   * this page's own are different numbers about different surfaces. */
+  const framedSeeded = useRef(false);
 
   const setLayerOpen = useCallback((id: string, open: boolean) => {
     setOpenLayers((current) => {
@@ -100,11 +114,32 @@ export function PageChromeBar({ children }: { children: React.ReactNode }) {
       else if (delta <= -4) setScrollVisible(true);
       if (Math.abs(delta) >= 4 || next <= 24) lastScrollY.current = next;
     };
-    // A framed artifact reports only its own scroll offset, so the page's
-    // metrics say nothing about whether IT has reached its end — that path
-    // keeps the direction rule alone rather than guessing.
     const onWindowScroll = () => update(window.scrollY, atPageBottom());
-    const onArtifactScroll = (event: Event) => update((event as CustomEvent<number>).detail);
+    /*
+     * A FRAMED DOCUMENT'S FIRST SAMPLE IS A BASELINE, NOT A DIRECTION. The
+     * baseline above is this page's own `scrollY`, which on an artifact page is
+     * 0 and stays 0 — the page never scrolls, the document inside it does. Read
+     * against a frame's offsets that made every reload of a document the reader
+     * was part-way through look like one enormous downward scroll, and the bar
+     * left from a standstill. The frame's own first offset is the only honest
+     * baseline for the frame's offsets; it says nothing about direction, so it
+     * decides nothing.
+     *
+     * `atBottom` travels WITH the sample for the same reason: this page's
+     * metrics cannot see the end of an opaque document, so without it the
+     * end-of-page rule — the bar stays up where the footer is, because there is
+     * no further downward scroll left to bring it back — was lost for every
+     * framed document.
+     */
+    const onArtifactScroll = (event: Event) => {
+      const { scrollY, atBottom } = (event as CustomEvent<PageChromeScrollSample>).detail;
+      if (!framedSeeded.current) {
+        framedSeeded.current = true;
+        lastScrollY.current = Math.max(0, scrollY);
+        return;
+      }
+      update(scrollY, atBottom);
+    };
     window.addEventListener('scroll', onWindowScroll, { passive: true });
     window.addEventListener(PAGE_CHROME_SCROLL_EVENT, onArtifactScroll);
     return () => {
