@@ -76,9 +76,35 @@ function maskEntities(s: string): { masked: string; restore: (seg: string) => st
   };
 }
 
+/**
+ * THE ONE EXCEPTION: a face the document self-hosts.
+ *
+ * `@font-face { src: url(https://…) }` used to be stripped like every other
+ * external url(), which meant a publish answered 201 and the document quietly
+ * lost its typeface (R7). Such a URL is now IMPORTED at publish
+ * (lib/web-assets) and the SERVED stylesheet is rewritten to our own origin
+ * (lib/story/asset-url mapExternalCssUrls), so nothing a reader loads ever
+ * names the upstream host — which is the whole reason the ban existed.
+ *
+ * Deliberately narrow: the `src` property, INSIDE an `@font-face` block (the
+ * immediately enclosing one, so `@media{ .a{src:…} }` is not it), with http(s)
+ * targets. A `background: url(…)` in the same block, or a `src:` anywhere else,
+ * is stripped exactly as before.
+ */
+const FONT_SRC_RE = /^\s*src\s*:/;
+const isFontFacePrelude = (prelude: string | undefined): boolean =>
+  !!prelude && /@font-face\b/.test(decodeForDetection(prelude));
+
+function isAdmittedFontSrc(decoded: string, prelude: string | undefined): boolean {
+  if (!isFontFacePrelude(prelude) || !FONT_SRC_RE.test(decoded)) return false;
+  const targets = [...decoded.matchAll(URL_TARGET_RE)].map((m) => m[1]);
+  return targets.length > 0 && targets.every((t) => t.startsWith('data:') || /^https?:\/\//.test(t));
+}
+
 /** True when a single declaration (or at-statement) must be stripped. `raw` is the ORIGINAL text. */
-function isBannedSegment(raw: string): boolean {
+function isBannedSegment(raw: string, prelude?: string): boolean {
   const d = decodeForDetection(raw);
+  if (isAdmittedFontSrc(d, prelude)) return false;
   if (IMPORT_RE.test(d)) {
     // @import passes only when every referenced target is a data: URI.
     const targets = [...d.matchAll(/url\(\s*["']?\s*([^"')\s]+)|@import\s+["']([^"']+)/g)]
@@ -102,6 +128,9 @@ export function sanitizeCssText(css: string): string {
   let start = 0;
   let quote: string | null = null;
   let parens = 0;
+  // The blocks we are inside, innermost last — a declaration's meaning depends
+  // on what encloses it (see isAdmittedFontSrc).
+  const preludes: string[] = [];
   for (let i = 0; i <= masked.length; i++) {
     const ch = i < masked.length ? masked[i] : ';'; // EOF closes the last segment
     if (quote) {
@@ -115,13 +144,15 @@ export function sanitizeCssText(css: string): string {
     if (ch !== ';' && ch !== '{' && ch !== '}') continue;
     const seg = restore(masked.slice(start, i));
     const isDeclaration = ch !== '{';
-    if (isDeclaration && isBannedSegment(seg)) {
+    if (isDeclaration && isBannedSegment(seg, preludes[preludes.length - 1])) {
       // Drop the declaration; keep a closing brace, swallow a `;` terminator.
       if (ch === '}') out += '}';
     } else {
       out += seg;
       if (i < masked.length) out += ch;
     }
+    if (ch === '{') preludes.push(seg);
+    else if (ch === '}') preludes.pop();
     start = i + 1;
   }
   return out;

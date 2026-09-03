@@ -392,6 +392,47 @@ ALTER TABLE app.webfonts ADD COLUMN IF NOT EXISTS assets JSONB NOT NULL DEFAULT 
 
 ALTER TABLE app.webfonts ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
+CREATE TABLE IF NOT EXISTS app.web_assets (
+  url_hash TEXT NOT NULL,
+  url TEXT NOT NULL,
+  object_key TEXT NOT NULL,
+  content_type TEXT NOT NULL,
+  bytes INTEGER NOT NULL DEFAULT 0,
+  width INTEGER,
+  height INTEGER,
+  placeholder TEXT,
+  fetched_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  fetched_by_token_id TEXT,
+  fetched_by_user_id TEXT,
+  PRIMARY KEY (url_hash)
+);
+
+ALTER TABLE app.web_assets ADD COLUMN IF NOT EXISTS url_hash TEXT NOT NULL;
+
+ALTER TABLE app.web_assets ADD COLUMN IF NOT EXISTS url TEXT NOT NULL;
+
+ALTER TABLE app.web_assets ADD COLUMN IF NOT EXISTS object_key TEXT NOT NULL;
+
+ALTER TABLE app.web_assets ADD COLUMN IF NOT EXISTS content_type TEXT NOT NULL;
+
+ALTER TABLE app.web_assets ADD COLUMN IF NOT EXISTS bytes INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE app.web_assets ADD COLUMN IF NOT EXISTS width INTEGER;
+
+ALTER TABLE app.web_assets ADD COLUMN IF NOT EXISTS height INTEGER;
+
+ALTER TABLE app.web_assets ADD COLUMN IF NOT EXISTS placeholder TEXT;
+
+ALTER TABLE app.web_assets ADD COLUMN IF NOT EXISTS fetched_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE app.web_assets ADD COLUMN IF NOT EXISTS fetched_by_token_id TEXT;
+
+ALTER TABLE app.web_assets ADD COLUMN IF NOT EXISTS fetched_by_user_id TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_web_assets_token ON app.web_assets (fetched_by_token_id);
+
+CREATE INDEX IF NOT EXISTS idx_web_assets_user ON app.web_assets (fetched_by_user_id);
+
 -- schema "auth" — owned by the proxy role; tables declared by the proxy's schema module
 
 CREATE TABLE IF NOT EXISTS auth.clients (

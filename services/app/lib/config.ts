@@ -174,6 +174,18 @@ export const AUTH_SECRET = env('AUTH', 'SECRET') ?? 'dev-only-secret-change-me';
 export const ARTIFACT_QUOTA_PER_TOKEN = Number(env('QUOTA', 'ARTIFACTS_PER_TOKEN') ?? '1000');
 
 /**
+ * THE BYTE CAP — how many stored bytes one importer may cause (uploaded images
+ * plus the URLs they were the first to import). 0 disables it.
+ *
+ * A separate question from ARTIFACT_QUOTA_PER_TOKEN, which counts ROWS and so
+ * bounds nothing expensive: a thousand artifacts can be five gigabytes or five
+ * kilobytes. URL-kept assets make bytes the thing worth capping, and the charge
+ * is the importer's, once — a second document naming an already-cached URL
+ * fetches nothing and stores nothing (lib/asset-quota).
+ */
+export const ASSETS_MAX_BYTES_PER_TOKEN = Number(env('ASSETS', 'MAX_BYTES_PER_TOKEN') ?? '536870912');
+
+/**
  * Anonymous-mint ceiling, per IP per hour — the abuse valve on the endpoints
  * that hand out a capability for free (`/api/tokens/anonymous`, `/api/start`,
  * and the login-code request).
@@ -283,6 +295,15 @@ export const WEB_INGEST_TIMEOUT_MS = Number(env('WEB_INGEST', 'TIMEOUT_MS') ?? '
 export const WEB_INGEST_MAX_PER_HOUR = Number(env('WEB_INGEST', 'MAX_PER_HOUR') ?? '300');
 /** External images one publish may import — bounds publish latency, not storage. */
 export const MAX_EXTERNAL_IMAGES_PER_PUBLISH = Number(env('WEB_INGEST', 'MAX_IMAGES_PER_PUBLISH') ?? '8');
+/**
+ * External ASSETS one publish may import in total — images AND the `@font-face`
+ * urls in its stylesheet. The image cap above counts images alone, which left
+ * the number of outbound fetches a single document could cause up to whoever
+ * wrote the document: twelve faces named twelve hosts and no cap saw them.
+ * Over this, the excess is NAMED in the reply and not fetched; the document
+ * still publishes, because a cap is not a reason to lose someone's work.
+ */
+export const MAX_EXTERNAL_ASSETS_PER_PUBLISH = Number(env('WEB_INGEST', 'MAX_ASSETS_PER_PUBLISH') ?? '16');
 
 /**
  * The biggest image an artifact may hold. Decoupled from MAX_CONTENT_BYTES (the

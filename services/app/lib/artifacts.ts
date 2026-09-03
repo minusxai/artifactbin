@@ -14,7 +14,7 @@ import { generateFileId } from './ids';
 import { parseContentInput, type ArtifactFormat } from './story/input';
 import { canonicalizeMarkup, publishJsx } from './story/jsx-tier';
 import { imageRawUrl } from './story/ref-data';
-import { ingestImageFromUrl } from './web-ingest/image';
+import { assetWarningFor, importWebAsset, WebAssetRefused, type AssetWarning, type WebAssetKind } from './web-assets';
 import { resolveWebFont, UnknownFontError } from './webfonts';
 import { webIngestRateLimited } from './auth';
 import { json } from './http';
@@ -427,7 +427,7 @@ async function forkInput(actor: TokenActor, source: ArtifactRow, overrides: Fork
     colorMode: design.colorMode,
   }, {
     loadRef: refLoaderForActor(actor),
-    ingestImage: imageIngestorFor(actor.tokenId, actor.userId),
+    importAsset: assetImporterFor(actor.tokenId, actor.userId),
     resolveFont: fontResolver(),
   });
   if (parsed instanceof Response) return parsed;
@@ -812,7 +812,8 @@ export interface EditInput {
  * Response unchanged (same shape as parseContentInput).
  */
 export type EditOutcome =
-  | { applied: true; row: ArtifactRow }
+  /** `warnings`: external URLs the candidate named that would not import (lib/web-assets). */
+  | { applied: true; row: ArtifactRow; warnings?: AssetWarning[] }
   | { applied: false; reason: 'stale_edit_id' | 'doc_changed'; head: { editId: string; source: string; version: number } }
   | { applied: false; reason: 'bad_diff'; detail: 'no_match' | 'multiple_matches' | 'identical' }
   | { applied: false; reason: 'not_editable' }; // data tiers are values, not documents
@@ -963,7 +964,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
         loadRef: refLoaderForActor(writerFor(head)),
         // An agent pasting a web image mid-edit imports like a publish would;
         // the created asset belongs to whoever the DOCUMENT belongs to.
-        ingestImage: imageIngestorFor(head.token_id, head.user_id),
+        importAsset: assetImporterFor(head.token_id, head.user_id),
         resolveFont: fontResolver(),
       },
     );
@@ -1018,7 +1019,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     );
     if (updated.rows[0]) {
       void trackEvent('edit', updated.rows[0].id, { userId: updated.rows[0].user_id });
-      return { applied: true, row: updated.rows[0] };
+      return { applied: true, row: updated.rows[0], ...(published.warnings?.length ? { warnings: published.warnings } : {}) };
     }
     // Lost the CAS: someone landed between our read and our write. Re-read and
     // redo — our base is now an ordinary stale base, so the node-scope check
@@ -1196,25 +1197,33 @@ function refLoaderForUser(userId: string): RefLoader {
 }
 
 /**
- * The publish door's image importer: one external URL → one image artifact
- * owned by the SAME identity publishing the document. Everything an upload
- * pays, an import pays — the creation quota (an import IS a creation) and an
- * hourly fetch allowance on top (lib/auth), because a failed probe creates
- * nothing the quota could ever count.
+ * THE PUBLISH DOOR'S ASSET IMPORTER: one external URL → one row in the global
+ * URL cache (lib/web-assets), charged to whoever the DOCUMENT belongs to.
+ *
+ * It answers a WARNING rather than a Response, because a URL that will not
+ * import must not cost an author their document: the publish succeeds, the
+ * reply names what failed and what to do, and the served `<img>` draws its alt
+ * text. The hourly fetch allowance is the same one every web import pays
+ * (lib/auth) — probing is the abuse shape and probes fail, so ATTEMPTS are what
+ * is counted. The byte quota is charged inside `importWebAsset`, at the one
+ * door that turns a URL into stored bytes.
+ *
+ * This replaced an importer that created an image ARTIFACT per URL and rewrote
+ * the source to `ref:<id>`: an agent got documents it never asked for, in a
+ * markup it no longer recognised, and re-publishing the same URL made another.
  */
-export function imageIngestorFor(tokenId: string, userId: string | null): (url: string) => Promise<{ id: string } | Response> {
-  return async (url) => {
+export function assetImporterFor(tokenId: string, userId: string | null): (url: string, kind: WebAssetKind) => Promise<AssetWarning | null> {
+  return async (url, kind) => {
     if (webIngestRateLimited(`ingest:${tokenId}`)) {
-      return json({ error: 'rate_limited', details: ['too many web imports this hour — try again later'] }, 429);
+      return { code: 'rate_limited', url, fix: 'too many web imports this hour — try again later' };
     }
-    if (await artifactQuotaExceeded(tokenId)) return json({ error: 'quota_exceeded' }, 403);
-    const stored = await ingestImageFromUrl(url);
-    if (stored instanceof Response) return stored;
-    const row = await createArtifact(tokenId, userId, {
-      title: (stored.derivedTitle ?? null) || imageTitleFallback(url),
-      ...stored,
-    });
-    return { id: row.id };
+    try {
+      await importWebAsset(url, { tokenId, userId }, kind);
+      return null;
+    } catch (error) {
+      if (error instanceof WebAssetRefused) return assetWarningFor(error);
+      throw error;
+    }
   };
 }
 
@@ -1237,14 +1246,6 @@ export function fontResolver(): (family: string) => Promise<Response | null> {
     }
   };
 }
-
-/** "…/team-logo.png" → "team-logo": the dashboard row needs a name, not a hash. */
-const imageTitleFallback = (url: string): string | null => {
-  try {
-    const last = new URL(url).pathname.split('/').filter(Boolean).pop() ?? '';
-    return decodeURIComponent(last).replace(/\.[a-z0-9]+$/i, '').trim() || null;
-  } catch { return null; }
-};
 
 // ── The bearer actor ─────────────────────────────────────────────────────────
 //

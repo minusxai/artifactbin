@@ -31,9 +31,10 @@ import { STORY_THEME_NAMES, STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-
 import { json } from '../http';
 import type { ContentInputCtx, StoredContent } from './input';
 import { findBrokenEmbeds, findExternalSubresources } from './refs';
-import { collectExternalImageUrls, rewriteExternalImages } from './external-images';
+import { collectExternalAssetUrls } from './external-images';
+import type { AssetWarning } from '@/lib/web-assets';
 import { documentFonts, invalidFontFamilies } from './document-fonts';
-import { MAX_EXTERNAL_IMAGES_PER_PUBLISH } from '@/lib/config';
+import { MAX_EXTERNAL_ASSETS_PER_PUBLISH, MAX_EXTERNAL_IMAGES_PER_PUBLISH } from '@/lib/config';
 import { checkDocumentData } from './data-checks';
 
 /** The full story vocabulary: kit registry + the data embeds (minusx JSX_STORY_COMPONENT_NAMES verbatim). */
@@ -86,7 +87,7 @@ export function canonicalizeMarkup(source: string): string {
 }
 
 export async function publishJsx(body: Record<string, unknown>, sourceIn: string, ctx: ContentInputCtx = {}): Promise<StoredContent | Response> {
-  let source = sourceIn;
+  const source = sourceIn;
   const theme = body.theme ?? null;
   // Retired names are rejected BY NAME with a hint naming the successor —
   // stored rows alias forward at read time (resolveStoredStoryDesign), but a
@@ -107,26 +108,50 @@ export async function publishJsx(body: Record<string, unknown>, sourceIn: string
     return json({ error: 'unknown_color_mode', allowed: COLOR_MODES }, 400);
   }
 
-  // IMPORT before validation: a web URL in an image position becomes an owned
-  // image artifact and the source is rewritten to `ref:<id>` — the stored
-  // document is self-contained by construction, so no gate below ever meets an
-  // external image. The CAP is checked hook-or-no-hook, which is what keeps
-  // /api/preview (no ingest hook, no fetches) agreeing with publish.
-  const externalImages = collectExternalImageUrls(source);
-  if (externalImages.length > MAX_EXTERNAL_IMAGES_PER_PUBLISH) {
+  /*
+   * IMPORT, AND KEEP THE URL. Every web URL the document names in an image
+   * position — and every `@font-face` src in its own stylesheet — is fetched
+   * once into the global asset cache (lib/web-assets) and the SOURCE IS LEFT
+   * ALONE: the author wrote a URL and reads a URL back, while the served
+   * document is pointed at our copy on the way out (lib/story/asset-url), which
+   * is what satisfies the sandbox's `img-src 'self'` and keeps a reader's
+   * browser away from the upstream host.
+   *
+   * A URL that will not import is a WARNING, never a refusal: the document is
+   * fine, one picture is missing, and an author can act on a named failure. The
+   * CAP is checked hook-or-no-hook, which is what keeps /api/preview (no import
+   * hook, no fetches) agreeing with publish.
+   */
+  const externalAssets = collectExternalAssetUrls(source);
+  if (externalAssets.images.length > MAX_EXTERNAL_IMAGES_PER_PUBLISH) {
     return json({
       error: 'too_many_external_images',
-      details: [`this publish imports ${externalImages.length} external images; the cap is ${MAX_EXTERNAL_IMAGES_PER_PUBLISH} — upload the rest as image artifacts and reference them as ref:<id>`],
+      details: [`this publish imports ${externalAssets.images.length} external images; the cap is ${MAX_EXTERNAL_IMAGES_PER_PUBLISH} — upload the rest as image artifacts and reference them as ref:<id>`],
     }, 400);
   }
-  if (externalImages.length > 0 && ctx.ingestImage) {
-    const refs = new Map<string, string>();
-    for (const url of externalImages) {
-      const got = await ctx.ingestImage(url);
-      if (got instanceof Response) return got; // named refusal — no document half-imported
-      refs.set(url, got.id);
+  /*
+   * The TOTAL cap, images and faces together. The image cap above counts images
+   * alone, so a document naming a dozen `@font-face` urls caused a dozen
+   * outbound fetches that nothing bounded — the count was the author's to set.
+   * Over the cap the excess is NAMED and not fetched, rather than refused:
+   * losing a whole document to a thirteenth font is the failure this milestone
+   * exists to stop, and an author who is told which urls were skipped can act.
+   * Counted hook-or-no-hook, so /api/preview agrees with publish.
+   */
+  const wanted = [
+    ...externalAssets.images.map((url) => ({ url, kind: 'image' as const })),
+    ...externalAssets.fonts.map((url) => ({ url, kind: 'font' as const })),
+  ];
+  const warnings: AssetWarning[] = wanted.slice(MAX_EXTERNAL_ASSETS_PER_PUBLISH).map(({ url }) => ({
+    code: 'too_many_external_assets',
+    url,
+    fix: `this document names ${wanted.length} external assets; the cap is ${MAX_EXTERNAL_ASSETS_PER_PUBLISH} — this one was not imported, so upload it as an image artifact or drop it`,
+  }));
+  if (ctx.importAsset) {
+    for (const { url, kind } of wanted.slice(0, MAX_EXTERNAL_ASSETS_PER_PUBLISH)) {
+      const refused = await ctx.importAsset(url, kind);
+      if (refused) warnings.push(refused);
     }
-    source = rewriteExternalImages(source, refs);
   }
 
   // Gate 1: the ported three-gate pipeline (registry, handlers, URL schemes).
@@ -232,6 +257,7 @@ export async function publishJsx(body: Record<string, unknown>, sourceIn: string
       refs,
     },
     derivedTitle: helmetTitle?.trim() || null,
+    ...(warnings.length ? { warnings } : {}),
   };
 }
 

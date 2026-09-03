@@ -332,7 +332,45 @@ const WEBFONTS: Table = {
   primaryKey: ['family'],
 };
 
-const TABLES: Table[] = [USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, WEBFONTS];
+/**
+ * THE GLOBAL URL → OBJECT CACHE for URL-kept external assets (lib/web-assets).
+ *
+ * Keyed by sha256 of the CANONICAL url (lib/story/asset-url), so the same URL
+ * is ONE object for everyone and the first importer pays the fetch — a second
+ * document naming it stores nothing. The row is the INDEX (the db is the only
+ * index); the bytes live in the object store under `object_key`.
+ *
+ * `width`/`height`/`placeholder` are what stops URL-keeping from costing the
+ * reader a jumping page: they are the box the served `<img>` reserves and the
+ * blur it shows while the bytes travel — exactly what an uploaded `ref:` image
+ * has carried since the store began measuring them. `fetched_by_user_id` rides
+ * beside the token because the BYTE quota is account-keyed for a claimed token
+ * (all of one person's tokens share one cap) and token-keyed for an anonymous
+ * one, which has no account to key on.
+ */
+const WEB_ASSETS: Table = {
+  name: 'web_assets',
+  columns: [
+    { name: 'url_hash', type: 'TEXT', notNull: true },
+    { name: 'url', type: 'TEXT', notNull: true },
+    { name: 'object_key', type: 'TEXT', notNull: true },
+    { name: 'content_type', type: 'TEXT', notNull: true },
+    { name: 'bytes', type: 'INTEGER', notNull: true, default: '0' },
+    { name: 'width', type: 'INTEGER' },
+    { name: 'height', type: 'INTEGER' },
+    { name: 'placeholder', type: 'TEXT' },
+    { name: 'fetched_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
+    { name: 'fetched_by_token_id', type: 'TEXT' },
+    { name: 'fetched_by_user_id', type: 'TEXT' },
+  ],
+  primaryKey: ['url_hash'],
+  indexes: [
+    { name: 'idx_web_assets_token', columns: ['fetched_by_token_id'] },
+    { name: 'idx_web_assets_user', columns: ['fetched_by_user_id'] },
+  ],
+};
+
+const TABLES: Table[] = [USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, WEBFONTS, WEB_ASSETS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);

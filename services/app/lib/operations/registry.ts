@@ -33,7 +33,7 @@ import { exportImageResponse } from '@/lib/export';
 import type { AnnotationAuthor } from '@/lib/annotations';
 import {
   artifactSummaryToWire, artifactToWireWithAnnotations, createArtifactFromBody, createdArtifactWire, parseFolderField, parseVisibilityValue, replaceArtifactWithBody,
-  respondToAnnotationAction, respondToEdit, respondToMutate,
+  refreshAssetsFor, respondToAnnotationAction, respondToEdit, respondToMutate,
 } from '@/lib/artifact-wire';
 import { MARKUP_FIELD_GUIDANCE, DATASET_FIELD_GUIDANCE, SHEET_URL_FIELD_GUIDANCE, IMAGE_URL_FIELD_GUIDANCE, CSV_URL_FIELD_GUIDANCE } from '@/lib/agent-guidance';
 
@@ -481,8 +481,47 @@ const forkArtifactOp: Operation = {
   },
 };
 
+/**
+ * REFRESH — the way out of "first cached wins".
+ *
+ * A URL a document names is fetched once and served from our copy forever
+ * after, which is right for bytes that almost never change and wrong the day
+ * they do. This re-fetches: one URL, or every external URL a document names —
+ * the second shape being the one anybody actually wants, since a person knows
+ * "this deck's pictures are stale" and not which URLs are in it.
+ *
+ * Nothing here IMPORTS. A URL nobody has published is reported as
+ * `not_cached`: importing is what publishing a document that names it does,
+ * and a refresh door that also imported would be a fetch primitive under
+ * another name.
+ */
+const refreshAssetOp: Operation = {
+  name: 'refresh_asset',
+  title: 'Refresh an imported web asset',
+  http: { method: 'POST', path: '/api/artifacts/assets/refresh' },
+  description: 'Re-fetch the copy this deployment stores for an external image or font URL, after the source changed. Pass id to refresh EVERY external url one of your documents names, or url to refresh a single one. Nothing else about the document changes: no new version, no edit_id, and every stored <img src> keeps naming the same url. Answers {refreshed, unchanged, failed}: unchanged means the source really is the same bytes, and failed names each url with a code and a fix (not_cached — nothing is stored for it; rate_limited — this hour\'s fetch allowance is spent, which is counted per url).',
+  input: {
+    id: z.string().optional().describe('a document of yours: every external url it names is refreshed'),
+    url: z.string().optional().describe('one external url to re-fetch; it must already be stored (a document must have named it)'),
+  },
+  // A write (bytes move) but not destructive, and idempotent: refreshing twice
+  // in a row costs a fetch and changes nothing the second time.
+  annotations: { idempotent: true },
+  example: { input: { id: 'aB3xK9' }, note: 'after the source image behind a url in that document was replaced' },
+  errors: [
+    NOT_FOUND,
+    { status: 400, code: 'nothing_to_refresh', fix: 'pass id (a document of yours) or url (one already-stored url)' },
+    // `not_cached` and `rate_limited` are deliberately NOT here: both are
+    // per-url reasons inside a 200 body (one url of several may be unknown, or
+    // over the hour's fetch allowance), never a refusal of the call.
+  ],
+  async run(ctx, input) {
+    return fromResponse(await refreshAssetsFor(ctx.actor, input));
+  },
+};
+
 export const OPERATIONS: Operation[] = [
   createArtifactOp, updateArtifactOp, editArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
   listVersionsOp, getVersionOp, revertArtifactOp, deleteArtifactOp, annotateOp, mutateDatasetOp,
-  exportArtifactOp,
+  exportArtifactOp, refreshAssetOp,
 ];

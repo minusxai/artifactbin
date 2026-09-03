@@ -7,16 +7,19 @@
  * edit it originated itself (delete, insert, a chart's spec) and posts it into
  * the frame — the runtime ships no JSX parser, so nodes have to be made by the
  * sender. Both must describe exactly the tree a reload would produce, which is
- * why this is the same parse → nesting repair → Helmet split the served
- * document uses, and why it lives HERE: `lib/story/document.ts` is the server's
- * builder and imports `path`/`module`, so nothing in it can run in a browser.
+ * why the tree comes from `storyBodyFor` — the ONE parse → nesting repair →
+ * Helmet split → asset mapping the served document is built from
+ * (lib/story/body) — rather than from a second copy of it here. It lives in
+ * this file rather than beside the builder because `lib/story/document.ts`
+ * imports `path`/`module`, so nothing in it can run in a browser, and the
+ * owner's page builds these parts in one.
  *
  * Pure: source in, parts out, no DOM, no I/O.
  */
-import { parseJsx, type JsxNode } from '@/lib/jsx';
+import type { JsxNode } from '@/lib/jsx';
 import type { Dataflow } from '@/lib/story/dataflow';
-import { splitHelmet } from '@/lib/story/helmet';
-import { fixHtmlNesting } from '@/lib/story/nesting';
+import { storyBodyFor } from '@/lib/story/body';
+import type { AssetLookup } from '@/lib/story/asset-url';
 
 export interface StoryUpdateParts {
   /** The body — what the runtime re-renders. The Helmet is never in it. */
@@ -40,11 +43,18 @@ export interface StoryUpdateParts {
   declarations: string;
 }
 
-/** Null when the source does not parse — an update that cannot be described is not sent. */
-export function storyUpdateParts(source: string): StoryUpdateParts | null {
-  const parsed = parseJsx(source);
-  if (!parsed.ok) return null;
-  const { content, body } = splitHelmet(fixHtmlNesting(parsed.nodes));
+/**
+ * Null when the source does not parse — an update that cannot be described is
+ * not sent. `assets` is the serve-time asset lookup (lib/story/asset-url): the
+ * server passes the rows it holds so a live frame names our copy of an external
+ * image exactly as a reload would, and the OWNER'S PAGE passes a predicate,
+ * because the editor knows a stored document's URLs were imported at its last
+ * write but not what the rows recorded.
+ */
+export function storyUpdateParts(source: string, assets?: AssetLookup): StoryUpdateParts | null {
+  const parts = storyBodyFor(source, assets);
+  if (!parts) return null;
+  const { content, body } = parts;
   return {
     nodes: body,
     authorCss: content.style ?? null,

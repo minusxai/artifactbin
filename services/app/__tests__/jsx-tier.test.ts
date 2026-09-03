@@ -128,15 +128,17 @@ describe('jsx tier publish', () => {
       expect(JSON.stringify(body.details), markup).toMatch(/ref:/);
     }
 
-    // The imported position still refuses an unreachable host — but as a FETCH
-    // refusal naming the URL, which is the actionable half of the new door.
+    // The imported position PUBLISHES even when the host is unreachable: the
+    // URL stays in the document, the reply names what could not be fetched, and
+    // the reader sees the alt text where the picture would be. Losing a whole
+    // document over one dead link is the failure this replaced.
     const imported = await createArtifactRoute(
       request('/api/artifacts', { method: 'POST', token: t.token, json: { title: 'x', markup: '<div data-design="tw"><img src="https://evil.test/p.png" /></div>' } }),
     );
-    expect(imported.status).toBe(400);
+    expect(imported.status).toBe(201);
     const importedBody = await imported.json();
-    expect(importedBody.error).toBe('image_fetch_failed');
-    expect(String(importedBody.details)).toContain('evil.test');
+    expect(importedBody.asset_warnings[0].url).toBe('https://evil.test/p.png');
+    expect(String(importedBody.asset_warnings[0].fix).length).toBeGreaterThan(0);
   });
 
   it('allows the self-contained sources: ref: and inline data:image', async () => {
