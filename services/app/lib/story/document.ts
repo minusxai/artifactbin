@@ -483,11 +483,15 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    * must MATCH, or the preload warms an entry the script cannot use and the
    * bytes are fetched twice. Fonts stay first: they block the text.
    */
-  const modulePreloads = hydrates
-    ? [runtimeSrc!, ...(drawsChart(split!.body) ? input.lazyChunks ?? [] : [])]
-      .map((href) => `<link rel="modulepreload" href="${escapeHtml(href)}" crossorigin>`)
-      .join('')
-    : '';
+  const modulePreloads = [
+    // FIRST, and unconditional: the anchor module is the reader's OWN chrome —
+    // the phone bar's scroll relay, the outline's clicks, the scroll-marked
+    // tables — and it is ~8 KB. Asking for it after a megabyte of runtime, or
+    // only for documents that hydrate, gets that backwards: the document that
+    // gains most is the prose one that ships nothing else.
+    ...(anchorSrc ? [anchorSrc] : []),
+    ...(hydrates ? [runtimeSrc!, ...(drawsChart(split!.body) ? input.lazyChunks ?? [] : [])] : []),
+  ].map((href) => `<link rel="modulepreload" href="${escapeHtml(href)}" crossorigin>`).join('');
 
   const island: StoryIslandData = { nodes: split?.body ?? [], refData, ...(Object.keys(glyphs).length ? { glyphs } : {}), ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, ...(input.queryUrl ? { queryUrl: input.queryUrl } : {}), ...(input.mutateUrl ? { mutateUrl: input.mutateUrl } : {}) };
   // `<` escaped so no row value can close the script element from inside JSON.
@@ -591,7 +595,17 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
     (comments ? `<script type="module" src="${escapeHtml(commentSrc!)}" crossorigin></script>` : '') +
     // Unconditional, unlike the runtime above: keeping the reader's place is
     // not a feature of documents that happen to hydrate.
-    (anchorSrc ? `<script type="module" src="${escapeHtml(anchorSrc)}" crossorigin></script>` : '') +
+    /*
+     * ASYNC, alone among the three. A module script without it executes IN
+     * ORDER with every module script before it, so on a chart document this
+     * one waited for the whole runtime entry to download AND evaluate before
+     * the reader's bar would answer a single scroll — measured at ~9.3 s
+     * against ~2.0 s for the chrome appearing (scripts/measure-bar.mjs).
+     * Nothing here depends on the runtime or on anything the runtime does, so
+     * there is no order to keep; it needs only its own document, and it is
+     * emitted after the island for that.
+     */
+    (anchorSrc ? `<script type="module" src="${escapeHtml(anchorSrc)}" crossorigin async></script>` : '') +
     authorScript +
     `</body></html>`
   );

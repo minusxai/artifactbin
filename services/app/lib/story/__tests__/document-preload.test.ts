@@ -146,3 +146,49 @@ describe('the chart walk, at its edges', () => {
     expect(preloads(await doc({ source: src, dataflow }))).not.toContain(CHART);
   });
 });
+
+/*
+ * SPIKE S4 (B1 — the mobile bar stays put while the page is loading, risk R2).
+ *
+ * The anchor module is the one script EVERY document ships, and it owns the
+ * reader's own chrome: the scroll relay that hides and shows the phone bar, the
+ * outline's clicks, the scroll-marked tables. It was emitted LAST and was not
+ * preloaded, and a module script without `async` executes IN ORDER with the
+ * module scripts before it — so on a chart document it waited for the entire
+ * runtime to download and evaluate before the bar would answer a scroll at all.
+ *
+ * `async` frees it from that queue and `modulepreload` starts its ~8 KB with
+ * the styles instead of after them. Unconditional, unlike the runtime's:
+ * keeping the reader's place is not a feature of documents that happen to
+ * hydrate, so the document that gains most is the prose one that ships nothing
+ * else.
+ */
+const ANCHOR = '/story/anchor-TESTHASH.js';
+
+describe('the anchor module — every document ships it (spike S4)', () => {
+  it('is preloaded, and FIRST: the reader chrome must not queue behind a megabyte', async () => {
+    const html = await doc({ anchorSrc: ANCHOR });
+    expect(preloads(html)).toEqual([ANCHOR, RUNTIME]);
+  });
+
+  it('is preloaded by a document that hydrates nothing at all', async () => {
+    expect(preloads(await doc({ source: '<h1>Just words</h1>', anchorSrc: ANCHOR }))).toEqual([ANCHOR]);
+  });
+
+  it('is async, so it does not execute in the runtime entry\'s queue', async () => {
+    const html = await doc({ source: CHART_Q, anchorSrc: ANCHOR });
+    expect(html).toContain(`<script type="module" src="${ANCHOR}" crossorigin async></script>`);
+    // The runtime entry is NOT async: it is code-split and its own lazy imports
+    // are ordered against it, and nothing waits behind it that a reader feels.
+    expect(html).toContain(`<script type="module" src="${RUNTIME}" crossorigin></script>`);
+  });
+
+  it('is still emitted after the island, so the tag it needs is already parsed', async () => {
+    const html = await doc({ source: CHART_Q, anchorSrc: ANCHOR });
+    expect(html.indexOf('application/json')).toBeLessThan(html.indexOf(`src="${ANCHOR}"`));
+  });
+
+  it('preloads nothing extra when there is no anchor module to point at', async () => {
+    expect(preloads(await doc({ anchorSrc: null }))).toEqual([RUNTIME]);
+  });
+});
