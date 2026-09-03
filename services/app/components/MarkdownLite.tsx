@@ -19,7 +19,14 @@
 import { Fragment, type ReactNode } from 'react';
 import { parseMarkdownLite, type MdInline, type MdNode } from '@/lib/markdown-lite';
 
-const CODE_CLASS = 'rounded-[3px] bg-raised px-1 py-0.5 font-mono text-[0.92em] text-fg';
+/*
+ * `break-all` is not cosmetic. A <pre> scrolls inside itself, but INLINE code
+ * has no box of its own to scroll — a 200-character identifier inside a list
+ * item or a blockquote simply ran off the rail's edge with nothing to say so.
+ * The rail's width is fixed either way; this decides whether the name is
+ * readable or cut.
+ */
+const CODE_CLASS = 'break-all rounded-[3px] bg-raised px-1 py-0.5 font-mono text-[0.92em] text-fg';
 
 function renderInline(nodes: MdInline[]): ReactNode[] {
   return nodes.map((node, i) => {

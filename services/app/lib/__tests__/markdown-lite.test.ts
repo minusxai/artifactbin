@@ -97,6 +97,28 @@ describe('inline', () => {
     expect(inline.children[1]).toEqual({ kind: 'strong', children: [{ kind: 'text', text: 'lib/config.ts' }] });
   });
 
+  /*
+   * A RUN'S FULL FENCE MAY FAIL WHERE A SHORTER ONE INSIDE IT MATCHES, so the
+   * parser may never skip past a run it could not close whole. These three are
+   * the exact trees the parser produced BEFORE the run-measurement rewrite
+   * (measured on the previous implementation) — they are here so "faster"
+   * cannot quietly become "different".
+   */
+  it('a sub-fence inside an unclosed run still matches — byte for byte', () => {
+    expect(parseMarkdownLite('``x`')[0]).toEqual({
+      kind: 'paragraph',
+      children: [{ kind: 'text', text: '`' }, { kind: 'code', text: 'x' }],
+    });
+    expect(parseMarkdownLite('``a`b`')[0]).toEqual({
+      kind: 'paragraph',
+      children: [{ kind: 'text', text: '`' }, { kind: 'code', text: 'a' }, { kind: 'text', text: 'b`' }],
+    });
+    expect(parseMarkdownLite('y``x`')[0]).toEqual({
+      kind: 'paragraph',
+      children: [{ kind: 'text', text: 'y`' }, { kind: 'code', text: 'x' }],
+    });
+  });
+
   it('leaves an unterminated marker exactly as typed', () => {
     expect(plainText(parseMarkdownLite('2 * 3 and a lone ` backtick'))).toBe('2 * 3 and a lone ` backtick');
     expect(para(parseMarkdownLite('2 * 3 and a lone ` backtick'))).toEqual([
@@ -174,13 +196,47 @@ describe('wrapSelection — the composer toolbar', () => {
 });
 
 describe('bounded', () => {
-  it('parses a 10 KB body well inside 10 ms, pathological delimiters included', () => {
-    const body = `${'the quick brown fox jumps over the lazy dog. '.repeat(120)}\n\n${'*'.repeat(2000)}\n\n${'`'.repeat(2000)}`;
+  /*
+   * THE PATH MATTERS MORE THAN THE SIZE. A pathological run alone on its own
+   * line never reaches `parseInline` at all — a line of backticks is eaten by
+   * FENCE_RE as a code fence first — so the budget has to be measured on runs
+   * sitting INSIDE a paragraph, which is where a comment's backticks actually
+   * live. The earlier version of this test measured the fence path and passed
+   * while the inline path took 156 ms.
+   */
+  const fastest = (body: string) => {
+    const runs = [0, 0, 0].map(() => {
+      const started = performance.now();
+      const nodes = parseMarkdownLite(body);
+      const elapsed = performance.now() - started;
+      expect(nodes.length).toBeGreaterThan(0);
+      return elapsed;
+    }).sort((a, b) => a - b);
+    return runs[1]; // the median of three — a shared laptop has outliers
+  };
+
+  it('a 10 KB body of pathological runs INSIDE a paragraph parses well under 10 ms', () => {
+    // "x" in front of each run so the line is a paragraph, not a fence.
+    const body = `${'the quick brown fox jumps over the lazy dog. '.repeat(120)}\n\n`
+      + `x${'*'.repeat(2000)}\n\nx${'`'.repeat(2000)}\n\nx${'_'.repeat(2000)}`;
     expect(body.length).toBeGreaterThan(9000);
-    const started = performance.now();
-    const nodes = parseMarkdownLite(body);
-    const elapsed = performance.now() - started;
-    expect(nodes.length).toBeGreaterThan(0);
-    expect(elapsed).toBeLessThan(10);
+    expect(fastest(body)).toBeLessThan(10);
+  });
+
+  it('a 10 KB inline backtick run — the shape that was quadratic — parses under 10 ms', () => {
+    const body = `x${'`'.repeat(10_000)}`;
+    expect(fastest(body)).toBeLessThan(10);
+  });
+
+  it('and 16,000 of them stay under 20 ms — the growth is not 4x per doubling', () => {
+    const body = `x${'`'.repeat(16_000)}`;
+    expect(fastest(body)).toBeLessThan(20);
+  });
+
+  it('a run whose fence never closes is still measured once, not once per backtick', () => {
+    // The memory half: the old code built one fence string per position, so a
+    // 3,000-backtick run constructed 4.5M characters before finding nothing.
+    const body = `x${'`'.repeat(3000)} and then ${'plain words '.repeat(400)}`;
+    expect(fastest(body)).toBeLessThan(10);
   });
 });
