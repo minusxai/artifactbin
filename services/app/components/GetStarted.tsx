@@ -102,15 +102,34 @@ const STORE = 'mx_surface';
 
 const isSurface = (v: string | null): v is SurfaceKey => SURFACES.some((s) => s.key === v);
 
+/** Keep the answer, wherever it came from. Private mode has no store, and that is not an error. */
+const remember = (key: SurfaceKey) => {
+  try {
+    localStorage.setItem(STORE, key);
+  } catch {
+    /* private mode */
+  }
+};
+
 /**
  * THE ONE PLACE a raw `?source=` becomes a surface. An agent sent this human here and named where it
  * is running, so the page can open on the card that answers them instead of asking a question they have
  * already answered. It is a surface key and never anything secret — the rule that a token never rides a
  * URL is untouched. Unknown, absent or malformed is `null`, which means "show the picker": this is user
  * input off a query string and must never throw.
+ *
+ * The key is matched EXACTLY, the way `mx_surface` stores it: `Claude-Code` is a string we do not know,
+ * and the honest answer to a string we do not know is the picker. A normalised guess would be a card
+ * asserting an answer nobody actually gave.
  */
-export function sourceSurface(_search: string): SurfaceKey | null {
-  throw new Error('m4: implement — ?source= to a surface key');
+export function sourceSurface(search: string): SurfaceKey | null {
+  try {
+    const value = new URLSearchParams(search).get('source');
+    return isSurface(value) ? value : null;
+  } catch {
+    // Nothing a URL can carry is worth an exception on the page whose job is to hand over a token.
+    return null;
+  }
 }
 
 /** Matches AgentLink's status line exactly — the two option foot lines sit a
@@ -467,13 +486,14 @@ export default function GetStarted({
   frame?: boolean;
   /**
    * Open on this surface instead of the default. An agent naming where it runs is FRESHER than a stored
-   * answer from a month ago, so this wins over `mx_surface` — and is remembered in turn.
-   * m4: implement — currently ignored.
+   * answer from a month ago, so this wins over `mx_surface` — and is remembered in turn. It also opens
+   * the fold: the question "which agent?" has been answered, so folding the answer away and asking it
+   * again would be the one thing this prop exists to avoid.
    */
   initialSurface?: SurfaceKey;
 }) {
-  const [surface, setSurface] = useState<SurfaceKey>('claude-code');
-  const [installOpen, setInstallOpen] = useState(false);
+  const [surface, setSurface] = useState<SurfaceKey>(initialSurface ?? 'claude-code');
+  const [installOpen, setInstallOpen] = useState(initialSurface !== undefined);
   // Empty until hydration, so server and client render the same relative URL;
   // the absolute one lands with the first client paint.
   const [origin, setOrigin] = useState('');
@@ -491,21 +511,23 @@ export default function GetStarted({
 
   useEffect(() => {
     setOrigin(window.location.origin);
+    // A named surface is this second's answer; the store is last month's. The fresher one wins, and
+    // replaces the stale one so the next visit opens in the same place.
+    if (initialSurface) {
+      remember(initialSurface);
+      return;
+    }
     try {
       const saved = localStorage.getItem(STORE);
       if (isSurface(saved)) setSurface(saved);
     } catch {
       /* private mode */
     }
-  }, []);
+  }, [initialSurface]);
 
   const pick = (key: SurfaceKey) => {
     setSurface(key);
-    try {
-      localStorage.setItem(STORE, key);
-    } catch {
-      /* private mode */
-    }
+    remember(key);
   };
 
   /** An installer-style parent choice always lands on a valid default. */

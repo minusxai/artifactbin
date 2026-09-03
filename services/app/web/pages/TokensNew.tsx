@@ -4,8 +4,18 @@
  * POST /api/tokens/anonymous { expiresInHours } → the secret shown ONCE with "Copy token" and its expiry →
  * logged-out only: POST /api/session/token { token } so the id lands in the agent cookie. Never a GET that
  * mints; nothing is stored; a fresh render shows the confirm step.
+ *
+ * `?source=<surface>` (m4). Nobody arrives here for fun: an agent hit a wall, told its human to stop, and
+ * sent them for a string that expires in six hours. That is the one moment a human is receptive to "install
+ * the plugin and never do this again", and this page used to spend it in silence. So the connect card sits
+ * ABOVE the mint, opened on the surface the agent named — a recommendation, never a gate: the mint below is
+ * byte-for-byte the flow it always was, same clicks, same secret. There is no second copy of the connect
+ * copy here; it is `GetStarted`, the same component the landing page shows. The query carries a SURFACE KEY
+ * and nothing else — a token still never rides a URL.
  */
 import { useState } from 'react';
+import { useLocation } from 'react-router';
+import GetStarted, { sourceSurface } from '@/components/GetStarted';
 import { Button, PANEL } from '@/components/ui';
 import { useSession } from '../session';
 
@@ -24,6 +34,9 @@ interface MintedToken {
 
 export function TokensNewPage() {
   const { session } = useSession();
+  const { search } = useLocation();
+  // Read once, here: below this line a surface is a SurfaceKey or nothing, never a query string.
+  const namedSurface = sourceSurface(search);
   const [expiresInHours, setExpiresInHours] = useState(6);
   const [minted, setMinted] = useState<MintedToken | null>(null);
   const [busy, setBusy] = useState(false);
@@ -74,7 +87,19 @@ export function TokensNewPage() {
     <main className="mx-auto mt-16 max-w-xl px-6 pb-24">
       <div className="mx-auto max-w-md">
         <h1 className="text-base font-semibold"><span className="text-accent">&gt;</span> new token</h1>
-        <div className={`${PANEL} mt-5 p-5`}>
+
+        {/* The better answer, offered first. A pasted token expires; this does not — and the human is
+          * standing here precisely because the last one ran out or never existed. */}
+        <div className="mt-5">
+          <GetStarted initialSurface={namedSurface ?? undefined} />
+        </div>
+
+        {/* …and the thing they actually came for, unchanged and one click away. The label is a signpost
+          * between two cards, not a toll: nothing above has to be done before this works. */}
+        <p className="mt-6 font-mono text-[11px] tracking-[0.14em] text-muted uppercase">
+          or take a token
+        </p>
+        <div className={`${PANEL} mt-2 p-5`}>
           {minted ? (
             <>
               <p className="font-mono text-xs text-muted">Shown once</p>
