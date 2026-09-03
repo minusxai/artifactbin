@@ -188,9 +188,11 @@ export async function importWebAsset(url: string, by: WebAssetImporter, kind: We
  * Re-fetch a URL and repoint its row — the answer to "the source image
  * changed" (R13). The ADDRESS never moves (`/assets/<url_hash>` is derived from
  * the url, not the bytes), which is what lets a stored document keep working
- * without a rewrite — and is also the honest limit of this: the address is
- * served `immutable`, so a reader whose browser already cached it keeps the old
- * picture until that entry expires. Everyone who has not is served the new one.
+ * without a rewrite. What USED to be its honest limit — the address is served
+ * `immutable`, so a reader who already had it kept the old picture (R19) — is
+ * closed by the row itself: the mapping cuts a `?v=` from `object_key`
+ * (lib/story/asset-url), so repointing the row changes the url every later
+ * render emits and every reader asks again exactly once.
  *
  * A URL nobody holds yet is simply imported, so a caller need not ask first.
  *

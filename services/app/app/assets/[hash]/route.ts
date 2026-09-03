@@ -4,9 +4,12 @@
  *
  * Content-addressed BY THE URL that produced it, so `immutable` is honest: the
  * address never moves, and `refresh_asset` repointing the row is the one way
- * the bytes behind it change (a reader who already cached this keeps the old
- * copy until the entry expires — the stated cost of an address that a stored
- * document can keep naming).
+ * the bytes behind it change. That used to be a real cost — a reader who had
+ * already cached this kept the old picture (R19) — and is not any more: the
+ * mapping puts a content-derived `?v=` on the url it emits
+ * (lib/story/asset-url), so a refreshed asset is asked for at an address no
+ * browser has seen before, while the bytes are still served here, from the
+ * hash alone, whatever query anyone arrives with.
  *
  * THE THREE DEFENSIVE HEADERS ARE THE POINT. An imported SVG is markup, and a
  * top-level navigation to one served plainly runs it in THIS origin — the

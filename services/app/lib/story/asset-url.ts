@@ -84,9 +84,9 @@ export const urlHash = (url: string): string => sha256Hex(canonicalAssetUrl(url)
  * document names the URL, and every rendering derives the address from it — so
  * the QUERY moves instead: eight hex of the content-addressed object key, which
  * changes exactly when the bytes do and never otherwise. The route ignores it
- * (it is a cache key, not an input), so the old copy stays valid at its own
- * address forever and nothing that was already fetched is invalidated by
- * anything but a real change.
+ * (it is a cache key, not an input): a browser holding the old url keeps a
+ * perfectly valid year-long entry, and the next render simply asks for a url it
+ * has never seen. Nothing is invalidated by anything but a real change.
  */
 const assetVersion = (objectKey: string | null | undefined): string | null => {
   const digest = (objectKey ?? '').split('/').pop() ?? '';
