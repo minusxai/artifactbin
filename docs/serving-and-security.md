@@ -35,9 +35,9 @@ the link you copy is the document you were looking at — and an agent can hand
 you one already narrowed to what you asked about.
 
 **Fork.** Anyone signed in can take a copy of any document they can read, from
-the reader controls or with `POST /api/artifacts/<id>/fork`: content and
-settings travel, history, comments and shares do not, and the original is never
-touched. The copy's footer says where it came from — naming and linking the
+the reader controls on the page — or, for an agent holding a bearer token,
+`POST /api/artifacts/<id>/fork`. Content and settings travel, history, comments
+and shares do not, and the original is never touched. The copy's footer says where it came from — naming and linking the
 source only when that source is `public`, since `unlisted` exists to be listed
 nowhere.
 
