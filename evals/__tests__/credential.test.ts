@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { acquireCredential, callbackCode, codeFromMail, credentialSourceFor, localLoginEmail, memoizeCredential, pickLoginMail, pkcePair, writeArtifactbinEnv, codeFromOutbox, shareForScoring } from '../lib/credential';
+import { acquireCredential, callbackCode, codeFromMail, credentialSourceFor, localLoginEmail, memoizeCredential, pickLoginMail, pkcePair, writeArtifactbinEnv, codeFromOutbox, shareForScoring, deploymentLoginEmail } from '../lib/credential';
 
 describe('credential source per mode', () => {
   const inbox = { RESEND_EVAL_API_KEY: 're_x', EVAL_LOGIN_EMAIL: 'mxmx_eval@social-worm.resend.app' };
@@ -330,5 +330,15 @@ describe('shareForScoring', () => {
   });
   it('names the id when the door refuses', async () => {
     await expect(shareForScoring({ base: 'https://x.test', cookie: 'sess=abc', ids: ['boom00'], fetch: fetchStub })).rejects.toThrow(/boom00/);
+  });
+});
+
+describe('deploymentLoginEmail — one inbox, one door per harness', () => {
+  it('adds +<harness> to the configured address’s local part', () => {
+    expect(deploymentLoginEmail('mxmx_eval@social-worm.resend.app', 'pi')).toBe('mxmx_eval+pi@social-worm.resend.app');
+    expect(deploymentLoginEmail('mxmx_eval@social-worm.resend.app', 'claude-code')).toBe('mxmx_eval+claude-code@social-worm.resend.app');
+  });
+  it('an address the caller already tagged is used verbatim', () => {
+    expect(deploymentLoginEmail('mxmx_eval+smoke@social-worm.resend.app', 'pi')).toBe('mxmx_eval+smoke@social-worm.resend.app');
   });
 });

@@ -29,6 +29,7 @@
  *
  * ONE login per leg: every task and every second attempt reuses what this returns.
  */
+import type { Harness } from './contracts';
 import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -111,6 +112,18 @@ export function credentialSourceFor(mode: EvalMode, env: CredentialEnv, opts: Cr
  */
 export function localLoginEmail(legLabel: string, env: CredentialEnv): string {
   return env.EVAL_LOGIN_EMAIL ?? `mxmx_eval_${slug(legLabel, 40) || 'leg'}@example.com`;
+}
+
+/**
+ * The address a DEPLOYMENT is signed into for this harness: the configured inbox address with `+<harness>`
+ * added to its local part — `mxmx_eval@d.test` × `pi` → `mxmx_eval+pi@d.test`. The proxy's login door is
+ * keyed by address (five sends an hour — deploys run 33782951666 hit it with four harnesses on one address),
+ * and the inbox is a catch-all, so a sub-address is the same mailbox with its own door and its own account.
+ * A configured address that already carries a `+tag` is used verbatim: the caller named it exactly.
+ */
+export function deploymentLoginEmail(configured: string, harness: Harness): string {
+  void configured; void harness;
+  throw new Error('login-subaddress: implement');
 }
 
 /**
