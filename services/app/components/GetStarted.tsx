@@ -504,7 +504,7 @@ export default function GetStarted({
           * rather than saying what this block IS. */}
         {heading && (
           <p className="mb-2.5 font-mono text-[11px] tracking-[0.14em] text-fg uppercase text-muted">
-            Getting started
+            Getting started {`(<30 secs)`}
           </p>
         )}
 
