@@ -42,7 +42,12 @@ async function setup() {
 const head = async (token: string, id: string) => {
   const res = await getArtifactRoute(request(`/api/artifacts/${id}`, { token }), params({ id }));
   expect(res.status).toBe(200);
-  return (await res.json()) as { edit_id: string; markup: string; open_annotations: Wire[] };
+  // CORRECTED BY THE IMPLEMENTER (F3): the artifact GET inlines the open set
+  // under `annotations`; `open_annotations` is the write echo's COUNT
+  // (lib/artifact-wire.ts, and __tests__/annotations.test.ts:165 pins it as a
+  // number). The assertion below is unchanged in strength — the owner read
+  // must carry the same quote and range — only the field name is the product's.
+  return (await res.json()) as { edit_id: string; markup: string; annotations: Wire[]; open_annotations: number };
 };
 const list = async (token: string, id: string): Promise<Wire[]> => {
   const res = await listAnnotationsRoute(request(`/api/artifacts/${id}/annotations`, { token }), params({ id }));
@@ -82,9 +87,12 @@ describe('a comment keeps its quote and range', () => {
     expect(ann.snippet).toBe('Revenue grew 40% in Q3, ahead of plan.');
 
     // The owner read inlines the same fields.
-    const [inlined] = (await head(w.t.token, w.doc.id)).open_annotations;
+    const owned = await head(w.t.token, w.doc.id);
+    expect(owned.open_annotations).toBe(1); // the echo's count contract, unchanged
+    const [inlined] = owned.annotations;
     expect(inlined.quote).toBe(QUOTE);
     expect(inlined.range).toEqual(RANGE);
+    expect(inlined.quote_found).toBe(true);
   });
 
   it('quote_found follows the document: an edit that removes the words flips it, the anchor stays', async () => {

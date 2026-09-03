@@ -12,6 +12,7 @@
  */
 import { respondToAnnotationList } from '@/app/api/artifacts/[id]/annotations/route';
 import { createAnnotationFor, type CreateAnnotationInput } from '@/lib/annotations';
+import { parseAnnotationRange } from '@/lib/story/annotation-range';
 import { browserActor } from '@/lib/auth';
 import { json, readJson, unauthorized } from '@/lib/http';
 import { ownerUsername } from '@/lib/users';
@@ -24,12 +25,28 @@ async function scopeFor(request: Request) {
   return actorForArtifacts(actor) ?? unauthorized(request);
 }
 
-/** Body → input; null = malformed. */
-function parseCreateBody(body: Record<string, unknown>): CreateAnnotationInput | null {
-  if (typeof body.path !== 'string' || !/^\d+(\.\d+)*$/.test(body.path)) return null;
-  if (typeof body.edit_id !== 'string' || body.edit_id.length === 0) return null;
-  if (typeof body.body !== 'string' || body.body.trim().length === 0) return null;
-  return { bodyPath: body.path, baseEditId: body.edit_id, body: body.body };
+/**
+ * Body → input, or the named refusal. `quote` and `range` are OPTIONAL and
+ * independent: a caret comment carries neither, a quote may travel without a
+ * range, and a range that is not the grammar is its own refusal (`bad_range`)
+ * rather than a generic malformed body — the caller can only fix what it is told.
+ */
+type CreateBodyResult = { input: CreateAnnotationInput } | { error: 'invalid_annotation_body' | 'bad_range' };
+
+function parseCreateBody(body: Record<string, unknown>): CreateBodyResult {
+  const invalid = { error: 'invalid_annotation_body' } as const;
+  if (typeof body.path !== 'string' || !/^\d+(\.\d+)*$/.test(body.path)) return invalid;
+  if (typeof body.edit_id !== 'string' || body.edit_id.length === 0) return invalid;
+  if (typeof body.body !== 'string' || body.body.trim().length === 0) return invalid;
+  if (body.quote !== undefined && typeof body.quote !== 'string') return invalid;
+  const input: CreateAnnotationInput = { bodyPath: body.path, baseEditId: body.edit_id, body: body.body };
+  if (typeof body.quote === 'string') input.quote = body.quote;
+  if (body.range !== undefined && body.range !== null) {
+    const range = parseAnnotationRange(body.range);
+    if (!range) return { error: 'bad_range' };
+    input.range = range;
+  }
+  return { input };
 }
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -45,13 +62,13 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const { id } = await ctx.params;
   const body = await readJson(request);
   if (!body) return json({ error: 'invalid_json' }, 400);
-  const input = parseCreateBody(body);
-  if (!input) return json({ error: 'invalid_annotation_body' }, 400);
+  const parsed = parseCreateBody(body);
+  if ('error' in parsed) return json({ error: parsed.error }, 400);
 
   // The author label is a display SNAPSHOT (never joined at read): the
   // account's public handle, or null for an anonymous cookie owner — the UI
   // then falls back to the kind.
-  const made = await createAnnotationFor(scoped, id, input, {
+  const made = await createAnnotationFor(scoped, id, parsed.input, {
     kind: 'human', label: await ownerUsername(scoped.userId), transport: 'browser',
   });
   if (made instanceof Response) return made; // the anchor edit's named publish refusal
