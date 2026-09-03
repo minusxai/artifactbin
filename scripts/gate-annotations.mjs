@@ -631,6 +631,7 @@ async function foldLeg(browser) {
       clamped: !!thread.querySelector('[data-folded-body="clamped"]'),
       control: thread.querySelector('[aria-label="Show whole comment"]')?.textContent ?? null,
       hasLastLine: thread.textContent.includes("line 60 of the agent's answer"),
+      barMeasured: Number.isFinite(barTop),
       sheet: { top: sheetBox.top, bottom: Math.min(sheetBox.bottom, barTop) },
       reply: replyBox && { top: replyBox.top, bottom: replyBox.bottom },
       answerTop: answer?.top ?? null,
@@ -639,6 +640,9 @@ async function foldLeg(browser) {
 
   const folded = await until(read, (s) => s?.clamped === true, 10000);
   ok(folded?.clamped === true, 'the sixty-line agent answer arrives folded');
+  // Without this, a hidden bar makes the bound below the SHEET's rect again —
+  // the bound that passed while the reply sat invisible behind the bar.
+  ok(folded?.barMeasured === true, 'the action bar is up: the bound below is the visible area, not the sheet rect');
   ok(/^show more \(\d+ lines\)$/.test(folded?.control ?? ''), `the fold offers to open itself (${JSON.stringify(folded?.control)})`);
   ok(folded?.hasLastLine === true, 'clamped, not truncated: the whole answer is still in the document');
   ok(!!folded?.reply

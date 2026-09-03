@@ -24,7 +24,7 @@
 
 /** @type {readonly GateSpec[]} */
 export const GATE_SPECS = Object.freeze([
-  // measured: implementer 5s; orchestrator 7s
+  // measured: implementer 9s; orchestrator 7s
   { name: 'annotations', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
   // measured: implementer 66s; orchestrator 71s
   { name: 'app-flows', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 213_000 },
