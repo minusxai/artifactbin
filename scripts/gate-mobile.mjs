@@ -299,53 +299,67 @@ const touchMark = (page) => page.evaluate(() => {
   return true;
 });
 
+/*
+ * Poll, never sleep: CI runs the gates four browsers to a machine, and a fixed
+ * wait is exactly what loses that race. The two states this leg turns on are
+ * "the card is up" and "the card is gone", so wait for each of them by name.
+ */
+const cardShown = (page, want) => page.waitForFunction(
+  (w) => {
+    const el = document.getElementById('vg-tooltip-element');
+    const cs = el && getComputedStyle(el);
+    return (!!cs && cs.visibility === 'visible' && cs.display !== 'none') === w;
+  },
+  want,
+  { timeout: 15_000 },
+).then(() => true).catch(() => false);
+
+// The first `path` to exist is an axis or a legend symbol; wait for a DRAWN ARC.
+const arcDrawn = (page) => page.waitForFunction(
+  () => [...document.querySelectorAll('[aria-label="Question embed"] svg path')]
+    .some((p) => p.__data__?.mark?.marktype === 'arc' && p.__data__?.datum),
+  null,
+  { timeout: 90_000 },
+).then(() => true).catch(() => false);
+
 const phone = await browser.newPage({ viewport: PHONE, hasTouch: true, isMobile: true, deviceScaleFactor: 3 });
 await phone.goto(`${B}/a/${chartDoc.id}`, { waitUntil: 'load' });
-await phone.waitForSelector('[aria-label="Question embed"] svg path', { timeout: 60_000 });
-await phone.waitForTimeout(1500);
+ok(await arcDrawn(phone), 'tooltip: the phone document draws an arc mark');
 
 ok(await touchMark(phone), 'tooltip: the phone document draws an arc mark to touch');
-await phone.waitForTimeout(300);
+ok(await cardShown(phone, true), 'tooltip: a touch opens the card');
 let tip = await cardState(phone);
-ok(tip.shown, `tooltip: a touch opens the card (${JSON.stringify(tip)})`);
+ok(tip.shown, `tooltip: …and it is really up (${JSON.stringify(tip)})`);
 ok(tip.close, 'tooltip: and a touch-opened card carries a close button');
 ok(tip.cardEvents === 'none' && tip.closeEvents !== 'none',
   `tooltip: the card stays pointer-transparent, the button does not (${tip.cardEvents} / ${tip.closeEvents})`);
 
 await phone.evaluate(() => window.scrollBy(0, 300));
-await phone.waitForTimeout(400);
-tip = await cardState(phone);
-ok(!tip.shown, 'tooltip: scrolling the document puts it away');
+ok(await cardShown(phone, false), 'tooltip: scrolling the document puts it away');
 
 await phone.evaluate(() => window.scrollTo(0, 0));
-await phone.waitForTimeout(400);
 await touchMark(phone);
-await phone.waitForTimeout(300);
-ok((await cardState(phone)).shown, 'tooltip: it opens again after the scroll');
+ok(await cardShown(phone, true), 'tooltip: it opens again after the scroll');
 const closeBox = await phone.locator('button[aria-label="Dismiss tooltip"]').boundingBox().catch(() => null);
 ok(!!closeBox && closeBox.width >= 20 && closeBox.height >= 20,
   `tooltip: the close button is a real target (${closeBox ? `${Math.round(closeBox.width)}x${Math.round(closeBox.height)}` : 'missing'})`);
 if (closeBox) await phone.touchscreen.tap(closeBox.x + closeBox.width / 2, closeBox.y + closeBox.height / 2);
-await phone.waitForTimeout(400);
-ok(!(await cardState(phone)).shown, 'tooltip: and tapping it dismisses the card');
+ok(await cardShown(phone, false), 'tooltip: and tapping it dismisses the card');
 await phone.close();
 
 // The same document with a MOUSE: desktop hover is untouched.
 const desk = await browser.newPage({ viewport: { width: 1200, height: 900 } });
 await desk.goto(`${B}/a/${chartDoc.id}`, { waitUntil: 'load' });
-await desk.waitForSelector('[aria-label="Question embed"] svg path', { timeout: 60_000 });
-await desk.waitForTimeout(1500);
+await arcDrawn(desk);
 const point = await markPoint(desk);
 ok(!!point, 'tooltip: the desktop document draws an arc mark to hover');
 await desk.mouse.move(point.x - 3, point.y - 3);
 await desk.mouse.move(point.x, point.y);
-await desk.waitForTimeout(400);
+ok(await cardShown(desk, true), 'tooltip: a real hover still opens the card');
 tip = await cardState(desk);
-ok(tip.shown, `tooltip: a real hover still opens the card (${JSON.stringify(tip)})`);
-ok(!tip.close, 'tooltip: and a mouse-opened card carries NO close button');
+ok(!tip.close, `tooltip: and a mouse-opened card carries NO close button (${JSON.stringify(tip)})`);
 await desk.mouse.move(4, 4);
-await desk.waitForTimeout(400);
-ok(!(await cardState(desk)).shown, 'tooltip: moving the cursor off the mark still closes it');
+ok(await cardShown(desk, false), 'tooltip: moving the cursor off the mark still closes it');
 await desk.close();
 
 await browser.close();
