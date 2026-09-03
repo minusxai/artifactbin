@@ -288,6 +288,8 @@ const run = async () => {
     await quoteLeg(browser);
     // ── an agent's reply is READ as markdown ──────────────────────────────
     await markdownLeg(browser);
+    // ── a long reply folds; a resolved card reads as resolved ─────────────
+    await foldLeg(browser);
   } finally {
     await browser.close();
   }
@@ -534,6 +536,152 @@ async function markdownLeg(browser) {
   // The wire NEVER carries the rendering — the body is the text as written.
   const after = await (await fetch(`${BASE}/api/artifacts/${id}/annotations?status=all`, { headers: auth })).json();
   ok(after.annotations?.[0]?.thread?.[1]?.body === AGENT_REPLY, 'the stored body is still the exact markdown text the agent sent');
+  await ctx.close();
+}
+
+/**
+ * A LONG REPLY MUST NOT PUSH THE SHORT ONE OFF THE RAIL (F6) — and a resolved
+ * card must READ as resolved (F7).
+ *
+ * The failure this exists for is a LAYOUT fact and nothing below a browser can
+ * see it: sixty lines of agent answer, a phone whose comment sheet is half the
+ * screen, and the human's own two-line reply somewhere below the bottom of it.
+ * So the measurement is the real one — the reply's rect against the sheet's —
+ * and the fold is measured the same way the product measures it, from what was
+ * actually laid out. The muting is read as a COMPUTED opacity for the same
+ * reason: a class name in the markup proves nothing about what Tailwind built.
+ */
+const FOLD_DOC =
+  '<Helmet><title>Folding comments</title></Helmet>'
+  + '<div data-design="tw" className="p-10">'
+  + '<h1>The cap</h1>'
+  + '<p id="cap">The cap is 5 today.</p>'
+  + '</div>';
+
+const LONG_AGENT_REPLY = Array.from({ length: 60 }, (_, i) => `line ${i + 1} of the agent's answer`).join('\n');
+const HUMAN_LAST_WORD = 'ship it — thanks';
+
+async function foldLeg(browser) {
+  const { id, token } = await startDocument(BASE);
+  const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const published = await fetch(`${BASE}/api/artifacts/${id}`, { method: 'PUT', headers: auth, body: JSON.stringify({ markup: FOLD_DOC }) });
+  if (!published.ok) throw new Error(`fold leg publish failed (${published.status}): ${await published.text()}`);
+
+  // A PHONE: the rail is a half-height bottom sheet there, which is where a
+  // long comment costs the most.
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  await becomeOwner(page, BASE, token);
+  await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
+  const frame = page.frameLocator('iframe[title="artifact"]');
+  await frame.locator('#cap').waitFor({ timeout: 15000 });
+
+  const head = await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: auth })).json();
+  const created = await page.evaluate(async ([docId, editId]) => {
+    const res = await fetch(`/api/my/artifacts/${docId}/annotations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: '0.1', edit_id: editId, body: 'why is the cap 5?' }),
+    });
+    return { status: res.status, body: await res.text() };
+  }, [id, head.edit_id]);
+  ok(created.status === 201, `the owner leaves a comment (${created.status} ${created.body.slice(0, 120)})`);
+
+  const wire = await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: auth })).json();
+  const ann = wire.annotations?.[0];
+  // The screenshot case: the agent answers at length, the human answers shortly.
+  const replied = await fetch(`${BASE}/api/artifacts/${id}/annotations/${ann.id}`, {
+    method: 'POST', headers: auth, body: JSON.stringify({ reply: LONG_AGENT_REPLY }),
+  });
+  ok(replied.ok, 'the agent answers with sixty lines over plain HTTP');
+  const lastWord = await page.evaluate(async ([docId, annId, body]) => {
+    const res = await fetch(`/api/my/artifacts/${docId}/annotations/${annId}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reply: body }),
+    });
+    return res.status;
+  }, [id, ann.id, HUMAN_LAST_WORD]);
+  ok(lastWord === 200, `the human answers shortly underneath (${lastWord})`);
+
+  await page.locator('[aria-label="Open artifact controls"]').click();
+  await page.locator('[aria-label="Toggle comments"]').click();
+  // No Escape here, unlike the desktop legs: on a phone the rail IS a sheet,
+  // and Escape is how a sheet closes.
+  await page.locator('[aria-label="Annotation sidebar"]').waitFor({ timeout: 8000 });
+  await page.locator('[aria-label="Open annotation thread"]').first().click({ timeout: 15000 });
+  await page.locator('[aria-label="Reply to annotation"]').first().waitFor({ timeout: 8000 });
+
+  const read = () => page.evaluate((reply) => {
+    const sheet = document.querySelector('[aria-label="Annotation sidebar"]');
+    const thread = document.querySelector('[aria-label="Annotation thread"]');
+    if (!sheet || !thread) return null;
+    const node = [...thread.querySelectorAll('p, li, div')]
+      .reverse()
+      .find((el) => el.textContent?.trim() === reply);
+    // The page's own action bar FLOATS OVER the bottom of the sheet on a
+    // phone, so the sheet's rect is not what a reader can see. Measure against
+    // what is left of it.
+    const bar = document.querySelector('[aria-label="Page actions"][data-scroll-hidden="false"]');
+    const barTop = bar?.getBoundingClientRect().top ?? Infinity;
+    const sheetBox = sheet.getBoundingClientRect();
+    const replyBox = node?.getBoundingClientRect() ?? null;
+    // The agent's answer is the second message; its TOP is what says whether
+    // the conversation still reads as one.
+    const answer = thread.querySelectorAll('li')[1]?.getBoundingClientRect() ?? null;
+    return {
+      clamped: !!thread.querySelector('[data-folded-body="clamped"]'),
+      control: thread.querySelector('[aria-label="Show whole comment"]')?.textContent ?? null,
+      hasLastLine: thread.textContent.includes("line 60 of the agent's answer"),
+      sheet: { top: sheetBox.top, bottom: Math.min(sheetBox.bottom, barTop) },
+      reply: replyBox && { top: replyBox.top, bottom: replyBox.bottom },
+      answerTop: answer?.top ?? null,
+    };
+  }, HUMAN_LAST_WORD);
+
+  const folded = await until(read, (s) => s?.clamped === true, 10000);
+  ok(folded?.clamped === true, 'the sixty-line agent answer arrives folded');
+  ok(/^show more \(\d+ lines\)$/.test(folded?.control ?? ''), `the fold offers to open itself (${JSON.stringify(folded?.control)})`);
+  ok(folded?.hasLastLine === true, 'clamped, not truncated: the whole answer is still in the document');
+  ok(!!folded?.reply
+    && folded.reply.top >= folded.sheet.top - 1
+    && folded.reply.bottom <= folded.sheet.bottom + 1,
+  `the human's own reply is visible without scrolling the sheet (reply ${JSON.stringify(folded?.reply)} in sheet ${JSON.stringify(folded?.sheet)})`);
+  ok(typeof folded?.answerTop === 'number' && folded.answerTop >= folded.sheet.top - 1,
+    `the agent's answer BEGINS on screen too — the fold is what fits both (answer top ${folded?.answerTop}, sheet top ${folded?.sheet.top})`);
+
+  await page.locator('[aria-label="Show whole comment"]').first().click();
+  const opened = await until(read, (s) => s?.clamped === false, 5000);
+  ok(opened?.clamped === false, 'tapping "show whole comment" expands it');
+  ok(await page.locator('[aria-label="Show less of comment"]').first().isVisible(), 'and offers to fold it back');
+  // THE A/B, so nothing above can pass vacuously: opened, the same sixty lines
+  // push the human's reply straight off the sheet. That is what the fold buys,
+  // measured on the same thread a moment apart.
+  ok(!!opened?.reply && opened.reply.top > opened.sheet.bottom,
+    `unfolded, the sixty lines push the human's reply off the sheet (reply ${JSON.stringify(opened?.reply)} vs sheet ${JSON.stringify(opened?.sheet)})`);
+  await page.locator('[aria-label="Show less of comment"]').first().click();
+  const refolded = await until(read, (s) => s?.clamped === true, 5000);
+  ok(!!refolded?.reply && refolded.reply.bottom <= refolded.sheet.bottom + 1, 'folding it back brings the reply home');
+
+  // ── F7: a resolved card reads as resolved ─────────────────────────────
+  const resolvedRes = await fetch(`${BASE}/api/artifacts/${id}/annotations/${ann.id}`, {
+    method: 'POST', headers: auth, body: JSON.stringify({ resolve: true }),
+  });
+  ok(resolvedRes.ok, 'the agent resolves the thread over plain HTTP');
+  const muted = await until(
+    () => page.evaluate(() => {
+      const card = document.querySelector('[aria-label="Resolved annotation thread"]');
+      const open = document.querySelector('[aria-label="Annotation thread"]');
+      return card
+        ? { opacity: Number(getComputedStyle(card).opacity), open: open ? Number(getComputedStyle(open).opacity) : null }
+        : null;
+    }),
+    (state) => typeof state?.opacity === 'number',
+    12000,
+  );
+  ok(!!muted && muted.opacity > 0.4 && muted.opacity < 0.8,
+    `the resolved card is muted rather than identical to an open one (opacity ${muted?.opacity})`);
+  ok(muted?.open === null || muted.open === 1, `an open card beside it stays at full opacity (${muted?.open})`);
+  ok(await page.locator('[aria-label="Show resolved conversation"]').first().isVisible(),
+    'muted is not disabled: the resolved card still offers its conversation');
   await ctx.close();
 }
 

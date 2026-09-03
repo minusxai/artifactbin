@@ -165,7 +165,12 @@ function FoldingBody({ text, foldable }: { text: string; foldable: boolean }) {
   useEffect(() => {
     const element = measured.current;
     if (!element) return;
-    const styled = window.getComputedStyle(element);
+    // The line height of the element that LAYS THE TEXT OUT, not of the
+    // wrapper: the rail is `text-sm` (20px lines) and a rendered paragraph is
+    // `leading-normal` (21px), so measuring the wrapper clamps ten lines at
+    // nine and a half and the tenth is cut through the middle.
+    const line = element.querySelector('p, li, pre') ?? element;
+    const styled = window.getComputedStyle(line);
     const lineHeight = parseFloat(styled.lineHeight) || DEFAULT_LINE_HEIGHT;
     const next = foldFromMeasure(element.scrollHeight, lineHeight);
     // Only when it MOVED: a setState on every render of an unchanged
@@ -439,6 +444,21 @@ function positionedComments(
   return shift > 0 ? placed.map((item) => ({ ...item, top: item.top - shift })) : placed;
 }
 
+/** ONE fold affordance for a thread, wherever the card is putting it. */
+function ThreadFoldControl({ folded, onToggle }: { folded: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={folded ? 'Expand thread' : 'Collapse thread'}
+      aria-expanded={!folded}
+      onClick={onToggle}
+      className="-ml-1 inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-[3px] text-faint hover:bg-raised hover:text-fg"
+    >
+      {folded ? <ChevronRight size={13} strokeWidth={1.8} /> : <ChevronDown size={13} strokeWidth={1.8} />}
+    </button>
+  );
+}
+
 function Thread({
   a, open, resolved, hovered, busy, folded, justOpened, isCommentFolded,
   onOpen, onHover, onReply, onResolve, onReopen, onDelete, onToggleFold, onToggleComment,
@@ -517,29 +537,22 @@ function Thread({
     >
       {/* The thread's own header: what it is about, and the way to fold it.
           Present open or closed, resolved or not — one affordance, one place. */}
-      <div className={`flex min-w-0 items-center gap-1.5 px-2 pt-1 ${folded ? 'border-b border-edge pb-1' : ''}`}>
-        <button
-          type="button"
-          aria-label={folded ? 'Expand thread' : 'Collapse thread'}
-          aria-expanded={!folded}
-          onClick={onToggleFold}
-          className="inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-[3px] text-faint hover:bg-raised hover:text-fg"
-        >
-          {folded ? <ChevronRight size={13} strokeWidth={1.8} /> : <ChevronDown size={13} strokeWidth={1.8} />}
-        </button>
-        {/* The words the thread is ABOUT, and only while it is folded: the
-            conversation itself says that when it is open, and a snippet over
-            every rail card is a second column of quotes nobody asked for. */}
-        {folded && (
-          <span className="truncate font-mono text-[10px] text-faint">{a.snippet || 'this document'}</span>
-        )}
-      </div>
-      {folded && first && (
+      {folded && (
         <div className="px-3 py-2">
-          <p className="truncate font-sans leading-snug text-fg/90">{firstLine(first.body)}</p>
-          <p className="mt-1 font-mono text-[10px] text-faint">
-            {replyCount === 1 ? '1 reply' : `${replyCount} replies`}
-          </p>
+          {/* Folded, the card IS its summary: what the thread is about, how it
+              opens, and how much is underneath. */}
+          <div className="flex min-w-0 items-center gap-1.5">
+            <ThreadFoldControl folded onToggle={onToggleFold} />
+            <span className="truncate font-mono text-[10px] text-faint">{a.snippet || 'this document'}</span>
+          </div>
+          {first && (
+            <>
+              <p className="mt-1 truncate font-sans leading-snug text-fg/90">{firstLine(first.body)}</p>
+              <p className="mt-1 font-mono text-[10px] text-faint">
+                {replyCount === 1 ? '1 reply' : `${replyCount} replies`}
+              </p>
+            </>
+          )}
         </div>
       )}
       {!folded && a.orphaned && (
@@ -554,9 +567,20 @@ function Thread({
           // ONE exemption to the auto-fold: the newest comment of a thread this
           // viewer just asked to see.
           const newest = index === visibleComments.length - 1;
+          /*
+           * `scroll-mb-14` below is not spacing — it is what the open-scroll
+           * aims at. On a phone the page's own action bar floats OVER the
+           * bottom of this sheet, so a comment scrolled flush to the
+           * scrollport's edge lands behind it; a scroll margin is the one
+           * mechanism scrollIntoView honours for chrome it cannot see.
+           */
           return (
-          <li key={c.id + c.created_at}>
+          <li key={c.id + c.created_at} className="scroll-mb-14 sm:scroll-mb-0">
             <div className="mb-1.5 flex min-w-0 items-center gap-2">
+              {/* The whole conversation's fold, at the top-left of the card —
+                  a row of its own would cost the rail a line it does not have
+                  to spend, which is the thing this feature is about. */}
+              {index === 0 && <ThreadFoldControl folded={false} onToggle={onToggleFold} />}
               {/*
                 * The author line is the comment's own toggle — but only where
                 * there is a body to fold away (an open thread). A DIV rather
@@ -806,8 +830,17 @@ export default function AnnotationLayer({
     const raf = requestAnimationFrame(() => {
       // Optional call: jsdom implements no scrollIntoView, and a missing
       // scroll is a cosmetic no-op, never an error.
-      document.querySelector(`[data-thread-id="${CSS.escape(openId)}"]`)
-        ?.scrollIntoView?.({ block: 'start', inline: 'nearest' });
+      const thread = document.querySelector(`[data-thread-id="${CSS.escape(openId)}"]`);
+      thread?.scrollIntoView?.({ block: 'start', inline: 'nearest' });
+      /*
+       * …and then the NEWEST comment, which is the answer somebody opened the
+       * thread for. A conversation taller than its scroller — a folded long
+       * reply on a phone half-sheet still is — shows its top and hides its
+       * tail, so the last message lands just under the edge. `nearest` moves
+       * nothing when the whole thread already fits, so the common case keeps
+       * the top of the conversation exactly where it was.
+       */
+      thread?.querySelector('li:last-child')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
     });
     return () => cancelAnimationFrame(raf);
   }, [openId, railOpen]);
