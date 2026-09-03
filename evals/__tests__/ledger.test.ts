@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { isDocsAddress, ledgerMetrics, parseLedger, scoredArtifactId, targetArtifactId, writtenArtifactIds } from '../lib/ledger';
+import { documentWrites, isDocsAddress, ledgerRows, ledgerMetrics, parseLedger, scoredArtifactId, targetArtifactId, writtenArtifactIds } from '../lib/ledger';
 import type { LedgerEntry } from '../lib/contracts';
 
 const text = fs.readFileSync(path.join(__dirname, 'fixtures/ledger.jsonl'), 'utf8');
@@ -58,6 +58,66 @@ describe('ledgerMetrics', () => {
   });
 });
 
+/**
+ * `versions` — how many stored versions the agent's writes produced. The row
+ * used to be counted in `main.ts` off an inline regex (`POST|PUT` on
+ * `/api/artifacts` or `/mcp`), which is this module's own `isWrite` with the
+ * detail rubbed off: it counted `POST /api/artifacts/<id>/annotations/<annId>`,
+ * and answering a comment is not a version. Measured on the real product:
+ * create 1, driver seed 2, anchor stamp 3, the agent's `/edits` 4, and the
+ * annotate call still 4 — while the row said 3.
+ */
+describe('documentWrites', () => {
+  const e = (over: Partial<LedgerEntry>): LedgerEntry => ({ t: 0, ms: 1, method: 'POST', path: '/x', status: 200, ua: null, auth: 'bearer', error: null, ...over });
+
+  it('counts the writes that make a version, and not the ones that do not', () => {
+    expect(documentWrites([
+      e({ path: '/api/artifacts', status: 201 }),
+      e({ method: 'PUT', path: '/api/artifacts/abc123' }),
+      e({ path: '/api/artifacts/abc123/edits' }),
+      e({ path: '/api/artifacts/abc123/revert' }),
+      e({ path: '/mcp' }),
+    ])).toBe(5);
+    // Replying to a comment and resolving it: one call, no version.
+    expect(documentWrites([e({ path: '/api/artifacts/abc123/annotations/ann_4504j887w47si35kba9' })])).toBe(0);
+    // Reads and refusals never count either.
+    expect(documentWrites([
+      e({ method: 'GET', path: '/api/artifacts/abc123' }),
+      e({ path: '/api/artifacts', status: 400 }),
+    ])).toBe(0);
+  });
+});
+
+/**
+ * The ROWS the ledger answers, built in one pure place.
+ *
+ * The reviewer's F1: restoring the driver's old inline write regex left the whole
+ * suite green, because nothing asserted that `main.ts` counted `versions` with
+ * `documentWrites` — the helper was guarded and the wiring was not. The driver
+ * now records exactly what this function returns, so the count and its caller
+ * are one thing to break.
+ */
+describe('ledgerRows', () => {
+  const e = (over: Partial<LedgerEntry>): LedgerEntry => ({ t: 0, ms: 1, method: 'POST', path: '/x', status: 200, ua: null, auth: 'bearer', error: null, ...over });
+  const rows = (entries: LedgerEntry[]) => Object.fromEntries(ledgerRows(entries).map((r) => [r.metric, r.value]));
+
+  it('counts versions through documentWrites — answering a comment is not a version', () => {
+    const run = [
+      e({ method: 'GET', path: '/docs/artifactbin/SKILL.md' }),
+      e({ method: 'GET', path: '/api/artifacts/abc123' }),
+      e({ path: '/api/artifacts/abc123/edits' }),
+      e({ path: '/api/artifacts/abc123/annotations/ann_4504j887w47si35kba9' }),
+    ];
+    // 1 (the document exists) + one /edits. The retired regex counted the annotate call and said 3.
+    expect(rows(run).versions).toBe(2);
+    expect(rows(run)).toMatchObject({ http_calls: 4, write_attempts: 1, four_xx: 0, invented_endpoints: 0 });
+  });
+
+  it('answers null for every ledger-derived number when nothing was observed', () => {
+    expect(rows([]).versions).toBeNull();
+  });
+});
+
 describe('endpoint and transport metrics', () => {
   const e = (over: Partial<LedgerEntry>): LedgerEntry => ({ t: 0, ms: 1, method: 'GET', path: '/x', status: 200, ua: null, auth: null, error: null, ...over });
 
@@ -69,7 +129,7 @@ describe('endpoint and transport metrics', () => {
   });
 
   it('knows every route the docs teach', () => {
-    for (const p of ['/docs/llm', '/docs/markup', '/api/tokens/anonymous', '/api/start', '/api/preview', '/api/artifacts', '/api/artifacts/abc123', '/api/artifacts/abc123/edits', '/api/artifacts/abc123/versions', '/api/artifacts/abc123/versions/3', '/mcp', '/a/abc123', '/a/abc123/start?k=x', '/a/abc123/export?format=png', '/a/abc123/raw?chrome=0']) {
+    for (const p of ['/api/artifacts/abc123/annotations/ann_2vlmssgwhdloxo0zdlx', '/api/artifacts/abc123/annotations', '/docs/llm', '/docs/markup', '/api/tokens/anonymous', '/api/start', '/api/preview', '/api/artifacts', '/api/artifacts/abc123', '/api/artifacts/abc123/edits', '/api/artifacts/abc123/versions', '/api/artifacts/abc123/versions/3', '/mcp', '/a/abc123', '/a/abc123/start?k=x', '/a/abc123/export?format=png', '/a/abc123/raw?chrome=0']) {
       expect(ledgerMetrics([e({ path: p, status: 404 })]).inventedEndpoints).toBe(0);
     }
   });

@@ -1,6 +1,5 @@
 {
   "id": "report",
-  "kind": "data",
   "template": "editorial",
   "brief": "The file coffee.csv in your working directory holds monthly coffee consumption by team for Q2. Publish it as a dataset, then write and publish a short one-page report. Its TITLE — what a browser tab and a shared link preview show, not just the on-page heading — must be \"Coffee consumption at a small startup, Q2\". It needs: a lead sentence stating the single most important finding with a number, three sections with headings (Overview, What changed, What we'll do next), one small table of monthly cups per team (3 teams x 3 months), and at least one real chart. Every number in the table, chart, and prose must be computed from the dataset. Keep it restrained and readable on a phone. When it is published, reply with the document's URL and nothing else.",
   "files": {

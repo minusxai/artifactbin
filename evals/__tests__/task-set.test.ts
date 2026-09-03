@@ -16,6 +16,19 @@ import { discoverTasks, parseShard, selectTasks, shardTasks } from '../lib/task-
 
 const DIR = path.resolve(__dirname, '../tasks');
 
+/**
+ * The sets, read off DISK rather than typed out here. A hand-written list is a
+ * third file to edit for every task added — `comment` turned two tests red that
+ * had nothing to do with it — and it tests the list against itself: the
+ * filename IS the membership rule, so the test's job is that `selectTasks`
+ * obeys it, not that somebody remembered to update an array.
+ */
+const filesIn = (set: 'ci' | 'eval') =>
+  fs.readdirSync(DIR)
+    .filter((f) => f.endsWith('.json') && f.endsWith('.eval.json') === (set === 'eval'))
+    .map((f) => f.replace(/\.eval\.json$|\.json$/, ''))
+    .sort();
+
 describe('discoverTasks', () => {
   it('reads the id and the set membership out of each filename', () => {
     const found = discoverTasks(DIR);
@@ -41,12 +54,13 @@ describe('selectTasks', () => {
   const found = discoverTasks(DIR);
 
   it('the eval matrix runs ONLY the .eval.json tasks', () => {
-    expect(selectTasks(found, { set: 'eval' }).map((t) => t.id).sort()).toEqual(['dashboard', 'deck', 'report', 'scrolly']);
+    expect(selectTasks(found, { set: 'eval' }).map((t) => t.id).sort()).toEqual(filesIn('eval'));
   });
 
   it('CI runs ONLY the product guards — the creative briefs are not a per-PR question', () => {
     const ids = selectTasks(found, { set: 'ci' }).map((t) => t.id).sort();
-    expect(ids).toEqual(['data', 'edit', 'mcp']);
+    expect(ids).toEqual(filesIn('ci'));
+    expect(ids).toContain('comment');
   });
 
   it('the two sets are disjoint and together cover every task on disk', () => {
@@ -122,7 +136,9 @@ describe('ordering', () => {
   });
 
   it('an unordered task sorts before an ordered one, keeping filename order among equals', () => {
-    expect(selectTasks(discoverTasks(DIR), { set: 'ci' }).map((t) => t.id)).toEqual(['data', 'edit', 'mcp']);
+    // Every CI task is unordered, so they come back in filename order — which is
+    // what `filesIn` reads, sorted the same way `discoverTasks` sorts.
+    expect(selectTasks(discoverTasks(DIR), { set: 'ci' }).map((t) => t.id)).toEqual(filesIn('ci'));
     expect(selectTasks(discoverTasks(DIR), { set: 'eval' }).map((t) => t.id).at(-1)).toBe('scrolly');
   });
 });
