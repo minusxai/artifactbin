@@ -46,6 +46,15 @@ const RESOLVED: AnnotationWire = {
   resolved_at: '2026-08-26T02:00:00Z',
 };
 
+const MCP_AGENT: AnnotationWire = {
+  ...ANN,
+  id: 'ann_mcp',
+  anchor: { key: 'mcp-key', path: '3', spanStart: 90, spanEnd: 120 },
+  thread: [
+    { id: 'ann_mcp', body: 'replied over MCP', author: { kind: 'agent', label: 'Claude Code', transport: 'mcp' }, created_at: '2026-08-29T00:00:00Z' },
+  ],
+};
+
 const GENERIC_AGENT: AnnotationWire = {
   ...ANN,
   id: 'ann_agent',
@@ -407,6 +416,30 @@ describe('AnnotationLayer', () => {
     fireEvent.click(await screen.findByLabelText('Show resolved conversation'));
     expect(screen.getByLabelText('Codex agent')).toBeTruthy();
     expect(screen.getByLabelText('Transport MCP')).toBeTruthy();
+  });
+
+  it('names the agent an MCP reply came from, with its own glyph and the MCP chip', async () => {
+    // The byline the /mcp route reads back off the token: a named harness must
+    // reach the rail as ITS name and ITS mark, never the anonymous 'Agent'.
+    const { frame, contentWindow } = makeFrame();
+    const { rerender } = render(layer(frame, { showViewComments: true }));
+    await flush();
+    rerender(layer(frame, { showViewComments: true, liveAnnotations: [MCP_AGENT] }));
+    await flush();
+    fromFrame(contentWindow, {
+      type: STORY_ANNOTATION_LAYOUT_MESSAGE,
+      nonce: NONCE,
+      positions: [{ id: MCP_AGENT.id, rect: { x: 10, y: 100, width: 300, height: 40 } }],
+    });
+
+    const marker = await screen.findByLabelText('Open annotation conversation by Claude Code, 1 message');
+    fireEvent.mouseEnter(marker.closest<HTMLElement>('[data-annotation-id]')!);
+    await flush();
+    expect(screen.getByText('Claude Code')).toBeTruthy();
+    expect(screen.getByLabelText('Transport MCP')).toBeTruthy();
+    // The GLYPH, not just the name: the Claude Code pixel mark's own path.
+    const mark = screen.getByLabelText('Claude Code agent');
+    expect(mark.querySelector('path')?.getAttribute('d')?.startsWith('M20.998')).toBe(true);
   });
 
   it('uses the generic agent icon and keeps HTTP provenance when no agent name is known', async () => {

@@ -16,7 +16,7 @@ import { PUBLIC_BASE_URL } from '@/lib/config';
 import { buildMcpInstructions } from '@/lib/skills';
 import { baseUrl, unauthorized } from '@/lib/http';
 import { wwwAuthenticate } from '@artifactbin/utils';
-import { rememberTokenClient, resolveToken } from '@/lib/tokens';
+import { rememberTokenClient, resolveToken, resolveTokenById } from '@/lib/tokens';
 import { agentLabelForHarness } from '@/lib/annotation-author';
 import { sessionActor } from '@/lib/viewer';
 
@@ -104,12 +104,14 @@ async function handler(req: Request): Promise<Response> {
   const presented = auth.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : '';
   /*
    * WHO IS ASKING comes from the ACTOR HEADER, like everywhere else in the app.
-   * This route used to resolve the bearer token itself, against the `tokens`
-   * table — which belongs to the proxy. Where identity has its own schema and
-   * its own role the app cannot read that table, so a caller with a perfectly
+   * This route used to resolve the bearer token itself: the PROXY is the one
+   * that holds the credential and resolves it, so a caller with a perfectly
    * good token was told `unauthorized` while every other authenticated route
-   * worked: the one place still doing its own authentication was the one place
-   * that broke.
+   * worked — the one place still doing its own authentication was the one place
+   * that broke. (The `tokens` table itself is the APP's: `grants.sql` gives the
+   * proxy only `SELECT ON app.tokens`. What the app must not do is
+   * AUTHENTICATE; reading its own row for a byline is fine, and is what
+   * `resolveTokenById` below does.)
    *
    * `resolveToken` remains the fallback for a process with no proxy in front
    * (a direct handler call in a test), where there is no header to read.
@@ -128,15 +130,32 @@ async function handler(req: Request): Promise<Response> {
     return response;
   }
   if (observed?.source === 'clientInfo' && agentLabelForHarness(observed.harness)) {
-    // Which agent holds this token is the PROXY's row to keep, and the app may
-    // have no privilege on it. The label is an annotation's byline, not an
-    // authorization input, so a refusal here must not fail the call — the
-    // request already carries the harness it just told us about.
+    // Which agent holds this token is remembered on the app's own `tokens` row.
+    // The label is an annotation's byline, not an authorization input, so a
+    // refusal here must not fail the call — the request already carries the
+    // harness it just told us about.
     await rememberTokenClient(resolved.id, observed.harness).catch(() => {});
   }
+  /*
+   * THE BYLINE IS READ BACK, because MCP names its client on `initialize` and
+   * NEVER on the stateless `tools/call` that carries the actual reply. The
+   * proxy-attached actor is identity-only — it has no room for a harness — so
+   * that branch used to hand the author a hardcoded null and every MCP comment
+   * from a proxied stack (production, and `npm run dev`) rendered as 'Agent'.
+   *
+   * This is a BYLINE lookup for an actor the proxy ALREADY vouched for, keyed
+   * by the token id it vouched with — not a second authentication: the
+   * `unauthorized` decision above still comes solely from the attached actor.
+   * Widening the `Actor` contract to carry the harness is the tidier shape and
+   * is deliberately out of scope here: it is an identity contract shared by
+   * three services, and a display string does not belong in it.
+   */
+  const remembered = observed?.harness
+    ? null
+    : resolved.clientHarness ?? (await resolveTokenById(resolved.id))?.clientHarness ?? null;
   const author: AnnotationAuthor = {
     kind: 'agent',
-    label: agentLabelForHarness(observed?.harness) ?? agentLabelForHarness(resolved.clientHarness),
+    label: agentLabelForHarness(observed?.harness) ?? agentLabelForHarness(remembered),
     transport: 'mcp',
   };
   const server = buildServer(req, author);
