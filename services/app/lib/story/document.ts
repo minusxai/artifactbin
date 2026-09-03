@@ -510,7 +510,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    * reason: a reader watching an agent write must be adopting the document a
    * reload would give them.
    */
-  const split = storyBodyFor(source, input.assetUrls ? assetLookupFrom(input.assetUrls) : undefined);
+  const split = storyBodyFor(source, input.assetUrls ? assetLookupFrom(input.assetUrls) : undefined, { capture: !chrome });
   const helmet: HelmetContent = split?.content ?? EMPTY_HELMET_CONTENT;
 
   // Mode resolution lives HERE, for every reader: a theme is designed for

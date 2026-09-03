@@ -16,7 +16,7 @@ import { useAppHarness, request } from '@/__tests__/harness';
 import { GET } from '@/app/assets/[hash]/route';
 import { getDb } from '@/lib/db';
 import { objectKey, objectStore } from '@/lib/object-store';
-import { urlHash } from '@/lib/story/asset-url';
+import { assetUrlFor, urlHash } from '@/lib/story/asset-url';
 
 useAppHarness();
 
@@ -34,7 +34,8 @@ const seed = async (contentType = 'image/svg+xml') => {
   return urlHash(URL_A);
 };
 
-const asset = (hash: string) => GET(request(`/assets/${hash}`), { params: Promise.resolve({ hash }) });
+const asset = (hash: string, search = '') =>
+  GET(request(`/assets/${hash}${search}`), { params: Promise.resolve({ hash }) });
 
 describe('GET /assets/<hash>', () => {
   it('serves the stored bytes with all five headers', async () => {
@@ -57,6 +58,34 @@ describe('GET /assets/<hash>', () => {
     expect((await asset('not-a-hash')).status).toBe(404);
     expect((await asset('../../etc/passwd')).status).toBe(404);
     expect((await asset('A'.repeat(64))).status).toBe(404); // hex is lowercase; a near miss is still a miss
+  });
+
+  /*
+   * `?v=` IS A CACHE KEY AND NOTHING ELSE (R19). The address is served
+   * `immutable` and cannot move — a stored document names the URL and every
+   * rendering derives the address from it — so a refresh changes what the
+   * mapping EMITS, and the route must answer the current bytes at every
+   * version anyone was ever served, including none at all.
+   */
+  it('ignores the version the mapping puts on it', async () => {
+    const hash = await seed();
+    for (const search of ['', '?v=1a2b3c4d', '?v=anything at all', '?v=', '?w=99999']) {
+      const res = await asset(hash, search);
+      expect([search, res.status]).toEqual([search, 200]);
+      expect(Buffer.from(await res.arrayBuffer())).toEqual(BYTES);
+    }
+  });
+
+  it('serves the address the mapping actually emits for a row', async () => {
+    await seed();
+    const db = await getDb();
+    const row = (await db.query('select * from web_assets where url_hash = $1', [urlHash(URL_A)])).rows[0] as any;
+    const mapped = assetUrlFor(URL_A, row);
+    expect(mapped).toMatch(/\?v=[0-9a-f]{8}$/);
+    const [path, search] = mapped.split('?');
+    const res = await asset(path.split('/').pop()!, `?${search}`);
+    expect(res.status).toBe(200);
+    expect(Buffer.from(await res.arrayBuffer())).toEqual(BYTES);
   });
 
   it('404s a row whose object the store will not give', async () => {

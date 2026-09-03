@@ -28,6 +28,7 @@ import { objectStore } from '@/lib/object-store';
 import { setAssetByteQuotaForTests } from '@/lib/asset-quota';
 import { importWebAsset, refreshWebAsset, refreshWebAssets, lookupWebAssets, webAssetByHash, WebAssetRefused } from '@/lib/web-assets';
 import { assetBytesForToken } from '@/lib/asset-quota';
+import { assetUrlFor } from '@/lib/story/asset-url';
 import { webIngestRateLimited } from '@/lib/auth';
 import { WEB_INGEST_MAX_PER_HOUR } from '@/lib/config';
 
@@ -193,6 +194,32 @@ describe('refreshWebAsset', () => {
     expect(after.url_hash).toBe(before.url_hash); // the served address never moves
     expect(after.object_key).not.toBe(before.object_key);
     expect((await webAssetByHash(before.url_hash))?.object_key).toBe(after.object_key);
+    photoColour = '#204080';
+  });
+
+  /*
+   * R19 — the half a repointed row cannot do on its own. `/assets/<hash>` is
+   * served `immutable` for a year, so a reader who already fetched the old
+   * bytes never asks again; what a refresh changes is the URL the next RENDER
+   * emits, and the change has to come from the row, since nothing else about
+   * the document moved.
+   */
+  it('changes the url every later render emits, at the same address', async () => {
+    allowLocal();
+    const actor = await anonToken();
+    photoColour = '#0b7a3c';
+    const before = await importWebAsset(`${base}/photo.png`, actor);
+    photoColour = '#c21807';
+    const after = await refreshWebAsset(`${base}/photo.png`, actor);
+
+    expect(assetUrlFor(`${base}/photo.png`, after)).not.toBe(assetUrlFor(`${base}/photo.png`, before));
+    expect(assetUrlFor(`${base}/photo.png`, after).split('?')[0])
+      .toBe(assetUrlFor(`${base}/photo.png`, before).split('?')[0]);
+    // …and a refresh that finds the SAME bytes emits the same url: the point is
+    // to invalidate a change, not to make every render a cache miss.
+    photoColour = '#c21807';
+    const again = await refreshWebAsset(`${base}/photo.png`, actor);
+    expect(assetUrlFor(`${base}/photo.png`, again)).toBe(assetUrlFor(`${base}/photo.png`, after));
     photoColour = '#204080';
   });
 

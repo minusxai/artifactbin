@@ -30,7 +30,7 @@
 import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { splitHelmet, type HelmetContent } from '@/lib/story/helmet';
 import { fixHtmlNesting } from '@/lib/story/nesting';
-import { mapExternalCssUrls, mapExternalImageSources, type AssetLookup } from '@/lib/story/asset-url';
+import { mapExternalCssUrls, mapExternalImageSources, type AssetLookup, type AssetMapOptions } from '@/lib/story/asset-url';
 
 export interface StoryBody {
   /** The `<Helmet>`'s content — with its stylesheet already asset-mapped. */
@@ -39,14 +39,22 @@ export interface StoryBody {
   body: JsxNode[];
 }
 
-/** Null when the source does not parse: a document that cannot be described is not served or sent. */
-export function storyBodyFor(source: string, assets?: AssetLookup): StoryBody | null {
+/**
+ * Null when the source does not parse: a document that cannot be described is
+ * not served or sent.
+ *
+ * `opts` is the mapping's, and there is exactly one of them: a CAPTURE render
+ * wants every image eager and a single `src` (lib/story/asset-url). It travels
+ * here rather than being decided here, because this module knows what a
+ * document IS and not who is looking at it.
+ */
+export function storyBodyFor(source: string, assets?: AssetLookup, opts?: AssetMapOptions): StoryBody | null {
   const parsed = parseJsx(source);
   if (!parsed.ok) return null;
   const { content, body } = splitHelmet(fixHtmlNesting(parsed.nodes));
   if (!assets) return { content, body };
   return {
     content: content.style ? { ...content, style: mapExternalCssUrls(content.style, assets) } : content,
-    body: mapExternalImageSources(body, assets),
+    body: mapExternalImageSources(body, assets, opts),
   };
 }
