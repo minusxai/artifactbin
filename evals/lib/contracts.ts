@@ -12,6 +12,7 @@
  * twenty minutes into a matrix.
  */
 import { z } from 'zod';
+import type { ToolInvocation } from './docs-reads';
 import { IMAGE_RENDERERS, IMAGE_SIZES, type ImageVariant } from './image-variants';
 import { STORY_TEMPLATE_NAMES } from '../../services/app/lib/validation/atlas-schemas';
 import type { Leg } from './leg';
@@ -63,6 +64,12 @@ const CHECKS = [
   'kept_untouched_text',
   // mcp
   'used_mcp',
+  /**
+   * The agent never opened this repo's own checkout. A readable checkout hands a
+   * `fetched_skill` run the skills it was supposed to fetch AND the task's own
+   * grading rubric (`lib/local-reads`).
+   */
+  'no_local_checkout_reads',
 ] as const;
 export type Check = (typeof CHECKS)[number];
 
@@ -184,6 +191,14 @@ export interface HarnessResult {
   toolCalls: number | null;
   /** Tool calls that fetched or READ our docs — incl. paging a saved copy. Null when the harness emitted no tool telemetry. See `lib/docs-reads`. */
   docsReadCalls: number | null;
+  /**
+   * Every tool call the run made, name + input, normalized across the four CLIs.
+   * Each adapter already builds this to answer `docsReadCalls`; it is exposed
+   * because it is the ONLY record of what the agent touched, and more than one
+   * question is asked of it (`lib/local-reads` asks whether it read this
+   * checkout). Empty when the harness emitted no tool telemetry.
+   */
+  invocations: ToolInvocation[];
   tokens: TokenUsage | null;
   /**
    * The harness's own cost figure — THE cost when present. A harness prices its run against the

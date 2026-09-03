@@ -80,6 +80,9 @@ const ALWAYS_REPORT = new Set([
   'published', 'published_first_try', 'read_docs_before_write', 'no_unknown_endpoints',
   'canonical_stable', 'has_title', 'used_start_document', 'harness_ok',
   'no_console_errors', 'no_failed_responses', 'fits_390px',
+  // Whether the agent read this checkout describes any run at all — and a column
+  // where it is false is a column that measured the disk instead of the wire.
+  'no_local_checkout_reads',
 ]);
 
 /**

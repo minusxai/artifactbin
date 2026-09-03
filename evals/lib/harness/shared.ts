@@ -1,4 +1,5 @@
 /** Helpers every adapter uses. Separate from the registry so an adapter never imports the module that imports it. */
+import type { HarnessResult } from '../contracts';
 export function parseJsonl(text: string): Array<Record<string, unknown>> {
   const out: Array<Record<string, unknown>> = [];
   for (const line of text.split('\n')) {
@@ -13,4 +14,6 @@ export function parseJsonl(text: string): Array<Record<string, unknown>> {
   return out;
 }
 
-export const NO_TELEMETRY = { turns: null, toolCalls: null, docsReadCalls: null, tokens: null, reportedCostUsd: null, webSearchCalls: null } as const;
+/** The shape of a run that told us nothing: every count null, no tool record. Typed (not `as const`) so `invocations` stays a mutable `ToolInvocation[]`. */
+export const NO_TELEMETRY: Pick<HarnessResult, 'turns' | 'toolCalls' | 'docsReadCalls' | 'invocations' | 'tokens' | 'reportedCostUsd' | 'webSearchCalls'> =
+  { turns: null, toolCalls: null, docsReadCalls: null, invocations: [], tokens: null, reportedCostUsd: null, webSearchCalls: null };

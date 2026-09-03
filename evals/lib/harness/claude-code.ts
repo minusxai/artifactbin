@@ -101,6 +101,7 @@ export const claudeCode: HarnessAdapter = {
       turns: typeof result.num_turns === 'number' ? result.num_turns : null,
       toolCalls,
       docsReadCalls: countDocsReads(invocations),
+      invocations,
       tokens: usageOf(result.usage as Record<string, unknown> | undefined),
       reportedCostUsd: typeof result.total_cost_usd === 'number' ? result.total_cost_usd : null,
       webSearchCalls: null,

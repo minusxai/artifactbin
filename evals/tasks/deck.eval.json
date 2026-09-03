@@ -17,6 +17,7 @@
     "chart_marks_drawn",
     "has_title",
     "no_console_errors",
-    "no_failed_responses"
+    "no_failed_responses",
+    "no_local_checkout_reads"
   ]
 }

@@ -45,6 +45,12 @@ export interface Args {
   portBase?: number;
   /** Override `run.concurrency` — how many of a leg's tasks run at once. */
   concurrency?: number;
+  /**
+   * Run every harness process as this unix user instead of the driver's own —
+   * the CI runner's isolation account, which cannot read this checkout. Without
+   * it no sudo is ever invoked, so a laptop run is unchanged (`lib/spawn`).
+   */
+  runAs?: string;
 }
 
 const EVALS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -108,6 +114,7 @@ export function parseArgs(argv: string[]): Args {
       case '--deployment': args.deployment = deploymentUrl(value()); break;
       case '--port-base': args.portBase = portBase(value()); break;
       case '--concurrency': args.concurrency = concurrency(value()); break;
+      case '--run-as': args.runAs = value(); break;
       case '--out': args.out = path.resolve(value()); break;
       case '--ci': args.ci = true; break;
       case '--no-retry': args.retry = false; break;

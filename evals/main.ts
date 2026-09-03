@@ -5,6 +5,7 @@
  *                   [--price-in N --price-out N] [--no-vision]
  *                   [--mode fetched_skill+api_action|fetched_skill+mcp_action|installed_skill+api_action|installed_skill+mcp_action]
  *                   [--tasks x,y] [--deployment https://…] [--out dir] [--no-report]
+ *                   [--run-as user]   run the harness as another unix account (CI isolation)
  *   npm run eval -- --ci …          the CI task set, exit 1 on any failed flow. A failed
  *                                   flow gets ONE more turn and is NAMED when it passes
  *                                   there (lib/second-attempt); `--no-retry` turns that off.
@@ -38,6 +39,7 @@ import { BASELINE_FLOW, BASELINE_PROMPT, BASELINE_ROWS_ID, measureBaseline } fro
 import { ledgerMetrics, parseLedger, scoredArtifactId } from './lib/ledger';
 import { adapterFor } from './lib/harness';
 import { runInvocation } from './lib/spawn';
+import { countCheckoutReads } from './lib/local-reads';
 import { RunRecorder } from './lib/rows';
 import { serverEnv, serverPorts, startServer } from './lib/server';
 import { mapConcurrent } from './lib/pool';
@@ -89,7 +91,7 @@ async function seedDocument(base: string, id: string, token: string, markup: str
 /** A task's outcome for one leg. `null` = skipped: this harness cannot run it at all. */
 import { runSecondAttempts, verdictLine, type MergedVerdicts, type Outcome } from './lib/second-attempt';
 
-async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: string, browser: Browser): Promise<Outcome[]> {
+async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: string, browser: Browser, runAs?: string): Promise<Outcome[]> {
   const apiKey = leg.apiKey;
   const ports = serverPorts(config.server.portBase, 0);
   const legDir = outDir;
@@ -161,7 +163,7 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
       ? materializePlugin(path.join(baseDir, 'plugin'), config.deployment ?? productUrl, actionTransport(leg.mode.run) === 'api' ? 'curl' : 'mcp')
       : undefined;
     const baseline = await measureBaseline({
-      leg, adapter: adapterFor(leg.harness), apiKey, dir: baseDir, plugin: basePlugin, timeoutMs: config.run.timeoutMs,
+      leg, adapter: adapterFor(leg.harness), apiKey, dir: baseDir, plugin: basePlugin, timeoutMs: config.run.timeoutMs, runAs,
     });
     const brec = new RunRecorder(legDir, { label: leg.label, target: productUrl, harness: leg.harness, model: leg.model, startedAt, mode: leg.mode.run }, BASELINE_ROWS_ID);
     brec.flow(BASELINE_FLOW, `${BASELINE_PROMPT} — the harness's fixed context, paid again on EVERY turn of every task below.`, { graded: false });
@@ -180,7 +182,7 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
     return await mapConcurrent(tasks, config.run.concurrency, async (task) => {
       const t = await startTaskProxy(task.id);
       try {
-        return await runTask({ leg, task, config, apiKey, legDir, ledgerPath: t.ledgerPath, productUrl, agentBase: t.agentBase, agentEnv: t.agentEnv, browser, startedAt });
+        return await runTask({ leg, task, config, apiKey, legDir, ledgerPath: t.ledgerPath, productUrl, agentBase: t.agentBase, agentEnv: t.agentEnv, browser, startedAt, runAs });
       } catch (err) {
         // A task's own failure is ITS failure. Letting it reject would take down the server its
         // siblings are still running against — and their agent time is already paid for. `false`
@@ -209,6 +211,8 @@ interface TaskRun {
   agentEnv: Record<string, string>;
   /** When the LEG started (ISO) — one value for every task, so the report can be named by it. */
   startedAt: string;
+  /** Unix user the harness process runs as, when CI isolates it from this checkout (`lib/spawn`). */
+  runAs?: string;
 }
 
 async function runTask(r: TaskRun): Promise<Outcome> {
@@ -284,6 +288,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     timeoutMs: config.run.timeoutMs,
     stdoutPath: path.join(runDir, 'transcript.jsonl'),
     stderrPath: path.join(runDir, 'stderr.log'),
+    ...(r.runAs ? { runAs: r.runAs, homeDir } : {}),
   });
   const result = adapter.reduce(spawned.stdout);
   if (spawned.timedOut) { result.ok = false; result.error = `timed out after ${config.run.timeoutMs} ms`; }
@@ -322,6 +327,11 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   rec.record(task.id, 'tool_calls', result.toolCalls);
   // Turns spent READING docs — fetches plus every later page through a saved copy (`lib/docs-reads`).
   rec.record(task.id, 'docs_read_calls', result.docsReadCalls);
+  // Turns spent reading THIS CHECKOUT — the skills a fetched_skill run is meant to discover over the
+  // wire, and the task's own grading rubric. Anything above zero invalidates the column (`lib/local-reads`).
+  // Null, like `docsReadCalls`, when the harness emitted no tool telemetry: nothing was observed either way.
+  const checkoutReads = result.docsReadCalls === null ? null : countCheckoutReads(result.invocations, [REPO_ROOT]);
+  rec.record(task.id, 'checkout_reads', checkoutReads);
   rec.record(task.id, 'tokens_in', result.tokens ? result.tokens.input + result.tokens.cacheRead + result.tokens.cacheWrite : null);
   rec.record(task.id, 'tokens_out', result.tokens ? result.tokens.output : null);
   const cost = taskCost(result, leg.price);
@@ -373,6 +383,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     // Null, not false, when this harness has no MCP client and ran the task over REST.
     used_mcp: transport.substitutedWhy || leg.mode.substitutedWhy ? null : lm.usedMcp,
     kept_untouched_text: task.seedKeepText ? served.html.includes(task.seedKeepText) : null,
+    no_local_checkout_reads: checkoutReads === null ? null : checkoutReads === 0,
   };
   // `checksToRecord` decides which checks become rows (task-specific ones only where the task grades them,
   // so an inapplicable check reads as "—" rather than a red FAIL); only the checks the TASK lists decide the
@@ -456,7 +467,7 @@ async function main(): Promise<void> {
   const browser = await chromium.launch();
   let merged: MergedVerdicts = { verdicts: [], recovered: [], failed: [] };
   try {
-    const first = await runLeg(leg, tasks, config, args.out, browser);
+    const first = await runLeg(leg, tasks, config, args.out, browser, args.runAs);
     // A CI flow that failed gets ONE more turn, alone, and is named for it
     // (lib/second-attempt). The first attempt's artifacts are kept beside the
     // retry's rather than overwritten, so the flake can still be read.
@@ -465,7 +476,7 @@ async function main(): Promise<void> {
       enabled: args.retry,
       outDir: args.out,
       announce: (task) => log(`${leg.label}/${task.id}: failed — one more turn, alone`),
-      rerun: async (task) => (await runLeg(leg, [task], config, args.out, browser))[0],
+      rerun: async (task) => (await runLeg(leg, [task], config, args.out, browser, args.runAs))[0],
     });
   } finally {
     await settleWithin(browser.close(), TEARDOWN_MS);

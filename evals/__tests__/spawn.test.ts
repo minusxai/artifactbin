@@ -10,7 +10,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { runInvocation, wrapRunAs } from '../lib/spawn';
+import { chownArgv, runInvocation, wrapRunAs } from '../lib/spawn';
 
 let dir: string;
 const paths = () => ({ stdoutPath: path.join(dir, 'transcript.jsonl'), stderrPath: path.join(dir, 'stderr.log') });
@@ -111,5 +111,14 @@ describe('wrapRunAs', () => {
     expect(wrapped.argv.slice(0, 6)).toEqual(['sudo', '-n', '-u', 'agent', '-E', '--']);
     expect(wrapped.argv.slice(6)).toEqual(inv.argv);
     expect(wrapped.unsetEnv).toEqual(['X']);
+  });
+
+  /**
+   * The other user must be able to WRITE its workspace and its config home, both of which the
+   * driver created as itself (a harness writes its login file before the turn). Only the argv is
+   * asserted — running it would need a real sudoer, and this suite never invokes one.
+   */
+  it('hands the workspace and the config home over, non-interactively, before the launch', () => {
+    expect(chownArgv('agent', ['/tmp/run/cwd', '/tmp/run/home'])).toEqual(['sudo', '-n', 'chown', '-R', 'agent', '/tmp/run/cwd', '/tmp/run/home']);
   });
 });

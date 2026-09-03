@@ -17,8 +17,9 @@
  * debug flag, a crash dump, an agent running `env` — would otherwise put the key
  * in a transcript that CI uploads as an artifact.
  */
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
+import path from 'node:path';
 import type { HarnessInvocation } from './contracts';
 import { longestSecret, scrubSecrets } from './secrets';
 
@@ -34,11 +35,71 @@ export interface SpawnResult {
 /** Backstop for a harness with no line filter, or one that streams something unforeseen. */
 const DEFAULT_MAX_STDOUT_BYTES = 32 * 1024 * 1024;
 
-export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string; baseEnv: Record<string, string | undefined>; timeoutMs: number; stdoutPath: string; stderrPath: string; maxStdoutBytes?: number }): Promise<SpawnResult> {
+/**
+ * ISOLATION — run the harness as somebody else.
+ *
+ * On a CI runner the driver and the agent share a filesystem, and the agent
+ * WILL wander it: production run 33702277600 has an agent finding this repo's
+ * checkout, reading the skill tree it was meant to fetch over the wire, and then
+ * reading the grading rubric of the task it was being graded on. Detecting that
+ * is `lib/local-reads`; PREVENTING it is a second unix account with no read
+ * access to the checkout, which is what `--run-as` selects.
+ *
+ * Pure, so the argv is a thing tests can look at rather than something only a
+ * runner can prove:
+ * - `sudo -n` never prompts — a runner has no tty and a hung sudo is a dead job.
+ * - `-E` carries the environment across, so the provider key, the harness's home
+ *   and the proxy settings survive the switch; the caller's `env` is untouched.
+ * - `--` ends sudo's own options, so a harness flag is never eaten by sudo.
+ * - argv[0] is made ABSOLUTE on the driver's PATH first: sudo replaces PATH with
+ *   its `secure_path`, which does not contain the runner's tool cache, and a CLI
+ *   installed there would simply vanish ("command not found") under the switch.
+ */
+export function wrapRunAs(inv: HarnessInvocation, user: string, resolve: (cmd: string) => string): HarnessInvocation {
+  const [cmd, ...rest] = inv.argv;
+  const exe = path.isAbsolute(cmd) ? cmd : resolve(cmd);
+  return { ...inv, argv: ['sudo', '-n', '-u', user, '-E', '--', exe, ...rest] };
+}
+
+/**
+ * Hand the other user the directories it must WRITE: its workspace and its
+ * config home. The driver prepares both as ITSELF (a harness's login file is
+ * written before the turn), so ownership moves at spawn time — not at creation,
+ * when the driver still needs to write there.
+ */
+export function chownArgv(user: string, dirs: string[]): string[] {
+  return ['sudo', '-n', 'chown', '-R', user, ...dirs];
+}
+
+/** First executable named `cmd` on `PATH`. Named error, never a bare fallback: a bare name is exactly what sudo's secure_path would lose. */
+function resolveOnPath(cmd: string, PATH: string | undefined): string {
+  for (const dir of (PATH ?? '').split(path.delimiter).filter(Boolean)) {
+    const candidate = path.join(dir, cmd);
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      return candidate;
+    } catch {
+      // not here
+    }
+  }
+  throw new Error(`--run-as: cannot find "${cmd}" on PATH`);
+}
+
+export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string; baseEnv: Record<string, string | undefined>; timeoutMs: number; stdoutPath: string; stderrPath: string; maxStdoutBytes?: number; runAs?: string; homeDir?: string }): Promise<SpawnResult> {
   const cap = opts.maxStdoutBytes ?? DEFAULT_MAX_STDOUT_BYTES;
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(opts.baseEnv)) if (v !== undefined && !inv.unsetEnv.includes(k)) env[k] = v;
   Object.assign(env, inv.env);
+
+  // No `--run-as`, no sudo: a laptop run is untouched by any of this. Only argv changes —
+  // the line filter, the redaction list and the environment are the same launch either way.
+  let argv = inv.argv;
+  if (opts.runAs) {
+    const chown = chownArgv(opts.runAs, [opts.cwd, ...(opts.homeDir ? [opts.homeDir] : [])]);
+    const done = spawnSync(chown[0], chown.slice(1), { stdio: 'inherit' });
+    if (done.status !== 0) throw new Error(`--run-as ${opts.runAs}: \`${chown.join(' ')}\` exited ${String(done.status ?? done.signal ?? done.error?.message)}`);
+    argv = wrapRunAs(inv, opts.runAs, (cmd) => resolveOnPath(cmd, env.PATH)).argv;
+  }
 
   const secrets = (inv.redact ?? []).filter((s) => s.length > 0);
   const scrub = (text: string) => scrubSecrets(text, secrets);
@@ -49,7 +110,7 @@ export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string;
   const errOut = fs.createWriteStream(opts.stderrPath, { flags: 'a' });
   const started = Date.now();
   const stdio: ['ignore', 'pipe', 'pipe'] = ['ignore', 'pipe', 'pipe'];
-  const child: ChildProcess = spawn(inv.argv[0], inv.argv.slice(1), { cwd: opts.cwd, env: env as NodeJS.ProcessEnv, stdio, detached: process.platform !== 'win32' });
+  const child: ChildProcess = spawn(argv[0], argv.slice(1), { cwd: opts.cwd, env: env as NodeJS.ProcessEnv, stdio, detached: process.platform !== 'win32' });
   let stdout = '';
   let written = 0;
   let truncated = false;
