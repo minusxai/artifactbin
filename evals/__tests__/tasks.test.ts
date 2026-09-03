@@ -72,3 +72,21 @@ describe('buildPrompt — a model that cannot see', () => {
     expect(blind.startsWith(task().brief)).toBe(true);
   });
 });
+
+/**
+ * Plugin mode without MCP: a person mints a token at /tokens/new and the skill reads it from ~/.artifactbin.env —
+ * the driver writes that file; the prompt never carries the token (decided 2026-09-03). Seeded RED by the orchestrator.
+ */
+describe('the installed-skill prompt carries no token', () => {
+  it('names the saved connection file instead of the secret', () => {
+    const prompt = buildPrompt(task(), { kind: 'token', base: 'https://x.test', token: 'mx_SECRET_VALUE', id: 'abc123' }, { mode: 'installed_skill+api_action' });
+    expect(prompt).not.toContain('mx_');
+    expect(prompt).toContain('~/.artifactbin.env');
+  });
+  it('the MCP prompts stay token-free too', () => {
+    for (const mode of ['fetched_skill+mcp_action', 'installed_skill+mcp_action'] as const) {
+      const prompt = buildPrompt(task(), { kind: 'token', base: 'https://x.test', token: 'mx_SECRET_VALUE', id: 'abc123' }, { mode });
+      expect(prompt, mode).not.toContain('mx_');
+    }
+  });
+});

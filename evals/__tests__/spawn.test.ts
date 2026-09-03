@@ -122,3 +122,17 @@ describe('wrapRunAs', () => {
     expect(chownArgv('agent', ['/tmp/run/cwd', '/tmp/run/home'])).toEqual(['sudo', '-n', 'chown', '-R', 'agent', '/tmp/run/cwd', '/tmp/run/home']);
   });
 });
+
+/**
+ * The harness's HOME is the per-run home the driver owns: `~/.artifactbin.env` resolves there, and nothing a CLI
+ * writes under $HOME lands in the runner's real home (the precondition for --run-as as well). Seeded RED.
+ */
+describe('HOME is the per-run harness home', () => {
+  it('the child sees homeDir as HOME', async () => {
+    const homeDir = path.join(dir, 'home');
+    fs.mkdirSync(homeDir);
+    const r = await runInvocation(node('console.log(process.env.HOME)'), { cwd: dir, homeDir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout.trim()).toBe(homeDir);
+  });
+});
