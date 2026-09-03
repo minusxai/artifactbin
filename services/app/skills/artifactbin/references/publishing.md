@@ -1,7 +1,7 @@
 ---
 name: publishing
 description: >-
-  The HTTP API beyond the brief: replace, the edit_id protocol in full, read back, list, the error table. Read when a call is refused or a human may be editing the same page.
+  The HTTP API beyond the brief: replace, the edit_id protocol, read back, list, fork, the error table. Read when a call is refused, an existing document is worth forking, or a human may be editing the same page.
 ---
 ## Read first
 

@@ -198,6 +198,9 @@ const editArtifactOp: Operation = {
     { status: 400, code: 'bad_diff', fix: 'old_string must appear exactly once — widen it until it is unique' },
     { status: 400, code: 'not_editable', fix: 'only markup artifacts take edits — replace a data tier whole instead' },
     INVALID_JSX,
+    // An edit re-publishes the whole document, refs included, so it answers
+    // this exactly as create and replace do.
+    INVALID_REFS,
   ],
   async run(ctx, input) {
     return fromResponse(await respondToEdit(ctx.base, input, (i) => applyEditFor(ctx.actor, String(input.id), i)));
@@ -430,8 +433,11 @@ const forkArtifactOp: Operation = {
   input: {
     id: z.string(),
     title: z.string().optional().describe('title for the COPY; omit to keep the original\'s'),
-    visibility: CONTENT_FIELDS.visibility,
-    folder: CONTENT_FIELDS.folder,
+    // The same three values, but NOT the create door's defaults sentence: a
+    // fork defaults to whatever the source is, which is the one thing about
+    // visibility a forker has to know.
+    visibility: CONTENT_FIELDS.visibility.describe("read ACL for the COPY: 'public' = anyone with the link, and it lists on your public profile; 'unlisted' = anyone with the link, listed nowhere; 'private' = you plus the emails you share it with (needs a logged-in account). Omit to keep the source's."),
+    folder: CONTENT_FIELDS.folder.describe("folder path for the COPY on your dashboard, like '2026/forks'; omit to file it at your root"),
   },
   // A plain write: not destructive (the source is untouched) and NOT
   // idempotent — two calls make two copies.

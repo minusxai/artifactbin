@@ -105,6 +105,20 @@ describe('the markup skill', () => {
   it('§1.5 the CSP paragraph names the four endpoints', () => {
     expect(doc).not.toContain('the one URL its CSP admits');
   });
+  /*
+   * ADDED (F8 round 2). The JSX MICRO-RULES — a tag closes, a comment is
+   * `{/* … *\/}`, and there is no document shell — were carried by
+   * publishing.md's orientation bullet and were DELETED with it rather than
+   * folded into their owner. They are the two mistakes an HTML-habit model
+   * makes on its first write (`<br>`, `<!-- -->`), and the only thing left to
+   * catch them was a 400 round trip. They live in markup.md, which owns the
+   * vocabulary.
+   */
+  it('§F8 the JSX micro-rules are documented: closing tags, JSX comments, no document shell', () => {
+    expect(doc).toContain('every tag closes (`<br />`)');
+    expect(doc).toContain('{/* … */}');
+    expect(doc).toContain('`<html>`');
+  });
 });
 
 describe('the design skill', () => {
