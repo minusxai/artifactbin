@@ -13,7 +13,7 @@ import { getDb, type Queryable } from './db';
 import { generateFileId } from './ids';
 import { parseContentInput, type ArtifactFormat } from './story/input';
 import { canonicalizeMarkup, publishJsx } from './story/jsx-tier';
-import { imageRawUrl } from './story/ref-data';
+import { imageRawUrl, imageVariantUrl } from './story/ref-data';
 import { assetWarningFor, importWebAsset, WebAssetRefused, type AssetWarning, type WebAssetKind } from './web-assets';
 import { resolveWebFont, UnknownFontError } from './webfonts';
 import { webIngestRateLimited } from './auth';
@@ -1579,7 +1579,10 @@ export function datasetsForDocument(source: string | null | undefined): string[]
 
 /** Build the render-time RefDataMap for a jsx artifact: recipes → parsed
  * template, images → their /a URL. (Datasets: see dataflowForRow.) */
-export async function refDataForRow(row: ArtifactRow): Promise<import('@/lib/story/ref-data').RefDataMap> {
+export async function refDataForRow(
+  row: ArtifactRow,
+  opts: { capture?: boolean } = {},
+): Promise<import('@/lib/story/ref-data').RefDataMap> {
   const meta = row.meta as { refs?: Array<{ id: string; kind: string }> };
   const out: import('@/lib/story/ref-data').RefDataMap = {};
   // A dataset a <Query> reads is a ref (ownership, dependents) but NOT page
@@ -1606,7 +1609,9 @@ export async function refDataForRow(row: ArtifactRow): Promise<import('@/lib/sto
       // it immutable and readers stop refetching the image on every render.
       // The intrinsic box, when the store recorded one (lib/images/optimise):
       // the markup reserves it so nothing below jumps when the bytes land.
-      const im = r.meta as { width?: unknown; height?: unknown; placeholder?: unknown } | null;
+      const im = r.meta as {
+        width?: unknown; height?: unknown; placeholder?: unknown; smallObjectKey?: unknown; smallWidth?: unknown;
+      } | null;
       const box = typeof im?.width === 'number' && typeof im?.height === 'number'
         ? { width: im.width, height: im.height }
         : {};
@@ -1615,7 +1620,15 @@ export async function refDataForRow(row: ArtifactRow): Promise<import('@/lib/sto
       const blur = typeof im?.placeholder === 'string' && im.placeholder.startsWith('data:')
         ? { blur: im.placeholder }
         : {};
-      out[r.id] = { kind: 'image', url: imageRawUrl(r.id, r.version), ...box, ...blur };
+      /*
+       * The narrow copy publish stored beside it, addressed on the same
+       * artifact — the second half of the `srcset` the markup writes. Never for
+       * a CAPTURE, which wants the full copy and nothing to choose from.
+       */
+      const widths = !opts.capture && typeof im?.smallWidth === 'number' && typeof im?.smallObjectKey === 'string'
+        ? { smallUrl: imageVariantUrl(r.id, r.version, im.smallWidth), smallWidth: im.smallWidth }
+        : {};
+      out[r.id] = { kind: 'image', url: imageRawUrl(r.id, r.version), ...box, ...blur, ...widths };
     }
   }
   return out;

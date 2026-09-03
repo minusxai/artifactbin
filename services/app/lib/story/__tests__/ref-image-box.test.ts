@@ -13,7 +13,7 @@
  * reserves its space in one and not the other has nowhere to come from.
  */
 import { describe, expect, it } from 'vitest';
-import { resolveRefProps } from '../ref-data';
+import { IMAGE_SIZES, resolveRefProps } from '../ref-data';
 import type { RefDataMap } from '../ref-data';
 
 const img = { isComponent: false, tag: 'img' };
@@ -44,6 +44,46 @@ describe('a ref image', () => {
   // poster's intrinsic pixels would fight the player's own box.
   it('sizes an <img> and not a Video poster', () => {
     expect(resolveRefProps({ isComponent: true, tag: 'Video' }, { poster: 'ref:abc123' }, sized))
+      .toEqual({ poster: '/a/abc123/raw?v=2' });
+  });
+});
+
+/*
+ * THE SECOND WIDTH — the copy a phone downloads instead of the desktop's.
+ *
+ * An upload wide enough to be worth it is stored twice (lib/images/optimise)
+ * and both copies come off the same artifact, `?w=` apart. It rides the ref map
+ * for the same reason the box and the blur do: both render paths consume it, so
+ * an image that offers two widths in one and one in the other has nowhere to
+ * come from.
+ */
+const wide: RefDataMap = {
+  abc123: {
+    kind: 'image', url: '/a/abc123/raw?v=2', width: 1600, height: 1200,
+    smallUrl: '/a/abc123/raw?v=2&w=640', smallWidth: 640,
+  },
+};
+
+describe('a ref image stored at two widths', () => {
+  it('offers both, and says what column they are read in', () => {
+    expect(resolveRefProps(img, { src: 'ref:abc123' }, wide)).toMatchObject({
+      src: '/a/abc123/raw?v=2',
+      srcSet: '/a/abc123/raw?v=2&w=640 640w, /a/abc123/raw?v=2 1600w',
+      sizes: IMAGE_SIZES,
+    });
+  });
+
+  it('offers one when only one was stored', () => {
+    expect(resolveRefProps(img, { src: 'ref:abc123' }, sized)).not.toHaveProperty('srcSet');
+  });
+
+  it("never overrides an author's own srcset", () => {
+    expect(resolveRefProps(img, { src: 'ref:abc123', srcSet: '/mine 1x' }, wide)).not.toHaveProperty('srcSet');
+    expect(resolveRefProps(img, { src: 'ref:abc123', srcset: '/mine 1x' }, wide)).not.toHaveProperty('srcSet');
+  });
+
+  it('offers none behind a Video poster', () => {
+    expect(resolveRefProps({ isComponent: true, tag: 'Video' }, { poster: 'ref:abc123' }, wide))
       .toEqual({ poster: '/a/abc123/raw?v=2' });
   });
 });

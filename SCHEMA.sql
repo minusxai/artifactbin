@@ -401,6 +401,8 @@ CREATE TABLE IF NOT EXISTS app.web_assets (
   width INTEGER,
   height INTEGER,
   placeholder TEXT,
+  small_object_key TEXT,
+  small_width INTEGER,
   fetched_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   fetched_by_token_id TEXT,
   fetched_by_user_id TEXT,
@@ -422,6 +424,10 @@ ALTER TABLE app.web_assets ADD COLUMN IF NOT EXISTS width INTEGER;
 ALTER TABLE app.web_assets ADD COLUMN IF NOT EXISTS height INTEGER;
 
 ALTER TABLE app.web_assets ADD COLUMN IF NOT EXISTS placeholder TEXT;
+
+ALTER TABLE app.web_assets ADD COLUMN IF NOT EXISTS small_object_key TEXT;
+
+ALTER TABLE app.web_assets ADD COLUMN IF NOT EXISTS small_width INTEGER;
 
 ALTER TABLE app.web_assets ADD COLUMN IF NOT EXISTS fetched_at TIMESTAMPTZ NOT NULL DEFAULT now();
 

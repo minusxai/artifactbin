@@ -25,6 +25,7 @@
  * began measuring images.
  */
 import { sha256Hex } from '@/lib/sha256';
+import { IMAGE_SIZES } from '@/lib/story/ref-data';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
 
 /**
@@ -124,14 +125,13 @@ function assetSrcSet(url: string, box: WebAssetBox): string | null {
   return `${assetVariantUrl(url, box)} ${small}w, ${assetUrlFor(url, box)} ${width}w`;
 }
 
-/**
- * What the browser should assume the image is laid out at, before any CSS has
- * loaded: the document column (`max-w-3xl`, 768px) on a desktop, and the whole
- * viewport on a phone. Wrong for a full-bleed image on a wide screen — which
- * simply gets the full variant, the one it would have got with no `srcset` at
- * all — and right for the ordinary case, which is an image in the column.
+/*
+ * The `sizes` hint is lib/story/ref-data's IMAGE_SIZES: the same picture in the
+ * same column, whether its bytes came from an upload or from a URL. It is wrong
+ * for a full-bleed image on a wide screen — which simply gets the full variant,
+ * the one it would have had with no `srcset` at all — and right for the
+ * ordinary case, which is an image in the document column.
  */
-const ASSET_SIZES = '(max-width: 640px) 100vw, 768px';
 
 /** How many images at the top of a document are assumed to be in the first viewport. */
 const EAGER_IMAGES = 2;
@@ -257,7 +257,7 @@ export function mapExternalImageSources(nodes: JsxNode[], lookup: AssetLookup, o
       const srcSet = attrOf(el, 'srcset') || attrOf(el, 'sizes') ? null : assetSrcSet(url, held);
       if (srcSet) {
         setAttr(el, 'srcSet', srcSet);
-        setAttr(el, 'sizes', ASSET_SIZES);
+        setAttr(el, 'sizes', IMAGE_SIZES);
       }
       /*
        * LET THE BROWSER WAIT for everything but the first viewport. `lazy` also

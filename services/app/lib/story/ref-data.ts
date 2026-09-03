@@ -24,6 +24,14 @@ export type ResolvedRefData =
   | {
     kind: 'image'; url: string; width?: number; height?: number;
     /**
+     * The narrow copy stored beside it (lib/images/optimise), at the same
+     * artifact with `?w=` on it, and the width it was made at — the two halves
+     * of a `srcset`. Absent for a narrow image, for everything published before
+     * the variant existed, and for a CAPTURE render, which wants the full copy
+     * and nothing to choose from.
+     */
+    smallUrl?: string; smallWidth?: number;
+    /**
      * A ~95-byte blurred copy as a `data:` URL (lib/images/optimise), shown
      * under the image while the real bytes travel. Absent for more than a
      * third of stored images — the tiny ones, where a 16px thumbnail is
@@ -44,6 +52,20 @@ export type RefDataMap = Record<string, ResolvedRefData>;
  * rendered from storage can never point at different URLs.
  */
 export const imageRawUrl = (id: string, version: number): string => `/a/${id}/raw?v=${version}`;
+
+/** Where the narrow copy of the same image artifact lives: the same bytes, `?w=` apart. */
+export const imageVariantUrl = (id: string, version: number, width: number): string =>
+  `${imageRawUrl(id, version)}&w=${width}`;
+
+/**
+ * What the browser should assume an image is laid out at before any CSS has
+ * loaded: the document column on a desktop, the whole viewport on a phone.
+ *
+ * ONE constant for both image paths — the `ref:` upload here and the URL-kept
+ * copy in lib/story/asset-url — because they are the same picture in the same
+ * column, and two numbers would be two answers to one question.
+ */
+export const IMAGE_SIZES = '(max-width: 640px) 100vw, 768px';
 
 /**
  * `src="ref:<id>"` on an <img> → the referenced image artifact's same-origin
@@ -99,6 +121,14 @@ export function resolveRefProps(
       ? { width: String(ref.width), height: String(ref.height) }
       : {};
     /*
+     * BOTH WIDTHS, when both were stored — and never over an author's own
+     * srcset, in either spelling they might have written it.
+     */
+    const widths: RefPropPatch = ref.smallUrl && ref.smallWidth && ref.width && ref.width > ref.smallWidth
+      && props.srcSet === undefined && props.srcset === undefined
+      ? { srcSet: `${ref.smallUrl} ${ref.smallWidth}w, ${ref.url} ${ref.width}w`, sizes: IMAGE_SIZES }
+      : {};
+    /*
      * THE BLUR, as a background on the image itself. The <img> is transparent
      * until its bytes paint, so this shows through and is covered the instant
      * they arrive — no JavaScript, identical in the SSR string, in hydration,
@@ -110,7 +140,7 @@ export function resolveRefProps(
      * class for the same reason — a className in the patch would clobber the
      * author's (`w-full rounded-md` on the image this was written for).
      */
-    const patch: RefPropPatch = { [pos.prop]: url, ...sized };
+    const patch: RefPropPatch = { [pos.prop]: url, ...sized, ...widths };
     if (ref.blur && props.style === undefined) {
       // An OBJECT, not a string: React rejects a string `style` prop, and both
       // render paths hand this straight to createElement.

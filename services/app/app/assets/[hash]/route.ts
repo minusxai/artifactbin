@@ -26,6 +26,7 @@
  * whose key comes from the CALLER, so a miss is routine rather than an anomaly.
  */
 import { objectStore } from '@/lib/object-store';
+import { VARIANT_CONTENT_TYPE } from '@/lib/images/optimise';
 import { webAssetByHash } from '@/lib/web-assets';
 
 /** Every asset response carries these, whatever the asset turns out to be. */
@@ -37,13 +38,25 @@ export const ASSET_HEADERS: Readonly<Record<string, string>> = {
   'Access-Control-Allow-Origin': '*',
 };
 
-export async function GET(_request: Request, ctx: { params: Promise<{ hash: string }> }) {
+export async function GET(request: Request, ctx: { params: Promise<{ hash: string }> }) {
   const { hash } = await ctx.params;
   const row = await webAssetByHash(hash);
   if (!row) return new Response('not found', { status: 404 });
+  /*
+   * `w=` NAMES A WIDTH WE STORED — it is not a resize anyone may ask for. The
+   * srcset the mapping writes offers exactly the row's `small_width`, so the
+   * one value that selects the narrow copy is the one we made; everything else
+   * (an old address, a hand-typed number, nothing at all) is the full copy,
+   * because a width is a preference and never a reason to fail a picture.
+   *
+   * `v=` is read by nobody: it is the CACHE KEY a refresh moves (R19), and the
+   * bytes it addresses are simply whatever the row points at now.
+   */
+  const width = new URL(request.url).searchParams.get('w');
+  const narrow = row.small_object_key && width !== null && Number(width) === row.small_width;
   let bytes: Buffer;
   try {
-    bytes = await objectStore().get(row.object_key);
+    bytes = await objectStore().get(narrow ? row.small_object_key! : row.object_key);
   } catch {
     // A row promising bytes the store will not give is corruption or broken
     // credentials — but this is a public asset address, and answering a caller
@@ -56,6 +69,6 @@ export async function GET(_request: Request, ctx: { params: Promise<{ hash: stri
     // Built fresh per response: @hono/node-server writes the computed
     // Content-Length back INTO this object, so a shared constant would
     // announce the first body's length for every later one.
-    headers: { 'Content-Type': row.content_type, ...ASSET_HEADERS },
+    headers: { 'Content-Type': narrow ? VARIANT_CONTENT_TYPE : row.content_type, ...ASSET_HEADERS },
   });
 }

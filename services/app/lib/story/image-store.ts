@@ -8,6 +8,7 @@
  * directions live here so no caller has to know where an image's bytes are.
  */
 import { objectKey, objectStore } from '@/lib/object-store';
+import { VARIANT_CONTENT_TYPE } from '@/lib/images/optimise';
 
 /** The image content types the tier accepts. */
 export const IMAGE_CONTENT_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml'] as const;
@@ -34,13 +35,30 @@ export interface StoredImage {
   contentType: string;
 }
 
+/** Which stored copy of the image is wanted: the full one, or a width we stored. */
+export interface LoadImageOptions {
+  /**
+   * The `w=` a `srcset` asked for. It NAMES A WIDTH WE STORED — never a resize
+   * anyone may ask for — so the one value that selects the narrow copy is the
+   * one publish made, and everything else is the full image. A width is a
+   * preference, never a reason to fail a picture.
+   */
+  width?: string | number | null;
+}
+
 /**
  * Read image bytes back from wherever they are. Returns null (→ 404) rather
  * than throwing when the object is gone: a missing image is a not-found, not a
  * server error.
  */
-export async function loadImage(row: { content?: string; meta: unknown }): Promise<StoredImage | null> {
-  const meta = row.meta as { objectKey?: unknown; contentType?: unknown } | null;
+export async function loadImage(row: { content?: string; meta: unknown }, opts: LoadImageOptions = {}): Promise<StoredImage | null> {
+  const meta = row.meta as {
+    objectKey?: unknown; contentType?: unknown; smallObjectKey?: unknown; smallWidth?: unknown;
+  } | null;
+  if (typeof meta?.smallObjectKey === 'string' && meta.smallObjectKey
+    && opts.width !== null && opts.width !== undefined && Number(opts.width) === meta.smallWidth) {
+    return { body: await objectStore().get(meta.smallObjectKey), contentType: VARIANT_CONTENT_TYPE };
+  }
   if (typeof meta?.objectKey !== 'string' || !meta.objectKey) {
     // Legacy: image rows written before the object store kept the bytes inline
     // as a base64 data: URL in `content`. Serve those rather than 404 — a

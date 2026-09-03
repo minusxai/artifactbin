@@ -21,6 +21,7 @@ import { assetUrlFor, urlHash } from '@/lib/story/asset-url';
 useAppHarness();
 
 const BYTES = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+const SMALL = Buffer.from('narrow copy of the same picture');
 const URL_A = 'https://example.test/logo.svg';
 
 const seed = async (contentType = 'image/svg+xml') => {
@@ -86,6 +87,34 @@ describe('GET /assets/<hash>', () => {
     const res = await asset(path.split('/').pop()!, `?${search}`);
     expect(res.status).toBe(200);
     expect(Buffer.from(await res.arrayBuffer())).toEqual(BYTES);
+  });
+
+  /*
+   * THE SECOND WIDTH lives at the same address with `w=` on it — one route,
+   * one row, one `?v=` invalidating both — because the narrow copy is not a
+   * second ASSET: it is the same URL's bytes at a second size, and it moves
+   * when the row moves.
+   */
+  it('serves the narrow copy when the srcset asks for it, and the full one otherwise', async () => {
+    const hash = await seed('image/webp');
+    const smallKey = objectKey('webasset', SMALL);
+    await objectStore().put(smallKey, SMALL, 'image/webp');
+    const db = await getDb();
+    await db.query('update web_assets set small_object_key = $1, small_width = 640 where url_hash = $2', [smallKey, hash]);
+
+    const narrow = await asset(hash, '?v=deadbeef&w=640');
+    expect(Buffer.from(await narrow.arrayBuffer())).toEqual(SMALL);
+    expect(narrow.headers.get('Content-Type')).toBe('image/webp');
+    // Anything else is the full copy: `w` names a width we STORED, never a
+    // resize anyone may ask for.
+    for (const search of ['', '?w=641', '?w=abc', '?w=']) {
+      expect(Buffer.from(await (await asset(hash, search)).arrayBuffer())).toEqual(BYTES);
+    }
+  });
+
+  it('serves the full copy when the row has no narrow one', async () => {
+    const hash = await seed();
+    expect(Buffer.from(await (await asset(hash, '?w=640')).arrayBuffer())).toEqual(BYTES);
   });
 
   it('404s a row whose object the store will not give', async () => {

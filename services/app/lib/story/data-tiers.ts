@@ -180,6 +180,12 @@ export async function storeImageContent(buffer: Buffer, contentType: string): Pr
    */
   const fit = await optimiseImage(buffer, contentType);
   const located = await storeImage(fit.buffer, fit.contentType);
+  /*
+   * The narrow copy, stored beside the full one and CHARGED WITH IT: `bytes` is
+   * what this upload cost the store, which is both objects, and the byte quota
+   * (lib/asset-quota) sums exactly that column. One upload, one number.
+   */
+  const small = fit.variant ? await storeImage(fit.variant.buffer, fit.variant.contentType) : null;
   return {
     format: 'image',
     content: '',
@@ -187,7 +193,8 @@ export async function storeImageContent(buffer: Buffer, contentType: string): Pr
     meta: {
       contentType: fit.contentType,
       objectKey: located.objectKey,
-      bytes: located.bytes,
+      bytes: located.bytes + (small?.bytes ?? 0),
+      ...(small && fit.variant ? { smallObjectKey: small.objectKey, smallWidth: fit.variant.width } : {}),
       // The box the markup reserves, and the stand-in shown while the real
       // bytes travel. Absent when the bytes could not be decoded.
       ...(fit.width && fit.height ? { width: fit.width, height: fit.height } : {}),

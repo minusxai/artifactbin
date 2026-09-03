@@ -14,7 +14,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import sharp from 'sharp';
-import { optimiseImage, MAX_IMAGE_EDGE } from '../optimise';
+import { optimiseImage, MAX_IMAGE_EDGE, VARIANT_WIDTH } from '../optimise';
 
 /** A photograph-ish JPEG: noisy enough that it does not compress to nothing. */
 const photo = async (width: number, height: number): Promise<Buffer> => {
@@ -119,6 +119,52 @@ describe('optimiseImage', () => {
     const animated = Buffer.from(gif);
     const out = await optimiseImage(animated, 'image/gif');
     expect(sniff(out.buffer)).toBe('gif');
+    expect(out.variant).toBeNull(); // …and no second copy of it either
+  });
+
+  /*
+   * THE SECOND COPY — the one a phone downloads instead of the desktop's.
+   *
+   * The full variant is capped at 2048px and lands in a column about 850px
+   * wide, so a 390px phone is handed roughly five times the pixels it can
+   * show. A 640-wide copy is the whole fix, and it is made HERE for the same
+   * reason everything else here is: at publish, in the one door every upload
+   * and every URL import already comes through, so the two cannot disagree.
+   *
+   * The threshold is about the SOURCE: below 960px the full copy is already
+   * close enough to 640 that a second object buys a request and saves nothing.
+   */
+  it('stores a narrow copy beside a wide one', async () => {
+    const out = await optimiseImage(await photo(1600, 1200), 'image/jpeg');
+    expect(out.variant?.width).toBe(VARIANT_WIDTH);
+    expect(out.variant?.contentType).toBe('image/webp');
+    expect(await sharp(out.variant!.buffer).metadata().then((m) => m.width)).toBe(VARIANT_WIDTH);
+    // Same aspect ratio: the markup reserves the box from the FULL copy's
+    // dimensions, and a variant of another shape would make that a lie.
+    expect(out.variant!.height).toBe(Math.round((VARIANT_WIDTH * out.height!) / out.width!));
+  });
+
+  it('makes none when the image was never wide enough to need one', async () => {
+    expect((await optimiseImage(await photo(900, 600), 'image/jpeg')).variant).toBeNull();
+    expect((await optimiseImage(await photo(64, 48), 'image/jpeg')).variant).toBeNull();
+  });
+
+  it('never makes one that is bigger than the copy it is meant to save', async () => {
+    for (const [w, h] of [[1600, 1200], [3000, 1000], [1000, 4000]]) {
+      const out = await optimiseImage(await photo(w, h), 'image/jpeg');
+      if (out.variant) expect(out.variant.buffer.length).toBeLessThan(out.buffer.length);
+    }
+  });
+
+  /*
+   * The formats that come back UNTOUCHED have no variant by construction — a
+   * second copy of bytes we deliberately did not re-encode would be the
+   * re-encode we refused, at a second size.
+   */
+  it('makes none for the formats it does not re-encode at all', async () => {
+    const svg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="1000"><rect width="2000" height="1000"/></svg>`);
+    expect((await optimiseImage(svg, 'image/svg+xml')).variant).toBeNull();
+    expect((await optimiseImage(Buffer.from('ffd8ffnot-really-a-jpeg', 'utf8'), 'image/jpeg')).variant).toBeNull();
   });
 
   // A publish must not die on an image; the door already vouched for the type.
