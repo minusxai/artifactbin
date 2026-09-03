@@ -46,7 +46,9 @@ const KNOWN_ROUTES: RegExp[] = [
   /^\/api\/query$/,
   /^\/api\/artifacts$/,
   /^\/api\/artifacts\/[A-Za-z0-9]+$/,
-  /^\/api\/artifacts\/[A-Za-z0-9]+\/(edits|revert|versions)$/,
+  /^\/api\/artifacts\/[A-Za-z0-9]+\/(edits|revert|versions|annotations)$/,
+  // Answering a comment: reply and resolve are one call on the thread's own id.
+  /^\/api\/artifacts\/[A-Za-z0-9]+\/annotations\/[A-Za-z0-9_]+$/,
   /^\/api\/artifacts\/[A-Za-z0-9]+\/versions\/\d+$/,
   /^\/api\/my\//,
   /^\/api\/session\/token$/,
@@ -70,6 +72,23 @@ function isWrite(e: LedgerEntry): boolean {
   if (/^\/api\/artifacts\/[A-Za-z0-9]+$/.test(p)) return e.method === 'PUT';
   if (/^\/api\/artifacts\/[A-Za-z0-9]+\/(edits|revert)$/.test(p)) return e.method === 'POST';
   return false;
+}
+
+/**
+ * How many stored VERSIONS the agent's writes produced — the writes above that
+ * the product answered, and nothing else.
+ *
+ * It shares `isWrite` with `writeAttempts` deliberately: the driver counted this
+ * with an inline `POST|PUT` regex over `/api/artifacts`, which also matched
+ * `POST /api/artifacts/<id>/annotations/<annId>` and reported answering a
+ * comment as a new version of the document.
+ *
+ * Honest limit: an MCP call is a POST to `/mcp` with its method in a body the
+ * ledger does not keep, so an `annotate` tool call is indistinguishable from a
+ * document write and is still counted. A REST run is exact.
+ */
+export function documentWrites(entries: LedgerEntry[]): number {
+  return entries.filter((e) => e.status < 300 && isWrite(e)).length;
 }
 
 /**

@@ -36,7 +36,7 @@ import { actionTransport, installsSkills, planTransport } from './lib/mode';
 import { materializePlugin } from './lib/plugin-kit';
 import { taskCost } from './lib/price';
 import { BASELINE_FLOW, BASELINE_PROMPT, BASELINE_ROWS_ID, measureBaseline } from './lib/baseline';
-import { ledgerMetrics, parseLedger, scoredArtifactId, writtenArtifactIds } from './lib/ledger';
+import { documentWrites, ledgerMetrics, parseLedger, scoredArtifactId, writtenArtifactIds } from './lib/ledger';
 import { adapterFor } from './lib/harness';
 import { runInvocation } from './lib/spawn';
 import { countCheckoutReads } from './lib/local-reads';
@@ -50,6 +50,7 @@ import { acquireCredential, credentialSourceFor, deploymentLoginEmail, localLogi
 import { agentProxyEnv, startMitmProxy } from './lib/mitm';
 import { exportDocument, inspectDocument, screenshotDocument } from './lib/score/browser';
 import { dataflowRows, productMetrics } from './lib/score/product';
+import { prepareTask, scorerFor } from './lib/score/kinds';
 import { credentialEnv, readDotEnv } from './lib/env';
 import { parseArgs } from './lib/args';
 import { registerSecret, scrubRegistered } from './lib/secrets';
@@ -292,24 +293,27 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   const installed = installsSkills(leg.mode.run);
   let access: Access = { kind: 'start-link', startPrompt: start.prompt };
   let mcp: { name: string; url: string; token: string } | undefined;
-  if (r.credential) {
-    const token = r.credential.token;
-    if (task.seed) await seedDocument(r.agentBase, start.id, token, task.seed);
-    access = { kind: 'token', base: r.agentBase, token, id: start.id };
+  // ONE place the driver's own credential is decided, and one place it is spent. It used to be
+  // decided twice — an account credential in one branch, the paste token in the other — and every
+  // setup step had to be written into both or work on only some legs.
+  const driverToken = r.credential
+    ? r.credential.token
+    : task.handoff === 'token' || installed || transport.run === 'mcp'
+      ? tokenFromPaste(start.prompt)
+      : null;
+  if (driverToken) {
+    if (task.seed) await seedDocument(r.agentBase, start.id, driverToken, task.seed);
+    access = { kind: 'token', base: r.agentBase, token: driverToken, id: start.id };
     if (transport.run === 'mcp') {
       // The token rides the harness's MCP configuration, as it does for a person who connected the server.
-      mcp = { name: 'artifactbin', url: `${r.agentBase}/mcp`, token };
-    } else if (installed) {
+      mcp = { name: 'artifactbin', url: `${r.agentBase}/mcp`, token: driverToken };
+    } else if (installed && r.credential) {
       // …and for API actions it rides the skill's own connection file in the agent's HOME, which is why
       // the prompt can stop naming it. An MCP leg never gets this file: a second, curl-shaped way in
-      // would measure something other than the MCP treatment.
-      writeArtifactbinEnv(homeDir, r.agentBase, token);
+      // would measure something other than the MCP treatment. Only ever written for an ACCOUNT
+      // credential, which is the one an installed mode is given (`credentialSourceFor`).
+      writeArtifactbinEnv(homeDir, r.agentBase, driverToken);
     }
-  } else if (task.handoff === 'token' || installed || transport.run === 'mcp') {
-    const token = tokenFromPaste(start.prompt);
-    if (task.seed) await seedDocument(r.agentBase, start.id, token, task.seed);
-    access = { kind: 'token', base: r.agentBase, token, id: start.id };
-    if (transport.run === 'mcp') mcp = { name: 'artifactbin', url: `${r.agentBase}/mcp`, token };
   }
   // The skills are built for the base THIS TASK will be reached on: each task has its own
   // recording proxy on its own port, and a skill naming another one sends the traffic past
@@ -319,11 +323,35 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   const plugin = installsSkills(leg.mode.run)
     ? materializePlugin(path.join(runDir, 'plugin'), r.agentBase, transport.run === 'api' ? 'curl' : 'mcp')
     : undefined;
-  // The start document as served BEFORE the agent ran. `published` is answered by comparing against
-  // it, because the start document is not blank — it serves "Untitled / Waiting for your agent…", so
-  // "has content" cannot tell a written document from an untouched one.
-  const baselineRes = await fetch(`${r.productUrl}/a/${start.id}/raw?chrome=0`);
-  const baseline = { status: baselineRes.status, html: baselineRes.ok ? await baselineRes.text() : '' };
+  // WHAT THIS KIND OF TASK NEEDS, and then the baseline — in that order, which is `prepareTask`'s
+  // whole job (`lib/score/kinds`). A `comment` task's setup posts a comment, and the anchor stamp is
+  // a REAL edit that bumps the version and rewrites the markup, so a baseline read before it would
+  // make `published` true for a document the agent never touched.
+  //
+  // The start document as served BEFORE the agent ran is what `published` compares against, because
+  // the start document is not blank — it serves "Untitled / Waiting for your agent…", so "has
+  // content" cannot tell a written document from an untouched one.
+  const scorer = scorerFor(task.kind);
+  const driverHeaders = { [DRIVER_HEADER]: '1' };
+  const prepared = await prepareTask(
+    scorer,
+    { task, base: r.agentBase, id: start.id, token: driverToken, driverHeaders, log: (m) => log(`${leg.label}/${task.id}: ${m}`) },
+    async () => {
+      const res = await fetch(`${r.productUrl}/a/${start.id}/raw?chrome=0`);
+      return { status: res.status, html: res.ok ? await res.text() : '' };
+    },
+  );
+  if (!prepared.ok) {
+    // The DRIVER failed, not the agent — and the driver's calls carry `DRIVER_HEADER`, so the ledger
+    // cannot see this at all. Without a check of its own it would show as a bare FAIL with no failing
+    // check name and an empty `first_error`, which reads as "the agent did nothing". No turn is spent.
+    log(`${leg.label}/${task.id}: SETUP FAILED at ${prepared.step} — ${prepared.error}`);
+    rec.record(task.id, 'setup_ok', false, 'pass');
+    rec.record(task.id, 'first_error', `setup/${prepared.step}: ${prepared.error}`, 'text');
+    rec.finalize(false);
+    return false;
+  }
+  const baseline = prepared.baseline;
 
   const prompt = buildPrompt(task, access, { vision: leg.vision, mode: leg.mode.run });
   fs.writeFileSync(path.join(runDir, 'prompt.txt'), prompt);
@@ -354,7 +382,6 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // calls marked and skipped (`DRIVER_HEADER`). No window, so nothing depends on when it ran.
   const ledger = parseLedger(fs.readFileSync(r.ledgerPath, 'utf8'));
   const lm = ledgerMetrics(ledger);
-  const successfulWrites = ledger.filter((e) => e.status < 300 && /^(POST|PUT)$/.test(e.method) && /^\/(api\/artifacts|mcp)/.test(e.path)).length;
 
   // --- score: product. The agent need not have used the document the start link named — Claude Opus 5
   // created its own, twice — so `scoredArtifactId` decides which artifact to score (its answer, then the
@@ -416,7 +443,9 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   rec.record(task.id, 'query_rows', queryRows);
   rec.record(task.id, 'docs_fetches', lm.docsFetches);
   rec.record(task.id, 'docs_bytes', lm.docsBytes);
-  rec.record(task.id, 'versions', lm.observed ? 1 + successfulWrites : null);
+  // `documentWrites` and not a regex of its own: the inline one counted answering a comment
+  // (`POST /api/artifacts/<id>/annotations/<annId>`) as a new version of the document.
+  rec.record(task.id, 'versions', lm.observed ? 1 + documentWrites(ledger) : null);
   // --- rows: text
   rec.record(task.id, 'first_error', lm.firstError ?? '', 'text');
   rec.record(task.id, 'harness_error', result.error ?? '', 'text');
@@ -434,7 +463,22 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   rec.record(task.id, 'final_message', (result.finalMessage ?? '').slice(0, 300), 'text');
 
   // --- rows: checks
+  // What THIS KIND asks of the product, computed by the kind itself and merged in. `record` is how a
+  // kind reports evidence that is not a verdict (`answered_by`, `split_verbatim`): a check name the
+  // task does not gate is dropped from the report entirely (`checksToRecord`), so a row is the only
+  // way to say something the reader should see either way.
+  const kindChecks = await scorer.checks({
+    task,
+    productUrl: r.productUrl,
+    startId: start.id,
+    token: driverToken,
+    driverHeaders,
+    served,
+    record: (metric, value, kind) => rec.record(task.id, metric, value, kind),
+  });
+
   const checks: Record<string, boolean | null> = {
+    setup_ok: true,
     published: pm.published,
     published_first_try: pm.published && lm.publishedFirstTry,
     // Nothing to observe when the protocol arrived installed — null, never false (the
@@ -454,8 +498,8 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     used_edits_endpoint: lm.usedEditsEndpoint,
     // Null, not false, when this harness has no MCP client and ran the task over REST.
     used_mcp: transport.substitutedWhy || leg.mode.substitutedWhy ? null : lm.usedMcp,
-    kept_untouched_text: task.seedKeepText ? served.html.includes(task.seedKeepText) : null,
     no_local_checkout_reads: checkoutReads === null ? null : checkoutReads === 0,
+    ...kindChecks,
   };
   // `checksToRecord` decides which checks become rows (task-specific ones only where the task grades them,
   // so an inapplicable check reads as "—" rather than a red FAIL); only the checks the TASK lists decide the

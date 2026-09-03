@@ -1,6 +1,5 @@
 {
   "id": "mcp",
-  "kind": "open",
   "brief": "Using the artifactbin MCP tools that are already connected, publish a single-page document with one heading and one short paragraph about why a shared link beats an attachment. Its TITLE — the text a browser tab and a shared link preview show, not just the on-page heading — must be \"Hello over MCP\". Reply with the document's URL and nothing else.",
   "handoff": "token",
   "checks": [

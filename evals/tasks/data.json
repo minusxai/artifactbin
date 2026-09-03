@@ -1,6 +1,5 @@
 {
   "id": "data",
-  "kind": "data",
   "brief": "The file sales.csv in your working directory holds monthly revenue by region. Publish it as a dataset, then publish a one-page document titled \"Revenue by region\" with a heading, one sentence, and ONE chart: total revenue per month, as a single line. Reply with the document's URL and nothing else.",
   "handoff": "start-link",
   "files": {

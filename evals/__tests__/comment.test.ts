@@ -1,5 +1,10 @@
 /**
- * SPIKE E2 — the comment task's `changed` predicate and its thread reading.
+ * The comment task's `changed` predicate and its thread reading.
+ *
+ * The module is `lib/score/kinds/comment` rather than the spike's
+ * `lib/score/comment`: the kind OWNS its predicates, its setup and its check
+ * names in one file, and a re-export existing only to keep an old test path
+ * alive is a second address for one topic.
  *
  * The two document fixtures are REAL served documents from this product
  * (`GET /a/<id>/raw?chrome=0`), not hand-written HTML: `product.ts` carries the
@@ -9,7 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { paragraphWords, splitAcrossParagraphs, threadMetrics } from '../lib/score/comment';
+import { paragraphWords, splitAcrossParagraphs, splitVerbatim, threadMetrics } from '../lib/score/kinds/comment';
 
 const fixture = (name: string) =>
   fs.readFileSync(path.join(import.meta.dirname, 'fixtures', `comment-${name}.html`), 'utf8');
@@ -40,6 +45,31 @@ describe('splitAcrossParagraphs — the task\'s `changed` check', () => {
       .replace('Median first response was three hours, and the backlog fell by half.', 'The support team closed 1,284 tickets last quarter.')
       .replace('@@A@@', 'Median first response was three hours, and the backlog fell by half.');
     expect(splitAcrossParagraphs(reordered, SEEDED)).toBe(false);
+  });
+
+  // The near misses. A CI gate that fails a CORRECT split is how a gate gets turned off, and
+  // exact word equality fails both of the first two — measured against the real fixture before
+  // the predicate was relaxed. Punctuation at the seam, and the capital that follows a new
+  // sentence boundary, are the agent writing English rather than the agent losing words.
+  it('is TRUE when the first half drops its terminal period', () => {
+    const h = fixture('split').replace('tickets last quarter.</p>', 'tickets last quarter</p>');
+    expect(splitAcrossParagraphs(h, SEEDED)).toBe(true);
+    expect(splitVerbatim(h, SEEDED)).toBe(false);
+  });
+
+  it('is TRUE when the second half is re-capitalised', () => {
+    const h = fixture('split').replace('>Median first', '>median first');
+    expect(splitAcrossParagraphs(h, SEEDED)).toBe(true);
+    expect(splitVerbatim(h, SEEDED)).toBe(false);
+  });
+
+  it('still refuses a changed NUMBER — 1,284 is not 1284', () => {
+    const h = fixture('split').replace('1,284', '1284');
+    expect(splitAcrossParagraphs(h, SEEDED)).toBe(false);
+  });
+
+  it('splitVerbatim is TRUE for the split the real agent wrote', () => {
+    expect(splitVerbatim(fixture('split'), SEEDED)).toBe(true);
   });
 
   it('ignores the annotation anchor and the ast stamps', () => {

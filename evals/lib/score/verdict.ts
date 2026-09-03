@@ -103,6 +103,10 @@ export interface Verdict {
  * whether or not a task grades them.
  */
 const ALWAYS_REPORT = new Set([
+  // Whether the DRIVER's own preparation worked describes any run, and it is the
+  // one failure the ledger cannot see: the driver's calls are marked and skipped,
+  // so a broken seed would otherwise read as an agent that did nothing.
+  'setup_ok',
   'published', 'published_first_try', 'read_docs_before_write', 'no_unknown_endpoints',
   'canonical_stable', 'has_title', 'used_start_document', 'harness_ok',
   'no_console_errors', 'no_failed_responses', 'fits_390px',
