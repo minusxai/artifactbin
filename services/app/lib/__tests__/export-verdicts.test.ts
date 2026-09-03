@@ -33,7 +33,9 @@ const PNG: RenderResult = { ok: true, mime: 'image/png', bytes: new Uint8Array([
 
 let n = 0;
 /** A fresh version every time, so neither cache layer can answer for the browser. */
-const row = () => ({ id: 'exprt1', version: ++n + 1000, format: 'markup' as const });
+// `source` rides along because the export door reads the document's own
+// `<Value>` declarations to canonicalize a link's selection (lib/export).
+const row = () => ({ id: 'exprt1', version: ++n + 1000, format: 'markup' as const, source: '<p>hi</p>' });
 
 beforeEach(async () => { await resetExportRenderer(); });
 afterEach(async () => { await resetExportRenderer(); setServices({ browser: undefined }); });

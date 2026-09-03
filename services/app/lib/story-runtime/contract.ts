@@ -7,6 +7,7 @@
  * the server exclusively as a prebuilt esbuild bundle (story-ssr.cjs) loaded
  * outside the module graph — see scripts/build-story-runtime.mjs.
  */
+import type { AnnotationRange } from '@/lib/story/annotation-range';
 import type { JsxNode } from '@/lib/jsx';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 import type { RefDataMap } from '@/lib/story/ref-data';
@@ -24,6 +25,16 @@ export interface StoryIslandDataflow {
    * canvas, both of which need a settled document rather than a fast one.
    */
   state?: DataflowState;
+  /**
+   * SPIKE S1 (F2): the reader's own `<Value>` choices, carried in the URL
+   * (`?$region=west`) and parsed server-side. Values WITHOUT rows — which is
+   * exactly why they are their own field rather than a synthetic `state`:
+   * `state` present means "somebody already ran the queries", so seeding
+   * through it would cancel the document's first run and leave every chart on
+   * its skeleton. These fold in as the store's starting values and the
+   * paint-first run happens WITH them.
+   */
+  values?: Record<string, Scalar>;
 }
 
 /**
@@ -252,6 +263,15 @@ export const STORY_SCROLL_MESSAGE = 'mx:reader-scroll';
 export interface StoryScrollMessage {
   type: typeof STORY_SCROLL_MESSAGE;
   scrollY: number;
+  /**
+   * "I have nothing further to scroll to" — the ANSWER, not the ingredients.
+   * The parent cannot measure an opaque frame's height, so it used to compare
+   * this offset against its OWN metrics; on the artifact page those never move,
+   * so the end-of-page rule (the bar stays up where the footer is) was lost for
+   * every framed document. The document measures its own end instead, with the
+   * same 4px slack the page uses for its own.
+   */
+  atBottom: boolean;
 }
 
 /**
@@ -315,6 +335,52 @@ export const STORY_DATA_MESSAGE = 'mx:data';
  * `next/headers` with it — into the browser bundle, which is a build failure,
  * not a size regression.
  */
+/**
+ * FRAME → PAGE: the reader changed a `<Value>`, and this is the document's
+ * whole scalar state after the change.
+ *
+ * A document served TOP-LEVEL writes its own address through the one narrow
+ * capability its history prelude leaves open (`__mxValues`). A FRAMED one
+ * cannot: `location` inside the frame is the frame's, so writing there moves
+ * `/a/<id>/raw?edit=1`, which nobody can see or copy — measured on the spike,
+ * and the reason this message exists at all.
+ *
+ * Signed like every other frame → page message, because the author's script
+ * shares this realm. And the page does not simply write what arrives: it
+ * re-derives the address through `writeUrlValues` against the flow IT holds,
+ * so a frame can never put a name the document does not declare into the
+ * address bar.
+ */
+/**
+ * The TOP-LEVEL document's own narrow URL capability, installed by the history
+ * prelude (lib/story/document HISTORY_PRELUDE) — the one window left open in
+ * an otherwise frozen History API. It takes `{name: string | null}`: a string
+ * sets `$name`, `null` removes it, and it reads the path and hash fresh at
+ * call time so no address ever arrives as an argument.
+ *
+ * Named here rather than only inside that string so the runtime and the
+ * prelude cannot drift apart; the prelude BUILDS its `defineProperty` from
+ * this constant.
+ */
+export const STORY_VALUES_HOOK = '__mxValues';
+
+export const STORY_VALUES_MESSAGE = 'mx:values';
+
+export interface StoryValuesMessage {
+  type: typeof STORY_VALUES_MESSAGE;
+  nonce: string;
+  /** Every scalar the document declares, at its current value. */
+  values: Record<string, Scalar>;
+}
+
+/** A `mx:values` carrying THIS session's nonce — anything else is author code. */
+export function isValuesMessage(data: unknown, nonce: string): data is StoryValuesMessage {
+  if (!data || typeof data !== 'object') return false;
+  const d = data as { type?: unknown; nonce?: unknown; values?: unknown };
+  return d.type === STORY_VALUES_MESSAGE && d.nonce === nonce
+    && !!d.values && typeof d.values === 'object' && !Array.isArray(d.values);
+}
+
 export const STORY_DATA_EVENT = 'data';
 
 export interface StoryDataUpdate {
@@ -393,6 +459,15 @@ export interface StoryEditSelection {
   style: string;
   /** Selectable ancestors, OUTERMOST first. */
   ancestors: StoryEditCrumb[];
+  /**
+   * The words actually selected, canonical — present only when there IS a text
+   * selection, which is why both of these are optional: the same struct rides
+   * every caret move in an edit session, where nothing is selected at all.
+   * A comment stores them beside its anchor (lib/story/annotation-range).
+   */
+  quote?: string;
+  /** Where those words are, addressed RELATIVE to `path` — never an absolute body path. */
+  range?: AnnotationRange;
 }
 
 /** Frame → parent: the selection changed, or moved (re-posted on in-frame scroll, throttled to a frame). */
@@ -528,7 +603,18 @@ export interface StoryAnnotationsMessage {
    * durable anchor — plain tags carry it into the DOM), `path` the body path
    * fallback (components keep the attribute in source only).
    */
-  pins: Array<{ id: string; path: string; key: string | null }>;
+  pins: Array<{
+    id: string;
+    path: string;
+    key: string | null;
+    /**
+     * The exact words the comment is on, addressed relative to the anchored
+     * node — the frame re-finds them by TEXT and paints them. Absent on a
+     * comment made before selections were kept, or one made from a caret;
+     * the whole-node tint is the fallback. Still ONE pin per thread.
+     */
+    range?: AnnotationRange | null;
+  }>;
   /** The thread the page has open — its node renders highlighted. */
   openId: string | null;
   /** The thread under either pointer — transient emphasis, never document state. */

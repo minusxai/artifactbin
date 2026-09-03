@@ -28,11 +28,15 @@
  * even reach them.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, EllipsisVertical, MessageSquare, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, EllipsisVertical, MessageSquare, Trash2, X } from 'lucide-react';
 import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations';
 import { ChatGPTIcon, ClaudeAIIcon, ClaudeCodeIcon, CodexIcon } from '@/components/brand-icons';
+import { foldFromMeasure, isFolded, readFolds, toggleFold, unfold, type FoldKind, type Folds } from '@/lib/comment-folds';
+import MarkdownField from '@/components/MarkdownField';
+import MarkdownLite from '@/components/MarkdownLite';
 import MobileSheet, { useIsPhoneViewport } from '@/components/MobileSheet';
 import { Tooltip } from '@/components/Tooltip';
+import { parseMarkdownLite, plainText } from '@/lib/markdown-lite';
 import { RIGHT_RAIL_W } from '@/lib/story/edit-bar';
 import {
   isEditFrameMessage, STORY_ANNOTATIONS_MESSAGE, STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE,
@@ -124,6 +128,85 @@ async function annotationFailure(res: Response): Promise<string> {
   } catch {
     return fallback;
   }
+}
+
+/**
+ * WHAT A CLAMPED SURFACE SHOWS. A comment body is markdown-lite, and the two
+ * compact surfaces — the floating card and a collapsed rail thread — have two
+ * lines to spend. Rendering the tree there would spend them on a fence or a
+ * bullet; the RAIL, opened, is where the whole thing is read.
+ */
+const previewText = (body: string) => plainText(parseMarkdownLite(body));
+
+/** What a folded comment or thread keeps: the sentence it opens with. */
+const firstLine = (body: string) => previewText(body).split('\n', 1)[0] ?? '';
+
+/** jsdom lays nothing out and an unstyled element reports `normal`; a comment
+    body is `leading-snug` over the app's base size, so 20px is the honest floor. */
+const DEFAULT_LINE_HEIGHT = 20;
+
+/**
+ * A BODY LONGER THAN TEN LINES CLAMPS ITSELF.
+ *
+ * The clamp is on the WRAPPER and the measurement is of the CHILD, which is
+ * the whole trick: clamping the element you measure makes its own scrollHeight
+ * agree with the clamp on the next render, and the fold quietly un-decides
+ * itself — on a rail that re-renders on every live frame, that is a control
+ * flickering in and out while an agent types.
+ *
+ * Clamped, never truncated: every word stays in the DOM, so find-in-page and a
+ * screen reader still reach the end of the answer.
+ */
+function FoldingBody({ text, foldable }: { text: string; foldable: boolean }) {
+  const measured = useRef<HTMLDivElement>(null);
+  const [fold, setFold] = useState({ overflowing: false, lines: 0, maxHeight: 0 });
+  const [shown, setShown] = useState(false);
+
+  useEffect(() => {
+    const element = measured.current;
+    if (!element) return;
+    // The line height of the element that LAYS THE TEXT OUT, not of the
+    // wrapper: the rail is `text-sm` (20px lines) and a rendered paragraph is
+    // `leading-normal` (21px), so measuring the wrapper clamps ten lines at
+    // nine and a half and the tenth is cut through the middle.
+    const line = element.querySelector('p, li, pre') ?? element;
+    const styled = window.getComputedStyle(line);
+    const lineHeight = parseFloat(styled.lineHeight) || DEFAULT_LINE_HEIGHT;
+    const next = foldFromMeasure(element.scrollHeight, lineHeight);
+    // Only when it MOVED: a setState on every render of an unchanged
+    // measurement is a loop, and this measures after every render.
+    setFold((current) => (
+      current.overflowing === next.overflowing && current.lines === next.lines && current.maxHeight === next.maxHeight
+        ? current
+        : next
+    ));
+  }, [text]);
+
+  const clamped = foldable && fold.overflowing && !shown;
+  return (
+    <div className="min-w-0">
+      <div
+        data-folded-body={clamped ? 'clamped' : undefined}
+        className={clamped ? 'overflow-hidden' : undefined}
+        style={clamped ? { maxHeight: fold.maxHeight } : undefined}
+      >
+        <div ref={measured}>
+          <MarkdownLite text={text} />
+        </div>
+      </div>
+      {foldable && fold.overflowing && (
+        <button
+          type="button"
+          aria-label={clamped ? 'Show whole comment' : 'Show less of comment'}
+          aria-expanded={!clamped}
+          onClick={() => setShown((current) => !current)}
+          className="mt-1 cursor-pointer rounded-[3px] font-mono text-[10px] text-muted hover:text-accent"
+        >
+          {clamped ? `show more (${fold.lines} lines)` : 'show less'}
+        </button>
+      )}
+    </div>
+  );
 }
 
 /** "27 Aug" — enough to place a comment in time without a second line. */
@@ -319,7 +402,7 @@ function ThreadPreview({ a, top, hovered, onOpen, onHover }: {
             <AuthorIdentity author={first.author} />
             <span className="font-mono text-[10px] text-faint">{shortDate(first.created_at)}</span>
           </span>
-          <span className="mt-1.5 line-clamp-2 block text-sm leading-snug text-fg/90">{first.body}</span>
+          <span className="mt-1.5 line-clamp-2 block font-sans text-sm leading-snug text-fg/90">{previewText(first.body)}</span>
           <span className="mt-auto flex items-center justify-between font-mono text-[10px] text-faint">
             <ThreadContinuation thread={a.thread} />
             <span className="transition-colors group-hover:text-accent">open →</span>
@@ -361,23 +444,64 @@ function positionedComments(
   return shift > 0 ? placed.map((item) => ({ ...item, top: item.top - shift })) : placed;
 }
 
-function Thread({ a, open, resolved, hovered, busy, onOpen, onHover, onReply, onResolve, onReopen, onDelete }: {
+/** ONE fold affordance for a thread, wherever the card is putting it. */
+function ThreadFoldControl({ folded, onToggle }: { folded: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={folded ? 'Expand thread' : 'Collapse thread'}
+      aria-expanded={!folded}
+      onClick={onToggle}
+      className="-ml-1 inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-[3px] text-faint hover:bg-raised hover:text-fg"
+    >
+      {folded ? <ChevronRight size={13} strokeWidth={1.8} /> : <ChevronDown size={13} strokeWidth={1.8} />}
+    </button>
+  );
+}
+
+function Thread({
+  a, open, resolved, hovered, busy, folded, justOpened, isCommentFolded,
+  onOpen, onHover, onReply, onResolve, onReopen, onDelete, onToggleFold, onToggleComment,
+}: {
   a: AnnotationWire;
   open: boolean;
   resolved?: boolean;
   hovered: boolean;
   busy: boolean;
+  /** This viewer folded the whole conversation away. */
+  folded: boolean;
+  /**
+   * This viewer just asked for this thread (a pin, a message, their own new
+   * comment), so its NEWEST comment is the answer they came for and is shown
+   * whole however long it is.
+   */
+  justOpened: boolean;
+  isCommentFolded: (commentId: string) => boolean;
   onOpen: () => void;
   onHover: (id: string | null) => void;
   onReply: (body: string) => void;
   onResolve: () => void;
   onReopen: () => void;
   onDelete: () => void;
+  onToggleFold: () => void;
+  onToggleComment: (commentId: string) => void;
 }) {
   const [reply, setReply] = useState('');
+  const [replyPreviewing, setReplyPreviewing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const visibleComments = open ? a.thread : a.thread.slice(0, 1);
+  const first = a.thread[0];
+  const replyCount = Math.max(0, a.thread.length - 1);
+
+  // ONE send for the button and for ⌘↵ — the field owns the key, the thread
+  // owns whether there is anything to send.
+  const sendReply = useCallback(() => {
+    if (busy || !reply.trim()) return;
+    onReply(reply);
+    setReply('');
+    setReplyPreviewing(false);
+  }, [busy, reply, onReply]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -404,21 +528,85 @@ function Thread({ a, open, resolved, hovered, busy, onOpen, onHover, onReply, on
       onMouseLeave={() => onHover(null)}
       onClick={(event) => {
         const target = event.target as Element;
-        if (!open && !target.closest('a, button, textarea, input')) onOpen();
+        // `[role="button"]` earns its place here: the author line is a DIV
+        // toggle, so without it collapsing a comment in a closed thread would
+        // also open the thread.
+        if (!open && !folded && !target.closest('a, button, textarea, input, [role="button"]')) onOpen();
       }}
-      className={`${threadClass} shrink-0 overflow-hidden transition-[border-color,background-color] duration-150 ${open ? '' : 'cursor-pointer'} ${open || hovered ? 'border-edge-bright bg-comment-hover' : ''} ${resolved ? 'opacity-70' : ''}`}
+      className={`${threadClass} shrink-0 overflow-hidden transition-[border-color,background-color,opacity] duration-150 ${open || folded ? '' : 'cursor-pointer'} ${open || hovered ? 'border-edge-bright bg-comment-hover' : ''} ${resolved ? 'opacity-55 hover:opacity-100 focus-within:opacity-100' : ''}`}
     >
-      {a.orphaned && (
+      {/* The thread's own header: what it is about, and the way to fold it.
+          Present open or closed, resolved or not — one affordance, one place. */}
+      {folded && (
+        <div className="px-3 py-2">
+          {/* Folded, the card IS its summary: what the thread is about, how it
+              opens, and how much is underneath. */}
+          <div className="flex min-w-0 items-center gap-1.5">
+            <ThreadFoldControl folded onToggle={onToggleFold} />
+            <span className="truncate font-mono text-[10px] text-faint">{a.snippet || 'this document'}</span>
+          </div>
+          {first && (
+            <>
+              <p className="mt-1 truncate font-sans leading-snug text-fg/90">{firstLine(first.body)}</p>
+              <p className="mt-1 font-mono text-[10px] text-faint">
+                {replyCount === 1 ? '1 reply' : `${replyCount} replies`}
+              </p>
+            </>
+          )}
+        </div>
+      )}
+      {!folded && a.orphaned && (
         <p className="border-b border-edge bg-surface/60 px-3 py-1.5 font-mono text-[10px] text-faint">
           annotated element was removed
         </p>
       )}
+      {!folded && (
       <ul className="flex flex-col gap-3 px-3 py-3">
-        {visibleComments.map((c, index) => (
-          <li key={c.id + c.created_at}>
+        {visibleComments.map((c, index) => {
+          const commentFolded = open && isCommentFolded(c.id);
+          // ONE exemption to the auto-fold: the newest comment of a thread this
+          // viewer just asked to see.
+          const newest = index === visibleComments.length - 1;
+          /*
+           * `scroll-mb-14` below is not spacing — it is what the open-scroll
+           * aims at. On a phone the page's own action bar floats OVER the
+           * bottom of this sheet, so a comment scrolled flush to the
+           * scrollport's edge lands behind it; a scroll margin is the one
+           * mechanism scrollIntoView honours for chrome it cannot see.
+           */
+          return (
+          <li key={c.id + c.created_at} className="scroll-mb-14 sm:scroll-mb-0">
             <div className="mb-1.5 flex min-w-0 items-center gap-2">
-              <AuthorIdentity author={c.author} />
-              <span className="ml-auto shrink-0 font-mono text-[10px] text-faint">{shortDate(c.created_at)}</span>
+              {/* The whole conversation's fold, at the top-left of the card —
+                  a row of its own would cost the rail a line it does not have
+                  to spend, which is the thing this feature is about. */}
+              {index === 0 && <ThreadFoldControl folded={false} onToggle={onToggleFold} />}
+              {/*
+                * The author line is the comment's own toggle — but only where
+                * there is a body to fold away (an open thread). A DIV rather
+                * than a button because it holds the author's profile link;
+                * clicks that land on real controls inside it are theirs.
+                */}
+              <span
+                role={open ? 'button' : undefined}
+                tabIndex={open ? 0 : undefined}
+                aria-label={open ? (commentFolded ? 'Expand comment' : 'Collapse comment') : undefined}
+                aria-expanded={open ? !commentFolded : undefined}
+                onClick={(event) => {
+                  if (!open) return;
+                  if ((event.target as Element).closest('a, button')) return;
+                  onToggleComment(c.id);
+                }}
+                onKeyDown={(event) => {
+                  if (!open || (event.key !== 'Enter' && event.key !== ' ')) return;
+                  event.preventDefault();
+                  onToggleComment(c.id);
+                }}
+                className={`flex min-w-0 flex-1 items-center gap-2 rounded-[3px] ${open ? 'cursor-pointer' : ''}`}
+              >
+                <AuthorIdentity author={c.author} />
+                <span className="ml-auto shrink-0 font-mono text-[10px] text-faint">{shortDate(c.created_at)}</span>
+              </span>
               {index === 0 && resolved && (
                 <Tooltip content="resolved">
                   <span className="inline-flex h-5 w-5 items-center justify-center text-accent">
@@ -485,11 +673,17 @@ function Thread({ a, open, resolved, hovered, busy, onOpen, onHover, onReply, on
                 </div>
               )}
             </div>
-            <p className={`leading-snug text-fg/90 ${open ? '' : 'line-clamp-2'}`}>{c.body}</p>
+            {commentFolded
+              ? <p className="truncate font-sans leading-snug text-fg/90">{firstLine(c.body)}</p>
+              : open
+                ? <FoldingBody text={c.body} foldable={!(justOpened && newest)} />
+                : <p className="line-clamp-2 font-sans leading-snug text-fg/90">{previewText(c.body)}</p>}
           </li>
-        ))}
+          );
+        })}
       </ul>
-      {!open && (
+      )}
+      {!folded && !open && (
         <button
           type="button"
           aria-label={resolved ? 'Show resolved conversation' : 'Open annotation thread'}
@@ -503,34 +697,32 @@ function Thread({ a, open, resolved, hovered, busy, onOpen, onHover, onReply, on
           <span className="shrink-0">open →</span>
         </button>
       )}
-      {open && !resolved && (
+      {!folded && open && !resolved && (
         <div className="border-t border-edge px-3 py-2">
-          <textarea
-            aria-label="Reply to annotation"
+          <MarkdownField
+            label="Reply to annotation"
+            previewLabel="Reply preview"
+            previewToggleLabel="Preview reply"
             value={reply}
-            onChange={(e) => setReply(e.target.value)}
-            onKeyDown={(event) => {
-              if (event.nativeEvent.isComposing || event.key !== 'Enter' || (!event.metaKey && !event.ctrlKey) || busy || !reply.trim()) return;
-              event.preventDefault();
-              onReply(reply);
-              setReply('');
-            }}
+            onChange={setReply}
+            onSubmit={sendReply}
+            previewing={replyPreviewing}
+            onPreviewingChange={setReplyPreviewing}
             rows={2}
-            className="mb-2 w-full rounded-[4px] border border-edge bg-surface p-1.5 focus:border-edge-bright focus:outline-none"
             placeholder="reply…"
           />
           <div className="flex justify-end gap-2">
             <button
               type="button"
               aria-label="Cancel reply"
-              onClick={() => { setReply(''); onOpen(); }}
+              onClick={() => { setReply(''); setReplyPreviewing(false); onOpen(); }}
               className="cursor-pointer rounded-[4px] bg-transparent px-2 py-1 text-muted hover:bg-surface hover:text-fg"
             >
               cancel
             </button>
             <button
               type="button" aria-label="Send reply" disabled={busy || !reply.trim()}
-              onClick={() => { onReply(reply); setReply(''); }}
+              onClick={sendReply}
               className="cursor-pointer rounded-[4px] border border-accent bg-accent px-2 py-1 font-semibold text-bg hover:brightness-110 disabled:cursor-default disabled:opacity-40"
             >
               reply
@@ -538,7 +730,7 @@ function Thread({ a, open, resolved, hovered, busy, onOpen, onHover, onReply, on
           </div>
         </div>
       )}
-      {open && resolved && (
+      {!folded && open && resolved && (
         <div className="flex justify-end border-t border-edge px-3 py-2">
           <button
             type="button"
@@ -563,10 +755,21 @@ export default function AnnotationLayer({
   const [resolvedList, setResolvedList] = useState<AnnotationWire[] | null>(null);
   const [openResolvedId, setOpenResolvedId] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  /*
+   * WHAT THIS VIEWER FOLDED. Held here rather than in each Thread so a remount
+   * of the rail — closing it, a live frame replacing the list — cannot lose it,
+   * and read from the store on mount so a reload cannot either. It never leaves
+   * the browser: no request body, no URL, nothing on the row.
+   */
+  const [folds, setFolds] = useState<Folds>(() => readFolds(id));
+  /** The thread this viewer just asked for; its newest comment is never folded. */
+  const [justOpenedId, setJustOpenedId] = useState<string | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [anchorRects, setAnchorRects] = useState<Record<string, StoryEditRect>>({});
   const [selection, setSelection] = useState<StoryEditSelection | null>(null);
   const [draft, setDraft] = useState('');
+  /** Reading the draft as it will be read — a view of the same text, not a mode. */
+  const [previewing, setPreviewing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 
@@ -578,6 +781,10 @@ export default function AnnotationLayer({
   currentEditIdRef.current = currentEditId;
   const onRailOpenChangeRef = useRef(onRailOpenChange);
   onRailOpenChangeRef.current = onRailOpenChange;
+  // A pin click arrives from a message listener that must not re-subscribe on
+  // every list change, so the list it needs is read through a ref.
+  const annotationsRef = useRef(annotations);
+  annotationsRef.current = annotations;
   const beforeCreateRef = useRef(beforeCreate);
   beforeCreateRef.current = beforeCreate;
   /*
@@ -593,11 +800,25 @@ export default function AnnotationLayer({
     frameRef.current?.contentWindow?.postMessage(message, '*');
   }, [frameRef]);
 
+  /*
+   * OPENING A THREAD UNFOLDS IT. Somebody who clicks a pin, follows a message
+   * or has just written a comment came for an answer; handing them a folded
+   * conversation would make the fold the thing they have to defeat first. The
+   * thread and its newest comment open together, in one write.
+   */
   const openThread = useCallback((annId: string) => {
     setOpenId(annId);
+    setJustOpenedId(annId);
     setSelection(null);
+    const thread = annotationsRef.current.find((a) => a.id === annId)?.thread;
+    const newest = thread?.at(-1)?.id;
+    setFolds(unfold(id, { threads: [annId], comments: newest ? [newest] : [] }));
     onRailOpenChangeRef.current(true);
-  }, []);
+  }, [id]);
+
+  const toggle = useCallback((kind: FoldKind, foldId: string) => {
+    setFolds(toggleFold(id, kind, foldId));
+  }, [id]);
 
   // The rail lists every thread, so the one a pin click opened can sit below
   // the fold — especially in the phone HALF sheet. Bring it to the top of its
@@ -609,11 +830,23 @@ export default function AnnotationLayer({
     const raf = requestAnimationFrame(() => {
       // Optional call: jsdom implements no scrollIntoView, and a missing
       // scroll is a cosmetic no-op, never an error.
-      document.querySelector(`[data-thread-id="${CSS.escape(openId)}"]`)
-        ?.scrollIntoView?.({ block: 'start', inline: 'nearest' });
+      const thread = document.querySelector(`[data-thread-id="${CSS.escape(openId)}"]`);
+      thread?.scrollIntoView?.({ block: 'start', inline: 'nearest' });
+      /*
+       * …and then the NEWEST comment, which is the answer somebody opened the
+       * thread for. A conversation taller than its scroller — a folded long
+       * reply on a phone half-sheet still is — shows its top and hides its
+       * tail, so the last message lands just under the edge. `nearest` moves
+       * nothing when the whole thread already fits, so the common case keeps
+       * the top of the conversation exactly where it was.
+       */
+      thread?.querySelector('li:last-child')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
     });
     return () => cancelAnimationFrame(raf);
   }, [openId, railOpen]);
+
+  // Folds are per artifact: a different document's rail starts from its own.
+  useEffect(() => { setFolds(readFolds(id)); }, [id]);
 
   // Seed from the session's own read; the live stream replaces it wholesale.
   useEffect(() => {
@@ -660,7 +893,12 @@ export default function AnnotationLayer({
       // Annotations are ambient whenever this capability exists. The frame
       // decides how pins/tints coexist with view and edit mode.
       mode: 'on',
-      pins: annotations.filter((a) => !a.orphaned && a.anchor).map((a) => ({ id: a.id, path: a.anchor!.path, key: a.anchor!.key })),
+      pins: annotations
+        .filter((a) => !a.orphaned && a.anchor)
+        // The range travels with the pin so the frame can paint the words
+        // themselves; ids, body paths and the words' own positions are still
+        // the only annotation data that enters that realm — never the comment.
+        .map((a) => ({ id: a.id, path: a.anchor!.path, key: a.anchor!.key, range: a.range })),
       openId,
       hoverId,
       selectedPath: selection?.path ?? null,
@@ -699,9 +937,24 @@ export default function AnnotationLayer({
         return;
       }
       if (event.data.type === STORY_SELECTION_MESSAGE && composingRef.current) {
-        setSelection(event.data.selection);
+        const reported = event.data.selection;
+        /*
+         * The frame re-reports the composing node's GEOMETRY on every scroll,
+         * resize and re-render, and that report carries no quote — the words
+         * live on this side. Taking it whole replaced the captured selection
+         * with a quote-less one before the comment was ever saved, which is
+         * how a two-paragraph comment quietly became a node again. The words
+         * survive a report about the SAME node and only that: widening to an
+         * ancestor is a different subject, and a range addressed from the old
+         * anchor would not describe it.
+         */
+        setSelection((previous) => (
+          reported && previous && reported.path === previous.path && previous.quote
+            ? { ...reported, quote: previous.quote, range: previous.range }
+            : reported
+        ));
         setFailure(null);
-        if (event.data.selection) setOpenId(null);
+        if (reported) setOpenId(null);
       }
     };
     window.addEventListener('message', onMessage);
@@ -733,6 +986,7 @@ export default function AnnotationLayer({
       else if (body.reopen) {
         setOpenResolvedId(null);
         setOpenId(annId);
+        setJustOpenedId(annId);
       }
     } finally { setBusy(false); }
   }, [id]);
@@ -766,7 +1020,14 @@ export default function AnnotationLayer({
       await beforeCreateRef.current?.();
       const post = (editId: string) => fetch(`/api/my/artifacts/${id}/annotations`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: selection.path, edit_id: editId, body: draft }),
+        // The exact words ride along when there are any: the frame captured
+        // them from the live Range, and the page is the only side that can
+        // store them. A caret comment simply carries neither key.
+        body: JSON.stringify({
+          path: selection.path, edit_id: editId, body: draft,
+          ...(selection.quote ? { quote: selection.quote } : {}),
+          ...(selection.range ? { range: selection.range } : {}),
+        }),
       });
       // The drain may itself have moved the head; the 409 path below covers it.
       let res = await post(currentEditIdRef.current);
@@ -783,7 +1044,9 @@ export default function AnnotationLayer({
       setAnnotations((prev) => [...prev, wire]);
       setSelection(null);
       setDraft('');
+      setPreviewing(false);
       setOpenId(wire.id);
+      setJustOpenedId(wire.id);
       postToFrame({ type: STORY_SELECT_MESSAGE, path: null });
     } finally { setBusy(false); }
   }, [id, selection, draft, postToFrame]);
@@ -791,6 +1054,7 @@ export default function AnnotationLayer({
   const cancelCompose = useCallback(() => {
     setSelection(null);
     setDraft('');
+    setPreviewing(false);
     setFailure(null);
     postToFrame({ type: STORY_SELECT_MESSAGE, path: null });
   }, [postToFrame]);
@@ -896,41 +1160,41 @@ export default function AnnotationLayer({
             </button>
           </div>
           <div className="p-3">
-            <div className="mb-2 flex min-w-0 flex-wrap items-center gap-1 font-mono text-[11px] text-muted">
-              {crumbs.map((crumb, i) => (
-                <span key={crumb.path} className="flex min-w-0 items-center gap-1">
-                  {i > 0 && <span>›</span>}
-                  {crumb.path === selection.path ? (
-                    <span className="truncate text-accent">{crumb.tag}</span>
-                  ) : (
-                    <Tooltip content={crumb.hint || crumb.tag}>
-                      <button
-                        type="button"
-                        aria-label={`Select ${crumb.tag}`}
-                        onClick={() => postToFrame({ type: STORY_SELECT_MESSAGE, path: crumb.path })}
-                        className="cursor-pointer truncate underline decoration-dotted hover:text-accent"
-                      >
-                        {crumb.tag}
-                      </button>
-                    </Tooltip>
-                  )}
-                </span>
-              ))}
-            </div>
-            <textarea
-              aria-label="Annotation comment"
+            <MarkdownField
+              label="Annotation comment"
+              previewLabel="Comment preview"
+              previewToggleLabel="Preview comment"
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(event) => {
-                if (event.nativeEvent.isComposing || event.key !== 'Enter' || (!event.metaKey && !event.ctrlKey)) return;
-                event.preventDefault();
-                submitDraft();
-              }}
+              onChange={setDraft}
+              onSubmit={submitDraft}
+              previewing={previewing}
+              onPreviewingChange={setPreviewing}
               rows={4}
               autoFocus
-              className="mb-2 w-full resize-y rounded-[4px] border border-edge bg-surface p-2 leading-snug focus:border-accent focus:outline-none"
               placeholder="Add a comment for your agent…"
-            />
+            >
+              <div className="mb-2 flex min-w-0 flex-wrap items-center gap-1 font-mono text-[11px] text-muted">
+                {crumbs.map((crumb, i) => (
+                  <span key={crumb.path} className="flex min-w-0 items-center gap-1">
+                    {i > 0 && <span>›</span>}
+                    {crumb.path === selection.path ? (
+                      <span className="truncate text-accent">{crumb.tag}</span>
+                    ) : (
+                      <Tooltip content={crumb.hint || crumb.tag}>
+                        <button
+                          type="button"
+                          aria-label={`Select ${crumb.tag}`}
+                          onClick={() => postToFrame({ type: STORY_SELECT_MESSAGE, path: crumb.path })}
+                          className="cursor-pointer truncate underline decoration-dotted hover:text-accent"
+                        >
+                          {crumb.tag}
+                        </button>
+                      </Tooltip>
+                    )}
+                  </span>
+                ))}
+              </div>
+            </MarkdownField>
             {failure && <p role="alert" className="mb-2 font-mono text-[11px] text-danger">{failure}</p>}
             <div className="flex items-center justify-end gap-2">
               <span className="mr-auto hidden font-mono text-[9px] text-faint sm:inline">⌘↵ to send</span>
@@ -986,12 +1250,17 @@ export default function AnnotationLayer({
             open={openId === a.id}
             hovered={hoverId === a.id}
             busy={busy}
+            folded={isFolded(folds, 'threads', a.id)}
+            justOpened={justOpenedId === a.id}
+            isCommentFolded={(commentId) => isFolded(folds, 'comments', commentId)}
             onOpen={() => openThread(a.id)}
             onHover={setHoverId}
             onReply={(body) => void act(a.id, { reply: body })}
             onResolve={() => void act(a.id, { resolve: true })}
             onReopen={() => {}}
             onDelete={() => void remove(a.id)}
+            onToggleFold={() => toggle('threads', a.id)}
+            onToggleComment={(commentId) => toggle('comments', commentId)}
           />
         ))}
         <div
@@ -1013,12 +1282,20 @@ export default function AnnotationLayer({
             resolved
             hovered={hoverId === a.id}
             busy={busy}
-            onOpen={() => setOpenResolvedId((current) => current === a.id ? null : a.id)}
+            folded={isFolded(folds, 'threads', a.id)}
+            justOpened={justOpenedId === a.id}
+            isCommentFolded={(commentId) => isFolded(folds, 'comments', commentId)}
+            onOpen={() => {
+              setJustOpenedId(a.id);
+              setOpenResolvedId((current) => current === a.id ? null : a.id);
+            }}
             onHover={setHoverId}
             onReply={() => {}}
             onResolve={() => {}}
             onReopen={() => void act(a.id, { reopen: true })}
             onDelete={() => void remove(a.id)}
+            onToggleFold={() => toggle('threads', a.id)}
+            onToggleComment={(commentId) => toggle('comments', commentId)}
           />
         ))}
         {(resolvedList?.length ?? 0) === 0 && (

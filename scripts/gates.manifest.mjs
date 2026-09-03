@@ -24,7 +24,7 @@
 
 /** @type {readonly GateSpec[]} */
 export const GATE_SPECS = Object.freeze([
-  // measured: implementer 5s; orchestrator 7s
+  // measured: implementer 9s; orchestrator 7s
   { name: 'annotations', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
   // measured: implementer 66s; orchestrator 71s
   { name: 'app-flows', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 213_000 },
@@ -66,6 +66,12 @@ export const GATE_SPECS = Object.freeze([
   { name: 'export-slice', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
   // measured: implementer 5s; orchestrator 5s
   { name: 'fonts', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
+  // measured: implementer 5s; orchestrator 5s
+  {
+    name: 'fork', start: 'custom',
+    why: 'Drives two browser contexts and logs the second in ON the /login page the fork anchor produced — the callbackUrl round trip is the thing under test, so the shared start helper (which navigates to /login itself) would throw it away.',
+    needsMail: true, needsClipboard: false, timeoutMs: 60_000,
+  },
   // measured: implementer 17s; orchestrator 23s
   { name: 'full-kit', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 69_000 },
   // measured: implementer 7s; orchestrator 7s
@@ -89,8 +95,8 @@ export const GATE_SPECS = Object.freeze([
   { name: 'live-data', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
   // measured: implementer 20s; orchestrator 20s
   { name: 'live-reader', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
-  // measured: implementer 8s; orchestrator 9s
-  { name: 'mobile', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
+  // measured: implementer 27s (F4 adds a fourth, touch-enabled context); orchestrator 9s (pre-F4)
+  { name: 'mobile', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 81_000 },
   // measured: implementer 1s; orchestrator 1s
   {
     name: 'oauth-browser', start: 'custom',

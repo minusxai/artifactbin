@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseJsx } from '@/lib/jsx';
-import { createFrameSelectionActions, SELECTION_ACTIONS_ATTR } from '../selection-actions';
+import { createFrameSelectionActions, SELECTION_ACTION_COARSE_CLASS, SELECTION_ACTIONS_ATTR } from '../selection-actions';
 
 const parsed = parseJsx('<p>select these words</p>');
 if (!parsed.ok) throw new Error('fixture does not parse');
@@ -25,6 +25,24 @@ const selectText = async () => {
   await Promise.resolve();
 };
 
+/** The Range a touch gesture leaves behind — set with no pointer event at all. */
+const selectRange = () => {
+  const text = document.querySelector('p')!.firstChild!;
+  const range = document.createRange();
+  range.selectNodeContents(text);
+  Object.defineProperty(range, 'getBoundingClientRect', {
+    value: () => ({ ...rangeRect, toJSON: () => ({}) }),
+  });
+  const selection = window.getSelection()!;
+  selection.removeAllRanges();
+  selection.addRange(range);
+};
+
+const bubbleVisible = () => {
+  const element = document.querySelector<HTMLElement>(`[${SELECTION_ACTIONS_ATTR}]`);
+  return !!element && !element.hidden;
+};
+
 beforeEach(() => {
   onAction.mockClear();
   rangeRect = { x: 100, y: 80, left: 100, top: 80, right: 240, bottom: 100, width: 140, height: 20 };
@@ -42,6 +60,7 @@ beforeEach(() => {
 afterEach(() => {
   actions.dispose();
   window.getSelection()?.removeAllRanges();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
   document.body.innerHTML = '';
 });
@@ -134,6 +153,182 @@ describe('view-mode text selection actions', () => {
     expect(onAction).toHaveBeenCalledWith('edit', expect.objectContaining({ path: '0.0.0', tag: 'strong', kind: 'text' }));
   });
 
+  /*
+   * ADDED (F3). Edit and Annotate want DIFFERENT nodes from the same Range:
+   * the editor should open on the deepest element the user touched, while a
+   * comment belongs to the BLOCK that contains the whole selection — anchoring
+   * a comment on the <strong> is how the rest of the sentence used to be lost.
+   * The words themselves travel with it.
+   */
+  it('annotates the BLOCK containing the selection, and carries the quote and its parts', async () => {
+    const nested = parseJsx('<div><p><strong>inner</strong> outer</p></div>');
+    if (!nested.ok) throw new Error('nested fixture does not parse');
+    document.body.innerHTML = '<div data-mx-ast="0"><p data-mx-ast="0.0"><strong data-mx-ast="0.0.0">inner</strong> outer</p></div>';
+    actions.setNodes(nested.nodes);
+    actions.update({ type: 'mx:selection-actions', edit: true, annotate: true });
+
+    const strongText = document.querySelector('strong')!.firstChild!;
+    const paragraphText = document.querySelector('p')!.lastChild!;
+    const range = document.createRange();
+    range.setStart(strongText, 2);
+    range.setEnd(paragraphText, paragraphText.textContent!.length);
+    Object.defineProperty(range, 'getBoundingClientRect', {
+      value: () => ({ x: 100, y: 80, left: 100, top: 80, right: 240, bottom: 100, width: 140, height: 20, toJSON: () => ({}) }),
+    });
+    const nativeSelection = window.getSelection()!;
+    nativeSelection.removeAllRanges();
+    nativeSelection.addRange(range);
+    document.querySelector('p')!.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
+    await Promise.resolve();
+
+    document.querySelector<HTMLButtonElement>('[aria-label="Annotate selected text"]')!.click();
+    expect(onAction).toHaveBeenCalledTimes(1);
+    const [action, selection] = onAction.mock.calls[0];
+    expect(action).toBe('annotate');
+    expect(selection).toMatchObject({ path: '0.0', tag: 'p' });
+    expect(selection.quote).toBe('ner outer');
+    expect(selection.range).toEqual({
+      v: 1,
+      parts: [
+        { rel: '0', start: 2, end: 5, text: 'ner' },
+        { rel: '', start: 5, end: 11, text: ' outer' },
+      ],
+    });
+
+    // The same Range, the other action: the editor still opens on what was touched.
+    onAction.mockClear();
+    document.querySelector('p')!.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
+    await Promise.resolve();
+    document.querySelector<HTMLButtonElement>('[aria-label="Edit selected text"]')!.click();
+    expect(onAction).toHaveBeenCalledWith('edit', expect.objectContaining({ path: '0.0.0', tag: 'strong' }));
+  });
+
+  /*
+   * ADDED (F4). …AND NOT UNDER THE DOCK. A document served top-level parks the
+   * reader's own chrome at the bottom of a phone's viewport, and the bubble
+   * hangs BELOW the words now — so a selection near the foot of the page would
+   * put the only way to act on it behind the dock. The clamp counts the dock
+   * only when it is really parked down there: it is `display: none` while the
+   * document is framed and only `position: fixed` under 640px, and a dock in
+   * ordinary flow scrolled into the upper half must not pull the bubble up off
+   * its words.
+   */
+  it('keeps a touch bubble clear of a reader dock parked at the foot of the viewport', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === '(pointer: coarse)',
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }));
+    document.body.innerHTML = '<p data-mx-ast="0">select these words</p>'
+      + '<div data-mx-reader-chrome></div>';
+    // jsdom's viewport is 768 tall: the dock occupies its last 68px.
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.hasAttribute(SELECTION_ACTIONS_ATTR)) {
+        return { x: 0, y: 0, left: 0, top: 0, right: 132, bottom: 30, width: 132, height: 30, toJSON: () => ({}) };
+      }
+      if (this.hasAttribute('data-mx-reader-chrome')) {
+        return { x: 0, y: 700, left: 0, top: 700, right: 390, bottom: 760, width: 390, height: 60, toJSON: () => ({}) };
+      }
+      return { x: 100, y: 660, left: 100, top: 660, right: 240, bottom: 690, width: 140, height: 30, toJSON: () => ({}) };
+    });
+    actions.update({ type: 'mx:selection-actions', edit: true, annotate: true });
+
+    const text = document.querySelector('p')!.firstChild!;
+    const range = document.createRange();
+    range.selectNodeContents(text);
+    const low = { x: 100, y: 660, left: 100, top: 660, right: 240, bottom: 690, width: 140, height: 30, toJSON: () => ({}) };
+    Object.defineProperty(range, 'getBoundingClientRect', { value: () => low });
+    Object.defineProperty(range, 'getClientRects', { value: () => [low] });
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.querySelector('p')!.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
+    await Promise.resolve();
+
+    // Below the words would be 697; the dock's top (700) less an 8px margin
+    // and the bubble's own 30px height is as low as it may go.
+    const toolbar = document.querySelector<HTMLElement>(`[${SELECTION_ACTIONS_ATTR}]`)!;
+    expect(toolbar.style.top).toBe('662px');
+    expect(toolbar).not.toHaveAttribute('hidden');
+  });
+
+  /*
+   * ADDED (F4, round 2). THE SETTLE IS FOR THE GESTURE THAT HAS NO OTHER EVENT.
+   * A mouse drag fires `selectionchange` continuously too, so a drag that
+   * pauses for the settle raised the bubble mid-gesture — into the path of the
+   * cursor it is heading for, and a release could land ON it. The review could
+   * not turn that into a wrong-target action (the drag's own last change
+   * re-arms the settle and re-measures), so this is not a correctness fix: the
+   * settle simply buys a MOUSE nothing, since `pointerup` already covers every
+   * mouse selection and `keyup` every keyboard one.
+   *
+   * Tracked as a held BUTTON rather than as a `pointerType` branch: jsdom's
+   * MouseEvent carries no `pointerType`, and every case above dispatches a
+   * `pointerup` with no `pointerdown` before it, so the flag is simply false
+   * for them.
+   */
+  it('does not raise the bubble mid-drag while a mouse button is held down', async () => {
+    actions.update({ type: 'mx:selection-actions', edit: true, annotate: true });
+    await Promise.resolve();
+    vi.useFakeTimers();
+    try {
+      document.querySelector('p')!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+      selectRange();
+      document.dispatchEvent(new Event('selectionchange'));
+      vi.advanceTimersByTime(400);
+      expect(bubbleVisible()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    // …and releasing shows it at once, by the path a mouse always used.
+    document.querySelector('p')!.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
+    await Promise.resolve();
+    expect(bubbleVisible()).toBe(true);
+  });
+
+  /*
+   * …and a TOUCH gesture reports a held button for its whole duration, so the
+   * gate is on the pointer as well as the button: the phone keeps its settle.
+   */
+  it('keeps the settle for a touch, where the same gesture reports a held button', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === '(pointer: coarse)',
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }));
+    actions.update({ type: 'mx:selection-actions', edit: true, annotate: true });
+    await Promise.resolve();
+    vi.useFakeTimers();
+    try {
+      document.querySelector('p')!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+      const text = document.querySelector('p')!.firstChild!;
+      const range = document.createRange();
+      range.selectNodeContents(text);
+      const line = { ...rangeRect, toJSON: () => ({}) };
+      Object.defineProperty(range, 'getBoundingClientRect', { value: () => line });
+      Object.defineProperty(range, 'getClientRects', { value: () => [line] });
+      const selection = window.getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new Event('selectionchange'));
+      vi.advanceTimersByTime(200);
+      expect(bubbleVisible()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('renders nothing for a reader and dismisses an open bubble when capability is removed', async () => {
     actions.update({ type: 'mx:selection-actions', edit: false, annotate: false });
     await selectText();
@@ -144,6 +339,106 @@ describe('view-mode text selection actions', () => {
     expect(document.querySelector(`[${SELECTION_ACTIONS_ATTR}]`)).toBeTruthy();
     actions.update({ type: 'mx:selection-actions', edit: false, annotate: false });
     expect(document.querySelector(`[${SELECTION_ACTIONS_ATTR}]`)).toBeNull();
+  });
+
+  /*
+   * ADDED (F4). A TOUCH SELECTION FIRES NEITHER OF THE EVENTS THE BUBBLE USED
+   * TO WAIT FOR. Android takes the long-press over for its own selection UI
+   * (the page sees `pointercancel` at best) and dragging the handles is browser
+   * chrome that never reaches the page — so `pointerup` never comes and no key
+   * is pressed. `selectionchange` is the one event every touch selection does
+   * fire, and it was wired ONLY to hide: on a phone the bubble was unreachable.
+   * It SHOWS now, after a settle, so a drag of the handles raises it once at
+   * the end rather than chasing every intermediate selection.
+   */
+  it('raises the bubble for a touch selection, which fires no pointerup at all', async () => {
+    actions.update({ type: 'mx:selection-actions', edit: true, annotate: true });
+    // Spend the first-update recovery microtask before the clock is frozen.
+    await Promise.resolve();
+    vi.useFakeTimers();
+    try {
+      selectRange();
+      document.dispatchEvent(new Event('selectionchange'));
+      expect(bubbleVisible()).toBe(false);
+      vi.advanceTimersByTime(199);
+      expect(bubbleVisible()).toBe(false);
+      vi.advanceTimersByTime(1);
+      expect(bubbleVisible()).toBe(true);
+
+      // Collapsing still hides at once — a settle would leave the bubble over
+      // words that are no longer selected.
+      window.getSelection()!.removeAllRanges();
+      document.dispatchEvent(new Event('selectionchange'));
+      expect(bubbleVisible()).toBe(false);
+
+      // A further change RE-ARMS the settle rather than adding a second one:
+      // dragging a handle changes the selection continuously, and the bubble
+      // belongs where the gesture ENDED.
+      selectRange();
+      document.dispatchEvent(new Event('selectionchange'));
+      vi.advanceTimersByTime(150);
+      document.dispatchEvent(new Event('selectionchange'));
+      vi.advanceTimersByTime(150);
+      expect(bubbleVisible()).toBe(false);
+      vi.advanceTimersByTime(50);
+      expect(bubbleVisible()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  /*
+   * ADDED (F4). ABOVE THE SELECTION IS EXACTLY WHERE A PHONE DRAWS ITS OWN
+   * Copy/Share menu, and the bounding box of a multi-line selection starts at
+   * its FIRST line — so the old placement put our bubble under the native menu
+   * and nowhere near the words the thumb just finished on. On a coarse pointer
+   * it hangs below the LAST client rect instead, and its buttons grow to a
+   * 44px touch target.
+   */
+  it('hangs below the last line of the selection on a coarse pointer, with touch-sized buttons', async () => {
+    // jsdom implements no matchMedia at all, which is why the module asks for
+    // it optionally — a document rendered where the query cannot be answered
+    // keeps the fine-pointer placement.
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === '(pointer: coarse)',
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }));
+    actions.update({ type: 'mx:selection-actions', edit: true, annotate: true });
+
+    const text = document.querySelector('p')!.firstChild!;
+    const range = document.createRange();
+    range.selectNodeContents(text);
+    Object.defineProperty(range, 'getBoundingClientRect', {
+      value: () => ({ ...rangeRect, toJSON: () => ({}) }),
+    });
+    // Two lines: the words wrap, and the gesture ended on the second one.
+    Object.defineProperty(range, 'getClientRects', {
+      value: () => [
+        { x: 100, y: 80, left: 100, top: 80, right: 240, bottom: 100, width: 140, height: 20, toJSON: () => ({}) },
+        { x: 100, y: 104, left: 100, top: 104, right: 180, bottom: 124, width: 80, height: 20, toJSON: () => ({}) },
+      ],
+    });
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.querySelector('p')!.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
+    await Promise.resolve();
+
+    const toolbar = document.querySelector<HTMLElement>(`[${SELECTION_ACTIONS_ATTR}]`)!;
+    expect(toolbar).not.toHaveAttribute('hidden');
+    // Below the SECOND rect's bottom, not above the first rect's top.
+    expect(toolbar.style.top).toBe('131px');
+    expect(toolbar.style.transform).toBe('translate(-50%, 0)');
+    expect(toolbar.style.left).toBe('140px');
+    const buttons = [...toolbar.querySelectorAll('button')];
+    expect(buttons).toHaveLength(2);
+    expect(buttons.every((button) => button.classList.contains(SELECTION_ACTION_COARSE_CLASS))).toBe(true);
   });
 
   it('follows the words when the document scrolls, rather than abandoning them', async () => {

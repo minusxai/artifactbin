@@ -25,14 +25,15 @@
  */
 import { z } from 'zod';
 import {
-  applyEditFor, canReadArtifact, deleteArtifactFor, findDependentsFor, getArtifactById, getArtifactFor, getVersionFor, listArtifactsFor, listVersionsFor,
-  revertArtifactFor, isVersionNotArchived, type TokenActor,
+  applyEditFor, canReadArtifact, deleteArtifactFor, findDependentsFor, forkArtifact, getArtifactById, getArtifactFor, getVersionFor, listArtifactsFor, listVersionsFor,
+  revertArtifactFor, isVersionNotArchived, type ForkOverrides, type TokenActor,
 } from '@/lib/artifacts';
 import { trackEvent } from '@/lib/analytics';
 import { exportImageResponse } from '@/lib/export';
 import type { AnnotationAuthor } from '@/lib/annotations';
 import {
-  artifactSummaryToWire, artifactToWireWithAnnotations, createArtifactFromBody, replaceArtifactWithBody, respondToAnnotationAction, respondToEdit, respondToMutate,
+  artifactSummaryToWire, artifactToWireWithAnnotations, createArtifactFromBody, createdArtifactWire, parseFolderField, parseVisibilityValue, replaceArtifactWithBody,
+  respondToAnnotationAction, respondToEdit, respondToMutate,
 } from '@/lib/artifact-wire';
 import { MARKUP_FIELD_GUIDANCE, DATASET_FIELD_GUIDANCE, SHEET_URL_FIELD_GUIDANCE, IMAGE_URL_FIELD_GUIDANCE, CSV_URL_FIELD_GUIDANCE } from '@/lib/agent-guidance';
 
@@ -125,10 +126,12 @@ const CONTENT_FIELDS = {
 };
 
 const INVALID_JSX: OperationError = { status: 400, code: 'invalid_jsx', fix: 'details names each problem with its span; a refused tag answer carries allowed_html_tags — pick from it' };
+const INVALID_REFS: OperationError = { status: 400, code: 'invalid_refs', fix: 'details names each ref: an id that does not resolve for YOU, a wrong kind, or a <Mutation> target that is not your own readwrite dataset — publish your own copy of it' };
 
 /** The shared write refusals, stated once and spread into each writer's table. */
 const CONTENT_ERRORS: OperationError[] = [
   INVALID_JSX,
+  INVALID_REFS,
   { status: 400, code: 'unknown_theme', fix: 'the 400 carries allowed — the six live theme names' },
   { status: 400, code: 'retired_theme', fix: 'the hint names the successor theme — use it' },
   { status: 400, code: 'image_fetch_failed', fix: 'the named image URL could not be imported — check it serves image bytes publicly' },
@@ -195,6 +198,9 @@ const editArtifactOp: Operation = {
     { status: 400, code: 'bad_diff', fix: 'old_string must appear exactly once — widen it until it is unique' },
     { status: 400, code: 'not_editable', fix: 'only markup artifacts take edits — replace a data tier whole instead' },
     INVALID_JSX,
+    // An edit re-publishes the whole document, refs included, so it answers
+    // this exactly as create and replace do.
+    INVALID_REFS,
   ],
   async run(ctx, input) {
     return fromResponse(await respondToEdit(ctx.base, input, (i) => applyEditFor(ctx.actor, String(input.id), i)));
@@ -409,8 +415,74 @@ const exportArtifactOp: Operation = {
   },
 };
 
+/**
+ * FORK — take a copy of anything you can READ, as yourself.
+ *
+ * The reach is the read ACL rather than ownership (the whole point: adapting
+ * someone else's public document), so the miss is the same uniform 404 every
+ * other operation answers. The copy is re-published as the FORKER
+ * (lib/artifacts forkArtifact), which is why a refusal here can name a ref
+ * that was fine for the original owner and is not for you — it passes through
+ * verbatim rather than copying a document that would be broken on arrival.
+ */
+const forkArtifactOp: Operation = {
+  name: 'fork_artifact',
+  title: 'Fork an artifact',
+  http: { method: 'POST', path: '/api/artifacts/{id}/fork' },
+  description: 'Copy an artifact you can READ — your own, one shared with your account, or any public/unlisted one — into a new artifact of your own at a new id and url. Use it instead of create_artifact when you are adapting a document that already exists: fork it, then edit the copy with edit_artifact. Content, title, theme, template and settings travel; version history, comments and shares do not (the copy is version 1, with its own edit_id). Every ref: image, dataset and recipe is re-validated AS YOU, so a document whose <Mutation> writes someone else\'s dataset, or that reads a private one, is refused by name instead of copied broken. Optional title, visibility and folder land on the copy only — the original is never touched. Answers the create reply plus forked_from.',
+  input: {
+    id: z.string(),
+    title: z.string().optional().describe('title for the COPY; omit to keep the original\'s'),
+    // The same three values, but NOT the create door's defaults sentence: a
+    // fork defaults to whatever the source is, which is the one thing about
+    // visibility a forker has to know.
+    visibility: CONTENT_FIELDS.visibility.describe("read ACL for the COPY: 'public' = anyone with the link, and it lists on your public profile; 'unlisted' = anyone with the link, listed nowhere; 'private' = you plus the emails you share it with (needs a logged-in account). Omit to keep the source's."),
+    folder: CONTENT_FIELDS.folder.describe("folder path for the COPY on your dashboard, like '2026/forks'; omit to file it at your root"),
+  },
+  // A plain write: not destructive (the source is untouched) and NOT
+  // idempotent — two calls make two copies.
+  annotations: {},
+  example: {
+    input: { id: 'aB3xK9', title: 'My copy', visibility: 'unlisted' },
+    note: 'the reply is create-shaped — take its id and edit_id straight into the edit loop',
+  },
+  errors: [
+    NOT_FOUND,
+    { status: 403, code: 'quota_exceeded', fix: 'this token has hit its artifact quota — delete what you no longer need' },
+    ...CONTENT_ERRORS,
+  ],
+  async run(ctx, input) {
+    // Validated BEFORE the copy is made, by the same parsers the owner's own
+    // doors run — so `private` without an account is the one refusal it has
+    // always been, never a silent downgrade of the copy.
+    const visibility = parseVisibilityValue(input.visibility, !!ctx.actor.userId);
+    if (visibility instanceof Response) return fromResponse(visibility);
+    const folder = parseFolderField(input);
+    if (folder instanceof Response) return fromResponse(folder);
+    const overrides: ForkOverrides = {
+      ...(typeof input.title === 'string' ? { title: input.title } : {}),
+      ...(visibility ? { visibility } : {}),
+      ...(folder !== undefined ? { folder } : {}),
+    };
+
+    const source = await getArtifactById(String(input.id));
+    if (!source) return reply({ error: 'not_found' }, 404);
+    // The export operation's rule, for the same reason: the publishing token
+    // reaches its own artifact directly, an account reaches whatever it may
+    // read. Unreachable and unknown are one answer.
+    const viewer = ctx.actor.userId ? { userId: ctx.actor.userId, email: null } : null;
+    if (ctx.actor.tokenId !== source.token_id && !(await canReadArtifact(source, viewer))) {
+      return reply({ error: 'not_found' }, 404);
+    }
+
+    const copy = await forkArtifact(ctx.actor, source, overrides);
+    if (copy instanceof Response) return fromResponse(copy);
+    return { status: 201, body: { ...createdArtifactWire(copy, ctx.base, undefined), forked_from: source.id } };
+  },
+};
+
 export const OPERATIONS: Operation[] = [
-  createArtifactOp, updateArtifactOp, editArtifactOp, getArtifactOp, listArtifactsOp,
+  createArtifactOp, updateArtifactOp, editArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
   listVersionsOp, getVersionOp, revertArtifactOp, deleteArtifactOp, annotateOp, mutateDatasetOp,
   exportArtifactOp,
 ];

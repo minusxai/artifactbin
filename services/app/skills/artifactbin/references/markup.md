@@ -11,14 +11,15 @@ over a fixed component registry, never executed. A fault is a
 
 - **Static JSX only**: literal props (strings, numbers, booleans, arrays,
   `{{…}}` objects); no expressions, spreads or inline handlers (`onClick=` is
-  rejected). **But the document DOES run your JavaScript**: one `<script>` in
-  `<Helmet>` runs after hydration — `addEventListener` on your own ids.
+  rejected). It is JSX and not HTML, so every tag closes (`<br />`), comments
+  are `{/* … */}`, and there is no `<html>`/`<head>`/`<body>`. **But the
+  document DOES run your JavaScript**: one `<script>` in `<Helmet>` runs after
+  hydration — `addEventListener` on your own ids.
 - **Style with Tailwind classes via `className`**, starting from a
   `<div data-design="tw" className="@container …">` wrapper with `@2xl:`
   container variants for responsive layout.
 - Data (`<Query>`, `<Value>`, `<Mutation>`, embeds, controls): [data](markup-data.md).
-  [motion](markup-motion.md) · [video](markup-video.md) · [svg](markup-svg.md) ·
-  [templates.md](templates.md) · [themes.md](themes.md).
+  [motion](markup-motion.md) · [video](markup-video.md) · [svg](markup-svg.md).
 
 ## Contents
 
@@ -93,10 +94,8 @@ never on line one.
   Keys: `--background --foreground --card --popover --primary --secondary
   --muted --accent --destructive` (each with `-foreground`), `--border
   --input --ring --radius --chart-1..5`, `--font-body --font-display --font-mono`.
-- **Subresources**: `<img src>` and `<Video poster>` take a `ref:<id>`, a
-  `data:image/` URL, or an `https://` URL imported at publish; any other
-  subresource position (`srcSet`, `background`) rejects an external URL.
-  Links (`href`) may point anywhere.
+- **Subresources**: only `<img src>` and `<Video poster>` take a URL (below);
+  `srcSet`/`background` reject an external one. Links (`href`) go anywhere.
 - **Web fonts**: `<meta name="font-display" content="Lobster" />` (also
   `font-body`, `font-mono`) names a Google family, served from this origin;
   an unknown family fails the publish.

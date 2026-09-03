@@ -30,7 +30,7 @@ import { IS_DEV } from '@/lib/config';
 import { parseJsx } from '@/lib/jsx';
 import { EMPTY_HELMET_CONTENT, splitHelmet, type HelmetContent } from '@/lib/story/helmet';
 import { fixHtmlNesting } from '@/lib/story/nesting';
-import { AUTHOR_SCRIPT_TYPE, STORY_HELLO_MESSAGE, STORY_ISLAND_ID, STORY_PAINTED_MESSAGE, STORY_ROOT_ID, type StoryIslandData, type StoryIslandDataflow, type StorySsrBundle } from '@/lib/story-runtime/contract';
+import { AUTHOR_SCRIPT_TYPE, STORY_HELLO_MESSAGE, STORY_VALUES_HOOK, STORY_ISLAND_ID, STORY_PAINTED_MESSAGE, STORY_ROOT_ID, type StoryIslandData, type StoryIslandDataflow, type StorySsrBundle } from '@/lib/story-runtime/contract';
 import type { JsxNode } from '@/lib/jsx';
 import type { RefDataMap } from '@/lib/story/ref-data';
 import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
@@ -121,8 +121,22 @@ export interface StoryDocumentInput {
    * the runtime would otherwise be downloaded to draw a tint.
    */
   commenting?: boolean;
-  /** Platform attribution appended after the artifact; null/absent for exports. */
-  credits?: { creatorUsername: string | null } | null;
+  /**
+   * Platform attribution appended after the artifact; null/absent for exports.
+   *
+   * `forkedFrom` is PROVENANCE, resolved per render rather than written into
+   * the markup: an agent that regenerates the document cannot delete the
+   * attribution, and nothing about the source is baked into bytes that outlive
+   * its ACL. The ROUTE decides both fields — it holds the rows — and anything
+   * that is not a PUBLIC source produces a label with NO href and no id,
+   * identical for unlisted, private and deleted: one branch, so the line can be
+   * neither an existence oracle nor a listing surface for a tier whose whole
+   * point is being listed nowhere.
+   */
+  credits?: {
+    creatorUsername: string | null;
+    forkedFrom?: { label: string; href: string | null } | null;
+  } | null;
   /**
    * Link-unfurl cards for THIS document. A reader is served the document
    * itself rather than the app page, so if these are not in its head a shared
@@ -140,6 +154,19 @@ export interface StoryDocumentInput {
    * for a viewer-only link, and for a capture: /export photographs this frame.
    */
   signIn?: { unlocks: 'commenter' | 'editor'; callbackUrl: string } | null;
+  /**
+   * "make this mine", in the reader's own controls. Unlike {@link signIn} it is
+   * offered on EVERY chrome-bearing markup document, because a reader may fork
+   * anything they can read and the door agrees (it decides on the read ACL).
+   *
+   * An anchor and nothing else, for the reason the sign-in door is one: the
+   * document is sandboxed with an opaque origin and holds no session, so it
+   * cannot POST the fork itself. It carries the ASK, and the shell on the
+   * other side performs it — which is why the ROUTE decides where it points
+   * (login-and-back for a request with no viewer, the document itself for one
+   * with).
+   */
+  fork?: { href: string } | null;
 }
 
 /**
@@ -226,12 +253,66 @@ function drawsChart(nodes: JsxNode[]): boolean {
  * Safe for our own document: the runtime never calls either method (pinned by
  * lib/story/__tests__/history-prelude.test.ts), and hydration does not route.
  */
+/*
+ * SPIKE S2 (F2 — the reader's `<Value>` selections in the URL, risk R5).
+ *
+ * The freeze above is exactly what a reader-facing URL needs, and F2 needs the
+ * URL to change anyway: someone who picks "west" must be able to copy the
+ * address bar and hand another person the document they are looking at. So the
+ * prelude keeps every door shut and opens ONE WINDOW, `window.__mxValues`.
+ *
+ * It is narrow by CONSTRUCTION, not by escaping:
+ *  - it holds the NATIVE `replaceState`, bound before the overwrite below —
+ *    after the freeze there is no other way to reach it, in or out;
+ *  - it takes no path, no host and no hash. `location.pathname` and
+ *    `location.hash` are read FRESH at call time, so there is no argument for
+ *    a crafted `toString` to arrive through;
+ *  - a key that is not a plain value name (`/^[A-Za-z_]\w*$/`, the dataflow's
+ *    own shape) is DROPPED rather than encoded, and only the object's own
+ *    enumerable keys are read, so a polluted `Object.prototype` injects
+ *    nothing;
+ *  - the search is rebuilt from `URLSearchParams`, so every value is encoded
+ *    and a `#` or `&` inside one is a character, never a delimiter. `$` alone
+ *    is written back literally — it is a legal query character and the point
+ *    of the whole feature is a link a person can read.
+ * A frozen, non-writable, non-configurable own property, so the author's own
+ * script cannot replace it with something that lies about what it did.
+ */
 export const HISTORY_PRELUDE =
   '(function(){var b=function(){};try{'
+  /*
+   * ORDER IS THE WHOLE MECHANISM, and it runs in exactly two beats.
+   *
+   * FIRST, bind the native — after the overwrite below there is no way to
+   * reach it, in or out, which is the point.
+   *
+   * THEN shut every door, and only AFTER that build the capability. The
+   * capability's own statements sit inside the same fail-silent `try`, so
+   * anything that throws there (a `defineProperty` refused because something
+   * already owns the name) would take the FREEZE down with it and leave the
+   * document with a fully writable History API and nobody told. The freeze is
+   * what this prelude is FOR; nothing may be attempted in front of it.
+   */
+  + 'var n=history.replaceState.bind(history);'
   + 'history.pushState=b;history.replaceState=b;'
   + 'History.prototype.pushState=b;History.prototype.replaceState=b;'
   + 'Object.freeze(History.prototype);Object.freeze(history);'
-  + '}catch(e){}})()';
+  + 'var c=function(s){return encodeURIComponent(s).replace(/%24/g,"$")};'
+  + 'var f=function(v){try{'
+  + 'if(!v||typeof v!=="object")return;'
+  + 'var p=new URLSearchParams(location.search),k=Object.keys(v),i,m,x;'
+  + 'for(i=0;i<k.length;i++){m=k[i];'
+  + 'if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(m))continue;'
+  // `x==null` rather than a spelled-out `undefined`: the built document is
+  // guarded against emitting that token at all (__tests__/document.test.ts).
+  + 'x=v[m];if(x==null)p.delete("$"+m);else p.set("$"+m,""+x)}'
+  + 'var o=[];p.forEach(function(val,key){o.push(c(key)+"="+c(val))});'
+  + 'var q=o.join("&");'
+  + 'n(null,"",location.pathname+(q?"?"+q:"")+location.hash)'
+  + '}catch(g){}};'
+  + 'Object.freeze(f);'
+  + `Object.defineProperty(window,"${STORY_VALUES_HOOK}",{value:f,writable:false,configurable:false,enumerable:false});`
+  + '}catch(z){}})()';
 
 /**
  * Re-apply the READER's mode override before first paint. The override lives
@@ -279,12 +360,24 @@ const SIGN_IN_LABEL: Record<'commenter' | 'editor', string> = {
   editor: 'log in to edit',
 };
 
+/**
+ * FORK, beside the sign-in door and for the same structural reason: an opaque
+ * document cannot act, so it carries the ask and the app performs it.
+ * `target="_top"` is what makes it work — a sandboxed document's one way out
+ * is a user-activated top navigation.
+ */
+const FORK_LABEL = 'Fork artifact';
+const ICON_FORK = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9"/><path d="M12 12v3"/></svg>';
+
+const renderFork = (fork: NonNullable<StoryDocumentInput['fork']>): string =>
+  `<a class="mx-reader-signin" data-mx-fork href="${escapeHtml(fork.href)}"`
+  + ` target="_top" aria-label="${FORK_LABEL}">${ICON_FORK}fork</a>`;
+
 const renderSignIn = (signIn: NonNullable<StoryDocumentInput['signIn']>): string =>
-  '<h3>this document</h3>'
-  + `<a class="mx-reader-signin" data-mx-signin href="/login?callbackUrl=${escapeHtml(encodeURIComponent(signIn.callbackUrl))}"`
+  `<a class="mx-reader-signin" data-mx-signin href="/login?callbackUrl=${escapeHtml(encodeURIComponent(signIn.callbackUrl))}"`
   + ` target="_top" aria-label="${escapeHtml(SIGN_IN_LABEL[signIn.unlocks])}">${escapeHtml(SIGN_IN_LABEL[signIn.unlocks])}</a>`;
 
-const renderReaderChrome = (signIn?: StoryDocumentInput['signIn']): string =>
+const renderReaderChrome = (signIn?: StoryDocumentInput['signIn'], fork?: StoryDocumentInput['fork']): string =>
   '<div class="mx-reader-chrome" data-mx-reader-chrome>'
   + `<button type="button" class="mx-reader-trigger mx-reader-trigger--left" data-mx-reader-trigger="menu" aria-label="Open menu" aria-expanded="false">${ICON_MENU}${ICON_X}<span class="mx-reader-label" data-mobile-label>menu</span></button>`
   + `<a class="mx-reader-home" href="/" target="_top" aria-label="Home">${ICON_HOME}<span class="mx-reader-label" data-mobile-label>home</span></a>`
@@ -301,7 +394,9 @@ const renderReaderChrome = (signIn?: StoryDocumentInput['signIn']): string =>
   + `<button type="button" data-mx-mode-choice="light" aria-label="Light mode">${ICON_SUN}light</button>`
   + `<button type="button" data-mx-mode-choice="dark" aria-label="Dark mode">${ICON_MOON}dark</button>`
   + '</div>'
+  + (signIn || fork ? '<h3>this document</h3>' : '')
   + (signIn ? renderSignIn(signIn) : '')
+  + (fork ? renderFork(fork) : '')
   + '</section></div>';
 
 const escapeHtml = (s: string): string =>
@@ -325,7 +420,7 @@ body[data-mx-story-root] > #mx-story-root {
 .mx-artifact-credits {
   display: flex !important; flex-direction: column !important;
   align-items: center !important; justify-content: center !important;
-  gap: 4px !important; width: 100% !important; height: 52px !important;
+  gap: 4px !important; width: 100% !important; min-height: 52px !important;
   box-sizing: border-box !important; margin: 0 !important; padding: 0 12px !important;
   border: 0 !important; border-top: 1px solid #202832 !important;
   background: #10151b !important; color: #e6edf3 !important;
@@ -345,11 +440,35 @@ body[data-mx-story-root] > #mx-story-root {
   font-size: 13px !important; line-height: 1 !important;
 }
 .mx-artifact-credits__host { gap: 6px !important; }
+.mx-artifact-credits__forked { color: #8b949e !important; font: inherit !important; }
+.mx-artifact-credits__forked a { display: inline !important; color: #8b949e !important; text-decoration: underline !important; }
+.mx-artifact-credits__forked a:hover { color: #3fe77b !important; }
 .mx-artifact-credits__logo {
   display: block !important; width: 14px !important; height: 14px !important;
   margin: 0 !important; padding: 0 !important; border: 0 !important;
 }
 `;
+
+/**
+ * PROVENANCE, said in the credits and nowhere else.
+ *
+ * Two shapes, and the second is the load-bearing one: with an href it names
+ * and links the source; without one it says only that there WAS a source. The
+ * label is the route's, not this module's, precisely so that "unlisted",
+ * "private" and "deleted" arrive here already indistinguishable — a line that
+ * could tell them apart is an existence oracle, and one that names an unlisted
+ * source is a listing surface for a tier that exists to have none.
+ */
+const renderForkedFrom = (forkedFrom: NonNullable<NonNullable<StoryDocumentInput['credits']>['forkedFrom']>): string => {
+  const label = escapeHtml(forkedFrom.label);
+  // With no href the label is plain TEXT rather than an element of its own:
+  // "forked from a private document" has to read as one sentence, and nothing
+  // in the DOM should mark where the name would have been.
+  const inner = forkedFrom.href
+    ? `<a href="${escapeHtml(forkedFrom.href)}" target="_top" aria-label="Open the artifact this was forked from">${label}</a>`
+    : label;
+  return `<span class="mx-artifact-credits__forked" data-mx-forked-from>forked from ${inner}</span>`;
+};
 
 const renderCredits = (credits: NonNullable<StoryDocumentInput['credits']>): string => {
   const username = credits.creatorUsername;
@@ -357,13 +476,14 @@ const renderCredits = (credits: NonNullable<StoryDocumentInput['credits']>): str
     ? `<a href="/@${escapeHtml(username)}" target="_top" aria-label="View @${escapeHtml(username)}'s profile">`
       + `made with <span class="mx-artifact-credits__heart" aria-hidden="true">&hearts;</span> by @${escapeHtml(username)}</a>`
     : '';
-  return `<footer class="mx-artifact-credits" aria-label="Artifact credits">${creator}`
+  const forked = credits.forkedFrom ? renderForkedFrom(credits.forkedFrom) : '';
+  return `<footer class="mx-artifact-credits" aria-label="Artifact credits">${creator}${forked}`
     + `<a class="mx-artifact-credits__host" href="/" target="_top" aria-label="Hosted on artifactbin">`
     + `<img class="mx-artifact-credits__logo" src="/logo-128.png" alt="">hosted on artifactbin</a></footer>`;
 };
 
 export async function buildStoryDocument(input: StoryDocumentInput): Promise<string> {
-  const { source, compiledCss, theme, template = null, colorMode, refData, runtimeSrc, anchorSrc, commentSrc, live = null, chrome = true, social = null, help = null, signIn = null } = input;
+  const { source, compiledCss, theme, template = null, colorMode, refData, runtimeSrc, anchorSrc, commentSrc, live = null, chrome = true, social = null, help = null, signIn = null, fork = null } = input;
   const dataflow = input.dataflow ?? null;
   // Chrome-less documents are capture inputs. Keep the omission structural so
   // a future caller cannot accidentally burn attribution into an export by
@@ -483,11 +603,15 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    * must MATCH, or the preload warms an entry the script cannot use and the
    * bytes are fetched twice. Fonts stay first: they block the text.
    */
-  const modulePreloads = hydrates
-    ? [runtimeSrc!, ...(drawsChart(split!.body) ? input.lazyChunks ?? [] : [])]
-      .map((href) => `<link rel="modulepreload" href="${escapeHtml(href)}" crossorigin>`)
-      .join('')
-    : '';
+  const modulePreloads = [
+    // FIRST, and unconditional: the anchor module is the reader's OWN chrome —
+    // the phone bar's scroll relay, the outline's clicks, the scroll-marked
+    // tables — and it is ~8 KB. Asking for it after a megabyte of runtime, or
+    // only for documents that hydrate, gets that backwards: the document that
+    // gains most is the prose one that ships nothing else.
+    ...(anchorSrc ? [anchorSrc] : []),
+    ...(hydrates ? [runtimeSrc!, ...(drawsChart(split!.body) ? input.lazyChunks ?? [] : [])] : []),
+  ].map((href) => `<link rel="modulepreload" href="${escapeHtml(href)}" crossorigin>`).join('');
 
   const island: StoryIslandData = { nodes: split?.body ?? [], refData, ...(Object.keys(glyphs).length ? { glyphs } : {}), ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, ...(input.queryUrl ? { queryUrl: input.queryUrl } : {}), ...(input.mutateUrl ? { mutateUrl: input.mutateUrl } : {}) };
   // `<` escaped so no row value can close the script element from inside JSON.
@@ -548,7 +672,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
     // this document's own stream (lib/story-runtime/anchor-entry).
     `<body ${STORY_ROOT_ATTR}${live ? ` data-mx-live-id="${escapeHtml(live.id)}" data-mx-live-edit="${escapeHtml(live.editId)}"` : ''}>` +
     `<div id="${STORY_ROOT_ID}">${bodyHtml}</div>` +
-    (chrome ? renderReaderChrome(signIn) : '') +
+    (chrome ? renderReaderChrome(signIn, fork) : '') +
     (credits ? renderCredits(credits) : '') +
     /*
      * The page holds its own copy of this text until we say we have painted,
@@ -591,7 +715,17 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
     (comments ? `<script type="module" src="${escapeHtml(commentSrc!)}" crossorigin></script>` : '') +
     // Unconditional, unlike the runtime above: keeping the reader's place is
     // not a feature of documents that happen to hydrate.
-    (anchorSrc ? `<script type="module" src="${escapeHtml(anchorSrc)}" crossorigin></script>` : '') +
+    /*
+     * ASYNC, alone among the three. A module script without it executes IN
+     * ORDER with every module script before it, so on a chart document this
+     * one waited for the whole runtime entry to download AND evaluate before
+     * the reader's bar would answer a single scroll — measured at ~9.3 s
+     * against ~2.0 s for the chrome appearing (scripts/measure-bar.mjs).
+     * Nothing here depends on the runtime or on anything the runtime does, so
+     * there is no order to keep; it needs only its own document, and it is
+     * emitted after the island for that.
+     */
+    (anchorSrc ? `<script type="module" src="${escapeHtml(anchorSrc)}" crossorigin async></script>` : '') +
     authorScript +
     `</body></html>`
   );

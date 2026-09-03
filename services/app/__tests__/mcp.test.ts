@@ -12,15 +12,35 @@ import { createAnnotationFor, type AnnotationWire } from '@/lib/annotations';
 
 useAppHarness();
 
-const rpc = (token: string | null, body: unknown) =>
-  mcp(request('/mcp', { method: 'POST', ...(token ? { token } : {}), headers: { Accept: 'application/json, text/event-stream' }, json: body }));
+const rpc = (token: string | null, body: unknown, headers: Record<string, string> = {}) =>
+  mcp(request('/mcp', { method: 'POST', ...(token ? { token } : {}), headers: { Accept: 'application/json, text/event-stream', ...headers }, json: body }));
 
-const mcpCall = async (token: string, name: string, args: Record<string, unknown>) => {
-  const res = await rpc(token, { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } });
+/**
+ * The branch PRODUCTION takes: the proxy resolved the bearer and attached the
+ * actor, so the route never sees the secret. `request` refuses `token` and
+ * `actor` together — one credential per request — so this is a separate helper
+ * rather than an option on `rpc`.
+ */
+const rpcAs = (tokenId: string, body: unknown, headers: Record<string, string> = {}) =>
+  mcp(request('/mcp', {
+    method: 'POST',
+    actor: { credential: 'bearer', tokenId },
+    headers: { Accept: 'application/json, text/event-stream', ...headers },
+    json: body,
+  }));
+
+const callWith = async (send: (body: unknown) => Promise<Response>, name: string, args: Record<string, unknown>) => {
+  const res = await send({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } });
   expect(res.status).toBe(200);
   const body = (await res.json()) as { result: { content: Array<{ text: string }>; isError?: boolean } };
   return { isError: body.result.isError ?? false, data: JSON.parse(body.result.content[0].text) as Record<string, unknown> };
 };
+
+const mcpCall = (token: string, name: string, args: Record<string, unknown>) =>
+  callWith((body) => rpc(token, body), name, args);
+
+const mcpCallAs = (tokenId: string, name: string, args: Record<string, unknown>, headers: Record<string, string> = {}) =>
+  callWith((body) => rpcAs(tokenId, body, headers), name, args);
 
 describe('MCP server', () => {
   it('rejects unauthenticated requests with 401', async () => {
@@ -40,26 +60,81 @@ describe('MCP server', () => {
     expect(body.result.instructions).toContain(`${PUBLIC_BASE_URL}/docs`);
   });
 
-  it('remembers MCP clientInfo on the token for later stateless tool calls', async () => {
-    const t = await mintToken('t');
-    const res = await rpc(t.token, { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'claude-code', version: '1.2.3' } } });
-    expect(res.status).toBe(200);
-    expect(await resolveToken(t.token)).toMatchObject({ clientHarness: 'claude-code' });
-
-    const doc = await mcpCall(t.token, 'create_artifact', { markup: '<p>check this</p>' });
+  /**
+   * A document with one HUMAN comment on it — the root an agent replies to.
+   * Creation is a browser door, so the root is seeded through the library
+   * rather than over MCP, exactly as the annotation gates do.
+   */
+  const seedThread = async (tokenId: string, doc: { data: Record<string, unknown> }) => {
     const annotation = await createAnnotationFor(
-      { tokenId: t.id, userId: null },
+      { tokenId, userId: null },
       doc.data.id as string,
       { bodyPath: '0', baseEditId: doc.data.edit_id as string, body: 'is this right?' },
       { kind: 'human', label: null, transport: 'browser' },
     ) as AnnotationWire;
-    const replied = await mcpCall(t.token, 'annotate', {
-      id: doc.data.id,
-      annotation_id: annotation.id,
+    return { id: doc.data.id as string, annotationId: annotation.id };
+  };
+
+  const initializeAs = (clientInfo: Record<string, unknown> | undefined) => ({
+    jsonrpc: '2.0', id: 1, method: 'initialize',
+    params: { protocolVersion: '2025-03-26', capabilities: {}, ...(clientInfo ? { clientInfo } : {}) },
+  });
+
+  it('bylines a proxy-attached reply with the harness remembered at initialize', async () => {
+    // The branch production takes: the proxy vouched for the bearer and attached
+    // the actor, so the route has no token secret to resolve — and MCP names its
+    // client only on `initialize`, never on the later stateless `tools/call`.
+    const t = await mintToken('t');
+    const res = await rpcAs(t.id, initializeAs({ name: 'claude-code', version: '1.2.3' }));
+    expect(res.status).toBe(200);
+    expect(await resolveToken(t.token)).toMatchObject({ clientHarness: 'claude-code' });
+
+    const doc = await mcpCallAs(t.id, 'create_artifact', { markup: '<p>check this</p>' });
+    const seeded = await seedThread(t.id, doc);
+    const replied = await mcpCallAs(t.id, 'annotate', {
+      id: seeded.id,
+      annotation_id: seeded.annotationId,
       reply: 'yes — verified',
     });
     const thread = replied.data.thread as AnnotationWire['thread'];
     expect(thread[1].author).toMatchObject({ kind: 'agent', label: 'Claude Code', transport: 'mcp' });
+  });
+
+  it('remembers MCP clientInfo on the token for later stateless tool calls (no proxy in front)', async () => {
+    const t = await mintToken('t');
+    const res = await rpc(t.token, initializeAs({ name: 'claude-code', version: '1.2.3' }));
+    expect(res.status).toBe(200);
+    expect(await resolveToken(t.token)).toMatchObject({ clientHarness: 'claude-code' });
+
+    const doc = await mcpCall(t.token, 'create_artifact', { markup: '<p>check this</p>' });
+    const seeded = await seedThread(t.id, doc);
+    const replied = await mcpCall(t.token, 'annotate', {
+      id: seeded.id,
+      annotation_id: seeded.annotationId,
+      reply: 'yes — verified',
+    });
+    const thread = replied.data.thread as AnnotationWire['thread'];
+    expect(thread[1].author).toMatchObject({ kind: 'agent', label: 'Claude Code', transport: 'mcp' });
+  });
+
+  it('leaves the byline unnamed when nothing named the client — never a guess from the runtime UA', async () => {
+    // No clientInfo, nothing remembered on the token, and a bare `node` user
+    // agent: the runtime is not the agent, so the label stays null (the rail
+    // renders 'Agent') rather than becoming a guess.
+    const t = await mintToken('t');
+    const res = await rpcAs(t.id, initializeAs(undefined), { 'user-agent': 'node' });
+    expect(res.status).toBe(200);
+    expect(await resolveToken(t.token)).toMatchObject({ clientHarness: null });
+
+    const doc = await mcpCallAs(t.id, 'create_artifact', { markup: '<p>check this</p>' }, { 'user-agent': 'node' });
+    const seeded = await seedThread(t.id, doc);
+    const replied = await mcpCallAs(t.id, 'annotate', {
+      id: seeded.id,
+      annotation_id: seeded.annotationId,
+      reply: 'done',
+    }, { 'user-agent': 'node' });
+    const thread = replied.data.thread as AnnotationWire['thread'];
+    expect(thread[1].author).toMatchObject({ kind: 'agent', label: null, transport: 'mcp' });
   });
 
   it('lists the artifact tools', async () => {
@@ -67,7 +142,7 @@ describe('MCP server', () => {
     const res = await rpc(t.token, { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
     const body = (await res.json()) as { result: { tools: Array<{ name: string; description?: string }> } };
     const names = body.result.tools.map((x) => x.name);
-    for (const n of ['create_artifact', 'update_artifact', 'edit_artifact', 'get_artifact', 'annotate', 'list_artifacts', 'list_versions', 'get_version', 'revert_artifact', 'delete_artifact']) {
+    for (const n of ['create_artifact', 'update_artifact', 'edit_artifact', 'fork_artifact', 'get_artifact', 'annotate', 'list_artifacts', 'list_versions', 'get_version', 'revert_artifact', 'delete_artifact']) {
       expect(names).toContain(n);
     }
     const getDescription = body.result.tools.find((tool) => tool.name === 'get_artifact')?.description ?? '';
@@ -108,6 +183,44 @@ describe('MCP server', () => {
     const other = await mintToken('other');
     const denied = await mcpCall(other.token, 'get_artifact', { id: story.data.id as string });
     expect(denied.isError).toBe(true);
+  });
+
+  /**
+   * FORK over MCP, end to end and on the branch production takes (the proxy
+   * vouched for the bearer and attached the actor). The reach is READ, so the
+   * forker is a different token entirely — and the copy is its own.
+   */
+  it('fork_artifact copies a public document as the CALLING token, create-shaped plus forked_from', async () => {
+    const owner = await mintToken('owner');
+    const doc = await mcpCall(owner.token, 'create_artifact', {
+      title: 'Payroll', visibility: 'public',
+      markup: '<div data-design="tw"><h1 className="text-2xl">Payroll</h1></div>',
+    });
+    expect(doc.isError).toBe(false);
+
+    const forker = await mintToken('forker');
+    const copy = await mcpCallAs(forker.id, 'fork_artifact', { id: doc.data.id as string, title: 'My copy' });
+    expect(copy.isError, JSON.stringify(copy.data)).toBe(false);
+    expect(copy.data.id).not.toBe(doc.data.id);
+    expect(copy.data.forked_from).toBe(doc.data.id);
+    expect(copy.data.version).toBe(1);
+    expect(copy.data.title).toBe('My copy');
+    expect(String(copy.data.markup)).toContain('Payroll');
+    // The copy is the FORKER's — and the original is untouched for its owner.
+    const mine = await mcpCallAs(forker.id, 'list_artifacts', {});
+    expect((mine.data.artifacts as Array<{ id: string }>).map((a) => a.id)).toEqual([copy.data.id]);
+    const theirs = await mcpCall(owner.token, 'get_artifact', { id: doc.data.id as string });
+    expect(theirs.data.title).toBe('Payroll');
+    expect(theirs.data.version).toBe(1);
+  });
+
+  it('fork_artifact answers the uniform not_found for what the token cannot read', async () => {
+    const owner = await mintToken('owner');
+    const doc = await mcpCall(owner.token, 'create_artifact', { markup: '<p>secret</p>', visibility: 'unlisted' });
+    const stranger = await mintToken('stranger');
+    // Unlisted reads by link, so the refusal is proved on an id that exists nowhere.
+    expect((await mcpCallAs(stranger.id, 'fork_artifact', { id: 'zzzzzz' })).data.error).toBe('not_found');
+    expect((await mcpCallAs(stranger.id, 'fork_artifact', { id: doc.data.id as string })).isError).toBe(false);
   });
 
   it('a retired theme is a real tool result carrying the successor hint, not a schema error', async () => {

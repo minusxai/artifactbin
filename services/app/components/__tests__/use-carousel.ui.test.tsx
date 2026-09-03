@@ -90,3 +90,28 @@ describe('the wheel', () => {
     expect(centred()).toBe(first);
   });
 });
+
+/**
+ * ONE CAROUSEL, TWO HOSTS. The landing asks a stranger what the product is
+ * FOR, so the wheel of uses IS the point there; the signed-in empty library
+ * has already sold that and wants only the documents, under its own name. The
+ * eyebrow and the wheel are props for that reason — never a second copy of
+ * the component with one line changed.
+ */
+describe('the carousel adapts to its host', () => {
+  it('takes the host\u2019s own name and drops the wheel when asked', () => {
+    render(<UseCarousel label="Inspiration Zone" wheel={false} />);
+    expect(screen.getByText(/Inspiration Zone/)).toBeInTheDocument();
+    expect(screen.queryByText(/What can you do with artifactbin/)).toBeNull();
+    expect(document.querySelector('[data-use-row]')).toBeNull();
+    // The documents are still there, still named, still steppable.
+    expect(screen.getByLabelText('Next example')).toBeInTheDocument();
+    expect(screen.getByLabelText(`Show ${SHOWCASE_FORMATS[0].label}`)).toBeInTheDocument();
+  });
+
+  it('keeps the landing\u2019s question and its wheel by default', () => {
+    render(<UseCarousel />);
+    expect(screen.getByText(/What can you do with artifactbin/)).toBeInTheDocument();
+    expect(document.querySelector('[data-use-row][data-state="in"]')).toBeTruthy();
+  });
+});

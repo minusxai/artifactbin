@@ -112,7 +112,7 @@ quick job this sheet is the whole thing; anything more follows the reading
 path. Beyond both, each ask has ONE file under `references/` ([[ docsIndexHint ]]):
 | when the ask involves | read |
 |---|---|
-| the API in full — full replace, `expectedVersion`, visibility & sharing, the error table | `publishing.md` |
+| the API in full — replace, `expectedVersion`, visibility, forking, the error table | `publishing.md` |
 | tokens — expiry, `/tokens/new`, saved config, claiming, a 401 | `publishing-auth.md` |
 | uploading data — CSV/sheet/URL rows, images, viz recipes, refresh warnings | `publishing-datasets.md` |
 | pinned human feedback — reply, resolve, the anchor attribute | `publishing-annotations.md` |

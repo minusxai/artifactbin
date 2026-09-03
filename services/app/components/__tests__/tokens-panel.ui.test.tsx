@@ -1,7 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLink from '@/components/AgentLink';
-import NextSteps from '@/components/NextSteps';
 import TokensPanel from '@/components/TokensPanel';
 import { anonymousPaste } from '@/lib/agent-copy';
 
@@ -21,14 +20,6 @@ afterEach(() => {
   cleanup();
   push.mockClear();
   vi.unstubAllGlobals();
-});
-
-describe('<NextSteps>', () => {
-  it('sends a signed-in person to the token mint before connecting an agent', () => {
-    render(<NextSteps signedIn defaultOpen="connect" />);
-
-    expect(screen.getByLabelText('Get a token for an agent')).toHaveAttribute('href', '/tokens/new');
-  });
 });
 
 describe('<TokensPanel>', () => {

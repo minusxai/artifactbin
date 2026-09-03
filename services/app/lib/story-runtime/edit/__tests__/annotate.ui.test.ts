@@ -156,3 +156,139 @@ describe('view-mode annotation geometry', () => {
     });
   });
 });
+
+/*
+ * ADDED (F3). A comment now keeps the words that were selected, so the layer
+ * paints THOSE rather than tinting the whole paragraph — with the CSS Custom
+ * Highlight API, because injected spans would be read back as document content
+ * by the editor. jsdom has neither `CSS.highlights` nor `Highlight`, which is
+ * exactly the fallback this has to keep working: the tint.
+ */
+interface FakeHighlight { ranges: Range[] }
+
+function installHighlightApi(): Map<string, FakeHighlight> {
+  const registry = new Map<string, FakeHighlight>();
+  // Assigned ONTO the real CSS object: `CSS.escape` is used all over this
+  // module and a stand-in that loses it fails for the wrong reason.
+  const css = window.CSS as unknown as { highlights?: unknown };
+  const scope = window as unknown as { Highlight?: unknown };
+  css.highlights = registry;
+  scope.Highlight = class {
+    ranges: Range[];
+    constructor(...ranges: Range[]) { this.ranges = ranges; }
+  };
+  installed.push(() => { delete css.highlights; delete scope.Highlight; });
+  return registry;
+}
+const installed: Array<() => void> = [];
+afterEach(() => { while (installed.length) installed.pop()!(); });
+
+const rangedPin = (text: string) => ({
+  ...PIN,
+  range: { v: 1 as const, parts: [{ rel: '', start: 0, end: text.length, text }] },
+});
+const anchorNode = () => document.querySelector('main p')!;
+
+describe('painting the exact words', () => {
+  it('registers one highlight per thread over the selected words, and stops tinting the whole node', () => {
+    const registry = installHighlightApi();
+    session.update({ ...state('on'), pins: [rangedPin('Revenue')] });
+
+    expect(registry.has('mx-annotation-ann_1')).toBe(true);
+    expect(registry.get('mx-annotation-ann_1')!.ranges.map((r) => r.toString())).toEqual(['Revenue']);
+    // The node keeps its behaviour attributes — a click on it still opens the
+    // thread — but its own background steps aside for the words' highlight.
+    expect(anchorNode().hasAttribute('data-mx-annotated')).toBe(true);
+    expect(anchorNode().hasAttribute('data-mx-annotation-ranged')).toBe(true);
+    expect(document.head.querySelector('style[data-mx-annotate-css]')!.textContent)
+      .toContain('::highlight(mx-annotation-ann_1)');
+  });
+
+  it('falls back to the whole-node tint when the words are gone', () => {
+    const registry = installHighlightApi();
+    session.update({ ...state('on'), pins: [rangedPin('Margins')] });
+    expect(registry.has('mx-annotation-ann_1')).toBe(false);
+    expect(anchorNode().hasAttribute('data-mx-annotated')).toBe(true);
+    expect(anchorNode().hasAttribute('data-mx-annotation-ranged')).toBe(false);
+  });
+
+  /*
+   * The wire's `quote_found` is ALL parts, not any — half a quote is not the
+   * words the person selected — and the paint has to say the same thing. A
+   * highlight over the surviving half would show a comment pointing at a
+   * fragment while the wire calls its quote gone.
+   */
+  it('paints nothing when only PART of a quote survives', () => {
+    const registry = installHighlightApi();
+    document.body.innerHTML = '<main>'
+      + '<p data-mx-ast="0" data-annotation-anchor="anchor_1">Revenue was flat in Q3, behind plan.</p>'
+      + '<p data-mx-ast="1">Costs fell 8% over the same period.</p>'
+      + '</main>';
+    session.update({ ...state('on'), pins: [{ ...PIN, range: { v: 1 as const, parts: [
+      { rel: '', start: 24, end: 38, text: 'ahead of plan.' },   // written away
+      { rel: '+1', start: 0, end: 13, text: 'Costs fell 8%' },   // still there
+    ] } }] });
+    const anchor = document.querySelector('[data-annotation-anchor="anchor_1"]')!;
+    expect(registry.has('mx-annotation-ann_1')).toBe(false);
+    expect(anchor.hasAttribute('data-mx-annotated')).toBe(true);
+    expect(anchor.hasAttribute('data-mx-annotation-ranged')).toBe(false);
+  });
+
+  it('falls back to the tint where the highlight API does not exist at all', () => {
+    session.update({ ...state('on'), pins: [rangedPin('Revenue')] });
+    expect(anchorNode().hasAttribute('data-mx-annotated')).toBe(true);
+    expect(anchorNode().hasAttribute('data-mx-annotation-ranged')).toBe(false);
+  });
+
+  it('reports the words rect, not the paragraph rect, once they are found', () => {
+    installHighlightApi();
+    // jsdom implements no Range.getBoundingClientRect (CSSOM View); a browser
+    // does, and measuring the words is the whole point of the union.
+    Object.defineProperty(Range.prototype, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ x: 62, y: 226, top: 226, left: 62, width: 74, height: 18, right: 136, bottom: 244, toJSON: () => ({}) }),
+    });
+    installed.push(() => { delete (Range.prototype as unknown as Record<string, unknown>).getBoundingClientRect; });
+    session.update({ ...state('on'), pins: [rangedPin('Revenue')] });
+    expect(layouts().at(-1)).toMatchObject({
+      positions: [{ id: 'ann_1', rect: { x: 62, y: 226, width: 74, height: 18 } }],
+    });
+  });
+
+  it('drops a highlight the moment the layer goes off', () => {
+    const registry = installHighlightApi();
+    session.update({ ...state('on'), pins: [rangedPin('Revenue')] });
+    expect(registry.size).toBe(1);
+    session.update({ ...state('off'), pins: [rangedPin('Revenue')] });
+    expect(registry.size).toBe(0);
+  });
+});
+
+/*
+ * ADDED (F3, after spike S3). A Highlight holds LIVE Ranges, and a live update
+ * (`mx:document` → the runtime re-rendering the tree) replaces the very text
+ * nodes they point into. A highlight set once therefore goes stale silently —
+ * it paints nothing, and nothing says so. It is rebuilt from the stored range
+ * wherever the pins are re-stamped, which is this same hook.
+ */
+describe('rebuilding a highlight after a live adopt', () => {
+  it('re-resolves the words against the NEW text nodes', () => {
+    const registry = installHighlightApi();
+    session.update({ ...state('on'), pins: [rangedPin('Revenue')] });
+    const before = registry.get('mx-annotation-ann_1')!.ranges[0];
+    const anchor = anchorNode();
+
+    // What an adopt does: same element, brand new text node under it.
+    anchor.replaceChildren(document.createTextNode('Revenue grew 40% in Q3'));
+    // A live Range does not follow: its boundaries collapse onto the parent
+    // the moment the text node it pointed into is taken away — it paints
+    // nothing, and nothing says so. Hence the rebuild.
+    expect(before.toString()).toBe('');
+    session.setNodes([]);
+
+    const after = registry.get('mx-annotation-ann_1')!.ranges[0];
+    expect(after).not.toBe(before);
+    expect(after.startContainer).toBe(anchor.firstChild);
+    expect(after.toString()).toBe('Revenue');
+  });
+});

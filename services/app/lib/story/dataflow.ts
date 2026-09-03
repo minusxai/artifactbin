@@ -245,7 +245,13 @@ function checkName(el: JsxElement, tag: string, errors: ValidationError[]): stri
   return got.json;
 }
 
-const scalarMatches = (v: unknown, t: ColumnType): boolean => {
+/**
+ * Does a value match a declared scalar type? The predicate the publish door
+ * uses for `<Value default>`, EXPORTED because a URL-carried selection has to
+ * be judged by exactly the same rule (lib/story/url-values) — a link that
+ * would be refused as a default must not become a document's state.
+ */
+export const scalarMatches = (v: unknown, t: ColumnType): boolean => {
   if (v === null) return true;
   switch (t) {
     case 'number': return typeof v === 'number' && Number.isFinite(v);

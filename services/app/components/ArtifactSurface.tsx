@@ -18,8 +18,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useArtifactOwner, useCanAnnotateArtifact, useCanEditArtifact } from '@/components/ArtifactShell';
 import AnnotationLayer from '@/components/AnnotationLayer';
 import CopyAgentPrompt from '@/components/CopyAgentPrompt';
+import ForkArtifact, { ForkConfirm } from '@/components/ForkArtifact';
 import ShareLink from '@/components/ShareLink';
 import type { AnnotationWire } from '@/lib/annotations';
+import { readIntent, stripIntent } from '@/lib/intent';
 import { notifyPageChromeScroll, PageChromeBar, PageControls, PageMenu, type AppearanceMode } from '@/components/PageChrome';
 import { useIsPhoneViewport } from '@/components/MobileSheet';
 /* The editing bar's height is RESERVED by this page, never measured — and it
@@ -28,8 +30,9 @@ import { useIsPhoneViewport } from '@/components/MobileSheet';
 import { EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
 import type { ArtifactFormat } from '@/lib/story/input';
 import { useLiveArtifact } from '@/lib/story/use-live-artifact';
-import { STORY_DATA_MESSAGE, STORY_DOCUMENT_ACK_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_HELLO_MESSAGE, STORY_MUTATE_MESSAGE, STORY_MUTATE_RESULT_MESSAGE, STORY_PAINTED_MESSAGE, STORY_READER_MODE_MESSAGE, STORY_SCROLL_MESSAGE, type StoryDataUpdate, type StoryMutateRequest, type StoryMutateResult, type StoryScrollMessage, STORY_ADOPTS_MESSAGE, STORY_QUERY_MESSAGE, STORY_QUERY_RESULT_MESSAGE, isEditFrameMessage, isSessionMessage, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, type StoryDocumentUpdate, type StoryEditSelection, type StoryQueryRequest, type StoryQueryResult, type StorySelectionActionsMessage } from '@/lib/story-runtime/contract';
+import { STORY_DATA_MESSAGE, STORY_DOCUMENT_ACK_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_HELLO_MESSAGE, STORY_MUTATE_MESSAGE, STORY_MUTATE_RESULT_MESSAGE, STORY_PAINTED_MESSAGE, STORY_READER_MODE_MESSAGE, STORY_SCROLL_MESSAGE, type StoryDataUpdate, type StoryMutateRequest, type StoryMutateResult, type StoryScrollMessage, STORY_ADOPTS_MESSAGE, STORY_QUERY_MESSAGE, STORY_QUERY_RESULT_MESSAGE, isEditFrameMessage, isSessionMessage, isValuesMessage, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, type StoryDocumentUpdate, type StoryEditSelection, type StoryQueryRequest, type StoryQueryResult, type StorySelectionActionsMessage } from '@/lib/story-runtime/contract';
 import type { DataflowState } from '@/lib/story/dataflow';
+import { urlValuesSearch, writeUrlValues } from '@/lib/story/url-values';
 import { displayTitle } from '@/lib/story/title';
 import { resolveStoryMode } from '@/lib/data/story/story-themes';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
@@ -57,6 +60,14 @@ export interface ArtifactSurfaceProps {
   refs: Array<{ id: string; kind: string }>;
   /** The document's server-run dataflow (lib/artifacts dataflowForRow) — seeds the editor's canvas. */
   dataflow?: StoryIslandDataflow | null;
+  /**
+   * The page's own query string, from the router (never `window.location` in
+   * render — that is a hydration mismatch waiting to happen). Its `$` params
+   * are the reader's `<Value>` selection and are forwarded into the framed
+   * document; everything else in it is the page's business, not the
+   * document's, and is deliberately left behind.
+   */
+  search?: string;
   /** This browser is in the preview (lib/features) — gates the share menu's writes row. */
   preview?: boolean;
   /** An ACCOUNT session (NextAuth) holds this browser — the bar offers Sign out. */
@@ -101,6 +112,10 @@ const DOCUMENT_GROUND = { light: '#ffffff', dark: '#0b0b0c' } as const;
 
 const CONTROL_ROW = 'flex w-full cursor-pointer items-center gap-2 rounded-[5px] border-0 bg-transparent px-2 py-2 text-left font-mono text-xs text-muted transition-colors hover:bg-raised hover:text-fg';
 
+/** The frame's own url with the reader's `$` selection on the end (or unchanged). */
+const appendSelection = (query: string, selection: string): string =>
+  (selection ? `${query}${query ? '&' : '?'}${selection}` : query);
+
 const safeRows = (content: string): Array<Record<string, unknown>> => {
   try {
     const parsed = JSON.parse(content);
@@ -135,7 +150,7 @@ const selectionActionCapabilities = (canEdit: boolean, canAnnotate: boolean, inV
 
 export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const [copiedRef, setCopiedRef] = useState(false);
-  const { id, editId, format, title, source, content, columns, compiledCss, theme, colorMode, template, refs, dataflow = null, preview = false, accountSession = false, anonSession = false, version, captureKey = null, openAnnotations = 0 } = props;
+  const { id, editId, format, title, source, content, columns, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', preview = false, accountSession = false, anonSession = false, version, captureKey = null, openAnnotations = 0 } = props;
   const [editing, setEditing] = useState(false);
   /** A view-mode text selection asks edit mode to open on its containing node. */
   const [initialEditSelectionPath, setInitialEditSelectionPath] = useState<string | null>(null);
@@ -145,6 +160,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * the hash is precisely the mistake this replaced.
    */
   const [railOpen, setRailOpen] = useState(false);
+  /** `?intent=fork` asked for a copy; the dialog asks the person (lib/intent). */
+  const [forkAsked, setForkAsked] = useState(false);
   /** Desktop comments reserve a rail; on a phone the same surface is a sheet. */
   const phone = useIsPhoneViewport();
   /** A reading preference, separate from the author's stored default. */
@@ -201,6 +218,41 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    */
   const showViewComments = canAnnotate && openAnnotationCount > 0;
 
+  /**
+   * `?intent=` — ONE instruction, carried out ONCE, then taken off the address.
+   *
+   * It is how a door that leads OUT of a document leads back INTO it doing the
+   * thing that was asked: "fork this" and "log in to comment" both go through
+   * /login, and a person who comes back to a document that has forgotten what
+   * they pressed does the work twice.
+   *
+   * Three things make it safe to act on a URL:
+   *  - the ALLOWLIST is the whole parser (lib/intent). This rides on a link
+   *    anyone may hand over and anyone may append to, so an unknown value is
+   *    silence, and `fork` — the one that writes — ASKS before it does.
+   *  - it runs from a ref, ONCE, rather than from a `search`-keyed effect. A
+   *    bare replaceState does not move react-router's location, so the `search`
+   *    prop still names the intent afterwards; without the ref the page would
+   *    re-prompt on every render that reads it.
+   *  - the strip is against the LIVE address and keeps everything else byte for
+   *    byte — the reader's `$` values (F2) are in this same query string, and
+   *    their place in the document is in the hash.
+   */
+  const intentDone = useRef(false);
+  useEffect(() => {
+    if (intentDone.current) return;
+    intentDone.current = true;
+    const intent = readIntent(search || window.location.search);
+    if (intent === 'fork') setForkAsked(true);
+    // Exactly the comments row's effect, and gated by exactly its capability:
+    // opening a rail for someone who may not comment is an empty panel.
+    else if (intent === 'comment' && canAnnotate) setRailOpen(true);
+    const next = stripIntent(window.location.search);
+    if (next !== window.location.search) {
+      window.history.replaceState(null, '', window.location.pathname + next + window.location.hash);
+    }
+  }, [search, canAnnotate]);
+
   // The authorized page — never the sandbox — decides which selection actions
   // exist. Whoever may edit gets Edit; whoever may annotate — owner, editor
   // or commenter — gets Annotate; a plain reader gets no bubble at all.
@@ -231,6 +283,27 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     );
   }, []);
   const live = useLiveArtifact(id, editId, version, !editing, undefined, onLiveData, setLiveAnnotations);
+  /*
+   * THE READER'S `<Value>` SELECTION, AND THE ADDRESS BAR (lib/story/url-values).
+   *
+   * Two halves that must not be confused with each other:
+   *
+   *  - the frame is SEEDED once, from the link this page was opened at. The
+   *    `src` must then never change again, because a `src` write NAVIGATES the
+   *    frame: a full document reload, every chart rebuilt, the reader's place
+   *    gone — once per pick, and it would look entirely correct while doing it.
+   *    So the seed is state that moves only when the frame is being replaced
+   *    anyway (`frameNonce`), never with the live address.
+   *  - the ADDRESS follows the picks. A framed document cannot write it: the
+   *    `location` its own capability reaches is the FRAME's, so it would move
+   *    `/a/<id>/raw?edit=1`, which nobody can copy (measured on the spike).
+   *    It reports instead, and this page writes — re-deriving the whole search
+   *    through `writeUrlValues` against the flow it holds, because the frame is
+   *    sandboxed markup and never an authority about what this document
+   *    declares.
+   */
+  const selectionRef = useRef(urlValuesSearch(search));
+  const [frameSearch, setFrameSearch] = useState(selectionRef.current);
   const liveSource = live && live.format === 'markup' ? live.source : null;
   const shownSource = liveSource ?? source;
   // What the row actually holds — null when nobody has named it. The editor's
@@ -297,7 +370,9 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       const data = event.data as Partial<StoryScrollMessage> | undefined;
       if (!data || data.type !== STORY_SCROLL_MESSAGE || typeof data.scrollY !== 'number') return;
       if (frameRef.current && event.source !== frameRef.current.contentWindow) return;
-      notifyPageChromeScroll(data.scrollY);
+      // Read leniently: a document served before `atBottom` existed posts
+      // without it, and "no flag" must mean "not at the end", never a crash.
+      notifyPageChromeScroll(data.scrollY, data.atBottom === true);
     };
     window.addEventListener('message', onScroll);
     return () => window.removeEventListener('message', onScroll);
@@ -417,11 +492,44 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
 
 
 
+  /**
+   * The frame says which `<Value>`s the reader has chosen; this page writes the
+   * address so the link they copy is the document they are looking at.
+   *
+   * `replaceState`, never `pushState`: a pick is not a navigation, and a back
+   * button that walked a reader through every filter they tried is a worse
+   * document than one they cannot go back in at all.
+   */
+  useEffect(() => {
+    const onValues = (e: MessageEvent) => {
+      if (frameRef.current && e.source !== frameRef.current.contentWindow) return;
+      if (!sessionNonce || !isValuesMessage(e.data, sessionNonce)) return;
+      // The flow the PAGE holds — the served one, or the live version if an
+      // agent has since changed the declarations.
+      const flow = live?.dataflow?.flow ?? dataflow?.flow ?? null;
+      if (!flow) return;
+      const next = writeUrlValues(window.location.search, flow, e.data.values);
+      // What a REPLACED frame should be seeded with, if one ever is.
+      selectionRef.current = urlValuesSearch(next);
+      if (next === window.location.search) return;
+      window.history.replaceState(null, '', window.location.pathname + next + window.location.hash);
+    };
+    window.addEventListener('message', onValues);
+    return () => window.removeEventListener('message', onValues);
+  }, [sessionNonce, dataflow, live]);
+
   // A new FRAME is hidden again until it has painted. Keyed on the nonce, not
   // on the document: a live edit no longer replaces the frame (see below), and
   // hiding a live document to announce an edit to it was the flash this whole
   // path exists to remove.
   useEffect(() => { setFrameLoaded(false); }, [frameNonce]);
+  /*
+   * A REPLACED frame is a new document load, so it is the one moment the seed
+   * may move — and must: a frame replaced after the reader has narrowed the
+   * document should come back narrowed. Every other render keeps `src` byte
+   * for byte, which is what stops a pick from reloading the document.
+   */
+  useEffect(() => { setFrameSearch(selectionRef.current); }, [frameNonce]);
 
   /*
    * Editing does NOT reset this, and that is the point.
@@ -799,38 +907,51 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
 
   /** Everything about THIS document lives behind one control. Navigation is
    * separate on the left; appearance, discussion, editing and owner handoff
-   * are grouped here and capability-gated exactly as their old buttons were. */
+   * are grouped here and capability-gated exactly as their old buttons were.
+   *
+   * There is no longer a "does this viewer have any document action at all"
+   * question either — `fork` is offered to everyone this page is served to, on
+   * every format, so the sheet always has contents and the old
+   * `hasDocumentControls` gate went with the answer it used to compute. */
   const documentControls = (close: () => void) => (
     <div className="space-y-4">
-      {(canAnnotate || canEdit) && format === 'markup' && (
-        <section aria-label="Document actions">
-          <h2 className="mb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">Artifact</h2>
-          {canAnnotate && (
-            <button
-              type="button"
-              aria-label="Toggle comments"
-              aria-pressed={railOpen}
-              onClick={() => { close(); setRailOpen((open) => !open); }}
-              className={`${CONTROL_ROW} ${railOpen ? 'bg-accent-soft text-accent' : ''}`}
-            >
-              <MessageSquare size={14} strokeWidth={1.75} />
-              <span className="flex-1">{railOpen ? 'close comments' : 'comments'}</span>
-              {openAnnotationCount > 0 && <span className="text-accent">{openAnnotationCount}</span>}
-            </button>
-          )}
-          {canEdit && (
-            <button
-              type="button"
-              aria-label="Edit artifact"
-              onClick={() => { close(); enterEdit(); }}
-              className={CONTROL_ROW}
-            >
-              <Pencil size={14} strokeWidth={1.75} />
-              edit artifact
-            </button>
-          )}
-        </section>
-      )}
+      {/* UNCONDITIONAL, and `fork` is why. Every other row here is capability
+          chrome — edit needs write, comments need annotate, both need a markup
+          document — but forking needs only the right to READ, which is exactly
+          what everyone holding this page already has (the door decides on the
+          read ACL, not on ownership). So the guards moved down onto the rows
+          that still need them, and a DATASET gets an Artifact section for the
+          first time. */}
+      <section aria-label="Document actions">
+        <h2 className="mb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">Artifact</h2>
+        {canAnnotate && format === 'markup' && (
+          <button
+            type="button"
+            aria-label="Toggle comments"
+            aria-pressed={railOpen}
+            onClick={() => { close(); setRailOpen((open) => !open); }}
+            className={`${CONTROL_ROW} ${railOpen ? 'bg-accent-soft text-accent' : ''}`}
+          >
+            <MessageSquare size={14} strokeWidth={1.75} />
+            <span className="flex-1">{railOpen ? 'close comments' : 'comments'}</span>
+            {openAnnotationCount > 0 && <span className="text-accent">{openAnnotationCount}</span>}
+          </button>
+        )}
+        {/* Everyone the shell is served to — owner, editor, commenter — may
+            take a copy of what they can read. */}
+        <ForkArtifact id={id} variant="menu" />
+        {canEdit && format === 'markup' && (
+          <button
+            type="button"
+            aria-label="Edit artifact"
+            onClick={() => { close(); enterEdit(); }}
+            className={CONTROL_ROW}
+          >
+            <Pencil size={14} strokeWidth={1.75} />
+            edit artifact
+          </button>
+        )}
+      </section>
 
       {owner && (
         <section aria-label="Owner actions">
@@ -851,7 +972,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       )}
     </div>
   );
-  const hasDocumentControls = owner || (format === 'markup' && (canAnnotate || canEdit));
 
   /** A document is full-bleed. Reading chrome floats over its safe corners;
    * only the contextual editing toolbar reserves any document space. */
@@ -872,7 +992,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
               active={railOpen}
               badge={openAnnotationCount}
             >
-              {hasDocumentControls ? documentControls : undefined}
+              {documentControls}
             </PageControls>
           </PageChromeBar>
         )}
@@ -940,7 +1060,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
              * it. Asked for at load, so pressing edit is one message rather
              * than a reload — and a reader's copy is untouched.
              */
-            src={`/a/${id}/raw${
+            src={`/a/${id}/raw${appendSelection(
               captureRender ? `?chrome=0&key=${encodeURIComponent(captureKey!)}`
               // An EDITOR needs the runtime: editing happens inside this frame
               // and a prose document ships none. A COMMENTER needs only the
@@ -950,8 +1070,9 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
               // is untouched by either.
               : canEdit ? '?edit=1'
               : canAnnotate ? '?comment=1'
-              : ''
-            }`}
+              : '',
+              frameSearch,
+            )}`}
             // Belt: a document that somehow never posts still gets revealed.
             onLoad={() => setFrameLoaded(true)}
             // The attribute mirrors the /raw response header's sandbox
@@ -1000,6 +1121,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             commentCount={openAnnotationCount}
           />
         )}
+        {forkAsked && <ForkConfirm id={id} title={shownTitle} onClose={() => setForkAsked(false)} />}
       </>
     );
   }
@@ -1011,7 +1133,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       <PageChromeBar>
         <PageMenu authed={accountSession} anon={anonSession} title={shownTitle} fixed />
         <PageControls fixed label="Artifact controls">
-          {hasDocumentControls ? documentControls : undefined}
+          {documentControls}
         </PageControls>
       </PageChromeBar>
       <main className="mx-auto w-full max-w-5xl px-4 pt-16 pb-6">
@@ -1065,6 +1187,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       )}
 
       </main>
+      {forkAsked && <ForkConfirm id={id} title={shownTitle} onClose={() => setForkAsked(false)} />}
     </>
   );
 }
