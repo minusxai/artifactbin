@@ -10,7 +10,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { chownArgv, prepareRunAsDirs, runInvocation, wrapRunAs } from '../lib/spawn';
+import { chownArgv, handOverRunAsDirs, prepareRunAsDirs, runInvocation, wrapRunAs } from '../lib/spawn';
 
 let dir: string;
 const paths = () => ({ stdoutPath: path.join(dir, 'transcript.jsonl'), stderrPath: path.join(dir, 'stderr.log') });
@@ -146,25 +146,76 @@ describe('HOME is the per-run harness home', () => {
  *   EACCES: permission denied, mkdir '…/home/xdg-data/opencode'
  *   EACCES: permission denied, mkdir '/home/runner/work/_temp/eval-out/baseline/home'   (the baseline probe)
  *
- * So the ROOT is handed over too, and every directory exists before ownership moves.
+ * So the root is reached — by traversal, not by ownership (see the describe below, and runs 33774034598 /
+ * 33774046050) — and every directory exists before ownership moves.
  */
 describe('prepareRunAsDirs', () => {
-  it('hands over the workspace ROOT as well as the cwd and the home — the root is what could not be traversed', () => {
+  it('chowns the cwd and the home, and reaches them by making the driver’s root traversable', () => {
     const root = path.join(dir, 'ws');
     const dirs = prepareRunAsDirs({ workspaceRoot: root, cwd: path.join(root, 'cwd'), homeDir: path.join(root, 'home') });
-    expect(dirs).toEqual([root, path.join(root, 'cwd'), path.join(root, 'home')]);
-    expect(chownArgv('agent', dirs)).toEqual(['sudo', '-n', 'chown', '-R', 'agent', root, path.join(root, 'cwd'), path.join(root, 'home')]);
+    expect(dirs).toEqual({ chown: [path.join(root, 'cwd'), path.join(root, 'home')], traverse: [root] });
+    expect(chownArgv('agent', dirs.chown)).toEqual(['sudo', '-n', 'chown', '-R', 'agent', path.join(root, 'cwd'), path.join(root, 'home')]);
   });
 
-  it('creates every directory it is about to hand over — the baseline probe’s home did not exist', () => {
+  it('creates every directory the switch touches — the baseline probe’s home did not exist', () => {
     const root = path.join(dir, 'baseline');
     const dirs = prepareRunAsDirs({ workspaceRoot: root, cwd: path.join(root, 'cwd'), homeDir: path.join(root, 'home') });
-    for (const d of dirs) expect(fs.statSync(d).isDirectory()).toBe(true);
+    for (const d of [...dirs.traverse, ...dirs.chown]) expect(fs.statSync(d).isDirectory()).toBe(true);
   });
 
   it('names each directory once, and drops the ones this run does not have', () => {
     const cwd = path.join(dir, 'only-cwd');
-    expect(prepareRunAsDirs({ workspaceRoot: cwd, cwd })).toEqual([cwd]);
-    expect(prepareRunAsDirs({ cwd })).toEqual([cwd]);
+    // A root that IS the cwd is handed over, not chmodded: once it is the agent's, the driver could not chmod it anyway.
+    expect(prepareRunAsDirs({ workspaceRoot: cwd, cwd })).toEqual({ chown: [cwd], traverse: [] });
+    expect(prepareRunAsDirs({ cwd })).toEqual({ chown: [cwd], traverse: [] });
+  });
+});
+
+/**
+ * Measured on a CI runner (deploys runs 33774034598 / 33774046050): chowning the workspace ROOT to the agent user
+ * locked the DRIVER out of its own transcript (`EACCES … open '<out>/baseline/transcript.jsonl'`). The agent owns
+ * only cwd and home; the root stays the driver's and merely becomes traversable. Seeded RED by the orchestrator.
+ */
+describe('run-as hands over only what the agent owns', () => {
+  it('chowns cwd and home, never the root, and the root is only made traversable', () => {
+    const root = path.join(dir, 'ws');
+    const cwd = path.join(root, 'cwd');
+    const homeDir = path.join(root, 'home');
+    const plan = prepareRunAsDirs({ workspaceRoot: root, cwd, homeDir });
+    expect(plan.chown.sort()).toEqual([cwd, homeDir].sort());
+    expect(plan.chown).not.toContain(root);
+    expect(plan.traverse).toEqual([root]);
+    expect(fs.existsSync(cwd)).toBe(true);
+    expect(fs.existsSync(homeDir)).toBe(true);
+  });
+});
+
+/**
+ * The filesystem half of the switch, as `runInvocation` performs it when `--run-as` is set — the privileged
+ * step is injected so the assertion is on the argv, and sudo never runs in this suite. The root must come out
+ * of it STILL owned by the driver (that is the transcript bug) and merely traversable.
+ */
+describe('handOverRunAsDirs', () => {
+  it('chowns exactly the cwd and the home, and only chmods the root', () => {
+    const root = path.join(dir, 'ws');
+    const cwd = path.join(root, 'cwd');
+    const homeDir = path.join(root, 'home');
+    const plan = prepareRunAsDirs({ workspaceRoot: root, cwd, homeDir });
+    fs.chmodSync(root, 0o700); // what mkdtemp leaves behind, and what locked the agent out
+    const before = fs.statSync(root);
+
+    const ran: string[][] = [];
+    handOverRunAsDirs('agent', plan, (argv) => ran.push(argv));
+
+    expect(ran).toEqual([['sudo', '-n', 'chown', '-R', 'agent', cwd, homeDir]]);
+    const after = fs.statSync(root);
+    expect(after.mode & 0o777).toBe(0o711);
+    expect(after.uid).toBe(before.uid); // the driver keeps the root: it still writes transcript/stderr/result there
+  });
+
+  it('leaves a run with nothing to hand over alone', () => {
+    const ran: string[][] = [];
+    handOverRunAsDirs('agent', { chown: [], traverse: [] }, (argv) => ran.push(argv));
+    expect(ran).toEqual([]);
   });
 });
