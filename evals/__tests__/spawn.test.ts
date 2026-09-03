@@ -10,7 +10,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { chownArgv, handOverRunAsDirs, prepareRunAsDirs, readableForAgent, runInvocation, wrapRunAs } from '../lib/spawn';
+import { chownArgv, handOverRunAsDirs, prepareRunAsDirs, readableForAgent, reclaimRunAsDirs, runInvocation, wrapRunAs } from '../lib/spawn';
 
 let dir: string;
 const paths = () => ({ stdoutPath: path.join(dir, 'transcript.jsonl'), stderrPath: path.join(dir, 'stderr.log') });
@@ -294,5 +294,87 @@ describe('handOverRunAsDirs opens what the harness is told to read', () => {
     if (unowned) expect(fs.statSync(foreign).mode & 0o7777).toBe(foreignStat.mode & 0o7777);
     expect(fs.existsSync(missing)).toBe(false); // planned ancestors are never created here
     expect(ran).toEqual([]); // still no sudo for any of it
+  });
+});
+
+describe('reclaimRunAsDirs — the driver takes back what it lent', () => {
+  it('chowns exactly the handed-over directories back to the driver’s numeric uid:gid, recursively, via sudo -n', () => {
+    const execs: string[][] = [];
+    reclaimRunAsDirs({ chown: ['/w/run/cwd', '/w/run/home'], traverse: ['/w'] }, (argv) => execs.push(argv));
+    expect(execs).toEqual([['sudo', '-n', 'chown', '-R', `${process.getuid!()}:${process.getgid!()}`, '/w/run/cwd', '/w/run/home']]);
+  });
+
+  it('takes an explicit owner, and reclaims nothing when nothing was handed over', () => {
+    const execs: string[][] = [];
+    reclaimRunAsDirs({ chown: ['/w/run/cwd'], traverse: [] }, (argv) => execs.push(argv), 'runner:docker');
+    expect(execs).toEqual([['sudo', '-n', 'chown', '-R', 'runner:docker', '/w/run/cwd']]);
+    reclaimRunAsDirs({ chown: [], traverse: ['/w'], read: ['/w/ca.crt'] }, (argv) => execs.push(argv));
+    expect(execs).toHaveLength(1);
+  });
+});
+
+/**
+ * THE WHOLE CONTRACT, END TO END — measured on deploys run 33781714008 (`--run-as`, ubuntu-latest): pi
+ * wrote `<home>/models-store.json` 0600 as the agent user, and `actions/upload-artifact` then hit `EACCES`
+ * zipping the run directory — the ledger, the transcript and every row of that harness were lost. The run
+ * directory is the DRIVER's deliverable, so once the child is done, whatever it created there is the
+ * driver's again.
+ *
+ * No sudo runs here: the privileged step is injected, and a fake `sudo` first on the CHILD's PATH stands in
+ * for the switch's own launch (libuv sets the child's environment before `execvp`, so argv[0] resolves
+ * against the PATH the child is given). The marker it leaves is what proves the ORDER — the reclaim must
+ * never run while the child is still alive.
+ *
+ * The run root is made under the SHARED temp dir, not `os.tmpdir()`: the hand-over widens every ancestor of
+ * the cwd, and macOS marks the per-user temp folders `sunlnk`, so chmod there is EPERM even for their owner
+ * (`/var/folders/<…>/T`). Under the shared root every ancestor is root's, which `grantMode` skips.
+ */
+describe('runInvocation gives the run directory back', () => {
+  const owner = `${process.getuid!()}:${process.getgid!()}`;
+  let runRoot: string;
+  beforeEach(() => { runRoot = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'eval-spawn-runas-')); });
+  afterEach(() => { fs.rmSync(runRoot, { recursive: true, force: true }); });
+
+  it('hands over before the child and reclaims after it has exited', async () => {
+    const root = path.join(runRoot, 'ws');
+    const cwd = path.join(root, 'cwd');
+    const homeDir = path.join(root, 'home');
+    const marker = path.join(runRoot, 'child-ran');
+    const bin = path.join(runRoot, 'bin');
+    fs.mkdirSync(bin, { recursive: true });
+    fs.writeFileSync(path.join(bin, 'sudo'), `#!/bin/sh\n: > "${marker}"\n`, { mode: 0o755 });
+
+    const seen: { argv: string[]; childRan: boolean }[] = [];
+    const r = await runInvocation(node('console.log("x")'), {
+      cwd, homeDir, workspaceRoot: root, runAs: 'agent',
+      baseEnv: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ''}` },
+      timeoutMs: 20_000, exec: (argv) => seen.push({ argv, childRan: fs.existsSync(marker) }), ...paths(),
+    });
+
+    expect(r.exitCode).toBe(0);
+    expect(fs.existsSync(marker)).toBe(true); // the switch's own launch really happened
+    expect(seen.map((e) => e.argv)).toEqual([
+      ['sudo', '-n', 'chown', '-R', 'agent', cwd, homeDir],
+      ['sudo', '-n', 'chown', '-R', owner, cwd, homeDir],
+    ]);
+    expect(seen.map((e) => e.childRan)).toEqual([false, true]); // lent before the child, taken back after it
+  });
+
+  it('reclaims even when the launch throws, and reclaims nothing without --run-as', async () => {
+    const cwd = path.join(runRoot, 'ws', 'cwd');
+    const seen: string[][] = [];
+    await expect(runInvocation({ ...node('console.log("x")'), argv: ['artifactbin-no-such-harness'] }, {
+      cwd, workspaceRoot: path.join(runRoot, 'ws'), runAs: 'agent', baseEnv: { ...process.env },
+      timeoutMs: 20_000, exec: (argv) => seen.push(argv), ...paths(),
+    })).rejects.toThrow(/artifactbin-no-such-harness/);
+    expect(seen).toEqual([
+      ['sudo', '-n', 'chown', '-R', 'agent', cwd],
+      ['sudo', '-n', 'chown', '-R', owner, cwd],
+    ]);
+
+    const plain: string[][] = [];
+    const r = await runInvocation(node('console.log("x")'), { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, exec: (argv) => plain.push(argv), ...paths() });
+    expect(r.exitCode).toBe(0);
+    expect(plain).toEqual([]); // a laptop run is untouched by any of this
   });
 });
