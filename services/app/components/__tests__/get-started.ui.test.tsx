@@ -18,7 +18,8 @@ import { AnthropicIcon, ClaudeAIIcon } from '@/components/brand-icons';
 import {
   CODEX_APP_PLUGIN_REF,
   CODEX_APP_PLUGIN_REPO_URL,
-  PLUGIN_INSTALL,
+  PLUGIN_INSTALL_COMMAND,
+  PLUGIN_MARKETPLACE_ADD_COMMAND,
   PLUGIN_REPO_URL,
 } from '@/lib/plugin-id';
 
@@ -122,17 +123,28 @@ describe('<GetStarted>', () => {
     expect(screen.queryByLabelText('Setup instructions')).not.toBeInTheDocument();
   });
 
-  it('opening the install path reveals the picker and its surface card', () => {
+  it('gives Claude Code three ordered, independently copyable setup commands', () => {
     renderInstalling();
     expect(screen.getByLabelText('Install for my agent')).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByLabelText('Agent families')).toBeInTheDocument();
     expect(screen.getAllByLabelText('Setup instructions')).toHaveLength(1);
     // The card is INSTALL-only now: path one is above it, not inside it.
     const body = card().textContent ?? '';
-    // Quoted from the plugin package, never retyped: a stale command here
-    // fails in the reader's terminal, where nothing guards it.
-    expect(body).toContain(PLUGIN_INSTALL);
-    expect(screen.getByLabelText('Copy the plugin install commands')).toBeInTheDocument();
+    expect(body).toContain(PLUGIN_MARKETPLACE_ADD_COMMAND);
+    expect(body).toContain(PLUGIN_INSTALL_COMMAND);
+    expect(body).toContain('/mcp');
+    expect(screen.getByLabelText('Step 1: Add the artifactbin marketplace')).toBeInTheDocument();
+    expect(screen.getByLabelText('Step 2: Install the artifactbin plugin')).toBeInTheDocument();
+    expect(screen.getByLabelText('Step 3: Authenticate the MCP server')).toBeInTheDocument();
+    const marketplaceCopy = screen.getByLabelText('Copy the marketplace add command');
+    const installCopy = screen.getByLabelText('Copy the plugin install command');
+    const mcpCopy = screen.getByLabelText('Copy the Claude Code MCP authentication command');
+    fireEvent.click(marketplaceCopy);
+    fireEvent.click(installCopy);
+    fireEvent.click(mcpCopy);
+    expect(navigator.clipboard.writeText).toHaveBeenNthCalledWith(1, PLUGIN_MARKETPLACE_ADD_COMMAND);
+    expect(navigator.clipboard.writeText).toHaveBeenNthCalledWith(2, PLUGIN_INSTALL_COMMAND);
+    expect(navigator.clipboard.writeText).toHaveBeenNthCalledWith(3, '/mcp');
     expect(body).toContain('Install plugin');
     expect(body.toLowerCase()).toContain('out of the box');
     expect(body).not.toContain('works with any agent');
@@ -143,7 +155,7 @@ describe('<GetStarted>', () => {
     renderInstalling();
     pick('claude.ai');
     expect(screen.getAllByLabelText('Setup instructions')).toHaveLength(1);
-    expect(card().textContent).not.toContain(PLUGIN_INSTALL);
+    expect(card().textContent).not.toContain(PLUGIN_INSTALL_COMMAND);
     expect(card().textContent).toContain(PLUGIN_REPO_URL);
   });
 
@@ -152,7 +164,7 @@ describe('<GetStarted>', () => {
     pick('Claude Code App');
     const body = card().textContent ?? '';
     expect(body).toContain(PLUGIN_REPO_URL);
-    expect(body).not.toContain(PLUGIN_INSTALL);
+    expect(body).not.toContain(PLUGIN_INSTALL_COMMAND);
     expect(body).toContain('Install plugin');
     const firstStep = screen.getByLabelText(
       'Step 1: Under the chat box, click + → Plugins → Manage Plugins',
@@ -264,6 +276,18 @@ describe('<GetStarted>', () => {
     expect(body).toContain(MCP_URL);
     fireEvent.click(screen.getByLabelText('Copy the connector URL'));
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(MCP_URL);
+  });
+
+  it('keeps the /mcp authentication command exclusive to Claude Code CLI', () => {
+    renderInstalling();
+    for (const surface of SURFACES.filter((item) => item.key !== 'claude-code')) {
+      const family = AGENT_FAMILIES.find((item) => item.key === surface.family)!;
+      chooseFamily(family.label);
+      pick(surface.label);
+      expect(
+        screen.queryByLabelText('Copy the Claude Code MCP authentication command'),
+      ).not.toBeInTheDocument();
+    }
   });
 
   it.each([
