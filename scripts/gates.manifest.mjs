@@ -87,8 +87,8 @@ export const GATE_SPECS = Object.freeze([
   { name: 'live-data', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
   // measured: implementer 20s; orchestrator 20s
   { name: 'live-reader', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
-  // measured: implementer 8s; orchestrator 9s
-  { name: 'mobile', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
+  // measured: implementer 27s (F4 adds a fourth, touch-enabled context); orchestrator 9s (pre-F4)
+  { name: 'mobile', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 81_000 },
   // measured: implementer 1s; orchestrator 1s
   {
     name: 'oauth-browser', start: 'custom',
