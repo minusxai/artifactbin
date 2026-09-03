@@ -89,9 +89,18 @@ export function TokensNewPage() {
         <h1 className="text-base font-semibold"><span className="text-accent">&gt;</span> new token</h1>
 
         {/* The better answer, offered first. A pasted token expires; this does not — and the human is
-          * standing here precisely because the last one ran out or never existed. */}
+          * standing here precisely because the last one ran out or never existed.
+          *
+          * When an agent NAMED a surface, install leads inside that panel too: this reader is here
+          * because the no-installation path just cost them a round trip, so meeting it again at the
+          * top would be the panel re-answering a question they have already had answered the hard
+          * way. With no surface named we know nothing about them, and the panel reads exactly as it
+          * does on the landing page. */}
         <div className="mt-5">
-          <GetStarted initialSurface={namedSurface ?? undefined} />
+          <GetStarted
+            initialSurface={namedSurface ?? undefined}
+            lead={namedSurface ? 'install' : 'http'}
+          />
         </div>
 
         {/* …and the thing they actually came for, unchanged and one click away. The label is a signpost
