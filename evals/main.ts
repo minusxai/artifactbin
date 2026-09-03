@@ -46,7 +46,7 @@ import { mapConcurrent } from './lib/pool';
 import { exitWhenDone, settleWithin, TEARDOWN_MS } from './lib/shutdown';
 import { DRIVER_HEADER, startProxy } from './lib/proxy';
 import { mintStartDocument, mintStartDocumentAs } from './lib/retry';
-import { acquireCredential, credentialSourceFor, localLoginEmail, memoizeCredential, shareForScoring, writeArtifactbinEnv, type Credential } from './lib/credential';
+import { acquireCredential, credentialSourceFor, deploymentLoginEmail, localLoginEmail, memoizeCredential, shareForScoring, writeArtifactbinEnv, type Credential } from './lib/credential';
 import { agentProxyEnv, startMitmProxy } from './lib/mitm';
 import { exportDocument, inspectDocument, screenshotDocument } from './lib/score/browser';
 import { dataflowRows, productMetrics } from './lib/score/product';
@@ -544,16 +544,21 @@ async function main(): Promise<void> {
   // devOutboxPath`), so the run has an account of its own with no inbox configured anywhere — which is
   // what CI's `agent smoke` has. A deployment has no such file: there the inbox or a token is the way in.
   const localOutbox = config.deployment ? null : devOutboxPath(serverDataDir(args.out));
-  const local: { localOutbox?: string; email?: string } = localOutbox
+  // WHO this leg signs in as: a throwaway named after the leg on a server the driver booted; on a
+  // DEPLOYMENT the configured inbox address SUB-ADDRESSED per harness, so each harness has its own
+  // five-an-hour login door and its own account in the one shared catch-all mailbox (`deploymentLoginEmail`).
+  const loginAs: { localOutbox?: string; email?: string } = localOutbox
     ? { localOutbox, email: localLoginEmail(leg.label, credentials) }
-    : {};
-  const source = args.credential ?? credentialSourceFor(leg.mode.run, credentials, local);
+    : credentials.EVAL_LOGIN_EMAIL
+      ? { email: deploymentLoginEmail(credentials.EVAL_LOGIN_EMAIL, leg.harness) }
+      : {};
+  const source = args.credential ?? credentialSourceFor(leg.mode.run, credentials, loginAs);
   const credentialFor = memoizeCredential(
-    (base: string, origin?: string) => acquireCredential(source, { base, env: credentials, ...local, ...(origin ? { origin } : {}) }),
+    (base: string, origin?: string) => acquireCredential(source, { base, env: credentials, ...loginAs, ...(origin ? { origin } : {}) }),
     // A booted server does not survive the second attempt, and neither does the account on it.
     { reusable: !localOutbox },
   );
-  log(`${leg.label}: credential source ${source}${localOutbox ? ` as ${local.email}` : ''}`);
+  log(`${leg.label}: credential source ${source}${loginAs.email ? ` as ${loginAs.email}` : ''}`);
 
   log(`${leg.label}: ${leg.harness} × ${leg.model} · tasks: ${tasks.map((t) => t.id).join(', ')} · out: ${args.out}`);
   fs.rmSync(args.out, { recursive: true, force: true });

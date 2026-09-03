@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { acquireCredential, callbackCode, codeFromMail, credentialSourceFor, localLoginEmail, memoizeCredential, pickLoginMail, pkcePair, writeArtifactbinEnv, codeFromOutbox, shareForScoring } from '../lib/credential';
+import { acquireCredential, callbackCode, codeFromMail, credentialSourceFor, localLoginEmail, memoizeCredential, pickLoginMail, pkcePair, writeArtifactbinEnv, codeFromOutbox, shareForScoring, deploymentLoginEmail, type InboundMail } from '../lib/credential';
 
 describe('credential source per mode', () => {
   const inbox = { RESEND_EVAL_API_KEY: 're_x', EVAL_LOGIN_EMAIL: 'mxmx_eval@social-worm.resend.app' };
@@ -41,6 +41,24 @@ describe('the pure pieces of the login', () => {
     ];
     expect(pickLoginMail(list, { to: 'mxmx_eval@social-worm.resend.app', since })?.id).toBe('b');
     expect(pickLoginMail(list.slice(0, 2), { to: 'mxmx_eval@social-worm.resend.app', since })).toBeNull();
+  });
+  /**
+   * The catch-all delivers `mxmx_eval@…` and `mxmx_eval+pi@…` into ONE mailbox, so the picker is the only
+   * thing keeping two harnesses' codes apart. Neither address may match the other's mail — in EITHER
+   * direction, which is what a prefix or a local-part compare would get wrong.
+   */
+  it('a sub-address and the bare address are different recipients to the picker', () => {
+    const since = Date.parse('2026-09-03T13:00:00Z');
+    const bare = 'mxmx_eval@social-worm.resend.app';
+    const tagged = 'mxmx_eval+pi@social-worm.resend.app';
+    const list = [
+      { id: 'bare', to: [bare], created_at: '2026-09-03T13:00:10Z', subject: 'Your login code' },
+      { id: 'tagged', to: [tagged], created_at: '2026-09-03T13:00:20Z', subject: 'Your login code' },
+    ];
+    expect(pickLoginMail(list, { to: tagged, since })?.id).toBe('tagged');
+    expect(pickLoginMail(list, { to: bare, since })?.id).toBe('bare');
+    expect(pickLoginMail([list[1]], { to: bare, since })).toBeNull();
+    expect(pickLoginMail([list[0]], { to: tagged, since })).toBeNull();
   });
   it('PKCE: the challenge is the S256 of the verifier, base64url', () => {
     const { verifier, challenge } = pkcePair();
@@ -80,7 +98,8 @@ describe('acquireCredential', () => {
 
   interface Seen { url: string; method: string; body: string; headers: Record<string, string> }
 
-  function stubFetch(seen: Seen[], over: { code?: string } = {}) {
+  /** `mails` puts more than one mail in the shared mailbox; `codeById` gives each its own code. */
+  function stubFetch(seen: Seen[], over: { code?: string; mails?: InboundMail[]; codeById?: Record<string, string> } = {}) {
     return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const url = String(input);
       const method = (init?.method ?? 'GET').toUpperCase();
@@ -89,10 +108,12 @@ describe('acquireCredential', () => {
       seen.push({ url, method, body, headers });
       if (url.startsWith(`${BASE}/api/auth/email-otp/send-verification-otp`)) return new Response('{}', { status: 200 });
       if (isResend(url, '/emails/receiving/')) {
-        return new Response(JSON.stringify({ text: `Your code is ${over.code ?? '424242'}` }), { status: 200 });
+        const id = new URL(url).pathname.split('/').pop() ?? '';
+        return new Response(JSON.stringify({ text: `Your code is ${over.codeById?.[id] ?? over.code ?? '424242'}` }), { status: 200 });
       }
       if (isResend(url, '/emails/receiving')) {
-        return new Response(JSON.stringify({ data: [{ id: 'mail_1', to: [env.EVAL_LOGIN_EMAIL], created_at: new Date().toISOString(), subject: 'Your login code' }] }), { status: 200 });
+        const data = over.mails ?? [{ id: 'mail_1', to: [env.EVAL_LOGIN_EMAIL], created_at: new Date().toISOString(), subject: 'Your login code' }];
+        return new Response(JSON.stringify({ data }), { status: 200 });
       }
       if (url.startsWith(`${BASE}/api/auth/sign-in/email-otp`)) {
         return new Response('{}', { status: 200, headers: { 'set-cookie': '__Secure-better-auth.session_token=sess_1; Path=/; HttpOnly' } });
@@ -125,6 +146,36 @@ describe('acquireCredential', () => {
     expect(JSON.parse(verify.body)).toEqual({ email: env.EVAL_LOGIN_EMAIL, otp: '424242' });
     // The inbox is read with the eval's own key, never the product's.
     expect(seen.find((s) => isResend(s.url))!.headers.authorization).toBe('Bearer re_x');
+  });
+
+  /**
+   * A DEPLOYMENT signs each harness in as its OWN sub-address of the one configured inbox address: the
+   * proxy's login door is five code sends an hour PER ADDRESS (`services/proxy/src/parts.ts` LOGIN_SEND),
+   * and a four-harness dispatch spent them all — deploys run 33782951666, pi: `send-verification-otp → 429`
+   * before its task began. The catch-all drops every sub-address into the SAME mailbox, so the address is
+   * what keeps the codes apart: here another harness's mail, on the bare configured address, is the NEWEST
+   * one in the inbox and must still be ignored.
+   */
+  it('a deployment logs in as the harness’s sub-address and reads the mail addressed to it', async () => {
+    const seen: Seen[] = [];
+    const email = deploymentLoginEmail(env.EVAL_LOGIN_EMAIL, 'pi');
+    expect(email).toBe('mxmx_eval+pi@social-worm.resend.app');
+    const now = Date.now();
+    const got = await acquireCredential('inbox-oauth', {
+      base: BASE, env, email, sleep: async () => {},
+      fetch: stubFetch(seen, {
+        codeById: { mine: '515151', theirs: '626262' },
+        mails: [
+          { id: 'mine', to: [email], created_at: new Date(now).toISOString(), subject: 'Your login code' },
+          { id: 'theirs', to: [env.EVAL_LOGIN_EMAIL], created_at: new Date(now + 1_000).toISOString(), subject: 'Your login code' },
+        ],
+      }),
+    });
+    expect(got?.email).toBe(email);
+    expect(JSON.parse(seen.find((s) => s.url.includes('send-verification-otp'))!.body)).toEqual({ email, type: 'sign-in' });
+    // The code out of the sub-address's mail, never the bare address's newer one.
+    expect(JSON.parse(seen.find((s) => s.url.includes('/sign-in/email-otp'))!.body)).toEqual({ email, otp: '515151' });
+    expect(seen.some((s) => isResend(s.url, '/emails/receiving/theirs'))).toBe(false);
   });
 
   it('carries the session cookie into the consent screen and posts the form back verbatim', async () => {
@@ -330,5 +381,15 @@ describe('shareForScoring', () => {
   });
   it('names the id when the door refuses', async () => {
     await expect(shareForScoring({ base: 'https://x.test', cookie: 'sess=abc', ids: ['boom00'], fetch: fetchStub })).rejects.toThrow(/boom00/);
+  });
+});
+
+describe('deploymentLoginEmail — one inbox, one door per harness', () => {
+  it('adds +<harness> to the configured address’s local part', () => {
+    expect(deploymentLoginEmail('mxmx_eval@social-worm.resend.app', 'pi')).toBe('mxmx_eval+pi@social-worm.resend.app');
+    expect(deploymentLoginEmail('mxmx_eval@social-worm.resend.app', 'claude-code')).toBe('mxmx_eval+claude-code@social-worm.resend.app');
+  });
+  it('an address the caller already tagged is used verbatim', () => {
+    expect(deploymentLoginEmail('mxmx_eval+smoke@social-worm.resend.app', 'pi')).toBe('mxmx_eval+smoke@social-worm.resend.app');
   });
 });
