@@ -84,6 +84,16 @@ export function doorFor(method: string, pathname: string): DoorName | null {
   return null;
 }
 
+/**
+ * IS THIS A REAL BROWSER? MEASURED on production: Chromium on `/tokens/new` sends
+ * `origin: <this origin>` and `sec-fetch-site: same-origin` on the mint fetch, and both survive this
+ * proxy to the upstream untouched. A bare HTTP client sends neither. The anonymous mint is the ONLY
+ * door this guards — `/api/start` shares its rate-limit door and is posted by agents with no browser.
+ */
+export function isBrowserContext(_headers: Headers, _origin: string): boolean {
+  throw new Error('m2: implement — the browser-context check');
+}
+
 /** How many hops in front of this proxy are ours (`RATE_LIMITER__TRUSTED_PROXY_HOPS`). Default 0: we are the outermost, and nothing inbound is believed. */
 export function trustedHopsOf(env: Record<string, string | undefined>): number {
   const raw = readEnv(env, 'RATE_LIMITER__TRUSTED_PROXY_HOPS');

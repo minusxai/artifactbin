@@ -22,5 +22,14 @@ export function startLinkPaste(base: string, artifactId: string, secret: string)
   return `Help me edit my artifact. Follow instructions at ${artifactUrl(base, artifactId)}/start?k=${secret}`;
 }
 
+/**
+ * THE RELAY DUTY. If an anonymous token ever published, the document is outside the human's account and
+ * they cannot reach it from their own dashboard — so the agent must hand them this line. The safety net
+ * under the ladder, not an alternative to it.
+ */
+export function anonymousClaimRelay(_base: string, _artifactId: string): string {
+  throw new Error('m2: implement — the claim line an agent relays to its human');
+}
+
 const artifactUrl = (base: string, artifactId: string): string =>
   `${base.replace(/\/$/, '')}/a/${artifactId}`;

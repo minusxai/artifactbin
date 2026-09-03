@@ -13,7 +13,15 @@
  *     token, resume. Anonymous tokens can be claimed by an account on the web, or rejected there.
  *   - Never put the token in URLs or commit it; header auth only: `Authorization: Bearer mx_…`.
  */
-export function agentContract(base: string): string {
+/**
+ * WHICH SURFACE is being told. An MCP client authenticated over OAuth holds no token and can acquire
+ * none — telling it how to get one is how we taught agents to mint their own. An HTTP agent gets the
+ * ladder, and its last rung is "ask your human", never "mint one yourself".
+ */
+export type AgentSurface = 'mcp' | 'http';
+
+export function agentContract(base: string, _surface: AgentSurface = 'http'): string {
+  // m2: implement — the surface must decide what is rendered.
   const origin = base.replace(/\/$/, '');
   return `**Agent token contract**
 
