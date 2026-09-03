@@ -13,7 +13,7 @@ import { POST as forkOpRoute } from '@/app/api/artifacts/[id]/fork/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { OPERATIONS as operations } from '@/lib/operations/registry';
-import { getArtifactById } from '@/lib/artifacts';
+import { getArtifactById, listArtifactsFor } from '@/lib/artifacts';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser } from '@/lib/users';
 
@@ -153,6 +153,42 @@ describe('POST /api/artifacts/:id/fork (bearer)', () => {
     const text = await res.text();
     expect(text).toMatch(/invalid_refs/);
     expect(text).toMatch(/not yours to write/);
+  });
+
+  /*
+   * ADDED (round 3). A fork's body is OPTIONAL — it holds nothing but the
+   * three overrides — so an ABSENT body means "keep everything". A body that
+   * was SENT and does not parse is a different fact and must not collapse
+   * into the same answer: the JSON the caller meant may have been
+   * `{"visibility":"private"}`, and publishing the copy at the source's
+   * visibility with a 201 is exactly the silent downgrade
+   * `private_requires_account` exists to refuse.
+   */
+  const rawFork = (id: string, token: string, body?: string) =>
+    forkOpRoute(new Request(`${BASE}/api/artifacts/${id}/fork`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
+      ...(body !== undefined ? { body } : {}),
+    }), params(id));
+
+  it('a fork with NO body is the ordinary fork: nothing to override, everything kept', async () => {
+    const w = await world();
+    const res = await rawFork(w.doc.id, w.anon.token);
+    expect(res.status, await res.clone().text()).toBe(201);
+    const body = (await res.json()) as { id: string; title: string; visibility: string; forked_from: string };
+    expect(body.forked_from).toBe(w.doc.id);
+    expect(body.title).toBe('The NBA payroll stack');
+    expect(body.visibility).toBe('public');
+  });
+
+  it('a body that was SENT and does not parse is invalid_json, and nothing is created', async () => {
+    const w = await world();
+    expect(await listArtifactsFor({ tokenId: w.tb.id, userId: w.bob.id })).toHaveLength(0);
+    const res = await rawFork(w.doc.id, w.tb.token, '{"visibility":"private"');
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('invalid_json');
+    // Not a copy at the SOURCE's visibility — the refusal is the whole point.
+    expect(await listArtifactsFor({ tokenId: w.tb.id, userId: w.bob.id })).toHaveLength(0);
   });
 
   it('every format forks; a dataset copy shares the object key', async () => {
