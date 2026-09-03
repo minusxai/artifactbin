@@ -97,7 +97,31 @@ describe('DataTable', () => {
     const html = renderToString(<DataTable rows={ROWS} columns={COLUMNS} height={200} />);
     expect(html).toContain('APAC');
     expect(html).toContain('1,200');
-    // A bounded, scrollable box — the iframe never scrolls itself.
-    expect(html).toMatch(/height:\s*200px/);
+    // A bounded, scrollable box — the iframe never scrolls itself — but bounded from ABOVE:
+    // a table with three rows must not reserve 200px (production run 33702277600 showed every
+    // report with ~250px of empty box under a 3-row table).
+    expect(html).toMatch(/max-height:\s*200px/);
+    expect(html).not.toMatch(/[^-]height:\s*200px/);
+  });
+
+  it('a short table hugs its rows: the scroll box is capped, never fixed', () => {
+    const { container } = render(<DataTable rows={ROWS} columns={COLUMNS} />);
+    const box = container.querySelector('[data-slot="data-table"] > div') as HTMLElement;
+    expect(box.style.maxHeight).toBe('420px');
+    expect(box.style.height).toBe('');
+  });
+
+  it('accepts the documented height="420px" string (markup-data.md) as well as a number', () => {
+    const html = renderToString(<DataTable rows={ROWS} columns={COLUMNS} height={'250px' as unknown as number} />);
+    expect(html).toMatch(/max-height:\s*250px/);
+    expect(html).not.toContain('pxpx');
+  });
+
+  it('a long table keeps the cap', () => {
+    const many = Array.from({ length: 200 }, (_, i) => ({ region: `R${i}`, revenue: i, growth: 0 }));
+    const { container } = render(<DataTable rows={many} columns={COLUMNS} height={300} />);
+    const box = container.querySelector('[data-slot="data-table"] > div') as HTMLElement;
+    expect(box.style.maxHeight).toBe('300px');
+    expect(box.className).toMatch(/overflow-auto/);
   });
 });
