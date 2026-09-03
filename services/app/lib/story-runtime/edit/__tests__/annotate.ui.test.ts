@@ -212,6 +212,28 @@ describe('painting the exact words', () => {
     expect(anchorNode().hasAttribute('data-mx-annotation-ranged')).toBe(false);
   });
 
+  /*
+   * The wire's `quote_found` is ALL parts, not any — half a quote is not the
+   * words the person selected — and the paint has to say the same thing. A
+   * highlight over the surviving half would show a comment pointing at a
+   * fragment while the wire calls its quote gone.
+   */
+  it('paints nothing when only PART of a quote survives', () => {
+    const registry = installHighlightApi();
+    document.body.innerHTML = '<main>'
+      + '<p data-mx-ast="0" data-annotation-anchor="anchor_1">Revenue was flat in Q3, behind plan.</p>'
+      + '<p data-mx-ast="1">Costs fell 8% over the same period.</p>'
+      + '</main>';
+    session.update({ ...state('on'), pins: [{ ...PIN, range: { v: 1 as const, parts: [
+      { rel: '', start: 24, end: 38, text: 'ahead of plan.' },   // written away
+      { rel: '+1', start: 0, end: 13, text: 'Costs fell 8%' },   // still there
+    ] } }] });
+    const anchor = document.querySelector('[data-annotation-anchor="anchor_1"]')!;
+    expect(registry.has('mx-annotation-ann_1')).toBe(false);
+    expect(anchor.hasAttribute('data-mx-annotated')).toBe(true);
+    expect(anchor.hasAttribute('data-mx-annotation-ranged')).toBe(false);
+  });
+
   it('falls back to the tint where the highlight API does not exist at all', () => {
     session.update({ ...state('on'), pins: [rangedPin('Revenue')] });
     expect(anchorNode().hasAttribute('data-mx-annotated')).toBe(true);

@@ -247,3 +247,29 @@ describe('resolving a range against the SOURCE', () => {
     expect(((await made.json()) as Wire).quote_found).toBe(true);
   });
 });
+
+describe('what "found" means', () => {
+  /*
+   * ADDED BY THE IMPLEMENTER (F3). The seeds only ever remove ALL of a quote,
+   * so they cannot say whether one surviving part is enough. It is not: a
+   * quote is the words a person selected, and half of them is not those words.
+   * The gate leg this phase adds depends on the same reading — it rewords only
+   * the first of two paragraphs and expects `quote_found` false.
+   */
+  it('one part written away is enough to say the quote is gone', async () => {
+    const w = await setup();
+    expect((await comment(w, { quote: QUOTE, range: RANGE })).status).toBe(201);
+    const { edit_id } = await head(w.t.token, w.doc.id);
+    const edited = await editsRoute(
+      request(`/api/artifacts/${w.doc.id}/edits`, { method: 'POST', token: w.t.token, json: { edit_id, old_string: 'grew</strong>', new_string: 'fell</strong>' } }),
+      params({ id: w.doc.id }),
+    );
+    expect(edited.status, await edited.clone().text()).toBe(200);
+
+    const [ann] = await list(w.t.token, w.doc.id);
+    // The second part (" 40% in Q3,") is untouched — and that is not enough.
+    expect((await head(w.t.token, w.doc.id)).markup).toContain('40% in Q3,');
+    expect(ann.orphaned).toBe(false);
+    expect(ann.quote_found).toBe(false);
+  });
+});

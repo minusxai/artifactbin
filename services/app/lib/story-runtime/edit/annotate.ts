@@ -228,9 +228,12 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
       const el = pin.range ? elementForPin(pin) : null;
       if (!el || !pin.range) continue;
       const ranges = resolveParts(el, pin.range.parts);
+      // EVERY part or none — the same rule the wire's `quote_found` answers by.
       // Not found is not an error: the words were edited away, and the node
-      // tint says "there is a comment here" just as it always did.
-      if (ranges.length === 0) continue;
+      // tint says "there is a comment here" just as it always did, while a
+      // highlight over the surviving half would point at a fragment nobody
+      // commented on.
+      if (ranges.length !== pin.range.parts.length) continue;
       const name = highlightNameFor(pin.id);
       api.registry.set(name, new api.Highlight(...ranges));
       registeredHighlights.add(name);

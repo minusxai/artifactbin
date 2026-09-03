@@ -704,9 +704,24 @@ export default function AnnotationLayer({
         return;
       }
       if (event.data.type === STORY_SELECTION_MESSAGE && composingRef.current) {
-        setSelection(event.data.selection);
+        const reported = event.data.selection;
+        /*
+         * The frame re-reports the composing node's GEOMETRY on every scroll,
+         * resize and re-render, and that report carries no quote — the words
+         * live on this side. Taking it whole replaced the captured selection
+         * with a quote-less one before the comment was ever saved, which is
+         * how a two-paragraph comment quietly became a node again. The words
+         * survive a report about the SAME node and only that: widening to an
+         * ancestor is a different subject, and a range addressed from the old
+         * anchor would not describe it.
+         */
+        setSelection((previous) => (
+          reported && previous && reported.path === previous.path && previous.quote
+            ? { ...reported, quote: previous.quote, range: previous.range }
+            : reported
+        ));
         setFailure(null);
-        if (event.data.selection) setOpenId(null);
+        if (reported) setOpenId(null);
       }
     };
     window.addEventListener('message', onMessage);

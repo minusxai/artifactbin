@@ -271,14 +271,17 @@ function storedRange(raw: string | null): AnnotationRange | null {
 /**
  * Are the quoted words still there? Computed per read, like `orphaned`, and
  * never written back: the quote is what was selected, and this says whether
- * the document still says it. A quote with no range can only be answered by
- * whether the anchor survived — there is nothing to look for.
+ * the document still says it. EVERY part, not any: half a quote is not the
+ * words the person selected, and an agent reading `quote_found: true` must be
+ * able to trust that what it is answering is still on the page. A quote with no
+ * range can only be answered by whether the anchor survived — there is nothing
+ * to look for.
  */
 function quoteFound(entry: AnchorEntry | undefined, quote: string | null, range: AnnotationRange | null): boolean | null {
   if (quote === null) return null;
   if (!entry) return false;
   if (!range) return true;
-  return range.parts.some((part) => {
+  return range.parts.every((part) => {
     const node = nodeForRel(entry, part.rel);
     return !!node && canonicalTextOf(node).includes(part.text);
   });
