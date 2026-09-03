@@ -249,7 +249,10 @@ export interface AcquireOptions {
  * to the agent itself and the driver only reads it back out of the paste when a task needs it.
  */
 export async function acquireCredential(source: CredentialSource, opts: AcquireOptions): Promise<Credential | null> {
-  if (source === 'none') throw new Error('m1: implement — `none` acquires nothing and must resolve null');
+  // `none` is the TOKEN-LESS leg: nobody hands the agent anything, and what it does about that — ask its
+  // human, or mint its own — IS the measurement. Never chosen by `credentialSourceFor`; only an explicit
+  // `--credential none` selects it, because falling back to it silently would empty a column of its account.
+  if (source === 'none') return null;
   if (source === 'paste') return null;
   if (source === 'secret') {
     const token = opts.env.EVAL_ACCOUNT_TOKEN;

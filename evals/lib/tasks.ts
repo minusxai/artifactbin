@@ -56,8 +56,21 @@ export function buildPrompt(task: Task, access: Access, opts: PromptOptions = {}
 
 function accessLine(_task: Task, access: Access, mode: EvalMode): string {
   const actions = actionTransport(mode);
-  if (access.kind === 'none') throw new Error('m1: implement — the no-credential access line');
   const installed = installsSkills(mode);
+  if (access.kind === 'none') {
+    // An MCP connection IS a token handoff — the server is configured with a bearer before the turn — so
+    // the token-less leg cannot be run over it, and saying so loudly beats measuring an authenticated run
+    // under a "no credential" heading. Same refusal, same reason, as the start-link branch below.
+    if (actions === 'mcp') {
+      throw new Error(`${mode} carries its token in the MCP configuration, so it cannot run without a credential`);
+    }
+    // NOTHING about a connection: no token, no start document, no `~/.artifactbin.env` — the driver
+    // deliberately wrote none, and a line claiming otherwise would send the agent looking for a file that
+    // is not there instead of doing the thing being measured. Only where the store is, and how to read it.
+    return installed
+      ? `The artifact store is at ${access.base}. The artifactbin skill is installed in this session — start with its SKILL.md; its dispatch table names the reference files beside it. You have not been given a token or a document.`
+      : `The artifact store is at ${access.base}. Read ${access.base}/docs/artifactbin/SKILL.md first; it is the API-action brief, and it names the rest of the docs. You have not been given a token or a document.`;
+  }
   if (access.kind === 'start-link') {
     if (actions === 'mcp' || installed) {
       throw new Error(`${mode} requires a token handoff so the harness can be configured before it runs`);
