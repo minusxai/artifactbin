@@ -92,6 +92,19 @@ export interface StoryIslandData {
    * reason queries relay there — the page holds the session.
    */
   mutateUrl?: string;
+  /**
+   * Where this document imports an image URL that only exists in the READER's
+   * browser — a bound `<img src="$pick">`, a template a pick completed, a
+   * column of logos: `GET <assetsUrl>?u=<url>` (app/a/[id]/assets), which
+   * imports it under this document's own read ACL and caps and answers a
+   * redirect to `/assets/<hash>`.
+   *
+   * An `<img>` LOAD, not a fetch — so unlike `queryUrl`/`mutateUrl` this needs
+   * no `connect-src` entry and the document's CSP is unchanged by it
+   * (`img-src 'self'` already admits a same-origin address). Absent for a
+   * render that is not a served document, where a bound image renders static.
+   */
+  assetsUrl?: string | null;
 }
 
 /** The GET query endpoint's one parameter: the JSON of a QueryRequest (lib/story/query-request). */

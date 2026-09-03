@@ -19,7 +19,7 @@ import { hasDangerousScheme, listHasDangerousScheme } from '@/lib/jsx/validate';
 // for why these must not be maintained separately.
 import { URL_ATTRS as URL_PROPS, URL_LIST_ATTRS as URL_LIST_PROPS, SVG_PAINT_ATTRS, paintHasExternalUrl } from '@/lib/jsx/url-attrs';
 import { STORY_SVG_TAGS } from './component-names';
-import { REF_ATTRS, refName } from '@/lib/story/dataflow';
+import { carriesRef, REF_ATTRS, refName } from '@/lib/story/dataflow';
 import type { JsxAttribute } from '@/lib/jsx';
 
 /**
@@ -38,6 +38,24 @@ export interface BoundControlProps {
   children?: React.ReactNode;
 }
 
+/**
+ * A `$`-bound SOURCE: `<img src="$pick">`, or the braced form
+ * `<img src="https://cdn.x.com/{$pick}.png">`.
+ *
+ * Its own seam rather than the control one above, because nothing about it is a
+ * control: no two-way write, no `disabled`, and the resolved value is a URL
+ * that must be mapped to our own copy before it reaches the DOM
+ * (lib/story/asset-url). `template` is the attribute value verbatim — resolving
+ * it is `resolveRefTemplate`, and both ends of the wire call the same function.
+ */
+export interface BoundSourceProps {
+  tag: 'img';
+  /** Everything the author wrote except the bound attribute itself. */
+  props: Record<string, unknown>;
+  /** The `src` the author wrote: `$pick`, or a string carrying `{$pick}`. */
+  template: string;
+}
+
 export interface StoryInterpreterOptions {
   /** Component registry: shadcn components + embeds. Unknown component tags render nothing. */
   components: Record<string, React.ComponentType<Record<string, unknown>>>;
@@ -48,6 +66,13 @@ export interface StoryInterpreterOptions {
    * and cannot pretend to work.
    */
   boundControl?: React.ComponentType<BoundControlProps>;
+  /**
+   * Renders a `$`-bound image source (see BoundSourceProps). Absent, the image
+   * renders with NO src and the binding named on `data-mx-bound` — the same
+   * honesty as the static control: the alt text stands where the picture would
+   * be, rather than a `$pick` in the DOM the browser would try to fetch.
+   */
+  boundSource?: React.ComponentType<BoundSourceProps>;
   /**
    * Optional per-element decoration hook, called with every rendered element node (the built
    * React element, its AST node, and its AST path). The WYSIWYG editor uses it to wrap text
@@ -132,6 +157,19 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
   const Component = isComponent ? options.components[node.tag] : null;
   if (isComponent && !Component) return null; // validator rejects these; render stays safe regardless
 
+  // A `$`-bound image SOURCE goes to its own seam, for the same reason as the
+  // control below: the reference must never reach the DOM, and here the
+  // resolved value additionally has to be mapped to our copy of it.
+  const source = isComponent ? null : boundSourceAttr(node);
+  if (source) {
+    const props = buildProps(node.attributes.filter((a) => a !== source.attr), false, node.tag, path);
+    const Source = options.boundSource ?? StaticBoundSource;
+    const element = React.createElement(Source, {
+      key: options.keyFor?.(path) ?? path, tag: 'img' as const, props, template: source.template,
+    });
+    return options.decorateElement ? options.decorateElement(element, node, path) : element;
+  }
+
   // A `$`-bound native control goes to the bound-control seam. Decided HERE,
   // before buildProps rewrites value→defaultValue: this is the one place the
   // element TYPE can change, and the reference must never reach the DOM.
@@ -156,8 +194,34 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
   return options.decorateElement ? options.decorateElement(element, node, path) : element;
 }
 
-/** The `$name` bindings on a native form control, or null when it has none. */
+/** The bound `src` on an `<img>`, or null when it carries no reference. */
+function boundSourceAttr(node: JsxElement): { attr: JsxAttribute; template: string } | null {
+  if (node.tag.toLowerCase() !== 'img') return null;
+  const attr = node.attributes.find((a) => a.name.toLowerCase() === 'src');
+  if (!attr || !attr.value.static || typeof attr.value.json !== 'string') return null;
+  return carriesRef(attr.value.json) ? { attr, template: attr.value.json } : null;
+}
+
+/**
+ * The static rendering of a bound image: everything the author wrote, no src,
+ * and the binding named. The alt text is what a reader sees — which is the
+ * honest answer for a render that has no store and no asset endpoint behind it.
+ */
+function StaticBoundSource({ props, template }: BoundSourceProps) {
+  return React.createElement('img', { ...props, 'data-mx-bound': `src:${template}` });
+}
+
+/**
+ * The `$name` bindings on a native form control, or null when it has none.
+ *
+ * Gated on the FORM control tags rather than on REF_ATTRS having an entry: the
+ * reference table also carries `img.src`, which is a bound SOURCE and not a
+ * control at all — without this an `<img>` would render through the control
+ * seam, which sets `disabled` and speaks a two-way value it has no idea what to
+ * do with.
+ */
 function boundAttrs(node: JsxElement): { bind: BoundControlProps['bind']; attrs: Set<JsxAttribute> } | null {
+  if (!FORM_CONTROL_TAGS.has(node.tag.toLowerCase())) return null;
   const table = REF_ATTRS.html[node.tag.toLowerCase()];
   if (!table) return null;
   const bind: BoundControlProps['bind'] = {};

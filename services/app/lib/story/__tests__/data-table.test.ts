@@ -187,3 +187,23 @@ describe('parseTableHeight', () => {
     expect(parseTableHeight(undefined, 300)).toBe(300);
   });
 });
+
+/**
+ * `kind: 'image'` — the ONE column kind, and the reason it has to be declared:
+ * a column of URLs is text far more often than it is pictures, so the author
+ * says which. Everything else about the column (title, width, align) is
+ * unchanged, and an unknown kind is dropped like every other malformed field.
+ */
+describe('an image column', () => {
+  it('is parsed only when the author asks for it, by name', () => {
+    expect(parseColumnSpecs([{ col: 'logo', kind: 'image' }])).toEqual([{ col: 'logo', kind: 'image' }]);
+    expect(parseColumnSpecs([{ col: 'logo' }])).toEqual([{ col: 'logo' }]);
+    expect(parseColumnSpecs([{ col: 'logo', kind: 'video' }])).toEqual([{ col: 'logo' }]);
+    expect(parseColumnSpecs([{ col: 'logo', kind: 7 }])).toEqual([{ col: 'logo' }]);
+  });
+
+  it('keeps everything else a column may declare', () => {
+    expect(parseColumnSpecs([{ col: 'logo', kind: 'image', title: 'Logo', width: 64, align: 'center' }]))
+      .toEqual([{ col: 'logo', kind: 'image', title: 'Logo', width: 64, align: 'center' }]);
+  });
+});

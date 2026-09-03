@@ -20,7 +20,7 @@ import { cloneElement, createContext, useContext, useEffect, useMemo, useRef, us
 import type { CSSProperties, ReactElement, ReactNode } from 'react';
 import type { JsxElement } from '@/lib/jsx';
 import type { ComponentType } from 'react';
-import { renderStoryNodes, type BoundControlProps } from '@/lib/story-ui/interpreter';
+import { renderStoryNodes, type BoundControlProps, type BoundSourceProps } from '@/lib/story-ui/interpreter';
 import { useNodeKeys } from '@/lib/story-ui/use-node-keys';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import { STORY_UI_COMPONENTS } from '@/lib/story-ui/registry';
@@ -37,7 +37,8 @@ import { discoverOutline, hasOutline, type OutlineEntry } from './outline';
 import QuestionEmbed from '@/components/views/story/QuestionEmbed';
 import InlineNumber, { type NumberAgg } from '@/components/views/story/InlineNumber';
 import { createDataflowStore, EMPTY_STATE, type DataflowStore } from './store';
-import { EMPTY_DATAFLOW, coerceScalarInput, refName, type Dataflow, type DataflowState, type Row, type Scalar, type ScalarValueDecl, type TableResult } from '@/lib/story/dataflow';
+import { EMPTY_DATAFLOW, coerceScalarInput, refName, resolveRefTemplate, type Dataflow, type DataflowState, type Row, type Scalar, type ScalarValueDecl, type TableResult } from '@/lib/story/dataflow';
+import { isWebUrl, runtimeAssetUrl } from '@/lib/story/asset-url';
 import { Button } from '@/components/kit/button';
 import { DataTable } from '@/components/kit/data-table';
 import { GridItemContext } from '@/components/kit/grid';
@@ -82,6 +83,72 @@ const RuntimeEmbedContext = createContext<RuntimeEmbedContextValue>({
   glyphs: {},
   colorMode: 'light',
 });
+
+/**
+ * WHERE A RUNTIME-COMPUTED IMAGE URL IS SERVED FROM.
+ *
+ * `endpoint` is the document's own asset import address (StoryIslandData
+ * `assetsUrl`); `seen` is the small set of URLs the browser has actually
+ * LOADED, which is the only evidence this side has that we hold a copy. It
+ * starts empty on both ends of the wire deliberately — see `runtimeAssetUrl`:
+ * the island carries no asset lookup, so a server that knew more than the
+ * hydrating client would hand React a mismatch and lose the whole server tree.
+ *
+ * A mutable Set rather than state: recording a load must not re-render (the
+ * image is already on screen — a re-render would only swap its src for an
+ * equivalent one and fetch again). The next render that happens for its own
+ * reasons picks the shorter address up.
+ */
+interface RuntimeAssetContextValue {
+  endpoint: string | null;
+  seen: Set<string>;
+}
+
+const RuntimeAssetContext = createContext<RuntimeAssetContextValue>({ endpoint: null, seen: new Set() });
+
+/**
+ * The LIVE bound image source (the interpreter's `boundSource` seam):
+ * `<img src="$pick">` or `<img src="https://cdn.x.com/{$pick}.png">` resolved
+ * against the store and mapped to our own copy.
+ *
+ * Three states, and each is a thing a reader can see:
+ *  - resolved → the mapped address, with `onLoad` recording that we hold it;
+ *  - unresolved (the value is null, nothing picked yet) → no src, so the alt
+ *    text stands in, and the binding named on `data-mx-bound`;
+ *  - REFUSED (the endpoint said no: a link-local address, a non-image, over the
+ *    cap, past the document's hourly allowance) → no src plus
+ *    `data-mx-asset="refused"`, which is the only signal there is. Nothing is
+ *    warned at publish for a bound source, because nothing was fetched then.
+ *
+ * The refusal is remembered per URL, not per element: the reader can pick
+ * something else and come back, and the answer for a URL does not change
+ * within a view.
+ */
+function RuntimeBoundSource({ props, template }: BoundSourceProps) {
+  const { state } = useContext(RuntimeEmbedContext);
+  const { endpoint, seen } = useContext(RuntimeAssetContext);
+  const [refused, setRefused] = useState<ReadonlySet<string>>(EMPTY_REFUSED);
+  const url = resolveRefTemplate(template, (name) => state.values[name]);
+  const mapped = url === null ? null : runtimeAssetUrl(url, (u) => seen.has(u), endpoint);
+  // A web URL that came back unchanged is one there is no endpoint to import
+  // it through — a rail preview, a canvas. It renders STATIC rather than
+  // reaching the third-party host: not importing it is the whole point, and in
+  // a served document its own CSP would refuse the load anyway.
+  const unmappable = url !== null && mapped === url && isWebUrl(url);
+  if (url === null || unmappable || refused.has(url)) {
+    return <img {...props} data-mx-bound={`src:${template}`} {...(url !== null && refused.has(url) ? { 'data-mx-asset': 'refused' } : {})} />;
+  }
+  return (
+    <img
+      {...props}
+      src={mapped ?? undefined}
+      onLoad={() => { if (isWebUrl(url)) seen.add(url); }}
+      onError={() => setRefused((prev) => new Set([...prev, url]))}
+    />
+  );
+}
+
+const EMPTY_REFUSED: ReadonlySet<string> = new Set();
 
 /**
  * The LIVE bound control (the interpreter's `boundControl` seam): a native
@@ -348,6 +415,14 @@ const TABLE_PAGE = 500;
  */
 function DataTableAdapter(props: Record<string, unknown>) {
   const ctx = useContext(RuntimeEmbedContext);
+  // An `image` column's cells go through the SAME mapping a bound <img src>
+  // does — one function, so a URL in a table and a URL in the markup are
+  // served from the same place and imported through the same door.
+  const { endpoint, seen } = useContext(RuntimeAssetContext);
+  const resolveSrc = useMemo(() => (url: string) => {
+    const mapped = runtimeAssetUrl(url, (u) => seen.has(u), endpoint);
+    return mapped === url && isWebUrl(url) ? null : mapped;
+  }, [endpoint, seen]);
   // Same cell contract as QuestionAdapter: inside a GridItem the cell sizes the embed.
   const inGridItem = useContext(GridItemContext);
   const name = refName(props.data);
@@ -410,6 +485,7 @@ function DataTableAdapter(props: Record<string, unknown>) {
         totalRows={table.totalRows}
         truncated={truncated}
         loading={paged.loading}
+        resolveSrc={resolveSrc}
         onSortChange={truncated ? (sort) => readWindow(0, sort, true) : undefined}
         onLoadMore={truncated ? () => readWindow(shown.length, paged.sort, false) : undefined}
       />
@@ -730,7 +806,7 @@ const EMPTY_GLYPHS: GlyphMap = {};
 /** A store-less subscribe (a Button rendered outside a document): nothing ever changes. */
 const NO_SUBSCRIBE = () => () => {};
 
-export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, template = null, chrome = true, store: givenStore, onMounted, editDecorate, onSlideRename }: StoryRuntimeAppProps) {
+export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, template = null, chrome = true, assetsUrl = null, store: givenStore, onMounted, editDecorate, onSlideRename }: StoryRuntimeAppProps) {
   const [store] = useState<DataflowStore>(() => givenStore ?? createDataflowStore(dataflow ?? { flow: EMPTY_DATAFLOW }));
   const mountedRef = useRef(onMounted);
   mountedRef.current = onMounted;
@@ -761,17 +837,26 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, t
     return editDecorate ? editDecorate(resolved as ReactElement, node, path) : resolved;
   }, [refData, editDecorate]);
 
+  // The URLs the browser has answered, for the life of this document. A ref,
+  // not state: see RuntimeAssetContext — recording a load must not re-render.
+  const seen = useRef<Set<string>>(null as unknown as Set<string>);
+  if (seen.current === null) seen.current = new Set();
+  const assets = useMemo(() => ({ endpoint: assetsUrl, seen: seen.current }), [assetsUrl]);
+
   const body = (
-    <RuntimeEmbedContext.Provider value={{ store, flow: store.flow, state, pending, setValue, fetchPage: store.fetchPage, refData, colorMode }}>
-      {renderStoryNodes(nodes, {
-        // Identity across an adopted document: a live update re-renders this
-        // tree, and positional keys would remount everything below the edit.
-        keyFor: nodeKeys.keyFor,
-        components: RUNTIME_REGISTRY,
-        boundControl: RuntimeBoundControl,
-        decorateElement,
-      })}
-    </RuntimeEmbedContext.Provider>
+    <RuntimeAssetContext.Provider value={assets}>
+      <RuntimeEmbedContext.Provider value={{ store, flow: store.flow, state, pending, setValue, fetchPage: store.fetchPage, refData, colorMode }}>
+        {renderStoryNodes(nodes, {
+          // Identity across an adopted document: a live update re-renders this
+          // tree, and positional keys would remount everything below the edit.
+          keyFor: nodeKeys.keyFor,
+          components: RUNTIME_REGISTRY,
+          boundControl: RuntimeBoundControl,
+          boundSource: RuntimeBoundSource,
+          decorateElement,
+        })}
+      </RuntimeEmbedContext.Provider>
+    </RuntimeAssetContext.Provider>
   );
 
   /*

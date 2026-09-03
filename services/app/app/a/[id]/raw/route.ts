@@ -35,7 +35,7 @@ import { buildStoryDocument } from '@/lib/story/document';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { declaresMutations } from '@/lib/story/helmet';
-import { markupCsp, mutatePath, queryPath } from '@/lib/story/markup-csp';
+import { assetsPath, markupCsp, mutatePath, queryPath } from '@/lib/story/markup-csp';
 import { readUrlValues } from '@/lib/story/url-values';
 import { storyRuntimeAssets } from '@/lib/story/runtime-asset';
 import { ownerUsername } from '@/lib/users';
@@ -328,6 +328,12 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         // Where this document fetches its re-runs when it IS the page (the
         // reader path); inside a parent the relay is chosen instead.
         queryUrl: queryPath(artifact.id),
+        // …and where it imports an image URL only its reader can compute (a
+        // bound <img src="$pick">). Unconditional, unlike mutateUrl: a source
+        // can appear in the DOM without the document declaring it — an author
+        // script, a table column — and the endpoint answers under this
+        // document's own read ACL either way.
+        assetsUrl: assetsPath(artifact.id),
         // Only a document that declares a write gets a write URL: a document
         // that cannot write should not carry the address of a door it never
         // opens.

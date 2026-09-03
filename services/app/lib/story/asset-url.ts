@@ -70,6 +70,40 @@ export function assetUrlFor(url: string): string {
 /** True for a URL this mapping is about at all: an absolute http(s) source. */
 export const isWebUrl = (value: string): boolean => WEB_URL.test(value);
 
+/**
+ * The SAME mapping, for a URL that only exists in the READER's browser — the
+ * value of a bound `<img src="$pick">`, a template a pick completed, a column
+ * of logos, a line of author script.
+ *
+ * Publish imports every URL it can SEE; it cannot see these, so there are two
+ * addresses rather than one and this chooses between them:
+ *
+ *  - `/assets/<hash>` once we know we hold a copy — which the caller learns by
+ *    the browser having loaded it once, never by asking the server;
+ *  - the document's own per-request endpoint otherwise
+ *    (`/a/<id>/assets?u=<url>`), which imports it under that document's read
+ *    ACL and its caps, and answers a redirect to the address above.
+ *
+ * Both are same-origin, so the served document's `img-src 'self'` admits them
+ * and nothing about its CSP changes.
+ *
+ * NOTHING here may consult the server's `web_assets` index. This runs on BOTH
+ * ends of the wire and the island carries no asset lookup, so a server that
+ * knew a URL was cached would render one address while the hydrating client
+ * rendered the other — which React answers by discarding the whole server tree
+ * (#418). Both ends start knowing nothing; the browser learns, and only later
+ * renders benefit.
+ *
+ * With no endpoint (a render that is not a served document — a rail preview, a
+ * canvas) the URL comes back untouched and the caller decides; a non-web value
+ * (a `data:` URL, a relative path) was never ours to map.
+ */
+export function runtimeAssetUrl(url: string, known: AssetLookup, endpoint: string | null | undefined): string {
+  if (!isWebUrl(url)) return url;
+  if (known(url)) return assetUrlFor(url);
+  return endpoint ? `${endpoint}?u=${encodeURIComponent(url)}` : url;
+}
+
 /** A lookup over whatever index the caller already has — a Set of urls, or the rows themselves. */
 export const assetLookupFrom = (index: ReadonlySet<string> | ReadonlyMap<string, WebAssetBox>): AssetLookup =>
   (url: string) => ('get' in index ? index.get(url) ?? false : index.has(url));

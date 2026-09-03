@@ -108,6 +108,13 @@ export interface StoryDocumentInput {
    */
   mutateUrl?: string | null;
   /**
+   * The document's own ASSET IMPORT endpoint (StoryIslandData.assetsUrl) — set
+   * by the serving route, so a bound `<img src="$pick">` has somewhere to
+   * import the URL a reader picks. Absent for renders with no reader behind
+   * them (the canvas, unit tests), where a bound image renders static.
+   */
+  assetsUrl?: string | null;
+  /**
    * Render the document's own navigation chrome (deck rail, present bar, outline).
    * False for capture renders — /export screenshots this frame, so chrome
    * would appear in every OG card and share image. Default true.
@@ -619,7 +626,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
     ...(hydrates ? [runtimeSrc!, ...(drawsChart(split!.body) ? input.lazyChunks ?? [] : [])] : []),
   ].map((href) => `<link rel="modulepreload" href="${escapeHtml(href)}" crossorigin>`).join('');
 
-  const island: StoryIslandData = { nodes: split?.body ?? [], refData, ...(Object.keys(glyphs).length ? { glyphs } : {}), ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, ...(input.queryUrl ? { queryUrl: input.queryUrl } : {}), ...(input.mutateUrl ? { mutateUrl: input.mutateUrl } : {}) };
+  const island: StoryIslandData = { nodes: split?.body ?? [], refData, ...(Object.keys(glyphs).length ? { glyphs } : {}), ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, ...(input.queryUrl ? { queryUrl: input.queryUrl } : {}), ...(input.mutateUrl ? { mutateUrl: input.mutateUrl } : {}), ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}) };
   // `<` escaped so no row value can close the script element from inside JSON.
   const islandJson = JSON.stringify(island).replace(/</g, '\\u003c');
 

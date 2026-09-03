@@ -154,6 +154,59 @@ export function refName(value: unknown): string | null {
 }
 
 /**
+ * A reference INSIDE a string: `https://cdn.x.com/{$pick}.png`.
+ *
+ * The whole-attribute rule above is the general one and stays the general one —
+ * it is what keeps `fmt="$,.0f"` and a literal "$5" from ever being read as a
+ * reference. This second, BRACED form exists for exactly ONE position (an
+ * image's `src`, TEMPLATE_REF_ATTRS below), because an image URL is the one
+ * value an author routinely composes rather than picks: a base path plus a key
+ * out of the data. The braces are what make it unambiguous — a bare `$pick` in
+ * the middle of a URL is a path segment as often as it is a reference.
+ */
+const TEMPLATE_REF_RE = /\{\s*\$([A-Za-z_]\w*)\s*\}/g;
+
+/** Every `{$name}` in a value, deduped, in order; empty for anything else. */
+export function templateRefNames(value: unknown): string[] {
+  if (typeof value !== 'string') return [];
+  return [...new Set([...value.matchAll(TEMPLATE_REF_RE)].map((m) => m[1]))];
+}
+
+/**
+ * Does this attribute value carry a reference at all — whole-attribute or
+ * braced? The publish door asks it to tell a BINDING from an external URL
+ * (lib/story/refs.ts), and the importer asks it to tell a literal URL it can
+ * fetch now from a template only the browser can ever complete.
+ */
+export const carriesRef = (value: unknown): boolean =>
+  refName(value) !== null || templateRefNames(value).length > 0;
+
+/**
+ * A bound source resolved against the document's values: the whole-attribute
+ * form yields the value itself, the braced form the string with every reference
+ * substituted. Null when a referenced value is absent, null or empty — a URL
+ * with a hole in it is not a URL, and the renderer draws the alt text instead.
+ *
+ * Pure, and shared by the runtime and its own server-side render: the two must
+ * agree byte for byte or React discards the whole server tree (#418).
+ */
+export function resolveRefTemplate(value: string, get: (name: string) => Scalar | undefined): string | null {
+  const whole = refName(value);
+  if (whole !== null) {
+    const v = get(whole);
+    return v === null || v === undefined || v === '' ? null : String(v);
+  }
+  if (templateRefNames(value).length === 0) return value;
+  let missing = false;
+  const out = value.replace(TEMPLATE_REF_RE, (_all, name: string) => {
+    const v = get(name);
+    if (v === null || v === undefined || v === '') { missing = true; return ''; }
+    return String(v);
+  });
+  return missing ? null : out;
+}
+
+/**
  * A control's string input coerced to the bound Value's declared type —
  * shared by every two-way binding (the native bound controls and the kit
  * control components), so a slider yields a number, a switch a boolean, and
@@ -199,8 +252,41 @@ export const REF_ATTRS: {
     input: { value: 'scalar', checked: 'scalar' },
     textarea: { value: 'scalar' },
     select: { value: 'scalar', options: 'table' },
+    /*
+     * `<img src="$pick">` — a BOUND SOURCE, and the one reference position that
+     * is not a form control. It is read exactly like every other scalar
+     * reference (declared, of the right kind, or a named refusal at publish);
+     * what differs is what happens with the value, which is a URL rather than a
+     * number: whatever the browser ends up with is mapped to our own copy
+     * (lib/story/asset-url runtimeAssetUrl) and imported on first view by the
+     * document's own asset endpoint, because publish cannot see a URL that does
+     * not exist until a reader picks it.
+     */
+    img: { src: 'scalar' },
   },
 };
+
+/**
+ * Where a `$name` may sit INSIDE a string rather than being the whole
+ * attribute — the braced form, `src="https://cdn.x.com/{$pick}.png"`.
+ *
+ * Exactly one position, deliberately. Widening this is how `fmt="$,.0f"`
+ * becomes a reference to a value called `,` — the whole-attribute rule is the
+ * general one and this is the single, named exception, for the single value an
+ * author composes instead of picking.
+ */
+export const TEMPLATE_REF_ATTRS: {
+  components: Record<string, ReadonlySet<string>>;
+  html: Record<string, ReadonlySet<string>>;
+} = {
+  components: {},
+  html: { img: new Set(['src']) },
+};
+
+/** True where the braced form is read at all — everywhere else `{$x}` is text. */
+export const isTemplateRefPosition = (tag: string, attr: string, isComponent: boolean): boolean =>
+  !!(isComponent ? TEMPLATE_REF_ATTRS.components[tag] : TEMPLATE_REF_ATTRS.html[tag.toLowerCase()])
+    ?.has(isComponent ? attr : attr.toLowerCase());
 
 /** One `$name` occurrence in the body. */
 export interface RefNameUse extends Span {
@@ -402,7 +488,13 @@ export function collectRefNameUses(body: JsxNode[]): RefNameUse[] {
           const expects = table[n.isComponent ? a.name : a.name.toLowerCase()];
           if (!expects || !a.value.static) continue;
           const name = refName(a.value.json);
-          if (name) out.push({ name, tag: n.tag, attr: a.name, expects, start: a.start, end: a.end });
+          if (name) { out.push({ name, tag: n.tag, attr: a.name, expects, start: a.start, end: a.end }); continue; }
+          // …and, in the one position that reads it, every `{$name}` inside the
+          // string. Same kind, same checks, same refusal — one use per name.
+          if (!isTemplateRefPosition(n.tag, a.name, n.isComponent)) continue;
+          for (const templated of templateRefNames(a.value.json)) {
+            out.push({ name: templated, tag: n.tag, attr: a.name, expects, start: a.start, end: a.end });
+          }
         }
       }
       visit(n.children);

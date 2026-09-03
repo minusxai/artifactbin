@@ -36,6 +36,17 @@ export interface DataTableColumnSpec {
   colorScale?: 'sequential' | 'diverging';
   /** Fixed column width in px. */
   width?: number;
+  /**
+   * What the cell HOLDS, when it is not text. `image` renders the cell's URL
+   * as an `<img>` served from our own copy of it (lib/story/asset-url,
+   * imported on first view through the document's asset endpoint).
+   *
+   * Declared rather than sniffed, deliberately: a column of URLs is a column of
+   * links far more often than it is a column of pictures, and a table that
+   * decided for itself would turn a list of sources into a wall of logos the
+   * author never asked for.
+   */
+  kind?: 'image';
 }
 
 /** A column as the table will render it — the spec resolved against the table's real columns. */
@@ -91,6 +102,7 @@ export function parseColumnSpecs(raw: unknown): DataTableColumnSpec[] | null {
     }
     if (typeof e.colorScale === 'string' && SCALES.has(e.colorScale)) spec.colorScale = e.colorScale as DataTableColumnSpec['colorScale'];
     if (typeof e.width === 'number' && Number.isFinite(e.width) && e.width > 0) spec.width = e.width;
+    if (e.kind === 'image') spec.kind = 'image';
     out.push(spec);
   }
   return out;

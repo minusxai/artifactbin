@@ -29,7 +29,8 @@ import { MAX_IMAGE_BYTES } from '@/lib/config';
 import { fetchWebResource } from '@/lib/web-ingest/fetch';
 import { WebIngestError } from '@/lib/web-ingest/guard';
 import { sniffImageType, sniffFontType } from '@/lib/web-ingest/sniff';
-import { canonicalAssetUrl, urlHash } from '@/lib/story/asset-url';
+import { assetUrlFor, canonicalAssetUrl, urlHash } from '@/lib/story/asset-url';
+import { docAssetImportRateLimited } from '@/lib/auth';
 import { collectExternalAssetUrls } from '@/lib/story/external-images';
 import { assetByteQuotaExceeded } from '@/lib/asset-quota';
 
@@ -161,6 +162,51 @@ export async function importWebAsset(url: string, by: WebAssetImporter, kind: We
   // Re-read rather than return what we built: a concurrent importer may have
   // won the insert, and the row that EXISTS is the one every reader will serve.
   return (await webAssetByHash(hash))!;
+}
+
+/**
+ * The document whose asset endpoint is being asked — enough of the row to
+ * decide who pays, and nothing that would make this module ask lib/artifacts a
+ * question (which imports THIS module: the read ACL stays at the route).
+ */
+export interface DocumentAssetTarget {
+  id: string;
+  token_id: string | null;
+  user_id: string | null;
+}
+
+/**
+ * FIRST-VIEW IMPORT: one URL a reader's browser computed, imported on behalf of
+ * one document (app/a/[id]/assets).
+ *
+ * Publish imports every URL it can SEE. It cannot see the source of a bound
+ * `<img src="$pick">`, of a template a pick completes, or of a column of logos
+ * — those exist only once someone is reading — so they arrive here instead,
+ * once, and are cached globally like every other URL.
+ *
+ * WHO PAYS is the whole of R10, and the answer is the DOCUMENT'S OWNER: they
+ * named the source, and a reader who merely opens a page — possibly an
+ * anonymous stranger — must not spend storage they do not have. It is charged
+ * exactly as a publish charges, through `importWebAsset`, so there is one byte
+ * quota and not two.
+ *
+ * The ALLOWANCE is checked only where we are about to FETCH. A URL already in
+ * the cache is answered above it: this bounds our outbound fetching, which is
+ * the thing worth bounding, and a document with two hundred readers looking at
+ * the same ten pictures would otherwise exhaust an hourly ceiling on the
+ * cheapest requests it makes.
+ *
+ * Returns the ADDRESS of our copy. The caller answers a redirect to it and
+ * never the upstream body, which is what keeps this from being a way to read a
+ * response the caller could not have fetched for themselves.
+ */
+export async function importForDocument(doc: DocumentAssetTarget, url: string): Promise<string> {
+  if (await webAssetByHash(urlHash(url))) return assetUrlFor(url);
+  if (docAssetImportRateLimited(doc.id)) {
+    throw new WebAssetRefused('rate_limited', 'too many asset imports for this document this hour', url);
+  }
+  await importWebAsset(url, { tokenId: doc.token_id, userId: doc.user_id });
+  return assetUrlFor(url);
 }
 
 /**

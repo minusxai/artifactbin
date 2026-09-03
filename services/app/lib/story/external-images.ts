@@ -19,6 +19,7 @@
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/helmet';
 import { externalCssUrls } from '@/lib/story/asset-url';
+import { carriesRef } from '@/lib/story/dataflow';
 
 const WEB_URL = /^https?:\/\//i;
 
@@ -57,7 +58,17 @@ export function collectExternalAssetUrls(source: string): { images: string[]; fo
   const images: string[] = [];
   walk(parsed.nodes, (el) => {
     for (const { value } of imageAttrsOf(el)) {
-      if (WEB_URL.test(value) && !images.includes(value)) images.push(value);
+      /*
+       * A URL carrying a REFERENCE is not a URL publish can fetch:
+       * `https://cdn.x.com/{$pick}.png` names a FAMILY of images, one of which
+       * exists once a reader has picked something. Fetching it literally is
+       * what happened before this line — a request for `/%7B$pick%7D.png`, a
+       * 404, and a warning about a URL nobody wrote. Those are imported on
+       * first view by the document's own asset endpoint instead
+       * (app/a/[id]/assets); the whole-attribute form (`src="$pick"`) is not a
+       * web URL at all and never reached here.
+       */
+      if (WEB_URL.test(value) && !carriesRef(value) && !images.includes(value)) images.push(value);
     }
   });
   const style = splitHelmet(parsed.nodes).content.style;
