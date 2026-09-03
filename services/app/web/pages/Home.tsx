@@ -47,15 +47,6 @@ function FirstArtifact() {
           Hand an agent the instruction below along with what artifact you want, and follow along.
         </p>
       </div>
-      <GetStarted />
-      <ClaimBanner />
-      {/* Inspiration, not decoration: an empty library has no examples of its
-        * own, so these are the real published documents from the landing —
-        * under this page's own name, and without the landing's wheel of use
-        * phrases, which sells a product this reader has already signed into. */}
-      <div className="mt-10 sm:mt-12">
-        <UseCarousel label="Inspiration Zone" wheel={false} />
-      </div>
     </>
   );
 }
@@ -97,14 +88,25 @@ export function HomePage() {
   const empty = home.artifacts.length === 0 && home.shared.length === 0;
   return (
     <main className={`${PAGE_COLUMN} mt-8 pb-24`}>
+      {/* The product's front door is stable: owned work, shared work, or an
+        * empty library must never reorder it below secondary content — and the
+        * pieces that CARRY STATE hold ONE slot across that flip. Claiming turns
+        * an empty library into a full one, so a branch that swapped the whole
+        * subtree remounted the banner mid-claim and threw away the result it
+        * had just been asked to report. */}
+      {empty && <FirstArtifact />}
+      <div className="mb-6"><GetStarted /></div>
+      <ClaimBanner />
       {empty ? (
-        <FirstArtifact />
+        /* Inspiration, not decoration: an empty library has no examples of its
+         * own, so these are the real published documents from the landing —
+         * under this page's own name, and without the landing's wheel of use
+         * phrases, which sells a product this reader has already signed into. */
+        <div className="mt-10 sm:mt-12">
+          <UseCarousel label="Inspiration Zone" wheel={false} />
+        </div>
       ) : (
         <>
-          {/* The product's front door is stable: owned work, shared work, or an
-            * empty library must never reorder it below secondary content. */}
-          <div className="mb-6"><GetStarted /></div>
-          <ClaimBanner />
           {home.artifacts.length > 0 && <Shelf actions="full" rows={home.artifacts as never} />}
           <SharedWithYou items={home.shared} />
         </>
