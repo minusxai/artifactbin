@@ -34,7 +34,7 @@ import { findBrokenEmbeds, findExternalSubresources } from './refs';
 import { collectExternalAssetUrls } from './external-images';
 import type { AssetWarning } from '@/lib/web-assets';
 import { documentFonts, invalidFontFamilies } from './document-fonts';
-import { MAX_EXTERNAL_IMAGES_PER_PUBLISH } from '@/lib/config';
+import { MAX_EXTERNAL_ASSETS_PER_PUBLISH, MAX_EXTERNAL_IMAGES_PER_PUBLISH } from '@/lib/config';
 import { checkDocumentData } from './data-checks';
 
 /** The full story vocabulary: kit registry + the data embeds (minusx JSX_STORY_COMPONENT_NAMES verbatim). */
@@ -129,14 +129,27 @@ export async function publishJsx(body: Record<string, unknown>, sourceIn: string
       details: [`this publish imports ${externalAssets.images.length} external images; the cap is ${MAX_EXTERNAL_IMAGES_PER_PUBLISH} — upload the rest as image artifacts and reference them as ref:<id>`],
     }, 400);
   }
-  const warnings: AssetWarning[] = [];
+  /*
+   * The TOTAL cap, images and faces together. The image cap above counts images
+   * alone, so a document naming a dozen `@font-face` urls caused a dozen
+   * outbound fetches that nothing bounded — the count was the author's to set.
+   * Over the cap the excess is NAMED and not fetched, rather than refused:
+   * losing a whole document to a thirteenth font is the failure this milestone
+   * exists to stop, and an author who is told which urls were skipped can act.
+   * Counted hook-or-no-hook, so /api/preview agrees with publish.
+   */
+  const wanted = [
+    ...externalAssets.images.map((url) => ({ url, kind: 'image' as const })),
+    ...externalAssets.fonts.map((url) => ({ url, kind: 'font' as const })),
+  ];
+  const warnings: AssetWarning[] = wanted.slice(MAX_EXTERNAL_ASSETS_PER_PUBLISH).map(({ url }) => ({
+    code: 'too_many_external_assets',
+    url,
+    fix: `this document names ${wanted.length} external assets; the cap is ${MAX_EXTERNAL_ASSETS_PER_PUBLISH} — this one was not imported, so upload it as an image artifact or drop it`,
+  }));
   if (ctx.importAsset) {
-    for (const url of externalAssets.images) {
-      const refused = await ctx.importAsset(url, 'image');
-      if (refused) warnings.push(refused);
-    }
-    for (const url of externalAssets.fonts) {
-      const refused = await ctx.importAsset(url, 'font');
+    for (const { url, kind } of wanted.slice(0, MAX_EXTERNAL_ASSETS_PER_PUBLISH)) {
+      const refused = await ctx.importAsset(url, kind);
       if (refused) warnings.push(refused);
     }
   }

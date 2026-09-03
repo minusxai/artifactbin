@@ -57,10 +57,12 @@ DO NOT NEED TO DOWNLOAD IT. And in markup you can simply write
 LEAVES YOUR URL in the document — you read back what you wrote, while readers
 are served our copy, so nobody talks to the original host and the picture
 cannot rot from under you. A URL that will not fetch does not fail the
-publish: the reply carries `warnings: [{code, url, fix}]` and that one image
-shows its alt text. Max `[[ maxImageBytes ]]` bytes (png|jpeg|webp|gif|svg+xml).
-The same happens to a `<Video poster>` and to an `@font-face { src: url(…) }`
-in your `<Helmet>` `<style>`.
+publish: the reply carries `asset_warnings: [{code, url, fix}]` (its own key —
+`warnings` stays the dataset-dependent list) and that one image shows its alt
+text. Max `[[ maxImageBytes ]]` bytes (png|jpeg|webp|gif|svg+xml), and at most
+`[[ maxExternalAssets ]]` external assets per document — the rest are named in
+`asset_warnings` and not fetched. The same happens to a `<Video poster>` and to
+an `@font-face { src: url(…) }` in your `<Helmet>` `<style>`.
 
 Source changed? `POST [[ base ]]/api/artifacts/assets/refresh` with
 `{"id": "<document id>"}` (every external url that document names) or

@@ -26,8 +26,8 @@ import { parseFolder } from '@/lib/urls';
 import { loadDatasetRows } from '@/lib/story/dataset-store';
 import { parseContentInput } from '@/lib/story/input';
 import { collectExternalAssetUrls } from '@/lib/story/external-images';
+import type { AssetWarning } from '@/lib/web-assets';
 import { refreshWebAssets, type WebAssetImporter } from '@/lib/web-assets';
-import { webIngestRateLimited } from '@/lib/auth';
 
 const safeJson = (s: string): unknown => { try { return JSON.parse(s); } catch { return null; } };
 
@@ -104,6 +104,19 @@ function markupEcho(sent: unknown, stored: string | null): Record<string, unknow
   if (typeof sent !== 'string') return { markup: stored };
   return sent === stored ? { markup_changed: false } : { markup_changed: true, markup: stored };
 }
+
+/**
+ * ASSET WARNINGS ride their own key.
+ *
+ * `warnings` already meant something on a write reply — the dependent
+ * documents a dataset write broke, `{id, title, details}` — and an external URL
+ * that would not import is `{code, url, fix}`. Both can be true of one markup
+ * PUT, and one key holding two shapes is a wire nobody can parse: a caller
+ * would have to sniff each element to know what it is reading. So the asset
+ * half is `asset_warnings`, present only when there is something to say.
+ */
+export const assetWarningsEcho = (warnings: AssetWarning[] | undefined): Record<string, unknown> =>
+  (warnings?.length ? { asset_warnings: warnings } : {});
 
 /** Full wire shape for a single-artifact read. */
 export async function artifactToWire(row: ArtifactRow, base: string) {
@@ -333,17 +346,10 @@ export async function replaceArtifactWithBody(
   if (isVersionConflict(row)) return json({ error: 'version_conflict', currentVersion: row.currentVersion }, 409);
   if (!row) return json({ error: 'not_found' }, 404);
 
-  /*
-   * WARNINGS — one array, two kinds, both "this write went through and here is
-   * what you should know": an external URL that would not import
-   * (lib/web-assets, carrying `code`/`url`/`fix`) and a dependent document
-   * whose bindings this dataset write broke (carrying `id`/`title`/`details`).
-   * Neither ever blocks the write.
-   */
-  const warnings = [
-    ...(parsed.warnings ?? []),
-    ...await refreshWarningsFor(actor, row),
-  ];
+  // Dataset/viz refresh: warn about dependents whose bindings no longer
+  // resolve (warnings, never blocks). A DIFFERENT shape from the asset
+  // warnings below, which is exactly why it is a different key.
+  const warnings = await refreshWarningsFor(actor, row);
   return json({
     id: row.id, url: `${base}/a/${row.id}`, version: row.version, visibility: row.visibility,
     // A replace moves the head pointer — hand back the new one so the caller
@@ -357,6 +363,7 @@ export async function replaceArtifactWithBody(
     // echo's signal that feedback exists (the GET inlines the full set).
     ...(row.format === 'markup' ? { open_annotations: await countOpenAnnotations(row.id) } : {}),
     ...(warnings.length ? { warnings } : {}),
+    ...assetWarningsEcho(parsed.warnings),
   });
 }
 
@@ -392,9 +399,7 @@ export async function createArtifactFromBody(
   });
   return json({
     ...createdArtifactWire(row, base, body.markup),
-    // External URLs that would not import (lib/web-assets): the document is
-    // published, one asset is missing, and the author is told which and why.
-    ...(parsed.warnings?.length ? { warnings: parsed.warnings } : {}),
+    ...assetWarningsEcho(parsed.warnings),
   }, 201);
 }
 
@@ -469,7 +474,9 @@ export async function respondToEdit(
   const outcome = await apply(input);
   if (outcome instanceof Response) return outcome; // publish-pipeline 400 (invalid_jsx, …)
   if (!outcome) return json({ error: 'not_found' }, 404);
-  if (outcome.applied) return json(await artifactToWire(outcome.row, base));
+  // The edit path runs the SAME publish door, so it answers the same way: a URL
+  // it could not import is news wherever the write came in from.
+  if (outcome.applied) return json({ ...await artifactToWire(outcome.row, base), ...assetWarningsEcho(outcome.warnings) });
   switch (outcome.reason) {
     case 'stale_edit_id':
     case 'doc_changed':
@@ -581,7 +588,10 @@ export async function respondToMutate(
  * 404 that every other door answers.
  *
  * The hourly web-import allowance is the same bucket a publish spends
- * (lib/auth), because these are the same fetches.
+ * (lib/auth) and is charged PER URL inside `refreshWebAssets`, because these
+ * are the same fetches: one call must not buy N of them for one slot. A url
+ * that cannot be paid for comes back in `failed` as `rate_limited`, beside the
+ * urls that could — a partial refresh is more useful than a refused one.
  */
 export async function refreshAssetsFor(
   actor: TokenActor,
@@ -590,9 +600,6 @@ export async function refreshAssetsFor(
   const url = typeof input.url === 'string' && input.url ? input.url : null;
   const id = typeof input.id === 'string' && input.id ? input.id : null;
   if (!url && !id) return json({ error: 'nothing_to_refresh', details: ['name a url, or the id of a document whose external urls should be refreshed'] }, 400);
-  if (webIngestRateLimited(`ingest:${actor.tokenId}`)) {
-    return json({ error: 'rate_limited', details: ['too many web imports this hour — try again later'] }, 429);
-  }
 
   let urls: string[];
   let by: WebAssetImporter = { tokenId: actor.tokenId, userId: actor.userId };

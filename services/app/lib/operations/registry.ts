@@ -499,7 +499,7 @@ const refreshAssetOp: Operation = {
   name: 'refresh_asset',
   title: 'Refresh an imported web asset',
   http: { method: 'POST', path: '/api/artifacts/assets/refresh' },
-  description: 'Re-fetch the copy this deployment stores for an external image or font URL, after the source changed. Pass id to refresh EVERY external url one of your documents names, or url to refresh a single one. Nothing else about the document changes: no new version, no edit_id, and every stored <img src> keeps naming the same url. Answers {refreshed, unchanged, failed}: unchanged means the source really is the same bytes, and failed names each url with a code and a fix.',
+  description: 'Re-fetch the copy this deployment stores for an external image or font URL, after the source changed. Pass id to refresh EVERY external url one of your documents names, or url to refresh a single one. Nothing else about the document changes: no new version, no edit_id, and every stored <img src> keeps naming the same url. Answers {refreshed, unchanged, failed}: unchanged means the source really is the same bytes, and failed names each url with a code and a fix (not_cached — nothing is stored for it; rate_limited — this hour\'s fetch allowance is spent, which is counted per url).',
   input: {
     id: z.string().optional().describe('a document of yours: every external url it names is refreshed'),
     url: z.string().optional().describe('one external url to re-fetch; it must already be stored (a document must have named it)'),
@@ -511,9 +511,9 @@ const refreshAssetOp: Operation = {
   errors: [
     NOT_FOUND,
     { status: 400, code: 'nothing_to_refresh', fix: 'pass id (a document of yours) or url (one already-stored url)' },
-    { status: 429, code: 'rate_limited', fix: 'too many web imports this hour — retry after the window' },
-    // `not_cached` is deliberately NOT here: it is a per-url reason inside a
-    // 200 body (one url of several may be unknown), not a refusal of the call.
+    // `not_cached` and `rate_limited` are deliberately NOT here: both are
+    // per-url reasons inside a 200 body (one url of several may be unknown, or
+    // over the hour's fetch allowance), never a refusal of the call.
   ],
   async run(ctx, input) {
     return fromResponse(await refreshAssetsFor(ctx.actor, input));
