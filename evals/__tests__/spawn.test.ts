@@ -168,3 +168,22 @@ describe('prepareRunAsDirs', () => {
     expect(prepareRunAsDirs({ cwd })).toEqual([cwd]);
   });
 });
+
+/**
+ * Measured on a CI runner (deploys runs 33774034598 / 33774046050): chowning the workspace ROOT to the agent user
+ * locked the DRIVER out of its own transcript (`EACCES … open '<out>/baseline/transcript.jsonl'`). The agent owns
+ * only cwd and home; the root stays the driver's and merely becomes traversable. Seeded RED by the orchestrator.
+ */
+describe('run-as hands over only what the agent owns', () => {
+  it('chowns cwd and home, never the root, and the root is only made traversable', () => {
+    const root = path.join(dir, 'ws');
+    const cwd = path.join(root, 'cwd');
+    const homeDir = path.join(root, 'home');
+    const plan = prepareRunAsDirs({ workspaceRoot: root, cwd, homeDir });
+    expect(plan.chown.sort()).toEqual([cwd, homeDir].sort());
+    expect(plan.chown).not.toContain(root);
+    expect(plan.traverse).toEqual([root]);
+    expect(fs.existsSync(cwd)).toBe(true);
+    expect(fs.existsSync(homeDir)).toBe(true);
+  });
+});
