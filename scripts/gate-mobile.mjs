@@ -12,6 +12,12 @@
  *     horizontal scrollbar.
  *  3. The reader actions belong in one thumb-reachable bottom dock. It gets
  *     out of the document's way on downward scroll and returns on reverse.
+ *  4. A chart's hover tooltip is written for a mouse: it opens on a move and
+ *     closes on `mouseout`, which a finger never sends. The card is `fixed`
+ *     (it cannot scroll away) and `pointer-events: none` (it cannot be tapped
+ *     away), so on a phone it stayed pinned over the document. A card opened
+ *     by touch now carries a close button and goes away on a scroll; a card
+ *     opened by a mouse still carries none.
  *
  * Both are checked as GEOMETRY, not as classes — an element's own rect against
  * the viewport is the only thing that survives a refactor of the styling.
@@ -37,6 +43,28 @@ await fetch(`${B}/api/artifacts/${st.id}`, {
   headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${st.token}` },
   body: JSON.stringify({ title: 'mobile gate', markup: DOC, theme: 'manuscript' }),
 });
+
+// A second, PUBLIC document carrying a chart — the tooltip legs read it as a
+// stranger would (no session), so the chart is in the main frame with no shell.
+const CHART_ROWS = [
+  { region: 'NA', revenue: 120 },
+  { region: 'EU', revenue: 90 },
+  { region: 'APAC', revenue: 70 },
+];
+// An ARC: `buildTooltipPlan` returns null for it, so it keeps the per-mark
+// `#vg-tooltip-element` — the card the bug report named.
+const ARC_VIZ = '{"kind":"vega-lite","spec":{"mark":{"type":"arc","tooltip":true},'
+  + '"encoding":{"theta":{"field":"revenue","type":"quantitative"},"color":{"field":"region","type":"nominal"}}}}';
+const chartMarkup = `<Helmet><Value name="rows" type="table" value={${JSON.stringify(CHART_ROWS)}} /></Helmet>`
+  + '<div data-design="tw" className="p-6"><h1 className="text-2xl font-bold">Revenue</h1>'
+  + `<Question title="By region" data="$rows" height={240} viz={${ARC_VIZ}} />`
+  + Array.from({ length: 30 }, (_, i) => `<p className="mt-4">A paragraph below the chart. ${i + 1}</p>`).join('')
+  + '</div>';
+const chartDoc = await (await fetch(`${B}/api/artifacts`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${st.token}` },
+  body: JSON.stringify({ title: 'mobile gate chart', markup: chartMarkup, theme: 'manuscript' }),
+})).json();
 
 const browser = await chromium.launch();
 
@@ -220,6 +248,105 @@ await wide.waitForTimeout(200);
 const option = await reachable(wide, '[aria-label="Color mode dark"]');
 ok(option.reachable, `desktop: a colour-mode option can actually be clicked (hit ${option.hit})`);
 await wide.close();
+
+// ── 5. a chart tooltip must be dismissable with a finger ───────────────────
+/*
+ * MEASURED FIRST, then written (the event log is in .agent/REPORT.md): headless
+ * Chromium's touch emulation sends a stationary tap as pointerdown → pointerup →
+ * pointerleave with NO pointermove, and Vega opens a tooltip on a MOVE — so an
+ * emulated tap opens no card at all and cannot exercise this. A real finger is
+ * never stationary; the touch legs therefore drive the mark with a synthetic
+ * touch pointer sequence (the product's own handler, hit test and policy all
+ * run for real, only the input is synthesised — the same compromise
+ * gate-image-upload makes, with gate-real-paste beside it). The MOUSE leg below
+ * uses a real pointer, because that is the behaviour that must not change.
+ */
+const cardState = (page) => page.evaluate(() => {
+  const el = document.getElementById('vg-tooltip-element');
+  if (!el) return { present: false, shown: false, close: false };
+  const cs = getComputedStyle(el);
+  const close = el.querySelector('button[aria-label="Dismiss tooltip"]');
+  return {
+    present: true,
+    shown: cs.visibility === 'visible' && cs.display !== 'none',
+    close: !!close,
+    // The card must stay transparent to the pointer; only the button is tappable.
+    cardEvents: cs.pointerEvents,
+    closeEvents: close ? getComputedStyle(close).pointerEvents : null,
+  };
+});
+
+/** The centre of a drawn arc mark, in client coordinates. */
+const markPoint = (page) => page.evaluate(() => {
+  const path = [...document.querySelectorAll('[aria-label="Question embed"] svg path')]
+    .find((p) => p.__data__?.mark?.marktype === 'arc' && p.__data__?.datum);
+  if (!path) return null;
+  const r = path.getBoundingClientRect();
+  return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+});
+
+/** Open the card the way a finger does: a touch pointer that moved onto the mark. */
+const touchMark = (page) => page.evaluate(() => {
+  const path = [...document.querySelectorAll('[aria-label="Question embed"] svg path')]
+    .find((p) => p.__data__?.mark?.marktype === 'arc' && p.__data__?.datum);
+  if (!path) return false;
+  const r = path.getBoundingClientRect();
+  const init = { bubbles: true, cancelable: true, view: window, clientX: Math.round(r.x + r.width / 2), clientY: Math.round(r.y + r.height / 2) };
+  const touch = { ...init, pointerType: 'touch', isPrimary: true };
+  path.dispatchEvent(new PointerEvent('pointerdown', touch));
+  path.dispatchEvent(new PointerEvent('pointermove', touch));
+  path.dispatchEvent(new MouseEvent('mousemove', init));
+  return true;
+});
+
+const phone = await browser.newPage({ viewport: PHONE, hasTouch: true, isMobile: true, deviceScaleFactor: 3 });
+await phone.goto(`${B}/a/${chartDoc.id}`, { waitUntil: 'load' });
+await phone.waitForSelector('[aria-label="Question embed"] svg path', { timeout: 60_000 });
+await phone.waitForTimeout(1500);
+
+ok(await touchMark(phone), 'tooltip: the phone document draws an arc mark to touch');
+await phone.waitForTimeout(300);
+let tip = await cardState(phone);
+ok(tip.shown, `tooltip: a touch opens the card (${JSON.stringify(tip)})`);
+ok(tip.close, 'tooltip: and a touch-opened card carries a close button');
+ok(tip.cardEvents === 'none' && tip.closeEvents !== 'none',
+  `tooltip: the card stays pointer-transparent, the button does not (${tip.cardEvents} / ${tip.closeEvents})`);
+
+await phone.evaluate(() => window.scrollBy(0, 300));
+await phone.waitForTimeout(400);
+tip = await cardState(phone);
+ok(!tip.shown, 'tooltip: scrolling the document puts it away');
+
+await phone.evaluate(() => window.scrollTo(0, 0));
+await phone.waitForTimeout(400);
+await touchMark(phone);
+await phone.waitForTimeout(300);
+ok((await cardState(phone)).shown, 'tooltip: it opens again after the scroll');
+const closeBox = await phone.locator('button[aria-label="Dismiss tooltip"]').boundingBox().catch(() => null);
+ok(!!closeBox && closeBox.width >= 20 && closeBox.height >= 20,
+  `tooltip: the close button is a real target (${closeBox ? `${Math.round(closeBox.width)}x${Math.round(closeBox.height)}` : 'missing'})`);
+if (closeBox) await phone.touchscreen.tap(closeBox.x + closeBox.width / 2, closeBox.y + closeBox.height / 2);
+await phone.waitForTimeout(400);
+ok(!(await cardState(phone)).shown, 'tooltip: and tapping it dismisses the card');
+await phone.close();
+
+// The same document with a MOUSE: desktop hover is untouched.
+const desk = await browser.newPage({ viewport: { width: 1200, height: 900 } });
+await desk.goto(`${B}/a/${chartDoc.id}`, { waitUntil: 'load' });
+await desk.waitForSelector('[aria-label="Question embed"] svg path', { timeout: 60_000 });
+await desk.waitForTimeout(1500);
+const point = await markPoint(desk);
+ok(!!point, 'tooltip: the desktop document draws an arc mark to hover');
+await desk.mouse.move(point.x - 3, point.y - 3);
+await desk.mouse.move(point.x, point.y);
+await desk.waitForTimeout(400);
+tip = await cardState(desk);
+ok(tip.shown, `tooltip: a real hover still opens the card (${JSON.stringify(tip)})`);
+ok(!tip.close, 'tooltip: and a mouse-opened card carries NO close button');
+await desk.mouse.move(4, 4);
+await desk.waitForTimeout(400);
+ok(!(await cardState(desk)).shown, 'tooltip: moving the cursor off the mark still closes it');
+await desk.close();
 
 await browser.close();
 const failed = out.filter((l) => l.startsWith('FAIL')).length;

@@ -6,12 +6,23 @@
  * module; this only positions and shows/hides. Browser-only.
  */
 import { ensureTooltipStyles } from './tooltip-styles';
+import { installTooltipDismiss, lastPointerType, decorateForOpener, offsetForOpener } from './tooltip-dismiss';
+
+const PAD = 16;
 
 export class SharedTooltip {
   private el: HTMLElement;
   private doc: Document;
+  /** The dismiss policy's release — a card that outlives its chart is the bug this closes. */
+  private release: () => void;
 
-  constructor(private theme: 'light' | 'dark', doc: Document = document) {
+  /**
+   * `chart` is the element the dismiss policy is scoped to: a press inside it picks the next
+   * x, a press anywhere else puts the card away (see `tooltip-dismiss`). It is required
+   * rather than defaulted, because a card with no chart to be "outside of" is exactly the
+   * stuck card on a phone.
+   */
+  constructor(private theme: 'light' | 'dark', doc: Document, chart: Element) {
     this.doc = doc;
     ensureTooltipStyles(doc);
     // Our OWN element (not Vega's `#vg-tooltip-element`) — sharing it fought the default
@@ -23,6 +34,7 @@ export class SharedTooltip {
       (doc.fullscreenElement ?? doc.body).appendChild(el);
     }
     this.el = el;
+    this.release = installTooltipDismiss(doc, chart, () => this.hide());
   }
 
   /** Show the tooltip near the cursor, flipped to stay on-screen. */
@@ -35,8 +47,11 @@ export class SharedTooltip {
     el.style.pointerEvents = 'none';
     el.style.visibility = 'visible';
     el.style.display = 'block';
+    // AFTER innerHTML, which would otherwise delete the button on every move.
+    const opener = lastPointerType(this.doc);
+    decorateForOpener(el, opener, () => this.hide());
 
-    const pad = 16;
+    const pad = offsetForOpener(opener, PAD);
     const r = el.getBoundingClientRect();
     let x = cursorX + pad;
     let y = cursorY + pad;
@@ -52,6 +67,7 @@ export class SharedTooltip {
   }
 
   destroy(): void {
+    this.release();
     this.hide();
   }
 }

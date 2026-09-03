@@ -49,6 +49,41 @@ const TOOLTIP_CSS = `
   text-align: left;
 }
 #mx-shared-tooltip { min-width: 132px; }
+
+/*
+ * The close button a touch-opened card carries (lib/viz/tooltip-dismiss). The CARD stays
+ * pointer-transparent — it must never steal the hover it describes — and only this subtree is
+ * tappable; a pointer-events:auto descendant of a pointer-events:none box is hit-testable.
+ * Sized to Apple's 44px touch target by its own padding, offset so it overhangs the card's
+ * top-right corner rather than covering its first line.
+ */
+#vg-tooltip-element .mx-tt-close,
+#mx-shared-tooltip .mx-tt-close {
+  pointer-events: auto;
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  color: inherit;
+  background: inherit;
+  box-shadow: 0 2px 10px -2px rgba(20, 27, 45, 0.35), inset 0 0 0 0.5px rgba(127, 140, 160, 0.35);
+}
+#vg-tooltip-element:has(.mx-tt-close),
+#mx-shared-tooltip:has(.mx-tt-close) {
+  position: fixed; /* the button anchors to the card; the card is already fixed */
+  overflow: visible;
+}
 .mx-tt-shared .mx-tt-head { opacity: 0.5; font-size: 10.5px; margin-bottom: 5px; letter-spacing: 0.2px; }
 .mx-tt-shared .mx-tt-row { display: flex; align-items: center; padding: 1.5px 0; }
 .mx-tt-shared .mx-tt-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; margin-right: 8px; }
