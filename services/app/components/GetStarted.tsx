@@ -102,6 +102,17 @@ const STORE = 'mx_surface';
 
 const isSurface = (v: string | null): v is SurfaceKey => SURFACES.some((s) => s.key === v);
 
+/**
+ * THE ONE PLACE a raw `?source=` becomes a surface. An agent sent this human here and named where it
+ * is running, so the page can open on the card that answers them instead of asking a question they have
+ * already answered. It is a surface key and never anything secret — the rule that a token never rides a
+ * URL is untouched. Unknown, absent or malformed is `null`, which means "show the picker": this is user
+ * input off a query string and must never throw.
+ */
+export function sourceSurface(_search: string): SurfaceKey | null {
+  throw new Error('m4: implement — ?source= to a surface key');
+}
+
 /** Matches AgentLink's status line exactly — the two option foot lines sit a
  * block apart and must read as the same voice. */
 const FOOT = 'mt-1.5 font-mono text-[11px] text-muted';
@@ -449,10 +460,17 @@ function InstallCard({ surface, mcpUrl, docsUrl }: { surface: SurfaceKey; mcpUrl
 export default function GetStarted({
   heading = true,
   frame = true,
+  initialSurface,
 }: {
   heading?: boolean;
   /** false = no panel chrome, for hosts that already draw a card around it. */
   frame?: boolean;
+  /**
+   * Open on this surface instead of the default. An agent naming where it runs is FRESHER than a stored
+   * answer from a month ago, so this wins over `mx_surface` — and is remembered in turn.
+   * m4: implement — currently ignored.
+   */
+  initialSurface?: SurfaceKey;
 }) {
   const [surface, setSurface] = useState<SurfaceKey>('claude-code');
   const [installOpen, setInstallOpen] = useState(false);
