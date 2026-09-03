@@ -27,6 +27,7 @@ export {
   PLUGIN_REPO_URL,
   pluginChannel,
   pluginInstall,
+  pluginInstallCommands,
 } from './plugin-id';
 export type { PluginChannel, PluginIdentity } from './plugin-id';
 

@@ -31,8 +31,19 @@ export function pluginChannel(channel: PluginChannel): PluginIdentity {
 }
 
 export function pluginInstall(channel: PluginChannel = 'production'): string {
+  return pluginInstallCommands(channel).join('\n');
+}
+
+/** Keep the two sequential Claude Code commands independently copyable while
+ * preserving the joined form used in generated plugin documentation. */
+export function pluginInstallCommands(
+  channel: PluginChannel = 'production',
+): readonly [marketplaceAdd: string, pluginInstall: string] {
   const identity = pluginChannel(channel);
-  return `/plugin marketplace add ${identity.repo}\n/plugin install ${identity.name}@${identity.marketplace}`;
+  return [
+    `/plugin marketplace add ${identity.repo}`,
+    `/plugin install ${identity.name}@${identity.marketplace}`,
+  ];
 }
 
 const production = PLUGIN_CHANNELS.production;
@@ -41,6 +52,8 @@ export const PLUGIN_REPO = production.repo;
 export const PLUGIN_REPO_URL = `https://github.com/${PLUGIN_REPO}`;
 export const PLUGIN_BASE_URL = production.baseUrl;
 export const MARKETPLACE_NAME = production.marketplace;
+export const [PLUGIN_MARKETPLACE_ADD_COMMAND, PLUGIN_INSTALL_COMMAND] =
+  pluginInstallCommands('production');
 export const PLUGIN_INSTALL = pluginInstall('production');
 export const CODEX_APP_PLUGIN_REPO_URL = PLUGIN_REPO_URL;
 export const CODEX_APP_PLUGIN_REF = production.branch;

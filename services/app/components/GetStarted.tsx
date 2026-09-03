@@ -32,7 +32,8 @@ import { Badge } from '@/components/ui';
 import {
   CODEX_APP_PLUGIN_REF,
   CODEX_APP_PLUGIN_REPO_URL,
-  PLUGIN_INSTALL,
+  PLUGIN_INSTALL_COMMAND,
+  PLUGIN_MARKETPLACE_ADD_COMMAND,
   PLUGIN_REPO_URL,
 } from '@/lib/plugin-id';
 
@@ -353,11 +354,47 @@ function InstallCard({ surface, mcpUrl, docsUrl }: { surface: SurfaceKey; mcpUrl
             title="Install plugin"
             note="ships MCP tools + skills out of the box; no HTTP wrangling"
           />
-          <CopyBlock
-            text={PLUGIN_INSTALL}
-            label="Copy the plugin install commands"
-            trailer='# then just ask: "make me a 5-slide deck about healthy living on artifactbin"'
-          />
+          <ol aria-label="Claude Code plugin installation steps" className="mt-3">
+            <PluginListStep
+              n={1}
+              ariaLabel="Add the artifactbin marketplace"
+              label="Add the marketplace"
+            >
+              <CopyBlock
+                text={PLUGIN_MARKETPLACE_ADD_COMMAND}
+                label="Copy the marketplace add command"
+                className="mt-0"
+              />
+            </PluginListStep>
+            <PluginListStep
+              n={2}
+              ariaLabel="Install the artifactbin plugin"
+              label="Install the plugin"
+            >
+              <CopyBlock
+                text={PLUGIN_INSTALL_COMMAND}
+                label="Copy the plugin install command"
+                className="mt-0"
+              />
+            </PluginListStep>
+            <PluginListStep
+              n={3}
+              ariaLabel="Authenticate the MCP server"
+              label="Authenticate the MCP server"
+            >
+              <CopyBlock
+                text="/mcp"
+                label="Copy the Claude Code MCP authentication command"
+                className="mt-0"
+              />
+            </PluginListStep>
+          </ol>
+          <p className={FOOT}>
+            then ask Claude:{' '}
+            <span className="text-fg">
+              “Make me a 5-slide deck about healthy living on artifactbin”
+            </span>
+          </p>
         </>
       );
     case 'claude-code-app':
