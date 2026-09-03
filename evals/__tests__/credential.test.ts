@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { acquireCredential, callbackCode, codeFromMail, credentialSourceFor, pickLoginMail, pkcePair, writeArtifactbinEnv } from '../lib/credential';
+import { acquireCredential, callbackCode, codeFromMail, credentialSourceFor, pickLoginMail, pkcePair, writeArtifactbinEnv, codeFromOutbox } from '../lib/credential';
 
 describe('credential source per mode', () => {
   const inbox = { RESEND_EVAL_API_KEY: 're_x', EVAL_LOGIN_EMAIL: 'mxmx_eval@social-worm.resend.app' };
@@ -159,5 +159,30 @@ describe('writeArtifactbinEnv', () => {
     expect(fs.readFileSync(file, 'utf8')).toBe('ARTIFACTBIN_URL=https://x.test\nARTIFACTBIN_TOKEN=mx_secret\n');
     expect(fs.statSync(file).mode & 0o077).toBe(0);
     fs.rmSync(home, { recursive: true, force: true });
+  });
+});
+
+/**
+ * A LOCAL eval server (CI's agent smoke, a laptop) has no Resend inbox: it writes its login mail to the dev outbox the
+ * browser gates read. The driver logs in through that file — same OAuth dance, a different code reader. Seeded RED.
+ */
+describe('a local server logs in through its dev outbox', () => {
+  it('the account modes pick outbox-oauth when the driver booted the server, before any inbox or secret', () => {
+    const local = { localOutbox: '/tmp/x/dev-mail.jsonl' };
+    for (const m of ['installed_skill+api_action', 'fetched_skill+mcp_action', 'installed_skill+mcp_action'] as const) {
+      expect(credentialSourceFor(m, {}, local), m).toBe('outbox-oauth');
+      expect(credentialSourceFor(m, { EVAL_ACCOUNT_TOKEN: 'mx_abc' }, local), m).toBe('outbox-oauth');
+    }
+    expect(credentialSourceFor('fetched_skill+api_action', {}, local)).toBe('paste');
+  });
+  it('reads the newest code addressed to the eval account that landed after the request', () => {
+    const since = Date.parse('2026-09-03T13:00:00Z');
+    const lines = [
+      { to: 'mxmx_eval_x@example.com', text: 'Your code is 111111', otp: '111111', at: '2026-09-03T12:59:00Z' },
+      { to: 'someone@example.com', text: 'Your code is 222222', otp: '222222', at: '2026-09-03T13:00:05Z' },
+      { to: 'mxmx_eval_x@example.com', text: 'Your code is 333333', at: '2026-09-03T13:00:10Z' },
+    ];
+    expect(codeFromOutbox(lines, { to: 'mxmx_eval_x@example.com', since })).toBe('333333');
+    expect(codeFromOutbox(lines.slice(0, 2), { to: 'mxmx_eval_x@example.com', since })).toBeNull();
   });
 });

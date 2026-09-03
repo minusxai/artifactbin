@@ -62,3 +62,11 @@ describe('the build a leg boots', () => {
     ).rejects.toThrow(/dist\/proxy-server\.mjs/);
   });
 });
+
+describe('the local server can send login mail to a file', () => {
+  it('serverEnv names a dev outbox under the data dir and never a real Resend key', () => {
+    const env = serverEnv({ dataDir: '/tmp/eval-data', objectDir: '/tmp/eval-objects', port: 3100 } as never);
+    expect(env.EMAIL__DEV_OUTBOX_PATH).toMatch(/^\/tmp\/eval-data\//);
+    expect(env.EMAIL__RESEND_API_KEY).toBe('eval-no-mail');
+  });
+});
