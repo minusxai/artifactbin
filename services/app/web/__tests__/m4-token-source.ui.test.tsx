@@ -11,7 +11,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
 import { TokensNewPage } from '@/web/pages/TokensNew';
-import { sourceSurface } from '@/components/GetStarted';
+import GetStarted, { sourceSurface } from '@/components/GetStarted';
 
 type Session = { user: { id: string; email: string | null } | null; kind: 'account' | 'anon' | 'none'; stats: null; mixpanel: { token: null; host: string } };
 let session: Session;
@@ -28,6 +28,13 @@ const at = (search: string) => render(
   <MemoryRouter initialEntries={[`/tokens/new${search}`]}><TokensNewPage /></MemoryRouter>,
 );
 
+/** Reading order, asked of the DOM rather than of a string index. */
+const precedes = (a: Element, b: Element) =>
+  Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+const httpOption = () => screen.getByText(/no installation/i);
+const installDoor = () => screen.getByRole('button', { name: /install for my agent/i });
+
 describe('sourceSurface — a query string becomes a surface, or nothing', () => {
   it('reads a known surface', () => {
     expect(sourceSurface('?source=claude-code')).toBe('claude-code');
@@ -40,11 +47,19 @@ describe('sourceSurface — a query string becomes a surface, or nothing', () =>
     }
   });
 
-  // A surface key is an EXACT key, the way `mx_surface` stores it. Odd casing is a string we do not
-  // know, and the honest answer to "I do not know this" is the picker — not a guess dressed up as an
-  // answer. It must still come back as null rather than as an exception.
-  it('is null for odd casing, and for a query that is no query at all', () => {
-    for (const q of ['?source=Claude-Code', '?source=CLAUDE-CODE', '?source=Codex', '?source= claude-code']) {
+  // An AGENT writes this string, not a human — and a wrong case does not produce a wrong card, it
+  // produces NO card, which is the worse outcome by far. So the case is folded before the key is
+  // matched. Everything that is still not a surface after folding is null, exactly as before.
+  it('folds the case — an agent writing Claude-Code still gets the Claude Code card', () => {
+    expect(sourceSurface('?source=Claude-Code')).toBe('claude-code');
+    expect(sourceSurface('?source=CLAUDE-CODE')).toBe('claude-code');
+    expect(sourceSurface('?source=CODEX')).toBe('codex');
+    expect(sourceSurface('?source=Codex')).toBe('codex');
+    expect(sourceSurface('?source=cLaUdE-CoDe-ApP')).toBe('claude-code-app');
+  });
+
+  it('is still null for what folding does not rescue, and never throws on a query at all', () => {
+    for (const q of ['?source=Claude Code', '?source= claude-code', '?source=Nonsense', '?source=claude_code']) {
       expect(sourceSurface(q)).toBeNull();
     }
     for (const q of ['not-a-query-string', '?=claude-code', '?source=claude-code#frag', '&&&']) {
@@ -129,5 +144,83 @@ describe('the page', () => {
     at('');
     fireEvent.click(screen.getByRole('button', { name: /install for my agent/i }));
     expect(screen.getByRole('button', { name: 'Use in Codex CLI' })).toHaveAttribute('aria-pressed', 'true');
+  });
+});
+
+/**
+ * WHICH PATH LEADS. A visitor to /tokens/new is standing here BECAUSE the no-installation path just
+ * cost them a round trip — leading with it again is the panel answering a question they have already
+ * had answered the hard way. So when an agent named a surface, install leads; everywhere else the
+ * component is byte-identical to what the landing page and /docs-human already render.
+ */
+describe('lead — which of the two paths comes first', () => {
+  it('leads with the HTTP path by default, as the landing page has always shown it', () => {
+    render(<MemoryRouter><GetStarted /></MemoryRouter>);
+    expect(precedes(httpOption(), installDoor())).toBe(true);
+  });
+
+  it('leads with install when asked, without restyling either path', () => {
+    render(<MemoryRouter><GetStarted lead="install" /></MemoryRouter>);
+    expect(precedes(installDoor(), httpOption())).toBe(true);
+    // Both paths are still on offer, and still exactly two.
+    expect(screen.getByText(/no installation/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/^option [12]$/)).toHaveLength(2);
+  });
+
+  it('numbers the options by where they actually sit', () => {
+    const { unmount } = render(<MemoryRouter><GetStarted lead="install" /></MemoryRouter>);
+    expect(installDoor().textContent).toContain('option 1');
+    expect(httpOption().closest('div')?.textContent).toContain('option 2');
+    unmount();
+    render(<MemoryRouter><GetStarted /></MemoryRouter>);
+    expect(httpOption().closest('div')?.textContent).toContain('option 1');
+    expect(installDoor().textContent).toContain('option 2');
+  });
+});
+
+describe('the page leads with install exactly when an agent named a surface', () => {
+  it('a named surface puts the install path first', () => {
+    at('?source=claude-code');
+    expect(precedes(installDoor(), httpOption())).toBe(true);
+    expect(installDoor().textContent).toContain('option 1');
+  });
+
+  it('a folded-case surface leads with install too — the fold reaches the whole page', () => {
+    at('?source=CODEX');
+    expect(precedes(installDoor(), httpOption())).toBe(true);
+    expect(screen.getByRole('button', { name: 'Use in Codex CLI' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText(/interactive installer/i)).toBeInTheDocument();
+  });
+
+  it('no source, no reordering — the panel reads exactly as it does everywhere else', () => {
+    at('');
+    expect(precedes(httpOption(), installDoor())).toBe(true);
+    expect(installDoor().textContent).toContain('option 2');
+  });
+
+  it('an unknown source, no reordering', () => {
+    at('?source=totally-made-up');
+    expect(precedes(httpOption(), installDoor())).toBe(true);
+  });
+
+  it('the mint is still last and still mints whichever path leads', async () => {
+    const secret = `mx_${'b'.repeat(43)}`;
+    const calls: Array<{ url: string; body: unknown }> = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url: String(url), body: JSON.parse(String(init?.body ?? 'null')) });
+      if (String(url).endsWith('/api/tokens/anonymous')) {
+        return new Response(JSON.stringify({ token: secret, expiresAt: '2026-09-01T00:00:00.000Z' }), { status: 201 });
+      }
+      return new Response(null, { status: 204 });
+    }));
+    at('?source=Claude-Code');
+    const mint = screen.getByRole('button', { name: /generate a token/i });
+    // A folded-case source leads with install, and BOTH paths still sit above the mint.
+    expect(installDoor().textContent).toContain('option 1');
+    expect(precedes(installDoor(), mint)).toBe(true);
+    expect(precedes(httpOption(), mint)).toBe(true);
+    fireEvent.click(mint);
+    expect(await screen.findByText(secret)).toBeInTheDocument();
+    expect(calls[0]).toEqual({ url: '/api/tokens/anonymous', body: { expiresInHours: 6 } });
   });
 });
