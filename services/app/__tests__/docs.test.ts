@@ -2,7 +2,8 @@
  * The /docs/* surface — ONE route over the skills tree (`lib/skills`): the
  * listing at /docs (and /llms.txt), a skill's files at /docs/<skill>, a file
  * at /docs/<skill>/<file>.md, the tree as a folder at /docs?download=true,
- * the human tour at /docs/human, and /docs redirecting a browser there.
+ * and the same answer to EVERY caller — the human tour is a separate address
+ * (/docs-human), so nothing here negotiates on Accept.
  * Route handler in-process.
  */
 import { gunzipSync } from 'node:zlib';
@@ -58,18 +59,21 @@ describe('agent-readable delivery', () => {
 
 describe('the listing', () => {
   /**
-   * `/docs` is the address an agent guesses first, and it used to send every
-   * caller to the page written for people. Measured: Claude Code asked twice,
-   * followed the redirect, and kept guessing — `/api/docs`, `/api/components`,
+   * `/docs` is the address an agent guesses first, and it used to answer the
+   * page written for people. Measured: Claude Code asked twice, followed the
+   * redirect, and kept guessing — `/api/docs`, `/api/components`,
    * `/api/artifacts/<id>/schema`, `/llms.txt` — reaching the protocol on its
-   * tenth request. The split is by what the caller ASKED FOR (ordinary content
-   * negotiation), not by the UA guess in `lib/client-identity`.
+   * tenth request. Sniffing `Accept` instead was no better: OpenCode's fetch
+   * tool asks for HTML and was bounced out of discovery the same way (run
+   * 33702277600). `/docs` is now an AGENT address, identical for everyone;
+   * people have `/docs-human`.
    */
-  it('sends a browser to the human tour, from /docs and from a skill', async () => {
+  it('answers a browser the same listing as curl, from /docs and from a skill', async () => {
     for (const path of ['', '/artifactbin']) {
       const res = await docsResponse(path, { accept: 'text/html,application/xhtml+xml' });
-      expect(res.status, path).toBe(307);
-      expect(res.headers.get('location')).toContain('/docs/human');
+      expect(res.status, path).toBe(200);
+      expect(res.headers.get('Content-Type'), path).toBe('text/plain; charset=utf-8');
+      expect(await res.text(), path).toBe(await (await docsResponse(path)).text());
     }
   });
 

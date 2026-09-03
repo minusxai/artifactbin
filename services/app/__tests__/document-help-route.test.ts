@@ -24,7 +24,7 @@ describe('GET /a/:id (the document itself)', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('link')).toBe(`<${BASE}/docs>; rel="help"`);
     const html = await res.text();
-    expect(html).toContain(`<link rel="help" href="${BASE}/docs">`);
+    expect(html).toContain(`<link rel="help" href="${BASE}/docs" title="Agents: read this first to edit any artifact here">`);
     expect(html).toContain(`tokens at ${BASE}/tokens/new`);
   });
   it('follows x-forwarded-proto/host like every other absolute URL the app emits', async () => {
@@ -42,7 +42,7 @@ describe('GET /a/:id (the document itself)', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('link')).toBe(`<${BASE}/docs>; rel="help"`);
     const html = await res.text();
-    expect(html).toContain(`<link rel="help" href="${BASE}/docs">`);
+    expect(html).toContain(`<link rel="help" href="${BASE}/docs" title="Agents: read this first to edit any artifact here">`);
     expect(html).toContain(`read ${BASE}/docs — tokens at ${BASE}/tokens/new`);
   });
 });

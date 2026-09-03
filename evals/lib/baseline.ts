@@ -49,6 +49,8 @@ export interface BaselineOptions {
   /** Present in installed_skill modes — the baseline includes what those skills cost to have. */
   plugin?: PluginKit;
   timeoutMs: number;
+  /** Run the probe as this unix user — the same isolation the tasks get, so the floor is measured under it too. */
+  runAs?: string;
 }
 
 export async function measureBaseline(opts: BaselineOptions): Promise<Baseline> {
@@ -74,6 +76,11 @@ export async function measureBaseline(opts: BaselineOptions): Promise<Baseline> 
     timeoutMs: opts.timeoutMs,
     stdoutPath: path.join(opts.dir, 'transcript.jsonl'),
     stderrPath: path.join(opts.dir, 'stderr.log'),
+    // Same home and same hand-over as a task's run: the probe measured the floor under `--run-as` and
+    // died on `EACCES … mkdir '<out>/baseline/home'` because only the directories BELOW its root changed hands.
+    homeDir,
+    workspaceRoot: opts.dir,
+    ...(opts.runAs ? { runAs: opts.runAs } : {}),
   });
   const result = opts.adapter.reduce(spawned.stdout);
   return {

@@ -40,6 +40,8 @@ export const GATE_SPECS = Object.freeze([
   { name: 'concurrent-edit', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 165_000 },
   // measured: implementer 8s; orchestrator 10s
   { name: 'data-ingest', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
+  // measured: implementer 4s (1s warm); orchestrator pending
+  { name: 'data-table-height', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
   // measured: implementer 6s; orchestrator 7s
   { name: 'data-ux', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
   // measured: implementer 4s; orchestrator 83s

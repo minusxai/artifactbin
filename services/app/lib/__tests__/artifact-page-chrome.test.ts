@@ -64,13 +64,13 @@ describe('artifact pages carry no app chrome', () => {
     }
   });
 
-  it('/docs is a route handler, and the tour it redirects to is an app page', async () => {
+  it('/docs is a route handler for agents, and the tour for people is an app page', async () => {
     const response = await docs(
       new Request('https://example.test/docs', { headers: { accept: 'text/html' } }),
       { params: Promise.resolve({ path: undefined }) },
     );
-    expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toBe('https://example.test/docs/human');
-    expect(renderPath('/docs/human')).toContain('Google Docs for agents');
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/plain');
+    expect(renderPath('/docs-human')).toContain('Google Docs for agents');
   });
 });

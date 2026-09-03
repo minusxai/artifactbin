@@ -24,7 +24,7 @@ describe('the app CSP', () => {
     expect(APP_CSP).toContain("frame-ancestors 'self'");
     expect(APP_CSP).toContain("object-src 'none'");
     expect(APP_CSP).toContain("base-uri 'self'");
-    for (const path of ['/', '/login', '/docs/human', '/account']) {
+    for (const path of ['/', '/login', '/docs-human', '/account']) {
       const res = await app.request(path);
       expect(res.headers.get('content-security-policy'), path).toBe(APP_CSP);
       expect(res.headers.get('x-content-type-options'), path).toBe('nosniff');

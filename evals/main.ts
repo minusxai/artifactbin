@@ -5,6 +5,7 @@
  *                   [--price-in N --price-out N] [--no-vision]
  *                   [--mode fetched_skill+api_action|fetched_skill+mcp_action|installed_skill+api_action|installed_skill+mcp_action]
  *                   [--tasks x,y] [--deployment https://…] [--out dir] [--no-report]
+ *                   [--run-as user]   run the harness as another unix account (CI isolation)
  *   npm run eval -- --ci …          the CI task set, exit 1 on any failed flow. A failed
  *                                   flow gets ONE more turn and is NAMED when it passes
  *                                   there (lib/second-attempt); `--no-retry` turns that off.
@@ -35,19 +36,21 @@ import { actionTransport, installsSkills, planTransport } from './lib/mode';
 import { materializePlugin } from './lib/plugin-kit';
 import { taskCost } from './lib/price';
 import { BASELINE_FLOW, BASELINE_PROMPT, BASELINE_ROWS_ID, measureBaseline } from './lib/baseline';
-import { ledgerMetrics, parseLedger, scoredArtifactId } from './lib/ledger';
+import { ledgerMetrics, parseLedger, scoredArtifactId, writtenArtifactIds } from './lib/ledger';
 import { adapterFor } from './lib/harness';
 import { runInvocation } from './lib/spawn';
+import { countCheckoutReads } from './lib/local-reads';
 import { RunRecorder } from './lib/rows';
-import { serverEnv, serverPorts, startServer } from './lib/server';
+import { devOutboxPath, serverDataDir, serverEnv, serverPorts, startServer } from './lib/server';
 import { mapConcurrent } from './lib/pool';
 import { exitWhenDone, settleWithin, TEARDOWN_MS } from './lib/shutdown';
 import { DRIVER_HEADER, startProxy } from './lib/proxy';
-import { mintStartDocument } from './lib/retry';
+import { mintStartDocument, mintStartDocumentAs } from './lib/retry';
+import { acquireCredential, credentialSourceFor, deploymentLoginEmail, localLoginEmail, memoizeCredential, shareForScoring, writeArtifactbinEnv, type Credential } from './lib/credential';
 import { agentProxyEnv, startMitmProxy } from './lib/mitm';
 import { exportDocument, inspectDocument, screenshotDocument } from './lib/score/browser';
 import { dataflowRows, productMetrics } from './lib/score/product';
-import { readDotEnv } from './lib/env';
+import { credentialEnv, readDotEnv } from './lib/env';
 import { parseArgs } from './lib/args';
 import { registerSecret, scrubRegistered } from './lib/secrets';
 import { createWorkspace } from './lib/workspace';
@@ -89,7 +92,20 @@ async function seedDocument(base: string, id: string, token: string, markup: str
 /** A task's outcome for one leg. `null` = skipped: this harness cannot run it at all. */
 import { runSecondAttempts, verdictLine, type MergedVerdicts, type Outcome } from './lib/second-attempt';
 
-async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: string, browser: Browser): Promise<Outcome[]> {
+interface LegRun {
+  /** Unix user the harness process runs as, when CI isolates it from this checkout (`lib/spawn`). */
+  runAs?: string;
+  /**
+   * The leg's credential, acquired ONCE and memoized by the caller: every task and every second
+   * attempt reuses the same login (`lib/credential`). Null for the copy-text treatment, whose token
+   * the product hands to the agent itself. `origin` is the address the product TRUSTS when that is
+   * not the one the driver dials — a booted server publishes the leg's proxy as its public base URL.
+   */
+  credentialFor: (base: string, origin?: string) => Promise<Credential | null>;
+}
+
+async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: string, browser: Browser, run: LegRun): Promise<Outcome[]> {
+  const runAs = run.runAs;
   const apiKey = leg.apiKey;
   const ports = serverPorts(config.server.portBase, 0);
   const legDir = outDir;
@@ -116,17 +132,31 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
   // time, and it silently mis-scored the moment two overlapped.
   let stopServer: (() => Promise<void>) | null = null;
   let productUrl: string;
+  // The origin the product trusts for a WRITE — its public base URL, which for a booted server is the
+  // leg's proxy rather than the server port the driver dials (measured: `403 INVALID_ORIGIN` otherwise).
+  let productOrigin: string | undefined;
   if (config.deployment) {
     productUrl = config.deployment;
   } else {
     log(`${leg.label}: booting server :${ports.server}`);
+    const serverEnvironment = serverEnv({ base: process.env, ports, dataDir: serverDataDir(legDir), extra: config.server.env });
     const server = await startServer({
       repoRoot: REPO_ROOT,
-      env: serverEnv({ base: process.env, ports, dataDir: path.join(legDir, 'server'), extra: config.server.env }),
+      env: serverEnvironment,
       logPath: path.join(legDir, 'server.log'),
     });
     stopServer = server.stop;
     productUrl = server.url;
+    productOrigin = serverEnvironment.APP__PUBLIC_BASE_URL;
+  }
+
+  // WHO the agent will be. One login per leg, against the product's own address rather than a task's
+  // proxy: the driver's setup traffic has no business in a task's ledger, and the token has to outlive
+  // every proxy the leg opens. `paste` acquires nothing — see lib/credential.
+  const credential = await run.credentialFor(productUrl, productOrigin);
+  if (credential) {
+    registerSecret(credential.token);
+    log(`${leg.label}: publishing as ${credential.email ?? 'the eval account'} (${credential.owner})`);
   }
 
   /** This task's own proxy and its own ledger. Ports are ephemeral, so any number may be live at once. */
@@ -161,7 +191,7 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
       ? materializePlugin(path.join(baseDir, 'plugin'), config.deployment ?? productUrl, actionTransport(leg.mode.run) === 'api' ? 'curl' : 'mcp')
       : undefined;
     const baseline = await measureBaseline({
-      leg, adapter: adapterFor(leg.harness), apiKey, dir: baseDir, plugin: basePlugin, timeoutMs: config.run.timeoutMs,
+      leg, adapter: adapterFor(leg.harness), apiKey, dir: baseDir, plugin: basePlugin, timeoutMs: config.run.timeoutMs, runAs,
     });
     const brec = new RunRecorder(legDir, { label: leg.label, target: productUrl, harness: leg.harness, model: leg.model, startedAt, mode: leg.mode.run }, BASELINE_ROWS_ID);
     brec.flow(BASELINE_FLOW, `${BASELINE_PROMPT} — the harness's fixed context, paid again on EVERY turn of every task below.`, { graded: false });
@@ -180,7 +210,7 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
     return await mapConcurrent(tasks, config.run.concurrency, async (task) => {
       const t = await startTaskProxy(task.id);
       try {
-        return await runTask({ leg, task, config, apiKey, legDir, ledgerPath: t.ledgerPath, productUrl, agentBase: t.agentBase, agentEnv: t.agentEnv, browser, startedAt });
+        return await runTask({ leg, task, config, apiKey, legDir, ledgerPath: t.ledgerPath, productUrl, agentBase: t.agentBase, agentEnv: t.agentEnv, browser, startedAt, credential, ...(runAs ? { runAs } : {}) });
       } catch (err) {
         // A task's own failure is ITS failure. Letting it reject would take down the server its
         // siblings are still running against — and their agent time is already paid for. `false`
@@ -209,6 +239,10 @@ interface TaskRun {
   agentEnv: Record<string, string>;
   /** When the LEG started (ISO) — one value for every task, so the report can be named by it. */
   startedAt: string;
+  /** Unix user the harness process runs as, when CI isolates it from this checkout (`lib/spawn`). */
+  runAs?: string;
+  /** The account this leg publishes as, or null when the product's own paste hands the token over. */
+  credential: Credential | null;
 }
 
 async function runTask(r: TaskRun): Promise<Outcome> {
@@ -239,9 +273,15 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // production leg died here on `POST /api/start → 502`, all inside 200 ms, when three proxies
   // opened at once against a deployment mid-roll. Nothing was learned and the column had three
   // holes. Only transient statuses retry — a 4xx is an answer (lib/retry.ts).
-  const start = await mintStartDocument(r.agentBase, DRIVER_HEADER);
+  // A leg with an ACCOUNT credential does not spend `/api/start`: that mints an anonymous token, and its
+  // document would belong to somebody other than the token the agent was given. The driver creates the
+  // start document itself, as that account, `unlisted` so every anonymous product-truth read below is
+  // unchanged (measured — lib/retry.mintStartDocumentAs).
+  const start = r.credential
+    ? await mintStartDocumentAs(r.agentBase, DRIVER_HEADER, r.credential.token)
+    : await mintStartDocument(r.agentBase, DRIVER_HEADER);
   // The paste must name the base the agent will be given, or the agent's traffic misses the ledger.
-  if (!start.prompt.includes(r.agentBase)) throw new Error(`start paste is not on ${r.agentBase}`);
+  if (!r.credential && !start.prompt.includes(r.agentBase)) throw new Error(`start paste is not on ${r.agentBase}`);
 
   // A `token` task needs the driver to hold the credential (to seed a document, or to write an MCP config),
   // so the driver reads it from the paste; a `start-link` task passes that paste on untouched.
@@ -252,7 +292,20 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   const installed = installsSkills(leg.mode.run);
   let access: Access = { kind: 'start-link', startPrompt: start.prompt };
   let mcp: { name: string; url: string; token: string } | undefined;
-  if (task.handoff === 'token' || installed || transport.run === 'mcp') {
+  if (r.credential) {
+    const token = r.credential.token;
+    if (task.seed) await seedDocument(r.agentBase, start.id, token, task.seed);
+    access = { kind: 'token', base: r.agentBase, token, id: start.id };
+    if (transport.run === 'mcp') {
+      // The token rides the harness's MCP configuration, as it does for a person who connected the server.
+      mcp = { name: 'artifactbin', url: `${r.agentBase}/mcp`, token };
+    } else if (installed) {
+      // …and for API actions it rides the skill's own connection file in the agent's HOME, which is why
+      // the prompt can stop naming it. An MCP leg never gets this file: a second, curl-shaped way in
+      // would measure something other than the MCP treatment.
+      writeArtifactbinEnv(homeDir, r.agentBase, token);
+    }
+  } else if (task.handoff === 'token' || installed || transport.run === 'mcp') {
     const token = tokenFromPaste(start.prompt);
     if (task.seed) await seedDocument(r.agentBase, start.id, token, task.seed);
     access = { kind: 'token', base: r.agentBase, token, id: start.id };
@@ -284,6 +337,12 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     timeoutMs: config.run.timeoutMs,
     stdoutPath: path.join(runDir, 'transcript.jsonl'),
     stderrPath: path.join(runDir, 'stderr.log'),
+    // The harness's HOME is this run's home in every case — `~/.artifactbin.env` resolves there, and
+    // nothing the CLI writes under $HOME lands in the runner's own. Under `--run-as` the workspace ROOT
+    // goes with it: it is a 0700 mkdtemp directory the other user could not otherwise traverse.
+    homeDir,
+    workspaceRoot: wsRoot,
+    ...(r.runAs ? { runAs: r.runAs } : {}),
   });
   const result = adapter.reduce(spawned.stdout);
   if (spawned.timedOut) { result.ok = false; result.error = `timed out after ${config.run.timeoutMs} ms`; }
@@ -301,6 +360,24 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // created its own, twice — so `scoredArtifactId` decides which artifact to score (its answer, then the
   // ledger, then the start document) and `used_start_document` records whether it was the one it was given.
   const targetId = scoredArtifactId({ finalMessage: result.finalMessage, ledger, startId: start.id });
+
+  // AND THEN THE PERSON SHARES IT. Under an account credential every document the agent made is born
+  // PRIVATE, while every read below is anonymous — the reader's view is the whole point of the score —
+  // so a flawless run read as `published: false` (PR #16 CI, the `data` task). Before the first of those
+  // reads the driver does what the person behind the agent does next: makes the run's artifacts unlisted
+  // through the owner's own sharing door. The start document is already unlisted and datasets and images
+  // are born unlisted, so this only ever moves the ones the agent created for itself. A pre-provisioned
+  // `EVAL_ACCOUNT_TOKEN` names no session, so there is no door to knock on and the run is left alone.
+  if (r.credential?.owner === 'account' && r.credential.cookie) {
+    const shared = await shareForScoring({
+      base: r.agentBase,
+      cookie: r.credential.cookie,
+      ids: [...writtenArtifactIds(ledger), targetId],
+      headers: { [DRIVER_HEADER]: '1' },
+    });
+    log(`${leg.label}/${task.id}: shared ${shared.length} artifact(s) for scoring`);
+  }
+
   const docUrl = `${r.productUrl}/a/${targetId}`;
   const servedRes = await fetch(`${docUrl}/raw?chrome=0`);
   const served = { status: servedRes.status, html: servedRes.ok ? await servedRes.text() : '' };
@@ -322,6 +399,11 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   rec.record(task.id, 'tool_calls', result.toolCalls);
   // Turns spent READING docs — fetches plus every later page through a saved copy (`lib/docs-reads`).
   rec.record(task.id, 'docs_read_calls', result.docsReadCalls);
+  // Turns spent reading THIS CHECKOUT — the skills a fetched_skill run is meant to discover over the
+  // wire, and the task's own grading rubric. Anything above zero invalidates the column (`lib/local-reads`).
+  // Null, like `docsReadCalls`, when the harness emitted no tool telemetry: nothing was observed either way.
+  const checkoutReads = result.docsReadCalls === null ? null : countCheckoutReads(result.invocations, [REPO_ROOT]);
+  rec.record(task.id, 'checkout_reads', checkoutReads);
   rec.record(task.id, 'tokens_in', result.tokens ? result.tokens.input + result.tokens.cacheRead + result.tokens.cacheWrite : null);
   rec.record(task.id, 'tokens_out', result.tokens ? result.tokens.output : null);
   const cost = taskCost(result, leg.price);
@@ -373,6 +455,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     // Null, not false, when this harness has no MCP client and ran the task over REST.
     used_mcp: transport.substitutedWhy || leg.mode.substitutedWhy ? null : lm.usedMcp,
     kept_untouched_text: task.seedKeepText ? served.html.includes(task.seedKeepText) : null,
+    no_local_checkout_reads: checkoutReads === null ? null : checkoutReads === 0,
   };
   // `checksToRecord` decides which checks become rows (task-specific ones only where the task grades them,
   // so an inapplicable check reads as "—" rather than a red FAIL); only the checks the TASK lists decide the
@@ -382,6 +465,9 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     trafficObserved: lm.observed,
     vocabularyInstalled: installed,
     transportSubstituted: transport.substitutedWhy !== null || leg.mode.substitutedWhy !== null,
+    // The same signal `checkoutReads` was computed from: a harness that emitted no tool calls
+    // cannot be asked what it read, so `no_local_checkout_reads` stops gating (verdict.ts).
+    toolTelemetryObserved: result.docsReadCalls !== null,
   });
   for (const [c, v] of Object.entries(checksToRecord(checks, gated))) {
     rec.record(task.id, c, v, 'pass');
@@ -449,6 +535,31 @@ async function main(): Promise<void> {
   const leg = legFromArgs(args, keys);
   registerSecret(leg.apiKey);
 
+  // WHERE this leg's token comes from — the mode decides, `--credential` overrides, and a mode that
+  // needs an account with no way to get one fails HERE, before an agent minute is spent. Acquired
+  // lazily, and once per SERVER: the second attempt reuses a deployment's login but logs in again on a
+  // server it booted, which is a new server with a new database (`memoizeCredential`).
+  const credentials = credentialEnv(keys);
+  // A server this driver BOOTS mails its login codes to a file rather than sending them (`lib/server
+  // devOutboxPath`), so the run has an account of its own with no inbox configured anywhere — which is
+  // what CI's `agent smoke` has. A deployment has no such file: there the inbox or a token is the way in.
+  const localOutbox = config.deployment ? null : devOutboxPath(serverDataDir(args.out));
+  // WHO this leg signs in as: a throwaway named after the leg on a server the driver booted; on a
+  // DEPLOYMENT the configured inbox address SUB-ADDRESSED per harness, so each harness has its own
+  // five-an-hour login door and its own account in the one shared catch-all mailbox (`deploymentLoginEmail`).
+  const loginAs: { localOutbox?: string; email?: string } = localOutbox
+    ? { localOutbox, email: localLoginEmail(leg.label, credentials) }
+    : credentials.EVAL_LOGIN_EMAIL
+      ? { email: deploymentLoginEmail(credentials.EVAL_LOGIN_EMAIL, leg.harness) }
+      : {};
+  const source = args.credential ?? credentialSourceFor(leg.mode.run, credentials, loginAs);
+  const credentialFor = memoizeCredential(
+    (base: string, origin?: string) => acquireCredential(source, { base, env: credentials, ...loginAs, ...(origin ? { origin } : {}) }),
+    // A booted server does not survive the second attempt, and neither does the account on it.
+    { reusable: !localOutbox },
+  );
+  log(`${leg.label}: credential source ${source}${loginAs.email ? ` as ${loginAs.email}` : ''}`);
+
   log(`${leg.label}: ${leg.harness} × ${leg.model} · tasks: ${tasks.map((t) => t.id).join(', ')} · out: ${args.out}`);
   fs.rmSync(args.out, { recursive: true, force: true });
   fs.mkdirSync(args.out, { recursive: true });
@@ -456,7 +567,7 @@ async function main(): Promise<void> {
   const browser = await chromium.launch();
   let merged: MergedVerdicts = { verdicts: [], recovered: [], failed: [] };
   try {
-    const first = await runLeg(leg, tasks, config, args.out, browser);
+    const first = await runLeg(leg, tasks, config, args.out, browser, { credentialFor, ...(args.runAs ? { runAs: args.runAs } : {}) });
     // A CI flow that failed gets ONE more turn, alone, and is named for it
     // (lib/second-attempt). The first attempt's artifacts are kept beside the
     // retry's rather than overwritten, so the flake can still be read.
@@ -465,7 +576,7 @@ async function main(): Promise<void> {
       enabled: args.retry,
       outDir: args.out,
       announce: (task) => log(`${leg.label}/${task.id}: failed — one more turn, alone`),
-      rerun: async (task) => (await runLeg(leg, [task], config, args.out, browser))[0],
+      rerun: async (task) => (await runLeg(leg, [task], config, args.out, browser, { credentialFor, ...(args.runAs ? { runAs: args.runAs } : {}) }))[0],
     });
   } finally {
     await settleWithin(browser.close(), TEARDOWN_MS);

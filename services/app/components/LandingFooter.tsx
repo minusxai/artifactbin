@@ -31,7 +31,7 @@ const DEMO_URL = '/demo';
 
 /** One row, in the order a stranger needs them. */
 const LINKS: readonly { label: string; href: string; external?: true }[] = [
-  { label: 'how it works', href: '/docs/human' },
+  { label: 'how it works', href: '/docs-human' },
   { label: 'agent docs', href: '/docs/artifactbin/SKILL.md' },
   { label: 'github', href: REPO_URL, external: true },
   { label: 'privacy', href: '/privacy' },

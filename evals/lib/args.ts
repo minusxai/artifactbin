@@ -9,6 +9,7 @@
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { DEFAULT_MODE, parseMode, type EvalMode } from './mode';
+import { parseCredentialSource, type CredentialSource } from './credential';
 
 export interface Args {
   /** The single leg this run drives — see `lib/leg.ts`. */
@@ -32,6 +33,13 @@ export interface Args {
   vision: boolean;
   /** How the agent REACHES the product — see `lib/mode.ts`. */
   mode: EvalMode;
+  /**
+   * WHERE this leg's token comes from, overriding what the mode would choose (`lib/credential.ts`):
+   * `paste` (the product's own copy-text handoff), `inbox-oauth` (log in with a code from the eval's
+   * Resend inbox and grant like an MCP client), `outbox-oauth` (the same login, with the code read out
+   * of a locally booted server's dev outbox) or `secret` (a pre-provisioned `EVAL_ACCOUNT_TOKEN`).
+   */
+  credential?: CredentialSource;
   tasks?: string[];
   out: string;
   ci: boolean;
@@ -45,6 +53,12 @@ export interface Args {
   portBase?: number;
   /** Override `run.concurrency` — how many of a leg's tasks run at once. */
   concurrency?: number;
+  /**
+   * Run every harness process as this unix user instead of the driver's own —
+   * the CI runner's isolation account, which cannot read this checkout. Without
+   * it no sudo is ever invoked, so a laptop run is unchanged (`lib/spawn`).
+   */
+  runAs?: string;
 }
 
 const EVALS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -103,11 +117,13 @@ export function parseArgs(argv: string[]): Args {
       case '--price-web-search': args.priceWebSearch = rate(value(), '--price-web-search'); break;
       case '--no-vision': args.vision = false; break;
       case '--mode': args.mode = parseMode(value()); break;
+      case '--credential': args.credential = parseCredentialSource(value()); break;
       case '--tasks': args.tasks = list(value()); break;
       case '--shard': args.shard = value(); break;
       case '--deployment': args.deployment = deploymentUrl(value()); break;
       case '--port-base': args.portBase = portBase(value()); break;
       case '--concurrency': args.concurrency = concurrency(value()); break;
+      case '--run-as': args.runAs = value(); break;
       case '--out': args.out = path.resolve(value()); break;
       case '--ci': args.ci = true; break;
       case '--no-retry': args.retry = false; break;

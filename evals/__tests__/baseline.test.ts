@@ -24,7 +24,7 @@ const fake = (stdout: string): HarnessAdapter => ({
   async prepare() {},
   invocation() { return { argv: ['node', '-e', `process.stdout.write(${JSON.stringify(stdout)})`], env: {}, unsetEnv: [] }; },
   reduce() {
-    return { ok: true, error: null, turns: 1, toolCalls: 0, docsReadCalls: 0, reportedCostUsd: 0.0031, webSearchCalls: null, finalMessage: 'OK',
+    return { ok: true, error: null, turns: 1, toolCalls: 0, docsReadCalls: 0, invocations: [], reportedCostUsd: 0.0031, webSearchCalls: null, finalMessage: 'OK',
              tokens: { input: 20, cacheWrite: 18000, cacheRead: 2169, output: 5 } };
   },
 });

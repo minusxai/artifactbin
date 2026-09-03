@@ -71,11 +71,14 @@ function accessLine(_task: Task, access: Access, mode: EvalMode): string {
     return `The artifactbin MCP server is already connected as "artifactbin" and authenticated. Work on document ${access.id} through its tools. Read ${access.base}/docs/artifactbin/SKILL.md?transport=mcp first; it is the MCP-tool brief, and ${access.base}/docs?transport=mcp lists its references.`;
   }
   if (installed) {
-    // The vocabulary is INSTALLED. Naming the skills is not a thumb on the scale — it is
+    // The vocabulary is INSTALLED — and so is the CONNECTION. A person with the plugin logged in once
+    // and their agent saved the token where the skill's own contract says it lives, so the prompt names
+    // the FILE and never the secret; the driver writes it into the harness's home before the turn
+    // (`lib/credential.writeArtifactbinEnv`). Naming the skill is not a thumb on the scale — it is
     // what a person with the plugin gets, since a harness matches a skill by its description
     // and the eval's brief never mentions artifactbin. What would be a thumb on the scale is
     // the HTTP line below, which sends it to fetch what it is already holding.
-    return `The artifact store is at ${access.base}. Your API token is ${access.token} — send it as \`Authorization: Bearer <token>\`. You are working on document ${access.id}. The artifactbin skill is installed in this session — start with its SKILL.md; its dispatch table names the reference files for anything it does not cover.`;
+    return `The artifact store is at ${access.base}, and its connection is already saved on this machine in \`~/.artifactbin.env\`. You are working on document ${access.id}. The artifactbin skill is installed in this session — start with its SKILL.md; its dispatch table names the reference files for anything it does not cover.`;
   }
   return `The artifact store is at ${access.base}. Your API token is ${access.token} — send it as \`Authorization: Bearer <token>\`. You are working on document ${access.id}. Read ${access.base}/docs/artifactbin/SKILL.md first; it is the API-action brief, and it names the rest of the docs.`;
 }

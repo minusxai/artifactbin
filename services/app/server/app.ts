@@ -31,6 +31,7 @@ import { canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
 import { ownerUsername } from '@/lib/users';
 import { roleFor, sessionActor } from '@/lib/viewer';
 import { canAnnotate } from '@/lib/share-roles';
+import { baseUrl, json } from '@/lib/http';
 import { mountRoutes } from './api';
 import { ROUTES } from './routes.generated';
 
@@ -146,7 +147,26 @@ export async function servesDocumentDirectly(request: Request): Promise<string |
   return found.id;
 }
 
-const SPA_PATHS = /^(\/|\/login|\/account|\/tokens|\/docs\/human)$/;
+const SPA_PATHS = /^(\/|\/login|\/account|\/tokens|\/docs-human)$/;
+
+/**
+ * A guessed machine address is answered in the machine's language. `/docs`
+ * and `/docs/*` are the agent surface; everything an agent GUESSES on the way
+ * there — a path under `/api/` nobody serves, `/openapi.json`,
+ * `/.well-known/ai-plugin.json` — used to fall through to the SPA and answer
+ * a page of HTML, which tells a fetch tool nothing. It now answers the same
+ * shape `unauthorized()` does: the error, and the one address that fixes it.
+ *
+ * Mounted AFTER the real routes (an earlier match wins) and BEFORE the SPA
+ * fallback, by EXACT path under `/.well-known/` — a prefix mount there would
+ * swallow `/.well-known/oauth-protected-resource`, which is the proxy's.
+ *
+ * Every OTHER miss answers this too when the caller never asked for HTML
+ * (`page()` below): measured on production, `/.well-known/deepseek` and
+ * `/help` handed a fetch tool the 891-byte SPA shell and no way on.
+ */
+const apiNotFound = (c: { req: { raw: Request } }) =>
+  json({ error: 'not_found', docs: `${baseUrl(c.req.raw)}/docs` }, 404, { 'Cache-Control': 'no-store' });
 
 export function createAppServer(opts: AppServerOptions = {}): Hono {
   const app = new Hono();
@@ -185,7 +205,12 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // default. Only derived when the caller did not already decide (the
     // document handlers pass documentStatus's 404 explicitly).
     const miss = data === null && new URL(c.req.url).pathname.split('/').filter(Boolean)[0]?.startsWith('@');
-    return new Response(data ? withBootstrap(html, data) : html, { status: status ?? (miss ? 404 : 200), headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS } });
+    const code = status ?? (miss ? 404 : 200);
+    // A dead end is answered in the language the caller asked in: a browser
+    // gets the app's own 404 page, anything else (curl's `*/*`, a fetch tool)
+    // gets the refusal that names the way on.
+    if (code === 404 && !(c.req.raw.headers.get('accept') ?? '').includes('text/html')) return apiNotFound(c);
+    return new Response(data ? withBootstrap(html, data) : html, { status: code, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS } });
   };
 
   const pageData = (dir: string) => ROUTES.find((r) => r.dir === dir)?.module.GET as ((request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>) | undefined;
@@ -272,13 +297,21 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   app.use('/*', serveStatic({ root: path.relative(process.cwd(), publicDir) || '.', onFound: () => {}, onNotFound: () => {} }));
 
   // The tour for people, registered AHEAD of the API mount: `/docs/*` is one
-  // catch-all route (the skills tree), and it would otherwise swallow this.
-  app.get('/docs/human', (c) => page(c));
+  // catch-all route (the skills tree), and it would otherwise swallow the old
+  // address's redirect. `/docs-human` is outside that catch-all by shape, and
+  // sits here beside the address it replaced.
+  app.get('/docs-human', (c) => page(c));
+  app.get('/docs/human', (c) => c.redirect('/docs-human', 301));
   // The token page must likewise win over the later profile-shaped catch-all
   // (`/tokens/new` otherwise looks like user "tokens", path "new").
   app.get('/tokens/new', (c) => page(c));
   // The app's API and document handlers.
   mountRoutes(app);
+
+  app.all('/api', apiNotFound);
+  app.all('/api/*', apiNotFound);
+  app.all('/openapi.json', apiNotFound);
+  app.all('/.well-known/ai-plugin.json', apiNotFound);
 
   // The reader/owner split, then the app page.
   const documentAddress = async (c: { req: { raw: Request; url: string } }) => {

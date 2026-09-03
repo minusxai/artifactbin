@@ -34,8 +34,9 @@ export function App() {
           <Route path="/account" element={<AccountPage />} />
           <Route path="/tokens" element={<Navigate to="/account" replace />} />
           <Route path="/tokens/new" element={<TokensNewPage />} />
-          <Route path="/docs" element={<Navigate to="/docs/human" replace />} />
-          <Route path="/docs/human" element={<DocsPage />} />
+          {/* `/docs` and below are the agent surface, served by the server's
+            * docs route — the SPA must not claim them. */}
+          <Route path="/docs-human" element={<DocsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
         <Route path="/a/:id" element={<ArtifactPage />} />

@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  barFraction, cellTint, formatCell, gridGeometry, parseColumnSpecs, parseSortSpec, resolveColumns, sortRows,
+  barFraction, cellTint, formatCell, gridGeometry, parseColumnSpecs, parseSortSpec, parseTableHeight, resolveColumns, sortRows,
 } from '@/lib/story/data-table';
 import type { DatasetColumn } from '@/lib/story/dataset-shape';
 
@@ -165,5 +165,25 @@ describe('cellTint', () => {
   it('is null without a scale', () => {
     const [c] = resolveColumns([{ col: 'growth' }], COLUMNS, ROWS);
     expect(cellTint(0.5, c)).toBeNull();
+  });
+});
+
+/**
+ * The docs teach `height="420px"`; the prop was typed number and the component emitted
+ * `420pxpx`. One pure parser, so the component and the docs agree on what a height is.
+ */
+describe('parseTableHeight', () => {
+  it('accepts a number, a numeric string, or a px string', () => {
+    expect(parseTableHeight(420)).toBe(420);
+    expect(parseTableHeight('420px')).toBe(420);
+    expect(parseTableHeight('250')).toBe(250);
+  });
+  it('falls back for anything that is not a positive pixel length', () => {
+    expect(parseTableHeight(undefined)).toBe(420);
+    expect(parseTableHeight('abc')).toBe(420);
+    expect(parseTableHeight(0)).toBe(420);
+    expect(parseTableHeight(-5)).toBe(420);
+    expect(parseTableHeight('50%')).toBe(420);
+    expect(parseTableHeight(undefined, 300)).toBe(300);
   });
 });

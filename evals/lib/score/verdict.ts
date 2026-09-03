@@ -53,17 +53,43 @@ const NEEDS_A_DOCS_FETCH = new Set(['read_docs_before_write']);
  */
 const NEEDS_MCP = new Set(['used_mcp']);
 
+/**
+ * And once more, one axis further over: `no_local_checkout_reads` is read out of
+ * the HARNESS TRANSCRIPT's tool calls, and some harnesses emit none — OpenCode
+ * can exit before its final event, which is the whole reason
+ * `HarnessResult.docsReadCalls` is nullable. A run like that answers null, and a
+ * gated null is a failure, so a column that published everything asked of it
+ * would go red for "we could not see which tools it used" — our instrument
+ * again, not the agent.
+ *
+ * The check is worth gating where it CAN be answered: production run 33702277600
+ * has an agent finding this checkout, reading the skill tree it was meant to
+ * fetch over the wire, and then reading the grading rubric of the very task it
+ * was being graded on. A transcript that shows nothing is not evidence that this
+ * did not happen — it is no evidence at all, and the run is judged on what it
+ * produced instead. The check is still RECORDED, as null, which the report
+ * renders "—".
+ */
+const NEEDS_TOOL_TELEMETRY = new Set(['no_local_checkout_reads']);
+
 export interface GateOptions {
   trafficObserved: boolean;
   vocabularyInstalled?: boolean;
   /** The task asked for MCP and this harness has no client, so it ran over REST. */
   transportSubstituted?: boolean;
+  /**
+   * Did the harness emit tool telemetry at all? Absent means YES: a gate must
+   * never be dropped by a caller's silence, only by a caller that measured the
+   * absence and says so (`result.docsReadCalls !== null`).
+   */
+  toolTelemetryObserved?: boolean;
 }
 
 export function gatedChecks(gated: string[], opts: GateOptions): string[] {
   let out = opts.trafficObserved ? gated : gated.filter((c) => !LEDGER_ONLY.has(c));
   if (opts.vocabularyInstalled) out = out.filter((c) => !NEEDS_A_DOCS_FETCH.has(c));
   if (opts.transportSubstituted) out = out.filter((c) => !NEEDS_MCP.has(c));
+  if (opts.toolTelemetryObserved === false) out = out.filter((c) => !NEEDS_TOOL_TELEMETRY.has(c));
   return out;
 }
 
@@ -80,6 +106,9 @@ const ALWAYS_REPORT = new Set([
   'published', 'published_first_try', 'read_docs_before_write', 'no_unknown_endpoints',
   'canonical_stable', 'has_title', 'used_start_document', 'harness_ok',
   'no_console_errors', 'no_failed_responses', 'fits_390px',
+  // Whether the agent read this checkout describes any run at all — and a column
+  // where it is false is a column that measured the disk instead of the wire.
+  'no_local_checkout_reads',
 ]);
 
 /**

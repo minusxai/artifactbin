@@ -15,6 +15,10 @@ describe('parseArgs', () => {
     expect(parseArgs(['--harness', 'pi']).harness).toBe('pi');
     expect(parseArgs(['--label=pi · deepseek']).label).toBe('pi · deepseek');
     expect(parseArgs(['--tasks=scrolly,report']).tasks).toEqual(['scrolly', 'report']);
+    // The isolation flag exists FOR a workflow, which writes the equals form.
+    expect(parseArgs(['--run-as=agent']).runAs).toBe('agent');
+    expect(parseArgs(['--run-as', 'agent']).runAs).toBe('agent');
+    expect(parseArgs([]).runAs).toBeUndefined();
   });
 
   it('handles the flags with no value', () => {

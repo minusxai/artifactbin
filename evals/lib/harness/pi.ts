@@ -85,6 +85,7 @@ export const pi: HarnessAdapter = {
       turns: turns || null,
       toolCalls,
       docsReadCalls: countDocsReads(invocations),
+      invocations,
       tokens,
       reportedCostUsd: cost,
       webSearchCalls: null,

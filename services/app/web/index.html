@@ -6,6 +6,11 @@
     <title>artifactbin</title>
     <meta name="description" content="Google Docs for agents. Your agents publish interactive HTML documents you can edit, annotate and share." />
     <link rel="icon" href="/favicon.ico" />
+    <!-- The agent surface, named in the shell every crawler and fetch tool sees
+         first. /docs is machine-readable and answers the same text to everyone;
+         the tour for people is /docs-human. -->
+    <link rel="help" href="/docs" title="Agents: read this first to edit any artifact here" />
+    <meta name="artifactbin:agent" content="To edit an artifact with an agent, read /docs — tokens at /tokens/new" />
     <!-- The theme is stamped BEFORE paint, from the same localStorage key the toggle writes.
          LIGHT is the default and carries no attribute, so only dark is stamped. -->
     <script>try{if(localStorage.getItem('mx_theme')==='dark')document.documentElement.dataset.theme='dark'}catch(e){}</script>

@@ -17,7 +17,7 @@
  * sandbox.
  */
 import { cloneElement, createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import type { ReactElement, ReactNode } from 'react';
+import type { CSSProperties, ReactElement, ReactNode } from 'react';
 import type { JsxElement } from '@/lib/jsx';
 import type { ComponentType } from 'react';
 import { renderStoryNodes, type BoundControlProps } from '@/lib/story-ui/interpreter';
@@ -42,7 +42,7 @@ import { Button } from '@/components/kit/button';
 import { DataTable } from '@/components/kit/data-table';
 import { GridItemContext } from '@/components/kit/grid';
 import { DateControl, SegmentedControl, SelectControl, SliderControl, SwitchControl, normalizeControlOptions, num, shellRest, str } from '@/components/kit/controls';
-import { parseColumnSpecs, parseSortSpec, type SortSpec } from '@/lib/story/data-table';
+import { parseColumnSpecs, parseSortSpec, parseTableHeight, type SortSpec } from '@/lib/story/data-table';
 
 export type { StoryIslandData } from './contract';
 import type { StoryIslandData } from './contract';
@@ -354,7 +354,12 @@ function DataTableAdapter(props: Record<string, unknown>) {
   const table = name ? ctx.state.tables[name] : undefined;
   const spec = useMemo(() => parseColumnSpecs(props.columns), [props.columns]);
   const authoredSort = useMemo(() => parseSortSpec(props.sort), [props.sort]);
-  const height = questionEmbedHeightPx(props.height ?? 420, false);
+  // A CEILING, not a reserved height (the kit's scroll box caps itself): outside a
+  // grid cell the wrapper leaves the table to hug its rows, and the cap is the TABLE
+  // parser's — questionEmbedHeightPx floors at MIN_CHART_H, a chart rule that would
+  // turn an authored height="120px" into a 340px box.
+  const cap = parseTableHeight(props.height);
+  const wrapper: CSSProperties = inGridItem ? { width: '100%', height: '100%' } : { width: '100%' };
 
   const [extra, setExtra] = useState<{ base: TableResult | undefined; rows: Row[]; sort: SortSpec | null; loading: boolean }>({ base: table, rows: [], sort: authoredSort, loading: false });
   const paged = extra.base === table ? extra : { base: table, rows: [], sort: authoredSort, loading: false };
@@ -375,7 +380,7 @@ function DataTableAdapter(props: Record<string, unknown>) {
     const error = name ? ctx.state.errors[name] : undefined;
     const pending = name !== null && ctx.pending.has(name);
     return (
-      <div aria-label="DataTable embed" className="flex w-full flex-col items-center justify-center gap-2.5 rounded-md border border-border p-4 text-sm text-muted-foreground" style={{ height: inGridItem ? '100%' : `${height}px` }}>
+      <div aria-label="DataTable embed" className="flex w-full flex-col items-center justify-center gap-2.5 rounded-md border border-border p-4 text-sm text-muted-foreground" style={wrapper}>
         {/* Pending speaks the platform loading lockup (see QuestionEmbed's `waiting`). */}
         {pending ? (
           <>
@@ -394,13 +399,13 @@ function DataTableAdapter(props: Record<string, unknown>) {
   const shown = paged.sort && paged.rows.length ? paged.rows : [...table.rows, ...paged.rows];
   const busy = name !== null && ctx.pending.has(name);
   return (
-    <div aria-label="DataTable embed" aria-busy={busy} className={busy ? 'mx-busy' : undefined} style={{ width: '100%', height: inGridItem ? '100%' : `${height}px` }}>
+    <div aria-label="DataTable embed" aria-busy={busy} className={busy ? 'mx-busy' : undefined} style={wrapper}>
       <DataTable
         rows={shown}
         columns={table.columns}
         spec={spec}
         sort={authoredSort}
-        height={height}
+        height={cap}
         sticky={props.sticky !== false}
         totalRows={table.totalRows}
         truncated={truncated}

@@ -11,8 +11,10 @@
  *   readers agents use reject `text/markdown`).
  * - `GET /docs?download=true`: the rendered tree as a `.tar.gz` (the plugin's
  *   `skills/` folder, one code path).
- * - a browser (`Accept: text/html`) asking for `/docs` or a skill gets the
- *   tour for people (`/docs/human`); a file is served as-is.
+ * Every caller gets the same answer: there is NO content negotiation here.
+ * `/docs` and below are AGENT addresses; the tour for people lives at
+ * `/docs-human`. Measured (eval run 33702277600): a fetch tool that asks for
+ * HTML was bounced to the human page mid-discovery.
  * - anything else: 404 JSON naming the nearest directory's children — the
  *   same "name the fix" reflex every other refusal has.
  *
@@ -66,14 +68,12 @@ export interface ServeDocsInput {
   base: string;
   /** The path under `/docs`, `''` for the root. */
   path: string;
-  accept: string;
   download: boolean;
   /** Which action vocabulary this HTTP-delivered skill teaches. */
   transport?: DocTransport;
 }
 
-export function serveDocs({ tree, base, path, accept, download, transport = 'curl' }: ServeDocsInput): Response {
-  const wantsHtml = accept.includes('text/html');
+export function serveDocs({ tree, base, path, download, transport = 'curl' }: ServeDocsInput): Response {
   const segments = path.split('/').filter(Boolean);
   if (download && segments.length === 0) {
     return new Response(new Uint8Array(docsArchive(tree, base, transport)), {
@@ -82,13 +82,11 @@ export function serveDocs({ tree, base, path, accept, download, transport = 'cur
     });
   }
   if (segments.length === 0) {
-    if (wantsHtml) return Response.redirect(`${base}/docs/human`, 307);
     return new Response(docsListing(tree, base, undefined, transport), { status: 200, headers: noStore(MARKDOWN) });
   }
   if (segments.length === 1) {
     const dir = tree.dir(segments[0]);
     if (dir) {
-      if (wantsHtml) return Response.redirect(`${base}/docs/human`, 307);
       return new Response(docsListing(tree, base, dir, transport), { status: 200, headers: noStore(MARKDOWN) });
     }
     return notFound(tree, base, undefined, path);
@@ -100,7 +98,6 @@ export function serveDocs({ tree, base, path, accept, download, transport = 'cur
   if (segments.length === 2 && segments[1] === 'references') {
     const dir = tree.dir(segments[0]);
     if (dir) {
-      if (wantsHtml) return Response.redirect(`${base}/docs/human`, 307);
       return new Response(docsListing(tree, base, dir, transport), { status: 200, headers: noStore(MARKDOWN) });
     }
   }

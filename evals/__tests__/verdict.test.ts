@@ -6,7 +6,9 @@
  * a run that is really a failure will fail a check that matters.
  */
 import { describe, it, expect } from 'vitest';
-import { checksToRecord, verdictFor } from '../lib/score/verdict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { checksToRecord, gatedChecks, verdictFor } from '../lib/score/verdict';
 
 describe('verdictFor', () => {
   it('passes when every gated check holds', () => {
@@ -65,5 +67,55 @@ describe('checksToRecord', () => {
 
   it('never records a non-gated check the scorer could not compute', () => {
     expect(checksToRecord({ ...all, no_console_errors: null }, ['published'])).not.toHaveProperty('no_console_errors');
+  });
+});
+
+/**
+ * ONE axis further, for the same reason as the unobserved ledger and the installed
+ * vocabulary: `no_local_checkout_reads` is answered from the harness's own TOOL
+ * TELEMETRY, and some harnesses emit none — OpenCode can exit before its final
+ * event, which is why `HarnessResult.docsReadCalls` is nullable at all. Such a run
+ * yields null for the check, and a gated null is a failure, so a run that published
+ * perfectly would fail for "we could not see what tools it used". That grades our
+ * instrument. The check exists because production run 33702277600 read this
+ * checkout's skill tree and then the rubric of the task it was being graded on —
+ * a real leak, worth gating on — but only where the transcript could show it.
+ */
+describe('the checkout-reads check needs tool telemetry to gate', () => {
+  const EVAL_TASKS = path.resolve(__dirname, '../tasks');
+  const checksOf = (file: string) => (JSON.parse(fs.readFileSync(path.join(EVAL_TASKS, file), 'utf8')) as { checks: string[] }).checks;
+  const FILES = ['dashboard.eval.json', 'deck.eval.json', 'report.eval.json', 'scrolly.eval.json'];
+
+  it('drops it when the harness emitted no tool telemetry, and keeps every other check', () => {
+    for (const f of FILES) {
+      const gated = gatedChecks(checksOf(f), { trafficObserved: true, toolTelemetryObserved: false });
+      expect(gated, f).not.toContain('no_local_checkout_reads');
+      expect(gated, f).toEqual(checksOf(f).filter((c) => c !== 'no_local_checkout_reads'));
+    }
+  });
+
+  it('so a telemetry-less run that did everything else is not failed for it', () => {
+    const gated = gatedChecks(checksOf('scrolly.eval.json'), { trafficObserved: true, toolTelemetryObserved: false });
+    const checks: Record<string, boolean | null> = Object.fromEntries(checksOf('scrolly.eval.json').map((c) => [c, true]));
+    checks.no_local_checkout_reads = null;
+    expect(verdictFor(checks, gated)).toEqual({ passed: true, failed: [] });
+  });
+
+  it('keeps it — and still fails a null — when the telemetry WAS there', () => {
+    const gated = gatedChecks(checksOf('scrolly.eval.json'), { trafficObserved: true, toolTelemetryObserved: true });
+    expect(gated).toContain('no_local_checkout_reads');
+    const checks: Record<string, boolean | null> = Object.fromEntries(checksOf('scrolly.eval.json').map((c) => [c, true]));
+    checks.no_local_checkout_reads = null;
+    expect(verdictFor(checks, gated)).toEqual({ passed: false, failed: ['no_local_checkout_reads'] });
+  });
+
+  it('and a run whose transcript shows zero checkout reads passes', () => {
+    const gated = gatedChecks(checksOf('scrolly.eval.json'), { trafficObserved: true, toolTelemetryObserved: true });
+    const checks: Record<string, boolean> = Object.fromEntries(checksOf('scrolly.eval.json').map((c) => [c, true]));
+    expect(verdictFor(checks, gated)).toEqual({ passed: true, failed: [] });
+  });
+
+  it('an absent telemetry answer means OBSERVED — the gate is never dropped by silence', () => {
+    expect(gatedChecks(checksOf('scrolly.eval.json'), { trafficObserved: true })).toContain('no_local_checkout_reads');
   });
 });
