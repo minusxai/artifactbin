@@ -45,6 +45,11 @@ describe('the brief tells the agent to publish first', () => {
     expect(sheet()).toMatch(/markup\.md/);
   });
 
+  /** Extended: the SKELETON sentence itself must lead, not merely the word "publish". */
+  it('puts the SKELETON instruction itself ahead of the reading path', () => {
+    expect(before(sheet(), /skeleton/i, /design\.md/)).toBe(true);
+  });
+
   it('stays inside the byte cap that shapes the whole rewrite', () => {
     expect(Buffer.byteLength(sheet(), 'utf8')).toBeLessThanOrEqual(QUICK_SHEET_MAX_BYTES);
   });
@@ -53,5 +58,10 @@ describe('the brief tells the agent to publish first', () => {
 describe('the MCP instructions teach the same order', () => {
   it('tells a tool-calling agent to publish before reading too', () => {
     expect(buildMcpInstructions(BASE)).toMatch(/publish[^.]*\b(skeleton|first)\b/i);
+  });
+
+  /** Extended: and names the fill-in move, in the same order the brief teaches. */
+  it('names edit_artifact as the fill-in move, after the skeleton', () => {
+    expect(before(buildMcpInstructions(BASE), /skeleton/i, /edit_artifact/)).toBe(true);
   });
 });
