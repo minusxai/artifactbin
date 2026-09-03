@@ -54,6 +54,14 @@ export interface Credential {
   owner: 'anonymous' | 'account';
   /** The account the token belongs to, when the driver logged in to get it. */
   email?: string;
+  /**
+   * The session the driver logged in WITH, kept beside the token it granted. The bearer is enough for
+   * everything an agent does; it is not enough to SHARE — the sharing door is browser-only on purpose
+   * (`services/app/app/api/my/artifacts/[id]/sharing/route.ts`), because handing out a link is a human
+   * act. So the human half of the login travels too, and `shareForScoring` uses it. Absent for `secret`
+   * (a pre-provisioned token names no session) and for `paste` (there is no credential at all).
+   */
+  cookie?: string;
 }
 
 /** The mail as the Resend inbound list returns it — only the fields the choice is made on. */
@@ -247,7 +255,52 @@ export async function acquireCredential(source: CredentialSource, opts: AcquireO
   const origin = opts.origin ?? opts.base;
   const cookie = await logIn({ base: opts.base, origin, email, read, fetch: call, sleep });
   const token = await grantAsMcpClient({ base: opts.base, origin, cookie, fetch: call });
-  return { token, owner: 'account', email };
+  return { token, owner: 'account', email, cookie };
+}
+
+/** What `shareForScoring` needs: the product, the session, and the documents to hand out links to. */
+export interface ShareForScoringOptions {
+  /** The address to knock on — the task's proxy, so the calls are the driver's and land where they belong. */
+  base: string;
+  /** The owner's session (`Credential.cookie`). The door takes no bearer. */
+  cookie: string;
+  /** The artifacts the run produced. Duplicates are one call; order is kept. */
+  ids: readonly string[];
+  fetch?: typeof globalThis.fetch;
+  /** Extra headers on every call — `DRIVER_HEADER`, so a task's ledger stays the AGENT's traffic. */
+  headers?: Record<string, string>;
+}
+
+/**
+ * SHARE THE RUN THE WAY A PERSON WOULD, so it can be scored. An account's documents are born PRIVATE
+ * while every product-truth read in the scorer is anonymous, so a run that published perfectly under an
+ * account token scored `published: false` (PR #16 CI, the `data` task: `doc gKFcj2`, 200 to the agent,
+ * nothing to the world). The fix is not a privileged read — the scorer must keep seeing exactly what a
+ * reader sees — it is to do what the person behind the agent does next: open the sharing dialog and make
+ * the document unlisted. That is this, over HTTP: `PUT /api/my/artifacts/<id>/sharing {visibility:'unlisted'}`
+ * with the owner's session.
+ *
+ * A 404 is the agent's own scratch document, created and then deleted — skipped, not an error. Anything
+ * else names the id, because a document the scorer cannot read is a hole in the column either way and a
+ * silent one would look like a bad run instead of a broken driver.
+ */
+export async function shareForScoring(opts: ShareForScoringOptions): Promise<string[]> {
+  const call = opts.fetch ?? globalThis.fetch;
+  const shared: string[] = [];
+  for (const id of new Set(opts.ids)) {
+    const res = await call(`${opts.base}/api/my/artifacts/${id}/sharing`, {
+      method: 'PUT',
+      // No `origin`: the door refuses a CROSS-SITE cookie mutation, and a request that states no origin
+      // is not one (`services/app/lib/http.ts isCrossSiteRequest`). Stating the proxy's would be a claim
+      // about a host this call does not need to make.
+      headers: { 'content-type': 'application/json', cookie: opts.cookie, ...opts.headers },
+      body: JSON.stringify({ visibility: 'unlisted' }),
+    });
+    if (res.status === 404) continue; // the agent deleted it — there is nothing left to share
+    if (!res.ok) throw new Error(`sharing ${id} for scoring → ${res.status} ${await res.text()}`);
+    shared.push(id);
+  }
+  return shared;
 }
 
 /** `fetch` has no cookie jar; the session is one header, carried by hand. */

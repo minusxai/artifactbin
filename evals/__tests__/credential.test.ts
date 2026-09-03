@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { acquireCredential, callbackCode, codeFromMail, credentialSourceFor, localLoginEmail, memoizeCredential, pickLoginMail, pkcePair, writeArtifactbinEnv, codeFromOutbox } from '../lib/credential';
+import { acquireCredential, callbackCode, codeFromMail, credentialSourceFor, localLoginEmail, memoizeCredential, pickLoginMail, pkcePair, writeArtifactbinEnv, codeFromOutbox, shareForScoring } from '../lib/credential';
 
 describe('credential source per mode', () => {
   const inbox = { RESEND_EVAL_API_KEY: 're_x', EVAL_LOGIN_EMAIL: 'mxmx_eval@social-worm.resend.app' };
@@ -117,7 +117,7 @@ describe('acquireCredential', () => {
   it('logs in with the emailed code and comes back with an ACCOUNT token', async () => {
     const seen: Seen[] = [];
     const got = await acquireCredential('inbox-oauth', { base: BASE, env, fetch: stubFetch(seen), sleep: async () => {} });
-    expect(got).toEqual({ token: 'mx_granted', owner: 'account', email: env.EVAL_LOGIN_EMAIL });
+    expect(got).toEqual({ token: 'mx_granted', owner: 'account', email: env.EVAL_LOGIN_EMAIL, cookie: '__Secure-better-auth.session_token=sess_1' });
 
     const send = seen.find((s) => s.url.includes('send-verification-otp'))!;
     expect(JSON.parse(send.body)).toEqual({ email: env.EVAL_LOGIN_EMAIL, type: 'sign-in' });
@@ -150,6 +150,21 @@ describe('acquireCredential', () => {
     expect(exchange.get('grant_type')).toBe('authorization_code');
     expect(exchange.get('code')).toBe('auth_code_1');
     expect(createHash('sha256').update(exchange.get('code_verifier') ?? '').digest('base64url')).toBe(challenge);
+  });
+
+  /**
+   * The cookie is not a detail of the login — it is the CREDENTIAL. An account's documents are born
+   * private, and the only door that makes one unlisted is the owner's own browser door
+   * (`/api/my/artifacts/<id>/sharing`), which takes a session and never a bearer. So the session the
+   * driver already held travels with the token. A pre-provisioned `EVAL_ACCOUNT_TOKEN` names no
+   * session at all — nothing was logged in — and says so by carrying no cookie.
+   */
+  it('the OAuth credential carries the session cookie; a pre-provisioned token carries none', async () => {
+    const seen: Seen[] = [];
+    const granted = await acquireCredential('inbox-oauth', { base: BASE, env, fetch: stubFetch(seen), sleep: async () => {} });
+    expect(granted?.cookie).toBe('__Secure-better-auth.session_token=sess_1');
+    const pre = await acquireCredential('secret', { base: BASE, env: { EVAL_ACCOUNT_TOKEN: 'mx_pre' }, fetch: stubFetch(seen), sleep: async () => {} });
+    expect(pre?.cookie).toBeUndefined();
   });
 
   it('a pre-provisioned account token is used as-is, with no login at all', async () => {
@@ -187,7 +202,7 @@ describe('acquireCredential', () => {
     const got = await acquireCredential('outbox-oauth', {
       base: BASE, env: {}, localOutbox: outbox, email: address, fetch: stubFetch(seen), sleep: async () => {},
     });
-    expect(got).toEqual({ token: 'mx_granted', owner: 'account', email: address });
+    expect(got).toEqual({ token: 'mx_granted', owner: 'account', email: address, cookie: '__Secure-better-auth.session_token=sess_1' });
 
     const send = seen.find((s) => s.url.includes('send-verification-otp'))!;
     expect(JSON.parse(send.body)).toEqual({ email: address, type: 'sign-in' });
@@ -288,5 +303,32 @@ describe('a local server logs in through its dev outbox', () => {
     expect(localLoginEmail('claude_code × sonnet', {})).toBe('mxmx_eval_claude-code-sonnet@example.com');
     expect(localLoginEmail('claude_code × sonnet', { EVAL_LOGIN_EMAIL: 'mxmx_eval@social-worm.resend.app' }))
       .toBe('mxmx_eval@social-worm.resend.app');
+  });
+});
+
+/**
+ * An account-owned run is scored the way a person shares it: every artifact the agent made is made unlisted through
+ * the owner's own sharing door before the scorer's anonymous reads (PR #16 CI: an agent's own document was born
+ * private and scored `published: false`). Seeded RED by the orchestrator.
+ */
+describe('shareForScoring', () => {
+  const calls: Array<{ url: string; method: string; headers: Record<string, string>; body: string }> = [];
+  const fetchStub = (async (url: string, init: RequestInit) => {
+    calls.push({ url, method: String(init.method), headers: Object.fromEntries(new Headers(init.headers).entries()), body: String(init.body) });
+    if (url.endsWith('/gone00/sharing')) return new Response('{"error":"not_found"}', { status: 404 });
+    if (url.endsWith('/boom00/sharing')) return new Response('{"error":"boom"}', { status: 500 });
+    return new Response('{"visibility":"unlisted"}', { status: 200 });
+  }) as unknown as typeof fetch;
+  it('PUTs unlisted to the owner sharing door with the session cookie, once per id, skipping a deleted one', async () => {
+    calls.length = 0;
+    const shared = await shareForScoring({ base: 'https://x.test', cookie: 'sess=abc', ids: ['abc123', 'gone00', 'abc123'], fetch: fetchStub });
+    expect(shared).toEqual(['abc123']);
+    const puts = calls.filter((c) => c.method === 'PUT');
+    expect(puts.map((c) => c.url)).toEqual(['https://x.test/api/my/artifacts/abc123/sharing', 'https://x.test/api/my/artifacts/gone00/sharing']);
+    expect(puts[0].headers.cookie).toBe('sess=abc');
+    expect(JSON.parse(puts[0].body)).toEqual({ visibility: 'unlisted' });
+  });
+  it('names the id when the door refuses', async () => {
+    await expect(shareForScoring({ base: 'https://x.test', cookie: 'sess=abc', ids: ['boom00'], fetch: fetchStub })).rejects.toThrow(/boom00/);
   });
 });
