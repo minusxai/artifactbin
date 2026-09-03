@@ -19,6 +19,8 @@
  * Keep the repo middleware-free so nothing rewrites them.
  */
 import { canReadArtifact, dataflowForRow, declarationsForRow, getArtifactById, linkRoleOf, refDataForRow } from '@/lib/artifacts';
+import { withIntent } from '@/lib/intent';
+import { canonicalArtifactPath } from '@/lib/urls';
 import { roleBehindLogin } from '@/lib/share-roles';
 import { trackEvent } from '@/lib/analytics';
 import { sessionActor } from '@/lib/viewer';
@@ -52,6 +54,36 @@ const COMMON = {
 const NOT_FOUND = '<!doctype html><meta charset="utf-8"><title>Not found</title><h1>Not found</h1>';
 const notFound = () =>
   new Response(NOT_FOUND, { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', ...COMMON } });
+
+/**
+ * WHERE THIS COPY CAME FROM, as the credit line may say it.
+ *
+ * The test is VISIBILITY — `public`, exactly — and deliberately NOT "may a
+ * stranger read it". `unlisted` is stranger-readable, which is the whole tier,
+ * but it exists to be listed NOWHERE: naming it here republishes its canonical
+ * address in the credits of every public fork, and the person who forked is not
+ * the person who chose the tier. Measured before this rule existed: an owner
+ * who narrowed a source to `unlisted` after someone forked it kept handing the
+ * full linked address to every stranger reading the copy.
+ *
+ * So there is ONE branch, and everything that is not public takes it —
+ * unlisted, private, and gone alike, with no link and no id. That is also what
+ * keeps the line from being an existence oracle: a reader has nothing here to
+ * tell those three apart with.
+ *
+ * Resolved per render rather than per viewer, and never written into the
+ * markup: an agent that rewrites the document cannot delete the attribution,
+ * and nothing about the source is baked into bytes that outlive its ACL.
+ */
+const NOT_PUBLIC_SOURCE = { label: 'a document that is not public', href: null } as const;
+
+async function forkedFromCredit(sourceId: string | null): Promise<{ label: string; href: string | null } | null> {
+  if (!sourceId) return null;
+  const source = await getArtifactById(sourceId);
+  if (!source || source.visibility !== 'public') return NOT_PUBLIC_SOURCE;
+  const href = canonicalArtifactPath(source, await ownerUsername(source.user_id));
+  return { label: href.replace(/^\//, ''), href };
+}
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -212,12 +244,13 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       const search = new URL(request.url).search;
       const urlValues = declared ? readUrlValues(search, declared.flow) : {};
       const hasUrlValues = Object.keys(urlValues).length > 0;
-      const [refData, dataflow, creatorUsername] = await Promise.all([
+      const [refData, dataflow, creatorUsername, forkedFrom] = await Promise.all([
         refDataForRow(artifact),
         chrome
           ? Promise.resolve(declared && hasUrlValues ? { ...declared, values: urlValues } : declared)
           : dataflowForRow(artifact, { values: urlValues }),
         chrome ? ownerUsername(artifact.user_id) : Promise.resolve(null),
+        chrome ? forkedFromCredit(artifact.forked_from) : Promise.resolve(null),
       ]);
       const runtime = storyRuntimeAssets();
       const html = await buildStoryDocument({
@@ -239,7 +272,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           }
           : null,
     help: chrome ? { docs: `${base}/docs`, tokens: `${base}/tokens/new` } : null,
-        credits: chrome ? { creatorUsername } : null,
+        credits: chrome ? { creatorUsername, forkedFrom } : null,
         /*
          * THE WAY IN. A guest — no account, so ANONYMOUS_CEILING holds them at
          * `viewer` — on a link its owner set to `can comment` or `can edit` is
@@ -252,7 +285,24 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
          * follows (server/app servesDocumentDirectly) — the path a signed-in
          * stranger has always taken.
          */
-        signIn: chrome && !viewer && signInUnlocks ? { unlocks: signInUnlocks, callbackUrl: `/a/${artifact.id}` } : null,
+        signIn: chrome && !viewer && signInUnlocks
+          // Back to the document AND back to what the door offered: someone who
+          // logged in to comment returns to an open conversation rather than to
+          // a document that has forgotten why they left (lib/intent).
+          ? { unlocks: signInUnlocks, callbackUrl: `/a/${artifact.id}${withIntent('', 'comment')}` }
+          : null,
+        /*
+         * FORK — on every chrome-bearing markup document, because a reader may
+         * fork anything they can READ and the door decides on exactly that.
+         *
+         * The two hrefs differ by one thing: whether this request had a viewer.
+         * With one, the shell is a navigation away and can be told what to do
+         * on arrival; without one, the shell is behind /login, so the ask rides
+         * through the login door and comes back on the other side. Either way
+         * the document only carries the ASK — it is sandboxed at an opaque
+         * origin and holds no session, so it could not POST the fork itself.
+         */
+        fork: chrome ? { href: viewer ? `/a/${artifact.id}${withIntent('', 'fork')}` : `/login?callbackUrl=${encodeURIComponent(`/a/${artifact.id}${withIntent('', 'fork')}`)}` } : null,
         source: artifact.source ?? '',
         compiledCss,
         theme: design.theme,
