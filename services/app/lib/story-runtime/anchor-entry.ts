@@ -10,6 +10,24 @@
  *  - hold this document's own stream (lib/story-runtime/live-entry), which
  *    nobody else can hold for it;
  *  - put the reader back where that reload left them.
+ *
+ * IT RUNS `async`, AND ITS TAG SITS AT THE END OF <body> (lib/story/document).
+ * Both halves are load-bearing and neither is visible from here:
+ *
+ *  - `async` is what frees it from the module queue. Without it this module
+ *    executes only after every module script before it, so on a chart document
+ *    the reader's own chrome — the phone bar's scroll relay, the outline's
+ *    clicks, the scroll-marked tables — waited for the whole ~1 MB runtime to
+ *    download AND evaluate while the document was already on screen. Nothing
+ *    here depends on the runtime, so there is no order to keep. The one edge
+ *    that buys: a version ping landing in the gap between this module and the
+ *    runtime finds no adopt hook and RELOADS the document instead of
+ *    re-rendering it (live-entry reads the hook per ping, not at load, so it
+ *    is a slightly worse update and never a broken one).
+ *  - the END OF <body> is why there is no `readyState` guard: everything this
+ *    module queries — the reader chrome, its panels, the tables, the headings
+ *    — is parsed before its own tag is. Moving the tag earlier, or injecting
+ *    this module dynamically, needs a DOMContentLoaded wait added here first.
  */
 import { STORY_MODE_HOOK, STORY_READER_MODE_MESSAGE, STORY_SCROLL_MESSAGE, type StoryReaderModeMessage, type StoryScrollMessage } from './contract';
 import { applyAnchor } from './anchor';
@@ -92,11 +110,16 @@ if (typeof window !== 'undefined') {
   let scrollQueued = false;
   const framed = window.parent !== window;
   const parentWindow = window.parent;
+  /* The parent cannot measure an opaque frame, so the sample carries the
+   * answer: 4px of slack for subpixel rounding and the mobile URL bar, which
+   * changes `innerHeight` under us as it collapses. */
+  const atBottom = () =>
+    window.innerHeight + Math.max(0, window.scrollY) >= document.documentElement.scrollHeight - 4;
   const updateChrome = () => {
     scrollQueued = false;
     const scrollY = Math.max(0, window.scrollY);
     if (framed) {
-      parentWindow.postMessage({ type: STORY_SCROLL_MESSAGE, scrollY } satisfies StoryScrollMessage, '*');
+      parentWindow.postMessage({ type: STORY_SCROLL_MESSAGE, scrollY, atBottom: atBottom() } satisfies StoryScrollMessage, '*');
     } else if (chrome && window.innerWidth < 640 && !triggers.some((trigger) => trigger.getAttribute('aria-expanded') === 'true')) {
       const delta = scrollY - lastScrollY;
       if (scrollY <= 24 || delta <= -4) chrome.classList.remove('mx-reader-chrome--hidden');

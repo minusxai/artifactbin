@@ -253,6 +253,15 @@ export const STORY_SCROLL_MESSAGE = 'mx:reader-scroll';
 export interface StoryScrollMessage {
   type: typeof STORY_SCROLL_MESSAGE;
   scrollY: number;
+  /**
+   * "I have nothing further to scroll to" — the ANSWER, not the ingredients.
+   * The parent cannot measure an opaque frame's height, so it used to compare
+   * this offset against its OWN metrics; on the artifact page those never move,
+   * so the end-of-page rule (the bar stays up where the footer is) was lost for
+   * every framed document. The document measures its own end instead, with the
+   * same 4px slack the page uses for its own.
+   */
+  atBottom: boolean;
 }
 
 /**

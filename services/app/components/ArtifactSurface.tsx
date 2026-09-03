@@ -297,7 +297,9 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       const data = event.data as Partial<StoryScrollMessage> | undefined;
       if (!data || data.type !== STORY_SCROLL_MESSAGE || typeof data.scrollY !== 'number') return;
       if (frameRef.current && event.source !== frameRef.current.contentWindow) return;
-      notifyPageChromeScroll(data.scrollY);
+      // Read leniently: a document served before `atBottom` existed posts
+      // without it, and "no flag" must mean "not at the end", never a crash.
+      notifyPageChromeScroll(data.scrollY, data.atBottom === true);
     };
     window.addEventListener('message', onScroll);
     return () => window.removeEventListener('message', onScroll);

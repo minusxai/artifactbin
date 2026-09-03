@@ -203,6 +203,11 @@ describe('PageControls', () => {
       </PageChromeBar>,
     );
     const bar = screen.getByRole('toolbar', { name: 'Page actions' });
+    // The frame's FIRST sample is a baseline, not a direction: the parent's own
+    // scrollY is 0 forever on this page and says nothing about where the reader
+    // is inside an opaque document.
+    act(() => notifyPageChromeScroll(100));
+    expect(bar).toHaveAttribute('data-scroll-hidden', 'false');
     act(() => notifyPageChromeScroll(140));
     expect(bar).toHaveAttribute('data-scroll-hidden', 'true');
     act(() => notifyPageChromeScroll(80));
