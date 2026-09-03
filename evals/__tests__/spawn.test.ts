@@ -396,3 +396,30 @@ describe('firstUrlAtMs — when the human could first click something (m1)', () 
     expect(r.firstUrlAtMs).toBeNull();
   });
 });
+
+describe('firstUrlAtMs — what it watches, and what it deliberately does not (m1)', () => {
+  it('watches the RETAINED stream, so a line the adapter drops does not start the clock', async () => {
+    // A streaming harness re-sends its whole partial message per token and the adapter filters those
+    // away; `stdout` is what everything downstream is scored from, so a URL that never reaches it must
+    // not produce a timestamp either — otherwise a run reads "no link in the transcript" AND a click time.
+    const script = 'setTimeout(()=>console.log(JSON.stringify({type:"noise",text:"https://x.test/a/ab3cd9"})),120);'
+      + 'setTimeout(()=>console.log(JSON.stringify({type:"keep",text:"published https://x.test/a/ab3cd9"})),450);'
+      + 'setTimeout(()=>{},650)';
+    const keepLine = (l: string) => !l.includes('"noise"');
+    const r = await runInvocation({ ...node(script), keepLine }, { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
+    expect(r.stdout).not.toContain('noise');
+    expect(r.firstUrlAtMs).not.toBeNull();
+    expect(r.firstUrlAtMs!).toBeGreaterThanOrEqual(400);
+  });
+
+  it('ignores a `/start` link — that is the document the agent was GIVEN, not one it made', async () => {
+    const r = await runInvocation(node('console.log("I was given https://x.test/a/ab3cd9/start?k=abc and did nothing")'), { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
+    expect(r.firstUrlAtMs).toBeNull();
+  });
+
+  it('still sees a URL on a FINAL line that carried no newline', async () => {
+    const r = await runInvocation(node('process.stdout.write("done: https://x.test/a/ab3cd9")'), { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
+    expect(r.firstUrlAtMs).not.toBeNull();
+    expect(r.firstUrlAtMs!).toBeLessThanOrEqual(r.durationMs);
+  });
+})

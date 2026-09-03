@@ -94,3 +94,89 @@ describe('the token-less leg', () => {
     expect(prompt).not.toContain('/start?k=');
   });
 });
+
+describe('the edges the seed did not pin', () => {
+  it('selfMinted counts the ATTEMPT, not the grant — a refused mint is still an agent taking a token', () => {
+    // The OSS default caps anonymous minting at 0/hour, so a self-minting agent's first sign is a 429.
+    const m = ledgerMetrics([entry({ method: 'POST', path: '/api/tokens/anonymous', status: 429, error: 'rate_limited' })]);
+    expect(m.selfMinted).toBe(true);
+  });
+
+  it('msToFirstPublish counts an MCP write, because `isWrite` does', () => {
+    const m = ledgerMetrics([
+      entry({ t: 3_000, method: 'POST', path: '/mcp', status: 200, artifactId: 'ab3cd9' }),
+    ], { startedAtMs: 1_000 });
+    expect(m.msToFirstPublish).toBe(2_000);
+  });
+
+  it('msToFirstPublish is null when the ledger saw nothing at all', () => {
+    expect(ledgerMetrics([]).msToFirstPublish).toBeNull();
+  });
+
+  it('skeletonSections is null when the FIRST successful write was a dataset, even though a later one has markup', () => {
+    // The data task writes its dataset first. The brief pins the FIRST successful write, so this reads
+    // null rather than borrowing the document's headings — the guardrail refuses to guess.
+    const m = ledgerMetrics([
+      entry({ t: 1_000, method: 'POST', path: '/api/artifacts', status: 201, reqFormat: 'dataset', artifactId: 'ds1111' }),
+      entry({ t: 2_000, method: 'POST', path: '/api/artifacts', status: 201, reqMarkup: '<h1>a</h1><h2>b</h2>', artifactId: 'ab3cd9' }),
+    ]);
+    expect(m.skeletonSections).toBeNull();
+  });
+
+  it('skeletonSections skips the FAILED first attempt and counts the first write that worked', () => {
+    const m = ledgerMetrics([
+      entry({ t: 1_000, method: 'POST', path: '/api/artifacts', status: 400, reqMarkup: '<h1>a</h1><h2>b</h2><h3>c</h3>' }),
+      entry({ t: 2_000, method: 'POST', path: '/api/artifacts', status: 201, reqMarkup: '<h1>a</h1>' }),
+    ]);
+    expect(m.skeletonSections).toBe(1);
+  });
+
+  it('skeletonSections counts opening h1–h3 only: attributes yes, </h1> and <h4> and <header> no', () => {
+    const markup = '<header><h1 class="t" id="x">T</h1></header><h2\n  data-a="1">A</h2><h3>B</h3><h4>C</h4><hgroup></hgroup>';
+    const m = ledgerMetrics([entry({ method: 'POST', path: '/api/artifacts', status: 201, reqMarkup: markup })]);
+    expect(m.skeletonSections).toBe(3);
+  });
+
+  it('skeletonSections is 0, not null, for a real but heading-less document', () => {
+    const m = ledgerMetrics([entry({ method: 'POST', path: '/api/artifacts', status: 201, reqMarkup: '<p>just a paragraph</p>' })]);
+    expect(m.skeletonSections).toBe(0);
+  });
+
+  it('leaves every neighbouring metric exactly as it was', () => {
+    const m = ledgerMetrics([
+      entry({ t: 1_000, method: 'GET', path: '/docs/artifactbin/SKILL.md', bytes: 10 }),
+      entry({ t: 2_000, method: 'POST', path: '/api/artifacts', status: 201, reqMarkup: '<h1>a</h1>', markupUnchanged: true, artifactId: 'ab3cd9' }),
+    ], { startedAtMs: 500 });
+    expect(m.readDocsBeforeWrite).toBe(true);
+    expect(m.publishedFirstTry).toBe(true);
+    expect(m.canonicalStable).toBe(true);
+    expect(m.docsFetches).toBe(1);
+    expect(m.docsBytes).toBe(10);
+    expect(m.httpCalls).toBe(2);
+  });
+});
+
+describe('the no-credential access line', () => {
+  const NONE = { kind: 'none', base: 'https://x.test' } as const;
+
+  it('points a FETCHED-skill agent at the docs, names no document, and claims no saved connection', () => {
+    const line = buildPrompt(TASK, NONE, { mode: 'fetched_skill+api_action' as never });
+    expect(line).toContain('https://x.test/docs/artifactbin/SKILL.md');
+    expect(line).not.toContain('.artifactbin.env');
+    expect(line).not.toMatch(/document [A-Za-z0-9]{6,12}/);
+    expect(line).not.toMatch(/mx_[A-Za-z0-9_-]+/);
+  });
+
+  it('names the INSTALLED skill but never claims a connection file that was deliberately not written', () => {
+    const line = buildPrompt(TASK, NONE, { mode: 'installed_skill+api_action' as never });
+    expect(line).toContain('https://x.test');
+    expect(line).toMatch(/skill is installed/i);
+    // The whole point of the leg: no token anywhere, and no lie about one being on disk.
+    expect(line).not.toContain('.artifactbin.env');
+    expect(line).not.toMatch(/mx_[A-Za-z0-9_-]+/);
+  });
+
+  it('refuses an MCP mode outright — the MCP config IS a token handoff', () => {
+    expect(() => buildPrompt(TASK, NONE, { mode: 'installed_skill+mcp_action' as never })).toThrow(/token/i);
+  });
+});
