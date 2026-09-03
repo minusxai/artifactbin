@@ -21,12 +21,12 @@
 import { createHash } from 'node:crypto';
 import { EXPORT_INTERNAL_ORIGIN } from '@/lib/config';
 import { services } from '@/lib/services';
-import { ArtifactRow } from './artifacts';
+import { ArtifactRow, declarationsOf } from './artifacts';
 import { CARD_HEIGHT, CARD_WIDTH } from './export-card';
 import { mintExportKey } from './export-key';
 import { json } from './http';
 import { objectStore } from './object-store';
-import { urlValuesSearch } from './story/url-values';
+import { urlSelection } from './story/url-values';
 
 export const EXPORT_MIME = { png: 'image/png', jpg: 'image/jpeg' } as const;
 export type ExportFormat = keyof typeof EXPORT_MIME;
@@ -114,6 +114,7 @@ export function exportStoreKey(
   format: ExportFormat,
   capture: ExportCapture,
   slide = 0,
+  /** The CANONICAL selection token (lib/story/url-values urlSelection), never raw params. */
   selection = '',
 ): string {
   return `exports/${artifact.id}/${artifact.version}.${exportCaptureKey(capture, slide, selection)}.${format}`;
@@ -256,6 +257,8 @@ export function renderArtifactImage(
   // `pageUrl` is REQUIRED: every artifact is shot from its live page. The old
   // optional shape existed so a row could be photographed from its stored HTML
   // instead — which only the retired html tier ever had.
+  /** `selection` is the CANONICAL token from urlSelection — a raw search string here
+   * would give one document unlimited keys for byte-identical renders. */
   opts: { pageUrl: () => string; target: string; capture?: ExportCapture; slide?: number; selection?: string },
 ): Promise<RenderResult> {
   const s = state();
@@ -341,7 +344,9 @@ function remember(s: ExportState, key: string, shot: { mime: string; bytes: Buff
  * has run the read ACL may call this.
  */
 export async function exportImageResponse(
-  artifact: Pick<ArtifactRow, 'id' | 'version' | 'format'>,
+  // `source` is here so the SELECTION can be read the way the document itself
+  // reads it — through its own declarations. See `selection` below.
+  artifact: Pick<ArtifactRow, 'id' | 'version' | 'format' | 'source'>,
   q: { format?: string | null; mode?: string | null; slide?: string | null; search?: string | null },
   base: string,
 ): Promise<Response> {
@@ -362,14 +367,27 @@ export async function exportImageResponse(
    * `/a/<id>/export?$region=NA` photographs the document the link describes
    * and an agent can look at what its user will see. Never for the CARD: an
    * unfurl is of the DOCUMENT, and one reader's filter is not what the next
-   * person should meet in a preview. Not validated here — the raw route owns
-   * that, once, against the flow; this only has to carry it.
+   * person should meet in a preview.
+   *
+   * READ THROUGH THE FLOW, not taken from the params. Forwarding was all this
+   * needed; KEYING on it is what made the difference matter. Both cache layers
+   * are addressed by artifact VERSION — which is what makes one render serve
+   * every unfurl and thumbnail with no invalidation ever run — so a token taken
+   * from the raw `$` params gave one document unlimited distinct keys: the
+   * document ignores a name it does not declare, a value its type refuses and a
+   * value already at its default, so `?$junk=17` renders bytes identical to the
+   * default shot and then stores them forever under a key of their own. The
+   * EXPORT door bounds the RATE (30/min per actor) and not the TOTAL. Now
+   * anything the document would ignore collapses onto the default shot's key,
+   * byte for byte, and one selection has one identity however its link was
+   * written (lib/story/url-values urlSelection).
    */
-  const selection = capture === 'card' ? '' : urlValuesSearch(q.search ?? '');
+  const flow = artifact.format === 'markup' && artifact.source ? declarationsOf(artifact.source) : null;
+  const selection = capture === 'card' ? { search: '', token: '' } : urlSelection(q.search ?? '', flow);
 
   const rendered = await renderArtifactImage(artifact, format, {
     capture,
-    ...(selection ? { selection } : {}),
+    ...(selection.token ? { selection: selection.token } : {}),
     // The headless browser has no session, so a private page would 404 on
     // itself. Mint a signed, seconds-long key scoped to this artifact —
     // minted only AFTER the caller's ACL admitted the requester, and never a
@@ -381,7 +399,7 @@ export async function exportImageResponse(
     // document of their own and render inside the app's <main>.
     pageUrl: () => new URL(
       artifact.format === 'markup'
-        ? `/a/${artifact.id}/raw?chrome=0&key=${mintExportKey(artifact.id)}${selection ? `&${selection}` : ''}`
+        ? `/a/${artifact.id}/raw?chrome=0&key=${mintExportKey(artifact.id)}${selection.search ? `&${selection.search}` : ''}`
         : `/a/${artifact.id}?key=${mintExportKey(artifact.id)}`,
       EXPORT_INTERNAL_ORIGIN ?? base,
     ).toString(),

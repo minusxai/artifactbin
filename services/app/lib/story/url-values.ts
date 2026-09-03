@@ -179,14 +179,13 @@ export function writeUrlValues(search: string, flow: Dataflow, values: Record<st
 
 /**
  * Just the `$` params of a search string, in a canonical order — the SELECTION
- * as an opaque token, for a caller that has no flow to validate it against.
+ * as an opaque token, for a caller with no flow in hand.
  *
- * The exporter is that caller: it forwards a link's selection to the page it
- * photographs (where the raw route validates it, exactly once) and needs a
- * stable string to segment its render CACHE by. Version-keyed caching is what
- * makes one shot serve every unfurl, and it is also what would have served the
- * DEFAULT picture for every selection — the same URL, so the same key.
- * Ordering is by raw key so two links naming the same picks share a shot.
+ * ONE caller is left: the owner's page seeding the frame it is about to load
+ * (components/ArtifactSurface). Junk is harmless there — the raw route parses
+ * it against the flow and ignores what the document does not declare, and
+ * nothing is stored. A caller that KEYS anything on the selection must use
+ * `urlSelection` below instead; see its header for what that difference cost.
  */
 export function urlValuesSearch(search: string): string {
   return pairsOf(search)
@@ -194,4 +193,46 @@ export function urlValuesSearch(search: string): string {
     .map((p) => p.raw)
     .sort()
     .join('&');
+}
+
+/** A link's selection, as the two different things a caller needs it to be. */
+export interface UrlSelection {
+  /**
+   * The `$` params to put on the document's own URL (no leading `?`), in
+   * DECLARATION order — exactly what `writeUrlValues` would write, so what the
+   * exporter photographs and what a reader's address bar says agree.
+   */
+  search: string;
+  /**
+   * The SAME selection as a cache key segment: sorted by name, so one selection
+   * has one identity however its link was written. Empty when the document is
+   * at rest, which is what keeps a default shot's key byte-identical to the one
+   * it had before selections existed.
+   */
+  token: string;
+}
+
+/**
+ * THE SELECTION A DOCUMENT ACTUALLY HAS, for a caller that must key on it.
+ *
+ * Read through the flow, exactly as the served document reads it — so a name
+ * the document does not declare, a value its type refuses, and a value already
+ * at its default all collapse to "no selection". That equivalence is the whole
+ * point rather than tidiness: `/export`'s two cache layers are keyed by artifact
+ * VERSION (one render then serves every unfurl and thumbnail, with no
+ * invalidation ever run), so a token taken from the RAW params gave one document
+ * unlimited distinct keys — `?$junk=17` renders bytes identical to the default
+ * shot and then stores them forever under a key of their own. The EXPORT door
+ * bounds the RATE (30/min per actor) and not the TOTAL, so that is a cache-fill
+ * anyone who can read a public document can pull.
+ */
+export function urlSelection(search: string, flow: Dataflow | null): UrlSelection {
+  if (!flow) return { search: '', token: '' };
+  const values = readUrlValues(search, flow);
+  const params = urlValueParams(flow, values);
+  const named = Object.entries(params).filter((e): e is [string, string] => e[1] !== null);
+  return {
+    search: writeUrlValues('', flow, values).replace(/^[?]/, ''),
+    token: named.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([n, v]) => `${n}=${v}`).join('&'),
+  };
 }

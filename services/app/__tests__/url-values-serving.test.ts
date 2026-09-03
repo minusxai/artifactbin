@@ -130,3 +130,80 @@ describe('GET /a/<id>/export with a selection', () => {
     expect(shot(0)).not.toContain('$region');
   });
 });
+
+/**
+ * F2 ROUND 2 — THE SHOT'S IDENTITY IS THE SELECTION THE DOCUMENT ACTUALLY HAS,
+ * not the `$` params somebody typed.
+ *
+ * Making the selection part of the render cache key is what stopped `?$region=NA`
+ * being answered with the picture of the defaults. But keying on the RAW params
+ * gave the same document unlimited distinct keys: the raw route ignores a name
+ * the document does not declare, a value its type refuses, and a value already at
+ * its default — so `?$junk=17` renders bytes identical to the default shot and
+ * then stores them under a key of their own, permanently (export objects are
+ * version-keyed and never invalidated). At the EXPORT door's own ceiling — 30 a
+ * minute per actor, ~43,000 a day — that is a cache-fill vector any reader of a
+ * public document can pull.
+ *
+ * So the token is derived through the FLOW, the same way the served document is:
+ * `readUrlValues` then the non-default values only, canonically ordered. Anything
+ * the document would ignore collapses onto the default shot's key byte for byte,
+ * and one selection has exactly one key however its link was written.
+ */
+describe('the export cache key is the SELECTION, canonicalized through the flow', () => {
+  let fake: ReturnType<typeof fakeBrowser> & { calls: unknown[] };
+  beforeEach(async () => {
+    await resetExportRenderer();
+    fake = fakeBrowser() as typeof fake;
+    setServices({ browser: fake });
+  });
+  afterEach(() => setServices({}));
+  const urls = () => fake.calls.map((c) => (c as RenderRequest).url);
+
+  it('a name the document does not declare is the DEFAULT shot, not a new one', async () => {
+    const { id, token } = await published();
+    const req = (search: string) => exportRoute(request(`/a/${id}/export${search}`, { token }), params(id));
+    expect((await req('')).status).toBe(200);
+    expect((await req('?$junk=17')).status).toBe(200);
+    expect(fake.calls.length).toBe(1);
+    expect(urls()[0]).not.toContain('junk');
+  });
+
+  it('a value already at its default is the DEFAULT shot', async () => {
+    const { id, token } = await published();
+    const req = (search: string) => exportRoute(request(`/a/${id}/export${search}`, { token }), params(id));
+    expect((await req('')).status).toBe(200);
+    // `region` is declared `default="EU"`; asking for EU is asking for the document.
+    expect((await req('?$region=EU')).status).toBe(200);
+    expect(fake.calls.length).toBe(1);
+    expect(urls()[0]).not.toContain('$region');
+  });
+
+  it('a value the declared type refuses is the DEFAULT shot', async () => {
+    const { id, token } = await published();
+    const req = (search: string) => exportRoute(request(`/a/${id}/export${search}`, { token }), params(id));
+    expect((await req('')).status).toBe(200);
+    // `top` is a number; the document ignores "ten", so the picture is the default one.
+    expect((await req('?$top=ten')).status).toBe(200);
+    expect(fake.calls.length).toBe(1);
+  });
+
+  it('the same selection written in either order is ONE shot', async () => {
+    const { id, token } = await published();
+    const req = (search: string) => exportRoute(request(`/a/${id}/export${search}`, { token }), params(id));
+    expect((await req('?$region=NA&$top=5')).status).toBe(200);
+    expect((await req('?$top=5&$region=NA')).status).toBe(200);
+    expect(fake.calls.length).toBe(1);
+  });
+
+  it('…and a real, non-default selection still gets its own shot', async () => {
+    const { id, token } = await published();
+    const req = (search: string) => exportRoute(request(`/a/${id}/export${search}`, { token }), params(id));
+    expect((await req('')).status).toBe(200);
+    expect((await req('?$region=NA')).status).toBe(200);
+    expect((await req('?$region=NA&$top=5')).status).toBe(200);
+    expect(fake.calls.length).toBe(3);
+    expect(urls()[1]).toContain('$region=NA');
+    expect(urls()[2]).toContain('$top=5');
+  });
+});
