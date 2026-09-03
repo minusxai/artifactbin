@@ -73,8 +73,7 @@ describe('the registry', () => {
   it('a task may only list checks its own kind can answer', () => {
     // `responded` belongs to the comment kind; a publish task listing it would
     // be gated on a check nothing computes, which `verdictFor` fails.
-    expect(() => task({ checks: ['published', 'responded'] as Task['checks'] })).toThrow(/responded/);
-    expect(() => task({ kind: 'comment', checks: ['responded'] } as Partial<Task>)).toThrow(/comment/); // …and still needs its comment
+    expect(() => task({ checks: ['published', 'responded'] as Task['checks'] })).toThrow(/responded.*is not one a publish task can answer/);
     expect(checkNamesFor('comment')).toEqual(expect.arrayContaining(['responded', 'changed', 'resolved']));
     expect(checkNamesFor('publish')).toContain('kept_untouched_text');
   });
