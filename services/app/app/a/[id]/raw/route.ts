@@ -33,6 +33,7 @@ import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { declaresMutations } from '@/lib/story/helmet';
 import { markupCsp, mutatePath, queryPath } from '@/lib/story/markup-csp';
+import { readUrlValues } from '@/lib/story/url-values';
 import { storyRuntimeAssets } from '@/lib/story/runtime-asset';
 import { ownerUsername } from '@/lib/users';
 import { displayTitle } from '@/lib/story/title';
@@ -187,9 +188,35 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
        * rather than fast — /export photographs this frame, and a photograph of
        * a skeleton previews nothing.
        */
+      /*
+       * THE READER'S OWN SELECTION, carried in the link (`?$region=west` —
+       * lib/story/url-values). It is read from the DECLARATIONS, which the
+       * reader path needs anyway, so a link naming a value the document does
+       * not declare, or a value its type refuses, costs nothing and changes
+       * nothing: the document falls back to what its author declared. The
+       * server's own keys on this URL (`key`, `chrome`, `edit`, `comment`,
+       * `v`) carry no `$` and a Value can never be named with one, so a
+       * selection cannot shadow them.
+       *
+       * Where it goes differs by which render this is, and that is the whole
+       * of it:
+       *  - the READER (chrome=1) gets the values on the island's THIRD
+       *    dataflow field, values with no rows. Seeding through `state`
+       *    instead would say "somebody already ran the queries" and cancel
+       *    paint-first's first run, leaving every chart on its skeleton.
+       *  - the CAPTURE (chrome=0) is the render that must be SETTLED rather
+       *    than fast — /export photographs it — so its selection is threaded
+       *    into the run itself and the rows it carries are the selected ones.
+       */
+      const declared = declarationsForRow(artifact);
+      const search = new URL(request.url).search;
+      const urlValues = declared ? readUrlValues(search, declared.flow) : {};
+      const hasUrlValues = Object.keys(urlValues).length > 0;
       const [refData, dataflow, creatorUsername] = await Promise.all([
         refDataForRow(artifact),
-        chrome ? Promise.resolve(declarationsForRow(artifact)) : dataflowForRow(artifact),
+        chrome
+          ? Promise.resolve(declared && hasUrlValues ? { ...declared, values: urlValues } : declared)
+          : dataflowForRow(artifact, { values: urlValues }),
         chrome ? ownerUsername(artifact.user_id) : Promise.resolve(null),
       ]);
       const runtime = storyRuntimeAssets();

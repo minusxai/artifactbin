@@ -176,3 +176,22 @@ export function writeUrlValues(search: string, flow: Dataflow, values: Record<st
   const query = [...kept, ...mine].join('&');
   return query ? `?${query}` : '';
 }
+
+/**
+ * Just the `$` params of a search string, in a canonical order — the SELECTION
+ * as an opaque token, for a caller that has no flow to validate it against.
+ *
+ * The exporter is that caller: it forwards a link's selection to the page it
+ * photographs (where the raw route validates it, exactly once) and needs a
+ * stable string to segment its render CACHE by. Version-keyed caching is what
+ * makes one shot serve every unfurl, and it is also what would have served the
+ * DEFAULT picture for every selection — the same URL, so the same key.
+ * Ordering is by raw key so two links naming the same picks share a shot.
+ */
+export function urlValuesSearch(search: string): string {
+  return pairsOf(search)
+    .filter((p) => p.ours)
+    .map((p) => p.raw)
+    .sort()
+    .join('&');
+}
