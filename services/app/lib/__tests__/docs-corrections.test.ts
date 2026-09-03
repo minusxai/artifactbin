@@ -66,6 +66,16 @@ describe('the publishing skill', () => {
     expect(quote).toContain('selected');
     expect(doc).toContain('quote_found');
   });
+  /*
+   * ADDED (F8). Forking became an AGENT verb, and the thing an agent needs is
+   * not the address — the registry renders that — but WHEN to reach for it:
+   * the create/edit loop is where a document that already exists gets adapted.
+   */
+  it('§F8 teaches forking as the way to adapt a document you can read', () => {
+    expect(doc).toContain(`POST ${BASE}/api/artifacts/<id>/fork`);
+    expect(doc.replace(/\s+/g, ' ')).toContain('To adapt a document you can read, fork it, then edit the copy');
+    expect(doc).toContain('"forked_from"');
+  });
   it('§1 error table carries image_fetch_failed and dataset_read_only', () => {
     expect(doc).toContain('image_fetch_failed');
     expect(doc).toContain('dataset_read_only');

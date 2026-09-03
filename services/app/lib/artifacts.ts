@@ -339,6 +339,19 @@ export async function createArtifact(
 }
 
 /**
+ * What a forker may change about the copy AS IT IS MADE — the three fields an
+ * owner reaches for first. Every value here is already validated by the
+ * caller through the shared parsers (lib/artifact-wire
+ * `parseVisibilityValue`/`parseFolderField`), so this door does not
+ * re-decide, for instance, whether an anonymous token may go private.
+ */
+export interface ForkOverrides {
+  title?: string;
+  visibility?: Visibility;
+  folder?: string;
+}
+
+/**
  * FORK — the same artifact under a NEW OWNER and a new id, and nothing else.
  *
  * What travels is the CONTENT: format, title, description, visibility, access,
@@ -362,10 +375,20 @@ export async function createArtifact(
  * rendering broken for its new owner. The refusal Response passes through
  * verbatim. The data tiers have nothing to re-validate — their content is bytes
  * behind a key — so they are copied straight across.
+ *
+ * `overrides` are the three things a forker changes FIRST (the browser door
+ * passes none; the agent operation passes what its caller sent, already
+ * validated by the shared parsers). They are applied to the copy's stored
+ * state rather than written afterwards: a post-hoc title would be a second
+ * write, rotating the `edit_id` the create reply just handed back.
  */
-export async function forkArtifact(actor: TokenActor, source: ArtifactRow): Promise<ArtifactRow | Response> {
+export async function forkArtifact(
+  actor: TokenActor,
+  source: ArtifactRow,
+  overrides: ForkOverrides = {},
+): Promise<ArtifactRow | Response> {
   if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded' }, 403);
-  const input = await forkInput(actor, source);
+  const input = await forkInput(actor, source, overrides);
   if (input instanceof Response) return input;
   const row = await createArtifact(actor.tokenId, actor.userId, input, { forkedFrom: source.id, linkRole: source.link_role });
   // Against the SOURCE: "this was forked" is a fact about the original, and the
@@ -375,17 +398,19 @@ export async function forkArtifact(actor: TokenActor, source: ArtifactRow): Prom
 }
 
 /** The copy's stored state, as the forker would have published it. */
-async function forkInput(actor: TokenActor, source: ArtifactRow): Promise<ArtifactInput | Response> {
-  // Everything the copy keeps that is not the content itself. `link_role` is
-  // carried too, but through createArtifact's creation-only argument rather
-  // than here: it is not part of ArtifactInput, which the replace path shares.
-  // `folder` is absent on purpose — createArtifact's default puts the copy at
-  // the forker's root, which is the only place they could have filed it.
+async function forkInput(actor: TokenActor, source: ArtifactRow, overrides: ForkOverrides): Promise<ArtifactInput | Response> {
+  // Everything the copy keeps that is not the content itself, with the
+  // forker's overrides winning. `link_role` is carried too, but through
+  // createArtifact's creation-only argument rather than here: it is not part
+  // of ArtifactInput, which the replace path shares. With no `folder`
+  // override, createArtifact's default puts the copy at the forker's root,
+  // which is the only place they could have filed it.
   const carried = {
-    title: source.title,
+    title: overrides.title ?? source.title,
     description: source.description,
-    visibility: source.visibility,
+    visibility: overrides.visibility ?? source.visibility,
     access: source.access,
+    ...(overrides.folder !== undefined ? { folder: overrides.folder } : {}),
   };
   if (source.format !== 'markup') {
     return { ...carried, format: source.format, content: source.content, source: source.source, meta: source.meta };
