@@ -23,6 +23,7 @@
  */
 import { chromium } from 'playwright';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
+import { mintAnon } from './lib/mint-anon.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const failures = [];
@@ -42,7 +43,7 @@ const sessionCookie = (await owner.cookies(BASE)).find((c) => /better-auth/.test
 check(Boolean(sessionCookie), 'email-code login landed a session cookie');
 
 // A user-owned token: mint anonymously, claim from the session context.
-const anon = await (await fetch(`${BASE}/api/tokens/anonymous`, { method: 'POST' })).json();
+const anon = await mintAnon(BASE);
 const claimed = await page.evaluate(async (t) => {
   const r = await fetch('/api/tokens/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }) });
   return r.status;

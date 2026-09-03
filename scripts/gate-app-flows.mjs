@@ -20,6 +20,7 @@
 import { chromium } from 'playwright';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
+import { mintAnonResponse } from './lib/mint-anon.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3000';
 const fails = [];
@@ -32,7 +33,8 @@ const J = async (path, init = {}, token) => {
 // Anonymous minting is IP-rate-limited (10/hour). Say so plainly rather than
 // failing every later check with an opaque 401.
 const mint = async () => {
-  const r = await J('/api/tokens/anonymous', { method: 'POST' });
+  const res = await mintAnonResponse(B);
+  const r = { status: res.status, body: await res.json().catch(() => null) };
   if (r.status === 429) {
     console.error('\nAnonymous mint is rate-limited (10/hour per IP). Wait for the window, restart the server (the limiter is in-memory), or export GATE_TOKEN=<mx_...> and re-run.');
     process.exit(2);
