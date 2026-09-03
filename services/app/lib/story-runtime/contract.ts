@@ -24,6 +24,16 @@ export interface StoryIslandDataflow {
    * canvas, both of which need a settled document rather than a fast one.
    */
   state?: DataflowState;
+  /**
+   * SPIKE S1 (F2): the reader's own `<Value>` choices, carried in the URL
+   * (`?$region=west`) and parsed server-side. Values WITHOUT rows — which is
+   * exactly why they are their own field rather than a synthetic `state`:
+   * `state` present means "somebody already ran the queries", so seeding
+   * through it would cancel the document's first run and leave every chart on
+   * its skeleton. These fold in as the store's starting values and the
+   * paint-first run happens WITH them.
+   */
+  values?: Record<string, Scalar>;
 }
 
 /**

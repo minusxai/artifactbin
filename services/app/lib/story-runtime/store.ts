@@ -118,7 +118,17 @@ export interface CreateStoreOptions {
 export const EMPTY_STATE: DataflowState = { values: {}, tables: {}, errors: {} };
 
 export function createDataflowStore(
-  input: { flow: Dataflow; state?: DataflowState },
+  /*
+   * SPIKE S1 (F2): `values` is the THIRD island field — values WITHOUT rows.
+   * The reader's URL carries their `<Value>` choices, and they must be the
+   * store's starting point before its first run. Seeding them through `state`
+   * cannot work: `state` present is how a capture and the editor's canvas say
+   * "the rows are already computed", so it silently cancels paint-first's
+   * first run. Precedence, lowest to highest: the declarations' own defaults,
+   * the state a capture arrived with, then the URL — the reader's link is the
+   * most specific thing anyone said about this document.
+   */
+  input: { flow: Dataflow; state?: DataflowState; values?: Record<string, Scalar> },
   options: CreateStoreOptions = {},
 ): DataflowStore {
   let flow = input.flow;
@@ -126,7 +136,7 @@ export function createDataflowStore(
   let transport: QueryTransport | null = options.transport ?? null;
   const listeners = new Set<() => void>();
   let state: DataflowState = {
-    values: { ...initialValues(flow), ...(input.state?.values ?? {}) },
+    values: { ...initialValues(flow), ...(input.state?.values ?? {}), ...(input.values ?? {}) },
     // Inline tables come from the declarations themselves — nobody has to run
     // anything for them, which is what makes a document of static rows work
     // with no server round trip at all.
