@@ -123,7 +123,7 @@ export default function HeaderBar({
                 agent docs
               </a>
               {' / '}
-              <a href="/docs/human" className={LINK}>
+              <a href="/docs-human" className={LINK}>
                 human docs
               </a>
             </span>

@@ -84,7 +84,7 @@ export function TokensNewPage() {
                 {copied ? 'copied' : 'copy token'}
               </Button>
               <p className="mt-4 font-sans text-sm text-muted">
-                Use it with your agent. <a className="text-accent underline underline-offset-2" href="/docs/human">Instructions</a>
+                Use it with your agent. <a className="text-accent underline underline-offset-2" href="/docs-human">Instructions</a>
               </p>
             </>
           ) : (

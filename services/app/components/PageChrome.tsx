@@ -262,7 +262,7 @@ export function PageMenu({
 
         {link('/', 'Artifacts', <FileText size={15} strokeWidth={1.5} />, pathname === '/')}
         {link('/account', 'Account', <User size={15} strokeWidth={1.5} />, pathname === '/account')}
-        {link('/docs', 'Human Docs', <BookOpen size={15} strokeWidth={1.5} />, pathname.startsWith('/docs') && pathname !== '/docs/artifactbin/SKILL.md')}
+        {link('/docs-human', 'Human Docs', <BookOpen size={15} strokeWidth={1.5} />, pathname === '/docs-human')}
         {link('/docs/artifactbin/SKILL.md', 'Agent docs', <Braces size={15} strokeWidth={1.5} />, pathname === '/docs/artifactbin/SKILL.md')}
 
         <div className="mt-auto" />

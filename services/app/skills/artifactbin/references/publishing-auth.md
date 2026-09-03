@@ -49,4 +49,4 @@ the token, so later stateless calls still carry your name. MCP clients do not
 need this header: MCP `initialize.clientInfo` supplies the identity, and the
 server records the transport separately on each annotation comment.
 
-Human tour for your user: `[[ base ]]/docs/human`.
+Human tour for your user: `[[ base ]]/docs-human`.

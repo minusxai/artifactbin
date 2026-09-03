@@ -112,7 +112,7 @@ describe('the address heals for the page, never for the reader', () => {
 
 describe('the app\'s paths', () => {
   it('serve the SPA under the app CSP, and anything else is a 404', async () => {
-    for (const p of ['/', '/login', '/account', '/docs/human']) {
+    for (const p of ['/', '/login', '/account', '/docs-human']) {
       const res = await app.request(p);
       expect(res.status, p).toBe(200);
       expect(res.headers.get('content-security-policy'), p).toContain('frame-ancestors');
@@ -120,21 +120,23 @@ describe('the app\'s paths', () => {
     expect((await app.request('/nope/nothing')).status).toBe(404);
   });
   /**
-   * A miss is 404 as a STATUS — and the SPA as a body, so the person sees the
-   * app's own 404 page rather than a bare-text default. Three addresses miss
-   * three different ways and must answer identically: a root typo (no route),
-   * a handle nobody holds, and a handle that exists (which is the 200 that
-   * proves the 404s above are decisions, not accidents).
+   * A miss is 404 as a STATUS — and, TO A BROWSER, the SPA as a body, so the
+   * person sees the app's own 404 page rather than a bare-text default. Three
+   * addresses miss three different ways and must answer identically: a root
+   * typo (no route), a handle nobody holds, and a handle that exists (which is
+   * the 200 that proves the 404s above are decisions, not accidents). A caller
+   * that never asked for HTML gets the JSON refusal naming `/docs` instead —
+   * `server/__tests__/docs-human.test.ts` owns that half.
    */
   it('a miss is the 404 STATUS carrying the SPA, wherever it happens', async () => {
     const w = await world();
     for (const p of ['/nope/nothing', '/@nobody_here']) {
-      const res = await app.request(p);
+      const res = await app.request(p, { headers: { accept: 'text/html' } });
       expect(res.status, p).toBe(404);
       expect(res.headers.get('content-security-policy'), p).toContain('frame-ancestors');
       expect(await res.text(), p).toContain('SPA');
     }
-    expect((await app.request(`/@${w.owner.username}`)).status).toBe(200);
+    expect((await app.request(`/@${w.owner.username}`, { headers: { accept: 'text/html' } })).status).toBe(200);
   });
   it('mounts the API: an unauthenticated write is the handler\'s own 401', async () => {
     const res = await app.request('/api/artifacts', { method: 'POST', body: '{}', headers: { 'content-type': 'application/json', ...as({ credential: 'none' }) } });

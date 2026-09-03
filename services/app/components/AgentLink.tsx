@@ -172,7 +172,7 @@ export default function AgentLink({
       <div className="flex items-baseline justify-between gap-3">
         <span className="font-mono text-xs text-fg">Start a live document:</span>
         {docsLink && (
-          <a href="/docs" className={`shrink-0 font-mono text-xs ${LINK}`}>
+          <a href="/docs-human" className={`shrink-0 font-mono text-xs ${LINK}`}>
             how it works →
           </a>
         )}

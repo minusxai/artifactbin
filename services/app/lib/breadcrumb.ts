@@ -62,9 +62,10 @@ export function crumbsFor(pathname: string, title?: string | null): Crumb[] {
   // is not a page. Its name is the whole trail.
   if (path.startsWith('/a/')) return [{ label: named ?? 'artifact' }];
 
-  // Every /docs address is the same destination as far as the bar cares — the
-  // human tour and the agent protocol doc are two readings of one thing.
-  if (path === '/docs' || path.startsWith('/docs/')) return [{ label: 'docs' }];
+  // Every docs address is the same destination as far as the bar cares — the
+  // human tour (`/docs-human`) and the agent tree (`/docs/…`) are two readings
+  // of one thing.
+  if (path === '/docs' || path === '/docs-human' || path.startsWith('/docs/')) return [{ label: 'docs' }];
 
   const name = PAGE_NAMES[path] ?? named;
   return name ? [{ label: name }] : [];
