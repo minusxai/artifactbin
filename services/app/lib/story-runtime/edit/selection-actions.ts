@@ -331,6 +331,10 @@ export function createFrameSelectionActions({
    * bubble hanging over words that are no longer selected.
    */
   const onSelectionChange = () => {
+    // Free for a reader and inside the editor, where nothing is granted: this
+    // fires on every drag frame and every caret move, and reading a Selection
+    // is the cost the keyup filter above exists to avoid paying per keystroke.
+    if (!capabilities.edit && !capabilities.annotate) return;
     const selection = win.getSelection();
     if (!selection || selection.isCollapsed) { hide(); return; }
     if (!selection.toString().trim()) return;

@@ -314,8 +314,15 @@ ok(placed.bottom > placed.top && placed.right > placed.left
 ok(placed.buttons.length > 0 && placed.buttons.every((h) => h >= 44),
   `touch: every action is a 44px touch target (${placed.buttons.join(', ')}px)`);
 
-// The dock is the page's on an owner's shell (the document's own copy is
-// display:none while framed), so the two boxes are compared in PAGE space.
+/*
+ * …and clear of the DOCK. On an owner's shell the document's own copy of the
+ * reader chrome is display:none (`.mx-framed`), so what a bubble inside the
+ * frame can actually collide with is the PAGE's dock — the two boxes are
+ * compared in page space. The frame-side clamp against a dock that IS parked
+ * at the foot of the viewport is a unit case (selection-actions.ui.test.ts),
+ * because no browser this gate can drive puts one there: the bubble needs a
+ * capability, and everyone who has one is served the shell.
+ */
 const overDock = await touch.evaluate((box) => {
   const frameBox = document.querySelector('iframe[title="artifact"]').getBoundingClientRect();
   const dock = document.querySelector('[data-mx-reader-chrome], [aria-label="Page actions"]');
@@ -323,7 +330,7 @@ const overDock = await touch.evaluate((box) => {
   return { bubbleBottom: frameBox.top + box.bottom, dockTop: dockBox?.top ?? null };
 }, { bottom: placed.bottom });
 ok(placed.bottom > placed.top && (overDock.dockTop === null || overDock.bubbleBottom <= overDock.dockTop + 1),
-  `touch: and it stays clear of the bottom dock (bubble bottom ${Math.round(overDock.bubbleBottom)} vs dock top ${overDock.dockTop === null ? 'none' : Math.round(overDock.dockTop)})`);
+  `touch: and it stays clear of the page's bottom dock (bubble bottom ${Math.round(overDock.bubbleBottom)} vs dock top ${overDock.dockTop === null ? 'none' : Math.round(overDock.dockTop)})`);
 
 // A tap, not a click: the whole point is the finger.
 await docFrame.locator('[aria-label="Annotate selected text"]').tap();
