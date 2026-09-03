@@ -25,7 +25,8 @@ and starts publishing.
 ## The editor
 
 Every artifact is human-editable in place at its own url — edit is a mode on
-the artifact's own url (owner only — session or the creating token):
+the artifact's own url, for the owner (a session, or the creating token) and
+for anyone invited as an editor:
 
 - **WYSIWYG**: click into text to edit it; for `markup`, click any element to
   select it — ancestor breadcrumbs, a font-size stepper, bold/italic, alignment,
@@ -35,3 +36,14 @@ the artifact's own url (owner only — session or the creating token):
 - **History rail**: every save is a version; click any to preview, one click to
   restore (restores are themselves versioned — nothing is ever lost, and the
   link never changes).
+
+## Comments
+
+Commenting is a layer, not a mode: anyone who may comment — owner, editor or
+invited commenter — selects text and opens a thread while reading or while
+editing, and the comment keeps the words it was about as well as the node it
+sits on. Bodies are plain text on the wire and read as a small markdown subset
+(emphasis, `code`, fences, lists, quotes, links), so an agent answering
+feedback writes what it would write in a terminal. A thread never travels in
+the markup: a full-replace PUT cannot delete a comment, and only the anchor
+attribute on the commented node is the agent's to preserve.
