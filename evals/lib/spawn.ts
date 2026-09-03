@@ -189,7 +189,7 @@ function resolveOnPath(cmd: string, PATH: string | undefined): string {
   throw new Error(`--run-as: cannot find "${cmd}" on PATH`);
 }
 
-export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string; baseEnv: Record<string, string | undefined>; timeoutMs: number; stdoutPath: string; stderrPath: string; maxStdoutBytes?: number; runAs?: string; homeDir?: string; workspaceRoot?: string }): Promise<SpawnResult> {
+export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string; baseEnv: Record<string, string | undefined>; timeoutMs: number; stdoutPath: string; stderrPath: string; maxStdoutBytes?: number; runAs?: string; homeDir?: string; workspaceRoot?: string; exec?: (argv: string[]) => void }): Promise<SpawnResult> {
   const cap = opts.maxStdoutBytes ?? DEFAULT_MAX_STDOUT_BYTES;
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(opts.baseEnv)) if (v !== undefined && !inv.unsetEnv.includes(k)) env[k] = v;
@@ -207,83 +207,103 @@ export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string;
   env.PWD = opts.cwd;
   delete env.OLDPWD;
 
+  // The privileged half of the switch — the one step that needs a sudoer. Injectable so the hand-over and
+  // the reclaim can be asserted as argv, with no sudo anywhere in the suite.
+  const exec = opts.exec ?? ((argv: string[]) => {
+    const done = spawnSync(argv[0], argv.slice(1), { stdio: 'inherit' });
+    if (done.status !== 0) throw new Error(`--run-as ${opts.runAs}: \`${argv.join(' ')}\` exited ${String(done.status ?? done.signal ?? done.error?.message)}`);
+  });
+
   // No `--run-as`, no sudo: a laptop run is untouched by any of this. Only argv changes —
   // the line filter, the redaction list and the environment are the same launch either way.
   let argv = inv.argv;
+  // What the driver has LENT the agent, and therefore owes itself back once the child is done.
+  let lent: RunAsDirs | undefined;
   if (opts.runAs) {
     const owned = prepareRunAsDirs(opts);
     // Planned from the FINAL environment — the CA and outbox paths the child will be told to open.
     const readable = readableForAgent(env, opts);
-    handOverRunAsDirs(opts.runAs, { ...owned, traverse: [...new Set([...readable.dirs, ...owned.traverse])], read: readable.files }, (chown) => {
-      const done = spawnSync(chown[0], chown.slice(1), { stdio: 'inherit' });
-      if (done.status !== 0) throw new Error(`--run-as ${opts.runAs}: \`${chown.join(' ')}\` exited ${String(done.status ?? done.signal ?? done.error?.message)}`);
-    });
-    argv = wrapRunAs(inv, opts.runAs, (cmd) => resolveOnPath(cmd, env.PATH)).argv;
+    handOverRunAsDirs(opts.runAs, { ...owned, traverse: [...new Set([...readable.dirs, ...owned.traverse])], read: readable.files }, exec);
+    lent = owned;
   }
 
-  const secrets = (inv.redact ?? []).filter((s) => s.length > 0);
-  const scrub = (text: string) => scrubSecrets(text, secrets);
-  // A secret can straddle two chunks, so the tail of each chunk is held back by the longest secret's length.
-  const carryLen = longestSecret(secrets);
+  try {
+    if (opts.runAs) argv = wrapRunAs(inv, opts.runAs, (cmd) => resolveOnPath(cmd, env.PATH)).argv;
 
-  const out = fs.createWriteStream(opts.stdoutPath);
-  const errOut = fs.createWriteStream(opts.stderrPath, { flags: 'a' });
-  const started = Date.now();
-  const stdio: ['ignore', 'pipe', 'pipe'] = ['ignore', 'pipe', 'pipe'];
-  const child: ChildProcess = spawn(argv[0], argv.slice(1), { cwd: opts.cwd, env: env as NodeJS.ProcessEnv, stdio, detached: process.platform !== 'win32' });
-  let stdout = '';
-  let written = 0;
-  let truncated = false;
-  let pending = '';
-  const retain = (text: string) => {
-    if (!text) return;
-    stdout += text;
-    if (stdout.length > cap) {
-      truncated = true;
-      stdout = stdout.slice(stdout.length - cap); // keep the tail: the reducer reads the end
+    const secrets = (inv.redact ?? []).filter((s) => s.length > 0);
+    const scrub = (text: string) => scrubSecrets(text, secrets);
+    // A secret can straddle two chunks, so the tail of each chunk is held back by the longest secret's length.
+    const carryLen = longestSecret(secrets);
+
+    const out = fs.createWriteStream(opts.stdoutPath);
+    const errOut = fs.createWriteStream(opts.stderrPath, { flags: 'a' });
+    const started = Date.now();
+    const stdio: ['ignore', 'pipe', 'pipe'] = ['ignore', 'pipe', 'pipe'];
+    const child: ChildProcess = spawn(argv[0], argv.slice(1), { cwd: opts.cwd, env: env as NodeJS.ProcessEnv, stdio, detached: process.platform !== 'win32' });
+    let stdout = '';
+    let written = 0;
+    let truncated = false;
+    let pending = '';
+    const retain = (text: string) => {
+      if (!text) return;
+      stdout += text;
+      if (stdout.length > cap) {
+        truncated = true;
+        stdout = stdout.slice(stdout.length - cap); // keep the tail: the reducer reads the end
+      }
+      if (written < cap) {
+        out.write(text); // keep the head on disk: a person debugging reads the start
+        written += text.length;
+      }
+    };
+    child.stdout!.on('data', (c: Buffer) => {
+      pending += c.toString('utf8');
+      const nl = pending.lastIndexOf('\n');
+      if (nl === -1) return; // a line split across chunks is judged whole, once it is whole
+      const complete = pending.slice(0, nl + 1);
+      pending = pending.slice(nl + 1);
+      retain(scrub(inv.keepLine ? complete.split('\n').filter((l) => l === '' || inv.keepLine!(l)).join('\n') : complete));
+    });
+
+    // stderr is a plain stream: scrub it too, holding back a chunk's tail so a secret cannot slip through a split.
+    let errCarry = '';
+    child.stderr!.on('data', (c: Buffer) => {
+      const text = errCarry + c.toString('utf8');
+      const cut = Math.max(0, text.length - carryLen);
+      errOut.write(scrub(text.slice(0, cut)));
+      errCarry = text.slice(cut);
+    });
+
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try { process.kill(-child.pid!, 'SIGKILL'); } catch { child.kill('SIGKILL'); }
+    }, opts.timeoutMs);
+
+    const exitCode = await new Promise<number | null>((resolve) => {
+      child.on('error', () => resolve(null));
+      child.on('exit', (code: number | null) => resolve(code));
+    });
+    clearTimeout(timer);
+    if (pending) retain(scrub(inv.keepLine && !inv.keepLine(pending) ? '' : pending)); // a final line with no newline
+    if (errCarry) errOut.write(scrub(errCarry));
+    const finish = (stream: fs.WriteStream) => new Promise<void>((resolve, reject) => {
+      stream.once('error', reject);
+      stream.end(resolve);
+    });
+    await Promise.all([finish(out), finish(errOut)]);
+    return { stdout, exitCode, timedOut, durationMs: Date.now() - started, truncated };
+  } finally {
+    // The last step of the contract, and it must not be able to lose the run: a reclaim that fails is
+    // reported on the run's own stderr and the result stands.
+    if (lent) {
+      try {
+        reclaimRunAsDirs(lent, exec);
+      } catch (err) {
+        try { fs.appendFileSync(opts.stderrPath, `--run-as ${opts.runAs}: reclaim failed: ${err instanceof Error ? err.message : String(err)}\n`); } catch { /* the run's result is not the reclaim's to lose */ }
+      }
     }
-    if (written < cap) {
-      out.write(text); // keep the head on disk: a person debugging reads the start
-      written += text.length;
-    }
-  };
-  child.stdout!.on('data', (c: Buffer) => {
-    pending += c.toString('utf8');
-    const nl = pending.lastIndexOf('\n');
-    if (nl === -1) return; // a line split across chunks is judged whole, once it is whole
-    const complete = pending.slice(0, nl + 1);
-    pending = pending.slice(nl + 1);
-    retain(scrub(inv.keepLine ? complete.split('\n').filter((l) => l === '' || inv.keepLine!(l)).join('\n') : complete));
-  });
-
-  // stderr is a plain stream: scrub it too, holding back a chunk's tail so a secret cannot slip through a split.
-  let errCarry = '';
-  child.stderr!.on('data', (c: Buffer) => {
-    const text = errCarry + c.toString('utf8');
-    const cut = Math.max(0, text.length - carryLen);
-    errOut.write(scrub(text.slice(0, cut)));
-    errCarry = text.slice(cut);
-  });
-
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    try { process.kill(-child.pid!, 'SIGKILL'); } catch { child.kill('SIGKILL'); }
-  }, opts.timeoutMs);
-
-  const exitCode = await new Promise<number | null>((resolve) => {
-    child.on('error', () => resolve(null));
-    child.on('exit', (code: number | null) => resolve(code));
-  });
-  clearTimeout(timer);
-  if (pending) retain(scrub(inv.keepLine && !inv.keepLine(pending) ? '' : pending)); // a final line with no newline
-  if (errCarry) errOut.write(scrub(errCarry));
-  const finish = (stream: fs.WriteStream) => new Promise<void>((resolve, reject) => {
-    stream.once('error', reject);
-    stream.end(resolve);
-  });
-  await Promise.all([finish(out), finish(errOut)]);
-  return { stdout, exitCode, timedOut, durationMs: Date.now() - started, truncated };
+  }
 }
 
 /**
@@ -294,6 +314,7 @@ export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string;
  * nothing to exec. Same `sudo -n chown -R` shape as `chownArgv`.
  */
 export function reclaimRunAsDirs(dirs: RunAsDirs, exec: (argv: string[]) => void, owner?: string): void {
-  void dirs; void exec; void owner;
-  throw new Error('runas-reclaim: implement');
+  if (dirs.chown.length === 0) return; // nothing was lent; `traverse`/`read` were mode bits on paths the driver still owns
+  // Numeric by default: the driver's user need not have a name the agent's view of the passwd file can resolve.
+  exec(chownArgv(owner ?? `${process.getuid?.() ?? 0}:${process.getgid?.() ?? 0}`, dirs.chown));
 }
