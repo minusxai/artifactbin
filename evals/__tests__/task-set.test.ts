@@ -126,3 +126,15 @@ describe('ordering', () => {
     expect(selectTasks(discoverTasks(DIR), { set: 'eval' }).map((t) => t.id).at(-1)).toBe('scrolly');
   });
 });
+
+describe('the comparison tasks gate local checkout reads', () => {
+  it('every *.eval.json lists no_local_checkout_reads', () => {
+    const dir = path.join(__dirname, '../tasks');
+    const files = fs.readdirSync(dir).filter((f) => f.endsWith('.eval.json'));
+    expect(files.length).toBeGreaterThanOrEqual(4);
+    for (const f of files) {
+      const checks = (JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')) as { checks: string[] }).checks;
+      expect(checks, f).toContain('no_local_checkout_reads');
+    }
+  });
+});
