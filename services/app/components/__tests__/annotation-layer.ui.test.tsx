@@ -26,6 +26,9 @@ const ANN: AnnotationWire = {
   orphaned: false,
   anchor_version: 2,
   snippet: 'Revenue grew 40%',
+  quote: null,
+  range: null,
+  quote_found: null,
   thread: [
     { id: 'ann_1', body: 'is this right?', author: { kind: 'human', label: 'vivek', transport: 'browser' }, created_at: '2026-08-27T00:00:00Z' },
     { id: 'ann_2', body: 'one more thought', author: { kind: 'human', label: 'vivek', transport: 'browser' }, created_at: '2026-08-27T01:00:00Z' },
@@ -273,6 +276,102 @@ describe('AnnotationLayer', () => {
     expect(screen.getByLabelText('Reply to annotation')).toBeTruthy();
     expect(screen.getByLabelText('Cancel reply')).toHaveClass('bg-transparent');
     expect(screen.getByLabelText('Send reply')).toHaveClass('bg-accent', 'text-bg');
+  });
+
+  /*
+   * ADDED (F3). The frame captures the exact words; the page is the only side
+   * that talks to the server, so a comment that does not FORWARD them stores a
+   * node and nothing else — which is what it did before.
+   */
+  it('forwards the selection quote and its anchor-relative range in the create POST', async () => {
+    const { frame } = makeFrame();
+    render(layer(frame, {
+      railOpen: true, currentEditId: 'e_head',
+      initialSelection: {
+        kind: 'text' as const, path: '1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [],
+        quote: 'grew 40% in Q3,',
+        range: { v: 1 as const, parts: [
+          { rel: '0', start: 8, end: 12, text: 'grew' },
+          { rel: '', start: 12, end: 23, text: ' 40% in Q3,' },
+        ] },
+      },
+    }));
+    await flush();
+    fireEvent.change(await screen.findByLabelText('Annotation comment'), { target: { value: 'which quarter?' } });
+    fireEvent.click(screen.getByLabelText('Save annotation'));
+    await flush();
+    const create = fetchCalls.find((c) => c.url.endsWith('/api/my/artifacts/doc1/annotations') && c.init?.method === 'POST');
+    expect(JSON.parse(String(create!.init!.body))).toEqual({
+      path: '1', edit_id: 'e_head', body: 'which quarter?',
+      quote: 'grew 40% in Q3,',
+      range: { v: 1, parts: [
+        { rel: '0', start: 8, end: 12, text: 'grew' },
+        { rel: '', start: 12, end: 23, text: ' 40% in Q3,' },
+      ] },
+    });
+  });
+
+  /*
+   * ADDED (F3). The frame re-reports the composing node's GEOMETRY on every
+   * scroll and re-render (`mx:selection`), and that report has no quote in it —
+   * the page is where the words live. Taking it at face value replaced the
+   * captured selection with a quote-less one before the comment was ever saved,
+   * which is how the words were lost between the drag and the POST.
+   */
+  it('keeps the captured words when the frame re-reports the SAME node', async () => {
+    const { frame, contentWindow } = makeFrame();
+    const quoted = {
+      kind: 'text' as const, path: '1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [],
+      quote: 'grew 40% in Q3,',
+      range: { v: 1 as const, parts: [{ rel: '', start: 12, end: 23, text: ' 40% in Q3,' }] },
+    };
+    render(layer(frame, { railOpen: true, currentEditId: 'e_head', initialSelection: quoted }));
+    await flush();
+    await fromFrame(contentWindow, {
+      type: STORY_SELECTION_MESSAGE, nonce: NONCE,
+      selection: { kind: 'text', path: '1', tag: 'p', rect: { x: 5, y: 40, width: 200, height: 40 }, className: '', style: '', ancestors: [] },
+    });
+    fireEvent.change(await screen.findByLabelText('Annotation comment'), { target: { value: 'still about those words' } });
+    fireEvent.click(screen.getByLabelText('Save annotation'));
+    await flush();
+    const create = fetchCalls.find((c) => c.url.endsWith('/api/my/artifacts/doc1/annotations') && c.init?.method === 'POST');
+    expect(JSON.parse(String(create!.init!.body))).toMatchObject({ quote: quoted.quote, range: quoted.range });
+  });
+
+  it('drops them when the composer is widened to a DIFFERENT node — they no longer describe it', async () => {
+    const { frame, contentWindow } = makeFrame();
+    render(layer(frame, {
+      railOpen: true, currentEditId: 'e_head',
+      initialSelection: {
+        kind: 'text' as const, path: '1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [],
+        quote: 'grew 40% in Q3,',
+        range: { v: 1 as const, parts: [{ rel: '', start: 12, end: 23, text: ' 40% in Q3,' }] },
+      },
+    }));
+    await flush();
+    await fromFrame(contentWindow, {
+      type: STORY_SELECTION_MESSAGE, nonce: NONCE,
+      selection: { kind: 'element', path: '0', tag: 'section', rect: { x: 0, y: 0, width: 400, height: 90 }, className: '', style: '', ancestors: [] },
+    });
+    fireEvent.change(await screen.findByLabelText('Annotation comment'), { target: { value: 'about the whole section' } });
+    fireEvent.click(screen.getByLabelText('Save annotation'));
+    await flush();
+    const create = fetchCalls.find((c) => c.url.endsWith('/api/my/artifacts/doc1/annotations') && c.init?.method === 'POST');
+    expect(JSON.parse(String(create!.init!.body))).toEqual({ path: '0', edit_id: 'e_head', body: 'about the whole section' });
+  });
+
+  it('sends no quote for a selection that has none — a caret comment is still a comment', async () => {
+    const { frame } = makeFrame();
+    render(layer(frame, {
+      railOpen: true, currentEditId: 'e_head',
+      initialSelection: { kind: 'text' as const, path: '1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [] },
+    }));
+    await flush();
+    fireEvent.change(await screen.findByLabelText('Annotation comment'), { target: { value: 'no words' } });
+    fireEvent.click(screen.getByLabelText('Save annotation'));
+    await flush();
+    const create = fetchCalls.find((c) => c.url.endsWith('/api/my/artifacts/doc1/annotations') && c.init?.method === 'POST');
+    expect(JSON.parse(String(create!.init!.body))).toEqual({ path: '1', edit_id: 'e_head', body: 'no words' });
   });
 
   it('a handed-in selection opens an anchored page composer; save moves the comment to the rail', async () => {

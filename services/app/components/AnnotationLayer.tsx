@@ -660,7 +660,12 @@ export default function AnnotationLayer({
       // Annotations are ambient whenever this capability exists. The frame
       // decides how pins/tints coexist with view and edit mode.
       mode: 'on',
-      pins: annotations.filter((a) => !a.orphaned && a.anchor).map((a) => ({ id: a.id, path: a.anchor!.path, key: a.anchor!.key })),
+      pins: annotations
+        .filter((a) => !a.orphaned && a.anchor)
+        // The range travels with the pin so the frame can paint the words
+        // themselves; ids, body paths and the words' own positions are still
+        // the only annotation data that enters that realm — never the comment.
+        .map((a) => ({ id: a.id, path: a.anchor!.path, key: a.anchor!.key, range: a.range })),
       openId,
       hoverId,
       selectedPath: selection?.path ?? null,
@@ -699,9 +704,24 @@ export default function AnnotationLayer({
         return;
       }
       if (event.data.type === STORY_SELECTION_MESSAGE && composingRef.current) {
-        setSelection(event.data.selection);
+        const reported = event.data.selection;
+        /*
+         * The frame re-reports the composing node's GEOMETRY on every scroll,
+         * resize and re-render, and that report carries no quote — the words
+         * live on this side. Taking it whole replaced the captured selection
+         * with a quote-less one before the comment was ever saved, which is
+         * how a two-paragraph comment quietly became a node again. The words
+         * survive a report about the SAME node and only that: widening to an
+         * ancestor is a different subject, and a range addressed from the old
+         * anchor would not describe it.
+         */
+        setSelection((previous) => (
+          reported && previous && reported.path === previous.path && previous.quote
+            ? { ...reported, quote: previous.quote, range: previous.range }
+            : reported
+        ));
         setFailure(null);
-        if (event.data.selection) setOpenId(null);
+        if (reported) setOpenId(null);
       }
     };
     window.addEventListener('message', onMessage);
@@ -766,7 +786,14 @@ export default function AnnotationLayer({
       await beforeCreateRef.current?.();
       const post = (editId: string) => fetch(`/api/my/artifacts/${id}/annotations`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: selection.path, edit_id: editId, body: draft }),
+        // The exact words ride along when there are any: the frame captured
+        // them from the live Range, and the page is the only side that can
+        // store them. A caret comment simply carries neither key.
+        body: JSON.stringify({
+          path: selection.path, edit_id: editId, body: draft,
+          ...(selection.quote ? { quote: selection.quote } : {}),
+          ...(selection.range ? { range: selection.range } : {}),
+        }),
       });
       // The drain may itself have moved the head; the 409 path below covers it.
       let res = await post(currentEditIdRef.current);

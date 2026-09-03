@@ -7,6 +7,7 @@
  * the server exclusively as a prebuilt esbuild bundle (story-ssr.cjs) loaded
  * outside the module graph — see scripts/build-story-runtime.mjs.
  */
+import type { AnnotationRange } from '@/lib/story/annotation-range';
 import type { JsxNode } from '@/lib/jsx';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 import type { RefDataMap } from '@/lib/story/ref-data';
@@ -393,6 +394,15 @@ export interface StoryEditSelection {
   style: string;
   /** Selectable ancestors, OUTERMOST first. */
   ancestors: StoryEditCrumb[];
+  /**
+   * The words actually selected, canonical — present only when there IS a text
+   * selection, which is why both of these are optional: the same struct rides
+   * every caret move in an edit session, where nothing is selected at all.
+   * A comment stores them beside its anchor (lib/story/annotation-range).
+   */
+  quote?: string;
+  /** Where those words are, addressed RELATIVE to `path` — never an absolute body path. */
+  range?: AnnotationRange;
 }
 
 /** Frame → parent: the selection changed, or moved (re-posted on in-frame scroll, throttled to a frame). */
@@ -528,7 +538,18 @@ export interface StoryAnnotationsMessage {
    * durable anchor — plain tags carry it into the DOM), `path` the body path
    * fallback (components keep the attribute in source only).
    */
-  pins: Array<{ id: string; path: string; key: string | null }>;
+  pins: Array<{
+    id: string;
+    path: string;
+    key: string | null;
+    /**
+     * The exact words the comment is on, addressed relative to the anchored
+     * node — the frame re-finds them by TEXT and paints them. Absent on a
+     * comment made before selections were kept, or one made from a caret;
+     * the whole-node tint is the fallback. Still ONE pin per thread.
+     */
+    range?: AnnotationRange | null;
+  }>;
   /** The thread the page has open — its node renders highlighted. */
   openId: string | null;
   /** The thread under either pointer — transient emphasis, never document state. */

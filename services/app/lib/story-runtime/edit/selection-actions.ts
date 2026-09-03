@@ -12,6 +12,7 @@ import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import type { JsxNode } from '@/lib/jsx';
 import type { StoryEditSelection, StorySelectionActionsMessage } from '../contract';
 import { describeSelection } from './describe-selection';
+import { anchorFor, describeRange } from './selection-range';
 
 export const SELECTION_ACTIONS_ATTR = 'data-mx-selection-actions';
 const SELECTION_ACTION_ATTR = 'data-mx-selection-action';
@@ -74,7 +75,15 @@ export function createFrameSelectionActions({
   let capabilities: StorySelectionActionsMessage = {
     type: 'mx:selection-actions', edit: false, annotate: false,
   };
+  /**
+   * ONE Range, TWO answers. Edit opens on the deepest element the user touched
+   * — the caret's own target — while a comment belongs to the BLOCK that holds
+   * the whole selection, with the selected words travelling beside it. Both are
+   * captured while the Range is live (the toolbar preserves the Selection, but
+   * the two questions are asked of the geometry, not of the click).
+   */
   let activeSelection: StoryEditSelection | null = null;
+  let activeAnnotation: StoryEditSelection | null = null;
   let toolbar: HTMLDivElement | null = null;
   let receivedCapabilities = false;
 
@@ -85,6 +94,7 @@ export function createFrameSelectionActions({
 
   const hide = () => {
     activeSelection = null;
+    activeAnnotation = null;
     if (toolbar) toolbar.hidden = true;
   };
 
@@ -135,7 +145,7 @@ export function createFrameSelectionActions({
         if (!activeSelection || (action !== 'edit' && action !== 'annotate')) return;
         event.preventDefault();
         event.stopPropagation();
-        const chosen = activeSelection;
+        const chosen = (action === 'annotate' ? activeAnnotation : null) ?? activeSelection;
         hide();
         onAction(action, chosen);
       });
@@ -213,6 +223,21 @@ export function createFrameSelectionActions({
     if (rect.width <= 0 || rect.height <= 0) { hide(); return; }
 
     activeSelection = described;
+    /*
+     * The comment's own target: the block containing the selection, described
+     * through the same door (so a stale path is still refused), plus the quote
+     * and its anchor-relative parts. Null when the block is not in the source —
+     * the annotate action then falls back to the edit target rather than
+     * offering nothing.
+     */
+    const anchor = anchorFor(range);
+    const annotated = anchor && !anchor.closest('.mx-rail, .mx-present') ? describeSelection(anchor, nodes) : null;
+    if (annotated && anchor) {
+      const captured = describeRange(range, anchor);
+      annotated.quote = captured.quote;
+      annotated.range = captured.range;
+    }
+    activeAnnotation = annotated;
     const surface = ensureToolbar();
     surface.hidden = false;
     const surfaceRect = surface.getBoundingClientRect();

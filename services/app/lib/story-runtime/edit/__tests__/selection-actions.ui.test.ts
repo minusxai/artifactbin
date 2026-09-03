@@ -134,6 +134,56 @@ describe('view-mode text selection actions', () => {
     expect(onAction).toHaveBeenCalledWith('edit', expect.objectContaining({ path: '0.0.0', tag: 'strong', kind: 'text' }));
   });
 
+  /*
+   * ADDED (F3). Edit and Annotate want DIFFERENT nodes from the same Range:
+   * the editor should open on the deepest element the user touched, while a
+   * comment belongs to the BLOCK that contains the whole selection — anchoring
+   * a comment on the <strong> is how the rest of the sentence used to be lost.
+   * The words themselves travel with it.
+   */
+  it('annotates the BLOCK containing the selection, and carries the quote and its parts', async () => {
+    const nested = parseJsx('<div><p><strong>inner</strong> outer</p></div>');
+    if (!nested.ok) throw new Error('nested fixture does not parse');
+    document.body.innerHTML = '<div data-mx-ast="0"><p data-mx-ast="0.0"><strong data-mx-ast="0.0.0">inner</strong> outer</p></div>';
+    actions.setNodes(nested.nodes);
+    actions.update({ type: 'mx:selection-actions', edit: true, annotate: true });
+
+    const strongText = document.querySelector('strong')!.firstChild!;
+    const paragraphText = document.querySelector('p')!.lastChild!;
+    const range = document.createRange();
+    range.setStart(strongText, 2);
+    range.setEnd(paragraphText, paragraphText.textContent!.length);
+    Object.defineProperty(range, 'getBoundingClientRect', {
+      value: () => ({ x: 100, y: 80, left: 100, top: 80, right: 240, bottom: 100, width: 140, height: 20, toJSON: () => ({}) }),
+    });
+    const nativeSelection = window.getSelection()!;
+    nativeSelection.removeAllRanges();
+    nativeSelection.addRange(range);
+    document.querySelector('p')!.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
+    await Promise.resolve();
+
+    document.querySelector<HTMLButtonElement>('[aria-label="Annotate selected text"]')!.click();
+    expect(onAction).toHaveBeenCalledTimes(1);
+    const [action, selection] = onAction.mock.calls[0];
+    expect(action).toBe('annotate');
+    expect(selection).toMatchObject({ path: '0.0', tag: 'p' });
+    expect(selection.quote).toBe('ner outer');
+    expect(selection.range).toEqual({
+      v: 1,
+      parts: [
+        { rel: '0', start: 2, end: 5, text: 'ner' },
+        { rel: '', start: 5, end: 11, text: ' outer' },
+      ],
+    });
+
+    // The same Range, the other action: the editor still opens on what was touched.
+    onAction.mockClear();
+    document.querySelector('p')!.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
+    await Promise.resolve();
+    document.querySelector<HTMLButtonElement>('[aria-label="Edit selected text"]')!.click();
+    expect(onAction).toHaveBeenCalledWith('edit', expect.objectContaining({ path: '0.0.0', tag: 'strong' }));
+  });
+
   it('renders nothing for a reader and dismisses an open bubble when capability is removed', async () => {
     actions.update({ type: 'mx:selection-actions', edit: false, annotate: false });
     await selectText();

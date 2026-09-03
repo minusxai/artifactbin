@@ -31,6 +31,10 @@ import { ANNOTATION_ANCHOR_ATTR } from '@/lib/annotation-anchors';
 import { getDb, type Queryable } from '@/lib/db';
 import { generateInternalId } from '@/lib/ids';
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
+import {
+  canonicalQuote, canonicalText, parseAnnotationRange, parseRel,
+  type AnnotationRange,
+} from '@/lib/story/annotation-range';
 import { bodyPathToSourcePath, sourcePathToBodyPath } from '@/lib/story/edit-compose';
 import { channelForAnnotations } from '@/lib/story/live';
 import { resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
@@ -78,6 +82,21 @@ export interface AnnotationWire {
   anchor_version: number | null;
   /** Plain-text excerpt of what was annotated; survives orphaning. */
   snippet: string;
+  /**
+   * The words the person actually SELECTED, canonical and stored verbatim —
+   * never recomputed, unlike `snippet`, which is the anchored node's text as
+   * it reads today. This is what an agent should read. Null on a comment made
+   * before the selection was kept, or from a caret with nothing selected.
+   */
+  quote: string | null;
+  /** Where those words were, addressed RELATIVE to the anchor. A hint for repainting, never an identity. */
+  range: AnnotationRange | null;
+  /**
+   * Computed on every read like `orphaned`: are the quoted words still in the
+   * document? Null when there is no quote to look for; false when the anchor is
+   * present but the selected text has been written away.
+   */
+  quote_found: boolean | null;
   /** The whole conversation, oldest first — [0] is the annotation's own body. */
   thread: AnnotationCommentWire[];
   created_at: string;
@@ -90,6 +109,10 @@ export interface CreateAnnotationInput {
   /** The head the page believed in when the owner clicked. */
   baseEditId: string;
   body: string;
+  /** The exact words selected, canonical. Absent for a caret-only comment. */
+  quote?: string;
+  /** Where they were, relative to the anchor. A quote without one is fine; a range without one is not sent. */
+  range?: AnnotationRange;
 }
 
 export type CreateAnnotationRefusal =
@@ -125,6 +148,10 @@ interface AnnotationRowDb {
   anchor_version: number | null;
   snippet: string;
   created_at: string;
+  /** Stored verbatim at create; both null on rows written before the selection was kept. */
+  quote: string | null;
+  /** JSON `AnnotationRange`, parsed on read — a malformed value reads as no range, never a throw. */
+  range: string | null;
 }
 
 const scopedRow = async (q: Queryable, scope: Scope, id: string): Promise<ArtifactRow | null> => {
@@ -157,9 +184,20 @@ const anchorKeyOf = (node: JsxElement): string | null => {
   return attr && attr.value.static && typeof attr.value.json === 'string' ? attr.value.json : null;
 };
 
+/**
+ * An anchored node as the source knows it: the element, its SOURCE path, and
+ * the sibling list it sits in — a range part addressed `+1` names the anchor's
+ * next ELEMENT sibling, which cannot be reached from the node alone.
+ */
+interface AnchorEntry {
+  node: JsxElement;
+  path: string;
+  siblings: JsxNode[];
+}
+
 /** Every anchor-carrying element in the source, by key, with its SOURCE path. */
-function anchorIndex(source: string): Map<string, { node: JsxElement; path: string }> {
-  const out = new Map<string, { node: JsxElement; path: string }>();
+function anchorIndex(source: string): Map<string, AnchorEntry> {
+  const out = new Map<string, AnchorEntry>();
   const parsed = parseJsx(source);
   if (!parsed.ok) return out;
   const walk = (nodes: JsxNode[], prefix: string) => {
@@ -170,7 +208,7 @@ function anchorIndex(source: string): Map<string, { node: JsxElement; path: stri
       // First occurrence wins: a duplicated attribute (an agent copied the
       // node) must not make the anchor jump between copies read to read.
       const key = anchorKeyOf(node);
-      if (key && !out.has(key)) out.set(key, { node, path });
+      if (key && !out.has(key)) out.set(key, { node, path, siblings: nodes });
       walk(node.children, path);
     }
   };
@@ -191,6 +229,69 @@ const sourceWithoutAnchor = (source: string, node: JsxElement): string => {
   const from = source[attr.start - 1] === ' ' ? attr.start - 1 : attr.start;
   return source.slice(0, from) + source.slice(attr.end);
 };
+
+// ── the quote and its range, answered against the CURRENT source ────────────
+
+/**
+ * An element's visible text in the ONE canonical form the frame captured the
+ * quote in. Concatenated with NO separator, because that is what the DOM's
+ * `textContent` does: `a<b>x</b>c` reads `axc`, and a joiner here would make
+ * every re-find across an inline element fail.
+ */
+function canonicalTextOf(node: JsxNode): string {
+  const raw = (n: JsxNode): string =>
+    n.type === 'text' ? n.value : n.type === 'element' ? n.children.map(raw).join('') : '';
+  return canonicalText(raw(node));
+}
+
+/** ELEMENT children only — `rel` counts elements, never the text between them. */
+const elementChildrenOf = (nodes: JsxNode[]): JsxElement[] =>
+  nodes.filter((n): n is JsxElement => n.type === 'element');
+
+/** Walk a part's `rel` from the anchored element to the node it names. */
+function nodeForRel(entry: AnchorEntry, rel: string): JsxElement | null {
+  const address = parseRel(rel);
+  if (!address) return null;
+  let node: JsxElement | undefined = entry.node;
+  if (address.sibling > 0) {
+    const siblings = elementChildrenOf(entry.siblings);
+    node = siblings[siblings.indexOf(entry.node) + address.sibling];
+  }
+  for (const step of address.steps) {
+    if (!node) return null;
+    node = elementChildrenOf(node.children)[step];
+  }
+  return node ?? null;
+}
+
+/** The stored JSON, or null — a row that cannot be parsed reads as no range, never a throw. */
+function storedRange(raw: string | null): AnnotationRange | null {
+  if (!raw) return null;
+  try {
+    return parseAnnotationRange(JSON.parse(raw) as unknown);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Are the quoted words still there? Computed per read, like `orphaned`, and
+ * never written back: the quote is what was selected, and this says whether
+ * the document still says it. EVERY part, not any: half a quote is not the
+ * words the person selected, and an agent reading `quote_found: true` must be
+ * able to trust that what it is answering is still on the page. A quote with no
+ * range can only be answered by whether the anchor survived — there is nothing
+ * to look for.
+ */
+function quoteFound(entry: AnchorEntry | undefined, quote: string | null, range: AnnotationRange | null): boolean | null {
+  if (quote === null) return null;
+  if (!entry) return false;
+  if (!range) return true;
+  return range.parts.every((part) => {
+    const node = nodeForRel(entry, part.rel);
+    return !!node && canonicalTextOf(node).includes(part.text);
+  });
+}
 
 /**
  * Create an annotation on a node of the owner's document. When the node has
@@ -241,14 +342,18 @@ export async function createAnnotationFor(
   }
 
   const id = 'ann_' + generateInternalId();
+  // Canonical and capped HERE, the one place the columns are written — the
+  // door validates the range's grammar, this owns the stored form.
+  const quote = input.quote === undefined ? null : canonicalQuote(input.quote) || null;
   const inserted = await db.query<AnnotationRowDb>(
     `INSERT INTO annotations
        (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport,
-        status, anchor_key, anchor_version, snippet)
-     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11)
+        status, anchor_key, anchor_version, snippet, quote, range)
+     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, $13)
      RETURNING *`,
     [id, artifactId, input.body, author.kind, actor.tokenId, actor.userId, author.label, author.transport,
-      anchorKey, head.version, snippetOf(source.slice(node.start, node.end))],
+      anchorKey, head.version, snippetOf(source.slice(node.start, node.end)),
+      quote, input.range ? JSON.stringify(input.range) : null],
   );
   await notify(db, artifactId, id);
 
@@ -278,6 +383,7 @@ async function wireFor(db: Queryable, head: ArtifactRow, roots: AnnotationRowDb[
     const found = root.anchor_key ? anchors.get(root.anchor_key) : undefined;
     const bodyPath = found ? sourcePathToBodyPath(source, found.path) : null;
     const anchored = !!found && bodyPath !== null;
+    const range = storedRange(root.range);
     return {
       id: root.id,
       status: root.status,
@@ -287,6 +393,11 @@ async function wireFor(db: Queryable, head: ArtifactRow, roots: AnnotationRowDb[
       orphaned: !anchored,
       anchor_version: root.anchor_version,
       snippet: anchored ? snippetOf(source.slice(found.node.start, found.node.end)) : root.snippet,
+      // Verbatim, both of them: what was selected does not change because the
+      // document did — only `quote_found` moves.
+      quote: root.quote,
+      range,
+      quote_found: quoteFound(anchored ? found : undefined, root.quote, range),
       thread: [commentWire(root), ...(byRoot.get(root.id) ?? []).map(commentWire)],
       created_at: root.created_at,
       resolved_at: root.resolved_at,

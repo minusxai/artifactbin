@@ -182,6 +182,38 @@ describe('selection', () => {
     });
   });
 
+  /*
+   * ADDED (F3). The editor's own "Comment on selection" and the view-mode
+   * bubble are two doors to ONE destination, so they must hand the composer the
+   * same thing: the words. A caret with nothing selected carries none, rather
+   * than the two doors disagreeing about what a comment is about.
+   */
+  it('carries the selected words with a reported selection, and nothing for a bare caret', () => {
+    const { at } = mount();
+    const host = at('0.1');
+    const range = document.createRange();
+    range.setStart(host.firstChild!, 2);
+    range.setEnd(host.firstChild!, 8);
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    fireEvent.focus(host);
+    expect(last(STORY_SELECTION_MESSAGE)).toMatchObject({
+      selection: {
+        path: '0.1',
+        quote: 'llo wo',
+        range: { v: 1, parts: [{ rel: '', start: 2, end: 8, text: 'llo wo' }] },
+      },
+    });
+
+    window.getSelection()!.removeAllRanges();
+    fireEvent.click(at('0.2'), { bubbles: true });
+    const reported = (last(STORY_SELECTION_MESSAGE) as { selection: Record<string, unknown> }).selection;
+    expect(reported.path).toBe('0.2');
+    expect(reported.quote).toBeUndefined();
+    expect(reported.range).toBeUndefined();
+  });
+
   it('reports a clicked container, and marks it for the reader', () => {
     const { at } = mount();
     fireEvent.click(at('0.2'), { bubbles: true });

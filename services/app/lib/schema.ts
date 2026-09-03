@@ -236,6 +236,13 @@ const ANNOTATIONS: Table = {
     { name: 'anchor_version', type: 'INTEGER' }, // document version the comment was made against (display)
     { name: 'snippet', type: 'TEXT', notNull: true, default: "''" }, // plain text, survives orphaning
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
+    // THE EXACT SELECTION, beside the one durable anchor — a hint, never an
+    // identity. Both stored verbatim on create and NEVER recomputed (the
+    // snippet above is the node's CURRENT text; these are what was selected
+    // then). APPENDED LAST, like every additive column: existing databases
+    // grow them by ADD COLUMN IF NOT EXISTS on the next boot.
+    { name: 'quote', type: 'TEXT' }, // canonical selected text, capped (lib/story/annotation-range)
+    { name: 'range', type: 'TEXT' }, // JSON AnnotationRange: parts addressed RELATIVE to the anchor
   ],
   primaryKey: ['id'],
   indexes: [{ name: 'idx_annotations_artifact_seq', columns: ['artifact_id', 'seq'] }],

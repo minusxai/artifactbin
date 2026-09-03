@@ -135,8 +135,12 @@ const run = async () => {
     ok((await viewComments.textContent())?.includes('Q3 sheet'), 'hover reveals the conversation preview');
     const anchorBox = await frame.locator('#figure').boundingBox();
     const commentBox = expandedBox;
-    ok(!!anchorBox && !!commentBox && Math.abs(anchorBox.y - commentBox.y) <= 4,
-      'the annotation marker follows its annotated content vertically');
+    // The marker follows the WORDS now (F3: a comment keeps its selection, and
+    // its rect is the union of the highlighted ranges), so it sits on the text
+    // LINE rather than on the paragraph box — half-leading apart, a handful of
+    // pixels. It is still the annotated content it follows.
+    ok(!!anchorBox && !!commentBox && Math.abs(anchorBox.y - commentBox.y) <= 12,
+      `the annotation marker follows its annotated content vertically (${Math.round(Math.abs((anchorBox?.y ?? 0) - (commentBox?.y ?? 0)))}px apart)`);
     const viewportWidth = await page.evaluate(() => innerWidth);
     ok(!!commentBox
       && commentBox.x >= 0
@@ -279,10 +283,152 @@ const run = async () => {
       'a reader selecting text is offered nothing at all');
     await strangerCtx.close();
     await owner.close();
+
+    // ── the comment keeps the exact selection ─────────────────────────────
+    await quoteLeg(browser);
   } finally {
     await browser.close();
   }
 };
+
+/**
+ * A COMMENT KEEPS THE WORDS, NOT JUST THE NODE (F3).
+ *
+ * Every seam here is browser fact and nothing below the browser can see it: a
+ * REAL drag from the middle of one paragraph into the next (a Selection inside
+ * an opaque frame), the parts it produces relative to the anchored block, the
+ * CSS Custom Highlight API painting them across two paragraphs after a RELOAD
+ * — no DOM surgery, so there is no element for a unit test to find — and the
+ * fallback to the whole-node tint once an agent writes the words away.
+ */
+const QUOTE_DOC =
+  '<Helmet><title>Quoted</title></Helmet>'
+  + '<div data-design="tw" className="p-10">'
+  + '<h1>Two paragraphs</h1>'
+  + '<p id="first">Revenue grew 40% in Q3, ahead of plan.</p>'
+  + '<p id="second">Costs fell 8% over the same period.</p>'
+  + '</div>';
+const FIRST_TEXT = 'Revenue grew 40% in Q3, ahead of plan.';
+const SECOND_TEXT = 'Costs fell 8% over the same period.';
+
+async function quoteLeg(browser) {
+  const { id, token } = await startDocument(BASE);
+  const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const published = await fetch(`${BASE}/api/artifacts/${id}`, { method: 'PUT', headers: auth, body: JSON.stringify({ markup: QUOTE_DOC }) });
+  if (!published.ok) throw new Error(`quote leg publish failed (${published.status}): ${await published.text()}`);
+
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  await becomeOwner(page, BASE, token);
+  await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
+  const frame = page.frameLocator('iframe[title="artifact"]');
+  await frame.locator('#second').waitFor({ timeout: 15000 });
+  const raw = await until(async () => page.frame({ url: (u) => u.pathname.includes('/raw') }), (f) => !!f, 15000);
+
+  /*
+   * The drag: from one CHARACTER inside the first paragraph to one inside the
+   * second. Aimed by measuring the character rather than by taking a fraction
+   * of the element's box — a paragraph's box is the whole column, so 45% of it
+   * lands past the end of a short sentence and the drag starts on nothing.
+   */
+  const frameBox = await page.locator('iframe[title="artifact"]').boundingBox();
+  const pointAt = async (selector, index) => {
+    const inFrame = await raw.evaluate(([sel, at]) => {
+      const range = document.createRange();
+      range.setStart(document.querySelector(sel).firstChild, at);
+      range.setEnd(document.querySelector(sel).firstChild, at + 1);
+      const box = range.getBoundingClientRect();
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    }, [selector, index]);
+    return { x: frameBox.x + inFrame.x, y: frameBox.y + inFrame.y };
+  };
+  const dragAcross = async () => {
+    const from = await pointAt('#first', 24);   // inside "ahead of plan."
+    const to = await pointAt('#second', 12);    // inside "8% over"
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    // A nudge before the long move: press-then-jump is delivered as a CLICK at
+    // the destination and selects nothing at all (measured — the drag looked
+    // right and the Range came back collapsed at its end point).
+    await page.mouse.move(from.x + 6, from.y, { steps: 3 });
+    await page.mouse.move(to.x, to.y, { steps: 20 });
+    await page.mouse.up();
+  };
+  const bubble = frame.locator('[data-mx-selection-actions]');
+  await until(async () => {
+    await dragAcross().catch(() => {});
+    return bubble.isVisible().catch(() => false);
+  }, (v) => v === true, 20000);
+  ok(await bubble.isVisible(), 'a drag across two paragraphs raises the bubble');
+
+  await frame.locator('[aria-label="Annotate selected text"]').click();
+  await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
+  await page.locator('[aria-label="Annotation comment"]').fill('does this hold for both?');
+  await page.locator('[aria-label="Save annotation"]').click();
+
+  // (a) THE WIRE: the quote and a two-part range, the second addressed as the
+  // anchor's next sibling — never an absolute path, which would rot.
+  const read = async () => (await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: { Authorization: `Bearer ${token}` } })).json());
+  const wire = await until(read, (w) => (w?.annotations?.length ?? 0) === 1, 15000);
+  const ann = wire.annotations?.[0];
+  const parts = ann?.range?.parts ?? [];
+  ok(parts.length === 2 && parts[0].rel === '' && parts[1].rel === '+1',
+    `the range is two parts, "" then "+1" (got ${JSON.stringify(parts.map((p) => p.rel))})`);
+  ok(FIRST_TEXT.endsWith(parts[0]?.text ?? 'x') && SECOND_TEXT.startsWith(parts[1]?.text ?? 'x'),
+    'each part is exactly the run it covers in its own node');
+  ok(ann?.quote === `${parts[0]?.text} ${parts[1]?.text}`, 'the quote is the parts, one space between blocks');
+  ok(ann?.quote_found === true, 'the quoted words are still in the document');
+  ok(ann?.snippet === FIRST_TEXT, 'the snippet is still the whole anchored node — a different thing, kept');
+
+  // (b) THE PAINT, AFTER A RELOAD: nothing about it is stored in the DOM, so a
+  // reload is the honest test that the range alone can re-find the words.
+  await page.reload({ waitUntil: 'load' });
+  const reloaded = await until(async () => page.frame({ url: (u) => u.pathname.includes('/raw') }), (f) => !!f && f !== raw, 15000);
+  const paint = await until(
+    () => reloaded.evaluate((name) => {
+      const highlight = window.CSS?.highlights?.get(name);
+      if (!highlight) return { has: false };
+      const rects = [...highlight].map((range) => range.getBoundingClientRect());
+      const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+      const inside = (rect, p) => rect.top >= p.top - 3 && rect.bottom <= p.bottom + 3 && rect.width > 0;
+      return {
+        has: true,
+        count: rects.length,
+        first: rects.some((rect) => inside(rect, box('#first'))),
+        second: rects.some((rect) => inside(rect, box('#second'))),
+        ranged: !!document.querySelector('#first[data-mx-annotation-ranged]'),
+      };
+    }, `mx-annotation-${ann.id}`).catch(() => ({ has: false })),
+    (p) => p?.has === true,
+    15000,
+  );
+  ok(paint.has, 'the frame registers a CSS highlight for the thread after a reload');
+  ok(paint.first && paint.second, 'the highlight covers words in BOTH paragraphs');
+  ok(paint.ranged, 'the anchored node gives up its own tint while its words are painted');
+
+  // (c) AN AGENT REWORDS THE FIRST PARAGRAPH: the thread stays anchored, the
+  // quote no longer reads as it did, and the paint falls back to the tint.
+  const current = await read();
+  const rewritten = current.markup.replace(FIRST_TEXT, 'Revenue was flat in Q3, behind plan.');
+  const put = await fetch(`${BASE}/api/artifacts/${id}`, { method: 'PUT', headers: auth, body: JSON.stringify({ markup: rewritten }) });
+  ok(put.ok, 'the agent rewords the annotated paragraph, keeping the anchor');
+  const after = await until(read, (w) => w?.annotations?.[0]?.quote_found === false, 15000);
+  ok(after?.annotations?.[0]?.quote_found === false, 'quote_found turns false when the words are written away');
+  ok(after?.annotations?.[0]?.orphaned === false, 'the thread is still anchored — the node is still there');
+  ok(after?.annotations?.[0]?.quote === ann.quote, 'the quote itself is never recomputed');
+  const fallback = await until(
+    () => reloaded.evaluate((name) => ({
+      highlighted: !!window.CSS?.highlights?.get(name),
+      tinted: !!document.querySelector('#first[data-mx-annotated]'),
+      ranged: !!document.querySelector('#first[data-mx-annotation-ranged]'),
+    }), `mx-annotation-${ann.id}`).catch(() => null),
+    (state) => state?.highlighted === false,
+    15000,
+  );
+  ok(fallback?.highlighted === false && fallback?.tinted === true && fallback?.ranged === false,
+    `the live frame falls back to the whole-node tint (got ${JSON.stringify(fallback)})`);
+  await ctx.close();
+}
 
 run().then(() => {
   if (failures.length) { console.error(`\n${failures.length} failure(s)`); process.exit(1); }
