@@ -85,3 +85,26 @@ export function pdfPageCount(buffer: Buffer): number | undefined {
   const matches = text.match(/\/Type\s*\/Page(?![sA-Za-z])/g);
   return matches && matches.length > 0 ? matches.length : undefined;
 }
+
+/**
+ * What the browser should call the file — `Content-Disposition`'s `filename`,
+ * built from the document's title.
+ *
+ * The title is AUTHOR INPUT and this header is a quoted string, so a quote or a
+ * newline in it would end the value early and let the rest be read as more
+ * header. Everything outside a conservative printable-ASCII set is dropped
+ * rather than escaped: the alternative (RFC 5987's `filename*`) buys accented
+ * characters in a download name at the cost of a second encoding to get wrong,
+ * and the id is a perfectly good name for the file that has none.
+ */
+export function pdfFilename(title: string | null | undefined, id: string): string {
+  const safe = (title ?? '')
+    // Quote, backslash and semicolon are this header's SYNTAX: they go.
+    .replace(/["\\;]/g, '')
+    // Anything else outside printable ASCII becomes a space rather than
+    // vanishing — a dropped newline would otherwise weld two words together.
+    .replace(/[^\x20-\x7e]/g, ' ')          // eslint-disable-line no-control-regex -- printable ASCII only
+    .replace(/\s+/g, ' ')
+    .trim();
+  return `${safe || id}.pdf`;
+}

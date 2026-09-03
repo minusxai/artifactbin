@@ -26,6 +26,7 @@
  * whose key comes from the CALLER, so a miss is routine rather than an anomaly.
  */
 import { objectStore } from '@/lib/object-store';
+import { pdfFilename } from '@/lib/story/pdf-store';
 import { webAssetByHash } from '@/lib/web-assets';
 
 /** Every asset response carries these, whatever the asset turns out to be. */
@@ -35,6 +36,30 @@ export const ASSET_HEADERS: Readonly<Record<string, string>> = {
   'Content-Disposition': 'attachment',
   'X-Content-Type-Options': 'nosniff',
   'Access-Control-Allow-Origin': '*',
+};
+
+/**
+ * THE ONE TYPE THAT IS NOT AN ATTACHMENT, and it is not a widening of R15.
+ *
+ * `attachment` is here because a stored SVG is MARKUP and a navigation to one
+ * must not become a page in this origin. A PDF is not markup: it cannot script,
+ * `nosniff` holds the browser to the type sniffed from the bytes at import, and
+ * `Content-Security-Policy: sandbox` — kept, and the actual defence — was
+ * measured putting the response at an opaque origin where storage and cookies
+ * both throw (spike S4). It does not stop the browser's own viewer.
+ *
+ * What `attachment` costs a PDF is the entire feature: opened from inside a
+ * document's sandbox it produced neither a popup nor an observable download,
+ * so a <File> card linking an imported PDF would click into nothing. The
+ * filename comes from the SOURCE URL's last segment, because the address here
+ * is a 64-hex hash and a browser would otherwise save the file under it.
+ */
+const dispositionFor = (contentType: string, url: string): string => {
+  if (contentType !== 'application/pdf') return 'attachment';
+  let last = '';
+  try { last = new URL(url).pathname.split('/').filter(Boolean).pop() ?? ''; } catch { /* keep the fallback */ }
+  const name = decodeURIComponent(last).replace(/\.pdf$/i, '');
+  return `inline; filename="${pdfFilename(name, 'file')}"`;
 };
 
 export async function GET(_request: Request, ctx: { params: Promise<{ hash: string }> }) {
@@ -56,6 +81,6 @@ export async function GET(_request: Request, ctx: { params: Promise<{ hash: stri
     // Built fresh per response: @hono/node-server writes the computed
     // Content-Length back INTO this object, so a shared constant would
     // announce the first body's length for every later one.
-    headers: { 'Content-Type': row.content_type, ...ASSET_HEADERS },
+    headers: { 'Content-Type': row.content_type, ...ASSET_HEADERS, 'Content-Disposition': dispositionFor(row.content_type, row.url) },
   });
 }

@@ -31,7 +31,7 @@ const VISIBILITY_TIPS: Record<Visibility, string> = {
 };
 
 /** Canonical chip order — chips are derived from the rows, these fix their sequence. */
-const FORMAT_ORDER = ['markup', 'dataset', 'viz', 'image'];
+const FORMAT_ORDER = ['markup', 'dataset', 'viz', 'image', 'pdf'];
 const VISIBILITY_ORDER: Visibility[] = ['public', 'unlisted', 'private'];
 
 const VISIBILITY_GLYPHS: Record<Visibility, React.ReactNode> = {

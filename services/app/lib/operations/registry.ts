@@ -35,7 +35,7 @@ import {
   artifactSummaryToWire, artifactToWireWithAnnotations, createArtifactFromBody, createdArtifactWire, parseFolderField, parseVisibilityValue, replaceArtifactWithBody,
   refreshAssetsFor, respondToAnnotationAction, respondToEdit, respondToMutate,
 } from '@/lib/artifact-wire';
-import { MARKUP_FIELD_GUIDANCE, DATASET_FIELD_GUIDANCE, SHEET_URL_FIELD_GUIDANCE, IMAGE_URL_FIELD_GUIDANCE, CSV_URL_FIELD_GUIDANCE } from '@/lib/agent-guidance';
+import { MARKUP_FIELD_GUIDANCE, DATASET_FIELD_GUIDANCE, SHEET_URL_FIELD_GUIDANCE, IMAGE_URL_FIELD_GUIDANCE, CSV_URL_FIELD_GUIDANCE, PDF_FIELD_GUIDANCE, PDF_URL_FIELD_GUIDANCE } from '@/lib/agent-guidance';
 
 /** What an operation answers: a status and a JSON body, transport-free. */
 export interface OpReply {
@@ -110,6 +110,8 @@ const CONTENT_FIELDS = {
   viz: z.record(z.string(), z.unknown()).optional().describe('viz tier: a recipe {description, engine, bindings, params?, template} with {{slot}} tokens'),
   image: z.string().optional().describe('image tier: a base64 data: URL (png|jpeg|webp|gif|svg+xml)'),
   imageUrl: z.string().optional().describe(IMAGE_URL_FIELD_GUIDANCE),
+  pdf: z.string().optional().describe(PDF_FIELD_GUIDANCE),
+  pdfUrl: z.string().optional().describe(PDF_URL_FIELD_GUIDANCE),
   csvUrl: z.string().optional().describe(CSV_URL_FIELD_GUIDANCE),
   title: z.string().optional(),
   description: z.string().optional().describe('shown on the owner dashboard, never on the document'),
@@ -135,6 +137,9 @@ const CONTENT_ERRORS: OperationError[] = [
   { status: 400, code: 'unknown_theme', fix: 'the 400 carries allowed — the six live theme names' },
   { status: 400, code: 'retired_theme', fix: 'the hint names the successor theme — use it' },
   { status: 400, code: 'image_fetch_failed', fix: 'the named image URL could not be imported — check it serves image bytes publicly' },
+  { status: 400, code: 'invalid_pdf', fix: 'pdf must be a base64 data:application/pdf URL whose BYTES are a PDF — to publish one already on the web send pdfUrl' },
+  { status: 413, code: 'pdf_too_large', fix: 'the file is over the PDF cap named in maxBytes — link a smaller copy' },
+  { status: 400, code: 'pdf_fetch_failed', fix: 'the named pdfUrl could not be imported — check it serves PDF bytes publicly and is under the cap' },
   { status: 400, code: 'public_not_enabled', fix: 'this deployment has not opened public documents — use "unlisted"' },
   { status: 400, code: 'private_requires_account', fix: 'private needs a logged-in owner — claim the token or use unlisted' },
 ];
@@ -145,7 +150,7 @@ const createArtifactOp: Operation = {
   name: 'create_artifact',
   title: 'Create an artifact',
   http: { method: 'POST', path: '/api/artifacts' },
-  description: 'Create an artifact (exactly one of markup | dataset | viz | image). Returns the public URL. markup is THE document format: story JSX over the component kit, HTML tags for everything else (prose is ordinary <p>/<h1>/<ul> — there is no markdown), and one top-level <Helmet> for <title>/<style>/<script> and the document\'s DATA: <Value name type default /> scalars and <Query name>{`select … from ref_<datasetId>`}</Query> (SQL over your datasets), bound in the body by name — <Question data="$q">, <DataTable data="$q">, <select value="$x" options="$q">. Recipes/images bind as ref:<id>. Dataset creation echoes the inferred columns and a ready-to-paste Query+Question.',
+  description: 'Create an artifact (exactly one of markup | dataset | viz | image | pdf). Returns the public URL. markup is THE document format: story JSX over the component kit, HTML tags for everything else (prose is ordinary <p>/<h1>/<ul> — there is no markdown), and one top-level <Helmet> for <title>/<style>/<script> and the document\'s DATA: <Value name type default /> scalars and <Query name>{`select … from ref_<datasetId>`}</Query> (SQL over your datasets), bound in the body by name — <Question data="$q">, <DataTable data="$q">, <select value="$x" options="$q">. Recipes/images bind as ref:<id>, and a pdf as <File src="ref:<id>" />. Dataset creation echoes the inferred columns and a ready-to-paste Query+Question.',
   input: CONTENT_FIELDS,
   annotations: {},
   example: {

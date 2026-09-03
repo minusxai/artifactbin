@@ -139,6 +139,13 @@ export async function publishJsx(body: Record<string, unknown>, sourceIn: string
       const refused = await ctx.importAsset(url, 'font');
       if (refused) warnings.push(refused);
     }
+    // A PDF a <File> card names by URL: the same import, its own cap, and the
+    // same warning shape when it will not come — one dead link must not cost
+    // an author their document.
+    for (const url of externalAssets.pdfs) {
+      const refused = await ctx.importAsset(url, 'pdf');
+      if (refused) warnings.push(refused);
+    }
   }
 
   // Gate 1: the ported three-gate pipeline (registry, handlers, URL schemes).

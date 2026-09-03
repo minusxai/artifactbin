@@ -42,10 +42,17 @@ export interface WebAssetBox {
  */
 export type AssetLookup = (url: string) => WebAssetBox | boolean | null | undefined;
 
-/** The same positions lib/story/external-images.ts owns: `<img src>`, `<Video poster>`. */
+/**
+ * The same positions lib/story/external-images.ts owns: `<img src>`,
+ * `<Video poster>`, and `<File src>` — the card that links a PDF, mapped here
+ * for the same reason as an image, though the card is a LINK rather than a
+ * subresource: the point of importing is that opening a document sends nothing
+ * to a third party, and a link the reader clicks would.
+ */
 const IMAGE_POSITIONS: ReadonlyArray<readonly [tag: string, attr: string, component: boolean]> = [
   ['img', 'src', false],
   ['Video', 'poster', true],
+  ['File', 'src', true],
 ];
 
 const WEB_URL = /^https?:\/\//i;

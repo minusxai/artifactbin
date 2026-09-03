@@ -14,7 +14,8 @@ import { getDb, type Queryable } from './db';
 import { generateFileId } from './ids';
 import { parseContentInput, type ArtifactFormat } from './story/input';
 import { canonicalizeMarkup, publishJsx } from './story/jsx-tier';
-import { imageRawUrl } from './story/ref-data';
+import { imageRawUrl, pdfRawUrl } from './story/ref-data';
+import { displayTitle } from './story/title';
 import { assetWarningFor, importWebAsset, WebAssetRefused, type AssetWarning, type WebAssetKind } from './web-assets';
 import { resolveWebFont, UnknownFontError } from './webfonts';
 import { webIngestRateLimited } from './auth';
@@ -1629,6 +1630,18 @@ export async function refDataForRow(row: ArtifactRow): Promise<import('@/lib/sto
         ? { blur: im.placeholder }
         : {};
       out[r.id] = { kind: 'image', url: imageRawUrl(r.id, r.version), ...box, ...blur };
+    } else if (r.format === 'pdf') {
+      // What the CARD says: where the file is, what it is called, how big it is
+      // and how long. The name is the artifact's title (the author's, or the
+      // one the importer derived from the URL), never the object key.
+      const pm = r.meta as { bytes?: unknown; pages?: unknown } | null;
+      out[r.id] = {
+        kind: 'pdf',
+        url: pdfRawUrl(r.id, r.version),
+        name: displayTitle(r),
+        bytes: typeof pm?.bytes === 'number' ? pm.bytes : 0,
+        ...(typeof pm?.pages === 'number' ? { pages: pm.pages } : {}),
+      };
     }
   }
   return out;

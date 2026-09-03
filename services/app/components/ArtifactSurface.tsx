@@ -35,6 +35,7 @@ import { STORY_DATA_MESSAGE, STORY_DOCUMENT_ACK_MESSAGE, STORY_DOCUMENT_MESSAGE,
 import type { DataflowState } from '@/lib/story/dataflow';
 import { urlValuesSearch, writeUrlValues } from '@/lib/story/url-values';
 import { displayTitle } from '@/lib/story/title';
+import { formatFileSize } from '@/lib/file-size';
 import { resolveStoryMode } from '@/lib/data/story/story-themes';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import type { StoryIslandDataflow } from '@/lib/story-runtime/contract';
@@ -55,6 +56,9 @@ export interface ArtifactSurfaceProps {
   editId: string;
   format: ArtifactFormat;
   title: string | null;
+  /** pdf: how big the file is and how long, as the file view says it. */
+  bytes?: number;
+  pages?: number | null;
   source: string | null;
   /** meta scalars the editor needs, so entering edit mode costs no round trip. */
   template: string | null;
@@ -151,7 +155,7 @@ const selectionActionCapabilities = (canEdit: boolean, canAnnotate: boolean, inV
 
 export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const [copiedRef, setCopiedRef] = useState(false);
-  const { id, editId, format, title, source, content, columns, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', preview = false, accountSession = false, anonSession = false, version, captureKey = null, openAnnotations = 0 } = props;
+  const { id, editId, format, title, source, content, columns, bytes: fileBytes = 0, pages: filePages = null, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', preview = false, accountSession = false, anonSession = false, version, captureKey = null, openAnnotations = 0 } = props;
   const [editing, setEditing] = useState(false);
   /** A view-mode text selection asks edit mode to open on its containing node. */
   const [initialEditSelectionPath, setInitialEditSelectionPath] = useState<string | null>(null);
@@ -1146,6 +1150,27 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       {format === 'image' && (
         // eslint-disable-next-line @next/next/no-img-element -- the artifact IS the image; no optimizer.
         <img key={rawKey} src={`/a/${id}/raw`} alt={shownTitle} className="mt-4 max-w-full rounded-[6px] border border-edge" />
+      )}
+
+      {format === 'pdf' && (
+        // A PDF is a FILE, not something the app renders: the browser's own
+        // viewer does that, at /raw, which is served inline and sandboxed. So
+        // this view is the two facts a person picks a file by and the link that
+        // opens it — the same card <File> draws inside a document.
+        <div className="mt-4 rounded-[6px] border border-edge bg-surface p-4">
+          <p className="font-sans text-xs text-muted" aria-label="PDF summary">
+            PDF{fileBytes ? ` · ${formatFileSize(fileBytes)}` : ''}{filePages ? ` · ${filePages} page${filePages === 1 ? '' : 's'}` : ''}
+          </p>
+          <a
+            aria-label="Open the PDF"
+            href={`/a/${id}/raw`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 inline-block font-sans text-sm underline underline-offset-2"
+          >
+            Open {shownTitle}
+          </a>
+        </div>
       )}
 
       {format === 'dataset' && (

@@ -22,7 +22,7 @@ import { renderStoryNodes } from '@/lib/story-ui/interpreter';
 import { STORY_UI_COMPONENTS } from '@/lib/story-ui/registry';
 import { kitchenSinkMarkup } from '@/lib/story/kitchen-sink';
 
-const MARKUP = kitchenSinkMarkup({ dataset: 'aaaaaa', recipe: 'bbbbbb', image: 'cccccc' });
+const MARKUP = kitchenSinkMarkup({ dataset: 'aaaaaa', recipe: 'bbbbbb', image: 'cccccc', pdf: 'dddddd' });
 
 /** Content with no box until someone opens it — Radix mounts these on demand. */
 const UNMOUNTED_UNTIL_OPEN = new Set([

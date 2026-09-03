@@ -23,15 +23,15 @@ useAppHarness();
 const BYTES = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
 const URL_A = 'https://example.test/logo.svg';
 
-const seed = async (contentType = 'image/svg+xml') => {
-  const key = objectKey('webasset', BYTES);
-  await objectStore().put(key, BYTES, contentType);
+const seed = async (contentType = 'image/svg+xml', bytes: Buffer = BYTES, url: string = URL_A) => {
+  const key = objectKey('webasset', bytes);
+  await objectStore().put(key, bytes, contentType);
   const db = await getDb();
   await db.query(
     `insert into web_assets (url_hash, url, object_key, content_type, bytes) values ($1,$2,$3,$4,$5)`,
-    [urlHash(URL_A), URL_A, key, contentType, BYTES.length],
+    [urlHash(url), url, key, contentType, bytes.length],
   );
-  return urlHash(URL_A);
+  return urlHash(url);
 };
 
 const asset = (hash: string) => GET(request(`/assets/${hash}`), { params: Promise.resolve({ hash }) });
@@ -64,5 +64,34 @@ describe('GET /assets/<hash>', () => {
     const db = await getDb();
     await db.query('update web_assets set object_key = $1 where url_hash = $2', ['webasset/gone', hash]);
     expect((await asset(hash)).status).toBe(404);
+  });
+});
+
+/*
+ * THE ONE EXCEPTION TO `attachment`, and it is not a widening.
+ *
+ * `attachment` exists here because a stored SVG is markup (R15). A PDF is not:
+ * it cannot script, `nosniff` holds the browser to the type we sniffed from the
+ * bytes, and `Content-Security-Policy: sandbox` — which stays — was measured
+ * putting the response at an OPAQUE origin where storage and cookies throw.
+ * What `attachment` DOES cost here is the whole feature: opened from inside a
+ * document's sandbox it was measured producing neither a popup nor a download
+ * (spike S4), so a <File> card linking an imported PDF would simply do nothing.
+ */
+describe('a PDF among the assets', () => {
+  it('is served inline, named after its source URL, with the sandbox and nosniff kept', async () => {
+    const pdf = Buffer.from('%PDF-1.4\nnot really, but typed from these bytes at import\n');
+    const hash = await seed('application/pdf', pdf, 'https://example.test/papers/q3%20report.pdf');
+    const res = await asset(hash);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toBe('application/pdf');
+    expect(res.headers.get('Content-Disposition')).toBe('inline; filename="q3 report.pdf"');
+    expect(res.headers.get('Content-Security-Policy')).toBe('sandbox');
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
+  });
+
+  it('leaves every other type as an attachment — the SVG hole stays closed', async () => {
+    const hash = await seed();
+    expect((await asset(hash)).headers.get('Content-Disposition')).toBe('attachment');
   });
 });

@@ -17,7 +17,7 @@ import { actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type A
 import { isMutationRefused, mutateDataset } from '@/lib/story/dataset-mutate';
 import type { Scalar } from '@/lib/story/dataflow';
 import { datasetCreateFields } from '@/lib/story/dataset-usage';
-import { imageRawUrl } from '@/lib/story/ref-data';
+import { imageRawUrl, pdfRawUrl } from '@/lib/story/ref-data';
 import { ALLOW_PUBLIC_VISIBILITY } from '@/lib/config';
 import { canSetDatasetAccess } from '@/lib/features';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
@@ -154,6 +154,7 @@ export async function artifactToWire(row: ArtifactRow, base: string) {
       : {}),
     ...(format === 'viz' ? { slots: (meta as { slots?: unknown }).slots ?? [], recipe: safeJson(content) } : {}),
     ...(format === 'image' ? { contentType: (meta as { contentType?: unknown }).contentType ?? null } : {}),
+    ...(format === 'pdf' ? { contentType: (meta as { contentType?: unknown }).contentType ?? null, bytes: (meta as { bytes?: unknown }).bytes ?? 0, pages: (meta as { pages?: unknown }).pages ?? null } : {}),
   };
 }
 
@@ -411,7 +412,7 @@ export async function createArtifactFromBody(
  * second thing to learn.
  */
 export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: unknown): Record<string, unknown> {
-  const meta = row.meta as { columns?: unknown; rowCount?: unknown; slots?: unknown };
+  const meta = row.meta as { columns?: unknown; rowCount?: unknown; slots?: unknown; bytes?: number; pages?: number };
   return {
     id: row.id, url: `${base}/a/${row.id}`, version: row.version, visibility: row.visibility,
     // The read-proof for the edit protocol: an agent can start editing straight
@@ -426,6 +427,9 @@ export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: 
     // has re-read the document (lib/story/ref-data owns the shape, so this
     // cannot drift from the render path).
     ...(row.format === 'image' ? { rawUrl: imageRawUrl(row.id, row.version) } : {}),
+    // Same for a PDF, plus the two facts a <File> card shows: an agent that has
+    // just uploaded one can write the card without re-reading anything.
+    ...(row.format === 'pdf' ? { rawUrl: pdfRawUrl(row.id, row.version), bytes: meta.bytes ?? 0, ...(meta.pages ? { pages: meta.pages } : {}) } : {}),
   };
 }
 

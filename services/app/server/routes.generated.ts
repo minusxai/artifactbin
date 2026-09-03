@@ -65,7 +65,7 @@ export const ROUTES: RouteEntry[] = [
   { path: "/a/:id/export", dir: "/a/[id]/export", methods: ["GET"], module: r3 },
   { path: "/a/:id/mutate", dir: "/a/[id]/mutate", methods: ["POST","OPTIONS"], module: r4 },
   { path: "/a/:id/query", dir: "/a/[id]/query", methods: ["GET","POST"], module: r5 },
-  { path: "/a/:id/raw", dir: "/a/[id]/raw", methods: ["GET"], module: r6 },
+  { path: "/a/:id/raw", dir: "/a/[id]/raw", methods: ["GET","HEAD"], module: r6 },
   { path: "/a/:id/start", dir: "/a/[id]/start", methods: ["GET","POST"], module: r7 },
   { path: "/api/artifacts/:id/annotations/:annId", dir: "/api/artifacts/[id]/annotations/[annId]", methods: ["POST"], module: r8 },
   { path: "/api/artifacts/:id/annotations", dir: "/api/artifacts/[id]/annotations", methods: ["GET"], module: r9 },

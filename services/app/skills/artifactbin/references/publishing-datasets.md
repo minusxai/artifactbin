@@ -1,13 +1,13 @@
 ---
 name: publishing-datasets
 description: >-
-  Uploading a dataset (rows, CSV, a URL), an image, a viz recipe; writable datasets. Read only when the brief's one-line dataset upload is not enough.
+  Uploading a dataset (rows, CSV, a URL), an image, a PDF, a viz recipe; writable datasets. Read only when the brief's one-line upload is not enough.
 order: 2
 ---
 ## Read first
 
-Every request carries exactly ONE content field: `markup | dataset | viz | image`.
-`markup` is the document; the other three are ASSETS a document reaches by id.
+Every request carries exactly ONE content field: `markup | dataset | viz | image | pdf`.
+`markup` is the document; the other four are ASSETS a document reaches by id.
 Create them first — a dataset's create response echoes the inferred columns AND
 a ready-to-paste `<Query>` + `<Question>`, so the read path arrives written.
 
@@ -31,7 +31,7 @@ POST [[ base ]]/api/artifacts
 
 ## Contents
 
-Images · Writable datasets · Viz recipes.
+Images · PDFs · Writable datasets · Viz recipes.
 
 ## Images
 
@@ -67,6 +67,31 @@ Source changed? `POST [[ base ]]/api/artifacts/assets/refresh` with
 `{"url": "https://…"}` (one already-stored url); naming neither is
 `nothing_to_refresh`. It answers `{refreshed, unchanged, failed}` and touches
 nothing else — no new version, and your markup keeps the url it has.
+
+## PDFs
+
+A `pdf` is a FILE a document links, never a document you publish. Two shapes,
+the same two an image has:
+
+```
+{ "title": "Q3 report", "pdf": "data:application/pdf;base64,…" }   ← bytes you hold
+{ "pdfUrl": "https://…/q3.pdf" }                                   ← already on the web; fetched server-side
+→ 201 { "id", "url", "bytes", "pages", "rawUrl" }
+```
+
+The bytes are stored exactly as sent — nothing re-encodes a PDF — up to
+`[[ maxPdfBytes ]]` bytes, and `pages` is present only when the file says so
+cheaply. The type comes from the BYTES: a file that is not a PDF is
+`400 invalid_pdf` (or `400 pdf_fetch_failed` for a URL) however it is named,
+and one over the cap is `413 pdf_too_large`.
+
+Link it with `<File src="ref:<id>" />` — a card showing the name, the size and
+the page count, which opens the file in a new tab in the reader's own PDF
+viewer. `title="…"` names it something other than the artifact's title. A
+public URL works in the same position (`<File src="https://…/paper.pdf" />`):
+publish imports a copy and LEAVES YOUR URL in the document, exactly as an
+`<img>` URL behaves, and a URL that will not fetch is a warning rather than a
+refused publish.
 
 ## Writable datasets (preview)
 

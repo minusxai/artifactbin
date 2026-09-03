@@ -25,7 +25,7 @@ import { STORY_TEMPLATES } from '@/lib/data/story/story-templates';
 import { STORY_HTML_TAGS, STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
 import { DANGEROUS_TAGS } from '@/lib/jsx/dangerous-tags';
 import { MAX_CONTENT_BYTES } from '@/lib/story/input';
-import { MAX_IMAGE_BYTES } from '@/lib/config';
+import { MAX_PDF_BYTES, MAX_IMAGE_BYTES } from '@/lib/config';
 import { COMPUTED_FIGURE_RULE } from '@/lib/agent-guidance';
 import { OPERATIONS } from '@/lib/operations/registry';
 import type { SkillFile } from './tree';
@@ -131,6 +131,7 @@ const REGISTRY_GLOBALS = {
   refusedTags: [...DANGEROUS_TAGS],
   maxContentBytes: MAX_CONTENT_BYTES.toLocaleString('en-US'),
   maxImageBytes: MAX_IMAGE_BYTES.toLocaleString('en-US'),
+  maxPdfBytes: MAX_PDF_BYTES.toLocaleString('en-US'),
   /** ONE sentence for the MCP schema and the docs — the rule that figures are computed, never typed. */
   computedFigureRule: COMPUTED_FIGURE_RULE,
 };
