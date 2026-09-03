@@ -130,8 +130,11 @@ export function writtenArtifactIds(entries: LedgerEntry[]): string[] {
  * comes first because the ledger sees only calls that crossed this machine and
  * cannot tell a scratch write from the deliverable; the start document is last
  * because an agent that ignored it must be scored on what it made instead.
+ *
+ * `startId` is null for the token-less leg, which mints no start document: then the last fallback has
+ * nothing to name and the answer is null — there is no artifact to score.
  */
-export function scoredArtifactId(input: { finalMessage: string | null; ledger: LedgerEntry[]; startId: string }): string {
+export function scoredArtifactId(input: { finalMessage: string | null; ledger: LedgerEntry[]; startId: string | null }): string | null {
   return artifactIdFromText(input.finalMessage ?? '') ?? targetArtifactId(input.ledger) ?? input.startId;
 }
 

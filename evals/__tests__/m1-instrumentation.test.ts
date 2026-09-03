@@ -7,7 +7,7 @@
  * empty stub from beating a real skeleton.
  */
 import { describe, it, expect } from 'vitest';
-import { ledgerMetrics } from '../lib/ledger';
+import { ledgerMetrics, scoredArtifactId } from '../lib/ledger';
 import type { LedgerEntry } from '../lib/contracts';
 import { acquireCredential, credentialSourceFor, parseCredentialSource } from '../lib/credential';
 import { buildPrompt } from '../lib/tasks';
@@ -178,5 +178,19 @@ describe('the no-credential access line', () => {
 
   it('refuses an MCP mode outright — the MCP config IS a token handoff', () => {
     expect(() => buildPrompt(TASK, NONE, { mode: 'installed_skill+mcp_action' as never })).toThrow(/token/i);
+  });
+});
+
+describe('scoring a run that was never given a document', () => {
+  it('falls through to null instead of a start document that does not exist', () => {
+    // The token-less leg mints no start document, so the third fallback has nothing to name. Null means
+    // "there is no artifact to score" — the honest answer for an agent that published nothing at all.
+    expect(scoredArtifactId({ finalMessage: null, ledger: [], startId: null })).toBeNull();
+  });
+
+  it('still scores what the agent made, or what the ledger watched it write', () => {
+    const written = [entry({ method: 'POST', path: '/api/artifacts', status: 201, artifactId: 'ledger1' })];
+    expect(scoredArtifactId({ finalMessage: 'Done: https://x.test/a/stated1', ledger: [], startId: null })).toBe('stated1');
+    expect(scoredArtifactId({ finalMessage: 'Done.', ledger: written, startId: null })).toBe('ledger1');
   });
 });
