@@ -8,14 +8,14 @@ order: 1
 
 A document DECLARES its data in `<Helmet>` and refers to it everywhere else
 by name. One namespace; a name is either a TABLE (a `<Query>` or a table
-`<Value>`) or a SCALAR (a `<Value>`); every reference is checked
-against that at publish — a typo is a `400` naming the token.
+`<Value>`) or a SCALAR (a `<Value>`), checked at publish — a typo is a
+`400` naming the token.
 
 ```jsx
 <Helmet>
   <Value name="region" type="string" />
   <Value name="min_rev" type="number" default={1000} />
-  <Value name="tiny" type="table" value={[{"name":"John","age":34},{"name":"Mary","age":60}]} />
+  <Value name="tiny" type="table" value={[{"name":"John","age":34}]} />
   <Query name="regions">{`select distinct region from ref_<datasetId> order by 1`}</Query>
   <Query name="sales">{`
     select region, sum(revenue) as revenue
@@ -26,10 +26,9 @@ against that at publish — a typo is a `400` naming the token.
 </Helmet>
 
 <select value="$region" options="$regions" />
-<input type="range" min={0} max={5000} value="$min_rev" />
 <Question title="Revenue by region" data="$sales" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"region","type":"nominal"},"y":{"field":"revenue","type":"quantitative"}}}}} height="430px" />
 <p>Total <Number data="$sales" col="revenue" agg="sum" prefix="$" format=",.0f" /></p>
-<DataTable data="$sales" height="420px" columns={[{"col":"region","title":"Region"},{"col":"revenue","title":"Revenue","fmt":"$,.0f","bar":true}]} />
+<DataTable data="$sales" height="420px" columns={[{"col":"region"},{"col":"revenue","fmt":"$,.0f","bar":true}]} />
 ```
 
 `ref:<id>` survives ONLY for images and recipes; `data="ref:<id>"`, inline
@@ -45,7 +44,9 @@ Declarations · Bindings: embeds · Bindings: controls.
 - `<Value name type default />` — a scalar the reader can change.
   `type`: `string | number | boolean | date` (default `string`); `default`
   must match it (dates `YYYY-MM-DD`); no default = `null`, which is how
-  "$region is null" in SQL means "all".
+  "$region is null" in SQL means "all". A scalar also travels in the LINK:
+  the document accepts `?$region=EU` (empty = "all"), so you can hand your
+  user a pre-filtered link — and a reader's own picks rewrite the address.
 - `<Value name type="table" value={[{…}, …]} />` — an inline table (flat
   objects; `columns={[{name,type}]}` optional). Read it in SQL by its bare
   name (`from tiny`) or bind it directly (`data="$tiny"`).
@@ -62,8 +63,7 @@ Declarations · Bindings: embeds · Bindings: controls.
   — a `<Query>` that WRITES (preview: the dataset needs `access: readwrite`,
   [publishing-datasets.md](publishing-datasets.md)). Exactly one INSERT | UPDATE | DELETE
   naming exactly ONE dataset, which must be YOUR OWN (reading a public one
-  you do not own is fine; writing it is not); `$name` binds a scalar
-  `<Value>`, never interpolated. It runs on demand, never at render:
+  you do not own is fine; writing it is not); `$name` binds a scalar, never interpolated. It runs on demand, never at render:
   `<Button run="$name">` in the body, or `mx.mutate("name")` from your
   `<script>`; dry-run at publish, so a button that could not work is a `400`
   naming the fix. Anyone who can read the document can run it — a poll, a

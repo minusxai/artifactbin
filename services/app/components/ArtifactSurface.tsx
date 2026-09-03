@@ -28,8 +28,9 @@ import { useIsPhoneViewport } from '@/components/MobileSheet';
 import { EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
 import type { ArtifactFormat } from '@/lib/story/input';
 import { useLiveArtifact } from '@/lib/story/use-live-artifact';
-import { STORY_DATA_MESSAGE, STORY_DOCUMENT_ACK_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_HELLO_MESSAGE, STORY_MUTATE_MESSAGE, STORY_MUTATE_RESULT_MESSAGE, STORY_PAINTED_MESSAGE, STORY_READER_MODE_MESSAGE, STORY_SCROLL_MESSAGE, type StoryDataUpdate, type StoryMutateRequest, type StoryMutateResult, type StoryScrollMessage, STORY_ADOPTS_MESSAGE, STORY_QUERY_MESSAGE, STORY_QUERY_RESULT_MESSAGE, isEditFrameMessage, isSessionMessage, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, type StoryDocumentUpdate, type StoryEditSelection, type StoryQueryRequest, type StoryQueryResult, type StorySelectionActionsMessage } from '@/lib/story-runtime/contract';
+import { STORY_DATA_MESSAGE, STORY_DOCUMENT_ACK_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_HELLO_MESSAGE, STORY_MUTATE_MESSAGE, STORY_MUTATE_RESULT_MESSAGE, STORY_PAINTED_MESSAGE, STORY_READER_MODE_MESSAGE, STORY_SCROLL_MESSAGE, type StoryDataUpdate, type StoryMutateRequest, type StoryMutateResult, type StoryScrollMessage, STORY_ADOPTS_MESSAGE, STORY_QUERY_MESSAGE, STORY_QUERY_RESULT_MESSAGE, isEditFrameMessage, isSessionMessage, isValuesMessage, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, type StoryDocumentUpdate, type StoryEditSelection, type StoryQueryRequest, type StoryQueryResult, type StorySelectionActionsMessage } from '@/lib/story-runtime/contract';
 import type { DataflowState } from '@/lib/story/dataflow';
+import { urlValuesSearch, writeUrlValues } from '@/lib/story/url-values';
 import { displayTitle } from '@/lib/story/title';
 import { resolveStoryMode } from '@/lib/data/story/story-themes';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
@@ -57,6 +58,14 @@ export interface ArtifactSurfaceProps {
   refs: Array<{ id: string; kind: string }>;
   /** The document's server-run dataflow (lib/artifacts dataflowForRow) — seeds the editor's canvas. */
   dataflow?: StoryIslandDataflow | null;
+  /**
+   * The page's own query string, from the router (never `window.location` in
+   * render — that is a hydration mismatch waiting to happen). Its `$` params
+   * are the reader's `<Value>` selection and are forwarded into the framed
+   * document; everything else in it is the page's business, not the
+   * document's, and is deliberately left behind.
+   */
+  search?: string;
   /** This browser is in the preview (lib/features) — gates the share menu's writes row. */
   preview?: boolean;
   /** An ACCOUNT session (NextAuth) holds this browser — the bar offers Sign out. */
@@ -101,6 +110,10 @@ const DOCUMENT_GROUND = { light: '#ffffff', dark: '#0b0b0c' } as const;
 
 const CONTROL_ROW = 'flex w-full cursor-pointer items-center gap-2 rounded-[5px] border-0 bg-transparent px-2 py-2 text-left font-mono text-xs text-muted transition-colors hover:bg-raised hover:text-fg';
 
+/** The frame's own url with the reader's `$` selection on the end (or unchanged). */
+const appendSelection = (query: string, selection: string): string =>
+  (selection ? `${query}${query ? '&' : '?'}${selection}` : query);
+
 const safeRows = (content: string): Array<Record<string, unknown>> => {
   try {
     const parsed = JSON.parse(content);
@@ -135,7 +148,7 @@ const selectionActionCapabilities = (canEdit: boolean, canAnnotate: boolean, inV
 
 export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const [copiedRef, setCopiedRef] = useState(false);
-  const { id, editId, format, title, source, content, columns, compiledCss, theme, colorMode, template, refs, dataflow = null, preview = false, accountSession = false, anonSession = false, version, captureKey = null, openAnnotations = 0 } = props;
+  const { id, editId, format, title, source, content, columns, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', preview = false, accountSession = false, anonSession = false, version, captureKey = null, openAnnotations = 0 } = props;
   const [editing, setEditing] = useState(false);
   /** A view-mode text selection asks edit mode to open on its containing node. */
   const [initialEditSelectionPath, setInitialEditSelectionPath] = useState<string | null>(null);
@@ -231,6 +244,27 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     );
   }, []);
   const live = useLiveArtifact(id, editId, version, !editing, undefined, onLiveData, setLiveAnnotations);
+  /*
+   * THE READER'S `<Value>` SELECTION, AND THE ADDRESS BAR (lib/story/url-values).
+   *
+   * Two halves that must not be confused with each other:
+   *
+   *  - the frame is SEEDED once, from the link this page was opened at. The
+   *    `src` must then never change again, because a `src` write NAVIGATES the
+   *    frame: a full document reload, every chart rebuilt, the reader's place
+   *    gone — once per pick, and it would look entirely correct while doing it.
+   *    So the seed is state that moves only when the frame is being replaced
+   *    anyway (`frameNonce`), never with the live address.
+   *  - the ADDRESS follows the picks. A framed document cannot write it: the
+   *    `location` its own capability reaches is the FRAME's, so it would move
+   *    `/a/<id>/raw?edit=1`, which nobody can copy (measured on the spike).
+   *    It reports instead, and this page writes — re-deriving the whole search
+   *    through `writeUrlValues` against the flow it holds, because the frame is
+   *    sandboxed markup and never an authority about what this document
+   *    declares.
+   */
+  const selectionRef = useRef(urlValuesSearch(search));
+  const [frameSearch, setFrameSearch] = useState(selectionRef.current);
   const liveSource = live && live.format === 'markup' ? live.source : null;
   const shownSource = liveSource ?? source;
   // What the row actually holds — null when nobody has named it. The editor's
@@ -419,11 +453,44 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
 
 
 
+  /**
+   * The frame says which `<Value>`s the reader has chosen; this page writes the
+   * address so the link they copy is the document they are looking at.
+   *
+   * `replaceState`, never `pushState`: a pick is not a navigation, and a back
+   * button that walked a reader through every filter they tried is a worse
+   * document than one they cannot go back in at all.
+   */
+  useEffect(() => {
+    const onValues = (e: MessageEvent) => {
+      if (frameRef.current && e.source !== frameRef.current.contentWindow) return;
+      if (!sessionNonce || !isValuesMessage(e.data, sessionNonce)) return;
+      // The flow the PAGE holds — the served one, or the live version if an
+      // agent has since changed the declarations.
+      const flow = live?.dataflow?.flow ?? dataflow?.flow ?? null;
+      if (!flow) return;
+      const next = writeUrlValues(window.location.search, flow, e.data.values);
+      // What a REPLACED frame should be seeded with, if one ever is.
+      selectionRef.current = urlValuesSearch(next);
+      if (next === window.location.search) return;
+      window.history.replaceState(null, '', window.location.pathname + next + window.location.hash);
+    };
+    window.addEventListener('message', onValues);
+    return () => window.removeEventListener('message', onValues);
+  }, [sessionNonce, dataflow, live]);
+
   // A new FRAME is hidden again until it has painted. Keyed on the nonce, not
   // on the document: a live edit no longer replaces the frame (see below), and
   // hiding a live document to announce an edit to it was the flash this whole
   // path exists to remove.
   useEffect(() => { setFrameLoaded(false); }, [frameNonce]);
+  /*
+   * A REPLACED frame is a new document load, so it is the one moment the seed
+   * may move — and must: a frame replaced after the reader has narrowed the
+   * document should come back narrowed. Every other render keeps `src` byte
+   * for byte, which is what stops a pick from reloading the document.
+   */
+  useEffect(() => { setFrameSearch(selectionRef.current); }, [frameNonce]);
 
   /*
    * Editing does NOT reset this, and that is the point.
@@ -942,7 +1009,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
              * it. Asked for at load, so pressing edit is one message rather
              * than a reload — and a reader's copy is untouched.
              */
-            src={`/a/${id}/raw${
+            src={`/a/${id}/raw${appendSelection(
               captureRender ? `?chrome=0&key=${encodeURIComponent(captureKey!)}`
               // An EDITOR needs the runtime: editing happens inside this frame
               // and a prose document ships none. A COMMENTER needs only the
@@ -952,8 +1019,9 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
               // is untouched by either.
               : canEdit ? '?edit=1'
               : canAnnotate ? '?comment=1'
-              : ''
-            }`}
+              : '',
+              frameSearch,
+            )}`}
             // Belt: a document that somehow never posts still gets revealed.
             onLoad={() => setFrameLoaded(true)}
             // The attribute mirrors the /raw response header's sandbox

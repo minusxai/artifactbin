@@ -18,13 +18,15 @@
  * the one retry, and the verdict → HTTP mapping. The service renders a URL;
  * the product decides what to render and what a failure means.
  */
+import { createHash } from 'node:crypto';
 import { EXPORT_INTERNAL_ORIGIN } from '@/lib/config';
 import { services } from '@/lib/services';
-import { ArtifactRow } from './artifacts';
+import { ArtifactRow, declarationsOf } from './artifacts';
 import { CARD_HEIGHT, CARD_WIDTH } from './export-card';
 import { mintExportKey } from './export-key';
 import { json } from './http';
 import { objectStore } from './object-store';
+import { urlSelection } from './story/url-values';
 
 export const EXPORT_MIME = { png: 'image/png', jpg: 'image/jpeg' } as const;
 export type ExportFormat = keyof typeof EXPORT_MIME;
@@ -91,10 +93,19 @@ export function parseExportSlide(value: string | null): number | null {
  * carries its slide number, and the whole-document shot carries the renderer
  * generation.
  */
-function exportCaptureKey(capture: ExportCapture, slide: number): string {
-  if (slide > 0) return `slide-${slide}-g${EXPORT_RENDER_GENERATION}`;
-  if (capture === 'card') return `card-${CARD_WIDTH}x${CARD_HEIGHT}-g${EXPORT_RENDER_GENERATION}`;
-  return `full-g${EXPORT_RENDER_GENERATION}`;
+function exportCaptureKey(capture: ExportCapture, slide: number, selection = ''): string {
+  /*
+   * A SELECTION IS PART OF WHAT THE SHOT IS. Both cache layers are keyed by
+   * artifact version — that is what makes one render serve every unfurl and
+   * every profile thumbnail, with no invalidation ever run — and it is also
+   * exactly what would hand `?$region=NA` the picture taken of the defaults:
+   * same id, same version, same key. Hashed because this string is also an
+   * object-store PATH, and short because it only has to separate.
+   */
+  const pick = selection ? `-p${createHash('sha256').update(selection).digest('hex').slice(0, 12)}` : '';
+  if (slide > 0) return `slide-${slide}-g${EXPORT_RENDER_GENERATION}${pick}`;
+  if (capture === 'card') return `card-${CARD_WIDTH}x${CARD_HEIGHT}-g${EXPORT_RENDER_GENERATION}${pick}`;
+  return `full-g${EXPORT_RENDER_GENERATION}${pick}`;
 }
 
 /** The durable cache address for one shot — version-keyed, so an edit misses naturally. */
@@ -103,8 +114,10 @@ export function exportStoreKey(
   format: ExportFormat,
   capture: ExportCapture,
   slide = 0,
+  /** The CANONICAL selection token (lib/story/url-values urlSelection), never raw params. */
+  selection = '',
 ): string {
-  return `exports/${artifact.id}/${artifact.version}.${exportCaptureKey(capture, slide)}.${format}`;
+  return `exports/${artifact.id}/${artifact.version}.${exportCaptureKey(capture, slide, selection)}.${format}`;
 }
 
 export type RenderResult =
@@ -244,12 +257,16 @@ export function renderArtifactImage(
   // `pageUrl` is REQUIRED: every artifact is shot from its live page. The old
   // optional shape existed so a row could be photographed from its stored HTML
   // instead — which only the retired html tier ever had.
-  opts: { pageUrl: () => string; target: string; capture?: ExportCapture; slide?: number },
+  /** `selection` is the CANONICAL token from urlSelection — a raw search string here
+   * would give one document unlimited keys for byte-identical renders. */
+  opts: { pageUrl: () => string; target: string; capture?: ExportCapture; slide?: number; selection?: string },
 ): Promise<RenderResult> {
   const s = state();
   const capture = opts.capture ?? 'full';
   const slide = opts.slide ?? 0;
-  const captureKey = exportCaptureKey(capture, slide);
+  // The reader's `<Value>` picks, when this shot is of a selected document.
+  const selection = opts.selection ?? '';
+  const captureKey = exportCaptureKey(capture, slide, selection);
   const key = `${artifact.id}:${artifact.version}:${captureKey}:${format}`;
   const hit = s.cache.get(key);
   if (hit) return Promise.resolve({ ok: true, ...hit });
@@ -258,7 +275,7 @@ export function renderArtifactImage(
   // stale entry just goes cold — no invalidation to run, ever. One render
   // then serves every og unfurl and profile thumbnail for that version,
   // across restarts.
-  const storeKey = exportStoreKey(artifact, format, capture, slide);
+  const storeKey = exportStoreKey(artifact, format, capture, slide, selection);
   const input: RenderInput = { urlFor: opts.pageUrl, target: opts.target };
   const run = s.chain.then(async (): Promise<RenderResult> => {
     const cached = s.cache.get(key); // a queued twin may have filled it
@@ -327,8 +344,10 @@ function remember(s: ExportState, key: string, shot: { mime: string; bytes: Buff
  * has run the read ACL may call this.
  */
 export async function exportImageResponse(
-  artifact: Pick<ArtifactRow, 'id' | 'version' | 'format'>,
-  q: { format?: string | null; mode?: string | null; slide?: string | null },
+  // `source` is here so the SELECTION can be read the way the document itself
+  // reads it — through its own declarations. See `selection` below.
+  artifact: Pick<ArtifactRow, 'id' | 'version' | 'format' | 'source'>,
+  q: { format?: string | null; mode?: string | null; slide?: string | null; search?: string | null },
   base: string,
 ): Promise<Response> {
   // Default png; anything unrecognized is a client error rather than a
@@ -343,8 +362,32 @@ export async function exportImageResponse(
   const slide = parseExportSlide(q.slide ?? null);
   if (slide === null) return json({ error: 'unknown_slide', hint: 'slide is a 1-based slide number, e.g. ?slide=2' }, 400);
 
+  /*
+   * THE READER'S SELECTION, forwarded to the page this shoots — so
+   * `/a/<id>/export?$region=NA` photographs the document the link describes
+   * and an agent can look at what its user will see. Never for the CARD: an
+   * unfurl is of the DOCUMENT, and one reader's filter is not what the next
+   * person should meet in a preview.
+   *
+   * READ THROUGH THE FLOW, not taken from the params. Forwarding was all this
+   * needed; KEYING on it is what made the difference matter. Both cache layers
+   * are addressed by artifact VERSION — which is what makes one render serve
+   * every unfurl and thumbnail with no invalidation ever run — so a token taken
+   * from the raw `$` params gave one document unlimited distinct keys: the
+   * document ignores a name it does not declare, a value its type refuses and a
+   * value already at its default, so `?$junk=17` renders bytes identical to the
+   * default shot and then stores them forever under a key of their own. The
+   * EXPORT door bounds the RATE (30/min per actor) and not the TOTAL. Now
+   * anything the document would ignore collapses onto the default shot's key,
+   * byte for byte, and one selection has one identity however its link was
+   * written (lib/story/url-values urlSelection).
+   */
+  const flow = artifact.format === 'markup' && artifact.source ? declarationsOf(artifact.source) : null;
+  const selection = capture === 'card' ? { search: '', token: '' } : urlSelection(q.search ?? '', flow);
+
   const rendered = await renderArtifactImage(artifact, format, {
     capture,
+    ...(selection.token ? { selection: selection.token } : {}),
     // The headless browser has no session, so a private page would 404 on
     // itself. Mint a signed, seconds-long key scoped to this artifact —
     // minted only AFTER the caller's ACL admitted the requester, and never a
@@ -356,7 +399,7 @@ export async function exportImageResponse(
     // document of their own and render inside the app's <main>.
     pageUrl: () => new URL(
       artifact.format === 'markup'
-        ? `/a/${artifact.id}/raw?chrome=0&key=${mintExportKey(artifact.id)}`
+        ? `/a/${artifact.id}/raw?chrome=0&key=${mintExportKey(artifact.id)}${selection.search ? `&${selection.search}` : ''}`
         : `/a/${artifact.id}?key=${mintExportKey(artifact.id)}`,
       EXPORT_INTERNAL_ORIGIN ?? base,
     ).toString(),

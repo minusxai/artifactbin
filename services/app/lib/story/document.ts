@@ -30,7 +30,7 @@ import { IS_DEV } from '@/lib/config';
 import { parseJsx } from '@/lib/jsx';
 import { EMPTY_HELMET_CONTENT, splitHelmet, type HelmetContent } from '@/lib/story/helmet';
 import { fixHtmlNesting } from '@/lib/story/nesting';
-import { AUTHOR_SCRIPT_TYPE, STORY_HELLO_MESSAGE, STORY_ISLAND_ID, STORY_PAINTED_MESSAGE, STORY_ROOT_ID, type StoryIslandData, type StoryIslandDataflow, type StorySsrBundle } from '@/lib/story-runtime/contract';
+import { AUTHOR_SCRIPT_TYPE, STORY_HELLO_MESSAGE, STORY_VALUES_HOOK, STORY_ISLAND_ID, STORY_PAINTED_MESSAGE, STORY_ROOT_ID, type StoryIslandData, type StoryIslandDataflow, type StorySsrBundle } from '@/lib/story-runtime/contract';
 import type { JsxNode } from '@/lib/jsx';
 import type { RefDataMap } from '@/lib/story/ref-data';
 import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
@@ -226,12 +226,66 @@ function drawsChart(nodes: JsxNode[]): boolean {
  * Safe for our own document: the runtime never calls either method (pinned by
  * lib/story/__tests__/history-prelude.test.ts), and hydration does not route.
  */
+/*
+ * SPIKE S2 (F2 — the reader's `<Value>` selections in the URL, risk R5).
+ *
+ * The freeze above is exactly what a reader-facing URL needs, and F2 needs the
+ * URL to change anyway: someone who picks "west" must be able to copy the
+ * address bar and hand another person the document they are looking at. So the
+ * prelude keeps every door shut and opens ONE WINDOW, `window.__mxValues`.
+ *
+ * It is narrow by CONSTRUCTION, not by escaping:
+ *  - it holds the NATIVE `replaceState`, bound before the overwrite below —
+ *    after the freeze there is no other way to reach it, in or out;
+ *  - it takes no path, no host and no hash. `location.pathname` and
+ *    `location.hash` are read FRESH at call time, so there is no argument for
+ *    a crafted `toString` to arrive through;
+ *  - a key that is not a plain value name (`/^[A-Za-z_]\w*$/`, the dataflow's
+ *    own shape) is DROPPED rather than encoded, and only the object's own
+ *    enumerable keys are read, so a polluted `Object.prototype` injects
+ *    nothing;
+ *  - the search is rebuilt from `URLSearchParams`, so every value is encoded
+ *    and a `#` or `&` inside one is a character, never a delimiter. `$` alone
+ *    is written back literally — it is a legal query character and the point
+ *    of the whole feature is a link a person can read.
+ * A frozen, non-writable, non-configurable own property, so the author's own
+ * script cannot replace it with something that lies about what it did.
+ */
 export const HISTORY_PRELUDE =
   '(function(){var b=function(){};try{'
+  /*
+   * ORDER IS THE WHOLE MECHANISM, and it runs in exactly two beats.
+   *
+   * FIRST, bind the native — after the overwrite below there is no way to
+   * reach it, in or out, which is the point.
+   *
+   * THEN shut every door, and only AFTER that build the capability. The
+   * capability's own statements sit inside the same fail-silent `try`, so
+   * anything that throws there (a `defineProperty` refused because something
+   * already owns the name) would take the FREEZE down with it and leave the
+   * document with a fully writable History API and nobody told. The freeze is
+   * what this prelude is FOR; nothing may be attempted in front of it.
+   */
+  + 'var n=history.replaceState.bind(history);'
   + 'history.pushState=b;history.replaceState=b;'
   + 'History.prototype.pushState=b;History.prototype.replaceState=b;'
   + 'Object.freeze(History.prototype);Object.freeze(history);'
-  + '}catch(e){}})()';
+  + 'var c=function(s){return encodeURIComponent(s).replace(/%24/g,"$")};'
+  + 'var f=function(v){try{'
+  + 'if(!v||typeof v!=="object")return;'
+  + 'var p=new URLSearchParams(location.search),k=Object.keys(v),i,m,x;'
+  + 'for(i=0;i<k.length;i++){m=k[i];'
+  + 'if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(m))continue;'
+  // `x==null` rather than a spelled-out `undefined`: the built document is
+  // guarded against emitting that token at all (__tests__/document.test.ts).
+  + 'x=v[m];if(x==null)p.delete("$"+m);else p.set("$"+m,""+x)}'
+  + 'var o=[];p.forEach(function(val,key){o.push(c(key)+"="+c(val))});'
+  + 'var q=o.join("&");'
+  + 'n(null,"",location.pathname+(q?"?"+q:"")+location.hash)'
+  + '}catch(g){}};'
+  + 'Object.freeze(f);'
+  + `Object.defineProperty(window,"${STORY_VALUES_HOOK}",{value:f,writable:false,configurable:false,enumerable:false});`
+  + '}catch(z){}})()';
 
 /**
  * Re-apply the READER's mode override before first paint. The override lives
