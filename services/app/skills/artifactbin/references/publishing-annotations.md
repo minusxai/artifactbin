@@ -52,6 +52,14 @@ snippet still says what it pointed at.
 
 ## Reply, resolve, reopen
 
+A comment body is plain TEXT on the wire, and your user reads it through a
+small markdown subset: `**bold**`, `_italic_`, `` `code` ``, fenced ``` blocks
+(with a language), `-` and `1.` lists, `>` quotes, and `[label](url)` links to
+`http`/`https`/`mailto` only. Write a reply the way you would write it in a
+terminal — name files and identifiers in backticks and put a diff or a command
+in a fence. Nothing else is interpreted: raw HTML, images and headings are
+shown as the characters you typed.
+
 `reply` alone keeps the thread open (say why, or ask back); `resolve` alone
 closes silently; `{ "reopen": true }` returns a resolved thread to the open
 list. A POST with none of the three is `400 invalid_annotation_action`.

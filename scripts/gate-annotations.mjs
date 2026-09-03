@@ -286,6 +286,8 @@ const run = async () => {
 
     // ── the comment keeps the exact selection ─────────────────────────────
     await quoteLeg(browser);
+    // ── an agent's reply is READ as markdown ──────────────────────────────
+    await markdownLeg(browser);
   } finally {
     await browser.close();
   }
@@ -427,6 +429,111 @@ async function quoteLeg(browser) {
   );
   ok(fallback?.highlighted === false && fallback?.tinted === true && fallback?.ranged === false,
     `the live frame falls back to the whole-node tint (got ${JSON.stringify(fallback)})`);
+  await ctx.close();
+}
+
+/**
+ * AN AGENT'S REPLY IS PROSE WITH CODE IN IT (F5).
+ *
+ * The body is plain TEXT on the wire and stays that way — what changed is the
+ * READING. Only a browser can show that: the rail renders a real `<pre>` for a
+ * fenced block, and it has to arrive over the LIVE annotations stream, with no
+ * reload, because the whole point is a comment answered while its reader is
+ * looking at it. A collapsed thread would show the plain text, so the thread is
+ * opened first: that is the surface under test.
+ */
+const MD_DOC =
+  '<Helmet><title>Markdown comments</title></Helmet>'
+  + '<div data-design="tw" className="p-10">'
+  + '<h1>The cap</h1>'
+  + '<p id="cap">The cap is 5 today.</p>'
+  + '</div>';
+
+const AGENT_REPLY = [
+  'Fixed in `lib/config.ts` — the cap was **10**:',
+  '',
+  '```ts',
+  'const MAX = 10;',
+  '```',
+  '',
+  '- bumped the cap',
+  '- added a test',
+].join('\n');
+
+async function markdownLeg(browser) {
+  const { id, token } = await startDocument(BASE);
+  const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const published = await fetch(`${BASE}/api/artifacts/${id}`, { method: 'PUT', headers: auth, body: JSON.stringify({ markup: MD_DOC }) });
+  if (!published.ok) throw new Error(`markdown leg publish failed (${published.status}): ${await published.text()}`);
+
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  await becomeOwner(page, BASE, token);
+  await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
+  const frame = page.frameLocator('iframe[title="artifact"]');
+  await frame.locator('#cap').waitFor({ timeout: 15000 });
+
+  // The comment itself through the browser door, with the session the page
+  // already holds — the selection dance is the leg above's subject, not this
+  // one's. `0.1` is the paragraph: BODY paths, the Helmet already hoisted off.
+  const head = await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: auth })).json();
+  const created = await page.evaluate(async ([docId, editId]) => {
+    const res = await fetch(`/api/my/artifacts/${docId}/annotations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: '0.1', edit_id: editId, body: 'why is the cap 5?' }),
+    });
+    return { status: res.status, body: await res.text() };
+  }, [id, head.edit_id]);
+  ok(created.status === 201, `the owner leaves a comment (${created.status} ${created.body.slice(0, 120)})`);
+
+  // Open the rail, and open the thread inside it: the compact surfaces show
+  // the plain text on purpose, so only the opened thread renders the tree.
+  await page.locator('[aria-label="Open artifact controls"]').click();
+  await page.locator('[aria-label="Toggle comments"]').click();
+  await page.locator('[aria-label="Annotation sidebar"]').waitFor({ timeout: 8000 });
+  await page.keyboard.press('Escape');
+  const thread = page.locator('[aria-label="Annotation thread"]').first();
+  await thread.waitFor({ timeout: 8000 });
+  await page.locator('[aria-label="Open annotation thread"]').first().click();
+  ok(await page.locator('[aria-label="Reply to annotation"]').first().isVisible(), 'the thread opens ready to reply');
+  ok(await page.locator('[aria-label="Bold"]').first().isVisible(), 'the reply box carries the markdown toolbar');
+
+  // THE AGENT ANSWERS over plain HTTP, with a fenced block in the reply.
+  const wire = await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: auth })).json();
+  const ann = wire.annotations?.[0];
+  ok(!!ann, 'the comment is on the wire for the agent to answer');
+  const replied = await fetch(`${BASE}/api/artifacts/${id}/annotations/${ann.id}`, {
+    method: 'POST', headers: auth, body: JSON.stringify({ reply: AGENT_REPLY }),
+  });
+  ok(replied.ok, 'the agent replies with a fenced block over plain HTTP');
+
+  // …and it is READ, in the still-open tab, with no reload.
+  const rendered = await until(
+    () => thread.evaluate((el) => {
+      const pre = el.querySelector('pre');
+      return {
+        pre: pre?.textContent ?? null,
+        items: [...el.querySelectorAll('[data-markdown] li')].map((li) => li.textContent),
+        code: [...el.querySelectorAll('code')].map((c) => c.textContent),
+        strong: [...el.querySelectorAll('strong')].map((c) => c.textContent),
+        fence: el.textContent.includes('```'),
+        wider: el.scrollWidth > el.clientWidth + 1,
+      };
+    }).catch(() => null),
+    (state) => typeof state?.pre === 'string',
+    15000,
+  );
+  ok(rendered?.pre === 'const MAX = 10;', `the fenced block arrives live as a <pre> (got ${JSON.stringify(rendered?.pre)})`);
+  ok(rendered?.items?.join('|') === 'bumped the cap|added a test', `the list arrives as <li>s (got ${JSON.stringify(rendered?.items)})`);
+  ok(rendered?.code?.includes('lib/config.ts'), 'a backticked identifier is a <code>, not a backtick');
+  ok(rendered?.strong?.includes('10'), 'the emphasis is a <strong>');
+  ok(rendered?.fence === false, 'the fence markers themselves are gone');
+  ok(rendered?.wider === false, 'the code block scrolls inside the rail rather than widening it');
+
+  // The wire NEVER carries the rendering — the body is the text as written.
+  const after = await (await fetch(`${BASE}/api/artifacts/${id}/annotations?status=all`, { headers: auth })).json();
+  ok(after.annotations?.[0]?.thread?.[1]?.body === AGENT_REPLY, 'the stored body is still the exact markdown text the agent sent');
   await ctx.close();
 }
 

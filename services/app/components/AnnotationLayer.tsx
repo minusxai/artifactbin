@@ -31,8 +31,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, EllipsisVertical, MessageSquare, Trash2, X } from 'lucide-react';
 import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations';
 import { ChatGPTIcon, ClaudeAIIcon, ClaudeCodeIcon, CodexIcon } from '@/components/brand-icons';
+import MarkdownField from '@/components/MarkdownField';
+import MarkdownLite from '@/components/MarkdownLite';
 import MobileSheet, { useIsPhoneViewport } from '@/components/MobileSheet';
 import { Tooltip } from '@/components/Tooltip';
+import { parseMarkdownLite, plainText } from '@/lib/markdown-lite';
 import { RIGHT_RAIL_W } from '@/lib/story/edit-bar';
 import {
   isEditFrameMessage, STORY_ANNOTATIONS_MESSAGE, STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE,
@@ -125,6 +128,14 @@ async function annotationFailure(res: Response): Promise<string> {
     return fallback;
   }
 }
+
+/**
+ * WHAT A CLAMPED SURFACE SHOWS. A comment body is markdown-lite, and the two
+ * compact surfaces — the floating card and a collapsed rail thread — have two
+ * lines to spend. Rendering the tree there would spend them on a fence or a
+ * bullet; the RAIL, opened, is where the whole thing is read.
+ */
+const previewText = (body: string) => plainText(parseMarkdownLite(body));
 
 /** "27 Aug" — enough to place a comment in time without a second line. */
 const shortDate = (iso: string) => {
@@ -319,7 +330,7 @@ function ThreadPreview({ a, top, hovered, onOpen, onHover }: {
             <AuthorIdentity author={first.author} />
             <span className="font-mono text-[10px] text-faint">{shortDate(first.created_at)}</span>
           </span>
-          <span className="mt-1.5 line-clamp-2 block text-sm leading-snug text-fg/90">{first.body}</span>
+          <span className="mt-1.5 line-clamp-2 block font-sans text-sm leading-snug text-fg/90">{previewText(first.body)}</span>
           <span className="mt-auto flex items-center justify-between font-mono text-[10px] text-faint">
             <ThreadContinuation thread={a.thread} />
             <span className="transition-colors group-hover:text-accent">open →</span>
@@ -375,9 +386,19 @@ function Thread({ a, open, resolved, hovered, busy, onOpen, onHover, onReply, on
   onDelete: () => void;
 }) {
   const [reply, setReply] = useState('');
+  const [replyPreviewing, setReplyPreviewing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const visibleComments = open ? a.thread : a.thread.slice(0, 1);
+
+  // ONE send for the button and for ⌘↵ — the field owns the key, the thread
+  // owns whether there is anything to send.
+  const sendReply = useCallback(() => {
+    if (busy || !reply.trim()) return;
+    onReply(reply);
+    setReply('');
+    setReplyPreviewing(false);
+  }, [busy, reply, onReply]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -485,7 +506,9 @@ function Thread({ a, open, resolved, hovered, busy, onOpen, onHover, onReply, on
                 </div>
               )}
             </div>
-            <p className={`leading-snug text-fg/90 ${open ? '' : 'line-clamp-2'}`}>{c.body}</p>
+            {open
+              ? <MarkdownLite text={c.body} />
+              : <p className="line-clamp-2 font-sans leading-snug text-fg/90">{previewText(c.body)}</p>}
           </li>
         ))}
       </ul>
@@ -505,32 +528,30 @@ function Thread({ a, open, resolved, hovered, busy, onOpen, onHover, onReply, on
       )}
       {open && !resolved && (
         <div className="border-t border-edge px-3 py-2">
-          <textarea
-            aria-label="Reply to annotation"
+          <MarkdownField
+            label="Reply to annotation"
+            previewLabel="Reply preview"
+            previewToggleLabel="Preview reply"
             value={reply}
-            onChange={(e) => setReply(e.target.value)}
-            onKeyDown={(event) => {
-              if (event.nativeEvent.isComposing || event.key !== 'Enter' || (!event.metaKey && !event.ctrlKey) || busy || !reply.trim()) return;
-              event.preventDefault();
-              onReply(reply);
-              setReply('');
-            }}
+            onChange={setReply}
+            onSubmit={sendReply}
+            previewing={replyPreviewing}
+            onPreviewingChange={setReplyPreviewing}
             rows={2}
-            className="mb-2 w-full rounded-[4px] border border-edge bg-surface p-1.5 focus:border-edge-bright focus:outline-none"
             placeholder="reply…"
           />
           <div className="flex justify-end gap-2">
             <button
               type="button"
               aria-label="Cancel reply"
-              onClick={() => { setReply(''); onOpen(); }}
+              onClick={() => { setReply(''); setReplyPreviewing(false); onOpen(); }}
               className="cursor-pointer rounded-[4px] bg-transparent px-2 py-1 text-muted hover:bg-surface hover:text-fg"
             >
               cancel
             </button>
             <button
               type="button" aria-label="Send reply" disabled={busy || !reply.trim()}
-              onClick={() => { onReply(reply); setReply(''); }}
+              onClick={sendReply}
               className="cursor-pointer rounded-[4px] border border-accent bg-accent px-2 py-1 font-semibold text-bg hover:brightness-110 disabled:cursor-default disabled:opacity-40"
             >
               reply
@@ -567,6 +588,8 @@ export default function AnnotationLayer({
   const [anchorRects, setAnchorRects] = useState<Record<string, StoryEditRect>>({});
   const [selection, setSelection] = useState<StoryEditSelection | null>(null);
   const [draft, setDraft] = useState('');
+  /** Reading the draft as it will be read — a view of the same text, not a mode. */
+  const [previewing, setPreviewing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 
@@ -810,6 +833,7 @@ export default function AnnotationLayer({
       setAnnotations((prev) => [...prev, wire]);
       setSelection(null);
       setDraft('');
+      setPreviewing(false);
       setOpenId(wire.id);
       postToFrame({ type: STORY_SELECT_MESSAGE, path: null });
     } finally { setBusy(false); }
@@ -818,6 +842,7 @@ export default function AnnotationLayer({
   const cancelCompose = useCallback(() => {
     setSelection(null);
     setDraft('');
+    setPreviewing(false);
     setFailure(null);
     postToFrame({ type: STORY_SELECT_MESSAGE, path: null });
   }, [postToFrame]);
@@ -923,41 +948,41 @@ export default function AnnotationLayer({
             </button>
           </div>
           <div className="p-3">
-            <div className="mb-2 flex min-w-0 flex-wrap items-center gap-1 font-mono text-[11px] text-muted">
-              {crumbs.map((crumb, i) => (
-                <span key={crumb.path} className="flex min-w-0 items-center gap-1">
-                  {i > 0 && <span>›</span>}
-                  {crumb.path === selection.path ? (
-                    <span className="truncate text-accent">{crumb.tag}</span>
-                  ) : (
-                    <Tooltip content={crumb.hint || crumb.tag}>
-                      <button
-                        type="button"
-                        aria-label={`Select ${crumb.tag}`}
-                        onClick={() => postToFrame({ type: STORY_SELECT_MESSAGE, path: crumb.path })}
-                        className="cursor-pointer truncate underline decoration-dotted hover:text-accent"
-                      >
-                        {crumb.tag}
-                      </button>
-                    </Tooltip>
-                  )}
-                </span>
-              ))}
-            </div>
-            <textarea
-              aria-label="Annotation comment"
+            <MarkdownField
+              label="Annotation comment"
+              previewLabel="Comment preview"
+              previewToggleLabel="Preview comment"
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(event) => {
-                if (event.nativeEvent.isComposing || event.key !== 'Enter' || (!event.metaKey && !event.ctrlKey)) return;
-                event.preventDefault();
-                submitDraft();
-              }}
+              onChange={setDraft}
+              onSubmit={submitDraft}
+              previewing={previewing}
+              onPreviewingChange={setPreviewing}
               rows={4}
               autoFocus
-              className="mb-2 w-full resize-y rounded-[4px] border border-edge bg-surface p-2 leading-snug focus:border-accent focus:outline-none"
               placeholder="Add a comment for your agent…"
-            />
+            >
+              <div className="mb-2 flex min-w-0 flex-wrap items-center gap-1 font-mono text-[11px] text-muted">
+                {crumbs.map((crumb, i) => (
+                  <span key={crumb.path} className="flex min-w-0 items-center gap-1">
+                    {i > 0 && <span>›</span>}
+                    {crumb.path === selection.path ? (
+                      <span className="truncate text-accent">{crumb.tag}</span>
+                    ) : (
+                      <Tooltip content={crumb.hint || crumb.tag}>
+                        <button
+                          type="button"
+                          aria-label={`Select ${crumb.tag}`}
+                          onClick={() => postToFrame({ type: STORY_SELECT_MESSAGE, path: crumb.path })}
+                          className="cursor-pointer truncate underline decoration-dotted hover:text-accent"
+                        >
+                          {crumb.tag}
+                        </button>
+                      </Tooltip>
+                    )}
+                  </span>
+                ))}
+              </div>
+            </MarkdownField>
             {failure && <p role="alert" className="mb-2 font-mono text-[11px] text-danger">{failure}</p>}
             <div className="flex items-center justify-end gap-2">
               <span className="mr-auto hidden font-mono text-[9px] text-faint sm:inline">⌘↵ to send</span>
