@@ -9,9 +9,11 @@
  */
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { mkdtemp, rm, readFile } from 'fs/promises';
+import v8 from 'node:v8';
+import { runInNewContext } from 'node:vm';
 import { tmpdir } from 'os';
 import path from 'path';
-import { ObjectUnavailable, objectKey, uniqueObjectKey, createLocalStore, createS3Store, parseS3Url, storageKeyFor, type ObjectStore } from '../index';
+import { ObjectUnavailable, cachedReads, objectKey, resetReadCache, uniqueObjectKey, createLocalStore, createS3Store, parseS3Url, storageKeyFor, type ObjectStore } from '../index';
 
 describe('object keys', () => {
   it('are content-addressed, so identical bytes reuse one object', () => {
@@ -184,7 +186,138 @@ describe('the boot canary', () => {
     const { verifyObjectStore } = await import('../index');
     const dir = await mkdtemp(path.join(tmpdir(), 'canary-'));
     await expect(verifyObjectStore(createLocalStore(dir))).resolves.toMatchObject({ backend: 'local' });
-    const broken: ObjectStore = { backend: 'local', put: async () => { throw new Error('disk full'); }, get: async () => Buffer.alloc(0), delete: async () => {} };
+    const broken: ObjectStore = {
+      backend: 'local', put: async () => { throw new Error('disk full'); }, get: async () => Buffer.alloc(0),
+      getStream: async () => { throw new Error('disk full'); }, delete: async () => {},
+    };
     await expect(verifyObjectStore(broken)).rejects.toThrow(/object store .*local.* unusable.*disk full/i);
+  });
+});
+
+/*
+ * ── THE STREAMING READ ───────────────────────────────────────────────────────
+ *
+ * A 25 MB PDF read through `get` is +25 MB of RSS for the life of the response
+ * and, worse, would be admitted to the read cache and evict essentially all of
+ * it — the cache that exists so datasets, ref images and webfonts are not
+ * refetched on every render (measured in the spike, S4). So the PDF tier reads
+ * through `getStream`, which buffers nothing and caches nothing, and the
+ * cache's own budget never has to move.
+ */
+/**
+ * A forced collection, so "how many of these bytes are held at once" is a
+ * question about the reader and not about when V8 last got round to the 64 KB
+ * buffers a stream has finished with. `--expose-gc` is not on for the suite, so
+ * it is asked for here rather than imposed on every other test's runtime.
+ */
+const collect = (() => {
+  v8.setFlagsFromString('--expose-gc');
+  const gc = runInNewContext('gc') as () => void;
+  v8.setFlagsFromString('--no-expose-gc');
+  return gc;
+})();
+
+describe('getStream', () => {
+  const streamed = async (store: ObjectStore, key: string, range?: { start: number; end: number }): Promise<Buffer> => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of await store.getStream(key, range)) chunks.push(Buffer.from(chunk as Uint8Array));
+    return Buffer.concat(chunks);
+  };
+
+  const streamSuite = (name: string, make: () => Promise<ObjectStore>) => {
+    describe(`${name} backend`, () => {
+      let store: ObjectStore;
+      beforeEach(async () => { store = await make(); });
+
+      it('streams the whole object', async () => {
+        await store.put('pdf/whole', Buffer.from('%PDF-1.7 hello'));
+        expect((await streamed(store, 'pdf/whole')).toString()).toBe('%PDF-1.7 hello');
+      });
+
+      it('streams ONE inclusive byte range — what a PDF viewer seeking asks for', async () => {
+        await store.put('pdf/ranged', Buffer.from('0123456789'));
+        expect((await streamed(store, 'pdf/ranged', { start: 2, end: 5 })).toString()).toBe('2345');
+        expect((await streamed(store, 'pdf/ranged', { start: 9, end: 9 })).toString()).toBe('9');
+      });
+
+      it('raises ObjectUnavailable for a missing key, like get — never an empty stream', async () => {
+        await expect(store.getStream('pdf/nope')).rejects.toBeInstanceOf(ObjectUnavailable);
+      });
+    });
+  };
+
+  streamSuite('local', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'ab-stream-'));
+    tmpDirs.push(dir);
+    return createLocalStore(dir);
+  });
+
+  if (MINIO) streamSuite('s3', async () => createS3Store(parseS3Url(MINIO)));
+
+  it('never enters the read cache, so a big object cannot evict what the cache is for', async () => {
+    resetReadCache();
+    const dir = await mkdtemp(path.join(tmpdir(), 'ab-stream-cache-'));
+    tmpDirs.push(dir);
+    const fs = createLocalStore(dir);
+    let gets = 0;
+    const counted: ObjectStore = { ...fs, get: (key) => { gets += 1; return fs.get(key); } };
+    const store = cachedReads(counted);
+
+    // A 25 MB object — the tier's cap, and comfortably under the 32 MB the
+    // cache would otherwise admit it at.
+    const big = Buffer.alloc(25 * 1024 * 1024, 0x41);
+    await store.put('pdf/big', big);
+    await store.put('dataset/small', 'a,b\n1,2');
+
+    // The small object is read ONCE and stays cached — before…
+    expect((await store.get('dataset/small')).toString()).toBe('a,b\n1,2');
+    expect(gets).toBe(1);
+
+    /*
+     * DRAINED, not collected: this is what the raw route does (the stream goes
+     * to the socket), and it is the only shape in which the number measures the
+     * STORE rather than the consumer — accumulating the chunks holds 25 MB by
+     * itself, which is exactly the cost being avoided.
+     *
+     * The BOUNDED CHUNK is the deterministic half of "never read whole": the
+     * object arrives 64 KB at a time and no single buffer is ever the file.
+     *
+     * The SIZE measurement is `arrayBuffers`, not RSS, and that is not a
+     * dodge — it is the instrument the spike used (S4 reported
+     * externalDelta/arrayBuffersDelta of 25 MB for one `get`). RSS answers a
+     * different question here: measured with --expose-gc on this machine, a
+     * whole 25 MB read shows an RSS delta of 0.0 MB and +26.2 MB of
+     * arrayBuffers (the allocator already held the pages), while a drained
+     * stream shows +21.2 MB of RSS and +0.1 MB of arrayBuffers (uncollected
+     * 64 KB buffers the collector has not got to yet). RSS is about V8's
+     * allocator; arrayBuffers is about how many of these bytes are held at
+     * once, which is the property under test.
+     */
+    const drain = async () => {
+      let bytes = 0;
+      let widest = 0;
+      for await (const chunk of await store.getStream('pdf/big')) {
+        bytes += (chunk as Uint8Array).byteLength;
+        widest = Math.max(widest, (chunk as Uint8Array).byteLength);
+      }
+      return { bytes, widest };
+    };
+    collect();
+    const heldBefore = process.memoryUsage().arrayBuffers;
+    const drained = await drain();
+    collect();
+    const held = process.memoryUsage().arrayBuffers - heldBefore;
+    expect(drained.bytes).toBe(big.byteLength);
+    expect(drained.widest).toBeLessThanOrEqual(1024 * 1024);
+
+    // The small object is still cached AFTER the big read: the stream went
+    // nowhere near `get`, so the cache never saw 25 MB to evict for.
+    expect((await store.get('dataset/small')).toString()).toBe('a,b\n1,2');
+    expect(gets).toBe(1);
+
+    // A whole read holds the whole object (+26.2 MB, measured above); the
+    // stream holds a chunk at a time. A tenth of the object is far more room
+    // than the 64 KB high-water mark needs and far less than a whole read.
+    expect(held).toBeLessThan(big.byteLength / 10);
   });
 });

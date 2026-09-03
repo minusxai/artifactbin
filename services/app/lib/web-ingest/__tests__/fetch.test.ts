@@ -32,6 +32,14 @@ beforeAll(async () => {
         res.writeHead(301, { Location: `${base}/ok.png` });
         res.end();
         return;
+      case '/one-write-too-big':
+        // A whole oversized body in ONE chunk — small enough that node hands it
+        // over as a single `data` event and the response is COMPLETE by the
+        // time the cap trips. /big streams and destroys mid-response, which is
+        // a different path in node and the reason this went unnoticed.
+        res.writeHead(200, { 'Content-Type': 'application/pdf' });
+        res.end(Buffer.alloc(8 * 1024, 0x20));
+        return;
       case '/loop':
         res.writeHead(302, { Location: '/loop' });
         res.end();
@@ -130,6 +138,33 @@ describe('fetchWebResource', () => {
     const started = Date.now();
     expect(await code(fetchWebResource(`${base}/big`, { maxBytes: 256 * 1024 }))).toBe('too_large');
     expect(Date.now() - started).toBeLessThan(10_000); // died at the cap, not at 50 MB
+  });
+
+  it('rejects an oversized body that arrived in ONE write, without raising an uncaught exception', async () => {
+    /*
+     * Two faults, one line, and both only when the body arrives in a single
+     * chunk. `req.destroy(err)` on a request whose response has already
+     * COMPLETED does not emit that error on the request — node raises it, and
+     * an uncaught exception in a server is the process — and the early
+     * `return` from the data handler then let `end` fire and RESOLVE the
+     * fetch with the bytes collected so far, so the caller was handed a
+     * truncated body (empty, here) and answered "not a PDF" for a file that
+     * was simply too big. Measured with an 8 KB body against a 1 KB cap:
+     * `-> end, uncaught+1`. The streaming case above destroys mid-response and
+     * was always correct, which is why this went unnoticed. The abort now
+     * destroys WITHOUT an error and rejects by hand.
+     */
+    lax();
+    const raised: Error[] = [];
+    const watch = (error: Error) => raised.push(error);
+    process.on('uncaughtException', watch);
+    try {
+      expect(await code(fetchWebResource(`${base}/one-write-too-big`, { maxBytes: 1_000 }))).toBe('too_large');
+      await new Promise((r) => setTimeout(r, 50)); // let a late throw land
+    } finally {
+      process.off('uncaughtException', watch);
+    }
+    expect(raised.map((e) => e.message)).toEqual([]);
   });
 
   it('enforces the deadline mid-body', async () => {

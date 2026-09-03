@@ -30,7 +30,7 @@ describe('document creation guards', () => {
     const t = await mintToken('t');
     const cases: Array<[Record<string, unknown>, string]> = [
       [{ markup: '<p>x</p>', markdown: '# x' }, 'markup_only'],
-      [{ title: 'x' }, 'one_of_markup_dataset_viz_image'],
+      [{ title: 'x' }, 'one_of_markup_dataset_viz_image_pdf'],
       [{ markup: '<p>x</p>', theme: 'vaporwave' }, 'unknown_theme'],
     ];
     for (const [body, error] of cases) {

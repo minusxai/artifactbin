@@ -303,6 +303,18 @@ export const MAX_EXTERNAL_IMAGES_PER_PUBLISH = Number(env('WEB_INGEST', 'MAX_IMA
  */
 export const MAX_IMAGE_BYTES = Number(env('IMAGES', 'MAX_BYTES') ?? '5000000');
 
+/**
+ * The biggest PDF an artifact may hold — its own cap, five times the image
+ * one, because a PDF is a document somebody wrote rather than a picture we may
+ * shrink: nothing re-encodes it, so the number here is the number stored.
+ *
+ * 25 MB is the size the spike measured the serving path against, and it is
+ * affordable only because that path STREAMS (lib/object-store getStream): a
+ * whole read of one of these would be +25 MB of RSS per response and would
+ * evict the store's entire read cache.
+ */
+export const MAX_PDF_BYTES = Number(env('PDF', 'MAX_BYTES') ?? '25000000');
+
 export const RESEND_API_KEY = env('EMAIL', 'RESEND_API_KEY');
 
 /** Sender for login codes. Must be a domain verified in Resend, or sends fail. */

@@ -38,6 +38,9 @@ export default defineConfig({
       // A small image cap so the size-limit test trips on a few KB, not a real
       // 5 MB payload. The mechanism is identical; only the threshold differs.
       IMAGES__MAX_BYTES: '5000',
+      // Same trick for the PDF tier: 20 KB rather than the real 25 MB, so the
+      // cap test trips on a payload a test can build rather than on a real one.
+      PDF__MAX_BYTES: '20000',
     },
     projects: [
       {

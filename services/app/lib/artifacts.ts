@@ -9,6 +9,7 @@ import { cache } from 'react';
 import { trackEvent } from './analytics';
 import { sourceWithoutAnchors } from './annotation-anchors';
 import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN } from './config';
+import { assetByteQuotaExceeded } from './asset-quota';
 import { getDb, type Queryable } from './db';
 import { generateFileId } from './ids';
 import { parseContentInput, type ArtifactFormat } from './story/input';
@@ -315,7 +316,7 @@ export async function createArtifact(
           // it. Routes validate an explicit ask upstream.
           input.visibility ??
             (!userId ? (ALLOW_PUBLIC_VISIBILITY ? 'public' : 'unlisted')
-              : input.format === 'image' || input.format === 'dataset' ? 'unlisted' : 'private'),
+              : input.format === 'image' || input.format === 'dataset' || input.format === 'pdf' ? 'unlisted' : 'private'),
           // NULL is the pre-column shape and reads as 'viewer' (linkRoleOf), so
           // every ordinary creation stays exactly as it was.
           atCreation.linkRole ?? null,
@@ -1224,6 +1225,19 @@ export function assetImporterFor(tokenId: string, userId: string | null): (url: 
       throw error;
     }
   };
+}
+
+/**
+ * The byte quota as the publish door asks it: "is this caller already over?"
+ *
+ * A closure over the identity, so lib/story/input can guard a tier without
+ * knowing who is publishing (the shape assetImporterFor established). The
+ * subject is the ACCOUNT when the token has one — a cap keyed on the token
+ * alone is bypassed by minting a second one — which lib/asset-quota decides,
+ * not this.
+ */
+export function byteQuotaFor(tokenId: string): () => Promise<boolean> {
+  return () => assetByteQuotaExceeded(tokenId);
 }
 
 /**
