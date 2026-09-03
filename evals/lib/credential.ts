@@ -122,8 +122,11 @@ export function localLoginEmail(legLabel: string, env: CredentialEnv): string {
  * A configured address that already carries a `+tag` is used verbatim: the caller named it exactly.
  */
 export function deploymentLoginEmail(configured: string, harness: Harness): string {
-  void configured; void harness;
-  throw new Error('login-subaddress: implement');
+  // The LAST `@` splits the address: everything before it is the local part, and only a `+` in THERE is a
+  // sub-address tag. A string with no `@` is not an address this function is entitled to rewrite.
+  const at = configured.lastIndexOf('@');
+  if (at < 0 || configured.slice(0, at).includes('+')) return configured;
+  return `${configured.slice(0, at)}+${harness}${configured.slice(at)}`;
 }
 
 /**

@@ -23,6 +23,9 @@ export function readDotEnv(file: string): Record<string, string> {
  *
  * - `RESEND_EVAL_API_KEY` + `EVAL_LOGIN_EMAIL` — the eval's own inbound mailbox, which is what lets
  *   the driver do the REAL user journey: ask the product for a login code and read it out of the mail.
+ *   `EVAL_LOGIN_EMAIL` names the INBOX, not the account: against a deployment each harness signs in as
+ *   its own `+<harness>` sub-address of it (`lib/credential deploymentLoginEmail`) — one catch-all
+ *   mailbox, but a login door and an account per harness, since the door is five sends an hour per address.
  * - `EVAL_ACCOUNT_TOKEN` — a pre-provisioned account token, the fallback where no inbox is configured
  *   (a laptop, a fork's CI) so the plugin and MCP modes can still run.
  */
