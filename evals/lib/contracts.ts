@@ -79,6 +79,13 @@ const COMMON_CHECKS = [
    */
   'setup_ok',
   /**
+   * …and the same for the driver's own scoring READS. A kind's checks fetch the
+   * product; a 500 or a socket error there is our instrument, not the agent's
+   * answer, so the kind's checks go unanswered and stop gating instead of
+   * reporting an agent that ignored the comment.
+   */
+  'checks_ok',
+  /**
    * The agent never opened this repo's own checkout. A readable checkout hands a
    * `fetched_skill` run the skills it was supposed to fetch AND the task's own
    * grading rubric (`lib/local-reads`).

@@ -72,15 +72,19 @@ export interface TaskScorer {
 }
 
 /**
- * A setup step that failed, carrying WHICH step. The driver reports it as
- * `setup_ok: false` with the step named, never as an agent failure: the
- * driver's calls carry the driver header and are invisible to the ledger, so
- * without a name a broken seed reads as "the agent did nothing".
+ * A DRIVER step that failed, carrying WHICH step — thrown by a kind's `setup`
+ * and by its `checks` alike, because the two failures are the same failure at
+ * different moments and both must be told apart from the agent's.
+ *
+ * The driver's calls carry the driver header and are invisible to the ledger,
+ * so without a name a broken seed reads as "the agent did nothing" and a failed
+ * thread read reads as "the agent ignored the comment". Reported as
+ * `setup_ok: false` / `checks_ok: false` with the step in `first_error`.
  */
-export class SetupFailure extends Error {
+export class DriverFailure extends Error {
   constructor(readonly step: string, message: string) {
     super(message);
-    this.name = 'SetupFailure';
+    this.name = 'DriverFailure';
   }
 }
 
@@ -105,7 +109,42 @@ export async function prepareTask(
     await scorer.setup(ctx);
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
-    return { ok: false, step: e instanceof SetupFailure ? e.step : 'setup', error };
+    return { ok: false, step: e instanceof DriverFailure ? e.step : 'setup', error };
   }
   return { ok: true, baseline: await readBaseline() };
+}
+
+export type Checked =
+  | { ok: true; checks: Record<string, boolean | null> }
+  | {
+      ok: false;
+      step: string;
+      error: string;
+      /** Every one of the kind's checks, UNANSWERED. */
+      checks: Record<string, boolean | null>;
+      /** …and therefore the names that must stop gating this run. */
+      ungated: string[];
+    };
+
+/**
+ * Run a kind's checks, and treat a failure INSIDE them as the driver's.
+ *
+ * A kind's checks read the product over HTTP, and a read that fails — a 500, an
+ * expired token, a socket error — is our instrument, not the agent's answer.
+ * Scoring it as `false` says the agent ignored the comment; answering `null` and
+ * dropping those names from the gate says what actually happened, which is the
+ * same rule `gatedChecks` already follows for a ledger that saw nothing.
+ */
+export async function runChecks(scorer: TaskScorer, ctx: CheckContext): Promise<Checked> {
+  try {
+    return { ok: true, checks: await scorer.checks(ctx) };
+  } catch (e) {
+    return {
+      ok: false,
+      step: e instanceof DriverFailure ? e.step : 'checks',
+      error: e instanceof Error ? e.message : String(e),
+      checks: Object.fromEntries(scorer.checkNames.map((name) => [name, null])),
+      ungated: [...scorer.checkNames],
+    };
+  }
 }

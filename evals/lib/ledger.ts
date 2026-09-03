@@ -91,6 +91,37 @@ export function documentWrites(entries: LedgerEntry[]): number {
   return entries.filter((e) => e.status < 300 && isWrite(e)).length;
 }
 
+/** One numeric row, as the driver records it. */
+export interface LedgerRow {
+  metric: string;
+  /** Null is "unavailable" — the recorder writes nothing and the report shows "—". */
+  value: number | null;
+}
+
+/**
+ * Every numeric row the LEDGER answers, in one place — including `versions`,
+ * which is `documentWrites` and nothing else.
+ *
+ * The driver used to build these inline, and `versions` had its own regex there:
+ * a drifted copy of `isWrite` that counted answering a comment as a version of
+ * the document. Restoring that regex left the whole suite green, because the
+ * predicate was guarded and its CALLER was not. The driver now records exactly
+ * what this returns, so the count and its use are one thing to break.
+ */
+export function ledgerRows(entries: LedgerEntry[]): LedgerRow[] {
+  const m = ledgerMetrics(entries);
+  return [
+    { metric: 'http_calls', value: m.httpCalls },
+    { metric: 'write_attempts', value: m.writeAttempts },
+    { metric: 'four_xx', value: m.fourXx },
+    { metric: 'invented_endpoints', value: m.inventedEndpoints },
+    { metric: 'docs_fetches', value: m.docsFetches },
+    { metric: 'docs_bytes', value: m.docsBytes },
+    // 1 for the document the start link minted, plus every write that stored a new version.
+    { metric: 'versions', value: m.observed ? 1 + documentWrites(entries) : null },
+  ];
+}
+
 /**
  * An address that serves the protocol docs: the listing `/docs`, the tarball
  * `/docs?download=true`, any page under `/docs/`, and `/llms.txt`. These are

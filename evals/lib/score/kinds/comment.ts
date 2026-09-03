@@ -12,7 +12,7 @@
  * The predicates below are pure and transport-free — the setup and the checks
  * are the only things here that touch the wire.
  */
-import { SetupFailure, type TaskScorer } from './contract';
+import { DriverFailure, type TaskScorer } from './contract';
 
 /** Declared apart from the scorer for the reason `publish.ts` gives: `contracts.ts` reads these names. */
 export const COMMENT_CHECKS = ['responded', 'changed', 'resolved'] as const;
@@ -158,24 +158,24 @@ export const commentScorer = {
     const { task, base, id, token } = ctx;
     const comment = task.comment;
     if (!comment) return;
-    if (!token) throw new SetupFailure('credential', `task ${task.id} posts a comment and so needs a token handoff`);
+    if (!token) throw new DriverFailure('credential', `task ${task.id} posts a comment and so needs a token handoff`);
     const driver = { ...ctx.driverHeaders, 'content-type': 'application/json' };
 
     const exchange = await fetch(`${base}/api/session/token`, {
       method: 'POST', headers: { ...driver, origin: base }, body: JSON.stringify({ token }),
     });
     const cookie = exchange.headers.get('set-cookie')?.split(';')[0];
-    if (!exchange.ok || !cookie) throw new SetupFailure('agent-cookie exchange', `POST /api/session/token → ${exchange.status}`);
+    if (!exchange.ok || !cookie) throw new DriverFailure('agent-cookie exchange', `POST /api/session/token → ${exchange.status}`);
 
     const head = await fetch(`${base}/api/artifacts/${id}`, { headers: { ...driver, authorization: `Bearer ${token}` } });
-    if (!head.ok) throw new SetupFailure('reading edit_id', `GET /api/artifacts/${id} → ${head.status}`);
+    if (!head.ok) throw new DriverFailure('reading edit_id', `GET /api/artifacts/${id} → ${head.status}`);
     const { edit_id: editId } = (await head.json()) as { edit_id: string };
 
     const res = await fetch(`${base}/api/my/artifacts/${id}/annotations`, {
       method: 'POST', headers: { ...driver, origin: base, cookie },
       body: JSON.stringify({ ...comment, edit_id: editId }),
     });
-    if (res.status !== 201) throw new SetupFailure('posting the comment', `POST /api/my/artifacts/${id}/annotations → ${res.status} ${await res.text()}`);
+    if (res.status !== 201) throw new DriverFailure('posting the comment', `POST /api/my/artifacts/${id}/annotations → ${res.status} ${await res.text()}`);
     const created = (await res.json()) as { id: string; snippet?: string };
 
     // The path is a body path over PARSED nodes, so a seed whose whitespace shifts anchors the
@@ -184,7 +184,7 @@ export const commentScorer = {
     const anchored = (created.snippet ?? '').replace(/\s+/g, ' ').trim();
     const wanted = (task.seedSplitText ?? '').replace(/\s+/g, ' ').trim();
     if (wanted && anchored !== wanted) {
-      throw new SetupFailure('anchoring the comment', `comment.path "${comment.path}" anchored to ${JSON.stringify(anchored)}, not to the paragraph seedSplitText names`);
+      throw new DriverFailure('anchoring the comment', `comment.path "${comment.path}" anchored to ${JSON.stringify(anchored)}, not to the paragraph seedSplitText names`);
     }
     ctx.log(`commented ${created.id} on ${id}`);
   },
@@ -214,11 +214,21 @@ export const commentScorer = {
   },
 } as const satisfies TaskScorer;
 
-/** Every thread on a document, open and resolved alike — a resolved one has left the artifact GET. */
+/**
+ * Every thread on a document, open and resolved alike — a resolved one has left the artifact GET.
+ *
+ * A failed read THROWS rather than answering `[]`. An empty list is a real answer ("nobody has
+ * commented"), and using it for "we could not ask" scores a 500 or an expired token as an agent that
+ * ignored the comment — the same instrument-blindness `setup_ok` exists to refuse one step earlier.
+ */
 async function readThreads(base: string, id: string, token: string | null, driverHeaders: Record<string, string>): Promise<AnnotationThread[]> {
-  const res = await fetch(`${base}/api/artifacts/${id}/annotations?status=all`, {
-    headers: { ...driverHeaders, ...(token ? { authorization: `Bearer ${token}` } : {}) },
-  });
-  if (!res.ok) return [];
+  const url = `${base}/api/artifacts/${id}/annotations?status=all`;
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: { ...driverHeaders, ...(token ? { authorization: `Bearer ${token}` } : {}) } });
+  } catch (e) {
+    throw new DriverFailure('reading the thread', `GET ${url} — ${e instanceof Error ? e.message : String(e)}`);
+  }
+  if (!res.ok) throw new DriverFailure('reading the thread', `GET ${url} → ${res.status}`);
   return ((await res.json()) as { annotations?: AnnotationThread[] }).annotations ?? [];
 }

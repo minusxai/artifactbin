@@ -13,10 +13,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { TaskSchema, type Task } from '../lib/contracts';
 import {
-  SetupFailure,
+  DriverFailure,
   TASK_KINDS,
   checkNamesFor,
   prepareTask,
+  runChecks,
   scorerFor,
   type CheckContext,
   type SetupContext,
@@ -132,7 +133,7 @@ describe('prepareTask — setup runs BEFORE the baseline is read', () => {
   it('names the STEP that failed and never reads the baseline — a setup failure is not an agent failure', async () => {
     const readBaseline = vi.fn();
     const prepared = await prepareTask(
-      scorer(async () => { throw new SetupFailure('comment', 'commenting on aaa111 → 400 bad_path'); }),
+      scorer(async () => { throw new DriverFailure('comment', 'commenting on aaa111 → 400 bad_path'); }),
       setupCtx(),
       readBaseline as unknown as () => Promise<{ status: number; html: string }>,
     );
@@ -181,5 +182,47 @@ describe('the `comment` kind', () => {
   it('needs the token handoff — the driver must hold a credential to comment at all', () => {
     const t = { id: 'c', kind: 'comment', brief: 'b', comment: { path: '1', body: 'x' }, seedSplitText: 'y', seed: '<p>a</p>', checks: ['published'] };
     expect(() => TaskSchema.parse(t)).toThrow(/handoff/);
+  });
+});
+
+describe('runChecks — a failed driver READ is not an agent failure either', () => {
+  /**
+   * The reviewer's F2, and the same lesson `setup_ok` learned one step earlier:
+   * `readThreads` used to answer `[]` for a 500, an expired token or a socket
+   * error, which scores `responded:false, resolved:false` and reports an agent
+   * that ignored the comment. The kind's own checks are UNANSWERED (null) and
+   * the driver says so with `checks_ok`.
+   */
+  const scorer = (checks: TaskScorer['checks']): TaskScorer => ({
+    kind: 'comment', checkNames: ['responded', 'changed', 'resolved'], setup: async () => {}, checks,
+  });
+
+  it('passes the checks through when the read worked', async () => {
+    const out = await runChecks(scorer(async () => ({ responded: true, changed: false, resolved: true })), checkCtx());
+    expect(out).toEqual({ ok: true, checks: { responded: true, changed: false, resolved: true } });
+  });
+
+  it('names the step, answers every one of the kind\'s checks NULL, and says which to stop gating', async () => {
+    const out = await runChecks(scorer(async () => { throw new DriverFailure('reading the thread', 'GET …/annotations?status=all → 500'); }), checkCtx());
+    expect(out).toEqual({
+      ok: false,
+      step: 'reading the thread',
+      error: 'GET …/annotations?status=all → 500',
+      checks: { responded: null, changed: null, resolved: null },
+      ungated: ['responded', 'changed', 'resolved'],
+    });
+  });
+
+  it('an unlabelled throw is still the DRIVER\'s, named `checks`', async () => {
+    const out = await runChecks(scorer(async () => { throw new Error('fetch failed'); }), checkCtx());
+    expect(out).toMatchObject({ ok: false, step: 'checks', error: 'fetch failed' });
+  });
+
+  it('the comment kind THROWS on a failed thread read rather than reading it as silence', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('nope', { status: 500 }));
+    const t = TaskSchema.parse(JSON.parse(fs.readFileSync(path.join(TASKS_DIR, 'comment.json'), 'utf8')));
+    const out = await runChecks(scorerFor('comment'), checkCtx({ task: t }));
+    expect(out).toMatchObject({ ok: false, step: 'reading the thread' });
+    fetchSpy.mockRestore();
   });
 });

@@ -36,7 +36,7 @@ import { actionTransport, installsSkills, planTransport } from './lib/mode';
 import { materializePlugin } from './lib/plugin-kit';
 import { taskCost } from './lib/price';
 import { BASELINE_FLOW, BASELINE_PROMPT, BASELINE_ROWS_ID, measureBaseline } from './lib/baseline';
-import { documentWrites, ledgerMetrics, parseLedger, scoredArtifactId, writtenArtifactIds } from './lib/ledger';
+import { ledgerMetrics, ledgerRows, parseLedger, scoredArtifactId, writtenArtifactIds } from './lib/ledger';
 import { adapterFor } from './lib/harness';
 import { runInvocation } from './lib/spawn';
 import { countCheckoutReads } from './lib/local-reads';
@@ -50,7 +50,7 @@ import { acquireCredential, credentialSourceFor, deploymentLoginEmail, localLogi
 import { agentProxyEnv, startMitmProxy } from './lib/mitm';
 import { exportDocument, inspectDocument, screenshotDocument } from './lib/score/browser';
 import { dataflowRows, productMetrics } from './lib/score/product';
-import { prepareTask, scorerFor } from './lib/score/kinds';
+import { prepareTask, runChecks, scorerFor } from './lib/score/kinds';
 import { credentialEnv, readDotEnv } from './lib/env';
 import { parseArgs } from './lib/args';
 import { registerSecret, scrubRegistered } from './lib/secrets';
@@ -421,6 +421,23 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // `<Query>` ran — not a `/query` request, which a static document never makes.
   const queryRows = dataflowRows(served.html);
 
+  // What THIS KIND asks of the product, computed by the kind itself. `record` is how a kind reports
+  // evidence that is not a verdict (`answered_by`, `split_verbatim`): a check name the task does not
+  // gate is dropped from the report entirely (`checksToRecord`), so a row is the only way to say
+  // something the reader should see either way. A failure INSIDE the checks is the DRIVER's — the
+  // reads are ours — so it answers `checks_ok: false`, leaves the kind's checks unanswered and stops
+  // them gating, rather than reporting an agent that ignored the comment.
+  const checked = await runChecks(scorer, {
+    task,
+    productUrl: r.productUrl,
+    startId: start.id,
+    token: driverToken,
+    driverHeaders,
+    served,
+    record: (metric, value, kind) => rec.record(task.id, metric, value, kind),
+  });
+  if (!checked.ok) log(`${leg.label}/${task.id}: CHECKS FAILED at ${checked.step} — ${checked.error}`);
+
   // --- rows: numbers
   rec.record(task.id, 'turns', result.turns);
   rec.record(task.id, 'tool_calls', result.toolCalls);
@@ -436,18 +453,12 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   const cost = taskCost(result, leg.price);
   rec.record(task.id, 'cost_usd', cost.usd);
   rec.record(task.id, 'duration_s', Math.round(spawned.durationMs / 100) / 10);
-  rec.record(task.id, 'http_calls', lm.httpCalls);
-  rec.record(task.id, 'write_attempts', lm.writeAttempts);
-  rec.record(task.id, 'four_xx', lm.fourXx);
-  rec.record(task.id, 'invented_endpoints', lm.inventedEndpoints);
+  // Every number the ledger answers, `versions` included, built in ONE pure place (`ledgerRows`) so
+  // the count and its caller are one thing to break.
+  for (const row of ledgerRows(ledger)) rec.record(task.id, row.metric, row.value);
   rec.record(task.id, 'query_rows', queryRows);
-  rec.record(task.id, 'docs_fetches', lm.docsFetches);
-  rec.record(task.id, 'docs_bytes', lm.docsBytes);
-  // `documentWrites` and not a regex of its own: the inline one counted answering a comment
-  // (`POST /api/artifacts/<id>/annotations/<annId>`) as a new version of the document.
-  rec.record(task.id, 'versions', lm.observed ? 1 + documentWrites(ledger) : null);
   // --- rows: text
-  rec.record(task.id, 'first_error', lm.firstError ?? '', 'text');
+  rec.record(task.id, 'first_error', checked.ok ? (lm.firstError ?? '') : `checks/${checked.step}: ${checked.error}`, 'text');
   rec.record(task.id, 'harness_error', result.error ?? '', 'text');
   // Where the cost came from: the harness's own figure, or our tokens × rates (a Codex run, which reports none).
   rec.record(task.id, 'cost_source', cost.source ?? '', 'text');
@@ -463,22 +474,9 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   rec.record(task.id, 'final_message', (result.finalMessage ?? '').slice(0, 300), 'text');
 
   // --- rows: checks
-  // What THIS KIND asks of the product, computed by the kind itself and merged in. `record` is how a
-  // kind reports evidence that is not a verdict (`answered_by`, `split_verbatim`): a check name the
-  // task does not gate is dropped from the report entirely (`checksToRecord`), so a row is the only
-  // way to say something the reader should see either way.
-  const kindChecks = await scorer.checks({
-    task,
-    productUrl: r.productUrl,
-    startId: start.id,
-    token: driverToken,
-    driverHeaders,
-    served,
-    record: (metric, value, kind) => rec.record(task.id, metric, value, kind),
-  });
-
   const checks: Record<string, boolean | null> = {
     setup_ok: true,
+    checks_ok: checked.ok,
     published: pm.published,
     published_first_try: pm.published && lm.publishedFirstTry,
     // Nothing to observe when the protocol arrived installed — null, never false (the
@@ -499,13 +497,13 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     // Null, not false, when this harness has no MCP client and ran the task over REST.
     used_mcp: transport.substitutedWhy || leg.mode.substitutedWhy ? null : lm.usedMcp,
     no_local_checkout_reads: checkoutReads === null ? null : checkoutReads === 0,
-    ...kindChecks,
+    ...checked.checks,
   };
   // `checksToRecord` decides which checks become rows (task-specific ones only where the task grades them,
   // so an inapplicable check reads as "—" rather than a red FAIL); only the checks the TASK lists decide the
   // verdict (`verdictFor`). `canonical_stable`, for instance, is information about how the product
   // canonicalized the agent's markup, not a failure of the flow.
-  const gated = gatedChecks([...task.checks], {
+  const gated = gatedChecks(checked.ok ? [...task.checks] : task.checks.filter((c) => !checked.ungated.includes(c)), {
     trafficObserved: lm.observed,
     vocabularyInstalled: installed,
     transportSubstituted: transport.substitutedWhy !== null || leg.mode.substitutedWhy !== null,
