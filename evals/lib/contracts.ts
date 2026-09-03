@@ -176,6 +176,10 @@ export interface TokenUsage {
 export interface HarnessResult {
   ok: boolean;
   error: string | null;
+  /**
+   * For Codex this is the number of assistant items emitted (messages, commands, file changes,
+   * searches, MCP calls), since its own turn events are one per prompt.
+   */
   turns: number | null;
   toolCalls: number | null;
   /** Tool calls that fetched or READ our docs — incl. paging a saved copy. Null when the harness emitted no tool telemetry. See `lib/docs-reads`. */

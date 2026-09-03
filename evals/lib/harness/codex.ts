@@ -14,6 +14,15 @@
  * billed every cache write twice, which on a Codex turn is nearly all of it.
  * It reports no cost, and a `web_search` item is a per-call fee the usage
  * object never carries, so those are counted for `taskCost` to price.
+ *
+ * A FOURTH: what this adapter reports as `turns` is NOT Codex's own turn count.
+ * Codex emits exactly one `turn.started`/`turn.completed` pair per user prompt,
+ * so a whole run read `turns: 1` beside 16 tool calls (production run 33702277600,
+ * 2026-09-03) — meaningless beside Claude Code's `turns`, which is its count of
+ * assistant messages. The comparable Codex figure is the number of assistant
+ * ITEMS it emitted (`ASSISTANT_ITEMS` below), so that is what the report gets.
+ * `turn.completed` still drives token accumulation and `ok`: turns is telemetry,
+ * `ok` is completion, and neither is read off the other.
  */
 import { countDocsReads, type ToolInvocation } from '../docs-reads';
 import { spawn } from 'node:child_process';
@@ -51,6 +60,9 @@ function run(argv: string[], home: string): Promise<void> {
 }
 
 const TOOL_ITEMS = new Set(['command_execution', 'mcp_tool_call', 'file_change', 'web_search']);
+
+/** Every item type Codex emits as the ASSISTANT acting — its count is the run's `turns`. Superset of `TOOL_ITEMS`. */
+const ASSISTANT_ITEMS = new Set(['agent_message', 'reasoning', 'command_execution', 'file_change', 'web_search', 'mcp_tool_call']);
 
 /** Codex reads a bearer token from an environment variable, so it never lands in config.toml. */
 const MCP_TOKEN_ENV = 'ARTIFACTBIN_MCP_TOKEN';
@@ -130,6 +142,7 @@ export const codex: HarnessAdapter = {
   reduce(stdout: string): HarnessResult {
     const events = parseJsonl(stdout);
     let tokens: TokenUsage | null = null;
+    let turnsCompleted = 0;
     let turns = 0;
     let toolCalls = 0;
     let webSearchCalls = 0;
@@ -139,7 +152,7 @@ export const codex: HarnessAdapter = {
     let failed = false;
     for (const e of events) {
       if (e.type === 'turn.completed') {
-        turns += 1;
+        turnsCompleted += 1;
         const u = (e.usage ?? {}) as Record<string, number>;
         const cached = Number(u.cached_input_tokens ?? 0);
         const written = Number(u.cache_write_input_tokens ?? 0);
@@ -154,6 +167,7 @@ export const codex: HarnessAdapter = {
           : add;
       } else if (e.type === 'item.completed') {
         const item = (e.item ?? {}) as { type?: string; text?: string; command?: string; url?: string; query?: string };
+        if (item.type && ASSISTANT_ITEMS.has(item.type)) turns += 1;
         if (item.type && TOOL_ITEMS.has(item.type)) {
           toolCalls += 1;
           invocations.push({ name: item.type, input: item.command ?? item.url ?? item.query ?? '' });
@@ -169,7 +183,7 @@ export const codex: HarnessAdapter = {
       }
     }
     if (events.length === 0) return { ok: false, error: 'no events in output', finalMessage: null, ...NO_TELEMETRY };
-    const ok = !failed && turns > 0;
+    const ok = !failed && turnsCompleted > 0;
     return { ok, error: ok ? null : (error ?? 'no turn completed'), turns: turns || null, toolCalls, docsReadCalls: countDocsReads(invocations), tokens, reportedCostUsd: null, webSearchCalls, finalMessage };
   },
 };

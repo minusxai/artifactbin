@@ -185,7 +185,9 @@ describe('codex', () => {
       { type: 'turn.completed', usage: { input_tokens: 2, cached_input_tokens: 0, cache_write_input_tokens: 0, output_tokens: 3 } },
     ].map((l) => JSON.stringify(l)).join('\n');
     const r = codex.reduce(lines);
-    expect(r).toMatchObject({ ok: true, turns: 2, toolCalls: 3, finalMessage: 'final', tokens: { input: 3, output: 4 } });
+    // turns is the FIVE assistant items, not the two turn.completed events — while the TOKENS are
+    // still accumulated per turn.completed, across both of them.
+    expect(r).toMatchObject({ ok: true, turns: 5, toolCalls: 3, finalMessage: 'final', tokens: { input: 3, output: 4 } });
   });
 });
 
