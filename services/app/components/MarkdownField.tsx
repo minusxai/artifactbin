@@ -44,7 +44,11 @@ export interface MarkdownFieldProps {
   placeholder?: string;
   autoFocus?: boolean;
   className?: string;
-  /** Anything the caller wants between the toolbar and the field. */
+  /**
+   * Anything the caller wants ABOVE the toolbar — the composer's breadcrumb.
+   * Above, deliberately: the breadcrumb says what is being commented ON, and
+   * a formatting bar between the subject and its own field reads backwards.
+   */
   children?: ReactNode;
 }
 
@@ -104,6 +108,7 @@ export default function MarkdownField({
 
   return (
     <div className={`min-w-0 ${className}`}>
+      {children}
       <div role="toolbar" aria-label={`${label} formatting`} className="mb-1 flex items-center gap-0.5">
         {TOOLBAR.map(({ marker, label: name, hint, Icon }) => (
           <Tooltip key={marker} content={hint}>
@@ -132,7 +137,6 @@ export default function MarkdownField({
           </button>
         </Tooltip>
       </div>
-      {children}
       {previewing ? (
         <MarkdownLite
           text={value}
