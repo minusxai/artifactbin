@@ -13,7 +13,7 @@ import { agentCookie, useAppHarness } from './harness';
 import { POST as forkRoute } from '@/app/api/my/artifacts/[id]/fork/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as getMineRoute } from '@/app/api/my/artifacts/[id]/route';
-import { PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
+import { GET as getSharingRoute, PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { GET as versionsMineRoute } from '@/app/api/my/artifacts/[id]/versions/route';
 import { getArtifactById, getSharingFor } from '@/lib/artifacts';
 import { getDb } from '@/lib/db';
@@ -71,6 +71,14 @@ async function world(markup = PROSE, visibility: 'public' | 'private' = 'public'
 describe('POST /api/my/artifacts/:id/fork', () => {
   it('a signed-in reader forks a public document: same content, new id and owner, version 1, provenance kept', async () => {
     const w = await world();
+    // GENERAL ACCESS is a VALUE on the row, not a named share, so it travels
+    // with visibility and access. Set it before forking: with both sides at the
+    // NULL default the `link_role` leg of the field loop below asserts nothing.
+    asSession({ id: w.owner.id, email: w.owner.email });
+    const general = await putSharingRoute(jreq(`/api/my/artifacts/${w.doc.id}/sharing`, 'PUT', { linkRole: 'editor' }), params(w.doc.id));
+    expect(general.status, await general.clone().text()).toBe(200);
+    expect(((await general.json()) as { linkRole: string }).linkRole).toBe('editor');
+
     asSession({ id: w.bob.id, email: w.bob.email });
     const res = await fork(w.doc.id);
     expect(res.status, await res.clone().text()).toBe(201);
@@ -85,6 +93,11 @@ describe('POST /api/my/artifacts/:id/fork', () => {
     for (const field of ['format', 'title', 'description', 'visibility', 'access', 'link_role'] as const) {
       expect(copy[field], field).toEqual(source[field]);
     }
+    expect(source.link_role, 'the source carries the role the loop compares against').toBe('editor');
+    // …and on the surface its new owner actually reads it from.
+    const sharing = await getSharingRoute(jreq(`/api/my/artifacts/${body.id}/sharing`, 'GET'), params(body.id));
+    expect(sharing.status, await sharing.clone().text()).toBe(200);
+    expect(((await sharing.json()) as { linkRole: string }).linkRole).toBe('editor');
     expect(copy.meta.theme).toBe(source.meta.theme);
     expect(copy.meta.template).toBe(source.meta.template);
     expect(copy.version).toBe(1);

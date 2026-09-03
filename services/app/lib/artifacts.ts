@@ -266,11 +266,18 @@ export async function createArtifact(
   userId: string | null,
   input: ArtifactInput,
   /**
-   * Creation-only provenance, deliberately NOT a field on ArtifactInput: that
-   * shape is shared with the replace path, where a parent is not a thing a
-   * write may change.
+   * What only CREATION may set, deliberately NOT fields on ArtifactInput: that
+   * shape is shared with the replace path, and neither of these is a thing a
+   * content write may change.
+   *   forkedFrom — provenance; written once and never updated.
+   *   linkRole   — GENERAL ACCESS, the role the LINK grants. Every other
+   *                creation leaves it NULL (which `linkRoleOf` reads as
+   *                'viewer') and the sharing surface owns it afterwards; a
+   *                FORK carries the source's, exactly as it carries visibility
+   *                and access — the same axis, and carrying the tier while
+   *                resetting the role would be incoherent.
    */
-  provenance: { forkedFrom?: string } = {},
+  atCreation: { forkedFrom?: string; linkRole?: ShareRole | null } = {},
 ): Promise<ArtifactRow> {
   const db = await getDb();
   // Birthday collisions at 62^6 are routine once the table is large, so the
@@ -284,8 +291,8 @@ export async function createArtifact(
         // ordinary (if empty) base, not an unknown one. Data-modifying CTEs
         // always execute, so the log row lands even though nothing reads it.
         `WITH created AS (
-           INSERT INTO artifacts (id, token_id, user_id, title, description, format, content, source, meta, visibility, folder, edit_id, access, forked_from, actor_user_id, actor_token_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $3, $2) RETURNING *
+           INSERT INTO artifacts (id, token_id, user_id, title, description, format, content, source, meta, visibility, link_role, folder, edit_id, access, forked_from, actor_user_id, actor_token_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $3, $2) RETURNING *
          ), genesis AS (
            INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, actor_user_id, actor_token_id)
            SELECT id, edit_id, 0, '', COALESCE(source, content), 0, 0, $3, $2 FROM created
@@ -309,13 +316,16 @@ export async function createArtifact(
           input.visibility ??
             (!userId ? (ALLOW_PUBLIC_VISIBILITY ? 'public' : 'unlisted')
               : input.format === 'image' || input.format === 'dataset' ? 'unlisted' : 'private'),
+          // NULL is the pre-column shape and reads as 'viewer' (linkRoleOf), so
+          // every ordinary creation stays exactly as it was.
+          atCreation.linkRole ?? null,
           input.folder ?? '',
           newEditId(),
           // Read-only unless the caller asked otherwise: a dataset that could
           // be written by default would make every existing document's data
           // mutable without anyone choosing it.
           input.access ?? 'read',
-          provenance.forkedFrom ?? null,
+          atCreation.forkedFrom ?? null,
         ],
       );
       void trackEvent('create', r.rows[0].id, { userId });
@@ -357,7 +367,7 @@ export async function forkArtifact(actor: TokenActor, source: ArtifactRow): Prom
   if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded' }, 403);
   const input = await forkInput(actor, source);
   if (input instanceof Response) return input;
-  const row = await createArtifact(actor.tokenId, actor.userId, input, { forkedFrom: source.id });
+  const row = await createArtifact(actor.tokenId, actor.userId, input, { forkedFrom: source.id, linkRole: source.link_role });
   // Against the SOURCE: "this was forked" is a fact about the original, and the
   // forker is who did it. Never inside a transaction (PGLite deadlock).
   void trackEvent('fork', source.id, { userId: actor.userId });
@@ -366,9 +376,11 @@ export async function forkArtifact(actor: TokenActor, source: ArtifactRow): Prom
 
 /** The copy's stored state, as the forker would have published it. */
 async function forkInput(actor: TokenActor, source: ArtifactRow): Promise<ArtifactInput | Response> {
-  // Everything the copy keeps that is not the content itself. `folder` is
-  // absent on purpose — createArtifact's default puts the copy at the forker's
-  // root, which is the only place they could have filed it.
+  // Everything the copy keeps that is not the content itself. `link_role` is
+  // carried too, but through createArtifact's creation-only argument rather
+  // than here: it is not part of ArtifactInput, which the replace path shares.
+  // `folder` is absent on purpose — createArtifact's default puts the copy at
+  // the forker's root, which is the only place they could have filed it.
   const carried = {
     title: source.title,
     description: source.description,
