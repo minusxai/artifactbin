@@ -35,8 +35,9 @@ export interface Args {
   mode: EvalMode;
   /**
    * WHERE this leg's token comes from, overriding what the mode would choose (`lib/credential.ts`):
-   * `paste` (the product's own copy-text handoff), `inbox-oauth` (log in with an emailed code and
-   * grant like an MCP client) or `secret` (a pre-provisioned account token in `EVAL_ACCOUNT_TOKEN`).
+   * `paste` (the product's own copy-text handoff), `inbox-oauth` (log in with a code from the eval's
+   * Resend inbox and grant like an MCP client), `outbox-oauth` (the same login, with the code read out
+   * of a locally booted server's dev outbox) or `secret` (a pre-provisioned `EVAL_ACCOUNT_TOKEN`).
    */
   credential?: CredentialSource;
   tasks?: string[];

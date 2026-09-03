@@ -23,6 +23,18 @@ export function serverPorts(portBase: number, legIndex: number): Ports {
 
 const PROVIDER_KEY = /_API_KEY$/;
 
+/** A leg's server state — its object store and its outbox — under the leg's run directory. */
+export const serverDataDir = (legDir: string): string => path.join(legDir, 'server');
+
+/**
+ * WHERE A LOCAL SERVER'S LOGIN MAIL LANDS. A server this driver boots answers on 127.0.0.1, and a
+ * localhost origin always writes its mail to a file instead of sending it (`services/proxy/src/mail.ts`
+ * `usesDevOutbox`) — which is what lets the driver log in as a person with no inbox anywhere. Named
+ * here once because two sides share it: the server writes the file, `lib/credential` reads the code
+ * out of it. The dummy Resend key stays: a local server must never be able to send.
+ */
+export const devOutboxPath = (dataDir: string): string => path.join(dataDir, 'dev-mail.jsonl');
+
 export function serverEnv(opts: { base: Record<string, string | undefined>; ports: Ports; dataDir: string; extra: Record<string, string> }): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(opts.base)) {
@@ -40,6 +52,7 @@ export function serverEnv(opts: { base: Record<string, string | undefined>; port
     OBJECT_STORE__LOCAL_DIR: path.join(opts.dataDir, 'objects'),
     AUTH__SECRET: crypto.randomBytes(32).toString('base64'),
     EMAIL__RESEND_API_KEY: 'eval-no-mail',
+    EMAIL__DEV_OUTBOX_PATH: devOutboxPath(opts.dataDir),
     ...opts.extra,
   };
 }

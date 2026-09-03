@@ -41,12 +41,12 @@ import { adapterFor } from './lib/harness';
 import { runInvocation } from './lib/spawn';
 import { countCheckoutReads } from './lib/local-reads';
 import { RunRecorder } from './lib/rows';
-import { serverEnv, serverPorts, startServer } from './lib/server';
+import { devOutboxPath, serverDataDir, serverEnv, serverPorts, startServer } from './lib/server';
 import { mapConcurrent } from './lib/pool';
 import { exitWhenDone, settleWithin, TEARDOWN_MS } from './lib/shutdown';
 import { DRIVER_HEADER, startProxy } from './lib/proxy';
 import { mintStartDocument, mintStartDocumentAs } from './lib/retry';
-import { acquireCredential, credentialSourceFor, writeArtifactbinEnv, type Credential } from './lib/credential';
+import { acquireCredential, credentialSourceFor, localLoginEmail, memoizeCredential, writeArtifactbinEnv, type Credential } from './lib/credential';
 import { agentProxyEnv, startMitmProxy } from './lib/mitm';
 import { exportDocument, inspectDocument, screenshotDocument } from './lib/score/browser';
 import { dataflowRows, productMetrics } from './lib/score/product';
@@ -98,9 +98,10 @@ interface LegRun {
   /**
    * The leg's credential, acquired ONCE and memoized by the caller: every task and every second
    * attempt reuses the same login (`lib/credential`). Null for the copy-text treatment, whose token
-   * the product hands to the agent itself.
+   * the product hands to the agent itself. `origin` is the address the product TRUSTS when that is
+   * not the one the driver dials — a booted server publishes the leg's proxy as its public base URL.
    */
-  credentialFor: (base: string) => Promise<Credential | null>;
+  credentialFor: (base: string, origin?: string) => Promise<Credential | null>;
 }
 
 async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: string, browser: Browser, run: LegRun): Promise<Outcome[]> {
@@ -131,23 +132,28 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
   // time, and it silently mis-scored the moment two overlapped.
   let stopServer: (() => Promise<void>) | null = null;
   let productUrl: string;
+  // The origin the product trusts for a WRITE — its public base URL, which for a booted server is the
+  // leg's proxy rather than the server port the driver dials (measured: `403 INVALID_ORIGIN` otherwise).
+  let productOrigin: string | undefined;
   if (config.deployment) {
     productUrl = config.deployment;
   } else {
     log(`${leg.label}: booting server :${ports.server}`);
+    const serverEnvironment = serverEnv({ base: process.env, ports, dataDir: serverDataDir(legDir), extra: config.server.env });
     const server = await startServer({
       repoRoot: REPO_ROOT,
-      env: serverEnv({ base: process.env, ports, dataDir: path.join(legDir, 'server'), extra: config.server.env }),
+      env: serverEnvironment,
       logPath: path.join(legDir, 'server.log'),
     });
     stopServer = server.stop;
     productUrl = server.url;
+    productOrigin = serverEnvironment.APP__PUBLIC_BASE_URL;
   }
 
   // WHO the agent will be. One login per leg, against the product's own address rather than a task's
   // proxy: the driver's setup traffic has no business in a task's ledger, and the token has to outlive
   // every proxy the leg opens. `paste` acquires nothing — see lib/credential.
-  const credential = await run.credentialFor(productUrl);
+  const credential = await run.credentialFor(productUrl, productOrigin);
   if (credential) {
     registerSecret(credential.token);
     log(`${leg.label}: publishing as ${credential.email ?? 'the eval account'} (${credential.owner})`);
@@ -513,12 +519,23 @@ async function main(): Promise<void> {
 
   // WHERE this leg's token comes from — the mode decides, `--credential` overrides, and a mode that
   // needs an account with no way to get one fails HERE, before an agent minute is spent. Acquired
-  // lazily and exactly once: the second attempt of a failed flow reuses the same login.
+  // lazily, and once per SERVER: the second attempt reuses a deployment's login but logs in again on a
+  // server it booted, which is a new server with a new database (`memoizeCredential`).
   const credentials = credentialEnv(keys);
-  const source = args.credential ?? credentialSourceFor(leg.mode.run, credentials);
-  let acquiring: Promise<Credential | null> | null = null;
-  const credentialFor = (base: string) => (acquiring ??= acquireCredential(source, { base, env: credentials }));
-  log(`${leg.label}: credential source ${source}`);
+  // A server this driver BOOTS mails its login codes to a file rather than sending them (`lib/server
+  // devOutboxPath`), so the run has an account of its own with no inbox configured anywhere — which is
+  // what CI's `agent smoke` has. A deployment has no such file: there the inbox or a token is the way in.
+  const localOutbox = config.deployment ? null : devOutboxPath(serverDataDir(args.out));
+  const local: { localOutbox?: string; email?: string } = localOutbox
+    ? { localOutbox, email: localLoginEmail(leg.label, credentials) }
+    : {};
+  const source = args.credential ?? credentialSourceFor(leg.mode.run, credentials, local);
+  const credentialFor = memoizeCredential(
+    (base: string, origin?: string) => acquireCredential(source, { base, env: credentials, ...local, ...(origin ? { origin } : {}) }),
+    // A booted server does not survive the second attempt, and neither does the account on it.
+    { reusable: !localOutbox },
+  );
+  log(`${leg.label}: credential source ${source}${localOutbox ? ` as ${local.email}` : ''}`);
 
   log(`${leg.label}: ${leg.harness} × ${leg.model} · tasks: ${tasks.map((t) => t.id).join(', ')} · out: ${args.out}`);
   fs.rmSync(args.out, { recursive: true, force: true });
