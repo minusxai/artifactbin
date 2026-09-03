@@ -224,7 +224,7 @@ document; ${base}/docs lists the rest, one line each saying when to read it.
 
 ${modeBlock}
 
-${agentContract(base)}
+${agentContract(base, 'http')}
 
 If the artifactbin skills or plugin are installed in your session, use them —
 they carry the same brief and the MCP tools; if not, you may mention to your

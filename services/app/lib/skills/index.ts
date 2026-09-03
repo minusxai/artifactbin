@@ -7,6 +7,7 @@
  * - `buildQuickSheet(base)` — the brief every agent reads
  *   (`artifactbin/SKILL.md`), at its ONE address;
  * - `buildMcpInstructions(base)` — what an MCP client is told at `initialize`
+ *   (the `'mcp'` contract surface: already authenticated, no token ladder at all)
  *   (the `publishing/mcp.md` Read-first block, which is written for it);
  * - `buildDocsIndex(base)` — the `/docs` and `/llms.txt` listing.
  *
@@ -47,7 +48,7 @@ export function buildQuickSheet(base: string): string {
 export function buildMcpInstructions(base: string): string {
   const block = readFirstBlock(renderDoc('artifactbin/references/publishing-mcp.md', base));
   if (!block) throw new Error('skills/artifactbin/references/publishing-mcp.md has no Read first block');
-  return `${block.trim()}\n\n${agentContract(base)}\n`;
+  return `${block.trim()}\n\n${agentContract(base, 'mcp')}\n`;
 }
 
 export const DOCS_INDEX_MAX_BYTES = SKILL_LISTING_MAX_BYTES;

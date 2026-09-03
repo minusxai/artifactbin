@@ -9,7 +9,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { assemble } from '@artifactbin/utils';
-import { proxyParts } from '../src/parts';
+import { isBrowserContext, proxyParts } from '../src/parts';
 import { testProxyOptions } from './helpers';
 
 const BROWSER = { 'content-type': 'application/json', origin: 'http://localhost', 'sec-fetch-site': 'same-origin' };
@@ -53,5 +53,77 @@ describe('the anonymous mint door', () => {
     const res = await proxy.fetch(new Request('http://localhost/api/start', { method: 'POST' }));
     expect(reached).toBe(true);
     expect(res.status).toBe(200);
+  });
+
+  it('leaves every other route alone, mint-shaped or not', async () => {
+    const proxy = await proxyFor();
+    for (const path of ['/api/artifacts', '/api/tokens', '/api/tokens/claim', '/a/ab3cd9/start']) {
+      const res = await proxy.fetch(new Request(`http://localhost${path}`, { method: 'POST' }));
+      expect(res.status, path).not.toBe(403);
+    }
+  });
+
+  it('refuses a GET-only pretender: the headers, not the method, are what is checked', async () => {
+    const proxy = await proxyFor();
+    const res = await proxy.fetch(new Request('http://localhost/api/tokens/anonymous', {
+      method: 'POST', headers: { origin: 'http://localhost' },
+    }));
+    expect(res.status).toBe(403);
+  });
+
+  it('refuses a cross-site browser fetch — sec-fetch-site tells us it is not our page', async () => {
+    const proxy = await proxyFor();
+    const res = await proxy.fetch(new Request('http://localhost/api/tokens/anonymous', {
+      method: 'POST', headers: { origin: 'https://evil.test', 'sec-fetch-site': 'cross-site' },
+    }));
+    expect(res.status).toBe(403);
+  });
+
+  /**
+   * The production shape, and the one that would have silently blocked the real page: behind TLS
+   * termination the browser says `origin: https://artifactbin.dev` while this hop received plain http.
+   * The check compares HOSTS for exactly this reason.
+   */
+  it('lets the real page through behind a TLS-terminating hop', async () => {
+    let reached = false;
+    const proxy = assemble(await proxyParts(await testProxyOptions({
+      env: { RATE_LIMITER__ANON_MINT_MAX: '1000', APP__PUBLIC_BASE_URL: 'https://artifactbin.dev' },
+      upstream: async () => { reached = true; return new Response('{"token":"mx_x"}', { status: 201 }); },
+    })));
+    const res = await proxy.fetch(new Request('http://localhost/api/tokens/anonymous', {
+      method: 'POST',
+      headers: { origin: 'https://artifactbin.dev', 'sec-fetch-site': 'same-origin' },
+    }));
+    expect(reached).toBe(true);
+    expect(res.status).toBe(201);
+  });
+
+  it('an agent that named no harness still gets an untagged door, never a broken URL', async () => {
+    const proxy = await proxyFor();
+    const body = await (await proxy.fetch(new Request('http://localhost/api/tokens/anonymous', { method: 'POST' }))).json() as { tokens: string };
+    expect(body.tokens).toBe('http://localhost/tokens/new');
+  });
+
+  it('ignores a harness it does not know, rather than reflecting it into a URL', async () => {
+    const proxy = await proxyFor();
+    const body = await (await proxy.fetch(new Request('http://localhost/api/tokens/anonymous', {
+      method: 'POST', headers: { 'artifactbin-agent': 'evil"><script>' },
+    }))).json() as { tokens: string };
+    expect(body.tokens).toBe('http://localhost/tokens/new');
+  });
+});
+
+describe('isBrowserContext', () => {
+  const h = (init: Record<string, string>) => new Headers(init);
+  it('needs BOTH signals: fetch metadata and a matching origin', () => {
+    expect(isBrowserContext(h({}), 'http://localhost')).toBe(false);
+    expect(isBrowserContext(h({ origin: 'http://localhost' }), 'http://localhost')).toBe(false);
+    expect(isBrowserContext(h({ 'sec-fetch-site': 'same-origin' }), 'http://localhost')).toBe(false);
+    expect(isBrowserContext(h({ origin: 'http://localhost', 'sec-fetch-site': 'same-origin' }), 'http://localhost')).toBe(true);
+  });
+  it('matches on host, so a terminated scheme or a garbage origin does not decide it', () => {
+    expect(isBrowserContext(h({ origin: 'https://a.test', 'sec-fetch-site': 'same-origin' }), 'http://a.test')).toBe(true);
+    expect(isBrowserContext(h({ origin: 'https://a.test:8443', 'sec-fetch-site': 'same-origin' }), 'http://a.test')).toBe(false);
+    expect(isBrowserContext(h({ origin: 'null', 'sec-fetch-site': 'same-origin' }), 'http://a.test')).toBe(false);
   });
 });

@@ -4,6 +4,7 @@ export type { Queryable } from './db';
 export * from './sql';
 export * from './browser';
 export * from './doors';
+export * from './agent';
 export * from './deny';
 export * from './routes';
 export type { TokenRecord, TokenReader, TokenReaderOptions, ClaimResult, CodeStore, AgentSession } from './identity';

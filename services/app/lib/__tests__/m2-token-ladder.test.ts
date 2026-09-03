@@ -8,7 +8,8 @@
 import { describe, it, expect } from 'vitest';
 import { agentContract } from '@/lib/agent-contract';
 import { anonymousClaimRelay } from '@/lib/agent-copy';
-import { buildMcpInstructions, renderDoc } from '@/lib/skills';
+import { buildMcpInstructions, buildQuickSheet, renderDoc, renderTree, skillTree } from '@/lib/skills';
+import { startBrief } from '@/lib/start-links';
 
 const BASE = 'https://x.test';
 
@@ -30,10 +31,17 @@ describe('the contract is surface-aware', () => {
 });
 
 describe('no agent-facing surface teaches self-minting', () => {
+  /**
+   * THE REGRESSION GUARD FOR THE WHOLE PHASE. Not a hand-kept list of the four surfaces we happened to
+   * fix — EVERY rendered doc in the tree, plus the built surfaces, so a file joins the set by existing.
+   * A new reference that names the mint fails here on the day it is written.
+   */
   const surfaces: [string, string][] = [
+    ...renderTree(skillTree(), BASE).map(({ file, text }) => [`skills/${file.path}`, text] as [string, string]),
     ['mcp instructions', buildMcpInstructions(BASE)],
-    ['publishing-auth.md', renderDoc('artifactbin/references/publishing-auth.md', BASE)],
-    ['SKILL.md', renderDoc('artifactbin/SKILL.md', BASE)],
+    ['the brief', buildQuickSheet(BASE)],
+    ['the start brief (fill)', startBrief(BASE, 'Ab3xK9', 'secret', 'fill')],
+    ['the start brief (edit)', startBrief(BASE, 'Ab3xK9', 'secret', 'edit')],
   ];
   for (const [name, text] of surfaces) {
     it(`${name} never names the anonymous mint`, () => {
@@ -42,6 +50,13 @@ describe('no agent-facing surface teaches self-minting', () => {
   }
   it('the MCP instructions carry no token-acquisition ladder at all', () => {
     expect(buildMcpInstructions(BASE)).not.toContain('/tokens/new');
+  });
+  it('publishing-auth.md still relays the claim line, so an orphaned document is recoverable', () => {
+    const doc = renderDoc('artifactbin/references/publishing-auth.md', BASE);
+    expect(doc).toContain(anonymousClaimRelay(BASE, '<id>'));
+  });
+  it('the http contract sends the human to a SOURCE-TAGGED door', () => {
+    expect(agentContract(BASE, 'http')).toContain(`${BASE}/tokens/new?source=`);
   });
 });
 

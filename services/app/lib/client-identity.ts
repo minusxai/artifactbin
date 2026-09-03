@@ -22,6 +22,8 @@
  * trivially forged. Nothing may gate access on them.
  */
 
+import { declaredAgentSlug, type DeclaredAgentSlug } from '@artifactbin/contracts';
+
 export type Harness =
   | 'chatgpt'
   | 'codex'
@@ -98,8 +100,12 @@ const USER_AGENT_HARNESSES: ReadonlyArray<readonly [pattern: string, harness: Ha
   ['undici', 'script'],
 ];
 
-/** Exact values accepted from Artifactbin-Agent. No substring matching: it is an explicit declaration. */
-const DECLARED_AGENT_HARNESSES: Readonly<Record<string, Harness>> = {
+/**
+ * Which declaration maps to which harness. The KEYS are `DECLARED_AGENT_SLUGS` from contracts — the ONE
+ * allowlist, which the proxy reads too (it tags `/tokens/new?source=<agent>` at a refused mint door).
+ * Typed as a total record over that union, so a slug added there without a mapping here fails to compile.
+ */
+const DECLARED_AGENT_HARNESSES: Readonly<Record<DeclaredAgentSlug, Harness>> = {
   chatgpt: 'chatgpt',
   codex: 'codex',
   'claude-code': 'claude-code',
@@ -129,8 +135,8 @@ export const ARTIFACTBIN_AGENT_HEADER = 'Artifactbin-Agent';
 export function declaredAgentHarness(value: unknown): Harness | null {
   const declared = str(value);
   if (!declared) return null;
-  const key = declared.toLowerCase().replace(/[\s_]+/g, '-');
-  return DECLARED_AGENT_HARNESSES[key] ?? null;
+  const slug = declaredAgentSlug(declared.replace(/[\s_]+/g, '-'));
+  return slug ? DECLARED_AGENT_HARNESSES[slug] : null;
 }
 
 export function identifyClient(input: {

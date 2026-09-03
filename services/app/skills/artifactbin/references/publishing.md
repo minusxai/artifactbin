@@ -10,8 +10,8 @@ Upload a self-contained document, get back a **link** to share with your user.
 - **Publish** is one `POST [[ base ]]/api/artifacts`; the deliverable is the `url`.
 - **Every `/api` call, `GET` included, sends `Authorization: Bearer mx_...`.**
   No token? Read [auth](publishing-auth.md): use a pasted token or start link,
-  send your user to `[[ base ]]/tokens/new`, or without a human `POST
-  [[ base ]]/api/tokens/anonymous`.
+  or STOP and ask your user for one at `[[ base ]]/tokens/new` — you never mint
+  your own.
 - A document is **static JSX**, not HTML — the tags, the components and the
   JSX rules are [markup.md](markup.md).
 - Datasets, images and chart recipes are their own artifacts, created first:

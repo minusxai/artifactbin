@@ -5,8 +5,8 @@ import { proxyParts, type ProxyOptions } from '../src/parts';
 import { testProxyOptions } from './helpers';
 
 describe('proxyParts', () => {
-  it('names are exactly ["session","rateLimit","loginRoutes","oauthRoutes","forwardedHeaders","forward"] in that order', async () => {
-    expect((await proxyParts(await testProxyOptions())).map((p) => p.name)).toEqual(['session', 'rateLimit', 'loginRoutes', 'oauthRoutes', 'forwardedHeaders', 'forward']);
+  it('names are exactly ["session","rateLimit","anonMintDoor","loginRoutes","oauthRoutes","forwardedHeaders","forward"] in that order', async () => {
+    expect((await proxyParts(await testProxyOptions())).map((p) => p.name)).toEqual(['session', 'rateLimit', 'anonMintDoor', 'loginRoutes', 'oauthRoutes', 'forwardedHeaders', 'forward']);
   });
   it('forward is LAST — positional ownership replaces the hand-kept prefix list', async () => {
     const parts = await proxyParts(await testProxyOptions());

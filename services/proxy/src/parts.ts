@@ -2,8 +2,9 @@
  * THE PROXY AS PARTS. One ordered literal — `proxyParts(o)` — is the whole
  * proxy: `session` resolves who is asking (bearer → the token reader; Better
  * Auth session; the agent cookie by id) and is the ONLY part that may touch
- * the actor; `rateLimit` is the doors (a deny is the proxy's ONLY own
- * verdict); `loginRoutes` is Better Auth behind the invite gate; `oauthRoutes`
+ * the actor; `rateLimit` is the doors; `anonMintDoor` refuses the anonymous
+ * mint to anything that is not a browser (these TWO are the proxy's own
+ * verdicts — everything else the app answers); `loginRoutes` is Better Auth behind the invite gate; `oauthRoutes`
  * the MCP OAuth provider; `forwardedHeaders` owns the forwarding headers
  * (x-mx-actor and x-real-ip dropped inbound, x-forwarded-{for,host,proto}
  * ours); `forward` is LAST — everything not matched above reaches the app
@@ -16,7 +17,7 @@
  * is no prefix list to drift.
  */
 import {
-  ACTOR_HEADER, ANONYMOUS, denyResponse, FORWARDED_FOR, FORWARDED_HOST, FORWARDED_PROTO,
+  ACTOR_HEADER, AGENT_HEADER, ANONYMOUS, declaredAgentSlug, denyResponse, FORWARDED_FOR, FORWARDED_HOST, FORWARDED_PROTO,
   type Actor, type DoorName, type Limiter, type Part, type Queryable, type TokenReader, type Upstream,
 } from '@artifactbin/contracts';
 import { Hono, type Context } from 'hono';
@@ -89,9 +90,76 @@ export function doorFor(method: string, pathname: string): DoorName | null {
  * `origin: <this origin>` and `sec-fetch-site: same-origin` on the mint fetch, and both survive this
  * proxy to the upstream untouched. A bare HTTP client sends neither. The anonymous mint is the ONLY
  * door this guards — `/api/start` shares its rate-limit door and is posted by agents with no browser.
+ *
+ * HOSTS are compared, not whole origins: behind TLS termination the browser says
+ * `origin: https://artifactbin.dev` while this hop's own request arrived over `http`, so full-origin
+ * equality would refuse the product's own page. `sec-fetch-site` is Fetch Metadata — the browser sets it and
+ * page JavaScript cannot — so its ABSENCE is the reliable half of the signal.
+ *
+ * Honestly: this is not a security boundary. Any client can type these two headers, and one that does gets
+ * through. It is a door that TEACHES — it catches the agent mid-mistake and hands it the ladder — while the
+ * real fix is that no agent-facing surface names this address any more (app `lib/agent-contract`).
  */
-export function isBrowserContext(_headers: Headers, _origin: string): boolean {
-  throw new Error('m2: implement — the browser-context check');
+export function isBrowserContext(headers: Headers, origin: string): boolean {
+  const site = headers.get('sec-fetch-site');
+  if (site !== 'same-origin' && site !== 'same-site') return false;
+  const declared = headers.get('origin');
+  const here = hostOf(origin);
+  return !!declared && here !== null && hostOf(declared) === here;
+}
+
+const hostOf = (value: string): string | null => {
+  try { return new URL(value).host.toLowerCase(); } catch { return null; }
+};
+
+/**
+ * THE REFUSAL THAT TEACHES. An agent at this door is mid-mistake and it is the best teaching moment we get,
+ * so the body IS the ladder rather than a bare "no": the plugin/MCP first, then the human's own door — SOURCE-
+ * TAGGED from `Artifactbin-Agent` when it names a harness we know, so the person who is asked for a token
+ * lands on a page that knows who sent them.
+ *
+ * 403, deliberately. The request is well formed and understood, and no credential the caller could add would
+ * change the answer — which is exactly what 401 would invite it to go and try (and trying is the failure).
+ * 404 would lie about a route the browser uses, and 429 would claim a rate limit that has not been hit.
+ */
+export function anonMintRefusal(origin: string, agentHeader: string | null): Response {
+  const source = declaredAgentSlug(agentHeader);
+  const tokens = `${origin}/tokens/new${source ? `?source=${source}` : ''}`;
+  return new Response(JSON.stringify({
+    error: 'browser_only',
+    reason: 'This endpoint is the web page\'s own mint. An agent that mints its own token publishes documents its human cannot reach.',
+    ladder: [
+      'If the artifactbin plugin or MCP server is available, use it — that connection is already authenticated and needs no token.',
+      `Otherwise check ~/.artifactbin.env for ARTIFACTBIN_TOKEN.`,
+      `Otherwise STOP and ask your human for a token at ${tokens} — do not mint one yourself.`,
+    ],
+    tokens,
+    docs: `${origin}/docs/artifactbin/references/publishing-auth.md`,
+  }), { status: 403, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+}
+
+/**
+ * THE ANONYMOUS-MINT DOOR — a browser-context check beside the rate limit, and the SECOND verdict this proxy
+ * gives on its own (the deny was the first).
+ *
+ * PATH-SPECIFIC, and that is not a detail: `doorFor` gives `/api/start` the same ANON_MINT rate-limit door,
+ * and a start link is POSTed by an agent with no browser at all — gating it would kill the very flow the
+ * refusal above steers people toward. Only `POST /api/tokens/anonymous` is guarded.
+ */
+export function anonMintDoor(o: ProxyOptions): Part<ProxyEnv> {
+  return {
+    name: 'anonMintDoor',
+    mount: (app) => app.use('*', async (c, next) => {
+      const { pathname } = new URL(c.req.url);
+      if (c.req.method === 'POST' && pathname === '/api/tokens/anonymous') {
+        const origin = baseUrlOf(c.req.raw, trustedHopsOf(o.env), readEnv(o.env, 'APP__PUBLIC_BASE_URL'));
+        if (!isBrowserContext(c.req.raw.headers, origin)) {
+          return anonMintRefusal(origin, c.req.raw.headers.get(AGENT_HEADER));
+        }
+      }
+      await next();
+    }),
+  };
 }
 
 /** How many hops in front of this proxy are ours (`RATE_LIMITER__TRUSTED_PROXY_HOPS`). Default 0: we are the outermost, and nothing inbound is believed. */
@@ -149,7 +217,7 @@ export function session(o: ProxyOptions): Part<ProxyEnv> {
   };
 }
 
-/** THE DOORS — a deny is the proxy's ONLY own verdict; everything else the app answers. */
+/** THE DOORS — a rate-limit deny; see also `anonMintDoor`, the proxy's other own verdict. */
 export function rateLimit(o: ProxyOptions): Part<ProxyEnv> {
   return {
     name: 'rateLimit',
@@ -216,7 +284,7 @@ export function oauthRoutes(o: ProxyOptions): Part<ProxyEnv> {
  * list). A downstream replaces a part BY NAME through utils' `assemble`.
  */
 export function proxyParts(o: ProxyOptions): Part<ProxyEnv>[] {
-  return [session(o), rateLimit(o), loginRoutes(o), oauthRoutes(o), forwardedHeaders({ trustedHops: trustedHopsOf(o.env), ...(o.secure ? { secure: true } : {}) }), forward(o.upstream, o)];
+  return [session(o), rateLimit(o), anonMintDoor(o), loginRoutes(o), oauthRoutes(o), forwardedHeaders({ trustedHops: trustedHopsOf(o.env), ...(o.secure ? { secure: true } : {}) }), forward(o.upstream, o)];
 }
 
 /** The proxy, assembled from its parts. */
