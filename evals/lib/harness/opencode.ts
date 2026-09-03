@@ -100,6 +100,7 @@ export const opencode: HarnessAdapter & { mcpConfig: typeof mcpConfig } = {
       turns: steps || null,
       toolCalls,
       docsReadCalls: countDocsReads(invocations),
+      invocations,
       tokens,
       reportedCostUsd: cost,
       webSearchCalls: null,

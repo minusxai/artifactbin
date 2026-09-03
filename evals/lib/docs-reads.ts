@@ -46,7 +46,13 @@ const SKILL_TOOL = /^skill$/i;
 const SAVE_TARGET = /(?:(?:-o|--output)\s+|>\s*)(["']?)([^\s"';|&]+)\1/g;
 const IS_WRITE = /(?:-X\s*(?:POST|PUT|PATCH|DELETE)\b|--data(?:-binary|-raw)?\b|\s-d\s)/;
 
-function text(input: unknown): string {
+/**
+ * An invocation's input flattened to searchable text: a string as itself, an
+ * object as its string values joined. Exported because every question about
+ * WHAT a tool call touched — docs, or the local checkout (`lib/local-reads`) —
+ * is asked of the same flattening.
+ */
+export function invocationText(input: unknown): string {
   if (typeof input === 'string') return input;
   if (input && typeof input === 'object') return Object.values(input as Record<string, unknown>).filter((v) => typeof v === 'string').join(' ');
   return '';
@@ -60,7 +66,7 @@ export function countDocsReads(calls: ToolInvocation[]): number {
   const saved = new Set<string>();
   let n = 0;
   for (const call of calls) {
-    const t = text(call.input);
+    const t = invocationText(call.input);
     if (!t) continue;
     if (IS_WRITE.test(t)) continue;
     const fetchesDocs = DOCS_URL.test(t) || SKILL_FILE.test(t) || SKILLS_DIR_SEARCH.test(t) || SKILL_TOOL.test(call.name);

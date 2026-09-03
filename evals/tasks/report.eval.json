@@ -16,7 +16,8 @@
     "has_title",
     "no_console_errors",
     "no_failed_responses",
-    "fits_390px"
+    "fits_390px",
+    "no_local_checkout_reads"
   ],
   "order": 3
 }

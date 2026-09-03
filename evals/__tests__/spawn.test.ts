@@ -10,7 +10,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { runInvocation } from '../lib/spawn';
+import { chownArgv, runInvocation, wrapRunAs } from '../lib/spawn';
 
 let dir: string;
 const paths = () => ({ stdoutPath: path.join(dir, 'transcript.jsonl'), stderrPath: path.join(dir, 'stderr.log') });
@@ -90,5 +90,35 @@ describe('secret redaction', () => {
   it('leaves output alone when there is nothing to redact', async () => {
     const r = await runInvocation(node('console.log("plain")'), { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
     expect(r.stdout).toBe('plain\n');
+  });
+});
+
+/**
+ * ISOLATION (run 33702277600): on a CI runner the harness runs as a second unix user that cannot read the
+ * checkout. The driver wraps the launch in sudo; argv[0] is made absolute because sudo's secure_path would
+ * otherwise hide a CLI installed under the tool cache. Seeded RED by the orchestrator.
+ */
+describe('wrapRunAs', () => {
+  it('wraps the launch in sudo -n -u <user> -E with an absolute argv[0]', () => {
+    const inv = { argv: ['codex', 'exec', '--json'], env: { A: '1' }, unsetEnv: [] };
+    const wrapped = wrapRunAs(inv, 'agent', (cmd: string) => `/opt/tool/bin/${cmd}`);
+    expect(wrapped.argv).toEqual(['sudo', '-n', '-u', 'agent', '-E', '--', '/opt/tool/bin/codex', 'exec', '--json']);
+    expect(wrapped.env).toEqual({ A: '1' });
+  });
+  it('leaves an already-absolute argv[0] alone and never touches the env', () => {
+    const inv = { argv: ['/usr/bin/node', '-e', '1'], env: { K: 'v' }, unsetEnv: ['X'] };
+    const wrapped = wrapRunAs(inv, 'agent', () => { throw new Error('must not resolve an absolute path'); });
+    expect(wrapped.argv.slice(0, 6)).toEqual(['sudo', '-n', '-u', 'agent', '-E', '--']);
+    expect(wrapped.argv.slice(6)).toEqual(inv.argv);
+    expect(wrapped.unsetEnv).toEqual(['X']);
+  });
+
+  /**
+   * The other user must be able to WRITE its workspace and its config home, both of which the
+   * driver created as itself (a harness writes its login file before the turn). Only the argv is
+   * asserted — running it would need a real sudoer, and this suite never invokes one.
+   */
+  it('hands the workspace and the config home over, non-interactively, before the launch', () => {
+    expect(chownArgv('agent', ['/tmp/run/cwd', '/tmp/run/home'])).toEqual(['sudo', '-n', 'chown', '-R', 'agent', '/tmp/run/cwd', '/tmp/run/home']);
   });
 });

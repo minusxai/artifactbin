@@ -184,6 +184,6 @@ export const codex: HarnessAdapter = {
     }
     if (events.length === 0) return { ok: false, error: 'no events in output', finalMessage: null, ...NO_TELEMETRY };
     const ok = !failed && turnsCompleted > 0;
-    return { ok, error: ok ? null : (error ?? 'no turn completed'), turns: turns || null, toolCalls, docsReadCalls: countDocsReads(invocations), tokens, reportedCostUsd: null, webSearchCalls, finalMessage };
+    return { ok, error: ok ? null : (error ?? 'no turn completed'), turns: turns || null, toolCalls, docsReadCalls: countDocsReads(invocations), invocations, tokens, reportedCostUsd: null, webSearchCalls, finalMessage };
   },
 };
