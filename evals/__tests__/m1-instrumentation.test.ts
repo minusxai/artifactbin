@@ -128,7 +128,9 @@ describe('the edges the seed did not pin', () => {
     expect(ledgerMetrics([
       entry({ t: 1_000, method: 'POST', path: '/api/artifacts', status: 201, reqFormat: 'dataset', artifactId: 'ds1111' }),
       entry({ t: 2_000, method: 'POST', path: '/api/artifacts', status: 201, reqMarkup: '<h1>a</h1>', artifactId: 'ab3cd9' }),
-    ], { startedAtMs: 500 }).msToFirstPublish).toBe(500);
+      // Anchor 0 so the two candidates are plainly 1_000 (the rows) and 2_000 (the document) and the
+      // assertion cannot be read as a coincidence with the anchor.
+    ], { startedAtMs: 0 }).msToFirstPublish).toBe(1_000);
   });
 
   it('skeletonSections skips the FAILED first attempt and counts the first write that worked', () => {
