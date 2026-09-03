@@ -257,6 +257,78 @@ describe('view-mode text selection actions', () => {
     expect(toolbar).not.toHaveAttribute('hidden');
   });
 
+  /*
+   * ADDED (F4, round 2). THE SETTLE IS FOR THE GESTURE THAT HAS NO OTHER EVENT.
+   * A mouse drag fires `selectionchange` continuously too, so a drag that
+   * pauses for the settle raised the bubble mid-gesture — into the path of the
+   * cursor it is heading for, and a release could land ON it. The review could
+   * not turn that into a wrong-target action (the drag's own last change
+   * re-arms the settle and re-measures), so this is not a correctness fix: the
+   * settle simply buys a MOUSE nothing, since `pointerup` already covers every
+   * mouse selection and `keyup` every keyboard one.
+   *
+   * Tracked as a held BUTTON rather than as a `pointerType` branch: jsdom's
+   * MouseEvent carries no `pointerType`, and every case above dispatches a
+   * `pointerup` with no `pointerdown` before it, so the flag is simply false
+   * for them.
+   */
+  it('does not raise the bubble mid-drag while a mouse button is held down', async () => {
+    actions.update({ type: 'mx:selection-actions', edit: true, annotate: true });
+    await Promise.resolve();
+    vi.useFakeTimers();
+    try {
+      document.querySelector('p')!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+      selectRange();
+      document.dispatchEvent(new Event('selectionchange'));
+      vi.advanceTimersByTime(400);
+      expect(bubbleVisible()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    // …and releasing shows it at once, by the path a mouse always used.
+    document.querySelector('p')!.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
+    await Promise.resolve();
+    expect(bubbleVisible()).toBe(true);
+  });
+
+  /*
+   * …and a TOUCH gesture reports a held button for its whole duration, so the
+   * gate is on the pointer as well as the button: the phone keeps its settle.
+   */
+  it('keeps the settle for a touch, where the same gesture reports a held button', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === '(pointer: coarse)',
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }));
+    actions.update({ type: 'mx:selection-actions', edit: true, annotate: true });
+    await Promise.resolve();
+    vi.useFakeTimers();
+    try {
+      document.querySelector('p')!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+      const text = document.querySelector('p')!.firstChild!;
+      const range = document.createRange();
+      range.selectNodeContents(text);
+      const line = { ...rangeRect, toJSON: () => ({}) };
+      Object.defineProperty(range, 'getBoundingClientRect', { value: () => line });
+      Object.defineProperty(range, 'getClientRects', { value: () => [line] });
+      const selection = window.getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new Event('selectionchange'));
+      vi.advanceTimersByTime(200);
+      expect(bubbleVisible()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('renders nothing for a reader and dismisses an open bubble when capability is removed', async () => {
     actions.update({ type: 'mx:selection-actions', edit: false, annotate: false });
     await selectText();

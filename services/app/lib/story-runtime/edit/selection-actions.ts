@@ -315,7 +315,20 @@ export function createFrameSelectionActions({
     surface.style.transform = above ? 'translate(-50%, -100%)' : 'translate(-50%, 0)';
   };
 
+  /*
+   * IS A BUTTON DOWN RIGHT NOW? A mouse drag fires `selectionchange` the whole
+   * way, so a drag that pauses for the settle raised the bubble mid-gesture —
+   * into the path of the cursor, where a release can land on it. The settle
+   * exists for the gesture that has NO other event; a mouse already has
+   * `pointerup` and a keyboard `keyup`, so it buys them nothing. Tracked as a
+   * held button rather than as a `pointerType` branch: the flag is simply
+   * false until a `pointerdown` arrives, and a touch keeps the settle anyway.
+   */
+  let buttonHeld = false;
+  const onPointerDown = () => { buttonHeld = true; };
+  const releaseButton = () => { buttonHeld = false; };
   const onPointerUp = (event: PointerEvent) => {
+    buttonHeld = false;
     if ((event.target as Element | null)?.closest?.(`[${SELECTION_ACTIONS_ATTR}]`)) return;
     win.queueMicrotask(showForSelection);
   };
@@ -338,6 +351,8 @@ export function createFrameSelectionActions({
     const selection = win.getSelection();
     if (!selection || selection.isCollapsed) { hide(); return; }
     if (!selection.toString().trim()) return;
+    // A drag still in progress: the release that ends it is the event to answer.
+    if (buttonHeld && !isCoarsePointer(win)) return;
     cancelSettle();
     settle = win.setTimeout(() => { settle = 0; showForSelection(); }, TOUCH_SETTLE_MS);
   };
@@ -363,7 +378,12 @@ export function createFrameSelectionActions({
     });
   };
 
+  doc.addEventListener('pointerdown', onPointerDown);
   doc.addEventListener('pointerup', onPointerUp);
+  // A drag can also end where no `pointerup` is delivered: the browser taking
+  // the gesture over, or the window losing focus mid-drag.
+  doc.addEventListener('pointercancel', releaseButton);
+  win.addEventListener('blur', releaseButton);
   doc.addEventListener('keyup', onKeyUp);
   doc.addEventListener('selectionchange', onSelectionChange);
   doc.addEventListener('keydown', onKeyDown);
@@ -393,7 +413,10 @@ export function createFrameSelectionActions({
       if (scheduled) win.cancelAnimationFrame(scheduled);
       toolbar?.remove();
       style.remove();
+      doc.removeEventListener('pointerdown', onPointerDown);
       doc.removeEventListener('pointerup', onPointerUp);
+      doc.removeEventListener('pointercancel', releaseButton);
+      win.removeEventListener('blur', releaseButton);
       doc.removeEventListener('keyup', onKeyUp);
       doc.removeEventListener('selectionchange', onSelectionChange);
       doc.removeEventListener('keydown', onKeyDown);
