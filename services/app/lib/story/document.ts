@@ -253,7 +253,23 @@ function drawsChart(nodes: JsxNode[]): boolean {
  */
 export const HISTORY_PRELUDE =
   '(function(){var b=function(){};try{'
+  /*
+   * ORDER IS THE WHOLE MECHANISM, and it runs in exactly two beats.
+   *
+   * FIRST, bind the native — after the overwrite below there is no way to
+   * reach it, in or out, which is the point.
+   *
+   * THEN shut every door, and only AFTER that build the capability. The
+   * capability's own statements sit inside the same fail-silent `try`, so
+   * anything that throws there (a `defineProperty` refused because something
+   * already owns the name) would take the FREEZE down with it and leave the
+   * document with a fully writable History API and nobody told. The freeze is
+   * what this prelude is FOR; nothing may be attempted in front of it.
+   */
   + 'var n=history.replaceState.bind(history);'
+  + 'history.pushState=b;history.replaceState=b;'
+  + 'History.prototype.pushState=b;History.prototype.replaceState=b;'
+  + 'Object.freeze(History.prototype);Object.freeze(history);'
   + 'var c=function(s){return encodeURIComponent(s).replace(/%24/g,"$")};'
   + 'var f=function(v){try{'
   + 'if(!v||typeof v!=="object")return;'
@@ -269,9 +285,6 @@ export const HISTORY_PRELUDE =
   + '}catch(g){}};'
   + 'Object.freeze(f);'
   + 'Object.defineProperty(window,"__mxValues",{value:f,writable:false,configurable:false,enumerable:false});'
-  + 'history.pushState=b;history.replaceState=b;'
-  + 'History.prototype.pushState=b;History.prototype.replaceState=b;'
-  + 'Object.freeze(History.prototype);Object.freeze(history);'
   + '}catch(z){}})()';
 
 /**

@@ -182,3 +182,27 @@ describe('the narrow URL capability the prelude exposes (spike S2)', () => {
     expect(html.indexOf(HISTORY_PRELUDE)).toBeLessThan(html.indexOf('window.__mxValues({a:"1"})'));
   });
 });
+
+/*
+ * The ordering the capability is built in, pinned on its own.
+ *
+ * The whole prelude is one fail-silent `try`, so anything attempted IN FRONT
+ * of the freeze can take the freeze down with it and leave the document with a
+ * fully writable History API and nobody told. Only the `bind` has to precede
+ * the overwrite; everything else follows the freeze.
+ */
+describe('the freeze is never behind the capability (spike S2)', () => {
+  it('shuts every door even when defining the capability throws', () => {
+    const dom = new JSDOM('<!doctype html><body><p>doc</p></body>', { url: START, runScripts: 'dangerously' });
+    // Something already owns the name, non-configurably: the prelude's own
+    // `defineProperty` must throw here.
+    dom.window.eval('Object.defineProperty(window,"__mxValues",{value:1,configurable:false,writable:false})');
+    dom.window.eval(HISTORY_PRELUDE);
+    const w = dom.window as unknown as Window & { eval(code: string): unknown };
+    expect(w.eval('Object.isFrozen(History.prototype)')).toBe(true);
+    expect(w.eval('Object.isFrozen(history)')).toBe(true);
+    w.eval('history.replaceState(null,"","/evil");history.pushState(null,"","/evil2")');
+    expect(w.location.href).toBe(START);
+    expect(w.eval('typeof window.__mxValues')).toBe('number'); // the capability lost, the freeze held
+  });
+});
