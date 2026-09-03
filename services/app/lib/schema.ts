@@ -117,6 +117,13 @@ const ARTIFACTS: Table = {
     { name: 'actor_token_id', type: 'TEXT' },
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
     { name: 'updated_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
+    // PROVENANCE: the artifact this one was FORKED from — the immediate
+    // parent, never a chain, and never updated after creation. NULL means
+    // "authored here", which every row written before the column existed
+    // already is: that equivalence is the whole migration. No foreign key —
+    // deleting the original must not delete the copy, and a fork of a document
+    // that is later gone is still honestly a fork.
+    { name: 'forked_from', type: 'TEXT' },
   ],
   primaryKey: ['id'],
   indexes: [{ name: 'idx_artifacts_token_updated', columns: ['token_id', 'updated_at DESC'] }],

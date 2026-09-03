@@ -119,6 +119,7 @@ CREATE TABLE IF NOT EXISTS app.artifacts (
   actor_token_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  forked_from TEXT,
   PRIMARY KEY (id)
 );
 
@@ -159,6 +160,8 @@ ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS actor_token_id TEXT;
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS forked_from TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_artifacts_token_updated ON app.artifacts (token_id, updated_at DESC);
 

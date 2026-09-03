@@ -27,6 +27,7 @@ import {
   type ArtifactRow, type Scope, type TokenActor,
 } from '@/lib/artifacts';
 import { canGovern } from '@/lib/share-roles';
+import { ANNOTATION_ANCHOR_ATTR } from '@/lib/annotation-anchors';
 import { getDb, type Queryable } from '@/lib/db';
 import { generateInternalId } from '@/lib/ids';
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
@@ -34,8 +35,13 @@ import { bodyPathToSourcePath, sourcePathToBodyPath } from '@/lib/story/edit-com
 import { channelForAnnotations } from '@/lib/story/live';
 import { resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
 
-/** The attribute that ties a node to its threads. It stores an opaque key, never comment text. */
-export const ANNOTATION_ANCHOR_ATTR = 'data-annotation-anchor';
+/**
+ * The attribute that ties a node to its threads. It stores an opaque key, never
+ * comment text. It lives in a PURE module (lib/annotation-anchors) because the
+ * fork door has to strip anchors from a document's source and may not import
+ * this one — which imports lib/artifacts.
+ */
+export { ANNOTATION_ANCHOR_ATTR };
 
 /** Where an annotation points, in CURRENT head coordinates. `path` is a BODY path (`data-mx-ast`). */
 export interface AnnotationAnchor {
