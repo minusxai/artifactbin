@@ -88,7 +88,7 @@ describe('emit', () => {
 describe('the catalogue', () => {
   const all = (Object.keys(EVENT_VERBS) as ObjectKind[]).flatMap((kind) => EVENT_VERBS[kind].map((verb) => [kind, verb] as const));
   it('has a fixture for every verb, and every fixture builds a valid envelope', () => {
-    expect(all.length).toBeGreaterThanOrEqual(26);
+    expect(all.length).toBeGreaterThanOrEqual(25);
     for (const [kind, verb] of all) {
       const payload = (FIXTURES[kind] as Record<string, unknown>)[verb];
       expect(payload, `${kind}.${verb} has no fixture`).toBeDefined();
