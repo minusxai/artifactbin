@@ -434,21 +434,32 @@ jobs:
       POSTGRES_PASSWORD: compose-ci-${{ github.run_id }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      # The lean images are built here a SECOND time — the `image` job already built the same four
+      # Dockerfiles — and this job starts with a cold daemon, so it pays in full. Reading main's layer
+      # cache turns that into a restore for every service that has not changed. Publishing the cache is
+      # left to main (see the write override): a PR that exported these layers would pay the export on
+      # every run and evict, from the repo's shared 10 GB budget, the entries the `image` job depends on.
+      - name: read main's layer cache; publish it only from main
+        run: |
+          echo "COMPOSE_FILE=docker-compose.lean.yml:docker-compose.lean.ci.yml" >> "$GITHUB_ENV"
+          if [ "$GITHUB_REF" = refs/heads/main ]; then
+            echo "COMPOSE_FILE=docker-compose.lean.yml:docker-compose.lean.ci.yml:docker-compose.lean.ci-write.yml" >> "$GITHUB_ENV"
+          fi
       - name: boot the four lean images as one host
         run: |
-          docker compose -f docker-compose.lean.yml up -d --build
+          docker compose up -d --build
           for i in $(seq 1 90); do
             code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5440/health || true)
             [ "$code" = "200" ] && echo "proxy serving after ${i}s" && exit 0
             sleep 1
           done
-          echo '--- compose state ---'; docker compose -f docker-compose.lean.yml ps; exit 1
+          echo '--- compose state ---'; docker compose ps; exit 1
       - name: walk it (health, mint, publish, serve, query)
         run: node scripts/test-compose-lean.mjs http://127.0.0.1:5440
       - if: failure()
-        run: docker compose -f docker-compose.lean.yml logs
+        run: docker compose logs
       - if: always()
-        run: docker compose -f docker-compose.lean.yml down -v --remove-orphans || true
+        run: docker compose down -v --remove-orphans || true
 
   # The stable roll-up: one name for humans, rulesets, and the merge button,
   # whatever the matrix above looks like this month. Runs on failure too —

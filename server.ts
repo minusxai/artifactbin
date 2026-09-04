@@ -66,7 +66,6 @@ async function main(): Promise<void> {
   };
 
   const { getDb } = await import('@/lib/db');
-  const { verifyObjectStore } = await import('@/lib/object-store');
   const { createAppServer } = await import('@/server/app');
 
   // An image built without an engine or a browser needs to be told where they
@@ -92,8 +91,6 @@ async function main(): Promise<void> {
   }
 
   const db = await getDb();
-  const store = await verifyObjectStore();
-  console.log(`[boot] object store ${store.backend} ok (${store.ms}ms)`);
   const raw = db.raw();
   const queryable = { query: async <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => (await db.query<T>(sql, params)) as { rows: T[] } };
 

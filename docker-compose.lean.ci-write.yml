@@ -1,0 +1,23 @@
+# CI ONLY, and ONLY on a push to main — PUBLISH the layer cache the pull requests read.
+#
+# Writing is separated from reading because exporting layers is not free, and this repo has already been
+# bitten by paying for it: the full image's cache is deliberately `mode=min` because `mode=max`'s export
+# was a large share of a 339s build (see .github/workflows/ci.yml). The browser image carries Chromium and
+# is the biggest of the four, so a PR that exported it would pay that cost on every run — and the repo's
+# 10 GB Actions cache is shared, so PR writes would evict the entries the `image` job depends on.
+#
+# Publishing from main alone: PRs pay nothing, the budget holds one copy per service, and main's layers
+# stay valid for as long as a service is untouched, which for proxy, sql and browser is most of the time.
+services:
+  proxy:
+    build:
+      cache_to: ["type=gha,mode=min,scope=lean-proxy"]
+  app:
+    build:
+      cache_to: ["type=gha,mode=min,scope=lean-app"]
+  sql:
+    build:
+      cache_to: ["type=gha,mode=min,scope=lean-sql"]
+  browser:
+    build:
+      cache_to: ["type=gha,mode=min,scope=lean-browser"]

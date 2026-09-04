@@ -13,9 +13,9 @@
  *
  * DELIBERATELY SHALLOW — it does not touch the database or the object store.
  * A probe that fails when Postgres blips restarts a server that would have
- * recovered on its own, and the store already has a BOOT canary
- * (instrumentation.ts `verifyObjectStore`) which fails startup loudly with the
- * store named. Answering here means the event loop is alive and routing works,
+ * recovered on its own, and whether the object store is reachable is the
+ * DEPLOYER's question, answered where the configuration is set rather than by
+ * every process that starts. Answering here means the event loop is alive and routing works,
  * which is exactly what an orchestrator should restart a container over.
  */
 
