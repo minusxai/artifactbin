@@ -25,7 +25,7 @@ async function owner(name = 'owner') {
   return { token: t.token, tokenId: t.id, userId: u.id, cookie: await agentCookie([t.id]) };
 }
 const create = async (token: string, body: Record<string, unknown>) => j(await createRoute(request('/api/artifacts', { method: 'POST', json: body, token })));
-const get = async (token: string, id: string) => j(await getRoute(request(`/api/artifacts/${id}`, { token }), params(id)));
+const readBack = async (token: string, id: string) => j(await getRoute(request(`/api/artifacts/${id}`, { token }), params(id)));
 const move = async (cookie: string, id: string, parent_id: string | null) =>
   j(await patchMineRoute(request(`/api/my/artifacts/${id}`, { method: 'PATCH', json: { parent_id }, cookie, origin: 'same' }), params(id)));
 
@@ -40,7 +40,7 @@ describe('creating a folder', () => {
     expect(row.source).toContain(`ref_${r.body.id}`);
     expect(row.source).toContain('<Files data="$children"');
     expect(row.content).toBe('');
-    const g = await get(o.token, r.body.id);
+    const g = await readBack(o.token, r.body.id);
     expect(g.body.format).toBe('folder');
     expect(g.body.parent_id).toBeNull();
     expect(g.body.ancestor_ids).toEqual([]);
@@ -62,10 +62,10 @@ describe('filing under a folder', () => {
     const f = (await create(o.token, { format: 'folder', title: 'Reports' })).body;
     const d = await create(o.token, { markup: '<h1>Q3</h1>', title: 'Q3', parent_id: f.id });
     expect(d.status, JSON.stringify(d.body)).toBe(201);
-    expect((await get(o.token, d.body.id)).body).toMatchObject({ parent_id: f.id, ancestor_ids: [f.id] });
+    expect((await readBack(o.token, d.body.id)).body).toMatchObject({ parent_id: f.id, ancestor_ids: [f.id] });
     const sub = (await create(o.token, { format: 'folder', title: '2026', parent_id: f.id })).body;
     const deep = (await create(o.token, { markup: '<p>deep</p>', parent_id: sub.id })).body;
-    expect((await get(o.token, deep.id)).body).toMatchObject({ parent_id: sub.id, ancestor_ids: [f.id, sub.id] });
+    expect((await readBack(o.token, deep.id)).body).toMatchObject({ parent_id: sub.id, ancestor_ids: [f.id, sub.id] });
   });
 
   it('a parent that is unknown, not a folder, or another owner\'s folder is one refusal: invalid_parent', async () => {
