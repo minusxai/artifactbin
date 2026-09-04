@@ -27,7 +27,7 @@ import { mintExportKey } from './export-key';
 import { json } from './http';
 import { objectStore } from './object-store';
 import { urlSelection } from './story/url-values';
-import { SOCIAL_PREVIEW_OVERVIEW_GENERATION, socialPreviewCrop, type SocialPreviewCrop } from './story/social-preview';
+import { SOCIAL_PREVIEW_OVERVIEW_GENERATION, parseSocialPreviewCrop, socialPreviewCrop, type SocialPreviewCrop } from './story/social-preview';
 
 export const EXPORT_MIME = { png: 'image/png', jpg: 'image/jpeg' } as const;
 export type ExportFormat = keyof typeof EXPORT_MIME;
@@ -222,7 +222,11 @@ async function renderOnce(
     // body (for crawlers), which may itself contain a <Video> player frame —
     // `first()` then measured the player and cropped every card to its width.
     selector: input.target,
-    capture: slide > 0 ? { slide } : capture === 'card' && crop ? { card: crop } : capture,
+    capture: slide > 0
+      ? { slide }
+      : (capture === 'card' || capture === 'preview') && crop
+        ? { card: crop }
+        : capture,
     // Same-origin requests are the app itself; anything cross-origin is a
     // stray — abort it, which doubles as the CSP discipline for the surface.
     sameOriginOnly: true,
@@ -261,14 +265,26 @@ export function renderArtifactImage(
   // instead — which only the retired html tier ever had.
   /** `selection` is the CANONICAL token from urlSelection — a raw search string here
    * would give one document unlimited keys for byte-identical renders. */
-  opts: { pageUrl: () => string; target: string; capture?: ExportCapture; slide?: number; selection?: string; crop?: SocialPreviewCrop },
+  opts: {
+    pageUrl: () => string;
+    target: string;
+    capture?: ExportCapture;
+    slide?: number;
+    selection?: string;
+    crop?: SocialPreviewCrop;
+    /** Editor-only draft crops stay in the bounded memory LRU, never durable storage. */
+    volatile?: boolean;
+  },
 ): Promise<RenderResult> {
   const s = state();
   const capture = opts.capture ?? 'full';
   const slide = opts.slide ?? 0;
   // The reader's `<Value>` picks, when this shot is of a selected document.
   const selection = opts.selection ?? '';
-  const captureKey = exportCaptureKey(capture, slide, selection);
+  const draftKey = opts.volatile && opts.crop
+    ? `-draft-${opts.crop.x}-${opts.crop.y}-${opts.crop.width}`
+    : '';
+  const captureKey = `${exportCaptureKey(capture, slide, selection)}${draftKey}`;
   const key = `${artifact.id}:${artifact.version}:${captureKey}:${format}`;
   const hit = s.cache.get(key);
   if (hit) return Promise.resolve({ ok: true, ...hit });
@@ -277,14 +293,14 @@ export function renderArtifactImage(
   // stale entry just goes cold — no invalidation to run, ever. One render
   // then serves every og unfurl and profile thumbnail for that version,
   // across restarts.
-  const storeKey = exportStoreKey(artifact, format, capture, slide, selection);
+  const storeKey = opts.volatile ? null : exportStoreKey(artifact, format, capture, slide, selection);
   const input: RenderInput = { urlFor: opts.pageUrl, target: opts.target };
   const run = s.chain.then(async (): Promise<RenderResult> => {
     const cached = s.cache.get(key); // a queued twin may have filled it
-    const stored = cached ?? (await objectStore().get(storeKey).then(
+    const stored = cached ?? (storeKey ? await objectStore().get(storeKey).then(
       (bytes) => ({ mime: EXPORT_MIME[format], bytes }),
       () => null,
-    ));
+    ) : null);
     if (stored) {
       if (!cached) remember(s, key, stored);
       return { ok: true, ...stored };
@@ -314,7 +330,7 @@ export function renderArtifactImage(
     if (!rendered.ok) return rendered.reason === 'navigation' ? { ok: false, reason: 'failed' } : rendered;
     const shot = { mime: rendered.mime, bytes: rendered.bytes };
     // Best-effort persist: a failed put costs a re-render later, never the shot.
-    await objectStore().put(storeKey, shot.bytes, shot.mime).catch(() => {});
+    if (storeKey) await objectStore().put(storeKey, shot.bytes, shot.mime).catch(() => {});
     remember(s, key, shot);
     return { ok: true, ...shot };
   });
@@ -349,7 +365,7 @@ export async function exportImageResponse(
   // `source` is here so the SELECTION can be read the way the document itself
   // reads it — through its own declarations. See `selection` below.
   artifact: Pick<ArtifactRow, 'id' | 'version' | 'format' | 'source'>,
-  q: { format?: string | null; mode?: string | null; slide?: string | null; search?: string | null },
+  q: { format?: string | null; mode?: string | null; slide?: string | null; crop?: string | null; search?: string | null },
   base: string,
 ): Promise<Response> {
   // Default png; anything unrecognized is a client error rather than a
@@ -364,6 +380,10 @@ export async function exportImageResponse(
   // One slide of a deck, 1-based. Absent is 0 — the whole document.
   const slide = parseExportSlide(q.slide ?? null);
   if (slide === null) return json({ error: 'unknown_slide', hint: 'slide is a 1-based slide number, e.g. ?slide=2' }, 400);
+  const draftCrop = capture === 'preview' && q.crop ? parseSocialPreviewCrop(q.crop) : null;
+  if (capture === 'preview' && q.crop && !draftCrop) {
+    return json({ error: 'unknown_crop', hint: 'crop must be x=<px>;y=<px>;width=<px>' }, 400);
+  }
 
   /*
    * THE READER'S SELECTION, forwarded to the page this shoots — so
@@ -390,8 +410,10 @@ export async function exportImageResponse(
 
   const rendered = await renderArtifactImage(artifact, format, {
     capture,
-    ...(capture === 'card' && artifact.format === 'markup'
-      ? { crop: socialPreviewCrop(artifact.source ?? '') }
+    ...(draftCrop
+      ? { crop: draftCrop, volatile: true }
+      : capture === 'card' && artifact.format === 'markup'
+        ? { crop: socialPreviewCrop(artifact.source ?? '') }
       : {}),
     ...(selection.token ? { selection: selection.token } : {}),
     // The headless browser has no session, so a private page would 404 on
@@ -429,7 +451,9 @@ export async function exportImageResponse(
       // version-busted URL (&v=), so they may cache hard. Editor previews are
       // private-cacheable; full shots keep no-store so an agent re-asking
       // after an edit never sees stale output.
-      'Cache-Control': capture === 'card'
+      'Cache-Control': draftCrop
+        ? 'private, no-store'
+        : capture === 'card'
         ? 'public, max-age=86400'
         : capture === 'preview'
           ? 'private, max-age=86400'

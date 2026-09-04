@@ -1,6 +1,6 @@
 /**
  * Editable social preview, end to end against a running server:
- * owner chrome → bounded overview → keyboard position/resize → source edit →
+ * owner chrome → focused cropper → keyboard position/resize → source edit →
  * exact 1600×840 card → reset back to the top-left default.
  */
 import { chromium } from 'playwright';
@@ -48,7 +48,7 @@ try {
   await page.getByLabel('Edit social preview').click();
   const dialog = page.getByRole('dialog', { name: 'Social preview' });
   await dialog.waitFor();
-  await dialog.getByAltText('Full artifact overview').waitFor({ state: 'visible', timeout: 30_000 });
+  await dialog.getByAltText('Artifact preview').waitFor({ state: 'visible', timeout: 30_000 });
   const frame = dialog.getByLabel('Move social preview crop');
   await frame.waitFor({ timeout: 30_000 });
 
@@ -65,7 +65,8 @@ try {
   if (!frameBox) throw new Error('crop frame has no layout box');
   await page.mouse.move(frameBox.x + frameBox.width / 2, frameBox.y + frameBox.height / 2);
   await page.mouse.down();
-  await page.mouse.move(frameBox.x + frameBox.width / 2 + 20, frameBox.y + frameBox.height / 2 + 12);
+  // Dragging pans the document: left/up reveals a region farther right/down.
+  await page.mouse.move(frameBox.x + frameBox.width / 2 - 20, frameBox.y + frameBox.height / 2 - 12);
   await page.mouse.up();
   check(!String(await frame.getAttribute('aria-valuetext')).startsWith('x 0, y 0,'), 'pointer drag positions the crop');
 

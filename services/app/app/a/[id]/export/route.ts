@@ -46,5 +46,11 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // `search` carries the reader's `<Value>` picks straight through to the page
   // this shoots (lib/story/url-values) — the raw route is the one door that
   // validates them, so an export cannot disagree with what it photographs.
-  return exportImageResponse(artifact, { format: q.get('format'), mode: q.get('mode'), slide: q.get('slide'), search: new URL(request.url).search }, baseUrl(request));
+  return exportImageResponse(artifact, {
+    format: q.get('format'),
+    mode: q.get('mode'),
+    slide: q.get('slide'),
+    crop: q.get('crop'),
+    search: new URL(request.url).search,
+  }, baseUrl(request));
 }

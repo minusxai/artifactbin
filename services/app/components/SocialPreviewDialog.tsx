@@ -20,6 +20,9 @@ const rounded = (crop: SocialPreviewCrop): SocialPreviewCrop => ({
   width: Math.round(crop.width),
 });
 
+const CAMERA_PADDING = 1.08;
+const RESIZE_OUTWARD_SENSITIVITY = 1.5;
+
 const clampCrop = (crop: SocialPreviewCrop, sourceHeight: number): SocialPreviewCrop => {
   const width = Math.min(SOCIAL_PREVIEW_WIDTH, Math.max(SOCIAL_PREVIEW_MIN_CROP_WIDTH, crop.width));
   const height = socialPreviewCropHeight(width);
@@ -36,6 +39,8 @@ type Interaction = {
   clientX: number;
   clientY: number;
   crop: SocialPreviewCrop;
+  camera: SocialPreviewCrop;
+  latest: SocialPreviewCrop;
 };
 
 interface SaveResponse {
@@ -54,6 +59,9 @@ export default function SocialPreviewDialog({ id, source, editId, version, onClo
 }) {
   const initialSaved = useMemo(() => savedSocialPreviewCrop(source), [source]);
   const [crop, setCrop] = useState<SocialPreviewCrop>(initialSaved ?? DEFAULT_SOCIAL_PREVIEW_CROP);
+  const [camera, setCamera] = useState<SocialPreviewCrop>(initialSaved ?? DEFAULT_SOCIAL_PREVIEW_CROP);
+  const [interacting, setInteracting] = useState(false);
+  const [loadedFocusedUrl, setLoadedFocusedUrl] = useState('');
   const [reset, setReset] = useState(false);
   const [sourceHeight, setSourceHeight] = useState(SOCIAL_PREVIEW_HEIGHT);
   const [imageReady, setImageReady] = useState(false);
@@ -70,6 +78,13 @@ export default function SocialPreviewDialog({ id, source, editId, version, onClo
   const previewUrl = `/a/${id}/export?mode=preview&format=jpg&v=${version}&pv=${SOCIAL_PREVIEW_OVERVIEW_GENERATION}${previewAttempt ? `&attempt=${previewAttempt}` : ''}`;
   const height = socialPreviewCropHeight(crop.width);
   const magnification = Math.round(SOCIAL_PREVIEW_WIDTH / crop.width * 100);
+  const focusedCrop = rounded(crop);
+  const focusedUrl = `/a/${id}/export?mode=preview&format=png&v=${version}&pv=${SOCIAL_PREVIEW_OVERVIEW_GENERATION}&focus=1&crop=${encodeURIComponent(`x=${focusedCrop.x};y=${focusedCrop.y};width=${focusedCrop.width}`)}`;
+  const focusedReady = loadedFocusedUrl === focusedUrl;
+  const cameraHeight = socialPreviewCropHeight(camera.width) * CAMERA_PADDING;
+  const cameraWidth = camera.width * CAMERA_PADDING;
+  const cameraX = camera.x - (cameraWidth - camera.width) / 2;
+  const cameraY = camera.y - (cameraHeight - socialPreviewCropHeight(camera.width)) / 2;
 
   useEffect(() => { closeRef.current?.focus(); }, []);
 
@@ -91,7 +106,9 @@ export default function SocialPreviewDialog({ id, source, editId, version, onClo
 
   const update = useCallback((next: SocialPreviewCrop) => {
     setReset(false);
-    setCrop(clampCrop(next, sourceHeight));
+    const clamped = clampCrop(next, sourceHeight);
+    setCrop(clamped);
+    setCamera(clamped);
   }, [sourceHeight]);
 
   const onImageLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
@@ -99,7 +116,11 @@ export default function SocialPreviewDialog({ id, source, editId, version, onClo
     const density = image.naturalWidth / SOCIAL_PREVIEW_WIDTH;
     const measuredHeight = density > 0 ? image.naturalHeight / density : SOCIAL_PREVIEW_HEIGHT;
     setSourceHeight(Math.max(SOCIAL_PREVIEW_HEIGHT, measuredHeight));
-    setCrop((current) => clampCrop(current, Math.max(SOCIAL_PREVIEW_HEIGHT, measuredHeight)));
+    setCrop((current) => {
+      const clamped = clampCrop(current, Math.max(SOCIAL_PREVIEW_HEIGHT, measuredHeight));
+      setCamera(clamped);
+      return clamped;
+    });
     setImageReady(true);
     setImageFailed(false);
   };
@@ -108,7 +129,16 @@ export default function SocialPreviewDialog({ id, source, editId, version, onClo
     event.preventDefault();
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
-    interaction.current = { pointerId: event.pointerId, kind, clientX: event.clientX, clientY: event.clientY, crop };
+    setInteracting(true);
+    interaction.current = {
+      pointerId: event.pointerId,
+      kind,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      crop,
+      camera,
+      latest: crop,
+    };
   };
 
   const move = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -116,18 +146,32 @@ export default function SocialPreviewDialog({ id, source, editId, version, onClo
     if (!held || held.pointerId !== event.pointerId || !frameRef.current) return;
     const previewWidth = frameRef.current.parentElement?.getBoundingClientRect().width ?? 0;
     if (previewWidth <= 0) return;
-    const scale = SOCIAL_PREVIEW_WIDTH / previewWidth;
+    const scale = held.camera.width * CAMERA_PADDING / previewWidth;
     const dx = (event.clientX - held.clientX) * scale;
     const dy = (event.clientY - held.clientY) * scale;
     const ratio = SOCIAL_PREVIEW_HEIGHT / SOCIAL_PREVIEW_WIDTH;
-    const resizeDelta = (dx + ratio * dy) / (1 + ratio * ratio);
-    update(held.kind === 'move'
-      ? { ...held.crop, x: held.crop.x + dx, y: held.crop.y + dy }
-      : { ...held.crop, width: held.crop.width + resizeDelta });
+    const rawResizeDelta = (dx + ratio * dy) / (1 + ratio * ratio);
+    const resizeDelta = rawResizeDelta > 0
+      ? rawResizeDelta * RESIZE_OUTWARD_SENSITIVITY
+      : rawResizeDelta;
+    const next = clampCrop(held.kind === 'move'
+      // Once focused, dragging pans the document beneath the output frame.
+      ? { ...held.crop, x: held.crop.x - dx, y: held.crop.y - dy }
+      : { ...held.crop, width: held.crop.width + resizeDelta }, sourceHeight);
+    held.latest = next;
+    setReset(false);
+    setCrop(next);
+    // Keep inward resizing spatially stable, then focus it on release. When
+    // resizing outward, reveal more of the page as the handle approaches it.
+    if (held.kind === 'move' || next.width >= held.crop.width) setCamera(next);
   };
 
   const end = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (interaction.current?.pointerId === event.pointerId) interaction.current = null;
+    const held = interaction.current;
+    if (held?.pointerId !== event.pointerId) return;
+    interaction.current = null;
+    setInteracting(false);
+    setCamera(held.latest);
   };
 
   const moveByKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -184,40 +228,28 @@ export default function SocialPreviewDialog({ id, source, editId, version, onClo
           <div>
             <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-accent">Share card</p>
             <h2 className="mt-1 font-sans text-base font-semibold text-fg">Social preview</h2>
-            <p className="mt-1 font-sans text-xs text-muted">Drag to position. Resize the locked 40:21 frame to magnify.</p>
+            <p className="mt-1 font-sans text-xs text-muted">Drag to pan. Resize the locked 40:21 frame; release to focus.</p>
           </div>
           <button ref={closeRef} type="button" aria-label="Cancel social preview" onClick={onClose} className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-edge bg-transparent text-muted hover:bg-raised hover:text-fg"><X size={15} /></button>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-auto bg-ground p-3 sm:p-5">
-          {imageReady && (
-            <div className="sticky top-0 z-20 mb-3 ml-auto w-full max-w-sm overflow-hidden rounded-[6px] border border-edge-bright bg-surface shadow-lg" aria-label="Magnified social preview">
-              <div className="flex items-center justify-between border-b border-edge px-2.5 py-1.5 font-mono text-[9px] uppercase tracking-[0.12em] text-muted">
-                <span>selected card</span>
-                <span>{magnification}%</span>
-              </div>
-              <div className="relative aspect-[40/21] overflow-hidden bg-raised">
-                {/* The overview gives immediate feedback; the saved card is independently rasterized at output density. */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={previewUrl}
-                  alt=""
-                  aria-hidden="true"
-                  draggable={false}
-                  className="pointer-events-none absolute max-w-none select-none"
-                  style={{
-                    width: `${SOCIAL_PREVIEW_WIDTH / crop.width * 100}%`,
-                    height: 'auto',
-                    left: `${-crop.x / crop.width * 100}%`,
-                    top: `${-crop.y / height * 100}%`,
-                  }}
-                />
-              </div>
-            </div>
-          )}
-          <div className="relative mx-auto min-h-48 overflow-hidden border border-edge bg-surface" aria-label="Social preview overview">
+        <div className="min-h-0 flex-1 bg-ground p-3 sm:p-5">
+          <div className="relative mx-auto aspect-[40/21] max-h-full overflow-hidden border border-edge bg-surface" aria-label="Social preview canvas">
             {/* eslint-disable-next-line @next/next/no-img-element -- this is an authenticated generated export. */}
-            <img key={previewAttempt} src={previewUrl} alt="Full artifact overview" draggable={false} onLoad={onImageLoad} onError={() => { setImageFailed(true); setImageReady(false); }} className="block h-auto w-full select-none" />
+            <img
+              key={previewAttempt}
+              src={previewUrl}
+              alt="Artifact preview"
+              draggable={false}
+              onLoad={onImageLoad}
+              onError={() => { setImageFailed(true); setImageReady(false); }}
+              className={`pointer-events-none absolute h-auto max-w-none select-none ease-out motion-reduce:transition-none ${interacting ? '' : 'transition-[left,top,width] duration-200'}`}
+              style={{
+                width: `${SOCIAL_PREVIEW_WIDTH / cameraWidth * 100}%`,
+                left: `${-cameraX / cameraWidth * 100}%`,
+                top: `${-cameraY / cameraHeight * 100}%`,
+              }}
+            />
             {!imageReady && !imageFailed && (
               <div role="status" aria-live="polite" className="absolute inset-0 flex min-h-48 flex-col items-center justify-center gap-3 bg-surface px-4 text-center font-mono text-xs text-muted">
                 <span aria-hidden="true" className="h-5 w-5 animate-spin rounded-full border-2 border-edge-bright border-t-accent motion-reduce:animate-none" />
@@ -243,15 +275,36 @@ export default function SocialPreviewDialog({ id, source, editId, version, onClo
                 onPointerMove={move}
                 onPointerUp={end}
                 onPointerCancel={end}
-                className="absolute cursor-move border-2 border-accent shadow-[0_0_0_9999px_rgba(0,0,0,0.55)] outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2"
+                className={`absolute cursor-move border-2 border-accent shadow-[0_0_0_9999px_rgba(0,0,0,0.55)] outline-none ease-out focus:ring-2 focus:ring-accent focus:ring-offset-2 motion-reduce:transition-none ${interacting ? '' : 'transition-[left,top,width,height] duration-200'}`}
                 style={{
-                  left: `${crop.x / SOCIAL_PREVIEW_WIDTH * 100}%`,
-                  top: `${crop.y / sourceHeight * 100}%`,
-                  width: `${crop.width / SOCIAL_PREVIEW_WIDTH * 100}%`,
-                  height: `${height / sourceHeight * 100}%`,
+                  left: `${(crop.x - cameraX) / cameraWidth * 100}%`,
+                  top: `${(crop.y - cameraY) / cameraHeight * 100}%`,
+                  width: `${crop.width / cameraWidth * 100}%`,
+                  height: `${height / cameraHeight * 100}%`,
                   touchAction: 'none',
                 }}
               >
+                {!interacting && (
+                  <>
+                    {/* A crop-sized render replaces the overview after each gesture, so magnification never enlarges overview pixels. */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      key={focusedUrl}
+                      src={focusedUrl}
+                      alt=""
+                      aria-hidden="true"
+                      draggable={false}
+                      onLoad={() => setLoadedFocusedUrl(focusedUrl)}
+                      className={`pointer-events-none absolute inset-0 h-full w-full select-none transition-opacity duration-150 motion-reduce:transition-none ${focusedReady ? 'opacity-100' : 'opacity-0'}`}
+                    />
+                    {!focusedReady && (
+                      <span aria-live="polite" className="absolute right-1.5 top-1.5 flex items-center gap-1.5 bg-black/65 px-2 py-1 font-mono text-[9px] text-white">
+                        <span aria-hidden="true" className="h-2.5 w-2.5 animate-spin rounded-full border border-white/40 border-t-white motion-reduce:animate-none" />
+                        sharpening…
+                      </span>
+                    )}
+                  </>
+                )}
                 <span className="absolute left-1 top-1 bg-accent px-1.5 py-1 font-mono text-[9px] text-white">1600 × 840 · {magnification}%</span>
                 <div
                   role="slider"
@@ -279,7 +332,7 @@ export default function SocialPreviewDialog({ id, source, editId, version, onClo
             <button
               type="button"
               aria-label="Reset social preview"
-              onClick={() => { setCrop(DEFAULT_SOCIAL_PREVIEW_CROP); setReset(true); setError(''); }}
+              onClick={() => { setCrop(DEFAULT_SOCIAL_PREVIEW_CROP); setCamera(DEFAULT_SOCIAL_PREVIEW_CROP); setReset(true); setError(''); }}
               className="inline-flex cursor-pointer items-center gap-1.5 rounded-[5px] border-0 bg-transparent px-2 py-2 font-mono text-xs text-muted hover:bg-raised hover:text-fg"
             >
               <RotateCcw size={13} /> reset

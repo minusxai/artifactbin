@@ -8,7 +8,7 @@ afterEach(() => {
 });
 
 const loadOverview = () => {
-  const image = screen.getByAltText('Full artifact overview') as HTMLImageElement;
+  const image = screen.getByAltText('Artifact preview') as HTMLImageElement;
   Object.defineProperty(image, 'naturalWidth', { configurable: true, value: 400 });
   Object.defineProperty(image, 'naturalHeight', { configurable: true, value: 420 });
   fireEvent.load(image);
@@ -34,13 +34,16 @@ describe('social preview dialog', () => {
         onClose={close}
       />,
     );
-    expect(screen.getByAltText('Full artifact overview')).toHaveAttribute(
+    expect(screen.getByAltText('Artifact preview')).toHaveAttribute(
       'src', '/a/story1/export?mode=preview&format=jpg&v=4&pv=2',
     );
     expect(screen.getByRole('status')).toHaveTextContent('rendering full-page overview');
     loadOverview();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Magnified social preview')).toHaveTextContent('selected card');
+    expect(screen.getByLabelText('Social preview canvas')).toBeInTheDocument();
+    expect(document.querySelector('img[aria-hidden="true"]')).toHaveAttribute(
+      'src', '/a/story1/export?mode=preview&format=png&v=4&pv=2&focus=1&crop=x%3D300%3By%3D900%3Bwidth%3D800',
+    );
     fireEvent.click(screen.getByLabelText('Reset social preview'));
     fireEvent.click(screen.getByText('save preview'));
     await waitFor(() => expect(close).toHaveBeenCalled());
@@ -63,6 +66,35 @@ describe('social preview dialog', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const sent = JSON.parse(fetchMock.mock.calls[0][1]?.body as string);
     expect(sent.source).toContain('content="x=0;y=10;width=1580"');
+  });
+
+  it('keeps an inward resize stable, then focuses and sharpens it on release', () => {
+    render(
+      <SocialPreviewDialog
+        id="story1"
+        source={'<Helmet><meta name="artifactbin:og-crop" content="x=300;y=900;width=800" /></Helmet><p>x</p>'}
+        editId="e1"
+        version={4}
+        onClose={() => {}}
+      />,
+    );
+    loadOverview();
+    const canvas = screen.getByLabelText('Social preview canvas');
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({ width: 800 } as DOMRect);
+    const overview = screen.getByAltText('Artifact preview');
+    const frame = screen.getByLabelText('Move social preview crop');
+    const resize = screen.getByLabelText('Resize social preview crop');
+    resize.setPointerCapture = vi.fn();
+    const before = overview.style.width;
+
+    fireEvent.pointerDown(resize, { pointerId: 1, clientX: 700, clientY: 400 });
+    fireEvent.pointerMove(resize, { pointerId: 1, clientX: 600, clientY: 350 });
+    expect(overview.style.width).toBe(before);
+    expect(frame).not.toHaveAttribute('aria-valuetext', 'x 300, y 900, width 800');
+
+    fireEvent.pointerUp(resize, { pointerId: 1 });
+    expect(overview.style.width).not.toBe(before);
+    expect(document.querySelector('img[src*="focus=1"]')).toHaveAttribute('src', expect.stringContaining('width%3D693'));
   });
 
   it('keeps the draft framing when a concurrent edit moves the document head', async () => {

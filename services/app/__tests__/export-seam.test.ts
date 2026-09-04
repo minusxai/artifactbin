@@ -103,6 +103,30 @@ describe('the export route through the browser seam', () => {
     expect(unsupported.status).toBe(404);
   });
 
+  it('renders an editor draft crop sharply without making it a durable public card', async () => {
+    browser();
+    const t = await mintToken('draft-owner');
+    const row = await createArtifact(t.id, null, {
+      format: 'markup', content: '', source: '<div>hi</div>', meta: {}, title: 'hi', description: null,
+    });
+    const res = await exportImage(new Request(
+      `${BASE}/a/${row.id}/export?mode=preview&format=png&crop=x%3D120%3By%3D640%3Bwidth%3D600`,
+      { headers: { authorization: `Bearer ${t.token}` } },
+    ), params(row.id));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toBe('private, no-store');
+    expect(lastRequest()).toMatchObject({
+      capture: { card: { x: 120, y: 640, width: 600 } },
+      viewport: { width: 1600, height: 840 },
+    });
+
+    const invalid = await exportImage(new Request(
+      `${BASE}/a/${row.id}/export?mode=preview&crop=nope`,
+      { headers: { authorization: `Bearer ${t.token}` } },
+    ), params(row.id));
+    expect(invalid.status).toBe(400);
+  });
+
   it('a slide capture forwards { slide: n }', async () => {
     browser();
     const id = await doc();
