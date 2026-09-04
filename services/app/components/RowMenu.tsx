@@ -24,6 +24,13 @@ export interface RowMenuItem {
   icon: React.ReactNode;
   onSelect: () => void;
   danger?: boolean;
+  /**
+   * OFFERED BUT REFUSED. A row that simply drops the item leaves the person
+   * wondering where it went; one that is visibly unavailable says what the
+   * rule is — which is why the caller puts the reason in `text`
+   * ("delete (12 inside)").
+   */
+  disabled?: boolean;
 }
 
 const ICON_ACTION =
@@ -71,7 +78,8 @@ export default function RowMenu({ name, items }: { name: string; items: RowMenuI
               key={item.label}
               type="button"
               aria-label={item.label}
-              className={`flex w-full cursor-pointer items-center gap-2 rounded-[4px] px-2 py-1 text-left text-muted hover:bg-raised ${item.danger ? 'hover:text-danger' : 'hover:text-fg'}`}
+              disabled={item.disabled}
+              className={`flex w-full items-center gap-2 rounded-[4px] px-2 py-1 text-left text-muted disabled:cursor-not-allowed disabled:text-faint disabled:hover:bg-transparent enabled:cursor-pointer enabled:hover:bg-raised ${item.danger ? 'enabled:hover:text-danger' : 'enabled:hover:text-fg'}`}
               onClick={() => {
                 setOpen(false);
                 item.onSelect();

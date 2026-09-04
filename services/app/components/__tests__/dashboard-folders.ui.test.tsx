@@ -15,6 +15,36 @@ beforeEach(() => {
   }));
 });
 
+describe('a folder tile carries the folder\u2019s own actions', () => {
+  const child = { ...doc, id: 'chd001', url: '/a/chd001', title: 'Inside', parent_id: 'rep001', ancestor_ids: ['rep001'] };
+  const empty = { ...folder, id: 'emp001', url: '/a/emp001', title: 'Empty' };
+
+  it('refuses to delete a folder with anything in it, and says how much', () => {
+    render(<Shelf actions="full" rows={[folder, empty, child] as never} />);
+    fireEvent.click(screen.getByLabelText('More actions for Reports'));
+    const del = screen.getByLabelText('Delete Reports') as HTMLButtonElement;
+    // Deleting a folder is deleting everything in it, so it has to be
+    // something someone chose rather than discovered (P3 makes it a trash).
+    expect(del.disabled).toBe(true);
+    expect(del.textContent).toContain('1 inside');
+  });
+
+  it('an empty folder deletes like anything else', () => {
+    render(<Shelf actions="full" rows={[folder, empty, child] as never} />);
+    fireEvent.click(screen.getByLabelText('More actions for Empty'));
+    expect((screen.getByLabelText('Delete Empty') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('moves a folder through the same picker every row uses', () => {
+    render(<Shelf actions="full" rows={[folder, empty, child] as never} />);
+    fireEvent.click(screen.getByLabelText('More actions for Reports'));
+    fireEvent.click(screen.getByLabelText('Move Reports'));
+    // Its own subtree is greyed — the cycle rule, drawn.
+    expect((screen.getByLabelText('Move to Reports') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByLabelText('Move to Empty') as HTMLButtonElement).disabled).toBe(false);
+  });
+});
+
 describe('the folders strip', () => {
   it('is absent without folders and lists them as tiles linking to /a/<id> when present', () => {
     const { unmount } = render(<Shelf actions="full" rows={[doc] as never} />);

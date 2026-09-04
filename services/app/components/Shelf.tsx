@@ -97,21 +97,27 @@ export interface ShelfProps {
  * adds over a document card is that a folder has no thumbnail worth taking (its
  * own card would be a picture of this listing) and a count instead.
  */
-function FolderTile({ row, count }: { row: ShelfRow; count: number }) {
+function FolderTile({ row, count, level, folders }: { row: ShelfRow; count: number; level: ShelfActions; folders: PickerFolder[] }) {
   return (
-    <li className={`reveal group relative ${PANEL} transition-colors hover:border-edge-bright`}>
+    <li className={`reveal group relative flex items-center gap-2 px-3 py-2.5 ${PANEL} transition-colors hover:border-edge-bright`}>
+      <Folder size={14} className="shrink-0 text-faint transition-colors group-hover:text-accent" />
+      {/* A STRETCHED LINK: the whole tile opens the folder, while the actions
+          beside it sit above the pseudo-element rather than inside the anchor
+          (a <button> in an <a> is invalid markup and swallows its own click). */}
       <a
         href={row.url}
         aria-label={`Open folder ${nameOf(row)}`}
-        className="flex items-center gap-2 px-3 py-2.5 no-underline"
+        className="min-w-0 flex-1 truncate font-mono text-sm font-semibold text-fg no-underline transition-colors after:absolute after:inset-0 group-hover:text-accent"
       >
-        <Folder size={14} className="shrink-0 text-faint transition-colors group-hover:text-accent" />
-        <span className="min-w-0 flex-1 truncate font-mono text-sm font-semibold text-fg transition-colors group-hover:text-accent">
-          {row.title ?? row.id}
-        </span>
-        <span className="shrink-0 font-mono text-[10px] tabular-nums text-faint">{count}</span>
-        {row.visibility && <VisibilityPill compact visibility={row.visibility} name={nameOf(row)} />}
+        {row.title ?? row.id}
       </a>
+      {/* Only when there IS one. This count is what THIS shelf holds under the
+          folder, and a profile's listing is root-scoped (its children are on
+          the folder's own page) — so a zero here would be a wrong number
+          rather than an empty folder. */}
+      {count > 0 && <span className="shrink-0 font-mono text-[10px] tabular-nums text-faint">{count}</span>}
+      {row.visibility && <VisibilityPill compact visibility={row.visibility} name={nameOf(row)} />}
+      <Actions row={row} level={level} folders={folders} childCount={count} />
     </li>
   );
 }
@@ -224,7 +230,7 @@ const nameOf = (row: ShelfRow) => row.title ?? row.id;
  * inside an <a> is invalid markup and swallows its own click. These sit above
  * that pseudo-element instead of inside the anchor.
  */
-function Actions({ row, level, folders }: { row: ShelfRow; level: ShelfActions; folders: PickerFolder[] }) {
+function Actions({ row, level, folders, childCount = 0 }: { row: ShelfRow; level: ShelfActions; folders: PickerFolder[]; childCount?: number }) {
   const [copied, setCopied] = useState(false);
   const [moving, setMoving] = useState(false);
   const [parentId, setParentId] = useState(row.parent_id ?? null);
@@ -269,9 +275,14 @@ function Actions({ row, level, folders }: { row: ShelfRow; level: ShelfActions; 
               },
               {
                 label: `Delete ${nameOf(row)}`,
-                text: 'delete',
+                // A FOLDER WITH ANYTHING IN IT IS REFUSED, with the count — the
+                // same answer the door gives (`folder_not_empty`), said before
+                // the click rather than after it, because deleting a folder is
+                // deleting everything in it. P3 turns this into a trash.
+                text: childCount > 0 ? `delete (${childCount} inside)` : 'delete',
                 icon: <Trash2 size={12} />,
                 danger: true,
+                disabled: childCount > 0,
                 onSelect: () => {
                   void confirmDeleteArtifact(row.id, nameOf(row)).then((ok) => ok && window.location.reload());
                 },
@@ -446,7 +457,11 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
     () => all.filter((r) => r.format === 'folder').map((r) => ({ id: r.id, title: r.title, ancestor_ids: r.ancestor_ids ?? [] })),
     [all],
   );
-  /** How many rows THIS shelf holds inside a folder. What the dashboard knows, no more. */
+  /**
+   * How many rows THIS shelf holds inside a folder — what the page was given
+   * and no more. The dashboard lists the whole account, so its number is the
+   * folder's; a profile lists the ROOT, so it has none to count and shows none.
+   */
   const inside = (id: string): number => all.filter((r) => r.parent_id === id).length;
 
   const filtering = Boolean(q) || picks.length > 0;
@@ -502,7 +517,7 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
           </div>
           <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {shelf.folders.map((row) => (
-              <FolderTile key={row.id} row={row} count={inside(row.id)} />
+              <FolderTile key={row.id} row={row} count={inside(row.id)} level={actions} folders={pickable} />
             ))}
           </ul>
         </section>
