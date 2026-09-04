@@ -5,6 +5,8 @@ export const SOCIAL_PREVIEW_META = 'artifactbin:og-crop';
 export const SOCIAL_PREVIEW_WIDTH = 1600;
 export const SOCIAL_PREVIEW_HEIGHT = 840;
 export const SOCIAL_PREVIEW_MIN_CROP_WIDTH = 400;
+/** Busts both the browser URL cache and durable render cache when overview pixels change. */
+export const SOCIAL_PREVIEW_OVERVIEW_GENERATION = 2;
 
 export interface SocialPreviewCrop {
   /** Top-left source coordinate in the canonical 1600px document layout. */

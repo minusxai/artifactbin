@@ -35,9 +35,11 @@ describe('social preview dialog', () => {
       />,
     );
     expect(screen.getByAltText('Full artifact overview')).toHaveAttribute(
-      'src', '/a/story1/export?mode=preview&format=jpg&v=4',
+      'src', '/a/story1/export?mode=preview&format=jpg&v=4&pv=2',
     );
+    expect(screen.getByRole('status')).toHaveTextContent('rendering full-page overview');
     loadOverview();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
     fireEvent.click(screen.getByLabelText('Reset social preview'));
     fireEvent.click(screen.getByText('save preview'));
     await waitFor(() => expect(close).toHaveBeenCalled());

@@ -27,7 +27,7 @@ import { mintExportKey } from './export-key';
 import { json } from './http';
 import { objectStore } from './object-store';
 import { urlSelection } from './story/url-values';
-import { socialPreviewCrop, type SocialPreviewCrop } from './story/social-preview';
+import { SOCIAL_PREVIEW_OVERVIEW_GENERATION, socialPreviewCrop, type SocialPreviewCrop } from './story/social-preview';
 
 export const EXPORT_MIME = { png: 'image/png', jpg: 'image/jpeg' } as const;
 export type ExportFormat = keyof typeof EXPORT_MIME;
@@ -105,7 +105,7 @@ function exportCaptureKey(capture: ExportCapture, slide: number, selection = '')
   const pick = selection ? `-p${createHash('sha256').update(selection).digest('hex').slice(0, 12)}` : '';
   if (slide > 0) return `slide-${slide}-g${EXPORT_RENDER_GENERATION}${pick}`;
   if (capture === 'card') return `card-${CARD_WIDTH}x${CARD_HEIGHT}-g${EXPORT_RENDER_GENERATION}${pick}`;
-  if (capture === 'preview') return `preview-g${EXPORT_RENDER_GENERATION}`;
+  if (capture === 'preview') return `preview-v${SOCIAL_PREVIEW_OVERVIEW_GENERATION}-g${EXPORT_RENDER_GENERATION}`;
   return `full-g${EXPORT_RENDER_GENERATION}${pick}`;
 }
 

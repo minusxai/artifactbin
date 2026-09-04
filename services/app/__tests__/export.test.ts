@@ -257,5 +257,6 @@ describe('the cache key names the renderer', () => {
     // A slice and a card are their own pictures, and say so.
     expect(exportStoreKey({ id: 'abc123', version: 3 }, 'png', 'full', 2)).toContain('slide-2');
     expect(exportStoreKey({ id: 'abc123', version: 3 }, 'png', 'card', 0)).toContain('card-');
+    expect(exportStoreKey({ id: 'abc123', version: 3 }, 'png', 'preview', 0)).toContain('preview-v2-');
   });
 });

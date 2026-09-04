@@ -10,7 +10,10 @@ import type { BrowserService, RenderRequest, RenderResult } from '@artifactbin/c
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_SETTLE_MS = 1_500;
-const PREVIEW_WIDTH = 400;
+// The editor can display the overview at ~850 CSS px on a 2x screen. Keeping
+// canonical horizontal resolution avoids enlarging a thumbnail while the
+// height cap still bounds unusually tall documents.
+const PREVIEW_WIDTH = 1_600;
 const PREVIEW_MAX_HEIGHT = 4_096;
 
 class NavigationError extends Error {}

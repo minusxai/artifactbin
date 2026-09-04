@@ -79,10 +79,10 @@ describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', re
     expect(at(600, 100)).toEqual([51, 204, 51]); // source y≈133: green band
     expect(at(600, 400)).toEqual([51, 51, 204]); // source y≈233: blue band
   });
-  it('produces a reduced-density overview using the same layout', async () => {
+  it('produces a height-bounded overview using the same layout', async () => {
     const r = await svc.render({ ...base(), capture: 'preview' });
     if (!r.ok) throw new Error(JSON.stringify(r));
-    expect(pngSize(r.bytes)).toEqual({ width: 400, height: 200 });
+    expect(pngSize(r.bytes)).toEqual({ width: 1600, height: 800 });
   });
   it('names a page that cannot be reached', async () => {
     const r = await svc.render({ ...base(), url: 'http://127.0.0.1:1/nope', timeoutMs: 2000 });

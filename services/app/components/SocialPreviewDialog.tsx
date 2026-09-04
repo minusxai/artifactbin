@@ -6,6 +6,7 @@ import {
   DEFAULT_SOCIAL_PREVIEW_CROP,
   SOCIAL_PREVIEW_HEIGHT,
   SOCIAL_PREVIEW_MIN_CROP_WIDTH,
+  SOCIAL_PREVIEW_OVERVIEW_GENERATION,
   SOCIAL_PREVIEW_WIDTH,
   savedSocialPreviewCrop,
   socialPreviewCropHeight,
@@ -66,7 +67,7 @@ export default function SocialPreviewDialog({ id, source, editId, version, onClo
   const frameRef = useRef<HTMLDivElement | null>(null);
   const interaction = useRef<Interaction | null>(null);
 
-  const previewUrl = `/a/${id}/export?mode=preview&format=jpg&v=${version}${previewAttempt ? `&attempt=${previewAttempt}` : ''}`;
+  const previewUrl = `/a/${id}/export?mode=preview&format=jpg&v=${version}&pv=${SOCIAL_PREVIEW_OVERVIEW_GENERATION}${previewAttempt ? `&attempt=${previewAttempt}` : ''}`;
   const height = socialPreviewCropHeight(crop.width);
   const magnification = Math.round(SOCIAL_PREVIEW_WIDTH / crop.width * 100);
 
@@ -189,10 +190,16 @@ export default function SocialPreviewDialog({ id, source, editId, version, onClo
         </header>
 
         <div className="min-h-0 flex-1 overflow-auto bg-ground p-3 sm:p-5">
-          <div className="relative mx-auto overflow-hidden border border-edge bg-surface" aria-label="Social preview overview">
+          <div className="relative mx-auto min-h-48 overflow-hidden border border-edge bg-surface" aria-label="Social preview overview">
             {/* eslint-disable-next-line @next/next/no-img-element -- this is an authenticated generated export. */}
             <img key={previewAttempt} src={previewUrl} alt="Full artifact overview" draggable={false} onLoad={onImageLoad} onError={() => { setImageFailed(true); setImageReady(false); }} className="block h-auto w-full select-none" />
-            {!imageReady && !imageFailed && <div className="absolute inset-0 flex min-h-48 items-center justify-center bg-surface font-mono text-xs text-muted">rendering overview…</div>}
+            {!imageReady && !imageFailed && (
+              <div role="status" aria-live="polite" className="absolute inset-0 flex min-h-48 flex-col items-center justify-center gap-3 bg-surface px-4 text-center font-mono text-xs text-muted">
+                <span aria-hidden="true" className="h-5 w-5 animate-spin rounded-full border-2 border-edge-bright border-t-accent motion-reduce:animate-none" />
+                <span>rendering full-page overview…</span>
+                <span className="text-[10px] text-faint">Complex artifacts can take a few seconds.</span>
+              </div>
+            )}
             {imageFailed && (
               <div role="status" className="absolute inset-0 flex min-h-48 flex-col items-center justify-center gap-3 bg-surface px-4 text-center font-mono text-xs text-muted">
                 <span>The overview could not be rendered.</span>
