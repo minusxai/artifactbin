@@ -37,6 +37,22 @@ export function sniffImageType(buf: Buffer): string | null {
   return null;
 }
 
+/**
+ * The type an ASSET the document embeds or links to actually is: an image, or
+ * a PDF. Nothing else — a font is fetched by a different door with a different
+ * cap, and a type this app does not serve is a refusal rather than a guess.
+ *
+ * `sniffImageType` is image-only BY CONSTRUCTION, which the PDF spike found the
+ * hard way: it does not know `%PDF-`, so a PDF handed to the image door is
+ * simply "not an image", and the tier that stores PDFs needs its own answer.
+ * The signature must be at the very start — a PDF hidden inside an html error
+ * page is an html error page.
+ */
+export function sniffAssetType(buf: Buffer): string | null {
+  if (startsWith(buf, '%PDF-')) return 'application/pdf';
+  return sniffImageType(buf);
+}
+
 /** Whether the bytes are a WOFF2 font — the only format the Google Fonts ingester stores. */
 export function isWoff2(buf: Buffer): boolean {
   return startsWith(buf, 'wOF2');

@@ -25,17 +25,17 @@
 import { getDb } from '@/lib/db';
 import { objectKey, objectStore } from '@/lib/object-store';
 import { optimiseImage } from '@/lib/images/optimise';
-import { MAX_IMAGE_BYTES } from '@/lib/config';
+import { MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/config';
 import { fetchWebResource } from '@/lib/web-ingest/fetch';
 import { WebIngestError } from '@/lib/web-ingest/guard';
-import { sniffImageType, sniffFontType } from '@/lib/web-ingest/sniff';
+import { sniffAssetType, sniffImageType, sniffFontType } from '@/lib/web-ingest/sniff';
 import { canonicalAssetUrl, urlHash } from '@/lib/story/asset-url';
 import { collectExternalAssetUrls } from '@/lib/story/external-images';
 import { assetByteQuotaExceeded } from '@/lib/asset-quota';
 import { webIngestRateLimited } from '@/lib/auth';
 
-/** What kind of asset a caller expects the URL to hold — the sniff and the optimiser follow it. */
-export type WebAssetKind = 'image' | 'font';
+/** What kind of asset a caller expects the URL to hold — the sniff, the cap and the optimiser follow it. */
+export type WebAssetKind = 'image' | 'font' | 'pdf';
 
 /** Who pays for an import: a token, and the account behind it when there is one. */
 export interface WebAssetImporter {
@@ -100,8 +100,8 @@ async function fetchAsset(url: string, kind: WebAssetKind): Promise<Omit<WebAsse
   let bytes: Buffer;
   try {
     ({ bytes } = await fetchWebResource(url, {
-      maxBytes: kind === 'font' ? MAX_FONT_BYTES : MAX_IMAGE_BYTES,
-      accept: kind === 'font' ? 'font/woff2,font/woff,*/*' : 'image/*',
+      maxBytes: kind === 'font' ? MAX_FONT_BYTES : kind === 'pdf' ? MAX_PDF_BYTES : MAX_IMAGE_BYTES,
+      accept: kind === 'font' ? 'font/woff2,font/woff,*/*' : kind === 'pdf' ? 'application/pdf,*/*' : 'image/*',
     }));
   } catch (error) {
     if (error instanceof WebIngestError) throw new WebAssetRefused(error.code, error.message, url);
@@ -118,6 +118,18 @@ async function fetchAsset(url: string, kind: WebAssetKind): Promise<Omit<WebAsse
     await objectStore().put(key, bytes, type);
     return {
       object_key: key, content_type: type, bytes: bytes.length,
+      width: null, height: null, placeholder: null, small_object_key: null, small_width: null,
+    };
+  }
+
+  if (kind === 'pdf') {
+    // Stored exactly as it arrived — a PDF is a document its author laid out,
+    // and nothing here may re-encode it. Same rule as the upload door.
+    if (sniffAssetType(bytes) !== 'application/pdf') throw new WebAssetRefused('unsupported_type', 'the response is not a PDF file', url);
+    const key = objectKey('webasset', bytes);
+    await objectStore().put(key, bytes, 'application/pdf');
+    return {
+      object_key: key, content_type: 'application/pdf', bytes: bytes.length,
       width: null, height: null, placeholder: null, small_object_key: null, small_width: null,
     };
   }
@@ -268,7 +280,7 @@ const FIXES: Readonly<Record<string, string>> = {
   timeout: 'the host took too long — try a URL that answers quickly',
   too_large: 'the file is over the import cap — link a smaller copy',
   too_many_redirects: 'too many redirects — link the file itself',
-  unsupported_type: 'that URL does not serve the file itself — link the image or font, not a page about it',
+  unsupported_type: 'that URL does not serve the file itself — link the image, font or PDF, not a page about it',
   invalid_url: 'only a plain public http(s) URL can be imported',
   forbidden_scheme: 'only a public https URL can be imported',
   forbidden_host: 'that host cannot be imported from',
@@ -295,7 +307,8 @@ export interface AssetRefreshResult {
 }
 
 /** A URL's kind, read back from what we stored for it. */
-export const kindOfRow = (row: WebAssetRow): WebAssetKind => (row.content_type.startsWith('font/') ? 'font' : 'image');
+export const kindOfRow = (row: WebAssetRow): WebAssetKind =>
+  (row.content_type.startsWith('font/') ? 'font' : row.content_type === 'application/pdf' ? 'pdf' : 'image');
 
 /**
  * Re-fetch a set of URLs we already hold and report what moved.

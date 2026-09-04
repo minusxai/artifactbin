@@ -12,10 +12,22 @@
  * The predicates below are pure and transport-free — the setup and the checks
  * are the only things here that touch the wire.
  */
-import { DriverFailure, type TaskScorer } from './contract';
+import { DriverFailure, type CheckContext, type TaskScorer } from './contract';
+// The ONE deterministic function from a web URL to where this product serves our
+// copy of it. Imported rather than re-spelled: a second sha256-of-the-canonical-URL
+// here would grade a stale address forever the day canonicalization moves, and
+// silently pass while doing it. `contracts.ts` already reaches into the app this way.
+import { assetUrlFor } from '../../../../services/app/lib/story/asset-url';
+
+/**
+ * The checks about the PICTURES a comment asked for, which only the image
+ * variant grades. Named apart from the rest so `validate` can ask "does this
+ * task grade any of these?" in one place rather than three.
+ */
+export const ASSET_CHECKS = ['urls_kept', 'assets_served', 'assets_ok'] as const;
 
 /** Declared apart from the scorer for the reason `publish.ts` gives: `contracts.ts` reads these names. */
-export const COMMENT_CHECKS = ['responded', 'changed', 'resolved'] as const;
+export const COMMENT_CHECKS = ['responded', 'changed', 'resolved', ...ASSET_CHECKS] as const;
 
 // ---------------------------------------------------------------- the thread
 
@@ -123,6 +135,121 @@ export function splitVerbatim(html: string, seededText: string): boolean {
   return splitAcrossParagraphs(html, seededText, false);
 }
 
+// ------------------------------------------------- the pictures a comment asked for
+
+/**
+ * THE THREE ASSET PREDICATES, and the split between them is the point.
+ *
+ * `urlsKept` is about STORAGE — the URL the agent wrote is the URL it reads
+ * back, which is the whole promise of URL-kept external assets and the thing
+ * the retired `ref:` rewrite broke. `assetsServed` is about the READER — what a
+ * browser is actually told to fetch, and therefore the "no request to the
+ * source host" claim, made BY CONSTRUCTION because this scorer has no browser.
+ * `assetOk` is about the BYTES behind that address.
+ *
+ * All three are pure. The reads they need live at the bottom of this module
+ * beside `readThreads`, because a scoring read is the DRIVER's and its failure
+ * is `checks_ok`, never the agent's answer.
+ */
+
+/** Every `<img src>` in a served document's body, in order, as written. */
+export function imageSources(html: string): string[] {
+  return [...bodyOf(html).matchAll(/<img\b[^>]*>/gi)]
+    .map((m) => /\ssrc\s*=\s*("([^"]*)"|'([^']*)')/i.exec(m[0]))
+    .map((m) => (m ? (m[2] ?? m[3] ?? '') : ''))
+    .filter(Boolean);
+}
+
+/** For the report: how many pictures the document ended up with. */
+export const imageCount = (html: string): number => imageSources(html).length;
+
+/**
+ * `urls_kept` — every URL the comment asked for is in the STORED markup,
+ * verbatim.
+ *
+ * An empty ask answers FALSE, not true: `every` over nothing is vacuously true,
+ * and a gated check with no subject that cannot fail is not a check.
+ */
+export function urlsKept(markup: string, urls: readonly string[]): boolean {
+  return urls.length > 0 && urls.every((url) => markup.includes(url));
+}
+
+const HOST_OF = (url: string): string | null => {
+  try {
+    return new URL(url).host.toLowerCase();
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * `assets_served` — the reader is sent to OUR origin for every one of them, and
+ * to the source host for nothing at all.
+ *
+ * The address is matched by PREFIX because it may grow a query (`?v=…`), and
+ * `assetUrlFor` is the product's own mapping rather than a second spelling of
+ * it. The negative half is deliberately wider than the two URLs the comment
+ * named: "opening this document tells the upstream host nothing" is a claim
+ * about the whole page, and one stray `<img>` on the source host breaks it
+ * whether or not the comment asked for that one.
+ */
+export function assetsServed(html: string, urls: readonly string[]): boolean {
+  if (urls.length === 0) return false;
+  const srcs = imageSources(html);
+  const hosts = new Set(urls.map(HOST_OF).filter((h): h is string => h !== null));
+  if (srcs.some((src) => { const h = HOST_OF(src); return h !== null && hosts.has(h); })) return false;
+  return urls.every((url) => srcs.some((src) => src.startsWith(assetUrlFor(url))));
+}
+
+/** The one type whose bytes must survive the import untouched (`lib/images/optimise` LEAVE_ALONE). */
+export const needsSourceIdentity = (contentType: string): boolean =>
+  contentType.split(';')[0].trim().toLowerCase() === 'image/svg+xml';
+
+const sameBytes = (a: Uint8Array, b: Uint8Array): boolean =>
+  a.length === b.length && a.every((byte, i) => byte === b[i]);
+
+/**
+ * `assets_ok`, for ONE address: our copy answers 200 as an image, and — where
+ * the product stores it untouched — is byte-identical to what the source
+ * served.
+ *
+ * A raster image is only required to BE an image: it is re-encoded to WebP at
+ * publish, so byte equality would be a check that must always fail. An SVG with
+ * no source to compare against is not a pass either — the identity rule is what
+ * this check is for, and skipping it silently is how it would rot.
+ */
+export function assetOk(a: { status: number; contentType: string; bytes: Uint8Array; sourceBytes: Uint8Array | null }): boolean {
+  if (a.status !== 200) return false;
+  if (!a.contentType.split(';')[0].trim().toLowerCase().startsWith('image/')) return false;
+  if (!needsSourceIdentity(a.contentType)) return true;
+  return a.sourceBytes !== null && sameBytes(a.bytes, a.sourceBytes);
+}
+
+/** Tags that can plausibly hold a one-line caption. A `<p>` can too — the word ceiling is what tells them apart. */
+const CAPTION_TAGS = 'figcaption|p|em|i|small|span|div|figure';
+/** Above this, what follows the picture is the document continuing, not a caption. A HINT, and recorded as one. */
+const CAPTION_MAX_WORDS = 25;
+
+/**
+ * For the report: does a short line of words follow this picture?
+ *
+ * Deliberately a HINT and never a gate, so it is a scan rather than a parser:
+ * the first text-bearing element after the image, whatever closing tags stand
+ * between, capped at a length no body paragraph would fit inside. A document
+ * that captions its figure some other way reads false here and loses nothing.
+ */
+export function captionAfter(html: string, url: string): boolean {
+  const body = bodyOf(html);
+  const address = assetUrlFor(url);
+  const img = [...body.matchAll(/<img\b[^>]*>/gi)].find((m) => new RegExp(`\\ssrc\\s*=\\s*["']${address}`, 'i').test(m[0]));
+  if (!img) return false;
+  const after = body.slice(img.index + img[0].length);
+  const next = new RegExp(`^(?:\\s|</[a-zA-Z][^>]*>)*<(${CAPTION_TAGS})\\b[^>]*>([\\s\\S]*?)</\\1>`, 'i').exec(after);
+  if (!next) return false;
+  const said = next[2].replace(/<[^>]*>/g, ' ').trim().split(/\s+/).filter(Boolean);
+  return said.length > 0 && said.length <= CAPTION_MAX_WORDS;
+}
+
 // ---------------------------------------------------------------- the kind
 
 /**
@@ -137,12 +264,34 @@ export const commentScorer = {
   kind: 'comment',
   checkNames: COMMENT_CHECKS,
 
+  /**
+   * What this kind needs of a task's JSON — asked of the CHECKS THE TASK LISTS,
+   * never of the kind as a whole.
+   *
+   * Two variants share this kind: one asks for a paragraph to be split, the
+   * other for two pictures to be added. Each must be free of the other's data,
+   * so `seedSplitText` is owed only by the task that grades `changed` and
+   * `assetUrls` only by the task that grades the asset checks. What is common to
+   * both — the comment, the seed, the credential to post with — is owed always.
+   */
   validate(task) {
     if (!task.comment) return 'a comment task must declare the `comment` it posts (path, body)';
-    if (!task.seedSplitText) return 'a comment task must declare `seedSplitText` — the paragraph `changed` grades';
     if (!task.seed) return 'a comment task must declare the `seed` it comments on';
     // Creation is a BROWSER door, so the driver has to hold the credential itself.
     if (task.handoff !== 'token') return 'a comment task needs `handoff: "token"`: only the driver can post the comment';
+    const graded = new Set<string>(task.checks);
+    if (graded.has('changed') && !task.seedSplitText) {
+      return 'a comment task grading `changed` must declare `seedSplitText` — the paragraph it grades';
+    }
+    if (ASSET_CHECKS.some((c) => graded.has(c))) {
+      const urls = task.assetUrls ?? [];
+      if (urls.length === 0) return `a comment task grading ${ASSET_CHECKS.join('/')} must declare the \`assetUrls\` it grades`;
+      // The URL the scorer grades must be the URL the agent was ASKED for. Two copies
+      // of a string in one file is exactly where drift starts, and a drifted one would
+      // fail every run for a reason no row names.
+      const stray = urls.find((u) => !task.comment?.body.includes(u));
+      if (stray) return `assetUrls names ${stray}, which the comment body never asks the agent for`;
+    }
     return null;
   },
 
@@ -186,6 +335,13 @@ export const commentScorer = {
     if (wanted && anchored !== wanted) {
       throw new DriverFailure('anchoring the comment', `comment.path "${comment.path}" anchored to ${JSON.stringify(anchored)}, not to the paragraph seedSplitText names`);
     }
+    // …and the same assertion for a variant that grades no paragraph: the QUOTE is the
+    // words the comment is about, so an anchor that does not contain them landed on the
+    // wrong node — and the run would then fail as if the agent had ignored the comment.
+    const quote = (comment.quote ?? '').replace(/\s+/g, ' ').trim();
+    if (quote && !anchored.includes(quote)) {
+      throw new DriverFailure('anchoring the comment', `comment.path "${comment.path}" anchored to ${JSON.stringify(anchored)}, which does not contain the quote it is about`);
+    }
     ctx.log(`commented ${created.id} on ${id}`);
   },
 
@@ -198,7 +354,8 @@ export const commentScorer = {
    */
   async checks(ctx) {
     const { task } = ctx;
-    if (!task.comment) return { responded: null, changed: null, resolved: null };
+    const unanswered = { responded: null, changed: null, resolved: null, urls_kept: null, assets_served: null, assets_ok: null };
+    if (!task.comment) return unanswered;
     const threads = await readThreads(ctx.productUrl, ctx.startId, ctx.token, ctx.driverHeaders);
     const tm = threadMetrics(threads);
     ctx.record('answered_by', tm.agentLabel, 'text');
@@ -210,6 +367,7 @@ export const commentScorer = {
       responded: tm.responded,
       resolved: tm.resolved,
       changed: seeded ? splitAcrossParagraphs(ctx.served.html, seeded) : null,
+      ...(await assetChecks(ctx)),
     };
   },
 } as const satisfies TaskScorer;
@@ -231,4 +389,84 @@ async function readThreads(base: string, id: string, token: string | null, drive
   }
   if (!res.ok) throw new DriverFailure('reading the thread', `GET ${url} → ${res.status}`);
   return ((await res.json()) as { annotations?: AnnotationThread[] }).annotations ?? [];
+}
+
+// ---------------------------------------------------------------- the asset reads
+
+/**
+ * The three asset checks, and the two reads they need beyond the served document.
+ *
+ * The STORED markup is read from the document the agent was GIVEN — the same
+ * rule `readThreads` follows and for the same reason: this is a comment on ONE
+ * document, and an agent that published somewhere else has not answered it.
+ *
+ * Both reads go to the product's OWN address, never to the task's recording
+ * proxy: a scoring read has no business in the ledger the agent is judged on.
+ * The source fetch is the one call in this file that leaves the machine.
+ */
+async function assetChecks(ctx: CheckContext): Promise<Record<string, boolean | null>> {
+  const urls = ctx.task.assetUrls ?? [];
+  if (urls.length === 0) return { urls_kept: null, assets_served: null, assets_ok: null };
+  const markup = await readStoredMarkup(ctx.productUrl, ctx.startId, ctx.token, ctx.driverHeaders);
+  ctx.record('image_count', imageCount(ctx.served.html), 'number');
+  // The caption was asked for on the LAST picture the comment named — the one it says
+  // "with a one-line caption" about. A hint for the reader, never a gate (see captionAfter).
+  ctx.record('caption_present', captionAfter(ctx.served.html, urls[urls.length - 1]), 'pass');
+  return {
+    urls_kept: urlsKept(markup, urls),
+    assets_served: assetsServed(ctx.served.html, urls),
+    assets_ok: await assetsOk(ctx.productUrl, urls, ctx.driverHeaders),
+  };
+}
+
+/** The document as the OWNER reads it back — what the product actually stored. */
+async function readStoredMarkup(base: string, id: string, token: string | null, driverHeaders: Record<string, string>): Promise<string> {
+  const url = `${base}/api/artifacts/${id}`;
+  if (!token) throw new DriverFailure('reading the stored markup', `GET ${url} — the driver holds no token`);
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: { ...driverHeaders, authorization: `Bearer ${token}` } });
+  } catch (e) {
+    throw new DriverFailure('reading the stored markup', `GET ${url} — ${e instanceof Error ? e.message : String(e)}`);
+  }
+  if (!res.ok) throw new DriverFailure('reading the stored markup', `GET ${url} → ${res.status}`);
+  return ((await res.json()) as { markup?: string }).markup ?? '';
+}
+
+/**
+ * Ask the product for our copy of each URL, and the SOURCE for the one type
+ * stored untouched.
+ *
+ * The distinction that matters: a NON-200 from the product is an answer — the
+ * asset is not there, and that is the agent's run failing. A fetch that THROWS,
+ * on either side, is our instrument, and a network blip must not be reported as
+ * a wrong picture (`checks_ok`, the same rule `readThreads` follows).
+ */
+async function assetsOk(base: string, urls: readonly string[], driverHeaders: Record<string, string>): Promise<boolean> {
+  for (const url of urls) {
+    const address = `${base}${assetUrlFor(url)}`;
+    let res: Response;
+    try {
+      res = await fetch(address, { headers: driverHeaders });
+    } catch (e) {
+      throw new DriverFailure('reading the asset', `GET ${address} — ${e instanceof Error ? e.message : String(e)}`);
+    }
+    const contentType = res.headers.get('content-type') ?? '';
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    const sourceBytes = res.status === 200 && needsSourceIdentity(contentType) ? await readSource(url) : null;
+    if (!assetOk({ status: res.status, contentType, bytes, sourceBytes })) return false;
+  }
+  return true;
+}
+
+/** The upstream bytes, fetched once, only for the identity rule. A failure here is the DRIVER's. */
+async function readSource(url: string): Promise<Uint8Array> {
+  let res: Response;
+  try {
+    res = await fetch(url);
+  } catch (e) {
+    throw new DriverFailure('fetching the source asset', `GET ${url} — ${e instanceof Error ? e.message : String(e)}`);
+  }
+  if (!res.ok) throw new DriverFailure('fetching the source asset', `GET ${url} → ${res.status}`);
+  return new Uint8Array(await res.arrayBuffer());
 }

@@ -98,7 +98,7 @@ describe('artifact CRUD', () => {
     const { token } = await mint();
     const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { title: 'x' } }));
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ error: 'one_of_markup_dataset_viz_image' });
+    expect(await res.json()).toEqual({ error: 'one_of_markup_dataset_viz_image_pdf' });
   });
 
   it('rejects oversized html with 413', async () => {

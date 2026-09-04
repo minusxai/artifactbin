@@ -13,7 +13,7 @@
  * fix is a fresh link, and telling the agent that is actionable.
  */
 import { auth } from '@/auth';
-import { getArtifactById, getArtifactFor, fontResolver, assetImporterFor, byteQuotaFor, refLoaderForActor, replaceArtifactFor, type ArtifactRow } from '@/lib/artifacts';
+import { getArtifactById, getArtifactFor, byteQuotaFor, fontResolver, assetImporterFor, refLoaderForActor, replaceArtifactFor, type ArtifactRow } from '@/lib/artifacts';
 import { resolveToken } from '@/lib/tokens';
 import { sessionActor } from '@/lib/viewer';
 import { baseUrl, json, unauthorized } from '@/lib/http';

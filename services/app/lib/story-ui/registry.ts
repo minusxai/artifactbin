@@ -76,6 +76,7 @@ import { Select, Slider, DatePicker, Segmented, Switch } from '@/components/kit/
 import { Icon } from '@/components/kit/icon';
 import { SlideDeck, Slide } from '@/components/kit/slides';
 import { Video } from '@/components/kit/video';
+import { File } from '@/components/kit/file';
 import { DataTable } from '@/components/kit/data-table';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -151,6 +152,7 @@ export const STORY_UI_COMPONENTS: Record<string, React.ComponentType<any>> = {
   SlideDeck,
   Slide,
   Video,
+  File,
   Icon,
   // The data-bound table. Registered bare for completeness; the three render
   // paths override it with an adapter that supplies the rows from the store

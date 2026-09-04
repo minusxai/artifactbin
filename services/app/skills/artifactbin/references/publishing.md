@@ -138,7 +138,7 @@ there is no separate datasets endpoint.
 
 | Status | Meaning | What to do |
 |---|---|---|
-| 400 | `invalid_json` / `markup_only` / `one_of_markup_dataset_viz_image` / `invalid_jsx` / `invalid_refs` / `invalid_sql` / `invalid_dataset` / `invalid_image` / `unknown_theme` / `retired_theme` | Fix the body — `details` names each problem with its span; `retired_theme`'s hint names the successor |
+| 400 | `invalid_json` / `markup_only` / `one_of_markup_dataset_viz_image_pdf` / `invalid_jsx` / `invalid_refs` / `invalid_sql` / `invalid_dataset` / `invalid_image` / `unknown_theme` / `retired_theme` | Fix the body — `details` names each problem with its span; `retired_theme`'s hint names the successor |
 | 400 | `invalid_visibility` / `private_requires_account` | `visibility` is `public`, `unlisted` or `private`; `private` needs an account-owned token |
 | 400 | `public_not_enabled` | This deployment does not offer `public`; use `unlisted` (already anyone-with-the-link) |
 | 400 | `invalid_folder` | `folder` segments are `[a-zA-Z0-9_-]` (max 40 chars each, 8 deep) |

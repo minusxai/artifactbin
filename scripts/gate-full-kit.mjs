@@ -19,6 +19,7 @@
  */
 import { chromium } from 'playwright';
 import { becomeOwner } from './lib/start-doc.mjs';
+import { samplePdf } from './lib/sample-pdf.mjs';
 import { execFileSync } from 'child_process';
 
 const BASE = process.argv[2] ?? 'http://localhost:3040';
@@ -72,13 +73,16 @@ const recipe = await publish({
 });
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 const image = await publish({ title: 'kit image', image: `data:image/png;base64,${PNG}` });
+// The file a <File> card links. Built by the same helper the pdf gate and the
+// unit tests use, so all three assert the same bytes.
+const pdf = await publish({ title: 'kit paper', pdf: `data:application/pdf;base64,${samplePdf(2).toString('base64')}` });
 
 // The kitchen sink comes from the MODULE, not from slicing its source: it is
 // the registry drift gate's definition of "every component", and a hand-rolled
 // unescape of its template literal breaks the moment a nested backtick appears.
 const markup = execFileSync('npx', ['tsx', '-e',
   `import { kitchenSinkMarkup } from './services/app/lib/story/kitchen-sink.ts';` +
-  `process.stdout.write(kitchenSinkMarkup(${JSON.stringify({ dataset: dataset.id, recipe: recipe.id, image: image.id })}));`,
+  `process.stdout.write(kitchenSinkMarkup(${JSON.stringify({ dataset: dataset.id, recipe: recipe.id, image: image.id, pdf: pdf.id })}));`,
 ], { encoding: 'utf8', cwd: new URL('..', import.meta.url).pathname });
 
 const doc = await publish({ markup, theme: 'modernist', colorMode: 'dark', title: 'Kitchen sink (unified)' });
@@ -116,6 +120,8 @@ const text = await frame.evaluate('document.body.innerText');
 for (const marker of [
   'The Kitchen Sink', 'Card title', 'Heads up', 'Tab one', 'Accordion section A',
   'Toggle details', 'Definition term', 'A deck inside the gallery', 'Grid-hosted chart',
+  // The <File> card's own text: the file's name and the facts under it.
+  'kit paper', '2 pages',
 ]) check(text.includes(marker), `renders: ${marker}`);
 
 // interactive components are HYDRATED, not dead markup

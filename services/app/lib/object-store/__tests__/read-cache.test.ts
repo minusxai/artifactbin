@@ -22,6 +22,9 @@ const backing = (bytes: Record<string, Buffer>, calls: string[]) => ({
   backend: 'local' as const,
   async get(key: string) { calls.push(key); const b = bytes[key]; if (!b) throw new Error('missing'); return b; },
   async put() {}, async delete() {},
+  // The cache passes a stream read straight through and never records it; this
+  // double refuses one so a caller that started streaming here would be loud.
+  async getStream(): Promise<never> { throw new Error('the read cache never streams'); },
 });
 
 beforeEach(() => { resetReadCache(); });

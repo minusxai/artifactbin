@@ -30,6 +30,8 @@
  */
 import { objectStore } from '@/lib/object-store';
 import { VARIANT_CONTENT_TYPE } from '@/lib/images/optimise';
+import { fileNameFromUrl } from '@/lib/file-display';
+import { pdfFilename } from '@/lib/story/pdf-store';
 import { webAssetByHash } from '@/lib/web-assets';
 
 /** Every asset response carries these, whatever the asset turns out to be. */
@@ -39,6 +41,31 @@ export const ASSET_HEADERS: Readonly<Record<string, string>> = {
   'Content-Disposition': 'attachment',
   'X-Content-Type-Options': 'nosniff',
   'Access-Control-Allow-Origin': '*',
+};
+
+/**
+ * THE ONE TYPE THAT IS NOT AN ATTACHMENT, and it is not a widening of R15.
+ *
+ * `attachment` is here because a stored SVG is MARKUP and a navigation to one
+ * must not become a page in this origin. A PDF is not markup: it cannot script,
+ * `nosniff` holds the browser to the type sniffed from the bytes at import, and
+ * `Content-Security-Policy: sandbox` — kept, and the actual defence — was
+ * measured putting the response at an opaque origin where storage and cookies
+ * both throw (spike S4). It does not stop the browser's own viewer.
+ *
+ * What `attachment` costs a PDF is the entire feature: opened from inside a
+ * document's sandbox it produced neither a popup nor an observable download,
+ * so a <File> card linking an imported PDF would click into nothing. The
+ * filename comes from the SOURCE URL's last segment, because the address here
+ * is a 64-hex hash and a browser would otherwise save the file under it.
+ */
+const dispositionFor = (contentType: string, url: string): string => {
+  if (contentType !== 'application/pdf') return 'attachment';
+  // fileNameFromUrl's decode cannot throw — a lone `%` in a filename is
+  // ordinary, and a bare decodeURIComponent here made this address 500 for a
+  // PDF that had imported perfectly (see lib/file-display).
+  const name = (fileNameFromUrl(url) ?? '').replace(/\.pdf$/i, '');
+  return `inline; filename="${pdfFilename(name, 'file')}"`;
 };
 
 export async function GET(request: Request, ctx: { params: Promise<{ hash: string }> }) {
@@ -72,6 +99,13 @@ export async function GET(request: Request, ctx: { params: Promise<{ hash: strin
     // Built fresh per response: @hono/node-server writes the computed
     // Content-Length back INTO this object, so a shared constant would
     // announce the first body's length for every later one.
-    headers: { 'Content-Type': narrow ? VARIANT_CONTENT_TYPE : row.content_type, ...ASSET_HEADERS },
+    // A `w=` hit is always an image row (only an image is stored at two
+    // widths), so the narrow branch never changes the disposition — the two
+    // decisions are independent and both are made here.
+    headers: {
+      'Content-Type': narrow ? VARIANT_CONTENT_TYPE : row.content_type,
+      ...ASSET_HEADERS,
+      'Content-Disposition': dispositionFor(row.content_type, row.url),
+    },
   });
 }

@@ -17,7 +17,7 @@ import type { SharedArtifactSummary } from '@/lib/users';
  * Renders NOTHING when nothing is shared: an empty "shared with you" panel
  * would read as a bug on every fresh dashboard.
  */
-const FORMAT_ORDER: string[] = ['markup', 'dataset', 'viz', 'image'];
+const FORMAT_ORDER: string[] = ['markup', 'dataset', 'viz', 'image', 'pdf'];
 
 function FilterChip({ value, label, active, onToggle }: {
   value: string;

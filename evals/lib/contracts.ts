@@ -147,6 +147,16 @@ export const TaskSchema = z.object({
   /** `kind: comment` only: the seeded paragraph that `changed` requires to read across two `<p>`s. */
   seedSplitText: z.string().optional(),
   /**
+   * `kind: comment` only: the external image URLs the comment asks the agent to
+   * use, and the ONLY subject the three asset checks grade.
+   *
+   * Declared rather than regexed out of the comment body, because a URL in a
+   * sentence is not always a URL the agent was asked to EMBED — and the kind's
+   * `validate` then refuses a URL the comment never mentions, so the two copies
+   * in one file cannot drift apart.
+   */
+  assetUrls: z.array(z.string().url()).optional(),
+  /**
    * Where this task sits in the report, which reads top to bottom in run order.
    * Lower first; ties fall back to filename. Editorial, not functional: the
    * the four template comparisons read deck → dashboard → editorial → scrolly.

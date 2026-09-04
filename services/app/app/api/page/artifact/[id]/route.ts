@@ -55,6 +55,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       source: artifact.source,
       content: artifact.format === 'markup' ? '' : artifact.format === 'dataset' ? JSON.stringify(await loadDatasetRows(artifact)) : artifact.content,
       columns: meta.columns ?? [],
+      // A stored FILE is not a document the app can render, so its view is the
+      // two facts a person picks a file by plus the link that opens it.
+      ...(artifact.format === 'pdf' ? { bytes: (meta as { bytes?: number }).bytes ?? 0, pages: (meta as { pages?: number }).pages ?? null } : {}),
       compiledCss: artifact.format === 'markup' ? await currentStoryCss(meta, artifact.source) : meta.compiledCss ?? null,
       theme: design.theme,
       colorMode: design.colorMode,

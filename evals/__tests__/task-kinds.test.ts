@@ -75,7 +75,7 @@ describe('the registry', () => {
     // `responded` belongs to the comment kind; a publish task listing it would
     // be gated on a check nothing computes, which `verdictFor` fails.
     expect(() => task({ checks: ['published', 'responded'] as Task['checks'] })).toThrow(/responded.*is not one a publish task can answer/);
-    expect(checkNamesFor('comment')).toEqual(expect.arrayContaining(['responded', 'changed', 'resolved']));
+    expect(checkNamesFor('comment')).toEqual(expect.arrayContaining(['responded', 'changed', 'resolved', 'urls_kept', 'assets_served', 'assets_ok']));
     expect(checkNamesFor('publish')).toContain('kept_untouched_text');
   });
 });
@@ -163,7 +163,10 @@ describe('the `comment` kind', () => {
 
     const out = await comment.checks(checkCtx({ task: t, served: { status: 200, html }, record: (m, v) => rows.push([m, v]) }));
 
-    expect(out).toEqual({ responded: true, changed: true, resolved: true });
+    // The kind answers every name it OWNS. A task that asked for no pictures gets
+    // null for the three asset checks — never false — and `checksToRecord` drops an
+    // ungated null rather than printing a red FAIL for something inapplicable.
+    expect(out).toEqual({ responded: true, changed: true, resolved: true, urls_kept: null, assets_served: null, assets_ok: null });
     expect(rows).toEqual(expect.arrayContaining([['answered_by', 'Claude Code (http)'], ['split_verbatim', true]]));
     // The thread is read from the document the agent was GIVEN, with `status=all`:
     // a resolved thread has left the artifact GET, and an agent that published
@@ -172,11 +175,49 @@ describe('the `comment` kind', () => {
     fetchSpy.mockRestore();
   });
 
-  it('is refused at load without the comment it posts and the paragraph it grades', () => {
+  it('is refused at load without the comment it posts', () => {
     const base = { id: 'c', kind: 'comment', handoff: 'token', brief: 'b', seed: '<p>a</p>', checks: ['published'] };
     expect(() => TaskSchema.parse(base)).toThrow(/comment/);
-    expect(() => TaskSchema.parse({ ...base, comment: { path: '1', body: 'split it' } })).toThrow(/seedSplitText/);
-    expect(() => TaskSchema.parse({ ...base, comment: { path: '1', body: 'split it' }, seedSplitText: 'x' })).not.toThrow();
+    expect(() => TaskSchema.parse({ ...base, comment: { path: '1', body: 'split it' } })).not.toThrow();
+  });
+
+  /**
+   * A kind's `validate` refuses a task that grades itself on something it has not
+   * declared — at LOAD, before a run mints anything or spends an agent minute. It
+   * asks that of the CHECKS the task lists, never of the kind as a whole: the image
+   * variant splits no paragraph and the split variant names no picture, and each
+   * must be free of the other's data.
+   */
+  it('wants the paragraph `changed` grades — and only from the task that grades it', () => {
+    const base = { id: 'c', kind: 'comment', handoff: 'token', brief: 'b', seed: '<p>a</p>', comment: { path: '1', body: 'split it' } };
+    expect(() => TaskSchema.parse({ ...base, checks: ['published', 'changed'] })).toThrow(/seedSplitText/);
+    expect(() => TaskSchema.parse({ ...base, checks: ['published', 'changed'], seedSplitText: 'x' })).not.toThrow();
+    expect(() => TaskSchema.parse({ ...base, checks: ['published'] })).not.toThrow();
+  });
+
+  it('wants the URLs the asset checks grade, and refuses one the comment never asked for', () => {
+    const url = 'https://example.test/a.svg';
+    const base = {
+      id: 'c', kind: 'comment', handoff: 'token', brief: 'b', seed: '<p>a</p>',
+      comment: { path: '1', body: `add ${url} please` },
+    };
+    // Gating an asset check with nothing to grade would fail every run.
+    expect(() => TaskSchema.parse({ ...base, checks: ['published', 'urls_kept'] })).toThrow(/assetUrls/);
+    expect(() => TaskSchema.parse({ ...base, checks: ['published', 'assets_served'] })).toThrow(/assetUrls/);
+    expect(() => TaskSchema.parse({ ...base, checks: ['published', 'assets_ok'] })).toThrow(/assetUrls/);
+    expect(() => TaskSchema.parse({ ...base, checks: ['published', 'urls_kept'], assetUrls: [url] })).not.toThrow();
+    // …and the URL the scorer grades must be the URL the agent was ASKED for: two
+    // copies of a string in one file is exactly where drift starts.
+    expect(() => TaskSchema.parse({ ...base, checks: ['published', 'urls_kept'], assetUrls: ['https://example.test/b.svg'] }))
+      .toThrow(/comment/);
+  });
+
+  it('the image variant on disk parses, and grades the three asset checks', () => {
+    const t = TaskSchema.parse(JSON.parse(fs.readFileSync(path.join(TASKS_DIR, 'comment-image.eval.json'), 'utf8')));
+    expect(t.kind).toBe('comment');
+    expect(t.assetUrls).toHaveLength(2);
+    expect(t.checks).toEqual(expect.arrayContaining(['urls_kept', 'assets_served', 'assets_ok']));
+    for (const url of t.assetUrls ?? []) expect(t.comment?.body).toContain(url);
   });
 
   it('needs the token handoff — the driver must hold a credential to comment at all', () => {
