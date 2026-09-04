@@ -638,7 +638,37 @@ async function foldLeg(browser) {
     };
   }, HUMAN_LAST_WORD);
 
-  const folded = await until(read, (s) => s?.clamped === true, 10000);
+  /*
+   * WAIT FOR THE GEOMETRY TO STOP MOVING, NOT MERELY FOR THE FOLD TO EXIST.
+   *
+   * Opening a thread scrolls it into view, and the fold can be in the DOM
+   * before that scroll has settled — so `clamped === true` is a signal about
+   * the CONTENT and says nothing about where the content currently is. Reading
+   * on that signal alone measures a sheet mid-scroll.
+   *
+   * Measured, and this is the whole reason the assertions below are worth
+   * anything: over 33 local runs the thread read 88px low twice, always the
+   * same 88 (thread top 471 rather than 383, the reply at 843 rather than 755,
+   * every element inside it identical in size). The same page read again 800ms
+   * later was at the settled position every time. In CI it cost two red merge
+   * gates and three re-runs, and it read as a product bug — a phone reader
+   * unable to see the human's reply — which it is not.
+   *
+   * So the wait is for the ANSWER'S TOP to repeat: a scroll that has finished
+   * reports the same offset twice, a scroll in flight does not. Polling for
+   * stability rather than sleeping a fixed time keeps the settled case fast.
+   */
+  const readSettled = async () => {
+    let previous = null;
+    for (let i = 0; i < 60; i++) {
+      const s = await read();
+      if (s?.clamped === true && s.answerTop !== null && s.answerTop === previous) return s;
+      previous = s?.answerTop ?? null;
+      await page.waitForTimeout(50);
+    }
+    return read();
+  };
+  const folded = await readSettled();
   ok(folded?.clamped === true, 'the sixty-line agent answer arrives folded');
   // Without this, a hidden bar makes the bound below the SHEET's rect again —
   // the bound that passed while the reply sat invisible behind the bar.
