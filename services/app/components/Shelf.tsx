@@ -659,6 +659,7 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
           folders={pickable}
           manage={actions === 'full'}
           canEdit={actions === 'full'}
+          canShare={actions !== 'none'}
           embedded
           dates={dates}
           perPage={SHELF_LIST_PER_PAGE}

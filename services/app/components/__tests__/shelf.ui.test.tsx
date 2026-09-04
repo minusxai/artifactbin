@@ -85,6 +85,10 @@ describe('Shelf — data and capabilities', () => {
     expect(screen.getByLabelText('Share Doc a')).toBeTruthy();
     expect(screen.queryByLabelText('Edit Doc a')).toBeNull();
     expect(screen.queryByLabelText('More actions for Doc a')).toBeNull();
+    fireEvent.click(screen.getByLabelText('List view'));
+    expect(screen.getByLabelText('Share Doc a')).toBeTruthy();
+    expect(screen.queryByLabelText('Edit Doc a')).toBeNull();
+    expect(screen.queryByLabelText('More actions for Doc a')).toBeNull();
   });
 
   it('moves a grid item through its overflow menu', async () => {
