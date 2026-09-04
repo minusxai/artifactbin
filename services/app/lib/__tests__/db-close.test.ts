@@ -13,6 +13,7 @@
  * wasm instance spinning at 100%, which starves the event loop, so no in-process
  * timer can turn it into a fast failure. Run it under a wall-clock cap.
  */
+// harness-exempt: reset closing the database, and the global handle it leaves behind, IS the subject here
 import { afterAll, describe, expect, it } from 'vitest';
 import { getDb, resetDb } from '../db';
 
