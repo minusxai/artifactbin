@@ -10,7 +10,7 @@ import { buildPrompt } from '../lib/tasks';
 import type { Task } from '../lib/contracts';
 
 const task = (over: Partial<Task> = {}): Task => ({
-  id: 'protocol', kind: 'open', brief: 'Publish a one-paragraph document titled "Hello".',
+  id: 'protocol', kind: 'publish', brief: 'Publish a one-paragraph document titled "Hello".',
   handoff: 'start-link', order: 0, checks: ['published'], ...over,
 });
 

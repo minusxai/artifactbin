@@ -14,7 +14,7 @@ describe('tasks/*.json', () => {
   it('every task validates and lists at least one check', () => {
     const dir = path.join(EVALS, 'tasks');
     const files = fs.readdirSync(dir).filter((f) => f.endsWith('.json'));
-    expect(files).toEqual(expect.arrayContaining(['scrolly.eval.json', 'report.eval.json', 'deck.eval.json', 'dashboard.eval.json', 'data.json', 'edit.json', 'mcp.json']));
+    expect(files).toEqual(expect.arrayContaining(['scrolly.eval.json', 'report.eval.json', 'deck.eval.json', 'dashboard.eval.json', 'comment.json', 'data.json', 'edit.json', 'mcp.json']));
     for (const f of files) {
       const task = TaskSchema.parse(read(`tasks/${f}`));
       expect(task.id).toBe(f.replace(/\.eval\.json$/, '').replace(/\.json$/, ''));
@@ -23,7 +23,7 @@ describe('tasks/*.json', () => {
   });
 
   it('an unknown check is refused', () => {
-    expect(() => TaskSchema.parse({ id: 't', kind: 'open', brief: 'x', checks: ['not_a_check'] })).toThrow();
+    expect(() => TaskSchema.parse({ id: 't', brief: 'x', checks: ['not_a_check'] })).toThrow();
   });
 
   it('a token-handoff task that seeds a document says what must survive a targeted edit', () => {
@@ -40,7 +40,9 @@ describe('tasks/*.json', () => {
     expect(Object.keys(TaskSchema.parse(read('tasks/report.eval.json')).files!)).toEqual(['coffee.csv']);
     for (const id of ['dashboard', 'deck', 'report', 'scrolly']) {
       const task = TaskSchema.parse(read(`tasks/${id}.eval.json`));
-      expect(task.kind).toBe('data');
+      // No kind of their own: they are `publish` tasks, which is what the
+      // default means, and the dataset checks below are what makes them charted.
+      expect(task.kind).toBe('publish');
       expect(task.checks).toEqual(expect.arrayContaining(['dataset_created', 'query_ran', 'chart_marks_drawn']));
     }
   });

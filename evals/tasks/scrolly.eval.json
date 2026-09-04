@@ -1,6 +1,5 @@
 {
   "id": "scrolly",
-  "kind": "data",
   "order": 4,
   "template": "scrolly",
   "brief": "The file commute.csv in your working directory tracks median commute time and commuter count by travel mode from 2022 through 2025. Publish it as a dataset, then build and publish a scrollytelling data story titled \"How the commute changed in four years\" — the TITLE being what a browser tab and a shared link preview show. Lead with one strong finding, then reveal the change across four or five concise scroll-driven chapters that build on one another. Include at least one real chart computed from the dataset, and make the visual progression—not long prose—the main storyteller. Do not type chart values or headline figures into the document. End with a short implication for the city. When it is published, reply with the document's URL and nothing else.",

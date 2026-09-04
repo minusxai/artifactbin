@@ -114,7 +114,7 @@ path. Beyond both, each ask has ONE file under `references/` ([[ docsIndexHint ]
 |---|---|
 | the API in full — replace, `expectedVersion`, visibility, forking, the error table | `publishing.md` |
 | tokens — expiry, `/tokens/new`, saved config, claiming, a 401 | `publishing-auth.md` |
-| uploading data — CSV/sheet/URL rows, images, viz recipes, refresh warnings | `publishing-datasets.md` |
+| uploading assets — CSV/sheet rows, images, PDFs (`<File>`), viz recipes | `publishing-datasets.md` |
 | pinned human feedback — reply, resolve, the anchor attribute | `publishing-annotations.md` |
 | connecting an MCP client — OAuth or bearer, the tool list | `publishing-mcp.md` |
 | history — versions, revert, delete, export options | `publishing-versions.md` |

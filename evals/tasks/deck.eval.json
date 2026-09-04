@@ -1,6 +1,5 @@
 {
   "id": "deck",
-  "kind": "data",
   "order": 1,
   "template": "deck",
   "brief": "The file onboarding.csv in your working directory holds the current and target time for each onboarding stage. Publish it as a dataset, then build and publish a six-slide presentation deck titled \"Why our onboarding takes 11 days\" — the TITLE being what a browser tab and a shared link preview show. Open with a full-bleed title slide, use the four middle slides to make one point each, and close with a single ask. Include at least one real chart computed from the dataset. Make it visually confident: commit to a colour direction and use it throughout rather than leaving everything on a white page. When it is published, reply with the document's URL and nothing else.",

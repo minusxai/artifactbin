@@ -17,12 +17,15 @@ export interface KitchenSinkRefs {
   recipe: string;
   /** An image artifact id. */
   image: string;
+  /** A pdf artifact id — the file a <File> card links. */
+  pdf: string;
 }
 
 export function kitchenSinkMarkup(refs: KitchenSinkRefs): string {
   const ds = `ref_${refs.dataset}`;
   const viz = `ref:${refs.recipe}`;
   const img = `ref:${refs.image}`;
+  const pdf = `ref:${refs.pdf}`;
   return `<Helmet>
   <title>The Kitchen Sink</title>
   <Value name="region" type="string" />
@@ -201,6 +204,7 @@ export function kitchenSinkMarkup(refs: KitchenSinkRefs): string {
 <section>
   <h2 className="text-2xl font-semibold tracking-tight">06 · Video</h2>
   <Video className="mt-6 max-w-2xl" src="https://www.youtube.com/watch?v=aqz-KE-bpKQ" poster="${img}" title="Big Buck Bunny" />
+  <File className="mt-6 max-w-2xl" src="${pdf}" />
 </section>
 
 <Separator className="my-10" />

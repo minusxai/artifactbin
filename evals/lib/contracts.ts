@@ -18,6 +18,7 @@ import { STORY_TEMPLATE_NAMES } from '../../services/app/lib/validation/atlas-sc
 import type { Leg } from './leg';
 import type { PluginKit } from './plugin-kit';
 import type { EvalMode } from './mode';
+import { KIND_CHECK_NAMES, TASK_KINDS, checkNamesFor, scorerFor } from './score/kinds';
 
 // ---------------------------------------------------------------- legs
 
@@ -42,8 +43,15 @@ export interface Price {
 
 // ---------------------------------------------------------------- tasks
 
-/** Every boolean the scorer can produce. A task lists which ones it is graded on. */
-const CHECKS = [
+/**
+ * The checks that describe ANY run, whatever kind of task it is. A task lists
+ * which ones it is graded on.
+ *
+ * Kind-SPECIFIC names live with the kind that answers them
+ * (`lib/score/kinds/*`) and join the vocabulary through `KIND_CHECK_NAMES`, so
+ * a new task's predicates no longer cost an edit to this file.
+ */
+const COMMON_CHECKS = [
   'published',
   'published_first_try',
   'read_docs_before_write',
@@ -61,9 +69,22 @@ const CHECKS = [
   'query_ran',
   // edit
   'used_edits_endpoint',
-  'kept_untouched_text',
   // mcp
   'used_mcp',
+  /**
+   * The driver's own preparation succeeded. Its calls carry the driver header
+   * and are invisible to the ledger, so a broken seed or a comment that would
+   * not anchor has no other way to show: without this the report shows a bare
+   * FAIL with no failing check name, which reads as "the agent did nothing".
+   */
+  'setup_ok',
+  /**
+   * …and the same for the driver's own scoring READS. A kind's checks fetch the
+   * product; a 500 or a socket error there is our instrument, not the agent's
+   * answer, so the kind's checks go unanswered and stop gating instead of
+   * reporting an agent that ignored the comment.
+   */
+  'checks_ok',
   /**
    * The agent never opened this repo's own checkout. A readable checkout hands a
    * `fetched_skill` run the skills it was supposed to fetch AND the task's own
@@ -71,13 +92,38 @@ const CHECKS = [
    */
   'no_local_checkout_reads',
 ] as const;
+
+/** Every boolean the scorer can produce: the common ones plus every kind's own. */
+const CHECKS = [...COMMON_CHECKS, ...KIND_CHECK_NAMES] as const;
 export type Check = (typeof CHECKS)[number];
 
-const TASK_KINDS = ['open', 'data', 'edit'] as const;
+/** A check any task may list, whatever its kind. */
+const COMMON = new Set<string>(COMMON_CHECKS);
+
+/**
+ * What the DRIVER posts on the seed before a `comment` task's agent runs.
+ *
+ * `path` is a BODY path and counts every parsed node, whitespace text nodes
+ * included, so a seed written one tag per line does NOT have its second
+ * paragraph at "1" — seeds for that kind are written with no whitespace between
+ * the siblings they count, and the kind's setup asserts what it anchored to.
+ */
+const CommentSchema = z.object({
+  path: z.string().regex(/^\d+(\.\d+)*$/),
+  body: z.string().min(1),
+  /** The words the comment is about, so the product can quote them back. */
+  quote: z.string().optional(),
+});
 
 export const TaskSchema = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
-  kind: z.enum(TASK_KINDS),
+  /**
+   * WHICH SCORER GRADES IT (`lib/score/kinds`). `publish` — the default, and
+   * every task that existed before the seam — is "publish a document and read
+   * the served truth"; a kind beyond it brings its own setup, its own checks
+   * and its own check names.
+   */
+  kind: z.enum(TASK_KINDS).default('publish'),
   /** Story template this comparison brief targets, from the product registry. */
   template: z.enum(STORY_TEMPLATE_NAMES).optional(),
   brief: z.string().min(1),
@@ -96,6 +142,20 @@ export const TaskSchema = z.object({
   seed: z.string().optional(),
   /** A phrase from `seed` that a targeted edit must leave alone (`kept_untouched_text`). */
   seedKeepText: z.string().optional(),
+  /** `kind: comment` only: the comment the driver posts on the seed before the agent runs. */
+  comment: CommentSchema.optional(),
+  /** `kind: comment` only: the seeded paragraph that `changed` requires to read across two `<p>`s. */
+  seedSplitText: z.string().optional(),
+  /**
+   * `kind: comment` only: the external image URLs the comment asks the agent to
+   * use, and the ONLY subject the three asset checks grade.
+   *
+   * Declared rather than regexed out of the comment body, because a URL in a
+   * sentence is not always a URL the agent was asked to EMBED — and the kind's
+   * `validate` then refuses a URL the comment never mentions, so the two copies
+   * in one file cannot drift apart.
+   */
+  assetUrls: z.array(z.string().url()).optional(),
   /**
    * Where this task sits in the report, which reads top to bottom in run order.
    * Lower first; ties fall back to filename. Editorial, not functional: the
@@ -103,7 +163,21 @@ export const TaskSchema = z.object({
    */
   order: z.number().int().default(0),
   checks: z.array(z.enum(CHECKS)).min(1),
-});
+})
+  // A task is refused AT LOAD — before a run mints anything or spends an agent
+  // minute — when it grades itself on a check its kind cannot answer (a gated
+  // check nothing computes is a guaranteed failure), or when its kind needs
+  // something of its JSON that is not there.
+  .superRefine((task, ctx) => {
+    const own = new Set<string>(checkNamesFor(task.kind));
+    for (const check of task.checks) {
+      if (!COMMON.has(check) && !own.has(check)) {
+        ctx.addIssue({ code: 'custom', path: ['checks'], message: `check "${check}" is not one a ${task.kind} task can answer` });
+      }
+    }
+    const missing = scorerFor(task.kind).validate?.(task as Task);
+    if (missing) ctx.addIssue({ code: 'custom', message: missing });
+  });
 export type Task = z.infer<typeof TaskSchema>;
 
 // ---------------------------------------------------------------- config

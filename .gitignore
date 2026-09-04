@@ -29,7 +29,11 @@ tmp/
 # Every run directory, not just the default one: `--out evals/.metrics-pi` is how two
 # local legs avoid clobbering each other, and a bare `evals/.metrics/` let 139 files of
 # transcripts and ledgers into a commit via `git add -A`.
-evals/.metrics*/
+# …and at any depth, because `npm run eval` CHDIRS to services/app before it
+# resolves --out (evals/preload.cjs), so `--out evals/.metrics/x` writes to
+# services/app/evals/.metrics/x — which the root-anchored rule did not cover, and
+# a run directory's transcript carries the run's bearer token in plaintext.
+**/evals/.metrics*/
 
 # Build output — the image builds these; they are never committed.
 /dist/

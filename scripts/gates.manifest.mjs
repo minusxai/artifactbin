@@ -115,6 +115,11 @@ export const GATE_SPECS = Object.freeze([
   // measured: implementer 10s
   { name: 'bound-assets', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 60_000 },
   { name: 'web-assets', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 90_000 },
+  // measured: implementer 20s; orchestrator pending
+  {
+    name: 'pdf', start: 'shared',
+    needsMail: false, needsClipboard: false, timeoutMs: 60_000,
+  },
   // measured: implementer 16s; orchestrator 17s
   { name: 'script-slice', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
   // measured: implementer 25s; orchestrator 26s

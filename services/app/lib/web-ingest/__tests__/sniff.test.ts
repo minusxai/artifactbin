@@ -4,7 +4,8 @@
  * a trusted header.
  */
 import { describe, expect, it } from 'vitest';
-import { isWoff2, sniffImageType } from '../sniff';
+import { samplePdf } from '../../../../../scripts/lib/sample-pdf.mjs';
+import { isWoff2, sniffAssetType, sniffImageType } from '../sniff';
 
 const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
 const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
@@ -45,5 +46,39 @@ describe('isWoff2', () => {
     expect(isWoff2(Buffer.from('wOFF\x00\x01'))).toBe(false); // woff1 — not what google serves us
     expect(isWoff2(Buffer.from('OTTO'))).toBe(false);
     expect(isWoff2(Buffer.alloc(0))).toBe(false);
+  });
+});
+
+/*
+ * The tier's whole safety story is "the type comes from the bytes", and the
+ * image sniffer is image-only by construction — it does not know `%PDF-`
+ * (measured in the spike, S4). sniffAssetType is the one that knows both, and
+ * it knows nothing else: an asset we do not serve is not a type we sniff.
+ */
+describe('sniffAssetType', () => {
+  it('names a PDF by its signature', () => {
+    expect(sniffAssetType(samplePdf(1))).toBe('application/pdf');
+    expect(sniffAssetType(Buffer.from('%PDF-1.7\n...'))).toBe('application/pdf');
+  });
+
+  it('still answers every image type the image sniffer knows', () => {
+    expect(sniffAssetType(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))).toBe('image/png');
+    expect(sniffAssetType(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>'))).toBe('image/svg+xml');
+  });
+
+  it('refuses what it does not know — a name is never guessed from an extension', () => {
+    expect(sniffAssetType(Buffer.from('<!doctype html><h1>404</h1>'))).toBeNull();
+    expect(sniffAssetType(Buffer.from('wOF2'))).toBeNull(); // a font is not an asset this tier serves
+    expect(sniffAssetType(Buffer.alloc(0))).toBeNull();
+  });
+
+  it('a PDF named .png is refused as an image and accepted as a PDF — the extension never decides', () => {
+    const pdf = samplePdf(1);
+    expect(sniffImageType(pdf)).toBeNull();
+    expect(sniffAssetType(pdf)).toBe('application/pdf');
+  });
+
+  it('is not fooled by %PDF- appearing later in the file', () => {
+    expect(sniffAssetType(Buffer.concat([Buffer.from('<!doctype html>'), samplePdf(1)]))).toBeNull();
   });
 });

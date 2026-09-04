@@ -13,10 +13,12 @@
  * naming the token.
  */
 import { json } from '../http';
-import { MAX_IMAGE_BYTES } from '@/lib/config';
+import { MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/config';
 import { storeDatasetRows } from './dataset-store';
 import { storeImage, IMAGE_CONTENT_TYPES } from './image-store';
 import { optimiseImage } from '@/lib/images/optimise';
+import { PDF_CONTENT_TYPE, pdfPageCount, storePdf } from './pdf-store';
+import { sniffAssetType } from '@/lib/web-ingest/sniff';
 import type { StoredContent } from './input';
 import type { VizRecipeBinding, VizRecipeParam } from '@/lib/validation/atlas-schemas';
 
@@ -201,4 +203,50 @@ export async function publishImage(_body: Record<string, unknown>, dataUrl: stri
   const m = IMAGE_DATA_URL_RE.exec(dataUrl);
   if (!m) return json({ error: 'invalid_image', details: ['image must be a base64 data: URL (png|jpeg|webp|gif|svg+xml)'] }, 400);
   return storeImageContent(Buffer.from(m[2], 'base64'), m[1]);
+}
+
+// ── pdf ──────────────────────────────────────────────────────────────────────
+
+const PDF_DATA_URL_RE = /^data:application\/pdf;base64,([A-Za-z0-9+/=]+)$/;
+
+/**
+ * Store already-decoded PDF bytes — THE ONE DOOR, shared by the `pdf` data URL
+ * and the `pdfUrl` importer, so the cap and the type policy cannot fork the way
+ * two doors always eventually do.
+ *
+ * The type comes from the BYTES and nothing else. A `data:application/pdf`
+ * label is caller-supplied and a remote Content-Type is attacker-supplied, and
+ * what this app then serves is `application/pdf` with `nosniff` — so the
+ * sniff is the whole of what stops us handing a browser one type under
+ * another's name.
+ *
+ * Unlike an image, nothing is re-encoded or resized: see lib/story/pdf-store.
+ */
+export async function storePdfContent(buffer: Buffer): Promise<StoredContent | Response> {
+  if (buffer.length === 0) return json({ error: 'invalid_pdf', details: ['the pdf is empty'] }, 400);
+  if (buffer.length > MAX_PDF_BYTES) return json({ error: 'pdf_too_large', maxBytes: MAX_PDF_BYTES }, 413);
+  if (sniffAssetType(buffer) !== PDF_CONTENT_TYPE) {
+    return json({ error: 'invalid_pdf', details: ['those bytes are not a PDF — the type comes from the file, never from its name or its Content-Type'] }, 400);
+  }
+  const located = await storePdf(buffer);
+  return {
+    format: 'pdf',
+    content: '',
+    source: null,
+    meta: {
+      contentType: PDF_CONTENT_TYPE,
+      objectKey: located.objectKey,
+      bytes: located.bytes,
+      // Only when the file says so in the clear — a <File> card shows a page
+      // count it was told and never one it invented (lib/story/pdf-store).
+      ...(() => { const pages = pdfPageCount(buffer); return pages ? { pages } : {}; })(),
+    },
+    derivedTitle: null,
+  };
+}
+
+export async function publishPdf(_body: Record<string, unknown>, dataUrl: string): Promise<StoredContent | Response> {
+  const m = PDF_DATA_URL_RE.exec(dataUrl);
+  if (!m) return json({ error: 'invalid_pdf', details: ['pdf must be a base64 data: URL — data:application/pdf;base64,<…>. To publish one that is already on the web, send pdfUrl instead.'] }, 400);
+  return storePdfContent(Buffer.from(m[1], 'base64'));
 }

@@ -121,7 +121,21 @@ const oneHop = (
       res.on('data', (chunk: Buffer) => {
         size += chunk.length;
         if (size > opts.maxBytes) {
-          req.destroy(new WebIngestError('too_large', `"${url}" exceeds the ${opts.maxBytes}-byte import cap`));
+          /*
+           * REJECT BY HAND, and destroy WITHOUT an error — both halves matter,
+           * and only when the whole body arrived in one chunk.
+           *
+           * `req.destroy(err)` on a request whose response has already
+           * COMPLETED does not emit that error on the request: node RAISES it,
+           * which in a server is the process. And leaving the rejection to that
+           * error meant `end` — already queued behind this very chunk — fired
+           * first and resolved the fetch with the bytes collected so far, so an
+           * oversized file came back TRUNCATED and was reported as "not an
+           * image/not a PDF" rather than as too large. Measured: an 8 KB body
+           * against a 1 KB cap resolved and raised an uncaught exception.
+           */
+          reject(new WebIngestError('too_large', `"${url}" exceeds the ${opts.maxBytes}-byte import cap`));
+          req.destroy();
           return;
         }
         chunks.push(chunk);

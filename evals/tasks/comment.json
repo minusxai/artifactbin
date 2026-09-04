@@ -1,0 +1,19 @@
+{
+  "id": "comment",
+  "kind": "comment",
+  "brief": "Someone has left a comment on this document. Read the feedback, make the change it asks for, reply on the thread saying what you did, and resolve it. Reply with the document's URL and nothing else.",
+  "handoff": "token",
+  "seed": "<Helmet><title>Support update</title></Helmet><p>Support kept pace with a busy quarter.</p><p>The support team closed 1,284 tickets last quarter. Median first response was three hours, and the backlog fell by half.</p><p>Two roles are open going into Q4.</p>",
+  "comment": {
+    "path": "1",
+    "body": "Split this paragraph into two — one about tickets, one about response time and the backlog. Keep every word.",
+    "quote": "Median first response was three hours"
+  },
+  "seedSplitText": "The support team closed 1,284 tickets last quarter. Median first response was three hours, and the backlog fell by half.",
+  "checks": [
+    "published",
+    "responded",
+    "changed",
+    "resolved"
+  ]
+}
