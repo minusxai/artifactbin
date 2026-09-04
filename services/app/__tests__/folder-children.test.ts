@@ -75,6 +75,36 @@ describe('the children table', () => {
     expect(mine.body.tables.children.rows).toHaveLength(1);
   });
 
+  /*
+   * THE OWNER MAY BE A TOKEN, NOT AN ACCOUNT. `sessionActor` answers an account
+   * session as a `viewer` and the AGENT COOKIE as a bare `tokenId`, so a route
+   * that threads only the viewer hands an ANONYMOUS owner the stranger's view
+   * of their own listing — no private children, no counts. Found on the dev
+   * walk, where every artifact belongs to an unclaimed token.
+   */
+  it('an anonymous owner sees their OWN folder through the agent cookie: the numbers, which a stranger never gets', async () => {
+    const t = await mintToken('bare');
+    const cookie = await agentCookie([t.id]);
+    const f = await create(t.token, { format: 'folder', title: 'Mine', visibility: 'unlisted' });
+    const child = await create(t.token, { markup: '<p>open</p>', title: 'Open', visibility: 'unlisted', parent_id: f.id });
+
+    const mine = await asOwner(f.id, cookie);
+    expect(mine.status, JSON.stringify(mine.body)).toBe(200);
+    const rows: any[] = mine.body.tables.children.rows;
+    expect(rows.map((x) => x.id)).toEqual([child.id]);
+    expect(typeof rows[0].views).toBe('number');
+    expect(typeof rows[0].sparkline).toBe('string');
+
+    // The anonymous transport is a stranger on the same folder: the same row,
+    // and none of the owner's numbers.
+    const theirs = await anonymous(f.id);
+    expect(theirs.status).toBe(200);
+    const strangerRows: any[] = theirs.body.tables.children.rows;
+    expect(strangerRows.map((x) => x.id)).toEqual([child.id]);
+    expect(strangerRows[0].views).toBeNull();
+    expect(strangerRows[0].sparkline).toBeNull();
+  });
+
   it('a child created under an open folder wakes the folder\'s own channel', async () => {
     const o = await owner();
     const f = await create(o.token, { format: 'folder', title: 'Live' });

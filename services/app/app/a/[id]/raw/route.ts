@@ -114,7 +114,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // document from its shell — a signed-out browser whose cookie names a
   // CLAIMED token would be an owner upstairs and a stranger here, its own
   // private document 404ing inside the frame the shell just rendered.
-  const viewer = (await sessionActor(request)).viewer;
+  const actor = await sessionActor(request);
+  const viewer = actor.viewer;
   const byExportKey = verifyExportKey(artifact.id, key ?? undefined);
   const admitted = (await canReadArtifact(artifact, viewer)) || byExportKey;
   if (!admitted) return notFound();
@@ -344,7 +345,11 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           // export driven by the signed key has no session and photographs the
           // PUBLIC listing, which is the right picture for something meant to
           // be shared.
-          : dataflowForRow(artifact, { values: urlValues, viewer: viewer ? { userId: viewer.userId, tokenId: null, email: viewer.email } : null }),
+          // The TOKEN travels beside the account: sessionActor answers an
+          // account session as a viewer and the agent cookie as a bare token,
+          // and an unclaimed folder is owned by its token — the viewer alone
+          // would photograph a stranger's view of the owner's own listing.
+          : dataflowForRow(artifact, { values: urlValues, viewer: { userId: viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: viewer?.email ?? null } }),
         chrome ? ownerUsername(artifact.user_id) : Promise.resolve(null),
         chrome ? forkedFromCredit(artifact.forked_from) : Promise.resolve(null),
       ]);

@@ -1,4 +1,4 @@
-import { canReadArtifact, dataflowForRow, getArtifactById, type ArtifactRow, type Viewer } from '@/lib/artifacts';
+import { canReadArtifact, dataflowForRow, getArtifactById, type ArtifactRow, type RoleActor } from '@/lib/artifacts';
 import { ID_RE } from '@/lib/ids';
 import { json, readJson } from '@/lib/http';
 import { sessionActor } from '@/lib/viewer';
@@ -58,14 +58,22 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   // cookie) — anything narrower splits the shell from its document: a browser
   // whose cookie names a CLAIMED token would own the page and be a stranger
   // here, its own private document's queries 404ing inside the frame.
-  const viewer = (await sessionActor(request)).viewer;
-  if (!(await canReadArtifact(artifact, viewer))) return json({ error: 'not_found' }, 404);
+  const actor = await sessionActor(request);
+  if (!(await canReadArtifact(artifact, actor.viewer))) return json({ error: 'not_found' }, 404);
 
   const body = await readJson(request);
   if (!body) return json({ error: 'invalid_json' }, 400);
   const parsed = parseQueryRequest(body);
   if (parsed instanceof Response) return parsed;
-  return answer(artifact, parsed, viewer);
+  /*
+   * THE TOKEN ID TRAVELS, not only the account. `sessionActor` answers an
+   * account session as a `viewer` and the AGENT COOKIE as a bare `tokenId`, and
+   * a folder is OWNED by its token when nobody has claimed it — so passing the
+   * viewer alone hands an anonymous owner the stranger's view of their own
+   * listing: no private children, no counts. Measured on the dev walk, where
+   * every artifact belongs to an unclaimed token.
+   */
+  return answer(artifact, parsed, { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null });
 }
 
 /**
@@ -79,8 +87,8 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
  * document's own (its <Query> may name only what its owner may read); this is
  * WHICH ROWS come back.
  */
-async function answer(artifact: ArtifactRow, parsed: QueryRequest, viewer: Viewer, extra: Record<string, string> = {}): Promise<Response> {
+async function answer(artifact: ArtifactRow, parsed: QueryRequest, viewer: RoleActor | null, extra: Record<string, string> = {}): Promise<Response> {
   if (artifact.format !== 'markup' && artifact.format !== 'folder') return json({ tables: {}, errors: {} }, 200, extra);
-  const flow = await dataflowForRow(artifact, { ...parsed, viewer: viewer ? { userId: viewer.userId, tokenId: null, email: viewer.email } : null });
+  const flow = await dataflowForRow(artifact, { ...parsed, viewer });
   return json({ tables: flow?.state.tables ?? {}, errors: flow?.state.errors ?? {} }, 200, extra);
 }
