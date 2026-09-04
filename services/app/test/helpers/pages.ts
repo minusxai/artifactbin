@@ -8,7 +8,7 @@
 import { GET as artifactData } from '@/app/api/page/artifact/[id]/route';
 import { GET as profileData } from '@/app/api/page/profile/[user]/[[...path]]/route';
 import { getArtifactById, type ArtifactRow } from '@/lib/artifacts';
-import { CARD_HEIGHT, CARD_WIDTH } from '@/lib/export-card';
+import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from '@/lib/export-card';
 import { publicOrigin } from '@/lib/http';
 import { displayTitle } from '@/lib/story/title';
 
@@ -57,7 +57,7 @@ async function metaOf(row: ArtifactRow): Promise<ArtifactMeta> {
   const origin = await publicOrigin();
   return {
     title,
-    openGraph: { title, images: [{ url: `${origin}/a/${row.id}/export?mode=card&v=${row.version}`, width: CARD_WIDTH, height: CARD_HEIGHT }] },
+    openGraph: { title, images: [{ url: `${origin}/a/${row.id}/export?mode=card&v=${row.version}&r=${CARD_RENDER_GENERATION}`, width: CARD_WIDTH, height: CARD_HEIGHT }] },
     twitter: { card: 'summary_large_image' },
   };
 }

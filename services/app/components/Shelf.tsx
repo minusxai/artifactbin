@@ -27,6 +27,7 @@ import { Tooltip } from '@/components/Tooltip';
 import { dateStamp, MicroLabel, PANEL, Spark, timeAgo, VISIBILITY_TIPS, VisibilityPill } from '@/components/ui';
 import { buildShelf, type ShelfItem } from '@/lib/shelf';
 import type { Visibility } from '@/lib/artifacts';
+import { CARD_RENDER_GENERATION } from '@/lib/export-card';
 
 /** The superset. Every field past the policy's two is optional by design. */
 export interface ShelfRow extends ShelfItem {
@@ -281,7 +282,7 @@ function Thumb({ row, className }: { row: ShelfRow; className: string }) {
       </span>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={`/a/${row.id}/export?format=jpg&mode=card&v=${row.version}`}
+        src={`/a/${row.id}/export?format=jpg&mode=card&v=${row.version}&r=${CARD_RENDER_GENERATION}`}
         alt=""
         loading="lazy"
         className="relative h-full w-full object-cover"

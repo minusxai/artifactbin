@@ -45,8 +45,14 @@ export function createBrowser(opts: { idleShutdownMs?: number } = {}): BrowserSe
     let b = await get();
     if (!b.isConnected()) { await close(); b = await get(); }
     const timeout = req.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const requestedCrop = typeof req.capture === 'object' && 'card' in req.capture ? req.capture.card : null;
+    // A crop narrower than the output must be RASTERIZED at the corresponding
+    // density. Scaling a 637px screenshot to 1600px only enlarges its pixels.
+    const cardDensity = requestedCrop
+      ? clamp(req.viewport.width / Math.max(1, requestedCrop.width), 1, 4)
+      : 1;
     // reducedMotion: the motion kit never arms scroll reveals under it, so a capture always sees the finished page.
-    const page = await b.newPage({ viewport: req.viewport, reducedMotion: 'reduce' });
+    const page = await b.newPage({ viewport: req.viewport, reducedMotion: 'reduce', deviceScaleFactor: cardDensity });
     try {
       const shotOpts = { timeout, ...(req.format === 'jpg' ? { type: 'jpeg' as const, quality: req.quality ?? 85 } : { type: 'png' as const }) };
       const mime = req.format === 'jpg' ? 'image/jpeg' as const : 'image/png' as const;
@@ -71,20 +77,40 @@ export function createBrowser(opts: { idleShutdownMs?: number } = {}): BrowserSe
       if (req.capture === 'preview' || typeof req.capture === 'object') {
         const { width: outputWidth, height: outputHeight } = req.viewport;
         const box = (await surface.boundingBox()) ?? { x: 0, y: 0, width: outputWidth, height: outputHeight };
+        const crop = requestedCrop;
+        const sourceWidth = crop
+          ? clamp(crop.width, 1, Math.max(1, box.width))
+          : Math.min(Math.max(1, box.width), outputWidth);
+        const sourceHeight = crop
+          ? sourceWidth * outputHeight / outputWidth
+          : Math.max(1, box.height);
+        const x = crop ? clamp(crop.x, 0, Math.max(0, box.width - sourceWidth)) : 0;
+        const y = crop ? clamp(crop.y, 0, Math.max(0, box.height - sourceHeight)) : 0;
+        if (crop) {
+          // page.screenshot honors deviceScaleFactor; CDP clip.scale does not
+          // increase raster density and produced a visibly enlarged bitmap.
+          const initialScrollY = await page.evaluate(() => window.scrollY);
+          const documentY = initialScrollY + box.y + y;
+          await page.evaluate((top) => window.scrollTo(0, top), documentY);
+          const scrollY = await page.evaluate(() => window.scrollY);
+          const bytes = await page.screenshot({
+            // Keep the high-density intermediate lossless. JPEG is encoded
+            // once, after the fractional clip is normalized to exact output.
+            type: 'png',
+            timeout,
+            clip: { x: box.x + x, y: documentY - scrollY, width: sourceWidth, height: sourceHeight },
+          });
+          // Fractional clip edges round at device pixels. The public contract
+          // remains exact even when the chosen width is not a clean divisor.
+          const exactPipeline = sharp(bytes).resize(outputWidth, outputHeight, { fit: 'fill' });
+          const exact = req.format === 'jpg'
+            ? await exactPipeline.jpeg({ quality: req.quality ?? 85 }).toBuffer()
+            : await exactPipeline.png().toBuffer();
+          return { mime, bytes: new Uint8Array(exact) };
+        }
         const client = await page.context().newCDPSession(page);
         try {
-          const crop = typeof req.capture === 'object' ? req.capture.card : null;
-          const sourceWidth = crop
-            ? clamp(crop.width, 1, Math.max(1, box.width))
-            : Math.min(Math.max(1, box.width), outputWidth);
-          const sourceHeight = crop
-            ? sourceWidth * outputHeight / outputWidth
-            : Math.max(1, box.height);
-          const x = crop ? clamp(crop.x, 0, Math.max(0, box.width - sourceWidth)) : 0;
-          const y = crop ? clamp(crop.y, 0, Math.max(0, box.height - sourceHeight)) : 0;
-          const scale = crop
-            ? outputWidth / sourceWidth
-            : Math.min(PREVIEW_WIDTH / sourceWidth, PREVIEW_MAX_HEIGHT / sourceHeight);
+          const scale = Math.min(PREVIEW_WIDTH / sourceWidth, PREVIEW_MAX_HEIGHT / sourceHeight);
           const captured = await client.send('Page.captureScreenshot', {
             format: req.format === 'jpg' ? 'jpeg' : 'png',
             ...(req.format === 'jpg' ? { quality: req.quality ?? 85 } : {}),
@@ -99,14 +125,7 @@ export function createBrowser(opts: { idleShutdownMs?: number } = {}): BrowserSe
             },
           });
           const bytes = Buffer.from(captured.data, 'base64');
-          if (!crop) return { mime, bytes: new Uint8Array(bytes) };
-          // CDP rounds fractional clip edges to device pixels. The render
-          // contract is exact, so contain that implementation detail here.
-          const exactPipeline = sharp(bytes).resize(outputWidth, outputHeight, { fit: 'fill' });
-          const exact = req.format === 'jpg'
-            ? await exactPipeline.jpeg({ quality: req.quality ?? 85 }).toBuffer()
-            : await exactPipeline.png().toBuffer();
-          return { mime, bytes: new Uint8Array(exact) };
+          return { mime, bytes: new Uint8Array(bytes) };
         } finally {
           await client.detach().catch(() => {});
         }

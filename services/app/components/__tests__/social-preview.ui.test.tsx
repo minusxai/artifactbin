@@ -40,6 +40,7 @@ describe('social preview dialog', () => {
     expect(screen.getByRole('status')).toHaveTextContent('rendering full-page overview');
     loadOverview();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Magnified social preview')).toHaveTextContent('selected card');
     fireEvent.click(screen.getByLabelText('Reset social preview'));
     fireEvent.click(screen.getByText('save preview'));
     await waitFor(() => expect(close).toHaveBeenCalled());

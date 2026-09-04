@@ -10,8 +10,12 @@ import { createBrowser } from '@artifactbin/browser/local';
 import sharp from 'sharp';
 import { withHttpServer, type RunningServer } from '../../app/__tests__/net';
 
-const PAGE = `<html><body style="margin:0"><main style="width:600px">
+const PAGE = `<html><head><style>
+.density{position:absolute;left:10px;top:10px;width:20px;height:20px;background:#c33}
+@media(min-resolution:2dppx){.density{background:#3c3}}
+</style></head><body style="margin:0"><main style="position:relative;width:600px">
 <img src="http://127.0.0.1:1/cross-origin.png" alt="">
+<div class="density"></div>
 <div data-mx-slide style="height:100px;background:#c33">one</div>
 <div data-mx-slide style="height:100px;background:#3c3">two</div>
 <div data-mx-slide style="height:100px;background:#33c">three</div></main></body></html>`;
@@ -78,6 +82,17 @@ describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', re
     };
     expect(at(600, 100)).toEqual([51, 204, 51]); // source y≈133: green band
     expect(at(600, 400)).toEqual([51, 51, 204]); // source y≈233: blue band
+  });
+  it('rasterizes a magnified card at the density needed by its output', async () => {
+    const r = await svc.render({
+      ...base(),
+      capture: { card: { x: 0, y: 0, width: 400 } },
+      viewport: { width: 1200, height: 630 },
+    });
+    if (!r.ok) throw new Error(JSON.stringify(r));
+    const { data: pixels, info } = await sharp(Buffer.from(r.bytes)).raw().toBuffer({ resolveWithObject: true });
+    const at = (60 * info.width + 60) * info.channels;
+    expect([...pixels.subarray(at, at + 3)]).toEqual([51, 204, 51]);
   });
   it('produces a height-bounded overview using the same layout', async () => {
     const r = await svc.render({ ...base(), capture: 'preview' });

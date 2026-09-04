@@ -22,7 +22,7 @@ import { createHash } from 'node:crypto';
 import { EXPORT_INTERNAL_ORIGIN } from '@/lib/config';
 import { services } from '@/lib/services';
 import { ArtifactRow, declarationsOf } from './artifacts';
-import { CARD_HEIGHT, CARD_WIDTH } from './export-card';
+import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from './export-card';
 import { mintExportKey } from './export-key';
 import { json } from './http';
 import { objectStore } from './object-store';
@@ -104,7 +104,7 @@ function exportCaptureKey(capture: ExportCapture, slide: number, selection = '')
    */
   const pick = selection ? `-p${createHash('sha256').update(selection).digest('hex').slice(0, 12)}` : '';
   if (slide > 0) return `slide-${slide}-g${EXPORT_RENDER_GENERATION}${pick}`;
-  if (capture === 'card') return `card-${CARD_WIDTH}x${CARD_HEIGHT}-g${EXPORT_RENDER_GENERATION}${pick}`;
+  if (capture === 'card') return `card-${CARD_WIDTH}x${CARD_HEIGHT}-r${CARD_RENDER_GENERATION}-g${EXPORT_RENDER_GENERATION}${pick}`;
   if (capture === 'preview') return `preview-v${SOCIAL_PREVIEW_OVERVIEW_GENERATION}-g${EXPORT_RENDER_GENERATION}`;
   return `full-g${EXPORT_RENDER_GENERATION}${pick}`;
 }

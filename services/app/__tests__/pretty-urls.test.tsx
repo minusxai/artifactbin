@@ -241,7 +241,7 @@ describe('public profile listing', () => {
     // Each card carries the version-busted og-card export as its thumbnail,
     // over a quiet spinner (a steady spin, never a blink) that shows while
     // the shot renders server-side.
-    expect(markup).toContain(`/a/${foldered.id}/export?format=jpg&amp;mode=card&amp;v=1`);
+    expect(markup).toContain(`/a/${foldered.id}/export?format=jpg&amp;mode=card&amp;v=1&amp;r=2`);
     expect(markup).toContain('animate-spin');
     expect(markup).not.toContain('animate-pulse');
   });
@@ -305,7 +305,7 @@ describe('public profile listing', () => {
     const markup = await markupOf('@mxmx_owner');
     // Documents render as thumbnail cards — private ones included (the img
     // request carries the owner session, so the export ACL admits it).
-    expect(markup).toContain(`/a/${doc.id}/export?format=jpg&amp;mode=card&amp;v=1`);
+    expect(markup).toContain(`/a/${doc.id}/export?format=jpg&amp;mode=card&amp;v=1&amp;r=2`);
     expect(markup).toContain('My Doc');
     expect(markup).toContain('private');
     // Folders survive as navigation.

@@ -190,6 +190,31 @@ export default function SocialPreviewDialog({ id, source, editId, version, onClo
         </header>
 
         <div className="min-h-0 flex-1 overflow-auto bg-ground p-3 sm:p-5">
+          {imageReady && (
+            <div className="sticky top-0 z-20 mb-3 ml-auto w-full max-w-sm overflow-hidden rounded-[6px] border border-edge-bright bg-surface shadow-lg" aria-label="Magnified social preview">
+              <div className="flex items-center justify-between border-b border-edge px-2.5 py-1.5 font-mono text-[9px] uppercase tracking-[0.12em] text-muted">
+                <span>selected card</span>
+                <span>{magnification}%</span>
+              </div>
+              <div className="relative aspect-[40/21] overflow-hidden bg-raised">
+                {/* The overview gives immediate feedback; the saved card is independently rasterized at output density. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={previewUrl}
+                  alt=""
+                  aria-hidden="true"
+                  draggable={false}
+                  className="pointer-events-none absolute max-w-none select-none"
+                  style={{
+                    width: `${SOCIAL_PREVIEW_WIDTH / crop.width * 100}%`,
+                    height: 'auto',
+                    left: `${-crop.x / crop.width * 100}%`,
+                    top: `${-crop.y / height * 100}%`,
+                  }}
+                />
+              </div>
+            </div>
+          )}
           <div className="relative mx-auto min-h-48 overflow-hidden border border-edge bg-surface" aria-label="Social preview overview">
             {/* eslint-disable-next-line @next/next/no-img-element -- this is an authenticated generated export. */}
             <img key={previewAttempt} src={previewUrl} alt="Full artifact overview" draggable={false} onLoad={onImageLoad} onError={() => { setImageFailed(true); setImageReady(false); }} className="block h-auto w-full select-none" />

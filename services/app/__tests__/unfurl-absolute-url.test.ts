@@ -31,7 +31,7 @@ describe('artifactPageMetadata', () => {
   it('points og:image at the PUBLIC origin, not the container', async () => {
     const meta = await artifactPageMetadata(row);
     const url = String(meta.openGraph?.images?.[0]?.url ?? '');
-    expect(url).toBe('https://artifactbin.dev/a/Ab3xK9/export?mode=card&v=4');
+    expect(url).toBe('https://artifactbin.dev/a/Ab3xK9/export?mode=card&v=4&r=2');
     expect(url).not.toContain('localhost');
   });
 
