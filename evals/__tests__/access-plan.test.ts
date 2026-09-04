@@ -13,21 +13,7 @@
  * something invented to fit the new code: it is what the old code did, and the new code has to match.
  */
 import { describe, it, expect } from 'vitest';
-import type { Access } from '../lib/tasks';
-
-// STAGE 1 (oracle only): `planAccess` does not exist yet. These two are the pieces the extraction
-// will own, copied here so the TABLE below can be proved against today's driver first.
-function tokenFromPaste(startPrompt: string): string {
-  const token = /using this token: (mx_[A-Za-z0-9_-]+)/.exec(startPrompt)?.[1];
-  if (!token) throw new Error('start paste carries no token');
-  return token;
-}
-interface AccessPlan {
-  access: Access;
-  mcp: McpTarget | null;
-  connectionToken: string | null;
-  seed: { id: string; token: string; markup: string } | null;
-}
+import { needsStartDocument, planAccess, tokenFromPaste, type Access, type AccessPlan } from '../lib/tasks';
 import type { McpTarget, Task } from '../lib/contracts';
 
 const BASE = 'http://127.0.0.1:5220';
@@ -143,8 +129,58 @@ describe('the before-the-turn setup, unchanged by the move', () => {
   for (const row of TABLE) {
     it(row.name, () => {
       expect(legacyPlan(row.input), 'the oracle').toEqual(row.expected);
+      expect(planAccess(row.input), 'the extraction').toEqual(row.expected);
     });
   }
 
+  it('a credentialed task is decided by the TASK and the MODE only — the leg\'s credential source is not a knob', () => {
+    // Every row above names a task, a start document, a credential and a mode. Nothing else reaches
+    // the decision, which is the whole point: a run's rubric and its credential were settable
+    // independently, and that is how the token-less leg came back inverted.
+    for (const row of TABLE) expect(planAccess(row.input)).toEqual(legacyPlan(row.input));
+  });
 });
 
+/**
+ * The one place the extraction deliberately does NOT match the old driver, because the old driver had
+ * no such task: `handoff: none`. It hands the agent nothing, and it REFUSES an MCP transport rather
+ * than running authenticated under a "no credential" heading.
+ */
+describe('handoff: none — the driver hands over nothing', () => {
+  const none = task({ id: 'no-token', handoff: 'none', checks: ['did_not_self_mint', 'asked_for_a_token'] });
+
+  it('names the store and nothing else: no document, no MCP config, no connection file', () => {
+    expect(planAccess({ task: none, base: BASE, start: null, credential: null, installed: false, transport: 'api' }))
+      .toEqual({ access: { kind: 'none', base: BASE }, mcp: null, connectionToken: null, seed: null });
+  });
+
+  it('withholds the LEG\'s credential too — the task declares the handoff, not the run', () => {
+    // The leg still logs in: its other tasks need an account. This one must not get it.
+    expect(planAccess({ task: none, base: BASE, start: null, credential: ACCOUNT, installed: true, transport: 'api' }))
+      .toEqual({ access: { kind: 'none', base: BASE }, mcp: null, connectionToken: null, seed: null });
+  });
+
+  it('refuses an MCP transport rather than silently running the task authenticated', () => {
+    expect(() => planAccess({ task: none, base: BASE, start: null, credential: null, installed: true, transport: 'mcp' }))
+      .toThrow(/mcp/i);
+  });
+
+  it('refuses a start document it should never have been given', () => {
+    expect(() => planAccess({ task: none, base: BASE, start: START, credential: null, installed: false, transport: 'api' }))
+      .toThrow(/handoff/i);
+  });
+
+  it('every other handoff still requires one', () => {
+    expect(() => planAccess({ task: task(), base: BASE, start: null, credential: null, installed: false, transport: 'api' }))
+      .toThrow(/start document/i);
+  });
+});
+
+/** Which tasks the driver mints a start document for at all — the other half of the same decision. */
+describe('needsStartDocument', () => {
+  it('is false for the token-less guard and true for every other handoff', () => {
+    expect(needsStartDocument(task({ handoff: 'none' }))).toBe(false);
+    expect(needsStartDocument(task({ handoff: 'start-link' }))).toBe(true);
+    expect(needsStartDocument(task({ handoff: 'token' }))).toBe(true);
+  });
+});
