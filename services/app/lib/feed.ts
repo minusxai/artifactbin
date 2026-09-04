@@ -12,6 +12,10 @@
 import type { EventEnvelope } from '@artifactbin/contracts';
 import { EVENTS_SCHEMA } from '@/lib/config';
 import { getDb } from '@/lib/db';
+import type { FeedItem } from '@/lib/feed-wire';
+import { linked } from '@/lib/relations';
+
+export type { FeedItem };
 
 export const FEED_DEFAULT_LIMIT = 50;
 
@@ -181,4 +185,83 @@ export async function dailyViewsByUser(userId: string): Promise<DailyViews[]> {
     if (day >= today) break;
   }
   return out;
+}
+
+/**
+ * The verbs a FOLLOWER cares about. Everything else an account does to its own
+ * documents — an edit, a revert, an export — is its own business; these four
+ * are the ones that read as news to somebody else.
+ */
+const FOLLOW_VERBS = ['created', 'forked', 'liked', 'annotated'];
+
+/**
+ * Decorate envelopes for a page: the subject's handle (users.username — null
+ * for a visitor, a token, or an account without one) and the artifact's title.
+ * TWO batched lookups for the whole list, never one per row.
+ */
+export async function decorateFeed(events: EventEnvelope[]): Promise<FeedItem[]> {
+  // Also the guard that keeps the empty page free of queries entirely.
+  if (events.length === 0) return [];
+  const db = await getDb();
+  /*
+   * ONE query per NAME, not one per row: a 50-row feed is two statements
+   * whatever it holds. The ids are deduped first because a feed is mostly the
+   * same few people doing things to the same few documents.
+   */
+  const subjectIds = [...new Set(events.flatMap((e) => (e.subject_kind === 'user' && e.subject_id ? [e.subject_id] : [])))];
+  const objectIds = [...new Set(events.flatMap((e) => (e.object_kind === 'artifact' ? [e.object_id] : [])))];
+  const handles = new Map<string, string>();
+  if (subjectIds.length > 0) {
+    const r = await db.query<{ id: string; username: string | null }>('SELECT id, username FROM users WHERE id = ANY($1)', [subjectIds]);
+    for (const row of r.rows) if (row.username) handles.set(row.id, row.username);
+  }
+  const titles = new Map<string, string>();
+  if (objectIds.length > 0) {
+    const r = await db.query<{ id: string; title: string | null }>('SELECT id, title FROM artifacts WHERE id = ANY($1)', [objectIds]);
+    for (const row of r.rows) if (row.title !== null) titles.set(row.id, row.title);
+  }
+  // A name we do not have is NULL, never a guess: a page that cannot say who
+  // says "someone", and it needs the difference to do that.
+  return events.map((e) => ({
+    id: e.id,
+    at: e.at,
+    verb: e.verb,
+    subject: { kind: e.subject_kind, id: e.subject_id, handle: (e.subject_id && handles.get(e.subject_id)) ?? null },
+    object: { kind: e.object_kind, id: e.object_id, title: titles.get(e.object_id) ?? null },
+    payload: e.payload,
+  }));
+}
+
+/**
+ * "What those I follow did": events said BY the users this one follows, ON
+ * artifacts, for the verbs a follower cares about (created, forked, liked,
+ * annotated) — and only on PUBLIC artifacts, so a followed user's private or
+ * unlisted work never leaks through their follower's feed. Newest first, id
+ * tie-break; empty when the table is absent or the user follows nobody.
+ */
+export async function followFeed(userId: string, opts: { limit?: number } = {}): Promise<EventEnvelope[]> {
+  if (!(await eventsTablePresent())) return [];
+  // The audience comes from `lib/relations`, the one module that touches the
+  // edges — this reader never writes its own join against them.
+  const audience = await linked(userId, 'follow');
+  if (audience.length === 0) return [];
+  const db = await getDb();
+  /*
+   * THE PUBLIC CUT. The join to `artifacts` is not decoration: without
+   * `visibility = 'public'` a follower would read the titles and ids of the
+   * private and unlisted work of everyone they follow, off a table whose rows
+   * nobody thought of as an ACL. The same `at DESC, id DESC` total order as
+   * `ownerFeed`, for the same reason.
+   */
+  const r = await db.query<EventRow>(
+    `SELECT e.* FROM ${EVENTS_SCHEMA}.events e
+       JOIN artifacts a ON a.id = e.object_id
+      WHERE e.object_kind = 'artifact' AND e.subject_kind = 'user'
+        AND e.subject_id = ANY($1) AND e.verb = ANY($2)
+        AND a.visibility = 'public'
+      ORDER BY e.at DESC, e.id DESC
+      LIMIT $3`,
+    [audience, FOLLOW_VERBS, opts.limit ?? FEED_DEFAULT_LIMIT],
+  );
+  return r.rows.map(envelopeOf);
 }

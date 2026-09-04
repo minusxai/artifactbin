@@ -29,6 +29,7 @@ import {
 import { canGovern } from '@/lib/share-roles';
 import { ANNOTATION_ANCHOR_ATTR } from '@/lib/annotation-anchors';
 import { getDb, type Queryable } from '@/lib/db';
+import { actorSubject, emit } from '@/lib/events';
 import { generateInternalId } from '@/lib/ids';
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import {
@@ -356,6 +357,10 @@ export async function createAnnotationFor(
       quote, input.range ? JSON.stringify(input.range) : null],
   );
   await notify(db, artifactId, id);
+  // The row exists; the sentence is about the ARTIFACT (that is whose owner
+  // cares) and the payload names the thread. Nothing here is inside a
+  // transaction, so it is awaited like every other state change.
+  await emit(actorSubject(actor), 'annotated', { kind: 'artifact', id: artifactId }, { annotation_id: id });
 
   const fresh = await scopedRow(db, scope, artifactId);
   const [wire] = fresh ? await wireFor(db, fresh, inserted.rows) : [];
@@ -456,7 +461,16 @@ export async function actOnAnnotationFor(
   const db = await getDb();
   const scope = annotationScope(actor);
 
-  const updated = await db.transaction(async (tx): Promise<AnnotationRowDb | null> => {
+  /*
+   * WHAT MOVED, decided inside the transaction and said outside it. Both
+   * sentences are about a state CHANGE, so the flags are set exactly where the
+   * writes happen: a reply that was actually inserted, and the one transition
+   * the catalogue has a verb for (open → resolved; a reopen says nothing).
+   * `emit` may not run in here — PGLite serialises the op queue behind an open
+   * transaction — so the callback hands the facts back and the log is told
+   * once the transaction has resolved.
+   */
+  const updated = await db.transaction(async (tx): Promise<{ row: AnnotationRowDb; replied: boolean; resolved: boolean } | null> => {
     const row = await scopedRow(tx, scope, artifactId);
     if (!row) return null;
     const found = await tx.query<AnnotationRowDb>(
@@ -466,7 +480,8 @@ export async function actOnAnnotationFor(
     const root = found.rows[0];
     if (!root) return null;
 
-    if (typeof action.reply === 'string' && action.reply.length > 0) {
+    const replied = typeof action.reply === 'string' && action.reply.length > 0;
+    if (replied) {
       await tx.query(
         `INSERT INTO annotations
            (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport, status, snippet)
@@ -474,20 +489,31 @@ export async function actOnAnnotationFor(
         ['ann_' + generateInternalId(), artifactId, root.id, action.reply, author.kind, actor.tokenId, actor.userId, author.label, author.transport],
       );
     }
+    let resolved = false;
     if (action.reopen && root.status === 'resolved') {
       await tx.query("UPDATE annotations SET status = 'open', resolved_at = NULL WHERE id = $1", [root.id]);
     } else if (action.resolve && root.status === 'open') {
       await tx.query("UPDATE annotations SET status = 'resolved', resolved_at = now() WHERE id = $1", [root.id]);
+      resolved = true;
     }
     const fresh = await tx.query<AnnotationRowDb>('SELECT * FROM annotations WHERE id = $1', [root.id]);
+    // The old shape returned the row itself, so a vanished one WAS the null;
+    // wrapping it in an object would have made every miss truthy.
+    if (!fresh.rows[0]) return null;
     await notify(tx, artifactId, root.id);
-    return fresh.rows[0];
+    return { row: fresh.rows[0], replied, resolved };
   });
   if (!updated) return null;
+  const subject = actorSubject(actor);
+  const thread = { kind: 'artifact', id: artifactId } as const;
+  // The payload names the ROOT for both, never the reply's own id: an owner's
+  // feed reads "commented on X", and the thread is what it opens.
+  if (updated.replied) await emit(subject, 'annotated', thread, { annotation_id: annotationId });
+  if (updated.resolved) await emit(subject, 'annotation_resolved', thread, { annotation_id: annotationId });
 
   const head = await scopedRow(db, scope, artifactId);
   if (!head) return null;
-  const [wire] = await wireFor(db, head, [updated]);
+  const [wire] = await wireFor(db, head, [updated.row]);
   return wire ?? null;
 }
 
@@ -531,6 +557,10 @@ export async function deleteAnnotationFor(actor: TokenActor, artifactId: string,
     return { anchorKey: others.rows.length === 0 ? anchorKey : null };
   });
   if (!cleanup) return false;
+  // A cleanup is only produced when the DELETE ran, so this is the erasure
+  // itself rather than an attempt at one. Said before the anchor is swept out
+  // of the source, which is a document edit with a verb of its own.
+  await emit(actorSubject(actor), 'annotation_deleted', { kind: 'artifact', id: artifactId }, { annotation_id: annotationId });
 
   if (cleanup.anchorKey) {
     const head = await scopedRow(db, scope, artifactId);
