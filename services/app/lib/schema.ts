@@ -51,7 +51,14 @@ const TOKENS: Table = {
     { name: 'audience', type: 'TEXT' },
     { name: 'scope', type: 'TEXT' },
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
-    { name: 'revoked_at', type: 'TIMESTAMPTZ' }, // NULL = live (soft revoke)
+    // NULL = live. The verb stays REVOKE everywhere a person or a function
+    // reads it (revokeToken, tokenStatus 'revoked', the dashboard's copy); the
+    // COLUMN is `deleted_at` because every table that can lose a row spells it
+    // the same way, and one pattern with no exception is worth more than a
+    // column name that reads slightly better on this one table. Declared as a
+    // rename, so a database built from the old declaration copies the stamps
+    // across on its next boot rather than un-revoking every revoked token.
+    { name: 'deleted_at', type: 'TIMESTAMPTZ', renamedFrom: 'revoked_at' },
     // Nullable so the additive boot DDL is the migration: existing tokens are
     // grandfathered as non-expiring, and new mints set their own policy.
     { name: 'expires_at', type: 'TIMESTAMPTZ' },
@@ -394,7 +401,15 @@ const WEB_ASSETS: Table = {
   ],
 };
 
-const TABLES: Table[] = [USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, WEBFONTS, WEB_ASSETS];
+/**
+ * The app's tables, in the order boot applies them — and the shape
+ * scripts/render-schema.mjs prefers, so `SCHEMA.sql` is rendered by the SAME
+ * renderer with the deployment's schema qualifier rather than by re-writing
+ * unqualified text. A statement the renderer emits that a regex cannot
+ * re-qualify (a rename's DO block names its own schema twice) is exactly what
+ * that indirection could not survive.
+ */
+export const TABLES: Table[] = [USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, WEBFONTS, WEB_ASSETS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);

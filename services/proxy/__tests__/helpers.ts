@@ -24,7 +24,7 @@ const TOKENS_DDL = [
      audience TEXT,
      scope TEXT,
      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-     revoked_at TIMESTAMPTZ,
+     deleted_at TIMESTAMPTZ,
      expires_at TIMESTAMPTZ,
      last_used_at TIMESTAMPTZ
    )`,

@@ -49,7 +49,7 @@ describe('token management', () => {
     const tokens = await listAccountTokenRows(user.id);
     expect(tokens.map((t) => t.name).sort()).toEqual(['desktop', 'laptop']);
     const laptop = tokens.find((t) => t.name === 'laptop');
-    expect(laptop).toMatchObject({ id: a.id, artifacts: 2, revoked_at: null });
+    expect(laptop).toMatchObject({ id: a.id, artifacts: 2, deleted_at: null });
     expect(tokens.find((t) => t.name === 'desktop')).toMatchObject({ id: b.id, artifacts: 0 });
   });
 
@@ -67,10 +67,10 @@ describe('token management', () => {
     );
     expect(res.status).toBe(401);
 
-    // Still listed (with revoked_at set) so the dashboard shows history.
+    // Still listed (with deleted_at set) so the dashboard shows history.
     const tokens = await listAccountTokenRows(alice.id);
     expect(tokens).toHaveLength(1);
-    expect(tokens[0].revoked_at).not.toBeNull();
+    expect(tokens[0].deleted_at).not.toBeNull();
   });
 });
 

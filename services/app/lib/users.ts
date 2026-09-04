@@ -194,7 +194,7 @@ async function claimWhere(
       // transaction, so "token attached" and "artifacts owned" commit together.
       const token = (
         await tx.query<{ id: string; user_id: string | null }>(
-          `SELECT id, user_id FROM tokens WHERE ${where} AND revoked_at IS NULL`,
+          `SELECT id, user_id FROM tokens WHERE ${where} AND deleted_at IS NULL`,
           [value],
         )
       ).rows[0];
@@ -266,7 +266,7 @@ async function offerableTokens(
        FROM tokens t
        LEFT JOIN artifacts a ON a.token_id = t.id
       WHERE ${col} = ANY($1)
-        AND t.revoked_at IS NULL
+        AND t.deleted_at IS NULL
         AND t.user_id IS NULL
         AND t.created_at > now() - ($2::int * interval '1 hour')
       GROUP BY t.token_hash, t.id`,
@@ -398,17 +398,17 @@ export interface UserTokenRow {
   name: string | null;
   artifacts: number;
   created_at: string;
-  revoked_at: string | null;
+  deleted_at: string | null;
 }
 
 /** The user's machine tokens (revoked ones included, so the dashboard shows history). */
 export async function listAccountTokenRows(userId: string): Promise<UserTokenRow[]> {
   const db = await getDb();
   const r = await db.query<UserTokenRow & { artifacts: string | number }>(
-    `SELECT t.id, t.name, t.created_at, t.revoked_at, COUNT(a.id) AS artifacts
+    `SELECT t.id, t.name, t.created_at, t.deleted_at, COUNT(a.id) AS artifacts
      FROM tokens t LEFT JOIN artifacts a ON a.token_id = t.id
      WHERE t.user_id = $1
-     GROUP BY t.id, t.name, t.created_at, t.revoked_at
+     GROUP BY t.id, t.name, t.created_at, t.deleted_at
      ORDER BY t.created_at DESC`,
     [userId],
   );
@@ -420,7 +420,7 @@ export async function listAccountTokenRows(userId: string): Promise<UserTokenRow
 export async function revokeUserToken(userId: string, tokenId: string): Promise<boolean> {
   const db = await getDb();
   const r = await db.query(
-    'UPDATE tokens SET revoked_at = now() WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL',
+    'UPDATE tokens SET deleted_at = now() WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
     [tokenId, userId],
   );
   return r.rowCount > 0;

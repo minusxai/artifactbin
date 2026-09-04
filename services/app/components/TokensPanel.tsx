@@ -9,7 +9,7 @@ export interface UserTokenView {
   name: string | null;
   status: 'active' | 'expired' | 'revoked';
   created_at: string;
-  revoked_at: string | null;
+  deleted_at: string | null;
   expires_at: string | null;
   last_used_at: string | null;
 }
