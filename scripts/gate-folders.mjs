@@ -22,6 +22,9 @@
  *   5. the picker moves the document out, and the listing follows.
  *   6. the dashboard lists the folder in its own strip, with its count.
  *   7. renaming one is the editor's Title field — a folder has no second door.
+ *   8. deleting one from the strip TRASHES it with its contents, and the trash
+ *      lists both — P3 made delete recoverable, so the row is offered rather
+ *      than refused and the confirm names what goes.
  *
  * Two logged-in contexts and one stranger, one mail sink. usage:
  * Local dev writes login mail to `.artifactbin/dev-mail.jsonl`; use `npm run dev:otp -- <email>`.
@@ -66,6 +69,8 @@ const stranger = await strangerCtx.newPage();
  * browser) and it injects markup, so it is exactly the shape that goes wrong.
  */
 const mismatches = [];
+/** What the delete confirm actually said, captured from the real dialog. */
+let confirmText = '';
 for (const [who, p] of [['owner', owner], ['stranger', stranger]]) {
   p.on('console', (m) => {
     const text = m.text();
@@ -219,13 +224,13 @@ await owner.waitForSelector('[aria-label="Folders"]', { timeout: 20000 });
 const tile = owner.locator('[aria-label="Open folder Field Notes"]');
 await tile.waitFor({ timeout: 15000 });
 check(true, 'the dashboard lists the folder in its own strip');
-// Deleting a folder is deleting everything in it, so the strip refuses it with
-// the count rather than asking afterwards.
+// Deleting a folder is deleting everything in it, so the row SAYS how much
+// before anyone clicks — the count the confirm then repeats in a sentence.
 await owner.locator('[aria-label="More actions for Field Notes"]').first().click();
 const del = owner.locator('[aria-label="Delete Field Notes"]').first();
 await del.waitFor({ timeout: 15000 });
-check(await del.isDisabled(), 'a folder with anything in it cannot be deleted from the strip');
-check(((await del.textContent()) ?? '').includes('inside'), 'and the row says how much is in it');
+check(((await del.textContent()) ?? '').includes('inside'), 'the row says how much is in it');
+await owner.keyboard.press('Escape');
 
 // ── 7. renaming a folder is the editor's Title field, and nothing else ────
 // A folder has no second rename door: the field writes `title` through the
@@ -244,6 +249,40 @@ await owner.waitForResponse(
 );
 const renamed = await owner.evaluate(async (id) => (await (await fetch(`/api/my/artifacts/${id}`)).json()), folder.id);
 check(renamed.title === 'Field Notes 2026', `the title field renames the folder (${renamed.title})`);
+
+// ── 8. deleting a folder from the strip trashes it WITH its contents ─────
+// P3 made delete a trash: the folder and everything under it go in ONE
+// statement, recoverable for 30 days. So the strip's row is offered rather
+// than refused, and what it takes is what the confirm named.
+await owner.goto(`${BASE}/`, { waitUntil: 'load' });
+await owner.waitForSelector('[aria-label="Folders"]', { timeout: 20000 });
+owner.once('dialog', (d) => {
+  confirmText = d.message();
+  void d.accept();
+});
+await owner.locator('[aria-label="More actions for Field Notes 2026"]').first().click();
+await Promise.all([
+  owner.waitForResponse((r) => r.request().method() === 'DELETE' && r.status() === 200, { timeout: 15000 }),
+  owner.locator('[aria-label="Delete Field Notes 2026"]').first().click(),
+]);
+check(/inside it\? They go to the trash for 30 days\./.test(confirmText), `the confirm names what goes with it (${confirmText})`);
+await owner.locator('[aria-label="Open folder Field Notes 2026"]').waitFor({ state: 'detached', timeout: 15000 });
+check(true, 'the tile leaves the strip with no reload');
+// Read back through the OWNER's own door — the bearer route would answer 401
+// to a browser and say nothing about the row. A trashed row is the uniform 404
+// even to the person who trashed it: the trash page is the one reader that
+// sees past the gate.
+const gone = await owner.evaluate(async (ids) => {
+  const status = {};
+  for (const [name, id] of Object.entries(ids)) status[name] = (await fetch(`/api/my/artifacts/${id}`)).status;
+  return status;
+}, { folder: folder.id, child: seen.id });
+check(gone.folder === 404 && gone.child === 404, `the folder and its child are gone, subtree and all (${gone.folder}/${gone.child})`);
+const address = await owner.request.get(`${BASE}/a/${folder.id}`);
+check(address.status() === 404, `and the folder's own address is the uniform 404 (${address.status()})`);
+const trash = await owner.evaluate(async () => (await (await fetch('/api/page/trash')).json()));
+const inTrash = new Set((trash.files ?? []).map((f) => f.id));
+check(inTrash.has(folder.id) && inTrash.has(seen.id), 'and both are listed in the trash');
 
 check(mismatches.length === 0, `no hydration mismatch on either render of the listing${mismatches.length ? ` — ${mismatches[0]}` : ''}`);
 

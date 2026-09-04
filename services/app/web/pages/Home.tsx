@@ -111,6 +111,21 @@ export function HomePage() {
           <SharedWithYou items={home.shared} />
         </>
       )}
+      {/* THE ONE WAY BACK. Deleting is a trash now (lib/trash): a row is
+        * recoverable for 30 days, which is worth nothing if nothing on the
+        * product leads to it. One quiet link under the library, on the
+        * account's own page — an anonymous browser has no trash to reach.
+        * OUTSIDE the empty/full flip on purpose: an emptied library is exactly
+        * when someone is looking for what they just deleted. */}
+      <p className="mt-8">
+        <a
+          href="/trash"
+          aria-label="Trash"
+          className="font-mono text-[10px] text-faint no-underline transition-colors hover:text-accent"
+        >
+          trash
+        </a>
+      </p>
     </main>
   );
 }

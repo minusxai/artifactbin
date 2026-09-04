@@ -103,6 +103,24 @@ describe('what the dashboard leads with', () => {
     expect(screen.queryByText(/claim an agent's artifacts/i)).toBeNull();
   });
 
+  it('offers ONE way to the trash, and only to an account', async () => {
+    /*
+     * P3 made delete a trash: a deleted row is recoverable for 30 days, which
+     * is worth nothing if there is no way to reach it. One link in the
+     * dashboard's chrome, and nothing else — an anonymous browser has no
+     * account to hold a trash, so it is not offered one.
+     */
+    home = { signedIn: true, artifacts: [doc('a')], shared: [] };
+    render(<MemoryRouter><HomePage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText('Doc a')).toBeInTheDocument());
+    expect(screen.getByLabelText('Trash')).toHaveAttribute('href', '/trash');
+    cleanup();
+    home = { signedIn: false };
+    render(<MemoryRouter><HomePage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByLabelText('Get started')).toBeInTheDocument());
+    expect(screen.queryByLabelText('Trash')).toBeNull();
+  });
+
   it('EMPTY: names the first artifact, then the panel, then other people\u2019s work', async () => {
     home = { signedIn: true, artifacts: [], shared: [] };
     render(<MemoryRouter><HomePage /></MemoryRouter>);

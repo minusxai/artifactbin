@@ -7,26 +7,44 @@ afterEach(cleanup);
 const doc = { id: 'doc001', url: '/a/doc001', title: 'Board update', format: 'markup', version: 1, parent_id: null, ancestor_ids: [], visibility: 'private' as const, updated_at: new Date().toISOString(), created_at: new Date().toISOString() };
 const folder = { ...doc, id: 'rep001', url: '/a/rep001', title: 'Reports', format: 'folder' };
 const posts: Array<{ url: string; body: any }> = [];
+const deletes: string[] = [];
+const asked: string[] = [];
 beforeEach(() => {
   posts.length = 0;
+  deletes.length = 0;
+  asked.length = 0;
+  vi.stubGlobal('confirm', vi.fn((message: string) => { asked.push(message); return true; }));
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.method === 'POST') { const body = JSON.parse(String(init.body)); posts.push({ url, body }); return new Response(JSON.stringify({ id: 'new001', format: 'folder', title: body.title, parent_id: body.parent_id ?? null, ancestor_ids: [] }), { status: 201 }); }
+    if (init?.method === 'DELETE') { deletes.push(String(url)); return new Response('{}', { status: 200 }); }
     return new Response('{}', { status: 404 });
   }));
 });
+afterEach(() => vi.unstubAllGlobals());
 
 describe('a folder tile carries the folder\u2019s own actions', () => {
   const child = { ...doc, id: 'chd001', url: '/a/chd001', title: 'Inside', parent_id: 'rep001', ancestor_ids: ['rep001'] };
   const empty = { ...folder, id: 'emp001', url: '/a/emp001', title: 'Empty' };
 
-  it('refuses to delete a folder with anything in it, and says how much', () => {
+  it('deletes a folder WITH its contents, naming what goes, and drops the tile', async () => {
+    /*
+     * P3 made delete a TRASH, so the refusal this row used to draw is gone:
+     * a folder and everything under it go in one statement, recoverable for 30
+     * days. What survives is that deleting a folder is deleting everything in
+     * it, so the count is still said — now in the confirm, where it is a fact
+     * about what is ABOUT to happen rather than a reason it cannot.
+     */
     render(<Shelf actions="full" rows={[folder, empty, child] as never} />);
     fireEvent.click(screen.getByLabelText('More actions for Reports'));
     const del = screen.getByLabelText('Delete Reports') as HTMLButtonElement;
-    // Deleting a folder is deleting everything in it, so it has to be
-    // something someone chose rather than discovered (P3 makes it a trash).
-    expect(del.disabled).toBe(true);
+    expect(del.disabled).toBe(false);
     expect(del.textContent).toContain('1 inside');
+    fireEvent.click(del);
+    await waitFor(() => expect(deletes).toEqual(['/api/my/artifacts/rep001']));
+    expect(asked[0]).toBe('Delete Reports and the 1 item inside it? They go to the trash for 30 days.');
+    // The tile leaves the strip, and so does what was under it — no reload.
+    await waitFor(() => expect(screen.queryByLabelText('Open folder Reports')).toBeNull());
+    expect(screen.getByLabelText('Open folder Empty')).toBeTruthy();
   });
 
   it('reads placement from the TRAIL too — which is all the dashboard sends', () => {
@@ -40,13 +58,20 @@ describe('a folder tile carries the folder\u2019s own actions', () => {
     const trailed = { ...child, parent_id: undefined, ancestor_ids: ['rep001'] };
     render(<Shelf actions="full" rows={[folder, empty, trailed] as never} />);
     fireEvent.click(screen.getByLabelText('More actions for Reports'));
-    expect((screen.getByLabelText('Delete Reports') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByLabelText('Delete Reports').textContent).toContain('1 inside');
+    // The folder nothing points at says nothing — the count is read, not assumed.
+    fireEvent.click(screen.getByLabelText('More actions for Empty'));
+    expect(screen.getByLabelText('Delete Empty').textContent).not.toContain('inside');
   });
 
-  it('an empty folder deletes like anything else', () => {
+  it('an empty folder is deleted with the plain warning — there is nothing inside to name', async () => {
     render(<Shelf actions="full" rows={[folder, empty, child] as never} />);
     fireEvent.click(screen.getByLabelText('More actions for Empty'));
-    expect((screen.getByLabelText('Delete Empty') as HTMLButtonElement).disabled).toBe(false);
+    const del = screen.getByLabelText('Delete Empty') as HTMLButtonElement;
+    expect(del.disabled).toBe(false);
+    fireEvent.click(del);
+    await waitFor(() => expect(deletes).toEqual(['/api/my/artifacts/emp001']));
+    expect(asked[0]).not.toContain('inside it');
   });
 
   it('moves a folder through the same picker every row uses', () => {

@@ -95,12 +95,21 @@ export default function RowMenu({ name, items }: { name: string; items: RowMenuI
 }
 
 /**
- * Deleting an artifact, with the confirmation the act deserves — the link dies
- * and the history goes with it. Shared so the two menus cannot drift into
- * warning about different things.
+ * Deleting an artifact, with the confirmation the act deserves. Shared so the
+ * two menus cannot drift into warning about different things.
+ *
+ * A FOLDER NAMES WHAT GOES WITH IT. Deleting one is deleting everything under
+ * it — one statement, since placement is `ancestor_ids` (lib/trash) — so the
+ * count belongs in the sentence the person answers, not in a refusal they have
+ * to work around. It says the trash and the 30 days too, because what makes
+ * taking a folder full of documents an ordinary act rather than a cliff is
+ * that it is recoverable.
  */
-export async function confirmDeleteArtifact(id: string, name: string): Promise<boolean> {
-  if (!confirm(`Delete "${name}"? The link dies and history is erased.`)) return false;
+export async function confirmDeleteArtifact(id: string, name: string, inside = 0): Promise<boolean> {
+  const message = inside > 0
+    ? `Delete ${name} and the ${inside} item${inside === 1 ? '' : 's'} inside it? They go to the trash for 30 days.`
+    : `Delete "${name}"? The link dies and history is erased.`;
+  if (!confirm(message)) return false;
   const res = await fetch(`/api/my/artifacts/${id}`, { method: 'DELETE' });
   return res.ok;
 }

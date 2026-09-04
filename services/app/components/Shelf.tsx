@@ -97,7 +97,7 @@ export interface ShelfProps {
  * adds over a document card is that a folder has no thumbnail worth taking (its
  * own card would be a picture of this listing) and a count instead.
  */
-function FolderTile({ row, count, level, folders }: { row: ShelfRow; count: number; level: ShelfActions; folders: PickerFolder[] }) {
+function FolderTile({ row, count, level, folders, onDeleted }: { row: ShelfRow; count: number; level: ShelfActions; folders: PickerFolder[]; onDeleted: (id: string) => void }) {
   return (
     <li className={`reveal group relative flex items-center gap-2 px-3 py-2.5 ${PANEL} transition-colors hover:border-edge-bright`}>
       <Folder size={14} className="shrink-0 text-faint transition-colors group-hover:text-accent" />
@@ -117,7 +117,7 @@ function FolderTile({ row, count, level, folders }: { row: ShelfRow; count: numb
           rather than an empty folder. */}
       {count > 0 && <span className="shrink-0 font-mono text-[10px] tabular-nums text-faint">{count}</span>}
       {row.visibility && <VisibilityPill compact visibility={row.visibility} name={nameOf(row)} />}
-      <Actions row={row} level={level} folders={folders} childCount={count} />
+      <Actions row={row} level={level} folders={folders} childCount={count} onDeleted={onDeleted} />
     </li>
   );
 }
@@ -230,7 +230,7 @@ const nameOf = (row: ShelfRow) => row.title ?? row.id;
  * inside an <a> is invalid markup and swallows its own click. These sit above
  * that pseudo-element instead of inside the anchor.
  */
-function Actions({ row, level, folders, childCount = 0 }: { row: ShelfRow; level: ShelfActions; folders: PickerFolder[]; childCount?: number }) {
+function Actions({ row, level, folders, childCount = 0, onDeleted }: { row: ShelfRow; level: ShelfActions; folders: PickerFolder[]; childCount?: number; onDeleted?: (id: string) => void }) {
   const [copied, setCopied] = useState(false);
   const [moving, setMoving] = useState(false);
   const [parentId, setParentId] = useState(parentOfRow(row));
@@ -275,16 +275,21 @@ function Actions({ row, level, folders, childCount = 0 }: { row: ShelfRow; level
               },
               {
                 label: `Delete ${nameOf(row)}`,
-                // A FOLDER WITH ANYTHING IN IT IS REFUSED, with the count — the
-                // same answer the door gives (`folder_not_empty`), said before
-                // the click rather than after it, because deleting a folder is
-                // deleting everything in it. P3 turns this into a trash.
+                // The row SAYS how much goes with it, and the confirm says it
+                // again in a sentence: deleting a folder is deleting everything
+                // under it, in one statement, into a trash it can be taken back
+                // out of for 30 days (lib/trash).
                 text: childCount > 0 ? `delete (${childCount} inside)` : 'delete',
                 icon: <Trash2 size={12} />,
                 danger: true,
-                disabled: childCount > 0,
                 onSelect: () => {
-                  void confirmDeleteArtifact(row.id, nameOf(row)).then((ok) => ok && window.location.reload());
+                  void confirmDeleteArtifact(row.id, nameOf(row), childCount).then((ok) => {
+                    if (!ok) return;
+                    // A caller that can drop the row does; anything else falls
+                    // back to the reload the dense tier has always used.
+                    if (onDeleted) onDeleted(row.id);
+                    else window.location.reload();
+                  });
                 },
               },
             ]}
@@ -430,8 +435,20 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
    * single new tile. The page's next load has it from the server.
    */
   const [made, setMade] = useState<ShelfRow[]>([]);
+  /*
+   * Folders TRASHED here, and everything that went with them. A folder is
+   * deleted with its whole subtree in one statement (lib/trash), so dropping
+   * only the tile would leave its documents on the shelf pointing at rows that
+   * are 404 — and reloading to find that out would throw away the search, the
+   * filters and the scroll, exactly as creating one would.
+   */
+  const [trashed, setTrashed] = useState<string[]>([]);
+  const trash = (id: string) => setTrashed((t) => [...t, id]);
   const q = query.trim().toLowerCase();
-  const all = made.length ? [...made, ...rows] : rows;
+  const present = trashed.length
+    ? rows.filter((r) => !trashed.includes(r.id) && !(r.ancestor_ids ?? []).some((a) => trashed.includes(a)))
+    : rows;
+  const all = made.length ? [...made, ...present] : present;
 
   const togglePick = (v: string) => setPicks((p) => (p.includes(v) ? p.filter((x) => x !== v) : [...p, v]));
 
@@ -511,13 +528,21 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
         * partition), and `total` still counts documents: making a folder never
         * changes what the shelf says you have. */}
       {shelf.folders.length > 0 && (
-        <section aria-label="Folders">
+        /*
+         * `relative z-20` is load-bearing, and was found by a real click. Every
+         * row here carries `.reveal`, which is a CSS ANIMATION — so each row is
+         * its own stacking context and a menu's `z-30` cannot escape it. The
+         * strip sits ABOVE the document tiers in the DOM, so painting order put
+         * a folder's open menu UNDERNEATH the hero card below it: visible,
+         * and unclickable. Raising the section raises everything inside it.
+         */
+        <section aria-label="Folders" className="relative z-20">
           <div className="mb-2 flex items-baseline gap-2">
             <MicroLabel>folders</MicroLabel>
           </div>
           <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {shelf.folders.map((row) => (
-              <FolderTile key={row.id} row={row} count={inside(row.id)} level={actions} folders={pickable} />
+              <FolderTile key={row.id} row={row} count={inside(row.id)} level={actions} folders={pickable} onDeleted={trash} />
             ))}
           </ul>
         </section>
