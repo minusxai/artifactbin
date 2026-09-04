@@ -27,9 +27,11 @@ import {
 } from './story/splice';
 import { parseJsx } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/helmet';
-import { datasetRefsInDataflow, initialValues, isEmptyDataflow, mutationTargets, type Dataflow, type Scalar } from '@/lib/story/dataflow';
+import { datasetRefsInDataflow, initialValues, isEmptyDataflow, mutationTargets, type Dataflow, type Row, type Scalar } from '@/lib/story/dataflow';
 import { isMutationRefused, mutateDataset } from '@/lib/story/dataset-mutate';
 import { runDataflow, type DatasetTables } from '@/lib/sql/run-dataflow';
+import { ancestorsForMove, childrenTableFor, CHILDREN_COLUMNS, folderScaffold, notifyParent, parentOf } from '@/lib/folders';
+import { compileStoryCss, storyCssCompileVersion } from '@/lib/data/story/story-css.server';
 import type { RanDataflow, StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { RefLoader, ResolvedRef } from '@/lib/story/refs';
 import type { DatasetColumn } from '@/lib/story/data-tiers';
@@ -91,8 +93,13 @@ export interface ArtifactRow {
    * backfilling. Read it through `linkRoleOf`, never directly.
    */
   link_role: ShareRole | null;
-  /** Materialized folder path ('' = root) — display metadata, never identity. */
-  folder: string;
+  /**
+   * PLACEMENT — the ids of this row's ancestors, root→parent. `[]` is the root,
+   * the LAST element is the parent, the LENGTH is the level. lib/folders.ts is
+   * the only module that does arithmetic on it; everything else asks that
+   * module (`parentOf`, `resolveParent`, `childrenTableFor`).
+   */
+  ancestor_ids: string[];
   /** Head pointer of the edit protocol — unguessable, regenerated on every accepted write. */
   edit_id: string;
   /** Who made the head: the last accepted writer (an editor may differ from the owner). */
@@ -164,18 +171,39 @@ export function ownsArtifact(row: Pick<ArtifactRow, 'user_id' | 'token_id'>, act
  * of the two is what this implements, which is why the swap is behaviour-
  * preserving — the disagreements were all between values of EQUAL rank.
  */
+/**
+ * The role this actor holds WITHOUT the link — ownership, or a share naming
+ * them personally. The other half of `effectiveRole`, and it is separate
+ * because one question in the product needs it alone: a LISTING.
+ *
+ * `unlisted` means "reads like public, listed nowhere", so a listing may not
+ * be built from "may this viewer read it" — the link is exactly what an
+ * unlisted row grants and exactly what a listing must not honour
+ * (lib/folders childrenTableFor). Holding the address is not a relationship
+ * to the row; ownership and an invitation are.
+ *
+ * Ownership short-circuits, so the share lookup is a query the owner's every
+ * request would otherwise pay for.
+ */
+export async function roleWithoutLink(
+  row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id'>,
+  actor: RoleActor,
+): Promise<ArtifactRole> {
+  if (ownsArtifact(row, actor)) return 'owner';
+  return namedRoleFor(row, actor);
+}
+
 export async function effectiveRole(
   row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | 'visibility' | 'link_role'>,
   actor: RoleActor,
 ): Promise<ArtifactRole> {
-  // Ownership short-circuits: nothing outranks it, so the share lookup is a
-  // query the owner's every request would otherwise pay for.
-  if (ownsArtifact(row, actor)) return 'owner';
+  const held = await roleWithoutLink(row, actor);
+  if (held === 'owner') return 'owner';
   // THE ANONYMOUS CEILING applies to the LINK only, never to a named share:
   // being invited by address is itself an account-shaped act, while holding a
   // URL is not. Without an account there is nothing to attribute a write to.
   const byLink = actor.userId ? linkRoleOf(row) : capRole(linkRoleOf(row), ANONYMOUS_CEILING);
-  return maxRole(byLink, await namedRoleFor(row, actor));
+  return maxRole(byLink, held);
 }
 
 /**
@@ -240,11 +268,17 @@ export interface ArtifactInput {
   visibility?: Visibility;
   /** Absent on replace = keep the current value. Datasets only (routes refuse it elsewhere). */
   access?: DatasetAccess;
-  /** Absent on replace = keep the current value. */
-  folder?: string;
+  /**
+   * PLACEMENT, already resolved. The WIRE speaks `parent_id` (an agent holds a
+   * folder's id and nothing else); the array is what the parent's own row
+   * answers, through lib/folders `resolveParent` — which reads a row, and so
+   * runs only AFTER the ownership scope has resolved the row being written.
+   * Absent on replace = leave it where it is.
+   */
+  ancestor_ids?: string[];
 }
 
-const SUMMARY_COLS = 'id, title, description, format, meta, version, visibility, access, folder, created_at, updated_at';
+const SUMMARY_COLS = 'id, title, description, format, meta, version, visibility, access, ancestor_ids, created_at, updated_at';
 
 // ── Per-token quota ──────────────────────────────────────────────────────────
 
@@ -261,6 +295,29 @@ export async function artifactQuotaExceeded(tokenId: string): Promise<boolean> {
   const db = await getDb();
   const r = await db.query<{ n: number }>('SELECT COUNT(*)::int AS n FROM artifacts WHERE token_id = $1', [tokenId]);
   return (r.rows[0]?.n ?? 0) >= cap;
+}
+
+/**
+ * THE FOLDER SCAFFOLD'S SHEET, COMPILED ONCE PER PROCESS.
+ *
+ * A folder's source is a product-owned CONSTANT — two lines whose only variable
+ * part is the folder's own id, inside a SQL string that contributes no classes.
+ * So the sheet is identical for every folder in the deployment and is compiled
+ * against one canonical id and reused, rather than recompiled per create
+ * (compileStoryCss memoizes by full source, which the id would defeat).
+ *
+ * This is the one place a stored `source` bypasses the publish door. It is
+ * allowed to because the content is OURS: the door's job is to judge what a
+ * caller sent, and nobody sent this.
+ */
+const SCAFFOLD_CSS_ID = 'folder';
+let scaffoldSheet: Promise<{ compiledCss: string | null; cssCompileVersion: string }> | null = null;
+function folderMeta(): Promise<{ compiledCss: string | null; cssCompileVersion: string }> {
+  scaffoldSheet ??= (async () => ({
+    compiledCss: await compileStoryCss(folderScaffold(SCAFFOLD_CSS_ID), { force: true }),
+    cssCompileVersion: storyCssCompileVersion(),
+  }))();
+  return scaffoldSheet;
 }
 
 export async function createArtifact(
@@ -286,6 +343,20 @@ export async function createArtifact(
   // PK-violation retry is a working path, not a theoretical one.
   const ID_MINT_ATTEMPTS = 5;
   for (let attempt = 0; ; attempt++) {
+    /*
+     * The id is minted HERE, in JS, and a folder's whole stored state follows
+     * from it — so the scaffold is built BEFORE the INSERT rather than stamped
+     * into the row afterwards. That keeps the genesis edit row honest: the CTE
+     * below logs `COALESCE(source, content)`, and an insert-then-stamp would
+     * log an empty genesis for a head that already carries the scaffold, which
+     * is a base the first agent edit cannot reconstruct. Re-minted per attempt,
+     * because each retry is a new id and therefore a new scaffold.
+     */
+    const id = generateFileId();
+    const folder = input.format === 'folder';
+    const stored = folder
+      ? { source: folderScaffold(id), meta: { ...input.meta, ...(await folderMeta()) } }
+      : { source: input.source, meta: input.meta };
     try {
       const r = await db.query<ArtifactRow>(
         // The genesis edit row makes the creation's edit_id resolvable like any
@@ -293,7 +364,7 @@ export async function createArtifact(
         // ordinary (if empty) base, not an unknown one. Data-modifying CTEs
         // always execute, so the log row lands even though nothing reads it.
         `WITH created AS (
-           INSERT INTO artifacts (id, token_id, user_id, title, description, format, content, source, meta, visibility, link_role, folder, edit_id, access, forked_from, actor_user_id, actor_token_id)
+           INSERT INTO artifacts (id, token_id, user_id, title, description, format, content, source, meta, visibility, link_role, ancestor_ids, edit_id, access, forked_from, actor_user_id, actor_token_id)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $3, $2) RETURNING *
          ), genesis AS (
            INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, actor_user_id, actor_token_id)
@@ -301,15 +372,15 @@ export async function createArtifact(
          )
          SELECT * FROM created`,
         [
-          generateFileId(),
+          id,
           tokenId,
           userId,
           input.title ?? null,
           input.description ?? null,
           input.format,
           input.content,
-          input.source,
-          JSON.stringify(input.meta),
+          stored.source,
+          JSON.stringify(stored.meta),
           // Born private when someone owns it, public when nobody could ever
           // manage an ACL for it — except assets (images/datasets), born
           // unlisted: a public document reaches them at read time, and a
@@ -321,7 +392,7 @@ export async function createArtifact(
           // NULL is the pre-column shape and reads as 'viewer' (linkRoleOf), so
           // every ordinary creation stays exactly as it was.
           atCreation.linkRole ?? null,
-          input.folder ?? '',
+          input.ancestor_ids ?? [],
           newEditId(),
           // Read-only unless the caller asked otherwise: a dataset that could
           // be written by default would make every existing document's data
@@ -331,6 +402,9 @@ export async function createArtifact(
         ],
       );
       void trackEvent('create', r.rows[0].id, { userId });
+      // A child arriving wakes the folder it landed in, so an open listing
+      // re-runs its own query with no reload.
+      await notifyParent(parentOf(r.rows[0]));
       return r.rows[0];
     } catch (error) {
       const code = (error as { code?: string }).code;
@@ -350,7 +424,8 @@ export async function createArtifact(
 export interface ForkOverrides {
   title?: string;
   visibility?: Visibility;
-  folder?: string;
+  /** Where the COPY lands, already resolved (lib/folders resolveParent). Absent = the forker's root. */
+  ancestor_ids?: string[];
 }
 
 /**
@@ -389,6 +464,16 @@ export async function forkArtifact(
   source: ArtifactRow,
   overrides: ForkOverrides = {},
 ): Promise<ArtifactRow | Response> {
+  /*
+   * A FOLDER IS NOT FORKABLE, and the refusal lives HERE so both doors — the
+   * one a person clicks and the `fork_artifact` operation — inherit it from the
+   * same place. A folder's source names its OWN children table by id, so a copy
+   * would faithfully list the original's children; and re-pointing it at the
+   * copy would silently rewrite a document the forker never wrote.
+   */
+  if (source.format === 'folder') {
+    return json({ error: 'not_forkable', hint: "a folder cannot be forked — create one with format: 'folder' and file documents under it with parent_id" }, 400);
+  }
   if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — delete documents you no longer need'] }, 403);
   const input = await forkInput(actor, source, overrides);
   if (input instanceof Response) return input;
@@ -404,15 +489,15 @@ async function forkInput(actor: TokenActor, source: ArtifactRow, overrides: Fork
   // Everything the copy keeps that is not the content itself, with the
   // forker's overrides winning. `link_role` is carried too, but through
   // createArtifact's creation-only argument rather than here: it is not part
-  // of ArtifactInput, which the replace path shares. With no `folder`
-  // override, createArtifact's default puts the copy at the forker's root,
-  // which is the only place they could have filed it.
+  // of ArtifactInput, which the replace path shares. With no placement
+  // override, the copy lands at the forker's ROOT — the only place they could
+  // have filed it without naming a folder of their own.
   const carried = {
     title: overrides.title ?? source.title,
     description: source.description,
     visibility: overrides.visibility ?? source.visibility,
     access: source.access,
-    ...(overrides.folder !== undefined ? { folder: overrides.folder } : {}),
+    ...(overrides.ancestor_ids !== undefined ? { ancestor_ids: overrides.ancestor_ids } : {}),
   };
   if (source.format !== 'markup') {
     return { ...carried, format: source.format, content: source.content, source: source.source, meta: source.meta };
@@ -476,25 +561,56 @@ export const getArtifactById = cache(async (id: string): Promise<ArtifactRow | n
 });
 
 /** Delete an artifact and its version history. Ownership-scoped; false = unknown/foreign. */
-async function deleteArtifactScoped(scope: Scope, id: string): Promise<boolean> {
+async function deleteArtifactScoped(scope: Scope, id: string, alsoIds: readonly string[] = []): Promise<boolean> {
   const db = await getDb();
   // The event fires AFTER the transaction resolves: an unawaited query from
   // inside the callback would deadlock PGLite's serialized op queue.
   let ownerId: string | null = null;
+  let parent: string | null = null;
   const deleted = await db.transaction(async (tx) => {
-    const owned = await tx.query<{ user_id: string | null }>(`SELECT user_id FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
+    const owned = await tx.query<{ user_id: string | null; ancestor_ids: string[] }>(`SELECT user_id, ancestor_ids FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
     if (owned.rows.length === 0) return false;
     ownerId = owned.rows[0].user_id;
-    await tx.query('DELETE FROM artifact_versions WHERE artifact_id = $1', [id]);
-    // The edit log stores full text (the genesis row holds the whole document),
-    // so "permanent" delete must take it too or the content survives the delete.
-    await tx.query('DELETE FROM artifact_edits WHERE artifact_id = $1', [id]);
-    await tx.query('DELETE FROM artifact_shares WHERE artifact_id = $1', [id]);
-    await tx.query('DELETE FROM annotations WHERE artifact_id = $1', [id]);
-    await tx.query('DELETE FROM artifacts WHERE id = $1', [id]);
+    parent = parentOf(owned.rows[0]);
+    /*
+     * A forced folder delete takes its whole subtree, one row at a time through
+     * exactly the statements a single delete runs — deepest first, so nothing is
+     * orphaned on the way down — inside this one transaction.
+     *
+     * The subtree is collected by CONTAINMENT (lib/folders subtreeIds), and
+     * every row in it belongs to this owner only because `resolveParent`
+     * refuses a parent held by anyone else. That is an invariant enforced in
+     * another module, so the scope is re-applied HERE to the rows the caller
+     * did not name: it costs one statement, and it makes this deletion's ACL
+     * independent of a rule it does not own. A row that fails it is left
+     * whole — orphaned under a folder that is gone, which is recoverable,
+     * where deleting a stranger's document is not.
+     *
+     * It FILTERS the caller's order rather than re-listing from the query,
+     * because the deepest-first order above is the load-bearing part and a
+     * bare `id = ANY(...)` has none.
+     */
+    const mine = new Set(
+      (await tx.query<{ id: string }>(
+        `SELECT id FROM artifacts WHERE id = ANY($1::text[]) AND ${scope.where('$2')}`,
+        [[...alsoIds], scope.val],
+      )).rows.map((r) => r.id),
+    );
+    for (const target of [...alsoIds.filter((x) => mine.has(x)), id]) {
+      await tx.query('DELETE FROM artifact_versions WHERE artifact_id = $1', [target]);
+      // The edit log stores full text (the genesis row holds the whole document),
+      // so "permanent" delete must take it too or the content survives the delete.
+      await tx.query('DELETE FROM artifact_edits WHERE artifact_id = $1', [target]);
+      await tx.query('DELETE FROM artifact_shares WHERE artifact_id = $1', [target]);
+      await tx.query('DELETE FROM annotations WHERE artifact_id = $1', [target]);
+      await tx.query('DELETE FROM artifacts WHERE id = $1', [target]);
+    }
     return true;
   });
-  if (deleted) void trackEvent('delete', id, { userId: ownerId });
+  if (deleted) {
+    void trackEvent('delete', id, { userId: ownerId });
+    await notifyParent(parent);
+  }
   return deleted;
 }
 
@@ -746,7 +862,8 @@ async function replaceScoped(
 ): Promise<ArtifactRow | null | VersionConflict> {
   const db = await getDb();
   const scope = editorScope(actor);
-  // Event fires post-txn — see deleteArtifactScoped for why.
+  // Event and the parent wakeups fire post-txn — see deleteArtifactScoped.
+  let moved: { from: string | null; to: string | null } | null = null;
   const result: ArtifactRow | null | VersionConflict = await db.transaction(async (tx) => {
     const current = (
       await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val])
@@ -761,7 +878,7 @@ async function replaceScoped(
     const updated = await tx.query<ArtifactRow>(
       `UPDATE artifacts
        SET format = $3, content = $4, source = $5, meta = $6, title = $7, description = $8,
-           visibility = COALESCE($10, visibility), folder = COALESCE($11, folder),
+           visibility = COALESCE($10, visibility), ancestor_ids = COALESCE($11::text[], ancestor_ids),
            access = COALESCE($12, access),
            version = version + 1, edit_id = $9, actor_user_id = $13, actor_token_id = $14, updated_at = now()
        WHERE id = $1 AND ${scope.where('$2')} RETURNING *`,
@@ -776,16 +893,36 @@ async function replaceScoped(
         input.description !== undefined ? input.description : current.description,
         newEditId(),
         input.visibility ?? null,
-        input.folder ?? null,
+        input.ancestor_ids ?? null,
         input.access ?? null,
         ...actorStamp(actor),
       ],
     );
+    // A replace may also FILE the row. When the row is a folder, its whole
+    // subtree follows in the same statement the move door uses — one prefix
+    // swap, inside this transaction, so a half-moved tree cannot be observed.
+    if (input.ancestor_ids && current.format === 'folder') {
+      const swap = ancestorsForMove(current, input.ancestor_ids);
+      await tx.query(swap.sql, swap.params);
+    }
     await logWholeDocumentWrite(tx, current, updated.rows[0]);
+    moved = { from: parentOf(current), to: parentOf(updated.rows[0]) };
     return updated.rows[0];
   });
   if (result && !isVersionConflict(result)) void trackEvent('update', result.id, { userId: result.user_id });
+  // BOTH ends of a move wake: the folder the row left and the one it joined.
+  if (moved) await wakeParents(moved);
   return result;
+}
+
+/**
+ * The two channels a placement change wakes — the folder the row LEFT and the
+ * one it JOINED — so an open listing at either end re-runs its own query.
+ * Deduped, because a rename or a plain content write moves nothing and would
+ * otherwise ping the same folder twice.
+ */
+async function wakeParents({ from, to }: { from: string | null; to: string | null }): Promise<void> {
+  for (const id of new Set([from, to])) await notifyParent(id);
 }
 
 // ── The concurrent-edit protocol (concurrent-artifacts-edits.md) ─────────────
@@ -1036,12 +1173,6 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
 }
 
 /**
- * Move a file between folders — metadata only: no version bump, no edit-log
- * row, no content change (a move is not an edit of the document). The
- * canonical URL follows automatically because it is derived, and old links
- * keep working because resolution is by id. Null = unknown/foreign.
- */
-/**
  * Open (or close) a dataset for writes — metadata only, exactly like a folder
  * move: no version bump, no edit-log row, no content change. The rows are not
  * touched; only who may change them from here on. Closing is always safe for
@@ -1061,13 +1192,44 @@ async function setAccessScoped(scope: Scope, id: string, access: DatasetAccess):
   return r.rows[0] ?? null;
 }
 
-async function setFolderScoped(scope: Scope, id: string, folder: string): Promise<ArtifactRow | null> {
+/**
+ * FILE a row under a folder (or back at the root) — metadata only: no version
+ * bump, no edit-log row, no content change, and `updated_at` untouched. A move
+ * is not an edit of the document, and moving `updated_at` would silently
+ * reorder every listing the row appears in.
+ *
+ * The row's own trail is set, and when the row is a FOLDER its whole subtree
+ * follows in ONE prefix-swap statement inside the same transaction — that is
+ * the entire reason placement is an array rather than a bare parent pointer.
+ * Null = unknown or foreign, which is the uniform 404 at every door.
+ *
+ * The caller resolves `next` through lib/folders `resolveParent` FIRST: this
+ * writes what it is given, and the owner, cycle and depth rules live in the one
+ * module that knows the hierarchy.
+ */
+async function setParentScoped(scope: Scope, id: string, next: string[]): Promise<ArtifactRow | null> {
   const db = await getDb();
-  const r = await db.query<ArtifactRow>(
-    `UPDATE artifacts SET folder = $3 WHERE id = $1 AND ${scope.where('$2')} RETURNING *`,
-    [id, scope.val, folder],
-  );
-  return r.rows[0] ?? null;
+  let moved: { from: string | null; to: string | null } | null = null;
+  const row = await db.transaction(async (tx) => {
+    const current = (
+      await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val])
+    ).rows[0];
+    if (!current) return null;
+    const updated = await tx.query<ArtifactRow>(
+      `UPDATE artifacts SET ancestor_ids = $3::text[] WHERE id = $1 AND ${scope.where('$2')} RETURNING *`,
+      [id, scope.val, next],
+    );
+    if (current.format === 'folder') {
+      const swap = ancestorsForMove(current, next);
+      await tx.query(swap.sql, swap.params);
+    }
+    moved = { from: parentOf(current), to: parentOf(updated.rows[0]) };
+    return updated.rows[0] ?? null;
+  });
+  // Post-transaction, like every other wakeup here: an unawaited query from
+  // inside the callback deadlocks PGLite's serialized op queue.
+  if (moved) await wakeParents(moved);
+  return row;
 }
 
 // ── Sharing (the private tier's ACL surface) ─────────────────────────────────
@@ -1321,12 +1483,19 @@ export function revertArtifactFor(actor: TokenActor, id: string, version: number
   return revertScoped(actor, id, version);
 }
 
-export function deleteArtifactFor(actor: TokenActor, id: string): Promise<boolean> {
-  return deleteArtifactScoped(ownerScope(actor), id);
+/**
+ * Delete a row the actor owns. `alsoIds` is a FOLDER's subtree, collected by
+ * the caller (which is also who answered `folder_not_empty` when it was not
+ * asked to force) — so the door's refusal and this deletion read the same
+ * containment.
+ */
+export function deleteArtifactFor(actor: TokenActor, id: string, alsoIds: readonly string[] = []): Promise<boolean> {
+  return deleteArtifactScoped(ownerScope(actor), id, alsoIds);
 }
 
-export function setFolderFor(actor: TokenActor, id: string, folder: string): Promise<ArtifactRow | null> {
-  return setFolderScoped(ownerScope(actor), id, folder);
+/** File a row the actor OWNS under `next` (the resolved trail; `[]` is the root). */
+export function setParentFor(actor: TokenActor, id: string, next: string[]): Promise<ArtifactRow | null> {
+  return setParentScoped(ownerScope(actor), id, next);
 }
 
 export function refLoaderForActor(actor: TokenActor): RefLoader {
@@ -1340,6 +1509,9 @@ function rowToResolvedRef(row: ArtifactRow, owned = false): ResolvedRef {
     format: row.format,
     owned,
     ...(row.format === 'dataset' ? { columns: meta.columns ?? [], access: row.access } : {}),
+    // A folder's shape is FIXED and computed, never stored — the publish door
+    // and the dry run both need it to judge a <Query> over `ref_<folderId>`.
+    ...(row.format === 'folder' ? { columns: CHILDREN_COLUMNS } : {}),
     ...(row.format === 'viz' ? { recipe: JSON.parse(row.content) } : {}),
   };
 }
@@ -1500,7 +1672,10 @@ export async function dataflowForRow(
   opts: DataflowRunOptions = {},
 ): Promise<RanDataflow | null> {
   if (!row.source) return null;
-  return runDocumentDataflow(row.source, datasetResolverForRow(row), opts);
+  // `viewer` absent is ANONYMOUS, deliberately — that is what the document's own
+  // GET transport is, and it is the safe default for every caller that has no
+  // session to hand over.
+  return runDocumentDataflow(row.source, datasetResolverForRow(row, opts.viewer ?? null), opts);
 }
 
 /**
@@ -1519,26 +1694,62 @@ export function declarationsForRow(row: ArtifactRow): StoryIslandDataflow | null
 }
 
 export interface DataflowRunOptions {
+  /**
+   * WHO IS READING. Only a folder's children table varies with it today, and
+   * that is exactly the point: reach is the document owner's, the rows are the
+   * viewer's. Absent = anonymous.
+   */
+  viewer?: RoleActor | null;
   values?: Record<string, Scalar>;
   only?: Iterable<string>;
   /** A window of one query (a table reading past the cap). */
   page?: { name: string; offset: number; limit: number; sort?: { col: string; dir: 'asc' | 'desc' } };
 }
 
-/** Resolve a dataset id to its row, or null — the ownership rule of the caller. */
-export type DatasetResolver = (id: string) => Promise<ArtifactRow | null>;
+/**
+ * Resolve a `ref_<id>` to the TABLE the dataflow registers, or null.
+ *
+ * It answers a table rather than a row because there are two kinds of table
+ * now and they are reached differently: a DATASET's rows come out of the
+ * object store, and a FOLDER's children are computed per VIEWER. Keeping the
+ * viewer in the resolver's closure is what stops the two questions collapsing
+ * — REACH (may this document read that id at all) is the document owner's,
+ * while WHICH ROWS is the person reading it, and answering both with one
+ * identity would hand a stranger the owner's private children.
+ */
+export type DatasetResolver = (id: string) => Promise<RefTable | null>;
+
+/** What a resolved ref contributes to the run: rows and their shape. */
+export type RefTable = { rows: Row[]; columns: DatasetColumn[] };
+
+/** A resolved ref row → its table, under the viewer whose run this is. */
+async function tableForRef(r: ArtifactRow | null, viewer: RoleActor | null): Promise<RefTable | null> {
+  if (!r) return null;
+  if (r.format === 'folder') {
+    return childrenTableFor(r, { userId: viewer?.userId ?? null, email: viewer?.email ?? null, tokenId: viewer?.tokenId ?? null });
+  }
+  if (r.format !== 'dataset') return null; // wrong kind → the query reports the missing table
+  const m = r.meta as { columns?: DatasetColumn[] };
+  try {
+    return { rows: await loadDatasetRows(r), columns: m.columns ?? [] };
+  } catch { return null; } // the query reports the missing table
+}
 
 /** A document's own scope: the token that published it, its owning account, then
  * anything link-readable — render-time must resolve whatever the publish door
- * admitted (getLinkReadableArtifact), or an accepted ref serves broken. */
-const datasetResolverForRow = (row: ArtifactRow): DatasetResolver => async (id) =>
-  (await getArtifact(row.token_id, id))
-  ?? (row.user_id ? await getArtifactByUser(row.user_id, id) : null)
-  ?? (await getLinkReadableArtifact(id));
+ * admitted (getLinkReadableArtifact), or an accepted ref serves broken. The
+ * VIEWER is separate and rides through: reach is the document's, rows are theirs. */
+const datasetResolverForRow = (row: ArtifactRow, viewer: RoleActor | null): DatasetResolver => async (id) =>
+  tableForRef(
+    (await getArtifact(row.token_id, id))
+    ?? (row.user_id ? await getArtifactByUser(row.user_id, id) : null)
+    ?? (await getLinkReadableArtifact(id)),
+    viewer,
+  );
 
-/** A bearer/session actor's scope — the editor running a DRAFT's queries. */
+/** A bearer/session actor's scope — the editor running a DRAFT's queries. Reach and viewer are the same person here. */
 export const datasetResolverForActor = (actor: TokenActor): DatasetResolver => async (id) =>
-  (await getArtifactFor(actor, id)) ?? (await getLinkReadableArtifact(id));
+  tableForRef((await getArtifactFor(actor, id)) ?? (await getLinkReadableArtifact(id)), { userId: actor.userId, tokenId: actor.tokenId });
 
 /**
  * What a document DECLARES: its `<Value>`s, `<Query>`s and `<Mutation>`s, from
@@ -1571,12 +1782,10 @@ export async function runDocumentDataflow(
 
   const datasets: DatasetTables = {};
   for (const id of datasetRefsInDataflow(flow)) {
-    const r = await resolve(id);
-    if (!r || r.format !== 'dataset') continue; // unresolvable → the query reports the missing table
-    const m = r.meta as { columns?: DatasetColumn[] };
-    try {
-      datasets[id] = { rows: await loadDatasetRows(r), columns: m.columns ?? [] };
-    } catch { /* the query reports the missing table */ }
+    // Unresolvable, or a kind that is not a table → the query reports the
+    // missing table, which is a query error rather than a render failure.
+    const table = await resolve(id);
+    if (table) datasets[id] = table;
   }
   const state = await runDataflow(flow, datasets, { values: opts.values, only: opts.only, page: opts.page });
   return { flow, state };

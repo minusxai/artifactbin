@@ -14,7 +14,7 @@ import { baseUrl, json } from '@/lib/http';
  * clicks (a session credential, no overrides — the copy opens in the editor,
  * where renaming and filing it are the next thing they do), and the
  * `fork_artifact` OPERATION (lib/operations/registry), which a bearer agent
- * calls and which carries the title/visibility/folder overrides an agent has
+ * calls and which carries the title/visibility/parent_id overrides an agent has
  * no editor to apply. The two differ in exactly three ways — the credential,
  * the 409 below, and the shape of the answer — and in nothing else, because
  * everything a fork MEANS lives in `forkArtifact`.

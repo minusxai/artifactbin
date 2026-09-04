@@ -156,6 +156,11 @@ export function kitchenSinkMarkup(refs: KitchenSinkRefs): string {
     <Card><CardHeader><CardTitle>DataTable</CardTitle></CardHeader><CardContent>
       <DataTable data="$sales" height="320px" sort={{col:"revenue", dir:"desc"}} columns={[{col:"month", title:"Month"}, {col:"region", title:"Region"}, {col:"revenue", title:"Revenue", fmt:"$,.0f", bar:true}]} />
     </CardContent></Card>
+    <Card><CardHeader><CardTitle>Files</CardTitle></CardHeader><CardContent>
+      {/* A folder's listing. Bound like any other table — a real folder's own
+          scaffold binds it to a <Query> over ref_&lt;folderId&gt;. */}
+      <Files data="$sales" variant="icons" />
+    </CardContent></Card>
     <figure>
       <img src="${img}" alt="Referenced image artifact" className="w-full rounded-md border border-border" />
       <figcaption className="mt-2 text-sm text-muted-foreground">An image artifact resolved from <code className="font-mono text-[0.9em]">ref:</code>.</figcaption>

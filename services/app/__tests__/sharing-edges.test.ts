@@ -1,7 +1,7 @@
 /**
- * Edge cases around the ACL, folders, and the agent surfaces — the ones the
+ * Edge cases around the ACL, placement, and the agent surfaces — the ones the
  * happy-path suites don't reach: share rows outliving their artifact, the
- * bounds on a share list, a folder whose NAME looks like a file id, the MCP
+ * bounds on a share list, a trailing segment that looks like a file id, the MCP
  * tool's own validation, and what the list/metadata surfaces disclose.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,6 +13,7 @@ import { GET as listArtifactsRoute, POST as createArtifactRoute } from '@/app/ap
 import { GET as listMineRoute } from '@/app/api/my/artifacts/route';
 import { DELETE as deleteMineRoute } from '@/app/api/my/artifacts/[id]/route';
 import { PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
+import { getArtifactById } from '@/lib/artifacts';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/users';
 
@@ -119,21 +120,23 @@ describe('share-list bounds', () => {
   });
 });
 
-describe('a folder whose name looks like a file id', () => {
-  it('falls through to the folder listing when no such file exists', async () => {
-    const { owner, token } = await ownerFixture();
-    // 'abc123' is a legal id shape AND a legal folder segment.
-    await create(token, { title: 'inside', markup: '<h1>x</h1>', folder: 'abc123' });
+describe('a trailing segment that looks like a file id', () => {
+  /*
+   * There is no listing below the handle any more: a folder is an artifact
+   * with its own id-anchored address, so nesting left the URL entirely. What
+   * used to be "does the file win over the folder of the same name" is now the
+   * simpler pair — an id resolves, and anything else is the uniform 404.
+   */
+  it('an id-shaped segment naming nothing is the uniform 404, never a listing', async () => {
+    const { owner } = await ownerFixture();
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
-    expect(await outcome(UserPage('@edgeowner', ['abc123']))).toBe('render');
+    expect(await outcome(UserPage('@edgeowner', ['abc123']))).toBe('notFound');
   });
 
-  it('but a real file of that id WINS over the folder of the same name', async () => {
+  it('a real file of that id resolves, and heals to its canonical address', async () => {
     const { owner, token } = await ownerFixture();
     const doc = await create(token, { title: 'the file', markup: '<h1>x</h1>', visibility: 'public' });
-    // Put another artifact in a folder named exactly like the first one's id.
-    await create(token, { title: 'inside', markup: '<h1>y</h1>', folder: doc.id });
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
     // Resolving by id means the canonical redirect, not a listing render.
@@ -149,25 +152,31 @@ describe('what the surfaces disclose', () => {
     expect(meta).toEqual({});
   });
 
-  it('both list surfaces carry visibility and folder', async () => {
+  it('both list surfaces carry visibility and placement', async () => {
     const { owner, token } = await ownerFixture();
-    await create(token, { title: 'x', markup: '<h1>x</h1>', folder: 'reports/q3' });
+    const box = await create(token, { format: 'folder', title: 'Q3' });
+    await create(token, { title: 'x', markup: '<h1>x</h1>', parent_id: box.id });
     const byToken = await (await listArtifactsRoute(request('/api/artifacts', { token: token }))).json();
-    expect(byToken.artifacts[0]).toMatchObject({ visibility: 'private', folder: 'reports/q3' });
+    expect(byToken.artifacts.find((a: { id: string }) => a.id !== box.id)).toMatchObject({ visibility: 'private', parent_id: box.id, ancestor_ids: [box.id] });
 
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
     const byUser = await (await listMineRoute(request('/api/my/artifacts'))).json();
-    expect(byUser.artifacts[0]).toMatchObject({ visibility: 'private', folder: 'reports/q3' });
+    expect(byUser.artifacts.find((a: { id: string }) => a.id !== box.id)).toMatchObject({ visibility: 'private', parent_id: box.id, ancestor_ids: [box.id] });
   });
 
-  it('an invalid visibility or folder on PUT is a 400, not a silent ignore', async () => {
+  it('an invalid visibility or parent on PUT is a 400, not a silent ignore', async () => {
     const { token } = await ownerFixture();
     const doc = await create(token, { title: 'x', markup: '<h1>x</h1>' });
+    const notAFolder = await create(token, { title: 'plain', markup: '<h1>z</h1>' });
     for (const [body, error] of [
       [{ markup: '<h1>y</h1>', visibility: 'hidden' }, 'invalid_visibility'],
-      [{ markup: '<h1>y</h1>', folder: 'has space' }, 'invalid_folder'],
-      [{ markup: '<h1>y</h1>', folder: 'a/'.repeat(9) }, 'invalid_folder'],
+      // Unknown, and not-a-folder: ONE refusal, because the parent must be
+      // yours and telling them apart says whether an id exists.
+      [{ markup: '<h1>y</h1>', parent_id: 'zzzzzz' }, 'invalid_parent'],
+      [{ markup: '<h1>y</h1>', parent_id: notAFolder.id }, 'invalid_parent'],
+      // The retired PATH field is answered by name, never as "invalid".
+      [{ markup: '<h1>y</h1>', folder: 'reports/q3' }, 'folder_retired'],
     ] as const) {
       const res = await putArtifact(request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: body }), params({ id: doc.id }));
       expect(res.status, JSON.stringify(body)).toBe(400);
@@ -191,22 +200,24 @@ describe('the MCP tool validates the same way the REST route does', () => {
     expect(owned.data.visibility).toBe('private');
   });
 
-  it('update_artifact HONOURS visibility and folder — the doc tells agents to use it', async () => {
+  it('update_artifact HONOURS visibility and parent_id — the doc tells agents to use it', async () => {
     const { token } = await ownerFixture();
+    const box = await mcpCall(token, 'create_artifact', { format: 'folder', title: 'Shared' });
+    expect(box.isError).toBe(false);
     const made = await mcpCall(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>' });
     expect(made.data.visibility).toBe('private');
 
     // "make it shareable" — the agent's only lever, and it must actually pull.
     const updated = await mcpCall(token, 'update_artifact', {
-      id: made.data.id as string, markup: '<h1>y</h1>', visibility: 'public', folder: 'shared/q3',
+      id: made.data.id as string, markup: '<h1>y</h1>', visibility: 'public', parent_id: box.data.id as string,
     });
     expect(updated.isError).toBe(false);
     expect(updated.data.visibility).toBe('public');
 
-    const row = await (await harness.db()).query<{ visibility: string; folder: string }>(
-      'SELECT visibility, folder FROM artifacts WHERE id = $1', [made.data.id],
+    const row = await (await harness.db()).query<{ visibility: string; ancestor_ids: string[] }>(
+      'SELECT visibility, ancestor_ids FROM artifacts WHERE id = $1', [made.data.id],
     );
-    expect(row.rows[0]).toEqual({ visibility: 'public', folder: 'shared/q3' });
+    expect(row.rows[0]).toEqual({ visibility: 'public', ancestor_ids: [box.data.id] });
   });
 
   it('update_artifact refuses private on an anonymous token, like the REST route', async () => {
@@ -219,13 +230,27 @@ describe('the MCP tool validates the same way the REST route does', () => {
     expect(refused.data.error).toBe('private_requires_account');
   });
 
-  it('rejects a malformed folder instead of storing it', async () => {
+  it('rejects an unreachable parent instead of storing it, and names the retired field', async () => {
     const { token } = await ownerFixture();
-    const bad = await mcpCall(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>', folder: 'has space' });
+    const bad = await mcpCall(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>', parent_id: 'zzzzzz' });
     expect(bad.isError).toBe(true);
-    expect(bad.data.error).toBe('invalid_folder');
+    expect(bad.data.error).toBe('invalid_parent');
 
-    const good = await mcpCall(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>', folder: '/reports/q3/' });
+    /*
+     * The RETIRED field over MCP: the tool's own schema no longer declares
+     * `folder`, so the SDK strips it before the operation runs and the document
+     * lands at the root. That is the same thing every other retired input
+     * (`markdown`, `html`, `jsx`) already does over this transport — a JSON-RPC
+     * tool call is validated against a declared schema, where an HTTP body is
+     * not — and REST, which sees the raw body, answers `folder_retired` by name
+     * (asserted above, on PUT).
+     */
+    const retired = await mcpCall(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>', folder: 'reports/q3' });
+    expect(retired.isError).toBe(false);
+    expect((await getArtifactById(retired.data.id as string))!.ancestor_ids).toEqual([]);
+
+    const box = await mcpCall(token, 'create_artifact', { format: 'folder', title: 'Reports' });
+    const good = await mcpCall(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>', parent_id: box.data.id as string });
     expect(good.isError).toBe(false);
   });
 });

@@ -47,7 +47,7 @@ async function fixtures() {
     new Request(`${BASE}/api/artifacts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t.token}` },
-      body: JSON.stringify({ title: 'Eating Healthy', markup: '<h1>x</h1>', visibility: 'public', folder: '2026/08' }),
+      body: JSON.stringify({ title: 'Eating Healthy', markup: '<h1>x</h1>', visibility: 'public' }),
     }),
   );
   expect(res.status).toBe(201);
@@ -63,19 +63,25 @@ beforeEach(async () => {
 describe('percent-encoded route params (what the router really sends)', () => {
   it('resolves %40username exactly like @username', async () => {
     const { doc } = await fixtures();
-    const canonical = `/@mxmx_owner/2026/08/${doc.id}-eating-healthy`;
+    const canonical = `/@mxmx_owner/${doc.id}-eating-healthy`;
     // Already canonical apart from the encoding → renders, no redirect loop.
-    expect((await outcome(UserPage('%40mxmx_owner', ['2026', '08', `${doc.id}-eating-healthy`]))).kind).toBe('render');
+    expect((await outcome(UserPage('%40mxmx_owner', [`${doc.id}-eating-healthy`]))).kind).toBe('render');
+    // An OLD link still carrying folder segments heals: resolution is by id,
+    // and everything before the last segment was always decoration.
+    expect(await outcome(UserPage('%40mxmx_owner', ['2026', '08', `${doc.id}-eating-healthy`]))).toEqual({ kind: 'redirect', to: canonical });
     // Non-canonical + encoded → still heals.
     expect(await outcome(UserPage('%40wronguser', [`${doc.id}`]))).toEqual({ kind: 'redirect', to: canonical });
   });
 
   it('decodes encoded PATH segments too, so a title slug with encoding still resolves', async () => {
     const { doc } = await fixtures();
-    // '%2D' is '-', the id/slug delimiter: an encoded delimiter must not hide the id.
-    expect(await outcome(UserPage('%40mxmx_owner', [`${doc.id}%2Deating%2Dhealthy`]))).toEqual({
+    // '%2D' is '-', the id/slug delimiter: an encoded delimiter must not hide
+    // the id. Decoded it IS the canonical address, so it renders in place.
+    expect((await outcome(UserPage('%40mxmx_owner', [`${doc.id}%2Deating%2Dhealthy`]))).kind).toBe('render');
+    // An encoded segment that decodes to a STALE slug still heals by id.
+    expect(await outcome(UserPage('%40mxmx_owner', [`${doc.id}%2Dstale%2Dtitle`]))).toEqual({
       kind: 'redirect',
-      to: `/@mxmx_owner/2026/08/${doc.id}-eating-healthy`,
+      to: `/@mxmx_owner/${doc.id}-eating-healthy`,
     });
   });
 
@@ -94,7 +100,7 @@ describe('percent-encoded route params (what the router really sends)', () => {
     const { doc } = await fixtures();
     expect(await outcome(UserPage('@PPSreejith', [doc.id]))).toEqual({
       kind: 'redirect',
-      to: `/@mxmx_owner/2026/08/${doc.id}-eating-healthy`,
+      to: `/@mxmx_owner/${doc.id}-eating-healthy`,
     });
   });
 });

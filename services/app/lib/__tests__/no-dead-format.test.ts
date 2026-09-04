@@ -86,7 +86,7 @@ describe('one document format', () => {
     // type are one declaration now (readers ask it "do we serve this?"), so
     // asserting the list is asserting both.
     const { ARTIFACT_FORMATS } = await import('@/lib/story/input');
-    expect([...ARTIFACT_FORMATS].sort()).toEqual(['dataset', 'image', 'markup', 'pdf', 'viz']);
+    expect([...ARTIFACT_FORMATS].sort()).toEqual(['dataset', 'folder', 'image', 'markup', 'pdf', 'viz']);
   });
 
   it('the agent doc teaches markup only', () => {

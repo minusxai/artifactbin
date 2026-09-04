@@ -15,8 +15,8 @@ interface ArtifactSummary {
   title: string | null;
   format?: string;
   version: number;
-  /** Materialized folder path ('' = root); present on session rows. */
-  folder?: string;
+  /** The id of the folder artifact this row sits in; absent/null = the root. */
+  parent_id?: string | null;
   visibility?: Visibility;
   updated_at: string;
   /** All-time view count; present on dashboard (session) rows only. */
@@ -203,18 +203,19 @@ export function ArtifactTable({ artifacts, manage, embedded, canEdit = true, can
   // change to justify reloading the page the way delete does.
   const [movedFolders, setMovedFolders] = useState<Record<string, string>>({});
   const [movingId, setMovingId] = useState<string | null>(null);
-  const [folderDraft, setFolderDraft] = useState('');
-  const folderOf = (a: ArtifactSummary) => movedFolders[a.id] ?? a.folder ?? '';
+  const [parentDraft, setParentDraft] = useState('');
+  const parentOfRow = (a: ArtifactSummary) => movedFolders[a.id] ?? a.parent_id ?? '';
 
   const moveTo = async (a: ArtifactSummary) => {
     const res = await fetch(`/api/my/artifacts/${a.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ folder: folderDraft.trim() }),
+      // '' is the ROOT, which the wire spells `null` (absent would mean "leave it").
+      body: JSON.stringify({ parent_id: parentDraft.trim() || null }),
     }).catch(() => null);
     if (res?.ok) {
-      const body = (await res.json()) as { folder: string };
-      setMovedFolders((m) => ({ ...m, [a.id]: body.folder }));
+      const body = (await res.json()) as { parent_id: string | null };
+      setMovedFolders((m) => ({ ...m, [a.id]: body.parent_id ?? '' }));
       setMovingId(null);
     }
   };
@@ -396,8 +397,8 @@ export function ArtifactTable({ artifacts, manage, embedded, canEdit = true, can
                       >
                         {a.title ?? <span className="text-faint">(untitled)</span>}
                       </a>
-                      {manage && movingId !== a.id && folderOf(a) && (
-                        <span className="shrink-0 font-mono text-[10px] text-faint">{folderOf(a)}</span>
+                      {manage && movingId !== a.id && parentOfRow(a) && (
+                        <span className="shrink-0 font-mono text-[10px] text-faint">{parentOfRow(a)}</span>
                       )}
                     </span>
                     <span className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 font-mono text-[10px] leading-none text-faint sm:hidden">
@@ -438,10 +439,10 @@ export function ArtifactTable({ artifacts, manage, embedded, canEdit = true, can
                     onSubmit={(e) => { e.preventDefault(); void moveTo(a); }}
                   >
                     <input
-                      aria-label="Folder path"
-                      placeholder="folder/subfolder ('' = root)"
-                      value={folderDraft}
-                      onChange={(e) => setFolderDraft(e.target.value)}
+                      aria-label="Folder id"
+                      placeholder="folder id ('' = root)"
+                      value={parentDraft}
+                      onChange={(e) => setParentDraft(e.target.value)}
                       className="w-48 rounded-[4px] border border-edge bg-transparent px-1.5 py-0.5 font-mono text-[11px] text-fg focus:outline-none focus:border-edge-bright"
                     />
                     <Tooltip content="save">
@@ -521,7 +522,7 @@ export function ArtifactTable({ artifacts, manage, embedded, canEdit = true, can
                           label: `Move ${a.title ?? a.id}`,
                           text: 'move to folder',
                           icon: <FolderInput size={12} />,
-                          onSelect: () => { setMovingId(a.id); setFolderDraft(folderOf(a)); },
+                          onSelect: () => { setMovingId(a.id); setParentDraft(parentOfRow(a)); },
                         },
                         {
                           label: `Delete ${a.title ?? a.id}`,

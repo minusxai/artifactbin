@@ -92,11 +92,14 @@ const ARTIFACTS: Table = {
     // owner publishes may write rows through a <Mutation>; lib/artifacts
     // canWriteDataset). Other formats carry the default and nothing reads it.
     { name: 'access', type: 'TEXT', notNull: true, default: "'read'" },
-    // Materialized folder path ('2026/08/12'; '' = root) — pure display
-    // metadata. Resolution is always by id, so moving/renaming a folder is
-    // one UPDATE and never breaks a link. No folder table: empty folders
-    // don't exist.
-    { name: 'folder', type: 'TEXT', notNull: true, default: "''" },
+    // PLACEMENT — the ids of this row's ancestors, root→parent (the
+    // materialized-path pattern, with ids rather than names). '{}' is the
+    // root, the LAST element is the parent, the array's LENGTH is the level,
+    // so nothing is stored twice; lib/folders.ts is the only module that does
+    // arithmetic on it. A folder is an artifact (`format: 'folder'`), which is
+    // what makes this the whole hierarchy: no second table, no foreign key,
+    // and one invariant a test pins — `ancestor_ids = parent.ancestor_ids || parent.id`.
+    { name: 'ancestor_ids', type: 'TEXT[]', notNull: true, default: "'{}'" },
     { name: 'title', type: 'TEXT' },
     { name: 'description', type: 'TEXT' },
     { name: 'format', type: 'TEXT', notNull: true, default: "'markup'" }, // ArtifactFormat (lib/story/input.ts); no CHECK on purpose
@@ -126,7 +129,21 @@ const ARTIFACTS: Table = {
     { name: 'forked_from', type: 'TEXT' },
   ],
   primaryKey: ['id'],
-  indexes: [{ name: 'idx_artifacts_token_updated', columns: ['token_id', 'updated_at DESC'] }],
+  indexes: [
+    { name: 'idx_artifacts_token_updated', columns: ['token_id', 'updated_at DESC'] },
+    // The three placement reads, one index each. GIN containment answers "every
+    // row under this folder" (the subtree, its height, a forced delete);
+    // the expression index answers "the children of this folder" off the last
+    // element; and (user_id, level) answers an account's ROOT listing, which is
+    // the dashboard's own query.
+    { name: 'idx_artifacts_ancestors', columns: ['ancestor_ids'], using: 'gin' },
+    { name: 'idx_artifacts_parent', columns: ['(ancestor_ids[cardinality(ancestor_ids)])'] },
+    { name: 'idx_artifacts_user_level', columns: ['user_id', '(cardinality(ancestor_ids))'] },
+  ],
+  // `folder` was a materialized PATH of names ('2026/08/reports'). Placement is
+  // `ancestor_ids` now — ids, so two sibling folders may share a name and a
+  // rename breaks nothing — and the old column is dead data, dropped on boot.
+  dropped: ['folder'],
 };
 
 // Append-only; a row is the state BEFORE a PUT replaced it.

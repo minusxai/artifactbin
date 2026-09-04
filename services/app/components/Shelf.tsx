@@ -37,7 +37,8 @@ export interface ShelfRow extends ShelfItem {
   description?: string | null;
   version: number;
   visibility?: Visibility;
-  folder?: string;
+  /** The id of the folder artifact this row sits in; absent/null = the root. */
+  parent_id?: string | null;
   views?: number;
   /** Server-rendered 30-day spline (inline SVG). Absent = draw none. */
   sparkline?: string;
@@ -104,8 +105,10 @@ const nameOf = (row: ShelfRow) => row.title ?? row.id;
 function Actions({ row, level }: { row: ShelfRow; level: ShelfActions }) {
   const [copied, setCopied] = useState(false);
   const [moving, setMoving] = useState(false);
-  const [folder, setFolder] = useState(row.folder ?? '');
-  const [folderDraft, setFolderDraft] = useState(row.folder ?? '');
+  // P1 keeps the move a plain id field; P2 replaces it with the folder picker
+  // (the tree, with the row's own subtree greyed out — the cycle rule drawn).
+  const [parentId, setParentId] = useState(row.parent_id ?? '');
+  const [parentDraft, setParentDraft] = useState(row.parent_id ?? '');
   const share = async () => {
     const url = row.url.startsWith('http') ? row.url : `${location.origin}${row.url}`;
     try {
@@ -117,15 +120,17 @@ function Actions({ row, level }: { row: ShelfRow; level: ShelfActions }) {
     }
   };
   const moveTo = async () => {
-    const next = folderDraft.trim();
+    // Empty means the ROOT, which the wire spells `null` — absent would mean
+    // "leave it where it is", and the two must stay distinguishable.
+    const next = parentDraft.trim() || null;
     const res = await fetch(`/api/my/artifacts/${row.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ folder: next }),
+      body: JSON.stringify({ parent_id: next }),
     }).catch(() => null);
     if (!res?.ok) return;
-    const body = (await res.json()) as { folder?: string };
-    setFolder(body.folder ?? next);
+    const body = (await res.json()) as { parent_id?: string | null };
+    setParentId(body.parent_id ?? next ?? '');
     setMoving(false);
   };
   if (level === 'none') return null;
@@ -156,7 +161,7 @@ function Actions({ row, level }: { row: ShelfRow; level: ShelfActions }) {
                 text: 'move to folder',
                 icon: <FolderInput size={12} />,
                 onSelect: () => {
-                  setFolderDraft(folder);
+                  setParentDraft(parentId);
                   setMoving(true);
                 },
               },
@@ -182,10 +187,10 @@ function Actions({ row, level }: { row: ShelfRow; level: ShelfActions }) {
           }}
         >
           <input
-            aria-label="Folder path"
-            placeholder="folder/subfolder ('' = root)"
-            value={folderDraft}
-            onChange={(e) => setFolderDraft(e.target.value)}
+            aria-label="Folder id"
+            placeholder="folder id ('' = root)"
+            value={parentDraft}
+            onChange={(e) => setParentDraft(e.target.value)}
             className="min-w-0 flex-1 rounded-[4px] border border-edge bg-transparent px-1.5 py-0.5 font-mono text-[11px] text-fg focus:border-edge-bright focus:outline-none"
           />
           <Tooltip content="save">

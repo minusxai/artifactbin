@@ -41,6 +41,7 @@ import { EMPTY_DATAFLOW, coerceScalarInput, refName, resolveRefTemplate, type Da
 import { isWebUrl, runtimeAssetUrl } from '@/lib/story/asset-url';
 import { Button } from '@/components/kit/button';
 import { DataTable } from '@/components/kit/data-table';
+import { Files } from '@/components/kit/files';
 import { GridItemContext } from '@/components/kit/grid';
 import { DateControl, SegmentedControl, SelectControl, SliderControl, SwitchControl, normalizeControlOptions, num, shellRest, str } from '@/components/kit/controls';
 import { parseColumnSpecs, parseSortSpec, parseTableHeight, type SortSpec } from '@/lib/story/data-table';
@@ -567,8 +568,23 @@ function DataTableAdapter(props: Record<string, unknown>) {
   );
 }
 
+/**
+ * `<Files data="$children">` — a folder's listing, live. The rows are the
+ * store's, exactly like every other bound embed: a folder's own <Query> runs
+ * through the transport its island already names, so the listing follows a
+ * child being created or moved with no reload (lib/folders notifyParent wakes
+ * the folder's own channel, and the store re-runs the query the ping dirties).
+ */
+function FilesAdapter(props: Record<string, unknown>) {
+  const ctx = useContext(RuntimeEmbedContext);
+  const name = refName(props.data);
+  const table = name ? ctx.state.tables[name] : undefined;
+  return <Files rows={table?.rows} variant={typeof props.variant === 'string' ? props.variant : undefined} />;
+}
+
 const RUNTIME_REGISTRY: Record<string, ComponentType<Record<string, unknown>>> = {
   ...STORY_UI_COMPONENTS,
+  Files: FilesAdapter,
   Question: QuestionAdapter,
   Number: NumberAdapter,
   DataTable: DataTableAdapter,

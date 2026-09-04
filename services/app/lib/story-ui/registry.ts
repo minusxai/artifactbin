@@ -78,6 +78,7 @@ import { SlideDeck, Slide } from '@/components/kit/slides';
 import { Video } from '@/components/kit/video';
 import { File } from '@/components/kit/file';
 import { DataTable } from '@/components/kit/data-table';
+import { Files } from '@/components/kit/files';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const STORY_UI_COMPONENTS: Record<string, React.ComponentType<any>> = {
@@ -158,6 +159,9 @@ export const STORY_UI_COMPONENTS: Record<string, React.ComponentType<any>> = {
   // paths override it with an adapter that supplies the rows from the store
   // (StoryRuntimeApp / StoryJsxBody) or a placeholder (preview/inert).
   DataTable: DataTable as unknown as React.ComponentType<any>, // eslint-disable-line @typescript-eslint/no-explicit-any
+  // A folder's listing. Registered bare, like DataTable, and overridden by the
+  // runtime adapter that supplies its rows from the store.
+  Files: Files as unknown as React.ComponentType<any>, // eslint-disable-line @typescript-eslint/no-explicit-any
 };
 
 export const STORY_UI_COMPONENT_NAMES = Object.keys(STORY_UI_COMPONENTS);

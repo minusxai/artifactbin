@@ -234,6 +234,8 @@ export const REF_ATTRS: {
     Question: { data: 'table' },
     Number: { data: 'table' },
     DataTable: { data: 'table' },
+    // A folder's listing, bound to the children table its <Query> reads.
+    Files: { data: 'table' },
     // The kit CONTROL components (components/kit/controls.tsx): the same
     // two-way scalar bindings the native controls carry, in themed chrome.
     // `options` is a table exactly like `<select options>` (column 1 the

@@ -1,7 +1,8 @@
 /**
  * Schema as data → idempotent DDL: CREATE TABLE IF NOT EXISTS + per-column ADD COLUMN IF NOT EXISTS
  * (so a database built from an older declaration gains new columns) + DROP NOT NULL for retired
- * columns + CREATE [UNIQUE] INDEX IF NOT EXISTS. Moved from lib/schema.ts renderTable, logic
+ * columns + DROP COLUMN IF EXISTS for dropped ones + CREATE [UNIQUE] INDEX IF NOT EXISTS (with an
+ * optional access method and expression columns). Moved from lib/schema.ts renderTable, logic
  * verbatim, plus an optional schema qualifier. Every statement individually executable, in order.
  */
 import type { Column, Queryable, Table } from '@artifactbin/contracts';
@@ -28,8 +29,17 @@ function renderTable(table: Table, qualified: (name: string) => string): string[
     ...table.columns
       .filter((c) => c.retired)
       .map((c) => `ALTER TABLE ${name} ALTER COLUMN ${c.name} DROP NOT NULL`),
+    // Columns the declaration no longer carries (Table.dropped) — the whole
+    // migration for a retired column, and idempotent, so it is safe on every
+    // boot. It runs BEFORE the indexes: dropping a column takes any index over
+    // it with it, so the other order would create one this statement removes.
+    ...(table.dropped ?? []).map((c) => `ALTER TABLE ${name} DROP COLUMN IF EXISTS ${c}`),
+    // `using` picks the access method (gin, gist, …); a column entry that is
+    // not a plain name is an EXPRESSION and rides through verbatim — the
+    // declaration owns its parentheses — which is what lets an index be over
+    // `f(col)` with nothing stored twice.
     ...(table.indexes ?? []).map(
-      (i) => `CREATE ${i.unique ? 'UNIQUE ' : ''}INDEX IF NOT EXISTS ${i.name} ON ${name} (${i.columns.join(', ')})${i.where ? ` WHERE ${i.where}` : ''}`,
+      (i) => `CREATE ${i.unique ? 'UNIQUE ' : ''}INDEX IF NOT EXISTS ${i.name} ON ${name}${i.using ? ` USING ${i.using}` : ''} (${i.columns.join(', ')})${i.where ? ` WHERE ${i.where}` : ''}`,
     ),
   ];
 }

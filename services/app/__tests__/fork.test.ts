@@ -3,7 +3,7 @@
  *
  * A fork is the same artifact under a new owner and a new id; everything else
  * stays the same. Bytes are shared by content-addressed key, never re-uploaded.
- * History, comments, shares and folder belong to the original's life and do not
+ * History, comments, shares and placement belong to the original's life and do not
  * travel. The door is a browser credential (a person's act from the page): you
  * may fork what you can READ, the miss is the uniform 404, and an anonymous
  * browser has no account to own the copy.
@@ -218,14 +218,26 @@ describe('POST /api/my/artifacts/:id/fork — what does not travel', () => {
     expect((await getSharingFor(owner, w.doc.id))?.shares).toEqual([{ email: 'bob@x.com', role: 'editor' }]);
   });
 
-  it('a folder does not travel: the copy is at the forker\'s root', async () => {
+  it('placement does not travel: the copy is at the forker\'s root', async () => {
     const w = await world();
-    const filed = await create(w.ta.token, { markup: '<div><p>filed</p></div>', visibility: 'public', folder: '2026/08' });
-    expect((await head(filed.id)).folder).toBe('2026/08');
+    const box = await create(w.ta.token, { format: 'folder', title: 'August' });
+    const filed = await create(w.ta.token, { markup: '<div><p>filed</p></div>', visibility: 'public', parent_id: box.id });
+    expect((await head(filed.id)).ancestor_ids).toEqual([box.id]);
     asSession({ id: w.bob.id, email: w.bob.email });
     const res = await fork(filed.id);
     expect(res.status, await res.clone().text()).toBe(201);
-    expect((await head(((await res.json()) as { id: string }).id)).folder).toBe('');
+    // The source's folder is somebody ELSE's tree — the copy lands at the
+    // forker's root, the only place they could have filed it.
+    expect((await head(((await res.json()) as { id: string }).id)).ancestor_ids).toEqual([]);
+  });
+
+  it('a FOLDER is not forkable: its source names its own children table', async () => {
+    const w = await world();
+    const box = await create(w.ta.token, { format: 'folder', title: 'Reports', visibility: 'public' });
+    asSession({ id: w.bob.id, email: w.bob.email });
+    const res = await fork(box.id);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('not_forkable');
   });
 
   it('records a fork event against the SOURCE, with the forker as the user', async () => {

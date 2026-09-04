@@ -25,14 +25,15 @@
  */
 import { z } from 'zod';
 import {
-  applyEditFor, canReadArtifact, deleteArtifactFor, findDependentsFor, forkArtifact, getArtifactById, getArtifactFor, getVersionFor, listArtifactsFor, listVersionsFor,
+  applyEditFor, canReadArtifact, deleteArtifactFor, findDependentsFor, forkArtifact, getArtifactById, getArtifactFor, getOwnedArtifactFor, getVersionFor, listArtifactsFor, listVersionsFor,
   revertArtifactFor, isVersionNotArchived, type ForkOverrides, type TokenActor,
 } from '@/lib/artifacts';
+import { isParentRefusal, resolveParent, subtreeIds } from '@/lib/folders';
 import { trackEvent } from '@/lib/analytics';
 import { exportImageResponse } from '@/lib/export';
 import type { AnnotationAuthor } from '@/lib/annotations';
 import {
-  artifactSummaryToWire, artifactToWireWithAnnotations, createArtifactFromBody, createdArtifactWire, parseFolderField, parseVisibilityValue, replaceArtifactWithBody,
+  artifactSummaryToWire, artifactToWireWithAnnotations, createArtifactFromBody, createdArtifactWire, parseParentField, parseVisibilityValue, replaceArtifactWithBody,
   refreshAssetsFor, respondToAnnotationAction, respondToEdit, respondToMutate,
 } from '@/lib/artifact-wire';
 import { MARKUP_FIELD_GUIDANCE, DATASET_FIELD_GUIDANCE, SHEET_URL_FIELD_GUIDANCE, IMAGE_URL_FIELD_GUIDANCE, CSV_URL_FIELD_GUIDANCE, PDF_FIELD_GUIDANCE, PDF_URL_FIELD_GUIDANCE } from '@/lib/agent-guidance';
@@ -122,10 +123,20 @@ const CONTENT_FIELDS = {
   theme: z.string().optional().describe('design personality (fonts, radius, light+dark palettes): modernist | organic | industry | terminal | manuscript | pop; a retired name (classical/broadsheet/nocturne) is rejected with a hint naming its successor'),
   template: z.enum(['editorial', 'deck', 'scrolly', 'dashboard']).optional(),
   colorMode: z.enum(['light', 'dark']).optional().describe("the AUTHOR's default mode; every theme has both palettes and readers can flip at view time"),
-  folder: z.string().optional().describe("folder path for the owner's dashboard, like '2026/08/reports' — organization only, the URL keeps working wherever the file moves"),
+  // A FOLDER IS AN ARTIFACT, so the create door's `format` takes exactly one
+  // value: everything else is named by its content field, and only a folder
+  // has none.
+  format: z.enum(['folder']).optional().describe("a folder: send it with NO content field. A folder is an artifact like any other — it has a url, visibility and sharing — and you file documents under it with parent_id"),
+  parent_id: z.string().nullable().optional().describe("the id of a FOLDER artifact to file this under (create one with {\"format\":\"folder\",\"title\":\"…\"}), or null for your root. Ids, never paths: two sibling folders may share a name. The URL keeps working wherever the file moves"),
   access: z.enum(['read', 'readwrite']).optional().describe("dataset WRITE ACL (preview): 'read' (default — documents may only read it) or 'readwrite' (documents you publish may add/change/remove rows through a <Mutation>). Needs the preview: pass ?v=2 on the request, or set PREVIEW__FEATURES=1 on the deployment."),
   visibility: z.enum(['public', 'private', 'unlisted']).optional().describe("read ACL: 'public' = anyone with the link, and it lists on the owner's public profile; 'unlisted' = anyone with the link, but never listed anywhere; 'private' = the owner + emails they share it with (needs a logged-in account — anonymous tokens can be public or unlisted). Defaults: account-owned tokens publish private — except images and datasets, born unlisted; anonymous tokens publish public."),
 };
+
+/** The placement refusals, stated once. One code covers every way a parent can be wrong. */
+const INVALID_PARENT: OperationError = { status: 400, code: 'invalid_parent', fix: "parent_id must be the id of a FOLDER you own, not inside the thing you are moving, and no more than 6 levels deep — one code on purpose, because naming which would reveal whether an id exists. Create a folder with {\"format\":\"folder\"}" };
+const FOLDER_RETIRED: OperationError = { status: 400, code: 'folder_retired', fix: "the `folder` path field is gone — send parent_id: the id of a folder artifact (create one with format: 'folder')" };
+const FOLDER_NOT_EMPTY: OperationError = { status: 409, code: 'folder_not_empty', fix: 'the folder still holds things (the count rides the refusal) — empty it, or pass force: true to delete the folder and everything under it' };
+const NOT_FORKABLE: OperationError = { status: 400, code: 'not_forkable', fix: "a folder cannot be forked — create your own with {\"format\":\"folder\"} and file documents under it with parent_id" };
 
 const INVALID_JSX: OperationError = { status: 400, code: 'invalid_jsx', fix: 'details names each problem with its span; a refused tag answer carries allowed_html_tags — pick from it' };
 const INVALID_REFS: OperationError = { status: 400, code: 'invalid_refs', fix: 'details names each ref: an id that does not resolve for YOU, a wrong kind, or a <Mutation> target that is not your own readwrite dataset — publish your own copy of it' };
@@ -142,6 +153,8 @@ const CONTENT_ERRORS: OperationError[] = [
   { status: 400, code: 'pdf_fetch_failed', fix: 'the named pdfUrl could not be imported — check it serves PDF bytes publicly and is under the cap' },
   { status: 400, code: 'public_not_enabled', fix: 'this deployment has not opened public documents — use "unlisted"' },
   { status: 400, code: 'private_requires_account', fix: 'private needs a logged-in owner — claim the token or use unlisted' },
+  INVALID_PARENT,
+  FOLDER_RETIRED,
 ];
 
 const NOT_FOUND: OperationError = { status: 404, code: 'not_found', fix: 'the id is wrong OR this token cannot reach it — existence is never revealed; list_artifacts shows what you can reach' };
@@ -150,7 +163,7 @@ const createArtifactOp: Operation = {
   name: 'create_artifact',
   title: 'Create an artifact',
   http: { method: 'POST', path: '/api/artifacts' },
-  description: 'Create an artifact (exactly one of markup | dataset | viz | image | pdf). Returns the public URL. markup is THE document format: story JSX over the component kit, HTML tags for everything else (prose is ordinary <p>/<h1>/<ul> — there is no markdown), and one top-level <Helmet> for <title>/<style>/<script> and the document\'s DATA: <Value name type default /> scalars and <Query name>{`select … from ref_<datasetId>`}</Query> (SQL over your datasets), bound in the body by name — <Question data="$q">, <DataTable data="$q">, <select value="$x" options="$q">. Recipes/images bind as ref:<id>, and a pdf as <File src="ref:<id>" />. No upload is needed for something already on the web: write <img src="https://…"> (or <Video poster>, <File src>) and publish stores a copy while your URL stays in the document. Dataset creation echoes the inferred columns and a ready-to-paste Query+Question.',
+  description: 'Create an artifact (exactly one of markup | dataset | viz | image | pdf). Returns the public URL. markup is THE document format: story JSX over the component kit, HTML tags for everything else (prose is ordinary <p>/<h1>/<ul> — there is no markdown), and one top-level <Helmet> for <title>/<style>/<script> and the document\'s DATA: <Value name type default /> scalars and <Query name>{`select … from ref_<datasetId>`}</Query> (SQL over your datasets), bound in the body by name — <Question data="$q">, <DataTable data="$q">, <select value="$x" options="$q">. Recipes/images bind as ref:<id>, and a pdf as <File src="ref:<id>" />. No upload is needed for something already on the web: write <img src="https://…"> (or <Video poster>, <File src>) and publish stores a copy while your URL stays in the document. Dataset creation echoes the inferred columns and a ready-to-paste Query+Question. To ORGANISE: {"format":"folder","title":"Reports"} makes a folder (no content field), and parent_id: "<folderId>" on any create files it there.',
   input: CONTENT_FIELDS,
   annotations: {},
   example: {
@@ -331,13 +344,14 @@ const deleteArtifactOp: Operation = {
   name: 'delete_artifact',
   title: 'Delete an artifact',
   http: { method: 'DELETE', path: '/api/artifacts/{id}' },
-  description: 'Delete an artifact and its history; the link dies. If other documents reference it (ref:), the delete fails with has_dependents — pass force: true to break those links knowingly (the documents degrade to empty fallbacks).',
+  description: 'Delete an artifact and its history; the link dies. If other documents reference it (ref:), the delete fails with has_dependents — pass force: true to break those links knowingly (the documents degrade to empty fallbacks). Deleting a FOLDER that has anything in it fails with folder_not_empty and the count; force: true deletes the folder and everything under it.',
   input: { id: z.string(), force: z.boolean().optional() },
   annotations: { destructive: true },
   example: { input: { id: 'aB3xK9' } },
   errors: [
     NOT_FOUND,
     { status: 409, code: 'has_dependents', fix: 'other documents reference this one (they are named) — force: true breaks their refs knowingly' },
+    FOLDER_NOT_EMPTY,
   ],
   async run(ctx, input) {
     // Delete protection: breaking other documents' refs must be an informed
@@ -348,7 +362,14 @@ const deleteArtifactOp: Operation = {
         return reply({ error: 'has_dependents', dependents: dependents.map((d) => ({ id: d.id, title: d.title })) }, 409);
       }
     }
-    const deleted = await deleteArtifactFor(ctx.actor, String(input.id));
+    // A FOLDER's subtree is the same informed choice, counted rather than
+    // named: a folder with fifty documents in it would be a wall of ids.
+    const current = await getOwnedArtifactFor(ctx.actor, String(input.id));
+    const subtree = current?.format === 'folder' ? await subtreeIds(current.id) : [];
+    if (current?.format === 'folder' && input.force !== true && subtree.length > 0) {
+      return reply({ error: 'folder_not_empty', count: subtree.length }, 409);
+    }
+    const deleted = await deleteArtifactFor(ctx.actor, String(input.id), subtree);
     if (!deleted) return reply({ error: 'not_found' }, 404);
     return reply({ ok: true });
   },
@@ -434,7 +455,7 @@ const forkArtifactOp: Operation = {
   name: 'fork_artifact',
   title: 'Fork an artifact',
   http: { method: 'POST', path: '/api/artifacts/{id}/fork' },
-  description: 'Copy an artifact you can READ — your own, one shared with your account, or any public/unlisted one — into a new artifact of your own at a new id and url. Use it instead of create_artifact when you are adapting a document that already exists: fork it, then edit the copy with edit_artifact. Content, title, theme, template and settings travel; version history, comments and shares do not (the copy is version 1, with its own edit_id). Every ref: image, dataset and recipe is re-validated AS YOU, so a document whose <Mutation> writes someone else\'s dataset, or that reads a private one, is refused by name instead of copied broken. Optional title, visibility and folder land on the copy only — the original is never touched. Answers the create reply plus forked_from.',
+  description: 'Copy an artifact you can READ — your own, one shared with your account, or any public/unlisted one — into a new artifact of your own at a new id and url. Use it instead of create_artifact when you are adapting a document that already exists: fork it, then edit the copy with edit_artifact. Content, title, theme, template and settings travel; version history, comments and shares do not (the copy is version 1, with its own edit_id). Every ref: image, dataset and recipe is re-validated AS YOU, so a document whose <Mutation> writes someone else\'s dataset, or that reads a private one, is refused by name instead of copied broken. Optional title, visibility and parent_id land on the copy only — the original is never touched. A FOLDER cannot be forked (not_forkable): its source names its own children table, so a copy would list the children of the original. Answers the create reply plus forked_from.',
   input: {
     id: z.string(),
     title: z.string().optional().describe('title for the COPY; omit to keep the original\'s'),
@@ -442,7 +463,7 @@ const forkArtifactOp: Operation = {
     // fork defaults to whatever the source is, which is the one thing about
     // visibility a forker has to know.
     visibility: CONTENT_FIELDS.visibility.describe("read ACL for the COPY: 'public' = anyone with the link, and it lists on your public profile; 'unlisted' = anyone with the link, listed nowhere; 'private' = you plus the emails you share it with (needs a logged-in account). Omit to keep the source's."),
-    folder: CONTENT_FIELDS.folder.describe("folder path for the COPY on your dashboard, like '2026/forks'; omit to file it at your root"),
+    parent_id: CONTENT_FIELDS.parent_id.describe("the id of a folder of YOURS to file the COPY under; omit to file it at your root"),
   },
   // A plain write: not destructive (the source is untouched) and NOT
   // idempotent — two calls make two copies.
@@ -454,6 +475,7 @@ const forkArtifactOp: Operation = {
   errors: [
     NOT_FOUND,
     { status: 403, code: 'quota_exceeded', fix: 'a cap was reached — either the artifact COUNT for this token, or the stored BYTES for its account (an upload or an imported url); the message names which. Delete what you no longer need' },
+    NOT_FORKABLE,
     ...CONTENT_ERRORS,
   ],
   async run(ctx, input) {
@@ -462,12 +484,16 @@ const forkArtifactOp: Operation = {
     // always been, never a silent downgrade of the copy.
     const visibility = parseVisibilityValue(input.visibility, !!ctx.actor.userId);
     if (visibility instanceof Response) return fromResponse(visibility);
-    const folder = parseFolderField(input);
-    if (folder instanceof Response) return fromResponse(folder);
+    const parent = parseParentField(input);
+    if (parent instanceof Response) return fromResponse(parent);
+    // The COPY's placement, against the FORKER's own folders — nothing about
+    // the source's is carried, because it is somebody else's tree.
+    const placement = parent === undefined ? undefined : await resolveParent(ctx.actor, parent, null);
+    if (placement && isParentRefusal(placement)) return reply(placement, 400);
     const overrides: ForkOverrides = {
       ...(typeof input.title === 'string' ? { title: input.title } : {}),
       ...(visibility ? { visibility } : {}),
-      ...(folder !== undefined ? { folder } : {}),
+      ...(placement ? { ancestor_ids: placement.ancestor_ids } : {}),
     };
 
     const source = await getArtifactById(String(input.id));

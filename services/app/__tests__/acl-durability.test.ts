@@ -1,7 +1,7 @@
 /**
  * The ACL must SURVIVE every write path.
  *
- * `visibility` and `folder` are set on one code path and read on another, so
+ * `visibility` and placement are set on one code path and read on another, so
  * the dangerous failure is silent: a save-less edit, a PUT, or a revert whose
  * UPDATE omits (or resets) those columns would quietly republish a private
  * document — nobody is told, and the owner finds out by being read. These
@@ -44,10 +44,14 @@ const create = async (token: string, body: Record<string, unknown>) => {
   return res.json() as Promise<{ id: string; edit_id: string; visibility: string }>;
 };
 
+/** A folder of the caller's own to file things under — placement is ids now. */
+const folder = async (token: string, title: string): Promise<string> =>
+  (await create(token, { format: 'folder', title })).id;
+
 /** The state that must never drift, read straight from the row. */
 const stateOf = async (id: string) => {
   const row = await getArtifactById(id);
-  return { visibility: row!.visibility, folder: row!.folder };
+  return { visibility: row!.visibility, ancestor_ids: row!.ancestor_ids };
 };
 
 beforeEach(async () => {
@@ -58,17 +62,18 @@ beforeEach(async () => {
 describe('a private document stays private through every write', () => {
   it('survives a save-less markup EDIT — the path an agent uses constantly', async () => {
     const { token } = await fixtures();
+    const folderId = await folder(token, 'notes');
     const doc = await create(token, {
-      title: 'Secret', markup: '<section><p>alpha text</p></section>', folder: 'private/notes',
+      title: 'Secret', markup: '<section><p>alpha text</p></section>', parent_id: folderId,
     });
-    expect(await stateOf(doc.id)).toEqual({ visibility: 'private', folder: 'private/notes' });
+    expect(await stateOf(doc.id)).toEqual({ visibility: 'private', ancestor_ids: [folderId] });
 
     const edited = await editRoute(
       request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: { edit_id: doc.edit_id, old_string: 'alpha text', new_string: 'beta text' } }),
       params({ id: doc.id }),
     );
     expect(edited.status).toBe(200);
-    expect(await stateOf(doc.id)).toEqual({ visibility: 'private', folder: 'private/notes' });
+    expect(await stateOf(doc.id)).toEqual({ visibility: 'private', ancestor_ids: [folderId] });
     // And the door is still shut to a stranger.
     expect((await rawRoute(request(`/a/${doc.id}/raw`), params({ id: doc.id }))).status).toBe(404);
   });
@@ -84,26 +89,28 @@ describe('a private document stays private through every write', () => {
     expect((await stateOf(doc.id)).visibility).toBe('private');
   });
 
-  it('survives a PUT that does not mention visibility or folder', async () => {
+  it('survives a PUT that does not mention visibility or a parent', async () => {
     const { token } = await fixtures();
-    const doc = await create(token, { title: 'Secret', markup: '<h1>a</h1>', folder: 'q3' });
+    const q3 = await folder(token, 'q3');
+    const doc = await create(token, { title: 'Secret', markup: '<h1>a</h1>', parent_id: q3 });
     const res = await putArtifact(
       request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { markup: '<h1>b</h1>' } }),
       params({ id: doc.id }),
     );
     expect(res.status).toBe(200);
-    expect(await stateOf(doc.id)).toEqual({ visibility: 'private', folder: 'q3' });
+    expect(await stateOf(doc.id)).toEqual({ visibility: 'private', ancestor_ids: [q3] });
   });
 
   it('survives a REVERT to a version archived before the ACL mattered', async () => {
     const { token } = await fixtures();
+    const vault = await folder(token, 'vault');
     // v1 public, then flipped private — reverting CONTENT must not revert the ACL.
     const doc = await create(token, { title: 'Secret', markup: '<h1>v1</h1>', visibility: 'public' });
     await putArtifact(
-      request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { markup: '<h1>v2</h1>', visibility: 'private', folder: 'vault' } }),
+      request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { markup: '<h1>v2</h1>', visibility: 'private', parent_id: vault } }),
       params({ id: doc.id }),
     );
-    expect(await stateOf(doc.id)).toEqual({ visibility: 'private', folder: 'vault' });
+    expect(await stateOf(doc.id)).toEqual({ visibility: 'private', ancestor_ids: [vault] });
 
     const reverted = await revertRoute(
       request(`/api/artifacts/${doc.id}/revert`, { method: 'POST', token: token, json: { version: 1 } }),
@@ -113,20 +120,21 @@ describe('a private document stays private through every write', () => {
     // Content went back to v1; the ACL did NOT.
     const raw = await rawRoute(request(`/a/${doc.id}/raw`), params({ id: doc.id }));
     expect(raw.status).toBe(404);
-    expect(await stateOf(doc.id)).toEqual({ visibility: 'private', folder: 'vault' });
+    expect(await stateOf(doc.id)).toEqual({ visibility: 'private', ancestor_ids: [vault] });
   });
 
-  it('survives a folder move, and a move does not touch visibility', async () => {
+  it('survives a move between folders, and a move does not touch visibility', async () => {
     const { owner, token } = await fixtures();
+    const moved = await folder(token, 'moved');
     const doc = await create(token, { title: 'Secret', markup: '<h1>a</h1>' });
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
     const res = await patchMineRoute(
-      request(`/api/my/artifacts/${doc.id}`, { method: 'PATCH', json: { folder: 'moved/here' } }),
+      request(`/api/my/artifacts/${doc.id}`, { method: 'PATCH', json: { parent_id: moved } }),
       params({ id: doc.id }),
     );
     expect(res.status).toBe(200);
-    expect(await stateOf(doc.id)).toEqual({ visibility: 'private', folder: 'moved/here' });
+    expect(await stateOf(doc.id)).toEqual({ visibility: 'private', ancestor_ids: [moved] });
   });
 });
 

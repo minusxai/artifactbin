@@ -36,6 +36,8 @@ const create = async (token: string, body: Record<string, unknown>) => {
   expect(res.status, await res.clone().text()).toBe(201);
   return (await res.json()) as { id: string; edit_id: string; version: number };
 };
+/** A folder of this token's own — placement on the wire is an id. */
+const createFolder = async (token: string, title: string) => (await create(token, { format: 'folder', title })).id;
 const fork = (id: string, token?: string, body: Record<string, unknown> = {}) =>
   forkOpRoute(jreq(`/api/artifacts/${id}/fork`, 'POST', body, token), params(id));
 const head = async (id: string) => (await getArtifactById(id))!;
@@ -67,10 +69,13 @@ describe('fork_artifact on the operations registry', () => {
     expect(op!.http).toEqual({ method: 'POST', path: '/api/artifacts/{id}/fork' });
     expect(op!.annotations.readOnly ?? false).toBe(false);
     expect(op!.annotations.destructive ?? false).toBe(false);
-    expect(Object.keys(op!.input).sort()).toEqual(['folder', 'id', 'title', 'visibility']);
+    expect(Object.keys(op!.input).sort()).toEqual(['id', 'parent_id', 'title', 'visibility']);
     const codes = op!.errors.map((e) => e.code);
     expect(codes).toContain('not_found');
     expect(codes).toContain('quota_exceeded');
+    // A folder's source names its own children table: a copy would list the
+    // children of the original, so the door refuses by name.
+    expect(codes).toContain('not_forkable');
     expect(op!.description.length).toBeGreaterThan(80);
     expect(op!.example.input).toMatchObject({ id: expect.any(String) });
   });
@@ -100,20 +105,31 @@ describe('POST /api/artifacts/:id/fork (bearer)', () => {
 
   it('a claimed token forks account-wide, and the three overrides land on the copy only', async () => {
     const w = await world();
-    const res = await fork(w.doc.id, w.tb.token, { title: 'My copy', visibility: 'unlisted', folder: '2026/forks' });
+    // The COPY's parent is one of the FORKER's own folders — nothing about the
+    // source's tree is carried, because it is somebody else's.
+    const box = await createFolder(w.tb.token, 'Forks');
+    const res = await fork(w.doc.id, w.tb.token, { title: 'My copy', visibility: 'unlisted', parent_id: box });
     expect(res.status, await res.clone().text()).toBe(201);
-    const body = (await res.json()) as { id: string; visibility: string; title: string; folder: string };
+    const body = (await res.json()) as { id: string; visibility: string; title: string; parent_id: string | null };
     expect(body.title).toBe('My copy');
     expect(body.visibility).toBe('unlisted');
-    expect(body.folder).toBe('2026/forks');
+    expect(body.parent_id).toBe(box);
     const copy = await head(body.id);
     expect(copy.user_id).toBe(w.bob.id);
     expect(copy.title).toBe('My copy');
     expect(copy.visibility).toBe('unlisted');
-    expect(copy.folder).toBe('2026/forks');
+    expect(copy.ancestor_ids).toEqual([box]);
     const source = await head(w.doc.id);
     expect(source.title).toBe('The NBA payroll stack');
-    expect(source.folder).toBe('');
+    expect(source.ancestor_ids).toEqual([]);
+  });
+
+  it('a folder of somebody else\'s is not a parent this forker may name: one refusal', async () => {
+    const w = await world();
+    const theirs = await createFolder(w.ta.token, 'Theirs');
+    const res = await fork(w.doc.id, w.tb.token, { parent_id: theirs });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe('invalid_parent');
   });
 
   it('an anonymous token cannot make the copy private: the existing visibility rule, never a silent downgrade', async () => {

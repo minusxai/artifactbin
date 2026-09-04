@@ -1,6 +1,6 @@
 /**
- * Pretty URLs: /@username/folder/.../<id>-<title-slug>, resolved by ID alone
- * (username/folders/title are decoration), self-correcting to canonical via
+ * Pretty URLs: /@username/<id>-<title-slug>, resolved by ID alone
+ * (username and title are decoration), self-correcting to canonical via
  * redirect. /a/<id> stays the universal short form: canonical for anonymous
  * docs, a redirect for owned ones. The ACL runs BEFORE any redirect, so a
  * probe never learns the owner's username from a private doc.
@@ -90,9 +90,12 @@ beforeEach(() => {
 describe('canonical redirects', () => {
   it('/a/<id> of an owned public doc redirects to /@username/<id>-<title-slug>', async () => {
     const { ownedToken } = await fixtures();
-    const doc = await create(ownedToken, { title: 'Eating Healthy', markup: '<h1>x</h1>', visibility: 'public', folder: '2026/08' });
+    const box = await create(ownedToken, { format: 'folder', title: 'August' });
+    const doc = await create(ownedToken, { title: 'Eating Healthy', markup: '<h1>x</h1>', visibility: 'public', parent_id: box.id });
+    // NESTING IS NEVER IN THE ADDRESS: the canonical path is one segment, and
+    // being filed under a folder does not lengthen it.
     const r = await outcome(ArtifactPage(doc.id));
-    expect(r).toEqual({ kind: 'redirect', to: `/@mxmx_owner/2026/08/${doc.id}-eating-healthy` });
+    expect(r).toEqual({ kind: 'redirect', to: `/@mxmx_owner/${doc.id}-eating-healthy` });
   });
 
   it('/a/<id> of an anonymous doc renders in place (it IS canonical)', async () => {
@@ -101,7 +104,7 @@ describe('canonical redirects', () => {
     expect((await outcome(ArtifactPage(doc.id))).kind).toBe('render');
   });
 
-  it('wrong username, stale title, wrong folder — all heal to canonical by id', async () => {
+  it('wrong username, stale title, an old folder path — all heal to canonical by id', async () => {
     const { ownedToken } = await fixtures();
     const doc = await create(ownedToken, { title: 'Eating Healthy', markup: '<h1>x</h1>', visibility: 'public' });
     const canonical = `/@mxmx_owner/${doc.id}-eating-healthy`;
@@ -153,39 +156,30 @@ describe('privacy through the resolver', () => {
   });
 });
 
-describe('folder listings (owner-only)', () => {
-  it('folders render for the owner and 404 for strangers; the root renders for both', async () => {
+/*
+ * The folder-LISTING cases are deleted rather than adapted: there is no listing
+ * below the handle any more. A folder is an artifact with its own id-anchored
+ * page, so the two questions those cases asked ("does this path render for the
+ * owner", "does an empty folder 404") no longer have a subject. What survives is
+ * the rule that replaced them.
+ */
+describe('there is no listing below the handle', () => {
+  it('any trailing segment that carries no id is the uniform 404 — owner and stranger alike', async () => {
     const { ownedToken, owner } = await fixtures();
-    await create(ownedToken, { title: 'One', markup: '<h1>1</h1>', folder: '2026/08' });
+    const box = await create(ownedToken, { format: 'folder', title: 'August' });
+    await create(ownedToken, { title: 'One', markup: '<h1>1</h1>', parent_id: box.id });
 
-    // Folders are the owner's organization — never part of the public surface.
     expect((await outcome(UserPage(userPageProps('@mxmx_owner', ['2026', '08'])))).kind).toBe('notFound');
-    // The profile ROOT is the public listing (possibly empty), not a 404.
+    // The profile ROOT is the listing (possibly empty), never a 404.
     expect((await outcome(UserPage(userPageProps('@mxmx_owner')))).kind).toBe('render');
 
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
-    expect((await outcome(UserPage(userPageProps('@mxmx_owner', ['2026', '08'])))).kind).toBe('render');
+    // Owning the profile buys nothing here: the address named nothing.
+    expect((await outcome(UserPage(userPageProps('@mxmx_owner', ['2026', '08'])))).kind).toBe('notFound');
     expect((await outcome(UserPage(userPageProps('@mxmx_owner')))).kind).toBe('render');
-  });
-
-  /**
-   * A folder EXISTS only through the artifacts that carry it (`folder` is a
-   * materialized path, nothing more), so an address naming one that holds
-   * nothing — no files, no child folders — names nothing, and answers the
-   * same 404 every other miss does. It used to render an empty listing, a
-   * third face for "not found". The ROOT is the one empty listing that is a
-   * real page: a brand-new account's dashboard.
-   */
-  it('a folder that holds nothing is a 404, even for the owner — the root never is', async () => {
-    const { ownedToken, owner } = await fixtures();
-    await create(ownedToken, { title: 'One', markup: '<h1>1</h1>', folder: '2026/08' });
-    sessionUser.id = owner.id;
-    sessionUser.email = owner.email;
-    expect((await outcome(UserPage(userPageProps('@mxmx_owner', ['gogo'])))).kind).toBe('notFound');
-    // An ancestor exists through its child; the empty root stays a page.
-    expect((await outcome(UserPage(userPageProps('@mxmx_owner', ['2026'])))).kind).toBe('render');
-    expect((await outcome(UserPage(userPageProps('@mxmx_owner')))).kind).toBe('render');
+    // The folder itself is reached at its own address, like any document.
+    expect((await outcome(UserPage(userPageProps('@mxmx_owner', [`${box.id}-august`])))).kind).toBe('render');
   });
 });
 
@@ -195,6 +189,11 @@ describe('public profile listing', () => {
    * listing is asserted the way it is built: the endpoint's data through the
    * same components the SPA mounts (components/Listing).
    */
+  /** The endpoint's own answer — what the page is BUILT from. */
+  const dataOf = async (user: string) => {
+    const res = await profileData(new Request(`http://localhost:3000/api/page/profile/${user}`), { params: Promise.resolve({ user }) });
+    return (await res.json()) as { files: Array<{ id: string; title: string; format: string }> };
+  };
   const markupOf = async (user: string, path?: string[]) => {
     const p = (path ?? []).join('/');
     const res = await profileData(new Request(`http://localhost:3000/api/page/profile/${user}${p ? '/' + p : ''}`), { params: Promise.resolve({ user, ...(p ? { path: p } : {}) }) });
@@ -217,16 +216,17 @@ describe('public profile listing', () => {
   it('strangers see a flat list of public artifacts — private ones never appear', async () => {
     const { ownedToken } = await fixtures();
     await create(ownedToken, { title: 'Open Doc', markup: '<h1>x</h1>', visibility: 'public' });
-    const foldered = await create(ownedToken, { title: 'Foldered Doc', markup: '<h1>x</h1>', visibility: 'public', folder: '2026/08' });
+    const box = await create(ownedToken, { format: 'folder', title: 'August' });
+    const foldered = await create(ownedToken, { title: 'Foldered Doc', markup: '<h1>x</h1>', visibility: 'public', parent_id: box.id });
     await create(ownedToken, { title: 'Secret Doc', markup: '<h1>x</h1>' }); // default private
     await create(ownedToken, { title: 'Quiet Doc', markup: '<h1>x</h1>', visibility: 'unlisted' });
 
     const markup = await markupOf('@mxmx_owner');
     expect(markup).toContain('Open Doc');
-    // Flat: a public doc inside a folder still lists at the root…
+    // Flat: a public doc inside a folder still lists on the public profile…
     expect(markup).toContain('Foldered Doc');
-    // …and its link is the canonical path, folder included.
-    expect(markup).toContain(`/@mxmx_owner/2026/08/${foldered.id}-foldered-doc`);
+    // …and its link is the canonical path, which carries no folder segment.
+    expect(markup).toContain(`/@mxmx_owner/${foldered.id}-foldered-doc`);
     expect(markup).not.toContain('Secret Doc');
     // Unlisted reads like public but never lists — that's its whole meaning.
     expect(markup).not.toContain('Quiet Doc');
@@ -293,12 +293,13 @@ describe('public profile listing', () => {
 
   it('the OWNER gets the same thumbnail cards — plus what only owners need', async () => {
     // One profile, one look: the card grid is the view for everyone. The owner
-    // additionally sees visibility per card, private documents and folders.
+    // additionally sees visibility per card and private documents.
     // Data files are the dashboard's business, not the profile's.
     const { ownedToken, owner } = await fixtures();
     const doc = await create(ownedToken, { title: 'My Doc', markup: '<h1>x</h1>' }); // default private
     const ds = await create(ownedToken, { title: 'My Numbers', dataset: [{ a: 1 }] });
-    await create(ownedToken, { title: 'Foldered', markup: '<h1>x</h1>', folder: '2026/08' });
+    const box = await create(ownedToken, { format: 'folder', title: 'August' });
+    await create(ownedToken, { title: 'Foldered', markup: '<h1>x</h1>', parent_id: box.id });
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
 
@@ -308,8 +309,13 @@ describe('public profile listing', () => {
     expect(markup).toContain(`/a/${doc.id}/export?format=jpg&amp;mode=card&amp;v=1&amp;r=2`);
     expect(markup).toContain('My Doc');
     expect(markup).toContain('private');
-    // Folders survive as navigation.
-    expect(markup).toContain('Open folder 2026');
+    // A FOLDER is a ROW in the listing now, not a derived navigation panel: it
+    // has its own page. The derived panel and its crumbs are gone from the
+    // markup; DRAWING the folder row is P2's shelf strip, so what P1 asserts is
+    // the data the page is built from.
+    expect(markup).not.toContain('Open folder');
+    const data = await dataOf('@mxmx_owner');
+    expect(data.files.find((f) => f.id === box.id)).toMatchObject({ format: 'folder', title: 'August' });
     // Data files are NOT listed here any more. They are the material documents
     // are built from, and a profile listing them is the junk drawer
     // listPublicArtifactsByUser already refuses to be — so the owner's own
@@ -322,15 +328,21 @@ describe('public profile listing', () => {
     expect(markup).toContain('aria-label="Open menu"');
   });
 
-  it('the owner keeps the full view: private docs, folders, and dates', async () => {
+  it('the owner keeps the full view: private docs, folder rows, and dates', async () => {
     const { ownedToken, owner } = await fixtures();
-    await create(ownedToken, { title: 'Secret Doc', markup: '<h1>x</h1>', folder: '2026/08' });
+    const box = await create(ownedToken, { format: 'folder', title: 'August' });
+    // A document INSIDE a folder is not at the root, so it is not on this page:
+    // it is on the folder's own page. That is the whole shape of the change.
+    await create(ownedToken, { title: 'Secret Doc', markup: '<h1>x</h1>', parent_id: box.id });
     await create(ownedToken, { title: 'Root Doc', markup: '<h1>x</h1>' });
     await create(ownedToken, { title: 'Quiet Doc', markup: '<h1>x</h1>', visibility: 'unlisted' });
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
     const markup = await markupOf('@mxmx_owner');
-    expect(markup).toContain('2026/');
+    // The folder is a row of the ROOT (P2 draws it); the document inside it is
+    // NOT at the root, so it is not on this page at all.
+    expect((await dataOf('@mxmx_owner')).files.map((f) => f.id)).toContain(box.id);
+    expect(markup).not.toContain('Secret Doc');
     expect(markup).toContain('Root Doc');
     expect(markup).toContain('Quiet Doc'); // unlisted hides from strangers, never from the owner
     // Cards carry the same absolute date stamp the public shelf shows.
@@ -340,27 +352,39 @@ describe('public profile listing', () => {
   });
 });
 
-describe('PATCH /api/my/artifacts/:id — metadata-only folder move', () => {
-  it('moves the file without touching content or version; canonical follows', async () => {
+describe('PATCH /api/my/artifacts/:id — the metadata-only move', () => {
+  it('files the row without touching content or version; the canonical URL never moves', async () => {
     const { ownedToken, owner } = await fixtures();
+    const box = await create(ownedToken, { format: 'folder', title: 'August' });
     const doc = await create(ownedToken, { title: 'Eating Healthy', markup: '<h1>x</h1>', visibility: 'public' });
 
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
     const moved = await patchArtifactRoute(
-      request(`/api/my/artifacts/${doc.id}`, { method: 'PATCH', json: { folder: '2026/08' } }),
+      request(`/api/my/artifacts/${doc.id}`, { method: 'PATCH', json: { parent_id: box.id } }),
       params({ id: doc.id }),
     );
     expect(moved.status).toBe(200);
-    expect(await moved.json()).toMatchObject({ id: doc.id, folder: '2026/08' });
+    expect(await moved.json()).toMatchObject({ id: doc.id, parent_id: box.id, ancestor_ids: [box.id] });
 
+    // The address is id-anchored and carries no placement, so a move changes
+    // nothing about it — which is exactly why a move can be free.
     const r = await outcome(ArtifactPage(doc.id));
-    expect(r).toEqual({ kind: 'redirect', to: `/@mxmx_owner/2026/08/${doc.id}-eating-healthy` });
+    expect(r).toEqual({ kind: 'redirect', to: `/@mxmx_owner/${doc.id}-eating-healthy` });
 
-    const bad = await patchArtifactRoute(
-      request(`/api/my/artifacts/${doc.id}`, { method: 'PATCH', json: { folder: 'has space' } }),
-      params({ id: doc.id }),
-    );
-    expect(bad.status).toBe(400);
+    // The retired path field is answered BY NAME, and an unreachable parent is
+    // the one refusal.
+    for (const [body, error] of [
+      [{ folder: '2026/08' }, 'folder_retired'],
+      [{ parent_id: 'zzzzzz' }, 'invalid_parent'],
+      [{ parent_id: doc.id }, 'invalid_parent'],
+    ] as const) {
+      const bad = await patchArtifactRoute(
+        request(`/api/my/artifacts/${doc.id}`, { method: 'PATCH', json: body }),
+        params({ id: doc.id }),
+      );
+      expect(bad.status, JSON.stringify(body)).toBe(400);
+      expect((await bad.json()).error).toBe(error);
+    }
   });
 });

@@ -114,7 +114,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // document from its shell — a signed-out browser whose cookie names a
   // CLAIMED token would be an owner upstairs and a stranger here, its own
   // private document 404ing inside the frame the shell just rendered.
-  const viewer = (await sessionActor(request)).viewer;
+  const actor = await sessionActor(request);
+  const viewer = actor.viewer;
   const byExportKey = verifyExportKey(artifact.id, key ?? undefined);
   const admitted = (await canReadArtifact(artifact, viewer)) || byExportKey;
   if (!admitted) return notFound();
@@ -235,10 +236,19 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       });
     }
 
-    // markup: the SSR'd standalone document — served top-level to readers
-    // (proxy.ts) and as the owner frame's src. Source read-back is the API's
-    // `markup:`.
-    case 'markup': {
+    /*
+     * markup: the SSR'd standalone document — served top-level to readers
+     * (proxy.ts) and as the owner frame's src. Source read-back is the API's
+     * `markup:`.
+     *
+     * A FOLDER IS A DOCUMENT and takes this same path, with no branch of its
+     * own. Its stored source is the scaffold (lib/folders folderScaffold),
+     * ordinary markup declaring a <Query> over its own children — so it is
+     * parsed, SSR'd, styled, exported, edited and streamed exactly as anything
+     * else here, and everything a document gets it gets for free.
+     */
+    case 'markup':
+    case 'folder': {
       /*
        * A view is counted HERE, not on the page.
        *
@@ -330,7 +340,16 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         refDataForRow(artifact, { capture: !chrome }),
         chrome
           ? Promise.resolve(declared && hasUrlValues ? { ...declared, values: urlValues } : declared)
-          : dataflowForRow(artifact, { values: urlValues }),
+          // The CAPTURE's run carries whoever asked for it, which matters for
+          // exactly one thing: a folder's children table is per viewer. An
+          // export driven by the signed key has no session and photographs the
+          // PUBLIC listing, which is the right picture for something meant to
+          // be shared.
+          // The TOKEN travels beside the account: sessionActor answers an
+          // account session as a viewer and the agent cookie as a bare token,
+          // and an unclaimed folder is owned by its token — the viewer alone
+          // would photograph a stranger's view of the owner's own listing.
+          : dataflowForRow(artifact, { values: urlValues, viewer: { userId: viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: viewer?.email ?? null } }),
         chrome ? ownerUsername(artifact.user_id) : Promise.resolve(null),
         chrome ? forkedFromCredit(artifact.forked_from) : Promise.resolve(null),
       ]);

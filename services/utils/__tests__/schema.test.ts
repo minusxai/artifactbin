@@ -22,6 +22,44 @@ describe('renderSchema', () => {
     for (const s of renderSchema([T], { schema: 'app' })) expect(s).toMatch(/app\.widgets/);
   });
 });
+describe('renderSchema: an access method, an expression column, and a dropped column', () => {
+  const D: Table = {
+    name: 'gadgets',
+    columns: [{ name: 'id', type: 'TEXT' }, { name: 'trail', type: 'TEXT[]', notNull: true, default: "'{}'" }],
+    primaryKey: ['id'],
+    // `using` picks the access method; a column that is not a plain name is an
+    // EXPRESSION and is emitted verbatim, parens and all.
+    indexes: [
+      { name: 'idx_gadgets_trail', columns: ['trail'], using: 'gin' },
+      { name: 'idx_gadgets_parent', columns: ['(trail[cardinality(trail)])'] },
+    ],
+    dropped: ['legacy'],
+  };
+  it('renders USING <method>, the expression verbatim, and an idempotent DROP COLUMN', () => {
+    const s = renderSchema([D]);
+    expect(s).toContainEqual('CREATE INDEX IF NOT EXISTS idx_gadgets_trail ON gadgets USING gin (trail)');
+    expect(s).toContainEqual('CREATE INDEX IF NOT EXISTS idx_gadgets_parent ON gadgets ((trail[cardinality(trail)]))');
+    expect(s).toContainEqual('ALTER TABLE gadgets DROP COLUMN IF EXISTS legacy');
+  });
+  it('drops the column BEFORE the indexes, so an index on a dropped column cannot be created after it', () => {
+    const s = renderSchema([D]);
+    expect(s.findIndex((x) => x.includes('DROP COLUMN IF EXISTS legacy')))
+      .toBeLessThan(s.findIndex((x) => x.includes('CREATE INDEX')));
+  });
+  it('applies against a real engine, twice, and the dropped column is gone after the first', async () => {
+    // The column exists first — the drop is a MIGRATION, so the interesting
+    // case is a database that still has it.
+    await pg.exec('CREATE TABLE IF NOT EXISTS app.gadgets (id TEXT PRIMARY KEY, legacy TEXT)');
+    await ensureTable(db, [D], { schema: 'app' });
+    await ensureTable(db, [D], { schema: 'app' });
+    const { rows } = await db.query<{ column_name: string }>("SELECT column_name FROM information_schema.columns WHERE table_schema = 'app' AND table_name = 'gadgets' ORDER BY ordinal_position");
+    expect(rows.map((r) => r.column_name)).toEqual(['id', 'trail']);
+    const idx = await db.query<{ indexname: string }>("SELECT indexname FROM pg_indexes WHERE schemaname = 'app' AND tablename = 'gadgets' ORDER BY indexname");
+    expect(idx.rows.map((r) => r.indexname)).toContain('idx_gadgets_trail');
+    expect(idx.rows.map((r) => r.indexname)).toContain('idx_gadgets_parent');
+  });
+});
+
 describe('ensureTable', () => {
   it('applies the DDL, is idempotent, and grows a table by a newly declared column', async () => {
     await ensureTable(db, [T], { schema: 'app' });

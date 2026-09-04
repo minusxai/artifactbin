@@ -10,7 +10,7 @@
  * answer with the same shape (`edit_id` and refresh `warnings` included).
  */
 import {
-  DATASET_ACCESS, SHARE_ROLES, artifactQuotaExceeded, byteQuotaFor, canWriteDataset, createArtifact, fontResolver, getArtifactFor, assetImporterFor, isVersionConflict, refLoaderForActor, refreshWarningsFor, replaceArtifactFor, writerFor,
+  DATASET_ACCESS, SHARE_ROLES, artifactQuotaExceeded, byteQuotaFor, canWriteDataset, createArtifact, fontResolver, getArtifactFor, getOwnedArtifactFor, assetImporterFor, isVersionConflict, refLoaderForActor, refreshWarningsFor, replaceArtifactFor, writerFor,
   type ArtifactInput, type ArtifactRow, type ArtifactSummary, type DatasetAccess, type EditInput, type EditOutcome, type ReplaceOpts, type ShareEntry, type ShareRole, type TokenActor, type Visibility,
 } from '@/lib/artifacts';
 import { actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type AnnotationAction, type AnnotationAuthor } from '@/lib/annotations';
@@ -23,7 +23,8 @@ import { ALLOW_PUBLIC_VISIBILITY } from '@/lib/config';
 import { canSetDatasetAccess } from '@/lib/features';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { json, readJson } from '@/lib/http';
-import { parseFolder } from '@/lib/urls';
+import { ID_RE } from '@/lib/ids-shape';
+import { PARENT_REFUSED, isParentRefusal, parentOf, resolveParent } from '@/lib/folders';
 import { loadDatasetRows } from '@/lib/story/dataset-store';
 import { parseContentInput } from '@/lib/story/input';
 import { collectExternalAssetUrls } from '@/lib/story/external-images';
@@ -47,6 +48,10 @@ const SUMMARY_META_FIELDS = {
   // reader picks between files by. The object key stays out, like every other
   // tier's.
   pdf: ['contentType', 'bytes', 'pages'],
+  // A folder's meta carries only the sheet its scaffold compiled to, which is
+  // an individual read's business. Present so the lookup is total over
+  // ArtifactFormat rather than falling through to the `?? []`.
+  folder: [],
 } as const;
 
 function summaryMeta(format: ArtifactRow['format'], meta: Record<string, unknown>) {
@@ -67,7 +72,15 @@ export function artifactSummaryToWire(
     version: row.version,
     visibility: row.visibility,
     ...(row.access ? { access: row.access } : {}),
-    folder: row.folder,
+    /*
+     * PLACEMENT, both halves. `parent_id` is what a client WRITES back (an
+     * agent holds a folder's id and nothing else), and `ancestor_ids` is the
+     * whole trail, so breadcrumbs are drawn from one read rather than a walk
+     * up the tree. Both are derived from the one stored array — lib/folders is
+     * the only module that does arithmetic on it.
+     */
+    parent_id: parentOf(row),
+    ancestor_ids: row.ancestor_ids ?? [],
     created_at: row.created_at,
     updated_at: row.updated_at,
     meta: summaryMeta(row.format, row.meta),
@@ -84,7 +97,7 @@ export function artifactSummaryToWire(
  */
 export async function artifactToWireWithAnnotations(row: ArtifactRow, base: string) {
   const wire = await artifactToWire(row, base);
-  return row.format === 'markup' ? { ...wire, annotations: await annotationsWireForRow(row) } : wire;
+  return row.format === 'markup' || row.format === 'folder' ? { ...wire, annotations: await annotationsWireForRow(row) } : wire;
 }
 
 /**
@@ -144,18 +157,24 @@ export async function artifactToWire(row: ArtifactRow, base: string) {
   // successor, so an agent that read-before-writes never learns a name that
   // publish would reject.
   const design = resolveStoredStoryDesign(m.theme, m.colorMode ?? null);
+  // A FOLDER is a markup document whose source we wrote — it reads back, edits,
+  // comments and echoes exactly like one.
+  const isDoc = format === 'markup' || format === 'folder';
   return {
     ...rest,
     format,
     url: `${base}/a/${row.id}`,
+    // The trail rides in `...rest`; the parent is derived from it, and it is
+    // the half a caller writes back.
+    parent_id: parentOf(row),
     markup: source,
     // Annotations are sidecar state (lib/annotations) — the write path never
     // round-trips them, so every echo carries the open COUNT as the signal;
     // the artifact GET additionally inlines the full open set.
-    ...(format === 'markup' ? { open_annotations: await countOpenAnnotations(row.id) } : {}),
+    ...(isDoc ? { open_annotations: await countOpenAnnotations(row.id) } : {}),
     // markup (story-engine) tier only: the source IS the artifact;
     // template/colorMode ride meta.
-    ...(format === 'markup'
+    ...(isDoc
       ? {
           template: m.template ?? null,
           colorMode: design.colorMode,
@@ -197,13 +216,33 @@ function parseExpectedVersion(body: Record<string, unknown>): ReplaceOpts | Resp
   return json({ error: 'invalid_expected_version' }, 400);
 }
 
-export function parseFolderField(body: Record<string, unknown>): string | undefined | Response {
-  const f = body.folder;
-  if (f === undefined || f === null) return undefined;
-  if (typeof f !== 'string') return json({ error: 'invalid_folder' }, 400);
-  const folder = parseFolder(f);
-  if (folder === null) return json({ error: 'invalid_folder' }, 400);
-  return folder;
+/**
+ * The wire's `parent_id`: the id of a folder artifact, or null for the root.
+ * ABSENT is "leave it where it is"; NULL is "move it to the root", and the two
+ * must stay distinguishable, which is why this answers `undefined` rather than
+ * folding an absent field into null.
+ *
+ * It never READS the parent row — that is `lib/folders resolveParent`, and it
+ * runs only after the ownership scope has resolved the row being written. A
+ * shape check may run first; a database read may not, or an id nobody can
+ * reach answers 400 where it owes the uniform 404.
+ *
+ * `folder` was a materialized PATH of names and is answered BY NAME, the same
+ * shape the retired `markdown`/`html` inputs use: an agent sending the old
+ * field learns what replaced it instead of reading "invalid".
+ */
+export function parseParentField(body: Record<string, unknown>): string | null | undefined | Response {
+  if (body.folder !== undefined && body.folder !== null) {
+    return json({
+      error: 'folder_retired',
+      hint: "send parent_id: the id of a folder artifact (create one with format: 'folder')",
+    }, 400);
+  }
+  const p = body.parent_id;
+  if (p === undefined) return undefined;
+  if (p === null) return null;
+  if (typeof p !== 'string' || !ID_RE.test(p)) return json({ error: 'invalid_parent' }, 400);
+  return p;
 }
 
 /** Validate a raw visibility value (a body field OR a query param). */
@@ -351,19 +390,45 @@ export async function replaceArtifactWithBody(
 
   const visibility = parseVisibility(body, !!actor.userId);
   if (visibility instanceof Response) return visibility;
-  const folder = parseFolderField(body);
-  if (folder instanceof Response) return folder;
+  const parent = parseParentField(body);
+  if (parent instanceof Response) return parent;
   const access = parseAccessField(body, parsed.format, request);
   if (access instanceof Response) return access;
   const expected = parseExpectedVersion(body);
   if (expected instanceof Response) return expected;
+  /*
+   * PLACEMENT IS RESOLVED HERE, AFTER the scope answered `current` above — a
+   * row this caller cannot reach is the uniform 404 whatever the body says,
+   * and validating the parent first would answer 400 for an id that does not
+   * exist for them, which is an existence oracle.
+   *
+   * …and it is the OWNER's verb, which this door alone has to say out loud:
+   * the replace scope is `editorScope`, so a named editor reaches this line,
+   * while every other way to move a row (the PATCH) is owner-scoped and
+   * refuses them with the uniform 404 before a parent is ever looked at. An
+   * editor may rewrite the document; filing it — into a folder of the owner's,
+   * or out to the root — is not theirs to do (lib/artifacts ownerScope: "delete,
+   * sharing, folder, dataset access, listing"). PLACEMENT only: `visibility` and
+   * `access` above are on `canGovern`'s list too and this door has always let an
+   * editor set them — a pre-existing gap, measured and reported, deliberately
+   * not widened into here. The second read is what asks, so the ONE ownership rule stays
+   * in SQL rather than being mirrored in JS here, and it is paid for only when
+   * a placement was actually asked for. The refusal is `invalid_parent`, which
+   * already conflates "not a folder you may file into" — there is no second
+   * code to learn, and it says nothing about whether the parent exists.
+   */
+  const mayPlace = parent === undefined || !!(await getOwnedArtifactFor(actor, id));
+  const placement = parent === undefined ? undefined
+    : mayPlace ? await resolveParent(writerFor(current), parent, { id: current.id, format: current.format })
+      : PARENT_REFUSED;
+  if (placement && isParentRefusal(placement)) return json(placement, 400);
 
   const input: ArtifactInput = {
     ...parsed,
     ...(typeof body.title === 'string' ? { title: body.title } : {}),
     ...(typeof body.description === 'string' ? { description: body.description } : {}),
     ...(visibility ? { visibility } : {}),
-    ...(folder !== undefined ? { folder } : {}),
+    ...(placement ? { ancestor_ids: placement.ancestor_ids } : {}),
     ...(access ? { access } : {}),
   };
   const row = await replaceArtifactFor(actor, id, input, expected);
@@ -385,7 +450,7 @@ export async function replaceArtifactWithBody(
     ...(row.format === 'dataset' ? { access: row.access } : {}),
     // Annotations are sidecar state a replace cannot touch — the count is the
     // echo's signal that feedback exists (the GET inlines the full set).
-    ...(row.format === 'markup' ? { open_annotations: await countOpenAnnotations(row.id) } : {}),
+    ...(row.format === 'markup' || row.format === 'folder' ? { open_annotations: await countOpenAnnotations(row.id) } : {}),
     ...(warnings.length ? { warnings } : {}),
     ...assetWarningsEcho(parsed.warnings),
     ...sourceRepairsEcho(parsed.repairs),
@@ -416,8 +481,13 @@ export async function createArtifactFromBody(
   if (visibility instanceof Response) return visibility;
   const access = parseAccessField(body, parsed.format, request);
   if (access instanceof Response) return access;
-  const folder = parseFolderField(body);
-  if (folder instanceof Response) return folder;
+  const parent = parseParentField(body);
+  if (parent instanceof Response) return parent;
+  // Nothing exists yet to be unreachable, so there is no ordering question
+  // here: the parent is the only row being read, and it must be the caller's
+  // own folder or this is the one refusal.
+  const placement = parent === undefined ? { ancestor_ids: [] } : await resolveParent(actor, parent, null);
+  if (isParentRefusal(placement)) return json(placement, 400);
 
   const row = await createArtifact(actor.tokenId, actor.userId, {
     ...parsed,
@@ -425,7 +495,7 @@ export async function createArtifactFromBody(
     description: typeof body.description === 'string' ? body.description : null,
     ...(visibility ? { visibility } : {}),
     ...(access ? { access } : {}),
-    ...(folder !== undefined ? { folder } : {}),
+    ancestor_ids: placement.ancestor_ids,
   });
   return json({
     ...createdArtifactWire(row, base, body.markup),
@@ -449,7 +519,10 @@ export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: 
     // The read-proof for the edit protocol: an agent can start editing straight
     // after create, without a round trip to learn the head pointer.
     edit_id: row.edit_id,
-    format: row.format, title: row.title, folder: row.folder,
+    format: row.format, title: row.title,
+    // Where it landed. `parent_id` is what a caller writes back, so the create
+    // reply hands it straight into the next call.
+    parent_id: parentOf(row), ancestor_ids: row.ancestor_ids,
     ...markupEcho(sentMarkup, row.source),
     // Echoes teach the agent its bindable surface without a second round trip.
     ...(row.format === 'dataset' ? datasetCreateFields(row.id, meta.columns, meta.rowCount, meta as { totalRows?: number; truncated?: boolean }, row.access) : {}),
