@@ -20,8 +20,9 @@
  * paging.
  */
 import { useMemo, useState } from 'react';
-import { Check, FolderInput, Link2, Pencil, Search, Trash2 } from 'lucide-react';
+import { Check, Folder, FolderInput, FolderPlus, Link2, Pencil, Search, Trash2 } from 'lucide-react';
 import RowMenu, { confirmDeleteArtifact } from '@/components/RowMenu';
+import { MoveMenu, type PickerFolder } from '@/components/FolderPicker';
 import { ArtifactTable } from '@/components/TokenBrowser';
 import { Tooltip } from '@/components/Tooltip';
 import { dateStamp, MicroLabel, PANEL, Spark, timeAgo, VISIBILITY_TIPS, VisibilityPill } from '@/components/ui';
@@ -39,6 +40,8 @@ export interface ShelfRow extends ShelfItem {
   visibility?: Visibility;
   /** The id of the folder artifact this row sits in; absent/null = the root. */
   parent_id?: string | null;
+  /** The trail root->parent, so a folder's own subtree can be greyed in the picker. */
+  ancestor_ids?: string[];
   views?: number;
   /** Server-rendered 30-day spline (inline SVG). Absent = draw none. */
   sparkline?: string;
@@ -77,6 +80,125 @@ export interface ShelfProps {
   dates?: 'relative' | 'absolute';
   /** Thumbnail-tier size. */
   cards?: number;
+  /**
+   * WHERE A FOLDER MADE HERE GOES — the folder being viewed, or null at the
+   * dashboard root. It is the wire's own `parent_id`, so null is the root and
+   * an absent value is never "leave it".
+   */
+  parentId?: string | null;
+}
+
+/**
+ * THE FOLDERS STRIP — a third partition of the shelf (lib/shelf `folders`),
+ * above the documents and absent for an account that has none, so nothing moves
+ * for someone who never makes one.
+ *
+ * A folder is an artifact, so a tile is an ordinary link to `/a/<id>`; what it
+ * adds over a document card is that a folder has no thumbnail worth taking (its
+ * own card would be a picture of this listing) and a count instead.
+ */
+function FolderTile({ row, count }: { row: ShelfRow; count: number }) {
+  return (
+    <li className={`reveal group relative ${PANEL} transition-colors hover:border-edge-bright`}>
+      <a
+        href={row.url}
+        aria-label={`Open folder ${nameOf(row)}`}
+        className="flex items-center gap-2 px-3 py-2.5 no-underline"
+      >
+        <Folder size={14} className="shrink-0 text-faint transition-colors group-hover:text-accent" />
+        <span className="min-w-0 flex-1 truncate font-mono text-sm font-semibold text-fg transition-colors group-hover:text-accent">
+          {row.title ?? row.id}
+        </span>
+        <span className="shrink-0 font-mono text-[10px] tabular-nums text-faint">{count}</span>
+        {row.visibility && <VisibilityPill compact visibility={row.visibility} name={nameOf(row)} />}
+      </a>
+    </li>
+  );
+}
+
+/**
+ * NEW FOLDER, INLINE — no dialog and no navigation. Enter creates, Escape
+ * discards, and the tile appears where the strip already is.
+ *
+ * The door is the session twin of create (`POST /api/my/artifacts`), which is
+ * the same pipeline an agent's `format: 'folder'` goes through: the scaffold is
+ * stamped there, in the insert's own transaction, so a folder made from a
+ * button and one made from a token are the same row.
+ */
+function NewFolder({ parentId, onMade }: { parentId: string | null; onMade: (row: ShelfRow) => void }) {
+  const [naming, setNaming] = useState(false);
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const create = async () => {
+    const title = name.trim();
+    if (!title || busy) return;
+    setBusy(true);
+    const res = await fetch('/api/my/artifacts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ format: 'folder', title, parent_id: parentId }),
+    }).catch(() => null);
+    setBusy(false);
+    if (!res?.ok) return;
+    const body = (await res.json().catch(() => null)) as (Partial<ShelfRow> & { id?: string }) | null;
+    if (!body?.id) return;
+    const now = new Date().toISOString();
+    onMade({
+      ...body,
+      id: body.id,
+      url: body.url ?? `/a/${body.id}`,
+      title: body.title ?? title,
+      format: 'folder',
+      version: body.version ?? 1,
+      // Born private like any owned artifact — said here only so the tile can
+      // classify itself before the page is next loaded from the server.
+      visibility: body.visibility ?? 'private',
+      updated_at: body.updated_at ?? now,
+      parent_id: body.parent_id ?? parentId,
+    });
+    setName('');
+    setNaming(false);
+  };
+
+  if (!naming) {
+    return (
+      <Tooltip content="a folder is an artifact — it gets a link, sharing and versions like any other">
+        <button
+          type="button"
+          aria-label="New folder"
+          onClick={() => setNaming(true)}
+          className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-[4px] border border-edge bg-transparent px-2 py-0.5 font-mono text-[10px] text-muted transition-colors hover:border-accent hover:text-accent"
+        >
+          <FolderPlus size={12} /> new folder
+        </button>
+      </Tooltip>
+    );
+  }
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1">
+      <input
+        aria-label="Folder name"
+        placeholder="folder name"
+        autoFocus
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            void create();
+          }
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            setName('');
+            setNaming(false);
+          }
+        }}
+        className="w-36 rounded-[4px] border border-edge bg-transparent px-1.5 py-0.5 font-mono text-[11px] text-fg focus:border-edge-bright focus:outline-none"
+      />
+      <span className="font-mono text-[10px] text-faint">enter</span>
+    </span>
+  );
 }
 
 /** Icon-only row action — the label lives in the tooltip, not beside the glyph. */
@@ -102,13 +224,10 @@ const nameOf = (row: ShelfRow) => row.title ?? row.id;
  * inside an <a> is invalid markup and swallows its own click. These sit above
  * that pseudo-element instead of inside the anchor.
  */
-function Actions({ row, level }: { row: ShelfRow; level: ShelfActions }) {
+function Actions({ row, level, folders }: { row: ShelfRow; level: ShelfActions; folders: PickerFolder[] }) {
   const [copied, setCopied] = useState(false);
   const [moving, setMoving] = useState(false);
-  // P1 keeps the move a plain id field; P2 replaces it with the folder picker
-  // (the tree, with the row's own subtree greyed out — the cycle rule drawn).
-  const [parentId, setParentId] = useState(row.parent_id ?? '');
-  const [parentDraft, setParentDraft] = useState(row.parent_id ?? '');
+  const [parentId, setParentId] = useState(row.parent_id ?? null);
   const share = async () => {
     const url = row.url.startsWith('http') ? row.url : `${location.origin}${row.url}`;
     try {
@@ -118,20 +237,6 @@ function Actions({ row, level }: { row: ShelfRow; level: ShelfActions }) {
     } catch {
       window.open(url, '_blank');
     }
-  };
-  const moveTo = async () => {
-    // Empty means the ROOT, which the wire spells `null` — absent would mean
-    // "leave it where it is", and the two must stay distinguishable.
-    const next = parentDraft.trim() || null;
-    const res = await fetch(`/api/my/artifacts/${row.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ parent_id: next }),
-    }).catch(() => null);
-    if (!res?.ok) return;
-    const body = (await res.json()) as { parent_id?: string | null };
-    setParentId(body.parent_id ?? next ?? '');
-    setMoving(false);
   };
   if (level === 'none') return null;
   return (
@@ -160,10 +265,7 @@ function Actions({ row, level }: { row: ShelfRow; level: ShelfActions }) {
                 label: `Move ${nameOf(row)}`,
                 text: 'move to folder',
                 icon: <FolderInput size={12} />,
-                onSelect: () => {
-                  setParentDraft(parentId);
-                  setMoving(true);
-                },
+                onSelect: () => setMoving(true),
               },
               {
                 label: `Delete ${nameOf(row)}`,
@@ -179,26 +281,12 @@ function Actions({ row, level }: { row: ShelfRow; level: ShelfActions }) {
         </>
       )}
       {moving && (
-        <form
-          className="absolute right-0 top-full z-30 mt-1 flex w-56 items-center gap-1 rounded-[6px] border border-edge bg-surface p-1.5"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void moveTo();
-          }}
-        >
-          <input
-            aria-label="Folder id"
-            placeholder="folder id ('' = root)"
-            value={parentDraft}
-            onChange={(e) => setParentDraft(e.target.value)}
-            className="min-w-0 flex-1 rounded-[4px] border border-edge bg-transparent px-1.5 py-0.5 font-mono text-[11px] text-fg focus:border-edge-bright focus:outline-none"
-          />
-          <Tooltip content="save">
-            <button type="submit" aria-label="Save folder" className={ICON_ACTION}>
-              <Check size={12} />
-            </button>
-          </Tooltip>
-        </form>
+        <MoveMenu
+          row={{ id: row.id, format: row.format, parent_id: parentId, ancestor_ids: row.ancestor_ids }}
+          folders={folders}
+          onMoved={setParentId}
+          onClose={() => setMoving(false)}
+        />
       )}
     </span>
   );
@@ -215,7 +303,7 @@ function Actions({ row, level }: { row: ShelfRow; level: ShelfActions }) {
  * one shelf. Hanging them on the picture is ONE rule with no breakpoint fork,
  * and the hero's right column is then free to be nothing but the document.
  */
-function CardControls({ row, level }: { row: ShelfRow; level: ShelfActions }) {
+function CardControls({ row, level, folders }: { row: ShelfRow; level: ShelfActions; folders: PickerFolder[] }) {
   if (!row.visibility && level === 'none') return null;
   return (
     <div
@@ -225,7 +313,7 @@ function CardControls({ row, level }: { row: ShelfRow; level: ShelfActions }) {
       <VisibilityTag row={row} overlay />
       {level !== 'none' && (
         <div className={`${CARD_ACTION_SURFACE} ml-auto`}>
-          <Actions row={row} level={level} />
+          <Actions row={row} level={level} folders={folders} />
         </div>
       )}
     </div>
@@ -321,20 +409,28 @@ function FilterChip({ value, active, onToggle }: { value: string; active: boolea
   );
 }
 
-export default function Shelf({ rows, actions = 'none', assets = true, dates = 'relative', cards = 3 }: ShelfProps) {
+export default function Shelf({ rows, actions = 'none', assets = true, dates = 'relative', cards = 3, parentId = null }: ShelfProps) {
   const [query, setQuery] = useState('');
   const [picks, setPicks] = useState<string[]>([]);
+  /*
+   * Folders MADE HERE, kept beside the page's own rows. Creating one is a
+   * metadata-sized act on a page that is otherwise a listing — reloading to
+   * show it would throw away the search, the filters and the scroll for a
+   * single new tile. The page's next load has it from the server.
+   */
+  const [made, setMade] = useState<ShelfRow[]>([]);
   const q = query.trim().toLowerCase();
+  const all = made.length ? [...made, ...rows] : rows;
 
   const togglePick = (v: string) => setPicks((p) => (p.includes(v) ? p.filter((x) => x !== v) : [...p, v]));
 
   // Chips are derived from the rows, so a shelf with nothing to split on shows
   // no dead controls.
-  const chips = VISIBILITY_ORDER.filter((v) => rows.some((r) => r.visibility === v));
+  const chips = VISIBILITY_ORDER.filter((v) => all.some((r) => r.visibility === v));
   const showChips = chips.length >= 2;
 
   const shelf = useMemo(() => {
-    const matched = rows.filter(
+    const matched = all.filter(
       (r) =>
         (!q || `${r.title ?? ''} ${r.description ?? ''} ${r.format}`.toLowerCase().includes(q)) &&
         (picks.length === 0 || (r.visibility != null && picks.includes(r.visibility))),
@@ -343,14 +439,23 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
     // and its results are already ordered by what was asked for. Filtering is
     // still browsing — a narrower shelf is a shelf.
     return buildShelf(matched, { cards, flat: Boolean(q) });
-  }, [rows, q, picks, cards]);
+  }, [all, q, picks, cards]);
+
+  /** The account's folders, for every picker on this shelf — the tree, unfiltered. */
+  const pickable: PickerFolder[] = useMemo(
+    () => all.filter((r) => r.format === 'folder').map((r) => ({ id: r.id, title: r.title, ancestor_ids: r.ancestor_ids ?? [] })),
+    [all],
+  );
+  /** How many rows THIS shelf holds inside a folder. What the dashboard knows, no more. */
+  const inside = (id: string): number => all.filter((r) => r.parent_id === id).length;
 
   const filtering = Boolean(q) || picks.length > 0;
+  const canMakeFolders = actions === 'full';
   const nothing = !shelf.hero && shelf.cards.length === 0 && shelf.list.length === 0 && shelf.assets.length === 0;
 
   return (
     <section aria-label="Shelf" className="flex flex-col gap-5">
-      {rows.length > 0 && (
+      {(all.length > 0 || canMakeFolders) && (
         <div className={PANEL}>
           {/* WRAPS, and the field has a floor: three visibility chips beside
               the input left it ~130px on a phone, truncating its own
@@ -373,11 +478,34 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
             )}
             {filtering && (
               <span className="shrink-0 border-l border-edge pl-2 font-mono text-[10px] tabular-nums text-faint">
-                {shelf.total + shelf.assets.length}/{rows.length}
+                {shelf.total + shelf.assets.length}/{all.length}
+              </span>
+            )}
+            {canMakeFolders && (
+              <span className="shrink-0 border-edge sm:border-l sm:pl-2">
+                <NewFolder parentId={parentId} onMade={(row) => setMade((m) => [row, ...m])} />
               </span>
             )}
           </div>
         </div>
+      )}
+
+      {/* FOLDERS — above the documents, and only for an account that has one.
+        * A folder is where the deliverables are rather than a deliverable, so
+        * it is neither a document tier nor an asset (lib/shelf's third
+        * partition), and `total` still counts documents: making a folder never
+        * changes what the shelf says you have. */}
+      {shelf.folders.length > 0 && (
+        <section aria-label="Folders">
+          <div className="mb-2 flex items-baseline gap-2">
+            <MicroLabel>folders</MicroLabel>
+          </div>
+          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {shelf.folders.map((row) => (
+              <FolderTile key={row.id} row={row} count={inside(row.id)} />
+            ))}
+          </ul>
+        </section>
       )}
 
       {nothing && filtering && (
@@ -399,7 +527,7 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
               its far corner is the right column's, where the actions belong.
               Stacked (phone) the card's top IS the picture's top: same corner
               as every tier below, still no breakpoint fork. */}
-          <CardControls row={shelf.hero} level={actions} />
+          <CardControls row={shelf.hero} level={actions} folders={pickable} />
           {/* Starts BELOW the control row on desktop, so the title gets the
               column's full width instead of sharing its first line with the
               buttons. On a phone the controls are on the picture — no clearance. */}
@@ -439,7 +567,7 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
             >
               <div className="relative">
                 <Thumb row={row} className="aspect-[40/21] border-b border-edge" />
-                <CardControls row={row} level={actions} />
+                <CardControls row={row} level={actions} folders={pickable} />
               </div>
               <div className="flex flex-1 flex-col gap-2.5 p-3">
                 <a
@@ -463,6 +591,7 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
       {shelf.list.length > 0 && (
         <ArtifactTable
           artifacts={shelf.list}
+          folders={pickable}
           manage={actions === 'full'}
           canEdit={actions === 'full'}
           embedded
@@ -480,6 +609,7 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
           </div>
           <ArtifactTable
             artifacts={shelf.assets}
+            folders={pickable}
             manage={actions === 'full'}
             canEdit={false}
             canShare={false}

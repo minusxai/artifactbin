@@ -137,3 +137,54 @@ export function FolderPicker({ folders, moving, current, onMove, onClose }: Fold
     </div>
   );
 }
+
+/** What the mover needs to know about the row it is moving. */
+export interface MoveTarget {
+  id: string;
+  format?: string;
+  /** Where it sits now — the wire's own field (null = root). */
+  parent_id?: string | null;
+  /** Its trail, so its own subtree can be greyed out when it is a folder. */
+  ancestor_ids?: string[];
+}
+
+/**
+ * THE PICKER PLUS THE ONE WIRE IT DRIVES — `PATCH {parent_id}`, metadata-only,
+ * never the content PUT.
+ *
+ * Two surfaces move a row (the shelf's cards and its dense tier) and they each
+ * had their own copy of this fetch when the control was a text field. One
+ * implementation, so the ROOT keeps meaning `null` on both — absent would mean
+ * "leave it where it is", and the two must stay distinguishable.
+ */
+export function MoveMenu({ row, folders, onMoved, onClose }: {
+  row: MoveTarget;
+  folders: PickerFolder[];
+  /** The accepted placement, as the server echoed it. */
+  onMoved: (parentId: string | null) => void;
+  onClose: () => void;
+}): React.ReactElement {
+  const move = async (parentId: string | null): Promise<void> => {
+    const res = await fetch(`/api/my/artifacts/${row.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parent_id: parentId }),
+    }).catch(() => null);
+    // A refusal (invalid_parent, and every reason it covers) leaves the picker
+    // open on the choice that was refused rather than closing over a move that
+    // did not happen.
+    if (!res?.ok) return;
+    const body = (await res.json().catch(() => ({}))) as { parent_id?: string | null };
+    onMoved(body.parent_id ?? null);
+    onClose();
+  };
+  return (
+    <FolderPicker
+      folders={folders}
+      moving={{ id: row.id, format: row.format ?? 'markup', ancestor_ids: row.ancestor_ids ?? [] }}
+      current={row.parent_id ?? null}
+      onMove={move}
+      onClose={onClose}
+    />
+  );
+}
