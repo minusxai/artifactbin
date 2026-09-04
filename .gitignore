@@ -39,3 +39,4 @@ tmp/
 /dist/
 services/app/dist/
 services/app/data/
+video/

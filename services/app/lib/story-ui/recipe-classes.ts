@@ -193,7 +193,7 @@ export const STORY_UI_RECIPE_CLASSES: readonly string[] = [
   "accordion-item",
   "accordion-trigger",
   "after:absolute",
-  "after:bg-foreground",
+  "after:bg-primary",
   "after:opacity-0",
   "after:transition-opacity",
   "alert",
