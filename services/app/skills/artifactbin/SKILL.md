@@ -9,8 +9,7 @@ read_first_max: 8192
 **Publish before you polish** — make the FIRST call a SKELETON: the real title,
 the theme and template you picked, the document's section headings, stubbed.
 Its response carries the `id` and the url `[[ base ]]/a/<id>`: hand it over at
-once and say it is live and still filling in. It is — an edit reaches an open
-reader in seconds, so they watch the sections land.
+once and say it is live and still filling in. It is: an edit reaches an open reader in seconds.
 **The reading path never precedes the first publish**; each section then lands
 as one targeted `edit_artifact`.
 
@@ -30,7 +29,7 @@ on-page heading is not it.
 [[ editExample ]]
 
 `old_string` must appear EXACTLY ONCE. Prefer it to replacing the whole
-document: smaller, and a human may be reading the page live.
+document: smaller, and a human may be reading live.
 
 **markup** is JSX treated as data: ordinary HTML tags for everything including
 prose (`h1 h2 p ul li blockquote table figure img`, inline `svg`) plus the
@@ -41,7 +40,7 @@ component kit (`Card`, `Tabs`, `Badge`, `Grid`/`GridItem`,
 
 **Guess rather than look up.** An unknown HTML tag is refused with a 400
 carrying the allowed set (`allowed_html_tags`), an unknown component the
-registry: a wrong guess costs one cheap round trip. One exception:
+registry: a wrong guess costs one round trip. One exception:
 `[[ refusedTags | join(' ') ]]` are refused with NO list — never guess them
 (`<form>` and `<iframe>` most often). Custom CSS and JS live in ONE `<Helmet>`,
 which also holds `<title>`:
@@ -77,8 +76,7 @@ artifact (`{"dataset":"month,revenue\n2026-01,120"}`); its response echoes a rea
 re-runs its queries live. **For ANY dataviz — charts, KPIs, tables, controls —
 read `references/markup-data.md` first, and ALWAYS chart with these embeds,
 never a hand-rolled `<svg>` chart**: `<Question viz>` speaks full vega-lite,
-the kit adds theme palettes, tooltips, responsive sizing and live re-runs
-for free.
+the kit adds theme palettes, tooltips, responsive sizing and live re-runs.
 
 **theme** — the palette and fonts; author with token classes
 (`bg-background`, `text-muted-foreground`) and it follows:
@@ -97,7 +95,7 @@ first-class:
   the only big type, almost no prose.
 - `editorial` — a report or long read: ONE centered `max-w-2xl` column,
   numbered `<h2>` section claims.
-- `scrolly` — data stories (pudding-style) and fun use cases: one conceit the
+- `scrolly` — data stories (pudding-style): one conceit the
   whole page commits to, chapter bands, evidence revealed on scroll. The
   strongest default when nothing above fits.
 
@@ -105,17 +103,17 @@ first-class:
 in order:** `references/design.md` (craft), `references/markup.md` (vocabulary),
 then the `references/templates-<name>.md` and `references/themes-<name>.md` you
 picked — their frame is what makes it come out right (a deck without it ships
-text flush to the viewport edge). The table below carries the rest.
+text flush to the viewport edge).
 
 [[ checkWork ]]
 
 **Prose, sections and a one-dataset chart are fully covered above**; anything
-more follows the reading path. Beyond both, each ask has ONE file under
+more follows the reading path. Each ask has ONE file under
 `references/` ([[ docsIndexHint ]]):
 | when the ask involves | read |
 |---|---|
 | the API in full — replace, `expectedVersion`, visibility, forking, the error table | `publishing.md` |
-| tokens — no token, expiry, saved config, claiming, a 401 | `publishing-auth.md` |
+| tokens — expiry, saved config, claiming, a 401 | `publishing-auth.md` |
 | uploading assets — CSV/sheet rows, images, PDFs (`<File>`), viz recipes | `publishing-datasets.md` |
 | pinned human feedback — reply, resolve, the anchor attribute | `publishing-annotations.md` |
 | connecting an MCP client — OAuth or bearer, the tool list | `publishing-mcp.md` |
