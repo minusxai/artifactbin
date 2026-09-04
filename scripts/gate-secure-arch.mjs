@@ -342,7 +342,10 @@ if (declImg.status === 201) {
   const declServed = await (await fetch(`${BASE}/a/${declBody.id}/raw`, {
     headers: { Authorization: `Bearer ${anon.token}` },
   })).text();
-  const mapped = /src="\/assets\/[0-9a-f]{64}"/.test(declServed);
+  // The mapped address carries a content-derived `?v=` when the row is known
+  // (lib/story/asset-url, R19) — the version is a cache key, so what this leg
+  // is about is the ADDRESS being ours.
+  const mapped = /src="\/assets\/[0-9a-f]{64}(\?v=[0-9a-f]{8})?"/.test(declServed);
   // A host this machine cannot reach is a WARNING rather than a refusal, and
   // the unmapped URL is then refused by the document's own CSP (layer 2 below)
   // — so the gate needs no internet to mean something.
