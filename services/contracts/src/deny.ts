@@ -1,6 +1,7 @@
 /**
- * The ONLY answer a proxy gives on its own: a rate-limit deny. Everything
- * else — 401s, 404s, `WWW-Authenticate` on /mcp — is the app's, because the
+ * A rate-limit deny — one of only two answers a proxy gives on its own (the other is the proxy's refusal of
+ * the anonymous mint to a non-browser, which is the proxy's because the app cannot see the hop the browser
+ * headers arrived on). Everything else — 401s, 404s, `WWW-Authenticate` on /mcp — is the app's, because the
  * app is the one that knows what a route requires.
  *
  * Moved from packages/contract/src/deny.ts (verbatim); that file re-exports

@@ -18,12 +18,13 @@
  */
 import { chromium } from 'playwright';
 import { becomeOwner } from './lib/start-doc.mjs';
+import { mintAnon } from './lib/mint-anon.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3040';
 const failures = [];
 const check = (ok, label) => { console.log(`${ok ? '  ok ' : 'FAIL '} ${label}`); if (!ok) failures.push(label); };
 
-const mint = await (await fetch(`${BASE}/api/tokens/anonymous`, { method: 'POST' })).json();
+const mint = await mintAnon(BASE);
 const publish = async (body) => {
   const res = await fetch(`${BASE}/api/artifacts`, {
     method: 'POST',

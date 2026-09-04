@@ -37,17 +37,24 @@ import {
  * The tombstone is read by an AGENT mid-run, where "ask the person who sent
  * it" is advice it cannot take — there is nobody in the loop. So it names the
  * cause it can fix itself (a mistyped `k=`, measured: one leg dropped a single
- * character and then spent seven 4xx guessing endpoints) and the two doors
- * that need no link at all.
+ * character and then spent seven 4xx guessing endpoints).
+ *
+ * It used to offer `POST /api/tokens/anonymous` as the door that "needs no
+ * link at all" — the single worst place for that sentence, because it is read
+ * by an agent that is stuck and looking for any way in, and a token it mints
+ * for itself publishes where its human cannot reach. The way out of a spent
+ * link is a person, so the tombstone asks for one (m2).
  */
 const goneText = (base: string) => [
   'This start link is spent, expired, or copied wrong — check every character of the `k=` value against what you were given.',
   '',
-  'You do not need it to continue:',
-  `  POST ${base}/api/tokens/anonymous   → a token, no account needed`,
+  'To continue you need a token, and only your human can get you one:',
+  `  ask them for a fresh start link, or for a token at ${base}/tokens/new`,
+  '  — or connect over the artifactbin plugin/MCP, which needs no token at all.',
   `  GET  ${base}/docs/artifactbin/references/publishing.md → the whole API`,
   '',
-  'For the original document, ask the person who sent the link for a fresh one.',
+  'Do not mint a token for yourself: what you publish with it lands where your',
+  'user cannot reach it.',
 ].join('\n');
 
 const gone = (request: Request) => new Response(goneText(baseUrl(request)), {

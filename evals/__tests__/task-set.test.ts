@@ -62,7 +62,11 @@ describe('selectTasks', () => {
   it('CI runs ONLY the product guards — the creative briefs are not a per-PR question', () => {
     const ids = selectTasks(found, { set: 'ci' }).map((t) => t.id).sort();
     expect(ids).toEqual(filesIn('ci'));
+    // Named, because membership is the point for both: `comment` brings a whole KIND, and `no-token`
+    // is here for the same reason the older three are — it has ONE right answer (stop and ask your
+    // human), so paying six comparison legs to re-answer it buys nothing.
     expect(ids).toContain('comment');
+    expect(ids).toContain('no-token');
   });
 
   it('the two sets are disjoint and together cover every task on disk', () => {

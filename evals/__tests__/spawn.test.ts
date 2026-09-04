@@ -378,3 +378,57 @@ describe('runInvocation gives the run directory back', () => {
     expect(plain).toEqual([]); // a laptop run is untouched by any of this
   });
 });
+
+describe('firstUrlAtMs — when the human could first click something (m1)', () => {
+  // The gap between the two URLs is SECONDS, not milliseconds, on purpose: node's own boot is inside
+  // `firstUrlAtMs` by design (the anchor is the spawn, not the child's first line), so the margin that
+  // separates "took the first" from "took the last" has to be bigger than a boot. An upper bound tight
+  // enough to sit between two 250ms-apart prints measures the laptop instead — it failed at 461 on a
+  // machine running three agents' suites, while reporting a perfectly correct number.
+  it('timestamps the first /a/<id> the agent prints, not the last', async () => {
+    // First URL on the very first line, second one three seconds later, then the child falls off the end.
+    const script = 'console.log("published https://x.test/a/ab3cd9");'
+      + 'setTimeout(()=>console.log("and https://x.test/a/zz9yy8"),3000)';
+    const r = await runInvocation(node(script), { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
+    expect(r.firstUrlAtMs).not.toBeNull();
+    // Well under the second print — a last-url implementation lands past 3000 and fails here.
+    expect(r.firstUrlAtMs!).toBeLessThan(2_000);
+    // …and the run genuinely spanned both, so "under 2000" is a choice between two URLs, not a run that
+    // ended before the second one was ever printed.
+    expect(r.durationMs).toBeGreaterThanOrEqual(3_000);
+    expect(r.firstUrlAtMs!).toBeLessThan(r.durationMs);
+    expect(r.stdout).toContain('zz9yy8');
+  });
+
+  it('is null when the agent never named a document', async () => {
+    const r = await runInvocation(node('console.log("I could not publish anything")'), { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
+    expect(r.firstUrlAtMs).toBeNull();
+  });
+});
+
+describe('firstUrlAtMs — what it watches, and what it deliberately does not (m1)', () => {
+  it('watches the RETAINED stream, so a line the adapter drops does not start the clock', async () => {
+    // A streaming harness re-sends its whole partial message per token and the adapter filters those
+    // away; `stdout` is what everything downstream is scored from, so a URL that never reaches it must
+    // not produce a timestamp either — otherwise a run reads "no link in the transcript" AND a click time.
+    const script = 'setTimeout(()=>console.log(JSON.stringify({type:"noise",text:"https://x.test/a/ab3cd9"})),120);'
+      + 'setTimeout(()=>console.log(JSON.stringify({type:"keep",text:"published https://x.test/a/ab3cd9"})),450);'
+      + 'setTimeout(()=>{},650)';
+    const keepLine = (l: string) => !l.includes('"noise"');
+    const r = await runInvocation({ ...node(script), keepLine }, { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
+    expect(r.stdout).not.toContain('noise');
+    expect(r.firstUrlAtMs).not.toBeNull();
+    expect(r.firstUrlAtMs!).toBeGreaterThanOrEqual(400);
+  });
+
+  it('ignores a `/start` link — that is the document the agent was GIVEN, not one it made', async () => {
+    const r = await runInvocation(node('console.log("I was given https://x.test/a/ab3cd9/start?k=abc and did nothing")'), { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
+    expect(r.firstUrlAtMs).toBeNull();
+  });
+
+  it('still sees a URL on a FINAL line that carried no newline', async () => {
+    const r = await runInvocation(node('process.stdout.write("done: https://x.test/a/ab3cd9")'), { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
+    expect(r.firstUrlAtMs).not.toBeNull();
+    expect(r.firstUrlAtMs!).toBeLessThanOrEqual(r.durationMs);
+  });
+})

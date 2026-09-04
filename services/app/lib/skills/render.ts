@@ -28,6 +28,7 @@ import { MAX_CONTENT_BYTES } from '@/lib/story/input';
 import { MAX_EXTERNAL_ASSETS_PER_PUBLISH, MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/config';
 import { COMPUTED_FIGURE_RULE } from '@/lib/agent-guidance';
 import { OPERATIONS } from '@/lib/operations/registry';
+import { anonymousClaimRelay } from '@/lib/agent-copy';
 import type { SkillFile } from './tree';
 
 /**
@@ -141,7 +142,9 @@ const REGISTRY_GLOBALS = {
 export function renderSkill(file: SkillFile, opts: RenderOptions): string {
   const transport = opts.transport ?? 'curl';
   const delivery = opts.delivery ?? (transport === 'mcp' ? 'installed' : 'http');
-  const claim = `*"to keep these under your account, log in at ${opts.base} and claim token \`mx_...\`"* (they paste it in the Claim box on the dashboard).`;
+  // ONE source for this advice: agent-copy's fifth string, the line an agent relays about an orphaned
+  // document. The docs render it for a stand-in id, so the words a reader sees are the words we hand over.
+  const claim = anonymousClaimRelay(opts.base, '<id>');
   const own: Record<string, unknown> = {};
   const entry = file.file.replace(/\.md$/, '');
   if (file.ref && entry.startsWith('themes-')) own.theme = REGISTRY_GLOBALS.themes.find((t) => t.name === entry.slice('themes-'.length));

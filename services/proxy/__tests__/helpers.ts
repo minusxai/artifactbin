@@ -55,6 +55,13 @@ export async function mintTestToken(o: { id: string; userId: string | null; pg: 
   return token;
 }
 
+/**
+ * What Chromium actually sends on the `/tokens/new` mint fetch (MEASURED on production). Any test that mints
+ * through the composed proxy needs these now: `anonMintDoor` refuses that ONE path to a non-browser. Kept
+ * here rather than typed into each file, so the measured shape has a single home.
+ */
+export const BROWSER_MINT_HEADERS: Readonly<Record<string, string>> = { origin: 'http://localhost', 'sec-fetch-site': 'same-origin' };
+
 export async function testProxyOptions(overrides: Partial<ProxyOptions> = {}): Promise<ProxyOptions> {
   const { query } = testDb();
   await ensureTestSchema();

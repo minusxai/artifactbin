@@ -308,6 +308,9 @@ export const commentScorer = {
     const comment = task.comment;
     if (!comment) return;
     if (!token) throw new DriverFailure('credential', `task ${task.id} posts a comment and so needs a token handoff`);
+    // Unreachable while `validate` insists on `handoff: "token"` — which is also what mints the start
+    // document — but stated rather than asserted away: a task handed no document has nothing to comment on.
+    if (!id) throw new DriverFailure('start document', `task ${task.id} posts a comment and so needs a start document`);
     const driver = { ...ctx.driverHeaders, 'content-type': 'application/json' };
 
     const exchange = await fetch(`${base}/api/session/token`, {
@@ -356,6 +359,8 @@ export const commentScorer = {
     const { task } = ctx;
     const unanswered = { responded: null, changed: null, resolved: null, urls_kept: null, assets_served: null, assets_ok: null };
     if (!task.comment) return unanswered;
+    // Same rule as `setup`: this kind's whole subject is a thread on the document the agent was GIVEN.
+    if (!ctx.startId) throw new DriverFailure('start document', `task ${task.id} has no start document to read a thread from`);
     const threads = await readThreads(ctx.productUrl, ctx.startId, ctx.token, ctx.driverHeaders);
     const tm = threadMetrics(threads);
     ctx.record('answered_by', tm.agentLabel, 'text');
@@ -407,6 +412,7 @@ async function readThreads(base: string, id: string, token: string | null, drive
 async function assetChecks(ctx: CheckContext): Promise<Record<string, boolean | null>> {
   const urls = ctx.task.assetUrls ?? [];
   if (urls.length === 0) return { urls_kept: null, assets_served: null, assets_ok: null };
+  if (!ctx.startId) throw new DriverFailure('start document', `task ${ctx.task.id} has no start document to read markup from`);
   const markup = await readStoredMarkup(ctx.productUrl, ctx.startId, ctx.token, ctx.driverHeaders);
   ctx.record('image_count', imageCount(ctx.served.html), 'number');
   // The caption was asked for on the LAST picture the comment named — the one it says

@@ -49,7 +49,7 @@ export async function POST(request: Request) {
       id: minted.id,
       token: minted.token,
       expiresAt: minted.expiresAt,
-      note: agentContract(baseUrl(request)),
+      note: agentContract(baseUrl(request), 'http'),
     },
     201,
   );
