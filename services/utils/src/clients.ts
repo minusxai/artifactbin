@@ -1,5 +1,6 @@
 import type {
   BrowserService,
+  EventsService,
   DryRunMutationsResult,
   DryRunResult,
   MutationOutcome,
@@ -9,7 +10,7 @@ import type {
   RenderResult,
   SqlService,
 } from '@artifactbin/contracts';
-import { BROWSER_ROUTES, SERVICE_AUTH_HEADER, SQL_ROUTES } from '@artifactbin/contracts';
+import { BROWSER_ROUTES, EVENTS_ROUTES, SERVICE_AUTH_HEADER, SQL_ROUTES } from '@artifactbin/contracts';
 import { httpClient } from './http';
 
 const SQL_DEFAULT_TIMEOUT_MS = 5_000;
@@ -72,4 +73,28 @@ export function queryBounds(
     limit: page ? bound(page.limit, caps.maxRows) : bound(input.limit, caps.maxRows),
     timeoutMs: bound(input.timeoutMs, caps.timeoutMs),
   };
+}
+
+export interface EventsClientOptions {
+  /** Deadline on every POST. */
+  deadlineMs?: number;
+  serviceSecret?: string;
+  /** A batch leaves after this long (default 1000 ms) … */
+  batchMs?: number;
+  /** … or when it holds this many envelopes (default 50), whichever first. */
+  batchMax?: number;
+  /** Envelopes waiting beyond this (default 1000) are dropped, with ONE warning line per overflow episode. */
+  queueMax?: number;
+}
+
+/**
+ * The HTTP client for the events service: `emit` enqueues and resolves at once
+ * (never rejects, never blocks a request), a batch leaves every `batchMs` or at
+ * `batchMax`, a failed POST is retried ONCE (the envelope ids make that safe),
+ * and `close` flushes the tail — what the SIGTERM handler awaits before the
+ * listener closes. A dead service costs the caller nothing but a log line.
+ */
+export function eventsClient(url: string, opts: EventsClientOptions = {}): EventsService {
+  void url; void opts; void EVENTS_ROUTES;
+  throw new Error('events-svc: implement eventsClient');
 }

@@ -49,7 +49,7 @@ export type AnalyticsEvent =
 export async function trackEvent(
   event: AnalyticsEvent,
   artifactId: string,
-  opts: { userId?: string | null } = {},
+  opts: { userId?: string | null; forkId?: string | null } = {},
 ): Promise<void> {
   try {
     let client: string | null = null;

@@ -3,6 +3,7 @@ export { ACTOR_HEADER, ACTOR_TTL_SECONDS, ANONYMOUS, CREDENTIALS, type Actor, ty
 export type { Queryable } from './db';
 export * from './sql';
 export * from './browser';
+export * from './events';
 export * from './doors';
 export * from './agent';
 export * from './deny';

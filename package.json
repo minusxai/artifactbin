@@ -36,6 +36,7 @@
   "dependencies": {
     "@artifactbin/browser": "0.1.0",
     "@artifactbin/contracts": "0.1.0",
+    "@artifactbin/events": "0.1.0",
     "@artifactbin/proxy": "0.1.0",
     "@artifactbin/sql": "0.1.0",
     "@artifactbin/utils": "0.1.0",
@@ -82,6 +83,7 @@
     "services/app",
     "services/sql",
     "services/browser",
+    "services/events",
     "services/proxy"
   ]
 }
