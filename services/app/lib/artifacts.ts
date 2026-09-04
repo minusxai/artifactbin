@@ -395,7 +395,7 @@ export async function forkArtifact(
   const row = await createArtifact(actor.tokenId, actor.userId, input, { forkedFrom: source.id, linkRole: source.link_role });
   // Against the SOURCE: "this was forked" is a fact about the original, and the
   // forker is who did it. Never inside a transaction (PGLite deadlock).
-  void trackEvent('fork', source.id, { userId: actor.userId });
+  void trackEvent('fork', source.id, { userId: actor.userId, forkId: row.id });
   return row;
 }
 

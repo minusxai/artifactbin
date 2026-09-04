@@ -35,9 +35,11 @@ export function envelope<K extends ObjectKind, V extends EventVerb<K>>(
     verb,
     object_kind: object.kind,
     object_id: object.id,
-    // Spread rather than assign: the catalogue's payloads are interfaces (no
-    // index signature), and the envelope owns its own object either way.
-    payload: { ...payload },
+    // Spread so the envelope owns its own object — a caller mutating what it
+    // passed cannot rewrite a queued row. The assertion is only about the
+    // index signature: an INTERFACE (which every catalogue payload is) never
+    // gets the implicit one a `Record<string, unknown>` column wants.
+    payload: { ...payload } as Record<string, unknown>,
   };
 }
 
