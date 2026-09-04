@@ -12,6 +12,9 @@
 import type { EventEnvelope } from '@artifactbin/contracts';
 import { EVENTS_SCHEMA } from '@/lib/config';
 import { getDb } from '@/lib/db';
+import type { FeedItem } from '@/lib/feed-wire';
+
+export type { FeedItem };
 
 export const FEED_DEFAULT_LIMIT = 50;
 
@@ -181,4 +184,26 @@ export async function dailyViewsByUser(userId: string): Promise<DailyViews[]> {
     if (day >= today) break;
   }
   return out;
+}
+
+/**
+ * Decorate envelopes for a page: the subject's handle (users.username — null
+ * for a visitor, a token, or an account without one) and the artifact's title.
+ * TWO batched lookups for the whole list, never one per row.
+ */
+export async function decorateFeed(events: EventEnvelope[]): Promise<FeedItem[]> {
+  void events;
+  throw new Error('events-moments: implement decorateFeed');
+}
+
+/**
+ * "What those I follow did": events said BY the users this one follows, ON
+ * artifacts, for the verbs a follower cares about (created, forked, liked,
+ * annotated) — and only on PUBLIC artifacts, so a followed user's private or
+ * unlisted work never leaks through their follower's feed. Newest first, id
+ * tie-break; empty when the table is absent or the user follows nobody.
+ */
+export async function followFeed(userId: string, opts: { limit?: number } = {}): Promise<EventEnvelope[]> {
+  void userId; void opts;
+  throw new Error('events-moments: implement followFeed');
 }
