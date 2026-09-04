@@ -35,6 +35,7 @@ const FIXTURES: Fixtures = {
     unliked: {},
   },
   user: {
+    signed_up: { email: 'someone@example.com' },
     login_sent: { email: 'someone@example.com' },
     login_verified: { email: 'someone@example.com' },
     oauth_linked: { provider: 'google' },
@@ -88,7 +89,7 @@ describe('emit', () => {
 describe('the catalogue', () => {
   const all = (Object.keys(EVENT_VERBS) as ObjectKind[]).flatMap((kind) => EVENT_VERBS[kind].map((verb) => [kind, verb] as const));
   it('has a fixture for every verb, and every fixture builds a valid envelope', () => {
-    expect(all.length).toBeGreaterThanOrEqual(25);
+    expect(all.length).toBeGreaterThanOrEqual(26);
     for (const [kind, verb] of all) {
       const payload = (FIXTURES[kind] as Record<string, unknown>)[verb];
       expect(payload, `${kind}.${verb} has no fixture`).toBeDefined();
@@ -101,7 +102,7 @@ describe('the catalogue', () => {
     for (const [kind, verb] of all) {
       const e = envelope({ kind: 'user', id: 'usr_a' }, verb as never, { kind, id: 'x' }, (FIXTURES[kind] as Record<string, unknown>)[verb] as never);
       const text = JSON.stringify(e);
-      const identity = kind === 'user' && verb.startsWith('login_');
+      const identity = kind === 'user' && (verb.startsWith('login_') || verb === 'signed_up');
       if (!identity) expect(text, `${kind}.${verb} leaks an email`).not.toMatch(/@/);
       for (const key of Object.keys(e.payload)) expect(key, `${kind}.${verb} payload key`).not.toMatch(/content|source|secret|token_hash|password|markup|body/i);
     }
