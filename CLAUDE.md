@@ -216,14 +216,20 @@ joins the set by existing. They FAN OUT OVER SERVERS, not over gates: what made
 the set sequential was never the browser but the server — two gates sharing one
 share a mint ceiling, a login door and a listing — so a worker gets its own
 server (`--servers=N`: in-memory PGLite, its own object dir and port) and runs
-its own gates one at a time. 34 gates went from ~25 minutes to ~3. A gate that FAILS
+its own gates one at a time. 34 gates went from ~25 minutes to ~3. Below that the
+MACHINE is the floor — four workers on four vCPUs — so the set also SHARDS across
+runners (`--shard=i/n`, `scripts/gates.shard.mjs`), balanced by each gate's
+measured `timeoutMs` rather than by count, because app-flows is 75s and
+annotations is 9s and a split by index hands one runner every slow gate. 40 gates
+over two runners: ~192s to ~105s each. A gate that FAILS
 under that load gets one more turn ALONE and is NAMED in the summary when it
 passes there: four browsers on one machine can lose a race that is not a
 broken contract, and a retry nobody is told about is how a real intermittent
 bug hides. They need a running server (and, where they log in,
 development mail written to their protected outbox), which is why `npm test` does not
-run them — but CI DOES: the `browser gates` job builds and runs the whole set
-against four of its own servers and is part of the `test` roll-up, so a
+run them — but CI DOES: the `browser gates (i/2)` matrix builds and runs the set
+across TWO runners, four of its own servers each, and is part of the `test`
+roll-up, so a
 "guarded by `scripts/gate-…`" note in this file is enforced on every PR rather
 than left to whoever remembered. A login code is read by the ADDRESS it was
 sent to, never by arrival order: the relay copies every message to every sink,
