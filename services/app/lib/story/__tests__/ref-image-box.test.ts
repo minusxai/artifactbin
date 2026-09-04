@@ -60,7 +60,7 @@ describe('a ref image', () => {
 const wide: RefDataMap = {
   abc123: {
     kind: 'image', url: '/a/abc123/raw?v=2', width: 1600, height: 1200,
-    smallUrl: '/a/abc123/raw?v=2&w=640', smallWidth: 640,
+    smallUrl: '/a/abc123/raw?v=2&w=1280', smallWidth: 1280,
   },
 };
 
@@ -68,7 +68,7 @@ describe('a ref image stored at two widths', () => {
   it('offers both, and says what column they are read in', () => {
     expect(resolveRefProps(img, { src: 'ref:abc123' }, wide)).toMatchObject({
       src: '/a/abc123/raw?v=2',
-      srcSet: '/a/abc123/raw?v=2&w=640 640w, /a/abc123/raw?v=2 1600w',
+      srcSet: '/a/abc123/raw?v=2&w=1280 1280w, /a/abc123/raw?v=2 1600w',
       sizes: IMAGE_SIZES,
     });
   });

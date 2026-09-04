@@ -34,7 +34,7 @@ const box = (over: Partial<WebAssetBox> = {}): WebAssetBox => ({
   width: 1600, height: 900, placeholder: null, ...over,
 });
 
-const wide = box({ small_object_key: 'webasset/ffeeddccbbaa99887766554433221100', small_width: 640 });
+const wide = box({ small_object_key: 'webasset/ffeeddccbbaa99887766554433221100', small_width: 1280 });
 
 const imgs = (n: number, url = URL_A) =>
   `<div>${Array.from({ length: n }, (_, i) => `<img src="${url}" alt="i${i}" />`).join('')}</div>`;
@@ -113,7 +113,7 @@ describe('size variants', () => {
   it('offers both widths and the column they are read in', () => {
     const a = attrsOf(mapped(imgs(1), () => wide), 0);
     expect(a.srcSet).toBe(
-      `${assetUrlFor(URL_A, wide)}&w=640 640w, ${assetUrlFor(URL_A, wide)} 1600w`,
+      `${assetUrlFor(URL_A, wide)}&w=1280 1280w, ${assetUrlFor(URL_A, wide)} 1600w`,
     );
     expect(a.sizes).toBe('(max-width: 640px) 100vw, 768px');
   });
@@ -129,6 +129,17 @@ describe('size variants', () => {
     expect(a.srcSet).toBeUndefined();
     expect(a.sizes).toBeUndefined();
     expect(a.src).toBe(assetUrlFor(URL_A, wide));
+  });
+
+  /*
+   * The separator follows the ADDRESS, not the row: `?v=` is added only when
+   * the key's last segment is hex, so a row without one must still produce a
+   * well-formed query rather than `/assets/<hash>&w=1280`.
+   */
+  it('opens the query when there is no version to hang it off', () => {
+    const noKey = { width: 1600, small_object_key: 'small', small_width: 1280 };
+    expect(attrsOf(mapped(imgs(1), () => noKey), 0).srcSet)
+      .toBe(`${assetUrlFor(URL_A)}?w=1280 1280w, ${assetUrlFor(URL_A)} 1600w`);
   });
 
   it("never overrides an author's own srcset", () => {

@@ -56,21 +56,34 @@ export const MAX_IMAGE_EDGE = 2048;
  * THE SECOND COPY, for the screen that is not a desktop.
  *
  * The stored image is capped at 2048px and read in a column about 850px wide,
- * so a 390px phone is handed roughly five times the pixels it can show — and
- * pays for them on the worse of the two connections. One narrow copy is the
- * whole fix: `srcset` offers both widths and the browser picks, with no
- * negotiation, no `Vary` header and no second format.
+ * so a phone is handed several times the pixels it can show — and pays for them
+ * on the worse of the two connections. One narrow copy is the whole fix:
+ * `srcset` offers both widths and the browser picks, with no negotiation, no
+ * `Vary` header and no second format.
  *
- * 640 because it covers every phone at 1× and the common ones at 2× once the
- * column's gutters come off; 960 as the threshold because below it the full
- * copy is already close enough that a second object costs a request and saves
- * nothing worth having. Both are measured against the SOURCE, before the cap —
- * a 1000px upload has no second copy worth making.
+ * 1280, AND THE REASON IS THE ONE THING THAT IS EASY TO GET WRONG HERE: a
+ * browser chooses by SLOT x DPR — device pixels — not by the CSS width of the
+ * viewport. The first cut of this was 640, reasoning from "a phone is 390px
+ * wide", and it was selected by almost no phone in existence: 390 x DPR 2 asks
+ * for 780 device pixels and 390 x DPR 3 for 1170, so every modern handset
+ * skipped past 640 and took the full 1600-2048px copy — the exact download this
+ * exists to avoid, measured in a real browser at DPR 1, 2 and 3.
+ *
+ * 1280 is the smallest single width that covers the phones: 390 x 3 = 1170 and
+ * 430 x 2 = 860 both fit under it, so they take this copy instead of the full
+ * one. A desktop reading at the document column (`sizes` says 768px) needs 768
+ * device pixels at DPR 1 — this copy — and 1536 at DPR 2, which correctly takes
+ * the full one. One variant, not two: a third object is a third of everything
+ * (bytes, quota, refresh, cache keys) for a slice between 768 and 1170.
+ *
+ * The THRESHOLD is measured against the SOURCE, before the cap: at or below
+ * 1536 (1280 x 1.2) the full copy is already close enough to 1280 that a second
+ * object costs a request and saves nothing worth having.
  */
-export const VARIANT_WIDTH = 640;
+export const VARIANT_WIDTH = 1280;
 /** What a variant always IS — it is made by the one encoder above, never passed through. */
 export const VARIANT_CONTENT_TYPE = 'image/webp';
-const VARIANT_MIN_SOURCE_WIDTH = 960;
+const VARIANT_MIN_SOURCE_WIDTH = 1536;
 
 /** Roughly the width of a fingernail — enough for colour and shape, nothing more. */
 const PLACEHOLDER_EDGE = 16;

@@ -16,6 +16,7 @@ import sharp from 'sharp';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { getArtifactById, refDataForRow } from '@/lib/artifacts';
+import { objectStore } from '@/lib/object-store';
 
 
 import { mintToken } from '@/lib/tokens';
@@ -94,19 +95,38 @@ describe('a stored blur reaches the reader', () => {
  * it is the same picture in the same column.
  */
 describe('an upload wide enough to be worth it is stored at two widths', () => {
+  /*
+   * CHARGED WITH THE ORIGINAL, ONCE — on THIS door as well as the URL cache's.
+   * `meta.bytes` is the column lib/asset-quota sums for an upload (R9's own
+   * column), so a variant left out of it is bytes stored and never billed. The
+   * `web_assets` twin of this assertion lives in web-assets.test.ts; the two
+   * doors do not share a code path, and a review found this half unguarded.
+   */
   it('records the narrow copy on the row, charged with the original', async () => {
     const { img } = await documentWithImage((id) => `<img src="ref:${id}" alt="x" />`, await wideDataUrl());
     const meta = (await getArtifactById(img))!.meta as
       { objectKey: string; bytes: number; smallObjectKey?: string; smallWidth?: number };
-    expect(meta.smallWidth).toBe(640);
+    expect(meta.smallWidth).toBe(1280);
     expect(meta.smallObjectKey).toBeTruthy();
     expect(meta.smallObjectKey).not.toBe(meta.objectKey);
+
+    const full = (await objectStore().get(meta.objectKey)).length;
+    const small = (await objectStore().get(meta.smallObjectKey!)).length;
+    expect(small).toBeLessThan(full);
+    expect(meta.bytes).toBe(full + small);
+  });
+
+  it('charges only the one copy when there is only one', async () => {
+    const { img } = await documentWithImage((id) => `<img src="ref:${id}" alt="x" />`);
+    const meta = (await getArtifactById(img))!.meta as { objectKey: string; bytes: number; smallObjectKey?: string };
+    expect(meta.smallObjectKey).toBeUndefined();
+    expect(meta.bytes).toBe((await objectStore().get(meta.objectKey)).length);
   });
 
   it('serves the narrow copy at the address the srcset names', async () => {
     const { img } = await documentWithImage((id) => `<img src="ref:${id}" alt="x" />`, await wideDataUrl());
     const full = await serveArtifact(request(`/a/${img}/raw?v=1`), params(img));
-    const narrow = await serveArtifact(request(`/a/${img}/raw?v=1&w=640`), params(img));
+    const narrow = await serveArtifact(request(`/a/${img}/raw?v=1&w=1280`), params(img));
     expect(narrow.status).toBe(200);
     expect(narrow.headers.get('Content-Type')).toBe('image/webp');
     expect((await narrow.arrayBuffer()).byteLength).toBeLessThan((await full.arrayBuffer()).byteLength);
@@ -117,7 +137,7 @@ describe('an upload wide enough to be worth it is stored at two widths', () => {
   it('offers both widths in the served document, and only the full one to a capture', async () => {
     const { doc } = await documentWithImage((id) => `<div className="p-4"><img src="ref:${id}" alt="x" /></div>`, await wideDataUrl());
     const html = await serveArtifact(request(`/a/${doc}/raw`), params(doc)).then((r) => r.text());
-    expect(html).toContain('&amp;w=640 640w');
+    expect(html).toContain('&amp;w=1280 1280w');
     expect(html).toContain('sizes="(max-width: 640px) 100vw, 768px"');
 
     // /export photographs the chrome-less frame: a `sizes` hint against a

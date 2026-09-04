@@ -115,8 +115,14 @@ export function assetUrlFor(url: string, held?: WebAssetBox | boolean | null): s
  * size, it moves when the row moves, and a refresh must invalidate both with
  * one `?v=`.
  */
-const assetVariantUrl = (url: string, box: WebAssetBox): string =>
-  `${assetUrlFor(url, box)}${box.object_key ? '&' : '?'}w=${box.small_width}`;
+const assetVariantUrl = (url: string, box: WebAssetBox): string => {
+  // The separator is decided by the STRING being appended to, not by whether
+  // the row has a key: `assetUrlFor` adds `?v=` only when that key's last
+  // segment is hex, so the two conditions agree for every key `objectKey()`
+  // makes today and would not for a key format that changed.
+  const base = assetUrlFor(url, box);
+  return `${base}${base.includes('?') ? '&' : '?'}w=${box.small_width}`;
+};
 
 /** The two widths a wide image offers, or null when only one copy was ever stored. */
 function assetSrcSet(url: string, box: WebAssetBox): string | null {

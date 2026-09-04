@@ -131,8 +131,11 @@ describe('optimiseImage', () => {
    * reason everything else here is: at publish, in the one door every upload
    * and every URL import already comes through, so the two cannot disagree.
    *
-   * The threshold is about the SOURCE: below 960px the full copy is already
-   * close enough to 640 that a second object buys a request and saves nothing.
+   * The width is decided by SLOT x DPR, which is what a browser actually
+   * computes — not by the CSS width of a phone. A 390px phone at DPR 3 needs
+   * 1170 device pixels and a 430px one at DPR 2 needs 860, so 1280 is the
+   * smallest single copy that serves them all; 640 served only a DPR-1
+   * viewport, which almost no phone is.
    */
   it('stores a narrow copy beside a wide one', async () => {
     const out = await optimiseImage(await photo(1600, 1200), 'image/jpeg');
@@ -145,12 +148,16 @@ describe('optimiseImage', () => {
   });
 
   it('makes none when the image was never wide enough to need one', async () => {
+    // The threshold is about the SOURCE: at or below it the full copy is
+    // already close enough to 1280 that a second object buys a request and
+    // saves nothing. 1536 is exactly 1280 x 1.2.
+    expect((await optimiseImage(await photo(1536, 1000), 'image/jpeg')).variant).toBeNull();
     expect((await optimiseImage(await photo(900, 600), 'image/jpeg')).variant).toBeNull();
     expect((await optimiseImage(await photo(64, 48), 'image/jpeg')).variant).toBeNull();
   });
 
   it('never makes one that is bigger than the copy it is meant to save', async () => {
-    for (const [w, h] of [[1600, 1200], [3000, 1000], [1000, 4000]]) {
+    for (const [w, h] of [[1600, 1200], [3000, 1000], [2000, 4000]]) {
       const out = await optimiseImage(await photo(w, h), 'image/jpeg');
       if (out.variant) expect(out.variant.buffer.length).toBeLessThan(out.buffer.length);
     }

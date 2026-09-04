@@ -149,7 +149,7 @@ describe('importWebAsset', () => {
     allowLocal();
     const row = await importWebAsset(`${base}/wide.webp`, await anonToken());
     expect(row.small_object_key).toBeTruthy();
-    expect(row.small_width).toBe(640);
+    expect(row.small_width).toBe(1280);
     expect(row.small_object_key).not.toBe(row.object_key);
     const full = (await objectStore().get(row.object_key)).length;
     const small = (await objectStore().get(row.small_object_key!)).length;

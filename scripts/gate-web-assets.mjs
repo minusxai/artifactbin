@@ -16,10 +16,12 @@
  *     — it silently does not exist.
  *  4. A phone must not download the desktop's copy, and a REFRESH must reach a
  *     reader who already has the old bytes. Both are facts about a real
- *     browser: whether `srcset` + `sizes` make it fetch the 640-wide variant at
- *     390px and the full one at 1200px, and whether the `?v=` a refreshed row
- *     emits actually moves — the address is served `immutable`, so nothing else
- *     could make a cached reader ask again (R19).
+ *     browser. The first is measured AT REAL DEVICE PIXEL RATIOS, because a
+ *     browser selects by slot x DPR and not by CSS width: the first cut of this
+ *     feature shipped a 640-wide variant that only a DPR-1 viewport ever chose,
+ *     and a gate pinned at `deviceScaleFactor: 1` said it worked. So the phone
+ *     legs run at DPR 2 AND 3 — what an actual handset is — and the desktop leg
+ *     at DPR 2, where the document column genuinely needs the full copy.
  *  5. R15: a stored SVG is markup, and a top-level navigation to one must not
  *     run in this app's origin — while an <img> of the same asset still paints.
  *     `Content-Disposition: attachment` makes the navigation a download and
@@ -179,36 +181,47 @@ ok(
 /* ── two widths, and the browser picking ────────────────────────────────────
  * `sizes` is authoritative for the choice, so this is a real browser decision
  * and not a guess about layout. */
-ok(/w=640 640w, \/assets\/[0-9a-f]{64}\?v=[0-9a-f]{8} 1600w$/.test(probe.wideSrcset ?? ''),
+ok(/w=1280 1280w, \/assets\/[0-9a-f]{64}\?v=[0-9a-f]{8} 1600w$/.test(probe.wideSrcset ?? ''),
   `the wide image offers both widths (${probe.wideSrcset})`);
 ok(probe.wideSizes === '(max-width: 640px) 100vw, 768px', `…and the column they are read in (${probe.wideSizes})`);
-ok((probe.wideCurrent ?? '').includes('w=640') === false, `a 1200px desktop loads the full copy (${probe.wideCurrent})`);
 
 // THE HEADLINE: nothing on the page reached the source host.
 ok(outbound.length === 0 && hits.length === 0, `zero requests to the source host while reading (${outbound.length} browser, ${hits.length} server-side)`);
 
-/* ── the phone gets the phone's copy ────────────────────────────────────────
- * Same document, same markup, a 390px viewport: the browser must reach for the
- * 640-wide object instead of the 1600-wide one, and it must ask OUR origin for
- * it. Asserted by the request the browser actually made. */
-const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
-const phoneAsked = [];
-phone.on('request', (r) => { if (r.resourceType() === 'image') phoneAsked.push(new URL(r.url()).search); });
-await becomeOwner(phone, B, owner.token);
-await phone.goto(`${B}/a/${owner.id}`, { waitUntil: 'networkidle' });
-const phoneFrame = await (await phone.waitForSelector('iframe[title="artifact"]', { timeout: 30_000 })).contentFrame();
-const phoneCurrent = await phoneFrame.evaluate(async () => {
-  const deadline = Date.now() + 8000;
-  while (Date.now() < deadline) {
-    const img = document.querySelector('img[alt="wide"]');
-    if (img?.currentSrc) return img.currentSrc;
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  return null;
-});
-ok((phoneCurrent ?? '').includes('w=640'), `a 390px phone loads the narrow copy (${phoneCurrent})`);
-ok(phoneAsked.some((s) => s.includes('w=640')), `…and asked our origin for it (${phoneAsked.join(' ') || 'no image request'})`);
-await phone.close();
+/* ── which copy each screen actually asks for ───────────────────────────────
+ * THE DPR IS THE POINT. A browser picks by slot x DPR: a 390px phone at DPR 3
+ * needs 1170 device pixels, so a 640-wide variant is skipped and the full copy
+ * downloaded — which is what shipped, and what a gate pinned at DPR 1 could not
+ * see. These legs run at the ratios real devices have, and the desktop leg runs
+ * at DPR 2, where a 768px column needs 1536 device pixels and the full copy is
+ * the RIGHT answer. Asserted by the request the browser actually made. */
+const whichCopy = async (label, viewport, deviceScaleFactor) => {
+  const page2 = await browser.newPage({ viewport, deviceScaleFactor });
+  const asked = [];
+  page2.on('request', (r) => { if (r.resourceType() === 'image') asked.push(new URL(r.url()).search); });
+  await becomeOwner(page2, B, owner.token);
+  await page2.goto(`${B}/a/${owner.id}`, { waitUntil: 'networkidle' });
+  const f = await (await page2.waitForSelector('iframe[title="artifact"]', { timeout: 30_000 })).contentFrame();
+  const current = await f.evaluate(async () => {
+    const deadline = Date.now() + 8000;
+    while (Date.now() < deadline) {
+      const img = document.querySelector('img[alt="wide"]');
+      if (img?.currentSrc) return img.currentSrc;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return null;
+  });
+  await page2.close();
+  return { label: `${label} ${viewport.width}px DPR${deviceScaleFactor}`, current, asked };
+};
+
+for (const dpr of [2, 3]) {
+  const shot = await whichCopy('phone', { width: 390, height: 844 }, dpr);
+  ok((shot.current ?? '').includes('w=1280'), `${shot.label} loads the narrow copy (${shot.current})`);
+  ok(shot.asked.some((s) => s.includes('w=1280')), `…and asked our origin for it (${shot.asked.join(' ') || 'no image request'})`);
+}
+const desk = await whichCopy('desktop', { width: 1200, height: 900 }, 2);
+ok(!(desk.current ?? '').includes('w='), `${desk.label} loads the full copy — 768 x 2 needs more than 1280 (${desk.current})`);
 
 /* ── a refresh reaches a reader who already has the old bytes (R19) ──────────
  * /assets/<hash> is immutable for a year and its address is derived from the
@@ -240,7 +253,14 @@ const after = await readerFrame.evaluate(async () => {
   return document.querySelector('img[alt="wide"]')?.getAttribute('src') ?? null;
 });
 ok(after !== before && ASSET_URL.test(after ?? ''), `the refreshed asset is served at a new ?v= (${before} → ${after})`);
-ok(fetchedAfter.some((u) => u === after), `…and the reader's browser fetched THAT url (${fetchedAfter.join(' ') || 'nothing'})`);
+/* The VERSION is what must have moved; WHICH width this reader picks is the
+ * browser's business (a 1200px DPR-1 page needs 768 device pixels, so it takes
+ * the 1280 copy — the srcset working). */
+const newVersion = new URL(after ?? '', B).searchParams.get('v');
+ok(
+  fetchedAfter.some((u) => u.startsWith(new URL(after ?? '', B).pathname) && u.includes(`v=${newVersion}`)),
+  `…and the reader's browser fetched the new version (${fetchedAfter.filter((u) => u.includes('/assets/')).join(' ') || 'nothing'})`,
+);
 await reader.close();
 
 /* ── the layout does not move ───────────────────────────────────────────────
