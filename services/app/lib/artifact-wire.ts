@@ -10,14 +10,14 @@
  * answer with the same shape (`edit_id` and refresh `warnings` included).
  */
 import {
-  DATASET_ACCESS, SHARE_ROLES, artifactQuotaExceeded, canWriteDataset, createArtifact, fontResolver, getArtifactFor, assetImporterFor, isVersionConflict, refLoaderForActor, refreshWarningsFor, replaceArtifactFor, writerFor,
+  DATASET_ACCESS, SHARE_ROLES, artifactQuotaExceeded, byteQuotaFor, canWriteDataset, createArtifact, fontResolver, getArtifactFor, assetImporterFor, isVersionConflict, refLoaderForActor, refreshWarningsFor, replaceArtifactFor, writerFor,
   type ArtifactInput, type ArtifactRow, type ArtifactSummary, type DatasetAccess, type EditInput, type EditOutcome, type ReplaceOpts, type ShareEntry, type ShareRole, type TokenActor, type Visibility,
 } from '@/lib/artifacts';
 import { actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type AnnotationAction, type AnnotationAuthor } from '@/lib/annotations';
 import { isMutationRefused, mutateDataset } from '@/lib/story/dataset-mutate';
 import type { Scalar } from '@/lib/story/dataflow';
 import { datasetCreateFields } from '@/lib/story/dataset-usage';
-import { imageRawUrl } from '@/lib/story/ref-data';
+import { imageRawUrl, pdfRawUrl } from '@/lib/story/ref-data';
 import { ALLOW_PUBLIC_VISIBILITY } from '@/lib/config';
 import { canSetDatasetAccess } from '@/lib/features';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
@@ -42,6 +42,10 @@ const SUMMARY_META_FIELDS = {
   dataset: ['columns', 'rowCount', 'totalRows', 'truncated'],
   viz: ['slots'],
   image: ['contentType', 'bytes', 'width', 'height'],
+  // A PDF's listing card says how big it is and how long — the two facts a
+  // reader picks between files by. The object key stays out, like every other
+  // tier's.
+  pdf: ['contentType', 'bytes', 'pages'],
 } as const;
 
 function summaryMeta(format: ArtifactRow['format'], meta: Record<string, unknown>) {
@@ -163,6 +167,7 @@ export async function artifactToWire(row: ArtifactRow, base: string) {
       : {}),
     ...(format === 'viz' ? { slots: (meta as { slots?: unknown }).slots ?? [], recipe: safeJson(content) } : {}),
     ...(format === 'image' ? { contentType: (meta as { contentType?: unknown }).contentType ?? null } : {}),
+    ...(format === 'pdf' ? { contentType: (meta as { contentType?: unknown }).contentType ?? null, bytes: (meta as { bytes?: unknown }).bytes ?? 0, pages: (meta as { pages?: unknown }).pages ?? null } : {}),
   };
 }
 
@@ -322,7 +327,7 @@ export async function replaceArtifactWithBody(
   const current = await getArtifactFor(actor, id);
   if (!current) return json({ error: 'not_found' }, 404);
   const owner = writerFor(current);
-  const parsed = await parseContentInput(body, { loadRef: refLoaderForActor(owner), importAsset: assetImporterFor(owner.tokenId, owner.userId), resolveFont: fontResolver() });
+  const parsed = await parseContentInput(body, { loadRef: refLoaderForActor(owner), importAsset: assetImporterFor(owner.tokenId, owner.userId), resolveFont: fontResolver(), overByteQuota: byteQuotaFor(owner.tokenId) });
   if (parsed instanceof Response) return parsed;
 
   const visibility = parseVisibility(body, !!actor.userId);
@@ -379,8 +384,8 @@ export async function createArtifactFromBody(
   base: string,
   request: Request,
 ): Promise<Response> {
-  if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded' }, 403);
-  const parsed = await parseContentInput(body, { loadRef: refLoaderForActor(actor), importAsset: assetImporterFor(actor.tokenId, actor.userId), resolveFont: fontResolver() });
+  if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — delete documents you no longer need'] }, 403);
+  const parsed = await parseContentInput(body, { loadRef: refLoaderForActor(actor), importAsset: assetImporterFor(actor.tokenId, actor.userId), resolveFont: fontResolver(), overByteQuota: byteQuotaFor(actor.tokenId) });
   if (parsed instanceof Response) return parsed;
   const visibility = parseVisibility(body, !!actor.userId);
   if (visibility instanceof Response) return visibility;
@@ -412,7 +417,7 @@ export async function createArtifactFromBody(
  * second thing to learn.
  */
 export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: unknown): Record<string, unknown> {
-  const meta = row.meta as { columns?: unknown; rowCount?: unknown; slots?: unknown };
+  const meta = row.meta as { columns?: unknown; rowCount?: unknown; slots?: unknown; bytes?: number; pages?: number };
   return {
     id: row.id, url: `${base}/a/${row.id}`, version: row.version, visibility: row.visibility,
     // The read-proof for the edit protocol: an agent can start editing straight
@@ -427,6 +432,9 @@ export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: 
     // has re-read the document (lib/story/ref-data owns the shape, so this
     // cannot drift from the render path).
     ...(row.format === 'image' ? { rawUrl: imageRawUrl(row.id, row.version) } : {}),
+    // Same for a PDF, plus the two facts a <File> card shows: an agent that has
+    // just uploaded one can write the card without re-reading anything.
+    ...(row.format === 'pdf' ? { rawUrl: pdfRawUrl(row.id, row.version), bytes: meta.bytes ?? 0, ...(meta.pages ? { pages: meta.pages } : {}) } : {}),
   };
 }
 

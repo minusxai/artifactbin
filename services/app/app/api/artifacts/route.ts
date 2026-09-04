@@ -21,7 +21,7 @@ export async function createArtifactFromRequest(
 ): Promise<Response> {
   const contentType = (request.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
   if (contentType.startsWith('image/')) {
-    if (await artifactQuotaExceeded(tokenId)) return json({ error: 'quota_exceeded' }, 403);
+    if (await artifactQuotaExceeded(tokenId)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — delete documents you no longer need'] }, 403);
     const stored = await storeImageContent(Buffer.from(await request.arrayBuffer()), contentType);
     if (stored instanceof Response) return stored;
     const q = new URL(request.url).searchParams;

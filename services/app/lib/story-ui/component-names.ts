@@ -26,6 +26,8 @@ export const STORY_UI_COMPONENT_NAME_LIST = [
   'Select', 'Slider', 'DatePicker', 'Segmented', 'Switch',
   'SlideDeck', 'Slide',
   'Video',
+  // A PDF the document links, as a card that opens it (components/kit/file.tsx).
+  'File',
   'Icon',
   'DataTable',
 ] as const;

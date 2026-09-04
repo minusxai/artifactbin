@@ -57,12 +57,16 @@ describe('collectExternalFontUrls', () => {
 });
 
 describe('collectExternalAssetUrls', () => {
-  it('is both kinds, deduplicated', () => {
-    const src = `<Helmet><style>{\`@font-face{src:url(https://f.example/a.woff2)}\`}</style></Helmet><img src="https://a.example/one.png" />`;
+  it('is all three kinds, deduplicated', () => {
+    const src = `<Helmet><style>{\`@font-face{src:url(https://f.example/a.woff2)}\`}</style></Helmet>`
+      + `<img src="https://a.example/one.png" /><File src="https://p.example/paper.pdf" />`;
     expect(collectExternalAssetUrls(src)).toEqual({
       images: ['https://a.example/one.png'],
       fonts: ['https://f.example/a.woff2'],
-      all: ['https://a.example/one.png', 'https://f.example/a.woff2'],
+      // A PDF a <File> card names by URL: its own list, because the import cap
+      // and the sniff differ from an image's.
+      pdfs: ['https://p.example/paper.pdf'],
+      all: ['https://a.example/one.png', 'https://f.example/a.woff2', 'https://p.example/paper.pdf'],
     });
   });
 });

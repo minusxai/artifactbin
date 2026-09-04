@@ -69,6 +69,26 @@ export const IMAGE_URL_FIELD_GUIDANCE =
   'You can also just write <img src="https://…"> in markup: publish imports it and echoes ' +
   'your markup rewritten to ref:<id>. Returns an artifact id to reference as ref:<id>.';
 
+/**
+ * The PDF tier's two shapes. Same lesson as the two above — an agent that
+ * believes it must fetch or re-encode the file will refuse or waste a call —
+ * plus the one thing only this tier needs said: a PDF is not a document you
+ * publish, it is a FILE a document links, and <File> is the position that
+ * links it.
+ */
+export const PDF_FIELD_GUIDANCE =
+  'pdf tier: a base64 data: URL (data:application/pdf;base64,…). Stored as-is, never re-encoded, '
+  + 'and served inline so a reader opens it in their browser\'s own viewer. '
+  + 'Link it from a document with <File src="ref:<id>" /> — a card showing the name, size and page count. '
+  + 'Returns an artifact id to reference as ref:<id>.';
+
+export const PDF_URL_FIELD_GUIDANCE =
+  'pdf tier from a URL: any public PDF on the web. '
+  + 'YOU DO NOT NEED TO DOWNLOAD IT — pass the URL and artifactbin fetches it server-side, '
+  + 'stores a copy, and serves it from its own origin (the card never links the original host). '
+  + 'You can also just write <File src="https://…/paper.pdf" /> in markup: publish imports it and '
+  + 'LEAVES YOUR URL in the document. Returns an artifact id to reference as ref:<id>.';
+
 export const CSV_URL_FIELD_GUIDANCE =
   'dataset tier from a URL: any PUBLIC CSV link (S3, raw GitHub, a data portal — not only Google Sheets). ' +
   'YOU DO NOT NEED TO DOWNLOAD IT — pass the URL and artifactbin fetches it server-side. ' +

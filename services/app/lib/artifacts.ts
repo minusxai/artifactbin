@@ -9,11 +9,13 @@ import { cache } from 'react';
 import { trackEvent } from './analytics';
 import { sourceWithoutAnchors } from './annotation-anchors';
 import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN } from './config';
+import { assetByteQuotaExceeded } from './asset-quota';
 import { getDb, type Queryable } from './db';
 import { generateFileId } from './ids';
 import { parseContentInput, type ArtifactFormat } from './story/input';
 import { canonicalizeMarkup, publishJsx } from './story/jsx-tier';
-import { imageRawUrl } from './story/ref-data';
+import { imageRawUrl, pdfRawUrl } from './story/ref-data';
+import { displayTitle } from './story/title';
 import { assetWarningFor, importWebAsset, WebAssetRefused, type AssetWarning, type WebAssetKind } from './web-assets';
 import { resolveWebFont, UnknownFontError } from './webfonts';
 import { webIngestRateLimited } from './auth';
@@ -315,7 +317,7 @@ export async function createArtifact(
           // it. Routes validate an explicit ask upstream.
           input.visibility ??
             (!userId ? (ALLOW_PUBLIC_VISIBILITY ? 'public' : 'unlisted')
-              : input.format === 'image' || input.format === 'dataset' ? 'unlisted' : 'private'),
+              : input.format === 'image' || input.format === 'dataset' || input.format === 'pdf' ? 'unlisted' : 'private'),
           // NULL is the pre-column shape and reads as 'viewer' (linkRoleOf), so
           // every ordinary creation stays exactly as it was.
           atCreation.linkRole ?? null,
@@ -387,7 +389,7 @@ export async function forkArtifact(
   source: ArtifactRow,
   overrides: ForkOverrides = {},
 ): Promise<ArtifactRow | Response> {
-  if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded' }, 403);
+  if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — delete documents you no longer need'] }, 403);
   const input = await forkInput(actor, source, overrides);
   if (input instanceof Response) return input;
   const row = await createArtifact(actor.tokenId, actor.userId, input, { forkedFrom: source.id, linkRole: source.link_role });
@@ -1228,6 +1230,19 @@ export function assetImporterFor(tokenId: string, userId: string | null): (url: 
 }
 
 /**
+ * The byte quota as the publish door asks it: "is this caller already over?"
+ *
+ * A closure over the identity, so lib/story/input can guard a tier without
+ * knowing who is publishing (the shape assetImporterFor established). The
+ * subject is the ACCOUNT when the token has one — a cap keyed on the token
+ * alone is bypassed by minting a second one — which lib/asset-quota decides,
+ * not this.
+ */
+export function byteQuotaFor(tokenId: string): () => Promise<boolean> {
+  return () => assetByteQuotaExceeded(tokenId);
+}
+
+/**
  * The publish door's font resolver: a family the document names becomes faces
  * copied into our object store (lib/webfonts), once per deployment. Failure is
  * a 400 that NAMES the family — the same stance the image door takes, and for
@@ -1616,6 +1631,18 @@ export async function refDataForRow(row: ArtifactRow): Promise<import('@/lib/sto
         ? { blur: im.placeholder }
         : {};
       out[r.id] = { kind: 'image', url: imageRawUrl(r.id, r.version), ...box, ...blur };
+    } else if (r.format === 'pdf') {
+      // What the CARD says: where the file is, what it is called, how big it is
+      // and how long. The name is the artifact's title (the author's, or the
+      // one the importer derived from the URL), never the object key.
+      const pm = r.meta as { bytes?: unknown; pages?: unknown } | null;
+      out[r.id] = {
+        kind: 'pdf',
+        url: pdfRawUrl(r.id, r.version),
+        name: displayTitle(r),
+        bytes: typeof pm?.bytes === 'number' ? pm.bytes : 0,
+        ...(typeof pm?.pages === 'number' ? { pages: pm.pages } : {}),
+      };
     }
   }
   return out;

@@ -12,7 +12,7 @@ import { collectRefNameUses, validateDataflow } from '@/lib/story/dataflow';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_UI_COMPONENT_NAME_LIST, STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
 
-const SRC = kitchenSinkMarkup({ dataset: 'ksdataset01', recipe: 'ksrecipe01', image: 'ksimage01' });
+const SRC = kitchenSinkMarkup({ dataset: 'ksdataset01', recipe: 'ksrecipe01', image: 'ksimage01', pdf: 'kspdf01' });
 
 describe('kitchen-sink doc', () => {
   it('parses and passes the full story publish gate', () => {

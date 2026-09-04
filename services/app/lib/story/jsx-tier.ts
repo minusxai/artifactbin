@@ -130,7 +130,8 @@ export async function publishJsx(body: Record<string, unknown>, sourceIn: string
     }, 400);
   }
   /*
-   * The TOTAL cap, images and faces together. The image cap above counts images
+   * The TOTAL cap — images, faces and the PDFs a <File> card names,
+   * together. The image cap above counts images
    * alone, so a document naming a dozen `@font-face` urls caused a dozen
    * outbound fetches that nothing bounded — the count was the author's to set.
    * Over the cap the excess is NAMED and not fetched, rather than refused:
@@ -141,6 +142,9 @@ export async function publishJsx(body: Record<string, unknown>, sourceIn: string
   const wanted = [
     ...externalAssets.images.map((url) => ({ url, kind: 'image' as const })),
     ...externalAssets.fonts.map((url) => ({ url, kind: 'font' as const })),
+    // A PDF a <File> card names by URL is an outbound fetch like any other, and
+    // the biggest of them: it counts against the same total.
+    ...externalAssets.pdfs.map((url) => ({ url, kind: 'pdf' as const })),
   ];
   const warnings: AssetWarning[] = wanted.slice(MAX_EXTERNAL_ASSETS_PER_PUBLISH).map(({ url }) => ({
     code: 'too_many_external_assets',
