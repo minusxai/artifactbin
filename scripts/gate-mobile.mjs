@@ -497,15 +497,27 @@ for (let i = 0; i < 400 && !ready.ran && !ready.entry; i++) {
 ok(ready.ran, `slow reader: the reader's own ~8 KB module has RUN (${ready.ran})`);
 ok(!ready.entry, 'slow reader: and the ~1 MB runtime entry is STILL IN FLIGHT — which is what makes the next check mean anything');
 
-const scrolledAt = Date.now();
+/*
+ * THE ANSWER MEASURED IS THE REVEAL, not the hide. The chrome is now
+ * server-rendered HIDDEN (lib/story/reader-chrome) and a scroll UP is what
+ * brings it back, so "it is hidden after a downward scroll" is the state the
+ * bytes arrived in and would pass with no JavaScript at all. Leaving that
+ * state is something only the reader's own module can do.
+ */
 await reader.evaluate(() => window.scrollBy(0, 300));
-let hidAfter = null;
-for (let i = 0; i < 20 && hidAfter === null; i++) {
-  if (await hiddenOn(reader)) hidAfter = Date.now() - scrolledAt;
+await reader.waitForTimeout(250);
+// Re-asked HERE, because the premise is about this moment and not the last one.
+const stillFlying = !(await loaded()).entry;
+const scrolledAt = Date.now();
+await reader.evaluate(() => window.scrollBy(0, -80));
+let shownAfter = null;
+for (let i = 0; i < 20 && shownAfter === null; i++) {
+  if (!(await hiddenOn(reader))) shownAfter = Date.now() - scrolledAt;
   else await reader.waitForTimeout(25);
 }
-ok(hidAfter !== null && hidAfter <= 500,
-  `slow reader: the chrome leaves within 500ms of the first scroll, runtime or no runtime (${hidAfter === null ? 'never' : `${hidAfter}ms`})`);
+ok(stillFlying, 'slow reader: the ~1 MB runtime entry is STILL in flight at the moment of the gesture');
+ok(shownAfter !== null && shownAfter <= 500,
+  `slow reader: the chrome answers the first scroll UP within 500ms, runtime or no runtime (${shownAfter === null ? 'never' : `${shownAfter}ms`})`);
 await slow.close();
 
 /*

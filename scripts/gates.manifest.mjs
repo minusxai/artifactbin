@@ -111,6 +111,12 @@ export const GATE_SPECS = Object.freeze([
   },
   // measured: implementer 15s; orchestrator 17s
   { name: 'reading-chrome', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
+  // measured: implementer 16s; orchestrator pending
+  {
+    name: 'reader-chrome', start: 'custom',
+    why: 'The byline is the AUTHOR\'s handle, so the document has to be owned: it logs an owner in, claims a token to publish under it, and forks a copy for the provenance line — none of which the anonymous shared start helper produces.',
+    needsMail: true, needsClipboard: true, serialGroup: 'clipboard', timeoutMs: 60_000,
+  },
   // measured: implementer 11s; orchestrator 10s
   {
     name: 'real-paste', start: 'shared', needsMail: false, needsClipboard: true, serialGroup: 'clipboard',

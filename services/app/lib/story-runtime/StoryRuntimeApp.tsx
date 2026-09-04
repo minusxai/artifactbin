@@ -716,7 +716,7 @@ function SlideRail({ slides, active, onGo, onRename }: {
   );
 }
 
-function PresentBar({ active, total, footerInset, onGo }: { active: number; total: number; footerInset: number; onGo: (index: number) => void }) {
+function PresentBar({ active, total, onGo }: { active: number; total: number; onGo: (index: number) => void }) {
   const [full, setFull] = useState(false);
   useEffect(() => {
     // Both spellings, for the same reason as toggleFullscreen below: Safari
@@ -771,11 +771,7 @@ function PresentBar({ active, total, footerInset, onGo }: { active: number; tota
   };
 
   return (
-    <div
-      className="mx-present"
-      aria-label="Slide controls"
-      style={{ ['--mx-footer-inset' as string]: `${footerInset}px` }}
-    >
+    <div className="mx-present" aria-label="Slide controls">
       <button type="button" aria-label="Previous slide" onClick={() => onGo(active - 1)}>‹</button>
       <span className="mx-present-count" aria-label="Slide position">{active + 1} / {total}</span>
       <button type="button" aria-label="Next slide" onClick={() => onGo(active + 1)}>›</button>
@@ -833,7 +829,6 @@ function OutlineRail({ entries }: { entries: OutlineEntry[] }) {
 /** Slide navigation over the rendered document — one realm, so plain DOM. */
 function useSlideChrome(count: number) {
   const [active, setActive] = useState(0);
-  const [footerInset, setFooterInset] = useState(0);
 
   useEffect(() => {
     if (count === 0) return;
@@ -846,16 +841,6 @@ function useSlideChrome(count: number) {
       let next = 0;
       slides.forEach((el, i) => { if (el.getBoundingClientRect().top <= mark) next = i; });
       setActive(next);
-
-      // The platform credits follow the story root in normal flow. As they
-      // enter the viewport, lift the fixed controls by exactly the visible
-      // portion so the two pieces of document chrome never cover each other.
-      const footer = document.querySelector<HTMLElement>('.mx-artifact-credits');
-      const rect = footer?.getBoundingClientRect();
-      const visible = rect
-        ? Math.max(0, Math.min(window.innerHeight, rect.bottom) - Math.max(0, rect.top))
-        : 0;
-      setFooterInset(visible);
     };
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
@@ -872,7 +857,7 @@ function useSlideChrome(count: number) {
     slides[clamped]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
-  return { active, footerInset, go };
+  return { active, go };
 }
 
 /**
@@ -936,7 +921,7 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, t
   const nodeKeys = useNodeKeys(nodes);
   const slides = useMemo(() => (chrome ? discoverSlides(nodes) : []), [nodes, chrome]);
   const deck = slides.length >= MIN_SLIDES_FOR_RAIL;
-  const { active, footerInset, go } = useSlideChrome(deck ? slides.length : 0);
+  const { active, go } = useSlideChrome(deck ? slides.length : 0);
   // A sectioned editorial gets its outline — never scrolly, a deck or a capture.
   const outline = useMemo(() => (chrome && !deck && template === 'editorial' && hasOutline(nodes) ? discoverOutline(nodes) : []), [nodes, template, chrome, deck]);
 
@@ -1001,7 +986,7 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, t
     <div className="mx-deck">
       <SlideRail slides={slides} active={active} onGo={go} onRename={onSlideRename} />
       <div className="mx-doc">{body}</div>
-      <PresentBar active={active} total={slides.length} footerInset={footerInset} onGo={go} />
+      <PresentBar active={active} total={slides.length} onGo={go} />
     </div>,
   );
 }

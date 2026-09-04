@@ -107,13 +107,12 @@ check(await frame.evaluate(`Math.abs(document.querySelectorAll('${SLIDES}')[1].g
 check(await frame.evaluate("document.querySelector('[aria-label=\"Slide position\"]').innerText.trim() === '2 / 3'"),
   'the counter tracks position');
 
-// 5. the controls stay above the footer when the end of the deck is visible
-await frame.evaluate("document.querySelector('.mx-artifact-credits').scrollIntoView({ block: 'end' })");
-await page.waitForTimeout(250);
-const footerGap = await frame.evaluate(
-  "document.querySelector('.mx-artifact-credits').getBoundingClientRect().top - document.querySelector('.mx-present').getBoundingClientRect().bottom",
-);
-check(footerGap >= 15, `the present bar clears the footer (gap=${footerGap}px)`);
+/*
+ * 5. RETIRED. The present bar used to yield to a credits footer that followed
+ * the document in normal flow; the footer is gone (lib/story/reader-chrome —
+ * the author is the byline, the host is the logo, provenance is in the
+ * settings panel), so there is nothing left for the bar to clear.
+ */
 
 // 6. the capture render carries no chrome
 const bare = await (await fetch(`${BASE}/a/${deck.id}/raw?chrome=0`)).text();

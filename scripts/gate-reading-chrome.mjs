@@ -16,6 +16,7 @@
  */
 import { chromium } from 'playwright';
 import { startDocument } from './lib/start-doc.mjs';
+import { revealReaderChrome } from './lib/reveal-chrome.mjs';
 
 /*
  * Every document this gate starts, so a run can take them away again. It
@@ -283,6 +284,8 @@ const browser = await chromium.launch();
   // And the reader's own controls: a light document flipped to dark keeps it.
   const lightDoc = await publish(DOC);
   await page.goto(`${BASE}/a/${lightDoc.id}`, { waitUntil: 'networkidle' });
+  // The chrome opens hidden now — a scroll up is what brings it back.
+  await revealReaderChrome(page);
   await page.click('[data-mx-reader-trigger="controls"]');
   await page.click('[data-mx-mode-choice="dark"]');
   await sleep(400);

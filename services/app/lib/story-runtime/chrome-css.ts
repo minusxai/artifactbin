@@ -105,7 +105,7 @@ input.mx-rail-title { min-width: 0; width: 100%; background: transparent; border
   transform: scale(0.128); transform-origin: top left;
 }
 .mx-present {
-  position: fixed; left: 50%; bottom: calc(16px + var(--mx-footer-inset, 0px)); transform: translateX(-50%);
+  position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%);
   display: flex; align-items: center; gap: 6px; z-index: 2147483000;
   padding: 5px 8px; border: 1px solid var(--border, rgba(128,128,128,0.35)); border-radius: 999px;
   background: color-mix(in srgb, var(--background, canvas) 88%, transparent);
@@ -162,31 +162,89 @@ input.mx-rail-title { min-width: 0; width: 100%; background: transparent; border
 @media (max-width: 1023px) { .mx-outline { display: none; } }
 @media print { .mx-outline { display: none; } }
 /*
- * QUIET READER CHROME. The top-level document mirrors the app shell's two
- * page-mounted controls. A framed owner/editor copy hides these: its trusted
- * parent supplies the same visual controls plus authenticated actions.
+ * THE READER'S CHROME — Instagram-shaped, and the shape is the point.
+ *
+ * On load there is NOTHING but the artifact: the chrome is server-rendered
+ * with --hidden and the every-document entry
+ * (lib/story-runtime/reader-chrome-actions) reveals it on a scroll UP, hides
+ * it on a scroll DOWN, and shows it outright where no gesture could bring it
+ * back (a document that fits, and the end of one that does not).
+ *
+ * visibility is in the hidden state beside opacity, and it is load-bearing
+ * rather than decoration: a transparent button is still a button — it takes
+ * clicks, it takes tab focus, and a browser's own "is this visible" answer is
+ * yes — so the reader would meet an invisible rail with their thumb. It
+ * transitions discretely, so it flips to visible at the START of the reveal
+ * and holds until the END of the hide.
+ *
+ * PHONE (<640px): the root is the whole viewport, transparent to the pointer,
+ * with three pieces pinned inside it — the logo top-left, the action rail
+ * hugging the right edge, the byline along the bottom-left, clear of the
+ * rail's column. DESKTOP (>=640px): one 44px bar across the top, logo and
+ * byline at its left, the rail at its right (order, so the DOM stays in
+ * reading order: logo, rail, byline).
+ *
+ * A framed owner/editor copy hides all of it: its trusted parent supplies the
+ * same controls plus the authenticated ones an opaque document cannot have.
  */
 :root.mx-framed .mx-reader-chrome { display: none !important; }
-.mx-reader-chrome { color: var(--foreground, canvastext) !important; font-family: var(--font-mono, ui-monospace, monospace) !important; }
-.mx-reader-chrome [hidden] { display: none !important; }
-.mx-reader-trigger {
-  position: fixed !important; top: max(12px, env(safe-area-inset-top)) !important; z-index: 2147483003 !important;
-  display: flex !important; align-items: center !important; justify-content: center !important; cursor: pointer !important;
-  width: 36px !important; height: 36px !important; margin: 0 !important; padding: 0 !important; border-radius: 999px !important;
-  border: 1px solid var(--border, rgba(128,128,128,0.35)) !important;
-  background: color-mix(in srgb, var(--background, canvas) 90%, transparent) !important;
-  color: var(--muted-foreground, canvastext) !important; box-shadow: 0 2px 10px rgba(0,0,0,.12) !important;
-  backdrop-filter: blur(8px) !important; transition: color 120ms ease, background 120ms ease, transform 120ms ease !important;
+.mx-reader-chrome {
+  position: fixed !important; z-index: 2147483003 !important;
+  color: var(--foreground, canvastext) !important;
+  font-family: var(--font-mono, ui-monospace, monospace) !important;
+  transition: opacity 200ms ease-out, transform 200ms ease-out, visibility 200ms !important;
 }
-.mx-reader-trigger:hover { color: var(--foreground, canvastext) !important; }
-.mx-reader-trigger:active { transform: scale(.96) !important; }
-.mx-reader-trigger--left { left: max(12px, env(safe-area-inset-left)) !important; }
-.mx-reader-trigger--right { right: max(12px, env(safe-area-inset-right)) !important; }
+.mx-reader-chrome [hidden] { display: none !important; }
+.mx-reader-chrome--hidden { opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }
+.mx-reader-action, .mx-reader-trigger, .mx-reader-home {
+  display: flex !important; align-items: center !important; justify-content: center !important;
+  box-sizing: border-box !important; margin: 0 !important; cursor: pointer !important;
+  border: 0 !important; border-radius: 10px !important; background: transparent !important;
+  color: var(--muted-foreground, canvastext) !important; font: inherit !important; text-decoration: none !important;
+  transition: color 120ms ease, background 120ms ease, transform 120ms ease !important;
+}
+.mx-reader-action:hover, .mx-reader-trigger:hover, .mx-reader-home:hover:hover {
+  background: color-mix(in srgb, var(--foreground, gray) 10%, transparent) !important;
+  color: var(--foreground, canvastext) !important;
+}
+.mx-reader-action:active, .mx-reader-trigger:active:active { transform: scale(.94) !important; }
+.mx-reader-home img { display: block !important; width: 22px !important; height: 22px !important; margin: 0 !important; border: 0 !important; }
 .mx-reader-trigger .mx-rc-close { display: none !important; }
 .mx-reader-trigger[aria-expanded="true"] .mx-rc-open { display: none !important; }
 .mx-reader-trigger[aria-expanded="true"] .mx-rc-close { display: block !important; }
-.mx-reader-home { display: none !important; }
-.mx-reader-label { display: none !important; }
+.mx-reader-label {
+  font: 500 8px/1 var(--font-mono, ui-monospace, monospace) !important;
+  letter-spacing: .04em !important; color: inherit !important;
+}
+/* The author's own link — selected THROUGH the byline rather than by its class
+   name, because this stylesheet ships inside every document and an anonymous
+   one must carry no author mark anywhere in it, stylesheet included. The byline
+   holds exactly two anchors, and the other one is create. */
+.mx-reader-byline > a {
+  color: var(--foreground, canvastext) !important; font-weight: 700 !important;
+  text-decoration: none !important; white-space: nowrap !important;
+}
+.mx-reader-byline > a:hover { color: var(--primary, currentColor) !important; }
+.mx-reader-title {
+  color: var(--muted-foreground, gray) !important; min-width: 0 !important;
+  overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important;
+}
+/* The toast says what just happened and then gets out of the way. */
+.mx-reader-toast {
+  position: fixed !important; left: 50% !important; transform: translateX(-50%) !important;
+  bottom: max(84px, calc(env(safe-area-inset-bottom) + 84px)) !important; z-index: 2147483004 !important;
+  padding: 7px 12px !important; border-radius: 999px !important;
+  border: 1px solid var(--border, rgba(128,128,128,.3)) !important;
+  background: var(--background, canvas) !important; color: var(--foreground, canvastext) !important;
+  font: 500 11px/1 var(--font-mono, ui-monospace, monospace) !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18) !important;
+}
+/* The copy fallback is a real field — it has to be selectable to be copied
+   out of — so it is moved off screen rather than hidden. */
+.mx-reader-copy {
+  position: fixed !important; left: -9999px !important; top: 0 !important;
+  width: 1px !important; height: 1px !important; opacity: 0 !important; pointer-events: none !important;
+}
 .mx-reader-scrim {
   position: fixed !important; inset: 0 !important; z-index: 2147483000 !important;
   width: auto !important; height: auto !important; margin: 0 !important; padding: 0 !important;
@@ -200,9 +258,9 @@ input.mx-rail-title { min-width: 0; width: 100%; background: transparent; border
   font: 500 12px/1.35 var(--font-mono, ui-monospace, monospace) !important;
 }
 .mx-reader-panel--menu {
-  inset: 0 auto 0 0 !important; display: flex !important; width: 288px !important;
-  flex-direction: column !important; gap: 2px !important; padding: 64px 8px 10px !important;
-  border-width: 0 1px 0 0 !important; animation: mx-reader-drawer 150ms ease-out !important;
+  top: 56px !important; right: 12px !important; display: flex !important; width: 288px !important;
+  flex-direction: column !important; gap: 2px !important; padding: 10px 8px !important;
+  border-radius: 7px !important; animation: mx-reader-rise 140ms ease-out !important;
 }
 .mx-reader-panel--menu a {
   display: flex !important; align-items: center !important; gap: 10px !important; box-sizing: border-box !important;
@@ -229,55 +287,130 @@ input.mx-rail-title { min-width: 0; width: 100%; background: transparent; border
   border: 0 !important; background: transparent !important; color: var(--muted-foreground, canvastext) !important; font: inherit !important;
 }
 .mx-reader-modes button[aria-pressed="true"] { background: color-mix(in srgb, var(--primary, currentColor) 12%, transparent) !important; color: var(--primary, currentColor) !important; }
-/* The login door, under its own heading in the controls panel. Sized like a
-   mode button so the panel reads as one column of controls. */
+/* The login door and the fork ask, under their own heading. Sized like a mode
+   button so the panel reads as one column of controls. */
 .mx-reader-panel--controls h3 + .mx-reader-signin { margin-top: 0 !important; }
 .mx-reader-signin {
-  display: flex !important; align-items: center !important; justify-content: center !important;
-  min-height: 36px !important; margin: 0 !important; padding: 7px 10px !important;
+  display: flex !important; align-items: center !important; justify-content: center !important; gap: 7px !important;
+  min-height: 36px !important; margin: 0 0 7px !important; padding: 7px 10px !important;
   border: 1px solid var(--border, rgba(128,128,128,.3)) !important; border-radius: 5px !important;
   background: color-mix(in srgb, var(--primary, currentColor) 10%, transparent) !important;
   color: var(--primary, currentColor) !important; font: inherit !important; text-decoration: none !important;
 }
 .mx-reader-signin:hover { background: color-mix(in srgb, var(--primary, currentColor) 18%, transparent) !important; }
+/* PROVENANCE — a sentence, not a control. */
+.mx-reader-forked { display: block !important; color: var(--muted-foreground, gray) !important; font: inherit !important; }
+.mx-reader-forked a { color: var(--muted-foreground, gray) !important; text-decoration: underline !important; }
+.mx-reader-forked a:hover { color: var(--primary, currentColor) !important; }
 .mx-reader-panel--controls .mx-reader-modes + h3 { margin-top: 14px !important; }
-@keyframes mx-reader-drawer { from { transform: translateX(-100%); } }
 @keyframes mx-reader-rise { from { opacity: 0; transform: translateY(-4px); } }
-@media (max-width: 639px) {
-  .mx-reader-chrome {
-    position: fixed !important; inset: auto 0 0 !important;
-    display: grid !important; grid-template-columns: 1fr auto 1fr !important; align-items: center !important;
-    box-sizing: border-box !important; width: 100% !important; margin: 0 !important;
-    padding: 4px 0 max(4px, env(safe-area-inset-bottom)) !important;
-    border: 0 !important; border-top: 1px solid var(--border, rgba(128,128,128,.35)) !important; border-radius: 0 !important;
-    background: color-mix(in srgb, var(--background, canvas) 92%, transparent) !important;
-    box-shadow: 0 -8px 24px rgba(0,0,0,.12) !important;
-    transition: transform 200ms ease-out, opacity 200ms ease-out !important;
-  }
-  .mx-reader-chrome--hidden { transform: translateY(calc(100% + 64px)) !important; opacity: 0 !important; pointer-events: none !important; }
-  .mx-reader-trigger {
-    position: static !important; width: 44px !important; height: 44px !important; border: 0 !important;
-    flex-direction: column !important; gap: 2px !important;
-    border-radius: 8px !important; background: transparent !important; box-shadow: none !important; backdrop-filter: none !important;
-  }
-  .mx-reader-trigger--left { left: auto !important; justify-self: center !important; }
-  .mx-reader-trigger--right { right: auto !important; justify-self: center !important; }
-  .mx-reader-home {
-    display: flex !important; align-items: center !important; justify-content: center !important; justify-self: center !important;
-    flex-direction: column !important; gap: 2px !important;
-    box-sizing: border-box !important; width: 44px !important; height: 44px !important; border-radius: 8px !important;
-    color: var(--muted-foreground, canvastext) !important; text-decoration: none !important;
-  }
-  .mx-reader-label {
-    display: block !important; font: 500 8px/1 var(--font-mono, ui-monospace, monospace) !important;
-    letter-spacing: .04em !important; color: inherit !important;
-  }
-  .mx-reader-home:hover { background: color-mix(in srgb, var(--foreground, gray) 8%, transparent) !important; color: var(--foreground, canvastext) !important; }
-  .mx-reader-panel--menu { width: 100% !important; }
-  .mx-reader-panel--controls { inset: auto 0 0 0 !important; width: 100% !important; padding: 16px 13px max(76px, calc(env(safe-area-inset-bottom) + 64px)) !important; border-radius: 10px 10px 0 0 !important; }
+
+/* FOLLOW — a pill in the byline, the one outlined control on the page: it is
+   the ask the whole chrome exists for. */
+.mx-reader-follow {
+  display: inline-flex !important; align-items: center !important; justify-content: center !important;
+  box-sizing: border-box !important; height: 28px !important; margin: 0 !important; padding: 0 12px !important;
+  border: 1px solid var(--primary, currentColor) !important; border-radius: 999px !important;
+  background: transparent !important; color: var(--primary, currentColor) !important;
+  font: 600 12px/1 var(--font-mono, ui-monospace, monospace) !important; text-transform: capitalize !important;
+  letter-spacing: .02em !important; white-space: nowrap !important; cursor: pointer !important;
+  transition: color 120ms ease, background 120ms ease, transform 120ms ease !important;
 }
-@media (max-width: 639px) and (prefers-reduced-motion: reduce) { .mx-reader-chrome { transition: none !important; } }
+.mx-reader-follow:hover { background: var(--primary, currentColor) !important; color: var(--primary-foreground, canvas) !important; }
+.mx-reader-follow:active { transform: scale(.96) !important; }
+
+/* TIPS — CSS only, because a document of prose ships no runtime to draw one.
+   Every control names itself in data-mx-tip; a hover or a keyboard focus
+   shows the word after a beat. Placement is the layout's (below the bar on a
+   desktop, beside the rail on a phone). */
+.mx-reader-chrome [data-mx-tip] { position: relative !important; }
+.mx-reader-chrome [data-mx-tip]:hover::after, .mx-reader-chrome [data-mx-tip]:focus-visible::after {
+  content: attr(data-mx-tip); position: absolute; z-index: 2147483005; pointer-events: none; white-space: nowrap;
+  padding: 5px 8px; border-radius: 6px;
+  background: var(--foreground, canvastext); color: var(--background, canvas);
+  font: 500 11px/1 var(--font-mono, ui-monospace, monospace); letter-spacing: .02em; text-transform: none;
+  box-shadow: 0 4px 14px rgba(0,0,0,.18);
+  animation: mx-reader-tip 120ms ease-out 350ms both;
+}
+@keyframes mx-reader-tip { from { opacity: 0; } to { opacity: 1; } }
+
+/* DESKTOP — one bar across the top. */
+@media (min-width: 640px) {
+  .mx-reader-chrome {
+    inset: 0 0 auto 0 !important; display: flex !important; align-items: center !important;
+    gap: 10px !important; box-sizing: border-box !important; height: 44px !important;
+    padding: 0 max(10px, env(safe-area-inset-right)) 0 max(10px, env(safe-area-inset-left)) !important;
+    border-bottom: 1px solid var(--border, rgba(128,128,128,.28)) !important;
+    background: color-mix(in srgb, var(--background, canvas) 92%, transparent) !important;
+    backdrop-filter: blur(8px) !important;
+  }
+  .mx-reader-chrome--hidden { transform: translateY(-100%) !important; }
+  .mx-reader-home { order: 0 !important; width: 34px !important; height: 34px !important; }
+  /* Byline before rail on the screen, after it in the DOM: the reading order
+     is logo → actions → who wrote it, the visual order puts the actions right. */
+  .mx-reader-byline {
+    order: 1 !important; display: flex !important; align-items: center !important; gap: 8px !important;
+    flex: 1 1 auto !important; min-width: 0 !important; font-size: 12px !important;
+  }
+  .mx-reader-byline .mx-reader-title::before { content: '/ ' !important; }
+  .mx-reader-follow { order: 1 !important; flex: 0 0 auto !important; }
+  /* A desktop has an address bar; the owner wants no share button there. */
+  .mx-reader-action[data-mx-reader-action="share"] { display: none !important; }
+  /* Tips hang under the bar. */
+  .mx-reader-chrome [data-mx-tip]:hover::after, .mx-reader-chrome [data-mx-tip]:focus-visible::after {
+    top: calc(100% + 6px) !important; left: 50% !important; transform: translateX(-50%) !important;
+  }
+  .mx-reader-rail { order: 2 !important; display: flex !important; align-items: center !important; gap: 2px !important; flex: 0 0 auto !important; }
+  .mx-reader-action, .mx-reader-trigger { width: 34px !important; height: 34px !important; }
+  /* One bar, one row of glyphs: the words belong under a thumb, not here. */
+  .mx-reader-label { display: none !important; }
+}
+
+/* PHONE — logo top-left, action rail on the right edge, byline along the bottom. */
+@media (max-width: 639px) {
+  .mx-reader-chrome { inset: 0 !important; pointer-events: none !important; }
+  .mx-reader-chrome > * { pointer-events: auto !important; }
+  .mx-reader-home {
+    position: absolute !important; top: max(10px, env(safe-area-inset-top)) !important;
+    left: max(10px, env(safe-area-inset-left)) !important;
+    width: 44px !important; height: 44px !important;
+    background: color-mix(in srgb, var(--background, canvas) 82%, transparent) !important;
+    backdrop-filter: blur(8px) !important;
+  }
+  .mx-reader-rail {
+    position: absolute !important; right: max(6px, env(safe-area-inset-right)) !important;
+    top: 50% !important; transform: translateY(-50%) !important;
+    display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4px !important;
+    padding: 6px 2px !important; border-radius: 14px !important;
+    background: color-mix(in srgb, var(--background, canvas) 82%, transparent) !important;
+    backdrop-filter: blur(8px) !important;
+  }
+  .mx-reader-action, .mx-reader-trigger {
+    flex-direction: column !important; gap: 2px !important;
+    width: 44px !important; height: 44px !important;
+  }
+  .mx-reader-byline {
+    position: absolute !important; left: max(10px, env(safe-area-inset-left)) !important;
+    /* Clear of the rail's column: the rail is centred vertically, but the row
+       must not run under it at any height the reader's own text takes. */
+    right: 68px !important; bottom: max(10px, env(safe-area-inset-bottom)) !important;
+    display: flex !important; align-items: center !important; gap: 8px !important;
+    box-sizing: border-box !important; padding: 5px 6px 5px 10px !important; border-radius: 14px !important;
+    background: color-mix(in srgb, var(--background, canvas) 82%, transparent) !important;
+    backdrop-filter: blur(8px) !important; font-size: 12px !important;
+  }
+  .mx-reader-follow { margin-left: auto !important; flex: 0 0 auto !important; }
+  /* Tips sit to the left of the rail (a phone rarely hovers; focus still shows them). */
+  .mx-reader-chrome [data-mx-tip]:hover::after, .mx-reader-chrome [data-mx-tip]:focus-visible::after {
+    right: calc(100% + 8px) !important; top: 50% !important; transform: translateY(-50%) !important;
+  }
+  .mx-reader-panel--menu { inset: auto 0 0 0 !important; top: auto !important; right: 0 !important; width: 100% !important; padding: 16px 13px max(20px, calc(env(safe-area-inset-bottom) + 16px)) !important; border-radius: 10px 10px 0 0 !important; }
+  .mx-reader-panel--controls { inset: auto 0 0 0 !important; width: 100% !important; padding: 16px 13px max(20px, calc(env(safe-area-inset-bottom) + 16px)) !important; border-radius: 10px 10px 0 0 !important; }
+}
+@media (prefers-reduced-motion: reduce) { .mx-reader-chrome { transition: none !important; } .mx-reader-chrome [data-mx-tip]::after { animation: none !important; } }
+/* Presenting is the document alone. */
 :fullscreen .mx-reader-chrome { display: none !important; }
+@media print { .mx-reader-chrome { display: none !important; } }
 `;
 
 /**

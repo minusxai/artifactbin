@@ -36,6 +36,7 @@ import type { RefDataMap } from '@/lib/story/ref-data';
 import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
 import { STORY_ROOT_ATTR } from '@/lib/story-surface';
+import { escapeHtml, renderReaderChrome, type ReaderForkedFrom } from '@/lib/story/reader-chrome';
 import { criticalStoryFonts, getStoryFontCss, storyFontFaceCss, STORY_FONTS_ATTR } from '@/lib/data/story/story-fonts';
 import { documentFonts, documentFontCss } from './document-fonts';
 import { webFontAssets } from '@/lib/webfonts';
@@ -136,21 +137,21 @@ export interface StoryDocumentInput {
    */
   commenting?: boolean;
   /**
-   * Platform attribution appended after the artifact; null/absent for exports.
+   * WHO MADE IT and WHERE IT CAME FROM, for the reader chrome
+   * (lib/story/reader-chrome): the author's handle is the byline and
+   * `forkedFrom` is PROVENANCE, shown in the settings panel — resolved per
+   * render rather than written into the markup, so an agent that regenerates
+   * the document cannot delete the attribution, and nothing about the source
+   * is baked into bytes that outlive its ACL. The ROUTE decides both fields —
+   * it holds the rows — and anything that is not a PUBLIC source produces a
+   * label with NO href and no id, identical for unlisted, private and deleted:
+   * one branch, so the line can be neither an existence oracle nor a listing
+   * surface for a tier whose whole point is being listed nowhere.
    *
-   * `forkedFrom` is PROVENANCE, resolved per render rather than written into
-   * the markup: an agent that regenerates the document cannot delete the
-   * attribution, and nothing about the source is baked into bytes that outlive
-   * its ACL. The ROUTE decides both fields — it holds the rows — and anything
-   * that is not a PUBLIC source produces a label with NO href and no id,
-   * identical for unlisted, private and deleted: one branch, so the line can be
-   * neither an existence oracle nor a listing surface for a tier whose whole
-   * point is being listed nowhere.
+   * Null/absent for a capture. `username: null` is an anonymous document: the
+   * chrome then carries no author mark at all.
    */
-  credits?: {
-    creatorUsername: string | null;
-    forkedFrom?: { label: string; href: string | null } | null;
-  } | null;
+  author?: { username: string | null; forkedFrom?: ReaderForkedFrom | null } | null;
   /**
    * Link-unfurl cards for THIS document. A reader is served the document
    * itself rather than the app page, so if these are not in its head a shared
@@ -343,166 +344,13 @@ const MODE_PRELUDE =
   + 'c.toggle("dark",s.mode==="dark");c.toggle("light",s.mode!=="dark");'
   + '}catch(e){}})()';
 
-/**
- * The anonymous reader's page chrome. It mirrors the trusted parent shell's
- * Menu / Home / Controls rail, but contains only what an opaque top-level
- * document may safely do: navigate and change its own reading appearance. A
- * framed owner/editor copy hides this layer; authenticated document actions
- * stay in the parent that holds the session.
- */
-const ICON_MENU = '<svg class="mx-rc-open" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>';
-const ICON_HOME = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10M9 20v-6h6v6"/></svg>';
-const ICON_SLIDERS = '<svg class="mx-rc-open" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>';
-const ICON_X = '<svg class="mx-rc-close" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="m18 6-12 12M6 6l12 12"/></svg>';
-const ICON_SUN = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>';
-const ICON_MOON = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
-
-/**
- * The DOOR, in the artifact controls beside appearance — because "log in to
- * comment on THIS" is a fact about this artifact, where the left menu is app
- * navigation. Rendered only when signing in would actually change what the
- * holder may do (lib/share-roles roleBehindLogin), so an ordinary public link
- * looks exactly as it always has.
- *
- * An anchor and nothing else: no runtime, no fetch, no session in an opaque
- * document. `target="_top"` is what makes it work at all — the document is
- * sandboxed without allow-same-origin, and a user-activated top navigation is
- * the one way out it has (the menu's own links have always used it).
- */
-const SIGN_IN_LABEL: Record<'commenter' | 'editor', string> = {
-  commenter: 'log in to comment',
-  editor: 'log in to edit',
-};
-
-/**
- * FORK, beside the sign-in door and for the same structural reason: an opaque
- * document cannot act, so it carries the ask and the app performs it.
- * `target="_top"` is what makes it work — a sandboxed document's one way out
- * is a user-activated top navigation.
- */
-const FORK_LABEL = 'Fork artifact';
-const ICON_FORK = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9"/><path d="M12 12v3"/></svg>';
-
-const renderFork = (fork: NonNullable<StoryDocumentInput['fork']>): string =>
-  `<a class="mx-reader-signin" data-mx-fork href="${escapeHtml(fork.href)}"`
-  + ` target="_top" aria-label="${FORK_LABEL}">${ICON_FORK}fork</a>`;
-
-const renderSignIn = (signIn: NonNullable<StoryDocumentInput['signIn']>): string =>
-  `<a class="mx-reader-signin" data-mx-signin href="/login?callbackUrl=${escapeHtml(encodeURIComponent(signIn.callbackUrl))}"`
-  + ` target="_top" aria-label="${escapeHtml(SIGN_IN_LABEL[signIn.unlocks])}">${escapeHtml(SIGN_IN_LABEL[signIn.unlocks])}</a>`;
-
-const renderReaderChrome = (signIn?: StoryDocumentInput['signIn'], fork?: StoryDocumentInput['fork']): string =>
-  '<div class="mx-reader-chrome" data-mx-reader-chrome>'
-  + `<button type="button" class="mx-reader-trigger mx-reader-trigger--left" data-mx-reader-trigger="menu" aria-label="Open menu" aria-expanded="false">${ICON_MENU}${ICON_X}<span class="mx-reader-label" data-mobile-label>menu</span></button>`
-  + `<a class="mx-reader-home" href="/" target="_top" aria-label="Home">${ICON_HOME}<span class="mx-reader-label" data-mobile-label>home</span></a>`
-  + `<button type="button" class="mx-reader-trigger mx-reader-trigger--right" data-mx-reader-trigger="controls" aria-label="Open artifact controls" aria-expanded="false">${ICON_SLIDERS}${ICON_X}<span class="mx-reader-label" data-mobile-label>controls</span></button>`
-  + '<button type="button" class="mx-reader-scrim" data-mx-reader-scrim aria-label="Close page controls" hidden></button>'
-  + '<nav class="mx-reader-panel mx-reader-panel--menu" data-mx-reader-panel="menu" aria-label="Menu" hidden>'
-  + '<a class="mx-reader-brand" href="/" target="_top"><img src="/logo-128.png" alt="">artifactbin</a>'
-  + '<a href="/" target="_top">Artifacts</a><a href="/account" target="_top">Account</a>'
-  + '<a href="/docs-human" target="_top">Human Docs</a><a href="/docs/artifactbin/SKILL.md" target="_top">Agent docs</a>'
-  + '</nav>'
-  + '<section class="mx-reader-panel mx-reader-panel--controls" data-mx-reader-panel="controls" aria-label="Artifact controls" hidden>'
-  + '<h2>artifact controls</h2><h3>appearance</h3>'
-  + '<div class="mx-reader-modes" role="group" aria-label="Color mode">'
-  + `<button type="button" data-mx-mode-choice="light" aria-label="Light mode">${ICON_SUN}light</button>`
-  + `<button type="button" data-mx-mode-choice="dark" aria-label="Dark mode">${ICON_MOON}dark</button>`
-  + '</div>'
-  + (signIn || fork ? '<h3>this document</h3>' : '')
-  + (signIn ? renderSignIn(signIn) : '')
-  + (fork ? renderFork(fork) : '')
-  + '</section></div>';
-
-const escapeHtml = (s: string): string =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
 /** `</style` inside CSS would close the tag early; CSS has no use for the sequence. */
 const styleTag = (attr: string, css: string): string =>
   `<style ${attr}>${css.replace(/<\/style/gi, '')}</style>`;
 
-/**
- * Platform chrome inside the opaque document. It comes after author CSS and
- * uses a prefixed namespace so a story's own footer styles cannot accidentally
- * repaint it. The story root gets a viewport floor so a short artifact still
- * places the credits at the bottom; long documents simply continue naturally.
- */
-const STORY_CREDITS_CSS = `
-body[data-mx-story-root] > #mx-story-root {
-  min-height: calc(100vh - 52px) !important;
-  box-sizing: border-box !important;
-}
-.mx-artifact-credits {
-  display: flex !important; flex-direction: column !important;
-  align-items: center !important; justify-content: center !important;
-  gap: 4px !important; width: 100% !important; min-height: 52px !important;
-  box-sizing: border-box !important; margin: 0 !important; padding: 0 12px !important;
-  border: 0 !important; border-top: 1px solid #202832 !important;
-  background: #10151b !important; color: #e6edf3 !important;
-  font-family: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace !important;
-  font-size: 12px !important; font-weight: 400 !important; line-height: 1 !important;
-}
-.mx-artifact-credits a {
-  display: inline-flex !important; align-items: center !important; gap: 4px !important;
-  margin: 0 !important; padding: 0 !important; border: 0 !important;
-  background: transparent !important; color: #e6edf3 !important;
-  font: inherit !important; text-decoration: none !important;
-  transition: color 120ms ease !important;
-}
-.mx-artifact-credits a:hover { color: #3fe77b !important; }
-.mx-artifact-credits__heart {
-  color: #ef4444 !important; font-family: Arial, sans-serif !important;
-  font-size: 13px !important; line-height: 1 !important;
-}
-.mx-artifact-credits__host { gap: 6px !important; }
-.mx-artifact-credits__forked { color: #8b949e !important; font: inherit !important; }
-.mx-artifact-credits__forked a { display: inline !important; color: #8b949e !important; text-decoration: underline !important; }
-.mx-artifact-credits__forked a:hover { color: #3fe77b !important; }
-.mx-artifact-credits__logo {
-  display: block !important; width: 14px !important; height: 14px !important;
-  margin: 0 !important; padding: 0 !important; border: 0 !important;
-}
-`;
-
-/**
- * PROVENANCE, said in the credits and nowhere else.
- *
- * Two shapes, and the second is the load-bearing one: with an href it names
- * and links the source; without one it says only that there WAS a source. The
- * label is the route's, not this module's, precisely so that "unlisted",
- * "private" and "deleted" arrive here already indistinguishable — a line that
- * could tell them apart is an existence oracle, and one that names an unlisted
- * source is a listing surface for a tier that exists to have none.
- */
-const renderForkedFrom = (forkedFrom: NonNullable<NonNullable<StoryDocumentInput['credits']>['forkedFrom']>): string => {
-  const label = escapeHtml(forkedFrom.label);
-  // With no href the label is plain TEXT rather than an element of its own:
-  // "forked from a private document" has to read as one sentence, and nothing
-  // in the DOM should mark where the name would have been.
-  const inner = forkedFrom.href
-    ? `<a href="${escapeHtml(forkedFrom.href)}" target="_top" aria-label="Open the artifact this was forked from">${label}</a>`
-    : label;
-  return `<span class="mx-artifact-credits__forked" data-mx-forked-from>forked from ${inner}</span>`;
-};
-
-const renderCredits = (credits: NonNullable<StoryDocumentInput['credits']>): string => {
-  const username = credits.creatorUsername;
-  const creator = username
-    ? `<a href="/@${escapeHtml(username)}" target="_top" aria-label="View @${escapeHtml(username)}'s profile">`
-      + `made with <span class="mx-artifact-credits__heart" aria-hidden="true">&hearts;</span> by @${escapeHtml(username)}</a>`
-    : '';
-  const forked = credits.forkedFrom ? renderForkedFrom(credits.forkedFrom) : '';
-  return `<footer class="mx-artifact-credits" aria-label="Artifact credits">${creator}${forked}`
-    + `<a class="mx-artifact-credits__host" href="/" target="_top" aria-label="Hosted on artifactbin">`
-    + `<img class="mx-artifact-credits__logo" src="/logo-128.png" alt="">hosted on artifactbin</a></footer>`;
-};
-
 export async function buildStoryDocument(input: StoryDocumentInput): Promise<string> {
   const { source, compiledCss, theme, template = null, colorMode, refData, runtimeSrc, anchorSrc, commentSrc, live = null, chrome = true, social = null, help = null, signIn = null, fork = null } = input;
   const dataflow = input.dataflow ?? null;
-  // Chrome-less documents are capture inputs. Keep the omission structural so
-  // a future caller cannot accidentally burn attribution into an export by
-  // passing both `chrome: false` and credits.
-  const credits = chrome ? input.credits : null;
 
   /*
    * ONE tree for every rendering (lib/story/body): the nesting repair the HTML
@@ -526,6 +374,29 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
   // document from being edited in a mode it will never be read in.
   const mode = resolveStoryMode(theme, colorMode);
   const title = helmet.title?.trim() || input.title || 'artifact';
+
+  /*
+   * THE READER'S CHROME (lib/story/reader-chrome) — assembled here and dropped
+   * after the story root below. Chrome-less documents are CAPTURE inputs, so
+   * the omission is structural: /export photographs this frame, and neither the
+   * rail nor the attribution belongs in an unfurl card.
+   */
+  const readerChrome = chrome
+    ? renderReaderChrome({
+      // The document knows its own id only when it is live enough to hear its
+      // author; a capture and a unit render have none, and the like/comment
+      // log then names nothing rather than guessing.
+      artifactId: live?.id ?? null,
+      // The STORED title, never the Helmet's: the Helmet is head content and
+      // nothing of it may reach the body (a rule this file already lives by),
+      // and "artifact" is a placeholder for a tab rather than a claim to print
+      // beside the author's handle.
+      title: input.title ?? null,
+      author: input.author ?? null,
+      signIn,
+      fork,
+    })
+    : '';
 
   /*
    * Resolved ONCE and handed to both the SSR render and the island below: the
@@ -584,7 +455,6 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
     importedFaces.length ? styleTag('data-mx-webfonts', storyFontFaceCss(importedFaces)) : '',
     documentFontCss(docFonts) ? styleTag('data-mx-font-vars', documentFontCss(docFonts)) : '',
     helmet.style ? styleTag('data-mx-author', helmet.style) : '',
-    credits ? styleTag('data-mx-credits', STORY_CREDITS_CSS) : '',
   ].join('');
 
   // A document with no components has nothing to hydrate (see needsRuntime) —
@@ -693,8 +563,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
     // this document's own stream (lib/story-runtime/anchor-entry).
     `<body ${STORY_ROOT_ATTR}${live ? ` data-mx-live-id="${escapeHtml(live.id)}" data-mx-live-edit="${escapeHtml(live.editId)}"` : ''}>` +
     `<div id="${STORY_ROOT_ID}">${bodyHtml}</div>` +
-    (chrome ? renderReaderChrome(signIn, fork) : '') +
-    (credits ? renderCredits(credits) : '') +
+    readerChrome +
     /*
      * The page holds its own copy of this text until we say we have painted,
      * and parse time IS the paint: everything above is server-rendered markup.

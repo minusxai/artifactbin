@@ -1,4 +1,9 @@
-/** The credit bar lives inside /raw so the artifact and credits share one scroll. */
+/**
+ * The frame gets the whole artifact viewport, and the PARENT page carries no
+ * credit bar of its own. It never should have: the reader's attribution lives
+ * inside the served document (lib/story/reader-chrome), where the author's
+ * handle is the byline — and the strip this test was written for is retired.
+ */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
@@ -27,7 +32,7 @@ const surfaceProps: ArtifactSurfaceProps = {
   content: '<p>hi</p>', columns: [], compiledCss: null, theme: null, colorMode: null,
 };
 
-describe('the artifact credit scroll boundary', () => {
+describe('the artifact viewport boundary', () => {
   it('gives the full artifact viewport to /raw, with no parent-page footer', () => {
     render(<ArtifactSurface {...surfaceProps} format="markup" source="<p>doc</p>" />);
 

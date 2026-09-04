@@ -43,26 +43,33 @@ describe('buildStoryDocument', () => {
     expect(html).toContain(JS);
   });
 
-  it('appends linked platform credits after the artifact root when requested', async () => {
-    const html = await doc({ credits: { creatorUsername: 'ada' } });
+  /**
+   * THE AUTHOR AND THE PROVENANCE RIDE THE READER CHROME (lib/story/reader-chrome),
+   * never a footer: the credits strip is retired. The builder's job is only to
+   * hand the chrome what the route resolved — the author's handle, the fork
+   * source, where ⊕ goes — and to render none of it on a capture.
+   */
+  it('names the author in the reader chrome and carries no credits footer', async () => {
+    const html = await doc({ author: { username: 'ada' } });
     const root = html.indexOf(`id="${STORY_ROOT_ID}"`);
-    const credits = html.indexOf('aria-label="Artifact credits"');
-
-    expect(credits).toBeGreaterThan(root);
-    expect(html).toContain('data-mx-credits');
-    expect(html).toContain('href="/@ada" target="_top"');
-    expect(html).toContain('made with <span class="mx-artifact-credits__heart"');
-    expect(html).toContain('href="/" target="_top" aria-label="Hosted on artifactbin"');
+    const chrome = html.indexOf('data-mx-reader-chrome');
+    expect(chrome).toBeGreaterThan(root);
+    expect(html).toContain('class="mx-reader-author" href="/@ada" target="_top"');
+    expect(html).toContain('class="mx-reader-follow" data-mx-reader-action="follow" data-mx-author="ada"');
+    expect(html).not.toContain('mx-reader-create');
     expect(html).toContain('src="/logo-128.png"');
+    expect(html).not.toContain('mx-artifact-credits');
+    expect(html).not.toContain('data-mx-credits');
+    expect(html).not.toContain('made with');
+    expect(html).not.toContain('Hosted on artifactbin');
   });
 
   /**
    * PROVENANCE. A fork is a copy of someone else's work, so the copy says so —
-   * in the credits, beside "made with ♥ by", where the document's other facts
-   * about itself already live. The markup is never touched: forking already
-   * strips what belongs to the original's LIFE (comments, history), and
-   * writing a line into the copy's source would hand the next agent a sentence
-   * it is free to delete.
+   * in the settings panel, where the document's other facts about itself live.
+   * The markup is never touched: forking already strips what belongs to the
+   * original's LIFE (comments, history), and writing a line into the copy's
+   * source would hand the next agent a sentence it is free to delete.
    *
    * The second shape is the load-bearing one. Everything that is not PUBLIC —
    * unlisted, private, deleted — must produce output that says nothing about
@@ -70,36 +77,51 @@ describe('buildStoryDocument', () => {
    * being an existence oracle, and what keeps a fork from becoming a listing
    * surface for a tier whose whole point is being listed nowhere.
    */
-  it('names the source it was forked from, and links it', async () => {
-    const html = await doc({ credits: { creatorUsername: 'ada', forkedFrom: { label: '@grace/ab12cd-first-draft', href: '/@grace/ab12cd-first-draft' } } });
+  it('names the source it was forked from inside the settings panel, and links it', async () => {
+    const html = await doc({ author: { username: 'ada', forkedFrom: { label: '@grace/ab12cd-first-draft', href: '/@grace/ab12cd-first-draft' } } });
     expect(html).toContain('data-mx-forked-from');
     expect(html).toContain('href="/@grace/ab12cd-first-draft" target="_top"');
     expect(html).toContain('forked from');
     expect(html).toContain('@grace/ab12cd-first-draft');
+    // INSIDE the settings panel — between its opening tag and its closing one —
+    // where the retired footer used to sit after everything.
+    const panelStart = html.indexOf('data-mx-reader-panel="controls"');
+    const panelEnd = html.indexOf('</section>', panelStart);
+    const line = html.indexOf('class="mx-reader-forked" data-mx-forked-from');
+    expect(line).toBeGreaterThan(panelStart);
+    expect(line).toBeLessThan(panelEnd);
   });
 
   it('says only that there WAS a source when the source is not public', async () => {
-    const html = await doc({ credits: { creatorUsername: 'ada', forkedFrom: { label: 'a document that is not public', href: null } } });
+    const html = await doc({ author: { username: 'ada', forkedFrom: { label: 'a document that is not public', href: null } } });
     expect(html).toContain('data-mx-forked-from');
-    expect(html).toContain('forked from a document that is not public');
+    expect(html).toContain('<span class="mx-reader-forked" data-mx-forked-from>forked from a document that is not public</span>');
     // No link, no id, nothing that separates "private" from "deleted".
     expect(html).not.toMatch(/<a[^>]*data-mx-forked-from/);
     expect(html).not.toContain('ab12cd');
   });
 
-  it('leaves a document that was not forked with the credits it always had', async () => {
-    expect(await doc({ credits: { creatorUsername: 'ada' } })).not.toContain('data-mx-forked-from');
-    expect(await doc({ chrome: false, credits: { creatorUsername: 'ada', forkedFrom: { label: '@grace/ab12cd-x', href: '/@grace/ab12cd-x' } } })).not.toContain('data-mx-forked-from');
+  it('leaves a document that was not forked without a provenance line', async () => {
+    const plain = await doc({ author: { username: 'ada' } });
+    expect(plain).not.toContain('data-mx-forked-from');
+    expect(plain).toContain('class="mx-reader-author"');
+    expect(await doc({ chrome: false, author: { username: 'ada', forkedFrom: { label: '@grace/ab12cd-x', href: '/@grace/ab12cd-x' } } })).not.toContain('data-mx-forked-from');
   });
 
-  it('keeps anonymous hosting credits but omits all credits from chrome-less documents', async () => {
-    const anonymous = await doc({ credits: { creatorUsername: null } });
-    expect(anonymous).toContain('aria-label="Hosted on artifactbin"');
+  it('marks no author on an anonymous document, and renders no chrome on a capture', async () => {
+    const anonymous = await doc({ author: { username: null } });
+    expect(anonymous).toContain('data-mx-reader-chrome');
+    expect(anonymous).not.toContain('mx-reader-author');
     expect(anonymous).not.toContain("'s profile");
+    expect(anonymous).not.toContain('mx-artifact-credits');
+    // The attribute, not the class: the chrome's stylesheet ships in every
+    // document and names the class whether or not the control is rendered.
+    expect(anonymous).not.toContain('data-mx-reader-action="follow"');
 
-    const capture = await doc({ chrome: false, credits: { creatorUsername: 'ada' } });
+    const capture = await doc({ chrome: false, author: { username: 'ada' } });
+    expect(capture).not.toContain('data-mx-reader-chrome');
+    expect(capture).not.toContain('mx-reader-author');
     expect(capture).not.toContain('mx-artifact-credits');
-    expect(capture).not.toContain('data-mx-credits');
   });
 
   it('SSRs the body: kit components render their markup inside the root', async () => {
@@ -229,15 +251,23 @@ describe('buildStoryDocument', () => {
     expect(await doc({ source: '<p>plain</p>' })).not.toContain('class="mx-deck"');
   });
 
-  it("carries the reader's Menu / Home / Controls chrome and pre-paint appearance", async () => {
-    const html = await doc({ source: '<p>plain</p>' });
-    expect(html).toContain('data-mx-reader-trigger="menu"');
+  it("carries the reader's chrome, server-rendered HIDDEN, and the pre-paint appearance", async () => {
+    const html = await doc({ source: '<p>plain</p>', live: { id: 'ab12cd', editId: 'e1' } });
+    expect(html).toContain('data-mx-reader-chrome');
+    expect(html).toContain('data-mx-reader-state="hidden"');
+    expect(html).toContain('mx-reader-chrome--hidden');
+    expect(html).toContain('data-mx-artifact-id="ab12cd"');
     expect(html).toContain('class="mx-reader-home"');
     expect(html).toContain('aria-label="Home"');
-    expect(html).toContain('data-mobile-label>menu</span>');
-    expect(html).toContain('data-mobile-label>home</span>');
-    expect(html).toContain('data-mobile-label>controls</span>');
+    expect(html).toContain('data-mx-reader-action="like"');
+    expect(html).toContain('data-mx-reader-action="comment"');
+    expect(html).toContain('data-mx-reader-action="share"');
+    expect(html).toContain('data-mx-reader-trigger="controls"');
     expect(html).toContain('aria-label="Open artifact controls"');
+    expect(html).toContain('data-mx-reader-trigger="menu"');
+    expect(html).toContain('aria-label="Open menu"');
+    expect(html).toContain('data-mobile-label>settings</span>');
+    expect(html).toContain('data-mobile-label>profile</span>');
     expect(html).toContain('data-mx-mode-choice="light"');
     expect(html).toContain('data-mx-mode-choice="dark"');
     expect(html).toContain('mx:doc:');

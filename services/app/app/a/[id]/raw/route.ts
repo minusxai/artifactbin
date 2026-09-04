@@ -371,7 +371,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           }
           : null,
     help: chrome ? { docs: `${base}/docs`, tokens: `${base}/tokens/new` } : null,
-        credits: chrome ? { creatorUsername, forkedFrom } : null,
+        author: chrome ? { username: creatorUsername, forkedFrom } : null,
         /*
          * THE WAY IN. A guest — no account, so ANONYMOUS_CEILING holds them at
          * `viewer` — on a link its owner set to `can comment` or `can edit` is
