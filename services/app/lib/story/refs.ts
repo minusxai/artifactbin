@@ -14,7 +14,7 @@
 import { parseJsx, type JsxAttribute, type JsxNode, type JsxElement, type ValidationError } from '@/lib/jsx';
 import { videoEmbedUrl } from '@/lib/story-ui/video-embed';
 import { collectFieldRefs, collectDerivedFieldNames, hasUnverifiableTransform } from '@/lib/viz/field-refs';
-import { MUTATION_TAG, QUERY_TAG, parseMutationDecl, parseQueryDecl, refName } from './dataflow';
+import { MUTATION_TAG, QUERY_TAG, carriesRef, parseMutationDecl, parseQueryDecl, refName } from './dataflow';
 import type { DatasetColumn } from './data-tiers';
 import type { VizRecipeBinding, VizRecipeContent } from '@/lib/validation/atlas-schemas';
 import { isNumberFormat, NUMBER_FORMAT_HINT } from './number-format';
@@ -167,10 +167,11 @@ export function findExternalSubresources(source: string): ValidationError[] {
         // publishing a player that renders "unsupported source" would tell the
         // author nothing (the findBrokenEmbeds principle below).
         // A WEB URL in an image position is INPUT vocabulary, not a violation:
-        // the publish door imports it and rewrites it to `ref:<id>` before the
-        // stored document exists (lib/story/external-images). Exempted here so
-        // /api/preview — which never ingests — agrees with publish, per the
-        // always-on-error-array rule. Every other position stays rejected.
+        // the publish door imports it into the global URL cache and the served
+        // document is pointed at our copy (lib/story/external-images,
+        // lib/web-assets). Exempted here so /api/preview — which never ingests
+        // — agrees with publish, per the always-on-error-array rule. Every
+        // other position stays rejected.
         // The same exemption for a PDF a document links by URL: the publish
         // door imports it under its own cap and the serve-time mapping points
         // the card at our copy. Here rather than only at the import so
@@ -181,6 +182,20 @@ export function findExternalSubresources(source: string): ValidationError[] {
             || (el.tag === 'File' && name === 'src'))) {
           continue;
         }
+        /*
+         * …and a BOUND image source is neither external nor self-contained —
+         * it is a binding, and this rule has nothing to say about it.
+         *
+         * `<img src="$pick">` used to reach the rejection above by
+         * FALL-THROUGH: it is not a ref, not a data: URL and not an http(s)
+         * one, so the door called `$pick` an "External URL" and told the author
+         * to publish it as an image artifact — advice that cannot be followed,
+         * about a value that does not exist yet. What the name means is settled
+         * where every other reference is settled: `validateDataflow` reports an
+         * undeclared or wrong-kind `$name` BY NAME, in the same always-on error
+         * array, so nothing here is being waved through.
+         */
+        if (!el.isComponent && el.tag.toLowerCase() === 'img' && name === 'src' && carriesRef(value)) continue;
         if (el.tag === 'Video' && name === 'src') {
           if (videoEmbedUrl(value) === null) {
             errors.push({

@@ -77,6 +77,58 @@ export function assetUrlFor(url: string): string {
 /** True for a URL this mapping is about at all: an absolute http(s) source. */
 export const isWebUrl = (value: string): boolean => WEB_URL.test(value);
 
+/**
+ * The SAME mapping, for a URL that only exists in the READER's browser — the
+ * value of a bound `<img src="$pick">`, a template a pick completed, a column
+ * of logos, a line of author script.
+ *
+ * Publish imports every URL it can SEE; it cannot see these, so there are two
+ * addresses rather than one and this chooses between them:
+ *
+ *  - `/assets/<hash>` once we know we hold a copy — which the caller learns by
+ *    the browser having loaded it once, never by asking the server;
+ *  - the document's own per-request endpoint otherwise
+ *    (`/a/<id>/assets?u=<url>`), which imports it under that document's read
+ *    ACL and its caps, and answers a redirect to the address above.
+ *
+ * Both are same-origin, so the served document's `img-src 'self'` admits them
+ * and nothing about its CSP changes.
+ *
+ * NOTHING here may consult the server's `web_assets` index. This runs on BOTH
+ * ends of the wire and the island carries no asset lookup, so a server that
+ * knew a URL was cached would render one address while the hydrating client
+ * rendered the other — which React answers by discarding the whole server tree
+ * (#418). Both ends start knowing nothing; the browser learns, and only later
+ * renders benefit.
+ *
+ * NULL is the refusal, and it is the MECHANISM rather than a backstop. Anything
+ * that is not an absolute `http(s)` URL — a protocol-relative `//host/x`, a
+ * `javascript:`, a relative path, even a `data:` the document's own `img-src`
+ * would happily render — is not a source we can import, so it never becomes an
+ * `<img src>` and the reader gets the alt text.
+ *
+ * That matters beyond tidiness: a bound `src` is set by the runtime DIRECTLY,
+ * which routes around the interpreter's own dangerous-scheme filter
+ * (`buildProps` drops the attribute and `RuntimeBoundSource` sets it again) —
+ * the one defence-in-depth layer lib/story-ui/interpreter.tsx's header promises
+ * to keep. The served document's CSP and React's refusal of `javascript:` do
+ * stop every shape in practice (measured: zero third-party requests), but a
+ * policy that happens to hold is not the same thing as a rule that says no.
+ *
+ * With no endpoint (a render that is not a served document — a rail preview, a
+ * canvas) a web URL comes back untouched and the caller decides what to do with
+ * it; that is the one case where this answers something it cannot serve.
+ */
+export function runtimeAssetUrl(url: string, known: AssetLookup, endpoint: string | null | undefined): string | null {
+  if (!isWebUrl(url)) return null;
+  if (known(url)) return assetUrlFor(url);
+  if (!endpoint) return url;
+  // The endpoint may already carry a query (a CAPTURE's `?key=` — the only
+  // credential a top-level, session-less render can present), so the separator
+  // is chosen rather than assumed, exactly as the query transport chooses it.
+  return `${endpoint}${endpoint.includes('?') ? '&' : '?'}u=${encodeURIComponent(url)}`;
+}
+
 /** A lookup over whatever index the caller already has — a Set of urls, or the rows themselves. */
 export const assetLookupFrom = (index: ReadonlySet<string> | ReadonlyMap<string, WebAssetBox>): AssetLookup =>
   (url: string) => ('get' in index ? index.get(url) ?? false : index.has(url));

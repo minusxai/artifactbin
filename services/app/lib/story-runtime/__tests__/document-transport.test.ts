@@ -6,7 +6,7 @@
 import { describe, expect, it, vi } from 'vitest';
 const APP = 'https://artifactbin.dev';
 import { createDocumentTransport } from '@/lib/story-runtime/document-transport';
-import { STORY_QUERY_MESSAGE } from '@/lib/story-runtime/contract';
+import { STORY_ASSET_MESSAGE, STORY_QUERY_MESSAGE } from '@/lib/story-runtime/contract';
 
 const win = (parent: unknown) => {
   const self = { parent: null as unknown, addEventListener: vi.fn() };
@@ -43,5 +43,28 @@ describe('createDocumentTransport', () => {
     const fetchFn = vi.fn(async () => new Response('{"tables":{},"errors":{}}', { status: 200 }));
     expect(createDocumentTransport(win(null), '/a/x/query', APP, fetchFn)).not.toBeNull();
     expect(createDocumentTransport(win(null), undefined, APP, fetchFn)).toBeNull();
+  });
+});
+
+/**
+ * WHICH HALF IMPORTS AN ASSET. Framed, the page must — the frame's `<img>`
+ * presents no session. Top-level, the ELEMENT is the transport: its src is the
+ * endpoint and the browser follows the redirect, so `importAsset` is absent and
+ * its absence is the instruction.
+ */
+describe('createDocumentTransport — importAsset', () => {
+  it('inside a parent: importing posts mx:asset to that parent', () => {
+    const posted: unknown[] = [];
+    const parent = { postMessage: (m: unknown) => posted.push(m) };
+    const t = createDocumentTransport(win(parent), '/a/abc123/query', APP, vi.fn());
+    expect(t!.importAsset).toBeTypeOf('function');
+    void t!.importAsset!('https://cdn.x.com/cat.png');
+    expect(posted[0]).toMatchObject({ type: STORY_ASSET_MESSAGE, url: 'https://cdn.x.com/cat.png' });
+  });
+
+  it('top-level: no importAsset at all — the <img> src is already the endpoint', () => {
+    const fetchFn = vi.fn(async () => new Response('{"tables":{},"errors":{}}', { status: 200 }));
+    const t = createDocumentTransport(win('self'), '/a/abc123/query', APP, fetchFn);
+    expect(t!.importAsset).toBeUndefined();
   });
 });
