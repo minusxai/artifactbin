@@ -6,6 +6,8 @@ import { describe, expect, it } from 'vitest';
 import { agentCookie, request, useAppHarness } from './harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { GET as queryGet, POST as queryPost } from '@/app/a/[id]/query/route';
+import { getArtifactById, updateSharing } from '@/lib/artifacts';
+import { childrenTableFor } from '@/lib/folders';
 import { subscribeToArtifact } from '@/lib/story/live';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser } from '@/lib/users';
@@ -17,7 +19,7 @@ async function owner(name = 'owner') {
   const t = await mintToken(name);
   const u = await createUser({ email: `${name}@example.com` });
   await claimToken(u.id, t.token);
-  return { token: t.token, tokenId: t.id, cookie: await agentCookie([t.id]) };
+  return { token: t.token, tokenId: t.id, userId: u.id, cookie: await agentCookie([t.id]) };
 }
 const create = async (token: string, body: Record<string, unknown>) => {
   const r = await j(await createRoute(request('/api/artifacts', { method: 'POST', json: body, token })));
@@ -103,6 +105,26 @@ describe('the children table', () => {
     expect(strangerRows.map((x) => x.id)).toEqual([child.id]);
     expect(strangerRows[0].views).toBeNull();
     expect(strangerRows[0].sparkline).toBeNull();
+  });
+
+  /*
+   * The BOUNDARY of the read fast path: the listing asks the LINK first and
+   * only pays for a share lookup on a row the link does not already open
+   * (lib/folders). That is exact — `maxRole` can only raise, and the anonymous
+   * ceiling is `viewer`, the rank the read question asks for — and this is the
+   * case that would break if it were ever approximated the other way: a
+   * private child the link refuses, which a named person must still see.
+   */
+  it('a person named on a private child sees it in the listing; a signed-in stranger does not', async () => {
+    const { o, f, pub, priv, sub } = await world();
+    const guest = await createUser({ email: 'guest@example.com' });
+    const bystander = await createUser({ email: 'bystander@example.com' });
+    await updateSharing(o.userId, priv.id, { shares: [{ email: 'guest@example.com', role: 'viewer' }] });
+    const folder = (await getArtifactById(f.id))!;
+    const seen = async (u: { id: string; email: string }) =>
+      (await childrenTableFor(folder, { userId: u.id, tokenId: null, email: u.email })).rows.map((r) => r.id).sort();
+    expect(await seen(guest)).toEqual([priv.id, pub.id, sub.id].sort());
+    expect(await seen(bystander)).toEqual([pub.id, sub.id].sort());
   });
 
   it('a child created under an open folder wakes the folder\'s own channel', async () => {
