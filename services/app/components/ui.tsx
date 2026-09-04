@@ -6,6 +6,7 @@
 import { EyeOff, Globe, Lock } from 'lucide-react';
 import type { ButtonHTMLAttributes, InputHTMLAttributes } from 'react';
 import { Tooltip } from '@/components/Tooltip';
+import { sparklineSvg } from '@/lib/viz/spark-markup';
 
 const BUTTON_VARIANTS = {
   solid:
@@ -180,24 +181,14 @@ export function MicroLabel({ children }: { children: React.ReactNode }) {
  * Decoration beside a count, so hidden from the accessibility tree.
  */
 export function Spark({ svg, filled = true, className = '' }: { svg: string; filled?: boolean; className?: string }) {
-  const fluid = svg.replace(/^<svg([^>]*)>/, (_tag, attrs: string) => {
-    const width = attrs.match(/\swidth="([\d.]+)"/)?.[1];
-    const height = attrs.match(/\sheight="([\d.]+)"/)?.[1];
-    let next = attrs;
-    if (!/\sviewBox=/.test(next) && width && height) next += ` viewBox="0 0 ${width} ${height}"`;
-    if (!/\spreserveAspectRatio=/.test(next)) next += ' preserveAspectRatio="none"';
-    return `<svg${next}>`;
-  });
-  // The stretch is non-uniform (wide, never tall), and a stroke scales with
-  // the geometry it rides: the spike's near-vertical segments drew ~5× fatter
-  // than the flat baseline. Non-scaling strokes keep one screen thickness.
-  const uniform = fluid.replace(/<path\b(?![^>]*\svector-effect=)/g, '<path vector-effect="non-scaling-stroke" ');
-  const drawn = filled ? uniform : uniform.replace(/(<path\b[^>]*\sfill-opacity=)"[^"]*"/g, '$1"0"');
+  // The three transformations live in lib/viz/spark-markup, because the
+  // document kit's <Files> draws the same mark from the same server render and
+  // may not import app chrome (lib/__tests__/reader-bundle-hygiene).
   return (
     <span
       aria-hidden="true"
       className={`flex items-center [&>svg]:h-full [&>svg]:w-full ${className}`}
-      dangerouslySetInnerHTML={{ __html: drawn }}
+      dangerouslySetInnerHTML={{ __html: sparklineSvg(svg, { filled }) }}
     />
   );
 }
