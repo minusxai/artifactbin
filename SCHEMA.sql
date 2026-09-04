@@ -498,3 +498,42 @@ CREATE INDEX IF NOT EXISTS idx_auth_credentials_group ON auth.credentials (group
 
 CREATE INDEX IF NOT EXISTS idx_auth_credentials_expiry ON auth.credentials (expires_at);
 
+-- schema "events" — owned by the events role; tables declared by services/events/src/schema.ts
+
+CREATE TABLE IF NOT EXISTS events.events (
+  id TEXT NOT NULL,
+  at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  source TEXT NOT NULL,
+  subject_kind TEXT,
+  subject_id TEXT,
+  verb TEXT NOT NULL,
+  object_kind TEXT NOT NULL,
+  object_id TEXT NOT NULL,
+  payload JSONB NOT NULL DEFAULT '{}',
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE events.events ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE events.events ADD COLUMN IF NOT EXISTS at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE events.events ADD COLUMN IF NOT EXISTS source TEXT NOT NULL;
+
+ALTER TABLE events.events ADD COLUMN IF NOT EXISTS subject_kind TEXT;
+
+ALTER TABLE events.events ADD COLUMN IF NOT EXISTS subject_id TEXT;
+
+ALTER TABLE events.events ADD COLUMN IF NOT EXISTS verb TEXT NOT NULL;
+
+ALTER TABLE events.events ADD COLUMN IF NOT EXISTS object_kind TEXT NOT NULL;
+
+ALTER TABLE events.events ADD COLUMN IF NOT EXISTS object_id TEXT NOT NULL;
+
+ALTER TABLE events.events ADD COLUMN IF NOT EXISTS payload JSONB NOT NULL DEFAULT '{}';
+
+CREATE INDEX IF NOT EXISTS idx_events_object_at ON events.events (object_id, at);
+
+CREATE INDEX IF NOT EXISTS idx_events_subject_at ON events.events (subject_id, at);
+
+CREATE INDEX IF NOT EXISTS idx_events_kind_verb_at ON events.events (object_kind, verb, at);
+

@@ -39,6 +39,7 @@ APP__PUBLIC_BASE_URL=http://localhost:${p(1)}
 PROXY__PORT=${p(0)}                      # the only published port when a proxy fronts the app
 SQL__SERVICE_URL=http://127.0.0.1:${p(10)}
 BROWSER__SERVICE_URL=http://127.0.0.1:${p(11)}
+EVENTS__SERVICE_URL=http://127.0.0.1:${p(12)}
 POSTGRES_PORT=${p(32)}
 MINIO_PORT=${p(90)}
 MINIO_CONSOLE_PORT=${p(91)}

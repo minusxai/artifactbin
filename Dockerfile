@@ -9,6 +9,7 @@ COPY services/utils/package.json ./services/utils/package.json
 COPY services/app/package.json ./services/app/package.json
 COPY services/sql/package.json ./services/sql/package.json
 COPY services/browser/package.json ./services/browser/package.json
+COPY services/events/package.json ./services/events/package.json
 COPY services/proxy/package.json ./services/proxy/package.json
 COPY services/app/scripts/copy-assets.mjs ./services/app/scripts/copy-assets.mjs
 # THE INSTALL LAYER IS KEYED ON MANIFESTS ONLY. `npm ci` reads the root files
@@ -62,6 +63,7 @@ COPY services/utils/package.json ./services/utils/package.json
 COPY services/app/package.json ./services/app/package.json
 COPY services/sql/package.json ./services/sql/package.json
 COPY services/browser/package.json ./services/browser/package.json
+COPY services/events/package.json ./services/events/package.json
 COPY services/proxy/package.json ./services/proxy/package.json
 # Manifests only, for the reason the builder stage states above — this is the
 # stage whose layer is the 518 MB one.
@@ -83,6 +85,10 @@ COPY scripts/lib/dev-ports.mjs ./scripts/lib/dev-ports.mjs
 COPY scripts/lib/setup-plan.mjs ./scripts/lib/setup-plan.mjs
 
 RUN test -f ./sql-server.mjs \
+    # The fifth service runs IN-PROCESS here (server.ts registers its writer on
+    # the app's own database handle), so there is no third bundle — but the
+    # workspace must be installed, or that registration cannot resolve.
+    && test -d node_modules/@artifactbin/events \
     && test -d ./skills/artifactbin \
     && test -f ./public/story/manifest.json \
     && node -e "const m=require('./public/story/manifest.json');for(const u of [m.entry,...(m.lazy||[])]) require('fs').accessSync('./public'+u)" \

@@ -200,7 +200,7 @@ describe('loadEventsConfig + runEvents (the boot)', () => {
   it('reads the four names with their defaults, names every missing required setting in one error, and reports unknown EVENTS__ names', () => {
     const c = loadEventsConfig({ DATABASE_URL: 'postgresql://x', INTERNAL__SERVICE_SECRET: 's' });
     expect(c).toMatchObject({ port: 8080, schema: 'events', databaseUrl: 'postgresql://x', serviceSecret: 's', unknownNames: [] });
-    expect(loadEventsConfig({ APP__PORT: '0', EVENTS__SCHEMA: 'afbin_prod_events', EVENTS__TYPO: '1' })).toMatchObject({ port: 0, schema: 'afbin_prod_events', unknownNames: ['EVENTS__TYPO'] });
+    expect(loadEventsConfig({ APP__PORT: '0', EVENTS__SCHEMA: 'tenant_events', EVENTS__TYPO: '1' })).toMatchObject({ port: 0, schema: 'tenant_events', unknownNames: ['EVENTS__TYPO'] });
     expect(() => loadEventsConfig({}, { required: ['DATABASE_URL', 'INTERNAL__SERVICE_SECRET'] })).toThrow(/DATABASE_URL[\s\S]*INTERNAL__SERVICE_SECRET/);
     expect(() => loadEventsConfig({ EVENTS__SCHEMA: 'no way' })).toThrow(/identifier/);
     expect(loadEventsConfig({ EVENTS__FORWARD_RULES: 'x=>y' }, { known: ['EVENTS__FORWARD_RULES'] }).unknownNames).toEqual([]);

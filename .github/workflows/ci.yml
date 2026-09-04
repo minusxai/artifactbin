@@ -467,7 +467,7 @@ jobs:
       - if: always()
         run: docker rm -f ab || true
 
-  # THE LEAN PASS (P3 CORE TESTS 1–2): the four lean images the split shape
+  # THE LEAN PASS (P3 CORE TESTS 1–2): the five lean images the split shape
   # composes, each through scripts/image-checks.mjs — contents (the package an
   # image exists to carry resolves; the other images' natives THROW),
   # boots-and-serves, and the du -sb size budget. A filtered install that grows
@@ -486,26 +486,29 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - name: the four lean images build
+      - name: the five lean images build
         run: |
           docker build -f services/app/Dockerfile -t lean-app:ci .
           docker build -f services/proxy/Dockerfile -t lean-proxy:ci .
           docker build -f services/sql/Dockerfile -t lean-sql:ci .
           docker build -f services/browser/Dockerfile -t lean-browser:ci .
-      - name: the four lean images carry what they should and nothing else
+          docker build -f services/events/Dockerfile -t lean-events:ci .
+      - name: the five lean images carry what they should and nothing else
         run: |
           node scripts/image-checks.mjs app lean-app:ci
           node scripts/image-checks.mjs proxy lean-proxy:ci
           node scripts/image-checks.mjs sql lean-sql:ci
           node scripts/image-checks.mjs browser lean-browser:ci
+          node scripts/image-checks.mjs events lean-events:ci
 
-  # THE COMPOSE OF THE FOUR LEAN IMAGES (P3 CORE TEST 4) — the split shape
+  # THE COMPOSE OF THE FIVE LEAN IMAGES (P3 CORE TEST 4) — the split shape
   # the plan's P5 deploys, booted exactly as a deployment composes it and
   # walked over HTTP: the proxy's own /health, an anonymous start through the
   # ANON_MINT door, a publish whose <Query> dry-run crosses the app→sql seam,
   # the served document IS the document through the proxy, and the document's
-  # own query URL answers real DuckDB rows from the sql container. It is
-  # expensive (four docker builds + a five-container boot) and it is the
+  # own query URL answers real DuckDB rows from the sql container, and the
+  # events container stores an envelope in the schema it owns. It is
+  # expensive (five docker builds + a seven-container boot) and it is the
   # point: this is the only job that proves the halves were shipped together.
   compose:
     name: compose (the split shape)
@@ -529,7 +532,7 @@ jobs:
           if [ "$GITHUB_REF" = refs/heads/main ]; then
             echo "COMPOSE_FILE=docker-compose.lean.yml:docker-compose.lean.ci.yml:docker-compose.lean.ci-write.yml" >> "$GITHUB_ENV"
           fi
-      - name: boot the four lean images as one host
+      - name: boot the five lean images as one host
         run: |
           docker compose up -d --build
           for i in $(seq 1 90); do
@@ -538,8 +541,8 @@ jobs:
             sleep 1
           done
           echo '--- compose state ---'; docker compose ps; exit 1
-      - name: walk it (health, mint, publish, serve, query)
-        run: node scripts/test-compose-lean.mjs http://127.0.0.1:5440
+      - name: walk it (health, mint, publish, serve, query, emit)
+        run: node scripts/test-compose-lean.mjs http://127.0.0.1:5440 http://127.0.0.1:5441
       - if: failure()
         run: docker compose logs
       - if: always()

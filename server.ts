@@ -71,14 +71,26 @@ async function main(): Promise<void> {
   // An image built without an engine or a browser needs to be told where they
   // went — before a boot canary passes and the first export answers 503.
   const {
-    BROWSER_SERVICE_URL, MAX_QUERY_ROWS, QUERY_TIMEOUT_MS, SQL_SERVICE_URL,
+    BROWSER_SERVICE_URL, EVENTS_SCHEMA, EVENTS_SERVICE_URL, MAX_QUERY_ROWS, QUERY_TIMEOUT_MS, SQL_SERVICE_URL,
   } = await import('@/lib/config');
+
+  /*
+   * THE DATABASE OPENS FIRST, because one of the services below writes through
+   * it. The events writer runs IN THIS PROCESS on the app's OWN handle — a
+   * second engine pointed at one PGLite data directory is a corrupted database,
+   * not a second reader — and the proxy composition below shares this same
+   * `queryable`.
+   */
+  const db = await getDb();
+  const raw = db.raw();
+  const queryable = { query: async <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => (await db.query<T>(sql, params)) as { rows: T[] } };
 
   /**
    * THE SERVICES, INJECTED ONCE — this is the only place the process decides
-   * where DuckDB and Chromium run (`lib/services` registry). Registered only
-   * when no URL names a service, because `./local` is the entry that loads
-   * the native module and Playwright, and the lean image has neither.
+   * where DuckDB, Chromium and the event log live (`lib/services` registry).
+   * Registered only when no URL names a service, because `./local` is the
+   * entry that loads the native module, Playwright or the writer's own DDL,
+   * and the lean image has none of them.
    */
   const { setServices } = await import('@/lib/services');
   if (!SQL_SERVICE_URL) {
@@ -89,10 +101,14 @@ async function main(): Promise<void> {
     const { createBrowser } = await import('@artifactbin/browser/local');
     setServices({ browser: createBrowser() });
   }
-
-  const db = await getDb();
-  const raw = db.raw();
-  const queryable = { query: async <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => (await db.query<T>(sql, params)) as { rows: T[] } };
+  if (!EVENTS_SERVICE_URL) {
+    // The log's schema is ensured LAZILY, on the first emit: here the database
+    // is the app's own (PGLite, or a Postgres it owns), so the DDL costs the
+    // boot nothing — the split shape's events container is where a database it
+    // cannot reach must fail the boot instead.
+    const { createEvents } = await import('@artifactbin/events/local');
+    setServices({ events: createEvents({ db: queryable, schema: EVENTS_SCHEMA }) });
+  }
 
   // The SPA: Vite in middleware mode for dev (modules, HMR, index transform); the built tree in production.
   let vite: import('vite').ViteDevServer | null = null;

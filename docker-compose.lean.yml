@@ -1,12 +1,15 @@
-# THE SPLIT SHAPE ON ONE HOST — four lean images behind one proxy.
+# THE SPLIT SHAPE ON ONE HOST — five lean images behind one proxy.
 #
 # Where docker-compose.yml is the self-host default (the FULL image + Postgres,
 # one container that carries its own engine and browser), this is the shape a
 # deployment composes when it wants them apart: the proxy is the only published
 # port and the only process with an identity surface; the app holds the
-# document tree and reaches DuckDB and Chromium over service URLs; the sql and
-# browser images are the other two phases of the same repo, built from the
-# same commit — a service image built elsewhere is a second dependency tree.
+# document tree and reaches DuckDB, Chromium and the event log over service
+# URLs; the sql, browser and events images are the other phases of the same
+# repo, built from the same commit — a service image built elsewhere is a
+# second dependency tree. The events service is the only STATEFUL one of the
+# four: it owns the `events` schema, is the log's only writer, and the app
+# reads that log through a GRANT (roles.sql / grants.sql).
 #
 #   docker compose -f docker-compose.lean.yml up -d
 #   → http://localhost:5440
@@ -88,6 +91,11 @@ services:
       # browser, and REFUSES to boot without both URLs naming them.
       SQL__SERVICE_URL: http://sql:8080
       BROWSER__SERVICE_URL: http://browser:8080
+      # The event log lives in a container of its own here, so the app emits
+      # over HTTP and never registers a writer (server.ts). The schema name is
+      # what the app's own SELECT-only reads qualify with.
+      EVENTS__SERVICE_URL: http://events:8080
+      EVENTS__SCHEMA: events
       # The browser service renders app URLs — from inside the compose
       # network, the app's own address is its service name, never the proxy's
       # published port.
@@ -113,6 +121,8 @@ services:
       sql:
         condition: service_healthy
       browser:
+        condition: service_healthy
+      events:
         condition: service_healthy
 
   sql:
@@ -147,6 +157,64 @@ services:
     environment:
       INTERNAL__SERVICE_SECRET: ${INTERNAL__SERVICE_SECRET:?Set INTERNAL__SERVICE_SECRET in .env}
 
+  # THE EVENT LOG — the one lean image with state. It owns the `events` schema
+  # (created for its role at the volume's first init, so the role needs no
+  # CREATE on the database), ensures its table at BOOT, and fails loudly when
+  # it cannot reach its database: a log service that accepted a batch it could
+  # not store would be worse than one that is down.
+  events:
+    build:
+      context: .
+      dockerfile: services/events/Dockerfile
+    image: artifactbin-lean-events
+    restart: unless-stopped
+    # `edge` is the network of PUBLISHED doors, and the log has one (below): a
+    # container attached only to `internal: true` networks cannot publish a port
+    # at all — measured on this file, where the binding is set on the container
+    # and NetworkSettings.Ports is null, while the proxy on `edge` publishes
+    # fine. compute is how the app reaches it; db is its own database.
+    networks: [edge, compute, db]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev"]
+    # THE LOG'S OWN DOOR, on loopback: the compose walk posts a hand-built
+    # envelope at it, and an operator reads the log through it. Every route but
+    # /health is behind INTERNAL__SERVICE_SECRET, so this is not an identity
+    # surface — but a deployment that has no such caller drops these two lines
+    # and leaves the proxy the only published port.
+    ports:
+      - "127.0.0.1:${LEAN_EVENTS_PORT:-5441}:8080"
+    env_file:
+      - infra/env/events.env.example
+    environment:
+      INTERNAL__SERVICE_SECRET: ${INTERNAL__SERVICE_SECRET:?Set INTERNAL__SERVICE_SECRET in .env}
+      EVENTS__SCHEMA: events
+      # Its OWN role — the schema it owns is the only one it can write, and it
+      # is the only role that can write that one.
+      DATABASE_URL: postgresql://artifactbin_events:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/artifact_bin
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # THE APP'S READ OF A LOG IT DOES NOT OWN — grants.sql's second line, run as
+  # the OWNER, once the events service's boot DDL has created the table. It
+  # cannot be part of the volume's first init for the same reason the proxy's
+  # SELECT on app.tokens cannot: the table does not exist yet.
+  events-grants:
+    image: postgres:17
+    networks: [db]
+    restart: "no"
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    command: >
+      psql -v ON_ERROR_STOP=1 -h postgres -U artifactbin_events -d artifact_bin
+      -c "GRANT USAGE ON SCHEMA events TO artifactbin_app"
+      -c "GRANT SELECT ON events.events TO artifactbin_app"
+    depends_on:
+      events:
+        condition: service_healthy
+
   postgres:
     image: postgres:17
     restart: unless-stopped
@@ -161,6 +229,9 @@ services:
       # volume's FIRST init — see the file for why the app's URL carries the
       # search_path instead of qualified DDL.
       - ./infra/postgres/init/01-schemas.sql:/docker-entrypoint-initdb.d/01-schemas.sql:ro
+      # …and the roles the events grant needs: the log's owner, and the app
+      # role the SELECT is granted to.
+      - ./infra/postgres/init/02-events-role.sh:/docker-entrypoint-initdb.d/02-events-role.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U artifact_bin -d artifact_bin"]
       interval: 10s
