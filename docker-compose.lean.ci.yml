@@ -1,0 +1,21 @@
+# CI ONLY — READ the layer cache. Never merged into the base file: `type=gha` speaks to the GitHub
+# Actions cache backend, which does not exist on a laptop, so `docker compose -f docker-compose.lean.yml
+# up` must stay usable without it.
+#
+# This job builds the same four Dockerfiles the `image` job builds, and starts with a cold daemon, so it
+# pays for them a second time. Reading main's layers turns that into a restore for anything that has not
+# changed — proxy, sql and browser move rarely, so a PR that touches app code rebuilds one image and
+# restores three. Writing is deliberately NOT here: see docker-compose.lean.ci-write.yml.
+services:
+  proxy:
+    build:
+      cache_from: ["type=gha,scope=lean-proxy"]
+  app:
+    build:
+      cache_from: ["type=gha,scope=lean-app"]
+  sql:
+    build:
+      cache_from: ["type=gha,scope=lean-sql"]
+  browser:
+    build:
+      cache_from: ["type=gha,scope=lean-browser"]
