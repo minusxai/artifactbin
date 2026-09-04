@@ -18,8 +18,10 @@ permissions:
 # no-parallel-projects rule (one embedded connection per process) still holds
 # within every job.
 jobs:
+  # THE TYPE CHECK ANSWERS ON ITS OWN, because it is the fastest signal on the
+  # commonest mistake and it was sharing a job with something 5x its length.
   checks:
-    name: validate + node
+    name: validate
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -43,6 +45,45 @@ jobs:
       - if: steps.node-modules.outputs.cache-hit == 'true'
         run: node services/app/scripts/copy-assets.mjs
       - run: npm run validate
+
+  # THE NODE PROJECT SHARDS, like api and ui. It is the biggest project in the
+  # repo — 288 files, ~3,060 tests against api's 1,029 — and it was the only one
+  # running whole, which made `validate + node` a 2m16s job of which 103s was
+  # this step alone.
+  #
+  # THREE shards, and not more: the files sum to ~337s of work but the slowest
+  # single file is 36s (services/proxy login-routes, then lib/images optimise at
+  # 34s), and vitest shards by FILE COUNT rather than duration — so past three
+  # each extra shard approaches that 36s floor while still paying a runner's
+  # startup. Measured locally, 2026-09-04.
+  node:
+    name: node tests (${{ matrix.shard }}/3)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      # Cache node_modules ITSELF, not just npm's download cache: `npm ci` costs ~23s in every
+      # job even with a warm ~/.npm. On a hit the postinstall must still run by hand — it
+      # generates gitignored files OUTSIDE node_modules (the content-hashed webfonts under
+      # public/fonts and the manifest lib/data/story/story-fonts reads), and a build without
+      # them serves every document with missing fonts.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: node-modules
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+      - if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci
+      - if: steps.node-modules.outputs.cache-hit == 'true'
+        run: node services/app/scripts/copy-assets.mjs
       # The node project drives a REAL headless Chromium too: the browser
       # service's contract suite (services/browser) launches one, and without
       # an installed browser 14 of its 17 cases fail here while the api and
@@ -61,7 +102,7 @@ jobs:
         run: npx playwright install --with-deps chromium
       - if: steps.playwright.outputs.cache-hit == 'true'
         run: npx playwright install chromium
-      - run: npx vitest run --project=node
+      - run: npx vitest run --project=node --shard=${{ matrix.shard }}/3
 
   # jsdom setup dominates the ui project (~110s serial on a 4-vCPU runner —
   # the environment boots per test file), so it shards like api does.
@@ -512,12 +553,13 @@ jobs:
     name: test
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [checks, ui, build, api, gates, image, lean, compose]
+    needs: [checks, node, ui, build, api, gates, image, lean, compose]
     if: always()
     steps:
       - name: All jobs green
         run: |
           [ "${{ needs.checks.result }}" = "success" ] && \
+          [ "${{ needs.node.result }}" = "success" ] && \
           [ "${{ needs.ui.result }}" = "success" ] && \
           [ "${{ needs.build.result }}" = "success" ] && \
           [ "${{ needs.api.result }}" = "success" ] && \
