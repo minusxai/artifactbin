@@ -1,4 +1,4 @@
-import { canReadArtifact, dataflowForRow, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
+import { canReadArtifact, dataflowForRow, getArtifactById, type ArtifactRow, type Viewer } from '@/lib/artifacts';
 import { ID_RE } from '@/lib/ids';
 import { json, readJson } from '@/lib/http';
 import { sessionActor } from '@/lib/viewer';
@@ -46,7 +46,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const parsed = parseQueryRequest(body as Record<string, unknown>);
   if (parsed instanceof Response) return parsed;
   // no-store: an edit changes the answer, and the document asks again anyway.
-  return answer(artifact, parsed, { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' });
+  return answer(artifact, parsed, null, { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' });
 }
 
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -65,12 +65,22 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   if (!body) return json({ error: 'invalid_json' }, 400);
   const parsed = parseQueryRequest(body);
   if (parsed instanceof Response) return parsed;
-  return answer(artifact, parsed);
+  return answer(artifact, parsed, viewer);
 }
 
-/** The run itself, shared by both doors. */
-async function answer(artifact: ArtifactRow, parsed: QueryRequest, extra: Record<string, string> = {}): Promise<Response> {
-  if (artifact.format !== 'markup') return json({ tables: {}, errors: {} }, 200, extra);
-  const flow = await dataflowForRow(artifact, parsed);
+/**
+ * The run itself, shared by both doors.
+ *
+ * The VIEWER rides in, and that is what separates the two doors' answers where
+ * the run depends on who is asking. A folder's children table is computed per
+ * viewer (lib/folders childrenTableFor): the GET door passes null and answers
+ * the public children, and the POST door passes the session — which is the
+ * only way an owner's private children are ever listed. REACH is still the
+ * document's own (its <Query> may name only what its owner may read); this is
+ * WHICH ROWS come back.
+ */
+async function answer(artifact: ArtifactRow, parsed: QueryRequest, viewer: Viewer, extra: Record<string, string> = {}): Promise<Response> {
+  if (artifact.format !== 'markup' && artifact.format !== 'folder') return json({ tables: {}, errors: {} }, 200, extra);
+  const flow = await dataflowForRow(artifact, { ...parsed, viewer: viewer ? { userId: viewer.userId, tokenId: null, email: viewer.email } : null });
   return json({ tables: flow?.state.tables ?? {}, errors: flow?.state.errors ?? {} }, 200, extra);
 }

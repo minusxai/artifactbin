@@ -30,7 +30,7 @@ import { splitHelmet } from '@/lib/story/helmet';
 import { datasetRefsInDataflow, initialValues, isEmptyDataflow, mutationTargets, type Dataflow, type Row, type Scalar } from '@/lib/story/dataflow';
 import { isMutationRefused, mutateDataset } from '@/lib/story/dataset-mutate';
 import { runDataflow, type DatasetTables } from '@/lib/sql/run-dataflow';
-import { ancestorsForMove, childrenTableFor, folderScaffold, notifyParent, parentOf } from '@/lib/folders';
+import { ancestorsForMove, childrenTableFor, CHILDREN_COLUMNS, folderScaffold, notifyParent, parentOf } from '@/lib/folders';
 import { compileStoryCss, storyCssCompileVersion } from '@/lib/data/story/story-css.server';
 import type { RanDataflow, StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { RefLoader, ResolvedRef } from '@/lib/story/refs';
@@ -1467,6 +1467,9 @@ function rowToResolvedRef(row: ArtifactRow, owned = false): ResolvedRef {
     format: row.format,
     owned,
     ...(row.format === 'dataset' ? { columns: meta.columns ?? [], access: row.access } : {}),
+    // A folder's shape is FIXED and computed, never stored — the publish door
+    // and the dry run both need it to judge a <Query> over `ref_<folderId>`.
+    ...(row.format === 'folder' ? { columns: CHILDREN_COLUMNS } : {}),
     ...(row.format === 'viz' ? { recipe: JSON.parse(row.content) } : {}),
   };
 }

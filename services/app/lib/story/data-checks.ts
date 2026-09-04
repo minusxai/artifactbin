@@ -47,7 +47,11 @@ async function dryRunDataflow(flow: Dataflow, load: RefLoader): Promise<
   const mutations = mutationsOf(flow);
   for (const id of new Set([...flow.queries.flatMap((q) => q.refs), ...mutations.map((m) => m.target)])) {
     const r = await load(id);
-    if (r?.format === 'dataset') tables[`ref_${id}`] = { columns: r.columns ?? [] };
+    // A folder registers the FIXED shape of its children table (lib/folders
+    // CHILDREN_COLUMNS), which `rowToResolvedRef` already put on the ref — so
+    // the dry run judges a folder's <Query> against the same columns the run
+    // will really see.
+    if (r?.format === 'dataset' || r?.format === 'folder') tables[`ref_${id}`] = { columns: r.columns ?? [] };
   }
   const paramNames = flow.values.filter((v) => v.kind === 'scalar').map((v) => v.name);
   const order = queryOrder(flow) ?? [];

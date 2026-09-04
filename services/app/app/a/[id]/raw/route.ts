@@ -235,10 +235,19 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       });
     }
 
-    // markup: the SSR'd standalone document — served top-level to readers
-    // (proxy.ts) and as the owner frame's src. Source read-back is the API's
-    // `markup:`.
-    case 'markup': {
+    /*
+     * markup: the SSR'd standalone document — served top-level to readers
+     * (proxy.ts) and as the owner frame's src. Source read-back is the API's
+     * `markup:`.
+     *
+     * A FOLDER IS A DOCUMENT and takes this same path, with no branch of its
+     * own. Its stored source is the scaffold (lib/folders folderScaffold),
+     * ordinary markup declaring a <Query> over its own children — so it is
+     * parsed, SSR'd, styled, exported, edited and streamed exactly as anything
+     * else here, and everything a document gets it gets for free.
+     */
+    case 'markup':
+    case 'folder': {
       /*
        * A view is counted HERE, not on the page.
        *
@@ -330,7 +339,12 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         refDataForRow(artifact, { capture: !chrome }),
         chrome
           ? Promise.resolve(declared && hasUrlValues ? { ...declared, values: urlValues } : declared)
-          : dataflowForRow(artifact, { values: urlValues }),
+          // The CAPTURE's run carries whoever asked for it, which matters for
+          // exactly one thing: a folder's children table is per viewer. An
+          // export driven by the signed key has no session and photographs the
+          // PUBLIC listing, which is the right picture for something meant to
+          // be shared.
+          : dataflowForRow(artifact, { values: urlValues, viewer: viewer ? { userId: viewer.userId, tokenId: null, email: viewer.email } : null }),
         chrome ? ownerUsername(artifact.user_id) : Promise.resolve(null),
         chrome ? forkedFromCredit(artifact.forked_from) : Promise.resolve(null),
       ]);

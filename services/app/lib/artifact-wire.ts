@@ -97,7 +97,7 @@ export function artifactSummaryToWire(
  */
 export async function artifactToWireWithAnnotations(row: ArtifactRow, base: string) {
   const wire = await artifactToWire(row, base);
-  return row.format === 'markup' ? { ...wire, annotations: await annotationsWireForRow(row) } : wire;
+  return row.format === 'markup' || row.format === 'folder' ? { ...wire, annotations: await annotationsWireForRow(row) } : wire;
 }
 
 /**
@@ -157,18 +157,24 @@ export async function artifactToWire(row: ArtifactRow, base: string) {
   // successor, so an agent that read-before-writes never learns a name that
   // publish would reject.
   const design = resolveStoredStoryDesign(m.theme, m.colorMode ?? null);
+  // A FOLDER is a markup document whose source we wrote — it reads back, edits,
+  // comments and echoes exactly like one.
+  const isDoc = format === 'markup' || format === 'folder';
   return {
     ...rest,
     format,
     url: `${base}/a/${row.id}`,
+    // The trail rides in `...rest`; the parent is derived from it, and it is
+    // the half a caller writes back.
+    parent_id: parentOf(row),
     markup: source,
     // Annotations are sidecar state (lib/annotations) — the write path never
     // round-trips them, so every echo carries the open COUNT as the signal;
     // the artifact GET additionally inlines the full open set.
-    ...(format === 'markup' ? { open_annotations: await countOpenAnnotations(row.id) } : {}),
+    ...(isDoc ? { open_annotations: await countOpenAnnotations(row.id) } : {}),
     // markup (story-engine) tier only: the source IS the artifact;
     // template/colorMode ride meta.
-    ...(format === 'markup'
+    ...(isDoc
       ? {
           template: m.template ?? null,
           colorMode: design.colorMode,
@@ -426,7 +432,7 @@ export async function replaceArtifactWithBody(
     ...(row.format === 'dataset' ? { access: row.access } : {}),
     // Annotations are sidecar state a replace cannot touch — the count is the
     // echo's signal that feedback exists (the GET inlines the full set).
-    ...(row.format === 'markup' ? { open_annotations: await countOpenAnnotations(row.id) } : {}),
+    ...(row.format === 'markup' || row.format === 'folder' ? { open_annotations: await countOpenAnnotations(row.id) } : {}),
     ...(warnings.length ? { warnings } : {}),
     ...assetWarningsEcho(parsed.warnings),
     ...sourceRepairsEcho(parsed.repairs),
