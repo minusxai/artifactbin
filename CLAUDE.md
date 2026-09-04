@@ -28,10 +28,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Raise every PR with NO description body.** Do not write a summary, a "what/why", a test plan, or any descriptive comment on the PR — open it with an empty body (`gh pr create --body ""`). The title alone stands.
 
-### Final responses
-
-**Every final response to the user (that's longer than 4 sentences) MUST end with a `===CONCISE===` section** — an additional concise and clear summary of the response. This is super important; never omit it unless your response is already short (i.e below 4 sentences). When giving a report or a response to the user, you must add this section if your response is long because you should not expect the user to read through a whole wall of text. This is purely additive to your response. Structure it in the forms of bullet points rather than one long list so it's easier for user to read through. It should be simple for the user to read and understand fully so don't make it too concise. You don't need to add it if the response is already short (i.e Only add this section if more than ~4 sentences of response).
-
 ---
 
 ## Planning: de-risk in the plan, not in the build
@@ -160,7 +156,7 @@ agent, learned by running it (keep this list current; add a line the first time 
   lifts only that — docker, loopback binds and `gh` then work, while writes outside the tree stay denied
   (measured 2026-08-31). Without it, socket-based tests must be re-run in the review, outside. RESUME: `codex exec resume <session id> "<prompt>"` — the id is the `session id:` line at the top of RUN.log (verified). Verdict from the first run: followed the TDD order, honest report, 6-file commit accepted.
 - **pi (GLM-5.3 on Fireworks)** — `cd <tree> && FIREWORKS_API_KEY=… pi -p --session-id <phase> --model fireworks/accounts/fireworks/models/glm-5p3 "<prompt>" < /dev/null > .agent/RUN.log 2>&1`.
-  RESUME: the same command with the same `--session-id` continues it (verified: code word recalled across two `-p` runs); `--no-session` would make it unresumable. A tool result carrying an IMAGE kills the run hard (Fireworks 400 "This model does not support image inputs" — no retry, run over) — and the image then sits in the session history, so the session is POISONED: resume re-sends it and dies the same way; finish with a fresh run. Tell it in the prompt to never screenshot. Reads CLAUDE.md by default (the evals pass `--no-context-files` to stop that; we do not). No MCP client. Runs with no sandbox, so the full suite runs inside it. Verdict from the first run: followed the TDD order, every claim reproduced on review (red, tsc, 1820-test suite), report even carried the house ===CONCISE=== section; 4-file commit, equivalent to Codex's.
+  RESUME: the same command with the same `--session-id` continues it (verified: code word recalled across two `-p` runs); `--no-session` would make it unresumable. A tool result carrying an IMAGE kills the run hard (Fireworks 400 "This model does not support image inputs" — no retry, run over) — and the image then sits in the session history, so the session is POISONED: resume re-sends it and dies the same way; finish with a fresh run. Tell it in the prompt to never screenshot. Reads CLAUDE.md by default (the evals pass `--no-context-files` to stop that; we do not). No MCP client. Runs with no sandbox, so the full suite runs inside it. Verdict from the first run: followed the TDD order, every claim reproduced on review (red, tsc, 1820-test suite); 4-file commit, equivalent to Codex's.
 - **Every harness** — macOS has no `timeout`: cap a run with `gtimeout` or a `perl -e 'alarm N; exec @ARGV' --`
   wrapper. The permission rules that let the orchestrator launch them live in `.claude/settings.local.json`
   (gitignored), granted explicitly by the user. A run that exits with no `.agent/REPORT.md` is a failed run.
