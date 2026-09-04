@@ -8,8 +8,9 @@
  * authenticated, so a browser is by definition the caller and Origin is
  * present and unforgeable.
  */
-import { artifactToWire, artifactToWireWithAnnotations, parseAccessValue, parseFolderField, replaceArtifactFromRequest } from '@/lib/artifact-wire';
-import { deleteArtifactFor, getArtifactFor, setAccessFor, setFolderFor } from '@/lib/artifacts';
+import { artifactToWire, artifactToWireWithAnnotations, parseAccessValue, parseParentField, replaceArtifactFromRequest } from '@/lib/artifact-wire';
+import { deleteArtifactFor, getArtifactFor, setAccessFor, setParentFor, writerFor } from '@/lib/artifacts';
+import { isParentRefusal, parentOf, resolveParent, subtreeCount, subtreeIds } from '@/lib/folders';
 import { browserActor } from '@/lib/auth';
 import { actorForArtifacts } from '@/lib/viewer';
 import { baseUrl, json, readJson, unauthorized } from '@/lib/http';
@@ -44,46 +45,73 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
 }
 
 /**
- * PATCH /api/my/artifacts/:id — metadata-only changes: `{ folder }` and
- * `{ access }`. Deliberately NOT the PUT: neither a folder move nor opening a
- * dataset for writes should require resending content or bump the version —
- * they are policy about the artifact, not an edit of it.
+ * PATCH /api/my/artifacts/:id — metadata-only changes: `{ parent_id }` and
+ * `{ access }`. Deliberately NOT the PUT: neither filing a document under a
+ * folder nor opening a dataset for writes should require resending content or
+ * bump the version — they are policy about the artifact, not an edit of it.
+ *
+ * THE ROW IS RESOLVED FIRST, and that ordering is the point. `parent_id` is
+ * checked against the caller's own folders, which is a DATABASE READ — so a
+ * row this caller cannot reach must answer the uniform 404 before any of it
+ * runs, or "your parent is invalid" tells a stranger the document exists. The
+ * shape check (a string or null) may run early; the lookup may not.
  */
 export async function PATCH(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const scoped = await scopeFor(request);
   if (scoped instanceof Response) return scoped;
   const body = await readJson(request);
   if (!body) return json({ error: 'invalid_json' }, 400);
-  const folder = parseFolderField(body);
-  if (folder instanceof Response) return folder;
+  // Shape only: the retired `folder` field named, and `parent_id` typed.
+  const parent = parseParentField(body);
+  if (parent instanceof Response) return parent;
   const { id } = await ctx.params;
+  const hasAccess = body.access !== undefined && body.access !== null;
+  if (!hasAccess && parent === undefined) return json({ error: 'nothing_to_change' }, 400);
 
-  // `access` needs the row's FORMAT to validate, so it is read first.
-  let accessed: Awaited<ReturnType<typeof setAccessFor>> = null;
-  if (body.access !== undefined && body.access !== null) {
-    const current = await getArtifactFor(scoped, id);
-    if (!current) return json({ error: 'not_found' }, 404);
+  const current = await getArtifactFor(scoped, id);
+  if (!current) return json({ error: 'not_found' }, 404);
+
+  let row = current;
+  if (hasAccess) {
     const access = parseAccessValue(body.access, current.format, request);
     if (access instanceof Response) return access;
     if (access) {
-      accessed = await setAccessFor(scoped, id, access);
+      const accessed = await setAccessFor(scoped, id, access);
       if (!accessed) return json({ error: 'not_found' }, 404);
+      row = accessed;
     }
-  } else if (folder === undefined) {
-    return json({ error: 'nothing_to_change' }, 400);
   }
-
-  const row = folder !== undefined ? await setFolderFor(scoped, id, folder) : accessed;
-  if (!row) return json({ error: 'not_found' }, 404);
-  return json({ id: row.id, folder: row.folder, ...(row.format === 'dataset' ? { access: row.access } : {}) });
+  if (parent !== undefined) {
+    const placement = await resolveParent(writerFor(current), parent, { id: current.id, format: current.format });
+    if (isParentRefusal(placement)) return json(placement, 400);
+    const moved = await setParentFor(scoped, id, placement.ancestor_ids);
+    if (!moved) return json({ error: 'not_found' }, 404);
+    row = moved;
+  }
+  return json({ id: row.id, parent_id: parentOf(row), ancestor_ids: row.ancestor_ids, ...(row.format === 'dataset' ? { access: row.access } : {}) });
 }
 
-/** DELETE /api/my/artifacts/:id — delete an artifact you own. */
+/**
+ * DELETE /api/my/artifacts/:id — delete an artifact you own.
+ *
+ * A FOLDER WITH ANYTHING UNDER IT IS REFUSED with the count, the same shape as
+ * the `has_dependents` refusal: deleting a folder is deleting everything in
+ * it, and that has to be something someone chose rather than discovered.
+ * `?force=true` takes the subtree.
+ */
 export async function DELETE(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const scoped = await scopeFor(request);
   if (scoped instanceof Response) return scoped;
   const { id } = await ctx.params;
-  const deleted = await deleteArtifactFor(scoped, id);
+  const force = new URL(request.url).searchParams.get('force') === 'true';
+  const current = await getArtifactFor(scoped, id);
+  if (!current) return json({ error: 'not_found' }, 404);
+  const subtree = current.format === 'folder' ? await subtreeIds(id) : [];
+  if (current.format === 'folder' && !force) {
+    const count = await subtreeCount(id);
+    if (count > 0) return json({ error: 'folder_not_empty', count }, 409);
+  }
+  const deleted = await deleteArtifactFor(scoped, id, subtree);
   if (!deleted) return json({ error: 'not_found' }, 404);
   return json({ ok: true });
 }

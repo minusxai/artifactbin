@@ -280,13 +280,13 @@ async function offerableTokens(
   }));
 }
 
-const SUMMARY_COLS = 'id, title, description, format, meta, version, visibility, folder, created_at, updated_at';
+const SUMMARY_COLS = 'id, title, description, format, meta, version, visibility, ancestor_ids, created_at, updated_at';
 
 /** A dashboard row: the summary plus its all-time count of unique daily visitors. */
 export type OwnedArtifactSummary = ArtifactSummary & { views: number };
 
 /**
- * The stranger's view of a profile: public artifacts only, flat — folders and
+ * The stranger's view of a profile: public artifacts only, flat — placement and
  * view counts are the owner's business. 'public' means listed under the
  * owner's handle (the profile root IS the list), not merely link-reachable.
  *

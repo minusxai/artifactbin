@@ -39,7 +39,7 @@ export async function GET(request: Request) {
   return json({
     signedIn: true,
     artifacts: artifacts.map((a) => ({
-      id: a.id, url: `/a/${a.id}`, title: a.title, format: a.format, version: a.version, folder: a.folder,
+      id: a.id, url: `/a/${a.id}`, title: a.title, format: a.format, version: a.version, ancestor_ids: a.ancestor_ids,
       visibility: a.visibility, updated_at: a.updated_at, views: a.views, sparkline: sparklines[a.id] ?? null,
     })),
     shared,

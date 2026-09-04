@@ -2,14 +2,20 @@
  * The pretty-URL page's data. Resolution is FORGIVING and id-anchored: a path
  * whose last segment starts with a valid id names the artifact (the client
  * heals a mangled address to the canonical one — after the ACL, so a private
- * document never leaks its owner); anything else is a listing — the owner's
- * folder tree, or a stranger's public index at the root only. An UNREADABLE
- * artifact falls through to the listing exactly like a nonexistent one: no
- * existence oracle in the difference.
+ * document never leaks its owner); the bare handle is a listing — the owner's
+ * ROOT, or a stranger's public index. An UNREADABLE artifact falls through to
+ * the listing exactly like a nonexistent one: no existence oracle in the
+ * difference.
+ *
+ * NESTING IS NOT IN THE ADDRESS. A folder is an artifact with its own page
+ * (its `<Files>` listing IS the folder), so there is no folder branch here and
+ * no path grammar to parse: any trailing segment that does not carry an id is
+ * the uniform 404. The owner's root is the rows at level 0 — folders included,
+ * as ordinary rows with `format: 'folder'`.
  */
 import { canReadArtifact, getArtifactById, type ArtifactSummary } from '@/lib/artifacts';
 import { json } from '@/lib/http';
-import { canonicalArtifactPath, parseFolder, parsePrettyPath } from '@/lib/urls';
+import { canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
 import { getUserByUsername, listArtifactsByUser, listPublicArtifactsByUser, ownerUsername } from '@/lib/users';
 import { browserSessionKind, sessionActor } from '@/lib/viewer';
 
@@ -41,28 +47,23 @@ export async function GET(request: Request, ctx: { params: Promise<{ user: strin
     }
   }
 
-  const folder = parseFolder(path.join('/'));
-  if (folder === null) return notFound();
+  // Anything left after the id parse is decoration that named nothing. There
+  // is no listing below the handle any more, so it is the uniform 404 — the
+  // same answer an unreadable id-path falls through to.
+  if (path.length > 0) return notFound();
   const owner = await getUserByUsername(handle);
   if (!owner) return notFound();
   if (!viewer || viewer.userId !== owner.id) {
-    if (folder !== '') return notFound();
     const files = await listPublicArtifactsByUser(owner.id);
     const anon = !viewer && (await browserSessionKind(request)) === 'anon';
     return json({ kind: 'public-profile', handle, files: strip(files), email: viewer?.email ?? null, authed: !!viewer, anon });
   }
   const all = await listArtifactsByUser(owner.id);
-  const files = all.filter((a) => a.folder === folder);
-  const prefix = folder ? `${folder}/` : '';
-  const children = [...new Set(all.filter((a) => a.folder.startsWith(prefix) && a.folder !== folder).map((a) => a.folder.slice(prefix.length).split('/')[0]))].sort();
-  // A folder exists only through the artifacts that carry it, so one holding
-  // nothing — no files, no children — is an address that names nothing: the
-  // uniform 404 (which is also where an unreadable id-path lands after it
-  // falls through to here). The ROOT stays a page when empty: a brand-new
-  // account's dashboard is a real, if bare, place.
-  if (folder !== '' && files.length === 0 && children.length === 0) return notFound();
+  // The ROOT: everything at level 0, folders among them as ordinary rows. A
+  // brand-new account's is a real, if bare, place — never a 404.
+  const files = all.filter((a) => (a.ancestor_ids ?? []).length === 0);
   return json({
-    kind: 'owner-listing', handle, folder, folders: children.map((c) => `${prefix}${c}`),
+    kind: 'owner-listing', handle,
     files: strip(files), total: all.length, stats: statsOf(all), email: viewer.email,
   });
 }
@@ -72,6 +73,6 @@ export async function GET(request: Request, ctx: { params: Promise<{ user: strin
  * too: a card stamps when a document was created, a row when it last moved,
  * and a card with no date reads "Invalid Date" (which is how this was found).
  */
-function strip(files: ArtifactSummary[]): Array<Pick<ArtifactSummary, 'id' | 'title' | 'format' | 'folder' | 'visibility' | 'updated_at' | 'created_at' | 'version'>> {
-  return files.map(({ id, title, format, folder, visibility, updated_at, created_at, version }) => ({ id, title, format, folder, visibility, updated_at, created_at, version }));
+function strip(files: ArtifactSummary[]): Array<Pick<ArtifactSummary, 'id' | 'title' | 'format' | 'ancestor_ids' | 'visibility' | 'updated_at' | 'created_at' | 'version'>> {
+  return files.map(({ id, title, format, ancestor_ids, visibility, updated_at, created_at, version }) => ({ id, title, format, ancestor_ids, visibility, updated_at, created_at, version }));
 }

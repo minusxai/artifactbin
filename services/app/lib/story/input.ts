@@ -4,6 +4,10 @@
  *   - `markup`   — THE document: story JSX over the kit, the data embeds, the
  *     HTML vocabulary and <Helmet>. The ONLY document input there is.
  *   - `dataset` | `viz` | `image` | `pdf` — the data tiers
+ *   - `format: 'folder'` — the ONE body with no content field at all. A folder
+ *     is a document whose source the CREATE door stamps (lib/folders
+ *     folderScaffold), so there is nothing for a caller to send and nothing
+ *     here to parse: it leaves with `content: ''`, `source: ''`.
  *
  * markdown and html are not inputs: HTML is the VOCABULARY inside a document,
  * and markdown is not an authoring language here at all. Both are rejected by
@@ -31,7 +35,7 @@ export const MAX_CONTENT_BYTES = 2_000_000;
  * ask "is this a format we serve?" (the page, the raw route) cannot drift from
  * the type the wire is checked against.
  */
-export const ARTIFACT_FORMATS = ['markup', 'dataset', 'viz', 'image', 'pdf'] as const;
+export const ARTIFACT_FORMATS = ['markup', 'dataset', 'viz', 'image', 'pdf', 'folder'] as const;
 export type ArtifactFormat = (typeof ARTIFACT_FORMATS)[number];
 
 import type { SourceRepair } from '@/lib/jsx/repair';
@@ -131,6 +135,16 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
   // Data tiers carry structured payloads, not strings.
   const dataPresent = (['dataset', 'sheetUrl', 'csvUrl', 'imageUrl', 'viz', 'image', 'pdf', 'pdfUrl'] as const).filter((k) => body[k] !== undefined && body[k] !== null);
   const present = [...textPresent, ...dataPresent];
+  /*
+   * A FOLDER IS THE ONE BODY WITH NO CONTENT. Its source is a product-owned
+   * constant the create door stamps with the row's own id — which cannot be
+   * known here, because the id is minted at INSERT — so this returns the empty
+   * stored state and `createArtifact` fills it in. A body that names the format
+   * AND sends content is still the one-of refusal: it is asking for two things.
+   */
+  if (body.format === 'folder' && present.length === 0) {
+    return { format: 'folder', content: '', source: '', meta: {}, derivedTitle: null };
+  }
   if (present.length !== 1) return json({ error: 'one_of_markup_dataset_viz_image_pdf' }, 400);
   const kind = present[0];
   // `dataset` accepts a JSON array (what an agent hand-writes) OR raw CSV text

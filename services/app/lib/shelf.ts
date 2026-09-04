@@ -58,14 +58,22 @@ export interface Shelf<T> {
   list: T[];
   /** Non-markup rows (dataset, image, viz), pulled out of the flow entirely. */
   assets: T[];
-  /** Document count — `assets` excluded, so it counts deliverables. */
+  /**
+   * Folders — a THIRD partition, never in `assets` and never in `documents`.
+   * A folder is neither: it is not material a document is built from, and it is
+   * not a deliverable, it is where the deliverables are. `total` still counts
+   * documents, so making a folder never changes what the shelf says you have.
+   */
+  folders: T[];
+  /** Document count — `assets` and `folders` excluded, so it counts deliverables. */
   total: number;
 }
 
 const DEFAULT_CARDS = 3;
 
-/** A document is markup; everything else is material a document is built from. */
+/** A document is markup; a folder is a place; everything else is material a document is built from. */
 const isDocument = (row: ShelfItem): boolean => row.format === 'markup';
+const isFolder = (row: ShelfItem): boolean => row.format === 'folder';
 
 export function buildShelf<T extends ShelfItem>(
   rows: readonly T[],
@@ -75,18 +83,20 @@ export function buildShelf<T extends ShelfItem>(
   // unsorted underneath us — the ranking below is in-place on ours.
   const documents: T[] = [];
   const assets: T[] = [];
-  for (const row of rows) (isDocument(row) ? documents : assets).push(row);
+  const folders: T[] = [];
+  for (const row of rows) (isFolder(row) ? folders : isDocument(row) ? documents : assets).push(row);
 
   documents.sort(byRecency);
   assets.sort(byRecency);
+  folders.sort(byRecency);
 
   // Flat: one ranked list. A search result is already ordered by the user's
   // intent, and promoting its first hit to full width would say "this is where
   // you left off" about a row they have never seen.
-  if (flat) return { hero: null, cards: [], list: documents, assets, total: documents.length };
+  if (flat) return { hero: null, cards: [], list: documents, assets, folders, total: documents.length };
 
   const [hero = null, ...rest] = documents;
-  return { hero, cards: rest.slice(0, cards), list: rest.slice(cards), assets, total: documents.length };
+  return { hero, cards: rest.slice(0, cards), list: rest.slice(cards), assets, folders, total: documents.length };
 }
 
 /**

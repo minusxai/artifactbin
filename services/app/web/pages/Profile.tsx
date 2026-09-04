@@ -1,8 +1,8 @@
-/** The pretty URLs: an artifact (id-anchored), the owner's folder tree, or a public index. */
+/** The pretty URLs: an artifact (id-anchored), the owner's root, or a public index. */
 import { useEffect, useRef, useState } from 'react';
 import { takeBootstrap } from '../bootstrap';
 import { Navigate, useLocation, useParams } from 'react-router';
-import { FolderPanel, ListingHero, ListingShell, NothingHere } from '@/components/Listing';
+import { ListingHero, ListingShell, NothingHere } from '@/components/Listing';
 import Shelf from '@/components/Shelf';
 import { canonicalArtifactPath } from '@/lib/urls';
 import { ArtifactPage } from './Artifact';
@@ -12,7 +12,7 @@ type Resolved =
   | { kind: 'redirect'; to: string }
   | { kind: 'artifact'; id: string }
   | { kind: 'public-profile'; handle: string; files: never[]; email: string | null; authed: boolean; anon: boolean }
-  | { kind: 'owner-listing'; handle: string; folder: string; folders: string[]; files: never[]; total: number; stats: { total: number; formats: Record<string, number> }; email: string | null };
+  | { kind: 'owner-listing'; handle: string; files: never[]; total: number; stats: { total: number; formats: Record<string, number> }; email: string | null };
 
 export function ProfilePage() {
   const { user, '*': rest } = useParams();
@@ -63,24 +63,19 @@ export function ProfilePage() {
  * DOCUMENTS, not artifacts, in the count: the assets band is withheld below,
  * so counting datasets would promise rows that are not there.
  */
-export function ProfileListing({ data }: { data: { kind: string; handle: string; folder?: string; folders?: string[]; files: Array<Record<string, unknown> & { id: string; format: string }> } }) {
+export function ProfileListing({ data }: { data: { kind: string; handle: string; files: Array<Record<string, unknown> & { id: string; format: string }> } }) {
   const owned = data.kind === 'owner-listing';
-  const folders = data.folders ?? [];
+  // Folders are ROWS in this listing now (`format: 'folder'`), reached at their
+  // own address, so there is no derived folder panel and no path crumb to draw.
   return (
     <>
       <ListingHero
         handle={data.handle}
-        folder={data.folder ?? ''}
         label={owned ? 'your artifacts' : 'public index'}
         count={data.files.filter((a) => a.format === 'markup').length}
         noun={owned ? 'document' : 'public artifact'}
       />
-      {folders.length === 0 && data.files.length === 0 ? <NothingHere /> : (
-        <div className="flex flex-col gap-6">
-          {folders.length > 0 && <FolderPanel handle={data.handle} folders={folders} />}
-          {data.files.length > 0 && <ProfileShelf handle={data.handle} files={data.files} />}
-        </div>
-      )}
+      {data.files.length === 0 ? <NothingHere /> : <ProfileShelf handle={data.handle} files={data.files} />}
     </>
   );
 }

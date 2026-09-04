@@ -41,8 +41,8 @@ export function ListingShell({ email, stats, authed = false, anon = false, child
  * The profile masthead: micro-label, the handle as a breadcrumb (each folder
  * segment its own link), and a one-line readout of what sits below.
  */
-export function ListingHero({ handle, folder, label, count, noun }: {
-  handle: string; folder: string; label: string; count: number; noun: string;
+export function ListingHero({ handle, folder = '', label, count, noun }: {
+  handle: string; folder?: string; label: string; count: number; noun: string;
 }) {
   const segments = folder ? folder.split('/') : [];
   return (
