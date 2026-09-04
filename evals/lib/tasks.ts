@@ -11,10 +11,12 @@
  * edit, or writing an MCP config — which requires the driver to hold the token.
  * It spends the start link itself and passes the credential on.
  */
-import type { Task } from './contracts';
+import type { McpTarget, Task } from './contracts';
 import { actionTransport, DEFAULT_MODE, installsSkills, type EvalMode } from './mode';
 
 const PASTE_TOKEN = /using this token: mx_[A-Za-z0-9_-]+/;
+/** The name the harness knows the server by, in every MCP configuration this driver writes. */
+const MCP_SERVER_NAME = 'artifactbin';
 
 export type Access =
   | { kind: 'start-link'; startPrompt: string }
@@ -25,6 +27,106 @@ export type Access =
    * human, or mint its own token — is the measurement.
    */
   | { kind: 'none'; base: string };
+
+// ---------------------------------------------------------------- before the turn
+
+/** Read the one-time token from the product's exact paste: a `token` task's driver needs it. */
+export function tokenFromPaste(startPrompt: string): string {
+  const token = /using this token: (mx_[A-Za-z0-9_-]+)/.exec(startPrompt)?.[1];
+  if (!token) throw new Error('start paste carries no token');
+  return token;
+}
+
+/**
+ * Does the driver mint this task a start document at all?
+ *
+ * `handoff: none` is the one that does not: `/api/start` hands out an anonymous token, and a driver
+ * that spent it would be handing the agent the very credential the task exists to withhold.
+ */
+export function needsStartDocument(task: Task): boolean {
+  return task.handoff !== 'none';
+}
+
+/** The start document as the driver holds it — its id, and the exact line a human would paste. */
+export interface StartDocument {
+  id: string;
+  prompt: string;
+}
+
+export interface AccessPlanInput {
+  task: Task;
+  /** The base the AGENT is given: the task's recording proxy locally, the deployment behind a MITM. */
+  base: string;
+  /** What `needsStartDocument` said to mint, or null for a task that hands the agent nothing. */
+  start: StartDocument | null;
+  /** The leg's ACCOUNT credential, or null when the product's own paste carries the token instead. */
+  credential: { token: string } | null;
+  /** Does this mode install the skills into the session (`lib/mode installsSkills`)? */
+  installed: boolean;
+  /** The action transport the harness actually runs, after any substitution (`lib/mode planTransport`). */
+  transport: 'api' | 'mcp';
+}
+
+/** EVERYTHING the driver does before the agent's turn, as values rather than side effects. */
+export interface AccessPlan {
+  /** How the agent is told to reach the product — the last line of its prompt. */
+  access: Access;
+  /** The MCP server to wire the harness to, or null. */
+  mcp: McpTarget | null;
+  /** The token to write into the skill's own connection file (`~/.artifactbin.env`), or null. */
+  connectionToken: string | null;
+  /** The document to publish before the turn (`task.seed`), or null. */
+  seed: { id: string; token: string; markup: string } | null;
+}
+
+/**
+ * HOW THIS TASK IS SET UP, decided by the TASK and the MODE and by nothing else.
+ *
+ * It used to be a branch inside the driver's `runTask`, reachable by no test, and it took its
+ * token-less case from a LEG-level `--credential none` flag — so a run's rubric and its credential
+ * were settable independently. That is exactly how the token-less leg came back inverted: it was
+ * graded with a rubric that asked what it published while being run with no way to publish. Access is
+ * a property of the task now, `handoff` says which, and there is no dispatch-time knob to disagree
+ * with it.
+ *
+ * Every combination but `handoff: none` behaves exactly as the old branch did — see
+ * `__tests__/access-plan.test.ts`, whose table was proved against that branch before it moved.
+ */
+export function planAccess(input: AccessPlanInput): AccessPlan {
+  const { task, base, start, credential, installed, transport } = input;
+  const nothing: AccessPlan = { access: { kind: 'none', base }, mcp: null, connectionToken: null, seed: null };
+  if (task.handoff === 'none') {
+    if (start) throw new Error(`${task.id} declares handoff: none — it must not be given a start document`);
+    // An MCP connection IS a token handoff: the server is configured with a bearer before the turn.
+    // Refusing loudly beats measuring an authenticated run under a "no credential" heading.
+    if (transport === 'mcp') {
+      throw new Error(`${task.id} declares handoff: none, and an MCP transport carries its token in the harness configuration — it cannot run without a credential`);
+    }
+    // Nothing else: no token, no document, no `~/.artifactbin.env`, no MCP config.
+    return nothing;
+  }
+  if (!start) throw new Error(`${task.id} needs a start document for handoff: ${task.handoff}`);
+  const mcpFor = (token: string): McpTarget => ({ name: MCP_SERVER_NAME, url: `${base}/mcp`, token });
+  const withToken = (token: string): AccessPlan => ({
+    access: { kind: 'token', base, token, id: start.id },
+    mcp: transport === 'mcp' ? mcpFor(token) : null,
+    connectionToken: null,
+    seed: task.seed === undefined ? null : { id: start.id, token, markup: task.seed },
+  });
+  if (credential) {
+    const plan = withToken(credential.token);
+    // The token rides the harness's MCP configuration, as it does for a person who connected the
+    // server; and for API actions it rides the skill's own connection file in the agent's HOME, which
+    // is why the prompt can stop naming it. An MCP leg never gets that file: a second, curl-shaped way
+    // in would measure something other than the MCP treatment.
+    return transport === 'mcp' || !installed ? plan : { ...plan, connectionToken: credential.token };
+  }
+  // The product's paste. A `token` task needs the driver to hold the credential (to seed a document,
+  // or to write an MCP config), so the driver reads it out of the paste; a `start-link` task passes
+  // that paste on untouched, which is the handoff the product itself teaches.
+  if (task.handoff === 'token' || installed || transport === 'mcp') return withToken(tokenFromPaste(start.prompt));
+  return { access: { kind: 'start-link', startPrompt: start.prompt }, mcp: null, connectionToken: null, seed: null };
+}
 
 export interface PromptOptions {
   /** False for a model that cannot read an image — see `Leg.vision`. */
