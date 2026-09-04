@@ -551,10 +551,31 @@ async function deleteArtifactScoped(scope: Scope, id: string, alsoIds: readonly 
     if (owned.rows.length === 0) return false;
     ownerId = owned.rows[0].user_id;
     parent = parentOf(owned.rows[0]);
-    // A forced folder delete takes its whole subtree, one row at a time through
-    // exactly the statements a single delete runs — deepest first, so nothing is
-    // orphaned on the way down — inside this one transaction.
-    for (const target of [...alsoIds, id]) {
+    /*
+     * A forced folder delete takes its whole subtree, one row at a time through
+     * exactly the statements a single delete runs — deepest first, so nothing is
+     * orphaned on the way down — inside this one transaction.
+     *
+     * The subtree is collected by CONTAINMENT (lib/folders subtreeIds), and
+     * every row in it belongs to this owner only because `resolveParent`
+     * refuses a parent held by anyone else. That is an invariant enforced in
+     * another module, so the scope is re-applied HERE to the rows the caller
+     * did not name: it costs one statement, and it makes this deletion's ACL
+     * independent of a rule it does not own. A row that fails it is left
+     * whole — orphaned under a folder that is gone, which is recoverable,
+     * where deleting a stranger's document is not.
+     *
+     * It FILTERS the caller's order rather than re-listing from the query,
+     * because the deepest-first order above is the load-bearing part and a
+     * bare `id = ANY(...)` has none.
+     */
+    const mine = new Set(
+      (await tx.query<{ id: string }>(
+        `SELECT id FROM artifacts WHERE id = ANY($1::text[]) AND ${scope.where('$2')}`,
+        [[...alsoIds], scope.val],
+      )).rows.map((r) => r.id),
+    );
+    for (const target of [...alsoIds.filter((x) => mine.has(x)), id]) {
       await tx.query('DELETE FROM artifact_versions WHERE artifact_id = $1', [target]);
       // The edit log stores full text (the genesis row holds the whole document),
       // so "permanent" delete must take it too or the content survives the delete.
