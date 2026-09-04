@@ -64,3 +64,35 @@ export async function ownerFeed(userId: string, opts: { limit?: number } = {}): 
   );
   return r.rows.map(envelopeOf);
 }
+
+/** How many days of history the dashboard splines show. */
+export const VIEW_SERIES_DAYS = 30;
+
+export interface DailyViews {
+  /** UTC calendar day, 'YYYY-MM-DD'. */
+  day: string;
+  views: number;
+}
+
+/**
+ * Daily view counts per artifact across everything the user owns, zero-filled
+ * to exactly `days` buckets (oldest → newest, last bucket = today UTC), read
+ * from the log: one row per open, deduped per UTC day on the subject (the
+ * daily visitor hash; a NULL subject counts once). Artifacts with no views in
+ * the window are absent from the map. While `analytics_events` still exists
+ * and the log's table does not, the legacy table answers instead.
+ */
+export async function viewSeriesByUser(userId: string, days: number = VIEW_SERIES_DAYS): Promise<Map<string, number[]>> {
+  void userId; void days;
+  throw new Error('events-views: implement viewSeriesByUser');
+}
+
+/**
+ * All-time daily view totals pooled across everything the user owns,
+ * zero-filled from the first viewed day through today (empty when no views).
+ * Same source rule as `viewSeriesByUser`.
+ */
+export async function dailyViewsByUser(userId: string): Promise<DailyViews[]> {
+  void userId;
+  throw new Error('events-views: implement dailyViewsByUser');
+}
