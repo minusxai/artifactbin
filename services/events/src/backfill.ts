@@ -6,10 +6,21 @@
  * the old dedupe treated it) and its user/client in the payload; `sse_connect`
  * rows are not moments anyone reads back and are not copied.
  *
+ * ONLY INTO A LOG THAT HAS NOT SPOKEN FOR ITSELF YET. The app dual-writes every
+ * moment — the counter row AND the sentence — so a log holding any row that is
+ * not a `legacy:` one is already covered, and copying into it would say the
+ * same moment twice: a live sentence (the account is the subject) beside its
+ * `legacy:<seq>` twin (the visitor hash is). The statement asks that question
+ * itself, in its own WHERE, so the rule holds for the boot and for an operator
+ * alike: the first run after the upgrade takes the whole history, every later
+ * one takes nothing, and the dual-write covers everything from the first live
+ * emit onward.
+ *
  * Who runs it: the single image's composition root, on every boot, right after
- * it registers the writer (ON CONFLICT makes the second run free); a split
- * deployment's operator, ONCE, as the database owner — the events role has no
- * read on the app schema, on purpose, so the statement is exported as text.
+ * it registers the writer (the rule above, and ON CONFLICT, make the second run
+ * free); a split deployment's operator, ONCE, as the database owner — the events
+ * role has no read on the app schema, on purpose, so the statement is exported
+ * as text.
  *
  * THE VERB MAPPING IS SAID TWICE, and has to be: the app says it in TypeScript
  * (`EVENT_VERBS_BY_ANALYTICS` in services/app/lib/analytics.ts, which the
@@ -56,7 +67,9 @@ export function backfillSql(opts: BackfillOptions): string {
   if (!QUALIFIED.test(opts.from)) throw new Error(`backfillSql: source table ${JSON.stringify(opts.from)} is not a plain identifier`);
   const events = Object.keys(VERBS);
   // The CASE and the WHERE are generated from ONE table, so a value can never
-  // be copied without a verb, or given a verb and left behind.
+  // be copied without a verb, or given a verb and left behind. The second WHERE
+  // clause is the once-only rule: a log with any row of its own has been written
+  // to live, and the dual-write already said everything this would.
   const verb = `CASE event ${events.map((event) => `WHEN '${event}' THEN '${VERBS[event]}'`).join(' ')} END`;
   return `INSERT INTO ${opts.schema}.events (id, at, source, subject_kind, subject_id, verb, object_kind, object_id, payload)
 SELECT 'legacy:' || seq, created_at, 'app',
@@ -66,6 +79,7 @@ SELECT 'legacy:' || seq, created_at, 'app',
        jsonb_strip_nulls(jsonb_build_object('user_id', user_id, 'client', client))
   FROM ${opts.from}
  WHERE event IN (${events.map((event) => `'${event}'`).join(', ')})
+   AND NOT EXISTS (SELECT 1 FROM ${opts.schema}.events WHERE id NOT LIKE 'legacy:%')
  ON CONFLICT (id) DO NOTHING`;
 }
 
