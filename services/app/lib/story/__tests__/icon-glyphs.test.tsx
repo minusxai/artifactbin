@@ -21,6 +21,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { icons } from 'lucide-react';
 import { Icon, IconGlyphProvider, ICON_BASE_CLASS } from '@/components/kit/icon';
 import { iconGlyphKey } from '@/lib/story-ui/icon-contract';
+import { FILE_GLYPH_NAMES } from '@/lib/story-ui/file-glyphs';
 import { buildGlyphMap, scanIcons, glyphsForNodes } from '@/lib/story/icon-glyphs';
 import { cn } from '@/components/kit/cn';
 import { parseJsx } from '@/lib/jsx';
@@ -83,6 +84,24 @@ describe('icon glyphs', () => {
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
     expect(Object.keys(glyphsForNodes(parsed.nodes))).toContain('CircleQuestionMark');
+  });
+
+  it('a <Files> listing carries the six format glyphs, though it names no <Icon>', () => {
+    /*
+     * THE FOLDER CASE, and the one a unit test of <Files> cannot see: a folder's
+     * whole document is `<Files data="$children" />` and there is no <Icon> in
+     * it anywhere — the glyph a row draws is chosen from its FORMAT, inside the
+     * component. Without this the scan answers {}, `<Icon>` finds an empty map,
+     * and every folder listing in the deployment draws no glyph at all while
+     * every test stays green.
+     */
+    const parsed = parseJsx('<Files data="$children" variant="icons" />');
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    const keys = Object.keys(glyphsForNodes(parsed.nodes));
+    for (const name of FILE_GLYPH_NAMES) expect(keys).toContain(iconGlyphKey(name));
+    // And the fallback, as for any document that draws an icon at all.
+    expect(keys).toContain('CircleQuestionMark');
   });
 
   it('a document with no icons ships no glyphs at all', () => {

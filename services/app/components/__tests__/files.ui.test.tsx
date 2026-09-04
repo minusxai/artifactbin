@@ -27,7 +27,11 @@ describe('<Files>', () => {
     render(<Files rows={rows} />);
     expect(screen.getByLabelText('41 views')).toBeTruthy();
     expect(screen.getByLabelText('Open Board update').querySelector('svg[data-sparkline]')).not.toBeNull();
-    expect(screen.queryByLabelText(/views$/i, { selector: '[aria-label$="views"]' })).not.toBeNull();
+    // SEED CORRECTION (P2): the line here asked queryByLabelText for a regex two
+    // rows match, which throws "Found multiple elements" — both children carry a
+    // number, and a mark per row is the point. Asserted as what it meant: every
+    // row the server counted gets one, and no row it did not.
+    expect(screen.getAllByLabelText(/^\d+ views$/).map((n) => n.getAttribute('aria-label'))).toEqual(['41 views', '12 views']);
     expect(screen.getByLabelText('Open Q3').querySelector('svg[data-sparkline]')).toBeNull();
     expect(screen.getByLabelText('Open Q3').textContent).not.toMatch(/views/);
   });

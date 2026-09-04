@@ -69,6 +69,14 @@ interface RuntimeEmbedContextValue {
   /** A window of one query's rows through the transport (a table reading past the cap). */
   fetchPage: DataflowStore['fetchPage'];
   refData: RefDataMap;
+  /**
+   * FALSE inside a `chrome=0` capture. An embed that must draw differently for
+   * a photograph reads it here rather than being told by the author: `<Files>`
+   * draws glyphs instead of every child's own og card, because a capture that
+   * waits on N captures is not a capture (and a private child's is a 404 to the
+   * session-less browser taking the shot).
+   */
+  chrome: boolean;
   glyphs?: GlyphMap;
   colorMode: 'light' | 'dark';
 }
@@ -81,6 +89,7 @@ const RuntimeEmbedContext = createContext<RuntimeEmbedContextValue>({
   setValue: () => {},
   fetchPage: () => Promise.reject(new Error('no store')),
   refData: {},
+  chrome: true,
   glyphs: {},
   colorMode: 'light',
 });
@@ -579,7 +588,13 @@ function FilesAdapter(props: Record<string, unknown>) {
   const ctx = useContext(RuntimeEmbedContext);
   const name = refName(props.data);
   const table = name ? ctx.state.tables[name] : undefined;
-  return <Files rows={table?.rows} variant={typeof props.variant === 'string' ? props.variant : undefined} />;
+  return (
+    <Files
+      rows={table?.rows}
+      variant={typeof props.variant === 'string' ? props.variant : undefined}
+      capture={!ctx.chrome}
+    />
+  );
 }
 
 const RUNTIME_REGISTRY: Record<string, ComponentType<Record<string, unknown>>> = {
@@ -943,7 +958,7 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, t
 
   const body = (
     <RuntimeAssetContext.Provider value={assets}>
-      <RuntimeEmbedContext.Provider value={{ store, flow: store.flow, state, pending, setValue, fetchPage: store.fetchPage, refData, colorMode }}>
+      <RuntimeEmbedContext.Provider value={{ store, flow: store.flow, state, pending, setValue, fetchPage: store.fetchPage, refData, chrome, colorMode }}>
         {renderStoryNodes(nodes, {
           // Identity across an adopted document: a live update re-renders this
           // tree, and positional keys would remount everything below the edit.
