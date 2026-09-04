@@ -69,7 +69,8 @@ client needs nothing: `initialize.clientInfo` already named it.
 
 `reply` alone keeps the thread open (say why, or ask back); `resolve` alone
 closes silently; `{ "reopen": true }` returns a resolved thread to the open
-list. A POST with none of the three is `400 invalid_annotation_action`.
+list. A POST with none of `reply`, `resolve: true` or `reopen: true` is `400 invalid_annotation_action`;
+a list `status` that is not `open`, `resolved` or `all` is `400 invalid_status`.
 Resolved annotations leave the inline list;
 `GET [[ base ]]/api/artifacts/<id>/annotations?status=all` shows history.
 
