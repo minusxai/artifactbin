@@ -91,17 +91,23 @@ describe('the children table', () => {
     const t = await mintToken('bare');
     const cookie = await agentCookie([t.id]);
     const f = await create(t.token, { format: 'folder', title: 'Mine', visibility: 'unlisted' });
-    const child = await create(t.token, { markup: '<p>open</p>', title: 'Open', visibility: 'unlisted', parent_id: f.id });
+    // One PUBLIC child, so the two viewers see the same row and the only thing
+    // that differs is the numbers — which is what this test is about — and one
+    // UNLISTED beside it, because an anonymous owner's shelf obeys the listing
+    // rule like everyone else's.
+    const child = await create(t.token, { markup: '<p>open</p>', title: 'Open', visibility: 'public', parent_id: f.id });
+    const quiet = await create(t.token, { markup: '<p>quiet</p>', title: 'Quiet', visibility: 'unlisted', parent_id: f.id });
 
     const mine = await asOwner(f.id, cookie);
     expect(mine.status, JSON.stringify(mine.body)).toBe(200);
     const rows: any[] = mine.body.tables.children.rows;
-    expect(rows.map((x) => x.id)).toEqual([child.id]);
-    expect(typeof rows[0].views).toBe('number');
-    expect(typeof rows[0].sparkline).toBe('string');
+    expect(rows.map((x) => x.id).sort()).toEqual([child.id, quiet.id].sort());
+    const open = rows.find((x) => x.id === child.id);
+    expect(typeof open.views).toBe('number');
+    expect(typeof open.sparkline).toBe('string');
 
-    // The anonymous transport is a stranger on the same folder: the same row,
-    // and none of the owner's numbers.
+    // The anonymous transport is a stranger on the same folder: the PUBLIC row
+    // only, and none of the owner's numbers.
     const theirs = await anonymous(f.id);
     expect(theirs.status).toBe(200);
     const strangerRows: any[] = theirs.body.tables.children.rows;

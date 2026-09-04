@@ -14,8 +14,8 @@
  * viewer on the server. Plan: ~/projects/artifactbin-folders.md.
  */
 import { getDb } from '@/lib/db';
-import { canEdit, canRead } from '@/lib/share-roles';
-import { effectiveRole, linkRoleOf, type ArtifactRow, type RoleActor } from '@/lib/artifacts';
+import { canAnnotate, canEdit, canRead } from '@/lib/share-roles';
+import { effectiveRole, roleWithoutLink, type ArtifactRow, type RoleActor } from '@/lib/artifacts';
 import type { ArtifactFormat } from '@/lib/story/input';
 import { channelFor } from '@/lib/story/live';
 import { renderSparklineSvg } from '@/lib/viz/sparkline';
@@ -175,9 +175,15 @@ interface ChildRow {
  * server and never filtered on the client.
  *
  * Three viewer-dependent facts, each decided here:
- *  - WHICH ROWS — every child this viewer may read, through the one access
- *    lattice (`effectiveRole`). A stranger on a public folder sees its public
- *    children; its owner sees all of them.
+ *  - WHICH ROWS — decided by the viewer's relationship to the FOLDER, then to
+ *    each child, and NOT by "may they read it". `unlisted` means "reads like
+ *    public, listed nowhere", and a folder's page is a listing: a stranger who
+ *    holds the folder's address may open an unlisted child by ITS address and
+ *    must still not be handed it here. So anyone with a ROLE on the folder —
+ *    owner, editor or commenter, which is `canAnnotate` and therefore above
+ *    what a public link alone grants — reads the whole shelf, and everyone
+ *    else gets the `public` children plus any child they are personally named
+ *    on (`roleWithoutLink`: ownership or a share, never the link).
  *  - THE THUMBNAIL — `/a/<child>/export?mode=card` for a public or unlisted
  *    DOCUMENT, null otherwise. A request the sandboxed frame makes carries no
  *    session, so a private child's card would 404 even for its owner; and a
@@ -193,7 +199,14 @@ export async function childrenTableFor(
 ): Promise<{ rows: Record<string, unknown>[]; columns: DatasetColumn[] }> {
   const db = await getDb();
   const actor: RoleActor = { userId: viewer?.userId ?? null, tokenId: viewer?.tokenId ?? null, email: viewer?.email ?? null };
-  const numbers = canEdit(await effectiveRole(folder, actor));
+  const folderRole = await effectiveRole(folder, actor);
+  const numbers = canEdit(folderRole);
+  // A role on the FOLDER is read as a role on its shelf. `canAnnotate` rather
+  // than `canRead` is the whole point: a public folder's link grants `viewer`
+  // to every stranger, so a `canRead` threshold would make "has a role here"
+  // true for anybody holding the address and list the unlisted children to
+  // them — which is the one thing `unlisted` promises will not happen.
+  const insider = canAnnotate(folderRole);
   const r = await db.query<ChildRow>(
     `SELECT id, title, format, cardinality(ancestor_ids)::int AS level, visibility, updated_at,
             user_id, token_id, link_role, version,
@@ -225,17 +238,17 @@ export async function childrenTableFor(
   const rows: Record<string, unknown>[] = [];
   for (const c of r.rows) {
     /*
-     * The read question is asked of the LINK first, and only a row the link
-     * does not already open costs a share lookup. That is exact rather than an
-     * approximation: `effectiveRole` composes with `maxRole`, which can only
-     * RAISE what the link grants, and the anonymous ceiling is `viewer` — the
-     * very rank `canRead` asks for — so a share can never change the answer to
-     * THIS question for a row the link admits. It matters because the share
-     * lookup also STAMPS resolved shares, so the naive loop was up to 500
-     * UPDATEs inside one query response. Measured at 100 public children read
-     * by a signed-in stranger: 25ms → 1ms.
+     * Three cheap answers before any query: an insider reads everything, a
+     * `public` child is listed to everybody, and only what is left — a private
+     * or unlisted child, for a viewer with no role on the folder — costs the
+     * share lookup that decides whether they were named on it personally. That
+     * lookup also STAMPS resolved shares, so asking it per row unconditionally
+     * was up to 500 UPDATEs inside one query response; now it is asked only
+     * for the rows that cannot be settled without it, and never at all for an
+     * anonymous viewer (`roleWithoutLink` returns `none` with no query).
+     * Measured at 100 children read by a signed-in stranger: 25ms → 1ms.
      */
-    if (!canRead(linkRoleOf(c)) && !canRead(await effectiveRole(c, actor))) continue;
+    if (!insider && c.visibility !== 'public' && !canRead(await roleWithoutLink(c, actor))) continue;
     const linkable = c.visibility === 'public' || c.visibility === 'unlisted';
     rows.push({
       id: c.id,

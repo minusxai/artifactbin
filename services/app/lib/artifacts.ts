@@ -171,18 +171,39 @@ export function ownsArtifact(row: Pick<ArtifactRow, 'user_id' | 'token_id'>, act
  * of the two is what this implements, which is why the swap is behaviour-
  * preserving — the disagreements were all between values of EQUAL rank.
  */
+/**
+ * The role this actor holds WITHOUT the link — ownership, or a share naming
+ * them personally. The other half of `effectiveRole`, and it is separate
+ * because one question in the product needs it alone: a LISTING.
+ *
+ * `unlisted` means "reads like public, listed nowhere", so a listing may not
+ * be built from "may this viewer read it" — the link is exactly what an
+ * unlisted row grants and exactly what a listing must not honour
+ * (lib/folders childrenTableFor). Holding the address is not a relationship
+ * to the row; ownership and an invitation are.
+ *
+ * Ownership short-circuits, so the share lookup is a query the owner's every
+ * request would otherwise pay for.
+ */
+export async function roleWithoutLink(
+  row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id'>,
+  actor: RoleActor,
+): Promise<ArtifactRole> {
+  if (ownsArtifact(row, actor)) return 'owner';
+  return namedRoleFor(row, actor);
+}
+
 export async function effectiveRole(
   row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | 'visibility' | 'link_role'>,
   actor: RoleActor,
 ): Promise<ArtifactRole> {
-  // Ownership short-circuits: nothing outranks it, so the share lookup is a
-  // query the owner's every request would otherwise pay for.
-  if (ownsArtifact(row, actor)) return 'owner';
+  const held = await roleWithoutLink(row, actor);
+  if (held === 'owner') return 'owner';
   // THE ANONYMOUS CEILING applies to the LINK only, never to a named share:
   // being invited by address is itself an account-shaped act, while holding a
   // URL is not. Without an account there is nothing to attribute a write to.
   const byLink = actor.userId ? linkRoleOf(row) : capRole(linkRoleOf(row), ANONYMOUS_CEILING);
-  return maxRole(byLink, await namedRoleFor(row, actor));
+  return maxRole(byLink, held);
 }
 
 /**
