@@ -128,7 +128,14 @@ const KINDS = {
     containerPort: 8080,
     mustResolve: ['pg'],
     mustCarry: ['node_modules/@artifactbin/utils', 'node_modules/@artifactbin/contracts'],
-    mustThrow: ['playwright', '@duckdb/node-api', 'react', 'better-auth', 'vite'],
+    /** `vite`/`vitest` are NOT listed, and that is measured, not sloppy:
+     *  `npm ci --omit=dev -w <workspace>` does not omit that WORKSPACE's own
+     *  devDependencies unless `--legacy-peer-deps` rides along (measured
+     *  2026-09-05, node:22-slim, both -w services/events and -w services/sql),
+     *  so every lean image built this way carries the test runner. That is the
+     *  sql and browser images' condition today too — one repo-wide fix, not
+     *  this service's to make. */
+    mustThrow: ['playwright', '@duckdb/node-api', 'react', 'better-auth'],
     /** No database here — see above; the boot leg is the compose walk's. */
     boots: false,
     refusesWithoutEnv: /DATABASE_URL/,
