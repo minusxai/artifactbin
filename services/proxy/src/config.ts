@@ -15,7 +15,8 @@
  * SCHEMA.sql: the app's tables, `tokens` included, live there) ·
  * APP__PUBLIC_BASE_URL · EMAIL__RESEND_API_KEY / EMAIL__FROM (the production
  * login mailer) · EMAIL__DEV_OUTBOX_PATH (local/test process coordination) ·
- * PROXY__SECURE_COOKIES.
+ * PROXY__SECURE_COOKIES · EVENTS__SERVICE_URL + INTERNAL__SERVICE_SECRET (the
+ * log the proxy says its own moments into; unset = nothing leaves the box).
  *
  * Every optional name is read EAGERLY here so the audit is honest: a
  * MODULE__NAME-shaped name nobody asked for is a typo that looks live, and
@@ -181,6 +182,11 @@ export function loadConfig(source: Record<string, string | undefined>, opts: Loa
   const upstreamDeadlineMs = deadlineRaw !== undefined && Number.isFinite(parsedDeadline) && parsedDeadline > 0
     ? Math.trunc(parsedDeadline)
     : 30_000;
+  // The log the proxy speaks into, and the header that service demands. Both
+  // are SHARED names — the app carries the same two — read here so the audit
+  // never calls them unknown on a proxy that is configured correctly.
+  const eventsServiceUrl = env('EVENTS', 'SERVICE_URL') || undefined;
+  const internalServiceSecret = env('INTERNAL', 'SERVICE_SECRET') || undefined;
   // A conventional exception (DATABASE_URL/S3_URL) — no MODULE__NAME shape,
   // so it is read straight from the source and audited by nobody.
   const databaseUrl = source.DATABASE_URL || undefined;
@@ -200,6 +206,8 @@ export function loadConfig(source: Record<string, string | undefined>, opts: Loa
     env: source,
     unknownNames: unknownNames().filter((name) => !LOGIN_PROVIDER_ENV_NAME_SET.has(name)),
     upstreamDeadlineMs,
+    ...(eventsServiceUrl ? { eventsServiceUrl } : {}),
+    ...(internalServiceSecret ? { internalServiceSecret } : {}),
     ...loginProviders,
   };
 }

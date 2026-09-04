@@ -25,6 +25,7 @@ import {
 import { Hono, type Context } from 'hono';
 import { assemble, cookieName, createLimiter, decodeAgentSession, doorsEnv, memoryBackend, readCookie } from '@artifactbin/utils';
 import { baseUrlOf, mountOAuthRoutes } from './routes/oauth';
+import { say, type ProxySubject } from './events';
 import { createOAuthStore } from './identity/oauth';
 import { readEnv } from './env';
 
@@ -214,6 +215,18 @@ export function clientIpOf(headers: Headers, trustedHops: number, peer: string):
   return peer;
 }
 
+/**
+ * WHO THE LOG NAMES when a door refuses. An account if we resolved one, else
+ * the bearer token that was presented, else nobody — never an IP and never an
+ * email: those identify a PERSON, and a refusal is not one of the identity
+ * moments where the catalogue lets an address travel.
+ */
+const subjectOf = (actor: Actor | undefined): ProxySubject | null => {
+  if (actor?.userId) return { kind: 'user', id: actor.userId };
+  if (actor?.tokenId) return { kind: 'token', id: actor.tokenId };
+  return null;
+};
+
 /** ONE limiter per options object — the session part's `c.set('limiter')` and the rateLimit part's doors are the same counters. */
 const limiters = new WeakMap<ProxyOptions, Limiter>();
 const limiterFor = (o: ProxyOptions): Limiter => {
@@ -249,7 +262,10 @@ export function rateLimit(o: ProxyOptions): Part<ProxyEnv> {
           actorId: actor.userId ?? actor.tokenId ?? null,
           holder: actor.credential !== 'none',
         });
-        if (!decision.allowed) return denyResponse({ error: 'rate_limited', retryAfter: decision.retryAfter, door });
+        if (!decision.allowed) {
+          void say(o.events, subjectOf(actor), 'denied', { kind: 'door', id: door }, { door });
+          return denyResponse({ error: 'rate_limited', retryAfter: decision.retryAfter, door });
+        }
       }
       await next();
     }),
@@ -268,8 +284,22 @@ export function loginRoutes(o: ProxyOptions): Part<ProxyEnv> {
         if (!email) return c.json({ error: 'email_invalid' }, 400);
         const trustedHops = trustedHopsOf(o.env);
         const decision = await limiterFor(o).limit('LOGIN_SEND', { ip: clientIpOf(c.req.raw.headers, trustedHops, peerIpOf(c)), actorId: email });
-        if (!decision.allowed) return denyResponse({ error: 'rate_limited', retryAfter: decision.retryAfter, door: 'LOGIN_SEND' });
+        if (!decision.allowed) {
+          void say(o.events, subjectOf(c.get('actor') as Actor | undefined), 'denied', { kind: 'door', id: 'LOGIN_SEND' }, { door: 'LOGIN_SEND' });
+          return denyResponse({ error: 'rate_limited', retryAfter: decision.retryAfter, door: 'LOGIN_SEND' });
+        }
         await next();
+        /*
+         * A CODE IS OUT. Said only once the door allowed AND Better Auth
+         * answered 2xx — a 400 (no address) or a 429 is not a code, and the
+         * 429 has already said `door.denied` instead. The ADDRESS is the
+         * object: at this step there is no account yet, so the address is the
+         * only identity the moment has, and the catalogue admits it on the
+         * identity verbs for exactly that reason.
+         */
+        if (c.res.status >= 200 && c.res.status < 300) {
+          void say(o.events, null, 'login_sent', { kind: 'user', id: email }, { email });
+        }
       });
       if (o.sessions.handler) a.all('/api/auth/*', (c) => o.sessions.handler!(c.req.raw));
     },
