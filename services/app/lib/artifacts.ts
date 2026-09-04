@@ -597,7 +597,9 @@ const actorStamp = (actor: TokenActor): [string | null, string | null] => [actor
  *                  tokens edit too. Reach, edits, PUT, revert, versions.
  *
  * The predicate runs INSIDE the same WHERE as the id, so a miss is the uniform
- * 404 either way — there is no existence oracle in the difference.
+ * 404 either way — there is no existence oracle in the difference. Both carry
+ * the trash gate below, which is why a deleted row is that same 404 without a
+ * single one of these statements mentioning it.
  */
 export type Scope = { where: (param: string) => string; val: string };
 
