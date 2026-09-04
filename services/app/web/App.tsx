@@ -12,6 +12,7 @@ import { LoginPage } from './pages/Login';
 import { NotFoundPage } from './pages/NotFound';
 import { ProfilePage } from './pages/Profile';
 import { TokensNewPage } from './pages/TokensNew';
+import { TrashPage } from './pages/Trash';
 
 function Analytics() {
   const { session } = useSession();
@@ -34,6 +35,7 @@ export function App() {
           <Route path="/account" element={<AccountPage />} />
           <Route path="/tokens" element={<Navigate to="/account" replace />} />
           <Route path="/tokens/new" element={<TokensNewPage />} />
+          <Route path="/trash" element={<TrashPage />} />
           {/* `/docs` and below are the agent surface, served by the server's
             * docs route — the SPA must not claim them. */}
           <Route path="/docs-human" element={<DocsPage />} />
