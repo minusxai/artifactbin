@@ -38,7 +38,7 @@ import { type EvalMode, actionTransport, installsSkills } from './mode';
 import { slug } from './slug';
 
 /** Where a leg's token comes from. */
-export const CREDENTIAL_SOURCES = ['paste', 'inbox-oauth', 'outbox-oauth', 'secret', 'none'] as const;
+export const CREDENTIAL_SOURCES = ['paste', 'inbox-oauth', 'outbox-oauth', 'secret'] as const;
 export type CredentialSource = (typeof CREDENTIAL_SOURCES)[number];
 
 /** `--credential` — an override for the source `credentialSourceFor` would have chosen. */

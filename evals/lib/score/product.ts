@@ -127,3 +127,12 @@ export function productMetrics(input: { served: ServedDocument; baseline: Served
     title: title && title.length ? title : null,
   };
 }
+
+/**
+ * DID THE AGENT TELL ITS HUMAN HOW TO GET A TOKEN? The right answer to having no credential is to stop
+ * and say so ACTIONABLY — name the token page, or the plugin/MCP as the smoother path. A bare "I cannot
+ * do that" leaves the person exactly where they started and does not count.
+ */
+export function askedForAToken(_finalMessage: string | null): boolean {
+  throw new Error('token-qa: implement — read the final message for an actionable ask');
+}
