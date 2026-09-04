@@ -66,10 +66,11 @@ describe('parseExportFormat', () => {
 });
 
 describe('parseExportCapture', () => {
-  it("absent means 'full' (agents eyeball whole pages); only 'card' opts into the viewport crop", () => {
+  it("maps the fixed export modes and rejects everything else", () => {
     expect(parseExportCapture(null)).toBe('full');
     expect(parseExportCapture('full')).toBe('full');
     expect(parseExportCapture('card')).toBe('card');
+    expect(parseExportCapture('preview')).toBe('preview');
     for (const bad of ['', 'CARD', 'banner', 'viewport']) expect(parseExportCapture(bad)).toBeNull();
   });
 });
@@ -255,6 +256,7 @@ describe('the cache key names the renderer', () => {
       .toBe(`exports/abc123/3.full-g${EXPORT_RENDER_GENERATION}.png`);
     // A slice and a card are their own pictures, and say so.
     expect(exportStoreKey({ id: 'abc123', version: 3 }, 'png', 'full', 2)).toContain('slide-2');
-    expect(exportStoreKey({ id: 'abc123', version: 3 }, 'png', 'card', 0)).toContain('card-');
+    expect(exportStoreKey({ id: 'abc123', version: 3 }, 'png', 'card', 0)).toContain('card-1600x840-r2-');
+    expect(exportStoreKey({ id: 'abc123', version: 3 }, 'png', 'preview', 0)).toContain('preview-v2-');
   });
 });

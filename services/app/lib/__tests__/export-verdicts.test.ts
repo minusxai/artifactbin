@@ -140,7 +140,7 @@ describe('what the app asks the browser for', () => {
   it('asks for the card stage at the card viewport', async () => {
     const browser = scripted(PNG);
     await shoot(browser, { mode: 'card' });
-    expect(browser.seen[0].capture).toBe('card');
+    expect(browser.seen[0].capture).toEqual({ card: { x: 0, y: 0, width: 1600 } });
     expect(browser.seen[0].viewport).toEqual({ width: 1600, height: 840 });
   });
 });

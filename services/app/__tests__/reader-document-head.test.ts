@@ -51,7 +51,7 @@ describe('the served document unfurls on its own', () => {
     // og:image is resolved by some scrapers against the page URL and by others
     // not at all. The route knows the public origin from the forwarding
     // headers, so there is no reason to make anyone guess.
-    expect(html).toContain(`property="og:image" content="${BASE}/a/${row.id}/export?mode=card&amp;v=${row.version}"`);
+    expect(html).toContain(`property="og:image" content="${BASE}/a/${row.id}/export?mode=card&amp;v=${row.version}&amp;r=2"`);
     expect(html).toContain('name="twitter:card" content="summary_large_image"');
   });
 

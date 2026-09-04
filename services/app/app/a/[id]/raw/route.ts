@@ -42,6 +42,7 @@ import { readUrlValues } from '@/lib/story/url-values';
 import { storyRuntimeAssets } from '@/lib/story/runtime-asset';
 import { ownerUsername } from '@/lib/users';
 import { displayTitle } from '@/lib/story/title';
+import { CARD_RENDER_GENERATION } from '@/lib/export-card';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 
 // The markup document's policy — per document, built in lib/story/markup-csp:
@@ -350,7 +351,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
             // URL and by others not at all. baseUrl reads the forwarding
             // headers, so behind the proxy this is the public origin — never
             // the container's.
-            image: `${base}/a/${artifact.id}/export?mode=card&v=${artifact.version}`,
+            image: `${base}/a/${artifact.id}/export?mode=card&v=${artifact.version}&r=${CARD_RENDER_GENERATION}`,
           }
           : null,
     help: chrome ? { docs: `${base}/docs`, tokens: `${base}/tokens/new` } : null,

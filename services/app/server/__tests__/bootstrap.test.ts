@@ -40,6 +40,15 @@ describe('inlined page data', () => {
     expect(html).toContain('\\u003c/script>');
   });
 
+  it('keeps replacement tokens in artifact text literal', () => {
+    const shell = '<!doctype html><head></head><body><div id="root"></div></body>';
+    const source = "before $' middle $& after $`";
+    const html = withBootstrap(shell, { source });
+    expect(inlined(html)).toEqual({ source });
+    expect(html.match(/<!doctype html>/g)).toHaveLength(1);
+    expect(html.match(/<body>/g)).toHaveLength(1);
+  });
+
   it('carries the owner\'s document page: the surface props and the canonical address', async () => {
     const w = await world();
     // At the canonical address — /a/<id> heals there first (server/app healTo).

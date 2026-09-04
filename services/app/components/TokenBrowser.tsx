@@ -7,6 +7,7 @@ import { Badge, Button, dateStamp, FormatBadge, formatLabel, MicroLabel, PANEL, 
 import RowMenu, { confirmDeleteArtifact } from '@/components/RowMenu';
 import { adoptToken } from '@/lib/browser-session';
 import type { Visibility } from '@/lib/artifacts';
+import { CARD_RENDER_GENERATION } from '@/lib/export-card';
 
 interface ArtifactSummary {
   id: string;
@@ -377,7 +378,7 @@ export function ArtifactTable({ artifacts, manage, embedded, canEdit = true, can
                     <span className="relative hidden h-[19px] w-9 shrink-0 overflow-hidden rounded-[2px] border border-edge bg-raised sm:block">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={`/a/${a.id}/export?format=jpg&mode=card&v=${a.version}`}
+                        src={`/a/${a.id}/export?format=jpg&mode=card&v=${a.version}&r=${CARD_RENDER_GENERATION}`}
                         alt=""
                         loading="lazy"
                         className="h-full w-full object-cover"

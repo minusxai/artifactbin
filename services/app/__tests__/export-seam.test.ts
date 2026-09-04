@@ -13,11 +13,10 @@ import { fakeBrowser } from '@artifactbin/utils';
 import type { RenderRequest, RenderResult } from '@artifactbin/contracts';
 import { GET as exportImage } from '@/app/a/[id]/export/route';
 import { createArtifact } from '@/lib/artifacts';
-
-
 import { resetExportRenderer } from '@/lib/export';
 import { setServices } from '@/lib/services';
 import { mintToken } from '@/lib/tokens';
+import { DEFAULT_SOCIAL_PREVIEW_CROP } from '@/lib/story/social-preview';
 import { useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
@@ -64,8 +63,68 @@ describe('the export route through the browser seam', () => {
     const res = await exportImage(new Request(`${BASE}/a/${id}/export?mode=card&format=jpg`), params(id));
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('image/jpeg');
-    expect(lastRequest().capture).toBe('card');
+    expect(lastRequest().capture).toEqual({ card: DEFAULT_SOCIAL_PREVIEW_CROP });
     expect(lastRequest().format).toBe('jpg');
+  });
+
+  it('forwards a saved social-preview crop to the browser', async () => {
+    browser();
+    const t = await mintToken('crop');
+    const row = await createArtifact(t.id, null, {
+      format: 'markup', content: '',
+      source: '<Helmet><meta name="artifactbin:og-crop" content="x=300;y=900;width=800" /></Helmet><div>hi</div>',
+      meta: {}, title: 'hi', description: null,
+    });
+    await exportImage(new Request(`${BASE}/a/${row.id}/export?mode=card`), params(row.id));
+    expect(lastRequest().capture).toEqual({ card: { x: 300, y: 900, width: 800 } });
+  });
+
+  it('keeps the framing overview editor-only and renders it at the canonical layout width', async () => {
+    browser();
+    const t = await mintToken('preview');
+    const row = await createArtifact(t.id, null, {
+      format: 'markup', content: '', source: '<div>hi</div>', meta: {}, title: 'hi', description: null,
+    });
+    const anonymous = await exportImage(new Request(`${BASE}/a/${row.id}/export?mode=preview`), params(row.id));
+    expect(anonymous.status).toBe(404);
+    const owner = await exportImage(new Request(`${BASE}/a/${row.id}/export?mode=preview`, {
+      headers: { authorization: `Bearer ${t.token}` },
+    }), params(row.id));
+    expect(owner.status).toBe(200);
+    expect(owner.headers.get('cache-control')).toBe('private, max-age=86400');
+    expect(lastRequest()).toMatchObject({ capture: 'preview', viewport: { width: 1600, height: 840 } });
+
+    const dataset = await createArtifact(t.id, null, {
+      format: 'dataset', content: 'a\n1', source: null, meta: {}, title: 'data', description: null,
+    });
+    const unsupported = await exportImage(new Request(`${BASE}/a/${dataset.id}/export?mode=preview`, {
+      headers: { authorization: `Bearer ${t.token}` },
+    }), params(dataset.id));
+    expect(unsupported.status).toBe(404);
+  });
+
+  it('renders an editor draft crop sharply without making it a durable public card', async () => {
+    browser();
+    const t = await mintToken('draft-owner');
+    const row = await createArtifact(t.id, null, {
+      format: 'markup', content: '', source: '<div>hi</div>', meta: {}, title: 'hi', description: null,
+    });
+    const res = await exportImage(new Request(
+      `${BASE}/a/${row.id}/export?mode=preview&format=png&crop=x%3D120%3By%3D640%3Bwidth%3D600`,
+      { headers: { authorization: `Bearer ${t.token}` } },
+    ), params(row.id));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toBe('private, no-store');
+    expect(lastRequest()).toMatchObject({
+      capture: { card: { x: 120, y: 640, width: 600 } },
+      viewport: { width: 1600, height: 840 },
+    });
+
+    const invalid = await exportImage(new Request(
+      `${BASE}/a/${row.id}/export?mode=preview&crop=nope`,
+      { headers: { authorization: `Bearer ${t.token}` } },
+    ), params(row.id));
+    expect(invalid.status).toBe(400);
   });
 
   it('a slide capture forwards { slide: n }', async () => {

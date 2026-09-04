@@ -40,7 +40,9 @@ export const BOOTSTRAP_ID = 'mx-page-data';
 /** `<` is the only character that can end a script element early; JSON never needs it. */
 const safeJson = (value: unknown): string => JSON.stringify(value).replace(/</g, '\\u003c');
 export const withBootstrap = (html: string, data: unknown): string =>
-  html.replace('</head>', `  <script type="application/json" id="${BOOTSTRAP_ID}">${safeJson(data)}</script>\n  </head>`);
+  // A function replacement keeps JavaScript's special replacement tokens in
+  // user-authored JSON literal instead of expanding them with the HTML shell.
+  html.replace('</head>', () => `  <script type="application/json" id="${BOOTSTRAP_ID}">${safeJson(data)}</script>\n  </head>`);
 
 // Inline scripts emitted by our source HTML and Vite's development transform.
 // Keeping the hashes explicit preserves the production policy while allowing

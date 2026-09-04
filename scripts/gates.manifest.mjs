@@ -130,6 +130,8 @@ export const GATE_SPECS = Object.freeze([
   },
   // measured: implementer 4s; orchestrator 4s
   { name: 'shell-seo', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
+  // measured: implementer 14s
+  { name: 'social-preview', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
   // measured: implementer 3s; orchestrator 3s
   {
     name: 'simpler-start', start: 'custom',

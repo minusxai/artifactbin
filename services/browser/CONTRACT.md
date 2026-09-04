@@ -6,7 +6,7 @@ A Chromium that renders a URL to an image. `@artifactbin/contracts` `BrowserServ
 
 `POST /render` with a `RenderRequest`:
 `url` (the page, carrying its own short-lived key — the service holds no credentials and sets no cookies) ·
-`format` `png|jpg` (+ `quality`) · `viewport` · `selector` (the element to shoot) · `capture` `"full" | "card" | { slide: n }` ·
+`format` `png|jpg` (+ `quality`) · `viewport` · `selector` (the element to shoot) · `capture` `"full" | "card" | "preview" | { card: { x, y, width } } | { slide: n }` ·
 `sameOriginOnly` (abort every other origin) · `injectCss` · `settleMs` · `timeoutMs`.
 
 Answer: the image with `Content-Type: image/png|image/jpeg`, or a JSON verdict —
@@ -14,11 +14,12 @@ Answer: the image with `Content-Type: image/png|image/jpeg`, or a JSON verdict �
 `{ ok:false, reason:"no_slide", slides:n }` fewer slides than asked (the count is the answer);
 `{ ok:false, reason:"unavailable" }` no browser; `{ ok:false, reason:"failed" }` anything else (the one callers may retry once).
 
-The three capture modes: `full` screenshots the SELECTOR's element, however tall; `{ slide: n }` shoots the
+The capture modes: `full` screenshots the SELECTOR's element, however tall; `{ slide: n }` shoots the
 n-th `[data-mx-slide]` inside it, 1-based; `card` is a CLIP of the page at the selector's top — the viewport's
 height by the surface's width (capped at the viewport), measured, the viewport grown by the surface's offset so
-the clip is not truncated, then measured again. `card` is a named MODE and not a client recipe because that dance
-happens inside one page load.
+the clip is not truncated, then measured again. `{ card }` instead captures a locked-ratio source rectangle and
+scales it to the requested viewport without relayout. `preview` captures a bounded low-density overview. `card` is
+a named MODE and not a client recipe because that dance happens inside one page load.
 
 Stateless: one page per request, closed after. Renders are serialised inside the service. The URL must be reachable
 FROM THE SERVICE'S NETWORK — behind compose that is the app's service name, not 127.0.0.1, and never a bare host

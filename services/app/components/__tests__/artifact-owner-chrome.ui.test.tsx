@@ -102,6 +102,21 @@ describe('the surface header buttons are owner chrome', () => {
     expect(screen.getByLabelText('Copy agent instructions')).toBeInTheDocument();
   });
 
+  it('offers social-preview framing to markup owners and editors, but not commenters or viewers', () => {
+    for (const role of ['owner', 'editor'] as const) {
+      render(<ArtifactShell role={role}><ArtifactSurface {...surfaceProps({ source: '<p>hi</p>' })} /></ArtifactShell>);
+      openDocumentControls();
+      expect(screen.getByLabelText('Edit social preview'), role).toBeInTheDocument();
+      cleanup();
+    }
+    for (const role of ['commenter', 'viewer'] as const) {
+      render(<ArtifactShell role={role}><ArtifactSurface {...surfaceProps({ source: '<p>hi</p>' })} /></ArtifactShell>);
+      openDocumentControls();
+      expect(screen.queryByLabelText('Edit social preview'), role).not.toBeInTheDocument();
+      cleanup();
+    }
+  });
+
   it('edit mode KEEPS the comments control, marks the titles, and turns edit into the exit', async () => {
     render(
       <ArtifactShell role="owner">
