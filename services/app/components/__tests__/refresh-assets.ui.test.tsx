@@ -35,6 +35,15 @@ describe('the refresh row', () => {
     fireEvent.click(row);
 
     await waitFor(() => expect(screen.getByLabelText('Refresh result')).toHaveTextContent('1 refreshed'));
+    /*
+     * …and NOT the caveat it used to carry. While the mapped url had no
+     * version, a refreshed image never reached a reader who had already loaded
+     * the old one, and saying so was the whole mitigation (R19). The url now
+     * carries a content-derived `?v=` (lib/story/asset-url), so the next render
+     * points every reader at an address their browser has never seen, and a
+     * warning that no longer describes the product is worse than none.
+     */
+    expect(screen.getByLabelText('Refresh result')).not.toHaveTextContent('old copy');
     expect(calls[0].url).toBe('/api/my/artifacts/story1/assets/refresh');
     expect(calls[0].init?.method).toBe('POST');
   });
@@ -54,16 +63,6 @@ describe('the refresh row', () => {
     fireEvent.click(screen.getByLabelText('Refresh external images'));
     await waitFor(() => expect(screen.getByLabelText('Refresh result')).toHaveTextContent('gone.png'));
     expect(screen.getByLabelText('Refresh result')).toHaveTextContent('check it is public');
-  });
-
-  it('says that a reader who already loaded the image may still see the old one', async () => {
-    vi.stubGlobal('fetch', answering(200, { refreshed: ['https://a.example/one.png'], unchanged: [], failed: [] }));
-    render(<RefreshAssets id="story1" variant="menu" />);
-    fireEvent.click(screen.getByLabelText('Refresh external images'));
-    // The address is derived from the url and served `immutable`, so a browser
-    // that has the old bytes keeps them. Saying so here is the whole mitigation
-    // until the cache-busting address lands (milestone 4).
-    await waitFor(() => expect(screen.getByLabelText('Refresh result')).toHaveTextContent('already loaded'));
   });
 
   it('does not fire twice on a double click', async () => {

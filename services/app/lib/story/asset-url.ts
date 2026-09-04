@@ -25,14 +25,27 @@
  * began measuring images.
  */
 import { sha256Hex } from '@/lib/sha256';
+import { IMAGE_SIZES } from '@/lib/story/ref-data';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
 
-/** What a `web_assets` row contributes to the markup: the box, and the blur to show inside it. */
+/**
+ * What a `web_assets` row contributes to the markup: the box, the blur to show
+ * inside it, the object behind it, and the narrow copy stored beside it.
+ *
+ * The field names are the ROW's, so a `Map<string, WebAssetRow>` is already a
+ * lookup index — no translation step, and so no translation step to drop a
+ * field on one serving path and keep it on another.
+ */
 export interface WebAssetBox {
   width?: number | null;
   height?: number | null;
   /** A ~100-byte `data:` URL stand-in (lib/images/optimise), or null for the tiny images that have none. */
   placeholder?: string | null;
+  /** Where the bytes are (`webasset/<hex>`) — what the `?v=` below is cut from. */
+  object_key?: string | null;
+  /** The 640-wide copy stored beside it, for sources wide enough to need one (lib/images/optimise). */
+  small_object_key?: string | null;
+  small_width?: number | null;
 }
 
 /**
@@ -69,9 +82,82 @@ export function canonicalAssetUrl(url: string): string {
 /** sha256 of the canonical URL — the `web_assets` primary key and the last path segment of the address below. */
 export const urlHash = (url: string): string => sha256Hex(canonicalAssetUrl(url));
 
-/** The ONE deterministic function from a web URL to where we serve our copy. */
-export function assetUrlFor(url: string): string {
-  return `/assets/${urlHash(url)}`;
+/**
+ * THE CACHE KEY, cut from the object the row points at.
+ *
+ * `/assets/<hash>` is served `immutable` for a year and its address is derived
+ * from the URL, so a `refresh_asset` that repoints the row reaches nobody whose
+ * browser already has the old bytes (R19). The address cannot move — a stored
+ * document names the URL, and every rendering derives the address from it — so
+ * the QUERY moves instead: eight hex of the content-addressed object key, which
+ * changes exactly when the bytes do and never otherwise. The route ignores it
+ * (it is a cache key, not an input): a browser holding the old url keeps a
+ * perfectly valid year-long entry, and the next render simply asks for a url it
+ * has never seen. Nothing is invalidated by anything but a real change.
+ */
+const assetVersion = (objectKey: string | null | undefined): string | null => {
+  const digest = (objectKey ?? '').split('/').pop() ?? '';
+  return /^[0-9a-f]{8}/.test(digest) ? digest.slice(0, 8) : null;
+};
+
+/**
+ * The ONE deterministic function from a web URL to where we serve our copy.
+ *
+ * The second argument is what the CALLER holds: a row (the serving paths, which
+ * looked the assets up to render at all) versions the address; a bare predicate
+ * (the editor's own push, which has no rows to consult) gets the unversioned
+ * address, which serves the same bytes and only misses the cache-busting.
+ */
+export function assetUrlFor(url: string, held?: WebAssetBox | boolean | null): string {
+  const base = `/assets/${urlHash(url)}`;
+  const v = held && typeof held === 'object' ? assetVersion(held.object_key) : null;
+  return v ? `${base}?v=${v}` : base;
+}
+
+/**
+ * The narrow copy's address: the same asset, `w=` the width that was stored.
+ *
+ * One route, one row, one query parameter — rather than a second hash — because
+ * the variant is not a second ASSET: it is the same URL's bytes at a second
+ * size, it moves when the row moves, and a refresh must invalidate both with
+ * one `?v=`.
+ */
+const assetVariantUrl = (url: string, box: WebAssetBox): string => {
+  // The separator is decided by the STRING being appended to, not by whether
+  // the row has a key: `assetUrlFor` adds `?v=` only when that key's last
+  // segment is hex, so the two conditions agree for every key `objectKey()`
+  // makes today and would not for a key format that changed.
+  const base = assetUrlFor(url, box);
+  return `${base}${base.includes('?') ? '&' : '?'}w=${box.small_width}`;
+};
+
+/** The two widths a wide image offers, or null when only one copy was ever stored. */
+function assetSrcSet(url: string, box: WebAssetBox): string | null {
+  const { width, small_width: small } = box;
+  if (!box.small_object_key || !small || !width || width <= small) return null;
+  return `${assetVariantUrl(url, box)} ${small}w, ${assetUrlFor(url, box)} ${width}w`;
+}
+
+/*
+ * The `sizes` hint is lib/story/ref-data's IMAGE_SIZES: the same picture in the
+ * same column, whether its bytes came from an upload or from a URL. It is wrong
+ * for a full-bleed image on a wide screen — which simply gets the full variant,
+ * the one it would have had with no `srcset` at all — and right for the
+ * ordinary case, which is an image in the document column.
+ */
+
+/** How many images at the top of a document are assumed to be in the first viewport. */
+const EAGER_IMAGES = 2;
+
+/** What varies between a document a person reads and a frame /export photographs. */
+export interface AssetMapOptions {
+  /**
+   * A CAPTURE render (`chrome=0`): one `src`, the full variant, nothing lazy.
+   * /export photographs this frame, so a lazy image is a photograph of nothing
+   * and a `sizes` hint against a headless viewport is a photograph of the
+   * 640px copy. ONE flag rather than three, because they are one decision.
+   */
+  capture?: boolean;
 }
 
 /** True for a URL this mapping is about at all: an absolute http(s) source. */
@@ -175,7 +261,7 @@ function setAttr(el: JsxElement, name: string, json: string | Record<string, str
  * Returns the SAME array when nothing matched: this runs on every render of
  * every document, and a document with no external assets must not pay a clone.
  */
-export function mapExternalImageSources(nodes: JsxNode[], lookup: AssetLookup): JsxNode[] {
+export function mapExternalImageSources(nodes: JsxNode[], lookup: AssetLookup, opts: AssetMapOptions = {}): JsxNode[] {
   let touches = false;
   walk(nodes, (el) => {
     for (const attr of imagePositionsOf(el)) {
@@ -185,14 +271,23 @@ export function mapExternalImageSources(nodes: JsxNode[], lookup: AssetLookup): 
   });
   if (!touches) return nodes;
 
+  /*
+   * WHERE IN THE DOCUMENT an image is, counted over EVERY `<img>` and not only
+   * the mapped ones: what decides whether a browser may wait for the bytes is
+   * how far down the page they are, and an upload above a URL-kept image
+   * occupies the fold just as well as anything else does.
+   */
+  let seen = 0;
   const clone: JsxNode[] = structuredClone(nodes);
   walk(clone, (el) => {
+    const isImg = !el.isComponent && el.tag.toLowerCase() === 'img';
+    const position = isImg ? seen++ : -1;
     for (const attr of imagePositionsOf(el)) {
       const url = webUrlAt(el, attr);
       if (!url) continue;
       const held = lookup(url);
       if (!held) continue;
-      setAttr(el, attr, assetUrlFor(url));
+      setAttr(el, attr, assetUrlFor(url, held));
       /*
        * The box and the blur, on the SAME rule lib/story/ref-data
        * `resolveRefProps` applies to a `ref:` image, and for the same reasons:
@@ -215,6 +310,30 @@ export function mapExternalImageSources(nodes: JsxNode[], lookup: AssetLookup): 
           backgroundRepeat: 'no-repeat',
         });
       }
+      if (opts.capture) continue;
+      /*
+       * TWO WIDTHS, and the browser picks. `srcSet` in React's own spelling
+       * rather than the HTML one: measured through the SSR renderer, a
+       * lowercase `srcset` reaches the DOM but React does not RECOGNISE it, so
+       * its own `<link rel=preload as=image>` preloads the full `href` and the
+       * phone downloads the desktop copy before it downloads the one it will
+       * use. The author's own srcset wins, as their width and style do.
+       */
+      const srcSet = attrOf(el, 'srcset') || attrOf(el, 'sizes') ? null : assetSrcSet(url, held);
+      if (srcSet) {
+        setAttr(el, 'srcSet', srcSet);
+        setAttr(el, 'sizes', IMAGE_SIZES);
+      }
+      /*
+       * LET THE BROWSER WAIT for everything but the first viewport. `lazy` also
+       * suppresses React's preload of that image (measured), which is the
+       * point: preloading what a reader may never scroll to is the same cost
+       * in a different place.
+       */
+      if (position >= EAGER_IMAGES && !attrOf(el, 'loading')) {
+        setAttr(el, 'loading', 'lazy');
+        if (!attrOf(el, 'decoding')) setAttr(el, 'decoding', 'async');
+      }
     }
   });
   return clone;
@@ -235,8 +354,14 @@ export function mapExternalImageSources(nodes: JsxNode[], lookup: AssetLookup): 
 const CSS_URL_RE = /url\(\s*(['"]?)(https?:\/\/[^'")\s]+)\1\s*\)/gi;
 
 export function mapExternalCssUrls(css: string, lookup: AssetLookup): string {
-  return css.replace(CSS_URL_RE, (whole, quote: string, url: string) =>
-    (lookup(url) ? `url(${quote}${assetUrlFor(url)}${quote})` : whole));
+  return css.replace(CSS_URL_RE, (whole, quote: string, url: string) => {
+    // The row, kept — not just "do we hold it": a face is served from the same
+    // `immutable` address an image is, so a REFRESHED font needs the same
+    // content-derived `?v=` or it reaches nobody who already loaded the old one
+    // (R19). `refresh_asset` refreshes fonts exactly as it refreshes pictures.
+    const held = lookup(url);
+    return held ? `url(${quote}${assetUrlFor(url, held)}${quote})` : whole;
+  });
 }
 
 /** The same positions, read rather than written — what the importer is asked to fetch. */

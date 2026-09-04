@@ -53,6 +53,9 @@ export interface WebAssetRow {
   width: number | null;
   height: number | null;
   placeholder: string | null;
+  /** The narrow copy (lib/images/optimise), for the `srcset` the mapping writes. */
+  small_object_key: string | null;
+  small_width: number | null;
   fetched_by_token_id: string | null;
   fetched_by_user_id: string | null;
 }
@@ -114,7 +117,10 @@ async function fetchAsset(url: string, kind: WebAssetKind): Promise<Omit<WebAsse
     if (!type) throw new WebAssetRefused('unsupported_type', 'the response is not a font file', url);
     const key = objectKey('webasset', bytes);
     await objectStore().put(key, bytes, type);
-    return { object_key: key, content_type: type, bytes: bytes.length, width: null, height: null, placeholder: null };
+    return {
+      object_key: key, content_type: type, bytes: bytes.length,
+      width: null, height: null, placeholder: null, small_object_key: null, small_width: null,
+    };
   }
 
   if (kind === 'pdf') {
@@ -123,7 +129,10 @@ async function fetchAsset(url: string, kind: WebAssetKind): Promise<Omit<WebAsse
     if (sniffAssetType(bytes) !== 'application/pdf') throw new WebAssetRefused('unsupported_type', 'the response is not a PDF file', url);
     const key = objectKey('webasset', bytes);
     await objectStore().put(key, bytes, 'application/pdf');
-    return { object_key: key, content_type: 'application/pdf', bytes: bytes.length, width: null, height: null, placeholder: null };
+    return {
+      object_key: key, content_type: 'application/pdf', bytes: bytes.length,
+      width: null, height: null, placeholder: null, small_object_key: null, small_width: null,
+    };
   }
 
   const sniffed = sniffImageType(bytes);
@@ -133,13 +142,25 @@ async function fetchAsset(url: string, kind: WebAssetKind): Promise<Omit<WebAsse
   const optimised = await optimiseImage(bytes, sniffed);
   const key = objectKey('webasset', optimised.buffer);
   await objectStore().put(key, optimised.buffer, optimised.contentType);
+  /*
+   * The narrow copy is stored HERE, beside the full one, and its bytes are
+   * charged WITH it: one import, one row, one number for the quota to sum. A
+   * second copy billed separately would look like a second import of a URL
+   * nobody named, and a second copy billed to nobody would be a way to store
+   * bytes off the books.
+   */
+  const variant = optimised.variant;
+  const smallKey = variant ? objectKey('webasset', variant.buffer) : null;
+  if (variant && smallKey) await objectStore().put(smallKey, variant.buffer, variant.contentType);
   return {
     object_key: key,
     content_type: optimised.contentType,
-    bytes: optimised.buffer.length,
+    bytes: optimised.buffer.length + (variant?.buffer.length ?? 0),
     width: optimised.width,
     height: optimised.height,
     placeholder: optimised.placeholder,
+    small_object_key: smallKey,
+    small_width: variant?.width ?? null,
   };
 }
 
@@ -164,10 +185,12 @@ export async function importWebAsset(url: string, by: WebAssetImporter, kind: We
   const stored = await fetchAsset(url, kind);
   const db = await getDb();
   await db.query(
-    `insert into web_assets (url_hash, url, object_key, content_type, bytes, width, height, placeholder, fetched_by_token_id, fetched_by_user_id)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) on conflict (url_hash) do nothing`,
+    `insert into web_assets (url_hash, url, object_key, content_type, bytes, width, height, placeholder,
+       small_object_key, small_width, fetched_by_token_id, fetched_by_user_id)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) on conflict (url_hash) do nothing`,
     [hash, canonicalAssetUrl(url), stored.object_key, stored.content_type, stored.bytes,
-      stored.width, stored.height, stored.placeholder, by.tokenId, by.userId],
+      stored.width, stored.height, stored.placeholder, stored.small_object_key, stored.small_width,
+      by.tokenId, by.userId],
   );
   // Re-read rather than return what we built: a concurrent importer may have
   // won the insert, and the row that EXISTS is the one every reader will serve.
@@ -223,9 +246,11 @@ export async function importForDocument(doc: DocumentAssetTarget, url: string): 
  * Re-fetch a URL and repoint its row — the answer to "the source image
  * changed" (R13). The ADDRESS never moves (`/assets/<url_hash>` is derived from
  * the url, not the bytes), which is what lets a stored document keep working
- * without a rewrite — and is also the honest limit of this: the address is
- * served `immutable`, so a reader whose browser already cached it keeps the old
- * picture until that entry expires. Everyone who has not is served the new one.
+ * without a rewrite. What USED to be its honest limit — the address is served
+ * `immutable`, so a reader who already had it kept the old picture (R19) — is
+ * closed by the row itself: the mapping cuts a `?v=` from `object_key`
+ * (lib/story/asset-url), so repointing the row changes the url every later
+ * render emits and every reader asks again exactly once.
  *
  * A URL nobody holds yet is simply imported, so a caller need not ask first.
  *
@@ -266,10 +291,11 @@ export async function refreshWebAsset(url: string, by: WebAssetImporter, kind: W
   const db = await getDb();
   await db.query(
     `update web_assets set object_key = $2, content_type = $3, bytes = $4, width = $5, height = $6,
-       placeholder = $7, fetched_at = now(), fetched_by_token_id = $8, fetched_by_user_id = $9
+       placeholder = $7, small_object_key = $8, small_width = $9,
+       fetched_at = now(), fetched_by_token_id = $10, fetched_by_user_id = $11
      where url_hash = $1`,
     [hash, stored.object_key, stored.content_type, stored.bytes, stored.width, stored.height, stored.placeholder,
-      by.tokenId, by.userId],
+      stored.small_object_key, stored.small_width, by.tokenId, by.userId],
   );
   return (await webAssetByHash(hash))!;
 }

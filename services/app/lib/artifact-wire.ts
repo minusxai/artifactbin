@@ -327,7 +327,12 @@ export async function replaceArtifactWithBody(
   const current = await getArtifactFor(actor, id);
   if (!current) return json({ error: 'not_found' }, 404);
   const owner = writerFor(current);
-  const parsed = await parseContentInput(body, { loadRef: refLoaderForActor(owner), importAsset: assetImporterFor(owner.tokenId, owner.userId), resolveFont: fontResolver(), overByteQuota: byteQuotaFor(owner.tokenId) });
+  const parsed = await parseContentInput(body, {
+    loadRef: refLoaderForActor(owner),
+    importAsset: assetImporterFor(owner.tokenId, owner.userId),
+    resolveFont: fontResolver(),
+    overByteQuota: byteQuotaFor(owner.tokenId),
+  });
   if (parsed instanceof Response) return parsed;
 
   const visibility = parseVisibility(body, !!actor.userId);
@@ -385,7 +390,12 @@ export async function createArtifactFromBody(
   request: Request,
 ): Promise<Response> {
   if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — delete documents you no longer need'] }, 403);
-  const parsed = await parseContentInput(body, { loadRef: refLoaderForActor(actor), importAsset: assetImporterFor(actor.tokenId, actor.userId), resolveFont: fontResolver(), overByteQuota: byteQuotaFor(actor.tokenId) });
+  const parsed = await parseContentInput(body, {
+    loadRef: refLoaderForActor(actor),
+    importAsset: assetImporterFor(actor.tokenId, actor.userId),
+    resolveFont: fontResolver(),
+    overByteQuota: byteQuotaFor(actor.tokenId),
+  });
   if (parsed instanceof Response) return parsed;
   const visibility = parseVisibility(body, !!actor.userId);
   if (visibility instanceof Response) return visibility;

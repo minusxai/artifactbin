@@ -359,6 +359,13 @@ const WEB_ASSETS: Table = {
     { name: 'width', type: 'INTEGER' },
     { name: 'height', type: 'INTEGER' },
     { name: 'placeholder', type: 'TEXT' },
+    // The narrow copy stored beside the full one (lib/images/optimise): its
+    // key and the width it was made at, which is the `srcset` descriptor. Null
+    // for a font, for an image that was never wide enough to need one, and for
+    // every row stored before the variant existed — all of which simply offer
+    // one width, exactly as they did.
+    { name: 'small_object_key', type: 'TEXT' },
+    { name: 'small_width', type: 'INTEGER' },
     { name: 'fetched_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
     { name: 'fetched_by_token_id', type: 'TEXT' },
     { name: 'fetched_by_user_id', type: 'TEXT' },

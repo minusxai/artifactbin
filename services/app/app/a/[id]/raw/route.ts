@@ -134,7 +134,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     case 'image': {
       let img: Awaited<ReturnType<typeof loadImage>>;
       try {
-        img = await loadImage(artifact);
+        // `w=` is the width a `srcset` asked for — one of the widths publish
+        // stored, never a resize (lib/story/image-store).
+        img = await loadImage(artifact, { width: new URL(request.url).searchParams.get('w') });
       } catch (error) {
         // The row promises bytes the store will not give: corruption or broken
         // credentials, both page-the-operator events — said plainly, never a 500.
@@ -321,7 +323,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         // served <img> points at them, with the box and the blur the row
         // recorded, and the reader's browser reaches no third party.
         webAssetsForSource(artifact.source),
-        refDataForRow(artifact),
+        // A capture takes the full copy of every image: /export photographs
+        // this frame, and a `sizes` hint against a headless viewport is how an
+        // og card ends up showing the 640px one.
+        refDataForRow(artifact, { capture: !chrome }),
         chrome
           ? Promise.resolve(declared && hasUrlValues ? { ...declared, values: urlValues } : declared)
           : dataflowForRow(artifact, { values: urlValues }),

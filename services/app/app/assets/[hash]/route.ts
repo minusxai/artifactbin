@@ -4,9 +4,12 @@
  *
  * Content-addressed BY THE URL that produced it, so `immutable` is honest: the
  * address never moves, and `refresh_asset` repointing the row is the one way
- * the bytes behind it change (a reader who already cached this keeps the old
- * copy until the entry expires — the stated cost of an address that a stored
- * document can keep naming).
+ * the bytes behind it change. That used to be a real cost — a reader who had
+ * already cached this kept the old picture (R19) — and is not any more: the
+ * mapping puts a content-derived `?v=` on the url it emits
+ * (lib/story/asset-url), so a refreshed asset is asked for at an address no
+ * browser has seen before, while the bytes are still served here, from the
+ * hash alone, whatever query anyone arrives with.
  *
  * THE THREE DEFENSIVE HEADERS ARE THE POINT. An imported SVG is markup, and a
  * top-level navigation to one served plainly runs it in THIS origin — the
@@ -26,6 +29,7 @@
  * whose key comes from the CALLER, so a miss is routine rather than an anomaly.
  */
 import { objectStore } from '@/lib/object-store';
+import { VARIANT_CONTENT_TYPE } from '@/lib/images/optimise';
 import { fileNameFromUrl } from '@/lib/file-display';
 import { pdfFilename } from '@/lib/story/pdf-store';
 import { webAssetByHash } from '@/lib/web-assets';
@@ -64,13 +68,25 @@ const dispositionFor = (contentType: string, url: string): string => {
   return `inline; filename="${pdfFilename(name, 'file')}"`;
 };
 
-export async function GET(_request: Request, ctx: { params: Promise<{ hash: string }> }) {
+export async function GET(request: Request, ctx: { params: Promise<{ hash: string }> }) {
   const { hash } = await ctx.params;
   const row = await webAssetByHash(hash);
   if (!row) return new Response('not found', { status: 404 });
+  /*
+   * `w=` NAMES A WIDTH WE STORED — it is not a resize anyone may ask for. The
+   * srcset the mapping writes offers exactly the row's `small_width`, so the
+   * one value that selects the narrow copy is the one we made; everything else
+   * (an old address, a hand-typed number, nothing at all) is the full copy,
+   * because a width is a preference and never a reason to fail a picture.
+   *
+   * `v=` is read by nobody: it is the CACHE KEY a refresh moves (R19), and the
+   * bytes it addresses are simply whatever the row points at now.
+   */
+  const width = new URL(request.url).searchParams.get('w');
+  const narrow = row.small_object_key && width !== null && Number(width) === row.small_width;
   let bytes: Buffer;
   try {
-    bytes = await objectStore().get(row.object_key);
+    bytes = await objectStore().get(narrow ? row.small_object_key! : row.object_key);
   } catch {
     // A row promising bytes the store will not give is corruption or broken
     // credentials — but this is a public asset address, and answering a caller
@@ -83,6 +99,13 @@ export async function GET(_request: Request, ctx: { params: Promise<{ hash: stri
     // Built fresh per response: @hono/node-server writes the computed
     // Content-Length back INTO this object, so a shared constant would
     // announce the first body's length for every later one.
-    headers: { 'Content-Type': row.content_type, ...ASSET_HEADERS, 'Content-Disposition': dispositionFor(row.content_type, row.url) },
+    // A `w=` hit is always an image row (only an image is stored at two
+    // widths), so the narrow branch never changes the disposition — the two
+    // decisions are independent and both are made here.
+    headers: {
+      'Content-Type': narrow ? VARIANT_CONTENT_TYPE : row.content_type,
+      ...ASSET_HEADERS,
+      'Content-Disposition': dispositionFor(row.content_type, row.url),
+    },
   });
 }

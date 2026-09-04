@@ -14,7 +14,7 @@ import { getDb, type Queryable } from './db';
 import { generateFileId } from './ids';
 import { parseContentInput, type ArtifactFormat } from './story/input';
 import { canonicalizeMarkup, publishJsx } from './story/jsx-tier';
-import { imageRawUrl, pdfRawUrl } from './story/ref-data';
+import { imageRawUrl, imageVariantUrl, pdfRawUrl } from './story/ref-data';
 import { displayTitle } from './story/title';
 import { assetWarningFor, importWebAsset, WebAssetRefused, type AssetWarning, type WebAssetKind } from './web-assets';
 import { resolveWebFont, UnknownFontError } from './webfonts';
@@ -431,6 +431,7 @@ async function forkInput(actor: TokenActor, source: ArtifactRow, overrides: Fork
     loadRef: refLoaderForActor(actor),
     importAsset: assetImporterFor(actor.tokenId, actor.userId),
     resolveFont: fontResolver(),
+    overByteQuota: byteQuotaFor(actor.tokenId),
   });
   if (parsed instanceof Response) return parsed;
   const { derivedTitle: _derived, ...stored } = parsed;
@@ -968,6 +969,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
         // the created asset belongs to whoever the DOCUMENT belongs to.
         importAsset: assetImporterFor(head.token_id, head.user_id),
         resolveFont: fontResolver(),
+        overByteQuota: byteQuotaFor(head.token_id),
       },
     );
     if (published instanceof Response) return published;
@@ -1237,6 +1239,11 @@ export function assetImporterFor(tokenId: string, userId: string | null): (url: 
  * subject is the ACCOUNT when the token has one — a cap keyed on the token
  * alone is bypassed by minting a second one — which lib/asset-quota decides,
  * not this.
+ *
+ * Its ABSENCE is also what tells the byte tiers they are being previewed:
+ * every other ctx member degrades to "do less", and storing the bytes IS what
+ * publishing an image or a PDF is, so those two refuse by name instead of
+ * quietly working for free (lib/story/input).
  */
 export function byteQuotaFor(tokenId: string): () => Promise<boolean> {
   return () => assetByteQuotaExceeded(tokenId);
@@ -1594,7 +1601,10 @@ export function datasetsForDocument(source: string | null | undefined): string[]
 
 /** Build the render-time RefDataMap for a jsx artifact: recipes → parsed
  * template, images → their /a URL. (Datasets: see dataflowForRow.) */
-export async function refDataForRow(row: ArtifactRow): Promise<import('@/lib/story/ref-data').RefDataMap> {
+export async function refDataForRow(
+  row: ArtifactRow,
+  opts: { capture?: boolean } = {},
+): Promise<import('@/lib/story/ref-data').RefDataMap> {
   const meta = row.meta as { refs?: Array<{ id: string; kind: string }> };
   const out: import('@/lib/story/ref-data').RefDataMap = {};
   // A dataset a <Query> reads is a ref (ownership, dependents) but NOT page
@@ -1621,7 +1631,9 @@ export async function refDataForRow(row: ArtifactRow): Promise<import('@/lib/sto
       // it immutable and readers stop refetching the image on every render.
       // The intrinsic box, when the store recorded one (lib/images/optimise):
       // the markup reserves it so nothing below jumps when the bytes land.
-      const im = r.meta as { width?: unknown; height?: unknown; placeholder?: unknown } | null;
+      const im = r.meta as {
+        width?: unknown; height?: unknown; placeholder?: unknown; smallObjectKey?: unknown; smallWidth?: unknown;
+      } | null;
       const box = typeof im?.width === 'number' && typeof im?.height === 'number'
         ? { width: im.width, height: im.height }
         : {};
@@ -1630,7 +1642,15 @@ export async function refDataForRow(row: ArtifactRow): Promise<import('@/lib/sto
       const blur = typeof im?.placeholder === 'string' && im.placeholder.startsWith('data:')
         ? { blur: im.placeholder }
         : {};
-      out[r.id] = { kind: 'image', url: imageRawUrl(r.id, r.version), ...box, ...blur };
+      /*
+       * The narrow copy publish stored beside it, addressed on the same
+       * artifact — the second half of the `srcset` the markup writes. Never for
+       * a CAPTURE, which wants the full copy and nothing to choose from.
+       */
+      const widths = !opts.capture && typeof im?.smallWidth === 'number' && typeof im?.smallObjectKey === 'string'
+        ? { smallUrl: imageVariantUrl(r.id, r.version, im.smallWidth), smallWidth: im.smallWidth }
+        : {};
+      out[r.id] = { kind: 'image', url: imageRawUrl(r.id, r.version), ...box, ...blur, ...widths };
     } else if (r.format === 'pdf') {
       // What the CARD says: where the file is, what it is called, how big it is
       // and how long. The name is the artifact's title (the author's, or the

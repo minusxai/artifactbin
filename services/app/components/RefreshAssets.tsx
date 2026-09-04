@@ -36,17 +36,18 @@ function summarise(reply: RefreshReply, status: number): string[] {
   if (status !== 200) return [reply.error ?? `could not refresh (${status})`];
   const lines: string[] = [];
   const refreshed = reply.refreshed?.length ?? 0;
-  if (refreshed > 0) {
-    lines.push(`${refreshed} refreshed`);
-    /*
-     * The honest caveat, said where the act was asked for. Our copy lives at an
-     * address derived from the URL and served `immutable`, so a reader whose
-     * browser already has the old bytes keeps them until that entry expires;
-     * everyone else is served the new picture at once. A cache-busting address
-     * is milestone 4's — until then, saying so IS the mitigation.
-     */
-    lines.push('readers who already loaded an image may see the old copy for a while');
-  } else if ((reply.unchanged?.length ?? 0) > 0) lines.push('already up to date');
+  /*
+   * "N refreshed" and nothing else. This used to add "readers who already
+   * loaded an image may see the old copy for a while", which was the honest
+   * caveat while the mapped url had no version: the address is derived from
+   * the URL and served `immutable`, so a repointed row reached nobody who had
+   * already fetched it. The url now carries a content-derived `?v=`
+   * (lib/story/asset-url), so the next render asks every reader for an address
+   * their browser has never seen — and a warning that no longer describes the
+   * product is worse than no warning at all.
+   */
+  if (refreshed > 0) lines.push(`${refreshed} refreshed`);
+  else if ((reply.unchanged?.length ?? 0) > 0) lines.push('already up to date');
   else if (!reply.failed?.length) lines.push('this document names no external images');
   for (const f of reply.failed ?? []) lines.push(`${f.url} — ${f.fix}`);
   return lines;

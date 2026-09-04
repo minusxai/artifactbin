@@ -16,7 +16,10 @@ import { storeImageContent } from '@/lib/story/data-tiers';
 import { mintToken } from '@/lib/tokens';
 import { createUser } from '@/lib/users';
 import type { StoredContent } from '@/lib/story/input';
-import { useAppHarness } from '@/__tests__/harness';
+import { useAppHarness, request } from '@/__tests__/harness';
+import { POST as previewRoute } from '@/app/api/preview/route';
+import { objectKey, objectStore, ObjectUnavailable } from '@/lib/object-store';
+import { optimiseImage } from '@/lib/images/optimise';
 
 const harness = useAppHarness();
 
@@ -197,5 +200,106 @@ describe('session raw-body image upload', () => {
     const res = await sessionCreate(jsonReq('/api/my/artifacts', { body: { title: 'doc', markup: '<h1>Hello</h1>' } }));
     expect(res.status).toBe(201);
     expect((await res.json()).format).toBe('markup');
+  });
+});
+
+
+/**
+ * A PREVIEW STORES NOTHING — and the image tier could not keep that promise.
+ *
+ * `/api/preview` exists to compile a draft, and every optional member of
+ * `ContentInputCtx` degrades to "do less" for it. Storing the bytes IS what
+ * publishing an image is, though, so previewing one PUT an object with no
+ * artifact row to reference it — and THE DB IS THE ONLY INDEX, so that object
+ * could never be found again, billed, or deleted. Any credential could have
+ * filled the disk a few megabytes at a time. Found by milestone 3, which fixed
+ * the same shape in the PDF tier (`pdf_not_previewable`) and booked this one
+ * here.
+ *
+ * The refusal is by NAME, and it costs the product nothing: the only caller of
+ * /api/preview in this app is the in-place editor's draft CSS compile, which
+ * sends `markup` (its draft DATA re-run goes to /api/query), and the docs never
+ * teach the route at all.
+ */
+describe('previewing an image', () => {
+  /*
+   * Its OWN bytes: the store is content-addressed, so a PNG another test in
+   * this file has already published would be at its key whatever this one did.
+   */
+  const OWN = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNk+M/wn4EIwDiqkL4KAV6+A/9m/6EkAAAAAElFTkSuQmCC',
+    'base64',
+  );
+  const dataUrl = `data:image/png;base64,${OWN.toString('base64')}`;
+  const preview = (json: unknown, token: string) =>
+    previewRoute(request('/api/preview', { method: 'POST', token, json }));
+
+  it('is refused by name, and stores nothing', async () => {
+    const t = await mintToken('t');
+    // The exact object publishing it WOULD have stored.
+    const fit = await optimiseImage(OWN, 'image/png');
+    const key = objectKey('image', fit.buffer);
+
+    const res = await preview({ image: dataUrl }, t.token);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('image_not_previewable');
+    await expect(objectStore().get(key)).rejects.toBeInstanceOf(ObjectUnavailable);
+  });
+
+  it('refuses an image URL before it fetches anything', async () => {
+    const t = await mintToken('t');
+    // A closed port: anything that reached the network would fail differently.
+    const res = await preview({ imageUrl: 'http://127.0.0.1:9/photo.png' }, t.token);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('image_not_previewable');
+  });
+
+  it('still compiles a draft document, which is what the route is for', async () => {
+    const t = await mintToken('t');
+    const res = await preview({ markup: '<h1 className="text-2xl">Draft</h1>' }, t.token);
+    expect(res.status).toBe(200);
+    expect(typeof (await res.json()).css).toBe('string');
+  });
+});
+
+
+/**
+ * THE LABEL IS NOT THE FILE.
+ *
+ * `storeImageContent` is the one door every upload comes through — the picker,
+ * a paste, a drop, the raw-body POST and the JSON data URL — and it took the
+ * caller's word for what the bytes were. `{image: "data:image/png;base64,<a
+ * PDF>"}` answered 201 and the document then served a PDF as `image/png`,
+ * under `nosniff`, which is the header that makes our word final. The URL
+ * importer has sniffed since it existed (lib/web-ingest/sniff, for exactly this
+ * reason: a remote label is attacker-controlled); the upload door now asks the
+ * same question of the same bytes.
+ */
+describe('what the bytes actually are', () => {
+  const asImage = (bytes: Buffer, label: string) => bearerCreate(request('/api/artifacts', {
+    method: 'POST', token: uploadToken, json: { image: `data:${label};base64,${bytes.toString('base64')}` },
+  }));
+  let uploadToken = '';
+  beforeEach(async () => { uploadToken = (await mintToken('t')).token; });
+
+  it('refuses bytes that are not an image, whatever they claim to be', async () => {
+    const pdf = Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.alloc(64, 0x20)]);
+    const res = await asImage(pdf, 'image/png');
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('invalid_image');
+  });
+
+  it('stores the type it SNIFFED, not the one it was told', async () => {
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4"/></svg>');
+    const res = await asImage(svg, 'image/png');
+    expect(res.status).toBe(201);
+    const { id } = await res.json();
+    // SVG is text that scales: sniffed, and still passed through untouched.
+    expect(((await getArtifactById(id))!.meta as { contentType: string }).contentType).toBe('image/svg+xml');
+
+    const mislabelled = await asImage(PNG_BYTES, 'image/jpeg');
+    expect(mislabelled.status).toBe(201);
+    const png = await mislabelled.json();
+    expect(((await getArtifactById(png.id))!.meta as { contentType: string }).contentType).not.toBe('image/jpeg');
   });
 });

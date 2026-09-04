@@ -94,6 +94,11 @@ export interface ContentInputCtx {
    * is open. It is a PRE-check and not a reservation — an account a byte under
    * the cap stores its file and is refused the next one, which is the same
    * rule importWebAsset ships.
+   *
+   * And by its ABSENCE it is what tells the BYTE tiers they are being
+   * previewed. Every other member above degrades to "do less"; the PDF and
+   * image tiers cannot, because storing the bytes IS publishing one, so they
+   * refuse by name instead (`*_not_previewable`, below).
    */
   overByteQuota?: () => Promise<boolean>;
 }
@@ -139,10 +144,40 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
       throw error;
     }
   }
-  if (kind === 'imageUrl') {
-    const ingested = await ingestImageFromUrl(String(body.imageUrl));
-    if (ingested instanceof Response) return ingested;
-    return { ...ingested, derivedTitle: typeof body.title === 'string' ? null : imageTitleFromUrl(String(body.imageUrl)) };
+  /*
+   * THE IMAGE TIER, BOTH SHAPES — the upload and the URL import — behind one
+   * gate, because the cost is the same object either way.
+   *
+   * NO HOOK, NO TIER. `/api/preview` promises that a draft persists nothing,
+   * and this is the tier that cannot keep it: storing the bytes IS publishing
+   * an image, and the object would then exist with no artifact row naming it —
+   * THE DB IS THE ONLY INDEX, so nothing could ever find it again, bill it, or
+   * delete it. Any credential could have filled the disk a few megabytes at a
+   * time. So a caller with no quota to charge is refused BY NAME rather than
+   * quietly given the tier for free. It costs the product nothing: the only
+   * caller of /api/preview here is the editor's draft-CSS compile, which sends
+   * `markup` (its data re-run goes to /api/query), and the docs never teach the
+   * route. The PDF tier answers `pdf_not_previewable` to the same question.
+   *
+   * Asked BEFORE the fetch, so a caller over their cap cannot spend our
+   * bandwidth either — and so a preview is not an image-fetch primitive.
+   */
+  if (kind === 'image' || kind === 'imageUrl') {
+    if (!ctx.overByteQuota) {
+      return json({
+        error: 'image_not_previewable',
+        details: ['an image cannot be previewed — previewing stores nothing, and storing the bytes IS publishing it. POST it to /api/artifacts instead.'],
+      }, 400);
+    }
+    if (await ctx.overByteQuota()) {
+      return json({ error: 'quota_exceeded', details: ['this account is over its stored-byte quota — delete assets you no longer need'] }, 403);
+    }
+    if (kind === 'imageUrl') {
+      const ingested = await ingestImageFromUrl(String(body.imageUrl));
+      if (ingested instanceof Response) return ingested;
+      return { ...ingested, derivedTitle: typeof body.title === 'string' ? null : imageTitleFromUrl(String(body.imageUrl)) };
+    }
+    return await publishImage(body, body.image as string);
   }
   /*
    * THE ONE PLACE THE BYTE QUOTA IS CHARGED at this door, and it guards both
@@ -150,15 +185,10 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
    * same 25 MB either way. Asked BEFORE the fetch, so a caller over their cap
    * cannot spend our bandwidth either.
    *
-   * NO HOOK, NO TIER. Every other optional ctx member degrades to "do less"
-   * for /api/preview, whose whole promise is that a draft stores nothing. That
-   * promise is not one this tier can keep: storing the bytes IS what publishing
-   * a PDF is, and the object would then exist with no artifact row to reference
-   * it — and THE DB IS THE ONLY INDEX, so nothing could ever find it again,
-   * bill it, or delete it. Any credential could have filled the disk 25 MB at a
-   * time. So a caller with no quota to charge is refused the tier rather than
-   * quietly given it for free. (The image tier has the same shape at a fifth
-   * the size; that is booked, not fixed here.)
+   * NO HOOK, NO TIER, for the reason written out over the image tier above —
+   * at 25 MB a time rather than a few. The two tiers refuse identically
+   * because they are the same failure: an object stored with no artifact row
+   * naming it, in an app where THE DB IS THE ONLY INDEX.
    */
   if (kind === 'pdf' || kind === 'pdfUrl') {
     if (!ctx.overByteQuota) {
@@ -178,7 +208,6 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
     return await publishPdf(body, body.pdf as string);
   }
   if (kind === 'viz') return publishVizRecipe(body, body.viz);
-  if (kind === 'image') return await publishImage(body, body.image as string);
   const value = body[kind] as string;
   const sizeError = tooLarge(value);
   if (sizeError) return sizeError;

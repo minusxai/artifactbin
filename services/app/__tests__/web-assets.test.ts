@@ -28,6 +28,7 @@ import { objectStore } from '@/lib/object-store';
 import { setAssetByteQuotaForTests } from '@/lib/asset-quota';
 import { importWebAsset, refreshWebAsset, refreshWebAssets, lookupWebAssets, webAssetByHash, WebAssetRefused } from '@/lib/web-assets';
 import { assetBytesForToken } from '@/lib/asset-quota';
+import { assetUrlFor } from '@/lib/story/asset-url';
 import { webIngestRateLimited } from '@/lib/auth';
 import { WEB_INGEST_MAX_PER_HOUR } from '@/lib/config';
 
@@ -35,6 +36,14 @@ useAppHarness();
 
 const png = (size: number, colour: string) =>
   sharp({ create: { width: size, height: size, channels: 3, background: colour } }).png().toBuffer();
+
+/**
+ * A wide image that earns a second, narrower copy — and fits under the suite's
+ * deliberately tiny 5 KB import cap (vitest.config IMAGES__MAX_BYTES), which is
+ * why it is a lossy webp rather than the photograph the rule was written for.
+ */
+const wideImage = (width: number, height: number): Promise<Buffer> =>
+  sharp({ create: { width, height, channels: 3, background: '#0a78c8' } }).webp({ quality: 50 }).toBuffer();
 
 const SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>');
 const WOFF2 = Buffer.concat([Buffer.from('wOF2'), Buffer.alloc(64, 7)]);
@@ -53,6 +62,10 @@ beforeAll(async () => {
       case '/photo.png':
         res.writeHead(200, { 'Content-Type': 'image/png' });
         res.end(await png(64, photoColour));
+        return;
+      case '/wide.webp':
+        res.writeHead(200, { 'Content-Type': 'image/webp' });
+        res.end(await wideImage(1600, 1200));
         return;
       case '/logo.svg':
         res.writeHead(200, { 'Content-Type': 'image/svg+xml' });
@@ -125,6 +138,33 @@ describe('importWebAsset', () => {
     expect((await objectStore().get(row.object_key)).length).toBe(row.bytes);
   });
 
+  /*
+   * THE NARROW COPY (lib/images/optimise) travels with the row, because the
+   * row is what the mapping reads to write a `srcset` — and it is CHARGED with
+   * the original, once: a variant nobody asked for must not be a way to store
+   * bytes off the books, and billing it separately would make the second copy
+   * look like a second import.
+   */
+  it('stores the narrow copy beside the full one, charged together', async () => {
+    allowLocal();
+    const row = await importWebAsset(`${base}/wide.webp`, await anonToken());
+    expect(row.small_object_key).toBeTruthy();
+    expect(row.small_width).toBe(1280);
+    expect(row.small_object_key).not.toBe(row.object_key);
+    const full = (await objectStore().get(row.object_key)).length;
+    const small = (await objectStore().get(row.small_object_key!)).length;
+    expect(small).toBeLessThan(full);
+    expect(row.bytes).toBe(full + small);
+  });
+
+  it('records no narrow copy for an image that never needed one', async () => {
+    allowLocal();
+    const row = await importWebAsset(`${base}/photo.png`, await anonToken());
+    expect(row.small_object_key).toBeNull();
+    expect(row.small_width).toBeNull();
+    expect(row.bytes).toBe((await objectStore().get(row.object_key)).length);
+  });
+
   it('leaves an SVG byte-identical', async () => {
     allowLocal();
     const row = await importWebAsset(`${base}/logo.svg`, await anonToken());
@@ -193,6 +233,32 @@ describe('refreshWebAsset', () => {
     expect(after.url_hash).toBe(before.url_hash); // the served address never moves
     expect(after.object_key).not.toBe(before.object_key);
     expect((await webAssetByHash(before.url_hash))?.object_key).toBe(after.object_key);
+    photoColour = '#204080';
+  });
+
+  /*
+   * R19 — the half a repointed row cannot do on its own. `/assets/<hash>` is
+   * served `immutable` for a year, so a reader who already fetched the old
+   * bytes never asks again; what a refresh changes is the URL the next RENDER
+   * emits, and the change has to come from the row, since nothing else about
+   * the document moved.
+   */
+  it('changes the url every later render emits, at the same address', async () => {
+    allowLocal();
+    const actor = await anonToken();
+    photoColour = '#0b7a3c';
+    const before = await importWebAsset(`${base}/photo.png`, actor);
+    photoColour = '#c21807';
+    const after = await refreshWebAsset(`${base}/photo.png`, actor);
+
+    expect(assetUrlFor(`${base}/photo.png`, after)).not.toBe(assetUrlFor(`${base}/photo.png`, before));
+    expect(assetUrlFor(`${base}/photo.png`, after).split('?')[0])
+      .toBe(assetUrlFor(`${base}/photo.png`, before).split('?')[0]);
+    // …and a refresh that finds the SAME bytes emits the same url: the point is
+    // to invalidate a change, not to make every render a cache miss.
+    photoColour = '#c21807';
+    const again = await refreshWebAsset(`${base}/photo.png`, actor);
+    expect(assetUrlFor(`${base}/photo.png`, again)).toBe(assetUrlFor(`${base}/photo.png`, after));
     photoColour = '#204080';
   });
 

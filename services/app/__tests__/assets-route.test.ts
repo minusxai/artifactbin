@@ -16,11 +16,12 @@ import { useAppHarness, request } from '@/__tests__/harness';
 import { GET } from '@/app/assets/[hash]/route';
 import { getDb } from '@/lib/db';
 import { objectKey, objectStore } from '@/lib/object-store';
-import { urlHash } from '@/lib/story/asset-url';
+import { assetUrlFor, urlHash } from '@/lib/story/asset-url';
 
 useAppHarness();
 
 const BYTES = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+const SMALL = Buffer.from('narrow copy of the same picture');
 const URL_A = 'https://example.test/logo.svg';
 
 const seed = async (contentType = 'image/svg+xml', bytes: Buffer = BYTES, url: string = URL_A) => {
@@ -34,7 +35,8 @@ const seed = async (contentType = 'image/svg+xml', bytes: Buffer = BYTES, url: s
   return urlHash(url);
 };
 
-const asset = (hash: string) => GET(request(`/assets/${hash}`), { params: Promise.resolve({ hash }) });
+const asset = (hash: string, search = '') =>
+  GET(request(`/assets/${hash}${search}`), { params: Promise.resolve({ hash }) });
 
 describe('GET /assets/<hash>', () => {
   it('serves the stored bytes with all five headers', async () => {
@@ -57,6 +59,62 @@ describe('GET /assets/<hash>', () => {
     expect((await asset('not-a-hash')).status).toBe(404);
     expect((await asset('../../etc/passwd')).status).toBe(404);
     expect((await asset('A'.repeat(64))).status).toBe(404); // hex is lowercase; a near miss is still a miss
+  });
+
+  /*
+   * `?v=` IS A CACHE KEY AND NOTHING ELSE (R19). The address is served
+   * `immutable` and cannot move — a stored document names the URL and every
+   * rendering derives the address from it — so a refresh changes what the
+   * mapping EMITS, and the route must answer the current bytes at every
+   * version anyone was ever served, including none at all.
+   */
+  it('ignores the version the mapping puts on it', async () => {
+    const hash = await seed();
+    for (const search of ['', '?v=1a2b3c4d', '?v=anything at all', '?v=', '?w=99999']) {
+      const res = await asset(hash, search);
+      expect([search, res.status]).toEqual([search, 200]);
+      expect(Buffer.from(await res.arrayBuffer())).toEqual(BYTES);
+    }
+  });
+
+  it('serves the address the mapping actually emits for a row', async () => {
+    await seed();
+    const db = await getDb();
+    const row = (await db.query('select * from web_assets where url_hash = $1', [urlHash(URL_A)])).rows[0] as any;
+    const mapped = assetUrlFor(URL_A, row);
+    expect(mapped).toMatch(/\?v=[0-9a-f]{8}$/);
+    const [path, search] = mapped.split('?');
+    const res = await asset(path.split('/').pop()!, `?${search}`);
+    expect(res.status).toBe(200);
+    expect(Buffer.from(await res.arrayBuffer())).toEqual(BYTES);
+  });
+
+  /*
+   * THE SECOND WIDTH lives at the same address with `w=` on it — one route,
+   * one row, one `?v=` invalidating both — because the narrow copy is not a
+   * second ASSET: it is the same URL's bytes at a second size, and it moves
+   * when the row moves.
+   */
+  it('serves the narrow copy when the srcset asks for it, and the full one otherwise', async () => {
+    const hash = await seed('image/webp');
+    const smallKey = objectKey('webasset', SMALL);
+    await objectStore().put(smallKey, SMALL, 'image/webp');
+    const db = await getDb();
+    await db.query('update web_assets set small_object_key = $1, small_width = 1280 where url_hash = $2', [smallKey, hash]);
+
+    const narrow = await asset(hash, '?v=deadbeef&w=1280');
+    expect(Buffer.from(await narrow.arrayBuffer())).toEqual(SMALL);
+    expect(narrow.headers.get('Content-Type')).toBe('image/webp');
+    // Anything else is the full copy: `w` names a width we STORED, never a
+    // resize anyone may ask for.
+    for (const search of ['', '?w=1281', '?w=abc', '?w=']) {
+      expect(Buffer.from(await (await asset(hash, search)).arrayBuffer())).toEqual(BYTES);
+    }
+  });
+
+  it('serves the full copy when the row has no narrow one', async () => {
+    const hash = await seed();
+    expect(Buffer.from(await (await asset(hash, '?w=1280')).arrayBuffer())).toEqual(BYTES);
   });
 
   it('404s a row whose object the store will not give', async () => {

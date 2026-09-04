@@ -11,11 +11,20 @@
 import { describe, expect, it } from 'vitest';
 import { storyBodyFor } from '@/lib/story/body';
 import { storyUpdateParts } from '@/lib/story/update-parts';
-import { assetUrlFor } from '@/lib/story/asset-url';
+import { assetLookupFrom, assetUrlFor, type WebAssetBox } from '@/lib/story/asset-url';
 
 const URL_A = 'https://picsum.photos/id/237/300/200';
 const FONT = 'https://fonts.example/Face.woff2';
 const held = (u: string) => u === URL_A || u === FONT;
+/*
+ * The ROWS, not a predicate: a `?v=` exists only when the lookup HAS one, so a
+ * font case written against a predicate is blind to exactly the thing R19 is
+ * about — and a REFRESHED FONT is served from the same `immutable` route as a
+ * refreshed image.
+ */
+const IMAGE_ROW: WebAssetBox = { object_key: 'webasset/1111111122222222333333334444aaaa', width: 300, height: 200 };
+const FONT_ROW: WebAssetBox = { object_key: 'webasset/aaaabbbbccccddddeeeeffff00001111' };
+const rows = assetLookupFrom(new Map([[URL_A, IMAGE_ROW], [FONT, FONT_ROW]]));
 
 describe('storyBodyFor', () => {
   it('repairs nesting and splits the Helmet out', () => {
@@ -36,6 +45,14 @@ describe('storyBodyFor', () => {
     expect(JSON.stringify(out.body)).toContain(assetUrlFor(URL_A));
     expect(out.content.style).toContain(assetUrlFor(FONT));
     expect(out.content.style).not.toContain(FONT);
+  });
+
+  it("versions the @font-face url too — a refreshed FACE is as cached as a refreshed picture", () => {
+    const source = `<Helmet><style>{\`@font-face{font-family:F;src:url(${FONT}) format('woff2')}\`}</style></Helmet><img src="${URL_A}" alt="a" />`;
+    const out = storyBodyFor(source, rows)!;
+    expect(out.content.style).toContain(assetUrlFor(FONT, FONT_ROW));
+    expect(assetUrlFor(FONT, FONT_ROW)).toMatch(/\?v=[0-9a-f]{8}$/);
+    expect(JSON.stringify(out.body)).toContain(assetUrlFor(URL_A, IMAGE_ROW));
   });
 
   it('leaves everything alone when no lookup is given — the mapping is the CALLER\'s to ask for', () => {

@@ -22,6 +22,7 @@ import { getArtifactById } from '@/lib/artifacts';
 import { getDb } from '@/lib/db';
 import { assetUrlFor } from '@/lib/story/asset-url';
 import { collectExternalAssetUrls } from '@/lib/story/external-images';
+import { lookupWebAssets } from '@/lib/web-assets';
 import { mintToken } from '@/lib/tokens';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { request, useAppHarness } from '@/__tests__/harness';
@@ -155,9 +156,16 @@ describe('a web URL in the same position', () => {
     // 3. the URL the author wrote is what the author reads back
     expect((await getArtifactById(id))!.source).toContain(url);
 
-    // 4. …and the reader is served OUR copy (lib/story/asset-url)
+    /*
+     * 4. …and the reader is served OUR copy (lib/story/asset-url), at the
+     * VERSIONED address: a refreshed PDF is as cached as a refreshed picture,
+     * so the `?v=` the row's object key produces rides on this href too. The
+     * bare form is what a caller with no row would emit.
+     */
+    const held = await lookupWebAssets([url]);
     const html = await (await rawRoute(request(`/a/${id}/raw`), params(id))).text();
-    expect(html).toContain(`href="${assetUrlFor(url)}"`);
+    expect(assetUrlFor(url, held.get(url))).toMatch(/\?v=[0-9a-f]{8}$/);
+    expect(html).toContain(`href="${assetUrlFor(url, held.get(url))}"`);
     expect(html).not.toContain(url);
   });
 
