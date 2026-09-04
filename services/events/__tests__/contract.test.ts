@@ -185,6 +185,28 @@ describe('eventsClient (the batching client)', () => {
   });
 });
 
+describe('createEvents (the writer)', () => {
+  it('a first emit that cannot reach the database stores nothing and does NOT poison the writer', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let failNext = true;
+    const flaky: Queryable = {
+      query: async <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => {
+        if (failNext) { failNext = false; throw new Error('the database is still starting up'); }
+        return db.query<T>(sql, params);
+      },
+    };
+    const svc = createEvents({ db: flaky, schema: 'evt_flaky' });
+    const e = envelope();
+    // Telemetry never fails the product, so both calls RESOLVE …
+    await expect(svc.emit([e])).resolves.toBeUndefined();
+    await expect(svc.emit([e])).resolves.toBeUndefined();
+    // … and the retry lands: a memoised REJECTION would leave the writer dead
+    // until the process restarts, and this row would never exist.
+    expect(await count('evt_flaky')).toBe(1);
+    error.mockRestore();
+  });
+});
+
 describe('ensureEventsSchema', () => {
   it('creates the schema and the table when absent, is idempotent, and refuses a schema that is not an identifier', async () => {
     await ensureEventsSchema(db, 'evt_fresh');

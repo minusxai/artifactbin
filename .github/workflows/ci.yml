@@ -542,7 +542,7 @@ jobs:
           done
           echo '--- compose state ---'; docker compose ps; exit 1
       - name: walk it (health, mint, publish, serve, query, emit)
-        run: node scripts/test-compose-lean.mjs http://127.0.0.1:5440 http://127.0.0.1:5441
+        run: node scripts/test-compose-lean.mjs http://127.0.0.1:5440
       - if: failure()
         run: docker compose logs
       - if: always()

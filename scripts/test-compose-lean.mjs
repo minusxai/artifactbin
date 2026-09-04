@@ -3,8 +3,7 @@
  * THE COMPOSE WALK (P3 CORE TEST 4) — the split shape, end to end, over HTTP.
  *
  *   docker compose -f docker-compose.lean.yml up -d --build
- *   node scripts/test-compose-lean.mjs [base] [events base]
- *                          # defaults http://127.0.0.1:5440 and :5441
+ *   node scripts/test-compose-lean.mjs [base]        # default http://127.0.0.1:5440
  *
  * Everything the five lean images exist FOR is crossed here, through the
  * proxy — no browser, no mail sink, so CI can run it:
@@ -25,8 +24,12 @@
  *      that contains no DuckDB, running the query in the sql container.
  *   6. the events container answers its own /health and STORES a hand-built
  *      envelope — the log's wire, its secret and its boot DDL, in the one
- *      container that owns a schema. Its INTERNAL__SERVICE_SECRET is read
- *      from this process's environment, the same value compose hands it.
+ *      container that owns a schema. It publishes NO port (the proxy is the
+ *      only door), so this leg runs FROM INSIDE the compute network, on the
+ *      app container, which is where an emitter lives and which already holds
+ *      the shared INTERNAL__SERVICE_SECRET. `docker compose` is addressed the
+ *      way CI addresses it — COMPOSE_FILE / COMPOSE_PROJECT_NAME from the
+ *      environment, defaulting to this repo's lean file.
  *
  * NO EXPORT LEG, deliberately. Measured on this compose (P3b-Y): Chromium
  * HTTPS-UPGRADES the plain-http container URL — `http://app:3000` navigates
@@ -42,10 +45,52 @@
  * a mailbox, which CI does not have — it is walked by hand against the same
  * compose file (the phase report carries it).
  */
-const [baseArg, eventsArg] = process.argv.slice(2);
+import { execFileSync } from 'node:child_process';
+
+const [baseArg] = process.argv.slice(2);
 const base = (baseArg ?? 'http://127.0.0.1:5440').replace(/\/$/, '');
-const eventsBase = (eventsArg ?? 'http://127.0.0.1:5441').replace(/\/$/, '');
-const serviceSecret = process.env.INTERNAL__SERVICE_SECRET ?? '';
+// Compose is addressed exactly as its callers address it: COMPOSE_FILE (CI sets
+// it to the lean file plus its overrides) and COMPOSE_PROJECT_NAME, with this
+// repo's lean file as the default so the two commands in the header still work
+// side by side.
+const composeEnv = { ...process.env, COMPOSE_FILE: process.env.COMPOSE_FILE ?? 'docker-compose.lean.yml' };
+
+/**
+ * One `node -e` on the app container: it sits on the compute network and holds
+ * the same INTERNAL__SERVICE_SECRET compose hands the events service, so the
+ * whole leg is one round trip and no secret travels through this process.
+ */
+const IN_NETWORK_EMIT = `
+const url = 'http://events:8080';
+const secret = process.env.INTERNAL__SERVICE_SECRET;
+const envelope = {
+  id: 'walk-' + Date.now(), at: new Date().toISOString(), source: 'app',
+  subject_kind: 'visitor', subject_id: 'compose-walk', verb: 'viewed',
+  object_kind: 'artifact', object_id: process.env.WALK_ARTIFACT_ID,
+  payload: { client: 'compose-walk' },
+};
+const post = (headers) => fetch(url + '/emit', { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify([envelope]) });
+const auth = { 'x-artifactbin-service-secret': secret };
+(async () => {
+  const health = await fetch(url + '/health');
+  const healthBody = await health.json().catch(() => null);
+  const anonymous = await post({});
+  const stored = await post(auth);
+  const storedBody = await stored.json().catch(() => null);
+  const replay = await post(auth);
+  console.log(JSON.stringify({ health: health.status, healthBody, anonymous: anonymous.status, stored: stored.status, storedBody, replay: replay.status }));
+})().catch((e) => { console.log(JSON.stringify({ error: String(e) })); });
+`;
+
+/** Run it and read the one JSON line back; a compose failure is a failed check, never a thrown walk. */
+const emitFromInside = (artifactId) => {
+  try {
+    const out = execFileSync('docker', ['compose', 'exec', '-T', '-e', `WALK_ARTIFACT_ID=${artifactId}`, 'app', 'node', '-e', IN_NETWORK_EMIT], { env: composeEnv, encoding: 'utf8' });
+    return JSON.parse(out.trim().split('\n').pop());
+  } catch (e) {
+    return { error: (e.stderr ?? e.message ?? String(e)).toString().trim().split('\n').slice(-2).join(' ') };
+  }
+};
 
 const TITLE = 'lean compose walk';
 const MARKUP = [
@@ -122,41 +167,25 @@ async function main() {
       right ? JSON.stringify(rows) : `${res.status} ${JSON.stringify(body).slice(0, 200)}`);
   }
 
-  // 6. The event log's own container: its health, its secret and its table.
+  // 6. The event log's own container, from INSIDE the compute network — it
+  //    publishes no port, so an emitter is where this must be driven from.
   //
   // TODO(events-app): assert the walk's publish landed as artifact.created —
   // the app's trackEvent dual-write is the other half of this wave and is not
   // in this branch, so nothing the walk above does emits anything yet. When it
   // merges, replace the hand-built envelope with a query for that row.
   {
-    const res = await fetch(`${eventsBase}/health`);
-    const body = await res.json().catch(() => null);
-    say('GET /health on the events container', res.status === 200 && body?.ok === true, `${res.status} ${JSON.stringify(body)}`);
-  }
-  {
-    const envelope = {
-      id: `walk-${Date.now()}`,
-      at: new Date().toISOString(),
-      source: 'app',
-      subject_kind: 'visitor',
-      subject_id: 'compose-walk',
-      verb: 'viewed',
-      object_kind: 'artifact',
-      object_id: id,
-      payload: { client: 'compose-walk' },
-    };
-    const post = (headers) => fetch(`${eventsBase}/emit`, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify([envelope]) });
+    const r = emitFromInside(id);
+    say('GET /health on the events container (from the app, over compute)', r.health === 200 && r.healthBody?.ok === true,
+      r.error ?? `${r.health} ${JSON.stringify(r.healthBody)}`);
     // The secret is not optional on the log: an unauthenticated emitter could
     // write anyone's history.
-    const refused = await post({});
-    say('POST /emit without the service secret is refused', refused.status === 401, `${refused.status}`);
-    const res = await post({ 'x-artifactbin-service-secret': serviceSecret });
-    const body = await res.json().catch(() => null);
-    say('POST /emit stores an envelope (the events container owns events.events)', res.status === 200 && body?.accepted === 1, `${res.status} ${JSON.stringify(body)}`);
+    say('POST /emit without the service secret is refused', r.anonymous === 401, r.error ?? `${r.anonymous}`);
+    say('POST /emit stores an envelope (the events container owns events.events)', r.stored === 200 && r.storedBody?.accepted === 1,
+      r.error ?? `${r.stored} ${JSON.stringify(r.storedBody)}`);
     // The id is the dedupe key: the same batch again stores nothing new, which
     // is what makes the client's one retry free.
-    const again = await post({ 'x-artifactbin-service-secret': serviceSecret });
-    say('the same envelope again is accepted and stores nothing new', again.status === 200, `${again.status}`);
+    say('the same envelope again is accepted and stores nothing new', r.replay === 200, r.error ?? `${r.replay}`);
   }
 
   const failed = checks.filter((c) => !c.ok);
