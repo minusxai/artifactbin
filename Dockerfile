@@ -4,8 +4,34 @@ FROM node:22-slim AS builder
 WORKDIR /app
 
 COPY package*.json ./
+COPY services/contracts/package.json ./services/contracts/package.json
+COPY services/utils/package.json ./services/utils/package.json
+COPY services/app/package.json ./services/app/package.json
+COPY services/sql/package.json ./services/sql/package.json
+COPY services/browser/package.json ./services/browser/package.json
+COPY services/proxy/package.json ./services/proxy/package.json
+COPY services/app/scripts/copy-assets.mjs ./services/app/scripts/copy-assets.mjs
+# THE INSTALL LAYER IS KEYED ON MANIFESTS ONLY. `npm ci` reads the root files
+# and each workspace's package.json and nothing else, but docker rebuilds a
+# layer when anything copied above it changes — so `COPY services ./services`
+# sitting here made every source edit reinstall, and made this stage's ~518 MB
+# result a NEW layer that buildx re-uploaded to the Actions cache on every run
+# (63.7s of the image job, and five copies of one blob against a shared 10 GB
+# budget). The tree lands AFTER; the image's contents are identical.
+#
+# `npm ci` runs the app workspace's postinstall, which chdirs to its own
+# package dir and reads only node_modules — so the script file is its whole
+# requirement, and it rides up here with the manifests.
+#
+# `--no-audit` ON EVERY INSTALL: `npm ci` otherwise blocks on npm's advisory
+# endpoint and retries twice when it fails. That endpoint degraded on
+# 2026-09-04 and this repo's install went 15s → 421s, ten times over across the
+# five Dockerfiles, cancelling the `image` job at its 30-minute cap. The
+# lockfile is pinned, so the verdict cannot change what is installed. The repo
+# `.npmrc` says the same for every install outside a build context; a Dockerfile
+# gets the flag on the command, where it cannot be half-applied per stage.
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --cache /root/.npm
 COPY services ./services
-RUN --mount=type=cache,target=/root/.npm npm ci --cache /root/.npm
 
 COPY scripts ./scripts
 COPY services/app/app ./app
@@ -31,11 +57,19 @@ ENV NODE_ENV=production \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 COPY package*.json ./
-COPY services ./services
-RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --ignore-scripts --cache /root/.npm \
+COPY services/contracts/package.json ./services/contracts/package.json
+COPY services/utils/package.json ./services/utils/package.json
+COPY services/app/package.json ./services/app/package.json
+COPY services/sql/package.json ./services/sql/package.json
+COPY services/browser/package.json ./services/browser/package.json
+COPY services/proxy/package.json ./services/proxy/package.json
+# Manifests only, for the reason the builder stage states above — this is the
+# stage whose layer is the 518 MB one.
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --omit=dev --ignore-scripts --cache /root/.npm \
     && node -e "const {DuckDBInstance}=require('@duckdb/node-api'); DuckDBInstance.create(':memory:').then(()=>console.log('duckdb ok')).catch((e)=>{console.error(e);process.exit(1)})" \
     && node node_modules/playwright/cli.js install --with-deps chromium \
     && rm -rf /var/lib/apt/lists/*
+COPY services ./services
 
 COPY --from=builder /app/dist/server.mjs ./server.mjs
 COPY --from=builder /app/dist/sql-server.mjs ./sql-server.mjs

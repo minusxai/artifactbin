@@ -12,13 +12,22 @@ FROM node:22 AS builder
 
 WORKDIR /app
 
-# Workspace packages must be present before install: npm links them from here.
 COPY package.json package-lock.json ./
+COPY services/contracts/package.json ./services/contracts/package.json
+COPY services/utils/package.json ./services/utils/package.json
+COPY services/app/package.json ./services/app/package.json
+COPY services/sql/package.json ./services/sql/package.json
+COPY services/browser/package.json ./services/browser/package.json
+COPY services/proxy/package.json ./services/proxy/package.json
+COPY services/app/scripts/copy-assets.mjs ./services/app/scripts/copy-assets.mjs
+# THE INSTALL LAYER IS KEYED ON MANIFESTS ONLY — `npm ci` reads the root files
+# and each workspace's package.json and nothing else, so copying the source
+# tree above it rebuilt this layer on every edit. The tree lands AFTER; the
+# image's contents are identical. The app workspace's postinstall
+# (copy-assets.mjs) runs on `npm ci` and chdirs to its own package dir to read
+# node_modules, so the script file is its whole requirement.
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --cache /root/.npm
 COPY services ./services
-# The app workspace's postinstall (copy-assets.mjs, from its own package dir)
-# runs on `npm ci`; it lives inside `services/` — the tree above is the whole
-# install's needs.
-RUN --mount=type=cache,target=/root/.npm npm ci --cache /root/.npm
 
 # The bundler and the externals list it reads — the whole `scripts/` tree is
 # NOT needed, and copying it would bust the install layer's cache for nothing.
@@ -34,14 +43,19 @@ ENV NODE_ENV=production \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 COPY package.json package-lock.json ./
-COPY services ./services
+COPY services/contracts/package.json ./services/contracts/package.json
+COPY services/utils/package.json ./services/utils/package.json
+COPY services/app/package.json ./services/app/package.json
+COPY services/sql/package.json ./services/sql/package.json
+COPY services/browser/package.json ./services/browser/package.json
+COPY services/proxy/package.json ./services/proxy/package.json
 
 # THE LEAN INSTALL, by npm's own resolution — never a hand-written list: the
 # workspace filter installs only this package's closure (measured: 8 packages,
 # playwright + playwright-core and nothing else of the natives). The assertions
 # are part of the image, and a filtered install that grows the wrong package
 # fails the BUILD, not a boot.
-RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --ignore-scripts -w services/browser --cache /root/.npm \
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --omit=dev --ignore-scripts -w services/browser --cache /root/.npm \
     # Playwright present — the service drives Chromium through it.
     && test -d node_modules/playwright \
     # …and the engine the sql image owns must NOT ride along.
@@ -52,6 +66,8 @@ RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --ignore-scripts -w s
 # leaves this layer CACHED instead of re-downloading Chromium. The version
 # guarantee is intact — the browser is installed BY the playwright that will
 # drive it. `--with-deps` apt-installs the browser's shared libraries.
+COPY services ./services
+
 COPY --from=builder /app/node_modules/playwright ./node_modules/playwright
 COPY --from=builder /app/node_modules/playwright-core ./node_modules/playwright-core
 # THE HEADLESS SHELL, and only the shell: measured (docker top, mid-render)

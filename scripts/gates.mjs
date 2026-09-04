@@ -2,7 +2,7 @@
 /**
  * Run the browser gates as a SET.
  *
- *   node scripts/gates.mjs [base-url ...] [--only=a,b] [--list] [--servers=N]
+ *   node scripts/gates.mjs [base-url ...] [--only=a,b] [--list] [--servers=N] [--shard=i/n]
  *
  * Every gate is a standalone script that drives a running server and exits
  * non-zero when a contract breaks. Individually they were runnable and
@@ -45,6 +45,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GATE_SPECS, checkManifest, specFor } from './gates.manifest.mjs';
+import { parseShard, shardOf } from './gates.shard.mjs';
 import { loadDotEnv } from './lib/dev-env.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -55,6 +56,13 @@ const args = process.argv.slice(2);
 const only = args.find((a) => a.startsWith('--only='))?.slice('--only='.length).split(',').filter(Boolean);
 const servers = Number(args.find((a) => a.startsWith('--servers='))?.slice('--servers='.length) ?? 0);
 const bases = args.filter((a) => !a.startsWith('--'));
+let shard;
+try {
+  shard = parseShard(args.find((a) => a.startsWith('--shard=')));
+} catch (error) {
+  console.error(String(error.message ?? error));
+  process.exit(2);
+}
 
 /** Every gate on disk, by short name (`gate-visibility.mjs` → `visibility`). */
 const GATES = readdirSync(HERE)
@@ -74,7 +82,15 @@ if (args.includes('--list')) {
   process.exit(0);
 }
 
-const selected = only ? GATES.filter((g) => only.includes(g.name)) : GATES;
+const chosen = only ? GATES.filter((g) => only.includes(g.name)) : GATES;
+// The shard is taken AFTER --only, so `--only=a,b --shard=1/2` means "half of
+// those two" rather than "whichever of them fell in shard 1 of the whole set".
+const selected = shard
+  ? (() => {
+      const names = shardOf(chosen.map((g) => g.name), shard, (name) => specFor(name).timeoutMs);
+      return chosen.filter((g) => names.includes(g.name));
+    })()
+  : chosen;
 if (selected.length === 0) {
   console.error(`No gate matched --only=${only?.join(',')}. Known: ${GATES.map((g) => g.name).join(', ')}`);
   process.exit(2);

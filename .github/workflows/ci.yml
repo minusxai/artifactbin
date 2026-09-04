@@ -289,9 +289,13 @@ jobs:
   # catching production-only faults: the app's stylesheet once compiled to zero
   # rules in the build alone, and every page-measuring gate would have said so.
   gates:
-    name: browser gates
+    name: browser gates (${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -326,8 +330,12 @@ jobs:
         run: npx playwright install chromium
       - run: npm run build
       # The runner boots the servers with one protected per-run mail outbox.
+      # Four servers within the runner, two runners across the set. The
+      # within-machine fan-out bottomed out at 192s on four vCPUs; the shard is
+      # balanced by each gate's measured weight, not by count, so neither half
+      # ends up holding every slow gate (scripts/gates.shard.mjs).
       - name: every gate, four servers
-        run: node scripts/gates.mjs --servers=4
+        run: node scripts/gates.mjs --servers=4 --shard=${{ matrix.shard }}/2
         env:
           AUTH__SECRET: gates-ci-${{ github.run_id }}
 
@@ -361,6 +369,9 @@ jobs:
           # final stage needs, so a rebuild whose dependencies did not change
           # still restores; a dependency change pays for a colder builder.
           cache-to: type=gha,mode=min
+          # No provenance attestation: it is generated and attached during the
+          # export, and nothing here consumes it.
+          provenance: false
       # It has to RUN, not merely build: the runner stage's assertions catch a
       # missing shared library, and this catches a missing package.
       - name: the image boots and serves
@@ -376,13 +387,64 @@ jobs:
             sleep 1
           done
           echo '--- container log ---'; docker logs ab; exit 1
-      # THE LEAN PASS (P3 CORE TESTS 1–2): the four lean images the split shape
-      # composes, each through scripts/image-checks.mjs — contents (the package
-      # an image exists to carry resolves; the other images' natives THROW),
-      # boots-and-serves, and the du -sb size budget. A filtered install that
-      # grows the wrong package fails HERE, on the PR — not at 3am on a box.
-      # Built from the same commit as the full image above, which is the whole
-      # point: a service image built elsewhere is a second dependency tree.
+      # And it has to LOOK right. The suite runs against the dev server, which
+      # skips the build step where a production-only break lives: the app's
+      # stylesheet once parsed to zero rules in the build alone, and every
+      # page-measuring gate would have caught it while every unit test passed.
+      # One gate that measures the page, against the CONTAINER.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      # The same two caches every other job here uses. This job had neither, and
+      # paid `npm ci` plus a full `--with-deps` Chromium install on every run to
+      # execute ONE gate: 47s of a job whose budget is 180s.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: node-modules
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+      - if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci
+      - if: steps.node-modules.outputs.cache-hit == 'true'
+        run: node services/app/scripts/copy-assets.mjs
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: playwright
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - if: steps.playwright.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.playwright.outputs.cache-hit == 'true'
+        run: npx playwright install chromium
+      - name: a gate that measures the page, against the container
+        run: node scripts/gate-layout-shift.mjs http://127.0.0.1:3399
+      # What the container itself said — the gate can only report that the
+      # server answered 500, and the reason is in here.
+      - if: failure()
+        run: docker logs ab
+      - if: always()
+        run: docker rm -f ab || true
+
+  # THE LEAN PASS (P3 CORE TESTS 1–2): the four lean images the split shape
+  # composes, each through scripts/image-checks.mjs — contents (the package an
+  # image exists to carry resolves; the other images' natives THROW),
+  # boots-and-serves, and the du -sb size budget. A filtered install that grows
+  # the wrong package fails HERE, on the PR — not at 3am on a box. Built from
+  # the same commit as the full image, which is the whole point: a service
+  # image built elsewhere is a second dependency tree.
+  #
+  # Its own job rather than four more steps of `image`: the two share no state
+  # (different Dockerfiles, different tags, and the full image is never an input
+  # here), so running them in one job only added their times together — 85s of
+  # builds and 13s of checks on top of a job already at 4m54s. Apart, both fit
+  # the 180s budget and the wall clock is the longer of the two, not the sum.
+  lean:
+    name: lean images
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: the four lean images build
         run: |
           docker build -f services/app/Dockerfile -t lean-app:ci .
@@ -395,25 +457,6 @@ jobs:
           node scripts/image-checks.mjs proxy lean-proxy:ci
           node scripts/image-checks.mjs sql lean-sql:ci
           node scripts/image-checks.mjs browser lean-browser:ci
-      # And it has to LOOK right. The suite runs against the dev server, which
-      # skips the build step where a production-only break lives: the app's
-      # stylesheet once parsed to zero rules in the build alone, and every
-      # page-measuring gate would have caught it while every unit test passed.
-      # One gate that measures the page, against the CONTAINER.
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - name: a gate that measures the page, against the container
-        run: node scripts/gate-layout-shift.mjs http://127.0.0.1:3399
-      # What the container itself said — the gate can only report that the
-      # server answered 500, and the reason is in here.
-      - if: failure()
-        run: docker logs ab
-      - if: always()
-        run: docker rm -f ab || true
 
   # THE COMPOSE OF THE FOUR LEAN IMAGES (P3 CORE TEST 4) — the split shape
   # the plan's P5 deploys, booted exactly as a deployment composes it and
@@ -469,7 +512,7 @@ jobs:
     name: test
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [checks, ui, build, api, gates, image, compose]
+    needs: [checks, ui, build, api, gates, image, lean, compose]
     if: always()
     steps:
       - name: All jobs green
@@ -480,4 +523,5 @@ jobs:
           [ "${{ needs.api.result }}" = "success" ] && \
           [ "${{ needs.gates.result }}" = "success" ] && \
           [ "${{ needs.image.result }}" = "success" ] && \
+          [ "${{ needs.lean.result }}" = "success" ] && \
           [ "${{ needs.compose.result }}" = "success" ]

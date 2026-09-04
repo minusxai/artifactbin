@@ -4,10 +4,23 @@ FROM node:22-slim AS builder
 WORKDIR /repo
 
 COPY package*.json ./
+COPY services/contracts/package.json ./services/contracts/package.json
+COPY services/utils/package.json ./services/utils/package.json
+COPY services/app/package.json ./services/app/package.json
+COPY services/sql/package.json ./services/sql/package.json
+COPY services/browser/package.json ./services/browser/package.json
+COPY services/proxy/package.json ./services/proxy/package.json
+COPY services/app/scripts/copy-assets.mjs ./services/app/scripts/copy-assets.mjs
+# THE INSTALL LAYER IS KEYED ON MANIFESTS ONLY — `npm ci` reads the root files
+# and each workspace's package.json and nothing else, so copying the source
+# tree above it rebuilt this layer on every edit. The tree lands AFTER; the
+# image's contents are identical. The app workspace's postinstall
+# (copy-assets.mjs) runs on `npm ci` and chdirs to its own package dir to read
+# node_modules, so the script file is its whole requirement.
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --cache /root/.npm
 COPY services ./services
 COPY scripts ./scripts
 COPY tsconfig.json vite.config.mts ./
-RUN --mount=type=cache,target=/root/.npm npm ci --cache /root/.npm
 RUN npm run build -w services/app \
     && node scripts/build-server.mjs services/app/dist/app.mjs services/app/src/main.ts
 
@@ -19,10 +32,13 @@ ENV NODE_ENV=production \
     APP__PORT=3000
 
 COPY package*.json ./
-COPY services/app/package.json ./services/app/package.json
 COPY services/contracts/package.json ./services/contracts/package.json
 COPY services/utils/package.json ./services/utils/package.json
-RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --legacy-peer-deps --ignore-scripts -w services/app --cache /root/.npm \
+COPY services/app/package.json ./services/app/package.json
+COPY services/sql/package.json ./services/sql/package.json
+COPY services/browser/package.json ./services/browser/package.json
+COPY services/proxy/package.json ./services/proxy/package.json
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --omit=dev --legacy-peer-deps --ignore-scripts -w services/app --cache /root/.npm \
     && test ! -e node_modules/@duckdb \
     && test ! -e node_modules/playwright \
     && test ! -e node_modules/playwright-core \
