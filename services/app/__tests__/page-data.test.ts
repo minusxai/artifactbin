@@ -142,19 +142,13 @@ describe('GET /api/page/profile/@user/...', () => {
     expect((await profilePage(request(`/api/page/profile/@${h}/nope00-secret`), params({ user: `@${h}`, path: 'nope00-secret' }))).status).toBe(404);
   });
   /*
-   * There is no folder BRANCH here any more. A folder is an artifact with its
-   * own address, so the owner's root is the rows at level 0 — the folder among
-   * them, as an ordinary row — and every other segment under the handle is the
-   * uniform 404, whether the viewer owns the profile or not.
-   */
-  /*
    * PLACEMENT IS THE OWNER'S BUSINESS. `ancestor_ids` names folders by id, and
    * a public document filed inside a private folder would hand every stranger
    * that folder's address in the profile payload — breadcrumbs to a place they
    * get the uniform 404 on, which buys the reader nothing and says something
    * about the owner's shelf. Ids are addresses rather than secrets, so this is
-   * a projection rule and not a hole; the owner's own listing still carries it,
-   * because the owner's listing is what draws the shelf.
+   * a projection rule and not a hole. The same public projection is returned
+   * to the owner, because private organization belongs to the dashboard.
    */
   it('keeps placement out of the public profile projection', async () => {
     const w = await world();
@@ -171,10 +165,11 @@ describe('GET /api/page/profile/@user/...', () => {
     expect(JSON.stringify(strangers)).not.toContain(w.box.id);
     asSession(w.owner);
     const root = await (await profilePage(request(`/api/page/profile/@${h}`), params({ user: `@${h}` }))).json();
-    for (const f of root.files) expect(f).toHaveProperty('ancestor_ids');
+    expect(root.files).toEqual(strangers.files);
+    for (const f of root.files) expect(f).not.toHaveProperty('ancestor_ids');
   });
 
-  it('lists the public index for a stranger and the ROOT for the owner; a nested path is the 404 either way', async () => {
+  it('lists the same flat public index for the owner and every visitor', async () => {
     const w = await world();
     const h = w.owner.username!;
     const strangers = await (await profilePage(request(`/api/page/profile/@${h}`), params({ user: `@${h}` }))).json();
@@ -183,12 +178,12 @@ describe('GET /api/page/profile/@user/...', () => {
     expect((await profilePage(request(`/api/page/profile/@${h}/2026/08`), params({ user: `@${h}`, path: '2026/08' }))).status).toBe(404);
     asSession(w.owner);
     const root = await (await profilePage(request(`/api/page/profile/@${h}`), params({ user: `@${h}` }))).json();
-    expect(root.kind).toBe('owner-listing');
+    expect(root.kind).toBe('public-profile');
+    expect(root.files).toEqual(strangers.files);
+    expect(root.files[0]).not.toHaveProperty('views');
+    expect(root.files[0]).not.toHaveProperty('sparkline');
     expect(root).not.toHaveProperty('folders');
-    // Level 0: the public document and the folder. The document INSIDE the
-    // folder is not at the root, and is reached at its own address.
-    expect(root.files.map((f: { id: string }) => f.id).sort()).toEqual([w.pub.id, w.box.id].sort());
-    expect(root.files.find((f: { id: string }) => f.id === w.box.id).format).toBe('folder');
+    expect(root).not.toHaveProperty('stats');
     expect((await profilePage(request(`/api/page/profile/@${h}/2026/08`), params({ user: `@${h}`, path: '2026/08' }))).status).toBe(404);
     expect((await profilePage(request('/api/page/profile/nobody'), params({ user: 'nobody' }))).status).toBe(404);
   });

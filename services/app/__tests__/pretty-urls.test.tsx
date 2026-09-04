@@ -189,11 +189,6 @@ describe('public profile listing', () => {
    * listing is asserted the way it is built: the endpoint's data through the
    * same components the SPA mounts (components/Listing).
    */
-  /** The endpoint's own answer — what the page is BUILT from. */
-  const dataOf = async (user: string) => {
-    const res = await profileData(new Request(`http://localhost:3000/api/page/profile/${user}`), { params: Promise.resolve({ user }) });
-    return (await res.json()) as { files: Array<{ id: string; title: string; format: string }> };
-  };
   const markupOf = async (user: string, path?: string[]) => {
     const p = (path ?? []).join('/');
     const res = await profileData(new Request(`http://localhost:3000/api/page/profile/${user}${p ? '/' + p : ''}`), { params: Promise.resolve({ user, ...(p ? { path: p } : {}) }) });
@@ -206,7 +201,7 @@ describe('public profile listing', () => {
     // The page menu reads the current path, so the tree is rendered inside a router.
     return renderToStaticMarkup((
       <MemoryRouter initialEntries={[`/${user}${p ? '/' + p : ''}`]}>
-      <ListingShell email={data.email} stats={data.stats ?? null} authed={data.kind === 'owner-listing' || !!data.authed} anon={!!data.anon}>
+      <ListingShell email={data.email} stats={null} authed={!!data.authed} anon={!!data.anon}>
         <ProfileListing data={data} />
       </ListingShell>
       </MemoryRouter>
@@ -291,63 +286,24 @@ describe('public profile listing', () => {
     expect((await outcome(UserPage(userPageProps('@nobody_here')))).kind).toBe('notFound');
   });
 
-  it('the OWNER gets the same thumbnail cards — plus what only owners need', async () => {
-    // One profile, one look: the card grid is the view for everyone. The owner
-    // additionally sees visibility per card and private documents.
-    // Data files are the dashboard's business, not the profile's.
+  it('the owner gets the same public thumbnail cards as everyone else', async () => {
     const { ownedToken, owner } = await fixtures();
-    const doc = await create(ownedToken, { title: 'My Doc', markup: '<h1>x</h1>' }); // default private
+    const publicDoc = await create(ownedToken, { title: 'Open Doc', markup: '<h1>x</h1>', visibility: 'public' });
+    const privateDoc = await create(ownedToken, { title: 'My Doc', markup: '<h1>x</h1>' });
     const ds = await create(ownedToken, { title: 'My Numbers', dataset: [{ a: 1 }] });
-    const box = await create(ownedToken, { format: 'folder', title: 'August' });
-    await create(ownedToken, { title: 'Foldered', markup: '<h1>x</h1>', parent_id: box.id });
-    sessionUser.id = owner.id;
-    sessionUser.email = owner.email;
-
-    const markup = await markupOf('@mxmx_owner');
-    // Documents render as thumbnail cards — private ones included (the img
-    // request carries the owner session, so the export ACL admits it).
-    expect(markup).toContain(`/a/${doc.id}/export?format=jpg&amp;mode=card&amp;v=1&amp;r=2`);
-    expect(markup).toContain('My Doc');
-    expect(markup).toContain('private');
-    // A FOLDER is a ROW in the listing now, not a derived navigation panel: it
-    // has its own page, and P2 draws it as the shelf's folders STRIP — one tile
-    // linking to that page, above the documents.
-    expect(markup).toContain('Open folder August');
-    // At the row's own canonical address — id-anchored, with the name as
-    // decoration, exactly like every other row on this page.
-    expect(markup).toContain(`/${box.id}-august`);
-    const data = await dataOf('@mxmx_owner');
-    expect(data.files.find((f) => f.id === box.id)).toMatchObject({ format: 'folder', title: 'August' });
-    // Data files are NOT listed here any more. They are the material documents
-    // are built from, and a profile listing them is the junk drawer
-    // listPublicArtifactsByUser already refuses to be — so the owner's own
-    // profile gets the same treatment and manages material on the dashboard,
-    // which is the one page with a delete affordance for it.
-    expect(markup).not.toContain('My Numbers');
-    expect(markup).not.toContain(`/a/${ds.id}/export`);
-    // Navigation lives behind the page-mounted hamburger, so what server-
-    // renders is the button, not the links.
-    expect(markup).toContain('aria-label="Open menu"');
-  });
-
-  it('the owner keeps the full view: private docs, folder rows, and dates', async () => {
-    const { ownedToken, owner } = await fixtures();
-    const box = await create(ownedToken, { format: 'folder', title: 'August' });
-    // A document INSIDE a folder is not at the root, so it is not on this page:
-    // it is on the folder's own page. That is the whole shape of the change.
-    await create(ownedToken, { title: 'Secret Doc', markup: '<h1>x</h1>', parent_id: box.id });
-    await create(ownedToken, { title: 'Root Doc', markup: '<h1>x</h1>' });
     await create(ownedToken, { title: 'Quiet Doc', markup: '<h1>x</h1>', visibility: 'unlisted' });
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
+
     const markup = await markupOf('@mxmx_owner');
-    // The folder is a row of the ROOT (P2 draws it); the document inside it is
-    // NOT at the root, so it is not on this page at all.
-    expect((await dataOf('@mxmx_owner')).files.map((f) => f.id)).toContain(box.id);
-    expect(markup).not.toContain('Secret Doc');
-    expect(markup).toContain('Root Doc');
-    expect(markup).toContain('Quiet Doc'); // unlisted hides from strangers, never from the owner
-    // Cards carry the same absolute date stamp the public shelf shows.
+    expect(markup).toContain(`/a/${publicDoc.id}/export?format=jpg&amp;mode=card&amp;v=1`);
+    expect(markup).toContain('Open Doc');
+    expect(markup).not.toContain('My Doc');
+    expect(markup).not.toContain(`/a/${privateDoc.id}/export`);
+    expect(markup).not.toContain('Quiet Doc');
+    expect(markup).not.toContain('Open folder 2026');
+    expect(markup).not.toContain('My Numbers');
+    expect(markup).not.toContain(`/a/${ds.id}/export`);
     expect(markup).toContain(
       new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
     );

@@ -1,5 +1,5 @@
 /**
- * THE SHELF PAGES: ONE COLUMN, AND WHAT EACH ONE LEADS WITH.
+ * THE DASHBOARD AND SHELF PAGES: ONE COLUMN, AND WHAT EACH ONE LEADS WITH.
  *
  * Ported from master's `page-column`, `dashboard-shape` and `profile-shelf`
  * tests, which rendered the Next pages this branch replaced. The RULES are
@@ -10,10 +10,8 @@
  *    that drifts back into one of these pages is exactly the failure, so this
  *    is asserted through the rendered pages rather than by reading the shared
  *    constant.
- *  - The dashboard always leads with the compact connect-agent door. Owned
- *    and shared shelves follow it; account utilities never become dashboard
- *    furniture just because the owned shelf is empty.
- *  - A profile renders the same shelf with its capabilities withheld.
+ *  - A populated homepage leads with its dashboard, followed by the shelf.
+ *  - A profile renders only the public shelf with owner capabilities withheld.
  */
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -30,6 +28,10 @@ vi.mock('@/web/session', () => ({ useSession: () => ({ session: { user: { id: 'u
 const doc = (id: string) => ({
   id, url: `/a/${id}`, title: `Doc ${id}`, description: null, format: 'markup', version: 1,
   visibility: 'public', parent_id: null, ancestor_ids: [], updated_at: '2026-08-20T00:00:00.000Z', views: 0, sparkline: null,
+});
+const profileDoc = (id: string) => ({
+  id, title: `Doc ${id}`, format: 'markup', version: 1, visibility: 'public', folder: '',
+  created_at: '2026-08-20T00:00:00.000Z', updated_at: '2026-08-20T00:00:00.000Z',
 });
 
 let home: unknown;
@@ -51,7 +53,7 @@ const mainWidth = (el: HTMLElement): string | undefined =>
 describe('the shelf pages share one column', () => {
   it('the dashboard and the profile are exactly as wide as each other', async () => {
     home = { signedIn: true, artifacts: [doc('a'), doc('b')], shared: [] };
-    profile = { kind: 'owner-listing', handle: 'cee', files: [doc('a')], total: 1, stats: { total: 1, formats: { markup: 1 } }, email: 'c@x.io' };
+    profile = { kind: 'public-profile', handle: 'cee', files: [profileDoc('a')], email: 'c@x.io', authed: true, anon: false };
 
     const dash = render(<MemoryRouter><HomePage /></MemoryRouter>);
     await waitFor(() => expect(mainWidth(dash.container)).toBeDefined());
@@ -85,22 +87,17 @@ describe('what the dashboard leads with', () => {
     expect(screen.queryByLabelText('Browse artifacts by agent token')).toBeNull();
   });
 
-  // ONE DOOR, ONE NAME, EVERY SURFACE. The dashboard used to fold the same
-  // panel into a strip of its own called "connect an agent" while the landing
-  // showed it open and called it "getting started" — one thing wearing two
-  // names, and the reader had to open the strip to find out they were the
-  // same. There is one presentation now, so these assertions are about the
-  // landing's panel appearing on a signed-in page.
-  it('WITH artifacts: the getting-started panel and the shelf, not the teaching rail', async () => {
-    home = { signedIn: true, artifacts: [doc('a')], shared: [] };
+  it('WITH artifacts: leads with the dashboard and then the Drive-like shelf', async () => {
+    home = { signedIn: true, artifacts: [{ ...doc('a'), views: 7 }], shared: [] };
     render(<MemoryRouter><HomePage /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByText('Doc a')).toBeInTheDocument());
-    expect(screen.getByLabelText('Get started')).toBeInTheDocument();
-    expect(document.body.textContent?.toLowerCase()).not.toContain('connect an agent');
-    // Examples are for a page with nothing of the reader's own on it.
+    await waitFor(() => expect(screen.getByLabelText('Open Doc a')).toBeInTheDocument());
+    const dashboard = screen.getByLabelText('Dashboard');
+    const shelf = screen.getByLabelText('Shelf');
+    expect(dashboard).toHaveTextContent('7');
+    expect(dashboard.compareDocumentPosition(shelf) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByLabelText('Artifact grid')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Get started')).toBeNull();
     expect(screen.queryByLabelText('What you can use it for')).toBeNull();
-    // The once-ever utilities are not permanent furniture.
-    expect(screen.queryByText(/claim an agent's artifacts/i)).toBeNull();
   });
 
   it('offers ONE way to the trash, and only to an account', async () => {
@@ -142,16 +139,17 @@ describe('what the dashboard leads with', () => {
     expect(panel.compareDocumentPosition(examples) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('WITHOUT owned artifacts: the panel still leads shared work and account utilities stay away', async () => {
+  it('WITHOUT owned artifacts: the zero-state dashboard leads shared work', async () => {
     home = {
       signedIn: true,
       artifacts: [],
       shared: [{ ...doc('shared'), description: null, role: 'viewer', owner_username: 'alice' }],
     };
     render(<MemoryRouter><HomePage /></MemoryRouter>);
-    const connect = await screen.findByLabelText('Get started');
+    const dashboard = await screen.findByLabelText('Dashboard');
     const shared = await screen.findByLabelText('Open shared artifact shared');
-    expect(connect.compareDocumentPosition(shared) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(dashboard).toHaveTextContent('0');
+    expect(dashboard.compareDocumentPosition(shared) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // Work shared WITH someone is still a library, so it is not the empty page.
     expect(screen.queryByLabelText('Create your first artifact')).toBeNull();
     expect(screen.queryByLabelText('Claim a token')).toBeNull();
@@ -209,7 +207,7 @@ describe('claiming across the empty \u2192 full flip', () => {
 
     // The page really did flip — without this the rule below could pass on a
     // page that never changed shape, which is not the case under test.
-    await screen.findByText('Doc a');
+    await screen.findByLabelText('Open Doc a');
     expect(screen.queryByLabelText(/create your first artifact/i)).toBeNull();
 
     // THE RULE: the flip does not take the answer with it.
@@ -221,13 +219,16 @@ const atProfile = () =>
   render(<MemoryRouter initialEntries={['/@cee']}><Routes><Route path="/:user/*" element={<ProfilePage />} /></Routes></MemoryRouter>);
 
 describe('a profile', () => {
-  it('renders the shelf for the files it lists', async () => {
-    profile = { kind: 'owner-listing', handle: 'cee', files: [doc('a'), doc('b')], total: 2, stats: { total: 2, formats: { markup: 2 } }, email: 'c@x.io' };
+  it('renders only the public shelf for the files it lists', async () => {
+    profile = { kind: 'public-profile', handle: 'cee', files: [profileDoc('a'), profileDoc('b')], email: 'c@x.io', authed: true, anon: false };
     // Mounted under the app's own route: ProfilePage reads `:user` from it,
     // and a bare mount reads nothing — which the typo guard answers with 404.
     atProfile();
     await waitFor(() => expect(screen.getByText('Doc a')).toBeInTheDocument());
     expect(screen.getByText('Doc b')).toBeInTheDocument();
+    expect(screen.getByLabelText('Artifact grid')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Dashboard')).toBeNull();
+    expect(screen.queryByLabelText('Assets')).toBeNull();
   });
 
   /*

@@ -1,25 +1,16 @@
 /**
  * THE HOME PAGE ON A PHONE.
  *
- * The home page is three pieces of chrome stacked — the masthead, the shelf's
- * tiers, and the bar's drawer — and each of them was drawn for a desktop
+ * The home page is three pieces of chrome stacked — the masthead, the shelf,
+ * and the bar's drawer — and each of them was drawn for a desktop
  * column. This file is the one place their PHONE shape is pinned, because the
  * faults are not per-component bugs: they are the same fault (a width that was
  * always there is suddenly the scarce thing) landing in three files.
  *
  * What is asserted here, and why each one is a real defect and not a taste:
  *
- *  1. THE HERO WEARS ITS CHROME WHERE A CARD DOES. The hero is a two-column
- *     grid on desktop, so its classification and controls sat at the top of
- *     the RIGHT column. Stacked on a phone that column falls under the
- *     picture, and the same two controls that overlay the thumbnail on every
- *     card appeared in a band beneath it on the one above them — the tiers
- *     stopped looking like one shelf. Putting them on the picture is one rule
- *     for every tier and no breakpoint fork.
- *  2. A TITLE GETS TWO LINES ON A PHONE. `truncate` is right in a wide column
- *     and wrong in a narrow one: at 390px it cut the hero's title to four
- *     words. The tier still refuses to grow without bound — two lines, then
- *     the ellipsis.
+ *  1. EVERY GRID ITEM WEARS ITS CHROME ON THE PREVIEW.
+ *  2. A TITLE GETS TWO LINES ON A PHONE rather than truncating to one.
  *  3. THE SEARCH ROW WRAPS. Three visibility chips beside the input left it
  *     ~130px wide, and its own placeholder was truncated mid-word. Chips fall
  *     to a second line rather than eating the field.
@@ -49,29 +40,22 @@ const doc = (id: string, day: number, extra: Partial<ShelfRow> = {}): ShelfRow =
 });
 
 describe('the shelf reads as ONE shelf on a phone', () => {
-  it('hangs the hero classification and controls on the CARD, at the same corner as every tier', () => {
+  it('hangs each item classification and controls over its preview', () => {
     render(<Shelf rows={[doc('a', 28, { visibility: 'private' }), doc('b', 27, { visibility: 'public' })]} actions="full" />);
 
-    const hero = screen.getByLabelText('Open Doc a (most recent)').closest('article')!;
+    const card = screen.getByLabelText('Open Doc a').closest('li')!;
     const overlay = screen.getByLabelText('Doc a card controls');
-
-    // Anchored to the ARTICLE: on desktop the hero is two columns and its far
-    // corner is the right column's, where the actions belong; stacked on a
-    // phone the card's top IS the picture's top — same corner as a card's.
-    expect(overlay.parentElement).toBe(hero);
+    expect(overlay.parentElement).toBe(card.querySelector('img')!.parentElement!.parentElement);
     expect(overlay).toHaveClass('absolute', 'inset-x-2.5', 'top-2.5', 'justify-between');
     expect(overlay).toContainElement(screen.getByLabelText('Doc a is private'));
     expect(overlay).toContainElement(screen.getByLabelText('Share Doc a'));
     expect(overlay).toContainElement(screen.getByLabelText('Edit Doc a'));
   });
 
-  it('lets titles wrap: the hero to three desktop lines (its column is mostly air), cards to one', () => {
+  it('lets every grid title wrap to two lines', () => {
     render(<Shelf rows={[doc('a', 28), doc('b', 27)]} actions="full" />);
-    const hero = screen.getByLabelText('Open Doc a (most recent)');
-    expect(hero).toHaveClass('line-clamp-2', 'sm:line-clamp-3');
-    const card = screen.getByLabelText('Open Doc b');
-    expect(card).toHaveClass('line-clamp-2', 'sm:line-clamp-1');
-    for (const link of [hero, card]) {
+    for (const link of [screen.getByLabelText('Open Doc a'), screen.getByLabelText('Open Doc b')]) {
+      expect(link).toHaveClass('line-clamp-2');
       // `truncate` sets white-space: nowrap, which would defeat the clamp.
       expect(link).not.toHaveClass('truncate');
     }
@@ -85,6 +69,7 @@ describe('the shelf reads as ONE shelf on a phone', () => {
     // A floor, so the field is a field even on the line it shares.
     expect(input).toHaveClass('min-w-32', 'flex-1');
     expect(input).not.toHaveClass('w-full');
+    expect(screen.getByLabelText('Shelf view')).toHaveClass('shrink-0');
   });
 });
 
