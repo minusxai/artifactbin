@@ -92,7 +92,7 @@ async function main(): Promise<void> {
    * entry that loads the native module, Playwright or the writer's own DDL,
    * and the lean image has none of them.
    */
-  const { setServices } = await import('@/lib/services');
+  const { services, setServices } = await import('@/lib/services');
   if (!SQL_SERVICE_URL) {
     const { createSql } = await import('@artifactbin/sql/local');
     setServices({ sql: createSql({ maxRows: MAX_QUERY_ROWS, timeoutMs: QUERY_TIMEOUT_MS }) });
@@ -109,6 +109,14 @@ async function main(): Promise<void> {
     const { createEvents } = await import('@artifactbin/events/local');
     setServices({ events: createEvents({ db: queryable, schema: EVENTS_SCHEMA }) });
   }
+  /*
+   * ONE `events` FOR THE WHOLE PROCESS. The proxy's parts and Better Auth's
+   * hooks say their moments into the SAME writer the app emits through — the
+   * registry decided above once, never a second client — so the log this box
+   * keeps is one table with one connection behind it, and `source` is all
+   * that says whether the app or the proxy spoke.
+   */
+  const events = services().events;
 
   // The SPA: Vite in middleware mode for dev (modules, HMR, index transform); the built tree in production.
   let vite: import('vite').ViteDevServer | null = null;
@@ -156,6 +164,7 @@ async function main(): Promise<void> {
       secret: authSecret,
       baseURL,
       mail: mailer,
+      events,
       ...(raw.kind === 'pglite' ? { pglite: raw.instance } : { pool: raw.pool as import('pg').Pool }),
       ...loginProviders,
       secure: baseURL.startsWith('https://'),
@@ -193,6 +202,7 @@ async function main(): Promise<void> {
       secure: baseURL.startsWith('https://'),
       identityDb: queryable,
       appSchema: readEnv(env, 'APP__SCHEMA'),
+      events,
     })).fetch);
 
   /*
