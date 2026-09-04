@@ -7,6 +7,10 @@
  * table still answers. And live: the real in-process writer, two opens by one
  * visitor today count once.
  *
+ * The last describe is the pair of dashboard aggregate cases that lived in
+ * analytics.test.ts before the queries moved here — the same assertions, over
+ * the same analytics_events rows, now reached through the backfill.
+ *
  * Seeded RED by the orchestrator.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -112,6 +116,25 @@ describe('the dashboard reads the log', () => {
     }
     expect((await dailyViewsByUser('usr_a')).length).toBeGreaterThanOrEqual(40);
   });
+  it('with the log present the log IS the source: sentences it alone holds count, a legacy row it never got does not', async () => {
+    // The equivalence case above cannot tell the two sources apart — after a
+    // backfill they hold the same moments and answer the same numbers. This
+    // one pulls them apart on purpose: two sentences only the log has, one
+    // legacy row only analytics_events has. Reading the legacy table would
+    // answer 1.
+    const db = await harness.db();
+    await db.query(`INSERT INTO artifacts (id, token_id, user_id, content) VALUES ('art0a1', 'tok_a', 'usr_a', 'x')`);
+    await ensureEventsSchema(db, EVENTS_SCHEMA);
+    await db.query(
+      `INSERT INTO ${EVENTS_SCHEMA}.events (id, at, source, subject_kind, subject_id, verb, object_kind, object_id, payload)
+       VALUES ('e1', now(), 'app', 'visitor', 'v1', 'viewed', 'artifact', 'art0a1', '{}'),
+              ('e2', now(), 'app', 'visitor', 'v2', 'viewed', 'artifact', 'art0a1', '{}')`,
+    );
+    await db.query(`INSERT INTO analytics_events (event, artifact_id, visitor) VALUES ('view', 'art0a1', 'v3')`);
+    expect((await viewSeriesByUser('usr_a')).get('art0a1')![VIEW_SERIES_DAYS - 1]).toBe(2);
+    expect((await dailyViewsByUser('usr_a')).at(-1)?.views).toBe(2);
+  });
+
   it('with no events table, the legacy table answers — a split self-host without the service keeps its dashboard', async () => {
     const db = await harness.db();
     await seedHistory(db);
@@ -136,5 +159,53 @@ describe('the dashboard reads the log', () => {
     expect(series[VIEW_SERIES_DAYS - 1]).toBe(2);
     expect((await dailyViewsByUser('usr_a')).at(-1)?.views).toBe(2);
     expect(asObject(await viewSeriesByUser('usr_a'))).toEqual(asObject(await oracleSeries(db, 'usr_a', VIEW_SERIES_DAYS)));
+  });
+});
+
+/**
+ * MOVED from analytics.test.ts's `aggregates` describe when the two queries
+ * left lib/analytics: the zero-fill, the window, and that an export is not a
+ * view. The rows are seeded into the legacy table and copied, so the shapes
+ * under test are exactly the ones the old suite pinned. (The half of the
+ * second case that reads `listArtifactsByUser` stayed behind — that total is
+ * still counted off analytics_events.)
+ */
+describe('the aggregates, over the log', () => {
+  const withLog = async (db: Queryable): Promise<void> => {
+    await ensureEventsSchema(db, EVENTS_SCHEMA);
+    await backfillAnalyticsEvents(db, { schema: EVENTS_SCHEMA, from: 'analytics_events' });
+  };
+
+  it('viewSeriesByUser zero-fills daily buckets, oldest first', async () => {
+    const db = await harness.db();
+    await db.query(`INSERT INTO artifacts (id, token_id, user_id, content) VALUES ('art0a1', 'tok_a', 'usr_a', 'x')`);
+    await db.query(
+      `INSERT INTO analytics_events (event, artifact_id, created_at) VALUES
+       ('view', 'art0a1', now()), ('view', 'art0a1', now()), ('view', 'art0a1', now() - interval '2 days'),
+       ('export', 'art0a1', now())`,
+    );
+    await withLog(db);
+    const series = (await viewSeriesByUser('usr_a')).get('art0a1');
+    expect(series).toHaveLength(VIEW_SERIES_DAYS);
+    expect(series![VIEW_SERIES_DAYS - 1]).toBe(2); // today
+    expect(series![VIEW_SERIES_DAYS - 3]).toBe(1); // two days ago
+    expect(series!.reduce((a, b) => a + b, 0)).toBe(3); // exports don't count
+  });
+
+  it('dailyViewsByUser buckets all owned artifacts per day, zero-filled to today', async () => {
+    const db = await harness.db();
+    await db.query(`INSERT INTO artifacts (id, token_id, user_id, content) VALUES ('art0a1', 'tok_a', 'usr_a', 'x'), ('art0a2', 'tok_a', 'usr_a', 'x')`);
+    await db.query(
+      `INSERT INTO analytics_events (event, artifact_id, created_at) VALUES
+       ('view', 'art0a1', now()), ('view', 'art0a1', now()), ('view', 'art0a2', now()),
+       ('view', 'art0a1', now() - interval '2 days'),
+       ('export', 'art0a1', now())`,
+    );
+    await withLog(db);
+    // Both artifacts pool into one series; the gap day is present as zero.
+    const daily = await dailyViewsByUser('usr_a');
+    expect(daily).toHaveLength(3);
+    expect(daily.map((d) => d.views)).toEqual([1, 0, 3]);
+    expect(daily[2].day > daily[0].day).toBe(true);
   });
 });

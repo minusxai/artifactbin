@@ -3,8 +3,8 @@
  * library (with each document's view sparkline, rendered here as SVG so the
  * page draws nothing), and what is shared with it.
  */
-import { viewSeriesByUser } from '@/lib/analytics';
 import { AGENT_COOKIE, decodeAgentSession } from '@/lib/agent-session';
+import { viewSeriesByUser } from '@/lib/feed';
 import { json, parseCookie } from '@/lib/http';
 import { listArtifactsByUser, listDraftsByTokenIds, listSharedWithEmail } from '@/lib/users';
 import { sessionActor } from '@/lib/viewer';
