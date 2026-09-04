@@ -192,6 +192,27 @@ describe('a web URL in the same position', () => {
     expect(asked.length).toBe(16);
   });
 
+  it('with a % in its filename still SERVES — a warning must not become a permanent 500', async () => {
+    /*
+     * `50%off.pdf` is an ordinary filename and `decodeURIComponent` throws on
+     * it. The import fails (the host does not resolve), which is a warning by
+     * design — and then the card's own name derivation threw during SSR, so the
+     * author was handed a document no reader could ever open. That is exactly
+     * the failure the warn-don't-refuse rule exists to avoid, one layer down.
+     */
+    const t = await mintToken('t');
+    const url = 'https://example.invalid/50%off.pdf';
+    const res = await create(t.token, { markup: `<div data-design="tw"><File src="${url}" /></div>`, visibility: 'public' });
+    expect(res.status).toBe(201);
+    const { id } = await res.json();
+
+    const served = await rawRoute(request(`/a/${id}/raw`), params(id));
+    expect(served.status).toBe(200);
+    const html = await served.text();
+    // The name is shown as it was written, percent and all.
+    expect(html).toContain('50%off.pdf');
+  }, 20_000);
+
   it('reports a URL it cannot fetch as a warning and publishes anyway', async () => {
     const t = await mintToken('t');
     const url = `${web}/gone.pdf`;

@@ -9,8 +9,6 @@
  */
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { mkdtemp, rm, readFile } from 'fs/promises';
-import v8 from 'node:v8';
-import { runInNewContext } from 'node:vm';
 import { tmpdir } from 'os';
 import path from 'path';
 import { ObjectUnavailable, cachedReads, objectKey, resetReadCache, uniqueObjectKey, createLocalStore, createS3Store, parseS3Url, storageKeyFor, type ObjectStore } from '../index';
@@ -204,19 +202,6 @@ describe('the boot canary', () => {
  * through `getStream`, which buffers nothing and caches nothing, and the
  * cache's own budget never has to move.
  */
-/**
- * A forced collection, so "how many of these bytes are held at once" is a
- * question about the reader and not about when V8 last got round to the 64 KB
- * buffers a stream has finished with. `--expose-gc` is not on for the suite, so
- * it is asked for here rather than imposed on every other test's runtime.
- */
-const collect = (() => {
-  v8.setFlagsFromString('--expose-gc');
-  const gc = runInNewContext('gc') as () => void;
-  v8.setFlagsFromString('--no-expose-gc');
-  return gc;
-})();
-
 describe('getStream', () => {
   const streamed = async (store: ObjectStore, key: string, range?: { start: number; end: number }): Promise<Buffer> => {
     const chunks: Buffer[] = [];
@@ -282,16 +267,21 @@ describe('getStream', () => {
      * The BOUNDED CHUNK is the deterministic half of "never read whole": the
      * object arrives 64 KB at a time and no single buffer is ever the file.
      *
-     * The SIZE measurement is `arrayBuffers`, not RSS, and that is not a
-     * dodge — it is the instrument the spike used (S4 reported
-     * externalDelta/arrayBuffersDelta of 25 MB for one `get`). RSS answers a
-     * different question here: measured with --expose-gc on this machine, a
-     * whole 25 MB read shows an RSS delta of 0.0 MB and +26.2 MB of
-     * arrayBuffers (the allocator already held the pages), while a drained
-     * stream shows +21.2 MB of RSS and +0.1 MB of arrayBuffers (uncollected
-     * 64 KB buffers the collector has not got to yet). RSS is about V8's
-     * allocator; arrayBuffers is about how many of these bytes are held at
-     * once, which is the property under test.
+     * WHAT IS NOT ASSERTED, and why. A memory figure was tried and removed:
+     * `process.memoryUsage()` is PROCESS-wide, so in a full run a neighbouring
+     * test file's allocations land in the same number and the assertion fails
+     * for a reason that is not this store (measured: +14 MB of arrayBuffers
+     * with a sibling file in the worker, against a +2.6 MB bound that held
+     * three runs out of three alone). Forcing a collection did not make it
+     * reliable either.
+     *
+     * The numbers themselves, measured once with --expose-gc on this machine
+     * and recorded here rather than gated: a whole 25 MB `get` costs +26.2 MB
+     * of arrayBuffers and 0.0 MB of RSS; the drained stream costs +0.1 MB of
+     * arrayBuffers and +21.2 MB of RSS (uncollected 64 KB buffers). RSS is
+     * about V8's allocator, arrayBuffers about how much is held at once — and
+     * NEITHER is a number this suite can hold steady, while both assertions
+     * below are exact. The bounded chunk is what caught the reviewer's break.
      */
     const drain = async () => {
       let bytes = 0;
@@ -302,12 +292,9 @@ describe('getStream', () => {
       }
       return { bytes, widest };
     };
-    collect();
-    const heldBefore = process.memoryUsage().arrayBuffers;
     const drained = await drain();
-    collect();
-    const held = process.memoryUsage().arrayBuffers - heldBefore;
     expect(drained.bytes).toBe(big.byteLength);
+    // Never one buffer holding the file: 64 KB at a time, whatever the size.
     expect(drained.widest).toBeLessThanOrEqual(1024 * 1024);
 
     // The small object is still cached AFTER the big read: the stream went
@@ -315,9 +302,6 @@ describe('getStream', () => {
     expect((await store.get('dataset/small')).toString()).toBe('a,b\n1,2');
     expect(gets).toBe(1);
 
-    // A whole read holds the whole object (+26.2 MB, measured above); the
-    // stream holds a chunk at a time. A tenth of the object is far more room
-    // than the 64 KB high-water mark needs and far less than a whole read.
-    expect(held).toBeLessThan(big.byteLength / 10);
+
   });
 });

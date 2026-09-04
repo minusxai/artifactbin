@@ -52,7 +52,7 @@ export const STORY_UI_RECIPE_CLASSES: readonly string[] = [
   "@/components/viz/VegaChart",
   "@/lib/data/story/question-height",
   "@/lib/dynamic",
-  "@/lib/file-size",
+  "@/lib/file-display",
   "@/lib/jsx",
   "@/lib/story-ui/ast-path",
   "@/lib/story-ui/grid-layout",

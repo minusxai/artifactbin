@@ -158,7 +158,7 @@ const createArtifactOp: Operation = {
     note: 'the response carries id, url, edit_id — hand the url to your user',
   },
   errors: [
-    { status: 403, code: 'quota_exceeded', fix: 'this token has hit its artifact quota — delete what you no longer need' },
+    { status: 403, code: 'quota_exceeded', fix: 'a cap was reached — either the artifact COUNT for this token, or the stored BYTES for its account (an upload or an imported url); the message names which. Delete what you no longer need' },
     ...CONTENT_ERRORS,
   ],
   async run(ctx, input) {
@@ -453,7 +453,7 @@ const forkArtifactOp: Operation = {
   },
   errors: [
     NOT_FOUND,
-    { status: 403, code: 'quota_exceeded', fix: 'this token has hit its artifact quota — delete what you no longer need' },
+    { status: 403, code: 'quota_exceeded', fix: 'a cap was reached — either the artifact COUNT for this token, or the stored BYTES for its account (an upload or an imported url); the message names which. Delete what you no longer need' },
     ...CONTENT_ERRORS,
   ],
   async run(ctx, input) {

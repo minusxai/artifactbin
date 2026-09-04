@@ -35,7 +35,7 @@ import { STORY_DATA_MESSAGE, STORY_DOCUMENT_ACK_MESSAGE, STORY_DOCUMENT_MESSAGE,
 import type { DataflowState } from '@/lib/story/dataflow';
 import { urlValuesSearch, writeUrlValues } from '@/lib/story/url-values';
 import { displayTitle } from '@/lib/story/title';
-import { formatFileSize } from '@/lib/file-size';
+import { formatFileSize } from '@/lib/file-display';
 import { resolveStoryMode } from '@/lib/data/story/story-themes';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import type { StoryIslandDataflow } from '@/lib/story-runtime/contract';

@@ -16,7 +16,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { samplePdf, samplePdfDataUrl } from '../../../scripts/lib/sample-pdf.mjs';
 import { POST as bearerCreate } from '@/app/api/artifacts/route';
 import { POST as preview } from '@/app/api/preview/route';
-import { getArtifactById } from '@/lib/artifacts';
+import { getArtifactById, setArtifactQuotaForTests } from '@/lib/artifacts';
 import { setAssetByteQuotaForTests } from '@/lib/asset-quota';
 import { LOCAL_OBJECT_DIR } from '@/lib/config';
 import { objectStore } from '@/lib/object-store';
@@ -235,5 +235,33 @@ describe('the one-of rule', () => {
     const res = await create(t.token, { markup: '<div><p>x</p></div>', pdf: samplePdfDataUrl(1) });
     expect(res.status).toBe(400);
     expect((await res.json()).error).toMatch(/one_of/);
+  });
+});
+
+/*
+ * ONE CODE, TWO CAUSES. `403 quota_exceeded` answers both the artifact COUNT
+ * cap and the stored-BYTE cap, and its registry `fix` line used to name only
+ * the first — an agent over its byte quota was told to delete documents, which
+ * would not help. Neither refusal is allowed to be silent about which it is.
+ */
+describe('the two quotas share one code and must not share one story', () => {
+  it('names bytes when it is bytes, and the count when it is the count', async () => {
+    const t = await mintToken('t');
+    setAssetByteQuotaForTests(1);
+    await create(t.token, { pdf: samplePdfDataUrl(1) });
+    const byBytes = await create(t.token, { pdf: samplePdfDataUrl(1) });
+    expect(byBytes.status).toBe(403);
+    expect((await byBytes.json()).details.join(' ')).toMatch(/byte/i);
+    setAssetByteQuotaForTests(null);
+
+    // 1, not 0: zero DISABLES the count cap (0 ⇒ unlimited), and the token
+    // already holds the one artifact the byte leg above stored.
+    setArtifactQuotaForTests(1);
+    const byCount = await create(t.token, { markup: '<div data-design="tw"><p>x</p></div>' });
+    expect(byCount.status).toBe(403);
+    const details = (await byCount.json()).details.join(' ');
+    expect(details).toMatch(/count/i);
+    expect(details).not.toMatch(/byte/i);
+    setArtifactQuotaForTests(null);
   });
 });

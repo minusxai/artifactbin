@@ -3,7 +3,7 @@
 import * as React from "react"
 
 import { cn } from "./cn"
-import { formatFileSize } from "@/lib/file-size"
+import { fileNameFromUrl, formatFileSize } from "@/lib/file-display"
 
 /**
  * A FILE, as a card that opens it — the sanctioned way a document carries a
@@ -48,7 +48,7 @@ function FileCard({
   interactive?: boolean
 }) {
   const resolved = typeof src === "string" && src !== "" && !src.startsWith("ref:") ? src : null
-  const label = title ?? name ?? fileNameFrom(resolved) ?? "File"
+  const label = title ?? name ?? fileNameFromUrl(resolved) ?? "File"
   const size = Number(bytes)
   const pageCount = Number(pages)
   const facts = [
@@ -90,14 +90,6 @@ function FileCard({
       </div>
     </div>
   )
-}
-
-/** "…/2026/q3-report.pdf?v=2" → "q3-report.pdf" — the name a browser would give it. */
-function fileNameFrom(url: string | null): string | null {
-  if (!url) return null
-  const path = url.split(/[?#]/)[0]
-  const last = path.split("/").filter(Boolean).pop()
-  return last ? decodeURIComponent(last) : null
 }
 
 /**

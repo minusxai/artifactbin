@@ -389,7 +389,7 @@ export async function forkArtifact(
   source: ArtifactRow,
   overrides: ForkOverrides = {},
 ): Promise<ArtifactRow | Response> {
-  if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded' }, 403);
+  if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — delete documents you no longer need'] }, 403);
   const input = await forkInput(actor, source, overrides);
   if (input instanceof Response) return input;
   const row = await createArtifact(actor.tokenId, actor.userId, input, { forkedFrom: source.id, linkRole: source.link_role });

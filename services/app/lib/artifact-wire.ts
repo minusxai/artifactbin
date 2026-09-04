@@ -384,7 +384,7 @@ export async function createArtifactFromBody(
   base: string,
   request: Request,
 ): Promise<Response> {
-  if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded' }, 403);
+  if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — delete documents you no longer need'] }, 403);
   const parsed = await parseContentInput(body, { loadRef: refLoaderForActor(actor), importAsset: assetImporterFor(actor.tokenId, actor.userId), resolveFont: fontResolver(), overByteQuota: byteQuotaFor(actor.tokenId) });
   if (parsed instanceof Response) return parsed;
   const visibility = parseVisibility(body, !!actor.userId);

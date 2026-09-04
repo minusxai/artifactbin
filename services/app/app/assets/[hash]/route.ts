@@ -26,6 +26,7 @@
  * whose key comes from the CALLER, so a miss is routine rather than an anomaly.
  */
 import { objectStore } from '@/lib/object-store';
+import { fileNameFromUrl } from '@/lib/file-display';
 import { pdfFilename } from '@/lib/story/pdf-store';
 import { webAssetByHash } from '@/lib/web-assets';
 
@@ -56,9 +57,10 @@ export const ASSET_HEADERS: Readonly<Record<string, string>> = {
  */
 const dispositionFor = (contentType: string, url: string): string => {
   if (contentType !== 'application/pdf') return 'attachment';
-  let last = '';
-  try { last = new URL(url).pathname.split('/').filter(Boolean).pop() ?? ''; } catch { /* keep the fallback */ }
-  const name = decodeURIComponent(last).replace(/\.pdf$/i, '');
+  // fileNameFromUrl's decode cannot throw — a lone `%` in a filename is
+  // ordinary, and a bare decodeURIComponent here made this address 500 for a
+  // PDF that had imported perfectly (see lib/file-display).
+  const name = (fileNameFromUrl(url) ?? '').replace(/\.pdf$/i, '');
   return `inline; filename="${pdfFilename(name, 'file')}"`;
 };
 

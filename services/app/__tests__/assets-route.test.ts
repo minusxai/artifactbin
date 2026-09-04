@@ -90,6 +90,18 @@ describe('a PDF among the assets', () => {
     expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
   });
 
+  it('serves one whose source URL has a % in its filename, instead of 500ing', async () => {
+    // The bytes imported perfectly; only the disposition's NAME is derived from
+    // the URL, and `decodeURIComponent('a%ff.pdf')` throws. A malformed escape
+    // is kept as text: a filename is decoration, and throwing here takes down
+    // an address every reader of the document loads.
+    const pdf = Buffer.from('%PDF-1.4\nfine bytes\n');
+    const hash = await seed('application/pdf', pdf, 'https://example.test/papers/a%ff.pdf');
+    const res = await asset(hash);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Disposition')).toBe('inline; filename="a%ff.pdf"');
+  });
+
   it('leaves every other type as an attachment — the SVG hole stays closed', async () => {
     const hash = await seed();
     expect((await asset(hash)).headers.get('Content-Disposition')).toBe('attachment');
