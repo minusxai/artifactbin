@@ -341,10 +341,18 @@ input.mx-rail-title { min-width: 0; width: 100%; background: transparent; border
     gap: 10px !important; box-sizing: border-box !important; height: 44px !important;
     padding: 0 max(10px, env(safe-area-inset-right)) 0 max(10px, env(safe-area-inset-left)) !important;
     border-bottom: 1px solid var(--border, rgba(128,128,128,.28)) !important;
+    background: transparent !important;
+  }
+  /* The ground and its blur live on a pseudo-element: a backdrop-filter on the
+     bar itself makes the bar the positioning parent of its own fixed scrim and
+     panels, and a scrim the size of the bar closes nothing when clicked away. */
+  .mx-reader-chrome::before {
+    content: '' !important; position: absolute !important; inset: 0 !important; z-index: -1 !important;
     background: color-mix(in srgb, var(--background, canvas) 92%, transparent) !important;
     backdrop-filter: blur(8px) !important;
   }
   .mx-reader-chrome--hidden { transform: translateY(-100%) !important; }
+  .mx-reader-panel--menu .mx-reader-signin { margin-bottom: 8px !important; }
   .mx-reader-home { order: 0 !important; width: 34px !important; height: 34px !important; }
   /* Byline before rail on the screen, after it in the DOM: the reading order
      is logo → actions → who wrote it, the visual order puts the actions right. */

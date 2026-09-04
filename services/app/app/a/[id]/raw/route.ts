@@ -401,6 +401,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
          * the document only carries the ASK — it is sandboxed at an opaque
          * origin and holds no session, so it could not POST the fork itself.
          */
+        login: chrome && !viewer ? { href: `/login?callbackUrl=${encodeURIComponent(`/a/${artifact.id}`)}` } : null,
         fork: chrome ? { href: viewer ? `/a/${artifact.id}${withIntent('', 'fork')}` : `/login?callbackUrl=${encodeURIComponent(`/a/${artifact.id}${withIntent('', 'fork')}`)}` } : null,
         source: artifact.source ?? '',
         compiledCss,

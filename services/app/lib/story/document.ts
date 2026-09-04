@@ -182,6 +182,8 @@ export interface StoryDocumentInput {
    * with).
    */
   fork?: { href: string } | null;
+  /** "Sign in" in the profile menu, for a reader with no session (the route knows). */
+  login?: { href: string } | null;
 }
 
 /**
@@ -395,6 +397,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
       author: input.author ?? null,
       signIn,
       fork,
+      login: input.login ?? null,
     })
     : '';
 
