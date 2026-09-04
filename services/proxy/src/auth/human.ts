@@ -27,6 +27,7 @@ import { emailOTP, genericOAuth } from 'better-auth/plugins';
 import { Kysely, PostgresDialect } from 'kysely';
 import { randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
+import { say } from '../events';
 import { pgliteDialect } from './pglite';
 
 export interface OutgoingMail { to: string; kind: 'otp' | 'verify-email' | 'change-email' | 'other'; subject: string; text: string; otp?: string; url?: string }
@@ -75,6 +76,21 @@ export interface HumanAuthOptions {
 /** A plain lowercase identifier — it goes into SQL unparameterised. */
 const SCHEMA_RE = /^[a-z_][a-z0-9_]*$/;
 
+/**
+ * The two columns the hooks below read out of Better Auth's own `user` table.
+ * The handle they get is `Kysely<Record<string, unknown>>` — schema-qualified
+ * by the caller and deliberately untyped about the tables Better Auth owns —
+ * so the read names exactly what it needs and nothing more.
+ */
+type IdentityTables = { user: { id: string; email: string } };
+
+/** The address on a user row, through the SAME handle Better Auth writes with (so it is the same schema, always). */
+const emailOf = async (db: Kysely<Record<string, unknown>>, userId: string): Promise<string | undefined> => {
+  const row = await (db as unknown as Kysely<IdentityTables>)
+    .selectFrom('user').select('email').where('id', '=', userId).executeTakeFirst();
+  return row?.email;
+};
+
 export interface HumanAuth {
   /** Better Auth's HTTP handler: mount at /api/auth/*. */
   handler: (request: Request) => Promise<Response>;
@@ -121,6 +137,54 @@ export function humanAuthOptions(opts: HumanAuthOptions, db: Kysely<Record<strin
      */
     rateLimit: { enabled: false },
     session: { cookieCache: { enabled: false } },
+    /*
+     * THE IDENTITY MOMENTS, said where the ROWS land rather than where the
+     * routes are — Better Auth owns half a dozen ways in (a code, Google, any
+     * OIDC, a link from an existing account) and they all end in these three
+     * inserts. A hook that watched routes would miss whichever one was added
+     * next.
+     *
+     * Every hook is fire-and-forget (`void say`, which never rejects) and
+     * NEVER throws into Better Auth: a log that is down may not cost anyone
+     * their login. The one thing awaited is the address read for
+     * `login_verified`, a primary-key select on the row that was just written.
+     *
+     * MEASURED (Better Auth 1.7, this file's own options): an email-OTP
+     * sign-in writes NO `account` row at all — the account table only ever
+     * gets a row from an OAuth provider — and `emailAndPassword` is disabled,
+     * so a `credential` account cannot exist either. `account.create` is
+     * therefore an OAuth link and nothing else; there is no non-OAuth
+     * providerId here to exclude.
+     */
+    databaseHooks: {
+      user: {
+        create: {
+          after: async (user: { id: string; email: string }) => {
+            void say(opts.events, { kind: 'user', id: user.id }, 'signed_up', { kind: 'user', id: user.id }, { email: user.email });
+          },
+        },
+      },
+      session: {
+        create: {
+          after: async (session: { userId: string }) => {
+            try {
+              const email = await emailOf(db, session.userId);
+              if (email === undefined) return;
+              void say(opts.events, { kind: 'user', id: session.userId }, 'login_verified', { kind: 'user', id: session.userId }, { email });
+            } catch (error) {
+              console.error('[events] login_verified failed:', error);
+            }
+          },
+        },
+      },
+      account: {
+        create: {
+          after: async (account: { userId: string; providerId: string }) => {
+            void say(opts.events, { kind: 'user', id: account.userId }, 'oauth_linked', { kind: 'user', id: account.userId }, { provider: account.providerId });
+          },
+        },
+      },
+    },
     advanced: {
       // The client's address as the proxy in front of us reports it.
       ipAddress: { ipAddressHeaders: ['x-forwarded-for'] },
