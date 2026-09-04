@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS app.artifacts (
   visibility TEXT NOT NULL DEFAULT 'public',
   link_role TEXT,
   access TEXT NOT NULL DEFAULT 'read',
-  folder TEXT NOT NULL DEFAULT '',
+  ancestor_ids TEXT[] NOT NULL DEFAULT '{}',
   title TEXT,
   description TEXT,
   format TEXT NOT NULL DEFAULT 'markup',
@@ -135,7 +135,7 @@ ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS link_role TEXT;
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS access TEXT NOT NULL DEFAULT 'read';
 
-ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS folder TEXT NOT NULL DEFAULT '';
+ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS ancestor_ids TEXT[] NOT NULL DEFAULT '{}';
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS title TEXT;
 
@@ -163,7 +163,15 @@ ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NU
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS forked_from TEXT;
 
+ALTER TABLE app.artifacts DROP COLUMN IF EXISTS folder;
+
 CREATE INDEX IF NOT EXISTS idx_artifacts_token_updated ON app.artifacts (token_id, updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_artifacts_ancestors ON app.artifacts USING gin (ancestor_ids);
+
+CREATE INDEX IF NOT EXISTS idx_artifacts_parent ON app.artifacts ((ancestor_ids[cardinality(ancestor_ids)]));
+
+CREATE INDEX IF NOT EXISTS idx_artifacts_user_level ON app.artifacts (user_id, (cardinality(ancestor_ids)));
 
 CREATE TABLE IF NOT EXISTS app.artifact_versions (
   artifact_id TEXT NOT NULL,
