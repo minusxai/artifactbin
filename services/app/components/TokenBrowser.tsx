@@ -6,6 +6,7 @@ import { Tooltip } from '@/components/Tooltip';
 import { Badge, Button, dateStamp, FormatBadge, formatLabel, MicroLabel, PANEL, Spark, TABLE_ROW, timeAgo, TokenInput, VisibilityPill } from '@/components/ui';
 import RowMenu, { confirmDeleteArtifact } from '@/components/RowMenu';
 import { MoveMenu, type PickerFolder } from '@/components/FolderPicker';
+import { parentOfRow } from '@/lib/shelf';
 import { adoptToken } from '@/lib/browser-session';
 import type { Visibility } from '@/lib/artifacts';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
@@ -213,7 +214,7 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
   // change to justify reloading the page the way delete does.
   const [movedFolders, setMovedFolders] = useState<Record<string, string>>({});
   const [movingId, setMovingId] = useState<string | null>(null);
-  const parentOfRow = (a: ArtifactSummary) => movedFolders[a.id] ?? a.parent_id ?? '';
+  const placeOf = (a: ArtifactSummary) => movedFolders[a.id] ?? parentOfRow(a) ?? '';
   // The tree the picker draws: what the page handed down, else whatever folders
   // are among these rows.
   const pickable: PickerFolder[] = folders
@@ -399,8 +400,8 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
                       >
                         {a.title ?? <span className="text-faint">(untitled)</span>}
                       </a>
-                      {manage && parentOfRow(a) && (
-                        <span className="shrink-0 font-mono text-[10px] text-faint">{placeName(parentOfRow(a))}</span>
+                      {manage && placeOf(a) && (
+                        <span className="shrink-0 font-mono text-[10px] text-faint">{placeName(placeOf(a))}</span>
                       )}
                     </span>
                     <span className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 font-mono text-[10px] leading-none text-faint sm:hidden">
@@ -525,7 +526,7 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
                        row, which on the dense tier is a full table width away. */
                     <span className="relative z-20 inline-flex">
                       <MoveMenu
-                        row={{ id: a.id, format: a.format ?? 'markup', parent_id: parentOfRow(a) || null, ancestor_ids: a.ancestor_ids ?? [] }}
+                        row={{ id: a.id, format: a.format ?? 'markup', parent_id: placeOf(a) || null, ancestor_ids: a.ancestor_ids ?? [] }}
                         folders={pickable}
                         onMoved={(parentId) => setMovedFolders((m) => ({ ...m, [a.id]: parentId ?? '' }))}
                         onClose={() => setMovingId(null)}

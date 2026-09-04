@@ -26,7 +26,7 @@ import { MoveMenu, type PickerFolder } from '@/components/FolderPicker';
 import { ArtifactTable } from '@/components/TokenBrowser';
 import { Tooltip } from '@/components/Tooltip';
 import { dateStamp, MicroLabel, PANEL, Spark, timeAgo, VISIBILITY_TIPS, VisibilityPill } from '@/components/ui';
-import { buildShelf, type ShelfItem } from '@/lib/shelf';
+import { buildShelf, parentOfRow, type ShelfItem } from '@/lib/shelf';
 import type { Visibility } from '@/lib/artifacts';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
 
@@ -233,7 +233,7 @@ const nameOf = (row: ShelfRow) => row.title ?? row.id;
 function Actions({ row, level, folders, childCount = 0 }: { row: ShelfRow; level: ShelfActions; folders: PickerFolder[]; childCount?: number }) {
   const [copied, setCopied] = useState(false);
   const [moving, setMoving] = useState(false);
-  const [parentId, setParentId] = useState(row.parent_id ?? null);
+  const [parentId, setParentId] = useState(parentOfRow(row));
   const share = async () => {
     const url = row.url.startsWith('http') ? row.url : `${location.origin}${row.url}`;
     try {
@@ -462,7 +462,7 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
    * and no more. The dashboard lists the whole account, so its number is the
    * folder's; a profile lists the ROOT, so it has none to count and shows none.
    */
-  const inside = (id: string): number => all.filter((r) => r.parent_id === id).length;
+  const inside = (id: string): number => all.filter((r) => parentOfRow(r) === id).length;
 
   const filtering = Boolean(q) || picks.length > 0;
   const canMakeFolders = actions === 'full';

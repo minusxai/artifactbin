@@ -29,6 +29,20 @@ describe('a folder tile carries the folder\u2019s own actions', () => {
     expect(del.textContent).toContain('1 inside');
   });
 
+  it('reads placement from the TRAIL too — which is all the dashboard sends', () => {
+    /*
+     * `/api/page/home` sends `ancestor_ids` and no `parent_id`: the trail is
+     * the stored truth and the id is derived from it (its last element). A
+     * shelf that read only the derived field counted every folder as empty and
+     * offered a delete the door would refuse — which is what the browser gate
+     * caught, with every fixture here passing because they all sent both.
+     */
+    const trailed = { ...child, parent_id: undefined, ancestor_ids: ['rep001'] };
+    render(<Shelf actions="full" rows={[folder, empty, trailed] as never} />);
+    fireEvent.click(screen.getByLabelText('More actions for Reports'));
+    expect((screen.getByLabelText('Delete Reports') as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('an empty folder deletes like anything else', () => {
     render(<Shelf actions="full" rows={[folder, empty, child] as never} />);
     fireEvent.click(screen.getByLabelText('More actions for Empty'));
