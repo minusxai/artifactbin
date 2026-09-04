@@ -179,19 +179,6 @@ describe('the prefix is actually applied to stored keys', () => {
   });
 });
 
-describe('the boot canary', () => {
-  it('writes and reads one object under the store\'s own prefix, and names the store on failure', async () => {
-    const { verifyObjectStore } = await import('../index');
-    const dir = await mkdtemp(path.join(tmpdir(), 'canary-'));
-    await expect(verifyObjectStore(createLocalStore(dir))).resolves.toMatchObject({ backend: 'local' });
-    const broken: ObjectStore = {
-      backend: 'local', put: async () => { throw new Error('disk full'); }, get: async () => Buffer.alloc(0),
-      getStream: async () => { throw new Error('disk full'); }, delete: async () => {},
-    };
-    await expect(verifyObjectStore(broken)).rejects.toThrow(/object store .*local.* unusable.*disk full/i);
-  });
-});
-
 /*
  * ── THE STREAMING READ ───────────────────────────────────────────────────────
  *

@@ -14,8 +14,8 @@
  *
  * SHALLOW ON PURPOSE. It does not touch the database or the object store: a
  * probe that fails when Postgres blips restarts a server that would have
- * recovered, and the store already has a boot canary (instrumentation.ts
- * verifyObjectStore) that fails startup loudly with the store named.
+ * recovered on its own, and whether the store is reachable belongs to whoever
+ * set the configuration, not to every process that starts.
  */
 import { describe, expect, it } from 'vitest';
 import { GET as health } from '@/app/health/route';

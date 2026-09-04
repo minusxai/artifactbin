@@ -271,23 +271,3 @@ export function createLocalStore(dir: string): ObjectStore {
   };
 }
 
-/**
- * THE BOOT CANARY: put and get one object under the store's own prefix. A
- * bad S3_URL, wrong credentials or a missing bucket fail HERE, at startup,
- * with the store named — not on the first user's request as a bare
- * ObjectUnavailable that cannot say whether the key or the credentials are
- * the problem. Diagnostic only; nothing else depends on it.
- */
-export async function verifyObjectStore(store: ObjectStore = objectStore()): Promise<{ backend: ObjectStore['backend']; ms: number }> {
-  const key = `_health/${randomBytes(8).toString('hex')}`;
-  const t0 = Date.now();
-  try {
-    await store.put(key, Buffer.from('ok'), 'text/plain');
-    const back = await store.get(key);
-    if (back.toString('utf8') !== 'ok') throw new Error('read back different bytes');
-    await store.delete(key).catch(() => {});
-  } catch (error) {
-    throw new Error(`object store (${store.backend}) unusable: ${(error as Error)?.message ?? String(error)}`, { cause: error });
-  }
-  return { backend: store.backend, ms: Date.now() - t0 };
-}
