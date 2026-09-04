@@ -71,3 +71,34 @@ describe('backfillAnalyticsEvents', () => {
     expect(await count()).toBe(4);
   });
 });
+
+/**
+ * THE COPY HAPPENS ONCE, INTO A LOG THAT HAS NOT SPOKEN FOR ITSELF YET. The app
+ * dual-writes every moment — the counter row AND the sentence — so once a live
+ * emit has landed, copying the legacy table would say the same moment twice: a
+ * `legacy:<seq>` twin of a row already in the log, with a different subject.
+ * A log holding any row that is not a `legacy:` one is a log that is already
+ * covered, so the statement copies nothing into it.
+ */
+describe('a log that has already started speaking for itself', () => {
+  const LIVE = 'evt_bf_live';
+  const liveCount = async (like: string) =>
+    (await db.query<{ n: number }>(`SELECT count(*)::int AS n FROM ${LIVE}.events WHERE id LIKE $1`, [like])).rows[0]!.n;
+
+  it('is not backfilled at all — one live row and the legacy table stays where it is', async () => {
+    await ensureEventsSchema(db, LIVE);
+    await db.query(
+      `INSERT INTO ${LIVE}.events (id, at, source, subject_kind, subject_id, verb, object_kind, object_id, payload)
+       VALUES ('11111111-2222-3333-4444-555555555555', now(), 'app', 'user', 'usr_1', 'created', 'artifact', 'art001', '{}')`,
+    );
+    expect(await backfillAnalyticsEvents(db, { schema: LIVE, from: 'analytics_events' })).toBe(0);
+    expect(await liveCount('legacy:%')).toBe(0);
+    expect(await liveCount('%')).toBe(1);
+  });
+
+  it('an EMPTY log still takes the whole history — the first boot after the upgrade', async () => {
+    const FRESH = 'evt_bf_fresh';
+    await ensureEventsSchema(db, FRESH);
+    expect(await backfillAnalyticsEvents(db, { schema: FRESH, from: 'analytics_events' })).toBe(4);
+  });
+});

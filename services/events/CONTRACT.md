@@ -59,6 +59,12 @@ schema, from })` runs it and resolves to the number of rows it took — 0 on eve
 ids are stable (`legacy:<seq>`) and the insert is `ON CONFLICT (id) DO NOTHING`. The single image runs it at every
 boot, right after it registers the writer.
 
+**It copies only into a log that has not spoken for itself yet**, and the statement asks that question in its own
+WHERE. An app that emits also dual-writes the legacy row, so a log holding any row that is not a `legacy:` one is
+already covered; copying into it would say each moment twice — the live sentence, whose subject is the account,
+beside its `legacy:<seq>` twin, whose subject is the visitor hash. The first run after an upgrade therefore takes
+the whole history, and every later one takes nothing.
+
 An operator runs it by hand instead, and runs it **as the database owner**: the events role has read on nothing
 but its own schema, on purpose, so it cannot see the app's table. `from` is the legacy table as that connection
 sees it — qualify it. Both names are interpolated, so both are refused unless they are plain identifiers
@@ -73,6 +79,7 @@ SELECT 'legacy:' || seq, created_at, 'app',
        jsonb_strip_nulls(jsonb_build_object('user_id', user_id, 'client', client))
   FROM app.analytics_events
  WHERE event IN ('view', 'export', 'create', 'update', 'edit', 'mutate', 'revert', 'fork', 'delete')
+   AND NOT EXISTS (SELECT 1 FROM events.events WHERE id NOT LIKE 'legacy:%')
  ON CONFLICT (id) DO NOTHING
 ```
 

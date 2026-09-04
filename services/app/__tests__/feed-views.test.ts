@@ -19,7 +19,7 @@ import { backfillAnalyticsEvents, createEvents, ensureEventsSchema } from '@arti
 import { useAppHarness } from '@/__tests__/harness';
 import { trackEvent } from '@/lib/analytics';
 import { EVENTS_SCHEMA } from '@/lib/config';
-import { dailyViewsByUser, eventsTablePresent, viewSeriesByUser, VIEW_SERIES_DAYS } from '@/lib/feed';
+import { dailyViewsByUser, eventsTablePresent, ownerFeed, viewSeriesByUser, VIEW_SERIES_DAYS } from '@/lib/feed';
 import { setServices } from '@/lib/services';
 
 const harness = useAppHarness();
@@ -207,5 +207,35 @@ describe('the aggregates, over the log', () => {
     expect(daily).toHaveLength(3);
     expect(daily.map((d) => d.views)).toEqual([1, 0, 3]);
     expect(daily[2].day > daily[0].day).toBe(true);
+  });
+});
+
+/**
+ * THE DUAL-WRITE AND THE BACKFILL MUST NOT BOTH CLAIM THE SAME MOMENT. In the
+ * single image `trackEvent` writes the counter row AND emits the sentence, and
+ * the boot copies the counter rows; without a rule, the restart after an
+ * upgrade gives the owner's feed every moment twice — once live (the account is
+ * the subject) and once as `legacy:<seq>` (the visitor hash is). Found by the
+ * next phase's boot walk: three legacy rows, three duplicates.
+ */
+describe('the backfill and the dual-write do not say the same thing twice', () => {
+  it('a moment that was emitted live is not copied again — the owner feed shows it once', async () => {
+    const db = await harness.db();
+    const queryable: Queryable = { query: async <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => ({ rows: (await db.query<T>(sql, params)).rows }) };
+    setServices({ events: createEvents({ db: queryable, schema: EVENTS_SCHEMA }) });
+    await db.query(`INSERT INTO artifacts (id, token_id, user_id, content) VALUES ('art0a1', 'tok_a', 'usr_a', 'x')`);
+
+    // The live path: one counter row and one sentence for the same moment.
+    await trackEvent('create', 'art0a1', { userId: 'usr_a' });
+    expect((await db.query<{ n: number }>('SELECT count(*)::int AS n FROM analytics_events')).rows[0]!.n).toBe(1);
+    expect((await db.query<{ n: number }>(`SELECT count(*)::int AS n FROM ${EVENTS_SCHEMA}.events`)).rows[0]!.n).toBe(1);
+
+    // The restart's backfill, over a log the dual-write already covers.
+    expect(await backfillAnalyticsEvents(db, { schema: EVENTS_SCHEMA, from: 'analytics_events' })).toBe(0);
+
+    const feed = await ownerFeed('usr_a');
+    expect(feed).toHaveLength(1);
+    expect(feed[0]).toMatchObject({ verb: 'created', object_id: 'art0a1', subject_kind: 'user', subject_id: 'usr_a' });
+    expect(feed.map((e) => e.id).some((id) => id.startsWith('legacy:'))).toBe(false);
   });
 });
