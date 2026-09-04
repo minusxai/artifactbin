@@ -55,14 +55,44 @@ const WEB_INGEST_WINDOW_MS = 60 * 60 * 1000;
 const webIngestTimes = new Map<string, number[]>();
 
 export function webIngestRateLimited(key: string, now = Date.now()): boolean {
+  return hourlyAttemptsExhausted(key, WEB_INGEST_MAX_PER_HOUR, now);
+}
+
+/** One hourly ATTEMPT bucket, shared by every allowance in this file. */
+function hourlyAttemptsExhausted(key: string, max: number, now: number): boolean {
   const times = (webIngestTimes.get(key) ?? []).filter((t) => now - t < WEB_INGEST_WINDOW_MS);
-  if (times.length >= WEB_INGEST_MAX_PER_HOUR) {
+  if (times.length >= max) {
     webIngestTimes.set(key, times);
     return true;
   }
   times.push(now);
   webIngestTimes.set(key, times);
   return false;
+}
+
+/**
+ * A DOCUMENT's own hourly ceiling on first-view asset imports
+ * (app/a/[id]/assets).
+ *
+ * Keyed on the document rather than on a caller, because the caller is
+ * whichever stranger happens to be reading and the thing being protected is
+ * this server's outbound fetching. It is an APP quota and not a proxy door for
+ * the reason CLAUDE.md gives — the proxy's verdicts are per client IP and it
+ * cannot see which document an address names, so "this document has done
+ * enough importing for one hour" is a question only the app can ask.
+ *
+ * Smaller than the per-identity web-ingest allowance by an order of magnitude:
+ * a publish imports a document's whole finite set of URLs at once, while this
+ * is the tail of what only a reader can compute, and a document that genuinely
+ * needs hundreds of distinct images an hour is not the shape this exists for.
+ */
+export const DOC_ASSET_IMPORTS_PER_HOUR = 30;
+let docAssetCap: number | null = null;
+/** Test hook, mirroring setAssetByteQuotaForTests — the ceiling is a constant. */
+export function setDocAssetImportCapForTests(cap: number | null): void { docAssetCap = cap; }
+
+export function docAssetImportRateLimited(id: string, now = Date.now()): boolean {
+  return hourlyAttemptsExhausted(`doc-assets:${id}`, docAssetCap ?? DOC_ASSET_IMPORTS_PER_HOUR, now);
 }
 
 export function resetWebIngestRateLimit(): void {

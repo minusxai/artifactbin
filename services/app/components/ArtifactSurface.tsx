@@ -31,7 +31,7 @@ import { useIsPhoneViewport } from '@/components/MobileSheet';
 import { EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
 import type { ArtifactFormat } from '@/lib/story/input';
 import { useLiveArtifact } from '@/lib/story/use-live-artifact';
-import { STORY_DATA_MESSAGE, STORY_DOCUMENT_ACK_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_HELLO_MESSAGE, STORY_MUTATE_MESSAGE, STORY_MUTATE_RESULT_MESSAGE, STORY_PAINTED_MESSAGE, STORY_READER_MODE_MESSAGE, STORY_SCROLL_MESSAGE, type StoryDataUpdate, type StoryMutateRequest, type StoryMutateResult, type StoryScrollMessage, STORY_ADOPTS_MESSAGE, STORY_QUERY_MESSAGE, STORY_QUERY_RESULT_MESSAGE, isEditFrameMessage, isSessionMessage, isValuesMessage, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, type StoryDocumentUpdate, type StoryEditSelection, type StoryQueryRequest, type StoryQueryResult, type StorySelectionActionsMessage } from '@/lib/story-runtime/contract';
+import { STORY_ASSET_MESSAGE, STORY_ASSET_RESULT_MESSAGE, type StoryAssetRequest, type StoryAssetResult, STORY_DATA_MESSAGE, STORY_DOCUMENT_ACK_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_HELLO_MESSAGE, STORY_MUTATE_MESSAGE, STORY_MUTATE_RESULT_MESSAGE, STORY_PAINTED_MESSAGE, STORY_READER_MODE_MESSAGE, STORY_SCROLL_MESSAGE, type StoryDataUpdate, type StoryMutateRequest, type StoryMutateResult, type StoryScrollMessage, STORY_ADOPTS_MESSAGE, STORY_QUERY_MESSAGE, STORY_QUERY_RESULT_MESSAGE, isEditFrameMessage, isSessionMessage, isValuesMessage, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, type StoryDocumentUpdate, type StoryEditSelection, type StoryQueryRequest, type StoryQueryResult, type StorySelectionActionsMessage } from '@/lib/story-runtime/contract';
 import type { DataflowState } from '@/lib/story/dataflow';
 import { urlValuesSearch, writeUrlValues } from '@/lib/story/url-values';
 import { displayTitle } from '@/lib/story/title';
@@ -459,6 +459,42 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     window.addEventListener('message', onQuery);
     return () => window.removeEventListener('message', onQuery);
   }, [id]);
+
+  /**
+   * THE ASSET RELAY — the same shape and the same reason as the two around it:
+   * the frame is opaque-origin, so an `<img>` it loads carries no cookie, and
+   * `/a/<id>/assets` then sees an anonymous caller from inside every framed
+   * document. On a PRIVATE one — which is what a signed-in user's document is
+   * by default — that is the uniform 404, for its own owner as much as anyone.
+   *
+   * So the page asks, with its session, and posts back the ADDRESS of our copy.
+   * What crosses is `/assets/<hash>`, which needs no credential at all
+   * (content-addressed from the URL, serving nothing the source host does not):
+   * never bytes, and never a credential.
+   *
+   * The CAPTURE carries the export key instead of a session — the headless
+   * browser has none — on exactly the terms `raw` admits it. Without that a
+   * private document's og image photographs alt text.
+   */
+  useEffect(() => {
+    const onAsset = async (e: MessageEvent) => {
+      const data = e.data as Partial<StoryAssetRequest> | undefined;
+      if (!data || typeof data !== 'object' || data.type !== STORY_ASSET_MESSAGE || typeof data.url !== 'string') return;
+      if (frameRef.current && e.source !== frameRef.current.contentWindow) return;
+      const reply = (msg: StoryAssetResult) => (e.source as Window | null)?.postMessage(msg, '*');
+      try {
+        const key = captureKey ? `&key=${encodeURIComponent(captureKey)}` : '';
+        const res = await fetch(`/a/${id}/assets?u=${encodeURIComponent(data.url)}${key}`, { headers: { Accept: 'application/json' } });
+        const body = (await res.json().catch(() => ({}))) as { url?: string; code?: string };
+        if (res.ok && body.url) reply({ type: STORY_ASSET_RESULT_MESSAGE, id: data.id!, url: body.url });
+        else reply({ type: STORY_ASSET_RESULT_MESSAGE, id: data.id!, refused: body.code ?? `http_${res.status}` });
+      } catch {
+        reply({ type: STORY_ASSET_RESULT_MESSAGE, id: data.id!, refused: 'fetch_failed' });
+      }
+    };
+    window.addEventListener('message', onAsset);
+    return () => window.removeEventListener('message', onAsset);
+  }, [id, captureKey]);
 
   /**
    * The WRITE RELAY — the same shape as the query relay above, and here for

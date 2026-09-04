@@ -108,6 +108,13 @@ export interface StoryDocumentInput {
    */
   mutateUrl?: string | null;
   /**
+   * The document's own ASSET IMPORT endpoint (StoryIslandData.assetsUrl) — set
+   * by the serving route, so a bound `<img src="$pick">` has somewhere to
+   * import the URL a reader picks. Absent for renders with no reader behind
+   * them (the canvas, unit tests), where a bound image renders static.
+   */
+  assetsUrl?: string | null;
+  /**
    * Render the document's own navigation chrome (deck rail, present bar, outline).
    * False for capture renders — /export screenshots this frame, so chrome
    * would appear in every OG card and share image. Default true.
@@ -528,8 +535,16 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    */
   const glyphs = split ? loadSsrBundle().glyphsForNodes(split.body) : {};
 
+  /*
+   * The SSR string and the island below are built from SEPARATE prop lists, and
+   * an island field that CHANGES WHAT IS DRAWN must appear in both or React
+   * discards the whole server tree at hydration (#418). `assetsUrl` is the
+   * first such field — `queryUrl`/`mutateUrl` only name a transport, so their
+   * absence here is correct, while a bound `<img src="$pick">` has nowhere to
+   * import from without this and rendered as a bare alt until hydration.
+   */
   const bodyHtml = split
-    ? loadSsrBundle().renderStoryBody({ nodes: split.body, refData, glyphs, ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome })
+    ? loadSsrBundle().renderStoryBody({ nodes: split.body, refData, glyphs, ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}) })
     : `<pre>${escapeHtml(source)}</pre>`;
 
   // Style order mirrors the engine's injection order (compiled Tailwind → bare
@@ -619,7 +634,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
     ...(hydrates ? [runtimeSrc!, ...(drawsChart(split!.body) ? input.lazyChunks ?? [] : [])] : []),
   ].map((href) => `<link rel="modulepreload" href="${escapeHtml(href)}" crossorigin>`).join('');
 
-  const island: StoryIslandData = { nodes: split?.body ?? [], refData, ...(Object.keys(glyphs).length ? { glyphs } : {}), ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, ...(input.queryUrl ? { queryUrl: input.queryUrl } : {}), ...(input.mutateUrl ? { mutateUrl: input.mutateUrl } : {}) };
+  const island: StoryIslandData = { nodes: split?.body ?? [], refData, ...(Object.keys(glyphs).length ? { glyphs } : {}), ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, ...(input.queryUrl ? { queryUrl: input.queryUrl } : {}), ...(input.mutateUrl ? { mutateUrl: input.mutateUrl } : {}), ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}) };
   // `<` escaped so no row value can close the script element from inside JSON.
   const islandJson = JSON.stringify(island).replace(/</g, '\\u003c');
 

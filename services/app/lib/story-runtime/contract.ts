@@ -92,6 +92,19 @@ export interface StoryIslandData {
    * reason queries relay there — the page holds the session.
    */
   mutateUrl?: string;
+  /**
+   * Where this document imports an image URL that only exists in the READER's
+   * browser — a bound `<img src="$pick">`, a template a pick completed, a
+   * column of logos: `GET <assetsUrl>?u=<url>` (app/a/[id]/assets), which
+   * imports it under this document's own read ACL and caps and answers a
+   * redirect to `/assets/<hash>`.
+   *
+   * An `<img>` LOAD, not a fetch — so unlike `queryUrl`/`mutateUrl` this needs
+   * no `connect-src` entry and the document's CSP is unchanged by it
+   * (`img-src 'self'` already admits a same-origin address). Absent for a
+   * render that is not a served document, where a bound image renders static.
+   */
+  assetsUrl?: string | null;
 }
 
 /** The GET query endpoint's one parameter: the JSON of a QueryRequest (lib/story/query-request). */
@@ -298,6 +311,41 @@ export interface StoryQueryRequest {
 export type StoryQueryResult =
   | { type: typeof STORY_QUERY_RESULT_MESSAGE; id: number; tables: DataflowState['tables']; errors: DataflowState['errors'] }
   | { type: typeof STORY_QUERY_RESULT_MESSAGE; id: number; error: string };
+
+/**
+ * THE ASSET RELAY — the third thing a framed document cannot do for itself.
+ *
+ * A bound `<img src="$pick">` names a URL only the reader can compute, and the
+ * document imports it through its own endpoint (`/a/<id>/assets?u=…`). Loading
+ * that as an `<img>` works top-level and CANNOT work inside a parent: the frame
+ * is opaque-origin, so its subresource requests carry no cookie, and the
+ * endpoint therefore sees an anonymous caller from inside every framed document
+ * — the owner's own copy of their PRIVATE document included, where the read ACL
+ * then answers the uniform 404. That is not an edge case: a signed-in user's
+ * document is born private.
+ *
+ * So the frame asks the PAGE, exactly as it does for a query and a write, and
+ * the page — which holds the session — calls the endpoint and posts back the
+ * ADDRESS of our copy. That address is `/assets/<hash>`, which needs no
+ * credential at all (content-addressed from the URL, serving nothing the source
+ * host does not), which is the whole reason a relay can answer this: what
+ * crosses back is a public address, never bytes and never a credential.
+ */
+export const STORY_ASSET_MESSAGE = 'mx:asset';
+export const STORY_ASSET_RESULT_MESSAGE = 'mx:asset-result';
+
+export interface StoryAssetRequest {
+  type: typeof STORY_ASSET_MESSAGE;
+  id: number;
+  /** The web URL the document ended up with — never a path, never ours. */
+  url: string;
+}
+
+export type StoryAssetResult =
+  /** Where our copy lives: `/assets/<hash>`. */
+  | { type: typeof STORY_ASSET_RESULT_MESSAGE; id: number; url: string }
+  /** The importer's own code (`forbidden_address`, `too_large`, `rate_limited`, …). */
+  | { type: typeof STORY_ASSET_RESULT_MESSAGE; id: number; refused: string };
 
 /**
  * THE WRITE RELAY — the same shape as the query relay, for the same reason: a

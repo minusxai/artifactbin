@@ -53,6 +53,15 @@ export interface DataTableProps {
   onSortChange?: (sort: SortSpec | null) => void
   /** When the rows are a sample: read the next window. */
   onLoadMore?: () => void
+  /**
+   * Where a cell in an `image` column is SERVED from — the document's own
+   * mapping of a web URL to our copy of it (lib/story/asset-url
+   * `runtimeAssetUrl`, supplied by the runtime's DataTable adapter). Null means
+   * there is nowhere to import it through, and the cell stays text: this
+   * component never reaches a third-party host on a reader's behalf, which is
+   * the whole point of the asset store above it.
+   */
+  resolveSrc?: (url: string) => string | null
   className?: string
   /**
    * Unknown props reach the root div, like every other kit component — the
@@ -69,7 +78,7 @@ const ROW_H = 33
 
 export function DataTable({
   rows = [], columns = [], spec = null, sort: initialSort = null, height, sticky = true,
-  totalRows, truncated = false, loading = false, onSortChange, onLoadMore, className, ...props
+  totalRows, truncated = false, loading = false, onSortChange, onLoadMore, resolveSrc, className, ...props
 }: DataTableProps) {
   // A CEILING, not a reserved height: a three-row table hugs its rows and a
   // long one scrolls inside the cap, because `overflow-auto` gives the
@@ -178,6 +187,7 @@ export function DataTable({
                 style={start === null ? undefined : { ...rowGrid, position: 'absolute', top: 0, left: 0, transform: `translateY(${start}px)` }}
                 measure={virtual ? virtualizer.measureElement : undefined}
                 index={index}
+                resolveSrc={resolveSrc}
               />
             ))}
           </tbody>
@@ -199,12 +209,13 @@ export function DataTable({
   )
 }
 
-function DataRow({ row, columns, style, measure, index }: {
+function DataRow({ row, columns, style, measure, index, resolveSrc }: {
   row: Row
   columns: ResolvedColumn[]
   style?: React.CSSProperties
   measure?: (el: HTMLElement | null) => void
   index: number
+  resolveSrc?: (url: string) => string | null
 }) {
   return (
     <tr ref={measure} data-index={index} className="border-b border-border/50" style={style}>
@@ -226,10 +237,25 @@ function DataRow({ row, columns, style, measure, index }: {
                 style={{ width: `${Math.round(bar * 100)}%`, background: typeof c.bar === 'object' && c.bar.color ? c.bar.color : 'var(--chart-1)' }}
               />
             )}
-            <span className="relative">{formatCell(value, c)}</span>
+            <span className="relative">{imageCell(value, c, resolveSrc) ?? formatCell(value, c)}</span>
           </td>
         )
       })}
     </tr>
   )
+}
+
+/**
+ * The one non-text cell: an `image` column's URL, drawn from OUR copy.
+ *
+ * Null for everything else — a column the author did not mark, a cell that is
+ * not a web URL, or a render with no mapping behind it — and the caller then
+ * formats it as text. `loading="lazy"` because a table is exactly the shape
+ * that puts fifty pictures below the fold.
+ */
+function imageCell(value: unknown, c: ResolvedColumn, resolveSrc?: (url: string) => string | null): React.ReactNode | null {
+  if (c.kind !== 'image' || typeof value !== 'string' || !/^https?:\/\//i.test(value)) return null
+  const src = resolveSrc?.(value) ?? null
+  if (!src) return null
+  return <img src={src} alt="" loading="lazy" className="inline-block max-h-8 w-auto align-middle" />
 }
