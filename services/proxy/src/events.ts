@@ -7,11 +7,17 @@
  * in parts.ts), and — through Better Auth's database hooks in auth/human.ts —
  * a user CREATED (`signed_up`), a session CREATED (`login_verified`), an OAuth
  * account LINKED (`oauth_linked`).
+ *
+ * The ROW SHAPE is not built here: `@artifactbin/utils` owns the ONE builder
+ * both processes call (utils/src/events.ts), so the log stays one table that
+ * one reader can read — `source` is the only thing the two callers disagree
+ * about.
  */
-import type { EventEnvelope, EventPayload, EventsService, EventVerb, ObjectKind, SubjectKind } from '@artifactbin/contracts';
+import type { EventEnvelope, EventPayload, EventsService, EventVerb, ObjectKind } from '@artifactbin/contracts';
+import { envelope, type EventObject, type EventSubject } from '@artifactbin/utils';
 
-export interface ProxySubject { kind: SubjectKind; id: string }
-export interface ProxyObject<K extends ObjectKind = ObjectKind> { kind: K; id: string }
+export type ProxySubject = EventSubject;
+export type ProxyObject<K extends ObjectKind = ObjectKind> = EventObject<K>;
 
 /** Build the row without sending it — pure, the app's `envelope` with the proxy as the source. */
 export function proxyEnvelope<K extends ObjectKind, V extends EventVerb<K>>(
@@ -20,8 +26,7 @@ export function proxyEnvelope<K extends ObjectKind, V extends EventVerb<K>>(
   object: ProxyObject<K>,
   payload: EventPayload<K, V>,
 ): EventEnvelope {
-  void subject; void verb; void object; void payload;
-  throw new Error('events-proxy: implement proxyEnvelope');
+  return envelope('proxy', subject, verb, object, payload);
 }
 
 /** Fire-and-forget: never rejects, never throws; an absent service is a noop. Callers write `void say(...)`. */
@@ -32,6 +37,12 @@ export async function say<K extends ObjectKind, V extends EventVerb<K>>(
   object: ProxyObject<K>,
   payload: EventPayload<K, V>,
 ): Promise<void> {
-  void events; void subject; void verb; void object; void payload;
-  throw new Error('events-proxy: implement say');
+  if (!events) return;
+  try {
+    await events.emit([proxyEnvelope(subject, verb, object, payload)]);
+  } catch (error) {
+    // Telemetry never takes a request down with it, and an unhandled rejection
+    // out of a `void say(...)` would kill the process.
+    console.error('[events] say failed:', error);
+  }
 }
