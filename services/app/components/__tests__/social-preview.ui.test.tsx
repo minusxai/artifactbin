@@ -95,6 +95,11 @@ describe('social preview dialog', () => {
     fireEvent.pointerUp(resize, { pointerId: 1 });
     expect(overview.style.width).not.toBe(before);
     expect(document.querySelector('img[src*="focus=1"]')).toHaveAttribute('src', expect.stringContaining('width%3D693'));
+
+    fireEvent.pointerDown(resize, { pointerId: 2, clientX: 600, clientY: 350 });
+    fireEvent.pointerMove(resize, { pointerId: 2, clientX: 640, clientY: 350 });
+    expect(Number(frame.getAttribute('aria-valuetext')?.match(/width (\d+)/)?.[1])).toBeGreaterThanOrEqual(780);
+    fireEvent.pointerUp(resize, { pointerId: 2 });
   });
 
   it('keeps the draft framing when a concurrent edit moves the document head', async () => {

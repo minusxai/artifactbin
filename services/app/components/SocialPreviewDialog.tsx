@@ -21,7 +21,7 @@ const rounded = (crop: SocialPreviewCrop): SocialPreviewCrop => ({
 });
 
 const CAMERA_PADDING = 1.08;
-const RESIZE_OUTWARD_SENSITIVITY = 1.5;
+const RESIZE_OUTWARD_SENSITIVITY = 3;
 
 const clampCrop = (crop: SocialPreviewCrop, sourceHeight: number): SocialPreviewCrop => {
   const width = Math.min(SOCIAL_PREVIEW_WIDTH, Math.max(SOCIAL_PREVIEW_MIN_CROP_WIDTH, crop.width));
