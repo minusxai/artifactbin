@@ -794,6 +794,7 @@ export const STORY_UI_RECIPE_CLASSES: readonly string[] = [
   "true",
   "truncate",
   "ui-monospace,",
+  "ul",
   "unavailable",
   "undefined",
   "underline",

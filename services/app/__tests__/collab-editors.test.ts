@@ -8,7 +8,7 @@
  * decided once by `roleFor`:
  *
  *   owner  — everything
- *   editor — reach + edits/PUT/revert/versions; never delete, share, folder, access
+ *   editor — reach + edits/PUT/revert/versions; never delete, share, move, access
  *   reader — the read ACL, nothing more
  *
  * Tested through the ROUTES, both credentials — the earlier hole
@@ -117,7 +117,7 @@ describe('a viewer share is read-only, exactly as before', () => {
 });
 
 describe('an editor edits through every write door, and nothing else', () => {
-  it('session: reach, edits, PUT, revert and versions answer; delete, sharing, folder do not', async () => {
+  it('session: reach, edits, PUT, revert and versions answer; delete, sharing, moving do not', async () => {
     const w = await world();
     await inviteEditor(w);
     asSession({ id: w.bob.id, email: w.bob.email });
@@ -144,7 +144,9 @@ describe('an editor edits through every write door, and nothing else', () => {
     expect((await deleteMineRoute(jreq(`/api/my/artifacts/${id}`, 'DELETE'), params({ id }))).status).toBe(404);
     expect((await getSharingRoute(jreq(`/api/my/artifacts/${id}/sharing`, 'GET'), params({ id }))).status).toBe(404);
     expect((await share(id, [{ email: 'carol@x.com', role: 'editor' }])).status).toBe(404);
-    expect((await patchMineRoute(jreq(`/api/my/artifacts/${id}`, 'PATCH', { folder: 'x' }), params({ id }))).status).toBe(404);
+    // The PATCH is OWNER-scoped, so an editor meets the uniform 404 before the
+    // parent is ever looked at — which is also the ordering rule itself.
+    expect((await patchMineRoute(jreq(`/api/my/artifacts/${id}`, 'PATCH', { parent_id: null }), params({ id }))).status).toBe(404);
     expect(await head(id)).toBeTruthy();
   });
 

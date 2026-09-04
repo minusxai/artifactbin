@@ -120,17 +120,22 @@ reply: `id` and `edit_id` go straight into the edit loop. Content and settings
 travel; history, comments and shares do not; the original is untouched; and refs
 re-check as YOU (someone else's `<Mutation>` target is `400 invalid_refs`).
 
-### Read one back (before editing) · List your artifacts
+### Read one back (before editing)
 
 ```
 GET [[ base ]]/api/artifacts/<id>
 → 200 { "id", "url", "title", "format", "markup", "version", "edit_id",
         "parent_id", "ancestor_ids", "annotations": [...], "open_annotations": <n> }
-GET [[ base ]]/api/artifacts   → 200 { "artifacts": [ { "id", "url", "title", ... } ] }
 ```
 
-The list is EVERYTHING you own — datasets, images, viz recipes and folders are
-artifacts too, with no separate endpoint for any of them.
+### List your artifacts
+
+```
+GET [[ base ]]/api/artifacts → 200 { "artifacts": [ { "id", "url", "title", "format", ... } ] }
+```
+
+EVERYTHING you own — datasets, images, viz recipes and folders are artifacts
+too; there is no separate datasets endpoint.
 
 ## Errors
 

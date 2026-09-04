@@ -17,7 +17,7 @@ const summary = (format: 'markup' | 'dataset' | 'viz' | 'image', meta: Record<st
   version: 3,
   visibility: 'private' as const,
   access: 'read' as const,
-  folder: 'reports',
+  ancestor_ids: ['f00001'],
   created_at: '2026-08-01T00:00:00.000Z',
   updated_at: '2026-08-30T00:00:00.000Z',
   views: 12,

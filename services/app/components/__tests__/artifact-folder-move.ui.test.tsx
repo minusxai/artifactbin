@@ -1,8 +1,13 @@
 /**
  * Folder moves from the dashboard: a manage-mode row tucks "Move" and
  * "Delete" behind a "…" overflow menu (share and edit stay one click).
- * Move PATCHes { folder } (metadata-only — never the content PUT) and
- * reflects the new path in place. Non-manage rows get no menu at all.
+ * Move PATCHes `{ parent_id }` — the ID of a folder artifact, metadata-only,
+ * never the content PUT — and reflects the new placement in place. Non-manage
+ * rows get no menu at all.
+ *
+ * P1 keeps the field a plain id box; P2 replaces it with the folder picker
+ * (the account's tree, with the row's own subtree greyed out — the cycle rule,
+ * drawn). What must hold either way is the WIRE, which is what this asserts.
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,7 +19,7 @@ const ROW = {
   title: 'Eating Healthy',
   format: 'markup',
   version: 3,
-  folder: '2026/08',
+  parent_id: 'f0Ld3r',
   visibility: 'private' as const,
   updated_at: new Date().toISOString(),
 };
@@ -27,7 +32,7 @@ beforeEach(() => {
     if (init?.method === 'PATCH') {
       const body = JSON.parse(String(init.body));
       patches.push({ url, body });
-      return new Response(JSON.stringify({ id: ROW.id, folder: body.folder }), { status: 200 });
+      return new Response(JSON.stringify({ id: ROW.id, parent_id: body.parent_id }), { status: 200 });
     }
     return new Response('{}', { status: 404 });
   }));
@@ -57,24 +62,37 @@ describe('ArtifactTable folder moves', () => {
     expect(screen.queryByLabelText('Delete Eating Healthy')).toBeNull();
   });
 
-  it('shows the folder and moves the file via PATCH', async () => {
+  it('shows where the row sits and moves it via PATCH { parent_id }', async () => {
     render(<ArtifactTable manage artifacts={[ROW]} />);
-    expect(screen.getByText('2026/08')).toBeTruthy();
+    expect(screen.getByText('f0Ld3r')).toBeTruthy();
 
     fireEvent.click(screen.getByLabelText('More actions for Eating Healthy'));
     fireEvent.click(screen.getByLabelText('Move Eating Healthy'));
     // Picking an action closes the menu.
     expect(screen.queryByLabelText('Delete Eating Healthy')).toBeNull();
-    const input = screen.getByLabelText('Folder path') as HTMLInputElement;
-    expect(input.value).toBe('2026/08');
+    const input = screen.getByLabelText('Folder id') as HTMLInputElement;
+    expect(input.value).toBe('f0Ld3r');
 
-    fireEvent.change(input, { target: { value: 'archive/2026' } });
+    fireEvent.change(input, { target: { value: 'Ar4Ch1' } });
     fireEvent.click(screen.getByLabelText('Save folder'));
 
     await waitFor(() => expect(patches).toEqual([
-      { url: '/api/my/artifacts/Ab3xK9', body: { folder: 'archive/2026' } },
+      { url: '/api/my/artifacts/Ab3xK9', body: { parent_id: 'Ar4Ch1' } },
     ]));
-    await waitFor(() => expect(screen.getByText('archive/2026')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Ar4Ch1')).toBeTruthy());
+  });
+
+  it('an EMPTY field is the root, which the wire spells null — never an absent field', async () => {
+    render(<ArtifactTable manage artifacts={[ROW]} />);
+    fireEvent.click(screen.getByLabelText('More actions for Eating Healthy'));
+    fireEvent.click(screen.getByLabelText('Move Eating Healthy'));
+    fireEvent.change(screen.getByLabelText('Folder id'), { target: { value: '  ' } });
+    fireEvent.click(screen.getByLabelText('Save folder'));
+    // Absent would mean "leave it where it is"; null means "the root". The two
+    // must stay distinguishable on the wire.
+    await waitFor(() => expect(patches).toEqual([
+      { url: '/api/my/artifacts/Ab3xK9', body: { parent_id: null } },
+    ]));
   });
 
   it('says who can read every row — public AND private are both marked', () => {

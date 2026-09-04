@@ -21,7 +21,7 @@ import * as React from "react"
 
 import type { Row } from "@/lib/story/dataflow"
 
-export interface FilesProps {
+export interface FilesProps extends Omit<React.ComponentProps<"ul">, "children"> {
   /** The bound rows — a folder's children table (lib/folders CHILDREN_COLUMNS). */
   rows?: Row[]
   /** Density. Read by P2; accepted here so the scaffold's own markup is already valid. */
@@ -30,11 +30,17 @@ export interface FilesProps {
 
 const text = (value: unknown): string => (typeof value === "string" && value ? value : "")
 
-function Files({ rows }: FilesProps) {
+/**
+ * The rest of the props reach the <ul> so the node's `data-mx-ast` stamp lands
+ * in the DOM — that stamp is what makes a component selectable in the editor
+ * and writable back into the source, and a component that swallows it is
+ * unreachable (lib/story-ui selectable-kit).
+ */
+function Files({ rows, variant: _variant, ...rest }: FilesProps) {
   const items = rows ?? []
-  if (items.length === 0) return <ul aria-label="Files" data-slot="files" />
+  if (items.length === 0) return <ul aria-label="Files" data-slot="files" {...rest} />
   return (
-    <ul aria-label="Files" data-slot="files">
+    <ul aria-label="Files" data-slot="files" {...rest}>
       {items.map((row, i) => {
         const id = text(row.id)
         const url = text(row.url) || (id ? `/a/${id}` : "")
