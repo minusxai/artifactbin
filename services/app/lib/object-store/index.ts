@@ -14,7 +14,8 @@
  */
 import { createRequire } from 'node:module';
 import { createHash, randomBytes } from 'crypto';
-import { mkdir, readFile, rm, writeFile } from 'fs/promises';
+import { mkdir, open, readFile, rm, writeFile } from 'fs/promises';
+import type { Readable } from 'node:stream';
 import path from 'path';
 import { S3_URL, LOCAL_OBJECT_DIR } from '@/lib/config';
 import { parseS3Url, storageKeyFor, type S3Config } from './url';
@@ -47,10 +48,34 @@ export function uniqueObjectKey(kind: string): string {
   return `${kind}/${randomBytes(16).toString('hex')}`;
 }
 
+/** An inclusive byte range, spelled the way HTTP spells one (`bytes=start-end`). */
+export interface ByteRange {
+  start: number;
+  end: number;
+}
+
 export interface ObjectStore {
   readonly backend: 's3' | 'local';
   put(key: string, body: Buffer | string, contentType?: string): Promise<void>;
   get(key: string): Promise<Buffer>;
+  /**
+   * The bytes as a STREAM — nothing buffered whole, nothing cached.
+   *
+   * `get` is the right read for everything the cache below exists for: a
+   * dataset, a ref image, a webfont are each read many times and are small
+   * enough to hold. A PDF is neither. Measured in the spike: one 25 MB object
+   * through `get` is +25 MB of RSS for the life of the response, and it would
+   * be admitted to a 32 MB cache — evicting essentially everything the rest of
+   * the product depends on, to hold one file that is streamed to one reader
+   * once. So the tier that stores large objects reads through here instead, and
+   * the cache's budget never has to move to accommodate it.
+   *
+   * `range` is INCLUSIVE, as HTTP's is, so a viewer seeking inside a PDF costs
+   * exactly the bytes it asked for. A missing object raises ObjectUnavailable
+   * from the returned promise, like `get` — never an empty stream, for the
+   * reason ObjectUnavailable exists.
+   */
+  getStream(key: string, range?: ByteRange): Promise<Readable>;
   delete(key: string): Promise<void>;
 }
 
@@ -97,6 +122,9 @@ export function cachedReads(store: ObjectStore): ObjectStore {
     backend: store.backend,
     async put(key, body, contentType) { forget(key); return store.put(key, body, contentType); },
     async delete(key) { forget(key); return store.delete(key); },
+    // Deliberately NOT cached and deliberately not counted: a streaming read is
+    // the one this cache must never hold (see ObjectStore.getStream).
+    getStream(key, range) { return store.getStream(key, range); },
     get(key) {
       const held = reads.get(key);
       if (held) return held.reading;
@@ -177,6 +205,19 @@ export function createS3Store(config: S3Config): ObjectStore {
         throw new ObjectUnavailable(key, error);
       }
     },
+    async getStream(key, range) {
+      try {
+        const res = await client.send(new GetObjectCommand({
+          Bucket: config.bucket, Key: storageKeyFor(config, key),
+          // S3 speaks the same inclusive range HTTP does, so the range the
+          // reader asked for is forwarded unchanged rather than re-derived.
+          ...(range ? { Range: `bytes=${range.start}-${range.end}` } : {}),
+        }));
+        return res.Body as Readable;
+      } catch (error) {
+        throw new ObjectUnavailable(key, error);
+      }
+    },
     async delete(key) {
       await client.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: storageKeyFor(config, key) }));
     },
@@ -208,6 +249,21 @@ export function createLocalStore(dir: string): ObjectStore {
       } catch (error) {
         throw new ObjectUnavailable(key, error);
       }
+    },
+    async getStream(key, range) {
+      // OPEN first, then stream from the handle: a stream created for a missing
+      // file fails asynchronously, on the stream, where the caller has already
+      // been handed something that looks like a working read. Opening makes the
+      // failure the promise's, which is what ObjectUnavailable's contract says.
+      let handle: Awaited<ReturnType<typeof open>>;
+      try {
+        handle = await open(resolve(key), 'r');
+      } catch (error) {
+        throw new ObjectUnavailable(key, error);
+      }
+      // The handle is closed with the stream (autoClose), including on an
+      // early destroy — which is what a client that abandons a range read does.
+      return handle.createReadStream(range ? { start: range.start, end: range.end } : {});
     },
     async delete(key) {
       await rm(resolve(key), { force: true });

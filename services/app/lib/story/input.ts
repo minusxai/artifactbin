@@ -3,7 +3,7 @@
  * carries exactly ONE content field:
  *   - `markup`   — THE document: story JSX over the kit, the data embeds, the
  *     HTML vocabulary and <Helmet>. The ONLY document input there is.
- *   - `dataset` | `viz` | `image` — the data tiers
+ *   - `dataset` | `viz` | `image` | `pdf` — the data tiers
  *
  * markdown and html are not inputs: HTML is the VOCABULARY inside a document,
  * and markdown is not an authoring language here at all. Both are rejected by
@@ -16,7 +16,9 @@ import { json } from '../http';
 import { publishJsx } from './jsx-tier';
 import { ingestDataset, IngestError } from '@/lib/data-ingest';
 import { ingestImageFromUrl } from '@/lib/web-ingest/image';
-import { publishDataset, publishVizRecipe, publishImage } from './data-tiers';
+import { ingestPdfFromUrl } from '@/lib/web-ingest/pdf';
+import type { AssetWarning, WebAssetKind } from '@/lib/web-assets';
+import { publishDataset, publishVizRecipe, publishImage, publishPdf } from './data-tiers';
 
 
 export const MAX_CONTENT_BYTES = 2_000_000;
@@ -29,7 +31,7 @@ export const MAX_CONTENT_BYTES = 2_000_000;
  * ask "is this a format we serve?" (the page, the raw route) cannot drift from
  * the type the wire is checked against.
  */
-export const ARTIFACT_FORMATS = ['markup', 'dataset', 'viz', 'image'] as const;
+export const ARTIFACT_FORMATS = ['markup', 'dataset', 'viz', 'image', 'pdf'] as const;
 export type ArtifactFormat = (typeof ARTIFACT_FORMATS)[number];
 
 export interface StoredContent {
@@ -39,6 +41,13 @@ export interface StoredContent {
   meta: Record<string, unknown>;
   /** Title derived from the source's first heading — used only when the body has no title. */
   derivedTitle: string | null;
+  /**
+   * External URLs the document names that could NOT be imported (lib/web-assets).
+   * Never a refusal: the document publishes and the reply says what failed and
+   * how to fix it, because losing a whole document over one dead image link is
+   * the worse answer. Absent when everything imported.
+   */
+  warnings?: AssetWarning[];
 }
 
 function tooLarge(value: string): Response | null {
@@ -61,18 +70,37 @@ export interface ContentInputCtx {
   /** Resolve a `ref:<id>` against the caller's own artifacts. Absent ⇒ ref checks skipped (preview). */
   loadRef?: import('./refs').RefLoader;
   /**
-   * Import one external image URL as an image artifact under the caller's
-   * identity, answering its id — lib/artifacts imageIngestorFor. Absent ⇒ the
-   * publish door leaves web image URLs in place unfetched (preview: a draft
-   * that previews must publish, and the transform belongs to publish alone).
+   * Import one external URL into the global asset cache under the caller's
+   * identity (lib/artifacts assetImporterFor), answering null on success or the
+   * warning to report. Absent ⇒ the door fetches nothing (preview: a draft that
+   * previews must publish, and importing belongs to publish alone).
    */
-  ingestImage?: (url: string) => Promise<{ id: string } | Response>;
+  importAsset?: (url: string, kind: WebAssetKind) => Promise<AssetWarning | null>;
   /**
    * Resolve one font family the document names, answering a Response only when
    * it cannot be had. Absent ⇒ no resolution (preview): the door still
    * validates the NAME, so a draft that previews still publishes.
    */
   resolveFont?: (family: string) => Promise<Response | null>;
+  /**
+   * "Is the caller already over their stored-byte quota?" — asked BEFORE a
+   * tier stores something large, and answered by lib/asset-quota under the
+   * caller's identity (account-keyed for a claimed token, token-keyed for an
+   * anonymous one). Absent ⇒ nothing is charged (preview: a draft that
+   * previews stores nothing, so there is nothing to bill).
+   *
+   * A closure rather than a token id, for the reason importAsset is one: this
+   * module has no business knowing who is publishing, only whether the door
+   * is open. It is a PRE-check and not a reservation — an account a byte under
+   * the cap stores its file and is refused the next one, which is the same
+   * rule importWebAsset ships.
+   *
+   * And by its ABSENCE it is what tells the BYTE tiers they are being
+   * previewed. Every other member above degrades to "do less"; the PDF and
+   * image tiers cannot, because storing the bytes IS publishing one, so they
+   * refuse by name instead (`*_not_previewable`, below).
+   */
+  overByteQuota?: () => Promise<boolean>;
 }
 
 export async function parseContentInput(body: Record<string, unknown>, ctx: ContentInputCtx = {}): Promise<StoredContent | Response> {
@@ -92,9 +120,9 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
     (k) => typeof body[k] === 'string' && (body[k] as string).length > 0,
   );
   // Data tiers carry structured payloads, not strings.
-  const dataPresent = (['dataset', 'sheetUrl', 'csvUrl', 'imageUrl', 'viz', 'image'] as const).filter((k) => body[k] !== undefined && body[k] !== null);
+  const dataPresent = (['dataset', 'sheetUrl', 'csvUrl', 'imageUrl', 'viz', 'image', 'pdf', 'pdfUrl'] as const).filter((k) => body[k] !== undefined && body[k] !== null);
   const present = [...textPresent, ...dataPresent];
-  if (present.length !== 1) return json({ error: 'one_of_markup_dataset_viz_image' }, 400);
+  if (present.length !== 1) return json({ error: 'one_of_markup_dataset_viz_image_pdf' }, 400);
   const kind = present[0];
   // `dataset` accepts a JSON array (what an agent hand-writes) OR raw CSV text
   // (what a file or a sheet actually contains); `sheetUrl` fetches a public
@@ -116,13 +144,70 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
       throw error;
     }
   }
-  if (kind === 'imageUrl') {
-    const ingested = await ingestImageFromUrl(String(body.imageUrl));
-    if (ingested instanceof Response) return ingested;
-    return { ...ingested, derivedTitle: typeof body.title === 'string' ? null : imageTitleFromUrl(String(body.imageUrl)) };
+  /*
+   * THE IMAGE TIER, BOTH SHAPES — the upload and the URL import — behind one
+   * gate, because the cost is the same object either way.
+   *
+   * NO HOOK, NO TIER. `/api/preview` promises that a draft persists nothing,
+   * and this is the tier that cannot keep it: storing the bytes IS publishing
+   * an image, and the object would then exist with no artifact row naming it —
+   * THE DB IS THE ONLY INDEX, so nothing could ever find it again, bill it, or
+   * delete it. Any credential could have filled the disk a few megabytes at a
+   * time. So a caller with no quota to charge is refused BY NAME rather than
+   * quietly given the tier for free. It costs the product nothing: the only
+   * caller of /api/preview here is the editor's draft-CSS compile, which sends
+   * `markup` (its data re-run goes to /api/query), and the docs never teach the
+   * route. The PDF tier answers `pdf_not_previewable` to the same question.
+   *
+   * Asked BEFORE the fetch, so a caller over their cap cannot spend our
+   * bandwidth either — and so a preview is not an image-fetch primitive.
+   */
+  if (kind === 'image' || kind === 'imageUrl') {
+    if (!ctx.overByteQuota) {
+      return json({
+        error: 'image_not_previewable',
+        details: ['an image cannot be previewed — previewing stores nothing, and storing the bytes IS publishing it. POST it to /api/artifacts instead.'],
+      }, 400);
+    }
+    if (await ctx.overByteQuota()) {
+      return json({ error: 'quota_exceeded', details: ['this account is over its stored-byte quota — delete assets you no longer need'] }, 403);
+    }
+    if (kind === 'imageUrl') {
+      const ingested = await ingestImageFromUrl(String(body.imageUrl));
+      if (ingested instanceof Response) return ingested;
+      return { ...ingested, derivedTitle: typeof body.title === 'string' ? null : imageTitleFromUrl(String(body.imageUrl)) };
+    }
+    return await publishImage(body, body.image as string);
+  }
+  /*
+   * THE ONE PLACE THE BYTE QUOTA IS CHARGED at this door, and it guards both
+   * PDF shapes at once — the upload and the import — because the cost is the
+   * same 25 MB either way. Asked BEFORE the fetch, so a caller over their cap
+   * cannot spend our bandwidth either.
+   *
+   * NO HOOK, NO TIER, for the reason written out over the image tier above —
+   * at 25 MB a time rather than a few. The two tiers refuse identically
+   * because they are the same failure: an object stored with no artifact row
+   * naming it, in an app where THE DB IS THE ONLY INDEX.
+   */
+  if (kind === 'pdf' || kind === 'pdfUrl') {
+    if (!ctx.overByteQuota) {
+      return json({
+        error: 'pdf_not_previewable',
+        details: ['a pdf cannot be previewed — previewing stores nothing, and storing the file IS publishing it. POST it to /api/artifacts instead.'],
+      }, 400);
+    }
+    if (await ctx.overByteQuota()) {
+      return json({ error: 'quota_exceeded', details: ['this account is over its stored-byte quota — delete assets you no longer need'] }, 403);
+    }
+    if (kind === 'pdfUrl') {
+      const ingested = await ingestPdfFromUrl(String(body.pdfUrl));
+      if (ingested instanceof Response) return ingested;
+      return { ...ingested, derivedTitle: typeof body.title === 'string' ? null : imageTitleFromUrl(String(body.pdfUrl)) };
+    }
+    return await publishPdf(body, body.pdf as string);
   }
   if (kind === 'viz') return publishVizRecipe(body, body.viz);
-  if (kind === 'image') return await publishImage(body, body.image as string);
   const value = body[kind] as string;
   const sizeError = tooLarge(value);
   if (sizeError) return sizeError;

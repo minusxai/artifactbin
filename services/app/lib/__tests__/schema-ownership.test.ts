@@ -34,6 +34,7 @@ const DECLARED_SET = [
   'app.codes',
   'app.tokens',
   'app.users',
+  'app.web_assets',
   'app.webfonts',
   'auth.clients',
   'auth.credentials',

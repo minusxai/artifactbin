@@ -1,6 +1,5 @@
 {
   "id": "dashboard",
-  "kind": "data",
   "order": 2,
   "template": "dashboard",
   "brief": "The file support.csv in your working directory holds one row per support ticket. Publish it as a dataset, then publish an operating dashboard titled \"Support load, first half\" \u2014 the TITLE being what a browser tab and a shared link preview show. It should be a grid of tiles: a few headline numbers across the top, a chart of ticket volume over time broken down by channel, and a chart comparing median resolution hours by team. Every number must come from the dataset, not be typed in. When it is published, reply with the document's URL and nothing else.",

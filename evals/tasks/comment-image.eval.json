@@ -1,0 +1,26 @@
+{
+  "id": "comment-image",
+  "kind": "comment",
+  "order": 5,
+  "brief": "Someone has left a comment on this document. Read the feedback, make the change it asks for, reply on the thread saying what you did, and resolve it. Reply with the document's URL and nothing else.",
+  "handoff": "token",
+  "seed": "<Helmet><title>Growth update</title></Helmet><h1>Growth update</h1><p>Self-serve signups grew for the third quarter running, and activation held steady.</p><p>The team is hiring two more engineers before the end of the year.</p>",
+  "comment": {
+    "path": "1",
+    "body": "Put the MinusX logo (https://minusx.ai/_next/static/media/logo.bda07120.svg) above the title, and add this picture after this paragraph with a one-line caption: https://minusx.ai/use_cases/growth_v2.webp. Use the URLs as they are.",
+    "quote": "activation held steady"
+  },
+  "assetUrls": [
+    "https://minusx.ai/_next/static/media/logo.bda07120.svg",
+    "https://minusx.ai/use_cases/growth_v2.webp"
+  ],
+  "checks": [
+    "published",
+    "responded",
+    "resolved",
+    "urls_kept",
+    "assets_served",
+    "assets_ok",
+    "no_local_checkout_reads"
+  ]
+}

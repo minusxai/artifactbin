@@ -21,7 +21,7 @@ const START = { id: 'abc123', prompt: `Help me edit my artifact at ${BASE}/a/abc
 const ACCOUNT = { token: 'mx_account' };
 
 const task = (over: Partial<Task> = {}): Task => ({
-  id: 'protocol', kind: 'open', brief: 'Publish something.',
+  id: 'protocol', kind: 'publish', brief: 'Publish something.',
   handoff: 'start-link', order: 0, checks: ['published'], ...over,
 });
 

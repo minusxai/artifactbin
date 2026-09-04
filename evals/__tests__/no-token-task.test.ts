@@ -206,13 +206,13 @@ describe('the CI set', () => {
 describe('the schema refuses the rubric that inverted the verdict', () => {
   it('rejects `handoff: none` gating `published`', () => {
     expect(() => TaskSchema.parse({
-      id: 'no-token', kind: 'open', handoff: 'none', brief: 'x', checks: ['asked_for_a_token', 'published'],
+      id: 'no-token', kind: 'publish', handoff: 'none', brief: 'x', checks: ['asked_for_a_token', 'published'],
     })).toThrow(/published/i);
   });
 
   it('rejects a `handoff: none` task that also wants a seeded document', () => {
     expect(() => TaskSchema.parse({
-      id: 'no-token', kind: 'open', handoff: 'none', brief: 'x', checks: ['asked_for_a_token'], seed: '<h1>x</h1>',
+      id: 'no-token', kind: 'publish', handoff: 'none', brief: 'x', checks: ['asked_for_a_token'], seed: '<h1>x</h1>',
     })).toThrow(/seed/i);
   });
 

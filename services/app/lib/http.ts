@@ -146,3 +146,43 @@ function addressedHost(request: Request): string {
   if (host) return host;
   return new URL(request.url).host;
 }
+
+/**
+ * ONE byte range, as a reader that seeks asks for it.
+ *
+ * Three shapes are answered — `bytes=a-b`, `bytes=a-` and `bytes=-n` (the last
+ * n bytes, which is where a PDF keeps its cross-reference table, so it is the
+ * first thing a viewer asks for) — and everything else is `null`, meaning
+ * SERVE THE WHOLE THING. That is deliberate: 200 with the entire body is always
+ * a correct answer to a Range request, so a malformed or multi-range header
+ * costs a reader nothing, while refusing one would break a viewer over a header
+ * we simply chose not to implement.
+ *
+ * `unsatisfiable` is the one refusal (416): a range that begins past the end is
+ * not a request we can answer at all, and answering 200 to it makes a seeking
+ * viewer read the same bytes forever.
+ *
+ * The end is INCLUSIVE, HTTP's own convention, and clamped to the last byte —
+ * `bytes=0-999999` on a small file is a normal thing for a viewer to send.
+ */
+export function parseByteRange(header: string | null, size: number):
+  | { start: number; end: number }
+  | null
+  | 'unsatisfiable' {
+  if (!header || size <= 0) return null;
+  const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!m) return null;
+  const [, rawStart, rawEnd] = m;
+  if (rawStart === '' && rawEnd === '') return null;
+  if (rawStart === '') {
+    // A suffix: the last N bytes. More than the file is the whole file.
+    const wanted = Number(rawEnd);
+    if (wanted <= 0) return 'unsatisfiable';
+    return { start: Math.max(0, size - wanted), end: size - 1 };
+  }
+  const start = Number(rawStart);
+  if (start >= size) return 'unsatisfiable';
+  const end = rawEnd === '' ? size - 1 : Math.min(Number(rawEnd), size - 1);
+  if (end < start) return 'unsatisfiable';
+  return { start, end };
+}

@@ -179,8 +179,11 @@ jobs:
 
   # A real coding agent, end to end: mints a start document, reads /docs,
   # publishes, and the served document passes the render guards — the manual
-  # pre-merge hole the gates leave. It runs the CI-ONLY tasks (data, edit, mcp),
-  # never the creative comparison briefs, which are not a per-PR question.
+  # pre-merge hole the gates leave. It runs the CI-ONLY tasks (comment, data,
+  # edit, mcp, no-token), never the creative comparison briefs, which are not a
+  # per-PR question. `comment` is on the fetched api_action row only: it was measured on THIS
+  # harness and model first (opencode × minimax-m3, PASS, $0.021 a leg), because
+  # a gate no weak model has passed becomes a red check on every PR.
   #
   # The harness and model are named HERE rather than in the repo: `evals/` knows
   # how to run one leg, not which legs exist (see evals/lib/leg.ts). OpenCode ×
@@ -193,7 +196,7 @@ jobs:
   # it never blocks a merge. Forks carry no secret, so they skip too.
   # Deliberately NOT in the `test` roll-up until it has been green for weeks.
   agent-smoke:
-    # Exercise the real two-axis treatments explicitly. API modes run the data/edit
+    # Exercise the real two-axis treatments explicitly. API modes run the comment/data/edit
     # regressions plus the token-less guard; MCP modes run the MCP regression. A task never
     # changes transport behind the mode's back, so every job's name describes what the
     # harness actually received.
@@ -213,7 +216,7 @@ jobs:
       matrix:
         include:
           - mode: fetched_skill+api_action
-            tasks: data,edit,no-token
+            tasks: comment,data,edit,no-token
           - mode: fetched_skill+mcp_action
             tasks: mcp
           - mode: installed_skill+api_action
@@ -339,7 +342,7 @@ jobs:
   image:
     name: image
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f

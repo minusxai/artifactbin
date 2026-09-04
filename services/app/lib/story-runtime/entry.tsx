@@ -80,6 +80,16 @@ if (island?.textContent && root) {
     // admits exactly that. Neither: values still change, tables stay.
     const transport = createDocumentTransport(window, data.queryUrl, appOrigin, undefined, data.mutateUrl);
     const store: DataflowStore = createDataflowStore(data.dataflow ?? { flow: EMPTY_DATAFLOW }, { transport });
+    /*
+     * The asset verb, threaded to the view for the ONE consumer that needs it:
+     * a bound `<img src="$pick">`, which cannot load the import endpoint for
+     * itself inside a parent (opaque origin, no cookie). Present exactly when
+     * the transport is the relay, so its presence IS "am I framed" — decided
+     * once, above, like everything else about where this document talks.
+     */
+    const assetImport = transport?.importAsset
+      ? { importAsset: (url: string) => transport.importAsset!(url) }
+      : {};
     installMx(store);
 
     /*
@@ -165,6 +175,7 @@ if (island?.textContent && root) {
       reactRoot.render(createElement(StoryRuntimeApp, {
         ...current,
         store,
+        ...assetImport,
         ...(edit ? {
           editDecorate: edit.decorate,
           onSlideRename: (path: string, title: string) => edit?.renameSlide(path, title),
@@ -187,7 +198,7 @@ if (island?.textContent && root) {
      * replaced, not at all. A script that runs when the document is ready is
      * worth more than a script that runs when the data is.
      */
-    const reactRoot = hydrateRoot(root, createElement(StoryRuntimeApp, { ...data, store, onMounted: runAuthorScript }));
+    const reactRoot = hydrateRoot(root, createElement(StoryRuntimeApp, { ...data, store, ...assetImport, onMounted: runAuthorScript }));
     setTimeout(runAuthorScript, 3000);
 
     /*
@@ -242,11 +253,11 @@ if (island?.textContent && root) {
     (window as unknown as Record<string, unknown>)[STORY_MODE_HOOK] = (mode: 'light' | 'dark') => {
       readerOverride = mode;
       current = { ...current, colorMode: mode };
-      reactRoot.render(createElement(StoryRuntimeApp, { ...current, store }));
+      reactRoot.render(createElement(StoryRuntimeApp, { ...current, store, ...assetImport }));
     };
     if (readerOverride && readerOverride !== data.colorMode) {
       current = { ...current, colorMode: readerOverride };
-      reactRoot.render(createElement(StoryRuntimeApp, { ...current, store }));
+      reactRoot.render(createElement(StoryRuntimeApp, { ...current, store, ...assetImport }));
     }
 
     /**

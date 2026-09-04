@@ -13,7 +13,7 @@
  * fix is a fresh link, and telling the agent that is actionable.
  */
 import { auth } from '@/auth';
-import { getArtifactById, getArtifactFor, fontResolver, imageIngestorFor, refLoaderForActor, replaceArtifactFor, type ArtifactRow } from '@/lib/artifacts';
+import { getArtifactById, getArtifactFor, byteQuotaFor, fontResolver, assetImporterFor, refLoaderForActor, replaceArtifactFor, type ArtifactRow } from '@/lib/artifacts';
 import { resolveToken } from '@/lib/tokens';
 import { sessionActor } from '@/lib/viewer';
 import { baseUrl, json, unauthorized } from '@/lib/http';
@@ -97,7 +97,12 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     const resolved = await resolveToken(grant.token);
     if (!resolved) return gone(request); // the token was revoked under the link
     const actor = { tokenId: resolved.id, userId: resolved.userId };
-    const parsed = await parseContentInput({ markup: source }, { loadRef: refLoaderForActor(actor), ingestImage: imageIngestorFor(actor.tokenId, actor.userId), resolveFont: fontResolver() });
+    const parsed = await parseContentInput({ markup: source }, {
+      loadRef: refLoaderForActor(actor),
+      importAsset: assetImporterFor(actor.tokenId, actor.userId),
+      resolveFont: fontResolver(),
+      overByteQuota: byteQuotaFor(actor.tokenId),
+    });
     if (parsed instanceof Response) return parsed; // the validator's diagnostics, verbatim
     const row = await replaceArtifactFor(actor, id, { ...parsed, title: parsed.derivedTitle ?? undefined });
     if (!row || 'currentVersion' in row) return text('The document changed underneath this upload — start a fresh link.', 409);

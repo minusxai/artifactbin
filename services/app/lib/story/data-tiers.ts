@@ -13,10 +13,13 @@
  * naming the token.
  */
 import { json } from '../http';
-import { MAX_IMAGE_BYTES } from '@/lib/config';
+import { MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/config';
 import { storeDatasetRows } from './dataset-store';
 import { storeImage, IMAGE_CONTENT_TYPES } from './image-store';
+import { sniffImageType } from '@/lib/web-ingest/sniff';
 import { optimiseImage } from '@/lib/images/optimise';
+import { PDF_CONTENT_TYPE, pdfPageCount, storePdf } from './pdf-store';
+import { sniffAssetType } from '@/lib/web-ingest/sniff';
 import type { StoredContent } from './input';
 import type { VizRecipeBinding, VizRecipeParam } from '@/lib/validation/atlas-schemas';
 
@@ -172,14 +175,35 @@ export async function storeImageContent(buffer: Buffer, contentType: string): Pr
   if (buffer.length === 0) return json({ error: 'invalid_image', details: ['image is empty'] }, 400);
   if (buffer.length > MAX_IMAGE_BYTES) return json({ error: 'image_too_large', maxBytes: MAX_IMAGE_BYTES }, 413);
   /*
+   * THE TYPE COMES FROM THE BYTES, and the label is only how the caller asked.
+   *
+   * `data:image/png;base64,<a PDF>` used to answer 201 and the document then
+   * served a PDF as `image/png` — under `nosniff`, which is the header that
+   * makes OUR word about the type final in the browser. The URL importer has
+   * sniffed since it existed (lib/web-ingest/sniff), for exactly this reason,
+   * and this is the same question asked of the same bytes at the other door.
+   * The sniff WINS: an SVG sent as `image/png` is text that scales and is
+   * passed through, not rasterised.
+   */
+  const sniffed = sniffImageType(buffer);
+  if (!sniffed) {
+    return json({ error: 'invalid_image', details: ['those bytes are not an image (png|jpeg|webp|gif|svg+xml) — the type is read from the file, never from what it is labelled'] }, 400);
+  }
+  /*
    * THE ONE DOOR every upload comes through — the picker, a paste, a drop and
    * the URL importer all land here — so it is where an image is made fit to
    * read: capped, converted to webp, measured. At PUBLISH rather than on first
    * read, because the first reader of a document is the person its author just
    * handed the link to, and they must not be the one paying for an encode.
    */
-  const fit = await optimiseImage(buffer, contentType);
+  const fit = await optimiseImage(buffer, sniffed);
   const located = await storeImage(fit.buffer, fit.contentType);
+  /*
+   * The narrow copy, stored beside the full one and CHARGED WITH IT: `bytes` is
+   * what this upload cost the store, which is both objects, and the byte quota
+   * (lib/asset-quota) sums exactly that column. One upload, one number.
+   */
+  const small = fit.variant ? await storeImage(fit.variant.buffer, fit.variant.contentType) : null;
   return {
     format: 'image',
     content: '',
@@ -187,7 +211,8 @@ export async function storeImageContent(buffer: Buffer, contentType: string): Pr
     meta: {
       contentType: fit.contentType,
       objectKey: located.objectKey,
-      bytes: located.bytes,
+      bytes: located.bytes + (small?.bytes ?? 0),
+      ...(small && fit.variant ? { smallObjectKey: small.objectKey, smallWidth: fit.variant.width } : {}),
       // The box the markup reserves, and the stand-in shown while the real
       // bytes travel. Absent when the bytes could not be decoded.
       ...(fit.width && fit.height ? { width: fit.width, height: fit.height } : {}),
@@ -201,4 +226,50 @@ export async function publishImage(_body: Record<string, unknown>, dataUrl: stri
   const m = IMAGE_DATA_URL_RE.exec(dataUrl);
   if (!m) return json({ error: 'invalid_image', details: ['image must be a base64 data: URL (png|jpeg|webp|gif|svg+xml)'] }, 400);
   return storeImageContent(Buffer.from(m[2], 'base64'), m[1]);
+}
+
+// ── pdf ──────────────────────────────────────────────────────────────────────
+
+const PDF_DATA_URL_RE = /^data:application\/pdf;base64,([A-Za-z0-9+/=]+)$/;
+
+/**
+ * Store already-decoded PDF bytes — THE ONE DOOR, shared by the `pdf` data URL
+ * and the `pdfUrl` importer, so the cap and the type policy cannot fork the way
+ * two doors always eventually do.
+ *
+ * The type comes from the BYTES and nothing else. A `data:application/pdf`
+ * label is caller-supplied and a remote Content-Type is attacker-supplied, and
+ * what this app then serves is `application/pdf` with `nosniff` — so the
+ * sniff is the whole of what stops us handing a browser one type under
+ * another's name.
+ *
+ * Unlike an image, nothing is re-encoded or resized: see lib/story/pdf-store.
+ */
+export async function storePdfContent(buffer: Buffer): Promise<StoredContent | Response> {
+  if (buffer.length === 0) return json({ error: 'invalid_pdf', details: ['the pdf is empty'] }, 400);
+  if (buffer.length > MAX_PDF_BYTES) return json({ error: 'pdf_too_large', maxBytes: MAX_PDF_BYTES }, 413);
+  if (sniffAssetType(buffer) !== PDF_CONTENT_TYPE) {
+    return json({ error: 'invalid_pdf', details: ['those bytes are not a PDF — the type comes from the file, never from its name or its Content-Type'] }, 400);
+  }
+  const located = await storePdf(buffer);
+  return {
+    format: 'pdf',
+    content: '',
+    source: null,
+    meta: {
+      contentType: PDF_CONTENT_TYPE,
+      objectKey: located.objectKey,
+      bytes: located.bytes,
+      // Only when the file says so in the clear — a <File> card shows a page
+      // count it was told and never one it invented (lib/story/pdf-store).
+      ...(() => { const pages = pdfPageCount(buffer); return pages ? { pages } : {}; })(),
+    },
+    derivedTitle: null,
+  };
+}
+
+export async function publishPdf(_body: Record<string, unknown>, dataUrl: string): Promise<StoredContent | Response> {
+  const m = PDF_DATA_URL_RE.exec(dataUrl);
+  if (!m) return json({ error: 'invalid_pdf', details: ['pdf must be a base64 data: URL — data:application/pdf;base64,<…>. To publish one that is already on the web, send pdfUrl instead.'] }, 400);
+  return storePdfContent(Buffer.from(m[1], 'base64'));
 }

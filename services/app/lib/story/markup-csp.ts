@@ -79,6 +79,16 @@ const eventsPath = (id: string): string => `/a/${id}/events`;
 export const mutatePath = (id: string): string => `/a/${id}/mutate`;
 
 /**
+ * …and the one document endpoint deliberately ABSENT from this policy: where a
+ * document imports an image URL only its reader can compute
+ * (app/a/[id]/assets). It belongs here because this is the registry of a
+ * document's own addresses, and it is missing from `connect-src` because it is
+ * never fetched — it is the `src` of an `<img>`, which `img-src 'self'` already
+ * admits. A policy entry for it would state the opposite of what is true.
+ */
+export const assetsPath = (id: string): string => `/a/${id}/assets`;
+
+/**
  * …and the one static directory: the boundary geometry the geo charts fetch
  * (`loadGeoFeatures` → `/geojson/<file>.json`, an allowlisted registry of
  * public files under `public/`). A trailing slash makes a CSP source a

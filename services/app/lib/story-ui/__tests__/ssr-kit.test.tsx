@@ -19,7 +19,7 @@ import { renderStoryNodes } from '@/lib/story-ui/interpreter';
 import { STORY_UI_COMPONENTS } from '@/lib/story-ui/registry';
 import { kitchenSinkMarkup } from '@/lib/story/kitchen-sink';
 
-const MARKUP = kitchenSinkMarkup({ dataset: 'aaaaaa', recipe: 'bbbbbb', image: 'cccccc' });
+const MARKUP = kitchenSinkMarkup({ dataset: 'aaaaaa', recipe: 'bbbbbb', image: 'cccccc', pdf: 'dddddd' });
 
 describe('kit SSR (renderToStaticMarkup over the interpreter)', () => {
   it('server-renders the kitchen-sink document without throwing', () => {

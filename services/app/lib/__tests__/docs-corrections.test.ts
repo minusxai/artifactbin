@@ -11,6 +11,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import { buildQuickSheet, renderDoc } from '../skills';
+import { IMAGE_URL_FIELD_GUIDANCE } from '../agent-guidance';
+import { OPERATIONS } from '../operations/registry';
 
 const buildSkillDoc = (base: string) => ['artifactbin/references/publishing.md', 'artifactbin/references/publishing-annotations.md', 'artifactbin/references/publishing-datasets.md', 'artifactbin/references/publishing-versions.md'].map((p) => renderDoc(p, base)).join('\n');
 const buildMarkupDoc = (base: string) => ['artifactbin/references/markup.md', 'artifactbin/references/markup-data.md', 'artifactbin/references/markup-video.md'].map((p) => renderDoc(p, base)).join('\n');
@@ -132,6 +134,88 @@ describe('the markup skill', () => {
     expect(doc).toContain('every tag closes (`<br />`)');
     expect(doc).toContain('{/* … */}');
     expect(doc).toContain('`<html>`');
+  });
+});
+
+/*
+ * ADDED (the external-assets batch, milestone 5). A web URL in an image
+ * position is no longer REWRITTEN to `ref:<id>` — publish stores a copy and
+ * the author's URL stays in the source, byte for byte, because an agent reads
+ * back what it wrote. Three files promised the rewrite in three wordings
+ * (markup.md, markup-video.md, publishing-datasets.md) and the MCP schema
+ * promised it in a fourth; a doc that teaches a retired mechanic is worse than
+ * none, and this one an agent would act on by hunting for an id that is never
+ * echoed.
+ */
+describe('URL-kept external assets', () => {
+  const markup = buildMarkupDoc(BASE);
+  const publishing = buildSkillDoc(BASE);
+  const flat = (t: string) => t.replace(/\s+/g, ' ');
+
+  it('no markup file still promises the `ref:` rewrite', () => {
+    // Flattened: both wordings broke across a line, and "the registry echoed
+    // back" for an unknown component name is a different, still-true sentence.
+    expect(flat(markup)).not.toMatch(/echoed back (as|rewritten to) `ref:/);
+    expect(flat(markup)).not.toMatch(/rewritten to `ref:/);
+  });
+  it('the markup vocabulary says the copy is stored and the URL is kept', () => {
+    expect(flat(markup)).toContain('publish stores a copy, YOUR URL STAYS as written');
+  });
+  it('…and that a URL that will not fetch is a warning, not a failed publish', () => {
+    expect(flat(markup)).toContain('a URL that will not fetch is a warning, not a failed publish');
+  });
+  it('the subresource roster names all three positions and the `$` binding', () => {
+    expect(flat(markup)).toContain('Only `<img src>`, `<Video poster>` and `<File src>` take a URL');
+    expect(flat(markup)).toContain('An image `src` also binds');
+    expect(markup).toContain('{$pick}');
+  });
+  it('the CSS strip carves out the one url() publish now imports', () => {
+    expect(markup).not.toMatch(/external\s*\n?\s*`url\(\)`\/`@import` are stripped/);
+    expect(flat(markup)).toContain('`@import` and a `url()` outside `@font-face` are stripped');
+  });
+  it('the web-fonts bullet says an @font-face url is imported too', () => {
+    expect(flat(markup)).toContain('An `@font-face` `url(https://…)` in your `<style>` is imported the same way');
+  });
+  it('a <Video poster> URL is stored and kept, never rewritten', () => {
+    expect(flat(markup)).toContain('which publish fetches and stores — your URL stays in the document as written');
+  });
+  it('a DataTable column of image URLs is declared, and served from our copy', () => {
+    expect(flat(markup)).toContain('kind: "image"');
+    expect(flat(markup)).toMatch(/fetched on first view/);
+  });
+  it('an imported URL is not an artifact and is not in the listing', () => {
+    expect(flat(publishing)).toContain('An imported URL is NOT an artifact');
+    expect(flat(publishing)).toContain('never appears in `GET ' + BASE + '/api/artifacts`');
+  });
+  it('the byte quota is the account\'s, and the first importer pays once', () => {
+    expect(flat(publishing)).toContain('count against your ACCOUNT\'s byte quota');
+    expect(flat(publishing)).toContain('charged once, to whoever first named the URL');
+  });
+  it('the MCP image-url field no longer promises the rewrite either', () => {
+    expect(IMAGE_URL_FIELD_GUIDANCE).not.toContain('rewritten to ref:<id>');
+    expect(IMAGE_URL_FIELD_GUIDANCE).toContain('LEAVES YOUR URL in the document');
+  });
+  it('create_artifact says a web URL needs no upload', () => {
+    const create = OPERATIONS.find((o) => o.name === 'create_artifact')!;
+    expect(create.description).toContain('<img src="https://…">');
+  });
+  it('refresh_asset names every kind it actually refreshes — PDFs included', () => {
+    const refresh = OPERATIONS.find((o) => o.name === 'refresh_asset')!;
+    expect(refresh.description).toContain('image, font or PDF');
+  });
+});
+
+/*
+ * ADDED (milestone 5). An agent answering a comment reads
+ * publishing-annotations.md and nothing else — measured in the eval spike,
+ * where every MCP reply signed itself "Agent". The auth reference owns the
+ * header; the file an agent is actually in has to NAME it.
+ */
+describe('a REST reply is signed', () => {
+  it('the annotations reference teaches Artifactbin-Agent on the reply call', () => {
+    const doc = renderDoc('artifactbin/references/publishing-annotations.md', BASE);
+    expect(doc).toContain('Artifactbin-Agent');
+    expect(doc.replace(/\s+/g, ' ')).toContain('signed with your name instead of "Agent"');
   });
 });
 

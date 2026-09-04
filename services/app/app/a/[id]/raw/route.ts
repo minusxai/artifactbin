@@ -25,16 +25,19 @@ import { roleBehindLogin } from '@/lib/share-roles';
 import { trackEvent } from '@/lib/analytics';
 import { sessionActor } from '@/lib/viewer';
 import { verifyExportKey } from '@/lib/export-key';
-import { baseUrl } from '@/lib/http';
+import { baseUrl, parseByteRange } from '@/lib/http';
 import { ID_RE } from '@/lib/ids';
 import { loadDatasetRows } from '@/lib/story/dataset-store';
 import { ObjectUnavailable } from '@/lib/object-store';
+import { Readable } from 'node:stream';
 import { loadImage } from '@/lib/story/image-store';
+import { loadPdfStream, pdfFilename, pdfMetaOf } from '@/lib/story/pdf-store';
+import { webAssetsForSource } from '@/lib/web-assets';
 import { buildStoryDocument } from '@/lib/story/document';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { declaresMutations } from '@/lib/story/helmet';
-import { markupCsp, mutatePath, queryPath } from '@/lib/story/markup-csp';
+import { assetsPath, markupCsp, mutatePath, queryPath } from '@/lib/story/markup-csp';
 import { readUrlValues } from '@/lib/story/url-values';
 import { storyRuntimeAssets } from '@/lib/story/runtime-asset';
 import { ownerUsername } from '@/lib/users';
@@ -111,8 +114,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // CLAIMED token would be an owner upstairs and a stranger here, its own
   // private document 404ing inside the frame the shell just rendered.
   const viewer = (await sessionActor(request)).viewer;
-  const admitted = (await canReadArtifact(artifact, viewer))
-    || verifyExportKey(artifact.id, key ?? undefined);
+  const byExportKey = verifyExportKey(artifact.id, key ?? undefined);
+  const admitted = (await canReadArtifact(artifact, viewer)) || byExportKey;
   if (!admitted) return notFound();
 
   switch (artifact.format) {
@@ -131,7 +134,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     case 'image': {
       let img: Awaited<ReturnType<typeof loadImage>>;
       try {
-        img = await loadImage(artifact);
+        // `w=` is the width a `srcset` asked for — one of the widths publish
+        // stored, never a resize (lib/story/image-store).
+        img = await loadImage(artifact, { width: new URL(request.url).searchParams.get('w') });
       } catch (error) {
         // The row promises bytes the store will not give: corruption or broken
         // credentials, both page-the-operator events — said plainly, never a 500.
@@ -160,6 +165,75 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       });
     }
 
+    /*
+     * THE PDF — inline, sandboxed, streamed, seekable.
+     *
+     * The shape is the spike's recommendation (S4), and every part of it was
+     * measured rather than chosen:
+     *  - `inline` is what makes the browser's own viewer render this instead of
+     *    downloading it. `attachment` was measured doing NOTHING when opened
+     *    from inside a document's sandbox — no popup, no download — so it is
+     *    the one disposition a <File> card must not be served under.
+     *  - `Content-Security-Policy: sandbox` does not stop the viewer (measured
+     *    headful: it rendered exactly as the bare inline response did) and puts
+     *    the response at an OPAQUE origin, where localStorage and
+     *    document.cookie both throw. That is what keeps a file any user can
+     *    cause us to store from gaining this origin's privileges — the same
+     *    posture /assets/<hash> and the served document already rely on.
+     *  - the bytes are STREAMED, never read whole: one 25 MB read is its own
+     *    size in RSS for the life of the response and would evict the object
+     *    store's entire read cache (lib/object-store getStream).
+     *  - `Accept-Ranges` plus a real 206, because a viewer opening a long
+     *    document reads its cross-reference table from the END first and then
+     *    seeks; without ranges it must download all of it before the first page.
+     */
+    case 'pdf': {
+      const meta = pdfMetaOf(artifact);
+      if (!meta) return notFound();
+      const range = parseByteRange(request.headers.get('range'), meta.bytes);
+      // Built fresh per response: @hono/node-server writes the computed
+      // Content-Length back INTO this object, so a shared constant would
+      // announce the first body's length for every later one.
+      const versioned = new URL(request.url).searchParams.has('v');
+      const scope = artifact.visibility === 'public' ? 'public' : 'private';
+      const headers: Record<string, string> = {
+        ...COMMON,
+        'Content-Type': meta.contentType,
+        'Content-Disposition': `inline; filename="${pdfFilename(artifact.title, artifact.id)}"`,
+        'Content-Security-Policy': 'sandbox',
+        'Accept-Ranges': 'bytes',
+        // Same rule as an image: a versioned address is genuinely immutable,
+        // a bare one only gets a short freshness window.
+        'Cache-Control': versioned ? `${scope}, max-age=31536000, immutable` : `${scope}, max-age=300`,
+      };
+      if (range === 'unsatisfiable') {
+        return new Response(null, { status: 416, headers: { ...headers, 'Content-Range': `bytes */${meta.bytes}` } });
+      }
+      const length = range ? range.end - range.start + 1 : meta.bytes;
+      // HEAD: the same answer without the body, so a viewer can learn the size
+      // and that ranges are served before it asks for one. No stream is opened.
+      if (request.method === 'HEAD') {
+        return new Response(null, { status: 200, headers: { ...headers, 'Content-Length': String(meta.bytes) } });
+      }
+      let stream: Readable;
+      try {
+        stream = await loadPdfStream(meta, range ?? undefined);
+      } catch (error) {
+        // A row promising bytes the store will not give: corruption or broken
+        // credentials, both page-the-operator events — said plainly, never a 500.
+        if (error instanceof ObjectUnavailable) return new Response('asset unavailable', { status: 503, headers: { 'cache-control': 'no-store' } });
+        throw error;
+      }
+      return new Response(Readable.toWeb(stream) as ReadableStream, {
+        status: range ? 206 : 200,
+        headers: {
+          ...headers,
+          'Content-Length': String(length),
+          ...(range ? { 'Content-Range': `bytes ${range.start}-${range.end}/${meta.bytes}` } : {}),
+        },
+      });
+    }
+
     // markup: the SSR'd standalone document — served top-level to readers
     // (proxy.ts) and as the owner frame's src. Source read-back is the API's
     // `markup:`.
@@ -177,7 +251,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
        * document to photograph it, not a reader. `void`, because analytics may
        * never delay or fail a render.
        */
-      if (!key) void trackEvent('view', artifact.id, { userId: viewer?.userId ?? null });
+      if (!key && request.method !== 'HEAD') void trackEvent('view', artifact.id, { userId: viewer?.userId ?? null });
 
       const meta = artifact.meta as { theme?: StoryThemeName | null; template?: string | null; colorMode?: 'light' | 'dark' | null; compiledCss?: string | null; cssCompileVersion?: string | null };
       // Stored rows may still carry a retired theme name (aliased forward) and
@@ -244,8 +318,15 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       const search = new URL(request.url).search;
       const urlValues = declared ? readUrlValues(search, declared.flow) : {};
       const hasUrlValues = Object.keys(urlValues).length > 0;
-      const [refData, dataflow, creatorUsername, forkedFrom] = await Promise.all([
-        refDataForRow(artifact),
+      const [assetUrls, refData, dataflow, creatorUsername, forkedFrom] = await Promise.all([
+        // Our copies of the web URLs this document names (lib/web-assets): the
+        // served <img> points at them, with the box and the blur the row
+        // recorded, and the reader's browser reaches no third party.
+        webAssetsForSource(artifact.source),
+        // A capture takes the full copy of every image: /export photographs
+        // this frame, and a `sizes` hint against a headless viewport is how an
+        // og card ends up showing the 640px one.
+        refDataForRow(artifact, { capture: !chrome }),
         chrome
           ? Promise.resolve(declared && hasUrlValues ? { ...declared, values: urlValues } : declared)
           : dataflowForRow(artifact, { values: urlValues }),
@@ -254,6 +335,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       ]);
       const runtime = storyRuntimeAssets();
       const html = await buildStoryDocument({
+        assetUrls,
         chrome,
         editable,
         commenting,
@@ -322,6 +404,22 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         // Where this document fetches its re-runs when it IS the page (the
         // reader path); inside a parent the relay is chosen instead.
         queryUrl: queryPath(artifact.id),
+        /*
+         * …and where it imports an image URL only its reader can compute (a
+         * bound <img src="$pick">). Unconditional, unlike mutateUrl: a source
+         * can appear in the DOM without the document declaring it — an author
+         * script, a table column — and the endpoint answers under this
+         * document's own read ACL either way.
+         *
+         * A CAPTURE carries the exporter's key in that address, because a
+         * markup document is photographed from THIS page top-level (lib/export
+         * — `raw?chrome=0&key=`), in a browser with no session and with no
+         * parent to relay through: the address is the only thing left that can
+         * present a credential, and without it a private document's og image
+         * photographs its alt text. Only a key this route VERIFIED is echoed,
+         * so nothing a caller invents ever reaches the document.
+         */
+        assetsUrl: byExportKey ? `${assetsPath(artifact.id)}?key=${encodeURIComponent(key!)}` : assetsPath(artifact.id),
         // Only a document that declares a write gets a write URL: a document
         // that cannot write should not carry the address of a door it never
         // opens.
@@ -351,4 +449,21 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     default:
       return notFound();
   }
+}
+
+/**
+ * HEAD is GET with the body thrown away — a PDF viewer sends one before it
+ * starts seeking, to learn the size and whether ranges are served.
+ *
+ * It runs the real handler rather than a second, shorter one: the ACL, the
+ * headers and the 404 must be the same answer, and a parallel implementation of
+ * "the same but no body" is exactly where those drift. The PDF case knows it is
+ * a HEAD and never opens a stream; every other format pays for a body it then
+ * discards — honest, and what a HEAD costs anywhere.
+ */
+export async function HEAD(request: Request, ctx: { params: Promise<{ id: string }> }) {
+  const res = await GET(request, ctx);
+  // Cancel rather than leak: an unread stream holds its file handle open.
+  await res.body?.cancel().catch(() => {});
+  return new Response(null, { status: res.status, headers: new Headers(res.headers) });
 }

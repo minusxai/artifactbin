@@ -36,7 +36,7 @@ import { actionTransport, installsSkills, planTransport } from './lib/mode';
 import { materializePlugin } from './lib/plugin-kit';
 import { taskCost } from './lib/price';
 import { BASELINE_FLOW, BASELINE_PROMPT, BASELINE_ROWS_ID, measureBaseline } from './lib/baseline';
-import { ledgerMetrics, parseLedger, scoredArtifactId, writtenArtifactIds } from './lib/ledger';
+import { ledgerMetrics, ledgerRows, parseLedger, scoredArtifactId, writtenArtifactIds } from './lib/ledger';
 import { adapterFor } from './lib/harness';
 import { runInvocation } from './lib/spawn';
 import { countCheckoutReads } from './lib/local-reads';
@@ -50,6 +50,7 @@ import { acquireCredential, credentialSourceFor, deploymentLoginEmail, localLogi
 import { agentProxyEnv, startMitmProxy } from './lib/mitm';
 import { exportDocument, inspectDocument, screenshotDocument } from './lib/score/browser';
 import { askedForAToken, dataflowRows, productMetrics, type ServedDocument } from './lib/score/product';
+import { prepareTask, runChecks, scorerFor } from './lib/score/kinds';
 import { credentialEnv, readDotEnv } from './lib/env';
 import { parseArgs } from './lib/args';
 import { registerSecret, scrubRegistered } from './lib/secrets';
@@ -298,6 +299,13 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   if (plan.connectionToken) writeArtifactbinEnv(homeDir, r.agentBase, plan.connectionToken);
   const access = plan.access;
   const mcp = plan.mcp ?? undefined;
+  // THE ONE CREDENTIAL THE DRIVER HOLDS for this task, read back OFF the plan rather than decided a
+  // second time beside it: `planAccess` answers `kind: 'token'` in exactly the cases the driver was
+  // handed one (an account credential, or the paste token a `token`/installed/MCP task makes it read),
+  // and `kind: 'none'` for the token-less task, which is the whole point of that task. A task KIND
+  // spends it — `comment`'s setup posts the comment and its checks read the thread back
+  // (`lib/score/kinds`) — so deriving it here keeps one decision rather than two that can disagree.
+  const driverToken = plan.access.kind === 'token' ? plan.access.token : null;
   // The skills are built for the base THIS TASK will be reached on: each task has its own
   // recording proxy on its own port, and a skill naming another one sends the traffic past
   // this task's ledger. `lib/plugin-package` is the same generator that ships the public
@@ -306,12 +314,35 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   const plugin = installsSkills(leg.mode.run)
     ? materializePlugin(path.join(runDir, 'plugin'), r.agentBase, transport.run === 'api' ? 'curl' : 'mcp')
     : undefined;
-  // The start document as served BEFORE the agent ran. `published` is answered by comparing against
-  // it, because the start document is not blank — it serves "Untitled / Waiting for your agent…", so
-  // "has content" cannot tell a written document from an untouched one.
-  // With no start document there is nothing to compare against, and `productMetrics` says so itself:
-  // a null baseline falls back to "does the served document have content".
-  const baseline = start ? await servedDocument(`${r.productUrl}/a/${start.id}/raw?chrome=0`) : null;
+  // WHAT THIS KIND OF TASK NEEDS, and then the baseline — in that order, which is `prepareTask`'s
+  // whole job (`lib/score/kinds`). A `comment` task's setup posts a comment, and the anchor stamp is
+  // a REAL edit that bumps the version and rewrites the markup, so a baseline read before it would
+  // make `published` true for a document the agent never touched.
+  //
+  // The start document as served BEFORE the agent ran is what `published` compares against, because
+  // the start document is not blank — it serves "Untitled / Waiting for your agent…", so "has
+  // content" cannot tell a written document from an untouched one. With NO start document — the
+  // token-less task, which mints none — there is nothing to compare against and nothing to prepare:
+  // the baseline reader answers null and `productMetrics` says so itself, falling back to "does the
+  // served document have content".
+  const scorer = scorerFor(task.kind);
+  const driverHeaders = { [DRIVER_HEADER]: '1' };
+  const prepared = await prepareTask(
+    scorer,
+    { task, base: r.agentBase, id: start?.id ?? null, token: driverToken, driverHeaders, log: (m) => log(`${leg.label}/${task.id}: ${m}`) },
+    async () => (start ? servedDocument(`${r.productUrl}/a/${start.id}/raw?chrome=0`) : null),
+  );
+  if (!prepared.ok) {
+    // The DRIVER failed, not the agent — and the driver's calls carry `DRIVER_HEADER`, so the ledger
+    // cannot see this at all. Without a check of its own it would show as a bare FAIL with no failing
+    // check name and an empty `first_error`, which reads as "the agent did nothing". No turn is spent.
+    log(`${leg.label}/${task.id}: SETUP FAILED at ${prepared.step} — ${prepared.error}`);
+    rec.record(task.id, 'setup_ok', false, 'pass');
+    rec.record(task.id, 'first_error', `setup/${prepared.step}: ${prepared.error}`, 'text');
+    rec.finalize(false);
+    return false;
+  }
+  const baseline = prepared.baseline;
 
   const prompt = buildPrompt(task, access, { vision: leg.vision, mode: leg.mode.run });
   fs.writeFileSync(path.join(runDir, 'prompt.txt'), prompt);
@@ -345,8 +376,9 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // The file holds exactly this task's agent traffic: its own proxy, and the driver's own setup
   // calls marked and skipped (`DRIVER_HEADER`). No window, so nothing depends on when it ran.
   const ledger = parseLedger(fs.readFileSync(r.ledgerPath, 'utf8'));
+  // `startedAtMs` is the anchor `ms_to_first_publish` is measured from; every other number the ledger
+  // answers is a pure function of the entries (`ledgerRows`, which owns `versions` too).
   const lm = ledgerMetrics(ledger, { startedAtMs });
-  const successfulWrites = ledger.filter((e) => e.status < 300 && /^(POST|PUT)$/.test(e.method) && /^\/(api\/artifacts|mcp)/.test(e.path)).length;
 
   // --- score: product. The agent need not have used the document the start link named — Claude Opus 5
   // created its own, twice — so `scoredArtifactId` decides which artifact to score (its answer, then the
@@ -388,6 +420,23 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // `<Query>` ran — not a `/query` request, which a static document never makes.
   const queryRows = dataflowRows(served.html);
 
+  // What THIS KIND asks of the product, computed by the kind itself. `record` is how a kind reports
+  // evidence that is not a verdict (`answered_by`, `split_verbatim`): a check name the task does not
+  // gate is dropped from the report entirely (`checksToRecord`), so a row is the only way to say
+  // something the reader should see either way. A failure INSIDE the checks is the DRIVER's — the
+  // reads are ours — so it answers `checks_ok: false`, leaves the kind's checks unanswered and stops
+  // them gating, rather than reporting an agent that ignored the comment.
+  const checked = await runChecks(scorer, {
+    task,
+    productUrl: r.productUrl,
+    startId: start?.id ?? null,
+    token: driverToken,
+    driverHeaders,
+    served,
+    record: (metric, value, kind) => rec.record(task.id, metric, value, kind),
+  });
+  if (!checked.ok) log(`${leg.label}/${task.id}: CHECKS FAILED at ${checked.step} — ${checked.error}`);
+
   // --- rows: numbers
   rec.record(task.id, 'turns', result.turns);
   rec.record(task.id, 'tool_calls', result.toolCalls);
@@ -403,13 +452,10 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   const cost = taskCost(result, leg.price);
   rec.record(task.id, 'cost_usd', cost.usd);
   rec.record(task.id, 'duration_s', Math.round(spawned.durationMs / 100) / 10);
-  rec.record(task.id, 'http_calls', lm.httpCalls);
-  rec.record(task.id, 'write_attempts', lm.writeAttempts);
-  rec.record(task.id, 'four_xx', lm.fourXx);
-  rec.record(task.id, 'invented_endpoints', lm.inventedEndpoints);
+  // Every number the ledger answers, `versions` included, built in ONE pure place (`ledgerRows`) so
+  // the count and its caller are one thing to break.
+  for (const row of ledgerRows(ledger)) rec.record(task.id, row.metric, row.value);
   rec.record(task.id, 'query_rows', queryRows);
-  rec.record(task.id, 'docs_fetches', lm.docsFetches);
-  rec.record(task.id, 'docs_bytes', lm.docsBytes);
   // --- rows: m1 instrumentation. Recorded on EVERY run, as plain rows rather than through `checks`:
   // the check map is gated by what each task grades, and these are observations about the agent, not
   // things it can pass or fail.
@@ -422,9 +468,8 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   rec.record(task.id, 'ms_to_first_publish', lm.msToFirstPublish);
   rec.record(task.id, 'ms_to_first_url', spawned.firstUrlAtMs);
   rec.record(task.id, 'skeleton_sections', lm.skeletonSections);
-  rec.record(task.id, 'versions', lm.observed ? 1 + successfulWrites : null);
   // --- rows: text
-  rec.record(task.id, 'first_error', lm.firstError ?? '', 'text');
+  rec.record(task.id, 'first_error', checked.ok ? (lm.firstError ?? '') : `checks/${checked.step}: ${checked.error}`, 'text');
   rec.record(task.id, 'harness_error', result.error ?? '', 'text');
   // Where the cost came from: the harness's own figure, or our tokens × rates (a Codex run, which reports none).
   rec.record(task.id, 'cost_source', cost.source ?? '', 'text');
@@ -441,6 +486,8 @@ async function runTask(r: TaskRun): Promise<Outcome> {
 
   // --- rows: checks
   const checks: Record<string, boolean | null> = {
+    setup_ok: true,
+    checks_ok: checked.ok,
     published: pm.published,
     published_first_try: pm.published && lm.publishedFirstTry,
     // Nothing to observe when the protocol arrived installed — null, never false (the
@@ -462,7 +509,6 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     used_edits_endpoint: lm.usedEditsEndpoint,
     // Null, not false, when this harness has no MCP client and ran the task over REST.
     used_mcp: transport.substitutedWhy || leg.mode.substitutedWhy ? null : lm.usedMcp,
-    kept_untouched_text: task.seedKeepText ? served.html.includes(task.seedKeepText) : null,
     no_local_checkout_reads: checkoutReads === null ? null : checkoutReads === 0,
     // The token-less guard's two, and the only two it is graded on. `did_not_self_mint` is the
     // ledger's `selfMinted` inverted — null, never true, when the ledger saw nothing, because `!null`
@@ -471,12 +517,14 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     // agent hand its human something to act on?
     did_not_self_mint: lm.selfMinted === null ? null : !lm.selfMinted,
     asked_for_a_token: askedForAToken(result.finalMessage),
+    // …and last, so a KIND's own answer wins over a common name it also computes.
+    ...checked.checks,
   };
   // `checksToRecord` decides which checks become rows (task-specific ones only where the task grades them,
   // so an inapplicable check reads as "—" rather than a red FAIL); only the checks the TASK lists decide the
   // verdict (`verdictFor`). `canonical_stable`, for instance, is information about how the product
   // canonicalized the agent's markup, not a failure of the flow.
-  const gated = gatedChecks([...task.checks], {
+  const gated = gatedChecks(checked.ok ? [...task.checks] : task.checks.filter((c) => !checked.ungated.includes(c)), {
     trafficObserved: lm.observed,
     vocabularyInstalled: installed,
     transportSubstituted: transport.substitutedWhy !== null || leg.mode.substitutedWhy !== null,

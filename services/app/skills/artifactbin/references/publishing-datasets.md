@@ -1,13 +1,13 @@
 ---
 name: publishing-datasets
 description: >-
-  Uploading a dataset (rows, CSV, a URL), an image, a viz recipe; writable datasets. Read only when the brief's one-line dataset upload is not enough.
+  Assets: dataset rows/CSV, images, PDFs, recipes — uploaded or kept by URL; refresh, byte quotas, writable datasets. Read past the brief's upload.
 order: 2
 ---
 ## Read first
 
-Every request carries exactly ONE content field: `markup | dataset | viz | image`.
-`markup` is the document; the other three are ASSETS a document reaches by id.
+Every request carries exactly ONE content field: `markup | dataset | viz | image | pdf`.
+`markup` is the document; the other four are ASSETS a document reaches by id.
 Create them first — a dataset's create response echoes the inferred columns AND
 a ready-to-paste `<Query>` + `<Question>`, so the read path arrives written.
 
@@ -26,12 +26,13 @@ POST [[ base ]]/api/artifacts
   ready-to-paste Query+Question over the real columns.
 - Images and recipes bind as `ref:<id>`; `data="ref:<id>"` and the old
   `<Param>` control are retired (400 with the replacement named).
-- Your datasets and images are in the artifact listing (`GET /api/artifacts`,
-  each with its `format`) — there is no separate datasets endpoint.
+- An imported URL is NOT an artifact: it never appears in
+  `GET [[ base ]]/api/artifacts` and has no id. Send `{"imageUrl": …}` when
+  you want one that does.
 
 ## Contents
 
-Images · Writable datasets · Viz recipes.
+Images · PDFs · Writable datasets · Viz recipes.
 
 ## Images
 
@@ -47,17 +48,59 @@ curl -X POST [[ base ]]/api/artifacts -H "Authorization: Bearer $TOKEN" \
 ```
 
 Either way the bytes are stored once (content-addressed) and served from
-`[[ base ]]/a/<id>`; bind it in markup as `<img src="ref:<id>" />` and the
-URL is resolved for you — you never write one.
+`[[ base ]]/a/<id>`; bind it in markup as `<img src="ref:<id>" />`.
 
 **Already on the web? Just use the URL.** `{ "imageUrl": "https://…" }`
 makes the artifact from a URL — artifactbin fetches it server-side, so YOU
 DO NOT NEED TO DOWNLOAD IT. And in markup you can simply write
-`<img src="https://example.com/chart.png" />`: the publish IMPORTS it,
-stores a copy, and echoes your markup rewritten to `ref:<id>`. The document
-ends up self-contained either way — a reader never talks to the original
-host, and the image cannot rot from under you. Max `[[ maxImageBytes ]]` bytes
-(png|jpeg|webp|gif|svg+xml).
+`<img src="https://example.com/chart.png" />`: the publish IMPORTS a copy and
+LEAVES YOUR URL in the document — you read back what you wrote, while readers
+are served our copy, so nobody talks to the original host and the picture
+cannot rot from under you. A URL that will not fetch does not fail the
+publish: the reply carries `asset_warnings: [{code, url, fix}]` (its own key —
+`warnings` stays the dataset-dependent list) and that one image shows its alt
+text. Max `[[ maxImageBytes ]]` bytes (png|jpeg|webp|gif|svg+xml), and at most
+`[[ maxExternalAssets ]]` external assets per document — the rest are named in
+`asset_warnings` and not fetched. The same happens to a `<Video poster>` and to
+an `@font-face { src: url(…) }` in your `<Helmet>` `<style>`.
+
+Stored bytes count against your ACCOUNT's byte quota (`403 quota_exceeded`);
+an import is charged once, to whoever first named the URL — the copy is shared,
+so a second document naming it fetches nothing and pays nothing.
+
+Source changed? `POST [[ base ]]/api/artifacts/assets/refresh` with
+`{"id": "<document id>"}` (every external url that document names) or
+`{"url": "https://…"}` (one already-stored url); naming neither is
+`nothing_to_refresh`. It answers `{refreshed, unchanged, failed}` and touches
+nothing else — no new version, and your markup keeps the url it has.
+
+## PDFs
+
+A `pdf` is a FILE a document links, never a document you publish. Two shapes,
+the same two an image has:
+
+```
+{ "title": "Q3 report", "pdf": "data:application/pdf;base64,…" }   ← bytes you hold
+{ "pdfUrl": "https://…/q3.pdf" }                                   ← already on the web; fetched server-side
+→ 201 { "id", "url", "bytes", "pages", "rawUrl" }
+```
+
+The bytes are stored exactly as sent — nothing re-encodes a PDF — up to
+`[[ maxPdfBytes ]]` bytes, and `pages` is present only when the file says so
+cheaply. The type comes from the BYTES: a file that is not a PDF is
+`400 invalid_pdf` (or `400 pdf_fetch_failed` for a URL) however it is named,
+and one over the cap is `413 pdf_too_large`.
+
+Link it with `<File src="ref:<id>" />` — a card showing the name, the size and
+the page count, which opens the file in a new tab in the reader's own PDF
+viewer. `title="…"` names it something other than the artifact's title. A
+public URL works in the same position (`<File src="https://…/paper.pdf" />`):
+publish imports a copy and LEAVES YOUR URL in the document, exactly as an
+`<img>` URL behaves, and a URL that will not fetch is a warning rather than a
+refused publish. It counts against the same per-document import cap.
+
+A pdf cannot be PREVIEWED (`400 pdf_not_previewable`): storing the file is what
+publishing it means, so send it to `POST [[ base ]]/api/artifacts`.
 
 ## Writable datasets (preview)
 

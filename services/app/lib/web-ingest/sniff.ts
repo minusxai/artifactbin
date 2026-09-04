@@ -37,7 +37,44 @@ export function sniffImageType(buf: Buffer): string | null {
   return null;
 }
 
-/** Whether the bytes are a WOFF2 font — the only format the font ingester stores. */
+/**
+ * The type an ASSET the document embeds or links to actually is: an image, or
+ * a PDF. Nothing else — a font is fetched by a different door with a different
+ * cap, and a type this app does not serve is a refusal rather than a guess.
+ *
+ * `sniffImageType` is image-only BY CONSTRUCTION, which the PDF spike found the
+ * hard way: it does not know `%PDF-`, so a PDF handed to the image door is
+ * simply "not an image", and the tier that stores PDFs needs its own answer.
+ * The signature must be at the very start — a PDF hidden inside an html error
+ * page is an html error page.
+ */
+export function sniffAssetType(buf: Buffer): string | null {
+  if (startsWith(buf, '%PDF-')) return 'application/pdf';
+  return sniffImageType(buf);
+}
+
+/** Whether the bytes are a WOFF2 font — the only format the Google Fonts ingester stores. */
 export function isWoff2(buf: Buffer): boolean {
   return startsWith(buf, 'wOF2');
+}
+
+/**
+ * The font type the bytes actually are, for a face a document self-hosts by
+ * URL (`@font-face { src: url(https://…) }`).
+ *
+ * Wider than {@link isWoff2} on purpose: the Google Fonts path asks css2 for
+ * woff2 and gets it, but an author naming their own face names whatever their
+ * host serves, and refusing a real TTF because it is not the format we would
+ * have chosen would fail a publish for no reason a reader could see. Nothing
+ * here is re-encoded, so the format is the author's to choose — the sniff only
+ * has to be sure it IS a font, since the stored type is what `nosniff` then
+ * holds the browser to.
+ */
+export function sniffFontType(buf: Buffer): string | null {
+  if (startsWith(buf, 'wOF2')) return 'font/woff2';
+  if (startsWith(buf, 'wOFF')) return 'font/woff';
+  if (startsWith(buf, 'OTTO')) return 'font/otf';
+  // TrueType: 0x00010000 (Windows/Adobe) or 'true'/'ttcf' (Apple, collections).
+  if (startsWith(buf, [0x00, 0x01, 0x00, 0x00]) || startsWith(buf, 'true') || startsWith(buf, 'ttcf')) return 'font/ttf';
+  return null;
 }

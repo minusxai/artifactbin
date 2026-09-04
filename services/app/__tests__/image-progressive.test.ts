@@ -12,9 +12,11 @@
  * the served document actually contains.
  */
 import { describe, expect, it } from 'vitest';
+import sharp from 'sharp';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { getArtifactById, refDataForRow } from '@/lib/artifacts';
+import { objectStore } from '@/lib/object-store';
 
 
 import { mintToken } from '@/lib/tokens';
@@ -35,10 +37,21 @@ const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAgCAIAAADbtmxLA
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const create = (token: string, body: unknown) => createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
 
+/**
+ * A WIDE image, small enough for the suite's 5 KB import cap
+ * (vitest.config IMAGES__MAX_BYTES) — which is why it is a flat webp rather
+ * than the photograph the rule was written for.
+ */
+const wideDataUrl = async (): Promise<string> => {
+  const bytes = await sharp({ create: { width: 1600, height: 1200, channels: 3, background: '#0a78c8' } })
+    .webp({ quality: 50 }).toBuffer();
+  return `data:image/webp;base64,${bytes.toString('base64')}`;
+};
+
 /** Publish an image, then a document that shows it. Returns both ids. */
-async function documentWithImage(markup: (id: string) => string) {
+async function documentWithImage(markup: (id: string) => string, image: string = PNG) {
   const t = await mintToken('t');
-  const img = (await (await create(t.token, { image: PNG })).json()) as { id: string };
+  const img = (await (await create(t.token, { image })).json()) as { id: string };
   const doc = (await (await create(t.token, { markup: markup(img.id) })).json()) as { id: string };
   return { img: img.id, doc: doc.id };
 }
@@ -67,5 +80,69 @@ describe('a stored blur reaches the reader', () => {
     const { doc } = await documentWithImage((id) => `<div className="p-4"><img src="ref:${id}" alt="x" style={{opacity: 0.5}} /></div>`);
     const html = await serveArtifact(request(`/a/${doc}/raw`), params(doc)).then((r) => r.text());
     expect(html).not.toMatch(/background-image:\s*url\(data:/);
+  });
+});
+
+
+/**
+ * THE PHONE DOWNLOADS THE PHONE'S COPY.
+ *
+ * The stored image is capped at 2048px and read in a column about 850px wide,
+ * so a 390px phone was being handed roughly five times the pixels it can show,
+ * on the worse of the two connections. Publish now stores a 640-wide copy
+ * beside it (lib/images/optimise) and the markup offers both — the same rule,
+ * and the same `sizes` hint, as a URL-kept image (lib/story/asset-url), because
+ * it is the same picture in the same column.
+ */
+describe('an upload wide enough to be worth it is stored at two widths', () => {
+  /*
+   * CHARGED WITH THE ORIGINAL, ONCE — on THIS door as well as the URL cache's.
+   * `meta.bytes` is the column lib/asset-quota sums for an upload (R9's own
+   * column), so a variant left out of it is bytes stored and never billed. The
+   * `web_assets` twin of this assertion lives in web-assets.test.ts; the two
+   * doors do not share a code path, and a review found this half unguarded.
+   */
+  it('records the narrow copy on the row, charged with the original', async () => {
+    const { img } = await documentWithImage((id) => `<img src="ref:${id}" alt="x" />`, await wideDataUrl());
+    const meta = (await getArtifactById(img))!.meta as
+      { objectKey: string; bytes: number; smallObjectKey?: string; smallWidth?: number };
+    expect(meta.smallWidth).toBe(1280);
+    expect(meta.smallObjectKey).toBeTruthy();
+    expect(meta.smallObjectKey).not.toBe(meta.objectKey);
+
+    const full = (await objectStore().get(meta.objectKey)).length;
+    const small = (await objectStore().get(meta.smallObjectKey!)).length;
+    expect(small).toBeLessThan(full);
+    expect(meta.bytes).toBe(full + small);
+  });
+
+  it('charges only the one copy when there is only one', async () => {
+    const { img } = await documentWithImage((id) => `<img src="ref:${id}" alt="x" />`);
+    const meta = (await getArtifactById(img))!.meta as { objectKey: string; bytes: number; smallObjectKey?: string };
+    expect(meta.smallObjectKey).toBeUndefined();
+    expect(meta.bytes).toBe((await objectStore().get(meta.objectKey)).length);
+  });
+
+  it('serves the narrow copy at the address the srcset names', async () => {
+    const { img } = await documentWithImage((id) => `<img src="ref:${id}" alt="x" />`, await wideDataUrl());
+    const full = await serveArtifact(request(`/a/${img}/raw?v=1`), params(img));
+    const narrow = await serveArtifact(request(`/a/${img}/raw?v=1&w=1280`), params(img));
+    expect(narrow.status).toBe(200);
+    expect(narrow.headers.get('Content-Type')).toBe('image/webp');
+    expect((await narrow.arrayBuffer()).byteLength).toBeLessThan((await full.arrayBuffer()).byteLength);
+    // A width we never stored is the full copy, never a failure.
+    expect((await serveArtifact(request(`/a/${img}/raw?v=1&w=999`), params(img))).status).toBe(200);
+  });
+
+  it('offers both widths in the served document, and only the full one to a capture', async () => {
+    const { doc } = await documentWithImage((id) => `<div className="p-4"><img src="ref:${id}" alt="x" /></div>`, await wideDataUrl());
+    const html = await serveArtifact(request(`/a/${doc}/raw`), params(doc)).then((r) => r.text());
+    expect(html).toContain('&amp;w=1280 1280w');
+    expect(html).toContain('sizes="(max-width: 640px) 100vw, 768px"');
+
+    // /export photographs the chrome-less frame: a `sizes` hint against a
+    // headless viewport is how an og card ends up showing the 640px copy.
+    const shot = await serveArtifact(request(`/a/${doc}/raw?chrome=0`), params(doc)).then((r) => r.text());
+    expect(shot).not.toContain('srcSet');
   });
 });

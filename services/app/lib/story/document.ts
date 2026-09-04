@@ -27,9 +27,9 @@ import path from 'path';
 import { pathToFileURL } from 'url';
 import { createRequire } from 'module';
 import { IS_DEV } from '@/lib/config';
-import { parseJsx } from '@/lib/jsx';
-import { EMPTY_HELMET_CONTENT, splitHelmet, type HelmetContent } from '@/lib/story/helmet';
-import { fixHtmlNesting } from '@/lib/story/nesting';
+import { EMPTY_HELMET_CONTENT, type HelmetContent } from '@/lib/story/helmet';
+import { storyBodyFor } from '@/lib/story/body';
+import { assetLookupFrom, type WebAssetBox } from '@/lib/story/asset-url';
 import { AUTHOR_SCRIPT_TYPE, STORY_HELLO_MESSAGE, STORY_VALUES_HOOK, STORY_ISLAND_ID, STORY_PAINTED_MESSAGE, STORY_ROOT_ID, type StoryIslandData, type StoryIslandDataflow, type StorySsrBundle } from '@/lib/story-runtime/contract';
 import type { JsxNode } from '@/lib/jsx';
 import type { RefDataMap } from '@/lib/story/ref-data';
@@ -51,6 +51,13 @@ export interface StoryDocumentInput {
   colorMode: 'light' | 'dark' | null;
   /** Server-resolved `ref:` data — rendered in; the sandbox reaches no third party (its only fetch is its own query url). */
   refData: RefDataMap;
+  /**
+   * The web URLs we hold a copy of (lib/web-assets), as a Set or as the rows
+   * themselves — a row additionally carries the box and the blur, which is what
+   * keeps a URL-kept image from shifting the page as it lands. Absent means map
+   * nothing: a caller with no index serves the document exactly as it is stored.
+   */
+  assetUrls?: ReadonlySet<string> | ReadonlyMap<string, WebAssetBox>;
   /** The document's `<Value>`/`<Query>`/`<Mutation>` declarations + render-time state (lib/artifacts dataflowForRow); null when it declares nothing. */
   dataflow?: StoryIslandDataflow | null;
   /** Stored title (Helmet's own <title> wins over it in the head). */
@@ -100,6 +107,13 @@ export interface StoryDocumentInput {
    * everywhere a write cannot happen (the canvas, a capture, unit tests).
    */
   mutateUrl?: string | null;
+  /**
+   * The document's own ASSET IMPORT endpoint (StoryIslandData.assetsUrl) — set
+   * by the serving route, so a bound `<img src="$pick">` has somewhere to
+   * import the URL a reader picks. Absent for renders with no reader behind
+   * them (the canvas, unit tests), where a bound image renders static.
+   */
+  assetsUrl?: string | null;
   /**
    * Render the document's own navigation chrome (deck rail, present bar, outline).
    * False for capture renders — /export screenshots this frame, so chrome
@@ -490,21 +504,20 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
   // passing both `chrome: false` and credits.
   const credits = chrome ? input.credits : null;
 
-  const parsed = parseJsx(source);
   /*
-   * Nesting the HTML parser will not undo, applied on the way OUT as well as
-   * on the way in (canonicalizeMarkup). Two different jobs: the door keeps
-   * stored source honest, so an agent's read-before-write and the editor's
-   * re-serialization see the same tree we serve — but every document published
-   * BEFORE that door existed is still stored with the fault, and would keep
-   * repainting on every read until someone happened to write to it.
+   * ONE tree for every rendering (lib/story/body): the nesting repair the HTML
+   * parser would otherwise undo, the Helmet split, and the serve-time asset
+   * mapping, in that order and in one place.
    *
-   * It has to happen HERE, above the split, rather than in either renderer:
+   * It has to happen ABOVE the split rather than in either renderer:
    * `split.body` feeds both the SSR string and the island the client hydrates
-   * FROM, and the whole failure is those two disagreeing. One transform, one
-   * tree, nothing left to diverge.
+   * FROM — and, through them, the renderer's own `<link rel=preload as=image>`
+   * — and the whole failure is those disagreeing. The live frame
+   * (lib/story/update-parts) is built from the same function for the same
+   * reason: a reader watching an agent write must be adopting the document a
+   * reload would give them.
    */
-  const split = parsed.ok ? splitHelmet(fixHtmlNesting(parsed.nodes)) : null;
+  const split = storyBodyFor(source, input.assetUrls ? assetLookupFrom(input.assetUrls) : undefined, { capture: !chrome });
   const helmet: HelmetContent = split?.content ?? EMPTY_HELMET_CONTENT;
 
   // Mode resolution lives HERE, for every reader: a theme is designed for
@@ -522,8 +535,16 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    */
   const glyphs = split ? loadSsrBundle().glyphsForNodes(split.body) : {};
 
+  /*
+   * The SSR string and the island below are built from SEPARATE prop lists, and
+   * an island field that CHANGES WHAT IS DRAWN must appear in both or React
+   * discards the whole server tree at hydration (#418). `assetsUrl` is the
+   * first such field — `queryUrl`/`mutateUrl` only name a transport, so their
+   * absence here is correct, while a bound `<img src="$pick">` has nowhere to
+   * import from without this and rendered as a bare alt until hydration.
+   */
   const bodyHtml = split
-    ? loadSsrBundle().renderStoryBody({ nodes: split.body, refData, glyphs, ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome })
+    ? loadSsrBundle().renderStoryBody({ nodes: split.body, refData, glyphs, ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}) })
     : `<pre>${escapeHtml(source)}</pre>`;
 
   // Style order mirrors the engine's injection order (compiled Tailwind → bare
@@ -613,7 +634,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
     ...(hydrates ? [runtimeSrc!, ...(drawsChart(split!.body) ? input.lazyChunks ?? [] : [])] : []),
   ].map((href) => `<link rel="modulepreload" href="${escapeHtml(href)}" crossorigin>`).join('');
 
-  const island: StoryIslandData = { nodes: split?.body ?? [], refData, ...(Object.keys(glyphs).length ? { glyphs } : {}), ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, ...(input.queryUrl ? { queryUrl: input.queryUrl } : {}), ...(input.mutateUrl ? { mutateUrl: input.mutateUrl } : {}) };
+  const island: StoryIslandData = { nodes: split?.body ?? [], refData, ...(Object.keys(glyphs).length ? { glyphs } : {}), ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, ...(input.queryUrl ? { queryUrl: input.queryUrl } : {}), ...(input.mutateUrl ? { mutateUrl: input.mutateUrl } : {}), ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}) };
   // `<` escaped so no row value can close the script element from inside JSON.
   const islandJson = JSON.stringify(island).replace(/</g, '\\u003c');
 

@@ -46,7 +46,9 @@ const KNOWN_ROUTES: RegExp[] = [
   /^\/api\/query$/,
   /^\/api\/artifacts$/,
   /^\/api\/artifacts\/[A-Za-z0-9]+$/,
-  /^\/api\/artifacts\/[A-Za-z0-9]+\/(edits|revert|versions)$/,
+  /^\/api\/artifacts\/[A-Za-z0-9]+\/(edits|revert|versions|annotations)$/,
+  // Answering a comment: reply and resolve are one call on the thread's own id.
+  /^\/api\/artifacts\/[A-Za-z0-9]+\/annotations\/[A-Za-z0-9_]+$/,
   /^\/api\/artifacts\/[A-Za-z0-9]+\/versions\/\d+$/,
   /^\/api\/my\//,
   /^\/api\/session\/token$/,
@@ -70,6 +72,54 @@ function isWrite(e: LedgerEntry): boolean {
   if (/^\/api\/artifacts\/[A-Za-z0-9]+$/.test(p)) return e.method === 'PUT';
   if (/^\/api\/artifacts\/[A-Za-z0-9]+\/(edits|revert)$/.test(p)) return e.method === 'POST';
   return false;
+}
+
+/**
+ * How many stored VERSIONS the agent's writes produced — the writes above that
+ * the product answered, and nothing else.
+ *
+ * It shares `isWrite` with `writeAttempts` deliberately: the driver counted this
+ * with an inline `POST|PUT` regex over `/api/artifacts`, which also matched
+ * `POST /api/artifacts/<id>/annotations/<annId>` and reported answering a
+ * comment as a new version of the document.
+ *
+ * Honest limit: an MCP call is a POST to `/mcp` with its method in a body the
+ * ledger does not keep, so an `annotate` tool call is indistinguishable from a
+ * document write and is still counted. A REST run is exact.
+ */
+export function documentWrites(entries: LedgerEntry[]): number {
+  return entries.filter((e) => e.status < 300 && isWrite(e)).length;
+}
+
+/** One numeric row, as the driver records it. */
+export interface LedgerRow {
+  metric: string;
+  /** Null is "unavailable" — the recorder writes nothing and the report shows "—". */
+  value: number | null;
+}
+
+/**
+ * Every numeric row the LEDGER answers, in one place — including `versions`,
+ * which is `documentWrites` and nothing else.
+ *
+ * The driver used to build these inline, and `versions` had its own regex there:
+ * a drifted copy of `isWrite` that counted answering a comment as a version of
+ * the document. Restoring that regex left the whole suite green, because the
+ * predicate was guarded and its CALLER was not. The driver now records exactly
+ * what this returns, so the count and its use are one thing to break.
+ */
+export function ledgerRows(entries: LedgerEntry[]): LedgerRow[] {
+  const m = ledgerMetrics(entries);
+  return [
+    { metric: 'http_calls', value: m.httpCalls },
+    { metric: 'write_attempts', value: m.writeAttempts },
+    { metric: 'four_xx', value: m.fourXx },
+    { metric: 'invented_endpoints', value: m.inventedEndpoints },
+    { metric: 'docs_fetches', value: m.docsFetches },
+    { metric: 'docs_bytes', value: m.docsBytes },
+    // 1 for the document the start link minted, plus every write that stored a new version.
+    { metric: 'versions', value: m.observed ? 1 + documentWrites(entries) : null },
+  ];
 }
 
 /**

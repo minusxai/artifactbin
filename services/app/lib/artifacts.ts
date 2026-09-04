@@ -9,12 +9,14 @@ import { cache } from 'react';
 import { trackEvent } from './analytics';
 import { sourceWithoutAnchors } from './annotation-anchors';
 import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN } from './config';
+import { assetByteQuotaExceeded } from './asset-quota';
 import { getDb, type Queryable } from './db';
 import { generateFileId } from './ids';
 import { parseContentInput, type ArtifactFormat } from './story/input';
 import { canonicalizeMarkup, publishJsx } from './story/jsx-tier';
-import { imageRawUrl } from './story/ref-data';
-import { ingestImageFromUrl } from './web-ingest/image';
+import { imageRawUrl, imageVariantUrl, pdfRawUrl } from './story/ref-data';
+import { displayTitle } from './story/title';
+import { assetWarningFor, importWebAsset, WebAssetRefused, type AssetWarning, type WebAssetKind } from './web-assets';
 import { resolveWebFont, UnknownFontError } from './webfonts';
 import { webIngestRateLimited } from './auth';
 import { json } from './http';
@@ -315,7 +317,7 @@ export async function createArtifact(
           // it. Routes validate an explicit ask upstream.
           input.visibility ??
             (!userId ? (ALLOW_PUBLIC_VISIBILITY ? 'public' : 'unlisted')
-              : input.format === 'image' || input.format === 'dataset' ? 'unlisted' : 'private'),
+              : input.format === 'image' || input.format === 'dataset' || input.format === 'pdf' ? 'unlisted' : 'private'),
           // NULL is the pre-column shape and reads as 'viewer' (linkRoleOf), so
           // every ordinary creation stays exactly as it was.
           atCreation.linkRole ?? null,
@@ -387,7 +389,7 @@ export async function forkArtifact(
   source: ArtifactRow,
   overrides: ForkOverrides = {},
 ): Promise<ArtifactRow | Response> {
-  if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded' }, 403);
+  if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — delete documents you no longer need'] }, 403);
   const input = await forkInput(actor, source, overrides);
   if (input instanceof Response) return input;
   const row = await createArtifact(actor.tokenId, actor.userId, input, { forkedFrom: source.id, linkRole: source.link_role });
@@ -427,8 +429,9 @@ async function forkInput(actor: TokenActor, source: ArtifactRow, overrides: Fork
     colorMode: design.colorMode,
   }, {
     loadRef: refLoaderForActor(actor),
-    ingestImage: imageIngestorFor(actor.tokenId, actor.userId),
+    importAsset: assetImporterFor(actor.tokenId, actor.userId),
     resolveFont: fontResolver(),
+    overByteQuota: byteQuotaFor(actor.tokenId),
   });
   if (parsed instanceof Response) return parsed;
   const { derivedTitle: _derived, ...stored } = parsed;
@@ -812,7 +815,8 @@ export interface EditInput {
  * Response unchanged (same shape as parseContentInput).
  */
 export type EditOutcome =
-  | { applied: true; row: ArtifactRow }
+  /** `warnings`: external URLs the candidate named that would not import (lib/web-assets). */
+  | { applied: true; row: ArtifactRow; warnings?: AssetWarning[] }
   | { applied: false; reason: 'stale_edit_id' | 'doc_changed'; head: { editId: string; source: string; version: number } }
   | { applied: false; reason: 'bad_diff'; detail: 'no_match' | 'multiple_matches' | 'identical' }
   | { applied: false; reason: 'not_editable' }; // data tiers are values, not documents
@@ -963,8 +967,9 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
         loadRef: refLoaderForActor(writerFor(head)),
         // An agent pasting a web image mid-edit imports like a publish would;
         // the created asset belongs to whoever the DOCUMENT belongs to.
-        ingestImage: imageIngestorFor(head.token_id, head.user_id),
+        importAsset: assetImporterFor(head.token_id, head.user_id),
         resolveFont: fontResolver(),
+        overByteQuota: byteQuotaFor(head.token_id),
       },
     );
     if (published instanceof Response) return published;
@@ -1018,7 +1023,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     );
     if (updated.rows[0]) {
       void trackEvent('edit', updated.rows[0].id, { userId: updated.rows[0].user_id });
-      return { applied: true, row: updated.rows[0] };
+      return { applied: true, row: updated.rows[0], ...(published.warnings?.length ? { warnings: published.warnings } : {}) };
     }
     // Lost the CAS: someone landed between our read and our write. Re-read and
     // redo — our base is now an ordinary stale base, so the node-scope check
@@ -1196,26 +1201,52 @@ function refLoaderForUser(userId: string): RefLoader {
 }
 
 /**
- * The publish door's image importer: one external URL → one image artifact
- * owned by the SAME identity publishing the document. Everything an upload
- * pays, an import pays — the creation quota (an import IS a creation) and an
- * hourly fetch allowance on top (lib/auth), because a failed probe creates
- * nothing the quota could ever count.
+ * THE PUBLISH DOOR'S ASSET IMPORTER: one external URL → one row in the global
+ * URL cache (lib/web-assets), charged to whoever the DOCUMENT belongs to.
+ *
+ * It answers a WARNING rather than a Response, because a URL that will not
+ * import must not cost an author their document: the publish succeeds, the
+ * reply names what failed and what to do, and the served `<img>` draws its alt
+ * text. The hourly fetch allowance is the same one every web import pays
+ * (lib/auth) — probing is the abuse shape and probes fail, so ATTEMPTS are what
+ * is counted. The byte quota is charged inside `importWebAsset`, at the one
+ * door that turns a URL into stored bytes.
+ *
+ * This replaced an importer that created an image ARTIFACT per URL and rewrote
+ * the source to `ref:<id>`: an agent got documents it never asked for, in a
+ * markup it no longer recognised, and re-publishing the same URL made another.
  */
-export function imageIngestorFor(tokenId: string, userId: string | null): (url: string) => Promise<{ id: string } | Response> {
-  return async (url) => {
+export function assetImporterFor(tokenId: string, userId: string | null): (url: string, kind: WebAssetKind) => Promise<AssetWarning | null> {
+  return async (url, kind) => {
     if (webIngestRateLimited(`ingest:${tokenId}`)) {
-      return json({ error: 'rate_limited', details: ['too many web imports this hour — try again later'] }, 429);
+      return { code: 'rate_limited', url, fix: 'too many web imports this hour — try again later' };
     }
-    if (await artifactQuotaExceeded(tokenId)) return json({ error: 'quota_exceeded' }, 403);
-    const stored = await ingestImageFromUrl(url);
-    if (stored instanceof Response) return stored;
-    const row = await createArtifact(tokenId, userId, {
-      title: (stored.derivedTitle ?? null) || imageTitleFallback(url),
-      ...stored,
-    });
-    return { id: row.id };
+    try {
+      await importWebAsset(url, { tokenId, userId }, kind);
+      return null;
+    } catch (error) {
+      if (error instanceof WebAssetRefused) return assetWarningFor(error);
+      throw error;
+    }
   };
+}
+
+/**
+ * The byte quota as the publish door asks it: "is this caller already over?"
+ *
+ * A closure over the identity, so lib/story/input can guard a tier without
+ * knowing who is publishing (the shape assetImporterFor established). The
+ * subject is the ACCOUNT when the token has one — a cap keyed on the token
+ * alone is bypassed by minting a second one — which lib/asset-quota decides,
+ * not this.
+ *
+ * Its ABSENCE is also what tells the byte tiers they are being previewed:
+ * every other ctx member degrades to "do less", and storing the bytes IS what
+ * publishing an image or a PDF is, so those two refuse by name instead of
+ * quietly working for free (lib/story/input).
+ */
+export function byteQuotaFor(tokenId: string): () => Promise<boolean> {
+  return () => assetByteQuotaExceeded(tokenId);
 }
 
 /**
@@ -1237,14 +1268,6 @@ export function fontResolver(): (family: string) => Promise<Response | null> {
     }
   };
 }
-
-/** "…/team-logo.png" → "team-logo": the dashboard row needs a name, not a hash. */
-const imageTitleFallback = (url: string): string | null => {
-  try {
-    const last = new URL(url).pathname.split('/').filter(Boolean).pop() ?? '';
-    return decodeURIComponent(last).replace(/\.[a-z0-9]+$/i, '').trim() || null;
-  } catch { return null; }
-};
 
 // ── The bearer actor ─────────────────────────────────────────────────────────
 //
@@ -1578,7 +1601,10 @@ export function datasetsForDocument(source: string | null | undefined): string[]
 
 /** Build the render-time RefDataMap for a jsx artifact: recipes → parsed
  * template, images → their /a URL. (Datasets: see dataflowForRow.) */
-export async function refDataForRow(row: ArtifactRow): Promise<import('@/lib/story/ref-data').RefDataMap> {
+export async function refDataForRow(
+  row: ArtifactRow,
+  opts: { capture?: boolean } = {},
+): Promise<import('@/lib/story/ref-data').RefDataMap> {
   const meta = row.meta as { refs?: Array<{ id: string; kind: string }> };
   const out: import('@/lib/story/ref-data').RefDataMap = {};
   // A dataset a <Query> reads is a ref (ownership, dependents) but NOT page
@@ -1605,7 +1631,9 @@ export async function refDataForRow(row: ArtifactRow): Promise<import('@/lib/sto
       // it immutable and readers stop refetching the image on every render.
       // The intrinsic box, when the store recorded one (lib/images/optimise):
       // the markup reserves it so nothing below jumps when the bytes land.
-      const im = r.meta as { width?: unknown; height?: unknown; placeholder?: unknown } | null;
+      const im = r.meta as {
+        width?: unknown; height?: unknown; placeholder?: unknown; smallObjectKey?: unknown; smallWidth?: unknown;
+      } | null;
       const box = typeof im?.width === 'number' && typeof im?.height === 'number'
         ? { width: im.width, height: im.height }
         : {};
@@ -1614,7 +1642,27 @@ export async function refDataForRow(row: ArtifactRow): Promise<import('@/lib/sto
       const blur = typeof im?.placeholder === 'string' && im.placeholder.startsWith('data:')
         ? { blur: im.placeholder }
         : {};
-      out[r.id] = { kind: 'image', url: imageRawUrl(r.id, r.version), ...box, ...blur };
+      /*
+       * The narrow copy publish stored beside it, addressed on the same
+       * artifact — the second half of the `srcset` the markup writes. Never for
+       * a CAPTURE, which wants the full copy and nothing to choose from.
+       */
+      const widths = !opts.capture && typeof im?.smallWidth === 'number' && typeof im?.smallObjectKey === 'string'
+        ? { smallUrl: imageVariantUrl(r.id, r.version, im.smallWidth), smallWidth: im.smallWidth }
+        : {};
+      out[r.id] = { kind: 'image', url: imageRawUrl(r.id, r.version), ...box, ...blur, ...widths };
+    } else if (r.format === 'pdf') {
+      // What the CARD says: where the file is, what it is called, how big it is
+      // and how long. The name is the artifact's title (the author's, or the
+      // one the importer derived from the URL), never the object key.
+      const pm = r.meta as { bytes?: unknown; pages?: unknown } | null;
+      out[r.id] = {
+        kind: 'pdf',
+        url: pdfRawUrl(r.id, r.version),
+        name: displayTitle(r),
+        bytes: typeof pm?.bytes === 'number' ? pm.bytes : 0,
+        ...(typeof pm?.pages === 'number' ? { pages: pm.pages } : {}),
+      };
     }
   }
   return out;

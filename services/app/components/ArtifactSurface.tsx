@@ -18,6 +18,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useArtifactOwner, useCanAnnotateArtifact, useCanEditArtifact } from '@/components/ArtifactShell';
 import AnnotationLayer from '@/components/AnnotationLayer';
 import CopyAgentPrompt from '@/components/CopyAgentPrompt';
+import RefreshAssets from '@/components/RefreshAssets';
 import ForkArtifact, { ForkConfirm } from '@/components/ForkArtifact';
 import ShareLink from '@/components/ShareLink';
 import type { AnnotationWire } from '@/lib/annotations';
@@ -30,10 +31,11 @@ import { useIsPhoneViewport } from '@/components/MobileSheet';
 import { EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
 import type { ArtifactFormat } from '@/lib/story/input';
 import { useLiveArtifact } from '@/lib/story/use-live-artifact';
-import { STORY_DATA_MESSAGE, STORY_DOCUMENT_ACK_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_HELLO_MESSAGE, STORY_MUTATE_MESSAGE, STORY_MUTATE_RESULT_MESSAGE, STORY_PAINTED_MESSAGE, STORY_READER_MODE_MESSAGE, STORY_SCROLL_MESSAGE, type StoryDataUpdate, type StoryMutateRequest, type StoryMutateResult, type StoryScrollMessage, STORY_ADOPTS_MESSAGE, STORY_QUERY_MESSAGE, STORY_QUERY_RESULT_MESSAGE, isEditFrameMessage, isSessionMessage, isValuesMessage, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, type StoryDocumentUpdate, type StoryEditSelection, type StoryQueryRequest, type StoryQueryResult, type StorySelectionActionsMessage } from '@/lib/story-runtime/contract';
+import { STORY_ASSET_MESSAGE, STORY_ASSET_RESULT_MESSAGE, type StoryAssetRequest, type StoryAssetResult, STORY_DATA_MESSAGE, STORY_DOCUMENT_ACK_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_HELLO_MESSAGE, STORY_MUTATE_MESSAGE, STORY_MUTATE_RESULT_MESSAGE, STORY_PAINTED_MESSAGE, STORY_READER_MODE_MESSAGE, STORY_SCROLL_MESSAGE, type StoryDataUpdate, type StoryMutateRequest, type StoryMutateResult, type StoryScrollMessage, STORY_ADOPTS_MESSAGE, STORY_QUERY_MESSAGE, STORY_QUERY_RESULT_MESSAGE, isEditFrameMessage, isSessionMessage, isValuesMessage, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, type StoryDocumentUpdate, type StoryEditSelection, type StoryQueryRequest, type StoryQueryResult, type StorySelectionActionsMessage } from '@/lib/story-runtime/contract';
 import type { DataflowState } from '@/lib/story/dataflow';
 import { urlValuesSearch, writeUrlValues } from '@/lib/story/url-values';
 import { displayTitle } from '@/lib/story/title';
+import { formatFileSize } from '@/lib/file-display';
 import { resolveStoryMode } from '@/lib/data/story/story-themes';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import type { StoryIslandDataflow } from '@/lib/story-runtime/contract';
@@ -54,6 +56,9 @@ export interface ArtifactSurfaceProps {
   editId: string;
   format: ArtifactFormat;
   title: string | null;
+  /** pdf: how big the file is and how long, as the file view says it. */
+  bytes?: number;
+  pages?: number | null;
   source: string | null;
   /** meta scalars the editor needs, so entering edit mode costs no round trip. */
   template: string | null;
@@ -150,7 +155,7 @@ const selectionActionCapabilities = (canEdit: boolean, canAnnotate: boolean, inV
 
 export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const [copiedRef, setCopiedRef] = useState(false);
-  const { id, editId, format, title, source, content, columns, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', preview = false, accountSession = false, anonSession = false, version, captureKey = null, openAnnotations = 0 } = props;
+  const { id, editId, format, title, source, content, columns, bytes: fileBytes = 0, pages: filePages = null, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', preview = false, accountSession = false, anonSession = false, version, captureKey = null, openAnnotations = 0 } = props;
   const [editing, setEditing] = useState(false);
   /** A view-mode text selection asks edit mode to open on its containing node. */
   const [initialEditSelectionPath, setInitialEditSelectionPath] = useState<string | null>(null);
@@ -454,6 +459,42 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     window.addEventListener('message', onQuery);
     return () => window.removeEventListener('message', onQuery);
   }, [id]);
+
+  /**
+   * THE ASSET RELAY — the same shape and the same reason as the two around it:
+   * the frame is opaque-origin, so an `<img>` it loads carries no cookie, and
+   * `/a/<id>/assets` then sees an anonymous caller from inside every framed
+   * document. On a PRIVATE one — which is what a signed-in user's document is
+   * by default — that is the uniform 404, for its own owner as much as anyone.
+   *
+   * So the page asks, with its session, and posts back the ADDRESS of our copy.
+   * What crosses is `/assets/<hash>`, which needs no credential at all
+   * (content-addressed from the URL, serving nothing the source host does not):
+   * never bytes, and never a credential.
+   *
+   * The CAPTURE carries the export key instead of a session — the headless
+   * browser has none — on exactly the terms `raw` admits it. Without that a
+   * private document's og image photographs alt text.
+   */
+  useEffect(() => {
+    const onAsset = async (e: MessageEvent) => {
+      const data = e.data as Partial<StoryAssetRequest> | undefined;
+      if (!data || typeof data !== 'object' || data.type !== STORY_ASSET_MESSAGE || typeof data.url !== 'string') return;
+      if (frameRef.current && e.source !== frameRef.current.contentWindow) return;
+      const reply = (msg: StoryAssetResult) => (e.source as Window | null)?.postMessage(msg, '*');
+      try {
+        const key = captureKey ? `&key=${encodeURIComponent(captureKey)}` : '';
+        const res = await fetch(`/a/${id}/assets?u=${encodeURIComponent(data.url)}${key}`, { headers: { Accept: 'application/json' } });
+        const body = (await res.json().catch(() => ({}))) as { url?: string; code?: string };
+        if (res.ok && body.url) reply({ type: STORY_ASSET_RESULT_MESSAGE, id: data.id!, url: body.url });
+        else reply({ type: STORY_ASSET_RESULT_MESSAGE, id: data.id!, refused: body.code ?? `http_${res.status}` });
+      } catch {
+        reply({ type: STORY_ASSET_RESULT_MESSAGE, id: data.id!, refused: 'fetch_failed' });
+      }
+    };
+    window.addEventListener('message', onAsset);
+    return () => window.removeEventListener('message', onAsset);
+  }, [id, captureKey]);
 
   /**
    * The WRITE RELAY — the same shape as the query relay above, and here for
@@ -957,6 +998,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
         <section aria-label="Owner actions">
           <h2 className="mb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">owner</h2>
           <CopyAgentPrompt id={id} variant="menu" />
+          {/* Owner chrome, unlike the fork row above: a refresh re-fetches
+              bytes that every reader of every document naming those URLs is
+              then served. Only for a markup document — it is the only format
+              that can name an external url at all. */}
+          {format === 'markup' && <RefreshAssets id={id} variant="menu" />}
           {format === 'dataset' && (
             <button
               type="button"
@@ -1140,6 +1186,27 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       {format === 'image' && (
         // eslint-disable-next-line @next/next/no-img-element -- the artifact IS the image; no optimizer.
         <img key={rawKey} src={`/a/${id}/raw`} alt={shownTitle} className="mt-4 max-w-full rounded-[6px] border border-edge" />
+      )}
+
+      {format === 'pdf' && (
+        // A PDF is a FILE, not something the app renders: the browser's own
+        // viewer does that, at /raw, which is served inline and sandboxed. So
+        // this view is the two facts a person picks a file by and the link that
+        // opens it — the same card <File> draws inside a document.
+        <div className="mt-4 rounded-[6px] border border-edge bg-surface p-4">
+          <p className="font-sans text-xs text-muted" aria-label="PDF summary">
+            PDF{fileBytes ? ` · ${formatFileSize(fileBytes)}` : ''}{filePages ? ` · ${filePages} page${filePages === 1 ? '' : 's'}` : ''}
+          </p>
+          <a
+            aria-label="Open the PDF"
+            href={`/a/${id}/raw`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 inline-block font-sans text-sm underline underline-offset-2"
+          >
+            Open {shownTitle}
+          </a>
+        </div>
       )}
 
       {format === 'dataset' && (

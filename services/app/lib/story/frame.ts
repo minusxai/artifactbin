@@ -21,6 +21,8 @@ import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import { loadDatasetRows } from './dataset-store';
 import type { ArtifactLiveEvent } from './live';
 import { storyUpdateParts } from './update-parts';
+import { assetLookupFrom } from './asset-url';
+import { webAssetsForSource } from '@/lib/web-assets';
 
 export interface LiveFrame extends Omit<ArtifactLiveEvent, 'compiledCss' | 'authorCss' | 'dataflow'> {
   compiledCss: string | null;
@@ -49,7 +51,16 @@ async function build(row: ArtifactRow): Promise<LiveFrame> {
   };
   const design = resolveStoredStoryDesign(meta.theme, meta.colorMode);
   const css = row.format === 'markup' ? await currentStoryCss(meta, row.source) : meta.compiledCss ?? null;
-  const parts = row.format === 'markup' && row.source ? storyUpdateParts(row.source) : null;
+  /*
+   * The SAME serve-time asset mapping the page applies (lib/story/asset-url):
+   * a reader adopting this frame and a reader reloading must see one document,
+   * and an external image in a frame that skipped the mapping would be a URL
+   * the document's own CSP refuses to load.
+   */
+  const assets = await webAssetsForSource(row.format === 'markup' ? row.source : null);
+  const parts = row.format === 'markup' && row.source
+    ? storyUpdateParts(row.source, assetLookupFrom(assets))
+    : null;
   return {
     editId: row.edit_id,
     version: row.version,

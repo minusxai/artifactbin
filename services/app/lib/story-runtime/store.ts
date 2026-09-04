@@ -50,6 +50,19 @@ export interface QueryTransport {
    * draft path, a capture) — the store then reports that plainly.
    */
   mutate?(values: Record<string, Scalar>, name: string): Promise<{ dataset: string }>;
+  /**
+   * Import one web URL the document ended up with (a bound `<img src="$pick">`,
+   * a column of logos) and resolve with the ADDRESS of our copy.
+   *
+   * Present only on the RELAY — a framed document, where the page holds the
+   * session the endpoint needs. Top-level the `<img>` element is its own
+   * transport: its src IS the endpoint and the browser follows the redirect,
+   * so there is nothing here to do and this is deliberately absent.
+   *
+   * Like `mutate`, this is not a query; what it shares with one is the channel.
+   * The document has ONE way to reach the outside, and this interface is it.
+   */
+  importAsset?(url: string): Promise<{ url: string } | { refused: string }>;
 }
 
 export interface DataflowStore {
