@@ -13,20 +13,20 @@ import * as r9 from '@/app/api/artifacts/[id]/annotations/[annId]/route';
 import * as r10 from '@/app/api/artifacts/[id]/annotations/route';
 import * as r11 from '@/app/api/artifacts/[id]/edits/route';
 import * as r12 from '@/app/api/artifacts/[id]/fork/route';
-import * as r13 from '@/app/api/artifacts/[id]/like/route';
-import * as r14 from '@/app/api/artifacts/[id]/mutate/route';
-import * as r15 from '@/app/api/artifacts/[id]/revert/route';
-import * as r16 from '@/app/api/artifacts/[id]/route';
-import * as r17 from '@/app/api/artifacts/[id]/versions/[version]/route';
-import * as r18 from '@/app/api/artifacts/[id]/versions/route';
-import * as r19 from '@/app/api/artifacts/assets/refresh/route';
-import * as r20 from '@/app/api/artifacts/route';
-import * as r21 from '@/app/api/my/artifacts/[id]/agent-prompt/route';
-import * as r22 from '@/app/api/my/artifacts/[id]/annotations/[annId]/route';
-import * as r23 from '@/app/api/my/artifacts/[id]/annotations/route';
-import * as r24 from '@/app/api/my/artifacts/[id]/assets/refresh/route';
-import * as r25 from '@/app/api/my/artifacts/[id]/edits/route';
-import * as r26 from '@/app/api/my/artifacts/[id]/fork/route';
+import * as r13 from '@/app/api/artifacts/[id]/mutate/route';
+import * as r14 from '@/app/api/artifacts/[id]/revert/route';
+import * as r15 from '@/app/api/artifacts/[id]/route';
+import * as r16 from '@/app/api/artifacts/[id]/versions/[version]/route';
+import * as r17 from '@/app/api/artifacts/[id]/versions/route';
+import * as r18 from '@/app/api/artifacts/assets/refresh/route';
+import * as r19 from '@/app/api/artifacts/route';
+import * as r20 from '@/app/api/my/artifacts/[id]/agent-prompt/route';
+import * as r21 from '@/app/api/my/artifacts/[id]/annotations/[annId]/route';
+import * as r22 from '@/app/api/my/artifacts/[id]/annotations/route';
+import * as r23 from '@/app/api/my/artifacts/[id]/assets/refresh/route';
+import * as r24 from '@/app/api/my/artifacts/[id]/edits/route';
+import * as r25 from '@/app/api/my/artifacts/[id]/fork/route';
+import * as r26 from '@/app/api/my/artifacts/[id]/like/route';
 import * as r27 from '@/app/api/my/artifacts/[id]/revert/route';
 import * as r28 from '@/app/api/my/artifacts/[id]/route';
 import * as r29 from '@/app/api/my/artifacts/[id]/sharing/route';
@@ -75,20 +75,20 @@ export const ROUTES: RouteEntry[] = [
   { path: "/api/artifacts/:id/annotations", dir: "/api/artifacts/[id]/annotations", methods: ["GET"], module: r10 },
   { path: "/api/artifacts/:id/edits", dir: "/api/artifacts/[id]/edits", methods: ["POST"], module: r11 },
   { path: "/api/artifacts/:id/fork", dir: "/api/artifacts/[id]/fork", methods: ["POST"], module: r12 },
-  { path: "/api/artifacts/:id/like", dir: "/api/artifacts/[id]/like", methods: ["GET","POST","DELETE"], module: r13 },
-  { path: "/api/artifacts/:id/mutate", dir: "/api/artifacts/[id]/mutate", methods: ["POST"], module: r14 },
-  { path: "/api/artifacts/:id/revert", dir: "/api/artifacts/[id]/revert", methods: ["POST"], module: r15 },
-  { path: "/api/artifacts/:id", dir: "/api/artifacts/[id]", methods: ["GET","PUT","DELETE"], module: r16 },
-  { path: "/api/artifacts/:id/versions/:version", dir: "/api/artifacts/[id]/versions/[version]", methods: ["GET"], module: r17 },
-  { path: "/api/artifacts/:id/versions", dir: "/api/artifacts/[id]/versions", methods: ["GET"], module: r18 },
-  { path: "/api/artifacts/assets/refresh", dir: "/api/artifacts/assets/refresh", methods: ["POST"], module: r19 },
-  { path: "/api/artifacts", dir: "/api/artifacts", methods: ["GET","POST"], module: r20 },
-  { path: "/api/my/artifacts/:id/agent-prompt", dir: "/api/my/artifacts/[id]/agent-prompt", methods: ["POST"], module: r21 },
-  { path: "/api/my/artifacts/:id/annotations/:annId", dir: "/api/my/artifacts/[id]/annotations/[annId]", methods: ["POST","DELETE"], module: r22 },
-  { path: "/api/my/artifacts/:id/annotations", dir: "/api/my/artifacts/[id]/annotations", methods: ["GET","POST"], module: r23 },
-  { path: "/api/my/artifacts/:id/assets/refresh", dir: "/api/my/artifacts/[id]/assets/refresh", methods: ["POST"], module: r24 },
-  { path: "/api/my/artifacts/:id/edits", dir: "/api/my/artifacts/[id]/edits", methods: ["POST"], module: r25 },
-  { path: "/api/my/artifacts/:id/fork", dir: "/api/my/artifacts/[id]/fork", methods: ["POST"], module: r26 },
+  { path: "/api/artifacts/:id/mutate", dir: "/api/artifacts/[id]/mutate", methods: ["POST"], module: r13 },
+  { path: "/api/artifacts/:id/revert", dir: "/api/artifacts/[id]/revert", methods: ["POST"], module: r14 },
+  { path: "/api/artifacts/:id", dir: "/api/artifacts/[id]", methods: ["GET","PUT","DELETE"], module: r15 },
+  { path: "/api/artifacts/:id/versions/:version", dir: "/api/artifacts/[id]/versions/[version]", methods: ["GET"], module: r16 },
+  { path: "/api/artifacts/:id/versions", dir: "/api/artifacts/[id]/versions", methods: ["GET"], module: r17 },
+  { path: "/api/artifacts/assets/refresh", dir: "/api/artifacts/assets/refresh", methods: ["POST"], module: r18 },
+  { path: "/api/artifacts", dir: "/api/artifacts", methods: ["GET","POST"], module: r19 },
+  { path: "/api/my/artifacts/:id/agent-prompt", dir: "/api/my/artifacts/[id]/agent-prompt", methods: ["POST"], module: r20 },
+  { path: "/api/my/artifacts/:id/annotations/:annId", dir: "/api/my/artifacts/[id]/annotations/[annId]", methods: ["POST","DELETE"], module: r21 },
+  { path: "/api/my/artifacts/:id/annotations", dir: "/api/my/artifacts/[id]/annotations", methods: ["GET","POST"], module: r22 },
+  { path: "/api/my/artifacts/:id/assets/refresh", dir: "/api/my/artifacts/[id]/assets/refresh", methods: ["POST"], module: r23 },
+  { path: "/api/my/artifacts/:id/edits", dir: "/api/my/artifacts/[id]/edits", methods: ["POST"], module: r24 },
+  { path: "/api/my/artifacts/:id/fork", dir: "/api/my/artifacts/[id]/fork", methods: ["POST"], module: r25 },
+  { path: "/api/my/artifacts/:id/like", dir: "/api/my/artifacts/[id]/like", methods: ["GET","POST","DELETE"], module: r26 },
   { path: "/api/my/artifacts/:id/revert", dir: "/api/my/artifacts/[id]/revert", methods: ["POST"], module: r27 },
   { path: "/api/my/artifacts/:id", dir: "/api/my/artifacts/[id]", methods: ["GET","PUT","PATCH","DELETE"], module: r28 },
   { path: "/api/my/artifacts/:id/sharing", dir: "/api/my/artifacts/[id]/sharing", methods: ["GET","PUT"], module: r29 },

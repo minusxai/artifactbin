@@ -31,7 +31,6 @@ function routePaths(dir: string, prefix: string, out: string[] = []): string[] {
 /** Routes that are deliberately NOT operations, each with its reason beside it here. */
 const EXCEPTIONS = new Set([
   '/api/artifacts/{id}/annotations', // the list view — the primary read is get_artifact, which inlines the open set
-  '/api/artifacts/{id}/like', // the like button — a SESSION-only, same-site door for the browser; an agent holding a bearer token has no business liking things, so it is deliberately outside the operation surface
 ]);
 
 describe('the registry covers the surface', () => {

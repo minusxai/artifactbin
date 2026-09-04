@@ -1,18 +1,26 @@
 /**
- * GET|POST|DELETE /api/artifacts/:id/like → `{ liked, count }`.
+ * GET|POST|DELETE /api/my/artifacts/:id/like → `{ liked, count }`.
  *
  * ONE answer for all three verbs, because a like button has exactly one
  * question — am I in, and how many of us are there — and a button that had to
  * ask twice would render wrong for a frame after every click.
  *
- * Session-only and same-site on the writes: this is the browser's door, ridden
- * by a cookie, so `refusesCrossSite` applies exactly as it does to the app's
- * other cookie-borne writes. An agent has no business liking things, so there
- * is deliberately no bearer path here.
+ * UNDER `/api/my`, which is where the address says what the credential is:
+ * `/api/artifacts/*` is the agent surface (every route there is a registry
+ * OPERATION, and `lib/operations/__tests__/coverage` enforces it), `/api/my/*`
+ * is the browser's. Liking is a person clicking a heart — there is deliberately
+ * no bearer path — so it belongs on this side, beside the fork door's own
+ * browser twin, which makes the same split for the same reason.
+ *
+ * Session-only and same-site on the writes: ridden by a cookie, so
+ * `refusesCrossSite` applies exactly as it does to the app's other cookie-borne
+ * writes. `sessionActor` rather than `browserActor` because an anonymous reader
+ * may still ASK (`liked: false`, and the real count) — only acting needs an
+ * account.
  *
  * The artifact must be READABLE by whoever is asking: an unreadable one and a
  * missing one are the same 404, so the door never confirms that a private id
- * exists. Anonymous may look (`liked: false`) but not act.
+ * exists.
  */
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { refusesCrossSite } from '@/lib/auth';
