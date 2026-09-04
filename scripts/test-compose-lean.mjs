@@ -92,6 +92,38 @@ const emitFromInside = (artifactId) => {
   }
 };
 
+/**
+ * The other half of leg 6: the walk's own publish must have landed in the log
+ * WITHOUT anyone posting an envelope by hand — the app's trackEvent dual-write,
+ * the batching client, the events container and its table, end to end. Read
+ * from the app container as the app connects (its DATABASE_URL; the events
+ * schema is SELECT-only for it), polling because the client batches for a
+ * second before it posts.
+ */
+const IN_NETWORK_LANDED = `
+const { Client } = require('pg');
+(async () => {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  let verbs = [];
+  for (let i = 0; i < 40 && verbs.length === 0; i += 1) {
+    const r = await client.query("SELECT verb FROM events.events WHERE object_kind = 'artifact' AND object_id = $1 AND source = 'app' AND subject_id <> 'compose-walk' ORDER BY at", [process.env.WALK_ARTIFACT_ID]);
+    verbs = r.rows.map((x) => x.verb);
+    if (verbs.length === 0) await new Promise((r) => setTimeout(r, 250));
+  }
+  await client.end();
+  console.log(JSON.stringify({ verbs }));
+})().catch((e) => { console.log(JSON.stringify({ error: String(e) })); });
+`;
+const landedFromInside = (artifactId) => {
+  try {
+    const out = execFileSync('docker', ['compose', 'exec', '-T', '-e', `WALK_ARTIFACT_ID=${artifactId}`, 'app', 'node', '-e', IN_NETWORK_LANDED], { env: composeEnv, encoding: 'utf8' });
+    return JSON.parse(out.trim().split('\n').pop());
+  } catch (e) {
+    return { error: (e.stderr ?? e.message ?? String(e)).toString().trim().split('\n').slice(-2).join(' ') };
+  }
+};
+
 const TITLE = 'lean compose walk';
 const MARKUP = [
   '<Helmet>',
@@ -170,10 +202,8 @@ async function main() {
   // 6. The event log's own container, from INSIDE the compute network — it
   //    publishes no port, so an emitter is where this must be driven from.
   //
-  // TODO(events-app): assert the walk's publish landed as artifact.created —
-  // the app's trackEvent dual-write is the other half of this wave and is not
-  // in this branch, so nothing the walk above does emits anything yet. When it
-  // merges, replace the hand-built envelope with a query for that row.
+  //    The hand-built envelope proves the wire; leg 7 proves the walk's own
+  //    publish travelled it.
   {
     const r = emitFromInside(id);
     say('GET /health on the events container (from the app, over compute)', r.health === 200 && r.healthBody?.ok === true,
@@ -186,6 +216,15 @@ async function main() {
     // The id is the dedupe key: the same batch again stores nothing new, which
     // is what makes the client's one retry free.
     say('the same envelope again is accepted and stores nothing new', r.replay === 200, r.error ?? `${r.replay}`);
+  }
+
+  // 7. The walk's own publish landed in the log, end to end: the app's dual-write
+  //    emitted it, the batching client posted it, the events container stored
+  //    it, and the app reads it back with its SELECT-only grant.
+  {
+    const r = landedFromInside(id);
+    const verbs = r.verbs ?? [];
+    say('the publish above landed in events.events through the app\'s own emit (artifact.created)', verbs.includes('created'), r.error ?? JSON.stringify(verbs));
   }
 
   const failed = checks.filter((c) => !c.ok);
