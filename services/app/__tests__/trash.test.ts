@@ -21,18 +21,18 @@ async function owner() {
 }
 const create = async (token: string, body: Record<string, unknown>) => { const r = await j(await createRoute(request('/api/artifacts', { method: 'POST', json: body, token }))); expect(r.status, JSON.stringify(r.body)).toBe(201); return r.body; };
 const del = (token: string, id: string) => deleteRoute(request(`/api/artifacts/${id}`, { method: 'DELETE', token }), params(id));
-const get = (token: string, id: string) => getRoute(request(`/api/artifacts/${id}`, { token }), params(id));
+const readBack = (token: string, id: string) => getRoute(request(`/api/artifacts/${id}`, { token }), params(id));
 
 describe('the trash', () => {
   it('a deleted document answers 404 everywhere, is listed in the trash, and restore brings it back at its version', async () => {
     const o = await owner();
     const d = await create(o.token, { markup: '<p>x</p>', title: 'Doc' });
     expect((await del(o.token, d.id)).status).toBe(200);
-    expect((await get(o.token, d.id)).status).toBe(404);
+    expect((await readBack(o.token, d.id)).status).toBe(404);
     expect(await getArtifactById(d.id)).toBeNull();
     expect((await listTrashFor(o.actor)).map((r) => r.id)).toEqual([d.id]);
     expect(await restoreArtifactFor(o.actor, d.id)).toMatchObject({ id: d.id, ancestor_ids: [] });
-    const back = await j(await get(o.token, d.id));
+    const back = await j(await readBack(o.token, d.id));
     expect(back.status).toBe(200);
     expect(back.body.version).toBe(1);
     expect(await listTrashFor(o.actor)).toEqual([]);
