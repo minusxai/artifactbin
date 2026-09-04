@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { BrowserService, RenderRequest } from '@artifactbin/contracts';
 import { BROWSER_ROUTES, browserClient, serveBrowser } from '@artifactbin/browser';
 import { createBrowser } from '@artifactbin/browser/local';
+import sharp from 'sharp';
 import { withHttpServer, type RunningServer } from '../../app/__tests__/net';
 
 const PAGE = `<html><body style="margin:0"><main style="width:600px">
@@ -61,6 +62,27 @@ describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', re
     const r = await svc.render({ ...base(), capture: 'card', selector: 'body', viewport: { width: 300, height: 200 } });
     if (!r.ok) throw new Error(JSON.stringify(r));
     expect(pngSize(r.bytes)).toEqual({ width: 300, height: 200 });
+  });
+  it('scales a positioned locked-ratio card crop to the requested output without relayout', async () => {
+    const r = await svc.render({
+      ...base(),
+      capture: { card: { x: 200, y: 100, width: 400 } },
+      viewport: { width: 1200, height: 630 },
+    });
+    if (!r.ok) throw new Error(JSON.stringify(r));
+    expect(pngSize(r.bytes)).toEqual({ width: 1200, height: 630 });
+    const { data: pixels, info } = await sharp(Buffer.from(r.bytes)).raw().toBuffer({ resolveWithObject: true });
+    const at = (x: number, y: number) => {
+      const start = (y * info.width + x) * info.channels;
+      return [...pixels.subarray(start, start + 3)];
+    };
+    expect(at(600, 100)).toEqual([51, 204, 51]); // source y≈133: green band
+    expect(at(600, 400)).toEqual([51, 51, 204]); // source y≈233: blue band
+  });
+  it('produces a reduced-density overview using the same layout', async () => {
+    const r = await svc.render({ ...base(), capture: 'preview' });
+    if (!r.ok) throw new Error(JSON.stringify(r));
+    expect(pngSize(r.bytes)).toEqual({ width: 400, height: 200 });
   });
   it('names a page that cannot be reached', async () => {
     const r = await svc.render({ ...base(), url: 'http://127.0.0.1:1/nope', timeoutMs: 2000 });

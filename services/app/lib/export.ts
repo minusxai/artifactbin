@@ -5,7 +5,7 @@
  * — minusx Story_Design_V2 §13), so a real browser takes the picture.
  *
  * THE BROWSER IS NOT THIS MODULE'S ANY MORE. Chromium — the singleton, the
- * serialising chain, the idle shutdown, the three capture modes — lives in
+ * serialising chain, the idle shutdown, and the capture modes — lives in
  * `@artifactbin/browser`, and this module reaches it through the services
  * registry (`lib/services`): an HTTP client when `BROWSER__SERVICE_URL` names
  * a service, the local Playwright one a composition root registered
@@ -27,18 +27,18 @@ import { mintExportKey } from './export-key';
 import { json } from './http';
 import { objectStore } from './object-store';
 import { urlSelection } from './story/url-values';
+import { socialPreviewCrop, type SocialPreviewCrop } from './story/social-preview';
 
 export const EXPORT_MIME = { png: 'image/png', jpg: 'image/jpeg' } as const;
 export type ExportFormat = keyof typeof EXPORT_MIME;
 
 /**
  * What the shot covers. 'full' = the whole document, however tall — agents
- * curl this to eyeball a page. 'card' = the top viewport at og ratio, the
- * og:image / thumbnail shape (platforms crop tall images unpredictably; a
- * card is already the ratio they want). The stage size lives in
- * lib/export-card.ts, importable without this module's whole graph.
+ * curl this to eyeball a page. 'card' = the document's saved 40:21 social
+ * frame; 'preview' = its bounded, editor-only framing overview. The output
+ * size lives in lib/export-card.ts, importable without this module's graph.
  */
-export type ExportCapture = 'full' | 'card';
+export type ExportCapture = 'full' | 'card' | 'preview';
 
 /** Rendered viewport width; height follows the content (full-page capture). */
 export const EXPORT_WIDTH = 1200;
@@ -61,7 +61,7 @@ const RENDER_RETRY_MS = 1_000;
  * Bump this whenever the framing changes. Old entries then go cold on their own,
  * exactly like the card key's stage size does.
  */
-export const EXPORT_RENDER_GENERATION = 2;
+export const EXPORT_RENDER_GENERATION = 3;
 const CACHE_MAX_ENTRIES = 24;
 
 /** `format` value → export format; null when absent or unrecognized. */
@@ -72,7 +72,7 @@ export function parseExportFormat(value: string | null): ExportFormat | null {
 /** `mode` value → capture; ABSENT defaults to 'full', garbage is null (400). */
 export function parseExportCapture(value: string | null): ExportCapture | null {
   if (value === null) return 'full';
-  return value === 'full' || value === 'card' ? value : null;
+  return value === 'full' || value === 'card' || value === 'preview' ? value : null;
 }
 
 /**
@@ -105,6 +105,7 @@ function exportCaptureKey(capture: ExportCapture, slide: number, selection = '')
   const pick = selection ? `-p${createHash('sha256').update(selection).digest('hex').slice(0, 12)}` : '';
   if (slide > 0) return `slide-${slide}-g${EXPORT_RENDER_GENERATION}${pick}`;
   if (capture === 'card') return `card-${CARD_WIDTH}x${CARD_HEIGHT}-g${EXPORT_RENDER_GENERATION}${pick}`;
+  if (capture === 'preview') return `preview-g${EXPORT_RENDER_GENERATION}`;
   return `full-g${EXPORT_RENDER_GENERATION}${pick}`;
 }
 
@@ -175,7 +176,7 @@ type RenderInput = {
 /**
  * THE ONE RENDER REQUEST. Everything the browser needs to take this picture
  * and nothing about this product: a URL (carrying its own key), what to shoot
- * on it, and which of the three capture modes. The service answers bytes or a
+ * on it, and which capture mode. The service answers bytes or a
  * VERDICT — it never throws — and this is the only place those verdicts are
  * turned into the app's own smaller vocabulary.
  *
@@ -205,6 +206,7 @@ async function renderOnce(
   format: ExportFormat,
   capture: ExportCapture,
   slide = 0,
+  crop?: SocialPreviewCrop,
 ): Promise<Shot> {
   const rendered = await services().browser.render({
     // The key is minted HERE, at the moment the request goes out — see
@@ -213,14 +215,14 @@ async function renderOnce(
     url: input.urlFor(),
     format,
     ...(format === 'jpg' ? { quality: 85 } : {}),
-    viewport: capture === 'card'
+    viewport: capture === 'card' || capture === 'preview'
       ? { width: CARD_WIDTH, height: CARD_HEIGHT }
       : { width: EXPORT_WIDTH, height: EXPORT_VIEWPORT_HEIGHT },
     // BY NAME, not by position: the page also carries the document's static
     // body (for crawlers), which may itself contain a <Video> player frame —
     // `first()` then measured the player and cropped every card to its width.
     selector: input.target,
-    capture: slide > 0 ? { slide } : capture,
+    capture: slide > 0 ? { slide } : capture === 'card' && crop ? { card: crop } : capture,
     // Same-origin requests are the app itself; anything cross-origin is a
     // stray — abort it, which doubles as the CSP discipline for the surface.
     sameOriginOnly: true,
@@ -259,7 +261,7 @@ export function renderArtifactImage(
   // instead — which only the retired html tier ever had.
   /** `selection` is the CANONICAL token from urlSelection — a raw search string here
    * would give one document unlimited keys for byte-identical renders. */
-  opts: { pageUrl: () => string; target: string; capture?: ExportCapture; slide?: number; selection?: string },
+  opts: { pageUrl: () => string; target: string; capture?: ExportCapture; slide?: number; selection?: string; crop?: SocialPreviewCrop },
 ): Promise<RenderResult> {
   const s = state();
   const capture = opts.capture ?? 'full';
@@ -302,10 +304,10 @@ export function renderArtifactImage(
      * time before the caller hears it. Only a FAST 'failed' looks like a race.
      */
     const startedAt = Date.now();
-    let rendered = await renderOnce(input, format, capture, slide);
+    let rendered = await renderOnce(input, format, capture, slide, opts.crop);
     if (!rendered.ok && rendered.reason === 'failed' && Date.now() - startedAt <= RENDER_TIMEOUT_MS / 2) {
       await new Promise((r) => setTimeout(r, RENDER_RETRY_MS));
-      rendered = await renderOnce(input, format, capture, slide);
+      rendered = await renderOnce(input, format, capture, slide, opts.crop);
     }
     // Only now do the service's four verdicts become the app's three: the
     // page could not be reached is a FAILURE, never "there is no browser here".
@@ -355,9 +357,10 @@ export async function exportImageResponse(
   const format = parseExportFormat(q.format ?? 'png');
   if (!format) return json({ error: 'unknown_format', allowed: ['png', 'jpg'] }, 400);
   // Default full page (agents ask for this to see the whole document); 'card'
-  // is the 1600×840 top stage (lib/export-card) og:image uses.
+  // is the saved 1600×840 framing that og:image uses; 'preview' is the private
+  // overview used only by editing chrome.
   const capture = parseExportCapture(q.mode ?? null);
-  if (!capture) return json({ error: 'unknown_mode', allowed: ['full', 'card'] }, 400);
+  if (!capture) return json({ error: 'unknown_mode', allowed: ['full', 'card', 'preview'] }, 400);
   // One slide of a deck, 1-based. Absent is 0 — the whole document.
   const slide = parseExportSlide(q.slide ?? null);
   if (slide === null) return json({ error: 'unknown_slide', hint: 'slide is a 1-based slide number, e.g. ?slide=2' }, 400);
@@ -383,10 +386,13 @@ export async function exportImageResponse(
    * written (lib/story/url-values urlSelection).
    */
   const flow = artifact.format === 'markup' && artifact.source ? declarationsOf(artifact.source) : null;
-  const selection = capture === 'card' ? { search: '', token: '' } : urlSelection(q.search ?? '', flow);
+  const selection = capture === 'card' || capture === 'preview' ? { search: '', token: '' } : urlSelection(q.search ?? '', flow);
 
   const rendered = await renderArtifactImage(artifact, format, {
     capture,
+    ...(capture === 'card' && artifact.format === 'markup'
+      ? { crop: socialPreviewCrop(artifact.source ?? '') }
+      : {}),
     ...(selection.token ? { selection: selection.token } : {}),
     // The headless browser has no session, so a private page would 404 on
     // itself. Mint a signed, seconds-long key scoped to this artifact —
@@ -420,9 +426,14 @@ export async function exportImageResponse(
       'Content-Type': rendered.mime,
       'X-Content-Type-Options': 'nosniff',
       // Cards are fetched by browsers en masse (profile grids) behind a
-      // version-busted URL (&v=), so they may cache hard; full shots keep
-      // no-store — an agent re-asking after an edit must never see stale.
-      'Cache-Control': capture === 'card' ? 'public, max-age=86400' : 'no-store',
+      // version-busted URL (&v=), so they may cache hard. Editor previews are
+      // private-cacheable; full shots keep no-store so an agent re-asking
+      // after an edit never sees stale output.
+      'Cache-Control': capture === 'card'
+        ? 'public, max-age=86400'
+        : capture === 'preview'
+          ? 'private, max-age=86400'
+          : 'no-store',
     },
   });
 }

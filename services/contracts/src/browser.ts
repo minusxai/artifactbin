@@ -5,11 +5,20 @@
  * app's retry decision and its 503-vs-500 split depend on which failure it was.
  *
  * There is no PDF: the product exports png and jpg, element-scoped by a
- * selector, in three capture modes. `card` is a measure→resize→measure→clip
- * dance inside one page load and is therefore a named mode, not a client recipe.
+ * selector, with full, card, positioned-card, preview, and slide capture
+ * modes. `card` is a measure→resize→measure→clip dance inside one page load
+ * and is therefore a named mode, not a client recipe.
  */
 export type RenderFormat = 'png' | 'jpg';
-export type RenderCapture = 'full' | 'card' | { slide: number };
+export interface RenderCardCrop {
+  /** Top-left coordinates relative to the selected surface. */
+  x: number;
+  y: number;
+  /** Source width; source height follows the requested viewport's aspect ratio. */
+  width: number;
+}
+
+export type RenderCapture = 'full' | 'card' | 'preview' | { slide: number } | { card: RenderCardCrop };
 
 export interface RenderRequest {
   url: string;

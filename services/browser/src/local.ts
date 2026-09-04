@@ -5,13 +5,18 @@
  * at a time bounds memory, and a failed launch never poisons the next try.
  */
 import { chromium, type Browser } from 'playwright';
+import sharp from 'sharp';
 import type { BrowserService, RenderRequest, RenderResult } from '@artifactbin/contracts';
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_SETTLE_MS = 1_500;
+const PREVIEW_WIDTH = 400;
+const PREVIEW_MAX_HEIGHT = 4_096;
 
 class NavigationError extends Error {}
 class NoSlideError extends Error { constructor(readonly slides: number) { super(`document has ${slides} slides`); } }
+
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
 export function createBrowser(opts: { idleShutdownMs?: number } = {}): BrowserService & { close(): Promise<void> } {
   const idleMs = opts.idleShutdownMs ?? 60_000;
@@ -51,7 +56,7 @@ export function createBrowser(opts: { idleShutdownMs?: number } = {}): BrowserSe
       const surface = page.locator(req.selector).first();
       await surface.waitFor({ timeout });
       await page.waitForTimeout(req.settleMs ?? DEFAULT_SETTLE_MS);
-      if (typeof req.capture === 'object') {
+      if (typeof req.capture === 'object' && 'slide' in req.capture) {
         const slides = surface.locator('[data-mx-slide]');
         const count = await slides.count();
         if (req.capture.slide > count) throw new NoSlideError(count);
@@ -60,6 +65,49 @@ export function createBrowser(opts: { idleShutdownMs?: number } = {}): BrowserSe
         return { mime, bytes: new Uint8Array(await one.screenshot(shotOpts)) };
       }
       if (req.capture === 'full') return { mime, bytes: new Uint8Array(await surface.screenshot(shotOpts)) };
+      if (req.capture === 'preview' || typeof req.capture === 'object') {
+        const { width: outputWidth, height: outputHeight } = req.viewport;
+        const box = (await surface.boundingBox()) ?? { x: 0, y: 0, width: outputWidth, height: outputHeight };
+        const client = await page.context().newCDPSession(page);
+        try {
+          const crop = typeof req.capture === 'object' ? req.capture.card : null;
+          const sourceWidth = crop
+            ? clamp(crop.width, 1, Math.max(1, box.width))
+            : Math.min(Math.max(1, box.width), outputWidth);
+          const sourceHeight = crop
+            ? sourceWidth * outputHeight / outputWidth
+            : Math.max(1, box.height);
+          const x = crop ? clamp(crop.x, 0, Math.max(0, box.width - sourceWidth)) : 0;
+          const y = crop ? clamp(crop.y, 0, Math.max(0, box.height - sourceHeight)) : 0;
+          const scale = crop
+            ? outputWidth / sourceWidth
+            : Math.min(PREVIEW_WIDTH / sourceWidth, PREVIEW_MAX_HEIGHT / sourceHeight);
+          const captured = await client.send('Page.captureScreenshot', {
+            format: req.format === 'jpg' ? 'jpeg' : 'png',
+            ...(req.format === 'jpg' ? { quality: req.quality ?? 85 } : {}),
+            fromSurface: true,
+            captureBeyondViewport: true,
+            clip: {
+              x: box.x + x,
+              y: box.y + y,
+              width: sourceWidth,
+              height: sourceHeight,
+              scale,
+            },
+          });
+          const bytes = Buffer.from(captured.data, 'base64');
+          if (!crop) return { mime, bytes: new Uint8Array(bytes) };
+          // CDP rounds fractional clip edges to device pixels. The render
+          // contract is exact, so contain that implementation detail here.
+          const exactPipeline = sharp(bytes).resize(outputWidth, outputHeight, { fit: 'fill' });
+          const exact = req.format === 'jpg'
+            ? await exactPipeline.jpeg({ quality: req.quality ?? 85 }).toBuffer()
+            : await exactPipeline.png().toBuffer();
+          return { mime, bytes: new Uint8Array(exact) };
+        } finally {
+          await client.detach().catch(() => {});
+        }
+      }
       // card: clip the PAGE to the surface's top stage; grow the viewport by the surface's offset so the clip is full height.
       const { width, height } = req.viewport;
       let box = (await surface.boundingBox()) ?? { x: 0, y: 0, width, height };

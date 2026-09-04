@@ -66,10 +66,11 @@ describe('parseExportFormat', () => {
 });
 
 describe('parseExportCapture', () => {
-  it("absent means 'full' (agents eyeball whole pages); only 'card' opts into the viewport crop", () => {
+  it("maps the fixed export modes and rejects everything else", () => {
     expect(parseExportCapture(null)).toBe('full');
     expect(parseExportCapture('full')).toBe('full');
     expect(parseExportCapture('card')).toBe('card');
+    expect(parseExportCapture('preview')).toBe('preview');
     for (const bad of ['', 'CARD', 'banner', 'viewport']) expect(parseExportCapture(bad)).toBeNull();
   });
 });

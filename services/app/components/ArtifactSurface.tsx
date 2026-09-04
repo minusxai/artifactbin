@@ -13,7 +13,7 @@
  * and Monaco, and a reader of a shared document must never pay for that.
  */
 import dynamic from '@/lib/dynamic';
-import { MessageSquare, Pencil } from 'lucide-react';
+import { Crop, MessageSquare, Pencil } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useArtifactOwner, useCanAnnotateArtifact, useCanEditArtifact } from '@/components/ArtifactShell';
 import AnnotationLayer from '@/components/AnnotationLayer';
@@ -43,6 +43,11 @@ import type { StoryIslandDataflow } from '@/lib/story-runtime/contract';
 const ArtifactEditor = dynamic(() => import('@/components/ArtifactEditor'), {
   ssr: false,
   loading: () => <p className="mt-10 text-center text-xs text-faint">loading the editor…</p>,
+});
+
+const SocialPreviewDialog = dynamic(() => import('@/components/SocialPreviewDialog'), {
+  ssr: false,
+  loading: () => <p className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 font-mono text-xs text-white">loading preview…</p>,
 });
 
 export interface ArtifactSurfaceProps {
@@ -167,6 +172,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const [railOpen, setRailOpen] = useState(false);
   /** `?intent=fork` asked for a copy; the dialog asks the person (lib/intent). */
   const [forkAsked, setForkAsked] = useState(false);
+  const [socialPreviewOpen, setSocialPreviewOpen] = useState(false);
   /** Desktop comments reserve a rail; on a phone the same surface is a sheet. */
   const phone = useIsPhoneViewport();
   /** A reading preference, separate from the author's stored default. */
@@ -982,15 +988,28 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             take a copy of what they can read. */}
         <ForkArtifact id={id} variant="menu" />
         {canEdit && format === 'markup' && (
-          <button
-            type="button"
-            aria-label="Edit artifact"
-            onClick={() => { close(); enterEdit(); }}
-            className={CONTROL_ROW}
-          >
-            <Pencil size={14} strokeWidth={1.75} />
-            edit artifact
-          </button>
+          <>
+            <button
+              type="button"
+              aria-label="Edit artifact"
+              onClick={() => { close(); enterEdit(); }}
+              className={CONTROL_ROW}
+            >
+              <Pencil size={14} strokeWidth={1.75} />
+              edit artifact
+            </button>
+            {shownSource !== null && (
+              <button
+                type="button"
+                aria-label="Edit social preview"
+                onClick={() => { close(); setSocialPreviewOpen(true); }}
+                className={CONTROL_ROW}
+              >
+                <Crop size={14} strokeWidth={1.75} />
+                social preview
+              </button>
+            )}
+          </>
         )}
       </section>
 
@@ -1168,6 +1187,15 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           />
         )}
         {forkAsked && <ForkConfirm id={id} title={shownTitle} onClose={() => setForkAsked(false)} />}
+        {socialPreviewOpen && shownSource !== null && (
+          <SocialPreviewDialog
+            id={id}
+            source={shownSource}
+            editId={live?.editId ?? editId}
+            version={live?.version ?? version}
+            onClose={() => setSocialPreviewOpen(false)}
+          />
+        )}
       </>
     );
   }

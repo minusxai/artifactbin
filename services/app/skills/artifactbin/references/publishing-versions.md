@@ -38,7 +38,7 @@ reference (an image, a dataset) answers `409 has_dependents`; re-send with
 ```
 GET [[ base ]]/a/<id>/export             → image/png of the fully rendered page
 GET [[ base ]]/a/<id>/export?format=jpg  → image/jpeg
-GET [[ base ]]/a/<id>/export?mode=card   → 1600×840 top-viewport card (the og:image)
+GET [[ base ]]/a/<id>/export?mode=card   → 1600×840 social preview card (the og:image)
 GET [[ base ]]/a/<id>/export?slide=2     → just slide 2 of a deck (1-based, one screen)
 ```
 
@@ -48,7 +48,8 @@ slide stacked, and each is too small to read. A slide past the end answers
 are.
 
 Rendered on demand in a server-side headless browser — full page at 1200px
-wide, repeat fetches cached until the artifact changes. Fetch it to eyeball
+wide, repeat fetches cached until the artifact changes. Owners and editors can
+set the card's locked 40:21 frame from the artifact controls. Fetch it to eyeball
 your own output ONLY IF YOU CAN VIEW IMAGES — otherwise read the stored markup
 back instead (a 200 write has already validated the document, and a harness
 that cannot take an image fails the whole run on one). Also use it to hand your

@@ -22,3 +22,8 @@ charts** — real tooltips and hover, themed to the story, rendered by a
 runtime served from this origin (the CSP still blocks all external hosts,
 and expression evaluation uses the AST interpreter, never `eval`). The full
 component reference lives at `GET /docs/artifactbin/references/markup.md`.
+
+The owner/editor “social preview” control stores its locked 40:21 framing as
+`<meta name="artifactbin:og-crop" content="x=…;y=…;width=…" />` in `<Helmet>`.
+Coordinates use the document's canonical 1600px-wide layout; crop height is
+derived from width, and removing the meta restores the top-left default.
