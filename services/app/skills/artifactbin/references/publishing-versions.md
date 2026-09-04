@@ -1,7 +1,7 @@
 ---
 name: publishing-versions
 description: >-
-  Version history, revert, delete, PNG export. Read to undo an edit, remove an artifact or hand over an image.
+  Version history, revert, delete/restore, PNG export. Read to undo an edit, remove one or hand over an image.
 order: 4
 ---
 ## Read first
@@ -21,14 +21,17 @@ missing/non-integer `version` is `400 version_required`; a checkpoint that was
 never archived (save-less edits coalesce) is `409 version_not_archived` — the
 list above shows the real ones.
 
-## Delete an artifact
+## Delete an artifact (it goes to the trash)
 
 ```
-DELETE [[ base ]]/api/artifacts/<id>
-→ 200 { "ok": true }
+DELETE [[ base ]]/api/artifacts/<id>          → 200 { "ok": true }
+POST   [[ base ]]/api/artifacts/<id>/restore  → 200 { "id", "url", "parent_id" }
 ```
 
-Permanent: the public link dies and version history is erased. Confirm with
+The link stops working at once, and the artifact is recoverable for 30 days,
+after which it is deleted for good. A FOLDER takes everything under it, and
+restore brings the whole subtree back — if the folder it lived in is itself
+still deleted, it comes back at your root and the answer says so. Confirm with
 your user before deleting anything they shared. An artifact other documents
 reference (an image, a dataset) answers `409 has_dependents`; re-send with
 `?force=true` to break them knowingly.

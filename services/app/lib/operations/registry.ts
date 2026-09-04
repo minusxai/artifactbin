@@ -136,6 +136,15 @@ const CONTENT_FIELDS = {
 /** The placement refusals, stated once. One code covers every way a parent can be wrong. */
 const INVALID_PARENT: OperationError = { status: 400, code: 'invalid_parent', fix: "parent_id must be the id of a FOLDER you own, not inside the thing you are moving, and no more than 6 levels deep — one code on purpose, because naming which would reveal whether an id exists. Create a folder with {\"format\":\"folder\"}" };
 const FOLDER_RETIRED: OperationError = { status: 400, code: 'folder_retired', fix: "the `folder` path field is gone — send parent_id: the id of a folder artifact (create one with format: 'folder')" };
+/**
+ * GOVERNANCE IS THE OWNER'S. The replace door runs under `editorScope`, so a
+ * named editor reaches it — and `visibility`/`access` decide who else may read
+ * the document and write its rows, which is not what they were invited to do.
+ * Every other governance surface is owner-scoped and answers them the uniform
+ * 404 instead, which is why this code exists on exactly one door.
+ */
+const OWNER_ONLY: OperationError = { status: 403, code: 'owner_only', fix: "visibility and access belong to the artifact's owner — you hold an editor share on it, so send the update without them" };
+
 const NOT_FORKABLE: OperationError = { status: 400, code: 'not_forkable', fix: "a folder cannot be forked — create your own with {\"format\":\"folder\"} and file documents under it with parent_id" };
 
 const INVALID_JSX: OperationError = { status: 400, code: 'invalid_jsx', fix: 'details names each problem with its span; a refused tag answer carries allowed_html_tags — pick from it' };
@@ -191,6 +200,7 @@ const updateArtifactOp: Operation = {
   },
   errors: [
     NOT_FOUND,
+    OWNER_ONLY,
     { status: 409, code: 'version_conflict', fix: 'someone wrote meanwhile — re-read, merge, retry with the reported currentVersion' },
     ...CONTENT_ERRORS,
   ],
