@@ -1,12 +1,17 @@
 # syntax=docker/dockerfile:1
 
-# THE BROWSER SERVICE AS AN IMAGE — Chromium in a process of its own, for the
-# split shape (`BROWSER__SERVICE_URL`). One ESM bundle over this workspace's
-# own lean dependency closure: no app, no DuckDB, no build toolchain at runtime.
+# THE EVENTS SERVICE AS AN IMAGE — the log of what happened in a process of its
+# own, for the split shape (`EVENTS__SERVICE_URL`). One ESM bundle over this
+# workspace's own lean dependency closure: no app, no DuckDB, no Playwright, no
+# build toolchain at runtime — a `pg` client and an HTTP shell.
+#
+# The ONE stateful lean image: it owns its schema and is the log's only writer,
+# so it boots against `DATABASE_URL` as its own role and fails loudly when it
+# cannot reach it.
 #
 # Build from the REPO ROOT — the builder installs the whole workspace tree
 # (the bundler needs the toolchain), the runtime only this package:
-#   docker build -f services/browser/Dockerfile -t artifactbin-browser .
+#   docker build -f services/events/Dockerfile -t artifactbin-events .
 
 FROM node:22 AS builder
 
@@ -33,15 +38,14 @@ COPY services ./services
 # The bundler and the externals list it reads — the whole `scripts/` tree is
 # NOT needed, and copying it would bust the install layer's cache for nothing.
 COPY scripts/build-server.mjs scripts/runtime-externals.mjs ./scripts/
-RUN node scripts/build-server.mjs dist/browser.mjs services/browser/src/server.ts
+RUN node scripts/build-server.mjs dist/events.mjs services/events/src/server.ts
 
 FROM node:22-slim
 
 WORKDIR /app
 
 ENV NODE_ENV=production \
-    APP__PORT=8080 \
-    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+    APP__PORT=8080
 
 COPY package.json package-lock.json ./
 COPY services/contracts/package.json ./services/contracts/package.json
@@ -53,43 +57,28 @@ COPY services/events/package.json ./services/events/package.json
 COPY services/proxy/package.json ./services/proxy/package.json
 
 # THE LEAN INSTALL, by npm's own resolution — never a hand-written list: the
-# workspace filter installs only this package's closure (measured: 8 packages,
-# playwright + playwright-core and nothing else of the natives). The assertions
-# are part of the image, and a filtered install that grows the wrong package
-# fails the BUILD, not a boot.
-RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --omit=dev --ignore-scripts -w services/browser --cache /root/.npm \
-    # Playwright present — the service drives Chromium through it.
-    && test -d node_modules/playwright \
-    # …and the engine the sql image owns must NOT ride along.
+# workspace filter installs only this package's closure. The assertions are part
+# of the image, and a filtered install that grows the wrong package fails the
+# BUILD, not a boot.
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --omit=dev --ignore-scripts -w services/events --cache /root/.npm \
+    # `pg` is the ONE runtime dependency the bundle leaves external (it resolves
+    # its own files from real paths) — without it the server dies at line one.
+    && test -d node_modules/pg \
+    # …and neither native the other images own may ride along.
+    && test ! -e node_modules/playwright \
     && test ! -e node_modules/@duckdb
 
-# THE DRIVER FIRST, and only the driver (the root Dockerfile's cache lesson):
-# keyed on the two packages the install reads, a dependency change elsewhere
-# leaves this layer CACHED instead of re-downloading Chromium. The version
-# guarantee is intact — the browser is installed BY the playwright that will
-# drive it. `--with-deps` apt-installs the browser's shared libraries.
 COPY services ./services
 
-COPY --from=builder /app/node_modules/playwright ./node_modules/playwright
-COPY --from=builder /app/node_modules/playwright-core ./node_modules/playwright-core
-# THE HEADLESS SHELL, and only the shell: measured (docker top, mid-render)
-# the service's `chromium.launch({ headless: true })` runs
-# /ms-playwright/chromium_headless_shell-*/headless_shell — the full Chromium
-# `playwright install chromium` also downloads is 641MB this process never
-# launches. Installing exactly what runs keeps the image under its size
-# budget with room to spare; scripts/image-checks.mjs's render probe is the
-# guard that what is installed is what launches.
-RUN node node_modules/playwright/cli.js install --with-deps chromium-headless-shell \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY --from=builder /app/dist/browser.mjs ./browser.mjs
+COPY --from=builder /app/dist/events.mjs ./events.mjs
 
 EXPOSE 8080
 
-# /health is the shell's one GET (services/browser CONTRACT.md) — the Docker
-# HEALTHCHECK and the compose `depends_on` condition.
+# /health is the shell's one GET (services/events CONTRACT.md), answered before
+# the secret guard — the Docker HEALTHCHECK and the compose `depends_on`
+# condition.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:8080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 USER node
-CMD ["node", "browser.mjs"]
+CMD ["node", "events.mjs"]
