@@ -168,7 +168,12 @@ services:
       dockerfile: services/events/Dockerfile
     image: artifactbin-lean-events
     restart: unless-stopped
-    networks: [compute, db]
+    # `edge` is the network of PUBLISHED doors, and the log has one (below): a
+    # container attached only to `internal: true` networks cannot publish a port
+    # at all — measured on this file, where the binding is set on the container
+    # and NetworkSettings.Ports is null, while the proxy on `edge` publishes
+    # fine. compute is how the app reaches it; db is its own database.
+    networks: [edge, compute, db]
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
