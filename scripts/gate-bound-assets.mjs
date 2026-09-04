@@ -63,6 +63,14 @@ const TWO = `${WEB}/pic2.png?run=${RUN}`;
  * the development switch that admits loopback, which is why it is the refusal
  * this gate picks rather than a merely dead URL. */
 const BAD = 'http://169.254.169.254/latest/meta-data/x.png';
+/*
+ * A `data:` image — which the served document's own `img-src 'self' data: blob:`
+ * would happily RENDER, and which used to. The mapping refuses it now: a bound
+ * `src` is set by the runtime directly and so goes round the interpreter's own
+ * dangerous-scheme filter, so what a binding may become is decided by the
+ * mapping rather than left to the policy that happens to catch it.
+ */
+const DATA_URL = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCI+PHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjYzMzIi8+PC9zdmc+';
 
 const owner = await startDocument(B);
 const auth = { 'Content-Type': 'application/json', Authorization: `Bearer ${owner.token}` };
@@ -74,6 +82,7 @@ const markup = `<Helmet><Value name="pick" type="string" default="${ONE}" /></He
   + `<option value="${ONE}">one</option>`
   + `<option value="${TWO}">two</option>`
   + `<option value="${BAD}">bad</option>`
+  + `<option value="${DATA_URL}">data</option>`
   + '</select>'
   + '</div>';
 
@@ -164,6 +173,28 @@ const refused = await page.evaluate(async () => {
 ok(refused.mark === 'refused', `a refused URL is marked (data-mx-asset=${refused.mark})`);
 ok(refused.src === null, 'it carries no src, so the browser draws the alt text');
 ok(refused.alt === 'the pick', 'the alt text is still the author\'s');
+
+/*
+ * …and a `data:` value, which the document's own img-src WOULD render. It used
+ * to: the mapping passed a non-web value through and the policy decided. Now
+ * the mapping decides, so a binding can only ever become a source we imported.
+ */
+await page.selectOption('select[aria-label="pick"]', DATA_URL);
+const dataShot = await page.evaluate(async () => {
+  const deadline = Date.now() + 5000;
+  const read = () => {
+    const img = document.querySelector('img[alt="the pick"]');
+    return { src: img?.getAttribute('src') ?? null, mark: img?.getAttribute('data-mx-asset') ?? null, natural: img ? img.naturalWidth : -1 };
+  };
+  while (Date.now() < deadline) {
+    const s = read();
+    if (s.mark === 'refused') return s;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return read();
+});
+ok(dataShot.mark === 'refused' && dataShot.src === null, `a data: value is refused by the MAPPING, not left to the policy (${JSON.stringify(dataShot)})`);
+ok(dataShot.natural !== 40, 'and it never painted');
 
 // THE HEADLINE: the page never reached the source host itself.
 ok(outbound.length === 0, `zero requests from the page to the source host (${outbound.length})`);

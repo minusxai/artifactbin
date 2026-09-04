@@ -228,3 +228,42 @@ describe('with an importing transport (a framed document)', () => {
     expect(img(container).getAttribute('src')).toBe(`/assets/${urlHash(CAT)}`);
   });
 });
+
+/**
+ * …and the same refusal where a reader would meet it. Each of these was
+ * measured reaching `<img src>` verbatim before the mapping said no: the
+ * document's CSP blocked three of them and React blocked the fourth, so
+ * nothing ever leaked — but the bound path sets `src` itself, going round the
+ * interpreter's own dangerous-scheme filter, and a backstop is not a mechanism.
+ */
+describe('a bound value that is not a web URL', () => {
+  for (const [name, value] of [
+    ['protocol-relative', '//cdn.example.com/evil.png'],
+    ['javascript:', 'javascript:alert(1)'],
+    ['a relative path', '/local/evil.png'],
+    ['data:', 'data:image/svg+xml;base64,PHN2Zy8+'],
+  ] as const) {
+    it(`is refused and shows the alt text — ${name}`, () => {
+      const { container } = render(app('<img src="$pick" alt="nothing to show" />', { pick: value }));
+      expect(img(container).hasAttribute('src')).toBe(false);
+      expect(img(container).getAttribute('data-mx-asset')).toBe('refused');
+      expect(img(container).getAttribute('alt')).toBe('nothing to show');
+      // …and the value itself never appears anywhere in the DOM.
+      expect(container.innerHTML).not.toContain(value);
+    });
+  }
+
+  it('refuses it in a framed document too — the page is never asked to import it', async () => {
+    const asked: string[] = [];
+    const { nodes, dataflow } = build('<img src="$pick" alt="a" />', { pick: 'javascript:alert(1)' });
+    const { container } = render(
+      <StoryRuntimeApp
+        nodes={nodes} refData={{}} dataflow={dataflow} colorMode="light" assetsUrl={ASSETS_URL}
+        importAsset={async (u) => { asked.push(u); return { url: '/assets/x' }; }}
+      />,
+    );
+    await act(async () => { await Promise.resolve(); });
+    expect(asked).toEqual([]);
+    expect(img(container).getAttribute('data-mx-asset')).toBe('refused');
+  });
+});

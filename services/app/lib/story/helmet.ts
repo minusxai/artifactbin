@@ -308,7 +308,8 @@ export function declaresLiveData(source: string | null | undefined): boolean {
  * braced `src="https://cdn.x.com/{$pick}.png"`?
  *
  * The third reader interaction that reaches the server, and the only one that
- * lives in the BODY rather than in `<Helmet>`. The URL a reader picks is
+ * lives in the BODY rather than in `<Helmet>`, which is why it is a tree walk
+ * here rather than a field of the split above. The URL a reader picks is
  * imported through `/a/<id>/assets`, and the frame cannot load that for itself:
  * a served document is sandboxed without `allow-same-origin`, so its `<img>`
  * carries no cookie, and a private document answers the uniform 404 — for its
@@ -317,18 +318,13 @@ export function declaresLiveData(source: string | null | undefined): boolean {
  * its parent page, where the session is, precisely as one declaring a query
  * does (lib/story-runtime/contract STORY_ASSET_MESSAGE).
  *
- * Parsed, never pattern-matched, and never throwing: `$pick` in prose is prose,
- * a literal URL is not a binding (publish already imported it), and source that
- * does not parse declares nothing. `carriesRef` is the dataflow's own answer to
- * "is this a reference", so this cannot drift from what the renderer binds.
+ * Private to this module and reached through `declaresLiveData` alone: the one
+ * question anybody asks is that one, and a second exported spelling of half an
+ * answer is a second thing to keep in step. `carriesRef` is the dataflow's own
+ * answer to "is this a reference", so this cannot drift from what the renderer
+ * binds; the nodes are the ones `declaresLiveData` already parsed, so a
+ * document pays one parse, not two, on every read.
  */
-export function declaresBoundSources(source: string | null | undefined): boolean {
-  if (!source) return false;
-  const parsed = parseJsx(source);
-  if (!parsed.ok) return false;
-  return hasBoundSource(splitHelmet(parsed.nodes).body);
-}
-
 const hasBoundSource = (nodes: JsxNode[]): boolean => nodes.some((n) => {
   if (n.type !== 'element') return false;
   if (!n.isComponent && n.tag.toLowerCase() === 'img') {

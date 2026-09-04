@@ -173,6 +173,8 @@ function RuntimeBoundSource({ props, template }: BoundSourceProps) {
    * ever swapped for another address of the same picture.
    */
   useEffect(() => {
+    // `isWebUrl` here for the same reason `runtimeAssetUrl` refuses one: a value
+    // we would not import is not a value to ask the page about either.
     if (!importAsset || !url || !isWebUrl(url) || relayed.has(url) || refused.has(url)) return;
     let live = true;
     void importAsset(url).then((answer) => {
@@ -189,13 +191,21 @@ function RuntimeBoundSource({ props, template }: BoundSourceProps) {
 
   const held = url === null ? undefined : relayed.get(url);
   const mapped = held ?? (url === null ? null : runtimeAssetUrl(url, (u) => seen.has(u), endpoint));
-  // A web URL that came back unchanged is one there is no endpoint to import
-  // it through — a rail preview, a canvas. It renders STATIC rather than
-  // reaching the third-party host: not importing it is the whole point, and in
-  // a served document its own CSP would refuse the load anyway.
+  /*
+   * A web URL that came back unchanged is one there is no endpoint to import it
+   * through — a rail preview, a canvas. It renders STATIC rather than reaching
+   * the third-party host: not importing it is the whole point.
+   *
+   * A NULL is the mapping refusing the value outright (not an http(s) URL at
+   * all), which is a REFUSAL a reader should see named, not a quiet blank: the
+   * bound path sets `src` itself and so goes round the interpreter's own
+   * scheme filter, and this is where that is answered.
+   */
   const unmappable = url !== null && !held && mapped === url && isWebUrl(url) && !importAsset;
-  if (url === null || unmappable || refused.has(url)) {
-    return <img {...props} data-mx-bound={`src:${template}`} {...(url !== null && refused.has(url) ? { 'data-mx-asset': 'refused' } : {})} />;
+  const notASource = url !== null && !held && mapped === null;
+  if (url === null || unmappable || notASource || refused.has(url)) {
+    const marked = url !== null && (notASource || refused.has(url));
+    return <img {...props} data-mx-bound={`src:${template}`} {...(marked ? { 'data-mx-asset': 'refused' } : {})} />;
   }
   return (
     <img
@@ -482,6 +492,8 @@ function DataTableAdapter(props: Record<string, unknown>) {
   // served from the same place and imported through the same door.
   const { endpoint, seen } = useContext(RuntimeAssetContext);
   const resolveSrc = useMemo(() => (url: string) => {
+    // Null both ways: the mapping refused the value, or there is no endpoint to
+    // import a web URL through. Either way the cell stays text (kit data-table).
     const mapped = runtimeAssetUrl(url, (u) => seen.has(u), endpoint);
     return mapped === url && isWebUrl(url) ? null : mapped;
   }, [endpoint, seen]);

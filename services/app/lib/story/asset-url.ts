@@ -94,12 +94,26 @@ export const isWebUrl = (value: string): boolean => WEB_URL.test(value);
  * (#418). Both ends start knowing nothing; the browser learns, and only later
  * renders benefit.
  *
+ * NULL is the refusal, and it is the MECHANISM rather than a backstop. Anything
+ * that is not an absolute `http(s)` URL — a protocol-relative `//host/x`, a
+ * `javascript:`, a relative path, even a `data:` the document's own `img-src`
+ * would happily render — is not a source we can import, so it never becomes an
+ * `<img src>` and the reader gets the alt text.
+ *
+ * That matters beyond tidiness: a bound `src` is set by the runtime DIRECTLY,
+ * which routes around the interpreter's own dangerous-scheme filter
+ * (`buildProps` drops the attribute and `RuntimeBoundSource` sets it again) —
+ * the one defence-in-depth layer lib/story-ui/interpreter.tsx's header promises
+ * to keep. The served document's CSP and React's refusal of `javascript:` do
+ * stop every shape in practice (measured: zero third-party requests), but a
+ * policy that happens to hold is not the same thing as a rule that says no.
+ *
  * With no endpoint (a render that is not a served document — a rail preview, a
- * canvas) the URL comes back untouched and the caller decides; a non-web value
- * (a `data:` URL, a relative path) was never ours to map.
+ * canvas) a web URL comes back untouched and the caller decides what to do with
+ * it; that is the one case where this answers something it cannot serve.
  */
-export function runtimeAssetUrl(url: string, known: AssetLookup, endpoint: string | null | undefined): string {
-  if (!isWebUrl(url)) return url;
+export function runtimeAssetUrl(url: string, known: AssetLookup, endpoint: string | null | undefined): string | null {
+  if (!isWebUrl(url)) return null;
   if (known(url)) return assetUrlFor(url);
   if (!endpoint) return url;
   // The endpoint may already carry a query (a CAPTURE's `?key=` — the only

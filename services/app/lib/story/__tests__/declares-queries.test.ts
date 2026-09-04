@@ -17,7 +17,7 @@
  *    escaped text), and must never throw here — this runs on every read.
  */
 import { describe, expect, it } from 'vitest';
-import { declaresBoundSources, declaresLiveData, declaresQueries } from '@/lib/story/helmet';
+import { declaresLiveData, declaresQueries } from '@/lib/story/helmet';
 
 const helmet = (inner: string) => `<Helmet>${inner}</Helmet><div><h1>Doc</h1></div>`;
 
@@ -49,8 +49,10 @@ describe('declaresQueries', () => {
 });
 
 /**
- * `declaresBoundSources` — the THIRD reader interaction that reaches the
- * server, and the one that is not in `<Helmet>` at all.
+ * A BOUND IMAGE SOURCE — the THIRD reader interaction that reaches the server,
+ * and the one that is not in `<Helmet>` at all. Asked through
+ * `declaresLiveData`, which is the only question anyone puts to this module:
+ * "does a reader's interaction with this document need the server?"
  *
  * A bound `<img src="$pick">` imports the URL a reader picked through
  * `/a/<id>/assets`, and the frame cannot load that itself: it is opaque-origin,
@@ -62,9 +64,9 @@ describe('declaresQueries', () => {
  * prose is prose; a literal URL is not a binding (publish already imported it);
  * and source that does not parse declares nothing and never throws.
  */
-describe('declaresBoundSources', () => {
-  const yes = (s: string) => expect(declaresBoundSources(s)).toBe(true);
-  const no = (s: string) => expect(declaresBoundSources(s)).toBe(false);
+describe('a bound image source, through declaresLiveData', () => {
+  const yes = (s: string) => expect(declaresLiveData(s)).toBe(true);
+  const no = (s: string) => expect(declaresLiveData(s)).toBe(false);
 
   it('counts a whole-attribute binding and the braced form alike', () => {
     yes('<Helmet><Value name="pick" type="string" /></Helmet><div><img src="$pick" /></div>');
@@ -83,7 +85,7 @@ describe('declaresBoundSources', () => {
 
   it('is false for nothing and for source that does not parse', () => {
     no('');
-    expect(declaresBoundSources(null)).toBe(false);
+    expect(declaresLiveData(null)).toBe(false);
     no('<div><p>unclosed');
   });
 });

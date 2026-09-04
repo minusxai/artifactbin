@@ -14,6 +14,7 @@ import {
   carriesRef, collectRefNameUses, isTemplateRefPosition, REF_ATTRS, resolveRefTemplate, templateRefNames,
   validateDataflow, type Dataflow, type Scalar,
 } from '@/lib/story/dataflow';
+import { assetUrlFor, runtimeAssetUrl } from '@/lib/story/asset-url';
 
 const nodes = (source: string): JsxNode[] => {
   const parsed = parseJsx(source);
@@ -109,5 +110,55 @@ describe('resolveRefTemplate — the one function both ends render from', () => 
 
   it('leaves a string carrying no reference exactly as it is', () => {
     expect(resolveRefTemplate('https://cdn.x.com/fixed.png', get({}))).toBe('https://cdn.x.com/fixed.png');
+  });
+});
+
+/**
+ * THE MAPPING IS WHAT SAYS NO. A bound `src` is set by the runtime directly,
+ * which means it goes round the interpreter's own dangerous-scheme filter
+ * (`buildProps` drops the attribute; `RuntimeBoundSource` sets it again) — the
+ * one defence-in-depth layer the interpreter's header promises to keep. The
+ * served document's CSP and React's `javascript:` refusal do stop every shape
+ * in practice, measured, but a backstop is not a mechanism: anything that is
+ * not an absolute http(s) URL is not a source we can import, so the mapping
+ * refuses it and the reader gets the alt text.
+ */
+describe('runtimeAssetUrl refuses anything that is not a web URL', () => {
+  const known = () => false;
+  const ENDPOINT = '/a/abc123/assets';
+
+  it('maps an http(s) URL to the document endpoint', () => {
+    expect(runtimeAssetUrl('https://cdn.x.com/cat.png', known, ENDPOINT))
+      .toBe(`${ENDPOINT}?u=${encodeURIComponent('https://cdn.x.com/cat.png')}`);
+    expect(runtimeAssetUrl('http://cdn.x.com/cat.png', known, ENDPOINT)).toContain('?u=');
+  });
+
+  it('answers null for every other shape a value can take', () => {
+    for (const hostile of [
+      '//cdn.x.com/cat.png',                    // protocol-relative: the browser's scheme, not ours
+      'javascript:alert(1)',
+      'data:image/svg+xml;base64,PHN2Zy8+',     // admitted by img-src, still not something we import
+      '/local/path.png',
+      'cat.png',
+      'ref:abc123',
+      'FILE:///etc/passwd',
+      '',
+    ]) {
+      expect(runtimeAssetUrl(hostile, known, ENDPOINT)).toBeNull();
+    }
+  });
+
+  it('still answers our own address for a URL the caller knows we hold', () => {
+    expect(runtimeAssetUrl('https://cdn.x.com/cat.png', () => true, ENDPOINT))
+      .toBe(assetUrlFor('https://cdn.x.com/cat.png'));
+  });
+
+  it('leaves a web URL alone when there is no endpoint to import through', () => {
+    expect(runtimeAssetUrl('https://cdn.x.com/cat.png', known, null)).toBe('https://cdn.x.com/cat.png');
+  });
+
+  it('appends to an endpoint that already carries a query (a capture\'s key)', () => {
+    expect(runtimeAssetUrl('https://cdn.x.com/cat.png', known, `${ENDPOINT}?key=abc`))
+      .toBe(`${ENDPOINT}?key=abc&u=${encodeURIComponent('https://cdn.x.com/cat.png')}`);
   });
 });
