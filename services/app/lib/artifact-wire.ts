@@ -10,7 +10,7 @@
  * answer with the same shape (`edit_id` and refresh `warnings` included).
  */
 import {
-  DATASET_ACCESS, SHARE_ROLES, artifactQuotaExceeded, byteQuotaFor, canWriteDataset, createArtifact, fontResolver, getArtifactFor, assetImporterFor, isVersionConflict, refLoaderForActor, refreshWarningsFor, replaceArtifactFor, writerFor,
+  DATASET_ACCESS, SHARE_ROLES, artifactQuotaExceeded, byteQuotaFor, canWriteDataset, createArtifact, fontResolver, getArtifactFor, getOwnedArtifactFor, assetImporterFor, isVersionConflict, refLoaderForActor, refreshWarningsFor, replaceArtifactFor, writerFor,
   type ArtifactInput, type ArtifactRow, type ArtifactSummary, type DatasetAccess, type EditInput, type EditOutcome, type ReplaceOpts, type ShareEntry, type ShareRole, type TokenActor, type Visibility,
 } from '@/lib/artifacts';
 import { actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type AnnotationAction, type AnnotationAuthor } from '@/lib/annotations';
@@ -24,7 +24,7 @@ import { canSetDatasetAccess } from '@/lib/features';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { json, readJson } from '@/lib/http';
 import { ID_RE } from '@/lib/ids-shape';
-import { isParentRefusal, parentOf, resolveParent } from '@/lib/folders';
+import { PARENT_REFUSED, isParentRefusal, parentOf, resolveParent } from '@/lib/folders';
 import { loadDatasetRows } from '@/lib/story/dataset-store';
 import { parseContentInput } from '@/lib/story/input';
 import { collectExternalAssetUrls } from '@/lib/story/external-images';
@@ -401,8 +401,26 @@ export async function replaceArtifactWithBody(
    * row this caller cannot reach is the uniform 404 whatever the body says,
    * and validating the parent first would answer 400 for an id that does not
    * exist for them, which is an existence oracle.
+   *
+   * …and it is the OWNER's verb, which this door alone has to say out loud:
+   * the replace scope is `editorScope`, so a named editor reaches this line,
+   * while every other way to move a row (the PATCH) is owner-scoped and
+   * refuses them with the uniform 404 before a parent is ever looked at. An
+   * editor may rewrite the document; filing it — into a folder of the owner's,
+   * or out to the root — is not theirs to do (lib/artifacts ownerScope: "delete,
+   * sharing, folder, dataset access, listing"). PLACEMENT only: `visibility` and
+   * `access` above are on `canGovern`'s list too and this door has always let an
+   * editor set them — a pre-existing gap, measured and reported, deliberately
+   * not widened into here. The second read is what asks, so the ONE ownership rule stays
+   * in SQL rather than being mirrored in JS here, and it is paid for only when
+   * a placement was actually asked for. The refusal is `invalid_parent`, which
+   * already conflates "not a folder you may file into" — there is no second
+   * code to learn, and it says nothing about whether the parent exists.
    */
-  const placement = parent === undefined ? undefined : await resolveParent(writerFor(current), parent, { id: current.id, format: current.format });
+  const mayPlace = parent === undefined || !!(await getOwnedArtifactFor(actor, id));
+  const placement = parent === undefined ? undefined
+    : mayPlace ? await resolveParent(writerFor(current), parent, { id: current.id, format: current.format })
+      : PARENT_REFUSED;
   if (placement && isParentRefusal(placement)) return json(placement, 400);
 
   const input: ArtifactInput = {

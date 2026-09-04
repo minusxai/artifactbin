@@ -148,6 +148,29 @@ describe('an editor edits through every write door, and nothing else', () => {
     // parent is ever looked at — which is also the ordering rule itself.
     expect((await patchMineRoute(jreq(`/api/my/artifacts/${id}`, 'PATCH', { parent_id: null }), params({ id }))).status).toBe(404);
     expect(await head(id)).toBeTruthy();
+
+    /*
+     * …and PLACEMENT is the same verb through the REPLACE door, which an
+     * editor DOES reach. `parent_id` on a PUT is owner-only (lib/artifacts
+     * ownerScope: "delete, sharing, folder, dataset access, listing"), so the
+     * editor's write is refused whole — `invalid_parent`, the one refusal
+     * that already means "not a folder you may file into" — and the document
+     * neither moves nor gains the version the rest of the body would have
+     * bought. Without this the editor could file the owner's document into
+     * any folder of theirs they can name, and `ancestor_ids` is in the
+     * read-back, so naming one is free.
+     */
+    asSession({ id: w.owner.id, email: w.owner.email });
+    const box = await create(w.ta.token, { format: 'folder', title: 'the owner\'s box' });
+    asSession({ id: w.bob.id, email: w.bob.email });
+    const before = (await head(id)).version;
+    for (const parent_id of [box.id, null]) {
+      const moved = await putMineRoute(jreq(`/api/my/artifacts/${id}`, 'PUT', { markup: PROSE2, parent_id }), params({ id }));
+      expect(moved.status, await moved.clone().text()).toBe(400);
+      expect(await moved.json()).toMatchObject({ error: 'invalid_parent' });
+    }
+    expect((await head(id)).ancestor_ids).toEqual([]);
+    expect((await head(id)).version).toBe(before);
   });
 
   it('bearer: the editor\'s CLAIMED token edits; an anonymous token and a stranger\'s token do not', async () => {

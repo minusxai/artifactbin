@@ -44,7 +44,13 @@ export const CHILDREN_COLUMNS: DatasetColumn[] = [
 /** One refusal for unknown, not-a-folder, not-yours, cycle and too deep — naming them apart is an existence oracle. */
 export type ParentRefusal = { error: 'invalid_parent' };
 
-const REFUSED: ParentRefusal = { error: 'invalid_parent' };
+/**
+ * The refusal itself, exported because one door answers it without ever
+ * reaching `resolveParent`: the replace path refuses a NON-OWNER's placement
+ * outright (lib/artifact-wire), and it must say the same word as every other
+ * way of not being allowed a parent, or the difference is an oracle.
+ */
+export const PARENT_REFUSED: ParentRefusal = { error: 'invalid_parent' };
 
 /** Narrow `resolveParent`'s answer: the refusal, or a placement. */
 export const isParentRefusal = (r: { ancestor_ids: string[] } | ParentRefusal): r is ParentRefusal => 'error' in r;
@@ -95,16 +101,16 @@ export async function resolveParent(
     [parentId, scope.val],
   );
   const parent = r.rows[0];
-  if (!parent || parent.format !== 'folder') return REFUSED;
+  if (!parent || parent.format !== 'folder') return PARENT_REFUSED;
   // The CYCLE, as one containment read on a row already in hand: a folder may
   // not move into itself, nor into anything already under it.
-  if (moved && (parent.id === moved.id || (parent.ancestor_ids ?? []).includes(moved.id))) return REFUSED;
+  if (moved && (parent.id === moved.id || (parent.ancestor_ids ?? []).includes(moved.id))) return PARENT_REFUSED;
 
   const level = (parent.ancestor_ids ?? []).length + 1;
   // The moved subtree's HEIGHT below the row itself. A document has none, and
   // neither has anything being created.
   const height = moved && moved.format === 'folder' ? await subtreeHeight(moved.id) : 0;
-  if (level + height >= MAX_FOLDER_DEPTH) return REFUSED;
+  if (level + height >= MAX_FOLDER_DEPTH) return PARENT_REFUSED;
   return { ancestor_ids: [...(parent.ancestor_ids ?? []), parent.id] };
 }
 
