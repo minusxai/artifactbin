@@ -102,12 +102,26 @@ async function main(): Promise<void> {
     setServices({ browser: createBrowser() });
   }
   if (!EVENTS_SERVICE_URL) {
-    // The log's schema is ensured LAZILY, on the first emit: here the database
-    // is the app's own (PGLite, or a Postgres it owns), so the DDL costs the
-    // boot nothing — the split shape's events container is where a database it
-    // cannot reach must fail the boot instead.
-    const { createEvents } = await import('@artifactbin/events/local');
+    const { backfillAnalyticsEvents, createEvents, ensureEventsSchema } = await import('@artifactbin/events/local');
     setServices({ events: createEvents({ db: queryable, schema: EVENTS_SCHEMA }) });
+    /*
+     * THE BOOT PAYS FOR THE SCHEMA HERE, not on the first emit as the writer
+     * alone would: the backfill has to INSERT into a table, so it has to exist
+     * before the statement runs. Both are idempotent — `ON CONFLICT (id) DO
+     * NOTHING` makes every boot after the first a no-op — and both are wrapped,
+     * because telemetry may cost a boot a round trip but never the boot itself.
+     * The database here is the app's own (PGLite, or a Postgres it owns), so it
+     * holds `analytics_events` too; a SPLIT deployment's events role has no read
+     * on the app schema, so its operator runs the same statement once by hand
+     * (services/events/CONTRACT.md).
+     */
+    try {
+      await ensureEventsSchema(queryable, EVENTS_SCHEMA);
+      const copied = await backfillAnalyticsEvents(queryable, { schema: EVENTS_SCHEMA, from: 'analytics_events' });
+      if (copied > 0) console.log(`[events] copied ${copied} legacy analytics rows into ${EVENTS_SCHEMA}.events`);
+    } catch (error) {
+      console.error('[events] the legacy analytics backfill failed:', error);
+    }
   }
 
   // The SPA: Vite in middleware mode for dev (modules, HMR, index transform); the built tree in production.

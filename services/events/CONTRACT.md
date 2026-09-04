@@ -50,3 +50,33 @@ Configuration (`loadEventsConfig`): `APP__PORT` (8080; 0 = ephemeral) · `APP__H
 
 Conformance: `__tests__/contract.test.ts` runs one suite over `createEvents({ db })` and over
 `eventsClient(serveEvents(createEvents({ db })))`, then the shell's own guards, the client's batching and the boot.
+
+## Backfilling a legacy analytics table
+
+A deployment that counted views in its own table before the log existed can copy that history in ONE idempotent
+statement. `backfillSql({ schema, from })` (from `./local`) returns the text; `backfillAnalyticsEvents(db, {
+schema, from })` runs it and resolves to the number of rows it took — 0 on every run after the first, because the
+ids are stable (`legacy:<seq>`) and the insert is `ON CONFLICT (id) DO NOTHING`. The single image runs it at every
+boot, right after it registers the writer.
+
+An operator runs it by hand instead, and runs it **as the database owner**: the events role has read on nothing
+but its own schema, on purpose, so it cannot see the app's table. `from` is the legacy table as that connection
+sees it — qualify it. Both names are interpolated, so both are refused unless they are plain identifiers
+(`from` may carry one dot).
+
+```sql
+INSERT INTO events.events (id, at, source, subject_kind, subject_id, verb, object_kind, object_id, payload)
+SELECT 'legacy:' || seq, created_at, 'app',
+       CASE WHEN visitor IS NULL THEN NULL ELSE 'visitor'::text END, visitor,
+       CASE event WHEN 'view' THEN 'viewed' WHEN 'export' THEN 'exported' WHEN 'create' THEN 'created' WHEN 'update' THEN 'updated' WHEN 'edit' THEN 'edited' WHEN 'mutate' THEN 'mutated' WHEN 'revert' THEN 'reverted' WHEN 'fork' THEN 'forked' WHEN 'delete' THEN 'deleted' END,
+       'artifact', artifact_id,
+       jsonb_strip_nulls(jsonb_build_object('user_id', user_id, 'client', client))
+  FROM app.analytics_events
+ WHERE event IN ('view', 'export', 'create', 'update', 'edit', 'mutate', 'revert', 'fork', 'delete')
+ ON CONFLICT (id) DO NOTHING
+```
+
+What the mapping says: the row keeps its time (`created_at`), its daily visitor hash as the subject (NULL stays
+NULL — such a row has nothing to dedupe on and counts once), its artifact as the object, and its account and
+client in the payload. A value the table above does not name is not copied: a connection (`sse_connect`) is not a
+moment anyone reads back.
