@@ -11,14 +11,16 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeEvents, type FakeEvents } from '@artifactbin/utils';
+import { createEvents } from '@artifactbin/events/local';
 import { useAppHarness } from '@/__tests__/harness';
 import { createArtifact, updateSharingFor } from '@/lib/artifacts';
+import { EVENTS_SCHEMA } from '@/lib/config';
 import { setServices } from '@/lib/services';
 import { mintToken, revokeHeldToken, revokeToken } from '@/lib/tokens';
 import { claimToken, claimTokenById, createUser, revokeUserToken } from '@/lib/users';
 import { mountRoutes } from '@/server/api';
 
-useAppHarness();
+const harness = useAppHarness();
 let fake: FakeEvents;
 /** A fresh log, so a fixture's own moments never count against the moment under test. */
 const listen = () => { fake = fakeEvents(); setServices({ events: fake }); };
@@ -118,5 +120,52 @@ describe('a route that throws', () => {
     expect(fake.events[0]).toMatchObject({ source: 'app', verb: 'failed', subject_kind: null, object_kind: 'route', object_id: 'GET /api/boom/:id', payload: { status: 500, method: 'GET' } });
     expect(JSON.stringify(fake.events[0])).not.toContain('secret4711');
     expect(JSON.stringify(fake.events[0]), 'the error text is the operator\'s log line, not a row').not.toContain('on fire');
+  });
+});
+
+/**
+ * THE ONE PLACE THE MINT MAY NOT AWAIT ITS OWN SENTENCE.
+ *
+ * `mintToken`'s third parameter exists so a caller ALREADY INSIDE a
+ * `db.transaction` can mint on that transaction's handle without re-entering
+ * the adapter. PGLite serialises its op queue behind an open transaction, so a
+ * log write that the callback AWAITS can never run: the transaction is waiting
+ * on the writer and the writer is waiting on the transaction. Fire-and-forget
+ * is not a style choice here — it is the difference between a mint that
+ * commits and a process that stops.
+ *
+ * This is the only test in the file that runs the REAL writer (the fake's
+ * push never touches the database, so it cannot deadlock and cannot prove
+ * anything). The cap is wall-clock: a deadlock does not fail, it hangs.
+ */
+describe('minting on a caller\'s transaction handle', () => {
+  /** Rejects rather than hanging the runner — a deadlock has no other symptom. */
+  const within = <T,>(ms: number, work: Promise<T>): Promise<T> => Promise.race([
+    work,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`deadlocked: nothing resolved in ${ms}ms`)), ms).unref?.()),
+  ]);
+
+  it('does not deadlock: the transaction commits, and the sentence lands after it', async () => {
+    const db = await harness.db();
+    // The REAL in-process writer, on this file's own database — exactly the
+    // registration `test/setup/vitest.setup.ts` makes for the whole suite.
+    setServices({
+      events: createEvents({
+        db: { query: async <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => (await harness.db()).query<T>(sql, params) },
+        schema: EVENTS_SCHEMA,
+      }),
+    });
+
+    const minted = await within(5_000, db.transaction(async (tx) => mintToken('inside', null, tx)));
+    expect(minted.name).toBe('inside');
+    // The INSERT the emit enqueued was behind the transaction; it lands once
+    // the commit lets the queue move.
+    await vi.waitFor(async () => {
+      const r = await db.query<{ n: string | number }>(
+        `SELECT COUNT(*) AS n FROM ${EVENTS_SCHEMA}.events WHERE verb = 'minted' AND object_id = $1`,
+        [minted.id],
+      );
+      expect(Number(r.rows[0]?.n ?? 0)).toBe(1);
+    });
   });
 });

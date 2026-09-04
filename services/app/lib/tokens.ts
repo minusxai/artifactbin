@@ -106,8 +106,15 @@ export async function mintToken(
    * learns of a credential coming into being in exactly one place. The subject
    * is the owning account when the token is born attached and nobody when it
    * is not; the plaintext token is returned to the caller and never said.
+   *
+   * NOT AWAITED, unlike every other state change in this file: `q` may be a
+   * TRANSACTION handle, and PGLite serialises its op queue behind an open
+   * transaction — an awaited log write would wait on a transaction that is
+   * waiting on it. Fired instead, so the writer's INSERT queues behind the
+   * commit and lands after it. `emit` never rejects, so the `void` cannot
+   * become an unhandled rejection.
    */
-  await emit(userId ? { kind: 'user', id: userId } : null, 'minted', { kind: 'token', id }, { name: name ?? null });
+  void emit(userId ? { kind: 'user', id: userId } : null, 'minted', { kind: 'token', id }, { name: name ?? null });
   return { id, name: name ?? null, token, expiresAt };
 }
 
