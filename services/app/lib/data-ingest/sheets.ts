@@ -36,6 +36,17 @@ export async function fetchSheetCsv(url: string): Promise<string> {
     throw new IngestError('fetch_failed', `Could not reach Google Sheets: ${(error as Error).message}`);
   }
 
+  // GOOGLE REFUSING US IS NOT THE AUTHOR'S SHARING SETTINGS. A 429 or a 5xx is
+  // Google declining to answer — throttling, an outage — and says nothing about
+  // the sheet, so reporting it as "not publicly readable" sends someone to fix
+  // a share setting that was never wrong. Measured: CI's `data-ingest` gate
+  // went red twice against Google's OWN public sample sheet, on both the first
+  // run and the retry alone. A 403 is deliberately NOT in this set — that is
+  // what a genuinely private sheet answers, and it is the common case.
+  if (res.status === 429 || res.status >= 500) {
+    throw new IngestError('fetch_failed', `Google Sheets refused the request (${res.status}) — this is about reaching Google, not about the sheet. Try again shortly.`);
+  }
+
   // The content-type check is the load-bearing guard. A sheet that is not
   // shared answers 404 with text/html, and a private one can answer 200 with a
   // sign-in page; both would otherwise be stored verbatim as a "dataset".
