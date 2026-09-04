@@ -17,6 +17,7 @@
  * the banned-css sanitizer as belt, then the compile.
  */
 import { syntaxErrorDetail } from '@/lib/jsx/syntax-error';
+import { repairJsxSource } from '@/lib/jsx/repair';
 import { parseJsx, serializeJsx, validateJsx } from '@/lib/jsx';
 import { hoistHelmet, splitHelmet, validateHelmet } from '@/lib/story/helmet';
 import { fixHtmlNesting } from '@/lib/story/nesting';
@@ -87,7 +88,19 @@ export function canonicalizeMarkup(source: string): string {
 }
 
 export async function publishJsx(body: Record<string, unknown>, sourceIn: string, ctx: ContentInputCtx = {}): Promise<StoredContent | Response> {
-  const source = sourceIn;
+  /*
+   * REPAIR FIRST, above everything that reads the source. The one fault we fix
+   * rather than refuse is the shell-escaped backtick (lib/jsx/repair — it costs
+   * an agent minutes and cannot be meant), and it has to happen before the
+   * asset scan below: that scan has SIDE EFFECTS (it fetches URLs), so
+   * repairing afterwards would import twice. Free for every document that does
+   * not carry the sequence.
+   */
+  const repaired = repairJsxSource(sourceIn);
+  const source = repaired ? repaired.source : sourceIn;
+  const repairs = repaired ? [repaired.repair] : [];
+  /** What the door changed, for the reply — absent when it changed nothing. */
+  const repairsEcho = repairs.length ? { repairs } : {};
   const theme = body.theme ?? null;
   // Retired names are rejected BY NAME with a hint naming the successor —
   // stored rows alias forward at read time (resolveStoredStoryDesign), but a
@@ -262,6 +275,7 @@ export async function publishJsx(body: Record<string, unknown>, sourceIn: string
     },
     derivedTitle: helmetTitle?.trim() || null,
     ...(warnings.length ? { warnings } : {}),
+    ...repairsEcho,
   };
 }
 

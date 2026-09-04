@@ -76,10 +76,29 @@ function readBackCall(base: string, transport: DocTransport): string {
 }
 
 /** The auth rule, per transport: MCP is authenticated by the connection; HTTP by the bearer on every call. */
-function authRule(transport: DocTransport): string {
+/**
+ * AUTH, AND THE ONE THING TO DO WHEN THERE IS NO TOKEN.
+ *
+ * The rule that an agent with no credential must STOP and hand its human a
+ * DOOR — the token page, or the plugin/MCP that needs no token at all — lived
+ * only in `publishing-auth.md`. Measured on the CI eval (run 33874008704): an
+ * agent read the brief, correctly concluded it had no token, refused, did not
+ * self-mint and did not fabricate — and then said only "please provide a
+ * bearer token", because it had read one file and made one request and so had
+ * never seen the door. `/api` was never called, so the 403 that carries the
+ * ladder never arrived either. A correct refusal that leaves the person
+ * exactly where they started, twice in a row.
+ *
+ * So the brief carries it. Paid for in place (six wording reclaims in
+ * SKILL.md) rather than by growing the file: the rendered brief is measured at
+ * the PRODUCTION base against a hard 8,192 B cap, and the margin was 18 B.
+ */
+function authRule(base: string, transport: DocTransport): string {
   return transport === 'mcp'
     ? '**The MCP connection is already authenticated — every call is a tool call; there is no token to manage.**'
-    : '**Every `/api` call, `GET` included, sends `Authorization: Bearer <token>`.**';
+    : '**Every `/api` call, `GET` included, sends `Authorization: Bearer <token>`.**\n'
+      + `No token? Never mint one — send your human to ${base}/tokens/new, or\n`
+      + 'the plugin/MCP.';
 }
 
 /**
@@ -157,7 +176,7 @@ export function renderSkill(file: SkillFile, opts: RenderOptions): string {
       publishExample: publishExample(opts.base, transport),
       editExample: editExample(opts.base, transport),
       readBackCall: readBackCall(opts.base, transport),
-      authRule: authRule(transport),
+      authRule: authRule(opts.base, transport),
       checkWork: checkWork(opts.base, transport),
       docsMoreLine: docsMoreLine(opts.base, transport, delivery),
       docsIndexHint: docsIndexHint(opts.base, transport, delivery),

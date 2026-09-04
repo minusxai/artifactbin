@@ -69,6 +69,36 @@ describe('fetchSheetCsv', () => {
       .rejects.toMatchObject({ code: 'sheet_not_public' });
   });
 
+  /**
+   * GOOGLE REFUSING US IS NOT THE AUTHOR'S SHARING SETTINGS.
+   *
+   * The content-type guard treated every non-CSV answer alike, so a 429 or a
+   * 5xx came back as "that sheet is not publicly readable" — sending someone
+   * to fix a share setting that was never wrong. Found when CI's `data-ingest`
+   * gate went red twice against Google's own public sample sheet
+   * (run 33874008704): the sheet was fine, the runner was refused.
+   *
+   * A 403 stays `sheet_not_public`: that is what a genuinely private sheet
+   * answers, and it is the common case by a distance.
+   */
+  it.each([429, 500, 503])('reports a %i from Google as fetch_failed, not the author\'s fault', async (status) => {
+    stubFetch('<!DOCTYPE html><html>rate limited', { status, type: 'text/html' });
+    await expect(fetchSheetCsv(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`))
+      .rejects.toMatchObject({ code: 'fetch_failed' });
+  });
+
+  it('names the status, so the reason is actionable', async () => {
+    stubFetch('nope', { status: 429, type: 'text/html' });
+    await expect(fetchSheetCsv(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`))
+      .rejects.toThrow(/429/);
+  });
+
+  it('still blames sharing for a 403, which is what a private sheet answers', async () => {
+    stubFetch('<!DOCTYPE html><html>', { status: 403, type: 'text/html' });
+    await expect(fetchSheetCsv(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`))
+      .rejects.toMatchObject({ code: 'sheet_not_public' });
+  });
+
   it('refuses a non-Sheets URL before making any request', async () => {
     const spy = vi.fn();
     vi.stubGlobal('fetch', spy as unknown as typeof fetch);
