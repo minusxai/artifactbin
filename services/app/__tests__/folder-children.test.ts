@@ -36,11 +36,13 @@ async function world() {
   const pub = await create(o.token, { markup: '<h1>Board update</h1>', title: 'Board update', visibility: 'public', parent_id: f.id });
   const priv = await create(o.token, { markup: '<h1>Hiring plan</h1>', title: 'Hiring plan', visibility: 'private', parent_id: f.id });
   const sub = await create(o.token, { format: 'folder', title: 'Q3', visibility: 'public', parent_id: f.id });
-  return { o, f, pub, priv, sub };
+  // UNLISTED means listed nowhere: readable by link, absent from every listing a stranger sees.
+  const quiet = await create(o.token, { markup: '<h1>Quiet</h1>', title: 'Quiet', visibility: 'unlisted', parent_id: f.id });
+  return { o, f, pub, priv, sub, quiet };
 }
 
 describe('the children table', () => {
-  it('a stranger on a public folder sees its public children, with no numbers and a thumbnail', async () => {
+  it('a stranger on a public folder sees its PUBLIC children only (never unlisted, never private), with no numbers and a thumbnail', async () => {
     const { f, pub, sub } = await world();
     const r = await anonymous(f.id);
     expect(r.status, JSON.stringify(r.body)).toBe(200);
@@ -55,11 +57,12 @@ describe('the children table', () => {
   });
 
   it('the owner sees every child, with view counts and a sparkline, and no thumbnail for a private one', async () => {
-    const { o, f, pub, priv, sub } = await world();
+    const { o, f, pub, priv, sub, quiet } = await world();
     const r = await asOwner(f.id, o.cookie);
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     const rows: any[] = r.body.tables.children.rows;
-    expect(rows.map((x) => x.id).sort()).toEqual([pub.id, priv.id, sub.id].sort());
+    expect(rows.map((x) => x.id).sort()).toEqual([pub.id, priv.id, sub.id, quiet.id].sort());
+    expect(rows.find((x) => x.id === quiet.id).thumbnail).toContain(`/a/${quiet.id}/export`);
     const p = rows.find((x) => x.id === priv.id);
     expect(p.thumbnail).toBeNull();
     expect(typeof p.views).toBe('number');
