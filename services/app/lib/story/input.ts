@@ -81,6 +81,14 @@ export interface ContentInputCtx {
    * validates the NAME, so a draft that previews still publishes.
    */
   resolveFont?: (family: string) => Promise<Response | null>;
+  /**
+   * "Is this caller over their stored-byte quota?" — and, by its ABSENCE, that
+   * nobody can be charged at all, which is what /api/preview is. Every other
+   * member above degrades to "do less" for a preview; the image tier cannot,
+   * because storing the bytes IS publishing an image, so it refuses instead
+   * (lib/artifacts byteQuotaFor).
+   */
+  overByteQuota?: () => Promise<boolean>;
 }
 
 export async function parseContentInput(body: Record<string, unknown>, ctx: ContentInputCtx = {}): Promise<StoredContent | Response> {
@@ -124,13 +132,42 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
       throw error;
     }
   }
-  if (kind === 'imageUrl') {
-    const ingested = await ingestImageFromUrl(String(body.imageUrl));
-    if (ingested instanceof Response) return ingested;
-    return { ...ingested, derivedTitle: typeof body.title === 'string' ? null : imageTitleFromUrl(String(body.imageUrl)) };
+  /*
+   * THE IMAGE TIER, BOTH SHAPES — the upload and the URL import — behind one
+   * gate, because the cost is the same object either way.
+   *
+   * NO HOOK, NO TIER. `/api/preview` promises that a draft persists nothing,
+   * and this is the tier that cannot keep it: storing the bytes IS publishing
+   * an image, and the object would then exist with no artifact row naming it —
+   * THE DB IS THE ONLY INDEX, so nothing could ever find it again, bill it, or
+   * delete it. Any credential could have filled the disk a few megabytes at a
+   * time. So a caller with no quota to charge is refused BY NAME rather than
+   * quietly given the tier for free. It costs the product nothing: the only
+   * caller of /api/preview here is the editor's draft-CSS compile, which sends
+   * `markup` (its data re-run goes to /api/query), and the docs never teach the
+   * route. The PDF tier answers `pdf_not_previewable` to the same question.
+   *
+   * Asked BEFORE the fetch, so a caller over their cap cannot spend our
+   * bandwidth either — and so a preview is not an image-fetch primitive.
+   */
+  if (kind === 'image' || kind === 'imageUrl') {
+    if (!ctx.overByteQuota) {
+      return json({
+        error: 'image_not_previewable',
+        details: ['an image cannot be previewed — previewing stores nothing, and storing the bytes IS publishing it. POST it to /api/artifacts instead.'],
+      }, 400);
+    }
+    if (await ctx.overByteQuota()) {
+      return json({ error: 'quota_exceeded', details: ['this account is over its stored-byte quota — delete assets you no longer need'] }, 403);
+    }
+    if (kind === 'imageUrl') {
+      const ingested = await ingestImageFromUrl(String(body.imageUrl));
+      if (ingested instanceof Response) return ingested;
+      return { ...ingested, derivedTitle: typeof body.title === 'string' ? null : imageTitleFromUrl(String(body.imageUrl)) };
+    }
+    return await publishImage(body, body.image as string);
   }
   if (kind === 'viz') return publishVizRecipe(body, body.viz);
-  if (kind === 'image') return await publishImage(body, body.image as string);
   const value = body[kind] as string;
   const sizeError = tooLarge(value);
   if (sizeError) return sizeError;

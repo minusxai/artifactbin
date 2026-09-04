@@ -1,5 +1,6 @@
 import { parseVisibilityValue } from '@/lib/artifact-wire';
 import { artifactQuotaExceeded, createArtifact, type Visibility } from '@/lib/artifacts';
+import { assetByteQuotaExceeded } from '@/lib/asset-quota';
 import { withTokenAuth } from '@/lib/auth';
 import { runOperation } from '@/lib/operations/http';
 import { baseUrl, json, readJson } from '@/lib/http';
@@ -21,7 +22,15 @@ export async function createArtifactFromRequest(
 ): Promise<Response> {
   const contentType = (request.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
   if (contentType.startsWith('image/')) {
+    // Two caps, two questions: how many artifacts this token holds, and how
+    // many BYTES its owner has caused to be stored (lib/asset-quota, R9 — the
+    // account's when the token has one). The JSON body asks the second through
+    // `ContentInputCtx.overByteQuota`; this branch never goes through that
+    // door, so it asks here, before the bytes are read into memory.
     if (await artifactQuotaExceeded(tokenId)) return json({ error: 'quota_exceeded' }, 403);
+    if (await assetByteQuotaExceeded(tokenId)) {
+      return json({ error: 'quota_exceeded', details: ['this account is over its stored-byte quota — delete assets you no longer need'] }, 403);
+    }
     const stored = await storeImageContent(Buffer.from(await request.arrayBuffer()), contentType);
     if (stored instanceof Response) return stored;
     const q = new URL(request.url).searchParams;

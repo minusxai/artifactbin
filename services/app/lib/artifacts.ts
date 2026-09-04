@@ -14,6 +14,7 @@ import { generateFileId } from './ids';
 import { parseContentInput, type ArtifactFormat } from './story/input';
 import { canonicalizeMarkup, publishJsx } from './story/jsx-tier';
 import { imageRawUrl, imageVariantUrl } from './story/ref-data';
+import { assetByteQuotaExceeded } from '@/lib/asset-quota';
 import { assetWarningFor, importWebAsset, WebAssetRefused, type AssetWarning, type WebAssetKind } from './web-assets';
 import { resolveWebFont, UnknownFontError } from './webfonts';
 import { webIngestRateLimited } from './auth';
@@ -429,6 +430,7 @@ async function forkInput(actor: TokenActor, source: ArtifactRow, overrides: Fork
     loadRef: refLoaderForActor(actor),
     importAsset: assetImporterFor(actor.tokenId, actor.userId),
     resolveFont: fontResolver(),
+    overByteQuota: byteQuotaFor(actor.tokenId),
   });
   if (parsed instanceof Response) return parsed;
   const { derivedTitle: _derived, ...stored } = parsed;
@@ -966,6 +968,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
         // the created asset belongs to whoever the DOCUMENT belongs to.
         importAsset: assetImporterFor(head.token_id, head.user_id),
         resolveFont: fontResolver(),
+        overByteQuota: byteQuotaFor(head.token_id),
       },
     );
     if (published instanceof Response) return published;
@@ -1225,6 +1228,23 @@ export function assetImporterFor(tokenId: string, userId: string | null): (url: 
       throw error;
     }
   };
+}
+
+/**
+ * THE PUBLISH DOOR'S BYTE QUOTA: "may this caller cause bytes to be stored?"
+ *
+ * It is asked at the one door where an upload becomes an object, and its
+ * ABSENCE is what tells the tiers they are being previewed: `/api/preview`
+ * passes no hooks, and every other one degrades to "do less" — skip the ref
+ * check, fetch nothing, resolve no font. Storing the bytes IS what publishing
+ * an image is, so this one cannot degrade, and a tier with no quota to charge
+ * refuses by name instead of quietly working for free (lib/story/input).
+ *
+ * Account-keyed when the token has an account (lib/asset-quota, R9): a cap on
+ * the token alone is bought off with a second token.
+ */
+export function byteQuotaFor(tokenId: string): () => Promise<boolean> {
+  return () => assetByteQuotaExceeded(tokenId);
 }
 
 /**

@@ -16,6 +16,7 @@ import { json } from '../http';
 import { MAX_IMAGE_BYTES } from '@/lib/config';
 import { storeDatasetRows } from './dataset-store';
 import { storeImage, IMAGE_CONTENT_TYPES } from './image-store';
+import { sniffImageType } from '@/lib/web-ingest/sniff';
 import { optimiseImage } from '@/lib/images/optimise';
 import type { StoredContent } from './input';
 import type { VizRecipeBinding, VizRecipeParam } from '@/lib/validation/atlas-schemas';
@@ -172,13 +173,28 @@ export async function storeImageContent(buffer: Buffer, contentType: string): Pr
   if (buffer.length === 0) return json({ error: 'invalid_image', details: ['image is empty'] }, 400);
   if (buffer.length > MAX_IMAGE_BYTES) return json({ error: 'image_too_large', maxBytes: MAX_IMAGE_BYTES }, 413);
   /*
+   * THE TYPE COMES FROM THE BYTES, and the label is only how the caller asked.
+   *
+   * `data:image/png;base64,<a PDF>` used to answer 201 and the document then
+   * served a PDF as `image/png` — under `nosniff`, which is the header that
+   * makes OUR word about the type final in the browser. The URL importer has
+   * sniffed since it existed (lib/web-ingest/sniff), for exactly this reason,
+   * and this is the same question asked of the same bytes at the other door.
+   * The sniff WINS: an SVG sent as `image/png` is text that scales and is
+   * passed through, not rasterised.
+   */
+  const sniffed = sniffImageType(buffer);
+  if (!sniffed) {
+    return json({ error: 'invalid_image', details: ['those bytes are not an image (png|jpeg|webp|gif|svg+xml) — the type is read from the file, never from what it is labelled'] }, 400);
+  }
+  /*
    * THE ONE DOOR every upload comes through — the picker, a paste, a drop and
    * the URL importer all land here — so it is where an image is made fit to
    * read: capped, converted to webp, measured. At PUBLISH rather than on first
    * read, because the first reader of a document is the person its author just
    * handed the link to, and they must not be the one paying for an encode.
    */
-  const fit = await optimiseImage(buffer, contentType);
+  const fit = await optimiseImage(buffer, sniffed);
   const located = await storeImage(fit.buffer, fit.contentType);
   /*
    * The narrow copy, stored beside the full one and CHARGED WITH IT: `bytes` is

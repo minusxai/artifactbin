@@ -10,7 +10,7 @@
  * answer with the same shape (`edit_id` and refresh `warnings` included).
  */
 import {
-  DATASET_ACCESS, SHARE_ROLES, artifactQuotaExceeded, canWriteDataset, createArtifact, fontResolver, getArtifactFor, assetImporterFor, isVersionConflict, refLoaderForActor, refreshWarningsFor, replaceArtifactFor, writerFor,
+  DATASET_ACCESS, SHARE_ROLES, artifactQuotaExceeded, canWriteDataset, byteQuotaFor, createArtifact, fontResolver, getArtifactFor, assetImporterFor, isVersionConflict, refLoaderForActor, refreshWarningsFor, replaceArtifactFor, writerFor,
   type ArtifactInput, type ArtifactRow, type ArtifactSummary, type DatasetAccess, type EditInput, type EditOutcome, type ReplaceOpts, type ShareEntry, type ShareRole, type TokenActor, type Visibility,
 } from '@/lib/artifacts';
 import { actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type AnnotationAction, type AnnotationAuthor } from '@/lib/annotations';
@@ -322,7 +322,12 @@ export async function replaceArtifactWithBody(
   const current = await getArtifactFor(actor, id);
   if (!current) return json({ error: 'not_found' }, 404);
   const owner = writerFor(current);
-  const parsed = await parseContentInput(body, { loadRef: refLoaderForActor(owner), importAsset: assetImporterFor(owner.tokenId, owner.userId), resolveFont: fontResolver() });
+  const parsed = await parseContentInput(body, {
+    loadRef: refLoaderForActor(owner),
+    importAsset: assetImporterFor(owner.tokenId, owner.userId),
+    resolveFont: fontResolver(),
+    overByteQuota: byteQuotaFor(owner.tokenId),
+  });
   if (parsed instanceof Response) return parsed;
 
   const visibility = parseVisibility(body, !!actor.userId);
@@ -380,7 +385,12 @@ export async function createArtifactFromBody(
   request: Request,
 ): Promise<Response> {
   if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded' }, 403);
-  const parsed = await parseContentInput(body, { loadRef: refLoaderForActor(actor), importAsset: assetImporterFor(actor.tokenId, actor.userId), resolveFont: fontResolver() });
+  const parsed = await parseContentInput(body, {
+    loadRef: refLoaderForActor(actor),
+    importAsset: assetImporterFor(actor.tokenId, actor.userId),
+    resolveFont: fontResolver(),
+    overByteQuota: byteQuotaFor(actor.tokenId),
+  });
   if (parsed instanceof Response) return parsed;
   const visibility = parseVisibility(body, !!actor.userId);
   if (visibility instanceof Response) return visibility;

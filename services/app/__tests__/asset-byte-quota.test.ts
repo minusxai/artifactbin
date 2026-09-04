@@ -19,6 +19,8 @@ import { mintToken } from '@/lib/tokens';
 import { getDb } from '@/lib/db';
 import { createUser } from '@/lib/users';
 import { assetBytesForToken, assetByteQuotaExceeded, setAssetByteQuotaForTests } from '@/lib/asset-quota';
+import { POST as bearerCreate } from '@/app/api/artifacts/route';
+import { request } from '@/__tests__/harness';
 
 useAppHarness();
 
@@ -90,5 +92,52 @@ describe('who the cap belongs to', () => {
     await seedWebAsset(owned.id, 'https://a.example/theirs.png', 2_000_000, user.id);
     expect(await assetByteQuotaExceeded(owned.id)).toBe(true);
     expect(await assetByteQuotaExceeded(anon.id)).toBe(false);
+  });
+});
+
+
+/**
+ * …AND THE DOORS ACTUALLY ASK IT (R9).
+ *
+ * M1 built the cap and charged web imports with it. An UPLOAD records its bytes
+ * the same way and nothing asked the question, so the one tier a person can
+ * point at a five-gigabyte folder was the one tier with no byte cap — on both
+ * of its shapes, the JSON `image:` body and the raw `Content-Type: image/*`
+ * one, which do not share a code path.
+ */
+describe('the image doors ask the byte quota', () => {
+  const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+
+  it('refuses a JSON image body from a token over its cap', async () => {
+    const t = await mintToken('t');
+    await seedWebAsset(t.id, 'https://a.example/already.png', 4_000_000);
+    setAssetByteQuotaForTests(1_000_000);
+    const res = await bearerCreate(request('/api/artifacts', {
+      method: 'POST', token: t.token, json: { image: `data:image/png;base64,${PNG.toString('base64')}` },
+    }));
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe('quota_exceeded');
+  });
+
+  it('refuses a raw-body upload from a token over its cap', async () => {
+    const t = await mintToken('t');
+    await seedWebAsset(t.id, 'https://a.example/already2.png', 4_000_000);
+    setAssetByteQuotaForTests(1_000_000);
+    const res = await bearerCreate(new Request('http://localhost:3000/api/artifacts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'image/png', Authorization: `Bearer ${t.token}` },
+      body: new Uint8Array(PNG),
+    }));
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe('quota_exceeded');
+  });
+
+  it('lets a token under its cap publish', async () => {
+    const t = await mintToken('t');
+    setAssetByteQuotaForTests(1_000_000);
+    const res = await bearerCreate(request('/api/artifacts', {
+      method: 'POST', token: t.token, json: { image: `data:image/png;base64,${PNG.toString('base64')}` },
+    }));
+    expect(res.status).toBe(201);
   });
 });
