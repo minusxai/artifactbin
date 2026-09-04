@@ -299,32 +299,6 @@ async function viewSeries(ids: string[], days = SPARKLINE_DAYS): Promise<Map<str
   return series;
 }
 
-/** How many rows sit anywhere under this folder — the count the non-empty refusal names. */
-export async function subtreeCount(id: string): Promise<number> {
-  const db = await getDb();
-  const r = await db.query<{ n: number }>(`SELECT COUNT(*)::int AS n FROM artifacts WHERE ancestor_ids @> ARRAY[$1] AND ${LIVE_ARTIFACT_SQL}`, [id]);
-  return r.rows[0]?.n ?? 0;
-}
-
-/** True when no live row names `id` as its parent. */
-export async function folderIsEmpty(id: string): Promise<boolean> {
-  const db = await getDb();
-  const r = await db.query(`SELECT 1 FROM artifacts WHERE ancestor_ids[cardinality(ancestor_ids)] = $1 AND ${LIVE_ARTIFACT_SQL} LIMIT 1`, [id]);
-  return r.rows.length === 0;
-}
-
-/** Every id under a folder (GIN containment), for a forced delete. */
-export async function subtreeIds(id: string): Promise<string[]> {
-  const db = await getDb();
-  // Deepest first, so a caller deleting row by row never steps over what is
-  // below the row it is on.
-  const r = await db.query<{ id: string }>(
-    `SELECT id FROM artifacts WHERE ancestor_ids @> ARRAY[$1] AND ${LIVE_ARTIFACT_SQL} ORDER BY cardinality(ancestor_ids) DESC`,
-    [id],
-  );
-  return r.rows.map((x) => x.id);
-}
-
 /**
  * The one place that names the channel a child write wakes: the parent
  * folder's OWN.

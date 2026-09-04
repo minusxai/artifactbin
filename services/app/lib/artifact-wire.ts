@@ -151,7 +151,10 @@ export const sourceRepairsEcho = (repairs: SourceRepair[] | undefined): Record<s
 
 /** Full wire shape for a single-artifact read. */
 export async function artifactToWire(row: ArtifactRow, base: string) {
-  const { content, source, token_id: _token, user_id: _owner, meta, format, ...rest } = row;
+  // `deleted_at` is dropped with the ownership columns: the trash gate means a
+  // row a caller can read is always live, so the field could only ever echo
+  // null — a key in every agent's context that can carry no news.
+  const { content, source, token_id: _token, user_id: _owner, deleted_at: _trashed, meta, format, ...rest } = row;
   const m = meta as { theme?: string; template?: string; colorMode?: 'light' | 'dark' | null };
   // Echo the LIVE vocabulary: a stored retired theme reads back as its
   // successor, so an agent that read-before-writes never learns a name that

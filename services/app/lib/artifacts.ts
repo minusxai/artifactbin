@@ -114,6 +114,14 @@ export interface ArtifactRow {
    * (versions, comments, shares) is its own from the first save.
    */
   forked_from: string | null;
+  /**
+   * THE TRASH STAMP: NULL = live, a timestamp = deleted (lib/trash). It is on
+   * the ROW type rather than only in the SQL because the gate is composed into
+   * the row-loading seam and callers must not think to filter — the field is
+   * here so lib/trash can read it, and it is dropped at the wire boundary,
+   * where it could only ever echo null.
+   */
+  deleted_at: string | null;
 }
 
 /** Who is looking, as far as the serving paths know. Null = no session. */
@@ -254,7 +262,7 @@ async function namedRoleFor(
 // `link_role` is deliberately absent: SUMMARY_COLS does not select it, and a
 // listing is an index rather than a bulk read. The general-access role is read
 // through the sharing surface, where it is edited.
-export type ArtifactSummary = Omit<ArtifactRow, 'content' | 'source' | 'token_id' | 'user_id' | 'actor_user_id' | 'actor_token_id' | 'link_role' | 'forked_from'>;
+export type ArtifactSummary = Omit<ArtifactRow, 'content' | 'source' | 'token_id' | 'user_id' | 'actor_user_id' | 'actor_token_id' | 'link_role' | 'forked_from' | 'deleted_at'>;
 
 /** The stored representation of one artifact state (built by parseContentInput). */
 export interface ArtifactInput {
