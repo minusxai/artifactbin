@@ -56,7 +56,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ user: strin
   if (!viewer || viewer.userId !== owner.id) {
     const files = await listPublicArtifactsByUser(owner.id);
     const anon = !viewer && (await browserSessionKind(request)) === 'anon';
-    return json({ kind: 'public-profile', handle, files: strip(files), email: viewer?.email ?? null, authed: !!viewer, anon });
+    return json({ kind: 'public-profile', handle, files: strip(files).map(({ ancestor_ids: _placement, ...card }) => card), email: viewer?.email ?? null, authed: !!viewer, anon });
   }
   const all = await listArtifactsByUser(owner.id);
   // The ROOT: everything at level 0, folders among them as ordinary rows. A
@@ -72,6 +72,15 @@ export async function GET(request: Request, ctx: { params: Promise<{ user: strin
  * What a listing card needs — never `content`/`source`. The two DATES travel
  * too: a card stamps when a document was created, a row when it last moved,
  * and a card with no date reads "Invalid Date" (which is how this was found).
+ *
+ * PLACEMENT is the one field the two branches do NOT share: the owner's
+ * listing draws the shelf from `ancestor_ids`, while a stranger's index of
+ * public documents drops it — a public document filed inside a private folder
+ * would otherwise hand every reader that folder's address, which is
+ * breadcrumbs to a uniform 404 and tells them something about a shelf that is
+ * not theirs. Ids are addresses and not secrets, so this is a projection rule
+ * rather than a hole; it is here because the alternative is a sentence in a
+ * doc-comment that the code contradicts.
  */
 function strip(files: ArtifactSummary[]): Array<Pick<ArtifactSummary, 'id' | 'title' | 'format' | 'ancestor_ids' | 'visibility' | 'updated_at' | 'created_at' | 'version'>> {
   return files.map(({ id, title, format, ancestor_ids, visibility, updated_at, created_at, version }) => ({ id, title, format, ancestor_ids, visibility, updated_at, created_at, version }));

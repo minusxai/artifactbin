@@ -65,6 +65,29 @@ describe('GET /api/page/home', () => {
     expect(body.artifacts[0]).toMatchObject({ url: expect.stringMatching(/^\/a\//), format: 'markup' });
     expect(Array.isArray(body.shared)).toBe(true);
   });
+
+  /*
+   * The SHARED half of the home payload is somebody ELSE's row, so it obeys the
+   * same projection rule the public profile does: placement is the owner's
+   * business. `listSharedWithEmail` selects the summary columns, and
+   * `ancestor_ids` joined them this phase — which would hand every invited
+   * person the ids of the folders on their inviter's shelf, a place they get
+   * the uniform 404 on. The viewer's OWN rows keep it: that is what draws
+   * their shelf.
+   */
+  it('keeps another owner\'s placement out of the shared-with-you list', async () => {
+    const w = await world();
+    const guest = await ensureUsername(await createUser({ email: 'mxmx_test_guest@example.com' }));
+    await updateSharingFor({ userId: w.owner.id, tokenId: '' }, w.priv.id, { shares: [{ email: guest.email, role: 'viewer' }] });
+    asSession(guest);
+    const body = await (await homePage(request('/api/page/home'))).json();
+    expect(body.shared.map((a: { id: string }) => a.id)).toEqual([w.priv.id]);
+    expect(body.shared[0]).not.toHaveProperty('ancestor_ids');
+    expect(JSON.stringify(body.shared)).not.toContain(w.box.id);
+    asSession(w.owner);
+    const own = await (await homePage(request('/api/page/home'))).json();
+    expect(own.artifacts[0]).toHaveProperty('ancestor_ids');
+  });
 });
 
 describe('GET /api/page/account', () => {
@@ -120,6 +143,33 @@ describe('GET /api/page/profile/@user/...', () => {
    * them, as an ordinary row — and every other segment under the handle is the
    * uniform 404, whether the viewer owns the profile or not.
    */
+  /*
+   * PLACEMENT IS THE OWNER'S BUSINESS. `ancestor_ids` names folders by id, and
+   * a public document filed inside a private folder would hand every stranger
+   * that folder's address in the profile payload — breadcrumbs to a place they
+   * get the uniform 404 on, which buys the reader nothing and says something
+   * about the owner's shelf. Ids are addresses rather than secrets, so this is
+   * a projection rule and not a hole; the owner's own listing still carries it,
+   * because the owner's listing is what draws the shelf.
+   */
+  it('keeps placement out of the public profile projection', async () => {
+    const w = await world();
+    const h = w.owner.username!;
+    await createArtifactRoute(new Request(`${BASE}/api/artifacts?v=2`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${w.t.token}` },
+      body: JSON.stringify({ title: 'Filed', markup: '<div><p>filed</p></div>', visibility: 'public', parent_id: w.box.id }),
+    }));
+    const strangers = await (await profilePage(request(`/api/page/profile/@${h}`), params({ user: `@${h}` }))).json();
+    expect(strangers.kind).toBe('public-profile');
+    expect(strangers.files.length).toBe(2);
+    for (const f of strangers.files) expect(f).not.toHaveProperty('ancestor_ids');
+    expect(JSON.stringify(strangers)).not.toContain(w.box.id);
+    asSession(w.owner);
+    const root = await (await profilePage(request(`/api/page/profile/@${h}`), params({ user: `@${h}` }))).json();
+    for (const f of root.files) expect(f).toHaveProperty('ancestor_ids');
+  });
+
   it('lists the public index for a stranger and the ROOT for the owner; a nested path is the 404 either way', async () => {
     const w = await world();
     const h = w.owner.username!;
