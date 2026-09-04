@@ -101,8 +101,9 @@ const emitFromInside = (artifactId) => {
  * second before it posts.
  */
 const IN_NETWORK_LANDED = `
-const { Client } = require('pg');
 (async () => {
+  const pg = await import('pg');
+  const Client = pg.Client ?? pg.default.Client;
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
   let verbs = [];
