@@ -310,10 +310,12 @@ describe('public profile listing', () => {
     expect(markup).toContain('My Doc');
     expect(markup).toContain('private');
     // A FOLDER is a ROW in the listing now, not a derived navigation panel: it
-    // has its own page. The derived panel and its crumbs are gone from the
-    // markup; DRAWING the folder row is P2's shelf strip, so what P1 asserts is
-    // the data the page is built from.
-    expect(markup).not.toContain('Open folder');
+    // has its own page, and P2 draws it as the shelf's folders STRIP — one tile
+    // linking to that page, above the documents.
+    expect(markup).toContain('Open folder August');
+    // At the row's own canonical address — id-anchored, with the name as
+    // decoration, exactly like every other row on this page.
+    expect(markup).toContain(`/${box.id}-august`);
     const data = await dataOf('@mxmx_owner');
     expect(data.files.find((f) => f.id === box.id)).toMatchObject({ format: 'folder', title: 'August' });
     // Data files are NOT listed here any more. They are the material documents

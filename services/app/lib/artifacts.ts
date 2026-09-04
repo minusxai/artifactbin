@@ -12,7 +12,7 @@ import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN } from './config';
 import { assetByteQuotaExceeded } from './asset-quota';
 import { getDb, type Queryable } from './db';
 import { generateFileId } from './ids';
-import { parseContentInput, type ArtifactFormat } from './story/input';
+import { isDocumentFormat, parseContentInput, type ArtifactFormat } from './story/input';
 import { canonicalizeMarkup, publishJsx } from './story/jsx-tier';
 import { imageRawUrl, imageVariantUrl, pdfRawUrl } from './story/ref-data';
 import { displayTitle } from './story/title';
@@ -1018,7 +1018,10 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     if (!head) return null;
     // Documents edit; VALUES do not. A dataset/viz/image is a blob whose
     // meaning lives in its structure, so a text splice into it is meaningless.
-    if (head.format !== 'markup') return { applied: false, reason: 'not_editable' };
+    // A FOLDER is a document — its source is the markup we stamped, and
+    // renaming one IS this protocol (the editor's Title field writes through
+    // here like every other change).
+    if (!isDocumentFormat(head.format)) return { applied: false, reason: 'not_editable' };
 
     // The document's truth is `source` (markup rows keep `content` empty).
     const headSource = head.source ?? '';

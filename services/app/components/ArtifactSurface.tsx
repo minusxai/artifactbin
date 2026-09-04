@@ -13,7 +13,7 @@
  * and Monaco, and a reader of a shared document must never pay for that.
  */
 import dynamic from '@/lib/dynamic';
-import { Crop, MessageSquare, Pencil } from 'lucide-react';
+import { Crop, FolderPlus, MessageSquare, Pencil } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useArtifactOwner, useCanAnnotateArtifact, useCanEditArtifact } from '@/components/ArtifactShell';
 import AnnotationLayer from '@/components/AnnotationLayer';
@@ -95,6 +95,52 @@ export interface ArtifactSurfaceProps {
 }
 
 /**
+ * NAMING A FOLDER MADE INSIDE ANOTHER — the shell's half of `New folder`.
+ *
+ * Inline and nothing else: Enter creates, Escape discards, and NOTHING
+ * navigates. The row it makes arrives in the listing on its own, because a
+ * folder's source names its own id as a table and a write to a child NOTIFYs
+ * that channel (lib/folders notifyParent) — the same live path an agent's
+ * publish already travels. So this closes and says nothing more.
+ */
+function NewFolderPrompt({ parentId, onClose }: { parentId: string; onClose: () => void }) {
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const create = async () => {
+    const title = name.trim();
+    if (!title || busy) return;
+    setBusy(true);
+    const res = await fetch('/api/my/artifacts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ format: 'folder', title, parent_id: parentId }),
+    }).catch(() => null);
+    setBusy(false);
+    if (res?.ok) onClose();
+  };
+  return (
+    <div className="fixed inset-x-0 top-16 z-50 flex justify-center px-4">
+      <div className="flex items-center gap-2 rounded-[6px] border border-edge bg-surface px-2 py-1.5 shadow-lg">
+        <FolderPlus size={13} className="shrink-0 text-faint" />
+        <input
+          aria-label="Folder name"
+          placeholder="folder name"
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); void create(); }
+            if (e.key === 'Escape') { e.preventDefault(); onClose(); }
+          }}
+          className="w-44 rounded-[4px] border border-edge bg-transparent px-1.5 py-0.5 font-mono text-xs text-fg focus:border-edge-bright focus:outline-none"
+        />
+        <span className="font-mono text-[10px] text-faint">enter</span>
+      </div>
+    </div>
+  );
+}
+
+/**
  * How long a revealed frame has to answer `mx:hello` before we call it dead.
  * Generous on purpose: the cost of waiting is a moment of a page that is
  * probably fine, and the cost of being wrong is throwing away a live document.
@@ -172,6 +218,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const [railOpen, setRailOpen] = useState(false);
   /** `?intent=fork` asked for a copy; the dialog asks the person (lib/intent). */
   const [forkAsked, setForkAsked] = useState(false);
+  /** Naming a new folder under THIS one — the shell's only folder-specific act. */
+  const [namingFolder, setNamingFolder] = useState(false);
   const [socialPreviewOpen, setSocialPreviewOpen] = useState(false);
   /** Desktop comments reserve a rail; on a phone the same surface is a sheet. */
   const phone = useIsPhoneViewport();
@@ -249,6 +297,13 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    *    byte — the reader's `$` values (F2) are in this same query string, and
    *    their place in the document is in the hash.
    */
+  /**
+   * The two formats the shell serves as a DOCUMENT — the frame, its live
+   * stream and the editor — rather than as a value the app draws itself.
+   */
+  const isDocumentFormat = format === 'markup' || format === 'folder';
+  const isFolder = format === 'folder';
+
   const intentDone = useRef(false);
   useEffect(() => {
     if (intentDone.current) return;
@@ -258,11 +313,15 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     // Exactly the comments row's effect, and gated by exactly its capability:
     // opening a rail for someone who may not comment is an empty panel.
     else if (intent === 'comment' && canAnnotate) setRailOpen(true);
+    // The document's own control can only ASK (opaque origin, no session); the
+    // shell holds the credential, so this is where the field opens. Gated by
+    // the same capability the bar's row is, for the same reason.
+    else if (intent === 'new-folder' && isFolder && canEdit) setNamingFolder(true);
     const next = stripIntent(window.location.search);
     if (next !== window.location.search) {
       window.history.replaceState(null, '', window.location.pathname + next + window.location.hash);
     }
-  }, [search, canAnnotate]);
+  }, [search, canAnnotate, canEdit, isFolder]);
 
   // The authorized page — never the sandbox — decides which selection actions
   // exist. Whoever may edit gets Edit; whoever may annotate — owner, editor
@@ -987,7 +1046,13 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
         {/* Everyone the shell is served to — owner, editor, commenter — may
             take a copy of what they can read. */}
         <ForkArtifact id={id} variant="menu" />
-        {canEdit && format === 'markup' && (
+        {/* EDIT IS ALSO RENAME, which is why a folder is offered it: the
+            editor's Title field writes `title` through the edit protocol like
+            any other change, so a folder needs no rename door of its own — and
+            a second one would be a second thing to keep in step. Its BODY is
+            editable for the same reason the plan gives: a folder is a document,
+            and customising one is editing it. */}
+        {canEdit && isDocumentFormat && (
           <>
             <button
               type="button"
@@ -998,7 +1063,9 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
               <Pencil size={14} strokeWidth={1.75} />
               edit artifact
             </button>
-            {shownSource !== null && (
+            {/* The social frame is a crop of a DOCUMENT's own picture; a
+                folder's card is a picture of its listing, which nobody frames. */}
+            {shownSource !== null && format === 'markup' && (
               <button
                 type="button"
                 aria-label="Edit social preview"
@@ -1010,6 +1077,23 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
               </button>
             )}
           </>
+        )}
+        {/* A FOLDER'S ONE EXTRA VERB. It lives in the chrome rather than in the
+            document because the document is sandboxed at an opaque origin and
+            holds no credential — the price of a folder being a document, and
+            the trade the plan states. Renaming is not here: the editor's own
+            Title field is the rename, and a second door would be a second
+            way for the two to disagree. */}
+        {canEdit && isFolder && (
+          <button
+            type="button"
+            aria-label="New folder"
+            onClick={() => { close(); setNamingFolder(true); }}
+            className={CONTROL_ROW}
+          >
+            <FolderPlus size={14} strokeWidth={1.75} />
+            new folder
+          </button>
         )}
       </section>
 
@@ -1039,8 +1123,13 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   );
 
   /** A document is full-bleed. Reading chrome floats over its safe corners;
-   * only the contextual editing toolbar reserves any document space. */
-  if (format === 'markup') {
+   * only the contextual editing toolbar reserves any document space.
+   *
+   * A FOLDER TAKES THIS BRANCH TOO, because a folder IS a document: its
+   * scaffold is ordinary markup, it is served through `raw` like any other
+   * (server/app admits it beside markup), and the alternative below is the
+   * DATA-TIER view, which has nothing to draw for one. */
+  if (isDocumentFormat) {
     return (
       <>
         {editing ? (
@@ -1187,6 +1276,9 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           />
         )}
         {forkAsked && <ForkConfirm id={id} title={shownTitle} onClose={() => setForkAsked(false)} />}
+        {namingFolder && canEdit && isFolder && (
+          <NewFolderPrompt parentId={id} onClose={() => setNamingFolder(false)} />
+        )}
         {socialPreviewOpen && shownSource !== null && (
           <SocialPreviewDialog
             id={id}

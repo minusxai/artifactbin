@@ -9,6 +9,7 @@ import { GET as getRoute, DELETE as deleteRoute } from '@/app/api/artifacts/[id]
 import { POST as forkOpRoute } from '@/app/api/artifacts/[id]/fork/route';
 import { PATCH as patchMineRoute } from '@/app/api/my/artifacts/[id]/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
+import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { getDb } from '@/lib/db';
 import { mintToken } from '@/lib/tokens';
@@ -199,6 +200,34 @@ describe('a folder is served as a document', () => {
     expect(await mine.text()).toContain(`ref_${f.id}`);
     const theirs = await rawRoute(request(`/a/${f.id}/raw`), params(f.id));
     expect(theirs.status).toBe(404);
+  });
+
+  it('takes an EDIT like any document — which is what renaming one is', async () => {
+    /*
+     * RENAMING A FOLDER IS THE EDITOR'S TITLE FIELD, and that field writes
+     * through the edit protocol like every other change. The protocol refused
+     * a folder outright (`not_editable`, the guard that keeps the DATA TIERS
+     * out — a table and a picture are values, not documents), so the shell
+     * opened an editor on a folder that could never commit: the name went
+     * back to what it was, with a 400 nobody was shown. A folder's source is
+     * ordinary markup and the plan says it is edited like any document.
+     */
+    const o = await owner();
+    const folder = (await create(o.token, { format: 'folder', title: 'Before' })).body;
+    const edited = j(await editRoute(
+      request(`/api/artifacts/${folder.id}/edits`, { method: 'POST', token: o.token, json: { edit_id: folder.edit_id, title: 'After' } }),
+      params(folder.id),
+    ));
+    expect((await edited).status, JSON.stringify((await edited).body)).toBe(200);
+    expect((await getArtifactById(folder.id))!.title).toBe('After');
+    // A DATA TIER is still refused: it is a value, not a document.
+    const ds = (await create(o.token, { dataset: [{ a: 1 }] })).body;
+    const refused = await j(await editRoute(
+      request(`/api/artifacts/${ds.id}/edits`, { method: 'POST', token: o.token, json: { edit_id: ds.edit_id, title: 'nope' } }),
+      params(ds.id),
+    ));
+    expect(refused.status).toBe(400);
+    expect(refused.body).toMatchObject({ error: 'not_editable' });
   });
 
   it('the list carries parent_id and ancestor_ids and the shelf files folders in their own partition', async () => {

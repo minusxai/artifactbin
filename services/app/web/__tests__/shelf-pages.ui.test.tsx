@@ -29,7 +29,7 @@ vi.mock('@/web/session', () => ({ useSession: () => ({ session: { user: { id: 'u
 
 const doc = (id: string) => ({
   id, url: `/a/${id}`, title: `Doc ${id}`, description: null, format: 'markup', version: 1,
-  visibility: 'public', folder: '', updated_at: '2026-08-20T00:00:00.000Z', views: 0, sparkline: null,
+  visibility: 'public', parent_id: null, ancestor_ids: [], updated_at: '2026-08-20T00:00:00.000Z', views: 0, sparkline: null,
 });
 
 let home: unknown;
@@ -51,7 +51,7 @@ const mainWidth = (el: HTMLElement): string | undefined =>
 describe('the shelf pages share one column', () => {
   it('the dashboard and the profile are exactly as wide as each other', async () => {
     home = { signedIn: true, artifacts: [doc('a'), doc('b')], shared: [] };
-    profile = { kind: 'owner-listing', handle: 'cee', folder: '', folders: [], files: [doc('a')], total: 1, stats: { total: 1, formats: { markup: 1 } }, email: 'c@x.io' };
+    profile = { kind: 'owner-listing', handle: 'cee', files: [doc('a')], total: 1, stats: { total: 1, formats: { markup: 1 } }, email: 'c@x.io' };
 
     const dash = render(<MemoryRouter><HomePage /></MemoryRouter>);
     await waitFor(() => expect(mainWidth(dash.container)).toBeDefined());
@@ -101,6 +101,24 @@ describe('what the dashboard leads with', () => {
     expect(screen.queryByLabelText('What you can use it for')).toBeNull();
     // The once-ever utilities are not permanent furniture.
     expect(screen.queryByText(/claim an agent's artifacts/i)).toBeNull();
+  });
+
+  it('offers ONE way to the trash, and only to an account', async () => {
+    /*
+     * P3 made delete a trash: a deleted row is recoverable for 30 days, which
+     * is worth nothing if there is no way to reach it. One link in the
+     * dashboard's chrome, and nothing else — an anonymous browser has no
+     * account to hold a trash, so it is not offered one.
+     */
+    home = { signedIn: true, artifacts: [doc('a')], shared: [] };
+    render(<MemoryRouter><HomePage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText('Doc a')).toBeInTheDocument());
+    expect(screen.getByLabelText('Trash')).toHaveAttribute('href', '/trash');
+    cleanup();
+    home = { signedIn: false };
+    render(<MemoryRouter><HomePage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByLabelText('Get started')).toBeInTheDocument());
+    expect(screen.queryByLabelText('Trash')).toBeNull();
   });
 
   it('EMPTY: names the first artifact, then the panel, then other people\u2019s work', async () => {
@@ -201,7 +219,7 @@ describe('claiming across the empty \u2192 full flip', () => {
 
 describe('a profile', () => {
   it('renders the shelf for the files it lists', async () => {
-    profile = { kind: 'owner-listing', handle: 'cee', folder: '', folders: [], files: [doc('a'), doc('b')], total: 2, stats: { total: 2, formats: { markup: 2 } }, email: 'c@x.io' };
+    profile = { kind: 'owner-listing', handle: 'cee', files: [doc('a'), doc('b')], total: 2, stats: { total: 2, formats: { markup: 2 } }, email: 'c@x.io' };
     // Mounted under the app's own route: ProfilePage reads `:user` from it,
     // and a bare mount reads nothing — which the typo guard answers with 404.
     render(<MemoryRouter initialEntries={['/@cee']}><Routes><Route path="/:user/*" element={<ProfilePage />} /></Routes></MemoryRouter>);

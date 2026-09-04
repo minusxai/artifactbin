@@ -86,6 +86,37 @@ describe('GET /a/<id>/events hears the document\'s datasets', () => {
     expect(typeof data!.data.version).toBe('number');
   });
 
+  it('a FOLDER hears its own children, because its one dependency is itself', async () => {
+    /*
+     * The folder's scaffold reads `ref_<its own id>`, so the folder is a data
+     * dependency of ITSELF — which is the whole reason a child's publish
+     * reaches an open folder page with no route of its own. It missed for one
+     * clause: the stream followed a document's dependencies only when the
+     * format was `markup`, so a folder subscribed to nothing, the write woke
+     * only the DOCUMENT channel, and the version ping that came out carried an
+     * unchanged version. The listing sat still and nothing anywhere failed.
+     */
+    const t = await mintToken('t');
+    const folder = (await create(t.token, { format: 'folder', title: 'Live folder' })).id;
+    const res = await eventsRoute(request(`/a/${folder}/events`), params({ id: folder }));
+    expect(res.status).toBe(200);
+    // ONE channel for two subscriptions: a folder is both the document and the
+    // table it reads, so the id — and therefore the channel — is the same one
+    // twice. That coincidence is exactly why this went unnoticed: the stream
+    // was already awake on that channel, so the write DID wake it, and what
+    // came out was a version ping carrying an unchanged version.
+    expect(liveChannelCount()).toBe(1);
+    const child = create(t.token, { markup: '<p>filed</p>', parent_id: folder });
+    // THREE: the opening frame, the version ping the shared channel also wakes,
+    // and the `data` frame that is the point. Reading two would stop on the
+    // ping — which is precisely what the broken version sent and nothing else.
+    const events = await readEvents(res.body!, 3);
+    await child;
+    const data = events.find((e) => e.event === 'data');
+    expect(data, 'the folder never heard its own child').toBeTruthy();
+    expect(data!.data).toMatchObject({ datasets: [folder] });
+  });
+
   it('a document that does not read the dataset hears nothing; a whole-dataset PUT wakes readers too', async () => {
     const t = await mintToken('t');
     const ds = (await create(t.token, { dataset: ROWS })).id;

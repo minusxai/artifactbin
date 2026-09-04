@@ -66,6 +66,12 @@ export const GATE_SPECS = Object.freeze([
   { name: 'export-slice', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
   // measured: implementer 5s; orchestrator 5s
   { name: 'fonts', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
+  // measured: implementer 40s; orchestrator pending
+  {
+    name: 'folders', start: 'custom',
+    why: 'Needs two logged-in contexts and a stranger over ONE public folder: the owner\u2019s shell, an invited editor, and the document served top-level.',
+    needsMail: true, needsClipboard: false, timeoutMs: 120_000,
+  },
   // measured: implementer 5s; orchestrator 5s
   {
     name: 'fork', start: 'custom',

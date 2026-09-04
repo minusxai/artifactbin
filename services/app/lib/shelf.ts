@@ -32,6 +32,18 @@
  * rows through untouched.
  */
 
+/**
+ * THE FOLDER A ROW SITS IN, from either half of the placement wire.
+ *
+ * `ancestor_ids` is the stored truth (root→parent) and `parent_id` is the
+ * DERIVED half a client writes back — and the two page endpoints send
+ * different subsets of them, because each sends what its own client needed.
+ * Reading only the derived one made every folder on the dashboard look empty,
+ * which is a wrong count and an offered delete the door would refuse.
+ */
+export const parentOfRow = (row: { parent_id?: string | null; ancestor_ids?: string[] }): string | null =>
+  row.parent_id ?? (row.ancestor_ids?.length ? row.ancestor_ids[row.ancestor_ids.length - 1] : null);
+
 /** The only two fields the policy reads. Callers pass richer rows. */
 export interface ShelfItem {
   format: string;
