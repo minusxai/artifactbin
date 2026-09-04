@@ -12,11 +12,12 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { TaskSchema } from '../lib/contracts';
+import { TaskSchema, type Task } from '../lib/contracts';
 import { askedForAToken } from '../lib/score/product';
 import { gatedChecks, verdictFor } from '../lib/score/verdict';
 import { ledgerMetrics, type LedgerMetrics } from '../lib/ledger';
 import { discoverTasks, selectTasks } from '../lib/task-set';
+import { mergeSecondAttempt, verdictLine } from '../lib/second-attempt';
 import { CREDENTIAL_SOURCES } from '../lib/credential';
 
 const task = TaskSchema.parse(JSON.parse(
@@ -163,6 +164,29 @@ describe('an unobserved ledger', () => {
     expect(gated).toEqual(['did_not_self_mint', 'asked_for_a_token']);
     expect(verdictFor({ did_not_self_mint: answer(minted), asked_for_a_token: true }, gated))
       .toEqual({ passed: false, failed: ['did_not_self_mint'] });
+  });
+});
+
+/**
+ * A refusal has to be LOUD. `planAccess` throws for `handoff: none` under an MCP transport, and
+ * `runLeg`'s per-task catch turns a throw into `false` — a FAILED flow — never `null`, which is
+ * "deliberately not run" and would drop the task out of the denominator instead of failing the job.
+ * These pin the loud end of that path: what a `false` verdict says out loud, and that `null` is a
+ * different thing entirely.
+ */
+describe('a refused run fails loudly', () => {
+  const guard = { id: 'no-token' } as Task;
+
+  it('names the flow FAILED in the one line the log and the job summary end on', () => {
+    const line = verdictLine(mergeSecondAttempt([guard], [false], new Map()));
+    expect(line).toContain('FAILED: no-token');
+    expect(line).toContain('0/1 flows passed');
+  });
+
+  it('and a SKIPPED flow says something else entirely — a refusal must never be recorded as one', () => {
+    const skipped = verdictLine(mergeSecondAttempt([guard], [null], new Map()));
+    expect(skipped).not.toContain('FAILED');
+    expect(skipped).toContain('0/0 flows passed');
   });
 });
 
