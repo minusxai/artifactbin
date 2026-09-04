@@ -3,7 +3,7 @@
 /**
  * THE OVERFLOW MENU BEHIND A ROW'S "…".
  *
- * Extracted because it is now needed twice — the dense tier's rows (move,
+ * Extracted because it is now needed twice — the list-view rows (move,
  * delete) and a shelf's ASSET rows (delete) — and a second hand-rolled
  * popover is how two menus start disagreeing about focus, dismissal and which
  * side they open on.

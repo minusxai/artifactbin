@@ -302,9 +302,9 @@ const SUMMARY_COLS = 'id, title, description, format, meta, version, visibility,
 export type OwnedArtifactSummary = ArtifactSummary & { views: number };
 
 /**
- * The stranger's view of a profile: public artifacts only, flat — placement and
- * view counts are the owner's business. 'public' means listed under the
- * owner's handle (the profile root IS the list), not merely link-reachable.
+ * The one profile view for every visitor, including its owner: public
+ * artifacts only and flat, with no view counts. 'public' means listed under
+ * the owner's handle (the profile root IS the list), not merely link-reachable.
  *
  * DOCUMENT tiers only: datasets, images and viz recipes are the material
  * documents are built from (bound as ref:<id>), so 'public' keeps them

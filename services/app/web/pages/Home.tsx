@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRefreshable } from '@/lib/navigation';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import ClaimBanner from '@/components/ClaimBanner';
+import Dashboard from '@/components/Dashboard';
 import GetStarted from '@/components/GetStarted';
 import Landing from '@/components/Landing';
 import LoginForm from '@/components/LoginForm';
@@ -83,21 +84,19 @@ export function HomePage() {
     // and hands over the instruction; the masthead keeps the login door.
     return <Landing />;
   }
-  // ONE FRONT DOOR, ONE NAME, EVERY SURFACE. The dashboard used to fold this
-  // panel into a strip called "connect an agent" while the landing showed it
-  // open under another name; the reader had to open the strip to discover
-  // they were the same thing. There is one presentation now.
   const empty = home.artifacts.length === 0 && home.shared.length === 0;
   return (
     <main className={`${PAGE_COLUMN} mt-8 pb-24`}>
-      {/* The product's front door is stable: owned work, shared work, or an
-        * empty library must never reorder it below secondary content — and the
-        * pieces that CARRY STATE hold ONE slot across that flip. Claiming turns
-        * an empty library into a full one, so a branch that swapped the whole
-        * subtree remounted the banner mid-claim and threw away the result it
-        * had just been asked to report. */}
-      {empty && <FirstArtifact />}
-      <div className="mb-6"><GetStarted /></div>
+      {empty ? (
+        <>
+          <FirstArtifact />
+          <div className="mb-6"><GetStarted /></div>
+        </>
+      ) : (
+        <Dashboard rows={home.artifacts as never} />
+      )}
+      {/* Kept outside the empty/full branch so a successful claim can report
+        * its result while the page refreshes into the dashboard. */}
       <ClaimBanner />
       {empty ? (
         /* Inspiration, not decoration: an empty library has no examples of its

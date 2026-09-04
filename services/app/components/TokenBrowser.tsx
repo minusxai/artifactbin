@@ -165,9 +165,8 @@ const ICON_ACTION =
  * Rows per page when this table IS the list (the logged-out token browser):
  * one block in a taller page, which must not grow into everything below it.
  *
- * As a shelf's dense tier the count is raised (SHELF_LIST_PER_PAGE) — there
- * the hero and cards carry the recent work, so these rows are the archive and
- * are cheap. Five is also below the count at which a pager helps anyone: it
+ * In a shelf's list view the count is raised (SHELF_LIST_PER_PAGE), because
+ * rows are compact and cheap. Five is also below the count at which a pager helps anyone: it
  * costs a click to reveal what a little scrolling would have shown, which is
  * most of why the old dashboard list read as small.
  */
@@ -203,7 +202,7 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
   /** Rows before a pager appears. */
   perPage?: number;
   /**
-   * Rendered as the dense tier of a `<Shelf>`, which owns the search box and
+   * Rendered as the list view of a `<Shelf>`, which owns the search box and
    * has already narrowed these rows. Suppresses this component's own search
    * header and filter chips so the page never carries two of either — the
    * rows, the actions and the pager are the part being reused.

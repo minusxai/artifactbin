@@ -1,13 +1,12 @@
 'use client';
 
 /**
- * THE SHELF — one presentation for three queries.
+ * THE SHELF — one presentation for the homepage and public profiles.
  *
- * `/` (the dashboard), `/@me` (the owner's profile root) and `/@them` (a
- * stranger's) are different QUESTIONS about who owns what; they are the same
- * ANSWER on screen. This component is that answer, and it fetches nothing:
- * each page runs its own query and hands over rows plus what the viewer may
- * do with them.
+ * `/` (the dashboard) and `/@handle` (the public profile) answer different
+ * questions with the same drive-like presentation. This component fetches
+ * nothing: each page runs its own query and hands over rows plus what the
+ * viewer may do with them.
  *
  * The capability props are the seam. A profile passes no `views`, so no
  * spline is drawn and no column is reserved — OPTIONAL FIELDS DEGRADE, which
@@ -15,12 +14,11 @@
  * counts to the dashboard required touching the profile, this would be the
  * wrong shape.
  *
- * Tiering policy lives in `lib/shelf` (pure). This file only renders it, and
- * hands the dense tier to `ArtifactTable`, which already owns row actions and
- * paging.
+ * Partitioning and recency order live in `lib/shelf` (pure). This file owns
+ * the grid/list presentation and hands list mode to `ArtifactTable`.
  */
 import { useMemo, useState } from 'react';
-import { Check, Folder, FolderInput, FolderPlus, Link2, Pencil, Search, Trash2 } from 'lucide-react';
+import { Check, Folder, FolderInput, FolderPlus, LayoutGrid, Link2, List as ListIcon, Pencil, Search, Trash2 } from 'lucide-react';
 import RowMenu, { confirmDeleteArtifact } from '@/components/RowMenu';
 import { MoveMenu, type PickerFolder } from '@/components/FolderPicker';
 import { ArtifactTable } from '@/components/TokenBrowser';
@@ -68,8 +66,6 @@ export interface ShelfProps {
    * they can cite. Same split `dateStamp`/`timeAgo` have always drawn.
    */
   dates?: 'relative' | 'absolute';
-  /** Thumbnail-tier size. */
-  cards?: number;
   /**
    * WHERE A FOLDER MADE HERE GOES — the folder being viewed, or null at the
    * dashboard root. It is the wire's own `parent_id`, so null is the root and
@@ -271,11 +267,8 @@ const VISIBILITY_ORDER = ['public', 'unlisted', 'private'] as const;
 const nameOf = (row: ShelfRow) => row.title ?? row.id;
 
 /**
- * Copy-link and edit, on EVERY tier.
- *
- * The tiers differ in weight, never in capability — needing to hunt for a
- * document in the dense rows to reach its editor would make the hero a
- * downgrade for the one document you are most likely to want.
+ * Copy-link and edit in grid mode. List mode exposes the same capability set
+ * through `ArtifactTable`.
  *
  * `relative z-10` is load-bearing: the card body is a STRETCHED LINK (an
  * anchor whose ::after covers the whole card), because a <button> nested
@@ -439,18 +432,18 @@ function Stamp({ row, mode }: { row: ShelfRow; mode: 'relative' | 'absolute' }) 
   );
 }
 
-/** Document tiers already guarantee `markup`; visibility is the only
+/** The document collection already guarantees `markup`; visibility is the only
  * classification that adds information here. */
 function VisibilityTag({ row, overlay = false }: { row: ShelfRow; overlay?: boolean }) {
   return row.visibility ? <VisibilityPill visibility={row.visibility} name={nameOf(row)} overlay={overlay} /> : null;
 }
 
-/** The artifact's own og card — one lazily-rendered image serves unfurls and this grid alike. */
+/** The artifact's own og card — one lazily-rendered image serves unfurls and the drive grid alike. */
 function Thumb({ row, className }: { row: ShelfRow; className: string }) {
   return (
     <span className={`relative block w-full overflow-hidden bg-raised ${className}`}>
       <span className="absolute inset-0 flex items-center justify-center">
-        <span className="h-5 w-5 animate-spin rounded-full border-2 border-edge-bright border-t-accent" />
+        <span className="h-4 w-4 animate-spin rounded-full border-2 border-edge-bright border-t-accent" />
       </span>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -464,8 +457,7 @@ function Thumb({ row, className }: { row: ShelfRow; className: string }) {
 }
 
 /**
- * The dense tier's page size. The hero and cards already carry what is recent,
- * so these are the archive — and a row is cheap where a thumbnail is not.
+ * Rows per page in list mode and in the separate assets table.
  */
 export const SHELF_LIST_PER_PAGE = 10;
 
@@ -488,7 +480,7 @@ function FilterChip({ value, active, onToggle }: { value: string; active: boolea
   );
 }
 
-export default function Shelf({ rows, actions = 'none', assets = true, dates = 'relative', cards = 3, parentId = null, canCreateFolders }: ShelfProps) {
+export default function Shelf({ rows, actions = 'none', assets = true, dates = 'relative', parentId = null, canCreateFolders }: ShelfProps) {
   const [query, setQuery] = useState('');
   const [picks, setPicks] = useState<string[]>([]);
   /*
@@ -507,6 +499,7 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
    */
   const [trashed, setTrashed] = useState<string[]>([]);
   const trash = (id: string) => setTrashed((t) => [...t, id]);
+  const [view, setView] = useState<'grid' | 'list'>('grid');
   const q = query.trim().toLowerCase();
   const present = trashed.length
     ? rows.filter((r) => !trashed.includes(r.id) && !(r.ancestor_ids ?? []).some((a) => trashed.includes(a)))
@@ -526,11 +519,8 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
         (!q || `${r.title ?? ''} ${r.description ?? ''} ${r.format}`.toLowerCase().includes(q)) &&
         (picks.length === 0 || (r.visibility != null && picks.includes(r.visibility))),
     );
-    // A text QUERY flattens; a visibility filter does not. Search is finding,
-    // and its results are already ordered by what was asked for. Filtering is
-    // still browsing — a narrower shelf is a shelf.
-    return buildShelf(matched, { cards, flat: Boolean(q) });
-  }, [all, q, picks, cards]);
+    return buildShelf(matched);
+  }, [all, q, picks]);
 
   /** The account's folders, for every picker on this shelf — the tree, unfiltered. */
   const pickable: PickerFolder[] = useMemo(
@@ -546,16 +536,13 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
 
   const filtering = Boolean(q) || picks.length > 0;
   const canMakeFolders = canCreateFolders ?? actions === 'full';
-  const nothing = !shelf.hero && shelf.cards.length === 0 && shelf.list.length === 0 && shelf.assets.length === 0;
+  const nothing = shelf.documents.length === 0 && shelf.assets.length === 0 && shelf.folders.length === 0;
 
   return (
-    <section aria-label="Shelf" className="flex flex-col gap-5">
+    <section aria-label="Shelf" className="flex flex-col gap-4">
       {(all.length > 0 || canMakeFolders) && (
-        <div className={PANEL}>
-          {/* WRAPS, and the field has a floor: three visibility chips beside
-              the input left it ~130px on a phone, truncating its own
-              placeholder mid-word. Chips take a second line instead. */}
-          <div className="flex flex-wrap items-center gap-2 px-4 py-2">
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <div className={`flex min-w-0 flex-1 flex-wrap items-center gap-2 px-3.5 py-2.5 ${PANEL}`}>
             <Search size={13} className="shrink-0 text-faint" />
             <input
               aria-label="Search artifacts"
@@ -565,7 +552,7 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
               className="min-w-32 flex-1 border-0 bg-transparent font-mono text-xs text-fg placeholder:text-faint focus:outline-none"
             />
             {showChips && (
-              <span className="flex shrink-0 items-center gap-1.5 border-edge sm:ml-auto sm:border-l sm:pl-2">
+              <span className="flex shrink-0 items-center gap-1.5 border-edge sm:border-l sm:pl-2">
                 {chips.map((v) => (
                   <FilterChip key={v} value={v} active={picks.includes(v)} onToggle={togglePick} />
                 ))}
@@ -581,6 +568,25 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
                 <NewFolder parentId={parentId} onMade={(row) => setMade((m) => [row, ...m])} />
               </span>
             )}
+          </div>
+          <div role="group" aria-label="Shelf view" className={`flex shrink-0 items-center p-1 ${PANEL}`}>
+            {([
+              ['grid', 'Grid view', LayoutGrid],
+              ['list', 'List view', ListIcon],
+            ] as const).map(([value, label, Icon]) => (
+              <button
+                key={value}
+                type="button"
+                aria-label={label}
+                aria-pressed={view === value}
+                onClick={() => setView(value)}
+                className={`inline-flex h-8 w-9 cursor-pointer items-center justify-center rounded-[4px] transition-all ${
+                  view === value ? 'bg-accent-soft text-accent' : 'text-faint hover:bg-raised hover:text-fg'
+                }`}
+              >
+                <Icon size={15} strokeWidth={1.7} />
+              </button>
+            ))}
           </div>
         </div>
       )}
@@ -617,56 +623,13 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
         </p>
       )}
 
-      {/* TIER 1 — full width, because it is almost always the one you came back
-        * for. The label pins to the TOP of the column and the classification
-        * to the bottom, so the title owns the middle and the eye lands there
-        * first; a flat row of equal-weight chips beside it read as noise. */}
-      {shelf.hero && (
-        <article className={`reveal group relative grid grid-cols-1 overflow-hidden md:grid-cols-[1.35fr_1fr] ${PANEL} transition-colors hover:border-edge-bright`}>
-          <div className="relative">
-            <Thumb row={shelf.hero} className="aspect-[40/21] border-b border-edge md:h-full md:border-r md:border-b-0" />
-          </div>
-          {/* On the CARD, not the picture — the hero alone is two columns, so
-              its far corner is the right column's, where the actions belong.
-              Stacked (phone) the card's top IS the picture's top: same corner
-              as every tier below, still no breakpoint fork. */}
-          <CardControls row={shelf.hero} level={actions} folders={pickable} />
-          {/* Starts BELOW the control row on desktop, so the title gets the
-              column's full width instead of sharing its first line with the
-              buttons. On a phone the controls are on the picture — no clearance. */}
-          <div className="flex flex-col justify-between gap-4 p-3 md:pt-12">
-            <div className="min-w-0">
-              <a
-                href={shelf.hero.url}
-                aria-label={`Open ${nameOf(shelf.hero)} (most recent)`}
-                // Clamped at 3, not 1: the hero's right column is mostly air,
-                // and a title cut to one line beside that much empty space
-                // reads as a bug. Three lines still cannot push the views
-                // footer out of the panel the thumbnail sets the height of.
-                className="block line-clamp-2 sm:line-clamp-3 text-lg leading-snug font-semibold text-fg no-underline transition-colors after:absolute after:inset-0 group-hover:text-accent"
-              >
-                {shelf.hero.title ?? <span className="text-faint">(untitled)</span>}
-              </a>
-              {shelf.hero.description && (
-                <p className="mt-1.5 line-clamp-2 font-mono text-xs leading-relaxed text-muted">{shelf.hero.description}</p>
-              )}
-            </div>
-            <div className="flex w-full min-w-0 items-center gap-3 pt-2 sm:pt-3">
-              <ViewsMark row={shelf.hero} filled={false} />
-              <Stamp row={shelf.hero} mode={dates} />
-            </div>
-          </div>
-        </article>
-      )}
-
-      {/* TIER 2 — thumbnails, where the picture is worth its space. */}
-      {shelf.cards.length > 0 && (
-        <ul aria-label="Recent documents" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {shelf.cards.map((row, i) => (
+      {view === 'grid' && shelf.documents.length > 0 && (
+        <ul aria-label="Artifact grid" className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+          {shelf.documents.map((row, i) => (
             <li
               key={row.id}
-              className={`reveal group relative flex flex-col overflow-hidden ${PANEL} transition-colors hover:border-edge-bright`}
-              style={{ animationDelay: `${i * 45}ms` }}
+              className={`reveal group relative flex flex-col overflow-hidden ${PANEL} transition-[border-color,transform] duration-150 hover:-translate-y-0.5 hover:border-edge-bright`}
+              style={{ animationDelay: `${Math.min(i * 35, 280)}ms` }}
             >
               <div className="relative">
                 <Thumb row={row} className="aspect-[40/21] border-b border-edge" />
@@ -676,7 +639,7 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
                 <a
                   href={row.url}
                   aria-label={`Open ${nameOf(row)}`}
-                  className="block line-clamp-2 sm:line-clamp-1 font-mono text-sm font-semibold text-fg no-underline transition-colors after:absolute after:inset-0 group-hover:text-accent"
+                  className="block line-clamp-2 font-mono text-[13px] leading-snug font-semibold text-fg no-underline transition-colors after:absolute after:inset-0 group-hover:text-accent"
                 >
                   {row.title ?? 'Untitled'}
                 </a>
@@ -690,10 +653,9 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
         </ul>
       )}
 
-      {/* TIER 3 — dense rows, and the only tier that pages. */}
-      {shelf.list.length > 0 && (
+      {view === 'list' && shelf.documents.length > 0 && (
         <ArtifactTable
-          artifacts={shelf.list}
+          artifacts={shelf.documents}
           folders={pickable}
           manage={actions === 'full'}
           canEdit={actions === 'full'}
