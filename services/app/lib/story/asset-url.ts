@@ -289,8 +289,14 @@ export function mapExternalImageSources(nodes: JsxNode[], lookup: AssetLookup, o
 const CSS_URL_RE = /url\(\s*(['"]?)(https?:\/\/[^'")\s]+)\1\s*\)/gi;
 
 export function mapExternalCssUrls(css: string, lookup: AssetLookup): string {
-  return css.replace(CSS_URL_RE, (whole, quote: string, url: string) =>
-    (lookup(url) ? `url(${quote}${assetUrlFor(url)}${quote})` : whole));
+  return css.replace(CSS_URL_RE, (whole, quote: string, url: string) => {
+    // The row, kept — not just "do we hold it": a face is served from the same
+    // `immutable` address an image is, so a REFRESHED font needs the same
+    // content-derived `?v=` or it reaches nobody who already loaded the old one
+    // (R19). `refresh_asset` refreshes fonts exactly as it refreshes pictures.
+    const held = lookup(url);
+    return held ? `url(${quote}${assetUrlFor(url, held)}${quote})` : whole;
+  });
 }
 
 /** The same positions, read rather than written — what the importer is asked to fetch. */

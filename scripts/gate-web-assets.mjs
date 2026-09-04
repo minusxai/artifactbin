@@ -167,6 +167,9 @@ ok(probe.blur.startsWith('url(') && probe.blur.includes('data:image/'), 'the blu
 ok(ASSET_URL.test(probe.svgSrc ?? ''), `the SVG <img> is served from our origin, versioned (${probe.svgSrc})`);
 ok(probe.svgNatural[0] > 0, `the SVG paints as an image despite the attachment header (${probe.svgNatural.join('×')})`);
 ok(probe.sheet.includes('/assets/') && !probe.sheet.includes(WEB), 'the @font-face src was rewritten to our origin');
+// …and VERSIONED: a face is served from the same immutable address a picture
+// is, so a refreshed font needs the same cache key (R19).
+ok(/url\(\/assets\/[0-9a-f]{64}\?v=[0-9a-f]{8}\)/.test(probe.sheet), 'the @font-face src carries the content version');
 ok(probe.fontFamily.includes('Probe'), `the paragraph asks for the imported face (${probe.fontFamily})`);
 ok(
   fontResponses.some((f) => /^200 \/assets\/[0-9a-f]{64}$/.test(f)),
