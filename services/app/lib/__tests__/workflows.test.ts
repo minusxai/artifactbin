@@ -39,6 +39,7 @@ const wf = yaml.parse(readFileSync(publishPath, 'utf8')) as {
 const ci = yaml.parse(readFileSync(ciPath, 'utf8')) as {
   jobs: Record<string, {
     'timeout-minutes'?: number;
+    needs?: string[];
     env?: Record<string, string>;
     steps: Array<{ uses?: string; with?: Record<string, unknown>; run?: string; name?: string; env?: Record<string, string> }>;
   }>;
@@ -165,14 +166,31 @@ describe('ci.yml: the image job proves what ships', () => {
     expect(fullBuild?.with?.file).toBe('Dockerfile');
     expect(fullBuild?.with?.context).toBe('.');
   });
-  it('runs the LEAN pass: all four lean images through image-checks.mjs', () => {
-    expect(runs.some((r) => r.includes('services/app/Dockerfile')), 'no lean app build').toBe(true);
-    expect(runs.some((r) => r.includes('services/proxy/Dockerfile')), 'no lean proxy build').toBe(true);
-    expect(runs.some((r) => r.includes('services/sql/Dockerfile')), 'no lean sql build').toBe(true);
-    expect(runs.some((r) => r.includes('services/browser/Dockerfile')), 'no lean browser build').toBe(true);
+  /**
+   * The lean pass used to be four more steps of THIS job, and this assertion
+   * used to say so. It moved to a job of its own because the two share no
+   * state and running them together only added their times: the `image` job
+   * could not fit its budget while also building four more images.
+   *
+   * WHICH job hosts it is not the contract. The contract is that all four lean
+   * images are built from THIS commit and each goes through image-checks.mjs,
+   * in a job the roll-up actually waits on — so this asks the workflow where
+   * the pass lives rather than assuming, and then checks `test` gates it. A
+   * lean pass in a job nobody needs is a check that cannot fail a merge.
+   */
+  it('runs the LEAN pass: all four lean images through image-checks.mjs, in a job the roll-up gates', () => {
+    const hosting = Object.entries(ci.jobs).filter(([, job]) =>
+      (job?.steps ?? []).some((s) => String(s.run ?? '').includes('image-checks.mjs')),
+    );
+    expect(hosting.length, 'no job in ci.yml runs image-checks.mjs').toBeGreaterThan(0);
+    const leanRuns = hosting.flatMap(([, job]) => (job.steps ?? []).map((s) => String(s.run ?? '')));
     for (const kind of ['app', 'proxy', 'sql', 'browser']) {
-      expect(runs.some((r) => r.includes(`image-checks.mjs ${kind}`)), `image-checks never checks the ${kind} image`).toBe(true);
+      expect(leanRuns.some((r) => r.includes(`services/${kind}/Dockerfile`)), `no lean ${kind} build`).toBe(true);
+      expect(leanRuns.some((r) => r.includes(`image-checks.mjs ${kind}`)), `image-checks never checks the ${kind} image`).toBe(true);
     }
+    const gated = ci.jobs.test?.needs ?? [];
+    for (const [name] of hosting)
+      expect(gated, `the roll-up does not wait on ${name}, so its lean pass cannot fail a merge`).toContain(name);
   });
 });
 

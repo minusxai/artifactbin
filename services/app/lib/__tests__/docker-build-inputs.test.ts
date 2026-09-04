@@ -63,6 +63,24 @@ describe('the image can run npm run build', () => {
 
   it('also copies whatever postinstall needs, before npm ci', () => {
     // `npm ci` triggers postinstall (copy-assets), so its script must land first.
-    expect(dockerfile).toMatch(/COPY services \.\/services[\s\S]*RUN[^\n]*npm ci/);
+    //
+    // This used to be satisfied by `COPY services ./services` sitting above the
+    // install, which copied the whole repo to get one file — and made every
+    // source edit rebuild the install and re-upload its ~518 MB layer
+    // (docker-install-layer.test.ts). The tree now lands AFTER the install, so
+    // the postinstall script is named on its own. Its requirement really is
+    // just the file: it chdirs to its own package dir and reads node_modules.
+    const scriptRunningInstall = dockerfile
+      .split(/^FROM /m)
+      .map((stage) => stage.split('\n'))
+      .find((lines) => lines.some((l) => /^RUN /.test(l) && /npm ci/.test(l) && !l.includes('--ignore-scripts')));
+    expect(scriptRunningInstall, 'no stage runs npm ci with its lifecycle scripts').toBeDefined();
+    const before = (scriptRunningInstall ?? []).slice(
+      0,
+      (scriptRunningInstall ?? []).findIndex((l) => /^RUN /.test(l) && /npm ci/.test(l)),
+    );
+    expect(before.join('\n'), 'the postinstall script must reach the image before the install that runs it').toContain(
+      'services/app/scripts/copy-assets.mjs',
+    );
   });
 });
