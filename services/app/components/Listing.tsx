@@ -38,13 +38,18 @@ export function ListingShell({ email, stats, authed = false, anon = false, child
 }
 
 /**
- * The profile masthead: micro-label, the handle as a breadcrumb (each folder
- * segment its own link), and a one-line readout of what sits below.
+ * The profile masthead: micro-label, the handle, and a one-line readout of what
+ * sits below.
+ *
+ * It carried a FOLDER PATH once — a crumb per segment, each its own link —
+ * because a folder used to be a string on a document and a listing address.
+ * Nesting is not in a URL any more (lib/urls): a folder is an artifact with its
+ * own address, this page is the account ROOT, and the trail from `ancestor_ids`
+ * is drawn on the folder's own document. So there is nothing here to segment.
  */
-export function ListingHero({ handle, folder = '', label, count, noun }: {
-  handle: string; folder?: string; label: string; count: number; noun: string;
+export function ListingHero({ handle, label, count, noun }: {
+  handle: string; label: string; count: number; noun: string;
 }) {
-  const segments = folder ? folder.split('/') : [];
   return (
     <header className="reveal mb-8">
       <MicroLabel>{label}</MicroLabel>
@@ -52,18 +57,6 @@ export function ListingHero({ handle, folder = '', label, count, noun }: {
         <a href={`/@${handle}`} aria-label="Profile root" className="no-underline transition-colors hover:text-accent">
           <span className="text-accent">@</span>{handle}
         </a>
-        {segments.map((segment, i) => (
-          <span key={i} className="flex items-baseline gap-x-1.5">
-            <span className="font-normal text-faint">/</span>
-            <a
-              href={`/@${handle}/${segments.slice(0, i + 1).join('/')}`}
-              aria-label={`Open folder ${segment}`}
-              className="no-underline transition-colors hover:text-accent"
-            >
-              {segment}
-            </a>
-          </span>
-        ))}
       </h1>
       <p className="mt-3 font-mono text-xs text-muted">
         {count} {noun}
@@ -84,34 +77,3 @@ export function NothingHere() {
 
 const delay = (i: number) => ({ animationDelay: `${Math.min(i * 45, 450)}ms` });
 
-const folderDelay = (i: number) => ({ animationDelay: `${Math.min(i * 45, 450)}ms` });
-
-/**
- * Folders as navigation. All that survives of the old ListingPanel: its file
- * rows are the shelf's dense tier now. Folders exist only as paths on files,
- * so a folder row is a derived prefix, never a record.
- */
-export function FolderPanel({ handle, folders }: { handle: string; folders: string[] }) {
-  return (
-    <ul className="overflow-hidden rounded-[6px] border border-edge bg-surface">
-      {folders.map((path, i) => {
-        const name = path.split('/').pop()!;
-        return (
-          <li key={path} className={i > 0 ? 'border-t border-edge' : ''}>
-            <a
-              href={`/@${handle}/${path}`}
-              aria-label={`Open folder ${name}`}
-              className="reveal group flex items-center justify-between gap-4 px-4 py-3 no-underline transition-colors hover:bg-raised"
-              style={folderDelay(i)}
-            >
-              <span className="truncate font-mono text-sm font-semibold text-fg transition-colors group-hover:text-accent">
-                {`${name}/`}
-              </span>
-              <MicroLabel>folder</MicroLabel>
-            </a>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}

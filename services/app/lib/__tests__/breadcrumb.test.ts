@@ -48,7 +48,9 @@ describe('crumbsFor — a profile and what is under it', () => {
     ]);
   });
 
-  it('keeps ONE ancestor however deep the folders go — five crumbs is a row of ellipses', () => {
+  it('keeps ONE ancestor whatever decoration the address carries — five crumbs is a row of ellipses', () => {
+    // Nesting is not in a URL any more, so these segments are an OLD link on
+    // its way to healing: id-anchored, ignored here, and never a crumb.
     const trail = crumbsFor('/@vivek/a/b/c/d/ab12cd-deep', 'Deep');
     expect(trail).toHaveLength(2);
     expect(trail[0]).toEqual({ label: '@vivek', href: '/@vivek' });
