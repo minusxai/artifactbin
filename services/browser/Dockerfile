@@ -18,7 +18,7 @@ COPY services ./services
 # The app workspace's postinstall (copy-assets.mjs, from its own package dir)
 # runs on `npm ci`; it lives inside `services/` — the tree above is the whole
 # install's needs.
-RUN --mount=type=cache,target=/root/.npm npm ci --cache /root/.npm
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --cache /root/.npm
 
 # The bundler and the externals list it reads — the whole `scripts/` tree is
 # NOT needed, and copying it would bust the install layer's cache for nothing.
@@ -41,7 +41,7 @@ COPY services ./services
 # playwright + playwright-core and nothing else of the natives). The assertions
 # are part of the image, and a filtered install that grows the wrong package
 # fails the BUILD, not a boot.
-RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --ignore-scripts -w services/browser --cache /root/.npm \
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --omit=dev --ignore-scripts -w services/browser --cache /root/.npm \
     # Playwright present — the service drives Chromium through it.
     && test -d node_modules/playwright \
     # …and the engine the sql image owns must NOT ride along.

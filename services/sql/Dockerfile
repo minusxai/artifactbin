@@ -18,7 +18,7 @@ COPY services ./services
 # The app workspace's postinstall (copy-assets.mjs, from its own package dir)
 # runs on `npm ci`; it lives inside `services/` — the tree above is the whole
 # install's needs.
-RUN --mount=type=cache,target=/root/.npm npm ci --cache /root/.npm
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --cache /root/.npm
 
 # The bundler and the externals list it reads — the whole `scripts/` tree is
 # NOT needed, and copying it would bust the install layer's cache for nothing.
@@ -39,7 +39,7 @@ COPY services ./services
 # workspace filter installs only this package's closure (measured: 9 packages,
 # 5 top-level node_modules dirs). The assertions are part of the image, and a
 # filtered install that grows the wrong package fails the BUILD, not a boot.
-RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --ignore-scripts -w services/sql --cache /root/.npm \
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --omit=dev --ignore-scripts -w services/sql --cache /root/.npm \
     # DuckDB present — the engine dlopens `libduckdb.so` beside its bindings.
     && test -d node_modules/@duckdb \
     # …and the browser the app image owns must NOT ride along.

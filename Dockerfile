@@ -5,7 +5,14 @@ WORKDIR /app
 
 COPY package*.json ./
 COPY services ./services
-RUN --mount=type=cache,target=/root/.npm npm ci --cache /root/.npm
+# `--no-audit` ON EVERY INSTALL: `npm ci` otherwise blocks on npm's advisory
+# endpoint and retries twice when it fails. That endpoint degraded on
+# 2026-09-04 and this repo's install went 15s → 421s, ten times over across the
+# five Dockerfiles, cancelling the `image` job at its 30-minute cap. The
+# lockfile is pinned, so the verdict cannot change what is installed. The repo
+# `.npmrc` says the same for every install outside a build context; a Dockerfile
+# gets the flag on the command, where it cannot be half-applied per stage.
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --cache /root/.npm
 
 COPY scripts ./scripts
 COPY services/app/app ./app
@@ -32,7 +39,7 @@ ENV NODE_ENV=production \
 
 COPY package*.json ./
 COPY services ./services
-RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --ignore-scripts --cache /root/.npm \
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --omit=dev --ignore-scripts --cache /root/.npm \
     && node -e "const {DuckDBInstance}=require('@duckdb/node-api'); DuckDBInstance.create(':memory:').then(()=>console.log('duckdb ok')).catch((e)=>{console.error(e);process.exit(1)})" \
     && node node_modules/playwright/cli.js install --with-deps chromium \
     && rm -rf /var/lib/apt/lists/*

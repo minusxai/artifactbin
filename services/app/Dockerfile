@@ -7,7 +7,7 @@ COPY package*.json ./
 COPY services ./services
 COPY scripts ./scripts
 COPY tsconfig.json vite.config.mts ./
-RUN --mount=type=cache,target=/root/.npm npm ci --cache /root/.npm
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --cache /root/.npm
 RUN npm run build -w services/app \
     && node scripts/build-server.mjs services/app/dist/app.mjs services/app/src/main.ts
 
@@ -22,7 +22,7 @@ COPY package*.json ./
 COPY services/app/package.json ./services/app/package.json
 COPY services/contracts/package.json ./services/contracts/package.json
 COPY services/utils/package.json ./services/utils/package.json
-RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --legacy-peer-deps --ignore-scripts -w services/app --cache /root/.npm \
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --omit=dev --legacy-peer-deps --ignore-scripts -w services/app --cache /root/.npm \
     && test ! -e node_modules/@duckdb \
     && test ! -e node_modules/playwright \
     && test ! -e node_modules/playwright-core \
