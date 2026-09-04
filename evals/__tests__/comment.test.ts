@@ -242,3 +242,46 @@ describe('the recorded rows — evidence, never a gate', () => {
     expect(captionAfter(served('<p>nothing here</p>'), A)).toBe(false);
   });
 });
+
+/**
+ * …and the same three predicates against a REAL served document rather than
+ * hand-written HTML — the scar `product.ts` carries, and the reason the two
+ * `comment-*.html` fixtures above are real too.
+ *
+ * This one is `GET /a/<id>/raw?chrome=0` for the markup the claude-code leg
+ * actually wrote for this task, republished against the prod build: the URLs
+ * mapped to `/assets/<hash>`, the `<figure>`/`<figcaption>` pair, the box and
+ * blur the row contributed, and the `data-mx-ast` stamps every SSR'd node
+ * carries. Nothing here is what one would have written by hand.
+ */
+describe('the asset predicates over a real served document', () => {
+  const LOGO = 'https://minusx.ai/_next/static/media/logo.bda07120.svg';
+  const PICTURE = 'https://minusx.ai/use_cases/growth_v2.webp';
+  const html = fixture('image-served');
+
+  it('serves both from our origin, and nothing from the source host', () => {
+    expect(assetsServed(html, [LOGO, PICTURE])).toBe(true);
+  });
+
+  it('counts the two pictures and sees the caption under the second', () => {
+    expect(imageCount(html)).toBe(2);
+    expect(captionAfter(html, PICTURE)).toBe(true);
+  });
+
+  it('the logo carries no caption — the comment only asked for one', () => {
+    expect(captionAfter(html, LOGO)).toBe(false);
+  });
+
+  /**
+   * `replaceAll`, and the reason is a thing only a real document shows: the
+   * address appears in the HEAD first, as `<link rel="preload" as="image">`, so
+   * a single `replace` rewrote the preload and left the `<img>` alone — and the
+   * predicate correctly stayed true, because it reads the BODY. Which is also
+   * why the body is enough: the renderer only preloads an asset it is about to
+   * draw, so there is no source-host preload without a source-host `<img>`
+   * under it.
+   */
+  it('…and turns FALSE the moment the picture goes back to the source host', () => {
+    expect(assetsServed(html.replaceAll(assetUrlFor(PICTURE), PICTURE), [LOGO, PICTURE])).toBe(false);
+  });
+});
