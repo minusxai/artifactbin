@@ -25,10 +25,11 @@
  */
 import { z } from 'zod';
 import {
-  applyEditFor, canReadArtifact, deleteArtifactFor, findDependentsFor, forkArtifact, getArtifactById, getArtifactFor, getOwnedArtifactFor, getVersionFor, listArtifactsFor, listVersionsFor,
+  applyEditFor, canReadArtifact, findDependentsFor, forkArtifact, getArtifactById, getArtifactFor, getOwnedArtifactFor, getVersionFor, listArtifactsFor, listVersionsFor,
   revertArtifactFor, isVersionNotArchived, type ForkOverrides, type TokenActor,
 } from '@/lib/artifacts';
-import { isParentRefusal, resolveParent, subtreeIds } from '@/lib/folders';
+import { isParentRefusal, resolveParent } from '@/lib/folders';
+import { restoreArtifactFor, trashArtifactFor } from '@/lib/trash';
 import { trackEvent } from '@/lib/analytics';
 import { exportImageResponse } from '@/lib/export';
 import type { AnnotationAuthor } from '@/lib/annotations';
@@ -135,7 +136,15 @@ const CONTENT_FIELDS = {
 /** The placement refusals, stated once. One code covers every way a parent can be wrong. */
 const INVALID_PARENT: OperationError = { status: 400, code: 'invalid_parent', fix: "parent_id must be the id of a FOLDER you own, not inside the thing you are moving, and no more than 6 levels deep — one code on purpose, because naming which would reveal whether an id exists. Create a folder with {\"format\":\"folder\"}" };
 const FOLDER_RETIRED: OperationError = { status: 400, code: 'folder_retired', fix: "the `folder` path field is gone — send parent_id: the id of a folder artifact (create one with format: 'folder')" };
-const FOLDER_NOT_EMPTY: OperationError = { status: 409, code: 'folder_not_empty', fix: 'the folder still holds things (the count rides the refusal) — empty it, or pass force: true to delete the folder and everything under it' };
+/**
+ * GOVERNANCE IS THE OWNER'S. The replace door runs under `editorScope`, so a
+ * named editor reaches it — and `visibility`/`access` decide who else may read
+ * the document and write its rows, which is not what they were invited to do.
+ * Every other governance surface is owner-scoped and answers them the uniform
+ * 404 instead, which is why this code exists on exactly one door.
+ */
+const OWNER_ONLY: OperationError = { status: 403, code: 'owner_only', fix: "visibility and access belong to the artifact's owner — you hold an editor share on it, so send the update without them" };
+
 const NOT_FORKABLE: OperationError = { status: 400, code: 'not_forkable', fix: "a folder cannot be forked — create your own with {\"format\":\"folder\"} and file documents under it with parent_id" };
 
 const INVALID_JSX: OperationError = { status: 400, code: 'invalid_jsx', fix: 'details names each problem with its span; a refused tag answer carries allowed_html_tags — pick from it' };
@@ -191,6 +200,7 @@ const updateArtifactOp: Operation = {
   },
   errors: [
     NOT_FOUND,
+    OWNER_ONLY,
     { status: 409, code: 'version_conflict', fix: 'someone wrote meanwhile — re-read, merge, retry with the reported currentVersion' },
     ...CONTENT_ERRORS,
   ],
@@ -344,14 +354,13 @@ const deleteArtifactOp: Operation = {
   name: 'delete_artifact',
   title: 'Delete an artifact',
   http: { method: 'DELETE', path: '/api/artifacts/{id}' },
-  description: 'Delete an artifact and its history; the link dies. If other documents reference it (ref:), the delete fails with has_dependents — pass force: true to break those links knowingly (the documents degrade to empty fallbacks). Deleting a FOLDER that has anything in it fails with folder_not_empty and the count; force: true deletes the folder and everything under it.',
+  description: 'Move an artifact to the trash; the link stops working. It is recoverable with restore_artifact until the retention runs out (30 days), after which it is deleted for good. A FOLDER takes everything under it, and restore brings the whole subtree back. If other documents reference it (ref:), the call fails with has_dependents — pass force: true to break those links knowingly (the documents degrade to empty fallbacks).',
   input: { id: z.string(), force: z.boolean().optional() },
   annotations: { destructive: true },
   example: { input: { id: 'aB3xK9' } },
   errors: [
     NOT_FOUND,
     { status: 409, code: 'has_dependents', fix: 'other documents reference this one (they are named) — force: true breaks their refs knowingly' },
-    FOLDER_NOT_EMPTY,
   ],
   async run(ctx, input) {
     // Delete protection: breaking other documents' refs must be an informed
@@ -362,16 +371,33 @@ const deleteArtifactOp: Operation = {
         return reply({ error: 'has_dependents', dependents: dependents.map((d) => ({ id: d.id, title: d.title })) }, 409);
       }
     }
-    // A FOLDER's subtree is the same informed choice, counted rather than
-    // named: a folder with fifty documents in it would be a wall of ids.
-    const current = await getOwnedArtifactFor(ctx.actor, String(input.id));
-    const subtree = current?.format === 'folder' ? await subtreeIds(current.id) : [];
-    if (current?.format === 'folder' && input.force !== true && subtree.length > 0) {
-      return reply({ error: 'folder_not_empty', count: subtree.length }, 409);
-    }
-    const deleted = await deleteArtifactFor(ctx.actor, String(input.id), subtree);
+    // A FOLDER takes its subtree, in the one statement lib/trash runs. There
+    // is no second refusal to force past: `folder_not_empty` asked an agent to
+    // confirm a permanent act, and this one is not permanent.
+    const deleted = await trashArtifactFor(ctx.actor, String(input.id));
     if (!deleted) return reply({ error: 'not_found' }, 404);
     return reply({ ok: true });
+  },
+};
+
+const restoreArtifactOp: Operation = {
+  name: 'restore_artifact',
+  title: 'Restore an artifact from the trash',
+  http: { method: 'POST', path: '/api/artifacts/{id}/restore' },
+  description: 'Take an artifact back out of the trash, at the version it had when it was deleted. A FOLDER brings back everything that was deleted with it. If the folder it used to live in is itself still in the trash, it comes back at your root — the answer says where it landed.',
+  input: { id: z.string() },
+  annotations: {},
+  example: { input: { id: 'aB3xK9' } },
+  errors: [
+    // The uniform miss, and it covers "already live" too: a row that is not in
+    // the trash is not something this door can act on, and saying which would
+    // tell a stranger whether the id exists.
+    NOT_FOUND,
+  ],
+  async run(ctx, input) {
+    const restored = await restoreArtifactFor(ctx.actor, String(input.id));
+    if (!restored) return reply({ error: 'not_found' }, 404);
+    return reply({ id: restored.id, url: `${ctx.base}/a/${restored.id}`, parent_id: restored.ancestor_ids.at(-1) ?? null, ancestor_ids: restored.ancestor_ids });
   },
 };
 
@@ -553,6 +579,6 @@ const refreshAssetOp: Operation = {
 
 export const OPERATIONS: Operation[] = [
   createArtifactOp, updateArtifactOp, editArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
-  listVersionsOp, getVersionOp, revertArtifactOp, deleteArtifactOp, annotateOp, mutateDatasetOp,
+  listVersionsOp, getVersionOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, mutateDatasetOp,
   exportArtifactOp, refreshAssetOp,
 ];

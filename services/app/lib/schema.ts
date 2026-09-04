@@ -51,7 +51,14 @@ const TOKENS: Table = {
     { name: 'audience', type: 'TEXT' },
     { name: 'scope', type: 'TEXT' },
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
-    { name: 'revoked_at', type: 'TIMESTAMPTZ' }, // NULL = live (soft revoke)
+    // NULL = live. The verb stays REVOKE everywhere a person or a function
+    // reads it (revokeToken, tokenStatus 'revoked', the dashboard's copy); the
+    // COLUMN is `deleted_at` because every table that can lose a row spells it
+    // the same way, and one pattern with no exception is worth more than a
+    // column name that reads slightly better on this one table. Declared as a
+    // rename, so a database built from the old declaration copies the stamps
+    // across on its next boot rather than un-revoking every revoked token.
+    { name: 'deleted_at', type: 'TIMESTAMPTZ', renamedFrom: 'revoked_at' },
     // Nullable so the additive boot DDL is the migration: existing tokens are
     // grandfathered as non-expiring, and new mints set their own policy.
     { name: 'expires_at', type: 'TIMESTAMPTZ' },
@@ -127,6 +134,13 @@ const ARTIFACTS: Table = {
     // deleting the original must not delete the copy, and a fork of a document
     // that is later gone is still honestly a fork.
     { name: 'forked_from', type: 'TEXT' },
+    // THE TRASH. NULL = live; a timestamp = deleted, and invisible to every
+    // read (lib/trash LIVE_ARTIFACT_SQL, composed into the row-loading seam in
+    // lib/artifacts rather than added by callers). Delete SETS it, restore
+    // clears it, and the purge hard-deletes what has sat here past the
+    // retention. Every row written before the column existed is NULL, which
+    // is exactly "live" — that equivalence is the whole migration.
+    { name: 'deleted_at', type: 'TIMESTAMPTZ' },
   ],
   primaryKey: ['id'],
   indexes: [
@@ -228,7 +242,7 @@ const ARTIFACT_SHARES: Table = {
  * revert all treat it as the ordinary edit it is). Resolution is a lookup in
  * the CURRENT source: attribute present → anchored, absent → orphaned, and
  * orphaned is re-checked on every read, so a revert that brings the text back
- * re-anchors the thread. No FKs (house rule) — deleteArtifactScoped
+ * re-anchors the thread. No FKs (house rule) — the purge (lib/trash)
  * hand-deletes.
  */
 const ANNOTATIONS: Table = {
@@ -260,6 +274,13 @@ const ANNOTATIONS: Table = {
     // grow them by ADD COLUMN IF NOT EXISTS on the next boot.
     { name: 'quote', type: 'TEXT' }, // canonical selected text, capped (lib/story/annotation-range)
     { name: 'range', type: 'TEXT' }, // JSON AnnotationRange: parts addressed RELATIVE to the anchor
+    // The same soft-delete stamp `artifacts` carries, and the same gate: a row
+    // with it set is nonexistent to every reader in lib/annotations. Deleting a
+    // comment is still a HARD delete (deleteAnnotationFor) — erasing someone's
+    // words is a deliberate act with no restore door behind it — so nothing
+    // writes this today; it is the column the pattern owes every adopted table,
+    // and the gate that makes adopting it later a one-line change.
+    { name: 'deleted_at', type: 'TIMESTAMPTZ' },
   ],
   primaryKey: ['id'],
   indexes: [{ name: 'idx_annotations_artifact_seq', columns: ['artifact_id', 'seq'] }],
@@ -394,7 +415,15 @@ const WEB_ASSETS: Table = {
   ],
 };
 
-const TABLES: Table[] = [USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, WEBFONTS, WEB_ASSETS];
+/**
+ * The app's tables, in the order boot applies them — and the shape
+ * scripts/render-schema.mjs prefers, so `SCHEMA.sql` is rendered by the SAME
+ * renderer with the deployment's schema qualifier rather than by re-writing
+ * unqualified text. A statement the renderer emits that a regex cannot
+ * re-qualify (a rename's DO block names its own schema twice) is exactly what
+ * that indirection could not survive.
+ */
+export const TABLES: Table[] = [USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, WEBFONTS, WEB_ASSETS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);

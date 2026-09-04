@@ -15,6 +15,7 @@ import { POST as revertRoute } from '@/app/api/artifacts/[id]/revert/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { isVersionNotArchived, listVersionsFor, revertArtifactFor } from '@/lib/artifacts';
 import { mintToken } from '@/lib/tokens';
+import { purgeTrash } from '@/lib/trash';
 import { createUser, listAccountTokenRows, revokeUserToken } from '@/lib/users';
 
 const BASE = 'http://localhost:3000';
@@ -49,7 +50,7 @@ describe('token management', () => {
     const tokens = await listAccountTokenRows(user.id);
     expect(tokens.map((t) => t.name).sort()).toEqual(['desktop', 'laptop']);
     const laptop = tokens.find((t) => t.name === 'laptop');
-    expect(laptop).toMatchObject({ id: a.id, artifacts: 2, revoked_at: null });
+    expect(laptop).toMatchObject({ id: a.id, artifacts: 2, deleted_at: null });
     expect(tokens.find((t) => t.name === 'desktop')).toMatchObject({ id: b.id, artifacts: 0 });
   });
 
@@ -67,15 +68,15 @@ describe('token management', () => {
     );
     expect(res.status).toBe(401);
 
-    // Still listed (with revoked_at set) so the dashboard shows history.
+    // Still listed (with deleted_at set) so the dashboard shows history.
     const tokens = await listAccountTokenRows(alice.id);
     expect(tokens).toHaveLength(1);
-    expect(tokens[0].revoked_at).not.toBeNull();
+    expect(tokens[0].deleted_at).not.toBeNull();
   });
 });
 
 describe('artifact deletion', () => {
-  it('deletes an artifact and its version history; the public link dies', async () => {
+  it('trashes an artifact — the public link dies at once, the version history goes at the purge', async () => {
     const t = await mintToken('t');
     const art = await create(t.token, '<h1>v1</h1>');
     await put(t.token, art.id, '<h1>v2</h1>');
@@ -90,8 +91,12 @@ describe('artifact deletion', () => {
     expect((await serveArtifact(request(`/a/${art.id}/raw`), params({ id: art.id }))).status).toBe(404);
 
     const db = await harness.db();
-    const versions = await db.query('SELECT 1 FROM artifact_versions WHERE artifact_id = $1', [art.id]);
-    expect(versions.rows).toHaveLength(0);
+    // The history survives the delete, because restoring a document that had
+    // lost its history would be a worse answer than not restoring it at all.
+    expect((await db.query('SELECT 1 FROM artifact_versions WHERE artifact_id = $1', [art.id])).rows).toHaveLength(1);
+    await db.query(`UPDATE artifacts SET deleted_at = now() - interval '31 days' WHERE id = $1`, [art.id]);
+    expect(await purgeTrash({ olderThanDays: 30 })).toEqual([art.id]);
+    expect((await db.query('SELECT 1 FROM artifact_versions WHERE artifact_id = $1', [art.id])).rows).toHaveLength(0);
   });
 
   it("cannot delete another token's artifact (uniform 404)", async () => {

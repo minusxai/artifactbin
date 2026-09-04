@@ -1,5 +1,20 @@
 /** Schema as data → idempotent, additive DDL. Each package declares its own tables with these; utils renders them. */
-export interface Column { name: string; type: string; notNull?: boolean; default?: string; retired?: boolean }
+export interface Column {
+  name: string;
+  type: string;
+  notNull?: boolean;
+  default?: string;
+  retired?: boolean;
+  /**
+   * This column's FORMER name. A rename is DECLARED rather than scripted: the
+   * renderer emits the add, a guarded copy of the old column into this one,
+   * and the drop of the old — idempotent, so it is the whole migration and it
+   * is safe on every boot. The copy is what makes it a rename: a bare drop
+   * beside a bare add would silently discard the data (un-revoking every
+   * revoked token, measured).
+   */
+  renamedFrom?: string;
+}
 export interface Index {
   name: string;
   /**

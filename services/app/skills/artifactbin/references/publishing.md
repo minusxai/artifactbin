@@ -152,5 +152,6 @@ too; there is no separate datasets endpoint.
 | 400 | `not_editable` | Not markup — PUT it whole |
 
 | 400 | `image_fetch_failed` | An `https://` image would not import (unreachable, not an image, private address, over the cap) — `details` names it |
-| 409 | `has_dependents` / `folder_not_empty` | Other documents reference it, or the folder still holds things (`count`) — re-send DELETE with `?force=true` |
+| 403 | `owner_only` | `visibility` and `access` are the owner's — you are a named editor here, so send the write without them |
+| 409 | `has_dependents` | Other documents reference it — re-send DELETE with `?force=true` |
 | 413 / 429 | `too_large` / `rate_limited` | Shrink the content; back off a minute |

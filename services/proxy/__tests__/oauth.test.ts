@@ -194,7 +194,7 @@ describe('oauth code and redirect binding', () => {
     await query('INSERT INTO tokens (id, name, token_hash, user_id) VALUES ($1, $2, $3, $4)', ['tok_revocable', 'oauth', hashToken(accessToken), 'usr_1']);
     const oauth = createOAuthStore({ query }, 'auth');
     const refreshToken = await oauth.issueRefresh({ clientId: 'mcp_client', userId: 'usr_1', resource: RESOURCE, scope: 'artifacts', accessTokenId: 'tok_revocable' });
-    await query('UPDATE tokens SET revoked_at = now() WHERE id = $1', ['tok_revocable']);
+    await query('UPDATE tokens SET deleted_at = now() WHERE id = $1', ['tok_revocable']);
     expect(await oauth.rotateRefresh(refreshToken, 'mcp_client', RESOURCE)).toBeNull();
   });
 });
@@ -234,7 +234,7 @@ describe('auth schema migration', () => {
         "SELECT column_name FROM information_schema.columns WHERE table_schema = 'auth' AND table_name = 'credentials'",
       )).rows.map((entry) => entry.column_name);
       expect(columns).not.toContain('attempts');
-      expect(columns).toEqual(expect.arrayContaining(['group_id', 'consumed_at', 'revoked_at']));
+      expect(columns).toEqual(expect.arrayContaining(['group_id', 'consumed_at', 'deleted_at']));
     } finally {
       await legacy.close();
     }

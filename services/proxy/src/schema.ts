@@ -11,7 +11,10 @@ export const PROXY_TABLES: Table[] = [
       { name: 'metadata', type: 'JSONB', notNull: true, default: "'{}'" },
       { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
       { name: 'updated_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
-      { name: 'revoked_at', type: 'TIMESTAMPTZ' },
+      // The soft-delete stamp every table in this product carries. Declared as
+      // a RENAME of `revoked_at` (utils renderSchema Column.renamedFrom), so an
+      // existing deployment copies the values across on its next boot.
+      { name: 'deleted_at', type: 'TIMESTAMPTZ', renamedFrom: 'revoked_at' },
     ],
     primaryKey: ['id'],
   },
@@ -25,7 +28,7 @@ export const PROXY_TABLES: Table[] = [
       { name: 'payload', type: 'JSONB', notNull: true, default: "'{}'" },
       { name: 'expires_at', type: 'TIMESTAMPTZ', notNull: true },
       { name: 'consumed_at', type: 'TIMESTAMPTZ' },
-      { name: 'revoked_at', type: 'TIMESTAMPTZ' },
+      { name: 'deleted_at', type: 'TIMESTAMPTZ', renamedFrom: 'revoked_at' },
       { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
     ],
     primaryKey: ['kind', 'credential_hash'],

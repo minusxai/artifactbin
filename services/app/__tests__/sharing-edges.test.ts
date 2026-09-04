@@ -15,6 +15,7 @@ import { DELETE as deleteMineRoute } from '@/app/api/my/artifacts/[id]/route';
 import { PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { mintToken } from '@/lib/tokens';
+import { purgeTrash } from '@/lib/trash';
 import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/users';
 
 const BASE = 'http://localhost:3000';
@@ -71,6 +72,11 @@ beforeEach(async () => {
 describe('share rows never outlive their artifact', () => {
   const sharesFor = async (id: string) =>
     (await (await harness.db()).query('SELECT 1 FROM artifact_shares WHERE artifact_id = $1', [id])).rows.length;
+  /** Age the row past the retention and sweep — the delete is a trash, the purge is what erases. */
+  const purge = async (id: string) => {
+    await (await harness.db()).query(`UPDATE artifacts SET deleted_at = now() - interval '31 days' WHERE id = $1`, [id]);
+    expect(await purgeTrash({ olderThanDays: 30 })).toEqual([id]);
+  };
 
   it('the bearer DELETE takes the share list with it', async () => {
     const { owner, token } = await ownerFixture();
@@ -81,7 +87,11 @@ describe('share rows never outlive their artifact', () => {
     expect(await sharesFor(doc.id)).toBe(1);
 
     expect((await deleteArtifactRoute(request(`/api/artifacts/${doc.id}`, { method: 'DELETE', token: token }), params({ id: doc.id }))).status).toBe(200);
-    // A recycled id must never inherit a stranger's grant.
+    // The trash keeps them: a restored document must come back shared with the
+    // same people. A recycled id must never inherit a stranger's grant, and
+    // that is the PURGE's promise now, asserted here where it was.
+    expect(await sharesFor(doc.id)).toBe(1);
+    await purge(doc.id);
     expect(await sharesFor(doc.id)).toBe(0);
   });
 
@@ -92,6 +102,7 @@ describe('share rows never outlive their artifact', () => {
     sessionUser.email = owner.email;
     await putSharingRoute(request(`/api/my/artifacts/${doc.id}/sharing`, { method: 'PUT', json: { shares: ['a@b.com'] } }), params({ id: doc.id }));
     expect((await deleteMineRoute(request(`/api/my/artifacts/${doc.id}`, { method: 'DELETE' }), params({ id: doc.id }))).status).toBe(200);
+    await purge(doc.id);
     expect(await sharesFor(doc.id)).toBe(0);
   });
 });

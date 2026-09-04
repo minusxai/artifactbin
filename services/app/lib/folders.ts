@@ -15,7 +15,10 @@
  */
 import { getDb } from '@/lib/db';
 import { canAnnotate, canEdit, canRead } from '@/lib/share-roles';
-import { effectiveRole, roleWithoutLink, type ArtifactRow, type RoleActor } from '@/lib/artifacts';
+// The hierarchy builds its own statements rather than going through the
+// row-loading seam, so every one of them names the trash gate: a trashed
+// folder is not somewhere to file into, and a trashed child is not listed.
+import { effectiveRole, roleWithoutLink, LIVE_ARTIFACT_SQL, type ArtifactRow, type RoleActor } from '@/lib/artifacts';
 import type { ArtifactFormat } from '@/lib/story/input';
 import { channelFor } from '@/lib/story/live';
 import { renderSparklineSvg } from '@/lib/viz/sparkline';
@@ -97,7 +100,7 @@ export async function resolveParent(
   const db = await getDb();
   const scope = ownedBy(owner);
   const r = await db.query<Pick<ArtifactRow, 'id' | 'format' | 'ancestor_ids'>>(
-    `SELECT id, format, ancestor_ids FROM artifacts WHERE id = $1 AND ${scope.where}`,
+    `SELECT id, format, ancestor_ids FROM artifacts WHERE id = $1 AND ${scope.where} AND ${LIVE_ARTIFACT_SQL}`,
     [parentId, scope.val],
   );
   const parent = r.rows[0];
@@ -122,7 +125,7 @@ export async function resolveParent(
 async function subtreeHeight(id: string): Promise<number> {
   const db = await getDb();
   const r = await db.query<{ deepest: number | null; own: number | null }>(
-    `SELECT (SELECT MAX(cardinality(ancestor_ids))::int FROM artifacts WHERE ancestor_ids @> ARRAY[$1]) AS deepest,
+    `SELECT (SELECT MAX(cardinality(ancestor_ids))::int FROM artifacts WHERE ancestor_ids @> ARRAY[$1] AND ${LIVE_ARTIFACT_SQL}) AS deepest,
             (SELECT cardinality(ancestor_ids)::int FROM artifacts WHERE id = $1) AS own`,
     [id],
   );
@@ -213,7 +216,7 @@ export async function childrenTableFor(
             (SELECT COUNT(DISTINCT COALESCE(e.visitor, e.seq::text))::int FROM analytics_events e
              WHERE e.artifact_id = artifacts.id AND e.event = 'view') AS views
        FROM artifacts
-      WHERE ancestor_ids[cardinality(ancestor_ids)] = $1
+      WHERE ancestor_ids[cardinality(ancestor_ids)] = $1 AND ${LIVE_ARTIFACT_SQL}
       ORDER BY updated_at DESC
       LIMIT 500`,
     [folder.id],
@@ -294,32 +297,6 @@ async function viewSeries(ids: string[], days = SPARKLINE_DAYS): Promise<Map<str
     series.set(row.artifact_id, buckets);
   }
   return series;
-}
-
-/** How many rows sit anywhere under this folder — the count the non-empty refusal names. */
-export async function subtreeCount(id: string): Promise<number> {
-  const db = await getDb();
-  const r = await db.query<{ n: number }>('SELECT COUNT(*)::int AS n FROM artifacts WHERE ancestor_ids @> ARRAY[$1]', [id]);
-  return r.rows[0]?.n ?? 0;
-}
-
-/** True when no live row names `id` as its parent. */
-export async function folderIsEmpty(id: string): Promise<boolean> {
-  const db = await getDb();
-  const r = await db.query('SELECT 1 FROM artifacts WHERE ancestor_ids[cardinality(ancestor_ids)] = $1 LIMIT 1', [id]);
-  return r.rows.length === 0;
-}
-
-/** Every id under a folder (GIN containment), for a forced delete. */
-export async function subtreeIds(id: string): Promise<string[]> {
-  const db = await getDb();
-  // Deepest first, so a caller deleting row by row never steps over what is
-  // below the row it is on.
-  const r = await db.query<{ id: string }>(
-    'SELECT id FROM artifacts WHERE ancestor_ids @> ARRAY[$1] ORDER BY cardinality(ancestor_ids) DESC',
-    [id],
-  );
-  return r.rows.map((x) => x.id);
 }
 
 /**

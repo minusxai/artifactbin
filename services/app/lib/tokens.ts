@@ -1,7 +1,7 @@
 /**
  * Agent bearer tokens. (Pattern from minusx-gateway gateway/ledger.py:
  * prefix + 256 random bits, shown exactly once, only sha256 stored in a
- * unique-indexed column, soft revoke via revoked_at — unknown and revoked are
+ * unique-indexed column, soft revoke via deleted_at — unknown and revoked are
  * indistinguishable to callers.)
  *
  * A token may be anonymous (user_id NULL) or bound to a user; artifacts it
@@ -14,8 +14,14 @@ import type { Harness } from './client-identity';
 
 export const TOKEN_PREFIX = 'mx_';
 
-/** SQL predicate shared by every app query that treats a token as a live credential. */
-export const LIVE_TOKEN_SQL = 'revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now())';
+/**
+ * SQL predicate shared by every app query that treats a token as a live
+ * credential. QUALIFIED by the table, which is not decoration: `deleted_at` is
+ * the soft-delete column on `artifacts` too now, and the drafts listing JOINs
+ * the two — an unqualified clause there is `column reference "deleted_at" is
+ * ambiguous`, which is a 500 on the dashboard of anyone holding a token.
+ */
+export const LIVE_TOKEN_SQL = 'tokens.deleted_at IS NULL AND (tokens.expires_at IS NULL OR tokens.expires_at > now())';
 
 // Cheap reject before any DB hit: exact shape of prefix + base64url(32 bytes).
 const TOKEN_RE = /^mx_[A-Za-z0-9_-]{40,50}$/;
@@ -64,10 +70,10 @@ export interface MintOptions {
 /** Derived, never stored twice: revoked wins over expired; NULL expires_at never expires (grandfathered rows). */
 export type TokenStatus = 'active' | 'expired' | 'revoked';
 export function tokenStatus(
-  row: { revoked_at: string | Date | null; expires_at: string | Date | null },
+  row: { deleted_at: string | Date | null; expires_at: string | Date | null },
   now: number = Date.now(),
 ): TokenStatus {
-  if (row.revoked_at !== null) return 'revoked';
+  if (row.deleted_at !== null) return 'revoked';
   if (row.expires_at !== null && new Date(row.expires_at).getTime() <= now) return 'expired';
   return 'active';
 }
@@ -112,7 +118,7 @@ export async function mintToken(
 export async function ensureUserToken(userId: string): Promise<string> {
   const db = await getDb();
   const existing = await db.query<{ id: string }>(
-    "SELECT id FROM tokens WHERE user_id = $1 AND name = 'web' AND revoked_at IS NULL LIMIT 1",
+    "SELECT id FROM tokens WHERE user_id = $1 AND name = 'web' AND deleted_at IS NULL LIMIT 1",
     [userId],
   );
   if (existing.rows[0]) return existing.rows[0].id;
@@ -147,7 +153,7 @@ export async function rememberTokenClient(id: string, harness: Harness): Promise
 
 /**
  * Resolve a token by its ID — for a credential that NAMES a token rather than
- * carrying it (lib/agent-session's cookie). The `revoked_at IS NULL` clause is
+ * carrying it (lib/agent-session's cookie). The `deleted_at IS NULL` clause is
  * the point: authorization is re-read on every request, so revoking a token
  * ends the browser session holding it on the very next call rather than
  * whenever the cookie happens to expire.
@@ -168,7 +174,7 @@ export async function resolveTokenById(id: string): Promise<ResolvedToken | null
 /** Soft revoke — the row and its artifacts survive. Returns false if no live token had this id. */
 export async function revokeToken(id: string): Promise<boolean> {
   const db = await getDb();
-  const r = await db.query('UPDATE tokens SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL', [id]);
+  const r = await db.query('UPDATE tokens SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL', [id]);
   return r.rowCount > 0;
 }
 
@@ -201,7 +207,7 @@ export async function touchToken(id: string): Promise<void> {
 export async function revokeHeldToken(id: string, userId: string | null): Promise<boolean> {
   const db = await getDb();
   const r = await db.query(
-    'UPDATE tokens SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL AND (user_id IS NULL OR user_id = $2)',
+    'UPDATE tokens SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL AND (user_id IS NULL OR user_id = $2)',
     [id, userId],
   );
   return r.rowCount > 0;
@@ -213,7 +219,7 @@ export interface TokenRow {
   name: string | null;
   user_id: string | null;
   created_at: string;
-  revoked_at: string | null;
+  deleted_at: string | null;
   expires_at: string | null;
   last_used_at: string | null;
 }
@@ -222,7 +228,7 @@ export interface TokenRow {
 export async function listTokensByUser(userId: string): Promise<TokenRow[]> {
   const db = await getDb();
   return (await db.query<TokenRow>(
-    'SELECT id, name, user_id, created_at, revoked_at, expires_at, last_used_at FROM tokens WHERE user_id = $1 AND revoked_at IS NULL ORDER BY last_used_at DESC NULLS LAST, created_at DESC',
+    'SELECT id, name, user_id, created_at, deleted_at, expires_at, last_used_at FROM tokens WHERE user_id = $1 AND deleted_at IS NULL ORDER BY last_used_at DESC NULLS LAST, created_at DESC',
     [userId],
   )).rows;
 }

@@ -28,6 +28,7 @@ import { runWithRequest } from '@/lib/request-context';
 import { declaresLiveData } from '@/lib/story/helmet';
 import { SHOWCASE_ORIGIN } from '@/lib/showcase';
 import { canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
+import { sweepTrashSoon } from '@/lib/trash';
 import { ownerUsername } from '@/lib/users';
 import { roleFor, sessionActor } from '@/lib/viewer';
 import { canAnnotate } from '@/lib/share-roles';
@@ -178,6 +179,14 @@ const apiNotFound = (c: { req: { raw: Request } }) =>
 
 export function createAppServer(opts: AppServerOptions = {}): Hono {
   const app = new Hono();
+  /*
+   * THE TRASH SWEEP, hung off the API surface: at most once an hour, from
+   * whatever request happens to arrive after the interval (lib/trash holds the
+   * timestamp), and never awaited — the caller is someone publishing or
+   * reading, and housekeeping must not be in their latency or their errors.
+   * Boot runs it once too (server.ts), which covers a process nobody calls.
+   */
+  app.use('/api/*', async (c, next) => { sweepTrashSoon(); await next(); });
   // Transport identity must be attached before any app middleware or route
   // asks viewer.ts who is calling.
   if (opts.actorSecret) actorReceiver(opts.actorSecret).mount(app);
