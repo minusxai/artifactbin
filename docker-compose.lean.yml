@@ -168,23 +168,16 @@ services:
       dockerfile: services/events/Dockerfile
     image: artifactbin-lean-events
     restart: unless-stopped
-    # `edge` is the network of PUBLISHED doors, and the log has one (below): a
-    # container attached only to `internal: true` networks cannot publish a port
-    # at all — measured on this file, where the binding is set on the container
-    # and NetworkSettings.Ports is null, while the proxy on `edge` publishes
-    # fine. compute is how the app reaches it; db is its own database.
-    networks: [edge, compute, db]
+    # compute is how the app reaches it; db is its own database. NO edge, and
+    # no published port: the proxy stays the only door, and the log's wire is
+    # reachable only from inside the compute network (the walk drives it with
+    # `compose exec` on the app container, which is where an emitter lives).
+    networks: [compute, db]
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     tmpfs: ["/tmp:rw,noexec,nosuid,nodev"]
-    # THE LOG'S OWN DOOR, on loopback: the compose walk posts a hand-built
-    # envelope at it, and an operator reads the log through it. Every route but
-    # /health is behind INTERNAL__SERVICE_SECRET, so this is not an identity
-    # surface — but a deployment that has no such caller drops these two lines
-    # and leaves the proxy the only published port.
-    ports:
-      - "127.0.0.1:${LEAN_EVENTS_PORT:-5441}:8080"
+    # No ports at all, like sql and browser: the proxy is the only way in.
     env_file:
       - infra/env/events.env.example
     environment:

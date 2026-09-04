@@ -45,14 +45,20 @@ export function createEvents(opts: EventsWriterOptions): EventsService {
   const schema = opts.schema ?? DEFAULT_EVENTS_SCHEMA;
   const sinks = opts.sinks ?? [];
   // ONE ensure per service, not per batch: the DDL is idempotent but it is
-  // still a round trip, and `emit` sits on the request path.
+  // still a round trip, and `emit` sits on the request path. A REJECTION is
+  // forgotten, though — memoising it would leave a writer whose database was
+  // merely slow to come up dead until the process restarts, and nothing in the
+  // product would say so, because emit never rejects.
   let ensured: Promise<void> | null = null;
+  const ready = (): Promise<void> => (ensured ??= ensureEventsSchema(opts.db, schema).catch((error) => {
+    ensured = null;
+    throw error;
+  }));
   return {
     async emit(events: EventEnvelope[]): Promise<void> {
       if (events.length === 0) return;
       try {
-        ensured ??= ensureEventsSchema(opts.db, schema);
-        await ensured;
+        await ready();
         // ONE statement per batch: the placeholders are generated from the
         // column list above, and `payload` is cast because a JSON string
         // parameter is text until it is told otherwise.
