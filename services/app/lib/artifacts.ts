@@ -11,6 +11,7 @@ import { sourceWithoutAnchors } from './annotation-anchors';
 import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN } from './config';
 import { assetByteQuotaExceeded } from './asset-quota';
 import { getDb, type Queryable } from './db';
+import { actorSubject, emit } from './events';
 import { generateFileId } from './ids';
 import { parseContentInput, type ArtifactFormat } from './story/input';
 import { canonicalizeMarkup, publishJsx } from './story/jsx-tier';
@@ -1154,6 +1155,16 @@ export async function updateSharingFor(actor: TokenActor, id: string, patch: Sha
     return true;
   });
   if (!done) return null;
+  /*
+   * AFTER the transaction, and only when the ACL actually moved. The payload
+   * carries the two axes a change can name and nothing else: the share list is
+   * email addresses, which never travel to the log — an operator reading
+   * "sharing_changed" learns the tier, not who is on it.
+   */
+  await emit(actorSubject(actor), 'sharing_changed', { kind: 'artifact', id }, {
+    visibility: patch.visibility ?? null,
+    link_role: patch.linkRole ?? null,
+  });
   return getSharingFor(actor, id);
 }
 

@@ -45,3 +45,17 @@ export async function emit<K extends ObjectKind, V extends EventVerb<K>>(
     console.error('[events] emit failed:', error);
   }
 }
+
+/**
+ * WHO IS SPEAKING, from the credential the request came in on. The account
+ * when there is one, the token when there is not, and nothing when there is
+ * neither — the one rule every lib call site shares, written once so a
+ * credential is never turned into a subject two slightly different ways.
+ *
+ * It takes the two fields rather than `TokenActor` so the emitter keeps no
+ * dependency on `lib/artifacts`; every caller already holds both.
+ */
+export function actorSubject(actor: { tokenId: string; userId: string | null }): EventSubject | null {
+  if (actor.userId) return { kind: 'user', id: actor.userId };
+  return actor.tokenId ? { kind: 'token', id: actor.tokenId } : null;
+}

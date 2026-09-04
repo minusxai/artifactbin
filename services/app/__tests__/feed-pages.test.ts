@@ -8,7 +8,7 @@
  * (the service's own declaration, ON CONFLICT DO NOTHING; the harness wipes).
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ensureTable } from '@artifactbin/utils';
+import { ensureTable, noopEvents } from '@artifactbin/utils';
 import { EVENTS_TABLES } from '@artifactbin/events';
 import { request, useAppHarness } from '@/__tests__/harness';
 import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
@@ -18,6 +18,7 @@ import { createArtifact } from '@/lib/artifacts';
 import { EVENTS_SCHEMA } from '@/lib/config';
 import { decorateFeed, followFeed, ownerFeed } from '@/lib/feed';
 import { link } from '@/lib/relations';
+import { setServices } from '@/lib/services';
 import { mintToken } from '@/lib/tokens';
 import { createUser, type UserRow } from '@/lib/users';
 
@@ -42,6 +43,15 @@ async function say(id: string, at: string, subject: [string | null, string | nul
 }
 
 beforeEach(async () => {
+  /*
+   * A SILENT FIXTURE. Publishing three documents and minting two tokens says
+   * `created` and `minted` to the log — fire-and-forget, so those rows would
+   * land at an unpredictable moment DURING a test and count against feeds that
+   * assert exact id lists. The writer is swapped for the noop instead of
+   * deleting behind it: only the sentences `say()` puts in are ever in there,
+   * and the harness owns every wipe (`harness-rollout` pin 4).
+   */
+  setServices({ events: noopEvents() });
   const db = await harness.db();
   await db.query(`CREATE SCHEMA IF NOT EXISTS ${EVENTS_SCHEMA}`);
   await ensureTable(db, EVENTS_TABLES, { schema: EVENTS_SCHEMA });
@@ -55,8 +65,6 @@ beforeEach(async () => {
   pubA = (await createArtifact(ta.id, alice.id, doc('Alice public', 'public'))).id;
   privA = (await createArtifact(ta.id, alice.id, doc('Alice private', 'private'))).id;
   pubB = (await createArtifact(tb.id, bob.id, doc('Bob public', 'public'))).id;
-  // A clean log: only the sentences this file says count.
-  await db.query(`DELETE FROM ${EVENTS_SCHEMA}.events`);
 });
 
 describe('followFeed', () => {
