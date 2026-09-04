@@ -20,7 +20,7 @@
  * merely opens a page — possibly an anonymous stranger — spends no storage.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { useAppHarness, request, agentCookie } from '@/__tests__/harness';
 import { withHttpServer, type RunningServer } from '@/__tests__/net';
 import { GET as docAssets } from '@/app/a/[id]/assets/route';
 import { POST as createArtifact, GET as listArtifacts } from '@/app/api/artifacts/route';
@@ -31,6 +31,7 @@ import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { setDocAssetImportCapForTests } from '@/lib/auth';
 import { assetUrlFor, urlHash } from '@/lib/story/asset-url';
 import { getDb } from '@/lib/db';
+import { mintExportKey } from '@/lib/export-key';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 9, 9, 9]);
 useAppHarness();
@@ -244,5 +245,83 @@ describe('nothing else was created', () => {
     await ask(doc.id, `${web}/tidy.png`);
     const list = await listArtifacts(request('/api/artifacts', { token: doc.token.token }));
     expect((await list.json()).artifacts).toHaveLength(1);
+  });
+});
+
+/**
+ * THE JSON ANSWER — for the one caller that is not an `<img>`.
+ *
+ * A framed document cannot load this endpoint itself: it is opaque-origin, so
+ * its `<img>` carries no cookie, and on a private document the ACL then answers
+ * the uniform 404 — for a shared reader, for the exporter, and for the OWNER's
+ * own framed copy, which is the default case since a signed-in user's document
+ * is born private. So the page asks on the frame's behalf and needs the ADDRESS
+ * rather than a redirect it would silently follow.
+ *
+ * Selected by `Accept: application/json`, which an `<img>` can never send (it
+ * asks for `image/*`), so the two answers can never be confused for each other.
+ */
+const asJson = (id: string, url: string, opts: Parameters<typeof request>[1] = {}) =>
+  docAssets(request(`/a/${id}/assets?u=${encodeURIComponent(url)}`, { ...opts, headers: { ...(opts.headers ?? {}), accept: 'application/json' } }), params(id));
+
+describe('the JSON answer', () => {
+  it('answers 200 with the address instead of a redirect', async () => {
+    const doc = await publicDoc();
+    const url = `${web}/json1.png`;
+    const res = await asJson(doc.id, url);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('location')).toBeNull();
+    expect(await res.json()).toEqual({ url: assetUrlFor(url) });
+  });
+
+  it('keeps a refusal exactly as the redirect path reports it', async () => {
+    const doc = await publicDoc();
+    const res = await asJson(doc.id, 'http://169.254.169.254/x.png');
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('forbidden_address');
+  });
+
+  it('is still the uniform 404 for a stranger on a private document', async () => {
+    const doc = await privateDoc();
+    hits.length = 0;
+    expect((await asJson(doc.id, `${web}/json2.png`)).status).toBe(404);
+    expect(hits).toEqual([]);
+  });
+
+  it('admits the OWNER through their browser credential, and charges them', async () => {
+    const doc = await privateDoc();
+    const res = await asJson(doc.id, `${web}/json3.png`, { cookie: await agentCookie([doc.token.id]) });
+    expect(res.status).toBe(200);
+    expect((await res.json()).url).toBe(assetUrlFor(`${web}/json3.png`));
+    const stored = await rows();
+    expect(stored).toHaveLength(1);
+    expect(stored[0].fetched_by_user_id).toBe(doc.user.id);
+  });
+});
+
+/**
+ * THE EXPORTER'S KEY. `/a/<id>/export` renders the page in a headless browser
+ * with no session at all, so a private document's capture reaches this endpoint
+ * through the page carrying the same signed, seconds-long key `raw` honours —
+ * without it the export photographs alt text where the picture should be.
+ */
+describe('the export key', () => {
+  it('admits a caller holding a valid key for THIS document', async () => {
+    const doc = await privateDoc();
+    const key = mintExportKey(doc.id);
+    const res = await docAssets(request(`/a/${doc.id}/assets?u=${encodeURIComponent(`${web}/key1.png`)}&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } }), params(doc.id));
+    expect(res.status).toBe(200);
+    expect((await res.json()).url).toBe(assetUrlFor(`${web}/key1.png`));
+  });
+
+  it('refuses a key minted for a DIFFERENT document, and an expired one', async () => {
+    const doc = await privateDoc();
+    const other = await privateDoc();
+    hits.length = 0;
+    const wrong = await docAssets(request(`/a/${doc.id}/assets?u=${encodeURIComponent(`${web}/key2.png`)}&key=${encodeURIComponent(mintExportKey(other.id))}`), params(doc.id));
+    expect(wrong.status).toBe(404);
+    const dead = await docAssets(request(`/a/${doc.id}/assets?u=${encodeURIComponent(`${web}/key3.png`)}&key=${encodeURIComponent(mintExportKey(doc.id, -1000))}`), params(doc.id));
+    expect(dead.status).toBe(404);
+    expect(hits).toEqual([]);
   });
 });

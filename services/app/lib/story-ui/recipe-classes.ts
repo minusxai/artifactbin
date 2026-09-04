@@ -778,6 +778,7 @@ export const STORY_UI_RECIPE_CLASSES: readonly string[] = [
   "underline-offset-4",
   "unknown",
   "uppercase",
+  "url",
   "use",
   "value",
   "var(--border,",

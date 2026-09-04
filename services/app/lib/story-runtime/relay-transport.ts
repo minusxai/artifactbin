@@ -14,7 +14,9 @@
  * React-free; installed by the entry.
  */
 import {
+  STORY_ASSET_MESSAGE, STORY_ASSET_RESULT_MESSAGE,
   STORY_MUTATE_MESSAGE, STORY_MUTATE_RESULT_MESSAGE, STORY_QUERY_MESSAGE, STORY_QUERY_RESULT_MESSAGE,
+  type StoryAssetRequest, type StoryAssetResult,
   type StoryMutateRequest, type StoryMutateResult, type StoryQueryRequest, type StoryQueryResult,
 } from './contract';
 import type { QueryTransport } from './store';
@@ -77,7 +79,36 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
     else w.reject(new Error(data.error));
   });
 
+  /**
+   * The ASSET half. Its own message type and waiter map, for the reason the
+   * write half has its own: an import must never be answered by a query's
+   * reply, and vice versa.
+   *
+   * It RESOLVES rather than rejects, always — `{refused}` is an answer, and a
+   * silence is `refused: 'no_answer'`. A bound image has exactly one way to
+   * report anything (its alt text, under `data-mx-asset="refused"`), so a
+   * rejection here would only become an unhandled promise and an empty box.
+   */
+  let assetSeq = 0;
+  const importers = new Map<number, { settle: (r: { url: string } | { refused: string }) => void; timer: ReturnType<typeof setTimeout> }>();
+  source.addEventListener('message', (e: MessageEvent) => {
+    if (e.source !== target || e.origin !== appOrigin) return;
+    const data = e.data as StoryAssetResult | undefined;
+    if (!data || typeof data !== 'object' || data.type !== STORY_ASSET_RESULT_MESSAGE) return;
+    const w = importers.get(data.id);
+    if (!w) return;
+    importers.delete(data.id);
+    clearTimeout(w.timer);
+    w.settle('url' in data ? { url: data.url } : { refused: data.refused });
+  });
+
   return {
+    importAsset: (url) => new Promise<{ url: string } | { refused: string }>((settle) => {
+      const id = ++assetSeq;
+      const timer = setTimeout(() => { importers.delete(id); settle({ refused: 'no_answer' }); }, timeoutMs);
+      importers.set(id, { settle, timer });
+      target.postMessage({ type: STORY_ASSET_MESSAGE, id, url } satisfies StoryAssetRequest, appOrigin);
+    }),
     run: async (values, only) => {
       const r = await send({ values, only });
       return { tables: r.tables, errors: r.errors };

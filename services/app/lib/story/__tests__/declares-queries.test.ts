@@ -17,7 +17,7 @@
  *    escaped text), and must never throw here — this runs on every read.
  */
 import { describe, expect, it } from 'vitest';
-import { declaresQueries } from '@/lib/story/helmet';
+import { declaresBoundSources, declaresLiveData, declaresQueries } from '@/lib/story/helmet';
 
 const helmet = (inner: string) => `<Helmet>${inner}</Helmet><div><h1>Doc</h1></div>`;
 
@@ -45,5 +45,55 @@ describe('declaresQueries', () => {
     expect(declaresQueries('<div><Query name="x">{`select 1`}</Query>')).toBe(false);
     expect(declaresQueries(null)).toBe(false);
     expect(declaresQueries('')).toBe(false);
+  });
+});
+
+/**
+ * `declaresBoundSources` — the THIRD reader interaction that reaches the
+ * server, and the one that is not in `<Helmet>` at all.
+ *
+ * A bound `<img src="$pick">` imports the URL a reader picked through
+ * `/a/<id>/assets`, and the frame cannot load that itself: it is opaque-origin,
+ * so its `<img>` carries no cookie and a private document answers the uniform
+ * 404 — for its own owner as much as for a stranger. So a private document with
+ * one keeps its parent page, exactly as one declaring a query does.
+ *
+ * Same edges as its siblings: parsed and never pattern-matched, so `$pick` in
+ * prose is prose; a literal URL is not a binding (publish already imported it);
+ * and source that does not parse declares nothing and never throws.
+ */
+describe('declaresBoundSources', () => {
+  const yes = (s: string) => expect(declaresBoundSources(s)).toBe(true);
+  const no = (s: string) => expect(declaresBoundSources(s)).toBe(false);
+
+  it('counts a whole-attribute binding and the braced form alike', () => {
+    yes('<Helmet><Value name="pick" type="string" /></Helmet><div><img src="$pick" /></div>');
+    yes('<Helmet><Value name="k" type="string" /></Helmet><div><img src="https://cdn.x.com/{$k}.png" /></div>');
+    yes('<div><section><img alt="deep" src="$pick" /></section></div>');
+  });
+
+  it('does not count a literal URL, a ref:, or a `$` anywhere else', () => {
+    no('<div><img src="https://cdn.x.com/fixed.png" /></div>');
+    no('<div><img src="ref:abc123" /></div>');
+    no('<div><p>pick with $pick in the prose</p></div>');
+    no('<div><Number data="$q" format="$,.0f" /></div>');
+    no('<div><input value="$pick" /></div>');
+    no('<div><Video poster="$pick" src="https://youtu.be/x" /></div>');
+  });
+
+  it('is false for nothing and for source that does not parse', () => {
+    no('');
+    expect(declaresBoundSources(null)).toBe(false);
+    no('<div><p>unclosed');
+  });
+});
+
+describe('declaresLiveData counts a bound source too', () => {
+  it('is true for a document whose only server interaction is a bound image', () => {
+    expect(declaresLiveData('<Helmet><Value name="pick" type="string" /></Helmet><div><img src="$pick" /></div>')).toBe(true);
+  });
+
+  it('is still false for a document whose values move nothing off the page', () => {
+    expect(declaresLiveData('<Helmet><Value name="r" type="string" /></Helmet><div><input value="$r" /><img src="https://cdn.x.com/a.png" /></div>')).toBe(false);
   });
 });

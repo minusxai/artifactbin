@@ -27,13 +27,15 @@
  * the import bounds belong with the importer.
  */
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
+import { verifyExportKey } from '@/lib/export-key';
 import { sessionActor } from '@/lib/viewer';
 import { importForDocument, WebAssetRefused } from '@/lib/web-assets';
 import { json } from '@/lib/http';
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
-  const url = new URL(request.url).searchParams.get('u');
+  const params = new URL(request.url).searchParams;
+  const url = params.get('u');
   if (!url) return json({ error: 'missing_url' }, 400);
 
   // The uniform 404 — an unreachable id and an unreadable one are the same
@@ -41,12 +43,30 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const artifact = await getArtifactById(id);
   if (!artifact) return notFound();
   const { viewer } = await sessionActor(request);
-  if (!(await canReadArtifact(artifact, viewer))) return notFound();
+  // …and the exporter's own credential, on exactly the terms `raw` admits it:
+  // a signed, seconds-long key scoped to THIS artifact. The capture runs in a
+  // headless browser with no session, so without this a private document's
+  // export photographs alt text where its picture should be.
+  const key = params.get('key');
+  const admitted = (await canReadArtifact(artifact, viewer)) || verifyExportKey(artifact.id, key ?? undefined);
+  if (!admitted) return notFound();
 
   try {
     const location = await importForDocument(artifact, url);
-    // 302, never the bytes: this cannot be used to read a response the caller
-    // could not have fetched for themselves.
+    /*
+     * TWO ANSWERS, ONE IMPORT. An `<img>` gets a 302 and the browser follows
+     * it — one request, and the bytes are never this response's. The PAGE,
+     * relaying for a framed document that cannot present a session
+     * (lib/story-runtime/contract STORY_ASSET_MESSAGE), asks with
+     * `Accept: application/json` and gets the address to hand back instead.
+     *
+     * The header rather than a `format=` param because an `<img>` can never
+     * send it — it asks for `image/*` — so the two answers cannot be confused
+     * for one another, and the endpoint grows no second URL shape.
+     */
+    if ((request.headers.get('accept') ?? '').includes('application/json')) return json({ url: location }, 200);
+    // Never the bytes: this cannot be used to read a response the caller could
+    // not have fetched for themselves.
     return new Response(null, { status: 302, headers: { Location: location } });
   } catch (error) {
     if (error instanceof WebAssetRefused) {

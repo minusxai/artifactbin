@@ -4,7 +4,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { createRelayTransport } from '@/lib/story-runtime/relay-transport';
-import { STORY_QUERY_MESSAGE, STORY_QUERY_RESULT_MESSAGE } from '@/lib/story-runtime/contract';
+import { STORY_ASSET_MESSAGE, STORY_ASSET_RESULT_MESSAGE, STORY_QUERY_MESSAGE, STORY_QUERY_RESULT_MESSAGE } from '@/lib/story-runtime/contract';
 
 /** The origin the document was served from — the only one it will deal with. */
 const APP = 'https://artifactbin.dev';
@@ -102,5 +102,52 @@ describe('who may answer a document\'s query', () => {
     const run = t.run({}, ['sales']);
     deliver(target, { type: STORY_QUERY_RESULT_MESSAGE, id: 1, tables: { sales: [{ revenue: 1 }] }, errors: {} });
     await expect(run).resolves.toMatchObject({ tables: { sales: [{ revenue: 1 }] } });
+  });
+});
+
+/**
+ * THE ASSET RELAY. A framed document's `<img>` cannot present a session, so the
+ * URL a reader picked is imported by the PAGE and only its public address comes
+ * back. Same envelope discipline as the query relay: matched by id, addressed
+ * to the app origin, accepted from the target window at that origin alone.
+ */
+describe('importAsset', () => {
+  it('posts mx:asset to the app origin and resolves with the address of our copy', async () => {
+    const { target, posted, messages } = fakeParent();
+    const t = createRelayTransport(target, APP, window);
+    const p = t.importAsset!('https://cdn.x.com/cat.png');
+    expect(messages()[0]).toEqual({ type: STORY_ASSET_MESSAGE, id: 1, url: 'https://cdn.x.com/cat.png' });
+    expect(posted[0].target).toBe(APP);
+    deliver(target, { type: STORY_ASSET_RESULT_MESSAGE, id: 1, url: '/assets/abc' });
+    expect(await p).toEqual({ url: '/assets/abc' });
+  });
+
+  it('resolves — never rejects — with the importer\'s own refusal code', async () => {
+    const { target } = fakeParent();
+    const t = createRelayTransport(target, APP, window);
+    const p = t.importAsset!('http://169.254.169.254/x.png');
+    deliver(target, { type: STORY_ASSET_RESULT_MESSAGE, id: 1, refused: 'forbidden_address' });
+    expect(await p).toEqual({ refused: 'forbidden_address' });
+  });
+
+  it('ignores an answer from another window, from another origin, and for another id', async () => {
+    const { target } = fakeParent();
+    const other = { postMessage: () => {} } as unknown as Window;
+    const t = createRelayTransport(target, APP, window, 100);
+    const p = t.importAsset!('https://cdn.x.com/cat.png');
+    deliver(target, { type: STORY_ASSET_RESULT_MESSAGE, id: 1, url: '/assets/stranger' }, 'https://evil.example');
+    deliver(other, { type: STORY_ASSET_RESULT_MESSAGE, id: 1, url: '/assets/other-window' });
+    deliver(target, { type: STORY_ASSET_RESULT_MESSAGE, id: 99, url: '/assets/wrong-id' });
+    // Nothing legitimate ever arrives: it gives up as a refusal, so the document
+    // shows its alt text rather than an empty box that never resolves.
+    expect(await p).toEqual({ refused: 'no_answer' });
+  });
+
+  it('keeps its own waiter map — a query result never answers an import', async () => {
+    const { target } = fakeParent();
+    const t = createRelayTransport(target, APP, window, 100);
+    const p = t.importAsset!('https://cdn.x.com/cat.png');
+    deliver(target, { type: STORY_QUERY_RESULT_MESSAGE, id: 1, tables: {}, errors: {} });
+    expect(await p).toEqual({ refused: 'no_answer' });
   });
 });

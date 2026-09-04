@@ -32,7 +32,7 @@
  *    CSS has no use for the sequence; the snapshot's styleTag precedent.)
  */
 import { parseJsx, type JsxElement, type JsxNode, type ValidationError } from '@/lib/jsx';
-import { MUTATION_TAG, QUERY_TAG, VALUE_TAG, parseMutationDecl, parseQueryDecl, parseValueDecl, type MutationDecl, type QueryDecl, type ValueDecl } from './dataflow';
+import { MUTATION_TAG, QUERY_TAG, VALUE_TAG, carriesRef, parseMutationDecl, parseQueryDecl, parseValueDecl, type MutationDecl, type QueryDecl, type ValueDecl } from './dataflow';
 
 export const HELMET_TAG = 'Helmet';
 
@@ -299,9 +299,44 @@ export function declaresLiveData(source: string | null | undefined): boolean {
   if (!source) return false;
   const parsed = parseJsx(source);
   if (!parsed.ok) return false;
-  const { content } = splitHelmet(parsed.nodes);
-  return content.queries.length > 0 || content.mutations.length > 0;
+  const { content, body } = splitHelmet(parsed.nodes);
+  return content.queries.length > 0 || content.mutations.length > 0 || hasBoundSource(body);
 }
+
+/**
+ * Does this document carry a BOUND IMAGE SOURCE — `<img src="$pick">`, or the
+ * braced `src="https://cdn.x.com/{$pick}.png"`?
+ *
+ * The third reader interaction that reaches the server, and the only one that
+ * lives in the BODY rather than in `<Helmet>`. The URL a reader picks is
+ * imported through `/a/<id>/assets`, and the frame cannot load that for itself:
+ * a served document is sandboxed without `allow-same-origin`, so its `<img>`
+ * carries no cookie, and a private document answers the uniform 404 — for its
+ * OWNER's own framed copy exactly as for a stranger, which is the default case
+ * since a signed-in user's document is born private. So such a document keeps
+ * its parent page, where the session is, precisely as one declaring a query
+ * does (lib/story-runtime/contract STORY_ASSET_MESSAGE).
+ *
+ * Parsed, never pattern-matched, and never throwing: `$pick` in prose is prose,
+ * a literal URL is not a binding (publish already imported it), and source that
+ * does not parse declares nothing. `carriesRef` is the dataflow's own answer to
+ * "is this a reference", so this cannot drift from what the renderer binds.
+ */
+export function declaresBoundSources(source: string | null | undefined): boolean {
+  if (!source) return false;
+  const parsed = parseJsx(source);
+  if (!parsed.ok) return false;
+  return hasBoundSource(splitHelmet(parsed.nodes).body);
+}
+
+const hasBoundSource = (nodes: JsxNode[]): boolean => nodes.some((n) => {
+  if (n.type !== 'element') return false;
+  if (!n.isComponent && n.tag.toLowerCase() === 'img') {
+    const src = n.attributes.find((a) => a.name.toLowerCase() === 'src');
+    if (src?.value.static && carriesRef(src.value.json)) return true;
+  }
+  return hasBoundSource(n.children);
+});
 
 /** Split Helmet out of the tree wherever it sits; body keeps original node spans. */
 export function splitHelmet(nodes: JsxNode[]): HelmetSplit {

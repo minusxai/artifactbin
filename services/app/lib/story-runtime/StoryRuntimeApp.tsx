@@ -102,6 +102,16 @@ const RuntimeEmbedContext = createContext<RuntimeEmbedContextValue>({
 interface RuntimeAssetContextValue {
   endpoint: string | null;
   seen: Set<string>;
+  /**
+   * The document's transport, when it has one that can import (the RELAY —
+   * lib/story-runtime/document-transport). Present means FRAMED, and framed
+   * means the element cannot do this for itself: the frame is opaque-origin, so
+   * its `<img>` carries no cookie and a private document's endpoint answers the
+   * uniform 404 — for its OWNER's copy as much as for a stranger. When it is
+   * here it is the AUTHORITY: the element's own load and error are ignored,
+   * because the load that fails is the one we already know cannot succeed.
+   */
+  importAsset?: (url: string) => Promise<{ url: string } | { refused: string }>;
 }
 
 const RuntimeAssetContext = createContext<RuntimeAssetContextValue>({ endpoint: null, seen: new Set() });
@@ -126,8 +136,10 @@ const RuntimeAssetContext = createContext<RuntimeAssetContextValue>({ endpoint: 
  */
 function RuntimeBoundSource({ props, template }: BoundSourceProps) {
   const { state } = useContext(RuntimeEmbedContext);
-  const { endpoint, seen } = useContext(RuntimeAssetContext);
+  const { endpoint, seen, importAsset } = useContext(RuntimeAssetContext);
   const [refused, setRefused] = useState<ReadonlySet<string>>(EMPTY_REFUSED);
+  /** Addresses the PAGE resolved for us — the relay's answers, url → /assets/<hash>. */
+  const [relayed, setRelayed] = useState<ReadonlyMap<string, string>>(EMPTY_RELAYED);
   const el = useRef<HTMLImageElement | null>(null);
   const url = resolveRefTemplate(template, (name) => state.values[name]);
   /*
@@ -140,19 +152,48 @@ function RuntimeBoundSource({ props, template }: BoundSourceProps) {
    * facts asked rather than awaited — done with pixels is a load, done without
    * them is an error. (Only a real browser can show this: jsdom fetches no
    * images at all, so the gate is this rule's test.)
+   *
+   * Skipped entirely when the page is importing for us: that request is the one
+   * we already know cannot succeed, and letting its failure mark the image
+   * would race the answer that works.
    */
   useEffect(() => {
     const img = el.current;
-    if (!url || !img || !img.complete) return;
+    if (importAsset || !url || !img || !img.complete) return;
     if (img.naturalWidth > 0) { if (isWebUrl(url)) seen.add(url); return; }
     setRefused((prev) => (prev.has(url) ? prev : new Set([...prev, url])));
-  }, [url, seen]);
-  const mapped = url === null ? null : runtimeAssetUrl(url, (u) => seen.has(u), endpoint);
+  }, [url, seen, importAsset]);
+  /*
+   * FRAMED: ask the page, once per URL. The first render is deliberately left
+   * alone — it has to be byte-identical to what the server sent, which knows
+   * nothing about transports — so the endpoint address paints first and this
+   * replaces it. On a public document that first request succeeds and the
+   * replacement is a cache hit; on a private one it is the only thing that
+   * works. Either way the reader never sees a flash, because the src is only
+   * ever swapped for another address of the same picture.
+   */
+  useEffect(() => {
+    if (!importAsset || !url || !isWebUrl(url) || relayed.has(url) || refused.has(url)) return;
+    let live = true;
+    void importAsset(url).then((answer) => {
+      if (!live) return;
+      if ('url' in answer) {
+        seen.add(url);
+        setRelayed((prev) => new Map([...prev, [url, answer.url]]));
+      } else {
+        setRefused((prev) => (prev.has(url) ? prev : new Set([...prev, url])));
+      }
+    });
+    return () => { live = false; };
+  }, [url, importAsset, relayed, refused, seen]);
+
+  const held = url === null ? undefined : relayed.get(url);
+  const mapped = held ?? (url === null ? null : runtimeAssetUrl(url, (u) => seen.has(u), endpoint));
   // A web URL that came back unchanged is one there is no endpoint to import
   // it through — a rail preview, a canvas. It renders STATIC rather than
   // reaching the third-party host: not importing it is the whole point, and in
   // a served document its own CSP would refuse the load anyway.
-  const unmappable = url !== null && mapped === url && isWebUrl(url);
+  const unmappable = url !== null && !held && mapped === url && isWebUrl(url) && !importAsset;
   if (url === null || unmappable || refused.has(url)) {
     return <img {...props} data-mx-bound={`src:${template}`} {...(url !== null && refused.has(url) ? { 'data-mx-asset': 'refused' } : {})} />;
   }
@@ -161,11 +202,13 @@ function RuntimeBoundSource({ props, template }: BoundSourceProps) {
       {...props}
       ref={el}
       src={mapped ?? undefined}
-      onLoad={() => { if (isWebUrl(url)) seen.add(url); }}
-      onError={() => setRefused((prev) => new Set([...prev, url]))}
+      onLoad={() => { if (!importAsset && isWebUrl(url)) seen.add(url); }}
+      onError={() => { if (!importAsset) setRefused((prev) => new Set([...prev, url])); }}
     />
   );
 }
+
+const EMPTY_RELAYED: ReadonlyMap<string, string> = new Map();
 
 const EMPTY_REFUSED: ReadonlySet<string> = new Set();
 
@@ -818,6 +861,14 @@ export type StoryRuntimeAppProps = StoryIslandData & {
    * handed React a mismatch. An effect is the only honest "hydrated" signal.
    */
   onMounted?: () => void;
+  /**
+   * Import one web URL through the PAGE — the document's transport verb
+   * (lib/story-runtime/store QueryTransport.importAsset), threaded here by the
+   * entry. Present only for a FRAMED document, and its presence is what makes
+   * the page the authority over a bound `<img>`'s source; absent, the element
+   * loads the endpoint for itself.
+   */
+  importAsset?: (url: string) => Promise<{ url: string } | { refused: string }>;
 };
 
 const EMPTY_GLYPHS: GlyphMap = {};
@@ -825,7 +876,7 @@ const EMPTY_GLYPHS: GlyphMap = {};
 /** A store-less subscribe (a Button rendered outside a document): nothing ever changes. */
 const NO_SUBSCRIBE = () => () => {};
 
-export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, template = null, chrome = true, assetsUrl = null, store: givenStore, onMounted, editDecorate, onSlideRename }: StoryRuntimeAppProps) {
+export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, template = null, chrome = true, assetsUrl = null, importAsset, store: givenStore, onMounted, editDecorate, onSlideRename }: StoryRuntimeAppProps) {
   const [store] = useState<DataflowStore>(() => givenStore ?? createDataflowStore(dataflow ?? { flow: EMPTY_DATAFLOW }));
   const mountedRef = useRef(onMounted);
   mountedRef.current = onMounted;
@@ -860,7 +911,7 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, t
   // not state: see RuntimeAssetContext — recording a load must not re-render.
   const seen = useRef<Set<string>>(null as unknown as Set<string>);
   if (seen.current === null) seen.current = new Set();
-  const assets = useMemo(() => ({ endpoint: assetsUrl, seen: seen.current }), [assetsUrl]);
+  const assets = useMemo(() => ({ endpoint: assetsUrl, seen: seen.current, importAsset }), [assetsUrl, importAsset]);
 
   const body = (
     <RuntimeAssetContext.Provider value={assets}>

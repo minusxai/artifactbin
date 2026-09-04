@@ -163,3 +163,68 @@ describe('a DataTable image column', () => {
     expect(container.textContent).toContain(CAT);
   });
 });
+
+/**
+ * FRAMED: the page imports on the document's behalf.
+ *
+ * The frame's own `<img>` presents no session, so on a private document the
+ * endpoint answers 404 — for the owner's framed copy as much as for anyone.
+ * When the transport offers `importAsset` (the relay; `document-transport`
+ * decides once) it becomes the authority: the first render still matches what
+ * the server sent — the island carries no transport, so anything else would be
+ * a hydration mismatch — and the answer replaces the src.
+ */
+describe('with an importing transport (a framed document)', () => {
+  const framed = (body: string, values: Record<string, string | null>, importAsset: (url: string) => Promise<{ url: string } | { refused: string }>) => {
+    const { nodes, dataflow } = build(body, values);
+    return (
+      <StoryRuntimeApp nodes={nodes} refData={{}} dataflow={dataflow} colorMode="light" assetsUrl={ASSETS_URL} importAsset={importAsset} />
+    );
+  };
+
+  it('paints the endpoint first (SSR parity) and then the address the page returned', async () => {
+    const asked: string[] = [];
+    const { container, findByAltText } = render(framed('<img src="$pick" alt="the pick" />', { pick: CAT }, async (u) => {
+      asked.push(u);
+      return { url: `/assets/${urlHash(u)}` };
+    }));
+    expect(img(container).getAttribute('src')).toBe(endpointFor(CAT));
+    await findByAltText('the pick');
+    await act(async () => { await Promise.resolve(); });
+    expect(img(container).getAttribute('src')).toBe(`/assets/${urlHash(CAT)}`);
+    expect(asked).toEqual([CAT]);
+  });
+
+  it('shows the alt placeholder when the page reports a refusal', async () => {
+    const { container } = render(framed('<img src="$pick" alt="the pick" />', { pick: CAT }, async () => ({ refused: 'forbidden_address' })));
+    await act(async () => { await Promise.resolve(); });
+    expect(img(container).getAttribute('data-mx-asset')).toBe('refused');
+    expect(img(container).hasAttribute('src')).toBe(false);
+  });
+
+  it('does NOT let the doomed endpoint request decide — the transport is the authority', async () => {
+    let settle: (r: { url: string }) => void = () => {};
+    const { container } = render(framed('<img src="$pick" alt="the pick" />', { pick: CAT }, () => new Promise((r) => { settle = r; })));
+    // The <img> the server rendered fails (a private document's endpoint says
+    // 404 to a caller with no cookie) while the import is still in flight.
+    act(() => { fireEvent.error(img(container)); });
+    expect(img(container).getAttribute('data-mx-asset')).toBeNull();
+    await act(async () => { settle({ url: `/assets/${urlHash(CAT)}` }); await Promise.resolve(); });
+    expect(img(container).getAttribute('src')).toBe(`/assets/${urlHash(CAT)}`);
+  });
+
+  it('asks once per URL, and asks again for a URL it has not seen', async () => {
+    const asked: string[] = [];
+    const { nodes, dataflow } = build('<img src="$pick" alt="the pick" /><select value="$pick"><option value="' + CAT + '">cat</option><option value="' + DOG + '">dog</option></select>', { pick: CAT });
+    const importAsset = async (u: string) => { asked.push(u); return { url: `/assets/${urlHash(u)}` }; };
+    const { container } = render(
+      <StoryRuntimeApp nodes={nodes} refData={{}} dataflow={dataflow} colorMode="light" assetsUrl={ASSETS_URL} importAsset={importAsset} />,
+    );
+    await act(async () => { await Promise.resolve(); });
+    const select = container.querySelector('select')!;
+    await act(async () => { fireEvent.change(select, { target: { value: DOG } }); await Promise.resolve(); });
+    await act(async () => { fireEvent.change(select, { target: { value: CAT } }); await Promise.resolve(); });
+    expect(asked).toEqual([CAT, DOG]);
+    expect(img(container).getAttribute('src')).toBe(`/assets/${urlHash(CAT)}`);
+  });
+});

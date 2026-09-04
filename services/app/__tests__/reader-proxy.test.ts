@@ -358,3 +358,48 @@ describe('an address carrying an intent', () => {
     expect(await servedBy(readerRequest(`/a/${row.id}?key=whatever&intent=fork`))).toBe('page');
   });
 });
+
+/**
+ * …and the same rule for a BOUND IMAGE SOURCE, which reaches the server through
+ * `/a/<id>/assets` rather than `/a/<id>/query`, and cannot present a session
+ * for exactly the same reason: the served document is opaque-origin, so its
+ * `<img>` carries no cookie. A private document with one therefore keeps its
+ * parent page, where the asset relay answers with the session
+ * (lib/story-runtime/contract STORY_ASSET_MESSAGE).
+ */
+describe('a PRIVATE document with a bound <img src> keeps its parent page', () => {
+  const bound = '<Helmet><Value name="pick" type="string" /></Helmet><div><img src="$pick" alt="a" /></div>';
+  const literal = '<Helmet><Value name="pick" type="string" /></Helmet><div><img src="https://cdn.example.com/a.png" alt="a" /></div>';
+
+  it('serves the SHELL to an admitted reader of a PRIVATE document with a bound source', async () => {
+    const owner = await createUser({ email: 'boundowner@example.com' });
+    const reader = await createUser({ email: 'boundreader@example.com' });
+    const t = await mintToken('t', owner.id);
+    const row = await createArtifact(t.id, owner.id, {
+      format: 'markup', content: '', source: bound, meta: {}, title: 'Bound', description: null, visibility: 'private',
+    });
+    await updateSharing(owner.id, row.id, { shares: [{ email: 'boundreader@example.com', role: 'viewer' }] });
+    sessionUser.id = reader.id; sessionUser.email = 'boundreader@example.com';
+    expect(await servedBy(readerRequest(`/a/${row.id}`))).toBe('page');
+  });
+
+  it('serves the DOCUMENT for a PUBLIC one — its own <img> reaches the endpoint anonymously', async () => {
+    const t = await mintToken('t');
+    const row = await createArtifact(t.id, null, {
+      format: 'markup', content: '', source: bound, meta: {}, title: 'Bound', description: null, visibility: 'public',
+    });
+    expect(await servedBy(readerRequest(`/a/${row.id}`))).toBe(`/a/${row.id}/raw`);
+  });
+
+  it('serves the DOCUMENT to an admitted reader of a PRIVATE document whose images are LITERAL — publish already imported them', async () => {
+    const owner = await createUser({ email: 'litowner@example.com' });
+    const reader = await createUser({ email: 'litreader@example.com' });
+    const t = await mintToken('t', owner.id);
+    const row = await createArtifact(t.id, owner.id, {
+      format: 'markup', content: '', source: literal, meta: {}, title: 'Literal', description: null, visibility: 'private',
+    });
+    await updateSharing(owner.id, row.id, { shares: [{ email: 'litreader@example.com', role: 'viewer' }] });
+    sessionUser.id = reader.id; sessionUser.email = 'litreader@example.com';
+    expect(await servedBy(readerRequest(`/a/${row.id}`))).toBe(`/a/${row.id}/raw`);
+  });
+});
