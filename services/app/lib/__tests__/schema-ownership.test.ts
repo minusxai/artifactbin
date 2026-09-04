@@ -34,6 +34,7 @@ const DECLARED_SET = [
   'app.artifacts',
   'app.analytics_events',
   'app.codes',
+  'app.relations',
   'app.tokens',
   'app.users',
   'app.web_assets',

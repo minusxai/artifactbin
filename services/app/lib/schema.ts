@@ -377,7 +377,39 @@ const WEB_ASSETS: Table = {
   ],
 };
 
-const TABLES: Table[] = [USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, WEBFONTS, WEB_ASSETS];
+/**
+ * STATE, as a sentence: the same subject/verb/object shape as the events log,
+ * in the present tense — one row per pair, EVER: a reversal sets `deleted_at`
+ * and the next link clears it on the same row, so the composite key is the
+ * pair itself. The verb vocabulary is closed (contracts RELATION_VERBS), and
+ * every read carries the verb literal so the partial indexes below apply
+ * (measured: a Bitmap Index Scan with it, a Seq Scan without). No FKs, as
+ * everywhere here; lib/relations.ts is the only writer and reader.
+ */
+const RELATIONS: Table = {
+  name: 'relations',
+  columns: [
+    { name: 'subject_kind', type: 'TEXT', notNull: true }, // 'user'
+    { name: 'subject_id', type: 'TEXT', notNull: true },
+    { name: 'verb', type: 'TEXT', notNull: true }, // 'like' | 'follow'
+    { name: 'object_kind', type: 'TEXT', notNull: true }, // 'artifact' | 'user'
+    { name: 'object_id', type: 'TEXT', notNull: true },
+    { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
+    /** NULL = live; set = undone (unlike, unfollow). The one generic reversal, for every verb. */
+    { name: 'deleted_at', type: 'TIMESTAMPTZ' },
+  ],
+  primaryKey: ['subject_kind', 'subject_id', 'verb', 'object_kind', 'object_id'],
+  indexes: [
+    /** likes on an artifact */
+    { name: 'idx_relations_like_object', columns: ['object_id'], where: "verb = 'like' AND deleted_at IS NULL" },
+    /** who I follow */
+    { name: 'idx_relations_follow_subject', columns: ['subject_id'], where: "verb = 'follow' AND deleted_at IS NULL" },
+    /** who follows me */
+    { name: 'idx_relations_follow_object', columns: ['object_id'], where: "verb = 'follow' AND deleted_at IS NULL" },
+  ],
+};
+
+const TABLES: Table[] = [USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);

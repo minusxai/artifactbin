@@ -4,6 +4,7 @@ export type { Queryable } from './db';
 export * from './sql';
 export * from './browser';
 export * from './events';
+export * from './relations';
 export * from './doors';
 export * from './agent';
 export * from './deny';

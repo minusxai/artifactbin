@@ -379,6 +379,37 @@ CREATE INDEX IF NOT EXISTS idx_analytics_events_artifact_created ON app.analytic
 
 CREATE INDEX IF NOT EXISTS idx_analytics_events_event ON app.analytics_events (event);
 
+CREATE TABLE IF NOT EXISTS app.relations (
+  subject_kind TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  verb TEXT NOT NULL,
+  object_kind TEXT NOT NULL,
+  object_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ,
+  PRIMARY KEY (subject_kind, subject_id, verb, object_kind, object_id)
+);
+
+ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS subject_kind TEXT NOT NULL;
+
+ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS subject_id TEXT NOT NULL;
+
+ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS verb TEXT NOT NULL;
+
+ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS object_kind TEXT NOT NULL;
+
+ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS object_id TEXT NOT NULL;
+
+ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS idx_relations_like_object ON app.relations (object_id) WHERE verb = 'like' AND deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_relations_follow_subject ON app.relations (subject_id) WHERE verb = 'follow' AND deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_relations_follow_object ON app.relations (object_id) WHERE verb = 'follow' AND deleted_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS app.webfonts (
   family TEXT NOT NULL,
   assets JSONB NOT NULL DEFAULT '[]',
