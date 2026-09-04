@@ -54,7 +54,7 @@ phone). Never a fixed pixel width.
 Rules a document lives by: one self-contained document — no CDN `<script src>`,
 no external stylesheet (hard 400s at publish); a runtime `fetch()` elsewhere
 is blocked by the sandbox; images are a `data:` URI or
-an `https://` URL (imported at publish); web fonts: a Google family via
+any `https://` URL (publish copies it, your URL stays); web fonts: a Google family via
 `<meta name="font-display" content="Lobster" />`.
 
 **Data in a document** — three moves: upload the rows, declare a `<Query>` over

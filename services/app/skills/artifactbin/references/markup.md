@@ -69,7 +69,7 @@ place for custom CSS, JS or data — any of those in the body is refused.
 <Helmet>
   <title>Quarterly review</title>
   <style>{`.rise { animation: rise .9s both } @keyframes rise { from { opacity: 0 } }`}</style>
-  <script>{`document.getElementById('tab-2').addEventListener('click', function () { document.getElementById('panel-2').hidden = false; });`}</script>
+  <script>{`document.getElementById('tab-2').addEventListener('click', () => { document.getElementById('panel-2').hidden = false });`}</script>
 </Helmet>
 ```
 
@@ -87,42 +87,44 @@ never on line one.
   Scope rules to your own class names (bare element selectors leak into chart
   chrome); colors from theme tokens (`var(--primary)`).
   **Utilities compile `!important`** — never fight a Tailwind class from a
-  style block. At save, `position: fixed/sticky` and external
-  `url()`/`@import` are stripped; `100vh` becomes the reader-viewport variable.
+  style block. At save, `position: fixed/sticky`, `@import` and a `url()`
+  outside `@font-face` are stripped; `100vh` becomes the reader viewport.
 - **Override a theme** in that block under `:root` — no theme-name selector
   or `!important`: `:root { --background: #0c0d0e; --primary: #ff6a1f; --chart-1: #ec6100; --font-display: Georgia, serif; }`.
   Keys: `--background --foreground --card --popover --primary --secondary
   --muted --accent --destructive` (each with `-foreground`), `--border
   --input --ring --radius --chart-1..5`, `--font-body --font-display --font-mono`.
-- **Subresources**: only `<img src>` and `<Video poster>` take a URL (below);
-  `srcSet`/`background` reject an external one. Links (`href`) go anywhere.
 - **Web fonts**: `<meta name="font-display" content="Lobster" />` (also
   `font-body`, `font-mono`) names a Google family, served from this origin;
-  an unknown family fails the publish.
+  an unknown family fails the publish. An `@font-face` `url(https://…)` in
+  your `<style>` is imported the same way.
 - **Theme tokens first**: `text-muted-foreground`, `bg-muted`, `border-border`,
   `bg-background` follow the active theme; hardcoded palettes fight it. ONE
   bespoke accent (`text-[#e2483d]`) is legitimate for the one bold moment —
   it will not follow a later theme switch.
 - `theme`, `template` and `colorMode` are top-level fields of the publish
-  call, not Helmet content. A template is a reference, not a contract (no
-  genre named → **default to `scrolly`**; torn → ask the user). `colorMode`
+  call, not Helmet content. No genre named → **default to `scrolly`**; torn →
+  ask the user. `colorMode`
   (`light | dark`) is the AUTHOR'S DEFAULT — readers flip it, so design in theme tokens.
 
 ## Images and icons
 
-- `<img src="ref:<imageId>" />` — an uploaded image artifact
-  ([publishing-datasets.md](publishing-datasets.md)). `<img src="https://…/chart.png" />` — a web image,
-  IMPORTED at publish and echoed back as `ref:<id>`; a dead URL fails the
-  publish and names itself.
+- `<img src="ref:<imageId>" />` — an uploaded image
+  ([publishing-datasets.md](publishing-datasets.md)) — or write the web URL
+  itself: publish stores a copy, YOUR URL STAYS as written, readers are served
+  ours, and a URL that will not fetch is a warning, not a failed publish.
+- Only `<img src>`, `<Video poster>` and `<File src>` take a URL;
+  `srcSet`/`background` reject an external one. `href` is free.
+- An image `src` also binds: `"$pick"`, or `"https://…/{$pick}.png"` to
+  compose one — the only braced position; the first reader imports it.
 - `<Icon name="chart-bar" />` — a lucide icon, inline (kebab-case names from
   lucide.dev). Size it with a `size-*` class; it inherits `currentColor`.
 
 ## Layout components
 
-- `<SlideDeck><Slide title="…">…</Slide>…</SlideDeck>` — a presentation, each
-  slide filling the viewport (the `deck` template).
-- `<Grid><GridItem x={0} y={0} w={6} h={3}>…</GridItem>…</Grid>` — the
-  12-column dashboard canvas (`dashboard`).
+`<SlideDeck><Slide title="…">…</Slide></SlideDeck>` — a presentation, each
+slide filling the viewport (`deck`). `<Grid><GridItem x={0} y={0} w={6}
+h={3}>…</GridItem></Grid>` — the 12-column canvas (`dashboard`).
 
 ## Do / Don't
 
@@ -130,6 +132,3 @@ never on line one.
   already its own scroll box — never widen one with negative margins.
 - Three or more `<h2>` sections get a table of contents made from the
   headings — write `<h2>`s as short claims. Decks and `<Grid>` dashboards get none.
-- DO put every number a viewer might question behind a `<Query>` and a
-  `<Number>`/`<Question>`/`<DataTable>` — never a typed-in figure.
-- DON'T author in markdown: there is no markdown tier; JSX is the round-trip format.

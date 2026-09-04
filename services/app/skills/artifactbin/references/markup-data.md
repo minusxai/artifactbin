@@ -33,7 +33,6 @@ by name. One namespace; a name is either a TABLE (a `<Query>` or a table
 
 `ref:<id>` survives ONLY for images and recipes; `data="ref:<id>"`, inline
 `data={[…]}` and the old Param control are retired and refused by name.
-Uploading rows: [publishing-datasets.md](publishing-datasets.md).
 
 ## Contents
 
@@ -57,8 +56,7 @@ Declarations · Bindings: embeds · Bindings: controls.
   scalar Value is the bound parameter `$name`, never interpolated. Dry-run
   at publish against the real columns: a bad column is a
   `400 {"error":"invalid_sql"}` carrying the engine's message with candidate
-  names. Results are cut at 10,000 rows (`<DataTable>` reads the rest a
-  window at a time); a query has 5 s.
+  names. Results are cut at 10,000 rows; a query has 5 s.
 - `<Mutation name>{`insert into ref_<datasetId> (a) values ($a)`}</Mutation>`
   — a `<Query>` that WRITES (preview: the dataset needs `access: readwrite`,
   [publishing-datasets.md](publishing-datasets.md)). Exactly one INSERT | UPDATE | DELETE
@@ -111,7 +109,9 @@ Declarations · Bindings: embeds · Bindings: controls.
   — THE way to show many rows: virtualised, sortable, honest about a cut
   result ("5,000 of 80,000", more on scroll). `columns` picks and orders:
   `{col, title, fmt, align, bar: true (a bar behind a number), colorScale:
-  "sequential" | "diverging", width}`; absent = every column. `fmt` and
+  "sequential" | "diverging", width, kind: "image"}`; absent = every column.
+  `kind: "image"` draws each cell's URL as a picture from our own copy of it,
+  fetched on first view (declared, never sniffed). `fmt` and
   `<Number format>` are d3-format specs (`",.0f"`, `"$,.2f"`, `".1%"`); one
   that does not parse is refused at publish by name.
 

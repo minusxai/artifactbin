@@ -66,8 +66,8 @@ export const IMAGE_URL_FIELD_GUIDANCE =
   'image tier from a URL: any public image on the web. ' +
   'YOU DO NOT NEED TO DOWNLOAD IT — pass the URL and artifactbin fetches it server-side, ' +
   'stores a copy, and serves it from its own origin (the document never hotlinks). ' +
-  'You can also just write <img src="https://…"> in markup: publish imports it and echoes ' +
-  'your markup rewritten to ref:<id>. Returns an artifact id to reference as ref:<id>.';
+  'You can also just write <img src="https://…"> in markup: publish imports a copy and ' +
+  'LEAVES YOUR URL in the document. Returns an artifact id to reference as ref:<id>.';
 
 /**
  * The PDF tier's two shapes. Same lesson as the two above — an agent that
