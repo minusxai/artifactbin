@@ -17,6 +17,6 @@ third-party frames, so a player iframe could never run (and a raw
   Vimeo page, a Loom share. Only these hosts are accepted; anything else is
   refused at publish.
 - `poster` (optional) is the thumbnail, and takes exactly what an
-  `<img src>` takes: a `ref:<id>` image artifact, or a web URL, which is
-  IMPORTED at publish and echoed back rewritten to `ref:<id>`. Without a
+  `<img src>` takes: a `ref:<id>` image artifact, or a web URL, which publish
+  fetches and stores — your URL stays in the document as written. Without a
   poster the card shows a dark slab with the play badge.

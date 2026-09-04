@@ -150,7 +150,7 @@ const createArtifactOp: Operation = {
   name: 'create_artifact',
   title: 'Create an artifact',
   http: { method: 'POST', path: '/api/artifacts' },
-  description: 'Create an artifact (exactly one of markup | dataset | viz | image | pdf). Returns the public URL. markup is THE document format: story JSX over the component kit, HTML tags for everything else (prose is ordinary <p>/<h1>/<ul> — there is no markdown), and one top-level <Helmet> for <title>/<style>/<script> and the document\'s DATA: <Value name type default /> scalars and <Query name>{`select … from ref_<datasetId>`}</Query> (SQL over your datasets), bound in the body by name — <Question data="$q">, <DataTable data="$q">, <select value="$x" options="$q">. Recipes/images bind as ref:<id>, and a pdf as <File src="ref:<id>" />. Dataset creation echoes the inferred columns and a ready-to-paste Query+Question.',
+  description: 'Create an artifact (exactly one of markup | dataset | viz | image | pdf). Returns the public URL. markup is THE document format: story JSX over the component kit, HTML tags for everything else (prose is ordinary <p>/<h1>/<ul> — there is no markdown), and one top-level <Helmet> for <title>/<style>/<script> and the document\'s DATA: <Value name type default /> scalars and <Query name>{`select … from ref_<datasetId>`}</Query> (SQL over your datasets), bound in the body by name — <Question data="$q">, <DataTable data="$q">, <select value="$x" options="$q">. Recipes/images bind as ref:<id>, and a pdf as <File src="ref:<id>" />. No upload is needed for something already on the web: write <img src="https://…"> (or <Video poster>, <File src>) and publish stores a copy while your URL stays in the document. Dataset creation echoes the inferred columns and a ready-to-paste Query+Question.',
   input: CONTENT_FIELDS,
   annotations: {},
   example: {
@@ -504,7 +504,7 @@ const refreshAssetOp: Operation = {
   name: 'refresh_asset',
   title: 'Refresh an imported web asset',
   http: { method: 'POST', path: '/api/artifacts/assets/refresh' },
-  description: 'Re-fetch the copy this deployment stores for an external image or font URL, after the source changed. Pass id to refresh EVERY external url one of your documents names, or url to refresh a single one. Nothing else about the document changes: no new version, no edit_id, and every stored <img src> keeps naming the same url. Answers {refreshed, unchanged, failed}: unchanged means the source really is the same bytes, and failed names each url with a code and a fix (not_cached — nothing is stored for it; rate_limited — this hour\'s fetch allowance is spent, which is counted per url).',
+  description: 'Re-fetch the copy this deployment stores for an external image, font or PDF URL, after the source changed. Pass id to refresh EVERY external url one of your documents names, or url to refresh a single one. Nothing else about the document changes: no new version, no edit_id, and every stored <img src> keeps naming the same url. Answers {refreshed, unchanged, failed}: unchanged means the source really is the same bytes, and failed names each url with a code and a fix (not_cached — nothing is stored for it; rate_limited — this hour\'s fetch allowance is spent, which is counted per url).',
   input: {
     id: z.string().optional().describe('a document of yours: every external url it names is refreshed'),
     url: z.string().optional().describe('one external url to re-fetch; it must already be stored (a document must have named it)'),

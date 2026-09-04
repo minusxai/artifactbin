@@ -1,7 +1,7 @@
 ---
 name: publishing-datasets
 description: >-
-  Uploading a dataset (rows, CSV, a URL), an image, a PDF, a viz recipe; writable datasets. Read only when the brief's one-line upload is not enough.
+  Assets: dataset rows/CSV, images, PDFs, recipes — uploaded or kept by URL; refresh, byte quotas, writable datasets. Read past the brief's upload.
 order: 2
 ---
 ## Read first
@@ -26,8 +26,9 @@ POST [[ base ]]/api/artifacts
   ready-to-paste Query+Question over the real columns.
 - Images and recipes bind as `ref:<id>`; `data="ref:<id>"` and the old
   `<Param>` control are retired (400 with the replacement named).
-- Your datasets and images are in the artifact listing (`GET /api/artifacts`,
-  each with its `format`) — there is no separate datasets endpoint.
+- An imported URL is NOT an artifact: it never appears in
+  `GET [[ base ]]/api/artifacts` and has no id. Send `{"imageUrl": …}` when
+  you want one that does.
 
 ## Contents
 
@@ -47,8 +48,7 @@ curl -X POST [[ base ]]/api/artifacts -H "Authorization: Bearer $TOKEN" \
 ```
 
 Either way the bytes are stored once (content-addressed) and served from
-`[[ base ]]/a/<id>`; bind it in markup as `<img src="ref:<id>" />` and the
-URL is resolved for you — you never write one.
+`[[ base ]]/a/<id>`; bind it in markup as `<img src="ref:<id>" />`.
 
 **Already on the web? Just use the URL.** `{ "imageUrl": "https://…" }`
 makes the artifact from a URL — artifactbin fetches it server-side, so YOU
@@ -63,6 +63,10 @@ text. Max `[[ maxImageBytes ]]` bytes (png|jpeg|webp|gif|svg+xml), and at most
 `[[ maxExternalAssets ]]` external assets per document — the rest are named in
 `asset_warnings` and not fetched. The same happens to a `<Video poster>` and to
 an `@font-face { src: url(…) }` in your `<Helmet>` `<style>`.
+
+Stored bytes count against your ACCOUNT's byte quota (`403 quota_exceeded`);
+an import is charged once, to whoever first named the URL — the copy is shared,
+so a second document naming it fetches nothing and pays nothing.
 
 Source changed? `POST [[ base ]]/api/artifacts/assets/refresh` with
 `{"id": "<document id>"}` (every external url that document names) or
@@ -93,8 +97,7 @@ viewer. `title="…"` names it something other than the artifact's title. A
 public URL works in the same position (`<File src="https://…/paper.pdf" />`):
 publish imports a copy and LEAVES YOUR URL in the document, exactly as an
 `<img>` URL behaves, and a URL that will not fetch is a warning rather than a
-refused publish. It counts against the same
-`[[ maxExternalAssets ]]`-asset import cap images and faces do.
+refused publish. It counts against the same per-document import cap.
 
 A pdf cannot be PREVIEWED (`400 pdf_not_previewable`): storing the file is what
 publishing it means, so send it to `POST [[ base ]]/api/artifacts`.

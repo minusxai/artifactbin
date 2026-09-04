@@ -46,14 +46,30 @@ network blocked**, and a `sandbox` directive gives each artifact an opaque
 origin so it can't touch the app's storage. Documents are always
 self-contained — but you don't have to make them so by hand.
 
-**Import from the web.** Point at an image, a font or a CSV and the server
-fetches it once, stores a copy, and serves it from this origin:
+**Import from the web.** Point at an image, a PDF, a font or a CSV and the
+server fetches it once, stores a copy, and serves it from this origin:
 
-- `<img src="https://example.com/chart.png" />` in markup — imported at
-  publish and rewritten to `ref:<id>`; agents just write the URL.
-- `{ "imageUrl": "https://…" }` or `{ "csvUrl": "https://…" }` on create.
+- `<img src="https://example.com/chart.png" />` in markup — and the URL STAYS
+  in the document. An agent writes what it would write anywhere and reads back
+  exactly that; only what a reader is SERVED is swapped for our copy. The same
+  goes for `<Video poster>`, `<File src="https://…/paper.pdf" />` and an
+  `@font-face { src: url(https://…) }` in the document's own stylesheet.
+- `{ "imageUrl": … }`, `{ "pdfUrl": … }` or `{ "csvUrl": … }` on create, when
+  you want the file to be an artifact with an id of its own.
 - `<meta name="font-display" content="Lobster" />` in `<Helmet>` — any
   Google family, downloaded once, served from here.
 
 Nothing is ever hotlinked: readers never touch the origin host, documents
-can't rot when it dies, and no reader's IP leaks to a third party.
+can't rot when it dies, and no reader's IP leaks to a third party. A URL that
+will not fetch is a warning on the publish reply, never a refused document —
+that one picture falls back to its alt text.
+
+The copy lives at `/assets/<sha256 of the URL>`, shared across every document
+and every user, so a popular URL is fetched exactly once. It is served
+`immutable` for a year and with three defensive headers — `sandbox`,
+`Content-Disposition: attachment` (a PDF excepted, so the browser's own viewer
+opens it) and `nosniff` — because an imported SVG is markup, and a navigation
+to one must never become a page on this origin. When a source changes,
+`POST /api/artifacts/assets/refresh` re-fetches it: pass a document's `id` for
+every URL it names, or one `url`. Nothing else moves — no new version, and the
+markup keeps the URL it has.
