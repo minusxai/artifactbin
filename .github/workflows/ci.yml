@@ -194,8 +194,17 @@ jobs:
   # Deliberately NOT in the `test` roll-up until it has been green for weeks.
   agent-smoke:
     # Exercise the real two-axis treatments explicitly. API modes run the data/edit
-    # regressions; MCP modes run the MCP regression. A task never changes transport behind
-    # the mode's back, so every job's name describes what the harness actually received.
+    # regressions plus the token-less guard; MCP modes run the MCP regression. A task never
+    # changes transport behind the mode's back, so every job's name describes what the
+    # harness actually received.
+    #
+    # `no-token` is on the API rows ONLY. It declares `handoff: none` — no token, no start
+    # document, no MCP config — and an MCP transport carries its token in the harness
+    # configuration, so `lib/tasks planAccess` REFUSES it rather than measuring an
+    # authenticated run under a "no credential" heading. That refusal is a FAILED flow, not
+    # a skipped one, so an mcp_action row that ever received it would go red instead of
+    # quietly reporting a pass. `evals/__tests__/ci-tasks.test.ts` keeps this list and the
+    # tasks on disk in step, in both directions.
     name: agent smoke (${{ matrix.mode }})
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -204,11 +213,11 @@ jobs:
       matrix:
         include:
           - mode: fetched_skill+api_action
-            tasks: data,edit
+            tasks: data,edit,no-token
           - mode: fetched_skill+mcp_action
             tasks: mcp
           - mode: installed_skill+api_action
-            tasks: data,edit
+            tasks: data,edit,no-token
           - mode: installed_skill+mcp_action
             tasks: mcp
     if: vars.AGENT_SMOKE_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)

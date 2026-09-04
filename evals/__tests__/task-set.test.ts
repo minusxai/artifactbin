@@ -46,7 +46,9 @@ describe('selectTasks', () => {
 
   it('CI runs ONLY the product guards — the creative briefs are not a per-PR question', () => {
     const ids = selectTasks(found, { set: 'ci' }).map((t) => t.id).sort();
-    expect(ids).toEqual(['data', 'edit', 'mcp']);
+    // `no-token` is here for the same reason the other three are: it has ONE right answer (stop and
+    // ask your human), so paying six comparison legs to re-answer it buys nothing.
+    expect(ids).toEqual(['data', 'edit', 'mcp', 'no-token']);
   });
 
   it('the two sets are disjoint and together cover every task on disk', () => {
@@ -122,7 +124,7 @@ describe('ordering', () => {
   });
 
   it('an unordered task sorts before an ordered one, keeping filename order among equals', () => {
-    expect(selectTasks(discoverTasks(DIR), { set: 'ci' }).map((t) => t.id)).toEqual(['data', 'edit', 'mcp']);
+    expect(selectTasks(discoverTasks(DIR), { set: 'ci' }).map((t) => t.id)).toEqual(['data', 'edit', 'mcp', 'no-token']);
     expect(selectTasks(discoverTasks(DIR), { set: 'eval' }).map((t) => t.id).at(-1)).toBe('scrolly');
   });
 });

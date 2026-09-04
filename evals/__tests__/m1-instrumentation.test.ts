@@ -73,18 +73,23 @@ describe('skeletonSections — was the early publish a document or a placeholder
   });
 });
 
-describe('the token-less leg', () => {
-  it('parses `none` as a credential source', () => {
-    expect(parseCredentialSource('none')).toBe('none');
+/**
+ * The token-less run — a TASK now (`handoff: none`), never a leg-level flag. `--credential none` was
+ * the knob that let a run's rubric and its credential be set independently, which is how the
+ * token-less leg came back graded on a document it was right not to publish.
+ */
+describe('the token-less task', () => {
+  it('refuses the retired `--credential none`, naming the four sources that are left', () => {
+    expect(() => parseCredentialSource('none')).toThrow(/unknown --credential "none"/);
+    expect(() => parseCredentialSource('none')).toThrow(/paste, inbox-oauth, outbox-oauth, secret/);
   });
 
-  it('acquires nothing, and does not throw doing it', async () => {
-    await expect(acquireCredential('none', { base: 'https://x.test', env: {} } as never)).resolves.toBeNull();
-  });
-
-  it('is never chosen automatically — only an explicit --credential picks it', () => {
-    const source = credentialSourceFor('fetched_skill+api_action' as never, {} as never, {});
-    expect(source).not.toBe('none');
+  it('the four that remain all still parse', async () => {
+    for (const s of ['paste', 'inbox-oauth', 'outbox-oauth', 'secret'] as const) expect(parseCredentialSource(s)).toBe(s);
+    // …and `paste` still acquires nothing, which is a different reason for null from handing the
+    // agent nothing: the product gives the agent its own token in the paste.
+    await expect(acquireCredential('paste', { base: 'https://x.test', env: {} } as never)).resolves.toBeNull();
+    expect(credentialSourceFor('fetched_skill+api_action' as never, {} as never, {})).toBe('paste');
   });
 
   it('builds a prompt that names the store and hands over NO credential', () => {

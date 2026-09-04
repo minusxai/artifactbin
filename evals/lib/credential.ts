@@ -38,7 +38,7 @@ import { type EvalMode, actionTransport, installsSkills } from './mode';
 import { slug } from './slug';
 
 /** Where a leg's token comes from. */
-export const CREDENTIAL_SOURCES = ['paste', 'inbox-oauth', 'outbox-oauth', 'secret', 'none'] as const;
+export const CREDENTIAL_SOURCES = ['paste', 'inbox-oauth', 'outbox-oauth', 'secret'] as const;
 export type CredentialSource = (typeof CREDENTIAL_SOURCES)[number];
 
 /** `--credential` — an override for the source `credentialSourceFor` would have chosen. */
@@ -247,12 +247,13 @@ export interface AcquireOptions {
 /**
  * The leg's credential. `paste` answers null — there is nothing to acquire, the product hands its token
  * to the agent itself and the driver only reads it back out of the paste when a task needs it.
+ *
+ * There is deliberately no `none` here any more. Withholding the credential is a property of the TASK
+ * (`handoff: none`, `lib/tasks planAccess`), not a flag on the leg: while it was both, a run's rubric
+ * and its credential were settable independently, and the token-less leg was graded on whether it
+ * published by a run that had given it no way to publish.
  */
 export async function acquireCredential(source: CredentialSource, opts: AcquireOptions): Promise<Credential | null> {
-  // `none` is the TOKEN-LESS leg: nobody hands the agent anything, and what it does about that — ask its
-  // human, or mint its own — IS the measurement. Never chosen by `credentialSourceFor`; only an explicit
-  // `--credential none` selects it, because falling back to it silently would empty a column of its account.
-  if (source === 'none') return null;
   if (source === 'paste') return null;
   if (source === 'secret') {
     const token = opts.env.EVAL_ACCOUNT_TOKEN;
