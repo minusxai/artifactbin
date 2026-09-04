@@ -13,6 +13,14 @@ import type { Table } from '@artifactbin/contracts';
 
 export const DEFAULT_EVENTS_SCHEMA = 'events';
 
+/**
+ * THE NAMING RULE for everything this package interpolates into SQL. A schema
+ * (and the legacy table the backfill reads) reaches DDL as text, never as a
+ * parameter, so the grammar is stated ONCE here and every caller in the
+ * package tests against this one regex.
+ */
+export const IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
+
 export const EVENTS_TABLE: Table = {
   name: 'events',
   columns: [

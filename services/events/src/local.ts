@@ -7,10 +7,7 @@
  */
 import type { EventEnvelope, EventSink, EventsService, Queryable } from '@artifactbin/contracts';
 import { ensureTable } from '@artifactbin/utils';
-import { DEFAULT_EVENTS_SCHEMA, EVENTS_TABLE, EVENTS_TABLES } from './schema';
-
-/** A schema name is INTERPOLATED into DDL — nothing but a plain identifier may reach it. */
-const IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
+import { DEFAULT_EVENTS_SCHEMA, EVENTS_TABLE, EVENTS_TABLES, IDENTIFIER } from './schema';
 
 export interface EventsWriterOptions {
   db: Queryable;
