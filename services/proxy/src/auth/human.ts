@@ -22,7 +22,7 @@
  */
 import { betterAuth } from 'better-auth';
 import { getMigrations } from 'better-auth/db/migration';
-import type { Queryable } from '@artifactbin/contracts';
+import type { EventsService, Queryable } from '@artifactbin/contracts';
 import { emailOTP, genericOAuth } from 'better-auth/plugins';
 import { Kysely, PostgresDialect } from 'kysely';
 import { randomBytes } from 'node:crypto';
@@ -64,6 +64,12 @@ export interface HumanAuthOptions {
   oidc?: OidcProvider;
   /** Cookies carry Secure (production). */
   secure?: boolean;
+  /**
+   * Where the identity moments are SAID (services/events): a user row created (`user.signed_up`), a session
+   * created (`user.login_verified`), an OAuth account linked (`user.oauth_linked`) — Better Auth's database
+   * hooks, the only seam those moments cross. Absent = nothing is said. Never awaited on the login's path.
+   */
+  events?: EventsService;
 }
 
 /** A plain lowercase identifier — it goes into SQL unparameterised. */

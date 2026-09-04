@@ -86,6 +86,10 @@ export interface ProxyConfig {
   google?: LoginProviders['google'];
   /** Any OIDC IdP, when `AUTH__OIDC_PROVIDER_ID` is set (the `AUTH__OIDC_*` names). */
   oidc?: OidcProvider;
+  /** EVENTS__SERVICE_URL — where the proxy's own sentences go (the events service); unset = nothing leaves the box. */
+  eventsServiceUrl?: string;
+  /** INTERNAL__SERVICE_SECRET — the header the events service demands; the same secret the app carries. */
+  internalServiceSecret?: string;
 }
 
 /** The human-login providers a deployment configures beside the email code — the SAME names the co-hosted server reads. */

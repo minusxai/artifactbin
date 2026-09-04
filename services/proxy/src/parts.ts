@@ -20,7 +20,7 @@
  */
 import {
   ACTOR_HEADER, AGENT_HEADER, ANONYMOUS, declaredAgentSlug, denyResponse, FORWARDED_FOR, FORWARDED_HOST, FORWARDED_PROTO,
-  type Actor, type DoorName, type Limiter, type Part, type Queryable, type TokenReader, type Upstream,
+  type Actor, type DoorName, type EventsService, type Limiter, type Part, type Queryable, type TokenReader, type Upstream,
 } from '@artifactbin/contracts';
 import { Hono, type Context } from 'hono';
 import { assemble, cookieName, createLimiter, decodeAgentSession, doorsEnv, memoryBackend, readCookie } from '@artifactbin/utils';
@@ -67,6 +67,12 @@ export interface ProxyOptions {
    * stops at the handshake: a body that streams (an event feed) runs as long as it likes.
    */
   upstreamDeadlineMs?: number;
+  /**
+   * Where the proxy SAYS what happened — a door's denial, a login code sent — in the log's own sentences
+   * (services/events). Absent = a noop: nothing leaves the box. The in-process composition hands the app's
+   * writer; the standalone one an HTTP client to EVENTS__SERVICE_URL. Never awaited on a request's path.
+   */
+  events?: EventsService;
 }
 
 /** The context variables the parts share (Hono's `c.set`/`c.get`) — routes/oauth mounts on the same shape. */

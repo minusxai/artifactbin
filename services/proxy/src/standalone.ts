@@ -11,7 +11,7 @@
 import { Pool } from 'pg';
 import { assemble, createTokenReader, log, overHttp, serve } from '@artifactbin/utils';
 import type { Hono } from 'hono';
-import type { Part, Queryable, TokenReader, Upstream } from '@artifactbin/contracts';
+import type { EventsService, Part, Queryable, TokenReader, Upstream } from '@artifactbin/contracts';
 import { createHumanAuth, type HumanAuthOptions, type Mailer } from './auth/human';
 import type { ProxyConfig } from './config';
 import { sessionStoreOf } from './index';
@@ -25,6 +25,8 @@ export interface StandaloneDeps {
   tokens?: TokenReader;
   sessions?: SessionStore;
   identityDb?: Queryable;
+  /** The log's writer or client (see ProxyOptions.events); `buildDeps` builds one from EVENTS__SERVICE_URL, closing it (a flush) on shutdown. */
+  events?: EventsService;
 }
 
 /** `buildDeps`' result: the deps plus what must be closed on shutdown. */
@@ -41,6 +43,8 @@ export interface StandaloneOverrides {
    * list is mounted exactly as given (no dedup, no reordering).
    */
   parts?: (assembled: Part[]) => Part[];
+  /** The log's writer or client to use INSTEAD of the one `buildDeps` would build from EVENTS__SERVICE_URL — a test's fake, or a deployment's own. Closed (flushed) by `close()` either way. */
+  events?: EventsService;
 }
 
 /** What `runStandalone` hands back: where it listens and how to stop it (socket, then deps). */

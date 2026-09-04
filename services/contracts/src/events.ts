@@ -52,6 +52,8 @@ export interface EventVerbs {
   };
   user: {
     /** The one place an email may travel: identity events, where the id alone says nothing to an operator. */
+    /** A user row came into being — the first verified login. Fires once per account, before that login's `login_verified`. */
+    signed_up: { email: string };
     login_sent: { email: string };
     login_verified: { email: string };
     oauth_linked: { provider: string };
@@ -81,7 +83,7 @@ const complete = <K extends ObjectKind>() => <const T extends readonly EventVerb
 
 export const EVENT_VERBS: { readonly [K in ObjectKind]: readonly EventVerb<K>[] } = {
   artifact: complete<'artifact'>()(['created', 'updated', 'edited', 'reverted', 'deleted', 'exported', 'mutated', 'viewed', 'forked', 'annotated', 'annotation_resolved', 'annotation_deleted', 'sharing_changed', 'liked', 'unliked']),
-  user: complete<'user'>()(['login_sent', 'login_verified', 'oauth_linked', 'followed', 'unfollowed']),
+  user: complete<'user'>()(['signed_up', 'login_sent', 'login_verified', 'oauth_linked', 'followed', 'unfollowed']),
   token: complete<'token'>()(['minted', 'claimed', 'revoked']),
   door: complete<'door'>()(['denied']),
   route: complete<'route'>()(['failed']),
