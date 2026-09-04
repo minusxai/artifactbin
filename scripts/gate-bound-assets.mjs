@@ -168,53 +168,98 @@ ok(refused.alt === 'the pick', 'the alt text is still the author\'s');
 // THE HEADLINE: the page never reached the source host itself.
 ok(outbound.length === 0, `zero requests from the page to the source host (${outbound.length})`);
 
-// ── the ACL: a PRIVATE document's endpoint is a stranger's 404 ──────────────
+// ── a PRIVATE document: the page imports, and the picture paints ───────────
+/*
+ * THE CASE THE WHOLE RELAY EXISTS FOR, and it is the DEFAULT one: a signed-in
+ * user's document is born private, so its first reader is its owner, looking at
+ * it in the shell. The frame is opaque-origin — its <img> carries no cookie —
+ * so the endpoint sees an anonymous caller and the read ACL answers 404. The
+ * page asks instead, with its session, and hands back the public address of our
+ * copy (mx:asset). Three things have to be true at once: the picture PAINTS,
+ * the source host was asked exactly once, and that one import was charged to
+ * the document's owner.
+ */
 const sink = await startMailSink();
-const email = `mxmx_test_boundassets_${Date.now()}@example.com`;
+const ownerEmail = `mxmx_test_boundassets_${Date.now()}@example.com`;
 const holder = await browser.newPage();
-await loginViaEmail(holder, B, sink, email);
+await loginViaEmail(holder, B, sink, ownerEmail);
+const PRIV = `${WEB}/pic3.png?run=${RUN}`;
 const mine = await holder.evaluate(async (u) => {
   const created = await fetch('/api/my/artifacts', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ markup: `<Helmet><Value name="pick" type="string" default="${u}" /></Helmet><div><img src="$pick" alt="a" /></div>`, title: 'private' }),
+    body: JSON.stringify({ markup: `<Helmet><Value name="pick" type="string" default="${u}" /></Helmet><div><img src="$pick" alt="a" /></div>`, title: 'private bound' }),
   });
   return { status: created.status, body: await created.json().catch(() => ({})) };
-}, ONE);
+}, PRIV);
 if (mine.status !== 201) {
   ok(false, `could not create a private document as a signed-in user (${mine.status} ${JSON.stringify(mine.body)})`);
 } else {
   const readBack = await holder.evaluate(async (id) => (await fetch(`/api/my/artifacts/${id}`)).json(), mine.body.id);
   ok(readBack.visibility === 'private', `a signed-in user's document is born private (${readBack.visibility})`);
-  const asStranger = await fetch(`${B}/a/${mine.body.id}/assets?u=${encodeURIComponent(ONE)}`, { redirect: 'manual' });
-  ok(asStranger.status === 404, `a stranger's call to a private document's asset endpoint is the uniform 404 (${asStranger.status})`);
-  ok(hits.filter((h) => h === '/pic1.png').length === 1, 'and nothing was fetched on their behalf');
 
-  /*
-   * THE BOUNDARY, stated rather than implied. A served document is sandboxed
-   * without allow-same-origin, so the `<img>` it loads carries no cookie — the
-   * endpoint sees an anonymous caller from inside every document, its OWNER'S
-   * framed copy included. On a private document that is the uniform 404, so a
-   * bound source there shows its alt text and nothing else. This asserts what
-   * actually happens (the refused placeholder, drawn for a failure that landed
-   * before hydration) instead of pretending the case works.
-   */
+  const beforePriv = hits.filter((h) => h === '/pic3.png').length;
   await holder.goto(`${B}/a/${mine.body.id}`, { waitUntil: 'networkidle' });
   const own = await (await holder.waitForSelector('iframe[title="artifact"]', { timeout: 30_000 })).contentFrame();
   const owned = await own.evaluate(async () => {
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + 15_000;
     const read = () => {
       const img = document.querySelector('img[alt="a"]');
-      return { src: img?.getAttribute('src') ?? null, mark: img?.getAttribute('data-mx-asset') ?? null, natural: img ? img.naturalWidth : -1 };
+      return { src: img?.getAttribute('src') ?? null, mark: img?.getAttribute('data-mx-asset') ?? null, natural: img ? [img.naturalWidth, img.naturalHeight] : [-1, -1] };
     };
     while (Date.now() < deadline) {
       const s = read();
-      if (s.mark || s.natural > 0) return s;
+      if (s.natural[0] > 0 || s.mark) return s;
       await new Promise((r) => setTimeout(r, 100));
     }
     return read();
   });
-  ok(owned.mark === 'refused' && owned.src === null, `a private document's own owner sees the alt placeholder, because the frame presents no session (${JSON.stringify(owned)})`);
+  ok(owned.natural[0] === 48 && owned.natural[1] === 32, `a private document's OWNER sees the picture, imported through the page (${JSON.stringify(owned)})`);
+  ok(/^\/assets\/[0-9a-f]{64}$/.test(owned.src ?? ''), `and its src is the public content address the relay handed back (${owned.src})`);
+  ok(hits.filter((h) => h === '/pic3.png').length === beforePriv + 1, `the source host was asked exactly once for it (${hits.filter((h) => h === '/pic3.png').length - beforePriv})`);
+
+  // Charged to the DOCUMENT'S OWNER (R10) — read back through the owner's own
+  // artifact list, which is the only reach a gate has into who paid.
+  const listed = await holder.evaluate(async () => (await fetch('/api/my/artifacts')).json());
+  ok(Array.isArray(listed.artifacts) && listed.artifacts.some((a) => a.id === mine.body.id), 'the import created no artifact of its own — the document is still the only one');
+
+  // …and a stranger still gets nothing at all from that endpoint.
+  const asStranger = await fetch(`${B}/a/${mine.body.id}/assets?u=${encodeURIComponent(ONE)}`, { redirect: 'manual' });
+  ok(asStranger.status === 404, `a stranger's call to a private document's asset endpoint is still the uniform 404 (${asStranger.status})`);
+  const asStrangerJson = await fetch(`${B}/a/${mine.body.id}/assets?u=${encodeURIComponent(ONE)}`, { headers: { Accept: 'application/json' } });
+  ok(asStrangerJson.status === 404, `…and so is the JSON answer the page uses (${asStrangerJson.status})`);
+
+  // ── an INVITED VIEWER sees it through the shell ──────────────────────────
+  const guestEmail = `mxmx_test_boundguest_${Date.now()}@example.com`;
+  const shared = await holder.evaluate(async ([id, email]) => {
+    const r = await fetch(`/api/my/artifacts/${id}/sharing`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shares: [{ email, role: 'viewer' }] }),
+    });
+    return r.status;
+  }, [mine.body.id, guestEmail]);
+  ok(shared === 200, `the owner invited a viewer (${shared})`);
+
+  const guest = await browser.newPage();
+  await loginViaEmail(guest, B, sink, guestEmail);
+  const beforeGuest = hits.filter((h) => h === '/pic3.png').length;
+  await guest.goto(`${B}/a/${mine.body.id}`, { waitUntil: 'networkidle' });
+  const guestFrame = await (await guest.waitForSelector('iframe[title="artifact"]', { timeout: 30_000 })).contentFrame();
+  const seenByGuest = await guestFrame.evaluate(async () => {
+    const deadline = Date.now() + 15_000;
+    const read = () => {
+      const img = document.querySelector('img[alt="a"]');
+      return { src: img?.getAttribute('src') ?? null, mark: img?.getAttribute('data-mx-asset') ?? null, natural: img ? [img.naturalWidth, img.naturalHeight] : [-1, -1] };
+    };
+    while (Date.now() < deadline) {
+      const s = read();
+      if (s.natural[0] > 0 || s.mark) return s;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return read();
+  });
+  ok(seenByGuest.natural[0] === 48, `an INVITED VIEWER of the private document sees the picture too, through the shell (${JSON.stringify(seenByGuest)})`);
+  ok(hits.filter((h) => h === '/pic3.png').length === beforeGuest, `and cost the source host nothing — it was already ours (${hits.filter((h) => h === '/pic3.png').length - beforeGuest} new requests)`);
 }
 
 await browser.close();

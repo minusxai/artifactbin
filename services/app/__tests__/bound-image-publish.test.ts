@@ -17,6 +17,7 @@ import { mintToken } from '@/lib/tokens';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { assetUrlFor } from '@/lib/story/asset-url';
 import { markupCsp } from '@/lib/story/markup-csp';
+import { mintExportKey } from '@/lib/export-key';
 import { getDb } from '@/lib/db';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 9, 9, 9]);
@@ -142,5 +143,40 @@ describe('the served document', () => {
     const page = await rawRoute(request(`/a/${body.id}/raw`), params({ id: body.id as string }));
     expect(page.headers.get('content-security-policy')).toBe(markupCsp('http://localhost:3000', body.id as string));
     expect(page.headers.get('content-security-policy')).not.toContain('/assets');
+  });
+});
+
+/**
+ * THE CAPTURE. A markup document is photographed from its OWN page
+ * (`/a/<id>/raw?chrome=0&key=…`, lib/export) — TOP-LEVEL, with no parent to
+ * relay through, and in a headless browser with no session. So the only thing
+ * that can carry the exporter's credential to the import endpoint is the
+ * address the document is given: without it a private document's og image
+ * photographs alt text where its picture should be.
+ */
+describe('the capture carries the exporter\'s key into its asset endpoint', () => {
+  it('puts a VERIFIED key on assetsUrl, and never anything else', async () => {
+    const url = `${web}/cap.png`;
+    const helmet = `<Helmet><Value name="pick" type="string" default="${url}" /></Helmet>`;
+    const { body } = await publish(`${helmet}<div><img src="$pick" alt="the pick" /></div>`);
+    const id = body.id as string;
+    const key = mintExportKey(id);
+
+    const shot = await rawRoute(request(`/a/${id}/raw?chrome=0&key=${encodeURIComponent(key)}`), params({ id }));
+    const html = await shot.text();
+    expect(html).toContain(`"assetsUrl":"/a/${id}/assets?key=${key}"`);
+    // …and the <img> the exporter loads therefore carries it too.
+    expect(/<img[^>]*alt="the pick"[^>]*>/.exec(html)?.[0]).toContain(`/a/${id}/assets?key=${key}&amp;u=`);
+
+    // A reader's ordinary view keeps the bare address — the key is the
+    // exporter's, and it must not ride in a document anyone else is served.
+    const plain = await rawRoute(request(`/a/${id}/raw`), params({ id }));
+    const plainHtml = await plain.text();
+    expect(plainHtml).toContain(`"assetsUrl":"/a/${id}/assets"`);
+    expect(plainHtml).not.toContain('key=');
+
+    // An INVALID key is admitted nowhere and echoed nowhere.
+    const forged = await rawRoute(request(`/a/${id}/raw?chrome=0&key=9999999999.${'a'.repeat(64)}`), params({ id }));
+    expect(await forged.text()).toContain(`"assetsUrl":"/a/${id}/assets"`);
   });
 });

@@ -101,7 +101,11 @@ export const isWebUrl = (value: string): boolean => WEB_URL.test(value);
 export function runtimeAssetUrl(url: string, known: AssetLookup, endpoint: string | null | undefined): string {
   if (!isWebUrl(url)) return url;
   if (known(url)) return assetUrlFor(url);
-  return endpoint ? `${endpoint}?u=${encodeURIComponent(url)}` : url;
+  if (!endpoint) return url;
+  // The endpoint may already carry a query (a CAPTURE's `?key=` — the only
+  // credential a top-level, session-less render can present), so the separator
+  // is chosen rather than assumed, exactly as the query transport chooses it.
+  return `${endpoint}${endpoint.includes('?') ? '&' : '?'}u=${encodeURIComponent(url)}`;
 }
 
 /** A lookup over whatever index the caller already has — a Set of urls, or the rows themselves. */

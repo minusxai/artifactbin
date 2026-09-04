@@ -90,7 +90,7 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
    * rejection here would only become an unhandled promise and an empty box.
    */
   let assetSeq = 0;
-  const importers = new Map<number, { settle: (r: { url: string } | { refused: string }) => void; timer: ReturnType<typeof setTimeout> }>();
+  const importers = new Map<number, { settle: (r: { url: string } | { refused: string }) => void; clear: () => void }>();
   source.addEventListener('message', (e: MessageEvent) => {
     if (e.source !== target || e.origin !== appOrigin) return;
     const data = e.data as StoryAssetResult | undefined;
@@ -98,16 +98,30 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
     const w = importers.get(data.id);
     if (!w) return;
     importers.delete(data.id);
-    clearTimeout(w.timer);
+    w.clear();
     w.settle('url' in data ? { url: data.url } : { refused: data.refused });
   });
 
   return {
     importAsset: (url) => new Promise<{ url: string } | { refused: string }>((settle) => {
       const id = ++assetSeq;
-      const timer = setTimeout(() => { importers.delete(id); settle({ refused: 'no_answer' }); }, timeoutMs);
-      importers.set(id, { settle, timer });
-      target.postMessage({ type: STORY_ASSET_MESSAGE, id, url } satisfies StoryAssetRequest, appOrigin);
+      const post = () => target.postMessage({ type: STORY_ASSET_MESSAGE, id, url } satisfies StoryAssetRequest, appOrigin);
+      /*
+       * Re-posted on the SAME schedule as a query, and for the same reason: a
+       * message nobody is listening for yet is not queued anywhere, it is gone.
+       * The page installs its listener in an effect while the frame asks the
+       * moment it has a channel — and in an EXPORT the two start together, so
+       * one send meant a private document's og image photographed its alt text.
+       * Re-posting is safe because the id does not change: a page that heard
+       * the first one answers once, and the second answer for a settled id is
+       * dropped by the waiter lookup above.
+       */
+      const timers = [
+        ...RETRIES_AT.map((at) => setTimeout(() => { if (importers.has(id)) post(); }, at)),
+        setTimeout(() => { importers.delete(id); settle({ refused: 'no_answer' }); }, timeoutMs),
+      ];
+      importers.set(id, { settle, clear: () => { for (const t of timers) clearTimeout(t); } });
+      post();
     }),
     run: async (values, only) => {
       const r = await send({ values, only });

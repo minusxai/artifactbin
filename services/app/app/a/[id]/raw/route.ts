@@ -112,8 +112,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // CLAIMED token would be an owner upstairs and a stranger here, its own
   // private document 404ing inside the frame the shell just rendered.
   const viewer = (await sessionActor(request)).viewer;
-  const admitted = (await canReadArtifact(artifact, viewer))
-    || verifyExportKey(artifact.id, key ?? undefined);
+  const byExportKey = verifyExportKey(artifact.id, key ?? undefined);
+  const admitted = (await canReadArtifact(artifact, viewer)) || byExportKey;
   if (!admitted) return notFound();
 
   switch (artifact.format) {
@@ -328,12 +328,22 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         // Where this document fetches its re-runs when it IS the page (the
         // reader path); inside a parent the relay is chosen instead.
         queryUrl: queryPath(artifact.id),
-        // …and where it imports an image URL only its reader can compute (a
-        // bound <img src="$pick">). Unconditional, unlike mutateUrl: a source
-        // can appear in the DOM without the document declaring it — an author
-        // script, a table column — and the endpoint answers under this
-        // document's own read ACL either way.
-        assetsUrl: assetsPath(artifact.id),
+        /*
+         * …and where it imports an image URL only its reader can compute (a
+         * bound <img src="$pick">). Unconditional, unlike mutateUrl: a source
+         * can appear in the DOM without the document declaring it — an author
+         * script, a table column — and the endpoint answers under this
+         * document's own read ACL either way.
+         *
+         * A CAPTURE carries the exporter's key in that address, because a
+         * markup document is photographed from THIS page top-level (lib/export
+         * — `raw?chrome=0&key=`), in a browser with no session and with no
+         * parent to relay through: the address is the only thing left that can
+         * present a credential, and without it a private document's og image
+         * photographs its alt text. Only a key this route VERIFIED is echoed,
+         * so nothing a caller invents ever reaches the document.
+         */
+        assetsUrl: byExportKey ? `${assetsPath(artifact.id)}?key=${encodeURIComponent(key!)}` : assetsPath(artifact.id),
         // Only a document that declares a write gets a write URL: a document
         // that cannot write should not carry the address of a door it never
         // opens.
