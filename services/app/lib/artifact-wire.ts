@@ -15,6 +15,7 @@ import {
 } from '@/lib/artifacts';
 import { actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type AnnotationAction, type AnnotationAuthor } from '@/lib/annotations';
 import { isMutationRefused, mutateDataset } from '@/lib/story/dataset-mutate';
+import type { SourceRepair } from '@/lib/jsx/repair';
 import type { Scalar } from '@/lib/story/dataflow';
 import { datasetCreateFields } from '@/lib/story/dataset-usage';
 import { imageRawUrl, pdfRawUrl } from '@/lib/story/ref-data';
@@ -121,6 +122,19 @@ function markupEcho(sent: unknown, stored: string | null): Record<string, unknow
  */
 export const assetWarningsEcho = (warnings: AssetWarning[] | undefined): Record<string, unknown> =>
   (warnings?.length ? { asset_warnings: warnings } : {});
+
+/**
+ * SOURCE REPAIRS ride their own key too, for the same reason and one more.
+ *
+ * A repair is not a warning: nothing is missing and nothing needs fixing — the
+ * door already changed the document and it published. What the caller needs is
+ * to know WHAT was changed, because the source it reads back will not be the
+ * source it sent. That is the whole licence for repairing an agent's markup
+ * instead of refusing it (lib/jsx/repair), so this key is the contract, not a
+ * courtesy. Present only when something was repaired.
+ */
+export const sourceRepairsEcho = (repairs: SourceRepair[] | undefined): Record<string, unknown> =>
+  (repairs?.length ? { source_repairs: repairs } : {});
 
 /** Full wire shape for a single-artifact read. */
 export async function artifactToWire(row: ArtifactRow, base: string) {
@@ -374,6 +388,7 @@ export async function replaceArtifactWithBody(
     ...(row.format === 'markup' ? { open_annotations: await countOpenAnnotations(row.id) } : {}),
     ...(warnings.length ? { warnings } : {}),
     ...assetWarningsEcho(parsed.warnings),
+    ...sourceRepairsEcho(parsed.repairs),
   });
 }
 
@@ -415,6 +430,7 @@ export async function createArtifactFromBody(
   return json({
     ...createdArtifactWire(row, base, body.markup),
     ...assetWarningsEcho(parsed.warnings),
+    ...sourceRepairsEcho(parsed.repairs),
   }, 201);
 }
 

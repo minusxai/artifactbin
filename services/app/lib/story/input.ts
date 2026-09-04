@@ -34,6 +34,8 @@ export const MAX_CONTENT_BYTES = 2_000_000;
 export const ARTIFACT_FORMATS = ['markup', 'dataset', 'viz', 'image', 'pdf'] as const;
 export type ArtifactFormat = (typeof ARTIFACT_FORMATS)[number];
 
+import type { SourceRepair } from '@/lib/jsx/repair';
+
 export interface StoredContent {
   format: ArtifactFormat;
   content: string; // what /a/<id> serves
@@ -48,6 +50,13 @@ export interface StoredContent {
    * the worse answer. Absent when everything imported.
    */
   warnings?: AssetWarning[];
+  /**
+   * Changes the door made to the source on the way in (lib/jsx/repair) — today
+   * only the shell-escaped backtick. Present ONLY when something was changed,
+   * and present is the point: the door is allowed to repair an agent's markup
+   * exactly because it names what it did, rather than rewriting SQL in silence.
+   */
+  repairs?: SourceRepair[];
 }
 
 function tooLarge(value: string): Response | null {
