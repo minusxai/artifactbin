@@ -20,6 +20,24 @@ export interface ShutdownOptions {
 
 /** Install the handlers; returns the close function itself (idempotent), for callers that want to run it directly. */
 export function installShutdown(opts: ShutdownOptions): () => Promise<void> {
-  void opts;
-  throw new Error('events-app: implement installShutdown');
+  const { steps, signals = ['SIGTERM', 'SIGINT'], process = globalThis.process, log = console.error } = opts;
+  // ONE promise, made on the first call: a second signal (or a second close())
+  // awaits the same run rather than starting another, which is what keeps
+  // `exit` to exactly once.
+  let closing: Promise<void> | undefined;
+  const close = (): Promise<void> => (closing ??= run());
+  const run = async (): Promise<void> => {
+    for (const step of steps) {
+      try {
+        await step();
+      } catch (error) {
+        // A step that cannot finish must not strand the ones after it — the
+        // listener still has to close even when the flush failed.
+        log('[shutdown] step failed:', error);
+      }
+    }
+    process.exit(0);
+  };
+  for (const signal of signals) process.once(signal, () => void close());
+  return close;
 }

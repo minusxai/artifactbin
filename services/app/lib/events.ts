@@ -10,7 +10,9 @@
  * The sentence is typed by the catalogue: a verb the object kind does not
  * take, or a payload of the wrong shape, is a compile error.
  */
+import { randomUUID } from 'node:crypto';
 import type { EventEnvelope, EventPayload, EventVerb, ObjectKind, SubjectKind } from '@artifactbin/contracts';
+import { services } from '@/lib/services';
 
 export interface EventSubject { kind: SubjectKind; id: string }
 export interface EventObject<K extends ObjectKind = ObjectKind> { kind: K; id: string }
@@ -22,8 +24,21 @@ export function envelope<K extends ObjectKind, V extends EventVerb<K>>(
   object: EventObject<K>,
   payload: EventPayload<K, V>,
 ): EventEnvelope {
-  void subject; void verb; void object; void payload;
-  throw new Error('events-app: implement envelope');
+  return {
+    id: randomUUID(),
+    at: new Date().toISOString(),
+    source: 'app',
+    // Two nulls, never a missing column: the row has both, and "nobody did it"
+    // is a state the log records rather than one it omits.
+    subject_kind: subject?.kind ?? null,
+    subject_id: subject?.id ?? null,
+    verb,
+    object_kind: object.kind,
+    object_id: object.id,
+    // Spread rather than assign: the catalogue's payloads are interfaces (no
+    // index signature), and the envelope owns its own object either way.
+    payload: { ...payload },
+  };
 }
 
 /** Fire-and-forget: never rejects. Callers write `void emit(...)`; tests may await it. */
@@ -33,6 +48,11 @@ export async function emit<K extends ObjectKind, V extends EventVerb<K>>(
   object: EventObject<K>,
   payload: EventPayload<K, V>,
 ): Promise<void> {
-  void subject; void verb; void object; void payload;
-  throw new Error('events-app: implement emit');
+  try {
+    await services().events.emit([envelope(subject, verb, object, payload)]);
+  } catch (error) {
+    // Telemetry never takes a request down with it, and an unhandled rejection
+    // out of a `void emit(...)` would kill the process.
+    console.error('[events] emit failed:', error);
+  }
 }
