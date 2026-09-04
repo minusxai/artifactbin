@@ -362,11 +362,24 @@ export async function createAnnotationFor(
   return wire ?? null;
 }
 
+/**
+ * THE TRASH GATE for this table — `annotations.deleted_at IS NULL`, named in
+ * every reader below the way lib/artifacts names its own.
+ *
+ * `deleteAnnotationFor` is still a HARD delete and nothing writes the column
+ * today: erasing someone's words is a deliberate act with no restore door
+ * behind it, so a comment does not go to a trash. The column and this gate are
+ * what the pattern owes an adopted table — they make a row that carries the
+ * stamp invisible, so adopting it for real is one statement rather than an
+ * audit of every reader.
+ */
+const LIVE_ANNOTATION_SQL = 'deleted_at IS NULL';
+
 /** Assemble wire threads for a set of roots — anchors resolved against the CURRENT source. */
 async function wireFor(db: Queryable, head: ArtifactRow, roots: AnnotationRowDb[]): Promise<AnnotationWire[]> {
   if (roots.length === 0) return [];
   const replies = await db.query<AnnotationRowDb>(
-    'SELECT * FROM annotations WHERE artifact_id = $1 AND root_id IS NOT NULL ORDER BY seq',
+    `SELECT * FROM annotations WHERE artifact_id = $1 AND root_id IS NOT NULL AND ${LIVE_ANNOTATION_SQL} ORDER BY seq`,
     [head.id],
   );
   const byRoot = new Map<string, AnnotationRowDb[]>();
@@ -435,7 +448,7 @@ export async function annotationsWireForRow(
   const status = opts?.status ?? 'open';
   const filter = status === 'all' ? '' : `AND status = '${status === 'open' ? 'open' : 'resolved'}'`;
   const roots = await db.query<AnnotationRowDb>(
-    `SELECT * FROM annotations WHERE artifact_id = $1 AND root_id IS NULL ${filter} ORDER BY seq`,
+    `SELECT * FROM annotations WHERE artifact_id = $1 AND root_id IS NULL ${filter} AND ${LIVE_ANNOTATION_SQL} ORDER BY seq`,
     [row.id],
   );
   return wireFor(db, row, roots.rows);
@@ -460,7 +473,7 @@ export async function actOnAnnotationFor(
     const row = await scopedRow(tx, scope, artifactId);
     if (!row) return null;
     const found = await tx.query<AnnotationRowDb>(
-      'SELECT * FROM annotations WHERE id = $1 AND artifact_id = $2 AND root_id IS NULL',
+      `SELECT * FROM annotations WHERE id = $1 AND artifact_id = $2 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL}`,
       [annotationId, artifactId],
     );
     const root = found.rows[0];
@@ -517,7 +530,7 @@ export async function deleteAnnotationFor(actor: TokenActor, artifactId: string,
     const row = await scopedRow(tx, scope, artifactId);
     if (!row) return null;
     const found = await tx.query<AnnotationRowDb>(
-      'SELECT anchor_key, author_user_id FROM annotations WHERE id = $1 AND artifact_id = $2 AND root_id IS NULL',
+      `SELECT anchor_key, author_user_id FROM annotations WHERE id = $1 AND artifact_id = $2 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL}`,
       [annotationId, artifactId],
     );
     if (found.rows.length === 0) return null;
@@ -526,7 +539,7 @@ export async function deleteAnnotationFor(actor: TokenActor, artifactId: string,
     await tx.query('DELETE FROM annotations WHERE id = $1 OR root_id = $1', [annotationId]);
     const anchorKey = found.rows[0].anchor_key;
     if (!anchorKey) return { anchorKey: null };
-    const others = await tx.query('SELECT 1 FROM annotations WHERE artifact_id = $1 AND anchor_key = $2 AND root_id IS NULL', [artifactId, anchorKey]);
+    const others = await tx.query(`SELECT 1 FROM annotations WHERE artifact_id = $1 AND anchor_key = $2 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL}`, [artifactId, anchorKey]);
     await notify(tx, artifactId, annotationId);
     return { anchorKey: others.rows.length === 0 ? anchorKey : null };
   });
@@ -550,7 +563,7 @@ export async function deleteAnnotationFor(actor: TokenActor, artifactId: string,
 export async function countOpenAnnotations(artifactId: string): Promise<number> {
   const db = await getDb();
   const r = await db.query<{ n: string | number }>(
-    "SELECT count(*) AS n FROM annotations WHERE artifact_id = $1 AND root_id IS NULL AND status = 'open'",
+    `SELECT count(*) AS n FROM annotations WHERE artifact_id = $1 AND root_id IS NULL AND status = 'open' AND ${LIVE_ANNOTATION_SQL}`,
     [artifactId],
   );
   return Number(r.rows[0]?.n ?? 0);

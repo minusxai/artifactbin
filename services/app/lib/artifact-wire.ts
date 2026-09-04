@@ -151,7 +151,10 @@ export const sourceRepairsEcho = (repairs: SourceRepair[] | undefined): Record<s
 
 /** Full wire shape for a single-artifact read. */
 export async function artifactToWire(row: ArtifactRow, base: string) {
-  const { content, source, token_id: _token, user_id: _owner, meta, format, ...rest } = row;
+  // `deleted_at` is dropped with the ownership columns: the trash gate means a
+  // row a caller can read is always live, so the field could only ever echo
+  // null — a key in every agent's context that can carry no news.
+  const { content, source, token_id: _token, user_id: _owner, deleted_at: _trashed, meta, format, ...rest } = row;
   const m = meta as { theme?: string; template?: string; colorMode?: 'light' | 'dark' | null };
   // Echo the LIVE vocabulary: a stored retired theme reads back as its
   // successor, so an agent that read-before-writes never learns a name that
@@ -379,6 +382,29 @@ export async function replaceArtifactWithBody(
   // they could never own. Unreachable is the uniform 404, before any parse.
   const current = await getArtifactFor(actor, id);
   if (!current) return json({ error: 'not_found' }, 404);
+  /*
+   * GOVERNANCE IS THE OWNER'S, AND THIS IS THE ONLY DOOR THAT HAS TO SAY SO.
+   *
+   * `visibility` and `access` sit on `canGovern`'s list beside sharing and
+   * placement — they decide who may READ the document and who may write its
+   * rows — and every other way to set them is owner-scoped, so a named editor
+   * meets the uniform 404 long before the value is read. This door runs under
+   * `editorScope`, which is the whole point of it: an editor may rewrite the
+   * document. They were not invited to change who else can see it.
+   *
+   * Asked by KEY PRESENCE, not by the parsed value: "carrying either" is the
+   * contract, and an editor re-sending the visibility the row already has is
+   * still asking for a decision that is not theirs — answering 200 to it would
+   * mean the refusal depends on what the owner happened to have set.
+   *
+   * Refused HERE, above `parseContentInput`, because that parse FETCHES: a
+   * refused write must not import the caller's images, and must not leave the
+   * markup half-applied under a 403 nobody can interpret. One ownership read,
+   * shared with the placement check below, and only when something asked for it.
+   */
+  const governs = 'visibility' in body || 'access' in body;
+  const owned = governs || body.parent_id !== undefined ? await getOwnedArtifactFor(actor, id) : null;
+  if (governs && !owned) return json({ error: 'owner_only' }, 403);
   const owner = writerFor(current);
   const parsed = await parseContentInput(body, {
     loadRef: refLoaderForActor(owner),
@@ -410,14 +436,14 @@ export async function replaceArtifactWithBody(
    * or out to the root — is not theirs to do (lib/artifacts ownerScope: "delete,
    * sharing, folder, dataset access, listing"). PLACEMENT only: `visibility` and
    * `access` above are on `canGovern`'s list too and this door has always let an
-   * editor set them — a pre-existing gap, measured and reported, deliberately
-   * not widened into here. The second read is what asks, so the ONE ownership rule stays
+   * editor set them — refused above, on the same one ownership read this
+   * shares. The read is what asks, so the ONE ownership rule stays
    * in SQL rather than being mirrored in JS here, and it is paid for only when
-   * a placement was actually asked for. The refusal is `invalid_parent`, which
+   * a placement or a governance field was actually asked for. The refusal is `invalid_parent`, which
    * already conflates "not a folder you may file into" — there is no second
    * code to learn, and it says nothing about whether the parent exists.
    */
-  const mayPlace = parent === undefined || !!(await getOwnedArtifactFor(actor, id));
+  const mayPlace = parent === undefined || !!owned;
   const placement = parent === undefined ? undefined
     : mayPlace ? await resolveParent(writerFor(current), parent, { id: current.id, format: current.format })
       : PARENT_REFUSED;

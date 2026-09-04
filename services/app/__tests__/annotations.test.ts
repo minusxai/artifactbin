@@ -21,6 +21,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { DELETE as myDeleteAnnotationRoute, POST as myActOnAnnotationRoute } from '@/app/api/my/artifacts/[id]/annotations/[annId]/route';
 import { GET as myListAnnotationsRoute, POST as myCreateAnnotationRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
 import { mintToken } from '@/lib/tokens';
+import { purgeTrash } from '@/lib/trash';
 import { claimToken, createUser, setUsername } from '@/lib/users';
 
 const BASE = 'http://localhost:3000';
@@ -300,13 +301,18 @@ describe('lifecycle', () => {
     expect(left.rows).toHaveLength(0); // the reply went with the root
   });
 
-  it('deleting the artifact takes its annotation rows with it', async () => {
+  it('the PURGE takes the artifact\'s annotation rows with it — a delete only trashes them', async () => {
     const { t, doc, cookie } = await publish();
     await annotate(doc.id, cookie, { path: '1', edit_id: doc.edit_id, body: 'x' });
     const del = await deleteArtifactRoute(request(`/api/artifacts/${doc.id}`, { method: 'DELETE', token: t.token }), params({ id: doc.id }));
     expect(del.status).toBe(200);
     const db = await harness.db();
-    const left = await db.query('SELECT 1 FROM annotations WHERE artifact_id = $1', [doc.id]);
-    expect(left.rows).toHaveLength(0);
+    // Still there, and that is the point of a trash: a restore has to bring
+    // the conversation back with the document. They are unreachable meanwhile
+    // — the artifact is (trashed-rows.test.ts), so everything hanging off it is.
+    expect((await db.query('SELECT 1 FROM annotations WHERE artifact_id = $1', [doc.id])).rows).toHaveLength(1);
+    await db.query(`UPDATE artifacts SET deleted_at = now() - interval '31 days' WHERE id = $1`, [doc.id]);
+    expect(await purgeTrash({ olderThanDays: 30 })).toEqual([doc.id]);
+    expect((await db.query('SELECT 1 FROM annotations WHERE artifact_id = $1', [doc.id])).rows).toHaveLength(0);
   });
 });

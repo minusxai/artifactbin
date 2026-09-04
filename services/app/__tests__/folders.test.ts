@@ -133,33 +133,37 @@ describe('moving', () => {
 });
 
 describe('deleting and forking a folder', () => {
-  it('a folder with children answers 409 folder_not_empty with the count; force deletes the subtree', async () => {
+  /*
+   * `folder_not_empty` and its `?force` are GONE. They existed because a
+   * delete was permanent and a folder full of documents was a decision nobody
+   * should discover afterwards; a trash is not that decision, so the refusal
+   * asked someone to confirm something that is no longer being done. What is
+   * left is the act itself: one statement takes the subtree (lib/trash), and
+   * restore reverses it (trash.test.ts).
+   */
+  it('deleting a folder takes its subtree into the trash, with no refusal and no force', async () => {
     const o = await owner();
     const f = (await create(o.token, { format: 'folder', title: 'F' })).body;
     const sub = (await create(o.token, { format: 'folder', title: 'S', parent_id: f.id })).body;
     const d = (await create(o.token, { markup: '<p>d</p>', parent_id: sub.id })).body;
-    const refused = await j(await deleteRoute(request(`/api/artifacts/${f.id}`, { method: 'DELETE', token: o.token }), params(f.id)));
-    expect(refused.status).toBe(409);
-    expect(refused.body.error).toBe('folder_not_empty');
-    expect(refused.body.count).toBe(2);
-    expect(await getArtifactById(f.id)).not.toBeNull();
-    const forced = await deleteRoute(request(`/api/artifacts/${f.id}?force=true`, { method: 'DELETE', token: o.token }), params(f.id));
-    expect(forced.status).toBe(200);
+    const gone = await j(await deleteRoute(request(`/api/artifacts/${f.id}`, { method: 'DELETE', token: o.token }), params(f.id)));
+    expect(gone.status).toBe(200);
+    expect(gone.body.error).toBeUndefined();
     for (const id of [f.id, sub.id, d.id]) expect(await getArtifactById(id), id).toBeNull();
     const empty = (await create(o.token, { format: 'folder', title: 'E' })).body;
     expect((await deleteRoute(request(`/api/artifacts/${empty.id}`, { method: 'DELETE', token: o.token }), params(empty.id))).status).toBe(200);
   });
 
   /*
-   * The forced delete collects the subtree by CONTAINMENT and then deletes it,
-   * so the rows it takes are decided by a rule (`resolveParent`: a parent is a
-   * folder the SAME owner holds) enforced in another module. An ACL that rests
-   * on a neighbour's invariant is one refactor from being wrong, so the
-   * deletion re-applies the owner scope to every row it takes and not only to
-   * the folder that was named. Unreachable through the doors today — which is
-   * why the foreign child is planted with SQL.
+   * The delete takes the subtree by CONTAINMENT, so the rows it takes are
+   * decided by a rule (`resolveParent`: a parent is a folder the SAME owner
+   * holds) enforced in another module. An ACL that rests on a neighbour's
+   * invariant is one refactor from being wrong, so the owner predicate sits in
+   * the SAME WHERE as the containment and not only on the folder that was
+   * named. Unreachable through the doors today — which is why the foreign
+   * child is planted with SQL.
    */
-  it('a forced delete takes only rows the actor owns, whatever the containment says', async () => {
+  it('deleting a folder takes only rows the actor owns, whatever the containment says', async () => {
     const o = await owner();
     const stranger = await owner('stranger');
     const f = (await create(o.token, { format: 'folder', title: 'F' })).body;
@@ -168,12 +172,12 @@ describe('deleting and forking a folder', () => {
     const db = await getDb();
     await db.query('UPDATE artifacts SET ancestor_ids = $2::text[] WHERE id = $1', [theirs.id, [f.id]]);
 
-    const forced = await deleteRoute(request(`/api/artifacts/${f.id}?force=true`, { method: 'DELETE', token: o.token }), params(f.id));
-    expect(forced.status).toBe(200);
+    const gone = await deleteRoute(request(`/api/artifacts/${f.id}`, { method: 'DELETE', token: o.token }), params(f.id));
+    expect(gone.status).toBe(200);
     for (const id of [f.id, mine.id]) expect(await getArtifactById(id), id).toBeNull();
     expect(await getArtifactById(theirs.id), 'the stranger keeps their document').not.toBeNull();
-    const rest = await db.query('SELECT count(*)::int AS n FROM artifact_edits WHERE artifact_id = $1', [theirs.id]);
-    expect(rest.rows[0].n, 'and its history').toBeGreaterThan(0);
+    const rest = await db.query('SELECT deleted_at FROM artifacts WHERE id = $1', [theirs.id]);
+    expect(rest.rows[0].deleted_at, 'and it was never even stamped').toBeNull();
   });
 
   it('fork_artifact on a folder answers 400 not_forkable', async () => {

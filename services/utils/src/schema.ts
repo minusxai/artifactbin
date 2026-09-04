@@ -14,7 +14,36 @@ function renderColumn(col: Column): string {
   return parts.join(' ');
 }
 
-function renderTable(table: Table, qualified: (name: string) => string): string[] {
+/**
+ * A DECLARED RENAME (Column.renamedFrom), as ONE guarded block beside the
+ * ordinary `ADD COLUMN IF NOT EXISTS` that already added the new column: if
+ * the OLD column is still there, copy it across and drop it.
+ *
+ * Three properties, each load-bearing. It is GUARDED on
+ * `information_schema.columns`, so from the second boot onward the whole block
+ * is a no-op — plpgsql prepares a statement only when it executes, so the body
+ * naming a column that no longer exists is never even parsed. It COPIES before
+ * it drops (`WHERE <new> IS NULL AND <old> IS NOT NULL`, so a half-migrated
+ * database is left alone): an add beside a bare drop would silently discard
+ * the data, which for `revoked_at` means un-revoking every revoked token. And
+ * it is DDL like everything else here, so the boot IS the migration and there
+ * is no script to remember to run.
+ */
+function renderRename(qualified: string, table: string, schemaExpr: string, col: Column): string {
+  const old = col.renamedFrom as string;
+  return `DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema = ${schemaExpr} AND table_name = '${table}' AND column_name = '${old}'
+  ) THEN
+    UPDATE ${qualified} SET ${col.name} = ${old} WHERE ${col.name} IS NULL AND ${old} IS NOT NULL;
+    ALTER TABLE ${qualified} DROP COLUMN IF EXISTS ${old};
+  END IF;
+END $$`;
+}
+
+function renderTable(table: Table, qualified: (name: string) => string, schemaExpr: string): string[] {
   const name = qualified(table.name);
   const body = table.columns.map((c) => `  ${renderColumn(c)}`);
   // Table-level PK so the constraint gets the conventional <table>_pkey name.
@@ -25,6 +54,12 @@ function renderTable(table: Table, qualified: (name: string) => string): string[
     `CREATE TABLE IF NOT EXISTS ${name} (\n${body.join(',\n')}\n)`,
     // Lets a database built from an older declaration gain newly-declared columns.
     ...table.columns.map((c) => `ALTER TABLE ${name} ADD COLUMN IF NOT EXISTS ${renderColumn(c)}`),
+    // A DECLARED rename: copy the old column across and drop it, guarded so
+    // the second boot is a no-op. AFTER the adds (the new column must exist to
+    // be written into) and BEFORE the drops and the indexes.
+    ...table.columns
+      .filter((c) => c.renamedFrom)
+      .map((c) => renderRename(name, table.name, schemaExpr, c)),
     // Relax constraints an older declaration applied — see Column.retired.
     ...table.columns
       .filter((c) => c.retired)
@@ -47,7 +82,10 @@ function renderTable(table: Table, qualified: (name: string) => string): string[
 /** Ordered, individually-executable DDL statements (no splitting needed). */
 export function renderSchema(tables: Table[], o: { schema?: string } = {}): string[] {
   const qualified = (name: string) => (o.schema ? `${o.schema}.${name}` : name);
-  return tables.flatMap((t) => renderTable(t, qualified));
+  // The catalog is asked by NAME, so an unqualified declaration has to name
+  // the schema the connection is actually in rather than assume `public`.
+  const schemaExpr = o.schema ? `'${o.schema}'` : 'current_schema()';
+  return tables.flatMap((t) => renderTable(t, qualified, schemaExpr));
 }
 
 /** Apply renderSchema's statements, in order, on every boot. */

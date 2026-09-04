@@ -15,6 +15,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as mintTokenRoute } from '@/app/api/tokens/route';
 import { resetRateLimit } from '@/lib/auth';
 import { MAX_STALE_EDITS } from '@/lib/artifacts';
+import { purgeTrash } from '@/lib/trash';
 
 const BASE = 'http://localhost:3000';
 const SECRET = 'test-secret';
@@ -481,7 +482,7 @@ describe('document-level meta edits', () => {
 });
 
 describe('deletion', () => {
-  it('erases the edit log too — the genesis row holds the whole document', async () => {
+  it('the purge erases the edit log too — the genesis row holds the whole document', async () => {
     const t = await mint();
     const doc = await createMarkup(t.token);
     await edit(t.token, doc.id, { edit_id: doc.edit_id, old_string: 'alpha text', new_string: 'SECRET' });
@@ -490,8 +491,14 @@ describe('deletion', () => {
 
     const gone = await deleteRoute(request(`/api/artifacts/${doc.id}`, { method: 'DELETE', token: t.token }), params({ id: doc.id }));
     expect(gone.status).toBe(200);
-    // "Permanent" must mean permanent: the log stores full text, so leaving it
-    // behind would keep the deleted document readable in the database.
+    // A delete is a TRASH now, so the log survives it — it has to, or a
+    // restore would bring back a document with no history behind it.
+    expect((await db.query('SELECT 1 FROM artifact_edits WHERE artifact_id = $1', [doc.id])).rows.length).toBeGreaterThan(0);
+    // The guarantee moved to the PURGE, and it is unchanged there: "permanent"
+    // must mean permanent, and the log stores full text, so leaving it behind
+    // would keep the deleted document readable in the database.
+    await db.query(`UPDATE artifacts SET deleted_at = now() - interval '31 days' WHERE id = $1`, [doc.id]);
+    expect(await purgeTrash({ olderThanDays: 30 })).toEqual([doc.id]);
     const left = await db.query('SELECT inserted FROM artifact_edits WHERE artifact_id = $1', [doc.id]);
     expect(left.rows).toEqual([]);
   });

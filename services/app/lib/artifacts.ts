@@ -114,6 +114,14 @@ export interface ArtifactRow {
    * (versions, comments, shares) is its own from the first save.
    */
   forked_from: string | null;
+  /**
+   * THE TRASH STAMP: NULL = live, a timestamp = deleted (lib/trash). It is on
+   * the ROW type rather than only in the SQL because the gate is composed into
+   * the row-loading seam and callers must not think to filter — the field is
+   * here so lib/trash can read it, and it is dropped at the wire boundary,
+   * where it could only ever echo null.
+   */
+  deleted_at: string | null;
 }
 
 /** Who is looking, as far as the serving paths know. Null = no session. */
@@ -254,7 +262,7 @@ async function namedRoleFor(
 // `link_role` is deliberately absent: SUMMARY_COLS does not select it, and a
 // listing is an index rather than a bulk read. The general-access role is read
 // through the sharing surface, where it is edited.
-export type ArtifactSummary = Omit<ArtifactRow, 'content' | 'source' | 'token_id' | 'user_id' | 'actor_user_id' | 'actor_token_id' | 'link_role' | 'forked_from'>;
+export type ArtifactSummary = Omit<ArtifactRow, 'content' | 'source' | 'token_id' | 'user_id' | 'actor_user_id' | 'actor_token_id' | 'link_role' | 'forked_from' | 'deleted_at'>;
 
 /** The stored representation of one artifact state (built by parseContentInput). */
 export interface ArtifactInput {
@@ -293,7 +301,10 @@ export async function artifactQuotaExceeded(tokenId: string): Promise<boolean> {
   const cap = quotaOverride ?? ARTIFACT_QUOTA_PER_TOKEN;
   if (!cap) return false;
   const db = await getDb();
-  const r = await db.query<{ n: number }>('SELECT COUNT(*)::int AS n FROM artifacts WHERE token_id = $1', [tokenId]);
+  // A quota counts what is LIVE: a document in the trash still occupies a row
+  // for thirty days, and charging someone for it would make deleting a
+  // document not free them to publish another one.
+  const r = await db.query<{ n: number }>(`SELECT COUNT(*)::int AS n FROM artifacts WHERE token_id = $1 AND ${LIVE_ARTIFACT_SQL}`, [tokenId]);
   return (r.rows[0]?.n ?? 0) >= cap;
 }
 
@@ -525,13 +536,13 @@ async function forkInput(actor: TokenActor, source: ArtifactRow, overrides: Fork
 
 async function getArtifact(tokenId: string, id: string): Promise<ArtifactRow | null> {
   const db = await getDb();
-  const r = await db.query<ArtifactRow>('SELECT * FROM artifacts WHERE id = $1 AND token_id = $2', [id, tokenId]);
+  const r = await db.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND token_id = $2 AND ${LIVE_ARTIFACT_SQL}`, [id, tokenId]);
   return r.rows[0] ?? null;
 }
 
 async function getArtifactByUser(userId: string, id: string): Promise<ArtifactRow | null> {
   const db = await getDb();
-  const r = await db.query<ArtifactRow>('SELECT * FROM artifacts WHERE id = $1 AND user_id = $2', [id, userId]);
+  const r = await db.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND user_id = $2 AND ${LIVE_ARTIFACT_SQL}`, [id, userId]);
   return r.rows[0] ?? null;
 }
 
@@ -556,63 +567,9 @@ async function listArtifactsScoped(scope: Scope): Promise<ArtifactSummary[]> {
  */
 export const getArtifactById = cache(async (id: string): Promise<ArtifactRow | null> => {
   const db = await getDb();
-  const r = await db.query<ArtifactRow>('SELECT * FROM artifacts WHERE id = $1', [id]);
+  const r = await db.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [id]);
   return r.rows[0] ?? null;
 });
-
-/** Delete an artifact and its version history. Ownership-scoped; false = unknown/foreign. */
-async function deleteArtifactScoped(scope: Scope, id: string, alsoIds: readonly string[] = []): Promise<boolean> {
-  const db = await getDb();
-  // The event fires AFTER the transaction resolves: an unawaited query from
-  // inside the callback would deadlock PGLite's serialized op queue.
-  let ownerId: string | null = null;
-  let parent: string | null = null;
-  const deleted = await db.transaction(async (tx) => {
-    const owned = await tx.query<{ user_id: string | null; ancestor_ids: string[] }>(`SELECT user_id, ancestor_ids FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
-    if (owned.rows.length === 0) return false;
-    ownerId = owned.rows[0].user_id;
-    parent = parentOf(owned.rows[0]);
-    /*
-     * A forced folder delete takes its whole subtree, one row at a time through
-     * exactly the statements a single delete runs — deepest first, so nothing is
-     * orphaned on the way down — inside this one transaction.
-     *
-     * The subtree is collected by CONTAINMENT (lib/folders subtreeIds), and
-     * every row in it belongs to this owner only because `resolveParent`
-     * refuses a parent held by anyone else. That is an invariant enforced in
-     * another module, so the scope is re-applied HERE to the rows the caller
-     * did not name: it costs one statement, and it makes this deletion's ACL
-     * independent of a rule it does not own. A row that fails it is left
-     * whole — orphaned under a folder that is gone, which is recoverable,
-     * where deleting a stranger's document is not.
-     *
-     * It FILTERS the caller's order rather than re-listing from the query,
-     * because the deepest-first order above is the load-bearing part and a
-     * bare `id = ANY(...)` has none.
-     */
-    const mine = new Set(
-      (await tx.query<{ id: string }>(
-        `SELECT id FROM artifacts WHERE id = ANY($1::text[]) AND ${scope.where('$2')}`,
-        [[...alsoIds], scope.val],
-      )).rows.map((r) => r.id),
-    );
-    for (const target of [...alsoIds.filter((x) => mine.has(x)), id]) {
-      await tx.query('DELETE FROM artifact_versions WHERE artifact_id = $1', [target]);
-      // The edit log stores full text (the genesis row holds the whole document),
-      // so "permanent" delete must take it too or the content survives the delete.
-      await tx.query('DELETE FROM artifact_edits WHERE artifact_id = $1', [target]);
-      await tx.query('DELETE FROM artifact_shares WHERE artifact_id = $1', [target]);
-      await tx.query('DELETE FROM annotations WHERE artifact_id = $1', [target]);
-      await tx.query('DELETE FROM artifacts WHERE id = $1', [target]);
-    }
-    return true;
-  });
-  if (deleted) {
-    void trackEvent('delete', id, { userId: ownerId });
-    await notifyParent(parent);
-  }
-  return deleted;
-}
 
 export interface VersionSummary {
   version: number;
@@ -648,9 +605,34 @@ const actorStamp = (actor: TokenActor): [string | null, string | null] => [actor
  *                  tokens edit too. Reach, edits, PUT, revert, versions.
  *
  * The predicate runs INSIDE the same WHERE as the id, so a miss is the uniform
- * 404 either way — there is no existence oracle in the difference.
+ * 404 either way — there is no existence oracle in the difference. Both carry
+ * the trash gate below, which is why a deleted row is that same 404 without a
+ * single one of these statements mentioning it.
  */
 export type Scope = { where: (param: string) => string; val: string };
+
+/**
+ * THE TRASH GATE — `deleted_at IS NULL`, and the ONE place the predicate is
+ * written down. A delete does not remove the row (lib/trash), so every read
+ * has to say so; saying it thirty times is thirty chances to forget once, and
+ * the one that forgets serves a document its owner deleted.
+ *
+ * So it is composed IN HERE, into the Scope constructors below and into the
+ * unscoped row reads, and callers never add it: `getArtifactFor`,
+ * `applyEditFor`, the listing, the versions, the sharing surface and every
+ * serving path inherit it by asking the seam they already ask. The readers
+ * that do NOT come through the seam — the account listings (lib/users), the
+ * hierarchy (lib/folders), the quotas (lib/asset-quota) — import this name, so
+ * `git grep LIVE_ARTIFACT_SQL` is the whole audit.
+ *
+ * lib/trash is the ONE module that reads past it, through `ownerPredicate`
+ * below: the trash listing, restore and the purge are the readers of trashed
+ * rows, and they are the reason the rows are still there.
+ */
+export const LIVE_ARTIFACT_SQL = 'deleted_at IS NULL';
+
+/** The same predicate with the trash gate composed in — every Scope carries it. */
+const live = (scope: Scope): Scope => ({ where: (p) => `${LIVE_ARTIFACT_SQL} AND (${scope.where(p)})`, val: scope.val });
 
 /**
  * An account holding one of `roles` on the row the enclosing statement is on.
@@ -675,8 +657,15 @@ async function resolveSharesFor(db: Queryable, artifactId: string, userId: strin
   );
 }
 
-const ownerScope = ({ tokenId, userId }: TokenActor): Scope =>
+/**
+ * WHO owns the row, WITHOUT the trash gate — for lib/trash alone, which reads
+ * trashed rows on purpose (the listing, restore, the purge). Every other
+ * caller wants `ownerScope`, which is this with the gate composed in.
+ */
+export const ownerPredicate = ({ tokenId, userId }: TokenActor): Scope =>
   userId ? { where: (p) => `user_id = ${p}`, val: userId } : { where: (p) => `token_id = ${p}`, val: tokenId };
+
+const ownerScope = (actor: TokenActor): Scope => live(ownerPredicate(actor));
 
 /**
  * The SQL MIRROR of the lattice: the owner, or an account holding any share
@@ -702,7 +691,7 @@ const LINK_PREDICATE = (min: ArtifactRole) =>
 
 const scopeAtLeast = (actor: TokenActor, min: ArtifactRole): Scope =>
   actor.userId
-    ? { where: (p) => `(user_id = ${p} OR ${SHARE_PREDICATE(shareRolesAtLeast(min), p)} OR ${LINK_PREDICATE(min)})`, val: actor.userId }
+    ? live({ where: (p) => `(user_id = ${p} OR ${SHARE_PREDICATE(shareRolesAtLeast(min), p)} OR ${LINK_PREDICATE(min)})`, val: actor.userId })
     : ownerScope(actor);
 
 const editorScope = (actor: TokenActor): Scope => scopeAtLeast(actor, 'editor');
@@ -801,7 +790,8 @@ export function isVersionNotArchived(r: ArtifactRow | null | VersionNotArchived)
 async function revertScoped(actor: TokenActor, id: string, version: number): Promise<ArtifactRow | null | VersionNotArchived> {
   const db = await getDb();
   const scope = editorScope(actor);
-  // Event fires post-txn — see deleteArtifactScoped for why.
+  // Event fires post-txn: an unawaited query from inside the callback would
+  // deadlock PGLite's serialized op queue.
   const result: ArtifactRow | null | VersionNotArchived = await db.transaction(async (tx) => {
     const current = (
       await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val])
@@ -862,7 +852,8 @@ async function replaceScoped(
 ): Promise<ArtifactRow | null | VersionConflict> {
   const db = await getDb();
   const scope = editorScope(actor);
-  // Event and the parent wakeups fire post-txn — see deleteArtifactScoped.
+  // Event and the parent wakeups fire post-txn — an unawaited query from
+  // inside the callback would deadlock PGLite's serialized op queue.
   let moved: { from: string | null; to: string | null } | null = null;
   const result: ArtifactRow | null | VersionConflict = await db.transaction(async (tx) => {
     const current = (
@@ -1481,16 +1472,6 @@ export function getVersionFor(actor: TokenActor, id: string, version: number): P
 
 export function revertArtifactFor(actor: TokenActor, id: string, version: number): Promise<ArtifactRow | null | VersionNotArchived> {
   return revertScoped(actor, id, version);
-}
-
-/**
- * Delete a row the actor owns. `alsoIds` is a FOLDER's subtree, collected by
- * the caller (which is also who answered `folder_not_empty` when it was not
- * asked to force) — so the door's refusal and this deletion read the same
- * containment.
- */
-export function deleteArtifactFor(actor: TokenActor, id: string, alsoIds: readonly string[] = []): Promise<boolean> {
-  return deleteArtifactScoped(ownerScope(actor), id, alsoIds);
 }
 
 /** File a row the actor OWNS under `next` (the resolved trail; `[]` is the root). */

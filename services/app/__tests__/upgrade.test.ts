@@ -102,9 +102,13 @@ describe('the additive DDL is replay-safe', () => {
       'author_kind', 'author_token_id', 'author_user_id', 'author_label',
       'author_transport',
       'status', 'resolved_at', 'anchor_key', 'anchor_version', 'snippet', 'created_at',
-      // The exact selection, appended LAST: an older database grows these two
-      // by ALTER TABLE on boot, so their ordinal position is after created_at.
+      // The exact selection, appended after created_at: an older database grows
+      // these two by ALTER TABLE on boot, so their ordinal position follows it.
       'quote', 'range',
+      // The soft-delete stamp every adopted table carries, appended LAST for
+      // the same reason. Nothing writes it on this table yet (a comment is
+      // erased, not trashed); the gate in lib/annotations is what it buys.
+      'deleted_at',
     ]);
     // Provenance is APPENDED, never inserted: a fork's parent is a column the
     // additive DDL adds on the next boot, with nothing to backfill (NULL is
@@ -114,8 +118,12 @@ describe('the additive DDL is replay-safe', () => {
        WHERE table_schema = current_schema() AND table_name = 'artifacts'
        ORDER BY ordinal_position`,
     );
-    expect(artifactColumns.rows.map((row) => row.column_name)).toEqual(expect.arrayContaining(['forked_from']));
-    expect(artifactColumns.rows[artifactColumns.rows.length - 1].column_name).toBe('forked_from');
+    expect(artifactColumns.rows.map((row) => row.column_name)).toEqual(expect.arrayContaining(['forked_from', 'deleted_at']));
+    // The LAST column is whatever was appended most recently — the trash stamp
+    // now, provenance before it. What the assertion is really about is that
+    // new columns go on the END, so an existing database grows them by ALTER
+    // rather than needing its rows rewritten.
+    expect(artifactColumns.rows.slice(-2).map((row) => row.column_name)).toEqual(['forked_from', 'deleted_at']);
     const tokenColumns = await fresh.query<{ column_name: string }>(
       `SELECT column_name FROM information_schema.columns
        WHERE table_schema = current_schema() AND table_name = 'tokens'`,

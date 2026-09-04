@@ -9,9 +9,10 @@
  * present and unforgeable.
  */
 import { artifactToWire, artifactToWireWithAnnotations, parseAccessValue, parseParentField, replaceArtifactFromRequest } from '@/lib/artifact-wire';
-import { deleteArtifactFor, getArtifactFor, setAccessFor, setParentFor, writerFor } from '@/lib/artifacts';
-import { isParentRefusal, parentOf, resolveParent, subtreeCount, subtreeIds } from '@/lib/folders';
+import { getArtifactFor, setAccessFor, setParentFor, writerFor } from '@/lib/artifacts';
+import { isParentRefusal, parentOf, resolveParent } from '@/lib/folders';
 import { browserActor } from '@/lib/auth';
+import { trashArtifactFor } from '@/lib/trash';
 import { actorForArtifacts } from '@/lib/viewer';
 import { baseUrl, json, readJson, unauthorized } from '@/lib/http';
 
@@ -92,26 +93,26 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
 }
 
 /**
- * DELETE /api/my/artifacts/:id — delete an artifact you own.
+ * DELETE /api/my/artifacts/:id — put an artifact you own in the trash.
  *
- * A FOLDER WITH ANYTHING UNDER IT IS REFUSED with the count, the same shape as
- * the `has_dependents` refusal: deleting a folder is deleting everything in
- * it, and that has to be something someone chose rather than discovered.
- * `?force=true` takes the subtree.
+ * A FOLDER TAKES ITS SUBTREE, in the one statement lib/trash runs, and there
+ * is no refusal and no `?force` here any more: `folder_not_empty` existed
+ * because a delete was permanent and a folder full of documents was a decision
+ * nobody should discover afterwards. A trash is not that decision — the rows
+ * are listed, restorable, and gone only after the retention — so the refusal
+ * asked someone to confirm something that is no longer being done.
  */
 export async function DELETE(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const scoped = await scopeFor(request);
   if (scoped instanceof Response) return scoped;
   const { id } = await ctx.params;
-  const force = new URL(request.url).searchParams.get('force') === 'true';
-  const current = await getArtifactFor(scoped, id);
-  if (!current) return json({ error: 'not_found' }, 404);
-  const subtree = current.format === 'folder' ? await subtreeIds(id) : [];
-  if (current.format === 'folder' && !force) {
-    const count = await subtreeCount(id);
-    if (count > 0) return json({ error: 'folder_not_empty', count }, 409);
-  }
-  const deleted = await deleteArtifactFor(scoped, id, subtree);
-  if (!deleted) return json({ error: 'not_found' }, 404);
+  if (!(await trashArtifactFor(scoped, id))) return json({ error: 'not_found' }, 404);
   return json({ ok: true });
 }
+
+/**
+ * POST /api/my/artifacts/:id/restore lives beside this one (restore/route.ts)
+ * rather than as a verb in the body here: it is a distinct act on a row this
+ * door can no longer even see, since every read in this file goes through the
+ * trash gate.
+ */

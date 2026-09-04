@@ -91,6 +91,18 @@ async function main(): Promise<void> {
   }
 
   const db = await getDb();
+  /*
+   * THE TRASH SWEEP at boot — the purge for anything that has sat past the
+   * retention (lib/trash). Not awaited: a process that has just opened its
+   * database should start answering, and nothing about a purge is urgent. The
+   * request path runs it at most hourly after this, so a busy deployment
+   * sweeps without a scheduler and an idle one sweeps whenever it restarts.
+   */
+  void (async () => {
+    const { sweepTrashAtBoot } = await import('@/lib/trash');
+    const purged = await sweepTrashAtBoot();
+    if (purged.length) console.log(`[boot] purged ${purged.length} artifact(s) past the trash retention`);
+  })();
   const raw = db.raw();
   const queryable = { query: async <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => (await db.query<T>(sql, params)) as { rows: T[] } };
 
