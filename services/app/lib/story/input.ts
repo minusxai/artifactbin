@@ -38,6 +38,21 @@ export const MAX_CONTENT_BYTES = 2_000_000;
 export const ARTIFACT_FORMATS = ['markup', 'dataset', 'viz', 'image', 'pdf', 'folder'] as const;
 export type ArtifactFormat = (typeof ARTIFACT_FORMATS)[number];
 
+/**
+ * THE FORMATS THAT ARE DOCUMENTS — the ones whose `source` is markup, served
+ * through `raw`, rendered by the runtime and edited in place. Everything else
+ * is a VALUE the app draws itself (a table, a picture, a file card).
+ *
+ * A folder joined this set by being one: its two-line scaffold is ordinary
+ * markup. The predicate exists because "is it markup" was written out by hand
+ * in every place that meant "is it a document", and each of those was a
+ * separate way for a folder to be quietly left out — the live stream followed
+ * a document's data dependencies only for `format === 'markup'`, so a folder,
+ * whose one dependency is ITSELF, subscribed to nothing and a child published
+ * under it reached nobody.
+ */
+export const isDocumentFormat = (format: string): boolean => format === 'markup' || format === 'folder';
+
 import type { SourceRepair } from '@/lib/jsx/repair';
 
 export interface StoredContent {
