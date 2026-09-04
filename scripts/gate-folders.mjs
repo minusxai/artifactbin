@@ -21,6 +21,7 @@
  *      NEVER, and no chrome at all.
  *   5. the picker moves the document out, and the listing follows.
  *   6. the dashboard lists the folder in its own strip, with its count.
+ *   7. renaming one is the editor's Title field — a folder has no second door.
  *
  * Two logged-in contexts and one stranger, one mail sink. usage:
  * Local dev writes login mail to `.artifactbin/dev-mail.jsonl`; use `npm run dev:otp -- <email>`.
@@ -56,6 +57,21 @@ const strangerCtx = await browser.newContext({ viewport: { width: 1400, height: 
 const owner = await ownerCtx.newPage();
 const editor = await editorCtx.newPage();
 const stranger = await strangerCtx.newPage();
+
+/*
+ * A HYDRATION MISMATCH IS SILENT TO EVERY ASSERTION BELOW. React answers #418
+ * by discarding the server tree and repainting the root, so the listing is
+ * still there afterwards and every locator finds it — the only witness is the
+ * console. <Files> is rendered twice (a string on the server, a DOM in the
+ * browser) and it injects markup, so it is exactly the shape that goes wrong.
+ */
+const mismatches = [];
+for (const [who, p] of [['owner', owner], ['stranger', stranger]]) {
+  p.on('console', (m) => {
+    const text = m.text();
+    if (/hydrat|#418|did not match|server rendered HTML/i.test(text)) mismatches.push(`${who}: ${text.slice(0, 160)}`);
+  });
+}
 
 await loginViaEmail(owner, BASE, sink, OWNER_EMAIL);
 check(Boolean((await ownerCtx.cookies(BASE)).find((c) => /better-auth/.test(c.name))), 'owner logged in');
@@ -210,6 +226,26 @@ const del = owner.locator('[aria-label="Delete Field Notes"]').first();
 await del.waitFor({ timeout: 15000 });
 check(await del.isDisabled(), 'a folder with anything in it cannot be deleted from the strip');
 check(((await del.textContent()) ?? '').includes('inside'), 'and the row says how much is in it');
+
+// ── 7. renaming a folder is the editor's Title field, and nothing else ────
+// A folder has no second rename door: the field writes `title` through the
+// edit protocol like every other change. That protocol refused a folder
+// outright until this phase, so the shell opened an editor that could not
+// commit and the name went back with a 400 nobody was shown.
+await owner.goto(`${BASE}/a/${folder.id}`, { waitUntil: 'load' });
+await owner.frameLocator('iframe[title="artifact"]').locator('[aria-label="Open Opening Note"]').waitFor({ timeout: 20000 });
+await owner.locator('[aria-label="Open artifact controls"]').click();
+await owner.locator('[aria-label="Edit artifact"]').click();
+await owner.waitForSelector('[aria-label="Title"]', { timeout: 15000 });
+await owner.fill('[aria-label="Title"]', 'Field Notes 2026');
+await owner.waitForResponse(
+  (r) => r.url().includes('/edits') && r.request().method() === 'POST' && r.status() === 200,
+  { timeout: 15000 },
+);
+const renamed = await owner.evaluate(async (id) => (await (await fetch(`/api/my/artifacts/${id}`)).json()), folder.id);
+check(renamed.title === 'Field Notes 2026', `the title field renames the folder (${renamed.title})`);
+
+check(mismatches.length === 0, `no hydration mismatch on either render of the listing${mismatches.length ? ` — ${mismatches[0]}` : ''}`);
 
 await browser.close();
 sink.close();
