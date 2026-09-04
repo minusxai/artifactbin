@@ -14,8 +14,14 @@ import type { Harness } from './client-identity';
 
 export const TOKEN_PREFIX = 'mx_';
 
-/** SQL predicate shared by every app query that treats a token as a live credential. */
-export const LIVE_TOKEN_SQL = 'deleted_at IS NULL AND (expires_at IS NULL OR expires_at > now())';
+/**
+ * SQL predicate shared by every app query that treats a token as a live
+ * credential. QUALIFIED by the table, which is not decoration: `deleted_at` is
+ * the soft-delete column on `artifacts` too now, and the drafts listing JOINs
+ * the two — an unqualified clause there is `column reference "deleted_at" is
+ * ambiguous`, which is a 500 on the dashboard of anyone holding a token.
+ */
+export const LIVE_TOKEN_SQL = 'tokens.deleted_at IS NULL AND (tokens.expires_at IS NULL OR tokens.expires_at > now())';
 
 // Cheap reject before any DB hit: exact shape of prefix + base64url(32 bytes).
 const TOKEN_RE = /^mx_[A-Za-z0-9_-]{40,50}$/;

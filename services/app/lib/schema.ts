@@ -134,6 +134,13 @@ const ARTIFACTS: Table = {
     // deleting the original must not delete the copy, and a fork of a document
     // that is later gone is still honestly a fork.
     { name: 'forked_from', type: 'TEXT' },
+    // THE TRASH. NULL = live; a timestamp = deleted, and invisible to every
+    // read (lib/trash LIVE_ARTIFACT_SQL, composed into the row-loading seam in
+    // lib/artifacts rather than added by callers). Delete SETS it, restore
+    // clears it, and the purge hard-deletes what has sat here past the
+    // retention. Every row written before the column existed is NULL, which
+    // is exactly "live" — that equivalence is the whole migration.
+    { name: 'deleted_at', type: 'TIMESTAMPTZ' },
   ],
   primaryKey: ['id'],
   indexes: [
@@ -235,7 +242,7 @@ const ARTIFACT_SHARES: Table = {
  * revert all treat it as the ordinary edit it is). Resolution is a lookup in
  * the CURRENT source: attribute present → anchored, absent → orphaned, and
  * orphaned is re-checked on every read, so a revert that brings the text back
- * re-anchors the thread. No FKs (house rule) — deleteArtifactScoped
+ * re-anchors the thread. No FKs (house rule) — the purge (lib/trash)
  * hand-deletes.
  */
 const ANNOTATIONS: Table = {
@@ -267,6 +274,13 @@ const ANNOTATIONS: Table = {
     // grow them by ADD COLUMN IF NOT EXISTS on the next boot.
     { name: 'quote', type: 'TEXT' }, // canonical selected text, capped (lib/story/annotation-range)
     { name: 'range', type: 'TEXT' }, // JSON AnnotationRange: parts addressed RELATIVE to the anchor
+    // The same soft-delete stamp `artifacts` carries, and the same gate: a row
+    // with it set is nonexistent to every reader in lib/annotations. Deleting a
+    // comment is still a HARD delete (deleteAnnotationFor) — erasing someone's
+    // words is a deliberate act with no restore door behind it — so nothing
+    // writes this today; it is the column the pattern owes every adopted table,
+    // and the gate that makes adopting it later a one-line change.
+    { name: 'deleted_at', type: 'TIMESTAMPTZ' },
   ],
   primaryKey: ['id'],
   indexes: [{ name: 'idx_annotations_artifact_seq', columns: ['artifact_id', 'seq'] }],

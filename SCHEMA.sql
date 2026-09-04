@@ -131,6 +131,7 @@ CREATE TABLE IF NOT EXISTS app.artifacts (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   forked_from TEXT,
+  deleted_at TIMESTAMPTZ,
   PRIMARY KEY (id)
 );
 
@@ -173,6 +174,8 @@ ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NU
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS forked_from TEXT;
+
+ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 
 ALTER TABLE app.artifacts DROP COLUMN IF EXISTS folder;
 
@@ -299,6 +302,7 @@ CREATE TABLE IF NOT EXISTS app.annotations (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   quote TEXT,
   range TEXT,
+  deleted_at TIMESTAMPTZ,
   PRIMARY KEY (id)
 );
 
@@ -337,6 +341,8 @@ ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT 
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS quote TEXT;
 
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS range TEXT;
+
+ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_annotations_artifact_seq ON app.annotations (artifact_id, seq);
 

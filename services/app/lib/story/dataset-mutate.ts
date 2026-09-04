@@ -29,7 +29,7 @@ import { trackEvent } from '@/lib/analytics';
 import { MAX_QUERY_ROWS } from '@/lib/config';
 import { getDb } from '@/lib/db';
 import { isQueryFailure, runMutation } from '@/lib/sql/engine';
-import type { ArtifactRow } from '@/lib/artifacts';
+import { LIVE_ARTIFACT_SQL, type ArtifactRow } from '@/lib/artifacts';
 import type { DatasetColumn } from './dataset-shape';
 import { loadDatasetRows, storeDatasetRows } from './dataset-store';
 import type { Scalar } from './dataflow';
@@ -92,7 +92,7 @@ export async function mutateDataset(
     // CAS miss means someone else's rows are now the base for ours.
     const current = attempt === 0
       ? dataset
-      : (await db.query<ArtifactRow>('SELECT * FROM artifacts WHERE id = $1', [dataset.id])).rows[0];
+      : (await db.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${LIVE_ARTIFACT_SQL}`, [dataset.id])).rows[0];
     // Deleted under us — the write has nothing to apply to. Reported as a
     // refusal rather than thrown: the caller answers the uniform 404 anyway.
     if (!current) return { reason: 'invalid_sql', detail: 'the dataset no longer exists' };

@@ -23,7 +23,12 @@
  * The two sources of stored bytes, both already recorded:
  *   artifacts.meta->>'bytes'  — every image/PDF stored through storeImageContent
  *   web_assets.bytes          — every URL this importer was the first to fetch
+ *
+ * A TRASHED asset is not charged (the gate is named in both sums): its bytes
+ * are still on disk for the retention, but a quota someone cannot get back
+ * under by deleting things is a quota that reads as broken.
  */
+import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts';
 import { getDb } from '@/lib/db';
 import { ASSETS_MAX_BYTES_PER_TOKEN } from '@/lib/config';
 
@@ -49,7 +54,7 @@ export async function assetBytesForToken(tokenId: string): Promise<number> {
     ? await db.query<{ n: number }>(
       `SELECT
          (SELECT COALESCE(SUM((meta->>'bytes')::bigint), 0) FROM artifacts
-           WHERE user_id = $1 AND meta ? 'bytes')
+           WHERE user_id = $1 AND meta ? 'bytes' AND ${LIVE_ARTIFACT_SQL})
        + (SELECT COALESCE(SUM(bytes), 0) FROM web_assets WHERE fetched_by_user_id = $1)
          AS n`,
       [userId],
@@ -57,7 +62,7 @@ export async function assetBytesForToken(tokenId: string): Promise<number> {
     : await db.query<{ n: number }>(
       `SELECT
          (SELECT COALESCE(SUM((meta->>'bytes')::bigint), 0) FROM artifacts
-           WHERE token_id = $1 AND user_id IS NULL AND meta ? 'bytes')
+           WHERE token_id = $1 AND user_id IS NULL AND meta ? 'bytes' AND ${LIVE_ARTIFACT_SQL})
        + (SELECT COALESCE(SUM(bytes), 0) FROM web_assets
            WHERE fetched_by_token_id = $1 AND fetched_by_user_id IS NULL)
          AS n`,
