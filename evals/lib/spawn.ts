@@ -21,6 +21,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { HarnessInvocation } from './contracts';
+import { artifactIdFromText } from './score/product';
 import { longestSecret, scrubSecrets } from './secrets';
 
 export interface SpawnResult {
@@ -30,6 +31,12 @@ export interface SpawnResult {
   durationMs: number;
   /** The stream outgrew `maxStdoutBytes`: the transcript holds the head, `stdout` the tail. */
   truncated: boolean;
+  /**
+   * Ms from spawn to the first `/a/<id>` the agent PRINTED — the moment its human could click something.
+   * Measured on the stream, not scanned off the transcript afterwards, because the timestamp is the point.
+   * Null when the agent never named a document.
+   */
+  firstUrlAtMs: number | null;
 }
 
 /** Backstop for a harness with no line filter, or one that streams something unforeseen. */
@@ -244,8 +251,16 @@ export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string;
     let written = 0;
     let truncated = false;
     let pending = '';
+    let firstUrlAtMs: number | null = null;
     const retain = (text: string) => {
       if (!text) return;
+      // The moment the human could click something, taken HERE rather than scanned off the finished
+      // transcript, because the timestamp is the point. It watches the RETAINED text — what everything
+      // downstream is scored from — so a partial-message line the adapter filters away cannot start the
+      // clock for a link that never reaches `stdout`. `artifactIdFromText` is the id shape the scorer
+      // already knows, including its refusal of a `/start` link: that names the document the agent was
+      // GIVEN. One scan per chunk until the first hit, then never again.
+      if (firstUrlAtMs === null && artifactIdFromText(text) !== null) firstUrlAtMs = Date.now() - started;
       stdout += text;
       if (stdout.length > cap) {
         truncated = true;
@@ -292,7 +307,7 @@ export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string;
       stream.end(resolve);
     });
     await Promise.all([finish(out), finish(errOut)]);
-    return { stdout, exitCode, timedOut, durationMs: Date.now() - started, truncated };
+    return { stdout, exitCode, timedOut, durationMs: Date.now() - started, truncated, firstUrlAtMs };
   } finally {
     // The last step of the contract, and it must not be able to lose the run: a reclaim that fails is
     // reported on the run's own stderr and the result stands.

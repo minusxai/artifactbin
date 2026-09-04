@@ -1,14 +1,14 @@
 /**
  * WHAT WE TELL THE LLM — ONE canonical "agent contract", the SAME words everywhere (tok-p3, plan §4b).
  *
- * lib/agent-contract exports `agentContract(base)`: a markdown block that names where the token lives
- * (~/.artifactbin.env), how to get one (a start link, or send the human to /tokens/new), that tokens expire
- * (6 h default; expiresInHours 1–720 at mint), what to do on 401/expired (/tokens/new, save, resume — never a
- * blind retry), and header-only auth. It is rendered VERBATIM into: the skill reference publishing-auth.md
- * (= llms.txt's auth section; the file uses the `[[ base ]]` placeholder), the MCP initialize instructions, and
- * the start-link brief.
+ * lib/agent-contract exports `agentContract(base, surface)`: a markdown block that names where the token lives
+ * (~/.artifactbin.env), that tokens expire (6 h default; expiresInHours 1–720 at mint), what to do on
+ * 401/expired (ask the human, save, resume — never a blind retry), and header-only auth. The `'http'`
+ * rendering is VERBATIM the skill reference publishing-auth.md (= llms.txt's auth section; the file uses the
+ * `[[ base ]]` placeholder) and the start-link brief.
  *
- * Seeded RED by the orchestrator; make it green without changing an expectation.
+ * The header used to say "make it green without changing an expectation" — m2 changed one, deliberately: the
+ * MCP initialize instructions no longer carry these words. See the case below and lib/agent-contract's ladder.
  */
 import { describe, expect, it } from 'vitest';
 import { agentContract } from '@/lib/agent-contract';
@@ -19,7 +19,7 @@ const B = 'https://x.test';
 const contract = () => agentContract(B);
 const publishingAuth = () => renderDoc('artifactbin/references/publishing-auth.md', B);
 
-describe('the contract itself', () => {
+describe('the contract itself — the HTTP surface', () => {
   it('names the token file, and says to check it first', () => {
     expect(contract()).toContain('~/.artifactbin.env');
     expect(contract()).toContain('ARTIFACTBIN_TOKEN=');
@@ -57,8 +57,11 @@ describe('the same words, everywhere', () => {
     expect(publishingAuth()).toContain(contract());
     expect(publishingAuth()).not.toContain('[[');
   });
-  it('the MCP initialize instructions carry it', () => {
-    expect(buildMcpInstructions(B)).toContain(contract());
+  // m2: the MCP surface is a DIFFERENT rendering, not the same words. A client that authenticated over
+  // OAuth holds no token and can acquire none, so it is told it is connected and given no ladder at all.
+  it('the MCP initialize instructions carry the MCP rendering, not the HTTP one', () => {
+    expect(buildMcpInstructions(B)).toContain(agentContract(B, 'mcp'));
+    expect(buildMcpInstructions(B)).not.toContain(contract());
   });
   it('the start-link brief carries it', () => {
     expect(startBrief(B, 'ab3cd9', 'k123')).toContain(contract());

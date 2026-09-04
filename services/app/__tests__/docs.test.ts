@@ -27,10 +27,14 @@ const markdown = async (res: Response) => {
 };
 
 describe('the auth doc', () => {
-  it('tells the user how to keep anonymous work under an account', () => {
+  // m2 inverted the third line. The doc still teaches the RECOVERY (the claim relay is rendered here, and
+  // it is the whole point of this case), but it must no longer teach the ADDRESS: an agent that reads
+  // `POST /api/tokens/anonymous` here goes and mints, and publishes where its human cannot reach.
+  it('tells the user how to keep anonymous work under an account, without naming the mint', () => {
     const doc = renderDoc('artifactbin/references/publishing-auth.md', BASE);
     expect(doc).toMatch(new RegExp(`log in at ${BASE}`, 'i'));
-    expect(doc).toContain('/api/tokens/anonymous');
+    expect(doc).toContain('Claim box');
+    expect(doc).not.toContain('tokens/anonymous');
     expect(doc).not.toContain('[[');
   });
 

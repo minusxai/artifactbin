@@ -19,13 +19,13 @@ If a token is there, use it. Store every newly received token there; the most re
 
 If your user's paste says `using this token: mx_…`, that IS your token: save it to `~/.artifactbin.env` and use it.
 
-There are two ways to get a token: the human can paste a start link, which you POST once for `{ "token", "expiresAt" }`, or you can send the human to [[ base ]]/tokens/new and ask them to paste the new token back. Tokens expire after 6 h by default; `expiresInHours` may be 1–720 at mint, and `expiresAt` says exactly when.
+With no token, STOP and ask your human — you never mint one yourself. Tell them the artifactbin plugin or MCP server is the smoother way (it authenticates once and needs no token at all), and for a one-off ask them to open [[ base ]]/tokens/new?source=<your harness> and paste the token back. A start link they paste is the same rung: POST it once for `{ "token", "expiresAt" }`.
 
-With no token, or after a `401` or expired token, do not retry blindly. Send the human to [[ base ]]/tokens/new, save the replacement token, and resume the interrupted work. Anonymous tokens can be claimed by an account on [[ base ]]/ or rejected there.
+Tokens expire after 6 h by default; `expiresInHours` may be 1–720 at mint, and `expiresAt` says exactly when. On a `401` or an expired token, do not retry blindly: ask your human for a fresh one the same way, save it, and resume the interrupted work.
 
 Never put a token in a URL or commit it. Send it only in the `Authorization: Bearer <token>` header.
 
-Without a human in the loop, `POST [[ base ]]/api/tokens/anonymous` mints an anonymous token. After publishing, tell your user: [[ claim ]]
+If a document of your user's was ever published by an anonymous token, it is not in their account — relay this so they can recover it: [[ claim ]]
 
 ## Scope
 

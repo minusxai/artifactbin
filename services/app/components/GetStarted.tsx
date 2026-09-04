@@ -102,6 +102,38 @@ const STORE = 'mx_surface';
 
 const isSurface = (v: string | null): v is SurfaceKey => SURFACES.some((s) => s.key === v);
 
+/** Keep the answer, wherever it came from. Private mode has no store, and that is not an error. */
+const remember = (key: SurfaceKey) => {
+  try {
+    localStorage.setItem(STORE, key);
+  } catch {
+    /* private mode */
+  }
+};
+
+/**
+ * THE ONE PLACE a raw `?source=` becomes a surface. An agent sent this human here and named where it
+ * is running, so the page can open on the card that answers them instead of asking a question they have
+ * already answered. It is a surface key and never anything secret — the rule that a token never rides a
+ * URL is untouched. Unknown, absent or malformed is `null`, which means "show the picker": this is user
+ * input off a query string and must never throw.
+ *
+ * The case is FOLDED before the key is matched. An AGENT writes this string, not a human, and getting
+ * the case wrong does not produce a wrong card — it produces NO card, which is the worse of the two
+ * failures by a distance. Folding cannot invent an answer: anything that is still not a key afterwards
+ * is `null`, exactly as `nonsense` is.
+ */
+export function sourceSurface(search: string): SurfaceKey | null {
+  try {
+    const named = new URLSearchParams(search).get('source');
+    const folded = named === null ? null : named.toLowerCase();
+    return isSurface(folded) ? folded : null;
+  } catch {
+    // Nothing a URL can carry is worth an exception on the page whose job is to hand over a token.
+    return null;
+  }
+}
+
 /** Matches AgentLink's status line exactly — the two option foot lines sit a
  * block apart and must read as the same voice. */
 const FOOT = 'mt-1.5 font-mono text-[11px] text-muted';
@@ -449,13 +481,32 @@ function InstallCard({ surface, mcpUrl, docsUrl }: { surface: SurfaceKey; mcpUrl
 export default function GetStarted({
   heading = true,
   frame = true,
+  initialSurface,
+  lead = 'http',
 }: {
   heading?: boolean;
   /** false = no panel chrome, for hosts that already draw a card around it. */
   frame?: boolean;
+  /**
+   * WHICH PATH COMES FIRST, and nothing else — neither option is drawn differently, only earlier or
+   * later, and the numbers follow the order because an "option 2" sitting above an "option 1" is a
+   * numbering that lies. `'http'` is the default because trying it must cost less than installing it
+   * for a reader who has not chosen yet, and every existing host keeps that reading unchanged.
+   * `'install'` is for the host whose reader is standing there BECAUSE the no-installation path just
+   * cost them a round trip; offering it to them first would be the panel re-answering a question they
+   * have already had answered the hard way.
+   */
+  lead?: 'install' | 'http';
+  /**
+   * Open on this surface instead of the default. An agent naming where it runs is FRESHER than a stored
+   * answer from a month ago, so this wins over `mx_surface` — and is remembered in turn. It also opens
+   * the fold: the question "which agent?" has been answered, so folding the answer away and asking it
+   * again would be the one thing this prop exists to avoid.
+   */
+  initialSurface?: SurfaceKey;
 }) {
-  const [surface, setSurface] = useState<SurfaceKey>('claude-code');
-  const [installOpen, setInstallOpen] = useState(false);
+  const [surface, setSurface] = useState<SurfaceKey>(initialSurface ?? 'claude-code');
+  const [installOpen, setInstallOpen] = useState(initialSurface !== undefined);
   // Empty until hydration, so server and client render the same relative URL;
   // the absolute one lands with the first client paint.
   const [origin, setOrigin] = useState('');
@@ -473,21 +524,23 @@ export default function GetStarted({
 
   useEffect(() => {
     setOrigin(window.location.origin);
+    // A named surface is this second's answer; the store is last month's. The fresher one wins, and
+    // replaces the stale one so the next visit opens in the same place.
+    if (initialSurface) {
+      remember(initialSurface);
+      return;
+    }
     try {
       const saved = localStorage.getItem(STORE);
       if (isSurface(saved)) setSurface(saved);
     } catch {
       /* private mode */
     }
-  }, []);
+  }, [initialSurface]);
 
   const pick = (key: SurfaceKey) => {
     setSurface(key);
-    try {
-      localStorage.setItem(STORE, key);
-    } catch {
-      /* private mode */
-    }
+    remember(key);
   };
 
   /** An installer-style parent choice always lands on a valid default. */
@@ -495,6 +548,165 @@ export default function GetStarted({
     const first = SURFACES.find((item) => item.family === key);
     if (first) pick(first.key);
   };
+
+  const leadInstall = lead === 'install';
+  /** The two paths as VALUES, so the order below is one expression instead of two copies of
+    * each block. Nothing about either path is conditional except the number it wears. */
+  const httpPath = (
+    <>
+      {/* PATH ONE. Trying it must cost less than installing it, so the
+        * no-setup document leads and needs no choice made first. */}
+      <OptionHeader n={leadInstall ? 2 : 1} title="no installation" note={HTTP_OPTION_NOTE} />
+      <AgentLink frame={false} docsLink={false} />
+    </>
+  );
+  const installPath = (
+    <>
+      {/* PATH TWO, FOLDED. The nine-surface picker used to be the first
+        * thing on the page: a form to fill in before the reader knew what
+        * they were choosing between, and irrelevant to everyone taking path
+        * one. It opens when someone asks for it. */}
+      <button
+        aria-label="Install for my agent"
+        aria-expanded={installOpen}
+        onClick={() => setInstallOpen((open) => !open)}
+        // A DOOR, NOT A CAPTION. Option 1 is a solid button and option 2
+        // was bare text on the panel's own ground: offered as equal choices,
+        // drawn as a button beside a footnote. It gets its own raised
+        // ground, and the border arrives on hover so it is a target without
+        // being a box inside a box.
+        className="group/inst w-full cursor-pointer rounded-[5px] border border-transparent bg-raised px-2.5 py-2 text-left transition-colors hover:border-accent/40 hover:bg-comment"
+      >
+        <span className="flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+          <span className="flex items-center gap-2.5">
+            <Badge tone="accent">option {leadInstall ? 1 : 2}</Badge>
+            <span className="font-mono text-[11px] tracking-[0.14em] text-fg uppercase">
+              install for your agent
+            </span>
+          </span>
+          <span className="flex min-w-0 flex-1 items-center justify-end gap-3">
+            <span
+              aria-hidden
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-accent/40 bg-accent-soft text-accent transition-colors group-hover/inst:border-accent group-hover/inst:bg-accent group-hover/inst:text-bg"
+            >
+              <ChevronDown
+                size={15}
+                className={`transition-transform duration-200 ${installOpen ? 'rotate-180' : ''}`}
+              />
+            </span>
+          </span>
+        </span>
+
+        <span className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          {/* WHICH agents, in their own marks — the row promises a per-agent
+            * setup and this is the shortest way to show it is kept. Held
+            * BACK at rest: eight brand marks at full saturation are a scatter
+            * of unrelated colours, and the row's job at rest is to be one
+            * thing. They come up together when the row is engaged. */}
+          <span
+            aria-hidden
+            className="flex items-center gap-3 text-fg opacity-55 transition-opacity duration-200 group-hover/inst:opacity-100"
+          >
+            {AGENT_MARKS.map((mark) => (
+              <mark.icon key={mark.key} size={mark.iconSize - 3} />
+            ))}
+          </span>
+          {/* Three facts, so three objects. Separated only by whitespace
+            * they scanned as one run-on phrase. */}
+          <span className="flex flex-wrap items-center gap-1.5">
+            {INSTALL_BENEFITS.map((benefit, index) => (
+              <span
+                key={benefit.label}
+                className={`items-center gap-1.5 rounded-[3px] border border-edge px-1.5 py-1 font-mono text-[10px] whitespace-nowrap text-muted ${
+                  // The last one is the reason; the other two are the parts.
+                  // A phone keeps the reason and drops the inventory.
+                  index === INSTALL_BENEFITS.length - 1 ? 'inline-flex' : 'hidden sm:inline-flex'
+                }`}
+              >
+                <benefit.icon size={11} className="shrink-0 text-accent" />
+                {benefit.label}
+              </span>
+            ))}
+          </span>
+        </span>
+      </button>
+
+      {installOpen && (
+        <div className="reveal mt-2.5">
+          <div className="grid grid-cols-[3.75rem_minmax(0,1fr)] items-stretch gap-x-2 gap-y-1.5">
+            <span className="flex items-center font-mono text-[10px] tracking-[0.12em] text-faint uppercase">
+              family
+            </span>
+            <div
+              role="group"
+              aria-label="Agent families"
+              className={`${PICKER_GROUP} grid-cols-3 sm:grid-cols-5`}
+            >
+              {AGENT_FAMILIES.map((item) => (
+                <button
+                  key={item.key}
+                  aria-label={`Choose ${item.label} agent family`}
+                  aria-pressed={item.key === activeFamily.key}
+                  onClick={() => pickFamily(item.key)}
+                  className={`${PICKER_BUTTON} ${
+                    item.key === activeFamily.key
+                      ? 'bg-accent-soft text-accent'
+                      : 'bg-surface text-muted hover:bg-raised hover:text-fg'
+                  }`}
+                >
+                  <span className="shrink-0 text-fg">
+                    <item.icon size={item.iconSize} />
+                  </span>
+                  <span className="min-w-0 max-h-[2.2em] overflow-hidden text-center">
+                    {item.label}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <span className="flex items-center font-mono text-[10px] tracking-[0.12em] text-faint uppercase">
+              surface
+            </span>
+            <div role="group" aria-label="Agent surfaces" className={`${PICKER_GROUP} ${surfaceColumns}`}>
+              {visibleSurfaces.map((item) => (
+                <button
+                  key={item.key}
+                  aria-label={`Use in ${item.label}`}
+                  aria-pressed={item.key === surface}
+                  onClick={() => pick(item.key)}
+                  className={`${PICKER_BUTTON} ${
+                    item.key === surface
+                      ? 'bg-accent-soft text-accent'
+                      : 'bg-surface text-muted hover:bg-raised hover:text-fg'
+                  }`}
+                >
+                  <span className="shrink-0 text-fg">
+                    <item.icon size={item.iconSize} />
+                  </span>
+                  <span className="min-w-0 max-h-[2.2em] overflow-hidden text-center">
+                    {item.label}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+          {/* Keyed so the reveal replays on every pick — the swap should read
+            * as an answer arriving, not text quietly mutating in place. */}
+          <div
+            key={surface}
+            aria-label="Setup instructions"
+            className="reveal mt-3 border-t border-edge pt-3"
+          >
+            <InstallCard
+              surface={surface}
+              mcpUrl={`${origin}/mcp`}
+              docsUrl={`${origin}/docs?download=true`}
+            />
+          </div>
+        </div>
+      )}
+    </>
+  );
 
   return (
     <section aria-label="Get started">
@@ -508,156 +720,11 @@ export default function GetStarted({
           </p>
         )}
 
-        {/* PATH ONE. Trying it must cost less than installing it, so the
-          * no-setup document leads and needs no choice made first. */}
-        <OptionHeader n={1} title="no installation" note={HTTP_OPTION_NOTE} />
-        <AgentLink frame={false} docsLink={false} />
-
+        {/* ORDER, NOT STYLE. `lead` decides which path the reader meets first; both are always
+          * offered, and the option numbers are read off the order so they cannot contradict it. */}
+        {leadInstall ? installPath : httpPath}
         <OrDivider />
-
-        {/* PATH TWO, FOLDED. The nine-surface picker used to be the first
-          * thing on the page: a form to fill in before the reader knew what
-          * they were choosing between, and irrelevant to everyone taking path
-          * one. It opens when someone asks for it. */}
-        <button
-          aria-label="Install for my agent"
-          aria-expanded={installOpen}
-          onClick={() => setInstallOpen((open) => !open)}
-          // A DOOR, NOT A CAPTION. Option 1 is a solid button and option 2
-          // was bare text on the panel's own ground: offered as equal choices,
-          // drawn as a button beside a footnote. It gets its own raised
-          // ground, and the border arrives on hover so it is a target without
-          // being a box inside a box.
-          className="group/inst w-full cursor-pointer rounded-[5px] border border-transparent bg-raised px-2.5 py-2 text-left transition-colors hover:border-accent/40 hover:bg-comment"
-        >
-          <span className="flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
-            <span className="flex items-center gap-2.5">
-              <Badge tone="accent">option 2</Badge>
-              <span className="font-mono text-[11px] tracking-[0.14em] text-fg uppercase">
-                install for your agent
-              </span>
-            </span>
-            <span className="flex min-w-0 flex-1 items-center justify-end gap-3">
-              <span
-                aria-hidden
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-accent/40 bg-accent-soft text-accent transition-colors group-hover/inst:border-accent group-hover/inst:bg-accent group-hover/inst:text-bg"
-              >
-                <ChevronDown
-                  size={15}
-                  className={`transition-transform duration-200 ${installOpen ? 'rotate-180' : ''}`}
-                />
-              </span>
-            </span>
-          </span>
-
-          <span className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-            {/* WHICH agents, in their own marks — the row promises a per-agent
-              * setup and this is the shortest way to show it is kept. Held
-              * BACK at rest: eight brand marks at full saturation are a scatter
-              * of unrelated colours, and the row's job at rest is to be one
-              * thing. They come up together when the row is engaged. */}
-            <span
-              aria-hidden
-              className="flex items-center gap-3 text-fg opacity-55 transition-opacity duration-200 group-hover/inst:opacity-100"
-            >
-              {AGENT_MARKS.map((mark) => (
-                <mark.icon key={mark.key} size={mark.iconSize - 3} />
-              ))}
-            </span>
-            {/* Three facts, so three objects. Separated only by whitespace
-              * they scanned as one run-on phrase. */}
-            <span className="flex flex-wrap items-center gap-1.5">
-              {INSTALL_BENEFITS.map((benefit, index) => (
-                <span
-                  key={benefit.label}
-                  className={`items-center gap-1.5 rounded-[3px] border border-edge px-1.5 py-1 font-mono text-[10px] whitespace-nowrap text-muted ${
-                    // The last one is the reason; the other two are the parts.
-                    // A phone keeps the reason and drops the inventory.
-                    index === INSTALL_BENEFITS.length - 1 ? 'inline-flex' : 'hidden sm:inline-flex'
-                  }`}
-                >
-                  <benefit.icon size={11} className="shrink-0 text-accent" />
-                  {benefit.label}
-                </span>
-              ))}
-            </span>
-          </span>
-        </button>
-
-        {installOpen && (
-          <div className="reveal mt-2.5">
-            <div className="grid grid-cols-[3.75rem_minmax(0,1fr)] items-stretch gap-x-2 gap-y-1.5">
-              <span className="flex items-center font-mono text-[10px] tracking-[0.12em] text-faint uppercase">
-                family
-              </span>
-              <div
-                role="group"
-                aria-label="Agent families"
-                className={`${PICKER_GROUP} grid-cols-3 sm:grid-cols-5`}
-              >
-                {AGENT_FAMILIES.map((item) => (
-                  <button
-                    key={item.key}
-                    aria-label={`Choose ${item.label} agent family`}
-                    aria-pressed={item.key === activeFamily.key}
-                    onClick={() => pickFamily(item.key)}
-                    className={`${PICKER_BUTTON} ${
-                      item.key === activeFamily.key
-                        ? 'bg-accent-soft text-accent'
-                        : 'bg-surface text-muted hover:bg-raised hover:text-fg'
-                    }`}
-                  >
-                    <span className="shrink-0 text-fg">
-                      <item.icon size={item.iconSize} />
-                    </span>
-                    <span className="min-w-0 max-h-[2.2em] overflow-hidden text-center">
-                      {item.label}
-                    </span>
-                  </button>
-                ))}
-              </div>
-
-              <span className="flex items-center font-mono text-[10px] tracking-[0.12em] text-faint uppercase">
-                surface
-              </span>
-              <div role="group" aria-label="Agent surfaces" className={`${PICKER_GROUP} ${surfaceColumns}`}>
-                {visibleSurfaces.map((item) => (
-                  <button
-                    key={item.key}
-                    aria-label={`Use in ${item.label}`}
-                    aria-pressed={item.key === surface}
-                    onClick={() => pick(item.key)}
-                    className={`${PICKER_BUTTON} ${
-                      item.key === surface
-                        ? 'bg-accent-soft text-accent'
-                        : 'bg-surface text-muted hover:bg-raised hover:text-fg'
-                    }`}
-                  >
-                    <span className="shrink-0 text-fg">
-                      <item.icon size={item.iconSize} />
-                    </span>
-                    <span className="min-w-0 max-h-[2.2em] overflow-hidden text-center">
-                      {item.label}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-            {/* Keyed so the reveal replays on every pick — the swap should read
-              * as an answer arriving, not text quietly mutating in place. */}
-            <div
-              key={surface}
-              aria-label="Setup instructions"
-              className="reveal mt-3 border-t border-edge pt-3"
-            >
-              <InstallCard
-                surface={surface}
-                mcpUrl={`${origin}/mcp`}
-                docsUrl={`${origin}/docs?download=true`}
-              />
-            </div>
-          </div>
-        )}
+        {leadInstall ? httpPath : installPath}
       </div>
     </section>
   );

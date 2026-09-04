@@ -28,11 +28,12 @@
  */
 import { chromium } from 'playwright';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
+import { mintAnon } from './lib/mint-anon.mjs';
 const B = process.argv[2] ?? 'http://localhost:3030';
 const out = [];
 const ok = (c, l) => { out.push(`${c ? '  ok ' : 'FAIL'} ${l}`); return c; };
 const j = async (r) => { const t = await r.text(); try { return JSON.parse(t); } catch { return { raw: t, status: r.status }; } };
-const tok = (await j(await fetch(`${B}/api/tokens/anonymous`, { method: 'POST' }))).token;
+const tok = (await mintAnon(B)).token;
 const H = { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' };
 const api = (path, body) => fetch(`${B}${path}`, { method: 'POST', headers: H, body: JSON.stringify(body) });
 
@@ -119,6 +120,8 @@ const reach = await frame.evaluate(async (id) => {
   return {
     query: await tryFetch(`/a/${id}/query?q=${encodeURIComponent('{}')}`),
     start: await tryFetch(`/a/${id}/start`, { method: 'POST' }),
+    // Deliberately raw, and deliberately NOT through lib/mint-anon: this fetch is issued by the
+    // SANDBOXED DOCUMENT and must die on the CSP's connect-src, long before the proxy's door sees it.
     api: await tryFetch('/api/tokens/anonymous', { method: 'POST' }),
     other: await tryFetch('/a/zzzzzz/query?q=%7B%7D'),
   };
@@ -169,7 +172,7 @@ const stamp = Date.now().toString(36);
 const ownerCtx = await b.newContext();
 const owner = await ownerCtx.newPage();
 await loginViaEmail(owner, B, sink, `mxmx_test_dataflow_owner_${stamp}@example.com`);
-const ownerTok = (await j(await fetch(`${B}/api/tokens/anonymous`, { method: 'POST' }))).token;
+const ownerTok = (await mintAnon(B)).token;
 const claimed = await owner.evaluate(async (t) => (await fetch('/api/tokens/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }) })).status, ownerTok);
 ok(claimed === 200, 'the owner claimed a token');
 const OH = { Authorization: `Bearer ${ownerTok}`, 'Content-Type': 'application/json' };

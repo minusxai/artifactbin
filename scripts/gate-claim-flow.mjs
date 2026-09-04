@@ -20,6 +20,7 @@
 import { chromium } from 'playwright';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
+import { mintAnon } from './lib/mint-anon.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
 const out = [];
@@ -38,7 +39,7 @@ const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: 1400, height: 1000 } });
 
 // ── an anonymous visitor makes two documents ────────────────────────────────
-const anon = await api('/api/tokens/anonymous', { method: 'POST' });
+const anon = await mintAnon(B);
 const doc = async (title) => api('/api/artifacts', {
   method: 'POST',
   body: JSON.stringify({ title, markup: `<div data-design="tw" className="p-8"><h1 className="text-3xl font-bold">${title}</h1></div>` }),
@@ -115,7 +116,7 @@ ok((await p.locator('[aria-label="Unclaimed drafts"]').count()) === 0,
   'and the banner does not nag again once the drafts are claimed');
 
 // ── someone else's token is never offered ───────────────────────────────────
-const stranger = await api('/api/tokens/anonymous', { method: 'POST' });
+const stranger = await mintAnon(B);
 await api('/api/artifacts', { method: 'POST', body: JSON.stringify({ title: 'Not Yours', markup: '<div data-design="tw" className="p-8"><h1 className="text-3xl">x</h1></div>' }) }, stranger.token);
 const claimable = await (await fetch(`${B}/api/tokens/claimable`, {
   method: 'POST',

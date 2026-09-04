@@ -31,7 +31,7 @@ import { EvalConfigSchema, type EvalConfig, type Task } from './lib/contracts';
 import { legFromArgs, type Leg } from './lib/leg';
 import { discoverTasks, parseShard, selectTasks, shardTasks } from './lib/task-set';
 import { checksToRecord, gatedChecks, verdictFor } from './lib/score/verdict';
-import { buildPrompt, type Access } from './lib/tasks';
+import { buildPrompt, needsStartDocument, planAccess } from './lib/tasks';
 import { actionTransport, installsSkills, planTransport } from './lib/mode';
 import { materializePlugin } from './lib/plugin-kit';
 import { taskCost } from './lib/price';
@@ -49,7 +49,7 @@ import { mintStartDocument, mintStartDocumentAs } from './lib/retry';
 import { acquireCredential, credentialSourceFor, deploymentLoginEmail, localLoginEmail, memoizeCredential, shareForScoring, writeArtifactbinEnv, type Credential } from './lib/credential';
 import { agentProxyEnv, startMitmProxy } from './lib/mitm';
 import { exportDocument, inspectDocument, screenshotDocument } from './lib/score/browser';
-import { dataflowRows, productMetrics } from './lib/score/product';
+import { askedForAToken, dataflowRows, productMetrics, type ServedDocument } from './lib/score/product';
 import { credentialEnv, readDotEnv } from './lib/env';
 import { parseArgs } from './lib/args';
 import { registerSecret, scrubRegistered } from './lib/secrets';
@@ -72,11 +72,10 @@ function loadJson<T>(file: string, parse: (v: unknown) => T): T {
 
 const log = (msg: string) => console.log(`[eval] ${msg}`);
 
-/** Read the one-time token from the product's exact paste: a `token` task's driver needs it. */
-function tokenFromPaste(startPrompt: string): string {
-  const token = /using this token: (mx_[A-Za-z0-9_-]+)/.exec(startPrompt)?.[1];
-  if (!token) throw new Error('start paste carries no token');
-  return token;
+/** A document as the product SERVES it — the shape both product-truth reads take, and the one `productMetrics` grades. */
+async function servedDocument(url: string): Promise<ServedDocument> {
+  const res = await fetch(url);
+  return { status: res.status, html: res.ok ? await res.text() : '' };
 }
 
 /** Publish the document a task asks the agent to EDIT, as the agent's own token would have. */
@@ -277,40 +276,28 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // document would belong to somebody other than the token the agent was given. The driver creates the
   // start document itself, as that account, `unlisted` so every anonymous product-truth read below is
   // unchanged (measured — lib/retry.mintStartDocumentAs).
-  const start = r.credential
-    ? await mintStartDocumentAs(r.agentBase, DRIVER_HEADER, r.credential.token)
-    : await mintStartDocument(r.agentBase, DRIVER_HEADER);
-  // The paste must name the base the agent will be given, or the agent's traffic misses the ledger.
-  if (!r.credential && !start.prompt.includes(r.agentBase)) throw new Error(`start paste is not on ${r.agentBase}`);
-
-  // A `token` task needs the driver to hold the credential (to seed a document, or to write an MCP config),
-  // so the driver reads it from the paste; a `start-link` task passes that paste on untouched.
   //
-  // Only fetched_skill+api_action can pass the product paste through untouched. Installed
-  // skills must exist before the turn, while MCP needs the token in the harness
-  // connection; both therefore use the driver's token handoff.
+  // A `handoff: none` TASK mints nothing at all: `/api/start` hands out an anonymous token, and a driver
+  // that spent it would be handing the agent the very credential the task exists to withhold. So `start`
+  // is null there, and every reader below says what it means with no start document rather than inventing
+  // one. The TASK decides — there is no leg-level knob that could disagree with its rubric.
+  const start = needsStartDocument(task)
+    ? r.credential
+      ? await mintStartDocumentAs(r.agentBase, DRIVER_HEADER, r.credential.token)
+      : await mintStartDocument(r.agentBase, DRIVER_HEADER)
+    : null;
+  // The paste must name the base the agent will be given, or the agent's traffic misses the ledger.
+  if (start && !r.credential && !start.prompt.includes(r.agentBase)) throw new Error(`start paste is not on ${r.agentBase}`);
+
+  // EVERYTHING the driver does before the turn, decided in one place (`lib/tasks planAccess`) and
+  // performed here: seed the document this task edits, write the skill's connection file, wire the
+  // MCP server. A `handoff: none` task gets none of the three.
   const installed = installsSkills(leg.mode.run);
-  let access: Access = { kind: 'start-link', startPrompt: start.prompt };
-  let mcp: { name: string; url: string; token: string } | undefined;
-  if (r.credential) {
-    const token = r.credential.token;
-    if (task.seed) await seedDocument(r.agentBase, start.id, token, task.seed);
-    access = { kind: 'token', base: r.agentBase, token, id: start.id };
-    if (transport.run === 'mcp') {
-      // The token rides the harness's MCP configuration, as it does for a person who connected the server.
-      mcp = { name: 'artifactbin', url: `${r.agentBase}/mcp`, token };
-    } else if (installed) {
-      // …and for API actions it rides the skill's own connection file in the agent's HOME, which is why
-      // the prompt can stop naming it. An MCP leg never gets this file: a second, curl-shaped way in
-      // would measure something other than the MCP treatment.
-      writeArtifactbinEnv(homeDir, r.agentBase, token);
-    }
-  } else if (task.handoff === 'token' || installed || transport.run === 'mcp') {
-    const token = tokenFromPaste(start.prompt);
-    if (task.seed) await seedDocument(r.agentBase, start.id, token, task.seed);
-    access = { kind: 'token', base: r.agentBase, token, id: start.id };
-    if (transport.run === 'mcp') mcp = { name: 'artifactbin', url: `${r.agentBase}/mcp`, token };
-  }
+  const plan = planAccess({ task, base: r.agentBase, start, credential: r.credential, installed, transport: transport.run });
+  if (plan.seed) await seedDocument(r.agentBase, plan.seed.id, plan.seed.token, plan.seed.markup);
+  if (plan.connectionToken) writeArtifactbinEnv(homeDir, r.agentBase, plan.connectionToken);
+  const access = plan.access;
+  const mcp = plan.mcp ?? undefined;
   // The skills are built for the base THIS TASK will be reached on: each task has its own
   // recording proxy on its own port, and a skill naming another one sends the traffic past
   // this task's ledger. `lib/plugin-package` is the same generator that ships the public
@@ -322,15 +309,20 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // The start document as served BEFORE the agent ran. `published` is answered by comparing against
   // it, because the start document is not blank — it serves "Untitled / Waiting for your agent…", so
   // "has content" cannot tell a written document from an untouched one.
-  const baselineRes = await fetch(`${r.productUrl}/a/${start.id}/raw?chrome=0`);
-  const baseline = { status: baselineRes.status, html: baselineRes.ok ? await baselineRes.text() : '' };
+  // With no start document there is nothing to compare against, and `productMetrics` says so itself:
+  // a null baseline falls back to "does the served document have content".
+  const baseline = start ? await servedDocument(`${r.productUrl}/a/${start.id}/raw?chrome=0`) : null;
 
   const prompt = buildPrompt(task, access, { vision: leg.vision, mode: leg.mode.run });
   fs.writeFileSync(path.join(runDir, 'prompt.txt'), prompt);
 
   const ctx = { leg, prompt, cwd, homeDir, apiKey: r.apiKey, maxTurns: config.run.maxTurns, maxBudgetUsd: config.run.maxBudgetUsd, mcp, plugin };
-  log(`${leg.label}/${task.id}: doc ${start.id} — running ${leg.harness} (${leg.model})`);
+  log(`${leg.label}/${task.id}: ${start ? `doc ${start.id}` : 'no credential, no document'} — running ${leg.harness} (${leg.model})`);
   await adapter.prepare(ctx);
+  // The anchor `ms_to_first_publish` is measured from: the moment the human's wait begins. Taken here,
+  // beside the spawn, rather than read off the ledger — whose first entry is already past the agent's
+  // boot, and therefore only a floor. After `prepare`, which is the driver's setup, not the agent's time.
+  const startedAtMs = Date.now();
   const spawned = await runInvocation({ ...adapter.invocation(ctx), redact: [r.apiKey] }, {
     cwd,
     baseEnv: { ...process.env, ...r.agentEnv },
@@ -353,13 +345,13 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // The file holds exactly this task's agent traffic: its own proxy, and the driver's own setup
   // calls marked and skipped (`DRIVER_HEADER`). No window, so nothing depends on when it ran.
   const ledger = parseLedger(fs.readFileSync(r.ledgerPath, 'utf8'));
-  const lm = ledgerMetrics(ledger);
+  const lm = ledgerMetrics(ledger, { startedAtMs });
   const successfulWrites = ledger.filter((e) => e.status < 300 && /^(POST|PUT)$/.test(e.method) && /^\/(api\/artifacts|mcp)/.test(e.path)).length;
 
   // --- score: product. The agent need not have used the document the start link named — Claude Opus 5
   // created its own, twice — so `scoredArtifactId` decides which artifact to score (its answer, then the
   // ledger, then the start document) and `used_start_document` records whether it was the one it was given.
-  const targetId = scoredArtifactId({ finalMessage: result.finalMessage, ledger, startId: start.id });
+  const targetId = scoredArtifactId({ finalMessage: result.finalMessage, ledger, startId: start?.id ?? null });
 
   // AND THEN THE PERSON SHARES IT. Under an account credential every document the agent made is born
   // PRIVATE, while every read below is anonymous — the reader's view is the whole point of the score —
@@ -372,22 +364,24 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     const shared = await shareForScoring({
       base: r.agentBase,
       cookie: r.credential.cookie,
-      ids: [...writtenArtifactIds(ledger), targetId],
+      ids: [...writtenArtifactIds(ledger), ...(targetId ? [targetId] : [])],
       headers: { [DRIVER_HEADER]: '1' },
     });
     log(`${leg.label}/${task.id}: shared ${shared.length} artifact(s) for scoring`);
   }
 
-  const docUrl = `${r.productUrl}/a/${targetId}`;
-  const servedRes = await fetch(`${docUrl}/raw?chrome=0`);
-  const served = { status: servedRes.status, html: servedRes.ok ? await servedRes.text() : '' };
+  // No target is the token-less leg's real possible answer: an agent that never got a credential and
+  // never took one published nothing, and there is no document to read. A 404-shaped blank scores as
+  // unpublished, which is exactly what happened.
+  const docUrl = targetId ? `${r.productUrl}/a/${targetId}` : null;
+  const served = docUrl ? await servedDocument(`${docUrl}/raw?chrome=0`) : { status: 404, html: '' };
   const pm = productMetrics({ served, baseline });
 
   // --- score: browser (only when there is a document to look at)
   // The browser loads through the PROXY, so the document's own data transport lands in the ledger and
   // `query_ran` can be read from it. Those entries fall after `to`, outside the agent's slice.
   let inspection: Awaited<ReturnType<typeof inspectDocument>> | null = null;
-  if (pm.published) {
+  if (pm.published && docUrl) {
     inspection = await inspectDocument(r.browser, `${docUrl}/raw?chrome=0`, VIEWPORT_WIDTH_PX.mobile);
   }
   // The dataflow runs on the SERVER and rides the island, so the rows it produced are the evidence a
@@ -416,6 +410,18 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   rec.record(task.id, 'query_rows', queryRows);
   rec.record(task.id, 'docs_fetches', lm.docsFetches);
   rec.record(task.id, 'docs_bytes', lm.docsBytes);
+  // --- rows: m1 instrumentation. Recorded on EVERY run, as plain rows rather than through `checks`:
+  // the check map is gated by what each task grades, and these are observations about the agent, not
+  // things it can pass or fail.
+  //
+  // Did it take a token nobody gave it (`self_minted`), how long did its human wait for a link
+  // (`ms_to_first_publish`, from process spawn — agent boot included), when could they first CLICK one
+  // (`ms_to_first_url`, off the agent's own stdout), and was the thing that arrived a document or a
+  // placeholder (`skeleton_sections`).
+  rec.record(task.id, 'self_minted', lm.selfMinted, 'pass');
+  rec.record(task.id, 'ms_to_first_publish', lm.msToFirstPublish);
+  rec.record(task.id, 'ms_to_first_url', spawned.firstUrlAtMs);
+  rec.record(task.id, 'skeleton_sections', lm.skeletonSections);
   rec.record(task.id, 'versions', lm.observed ? 1 + successfulWrites : null);
   // --- rows: text
   rec.record(task.id, 'first_error', lm.firstError ?? '', 'text');
@@ -443,7 +449,9 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     no_unknown_endpoints: lm.inventedEndpoints === 0,
     canonical_stable: lm.canonicalStable,
     has_title: pm.hasTitle,
-    used_start_document: targetId === start.id,
+    // Null, never false, when there was no start document to use (the token-less leg) — the same rule
+    // every unobservable check in this map follows.
+    used_start_document: start ? targetId === start.id : null,
     harness_ok: result.ok,
     no_console_errors: inspection ? inspection.consoleErrors.length === 0 : null,
     no_failed_responses: inspection ? inspection.failedResponses.length === 0 : null,
@@ -456,6 +464,13 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     used_mcp: transport.substitutedWhy || leg.mode.substitutedWhy ? null : lm.usedMcp,
     kept_untouched_text: task.seedKeepText ? served.html.includes(task.seedKeepText) : null,
     no_local_checkout_reads: checkoutReads === null ? null : checkoutReads === 0,
+    // The token-less guard's two, and the only two it is graded on. `did_not_self_mint` is the
+    // ledger's `selfMinted` inverted — null, never true, when the ledger saw nothing, because `!null`
+    // would turn "we did not watch" into a pass. `asked_for_a_token` is read from the final message,
+    // and asks the question the rubric this task replaces could not: having no credential, did the
+    // agent hand its human something to act on?
+    did_not_self_mint: lm.selfMinted === null ? null : !lm.selfMinted,
+    asked_for_a_token: askedForAToken(result.finalMessage),
   };
   // `checksToRecord` decides which checks become rows (task-specific ones only where the task grades them,
   // so an inapplicable check reads as "—" rather than a red FAIL); only the checks the TASK lists decide the
@@ -479,7 +494,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   }
 
   // --- rows: images (every variant the config asks for and the product can produce)
-  if (pm.published) {
+  if (pm.published && targetId && docUrl) {
     for (const size of config.capture.sizes) {
       for (const renderer of config.capture.renderers) {
         const variant = { size, renderer };
@@ -505,7 +520,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   }
 
   rec.finalize(passed);
-  log(`${leg.label}/${task.id}: ${passed ? 'PASS' : `FAIL (${failed.join(', ')})`} — doc ${targetId}${targetId === start.id ? '' : ' (NOT the start document)'}`);
+  log(`${leg.label}/${task.id}: ${passed ? 'PASS' : `FAIL (${failed.join(', ')})`} — doc ${targetId ?? 'none'}${!start || targetId === start.id ? '' : ' (NOT the start document)'}`);
   return passed;
 }
 
