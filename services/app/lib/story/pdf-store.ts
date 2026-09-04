@@ -112,6 +112,11 @@ export function pdfPageCount(buffer: Buffer): number | undefined {
     at = hit + TYPE.length;
     let p = at;
     while (p < buffer.length && isSpace(buffer[p])) p += 1;
+    // No room left for the name: `buffer.compare` THROWS on an out-of-range
+    // target, and this runs on the publish path, so a file whose last `/Type`
+    // sits within a few bytes of the end would have been a 500 on create. Every
+    // later hit is nearer the end still, so there is nothing left to find.
+    if (p + PAGE.length > buffer.length) break;
     if (buffer.compare(PAGE, 0, PAGE.length, p, p + PAGE.length) !== 0) continue;
     const after = buffer[p + PAGE.length];
     if (after !== undefined && isLetter(after)) continue; // `/Pages`: the tree, not a leaf

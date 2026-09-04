@@ -32,6 +32,31 @@ describe('pdfPageCount', () => {
     expect(pdfPageCount(Buffer.from('/Type/Page /Type\n/Page /Type  /Page'))).toBe(3);
   });
 
+  it('never throws on a token that runs off the end of the file', () => {
+    /*
+     * A `/Type` in the last few bytes has no room for the `/Page` after it, and
+     * the buffer walk compared past the end — `RangeError: sourceEnd is out of
+     * range`. It runs on the PUBLISH path, so a truncated upload (or any file
+     * whose last token lands near EOF) would have been a 500 on create: the
+     * same class of bug as the `%`-in-a-filename 500, introduced by the fix for
+     * the unbounded scan.
+     */
+    for (const tail of ['/Type /Pag', '/Type', '/Type /', '/Type /P', '/Typ']) {
+      expect(() => pdfPageCount(Buffer.from(tail)), tail).not.toThrow();
+      expect(pdfPageCount(Buffer.from(tail)), tail).toBeUndefined();
+    }
+    // …and a whole one at the very end still counts.
+    expect(pdfPageCount(Buffer.from('%PDF-1.4 /Type /Page'))).toBe(1);
+  });
+
+  it('reads the page TREE as the tree, spaced or not', () => {
+    // `/Type/Pages` is the node that holds the leaves; counting it would put
+    // every file one page over.
+    expect(pdfPageCount(Buffer.from('/Type/Pages'))).toBeUndefined();
+    expect(pdfPageCount(Buffer.from('/Type /Pages'))).toBeUndefined();
+    expect(pdfPageCount(Buffer.from('/Type/Pages /Type/Page'))).toBe(1);
+  });
+
   it('is bounded on the worst case the cap and the sniff both admit', () => {
     // 25 MB of nothing but the token: two million pages, all legal input.
     const token = '/Type /Page ';
