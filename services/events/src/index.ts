@@ -13,7 +13,7 @@ import type { EventsService, EventSink, Queryable } from '@artifactbin/contracts
 import { EVENTS_ROUTES, SERVICE_AUTH_HEADER } from '@artifactbin/contracts';
 import { createEnv, log, serviceSecretForServer, type JsonServer } from '@artifactbin/utils';
 import { createEvents, ensureEventsSchema } from './local';
-import { DEFAULT_EVENTS_SCHEMA } from './schema';
+import { DEFAULT_EVENTS_SCHEMA, IDENTIFIER } from './schema';
 
 export type * from '@artifactbin/contracts';
 export { EVENTS_ROUTES, EVENT_VERBS, eventName } from '@artifactbin/contracts';
@@ -22,8 +22,6 @@ export { DEFAULT_EVENTS_SCHEMA, EVENTS_TABLE, EVENTS_TABLES } from './schema';
 
 /** The one GET a shell answers — the Docker HEALTHCHECK and the compose `depends_on` condition. */
 const HEALTH = '/health';
-/** A schema name is INTERPOLATED into DDL; the config refuses anything else, as the writer does. */
-const IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
 
 /**
  * One POST (`/emit`, a JSON array of envelopes → `{ accepted: n }`) plus
