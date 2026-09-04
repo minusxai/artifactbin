@@ -497,6 +497,9 @@ export async function actOnAnnotationFor(
       resolved = true;
     }
     const fresh = await tx.query<AnnotationRowDb>('SELECT * FROM annotations WHERE id = $1', [root.id]);
+    // The old shape returned the row itself, so a vanished one WAS the null;
+    // wrapping it in an object would have made every miss truthy.
+    if (!fresh.rows[0]) return null;
     await notify(tx, artifactId, root.id);
     return { row: fresh.rows[0], replied, resolved };
   });
