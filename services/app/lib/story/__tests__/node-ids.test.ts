@@ -95,6 +95,21 @@ describe('persisted source node identity', () => {
     ]);
   });
 
+  it('repairs ids containing HTML whitespace instead of treating them as authored identity', () => {
+    const result=stampNodeIds('<p id="two words">A</p><p id={"line\\nbreak"}>B</p>',{mint:mint('a001','a002')});
+    expect(result.ids).toEqual(['a001','a002']);
+    expect(result.repairs.map(({from,reason})=>({from,reason}))).toEqual([
+      {from:'two words',reason:'invalid'},{from:'line\nbreak',reason:'invalid'},
+    ]);
+  });
+
+  it('reserves a later lone legacy identity before minting earlier nodes', () => {
+    const result=stampNodeIds('<p>Earlier</p><p data-annotation-anchor="a001">Legacy</p>',{mint:mint('a001','a002')});
+    expect(result.ids).toEqual(['a002','a001']);
+    expect(result.aliases).toEqual([]);
+    expect(result.source).not.toContain('data-annotation-anchor');
+  });
+
   it('bounds an adversarial mint and falls back without reusing reservations', () => {
     let calls=0;
     const result=stampNodeIds('<p>A</p>',{reservedIds:['a001'],mint:()=>{calls++; return 'a001';}});

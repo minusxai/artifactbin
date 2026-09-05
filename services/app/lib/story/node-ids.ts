@@ -37,7 +37,7 @@ const attr = (node: JsxElement, name: string): JsxAttribute | undefined =>
 
 const stringValue = (attribute: JsxAttribute | undefined): string | null => {
   const value = attribute?.value;
-  return value?.static && typeof value.json === 'string' && value.json.trim() !== '' ? value.json : null;
+  return value?.static && typeof value.json === 'string' && value.json !== '' && !/[\t\n\f\r ]/.test(value.json) ? value.json : null;
 };
 
 const reportedValue = (attribute: JsxAttribute | undefined): string | null => {
@@ -108,11 +108,14 @@ export function stampNodeIds(source: string, options: NodeIdOptions = {}): NodeI
   const walked = elements(nodes);
   const used = new Set<string>(options.reservedIds ?? []);
   const explicitIds = new Set<string>();
-  // Reserve every explicit id before visiting the first node. Authored ids win
-  // over generation regardless of source order.
+  // Reserve every explicit id and valid legacy identity before visiting the
+  // first node. Both win over generation regardless of source order; authored
+  // ids still win when the two namespaces collide on different nodes.
   for (const { node } of walked) {
     const id = stringValue(attr(node, ID_ATTR));
     if (id) { used.add(id); explicitIds.add(id); }
+    const legacy = stringValue(attr(node, LEGACY_ATTR));
+    if (legacy) used.add(legacy);
   }
 
   const previousNodes = options.previousSource ? parsed(options.previousSource) : [];
