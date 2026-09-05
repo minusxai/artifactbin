@@ -29,7 +29,7 @@ const SECRET = 'test-secret';
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 let token: string;
-const CANONICAL = '<div className="p-8"><h1 className="text-4xl font-bold">Title</h1><p>Body copy.</p></div>';
+const CANONICAL = '<div className="p-8" id="root"><h1 className="text-4xl font-bold" id="heading">Title</h1><p id="body">Body copy.</p></div>';
 /** HTML's parser closes the <p> at the <div>, so the door rewrites it — the case the echo exists for. */
 const NEEDS_REWRITE = '<div className="p-8"><p className="lead"><div>Block inside a paragraph</div></p></div>';
 

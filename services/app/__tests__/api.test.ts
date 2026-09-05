@@ -78,7 +78,7 @@ describe('artifact CRUD', () => {
 
   it('creates and reads back an artifact', async () => {
     const { token } = await mint();
-    const created = await create(token, '<h1>report</h1>', 'Q3');
+    const created = await create(token, '<h1 id="head">report</h1>', 'Q3');
     expect(created.url).toBe(`${BASE}/a/${created.id}`);
     expect(created).not.toHaveProperty('slug');
     expect(created.version).toBe(1);
@@ -89,7 +89,7 @@ describe('artifact CRUD', () => {
     );
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.markup).toBe('<h1>report</h1>');
+    expect(body.markup).toBe('<h1 id="head">report</h1>');
     expect(body.title).toBe('Q3');
     expect(body.token_id).toBeUndefined();
   });
@@ -111,9 +111,9 @@ describe('artifact CRUD', () => {
 
   it('PUT bumps the version, archives the old state, and keeps the id/url stable', async () => {
     const { token } = await mint();
-    const created = await create(token, '<h1>v1</h1>');
+    const created = await create(token, '<h1 id="head">v1</h1>');
     const res = await putArtifact(
-      request(`/api/artifacts/${created.id}`, { method: 'PUT', token: token, json: { markup: '<h1>v2</h1>' } }),
+      request(`/api/artifacts/${created.id}`, { method: 'PUT', token: token, json: { markup: '<h1 id="head">v2</h1>' } }),
       params({ id: created.id }),
     );
     expect(res.status).toBe(200);
@@ -130,10 +130,10 @@ describe('artifact CRUD', () => {
       'SELECT version, source FROM artifact_versions WHERE artifact_id = $1',
       [created.id],
     );
-    expect(versions.rows).toEqual([{ version: 1, source: '<h1>v1</h1>' }]);
+    expect(versions.rows).toEqual([{ version: 1, source: '<h1 id="head">v1</h1>' }]);
 
     const read = await getArtifactRoute(request(`/api/artifacts/${created.id}`, { token: token }), params({ id: created.id }));
-    expect((await read.json()).markup).toBe('<h1>v2</h1>');
+    expect((await read.json()).markup).toBe('<h1 id="head">v2</h1>');
   });
 
   it("answers uniform 404 for another token's artifact id", async () => {

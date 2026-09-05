@@ -109,15 +109,17 @@ describe('POST /api/my/artifacts/:id/fork', () => {
     expect(source.edit_id).toBe(w.doc.edit_id);
   });
 
-  it('comments do not travel: every annotation anchor is stripped from the copy, the prose is not', async () => {
+  it('legacy annotation metadata does not travel, while source identity and prose do', async () => {
     const w = await world();
-    expect((await head(w.doc.id)).source).toContain('data-annotation-anchor');
+    const source = await head(w.doc.id);
+    expect(source.source).not.toContain('data-annotation-anchor');
+    expect(source.source).toContain('id="a1b2c3d4e"');
     asSession({ id: w.bob.id, email: w.bob.email });
     const res = await fork(w.doc.id);
     expect(res.status, await res.clone().text()).toBe(201);
     const copy = await head(((await res.json()) as { id: string }).id);
     expect(copy.source).not.toContain('data-annotation-anchor');
-    expect(copy.source).toContain('<p>hello</p>');
+    expect(copy.source).toContain('<p id="a1b2c3d4e">hello</p>');
     expect(copy.source).toContain('Payroll');
   });
 
