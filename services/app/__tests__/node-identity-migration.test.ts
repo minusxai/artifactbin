@@ -1,15 +1,8 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { useAppHarness } from './harness';
 import { runNodeIdentityMigrationBatch } from '@/lib/node-identity-migration';
 
 const harness=useAppHarness();
-
-async function installContractTables() {
-  const db=await harness.db();
-  await db.query('DELETE FROM node_identity_migration_jobs');
-  await db.query('DELETE FROM artifact_source_ids');
-  await db.query('DELETE FROM artifact_node_aliases');
-}
 
 async function artifact(id:string,source:string,version=1) {
   const db=await harness.db();
@@ -23,8 +16,6 @@ async function annotation(id:string,artifactId:string,key:string) {
     (id,artifact_id,body,author_kind,status,anchor_key,snippet)
     VALUES ($1,$2,'comment','human','open',$3,'')`,[id,artifactId,key]);
 }
-
-beforeEach(installContractTables);
 
 describe('app-owned source identity migration contract',()=>{
   it('persists completion even when there are no artifacts',async()=>{
