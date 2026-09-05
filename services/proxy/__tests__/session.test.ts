@@ -1,7 +1,7 @@
 /**
  * THE SESSION PART — who is asking, resolved once and attached to nothing
  * (the actor travels as `c.get('actor')` to the forwarder, which hands it to
- * the upstream — utils attachActor, never a part). The doors here are keyed
+ * the upstream — utils attachActor, never a part). The policies here are keyed
  * the way P4 finding F2 demands: on the CLIENT's IP behind a trusted hop, on
  * the hop's own IP behind an untrusted one.
  */

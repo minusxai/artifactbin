@@ -121,7 +121,7 @@ export function humanAuthOptions(opts: HumanAuthOptions, db: Kysely<Record<strin
     database: { db, type: 'postgres' },
     emailAndPassword: { enabled: false },
     /*
-     * LOGIN RATE LIMITING IS THE DOORS' JOB, and Better Auth's own limiter is
+     * LOGIN RATE LIMITING IS THE POLICY FILE'S JOB, and Better Auth's own limiter is
      * off because it could not do it here: behind a proxy it cannot resolve a
      * client address, and it says so — "falling back to a single shared
      * per-path bucket", which is ONE COUNTER FOR THE WHOLE DEPLOYMENT.
@@ -129,8 +129,8 @@ export function humanAuthOptions(opts: HumanAuthOptions, db: Kysely<Record<strin
      * answered 429. It defaults to on in production only, so neither the
      * suite nor `npm run dev` could ever see it.
      *
-     * The doors are keyed on purpose — LOGIN_SEND per ADDRESS (five an hour),
-     * LOGIN_VERIFY per ip — and the one limit that is genuinely Better Auth's,
+     * The policies are keyed on purpose — `login_send` per ADDRESS (five an
+     * hour), `login_verify` per ip — and the one limit that is genuinely Better Auth's,
      * the guess cap per code, is emailOTP's `allowedAttempts`, untouched by
      * this. The headers below stay configured regardless, so anything that
      * DOES key by address here keys correctly.
