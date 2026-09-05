@@ -396,6 +396,11 @@ export async function replaceArtifactWithBody(
   const owned = governs || body.parent_id !== undefined ? await getOwnedArtifactFor(actor, id) : null;
   if (governs && !owned) return json({ error: 'owner_only' }, 403);
   const owner = writerFor(current);
+  if(typeof body.markup==='string') {
+    const db=await getDb();
+    const lifetime=await db.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[current.id]);
+    body={...body,markup:stampNodeIds(body.markup,{previousSource:current.source,reservedIds:lifetime.rows.map(row=>row.source_id),retireLegacyAliases:false}).source};
+  }
   /*
    * A FOLDER HAS NO CONTENT, AND THE REPLACE DOOR IS WHERE THAT IS ENFORCED.
    *
@@ -431,19 +436,6 @@ export async function replaceArtifactWithBody(
       overByteQuota: byteQuotaFor(owner.tokenId),
     });
   if (parsed instanceof Response) return parsed;
-  if (parsed.format === 'markup' && parsed.source) {
-    const db = await getDb();
-    const lifetime = await db.query<{ source_id: string }>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1', [current.id]);
-    const stamped = stampNodeIds(parsed.source, { previousSource: current.source, reservedIds: lifetime.rows.map((row) => row.source_id), retireLegacyAliases: false }).source;
-    if (stamped !== parsed.source) {
-      const checked = await parseContentInput({ ...body, markup: stamped }, {
-        loadRef: refLoaderForActor(owner), importAsset: assetImporterFor(owner.tokenId, owner.userId),
-        resolveFont: fontResolver(), overByteQuota: byteQuotaFor(owner.tokenId),
-      });
-      if (checked instanceof Response) return checked;
-      Object.assign(parsed, checked);
-    }
-  }
 
   const visibility = parseVisibility(body, !!actor.userId);
   if (visibility instanceof Response) return visibility;
@@ -554,6 +546,7 @@ export async function createArtifactFromBody(
   request: Request,
 ): Promise<Response> {
   if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
+  if(typeof body.markup==='string') body={...body,markup:stampNodeIds(body.markup,{retireLegacyAliases:true}).source};
   const parsed = await parseContentInput(body, {
     creating: true,
     loadRef: refLoaderForActor(actor),
@@ -562,17 +555,6 @@ export async function createArtifactFromBody(
     overByteQuota: byteQuotaFor(actor.tokenId),
   });
   if (parsed instanceof Response) return parsed;
-  if (parsed.format === 'markup' && parsed.source) {
-    const stamped = stampNodeIds(parsed.source).source;
-    if (stamped !== parsed.source) {
-      const checked = await parseContentInput({ ...body, markup: stamped }, {
-        creating: true, loadRef: refLoaderForActor(actor), importAsset: assetImporterFor(actor.tokenId, actor.userId),
-        resolveFont: fontResolver(), overByteQuota: byteQuotaFor(actor.tokenId),
-      });
-      if (checked instanceof Response) return checked;
-      Object.assign(parsed, checked);
-    }
-  }
   const visibility = parseVisibility(body, !!actor.userId);
   if (visibility instanceof Response) return visibility;
   const access = parseAccessField(body, parsed.format);

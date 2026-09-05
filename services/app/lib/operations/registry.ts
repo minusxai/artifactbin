@@ -349,7 +349,11 @@ const revertArtifactOp: Operation = {
     const row = await revertArtifactFor(ctx.actor, String(input.id), input.version);
     // Distinct from not_found: the artifact is yours, that checkpoint just was
     // never archived (save-less edits coalesce). list_versions has the real ones.
-    if (isVersionNotArchived(row)) return reply({ error: 'version_not_archived' }, 409);
+    if (isVersionNotArchived(row)) {
+      if(row.refusal) return fromResponse(row.refusal);
+      if(row.conflictVersion!==undefined) return reply({error:'version_conflict',currentVersion:row.conflictVersion},409);
+      return reply({ error: 'version_not_archived' }, 409);
+    }
     if (!row) return reply({ error: 'not_found' }, 404);
     return reply({
       id: row.id, url: `${ctx.base}/a/${row.id}`, version: row.version,

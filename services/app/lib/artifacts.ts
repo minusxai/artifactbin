@@ -335,8 +335,15 @@ export async function createArtifact(
   atCreation: { forkedFrom?: string; linkRole?: ShareRole | null } = {},
 ): Promise<ArtifactRow> {
   const db = await getDb();
-  if (input.format === 'markup' && input.source) input = { ...input, source: stampNodeIds(input.source, { retireLegacyAliases: true }).source };
-  const sourceIds = input.format === 'markup' && input.source ? [...nodeIndex(input.source).keys()] : [];
+  if (input.format === 'markup' && input.source) {
+    try { input = { ...input, source: stampNodeIds(input.source, { retireLegacyAliases: true }).source }; }
+    catch { /* publish output can contain canonical Helmet CSS outside parser grammar; its body was stamped pre-publish */ }
+  }
+  let sourceIds: string[] = [];
+  if(input.format==='markup'&&input.source) {
+    try { sourceIds=[...nodeIndex(input.source).keys()]; }
+    catch { sourceIds=[...input.source.matchAll(/\sid="([A-Za-z][A-Za-z0-9]{3})"/g)].map(match=>match[1]); }
+  }
   // Birthday collisions at 62^6 are routine once the table is large, so the
   // PK-violation retry is a working path, not a theoretical one.
   const ID_MINT_ATTEMPTS = 5;
@@ -722,14 +729,14 @@ export async function commitNormalizedMarkup(
   tx: Queryable,
   actor: TokenActor | null,
   current: ArtifactRow,
-  normalized: { source: string; content: string; meta: Record<string, unknown>; ids: readonly string[]; aliases?: readonly { legacyKey: string; nodeId: string; path: string }[]; title?: string | null; description?: string | null },
+  normalized: { source: string; content: string; meta: Record<string, unknown>; ids: readonly string[]; aliases?: readonly { legacyKey: string; nodeId: string; path: string }[]; title?: string | null; description?: string | null; format?: ArtifactFormat },
 ): Promise<ArtifactRow> {
   await archiveVersion(tx, current);
   const editId = newEditId();
   const result = await tx.query<ArtifactRow>(
-    `UPDATE artifacts SET source=$2, content=$3, meta=$4::jsonb, title=$9, description=$10, version=version+1, edit_id=$5,
+    `UPDATE artifacts SET source=$2, content=$3, meta=$4::jsonb, title=$9, description=$10, format=$11, version=version+1, edit_id=$5,
        actor_user_id=$6, actor_token_id=$7, updated_at=now() WHERE id=$1 AND edit_id=$8 RETURNING *`,
-    [current.id, normalized.source, normalized.content, JSON.stringify(normalized.meta), editId, ...(actor ? actorStamp(actor) : [null, null]), current.edit_id, normalized.title === undefined ? current.title : normalized.title, normalized.description === undefined ? current.description : normalized.description],
+    [current.id, normalized.source, normalized.content, JSON.stringify(normalized.meta), editId, ...(actor ? actorStamp(actor) : [null, null]), current.edit_id, normalized.title === undefined ? current.title : normalized.title, normalized.description === undefined ? current.description : normalized.description, normalized.format ?? current.format],
   );
   const updated = result.rows[0];
   if (!updated) throw new Error('artifact changed after identity preparation');
@@ -739,6 +746,8 @@ export async function commitNormalizedMarkup(
      ON CONFLICT DO NOTHING`,
     [current.id, updated.version, JSON.stringify(normalized.ids)],
   );
+  await tx.query('UPDATE artifact_source_ids SET retired_version=NULL WHERE artifact_id=$1 AND source_id=ANY($2::text[])',[current.id,normalized.ids]);
+  await tx.query('UPDATE artifact_source_ids SET retired_version=$2 WHERE artifact_id=$1 AND retired_version IS NULL AND NOT(source_id=ANY($3::text[]))',[current.id,updated.version,normalized.ids]);
   for (const alias of normalized.aliases ?? []) {
     await tx.query(
       `INSERT INTO artifact_node_aliases (artifact_id, legacy_key, source_id, source_path, created_version)
@@ -755,8 +764,9 @@ export async function commitNormalizedMarkup(
 export async function publishMarkupForArtifact(
   current: ArtifactRow,
   source: string,
+  metaOverride: Record<string, unknown> = current.meta,
 ): Promise<Response | { source: string; content: string; meta: Record<string, unknown>; ids: string[]; aliases: Array<{ legacyKey: string; nodeId: string; path: string }> }> {
-  const currentMeta = current.meta as { theme?: unknown; template?: unknown; colorMode?: unknown };
+  const currentMeta = metaOverride as { theme?: unknown; template?: unknown; colorMode?: unknown };
   const context = {
     loadRef: refLoaderForActor(writerFor(current)),
     importAsset: assetImporterFor(current.token_id, current.user_id),
@@ -823,6 +833,8 @@ async function getVersionScoped(scope: Scope, id: string, version: number): Prom
  */
 export interface VersionNotArchived {
   notArchived: true;
+  refusal?: Response;
+  conflictVersion?: number;
 }
 export function isVersionNotArchived(r: ArtifactRow | null | VersionNotArchived): r is VersionNotArchived {
   return r !== null && 'notArchived' in r;
@@ -835,8 +847,8 @@ async function revertScoped(actor: TokenActor, id: string, version: number): Pro
   if (!initial) return null;
   const target = (await db.query<ArtifactRow>('SELECT title,description,format,content,source,meta FROM artifact_versions WHERE artifact_id=$1 AND version=$2',[id,version])).rows[0];
   if (!target) return {notArchived:true};
-  const prepared = target.format === 'markup' ? await publishMarkupForArtifact(initial,target.source??'') : null;
-  if (prepared instanceof Response) return {notArchived:true};
+  const prepared = target.format === 'markup' ? await publishMarkupForArtifact(initial,target.source??'',target.meta) : null;
+  if (prepared instanceof Response) return {notArchived:true,refusal:prepared};
   // Event fires post-txn: an unawaited query from inside the callback would
   // deadlock PGLite's serialized op queue.
   const result: ArtifactRow | null | VersionNotArchived = await db.transaction(async (tx) => {
@@ -844,8 +856,8 @@ async function revertScoped(actor: TokenActor, id: string, version: number): Pro
       await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val])
     ).rows[0];
     if (!current) return null;
-    if(current.edit_id!==initial.edit_id) throw new Error('artifact changed during revert preparation');
-    if(prepared) return commitNormalizedMarkup(tx,actor,current,{...prepared,title:target.title,description:target.description});
+    if(current.edit_id!==initial.edit_id) return {notArchived:true,conflictVersion:current.version};
+    if(prepared) return commitNormalizedMarkup(tx,actor,current,{...prepared,title:target.title,description:target.description,format:target.format});
 
     await archiveVersion(tx, current);
     const updated = await tx.query<ArtifactRow>(
@@ -918,6 +930,14 @@ async function replaceScoped(
           retireLegacyAliases: true,
         })
       : null;
+    if(replacementIdentity) {
+      const aliases=new Map<string,string>();
+      for(const alias of replacementIdentity.aliases) {
+        const prior=aliases.get(alias.legacyKey);
+        if(prior && prior!==alias.nodeId) return {conflict:true,currentVersion:current.version};
+        aliases.set(alias.legacyKey,alias.nodeId);
+      }
+    }
 
     await archiveVersion(tx, current);
 
