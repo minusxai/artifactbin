@@ -54,7 +54,7 @@ Declarations · Bindings: embeds · Bindings: controls.
   at publish against the real columns: a bad column is a
   `400 {"error":"invalid_sql"}` carrying the engine's message with candidate
   names. Results are cut at 10,000 rows; a query has 5 s. A FOLDER is a table
-  too — `ref_<folderId>`, its children, which its own page lists with
+  too — `ref_<folderId>`, its children, which a document can list with
   `<Files data="$children" variant="icons|tiles" />`. Columns `id title format
   level visibility updated_at url thumbnail views sparkline`, computed per
   VIEWER: a stranger gets the `public` children, `thumbnail` (a card) is null

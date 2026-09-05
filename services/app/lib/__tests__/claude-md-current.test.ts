@@ -16,4 +16,17 @@ describe('CLAUDE.md is current after the folders work', () => {
       expect(md, must).toContain(must);
     }
   });
+  /*
+   * THE FOLDER PAGE. The folder bullet described a mechanism that is gone: the
+   * create door stamped a two-line SCAFFOLD as the row's `source` and the
+   * folder was served as the document it was, `lib/story-ui/folder-head`
+   * decorating it. The row carries no content now and the listing is app
+   * chrome painted from the page bootstrap — so the bullet has to name where
+   * that lives, or the next reader goes hunting for a stored source that no
+   * longer exists and a component that no longer renders it.
+   */
+  it('the folder bullet names the app-chrome page, not the retired scaffold', () => {
+    for (const must of ['web/pages/Folder.tsx', "kind: 'folder'"]) expect(md, must).toContain(must);
+    for (const stale of ['scaffold', 'folder-head', 'folderScaffold']) expect(md, stale).not.toContain(stale);
+  });
 });
