@@ -9,6 +9,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { fakeBrowser } from '@artifactbin/utils';
+import type { RenderRequest } from '@artifactbin/contracts';
 import { GET as exportImage } from '@/app/a/[id]/export/route';
 import { GET as serveRaw } from '@/app/a/[id]/raw/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -288,11 +289,12 @@ describe('the cache key names the renderer', () => {
  */
 describe('GET /a/<folder>/export', () => {
   const recording = () => {
-    const fake = fakeBrowser({ ok: true, mime: 'image/png', bytes: EXPORT_BYTES }) as ReturnType<typeof fakeBrowser> & {
-      calls: { url: string; selector: string; capture: unknown }[];
-    };
+    const fake = fakeBrowser({ ok: true, mime: 'image/png', bytes: EXPORT_BYTES });
     setServices({ browser: fake });
-    return fake;
+    // The RENDER REQUEST the route built, in the service's own contract type —
+    // the fake records `unknown[]`, and every field asserted below is one this
+    // route decides.
+    return () => fake.calls.at(-1) as RenderRequest;
   };
 
   /** A public folder holding one public child, created through the real doors. */
@@ -315,11 +317,11 @@ describe('GET /a/<folder>/export', () => {
   }
 
   it('photographs the folder document itself, not the app shell', async () => {
-    const fake = recording();
+    const shotOf = recording();
     const { folder } = await folderWithChild();
     const res = await exportImage(request(`/a/${folder.id}/export`), params({ id: folder.id }));
     expect(res.status).toBe(200);
-    const shot = fake.calls.at(-1)!;
+    const shot = shotOf();
     // The document's OWN page, chrome stripped, carrying the signed key — the
     // same address a markup document is shot at.
     expect(shot.url).toContain(`/a/${folder.id}/raw`);
@@ -329,10 +331,10 @@ describe('GET /a/<folder>/export', () => {
   });
 
   it('and the address it names renders the listing', async () => {
-    const fake = recording();
+    const shotOf = recording();
     const { folder } = await folderWithChild();
     await exportImage(request(`/a/${folder.id}/export`), params({ id: folder.id }));
-    const shot = fake.calls.at(-1)!;
+    const shot = shotOf();
     // Exactly what the headless browser would fetch — no session, the key
     // alone, and the capture's own settled dataflow.
     const framed = await serveRaw(request(new URL(shot.url).pathname + new URL(shot.url).search), params({ id: folder.id }));
@@ -343,10 +345,10 @@ describe('GET /a/<folder>/export', () => {
   });
 
   it('gives the card the same crop every document gets', async () => {
-    const fake = recording();
+    const shotOf = recording();
     const { folder } = await folderWithChild();
     const res = await exportImage(request(`/a/${folder.id}/export?mode=card`), params({ id: folder.id }));
     expect(res.status).toBe(200);
-    expect(fake.calls.at(-1)!.capture).toEqual({ card: DEFAULT_SOCIAL_PREVIEW_CROP });
+    expect(shotOf().capture).toEqual({ card: DEFAULT_SOCIAL_PREVIEW_CROP });
   });
 });
