@@ -365,6 +365,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         ? `/a/${artifact.id}${withIntent('', kind)}`
         : `/login?callbackUrl=${encodeURIComponent(`/a/${artifact.id}${withIntent('', kind)}`)}`);
       const viewerId = viewer?.userId ?? null;
+      const role = await roleFor(artifact, actor);
+      const ownerBreadcrumb = chrome && role === 'owner';
       const reactions = chrome
         ? {
           like: { count: await count('like', artifact.id), liked: viewerId ? await has(viewerId, 'like', artifact.id) : false, href: door('like') },
@@ -373,11 +375,12 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
             : null,
           // Unresolved threads — the number, not the words, and only for someone
           // who may take part (the page hands the count to the same people).
-          comment: { count: canAnnotate(await roleFor(artifact, actor)) ? await countOpenAnnotations(artifact.id) : 0, href: door('comment') },
+          comment: { count: canAnnotate(role) ? await countOpenAnnotations(artifact.id) : 0, href: door('comment') },
         }
         : null;
       const html = await buildStoryDocument({
         reactions,
+        ownerBreadcrumb,
         assetUrls,
         chrome,
         editable,
@@ -437,7 +440,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         colorMode: design.colorMode,
         refData,
         dataflow,
-        title: artifact.title,
+        title: ownerBreadcrumb ? displayTitle(artifact) : artifact.title,
         // Content-addressed, from the build's own manifest: the URL has to
         // change when the bytes do, because services/app/server/app.ts caches everything
         // under /story/ for a year. Null when there is no build — a document

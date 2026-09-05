@@ -87,6 +87,8 @@ export interface ReaderChromeInput {
   login?: { href: string } | null;
   /** This viewer may WRITE (the owner's or an editor's framed copy): the rail offers Edit. */
   edit?: boolean;
+  /** The owner sees the artifact title beside the handle as a breadcrumb. */
+  ownerBreadcrumb?: boolean;
   /** Counts, the viewer's own state, and the doors. Absent: the rail is inert (tests, previews). */
   reactions?: ReaderReactions | null;
 }
@@ -122,6 +124,7 @@ const ICON = (paths: string, size = 20): string =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor"`
   + ` stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
 
+const ICON_CHEVRON = ICON('<path d="m9 18 6-6-6-6"/>', 14);
 const ICON_HEART = ICON('<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21.2l7.7-7.7 1.1-1.1a5.5 5.5 0 0 0 0-7.8z"/>');
 const ICON_COMMENT = ICON('<path d="M21 11.5a8.4 8.4 0 0 1-9 8.5 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.2A8.4 8.4 0 0 1 4 12a8.4 8.4 0 0 1 8.5-9 8.4 8.4 0 0 1 8.5 8.5z"/>');
 const ICON_SEND = ICON('<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>');
@@ -197,7 +200,7 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
   const following = reactions?.follow?.following ?? false;
   const followAria = `${following ? 'Unfollow' : 'Follow'} @${escapeHtml(username ?? '')}`;
 
-  const byline = '<div class="mx-reader-byline" data-mx-reader-byline>'
+  const byline = `<div class="mx-reader-byline" data-mx-reader-byline${input.ownerBreadcrumb ? ' data-mx-owner-breadcrumb' : ''}>`
     + (username
       ? `<a class="mx-reader-author" href="/@${escapeHtml(username)}" target="_top"`
         + ` aria-label="View @${escapeHtml(username)}'s profile">@${escapeHtml(username)}</a>`
@@ -205,6 +208,7 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
     // FOLLOW rides right beside the handle it follows, and only when there is
     // one: an anonymous document has nobody to follow. UI only for now — the
     // entry logs it with the author, the way like and comment log.
+    + (input.ownerBreadcrumb && username && title ? `<span class="mx-reader-chevron" aria-hidden="true">${ICON_CHEVRON}</span>` : '')
     + (title ? `<span class="mx-reader-title">${escapeHtml(title)}</span>` : '')
     + (username && (!reactions || reactions.follow)
       ? `<button type="button" class="mx-reader-follow" data-mx-reader-action="follow" data-mx-author="${escapeHtml(username)}"`

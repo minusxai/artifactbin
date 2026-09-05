@@ -77,7 +77,6 @@ function triggerPosition(side: 'left' | 'right', fixed: boolean, open: boolean) 
 export function PageMenu({
   authed,
   anon = false,
-  title,
   fixed = false,
   triggerless = false,
   panelTop,
@@ -92,7 +91,6 @@ export function PageMenu({
   triggerless?: boolean;
 }) {
   const pathname = usePathname() ?? '';
-  const trail = crumbsFor(pathname, title);
   const [open, setOpen] = useState(false);
   const phone = useIsPhoneViewport();
   const toggle = useExclusiveLayer(open, setOpen);
@@ -156,21 +154,6 @@ export function PageMenu({
           <img src="/logo-128.png" alt="" className="h-7 w-7" />
           artifactbin
         </a>
-
-        {trail.length > 0 && (
-          <div aria-label="Current page" className="mb-3 flex min-w-0 items-center gap-1 border-y border-edge px-2 py-2 font-mono text-xs text-muted">
-            {trail.map((crumb, index) => (
-              <span key={`${crumb.href ?? ''}:${crumb.label}`} className="flex min-w-0 items-center gap-1">
-                {index > 0 && <ChevronRight size={12} className="shrink-0 text-faint" aria-hidden="true" />}
-                {crumb.href ? (
-                  <a href={crumb.href} className="shrink-0 text-muted no-underline hover:text-accent">{crumb.label}</a>
-                ) : (
-                  <span className="min-w-0 truncate text-fg">{crumb.label}</span>
-                )}
-              </span>
-            ))}
-          </div>
-        )}
 
         {link('/', 'Artifacts', <FileText size={15} strokeWidth={1.5} />, pathname === '/')}
         {link('/account', 'Account', <User size={15} strokeWidth={1.5} />, pathname === '/account')}

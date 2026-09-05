@@ -27,6 +27,7 @@
  * metadata door (`PATCH {title}`): a rename should not archive a version.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ChevronRight } from 'lucide-react';
 import Shelf from '@/components/Shelf';
 import WorkspaceLayout, { HOME_WORKSPACE_COLUMN } from '@/components/WorkspaceLayout';
 import { PAGE_COLUMN } from '@/components/ui';
@@ -192,13 +193,13 @@ export function FolderPage({ folder: given, role, workspace: givenWorkspace, own
             {/* Only ancestors this viewer may read are included in the trail. */}
             {folder.trail.map((crumb) => (
               <span key={crumb.id} className="flex min-w-0 items-baseline gap-x-3">
-                <span aria-hidden="true" className="text-sm text-faint">&gt;</span>
+                <ChevronRight size={14} aria-hidden="true" className="shrink-0 self-center text-faint" />
                 <a href={crumb.url} className={`${NAME_TYPE} text-muted no-underline transition-colors hover:text-accent`}>
                   {crumb.title ?? crumb.id}
                 </a>
               </span>
             ))}
-            <span aria-hidden="true" className="text-sm text-faint">&gt;</span>
+            <ChevronRight size={14} aria-hidden="true" className="shrink-0 self-center text-faint" />
             <h1 aria-current="page" className="m-0 min-w-0 break-words">
               <Name id={folder.id} title={folder.title} mayRename={mayWrite} onRenamed={(title) => setFolder((f) => ({ ...f, title }))} />
             </h1>

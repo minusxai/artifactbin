@@ -229,6 +229,7 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
   text-decoration: none !important; white-space: nowrap !important;
 }
 .mx-reader-byline > a:hover { color: var(--primary, currentColor) !important; }
+.mx-reader-chevron { display: none !important; }
 .mx-reader-title {
   color: var(--muted-foreground, gray) !important; min-width: 0 !important;
   overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important;
@@ -384,6 +385,9 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
     flex: 1 1 auto !important; min-width: 0 !important; font-size: 12px !important;
   }
   .mx-reader-byline .mx-reader-title::before { content: '/ ' !important; }
+  .mx-reader-byline[data-mx-owner-breadcrumb] .mx-reader-title::before { content: none !important; }
+  .mx-reader-byline .mx-reader-chevron { display: inline-flex !important; flex-shrink: 0 !important; color: var(--muted-foreground, gray) !important; }
+  .mx-reader-byline[data-mx-owner-breadcrumb] > a { flex-shrink: 0 !important; }
   .mx-reader-follow { order: 1 !important; flex: 0 0 auto !important; }
   /* A desktop has an address bar; the owner wants no share button there. */
   .mx-reader-action[data-mx-reader-action="share"] { display: none !important; }
