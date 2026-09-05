@@ -7,8 +7,7 @@ order: 2
 ## Read first
 
 Use `<DataTable>` with `<Column>` children to render one template per row.
-An existing control with `run="$mutation"` saves its cell through a declared
-mutation. Upload a dataset you own with `access: readwrite`
+A control's `run="$mutation"` saves its cell. Upload your dataset with `access: readwrite`
 ([datasets](publishing-datasets.md)); queries and ordinary controls follow
 [data](markup-data.md). No per-row Values or JavaScript required.
 
@@ -18,7 +17,7 @@ Example · Scope and identity · Committing · References and authorization.
 
 ## Seven roadmap editors
 
-Replace `TASKS_ID` and `SPRINTS_ID` with dataset IDs. The tasks dataset has
+Replace `TASKS_ID` / `SPRINTS_ID` with dataset IDs. Tasks have
 `id` (integer), `item`, `owner`, `hours` (nullable number), `depends_on`,
 `tags`, `status`, and `sprint`; the sprints dataset has `name`.
 Store tags and dependency IDs as **JSON-array strings**, for example
@@ -77,6 +76,8 @@ explicitly first; embedded commas cannot be recovered by blindly splitting.
   templates such as `label="Status {$_row.id}"` inside a Column. One member
   level only; extract nested JSON with SQL. `_`-prefixed declaration names
   are reserved. `$_value` is the committed scalar in mutation SQL.
+- Supported `run` editors: `<Select>`, native `<input>` with `type="text"` or `type="number"`,
+  `<textarea>` and `<select>`. Other controls/input types are rejected.
 - A row mutation is invoked only by a control's `run` inside a Column;
   that `run` must name a row mutation. Its `$_row` is the immutable original
   row snapshot from when editing began, not the latest refreshed row.
@@ -99,13 +100,9 @@ Done or outside dismissal (including keyboard focus leaving); Escape cancels.
 Multi-select requires `valueFormat="json"` and stores unique strings, with
 `[]` for no selections. Commas, quotes and Unicode round-trip through JSON.
 `allowCreate` adds values absent from the options. Missing selections remain visible by raw value and removable; options
-refreshes never drop them. Malformed JSON or non-string members block editing
-instead of replacing the stored value with an empty selection.
+refreshes never drop them. Malformed JSON or non-string members block editing without erasing data.
 
-A pending cell is disabled; other cells remain editable. Successful values
-stay visible until the authoritative query refresh confirms them. Errors
-retain the draft for explicit retry or cancellation; refresh does not silently
-replace its original snapshot. Captures and static editor previews show
+A pending cell is disabled; other cells remain editable. Saved values stay visible until query refresh confirms them. Errors retain drafts for retry/cancellation; refresh preserves original snapshots. Captures and static editor previews show
 controls disabled; writes require the interactive reader.
 
 Use **both** `expectedAffected={1}` and the original-value predicate shown
@@ -113,14 +110,13 @@ above. `IS NOT DISTINCT FROM` compares nulls correctly and checks only the
 edited field, allowing different-field edits to coexist. Zero matched rows
 returns `row_changed` (stale, deleted, or rejected by a predicate); multiple
 matches return `row_not_unique`. Both leave dataset data and version unchanged.
-The guard is checked on every storage retry. Publish checks SQL syntax/types;
-its empty-table dry run does not enforce the runtime row count. This is
+The guard runs on every retry. Publish checks SQL syntax/types,
+not the runtime row count. This is
 value-based conflict detection: an A→B→A history is not detected.
 
 ## References and authorization
 
-Options queries use value/label columns and should include references outside
-the currently filtered table. Dependency IDs are strings: this integer-ID
+Options queries use value/label columns; include references outside table filters. Dependency IDs are strings: this integer-ID
 example casts through BIGINT before VARCHAR so `1.0` cannot disagree with
 `"1"`. `exclude="$_row.id"` hides the current task from selectable options;
 the mutation's server-side predicate is what rejects a self-dependency.
