@@ -144,8 +144,18 @@ class PgliteDb implements Db {
     return async () => { await this.serialize(() => unsubscribe()); };
   }
 
+  /**
+   * THROUGH THE QUEUE, like every other operation — closing was the one that
+   * was not, and PGLite hangs when a query is still in flight as the wasm
+   * instance goes away. Fire-and-forget telemetry is exactly that case: a
+   * `void trackEvent(...)` at the end of a request has its INSERT (and, on the
+   * first one, the events writer's DDL) still queued when a test's teardown or
+   * a shutdown closes the database. Waiting our turn costs nothing — the queue
+   * is already the contract this class states — and it makes `close` mean
+   * "after what was asked for", not "now, mid-statement".
+   */
   async close(): Promise<void> {
-    await this.db.close();
+    await this.serialize(() => this.db.close());
   }
 }
 

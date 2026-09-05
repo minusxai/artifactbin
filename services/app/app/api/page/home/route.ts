@@ -1,14 +1,20 @@
 /**
  * The dashboard's data: a stranger gets the landing; an account gets its
  * library (with each document's view sparkline, rendered here as SVG so the
- * page draws nothing), and what is shared with it.
+ * page draws nothing), what is shared with it, and the two activity lists —
+ * what happened to its documents, and what the people it follows did in
+ * public. Both come decorated (handles, titles) because the SPA holds no
+ * database and must not spend a request per row learning names.
  */
-import { viewSeriesByUser } from '@/lib/analytics';
 import { AGENT_COOKIE, decodeAgentSession } from '@/lib/agent-session';
+import { decorateFeed, followFeed, ownerFeed, viewSeriesByUser } from '@/lib/feed';
 import { json, parseCookie } from '@/lib/http';
 import { listArtifactsByUser, listDraftsByTokenIds, listSharedWithEmail } from '@/lib/users';
 import { sessionActor } from '@/lib/viewer';
 import { renderSparklineSvg } from '@/lib/viz/sparkline';
+
+/** How much activity the dashboard's two lists show. Short on purpose: this is a glance, not a history. */
+const ACTIVITY_LIMIT = 20;
 
 export async function GET(request: Request) {
   const actor = await sessionActor(request);
@@ -36,8 +42,13 @@ export async function GET(request: Request) {
     const s = series.get(a.id);
     if (s?.some((n) => n > 0)) sparklines[a.id] = await renderSparklineSvg(s);
   }
+  const [mine, following] = await Promise.all([
+    ownerFeed(user.userId, { limit: ACTIVITY_LIMIT }).then(decorateFeed),
+    followFeed(user.userId, { limit: ACTIVITY_LIMIT }).then(decorateFeed),
+  ]);
   return json({
     signedIn: true,
+    feed: { mine, following },
     artifacts: artifacts.map((a) => ({
       id: a.id, url: `/a/${a.id}`, title: a.title, format: a.format, version: a.version, folder: a.folder,
       visibility: a.visibility, updated_at: a.updated_at, views: a.views, sparkline: sparklines[a.id] ?? null,

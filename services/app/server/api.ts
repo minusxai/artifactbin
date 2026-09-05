@@ -6,6 +6,7 @@
  * request. The table is generated from the filesystem (scripts/generate-routes).
  */
 import type { Hono } from 'hono';
+import { emit } from '@/lib/events';
 import { runWithRequest } from '@/lib/request-context';
 import { ROUTES, type RouteEntry } from './routes.generated';
 
@@ -27,6 +28,17 @@ export function mountRoutes(app: Hono, routes: RouteEntry[] = ROUTES): void {
            * caller still learns nothing (the text is ours, not theirs).
            */
           console.error(`[route] ${method} ${new URL(c.req.url).pathname} failed:`, error);
+          /*
+           * The same outage, counted. The object is the route PATTERN
+           * (`GET /api/artifacts/:id`) and never the raw URL — that carries
+           * artifact and token ids, and a log of 500s is exactly the place they
+           * must not accumulate. The error TEXT stays in the operator's line
+           * above for the same reason: it is whatever the throw said.
+           *
+           * `void`, not awaited: a 500 answers as fast as it can, and `emit`
+           * never rejects.
+           */
+          void emit(null, 'failed', { kind: 'route', id: `${method} ${route.path}` }, { status: 500, method });
           return new Response('internal error', { status: 500 });
         }
       });

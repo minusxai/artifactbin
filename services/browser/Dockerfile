@@ -18,6 +18,7 @@ COPY services/utils/package.json ./services/utils/package.json
 COPY services/app/package.json ./services/app/package.json
 COPY services/sql/package.json ./services/sql/package.json
 COPY services/browser/package.json ./services/browser/package.json
+COPY services/events/package.json ./services/events/package.json
 COPY services/proxy/package.json ./services/proxy/package.json
 COPY services/app/scripts/copy-assets.mjs ./services/app/scripts/copy-assets.mjs
 # THE INSTALL LAYER IS KEYED ON MANIFESTS ONLY — `npm ci` reads the root files
@@ -48,6 +49,7 @@ COPY services/utils/package.json ./services/utils/package.json
 COPY services/app/package.json ./services/app/package.json
 COPY services/sql/package.json ./services/sql/package.json
 COPY services/browser/package.json ./services/browser/package.json
+COPY services/events/package.json ./services/events/package.json
 COPY services/proxy/package.json ./services/proxy/package.json
 
 # THE LEAN INSTALL, by npm's own resolution — never a hand-written list: the

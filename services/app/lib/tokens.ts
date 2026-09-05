@@ -9,6 +9,7 @@
  */
 import crypto from 'crypto';
 import { getDb, Queryable } from './db';
+import { emit } from './events';
 import { generateTokenId } from './ids';
 import type { Harness } from './client-identity';
 
@@ -99,6 +100,21 @@ export async function mintToken(
     options.audience ?? null,
     options.scope ?? null,
   ]);
+  /*
+   * THE ONE CHOKEPOINT. Every mint in the product — anonymous, operator,
+   * browser, the agent-link start door — comes through this insert, so the log
+   * learns of a credential coming into being in exactly one place. The subject
+   * is the owning account when the token is born attached and nobody when it
+   * is not; the plaintext token is returned to the caller and never said.
+   *
+   * NOT AWAITED, unlike every other state change in this file: `q` may be a
+   * TRANSACTION handle, and PGLite serialises its op queue behind an open
+   * transaction — an awaited log write would wait on a transaction that is
+   * waiting on it. Fired instead, so the writer's INSERT queues behind the
+   * commit and lands after it. `emit` never rejects, so the `void` cannot
+   * become an unhandled rejection.
+   */
+  void emit(userId ? { kind: 'user', id: userId } : null, 'minted', { kind: 'token', id }, { name: name ?? null });
   return { id, name: name ?? null, token, expiresAt };
 }
 
@@ -165,11 +181,21 @@ export async function resolveTokenById(id: string): Promise<ResolvedToken | null
   return row ? { id: row.id, userId: row.user_id, clientHarness: row.client_harness } : null;
 }
 
-/** Soft revoke — the row and its artifacts survive. Returns false if no live token had this id. */
+/**
+ * Soft revoke — the row and its artifacts survive. Returns false if no live token had this id.
+ *
+ * The operator's door: nobody is named as the subject, because the credential
+ * that opened it is the admin secret rather than an account. `RETURNING name`
+ * is what makes the sentence worth reading — the id alone says nothing — and
+ * it is the same statement, not a second read.
+ */
 export async function revokeToken(id: string): Promise<boolean> {
   const db = await getDb();
-  const r = await db.query('UPDATE tokens SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL', [id]);
-  return r.rowCount > 0;
+  const r = await db.query<{ name: string | null }>('UPDATE tokens SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL RETURNING name', [id]);
+  const row = r.rows[0];
+  if (!row) return false;
+  await emit(null, 'revoked', { kind: 'token', id }, { name: row.name });
+  return true;
 }
 
 /**
@@ -200,11 +226,16 @@ export async function touchToken(id: string): Promise<void> {
  */
 export async function revokeHeldToken(id: string, userId: string | null): Promise<boolean> {
   const db = await getDb();
-  const r = await db.query(
-    'UPDATE tokens SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL AND (user_id IS NULL OR user_id = $2)',
+  const r = await db.query<{ name: string | null }>(
+    'UPDATE tokens SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL AND (user_id IS NULL OR user_id = $2) RETURNING name',
     [id, userId],
   );
-  return r.rowCount > 0;
+  const row = r.rows[0];
+  if (!row) return false;
+  // The browser holding the cookie may have no account behind it; the token
+  // being revoked is the OBJECT here, so it is never also the subject.
+  await emit(userId ? { kind: 'user', id: userId } : null, 'revoked', { kind: 'token', id }, { name: row.name });
+  return true;
 }
 
 /** A token row as the account's token list shows it (GET /api/my/tokens). */
