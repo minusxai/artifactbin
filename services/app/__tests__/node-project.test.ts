@@ -10,6 +10,7 @@ import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { POST as commentRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
 import { DELETE as deleteCommentRoute } from '@/app/api/my/artifacts/[id]/annotations/[annId]/route';
 import { POST as revertRoute } from '@/app/api/artifacts/[id]/revert/route';
+import { PUT as replaceRoute } from '@/app/api/artifacts/[id]/route';
 import { createArtifact } from '@/lib/artifacts';
 useAppHarness();
 const params=(id:string)=>({params:Promise.resolve({id})});
@@ -94,11 +95,39 @@ describe('node project through real routes',()=>{
     const s=await setup('<main id="root"><p id="current">Current</p></main>');const db=await getDb();
     await db.query('UPDATE artifacts SET version=2 WHERE id=$1',[s.doc.id]);
     await db.query(`INSERT INTO artifact_versions(artifact_id,version,title,description,format,content,source,meta)
-      VALUES($1,1,'old',NULL,'markup','',$2,'{}')`,[s.doc.id,'<main><p>Archived</p></main>']);
+      VALUES($1,1,'old',NULL,'markup','',$2,$3)`,[s.doc.id,'<main><p>Archived</p></main>',JSON.stringify({theme:'modernist',template:null,colorMode:'light'})]);
     const response=await revertRoute(request(`/api/artifacts/${s.doc.id}/revert`,{method:'POST',token:s.t.token,json:{version:1}}),params(s.doc.id));
     expect(response.status,await response.clone().text()).toBe(200);
     const head=await s.read();const ids=bodyIds(head.markup) as string[];expect(ids).toHaveLength(2);expect(ids.every(Boolean)).toBe(true);
     const reserved=await db.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[s.doc.id]);
     expect(ids.every(id=>reserved.rows.some(row=>row.source_id===id))).toBe(true);
+    const stored=(await db.query<{format:string;meta:Record<string,unknown>}>('SELECT format,meta FROM artifacts WHERE id=$1',[s.doc.id])).rows[0];
+    expect(stored.format).toBe('markup');expect(stored.meta.colorMode).toBe('light');expect(stored.meta.theme).toBe('modernist');
+  });
+  it('a refused archived publish leaves head and history unchanged',async()=>{
+    const s=await setup('<p id="safe">Safe</p>');const db=await getDb();await db.query('UPDATE artifacts SET version=2 WHERE id=$1',[s.doc.id]);
+    await db.query(`INSERT INTO artifact_versions(artifact_id,version,title,format,content,source,meta) VALUES($1,1,'bad','markup','',$2,'{}')`,[s.doc.id,'<p id="bad" style="color:red">Bad</p>']);
+    const before=await history(s.doc.id);const head=await s.read();
+    const response=await revertRoute(request(`/api/artifacts/${s.doc.id}/revert`,{method:'POST',token:s.t.token,json:{version:1}}),params(s.doc.id));
+    expect(response.status).toBe(400);expect((await response.json()).error).toBe('invalid_jsx');
+    expect((await s.read()).markup).toBe(head.markup);expect(await history(s.doc.id)).toEqual(before);
+  });
+  it('metadata-only edits preserve source bytes',async()=>{
+    const s=await setup('<main id="root"><p id="para">Same</p></main>');const base=await s.read();
+    const response=await s.edit({edit_id:base.edit_id,title:'Renamed'});expect(response.status).toBe(200);
+    expect((await s.read()).markup).toBe(base.markup);
+  });
+  it('reactivates a retired id when an archived source is restored',async()=>{
+    const s=await setup('<main id="root"><p id="returning">Back</p></main>');const base=await s.read();
+    expect((await s.edit({edit_id:base.edit_id,old_string:'<p id="returning">Back</p>',new_string:''})).status).toBe(200);
+    const db=await getDb();expect((await db.query<{retired_version:number|null}>('SELECT retired_version FROM artifact_source_ids WHERE artifact_id=$1 AND source_id=$2',[s.doc.id,'returning'])).rows[0].retired_version).not.toBeNull();
+    const restored=await revertRoute(request(`/api/artifacts/${s.doc.id}/revert`,{method:'POST',token:s.t.token,json:{version:base.version}}),params(s.doc.id));
+    expect(restored.status,await restored.clone().text()).toBe(200);
+    expect((await db.query<{retired_version:number|null}>('SELECT retired_version FROM artifact_source_ids WHERE artifact_id=$1 AND source_id=$2',[s.doc.id,'returning'])).rows[0].retired_version).toBeNull();
+  });
+  it('duplicate legacy aliases refuse a full replace without mutation',async()=>{
+    const s=await setup('<main id="root"><p id="para">Same</p></main>');const before=await s.read();const beforeHistory=await history(s.doc.id);
+    const response=await replaceRoute(request(`/api/artifacts/${s.doc.id}`,{method:'PUT',token:s.t.token,json:{markup:'<main><p data-annotation-anchor="old">A</p><p data-annotation-anchor="old">B</p></main>'}}),params(s.doc.id));
+    expect(response.status).toBe(409);expect((await s.read()).markup).toBe(before.markup);expect(await history(s.doc.id)).toEqual(beforeHistory);
   });
 });

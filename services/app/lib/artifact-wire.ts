@@ -397,6 +397,8 @@ export async function replaceArtifactWithBody(
   if (governs && !owned) return json({ error: 'owner_only' }, 403);
   const owner = writerFor(current);
   if(typeof body.markup==='string') {
+    const legacy=[...body.markup.matchAll(/data-annotation-anchor\s*=\s*["']([^"']+)["']/g)].map(match=>match[1]);
+    if(new Set(legacy).size!==legacy.length) return json({error:'ambiguous_node_alias'},409);
     const db=await getDb();
     const lifetime=await db.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[current.id]);
     body={...body,markup:stampNodeIds(body.markup,{previousSource:current.source,reservedIds:lifetime.rows.map(row=>row.source_id),retireLegacyAliases:false}).source};
@@ -546,6 +548,7 @@ export async function createArtifactFromBody(
   request: Request,
 ): Promise<Response> {
   if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
+  const sentMarkup=body.markup;
   if(typeof body.markup==='string') body={...body,markup:stampNodeIds(body.markup,{retireLegacyAliases:true}).source};
   const parsed = await parseContentInput(body, {
     creating: true,
@@ -576,7 +579,7 @@ export async function createArtifactFromBody(
     ancestor_ids: placement.ancestor_ids,
   });
   return json({
-    ...createdArtifactWire(row, base, body.markup),
+    ...createdArtifactWire(row, base, sentMarkup),
     ...assetWarningsEcho(parsed.warnings),
     ...sourceRepairsEcho(parsed.repairs),
   }, 201);
