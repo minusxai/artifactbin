@@ -200,7 +200,7 @@ input.mx-rail-title { min-width: 0; width: 100%; background: transparent; border
   display: flex !important; align-items: center !important; justify-content: center !important;
   box-sizing: border-box !important; margin: 0 !important; cursor: pointer !important;
   border: 0 !important; border-radius: 10px !important; background: transparent !important;
-  color: var(--muted-foreground, canvastext) !important; font: inherit !important; text-decoration: none !important;
+  color: var(--foreground, canvastext) !important; font: inherit !important; text-decoration: none !important;
   transition: color 120ms ease, background 120ms ease, transform 120ms ease !important;
 }
 .mx-reader-action:hover, .mx-reader-trigger:hover, .mx-reader-home:hover:hover {
@@ -212,10 +212,9 @@ input.mx-rail-title { min-width: 0; width: 100%; background: transparent; border
 .mx-reader-trigger .mx-rc-close { display: none !important; }
 .mx-reader-trigger[aria-expanded="true"] .mx-rc-open { display: none !important; }
 .mx-reader-trigger[aria-expanded="true"] .mx-rc-close { display: block !important; }
-.mx-reader-label {
-  font: 500 8px/1 var(--font-mono, ui-monospace, monospace) !important;
-  letter-spacing: .04em !important; color: inherit !important;
-}
+/* The words stay in the markup for the tests and screen readers; nobody needs
+   "like" printed under a heart. */
+.mx-reader-label { display: none !important; }
 /* The author's own link — selected THROUGH the byline rather than by its class
    name, because this stylesheet ships inside every document and an anonymous
    one must carry no author mark anywhere in it, stylesheet included. The byline
@@ -309,10 +308,10 @@ input.mx-rail-title { min-width: 0; width: 100%; background: transparent; border
    the ask the whole chrome exists for. */
 .mx-reader-follow {
   display: inline-flex !important; align-items: center !important; justify-content: center !important;
-  box-sizing: border-box !important; height: 28px !important; margin: 0 !important; padding: 0 12px !important;
-  border: 1px solid var(--primary, currentColor) !important; border-radius: 999px !important;
+  box-sizing: border-box !important; height: 24px !important; margin: 0 !important; padding: 0 9px !important;
+  border: 1px solid var(--primary, currentColor) !important; border-radius: 6px !important;
   background: transparent !important; color: var(--primary, currentColor) !important;
-  font: 600 12px/1 var(--font-mono, ui-monospace, monospace) !important; text-transform: capitalize !important;
+  font: 600 11px/1 var(--font-mono, ui-monospace, monospace) !important; text-transform: capitalize !important;
   letter-spacing: .02em !important; white-space: nowrap !important; cursor: pointer !important;
   transition: color 120ms ease, background 120ms ease, transform 120ms ease !important;
 }
@@ -340,7 +339,7 @@ input.mx-rail-title { min-width: 0; width: 100%; background: transparent; border
     inset: 0 0 auto 0 !important; display: flex !important; align-items: center !important;
     gap: 10px !important; box-sizing: border-box !important; height: 44px !important;
     padding: 0 max(10px, env(safe-area-inset-right)) 0 max(10px, env(safe-area-inset-left)) !important;
-    border-bottom: 1px solid var(--border, rgba(128,128,128,.28)) !important;
+    border-bottom: 0 !important;
     background: transparent !important;
   }
   /* The ground and its blur live on a pseudo-element: a backdrop-filter on the
@@ -348,8 +347,9 @@ input.mx-rail-title { min-width: 0; width: 100%; background: transparent; border
      panels, and a scrim the size of the bar closes nothing when clicked away. */
   .mx-reader-chrome::before {
     content: '' !important; position: absolute !important; inset: 0 !important; z-index: -1 !important;
-    background: color-mix(in srgb, var(--background, canvas) 92%, transparent) !important;
-    backdrop-filter: blur(8px) !important;
+    background: color-mix(in srgb, var(--background, canvas) 84%, transparent) !important;
+    -webkit-backdrop-filter: blur(16px) saturate(1.5) !important; backdrop-filter: blur(16px) saturate(1.5) !important;
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--foreground, canvastext) 12%, transparent), 0 10px 28px -18px rgba(0,0,0,.45) !important;
   }
   .mx-reader-chrome--hidden { transform: translateY(-100%) !important; }
   .mx-reader-panel--menu .mx-reader-signin { margin-bottom: 8px !important; }
@@ -370,8 +370,7 @@ input.mx-rail-title { min-width: 0; width: 100%; background: transparent; border
   }
   .mx-reader-rail { order: 2 !important; display: flex !important; align-items: center !important; gap: 2px !important; flex: 0 0 auto !important; }
   .mx-reader-action, .mx-reader-trigger { width: 34px !important; height: 34px !important; }
-  /* One bar, one row of glyphs: the words belong under a thumb, not here. */
-  .mx-reader-label { display: none !important; }
+
 }
 
 /* PHONE — logo top-left, action rail on the right edge, byline along the bottom. */
@@ -382,32 +381,71 @@ input.mx-rail-title { min-width: 0; width: 100%; background: transparent; border
     position: absolute !important; top: max(10px, env(safe-area-inset-top)) !important;
     left: max(10px, env(safe-area-inset-left)) !important;
     width: 44px !important; height: 44px !important;
-    background: color-mix(in srgb, var(--background, canvas) 82%, transparent) !important;
-    backdrop-filter: blur(8px) !important;
   }
   .mx-reader-rail {
-    position: absolute !important; right: max(6px, env(safe-area-inset-right)) !important;
-    top: 50% !important; transform: translateY(-50%) !important;
+    position: absolute !important; right: max(2px, env(safe-area-inset-right)) !important;
+    bottom: max(6px, env(safe-area-inset-bottom)) !important;
     display: flex !important; flex-direction: column !important; align-items: center !important; gap: 4px !important;
-    padding: 6px 2px !important; border-radius: 14px !important;
-    background: color-mix(in srgb, var(--background, canvas) 82%, transparent) !important;
-    backdrop-filter: blur(8px) !important;
+    padding: 0 !important; gap: 2px !important;
   }
   .mx-reader-action, .mx-reader-trigger {
     flex-direction: column !important; gap: 2px !important;
     width: 44px !important; height: 44px !important;
   }
   .mx-reader-byline {
-    position: absolute !important; left: max(10px, env(safe-area-inset-left)) !important;
+    position: absolute !important; left: max(24px, env(safe-area-inset-left)) !important;
     /* Clear of the rail's column: the rail is centred vertically, but the row
        must not run under it at any height the reader's own text takes. */
-    right: 68px !important; bottom: max(10px, env(safe-area-inset-bottom)) !important;
+    right: 68px !important; bottom: max(20px, env(safe-area-inset-bottom)) !important;
     display: flex !important; align-items: center !important; gap: 8px !important;
-    box-sizing: border-box !important; padding: 5px 6px 5px 10px !important; border-radius: 14px !important;
-    background: color-mix(in srgb, var(--background, canvas) 82%, transparent) !important;
-    backdrop-filter: blur(8px) !important; font-size: 12px !important;
+    box-sizing: border-box !important; padding: 0 !important; font-size: 12px !important;
+    text-shadow: 0 1px 2px var(--background, canvas), 0 0 8px var(--background, canvas) !important;
   }
-  .mx-reader-follow { margin-left: auto !important; flex: 0 0 auto !important; }
+  .mx-reader-follow { flex: 0 0 auto !important; }
+
+  .mx-reader-follow { background: color-mix(in srgb, var(--background, canvas) 72%, transparent) !important; }
+  /* NO SURFACE, the way a Reel does it. The glyphs sit straight on the content
+     and carry a soft halo in the page's OWN ground colour — white around ink on a
+     light page, black around white on a dark one — so they read over text and
+     over a photograph alike, and nothing boxes them in. */
+  .mx-reader-rail, .mx-reader-byline { background: none !important; box-shadow: none !important; }
+  .mx-reader-action svg, .mx-reader-trigger svg, .mx-reader-home img {
+    filter: drop-shadow(0 1px 1.5px var(--background, canvas)) drop-shadow(0 0 6px color-mix(in srgb, var(--background, canvas) 85%, transparent)) !important;
+  }
+  .mx-reader-action svg, .mx-reader-trigger svg { width: 26px !important; height: 26px !important; }
+  .mx-reader-home {
+    width: 48px !important; height: 48px !important; border-radius: 12px !important;
+    background: var(--background, canvas) !important;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--foreground, canvastext) 18%, transparent), 0 2px 8px rgba(0,0,0,.18) !important;
+  }
+  .mx-reader-home img { width: 30px !important; height: 30px !important; filter: none !important; }
+  /* Two lines: the title first, clipped with an ellipsis; then the handle with
+     Follow beside it. Flex order does the swap so the markup (and the desktop
+     bar, which reads handle · title · follow) stays as it is. */
+  .mx-reader-byline { font-size: 14px !important; flex-wrap: wrap !important; row-gap: 5px !important; column-gap: 8px !important; }
+  .mx-reader-byline .mx-reader-title {
+    order: 0 !important; flex: 1 1 100% !important; min-width: 0 !important;
+    color: var(--foreground, canvastext) !important; font-weight: 600 !important;
+  }
+  .mx-reader-byline > a { order: 1 !important; font-size: 13px !important; font-weight: 500 !important; }
+  .mx-reader-follow { order: 2 !important; }
+  /* The rail's own vignette: a fade to the ground colour up the right edge,
+     behind the glyphs, the twin of the one along the bottom. */
+  .mx-reader-chrome::before {
+    content: '' !important; position: absolute !important; top: 35% !important; right: 0 !important; bottom: 0 !important;
+    width: 140px !important; z-index: -1 !important; pointer-events: none !important;
+    background: linear-gradient(to left, color-mix(in srgb, var(--background, canvas) 88%, transparent), transparent) !important;
+  }
+  /* The vignette: a fade to the ground colour along the bottom, behind the rail
+     and the byline. Invisible on a plain page (same colour), and on an image it
+     is the darkening a Reel puts under its controls. Hides with the chrome. */
+  .mx-reader-chrome::after {
+    content: '' !important; position: absolute !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+    height: 220px !important; z-index: -1 !important; pointer-events: none !important;
+    /* Solid ground for the first stretch, where the handle sits, then the fade. */
+    background: linear-gradient(to top, var(--background, canvas) 0, color-mix(in srgb, var(--background, canvas) 96%, transparent) 56px, color-mix(in srgb, var(--background, canvas) 70%, transparent) 120px, transparent) !important;
+  }
+  }
   /* Tips sit to the left of the rail (a phone rarely hovers; focus still shows them). */
   .mx-reader-chrome [data-mx-tip]:hover::after, .mx-reader-chrome [data-mx-tip]:focus-visible::after {
     right: calc(100% + 8px) !important; top: 50% !important; transform: translateY(-50%) !important;

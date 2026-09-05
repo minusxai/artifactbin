@@ -152,22 +152,14 @@ describe('wireReaderChrome — the rail', () => {
     expect(toast.hidden).toBe(true);
   });
 
-  it('goes back through history from the logo when there is somewhere to go, else lets the anchor go home', () => {
-    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {});
-    set(window.history, 'length', 3);
+  it('leaves the logo a plain link home', () => {
     mount();
     const logo = document.querySelector<HTMLAnchorElement>('[data-mx-reader-logo]')!;
     expect(logo.getAttribute('href')).toBe('/');
-    const withHistory = new MouseEvent('click', { bubbles: true, cancelable: true });
-    logo.dispatchEvent(withHistory);
-    expect(back).toHaveBeenCalledTimes(1);
-    expect(withHistory.defaultPrevented).toBe(true);
-
-    set(window.history, 'length', 1);
-    const fresh = new MouseEvent('click', { bubbles: true, cancelable: true });
-    logo.dispatchEvent(fresh);
-    expect(back).toHaveBeenCalledTimes(1);
-    expect(fresh.defaultPrevented).toBe(false);
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    logo.dispatchEvent(click);
+    // Nothing in the chrome's wiring intercepts it (the UI harness cancels every anchor).
+    expect(document.querySelector('[data-mx-reader-logo]')).toBe(logo);
   });
 
   it('flips the reader mode from the settings panel', () => {

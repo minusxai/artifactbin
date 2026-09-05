@@ -15,8 +15,8 @@
  * lib/story/__tests__/reader-chrome.test.ts and read by browser gates — rename
  * nothing):
  *
- *  1. the LOGO (`.mx-reader-home`, aria "Home"): back if there is history,
- *     else home — and the only "hosted on artifactbin" mark left;
+ *  1. the LOGO (`.mx-reader-home`, aria "Home"): a plain link to `/`, and
+ *     the only "hosted on artifactbin" mark left;
  *  2. the RAIL: like · comment · share (`data-mx-reader-action`), then the two
  *     panel triggers exactly as they always were — `controls` ("Open artifact
  *     controls": appearance, the sign-in door, fork, provenance) and `menu`
@@ -181,10 +181,10 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
       ? `<a class="mx-reader-author" href="/@${escapeHtml(username)}" target="_top"`
         + ` aria-label="View @${escapeHtml(username)}'s profile">@${escapeHtml(username)}</a>`
       : '')
+    // FOLLOW rides right beside the handle it follows, and only when there is
+    // one: an anonymous document has nobody to follow. UI only for now — the
+    // entry logs it with the author, the way like and comment log.
     + (title ? `<span class="mx-reader-title">${escapeHtml(title)}</span>` : '')
-    // FOLLOW rides beside the handle it follows, and only when there is one:
-    // an anonymous document has nobody to follow. UI only for now — the entry
-    // logs it with the author, the way like and comment log.
     + (username
       ? `<button type="button" class="mx-reader-follow" data-mx-reader-action="follow" data-mx-author="${escapeHtml(username)}"`
         + ` aria-label="Follow @${escapeHtml(username)}" data-mx-tip="Follow @${escapeHtml(username)}">follow</button>`

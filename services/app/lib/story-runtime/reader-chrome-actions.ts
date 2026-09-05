@@ -20,8 +20,7 @@
  *    else `navigator.clipboard.writeText(url)`; else select the hidden copy
  *    field and `document.execCommand('copy')`. Then the toast, ~1.5s. `url` is
  *    `location.href` — the reader's document is top-level, so it is real.
- *  - LOGO: `history.back()` (and preventDefault) when there is somewhere to
- *    go back to; otherwise the anchor's own `href="/"` navigates.
+ *  - LOGO: a plain link home (`href="/"`); nothing to wire.
  */
 
 import { READER_CHROME_HIDDEN_CLASS, type ReaderChromeState } from '@/lib/story/reader-chrome';
@@ -225,19 +224,6 @@ export function wireReaderChrome(win: Window, doc: Document): ReaderChromeHandle
     });
   }
 
-  /*
-   * THE LOGO is back-or-home. A reader who arrived from somewhere expects the
-   * mark in the corner to return them there; one who opened the link cold has
-   * nowhere to go back to, and the anchor's own href takes them to the product.
-   */
-  const logo = root.querySelector<HTMLAnchorElement>('[data-mx-reader-logo]');
-  if (logo) {
-    on(logo, 'click', (event) => {
-      if (win.history.length <= 1) return;
-      event.preventDefault();
-      win.history.back();
-    });
-  }
 
   /*
    * A CLICK ON THE CHROME IS THE CHROME'S. It floats over the document, and

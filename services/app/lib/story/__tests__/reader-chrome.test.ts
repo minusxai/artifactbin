@@ -56,6 +56,7 @@ describe('renderReaderChrome', () => {
     expect(html).toContain('<a class="mx-reader-author" href="/@ada" target="_top" aria-label="View @ada\'s profile">@ada</a>');
     expect(html).toContain('<span class="mx-reader-title">A &lt;b&gt;bold&lt;/b&gt; &amp; &quot;quoted&quot; title</span>');
     expect(html).toContain('<button type="button" class="mx-reader-follow" data-mx-reader-action="follow" data-mx-author="ada" aria-label="Follow @ada" data-mx-tip="Follow @ada">follow</button>');
+    // After the handle and the title: @who · what · follow.
     expect(html.indexOf('mx-reader-follow')).toBeGreaterThan(html.indexOf('mx-reader-title'));
     expect(html).not.toContain('mx-reader-create');
     expect(html).not.toContain('New artifact');
