@@ -3,7 +3,8 @@
 import { Check, ChevronLeft, ChevronRight, EyeOff, FolderInput, Globe, Link2, Lock, Pencil, Search, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Tooltip } from '@/components/Tooltip';
-import { Badge, Button, dateStamp, FormatBadge, formatLabel, MicroLabel, PANEL, Spark, TABLE_ROW, timeAgo, TokenInput, VisibilityPill } from '@/components/ui';
+import { Badge, Button, dateStamp, FormatBadge, formatLabel, MicroLabel, PANEL, TABLE_ROW, timeAgo, TokenInput, VisibilityPill } from '@/components/ui';
+import { ViewsMark } from '@/components/ViewsMark';
 import RowMenu, { confirmDeleteArtifact } from '@/components/RowMenu';
 import { MoveMenu, type PickerFolder } from '@/components/FolderPicker';
 import { parentOfRow } from '@/lib/shelf';
@@ -417,14 +418,7 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
                       )}
                       {hasViews && (
                         <>
-                          {/* The spline rides beside the count here too — the
-                              trend is the interesting half of the number, and
-                              a 12px-tall squash of the same server-rendered
-                              SVG costs the line nothing. */}
-                          <span className="inline-flex items-center gap-1.5">
-                            {a.sparkline && <Spark svg={a.sparkline} className="h-3 w-12" />}
-                            <span>{a.views ?? 0} view{a.views === 1 ? '' : 's'}</span>
-                          </span>
+                          <ViewsMark name={a.title ?? a.id} views={a.views ?? 0} sparkline={a.sparkline} className="w-24 shrink-0" />
                           <span aria-hidden="true">·</span>
                         </>
                       )}
@@ -455,17 +449,7 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
               )}
               {hasViews && (
                 <td className="hidden px-4 py-2.5 whitespace-nowrap sm:table-cell">
-                  <Tooltip content="views · spline is the last 30 days">
-                    <span
-                      aria-label={`${a.title ?? a.id} views`}
-                      className="inline-flex items-center gap-1.5"
-                    >
-                      {/* The spline is server-rendered SVG (lib/viz/sparkline) — decoration
-                          next to the count, so hidden from the accessibility tree. */}
-                      {a.sparkline && <Spark svg={a.sparkline} className="h-5 w-24" />}
-                      <span className="font-mono text-xs tabular-nums text-muted">{a.views ?? 0}</span>
-                    </span>
-                  </Tooltip>
+                  <ViewsMark name={a.title ?? a.id} views={a.views ?? 0} sparkline={a.sparkline} className="w-28" />
                 </td>
               )}
               <Tooltip content={new Date(a.updated_at).toLocaleString()}>

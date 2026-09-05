@@ -18,12 +18,13 @@
  * the grid/list presentation and hands list mode to `ArtifactTable`.
  */
 import { useMemo, useState } from 'react';
-import { Check, Folder, FolderInput, LayoutGrid, Link2, List as ListIcon, Pencil, Search, Trash2 } from 'lucide-react';
+import { Check, Folder, FolderInput, FolderPlus, LayoutGrid, Link2, List as ListIcon, Pencil, Search, Trash2 } from 'lucide-react';
 import RowMenu, { confirmDeleteArtifact } from '@/components/RowMenu';
 import { MoveMenu, type PickerFolder } from '@/components/FolderPicker';
 import { ArtifactTable } from '@/components/TokenBrowser';
 import { Tooltip } from '@/components/Tooltip';
-import { dateStamp, MicroLabel, PANEL, Spark, timeAgo, VISIBILITY_TIPS, VisibilityPill } from '@/components/ui';
+import { dateStamp, MicroLabel, PANEL, timeAgo, VISIBILITY_TIPS, VisibilityPill } from '@/components/ui';
+import { ViewsMark } from '@/components/ViewsMark';
 import { buildShelf, groupShelfByRecency, parentOfRow, type ShelfRow } from '@/lib/shelf';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
 
@@ -66,6 +67,78 @@ export interface ShelfProps {
    * they can cite. Same split `dateStamp`/`timeAgo` have always drawn.
    */
   dates?: 'relative' | 'absolute';
+  /** The folder that a folder created from this shelf should belong to. */
+  parentId?: string | null;
+  /** Folder pages opt into creation without inheriting the homepage's row actions. */
+  canCreateFolders?: boolean;
+}
+
+/** Create a child folder in place, preserving the shelf's current view state. */
+function NewFolder({ parentId, onMade }: { parentId: string | null; onMade: (row: ShelfRow) => void }) {
+  const [naming, setNaming] = useState(false);
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const create = async () => {
+    const title = name.trim();
+    if (!title || busy) return;
+    setBusy(true);
+    const response = await fetch('/api/my/artifacts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ format: 'folder', title, parent_id: parentId }),
+    }).catch(() => null);
+    setBusy(false);
+    if (!response?.ok) return;
+    const body = (await response.json().catch(() => null)) as (Partial<ShelfRow> & { id?: string }) | null;
+    if (!body?.id) return;
+    onMade({
+      ...body,
+      id: body.id,
+      url: body.url ?? `/a/${body.id}`,
+      title: body.title ?? title,
+      format: 'folder',
+      version: body.version ?? 1,
+      visibility: body.visibility ?? 'private',
+      updated_at: body.updated_at ?? new Date().toISOString(),
+      parent_id: body.parent_id ?? parentId,
+    });
+    setName('');
+    setNaming(false);
+  };
+
+  if (!naming) {
+    return (
+      <Tooltip content="create a folder here">
+        <button
+          type="button"
+          aria-label="New folder"
+          onClick={() => setNaming(true)}
+          className="inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-[4px] px-2 font-mono text-[10px] text-muted transition-colors hover:bg-raised hover:text-accent"
+        >
+          <FolderPlus size={12} /> new folder
+        </button>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <span className="inline-flex h-7 shrink-0 items-center gap-1">
+      <input
+        aria-label="Folder name"
+        placeholder="folder name"
+        autoFocus
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') { event.preventDefault(); void create(); }
+          if (event.key === 'Escape') { event.preventDefault(); setName(''); setNaming(false); }
+        }}
+        className="h-7 w-36 rounded-[4px] border border-edge bg-transparent px-1.5 font-mono text-[11px] text-fg focus:border-edge-bright focus:outline-none"
+      />
+      <span className="font-mono text-[10px] text-faint">{busy ? 'creating…' : 'enter'}</span>
+    </span>
+  );
 }
 
 /**
@@ -288,36 +361,6 @@ function CardControls({ row, level, folders }: { row: ShelfRow; level: ShelfActi
   );
 }
 
-/**
- * Views + spline, or NOTHING. The old table printed `views ?? 0`, which told a
- * profile visitor that a document had zero readers when the truth was that
- * nobody had counted for them. The fluid-SVG mechanics live in ui's Spark —
- * the table draws the same mark at other sizes.
- */
-function ViewsMark({ row, spline = true, filled = true }: { row: ShelfRow; spline?: boolean; filled?: boolean }) {
-  if (row.views === undefined) return null;
-  const hasSpline = spline && Boolean(row.sparkline);
-  return (
-    <Tooltip content="views · spline is the last 30 days">
-      <span aria-label={`${nameOf(row)} views`} className="relative flex h-5 min-w-0 flex-1 items-center">
-        {hasSpline && (
-          <Spark svg={row.sparkline!} filled={filled} className="absolute inset-0 h-full w-full" />
-        )}
-        {/* The count rides on the chart instead of reserving a column beside
-            it. Its small surface keeps the number legible over a spike while
-            the spline gets the entire width between title and timestamp. */}
-        <span
-          className={`z-[1] shrink-0 rounded-[3px] font-mono text-[9px] leading-none tabular-nums text-muted ${
-            hasSpline ? 'bg-surface/55 px-0.5 py-px' : ''
-          }`}
-        >
-          {row.views} view{row.views === 1 ? '' : 's'}
-        </span>
-      </span>
-    </Tooltip>
-  );
-}
-
 function Stamp({ row, mode, trailing = false }: { row: ShelfRow; mode: 'relative' | 'absolute'; trailing?: boolean }) {
   return (
     <Tooltip content={new Date(row.updated_at).toLocaleString()}>
@@ -383,9 +426,10 @@ function FilterChip({ value, active, onToggle }: { value: string; active: boolea
   );
 }
 
-export default function Shelf({ rows, actions = 'none', assets = true, dates = 'relative' }: ShelfProps) {
+export default function Shelf({ rows, actions = 'none', assets = true, dates = 'relative', parentId = null, canCreateFolders = false }: ShelfProps) {
   const [query, setQuery] = useState('');
   const [picks, setPicks] = useState<string[]>([]);
+  const [made, setMade] = useState<ShelfRow[]>([]);
   /*
    * Folders TRASHED here, and everything that went with them. A folder is
    * deleted with its whole subtree in one statement (lib/trash), so dropping
@@ -404,7 +448,8 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
   // including search counts and visibility chips. Their management surface is
   // `/assets`; leaving them in these derivations would make Home report hidden
   // matches that it can never render.
-  const all = assets ? present : present.filter((row) => row.format === 'markup' || row.format === 'folder');
+  const available = made.length > 0 ? [...made, ...present] : present;
+  const all = assets ? available : available.filter((row) => row.format === 'markup' || row.format === 'folder');
 
   const togglePick = (v: string) => setPicks((p) => (p.includes(v) ? p.filter((x) => x !== v) : [...p, v]));
 
@@ -440,7 +485,7 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
 
   return (
     <section aria-label="Shelf" className="flex flex-col gap-4">
-      {all.length > 0 && (
+      {(all.length > 0 || canCreateFolders) && (
         <div className={`flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 px-3 py-1.5 ${PANEL}`}>
             <Search size={13} className="shrink-0 text-faint" />
             <input
@@ -462,6 +507,11 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
                 {shelf.total + shelf.assets.length}/{all.length}
               </span>
             )}
+          {canCreateFolders && (
+            <span className="shrink-0 border-l border-edge pl-1.5">
+              <NewFolder parentId={parentId} onMade={(row) => setMade((current) => [row, ...current])} />
+            </span>
+          )}
           <div role="group" aria-label="Shelf view" className="ml-auto flex shrink-0 items-center border-l border-edge pl-1.5">
             {([
               ['grid', 'Grid view', LayoutGrid],
@@ -548,7 +598,9 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
                           {row.title ?? 'Untitled'}
                         </a>
                         <div className="mt-auto flex min-w-0 items-center gap-2">
-                          <ViewsMark row={row} />
+                          {row.views !== undefined && (
+                            <ViewsMark name={nameOf(row)} views={row.views} sparkline={row.sparkline} className="flex-1" />
+                          )}
                           <Stamp row={row} mode={dates} trailing={row.views !== undefined} />
                         </div>
                       </div>
