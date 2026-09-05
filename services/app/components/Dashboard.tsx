@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { Activity, Database, Eye, FileText, GitFork, Heart, Users, type LucideIcon } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Activity, Database, Eye, FileText, GitFork, Heart, Maximize2, Users, X, type LucideIcon } from 'lucide-react';
 import dynamic from '@/lib/dynamic';
+import { Tooltip } from '@/components/Tooltip';
 import { MicroLabel } from '@/components/ui';
 import type { ShelfRow } from '@/components/Shelf';
 import type { VegaChartProps } from '@/components/viz/VegaChart';
@@ -26,6 +28,17 @@ export interface EngagementDatum extends Record<string, unknown> {
   day: string;
   series: 'views' | 'likes';
   value: number;
+}
+
+/** Compact without rounding up: 1,267 reads as 1.2k, while the title keeps 1,267. */
+export function compactMetric(value: number): string {
+  const compact = (amount: number, suffix: string) => {
+    const truncated = Math.floor(amount * 10) / 10;
+    return `${Number.isInteger(truncated) ? truncated.toFixed(0) : truncated.toFixed(1)}${suffix}`;
+  };
+  if (value >= 1_000_000) return compact(value / 1_000_000, 'm');
+  if (value >= 1_000) return compact(value / 1_000, 'k');
+  return value.toLocaleString('en-US');
 }
 
 /** Align differently-sized trailing series and give Vega real UTC timestamps. */
@@ -132,22 +145,30 @@ function useAppMode(): 'light' | 'dark' {
   return mode;
 }
 
-/** A compact owner-only readout in the homepage rail. Profiles never mount it. */
-export default function Dashboard({
-  rows,
-  viewsOverTime = EMPTY_SERIES,
-  likes = 0,
-  likesOverTime = EMPTY_SERIES,
-  followers = 0,
-  forks = 0,
-}: {
+export interface DashboardProps {
   rows: ShelfRow[];
   viewsOverTime?: number[];
   likes?: number;
   likesOverTime?: number[];
   followers?: number;
   forks?: number;
-}) {
+}
+
+/**
+ * One dashboard composition at two scales. The expanded form deliberately
+ * reuses this component rather than beginning a separate dashboard design;
+ * a future route can mount the same content without inheriting modal chrome.
+ */
+export function DashboardContent({
+  rows,
+  viewsOverTime = EMPTY_SERIES,
+  likes = 0,
+  likesOverTime = EMPTY_SERIES,
+  followers = 0,
+  forks = 0,
+  expanded = false,
+  onExpand,
+}: DashboardProps & { expanded?: boolean; onExpand?: () => void }) {
   const documents = rows.filter((row) => row.format === 'markup');
   const dataFiles = rows.filter((row) => row.format !== 'markup' && row.format !== 'folder').length;
   const totalViews = documents.reduce((sum, row) => sum + (row.views ?? 0), 0);
@@ -167,30 +188,52 @@ export default function Dashboard({
   ];
 
   return (
-    <section aria-label="Dashboard" className="reveal lg:sticky lg:top-6">
-      <div className="mb-4 flex items-baseline justify-between gap-3 border-b border-edge pb-3">
+    <section aria-label={expanded ? 'Expanded dashboard content' : 'Dashboard'} className={`min-w-0 ${expanded ? '' : 'reveal lg:sticky lg:top-6'}`}>
+      <div className={`mb-4 flex items-baseline justify-between gap-3 border-b border-edge pb-3 ${expanded ? 'pr-10' : ''}`}>
         <MicroLabel>dashboard</MicroLabel>
-        <h1 className="text-[11px] font-medium tracking-tight text-muted">Your artifacts</h1>
+        <span className="flex items-center gap-2">
+          <h1 className={`${expanded ? 'font-mono text-sm text-fg' : 'text-[11px] text-muted'} font-medium tracking-tight`}>Your artifacts</h1>
+          {onExpand && (
+            <Tooltip content="open dashboard">
+              <button
+                type="button"
+                aria-label="Expand dashboard"
+                onClick={onExpand}
+                className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[4px] text-faint transition-colors hover:bg-raised hover:text-accent"
+              >
+                <Maximize2 aria-hidden="true" size={13} strokeWidth={1.7} />
+              </button>
+            </Tooltip>
+          )}
+        </span>
       </div>
 
-      <dl aria-label="Dashboard metrics" className="grid grid-cols-2 border-b border-edge">
+      <dl
+        aria-label={expanded ? 'Expanded dashboard metrics' : 'Dashboard metrics'}
+        className={`grid grid-cols-2 border-b border-edge ${expanded ? 'sm:grid-cols-3 lg:grid-cols-6' : ''}`}
+      >
         {metrics.map(({ label, value, Icon }, index) => (
           <div
             key={label}
-            className={`group py-2.5 ${index % 2 ? 'border-l border-edge pl-3' : 'pr-3'} ${
-              index > 1 ? 'border-t border-edge' : ''
-            }`}
+            className={expanded
+              ? `group px-4 py-4 ${index % 2 ? 'border-l border-edge' : ''} ${index > 1 ? 'border-t border-edge' : ''} ${index % 3 ? 'sm:border-l' : 'sm:border-l-0'} ${index > 2 ? 'sm:border-t' : 'sm:border-t-0'} ${index > 0 ? 'lg:border-l' : 'lg:border-l-0'} lg:border-t-0`
+              : `group py-2.5 ${index % 2 ? 'border-l border-edge pl-3' : 'pr-3'} ${index > 1 ? 'border-t border-edge' : ''}`}
           >
-            <dt className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.11em] text-faint">
-              <Icon aria-hidden="true" className="size-2.5 stroke-[1.7] transition-colors group-hover:text-accent" />
+            <dt className={`flex items-center gap-1.5 font-mono uppercase tracking-[0.11em] text-faint ${expanded ? 'text-[10px]' : 'text-[9px]'}`}>
+              <Icon aria-hidden="true" className={`${expanded ? 'size-3' : 'size-2.5'} stroke-[1.7] transition-colors group-hover:text-accent`} />
               <span>{label}</span>
             </dt>
-            <dd className="mt-1 font-mono text-lg leading-none font-medium tabular-nums text-fg">{value}</dd>
+            <dd
+              title={`${value.toLocaleString('en-US')} ${label}`}
+              className={`mt-1.5 font-mono leading-none font-medium tabular-nums text-fg ${expanded ? 'text-2xl' : 'text-lg'}`}
+            >
+              {compactMetric(value)}
+            </dd>
           </div>
         ))}
       </dl>
 
-      <div className="mt-5">
+      <div className={expanded ? 'mt-7' : 'mt-5'}>
         <div className="mb-2.5">
           <h2 className="flex items-center gap-1.5 font-mono text-xs font-semibold text-fg">
             <Activity aria-hidden="true" className="size-3 stroke-[1.8] text-accent" />
@@ -211,12 +254,12 @@ export default function Dashboard({
             role="group"
             aria-label={`Interactive engagement chart: ${periodViews} views and ${periodLikes} likes in the last 30 days`}
           >
-            <div className="flex h-[14.25rem] min-h-0 w-full">
+            <div className={`flex min-h-0 w-full ${expanded ? 'h-[18rem] sm:h-[26rem]' : 'h-[14.25rem]'}`}>
               <InteractiveVegaChart
                 envelope={ENGAGEMENT_ENVELOPE}
                 rows={chartRows}
                 colorMode={colorMode}
-                ariaLabel="Engagement Vega chart"
+                ariaLabel={expanded ? 'Expanded engagement Vega chart' : 'Engagement Vega chart'}
               />
             </div>
             <p className="mt-1 font-mono text-[8px] leading-relaxed text-faint">
@@ -226,5 +269,83 @@ export default function Dashboard({
         )}
       </div>
     </section>
+  );
+}
+
+function DashboardDialog({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  const panel = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+      if (event.key !== 'Tab' || !panel.current) return;
+      const stops = [...panel.current.querySelectorAll<HTMLElement>('button:not([disabled])')];
+      if (stops.length === 0) return;
+      const first = stops[0];
+      const last = stops[stops.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden p-3 sm:p-8">
+      <button
+        type="button"
+        aria-label="Close expanded dashboard by clicking outside"
+        onClick={onClose}
+        className="absolute inset-0 cursor-default border-0 bg-black/50 p-0 backdrop-blur-[2px]"
+      />
+      <div
+        ref={panel}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Expanded dashboard"
+        className="relative z-10 flex min-w-0 max-w-6xl animate-[rise_.16s_ease-out] flex-col overflow-hidden rounded-[9px] border border-edge-bright bg-surface shadow-2xl"
+        style={{ width: 'calc(100vw - 1.5rem)', maxHeight: 'calc(100svh - 1.5rem)' }}
+      >
+        <button
+          type="button"
+          aria-label="Close expanded dashboard"
+          autoFocus
+          onClick={onClose}
+          className="absolute top-4 right-4 z-10 inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-[4px] bg-surface text-muted transition-colors hover:bg-raised hover:text-fg"
+        >
+          <X aria-hidden="true" size={16} />
+        </button>
+        <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 py-5 sm:px-8 sm:py-7">
+          {children}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/** A compact owner-only readout in the homepage rail. Profiles never mount it. */
+export default function Dashboard(props: DashboardProps) {
+  const [expanded, setExpanded] = useState(false);
+  const close = useCallback(() => setExpanded(false), []);
+  return (
+    <>
+      {!expanded && <DashboardContent {...props} onExpand={() => setExpanded(true)} />}
+      {expanded && (
+        <DashboardDialog onClose={close}>
+          <DashboardContent {...props} expanded />
+        </DashboardDialog>
+      )}
+    </>
   );
 }
