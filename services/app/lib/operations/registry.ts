@@ -219,7 +219,11 @@ const editArtifactOp: Operation = {
   title: 'Edit an artifact in place',
   http: { method: 'POST', path: '/api/artifacts/{id}/edits' },
   description: 'Edit part of a markup artifact in place, like a file edit: old_string must appear EXACTLY ONCE in the version named by edit_id, and is replaced by new_string. Pass the edit_id from create/get/edit (never a guess — it proves you read the version you are changing). Edits to DIFFERENT nodes succeed even when someone else changed the document meanwhile; only a change to the SAME node fails, with doc_changed plus the current edit_id and source to rebase on and retry. Prefer this over update_artifact for targeted changes: it is smaller, and it lets a human edit the page live alongside you.',
-  input: { id: z.string(), edit_id: z.string(), old_string: z.string(), new_string: z.string() },
+  input: {
+    id: z.string(), edit_id: z.string(),
+    old_string: z.string().optional(), new_string: z.string().optional(),
+    edits: z.array(z.object({ old_string: z.string(), new_string: z.string() })).min(1).max(64).optional(),
+  },
   annotations: {},
   example: {
     input: { id: 'aB3xK9', edit_id: '<from your last read>', old_string: 'exact text once in the document', new_string: 'replacement' },

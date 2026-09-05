@@ -105,10 +105,12 @@ export interface AnnotationWire {
 }
 
 export interface CreateAnnotationInput {
+  /** Stable source identity; preferred by all new callers. */
+  nodeId?: string;
   /** BODY path the frame reported for the selected node. */
-  bodyPath: string;
+  bodyPath?: string;
   /** The head the page believed in when the owner clicked. */
-  baseEditId: string;
+  baseEditId?: string;
   body: string;
   /** The exact words selected, canonical. Absent for a caret-only comment. */
   quote?: string;
@@ -181,7 +183,8 @@ const commentWire = (row: AnnotationRowDb): AnnotationCommentWire => ({
 // ── the anchor attribute, read and written against the parsed source ─────────
 
 const anchorKeyOf = (node: JsxElement): string | null => {
-  const attr = node.attributes.find((a) => a.name === ANNOTATION_ANCHOR_ATTR);
+  const attr = node.attributes.find((a) => a.name === 'id')
+    ?? node.attributes.find((a) => a.name === ANNOTATION_ANCHOR_ATTR);
   return attr && attr.value.static && typeof attr.value.json === 'string' ? attr.value.json : null;
 };
 
@@ -312,35 +315,19 @@ export async function createAnnotationFor(
   if (!row) return null;
   if (row.format !== 'markup') return { refused: 'not_markup' };
   const stale = (head: { editId: string; version: number }) => ({ refused: 'stale' as const, head });
-  if (input.baseEditId !== row.edit_id) return stale({ editId: row.edit_id, version: row.version });
+  if (input.baseEditId && input.baseEditId !== row.edit_id) return stale({ editId: row.edit_id, version: row.version });
 
   const source = row.source ?? '';
   const parsed = parseJsx(source);
   if (!parsed.ok) return { refused: 'bad_path' };
-  const node = resolveJsxNodeAtPath(parsed.nodes, bodyPathToSourcePath(source, input.bodyPath));
+  const node = input.nodeId
+    ? anchorIndex(source).get(input.nodeId)?.node
+    : resolveJsxNodeAtPath(parsed.nodes, bodyPathToSourcePath(source, input.bodyPath!));
   if (!node || node.type !== 'element') return { refused: 'bad_path' };
 
-  let anchorKey = anchorKeyOf(node);
-  let head = { version: row.version, editId: row.edit_id };
-  if (!anchorKey) {
-    anchorKey = 'a' + generateInternalId().slice(0, 8);
-    const outcome = await applyEditFor(actor, artifactId, {
-      baseEditId: input.baseEditId,
-      change: { newSource: sourceWithAnchor(source, node, anchorKey) },
-    }, { scope });
-    if (!outcome) return null;
-    // The anchor is a real document edit, so the ordinary publish pipeline may
-    // refuse the document (for example, an older artifact that no longer
-    // satisfies today's validator). Preserve that named refusal verbatim.
-    // Calling it `bad_path` hid the only useful diagnostic and blamed a path
-    // that had already resolved successfully above.
-    if (outcome instanceof Response) return outcome;
-    if (!outcome.applied) {
-      const moved = 'head' in outcome ? { editId: outcome.head.editId, version: outcome.head.version } : { editId: row.edit_id, version: row.version };
-      return stale(moved);
-    }
-    head = { version: outcome.row.version, editId: outcome.row.edit_id };
-  }
+  const anchorKey = anchorKeyOf(node);
+  if (!anchorKey) return { refused: 'bad_path' };
+  const head = { version: row.version, editId: row.edit_id };
 
   const id = 'ann_' + generateInternalId();
   // Canonical and capped HERE, the one place the columns are written — the
@@ -581,17 +568,6 @@ export async function deleteAnnotationFor(actor: TokenActor, artifactId: string,
   // of the source, which is a document edit with a verb of its own.
   await emit(actorSubject(actor), 'annotation_deleted', { kind: 'artifact', id: artifactId }, { annotation_id: annotationId });
 
-  if (cleanup.anchorKey) {
-    const head = await scopedRow(db, scope, artifactId);
-    const source = head?.source ?? '';
-    const found = head ? anchorIndex(source).get(cleanup.anchorKey) : undefined;
-    if (head && found) {
-      await applyEditFor(actor, artifactId, {
-        baseEditId: head.edit_id,
-        change: { newSource: sourceWithoutAnchor(source, found.node) },
-      }).catch(() => {});
-    }
-  }
   return true;
 }
 

@@ -14,6 +14,7 @@ import {
   type ArtifactInput, type ArtifactRow, type ArtifactSummary, type DatasetAccess, type EditInput, type EditOutcome, type ReplaceOpts, type ShareEntry, type ShareRole, type TokenActor, type Visibility,
 } from '@/lib/artifacts';
 import { actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type AnnotationAction, type AnnotationAuthor } from '@/lib/annotations';
+import { stampNodeIds } from '@/lib/story/node-ids';
 import { isMutationRefused, mutateDataset } from '@/lib/story/dataset-mutate';
 import type { SourceRepair } from '@/lib/jsx/repair';
 import type { Scalar } from '@/lib/story/dataflow';
@@ -429,6 +430,7 @@ export async function replaceArtifactWithBody(
       overByteQuota: byteQuotaFor(owner.tokenId),
     });
   if (parsed instanceof Response) return parsed;
+  if (parsed.format === 'markup' && parsed.source) parsed.source = stampNodeIds(parsed.source).source;
 
   const visibility = parseVisibility(body, !!actor.userId);
   if (visibility instanceof Response) return visibility;
@@ -547,6 +549,7 @@ export async function createArtifactFromBody(
     overByteQuota: byteQuotaFor(actor.tokenId),
   });
   if (parsed instanceof Response) return parsed;
+  if (parsed.format === 'markup' && parsed.source) parsed.source = stampNodeIds(parsed.source).source;
   const visibility = parseVisibility(body, !!actor.userId);
   if (visibility instanceof Response) return visibility;
   const access = parseAccessField(body, parsed.format);
@@ -614,12 +617,18 @@ function parseEditBody(body: Record<string, unknown>): EditInput | null {
 
   const hasDiff = typeof body.old_string === 'string' && typeof body.new_string === 'string';
   const hasSource = typeof body.source === 'string';
-  if (hasDiff && hasSource) return null; // at most one content form
+  const hasBatch = Array.isArray(body.edits) && body.edits.length > 0 && body.edits.length <= 64
+    && body.edits.every((edit) => !!edit && typeof edit === 'object'
+      && typeof (edit as Record<string, unknown>).old_string === 'string'
+      && typeof (edit as Record<string, unknown>).new_string === 'string');
+  if ([hasDiff, hasSource, hasBatch].filter(Boolean).length > 1 || (Array.isArray(body.edits) && !hasBatch)) return null;
   const change = hasDiff
     ? { oldString: body.old_string as string, newString: body.new_string as string }
     : hasSource
       ? { newSource: body.source as string }
-      : undefined;
+      : hasBatch
+        ? { edits: (body.edits as Array<Record<string, string>>).map((edit) => ({ oldString: edit.old_string, newString: edit.new_string })) }
+        : undefined;
 
   // Document-level attributes; each optional, each only when well-typed.
   const meta: NonNullable<EditInput['meta']> = {};
@@ -659,7 +668,7 @@ export async function respondToEdit(
     case 'doc_changed':
       return json({ error: outcome.reason, edit_id: outcome.head.editId, source: outcome.head.source, version: outcome.head.version }, 409);
     case 'bad_diff':
-      return json({ error: 'bad_diff', detail: outcome.detail }, 400);
+      return json({ error: 'bad_diff', detail: outcome.detail, ...(outcome.editIndex === undefined ? {} : { edit_index: outcome.editIndex }) }, 400);
     case 'not_editable':
       return json({ error: 'not_editable' }, 400);
   }
