@@ -56,6 +56,8 @@ export const GATE_SPECS = Object.freeze([
   { name: 'editor-exit', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 102_000 },
   // measured: implementer 35s; orchestrator 36s
   { name: 'editor-flow', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 108_000 },
+  // New editable-cell integration gate; timing to be measured on its first complete run.
+  { name: 'editable-table', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 120_000 },
   // measured: implementer 2s; orchestrator 2s
   {
     name: 'email-login', start: 'custom',
