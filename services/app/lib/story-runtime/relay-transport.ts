@@ -127,11 +127,11 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
       const r = await send({ values, only });
       return { tables: r.tables, errors: r.errors };
     },
-    mutate: (values, mutation) => new Promise<{ dataset: string }>((resolve, reject) => {
+    mutate: (values, mutation, row) => new Promise<{ dataset: string }>((resolve, reject) => {
       const id = ++writeSeq;
       const timer = setTimeout(() => { writers.delete(id); reject(new Error('the page did not answer the write')); }, timeoutMs);
       writers.set(id, { resolve, reject, timer });
-      target.postMessage({ type: STORY_MUTATE_MESSAGE, id, mutation, values } satisfies StoryMutateRequest, appOrigin);
+      target.postMessage({ type: STORY_MUTATE_MESSAGE, id, mutation, values, ...(row ? { row } : {}) } satisfies StoryMutateRequest, appOrigin);
     }),
     page: async (values, name, page) => {
       const r = await send({ values, only: [name], page: { name, ...page } });

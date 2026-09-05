@@ -590,7 +590,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
         const res = await fetch(`/a/${id}/mutate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mutation: data.mutation, values: data.values ?? {} }),
+          body: JSON.stringify({ mutation: data.mutation, values: data.values ?? {}, ...(data.row ? { row: data.row } : {}) }),
         });
         const body = (await res.json().catch(() => ({}))) as { ok?: boolean; dataset?: string; version?: number; affected?: number; error?: string; detail?: string };
         if (!res.ok || !body.ok) {

@@ -69,12 +69,7 @@ export function createMx(store: DataflowStore): MxApi {
       subscribe: (listener) => store.subscribe(() => listener(store.getState(), [...store.pending()])),
     },
     refresh: (names) => store.refresh(names),
-    mutate: (name, values) => {
-      // An override is a real value change: it belongs in the store before the
-      // write reads it, and the controls bound to it must show it.
-      if (values) store.setValues(values);
-      return store.mutate(name);
-    },
+    mutate: (name, values) => store.mutate(name, values),
   };
 }
 

@@ -159,6 +159,7 @@ export const STORY_UI_COMPONENTS: Record<string, React.ComponentType<any>> = {
   // paths override it with an adapter that supplies the rows from the store
   // (StoryRuntimeApp / StoryJsxBody) or a placeholder (preview/inert).
   DataTable: DataTable as unknown as React.ComponentType<any>, // eslint-disable-line @typescript-eslint/no-explicit-any
+  Column: (() => null) as React.ComponentType<any>, // template-only; DataTable's interpreter seam consumes it
   // A folder's listing. Registered bare, like DataTable, and overridden by the
   // runtime adapter that supplies its rows from the store.
   Files: Files as unknown as React.ComponentType<any>, // eslint-disable-line @typescript-eslint/no-explicit-any

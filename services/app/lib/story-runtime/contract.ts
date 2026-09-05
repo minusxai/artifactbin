@@ -400,6 +400,7 @@ export interface StoryMutateRequest {
   id: number;
   mutation: string;
   values: Record<string, Scalar>;
+  row?: Record<string, Scalar>;
 }
 
 export type StoryMutateResult =

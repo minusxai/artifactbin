@@ -21,6 +21,19 @@ import { URL_ATTRS as URL_PROPS, URL_LIST_ATTRS as URL_LIST_PROPS, SVG_PAINT_ATT
 import { STORY_SVG_TAGS } from './component-names';
 import { carriesRef, REF_ATTRS, refName } from '@/lib/story/dataflow';
 import type { JsxAttribute } from '@/lib/jsx';
+import { substituteRow } from '@/lib/story/row-scope';
+import type { ColumnTemplate } from '@/components/kit/data-table';
+
+export interface CellControlProps {
+  tag: string;
+  component?: React.ComponentType<Record<string, unknown>>;
+  props: Record<string, unknown>;
+  row: Record<string, unknown>;
+  identity: string;
+  column: string;
+  rowKey: unknown;
+  children?: React.ReactNode;
+}
 
 /**
  * A native form control whose `value`/`checked`/`options` is a `$name`
@@ -89,6 +102,9 @@ export interface StoryInterpreterOptions {
    * subtrees. A renderer that re-renders a document supplies this.
    */
   keyFor?: (path: string) => string;
+  row?: Record<string, unknown>;
+  cellScope?: { table: string; key: unknown; column: string };
+  cellControl?: React.ComponentType<CellControlProps>;
 }
 
 /** JSX attr names → React prop names for HTML tags (agents author HTML spellings). */
@@ -146,9 +162,12 @@ export function renderStoryNodes(nodes: JsxNode[], options: StoryInterpreterOpti
 }
 
 function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: string): React.ReactNode {
-  if (node.type === 'text') return node.value;
+  if (node.type === 'text') return options.row ? substituteRow(node.value, options.row) : node.value;
   if (node.type === 'expression') {
-    if (!node.value.static) return null;
+    if (!node.value.static) {
+      const field = options.row ? /^\s*\$_row\.([A-Za-z_]\w*)\s*$/.exec(node.source)?.[1] : null;
+      return field ? String(options.row?.[field] ?? '') : null;
+    }
     const v = node.value.json;
     return typeof v === 'string' || typeof v === 'number' ? String(v) : null;
   }
@@ -157,12 +176,33 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
   const Component = isComponent ? options.components[node.tag] : null;
   if (isComponent && !Component) return null; // validator rejects these; render stays safe regardless
 
+  if (node.tag === 'DataTable' && Component) {
+    const props = buildProps(node.attributes, true, node.tag, path, options.row);
+    const templates: ColumnTemplate[] = node.children.flatMap((child, index) => {
+      if (child.type !== 'element' || child.tag !== 'Column') return [];
+      const cp = buildProps(child.attributes, true, child.tag, `${path}.${index}`, options.row);
+      return typeof cp.col === 'string' ? [{ col: cp.col, title: typeof cp.title === 'string' ? cp.title : undefined, props: cp, nodes: child.children, path: `${path}.${index}` }] : [];
+    });
+    const renderCell = (template: ColumnTemplate, row: Record<string, unknown>) => template.nodes.map((child, i) => renderNode(child, {
+      ...options, row, cellScope: { table: options.keyFor?.(path) ?? path, key: row[String(props.rowKey)], column: template.col },
+    }, `${template.path}.${i}`));
+    const element = React.createElement(Component, { ...props, templates, renderCell, key: options.keyFor?.(path) ?? path });
+    return options.decorateElement ? options.decorateElement(element, node, path) : element;
+  }
+
+  const run = node.attributes.find((a) => a.name === 'run');
+  if (options.row && options.cellControl && run?.value.static && typeof run.value.json === 'string' && refName(run.value.json)) {
+    const props = buildProps(node.attributes, isComponent, node.tag, path, options.row);
+    const children = node.children.map((c, i) => renderNode(c, options, `${path}.${i}`));
+    return React.createElement(options.cellControl, { key: options.keyFor?.(path) ?? path, tag: node.tag, component: Component ?? undefined, props, row: options.row, identity: JSON.stringify([options.cellScope?.table, typeof options.cellScope?.key, options.cellScope?.key, options.cellScope?.column, path]), column: options.cellScope?.column ?? '', rowKey: options.cellScope?.key, children });
+  }
+
   // A `$`-bound image SOURCE goes to its own seam, for the same reason as the
   // control below: the reference must never reach the DOM, and here the
   // resolved value additionally has to be mapped to our copy of it.
   const source = isComponent ? null : boundSourceAttr(node);
   if (source) {
-    const props = buildProps(node.attributes.filter((a) => a !== source.attr), false, node.tag, path);
+    const props = buildProps(node.attributes.filter((a) => a !== source.attr), false, node.tag, path, options.row);
     const Source = options.boundSource ?? StaticBoundSource;
     const element = React.createElement(Source, {
       key: options.keyFor?.(path) ?? path, tag: 'img' as const, props, template: source.template,
@@ -176,7 +216,7 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
   const bound = isComponent ? null : boundAttrs(node);
   if (bound) {
     const rest = node.attributes.filter((a) => !bound.attrs.has(a));
-    const props = buildProps(rest, false, node.tag, path);
+    const props = buildProps(rest, false, node.tag, path, options.row);
     const children = node.children.map((c, i) => renderNode(c, options, `${path}.${i}`));
     const Control = options.boundControl ?? StaticBoundControl;
     const element = React.createElement(Control, {
@@ -185,7 +225,7 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
     return options.decorateElement ? options.decorateElement(element, node, path) : element;
   }
 
-  const props = buildProps(node.attributes, isComponent, node.tag, path);
+  const props = buildProps(node.attributes, isComponent, node.tag, path, options.row);
   const children = node.children.map((c, i) => renderNode(c, options, `${path}.${i}`));
   const type = (Component ?? SVG_TAG_CASE[node.tag.toLowerCase()] ?? node.tag.toLowerCase()) as React.ElementType;
   // Void HTML elements must not receive children (React throws).
@@ -252,6 +292,7 @@ function buildProps(
   isComponent: boolean,
   tag: string,
   path: string,
+  row?: Record<string, unknown>,
 ): Record<string, unknown> {
   const props: Record<string, unknown> = { [AST_PATH_ATTR]: path };
   for (const a of attributes) {
@@ -260,7 +301,7 @@ function buildProps(
     if (lower.startsWith('on') || DENIED_PROPS.has(lower)) continue;
 
     let name = HTML_ATTR_TO_REACT[a.name] ?? SVG_ATTR_CASE[lower] ?? a.name;
-    let value = a.value.json;
+    let value = row ? substituteRow(a.value.json, row) : a.value.json;
 
     // Dangerous URL schemes dropped (browser-normalized check — see lib/jsx/validate.ts).
     if (typeof value === 'string') {
@@ -293,7 +334,7 @@ function buildProps(
         // and the adapter — not React — services it.
         && !REF_ATTRS.components[tag]?.[name]
       : CONTROLLED_TO_DEFAULT[name] && FORM_CONTROL_TAGS.has(tag.toLowerCase());
-    if (controlled) {
+    if (controlled && !row) {
       name = CONTROLLED_TO_DEFAULT[name];
     }
 
