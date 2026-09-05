@@ -1,0 +1,78 @@
+/** One authored workspace shared by the local roadmap and its browser acceptance gate. */
+export function withRoadmapViews(markup, {datasetId, sprintsId}) {
+  const declarations = [...markup.matchAll(/<(Value|Query|Mutation)\b[\s\S]*?(?:\/>|<\/\1>)/g)]
+    .map(match => match[0]).filter(node => /name="(?:filter_status|tasks|task_options|sprints|set_\w+)"/.test(node)).join('\n');
+  let table = markup.match(/<DataTable\b[\s\S]*?<\/DataTable>/)[0].replace(/height={\d+}/, 'height={520}').replace(/ width={\d+}/g, '');
+  for (const [col,width] of Object.entries({id:48,item:320,owner:148,hours:72,depends_on:180,tags:130,status:110,sprint:160})) table = table.replace(`col="${col}"`, `col="${col}" width={${width}}`);
+  table = table.replace(/(<Select[^>]+run="\$set_sprint")\s*\/>/, '$1><button type="button" aria-label="Add Sprint" data-add-sprint="true" data-return-label="Sprint {$_row.id}" className="w-full rounded-md px-2 py-2 text-left text-sm font-medium text-primary hover:bg-accent">+ Add Sprint…</button></Select>');
+  const script = `(function () {
+    var dialog = document.getElementById('sprint-dialog');
+    var error = document.getElementById('sprint-error');
+    var save = document.getElementById('sprint-save');
+    var returnLabel = null;
+    function showView(values) {
+      var active = values.view_mode || 'table';
+      ['table','dag','sprint'].forEach(function (name) { document.getElementById('view-' + name).hidden = name !== active; });
+    }
+    showView({view_mode:mx.params.get('view_mode')});
+    mx.params.subscribe(showView);
+    function close() { if (!save.disabled) dialog.close(); }
+    dialog.addEventListener('close', function () {
+      if (returnLabel) { var trigger = Array.from(document.querySelectorAll('button[aria-label]')).find(function (el) { return el.getAttribute('aria-label') === returnLabel; }); if (trigger) trigger.focus({preventScroll:true}); }
+    });
+    dialog.addEventListener('cancel', function (event) { if (save.disabled) event.preventDefault(); });
+    document.addEventListener('click', function (event) {
+      var target = event.target.closest('[data-add-sprint]');
+      if (target) {
+        returnLabel = target.getAttribute('data-return-label');
+        mx.params.set('new_sprint', ''); mx.params.set('new_deadline', ''); mx.params.set('new_members', 'all');
+        error.textContent = ''; dialog.showModal(); document.getElementById('sprint-name').focus({preventScroll:true});
+      }
+      if (event.target.closest('[data-cancel-sprint]')) close();
+    });
+    save.addEventListener('click', async function () {
+      var name = document.getElementById('sprint-name');
+      if (!name.value.trim()) { name.setCustomValidity('Enter a sprint name.'); name.reportValidity(); return; }
+      name.setCustomValidity(''); error.textContent = ''; save.disabled = true; save.textContent = 'Creating…';
+      try {
+        await mx.mutate('create_sprint', {new_sprint:name.value.trim(),new_deadline:document.getElementById('sprint-deadline').value,new_members:document.getElementById('sprint-members').value});
+        save.disabled = false; dialog.close();
+      } catch (failure) { error.textContent = /changed|row_changed/.test(String(failure)) ? 'A sprint with this name already exists. Choose another name.' : String(failure.message || failure); }
+      finally { save.disabled = false; save.textContent = 'Create sprint'; }
+    });
+    document.getElementById('sprint-name').addEventListener('input', function (event) { event.target.setCustomValidity(''); });
+    dialog.addEventListener('keydown', function (event) { if (event.key === 'Enter' && event.target.tagName === 'INPUT') { event.preventDefault(); save.click(); } });
+  })();`;
+  // Sample curved links in SQL so the existing Vega-Lite renderer can show
+  // direction without a second graph engine or lines crossing intervening nodes.
+  const dagSql = `with nodes as (select *, cast((row_number() over (order by id)-1)%5 as double) as x, -cast(floor((row_number() over (order by id)-1)/5) as double) as y from ref_${datasetId} where $filter_status is null or status=$filter_status), edges as (select child.id as child, try_cast(dep as double) as parent from nodes child, unnest(cast(child.depends_on as varchar[])) as dependencies(dep)), links as (select 'Dependency ' || cast(cast(parent.id as bigint) as varchar) || ' → ' || cast(cast(child.id as bigint) as varchar) as label, parent.x as px, parent.y as py, child.x as cx, child.y as cy from edges e join nodes parent on parent.id=e.parent join nodes child on child.id=e.child), points as (select *, i/20.0 as t from links, range(21) samples(i)) select 'node' as kind, cast(cast(id as bigint) as varchar) as label, item, owner, hours, status, x, y, cast(null as double) as x2, cast(null as double) as y2, 0 as step from nodes union all select 'edge', label, '', '', null, '', px+(cx-px)*t, py+(cy-py)*t+1.2*t*(1-t), px+(cx-px)*(t+0.01), py+(cy-py)*(t+0.01)+1.2*(t+0.01)*(1-t-0.01), i from points`;
+  const position = {x:{field:'x',type:'quantitative',axis:null,scale:{padding:25}},y:{field:'y',type:'quantitative',axis:null,scale:{padding:30}}};
+  const viz = {kind:'vega-lite',spec:{layer:[
+    {transform:[{filter:"datum.kind === 'edge'"}],mark:{type:'line',point:false,interpolate:'basis',stroke:'#94a3b8',strokeWidth:1.5},encoding:{...position,detail:{field:'label'},order:{field:'step',type:'quantitative'},description:{field:'label'}}},
+    {transform:[{filter:"datum.kind === 'edge' && datum.step === 18"}],mark:{type:'point',shape:'triangle',filled:true,color:'#64748b',size:75,angle:{expr:"atan2(scale('y',datum.y2)-scale('y',datum.y),scale('x',datum.x2)-scale('x',datum.x))*180/PI+90"}},encoding:{...position,description:{field:'label'},tooltip:{field:'label',title:'Dependency'}}},
+    {transform:[{filter:"datum.kind === 'node'"}],mark:{type:'circle',size:950,stroke:'#ffffff',strokeWidth:3},encoding:{...position,color:{field:'status',type:'nominal',scale:{domain:['backlog','active','done'],range:['#94a3b8','#6366f1','#10b981']},legend:{title:null,orient:'bottom'}},tooltip:[{field:'label',title:'Task'},{field:'item',title:'Item'},{field:'owner',title:'Owner'},{field:'hours',title:'Hours'}]}},
+    {transform:[{filter:"datum.kind === 'node'"}],mark:{type:'text',color:'white',fontSize:12,fontWeight:600},encoding:{...position,text:{field:'label',type:'nominal'}}},
+    {transform:[{filter:"datum.kind === 'node'"}],mark:{type:'text',dy:27,fontSize:11,limit:150},encoding:{...position,text:{field:'item',type:'nominal'}}}
+  ]}};
+  return `<Helmet><title>MinusX roadmap</title>
+${declarations}
+<Value name="view_mode" type="string" default="table" />
+<Value name="new_sprint" type="string" /><Value name="new_deadline" type="string" /><Value name="new_members" type="string" default="all" />
+<Query name="roadmap_totals">{\`select count(*) as tasks, coalesce(sum(hours),0) as hours from tasks\`}</Query>
+<Query name="sprint_summary">{\`select s.name as sprint, s.deadline, s.members, count(t.id) as tasks, coalesce(sum(t.hours),0) as hours, count(t.id) filter (where t.status='done') as completed from ref_${sprintsId} s left join tasks t on t.sprint=s.name group by s.name,s.deadline,s.members order by s.deadline nulls last,s.name\`}</Query>
+<Query name="dag_view">{${JSON.stringify(dagSql)}}</Query>
+<Mutation name="create_sprint" expectedAffected={1}>{\`insert into ref_${sprintsId} (name,deadline,members) select trim($new_sprint),nullif($new_deadline,''),coalesce(nullif($new_members,''),'all') where trim(coalesce($new_sprint,'')) != '' and not exists (select 1 from ref_${sprintsId} where lower(name)=lower(trim($new_sprint)))\`}</Mutation>
+<script>{${JSON.stringify(script)}}</script></Helmet>
+<main data-design="tw" className="mx-auto max-w-[1480px] px-4 pb-12 pt-20 @md:px-8">
+  <header className="mb-7"><p className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">MinusX / Planning</p><h1 className="text-3xl font-semibold tracking-tight">Roadmap</h1><p className="mt-2 text-sm text-muted-foreground"><Number data="$roadmap_totals" col="tasks" /> tasks · <Number data="$roadmap_totals" col="hours" /> planned hours</p></header>
+  <div className="mb-5 flex flex-wrap items-end gap-4"><Select label="View" value="$view_mode" options={[{value:"table",label:"Table"},{value:"dag",label:"DAG"},{value:"sprint",label:"Sprint"}]} /><Select label="Filter status" placeholder="All statuses" value="$filter_status" options={["backlog","active","done"]} /></div>
+  <section id="view-table" aria-label="Table view">${table}<p className="mt-3 text-xs text-muted-foreground">Edit any cell. Enter saves; Escape cancels.</p></section>
+  <section id="view-dag" aria-label="DAG view" hidden><div className="rounded-xl border border-border bg-card p-5"><h2 className="text-lg font-semibold">Dependencies</h2><p className="mt-1 mb-4 text-sm text-muted-foreground">Arrows point from a prerequisite to the task it unlocks. Hover for details.</p><div className="overflow-x-auto"><div className="min-w-[720px]"><Question data="$dag_view" height="380px" viz={${JSON.stringify(viz)}} /></div></div></div></section>
+  <section id="view-sprint" aria-label="Sprint view" hidden><div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Sprints</h2><p className="mt-1 text-sm text-muted-foreground">Dates, owners, and planned work in one place.</p></div><button type="button" aria-label="Add Sprint" data-add-sprint="true" className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">+ Add Sprint</button></div><DataTable data="$sprint_summary" columns={[{col:"sprint",title:"Sprint"},{col:"deadline",title:"Deadline"},{col:"members",title:"Members"},{col:"tasks",title:"Tasks"},{col:"hours",title:"Hours"},{col:"completed",title:"Done"}]} /></section>
+  <dialog id="sprint-dialog" aria-labelledby="sprint-title" className="m-auto w-[420px] max-w-[calc(100vw-32px)] rounded-2xl border border-border bg-card p-6 text-foreground shadow-xl backdrop:bg-black/30">
+    <div className="mb-5 flex items-start justify-between gap-4"><div><h2 id="sprint-title" className="text-xl font-semibold">Add sprint</h2><p className="mt-1 text-sm text-muted-foreground">Give the next cycle a name and a deadline.</p></div><button type="button" aria-label="Close sprint dialog" data-cancel-sprint="true" className="rounded px-2 py-1 text-muted-foreground hover:bg-muted">×</button></div>
+    <div className="space-y-4"><label className="block text-sm font-medium">Sprint name<input id="sprint-name" aria-label="Sprint name" value="$new_sprint" required placeholder="e.g. September polish" className="mt-1.5 block h-10 w-full rounded-lg border border-input bg-background px-3 outline-none focus:ring-2 focus:ring-ring/30" /></label><label className="block text-sm font-medium">Deadline <span className="font-normal text-muted-foreground">(optional)</span><input id="sprint-deadline" aria-label="Sprint deadline" type="date" value="$new_deadline" className="mt-1.5 block h-10 w-full rounded-lg border border-input bg-background px-3" /></label><label className="block text-sm font-medium">Members<input id="sprint-members" aria-label="Sprint members" value="$new_members" placeholder="all" className="mt-1.5 block h-10 w-full rounded-lg border border-input bg-background px-3" /></label></div>
+    <p id="sprint-error" role="alert" className="mt-3 text-sm text-destructive"></p><div className="mt-6 flex justify-end gap-2"><button type="button" aria-label="Cancel sprint" data-cancel-sprint="true" className="rounded-lg px-4 py-2 text-sm hover:bg-muted">Cancel</button><button id="sprint-save" type="button" aria-label="Create sprint" className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">Create sprint</button></div>
+  </dialog>
+</main>`;
+}

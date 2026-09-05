@@ -13,6 +13,7 @@ import { DECL_NAME_RE, type Scalar } from './dataflow';
 export interface MutationRequest {
   mutation: string;
   values?: Record<string, Scalar>;
+  row?: Record<string, Scalar>;
 }
 
 const isScalar = (v: unknown): v is Scalar =>
@@ -32,6 +33,15 @@ export function parseMutationRequest(body: Record<string, unknown>): MutationReq
       if (!isScalar(v)) return json({ error: 'invalid_values', details: [`value "${k}" must be a string, number, boolean or null`] }, 400, { 'Access-Control-Allow-Origin': '*' });
     }
     out.values = body.values as Record<string, Scalar>;
+  }
+  if (body.row !== undefined) {
+    if (!body.row || typeof body.row !== 'object' || Array.isArray(body.row)) {
+      return json({ error: 'invalid_row', details: ['row must be an object of scalars'] }, 400, { 'Access-Control-Allow-Origin': '*' });
+    }
+    for (const [k, v] of Object.entries(body.row as Record<string, unknown>)) {
+      if (!DECL_NAME_RE.test(k) || !isScalar(v)) return json({ error: 'invalid_row', details: [`row field "${k}" must be a named scalar`] }, 400, { 'Access-Control-Allow-Origin': '*' });
+    }
+    out.row = body.row as Record<string, Scalar>;
   }
   return out;
 }

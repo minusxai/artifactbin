@@ -20,7 +20,7 @@ import { cloneElement, createContext, useContext, useEffect, useId, useMemo, use
 import type { CSSProperties, ReactElement, ReactNode } from 'react';
 import type { JsxElement } from '@/lib/jsx';
 import type { ComponentType } from 'react';
-import { renderStoryNodes, type BoundControlProps, type BoundSourceProps } from '@/lib/story-ui/interpreter';
+import { renderStoryNodes, type BoundControlProps, type BoundSourceProps, type CellControlProps } from '@/lib/story-ui/interpreter';
 import { useNodeKeys } from '@/lib/story-ui/use-node-keys';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import { STORY_UI_COMPONENTS } from '@/lib/story-ui/registry';
@@ -36,16 +36,83 @@ import { discoverSlides, MIN_SLIDES_FOR_RAIL, type DiscoveredSlide } from './sli
 import { discoverOutline, hasOutline, type OutlineEntry } from './outline';
 import QuestionEmbed from '@/components/views/story/QuestionEmbed';
 import InlineNumber, { type NumberAgg } from '@/components/views/story/InlineNumber';
+import { createCellSessions, type CellSessions } from './cell-sessions';
+import type { ColumnTemplate } from '@/components/kit/data-table';
 import { createDataflowStore, EMPTY_STATE, type DataflowStore } from './store';
 import { EMPTY_DATAFLOW, coerceScalarInput, refName, resolveRefTemplate, type Dataflow, type DataflowState, type Row, type Scalar, type ScalarValueDecl, type TableResult } from '@/lib/story/dataflow';
 import { isWebUrl, runtimeAssetUrl } from '@/lib/story/asset-url';
 import { Button } from '@/components/kit/button';
+import { cn } from '@/components/kit/cn';
 import { DataTable } from '@/components/kit/data-table';
 import { Files } from '@/components/kit/files';
 import { GridItemContext } from '@/components/kit/grid';
 import { DateControl, SegmentedControl, SelectControl, SliderControl, SwitchControl, normalizeControlOptions, num, shellRest, str } from '@/components/kit/controls';
 import { parseColumnSpecs, parseSortSpec, parseTableHeight, type SortSpec } from '@/lib/story/data-table';
 import { createPreviewIdentityAllocator } from './preview-identity';
+
+const CellSessionsContext = createContext<CellSessions | null>(null);
+const scalarRow = (row: Row): Record<string, Scalar> => Object.fromEntries(Object.entries(row).filter((entry): entry is [string, Scalar] => {
+  const v = entry[1]; return v === null || typeof v === 'string' || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v));
+}));
+
+function RuntimeCellControl({ tag, component: Component, props, row, identity, column, rowKey, tableName, valueField, children }: CellControlProps) {
+  const ctx = useContext(RuntimeEmbedContext);
+  const sessions = useContext(CellSessionsContext);
+  const name = typeof props.run === 'string' ? refName(props.run) : null;
+  const writable = useSyncExternalStore(ctx.store?.subscribe ?? NO_SUBSCRIBE, () => ctx.store?.canMutate() ?? false, () => false);
+  const initial = (props.value ?? null) as Scalar;
+  const session = useSyncExternalStore(sessions?.subscribe ?? NO_SUBSCRIBE, () => sessions?.get(identity), () => undefined);
+  useEffect(() => { sessions?.reconcile(identity, initial); }, [sessions, identity, initial, session?.phase]);
+  const begin = () => sessions?.begin(identity, initial, scalarRow(row));
+  const cancel = () => sessions?.cancel(identity);
+  const change = (value: Scalar) => { begin(); sessions?.change(identity, value); };
+  const commit = () => {
+    if (!ctx.chrome || !writable || !name || !ctx.store) return;
+    void sessions?.commit(identity, (draft, _original, snapshot) => ctx.store!.mutate(name, { _value: draft }, { ...snapshot }));
+  };
+  const value = session ? session.draft : initial;
+  const busy = session?.phase === 'pending' || session?.phase === 'saved';
+  const { run: _run, defaultValue: _defaultValue, value: _value, 'aria-label': _ariaLabel, disabled: _disabled, exclude: _exclude, ...rest } = props;
+  const label = str(props['aria-label']) ?? str(props.label) ?? `${column} ${String(rowKey)}`;
+  const error = session?.error ? <span role="alert" className="mx-write-error">{session.error}</span> : null;
+  const valueType = tableName ? ctx.state.tables[tableName]?.columns.find((c) => c.name === valueField)?.type : undefined;
+  const selectValue = (next: string | null): Scalar => next === null ? null : valueType === 'number' ? next === '' ? null : Number(next) : valueType === 'boolean' ? next === 'true' : next;
+  if (tag === 'Select') {
+    const optsName = refName(props.options);
+    const options = normalizeControlOptions(props.options, optsName ? ctx.state.tables[optsName] : undefined)
+      .filter((option) => props.exclude === undefined || option.value !== String(props.exclude));
+    return <><SelectControl
+      appearance="cell" label={label} placeholder={str(props.placeholder) ?? 'None'} className={str(props.className)} options={options}
+      value={value === null ? null : String(value)} nullable={props.nullable === true}
+      onOpenChange={(open) => { if (open) begin(); }} onChange={(next) => change(selectValue(next))}
+      onCommit={commit} onCancel={cancel}
+      draftValue={session ? session.draft === null ? null : String(session.draft) : undefined}
+      onDraftChange={(next) => change(next)} multiple={props.multiple === true} allowCreate={props.allowCreate === true}
+      valueFormat={props.valueFormat === 'json' ? 'json' : undefined} disabled={!ctx.chrome || !writable || busy || props.disabled === true}
+      rest={{ ...shellRest(rest), 'aria-busy': busy || undefined }}
+    >{children}</SelectControl>{error}</>;
+  }
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') {
+    const Html = tag as 'input' | 'textarea' | 'select';
+    const commitDraft = (element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement) => {
+      if (!element.validity.valid) { element.reportValidity(); return; }
+      const active = sessions?.get(identity);
+      if (!active || (active.phase !== 'editing' && active.phase !== 'error')) return;
+      if (props.type === 'number') {
+        const n = active.draft === '' || active.draft === null ? null : Number(active.draft);
+        if (n !== null && !Number.isFinite(n)) return;
+        sessions?.change(identity, n);
+      }
+      commit();
+    };
+    return <><Html {...(rest as Record<string, unknown>)} aria-label={label} value={value === null ? '' : String(value)} disabled={!ctx.chrome || !writable || busy || props.disabled === true}
+      className={cn('w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 py-1 text-sm outline-none transition-colors hover:border-border focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-50', tag === 'textarea' ? 'min-h-8 resize-y' : 'h-8', props.type === 'number' && 'text-right tabular-nums', str(props.className))}
+      onFocus={begin} onChange={(e) => { change(tag === 'select' ? selectValue(e.currentTarget.value) : e.currentTarget.value); if (tag === 'select') commitDraft(e.currentTarget); }} onBlur={(e) => commitDraft(e.currentTarget)}
+      onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); cancel(); e.currentTarget.blur(); } else if (e.key === 'Enter' && !(tag === 'textarea' && e.shiftKey)) { e.preventDefault(); commitDraft(e.currentTarget); } }}
+    >{tag === 'input' ? undefined : children}</Html>{error}</>;
+  }
+  return Component ? <Component {...rest}>{children}</Component> : null;
+}
 
 export type { StoryIslandData } from './contract';
 import type { StoryIslandData } from './contract';
@@ -331,8 +398,9 @@ function SelectAdapter(props: Record<string, unknown>) {
     <SelectControl
       label={str(props.label)} placeholder={str(props.placeholder)} className={str(props.className)}
       options={options} value={bind.current} nullable={bind.nullable}
+      multiple={props.multiple === true} allowCreate={props.allowCreate === true} valueFormat={props.valueFormat === 'json' ? 'json' : undefined}
       onChange={bind.write} rest={shellRest(props)}
-    />
+    >{props.children as ReactNode}</SelectControl>
   );
 }
 
@@ -523,6 +591,8 @@ function DataTableAdapter(props: Record<string, unknown>) {
   const table = name ? ctx.state.tables[name] : undefined;
   const spec = useMemo(() => parseColumnSpecs(props.columns), [props.columns]);
   const authoredSort = useMemo(() => parseSortSpec(props.sort), [props.sort]);
+  const templates = Array.isArray(props.templates) ? props.templates as ColumnTemplate[] : [];
+  const sessions = useMemo(() => createCellSessions(), []);
   // A CEILING, not a reserved height (the kit's scroll box caps itself): outside a
   // grid cell the wrapper leaves the table to hug its rows, and the cap is the TABLE
   // parser's — questionEmbedHeightPx floors at MIN_CHART_H, a chart rule that would
@@ -569,10 +639,13 @@ function DataTableAdapter(props: Record<string, unknown>) {
   const busy = name !== null && ctx.pending.has(name);
   return (
     <div {...runtimeTargetIdentity(props)} aria-label="DataTable embed" aria-busy={busy} className={busy ? 'mx-busy' : undefined} style={wrapper}>
-      <DataTable
+      <CellSessionsContext.Provider value={sessions}><DataTable
         rows={shown}
         columns={table.columns}
         spec={spec}
+        rowKey={typeof props.rowKey === 'string' ? props.rowKey : undefined}
+        templates={templates}
+        renderCell={typeof props.renderCell === 'function' ? props.renderCell as (template: ColumnTemplate, row: Row) => ReactNode : undefined}
         sort={authoredSort}
         height={cap}
         sticky={props.sticky !== false}
@@ -582,7 +655,7 @@ function DataTableAdapter(props: Record<string, unknown>) {
         resolveSrc={resolveSrc}
         onSortChange={truncated ? (sort) => readWindow(0, sort, true) : undefined}
         onLoadMore={truncated ? () => readWindow(shown.length, paged.sort, false) : undefined}
-      />
+      /></CellSessionsContext.Provider>
     </div>
   );
 }
@@ -971,6 +1044,7 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, t
           components: RUNTIME_REGISTRY,
           boundControl: RuntimeBoundControl,
           boundSource: RuntimeBoundSource,
+          cellControl: RuntimeCellControl,
           decorateElement,
         })}
       </RuntimeEmbedContext.Provider>

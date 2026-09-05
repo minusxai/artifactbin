@@ -21,6 +21,7 @@ import { repairJsxSource } from '@/lib/jsx/repair';
 import { parseJsx, serializeJsx, validateJsx } from '@/lib/jsx';
 import { hoistHelmet, splitHelmet, validateHelmet } from '@/lib/story/helmet';
 import { fixHtmlNesting } from '@/lib/story/nesting';
+import { analyzeRowScopes } from './row-scope';
 import { collectRefNameUses, validateDataflow } from '@/lib/story/dataflow';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
@@ -203,6 +204,7 @@ export async function publishJsx(body: Record<string, unknown>, sourceIn: string
   }
   const errors = [
     ...helmetErrors,
+    ...analyzeRowScopes(split.body).errors.map((message) => ({ message })),
     ...validateJsx(split.body, {
       components: JSX_TIER_COMPONENTS,
       allowedHtmlTags: STORY_HTML_TAGS,

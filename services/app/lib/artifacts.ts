@@ -31,6 +31,8 @@ import { nodeIndex, stampNodeIds } from './story/node-ids';
 import { parseJsx } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/helmet';
 import { datasetRefsInDataflow, initialValues, isEmptyDataflow, mutationTargets, type Dataflow, type Row, type Scalar } from '@/lib/story/dataflow';
+import { dryRunDataflow } from '@/lib/story/data-checks';
+import { mutationUsesRow } from '@/lib/story/row-scope';
 import { isMutationRefused, mutateDataset } from '@/lib/story/dataset-mutate';
 import { runDataflow, type DatasetTables } from '@/lib/sql/run-dataflow';
 import { ancestorsForMove, childrenTableFor, CHILDREN_COLUMNS, notifyParent, parentOf } from '@/lib/folders';
@@ -1819,17 +1821,18 @@ export const writerFor = (doc: ArtifactRow): TokenActor => ({ tokenId: doc.token
  */
 export type DocumentMutationOutcome =
   | { ok: true; dataset: ArtifactRow; affected: number; rowCount: number }
-  | { ok: false; reason: 'unknown_mutation' | WriteRefusal | 'dataset_full' | 'invalid_sql' | 'contended'; detail?: string };
+  | { ok: false; reason: 'unknown_mutation' | WriteRefusal | 'dataset_full' | 'invalid_sql' | 'contended' | 'row_changed' | 'row_not_unique' | 'invalid_row'; detail?: string };
 
 export async function runDocumentMutation(
   doc: ArtifactRow,
   name: string,
   values: Record<string, Scalar>,
+  row?: Record<string, Scalar>,
 ): Promise<DocumentMutationOutcome> {
   if (doc.format !== 'markup' || !doc.source) return { ok: false, reason: 'unknown_mutation' };
   const parsed = parseJsx(doc.source);
   if (!parsed.ok) return { ok: false, reason: 'unknown_mutation' };
-  const { content } = splitHelmet(parsed.nodes);
+  const { content, body } = splitHelmet(parsed.nodes);
   const decl = content.mutations.find((m) => m.name === name);
   if (!decl) return { ok: false, reason: 'unknown_mutation' };
 
@@ -1849,7 +1852,24 @@ export async function runDocumentMutation(
   const bound = initialValues(flow);
   for (const [k, v] of Object.entries(values)) if (k in bound) bound[k] = v;
 
-  const result = await mutateDataset(dataset, decl.sql, bound);
+  let rowBinding: { columns: DatasetColumn[]; values: Record<string, Scalar> } | undefined;
+  if (mutationUsesRow(decl.sql)) {
+    if (!row) return { ok: false, reason: 'invalid_row', detail: 'this cell mutation requires its original row snapshot' };
+    const checked = await dryRunDataflow(flow, refLoaderForActor(writer), body);
+    if (checked.kind === 'sql') return { ok: false, reason: 'invalid_row', detail: checked.details.join('; ') };
+    const columns = checked.rowSchemas[name];
+    if (!columns || Object.keys(row).length !== columns.length || columns.some((c) => {
+      if (!Object.hasOwn(row, c.name)) return true;
+      const value = row[c.name];
+      return value !== null && (c.type === 'date' ? typeof value !== 'string' : typeof value !== c.type);
+    })) return { ok: false, reason: 'invalid_row', detail: 'row fields and scalar types must match the declared table result' };
+    if (!Object.hasOwn(values, '_value')) return { ok: false, reason: 'invalid_row', detail: 'cell mutations require _value' };
+    bound._value = values._value;
+    rowBinding = { columns, values: row };
+  } else if (row !== undefined || Object.hasOwn(values, '_value')) {
+    return { ok: false, reason: 'invalid_row', detail: 'this mutation does not accept a row or _value' };
+  }
+  const result = await mutateDataset(dataset, decl.sql, bound, { row: rowBinding, expectedAffected: decl.expectedAffected });
   if (isMutationRefused(result)) return { ok: false, reason: result.reason, detail: result.detail };
   return { ok: true, dataset: result.row, affected: result.affected, rowCount: result.rowCount };
 }
