@@ -70,24 +70,25 @@ read): a concurrent edit then answers `409 version_conflict` with its
 
 ### Folders, and the trash
 
-`format: 'folder'` with NO content field makes one — an artifact like any
-other, with its own url, title, visibility and sharing. `parent_id` files
-anything under it, on create, fork or PUT; `null` is your root.
+`format: 'folder'` makes one — an artifact like any other, with its own url,
+visibility and sharing. `parent_id` files anything under it, on create, fork
+or PUT; `null` is your root.
 
 ```
 POST [[ base ]]/api/artifacts  { "format": "folder", "title": "Reports" } → 201 { "id": "hAoPxJ" }
-POST [[ base ]]/api/artifacts  { "markup": "…", "title": "Q3", "parent_id": "hAoPxJ" }
+POST [[ base ]]/api/artifacts  { "markup": "…", "parent_id": "hAoPxJ" }
 ```
 
-Ids, never paths (two sibling folders may share a name); max 6 deep. Every read
-carries `parent_id` and `ancestor_ids` (the trail, root→parent), so one call
-draws breadcrumbs and the url keeps working wherever a file moves.
+Ids, never paths (two sibling folders may share a name). Every read carries
+`parent_id` and `ancestor_ids` (the trail, root→parent), so one call draws
+breadcrumbs and a move costs no url.
 
-A folder's page is its own stored markup — a `<Query>` over its children table
-`ref_<folderId>`, drawn by `<Files>` ([markup-data.md](markup-data.md)) — so you
-edit one like any document. DELETE is a TRASH: a folder goes with everything
-under it, and `restore_artifact` takes it back at any time
-([publishing-versions.md](publishing-versions.md)).
+A FOLDER HAS NO CONTENT: its page IS the listing, rendered per viewer —
+everything for you, the `public` children for a stranger. `title` (renaming),
+`visibility` and `parent_id` are all a PUT takes on one; content, and
+`edit_artifact`, answer `400 not_editable`. DELETE is a TRASH: a folder goes
+with everything under it, and `restore_artifact` takes it back at any time
+([versions](publishing-versions.md)).
 
 ### Edit part of a document
 
@@ -140,8 +141,8 @@ GET [[ base ]]/api/artifacts/<id>
 GET [[ base ]]/api/artifacts → 200 { "artifacts": [ { "id", "url", "title", "format", ... } ] }
 ```
 
-EVERYTHING you own — datasets, images, viz recipes and folders are artifacts
-too; there is no separate datasets endpoint.
+EVERYTHING you own — datasets, images, recipes and folders are artifacts too;
+there is no separate datasets endpoint.
 
 ## Errors
 
@@ -154,7 +155,7 @@ too; there is no separate datasets endpoint.
 | 403 | `quota_exceeded` | At its cap — deleting frees nothing; use another token |
 | 404 | `not_found` | No artifact with that id is reachable by your token |
 | 409 | `version_conflict` | `expectedVersion` is stale — re-read, merge, retry (`400 invalid_expected_version`: it must be a number) |
-| 400 | `not_editable` | Not markup — PUT it whole |
+| 400 | `not_editable` | A data tier — PUT it whole; a folder has no content |
 | 400 | `image_fetch_failed` | An `https://` image would not import (unreachable, not an image, private address, over the cap) — `details` names it |
 | 403 | `owner_only` | `visibility` and `access` are the owner's — you are a named editor here, so send the write without them |
 | 409 | `has_dependents` | Other documents reference it — re-send DELETE with `?force=true` |
