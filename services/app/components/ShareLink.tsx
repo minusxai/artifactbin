@@ -12,8 +12,8 @@
  * owns nothing here gets a plain one-click copy.
  *
  * The URL is location minus the fragment on purpose: #edit is a MODE, never
- * part of the link you hand someone. Lives in the artifact controls, so it
- * only exists where owner chrome does. The ACL
+ * part of the link you hand someone. Shelf menus pass the selected artifact's
+ * address explicitly. The ACL
  * surface is session-only (/api/my/artifacts/<id>/sharing).
  */
 import { useEffect, useState } from 'react';
@@ -50,22 +50,31 @@ const ROLE_OPTIONS = SHARE_ROLES.map((r) => ({ value: r, label: SHARE_ROLE_LABEL
 export default function ShareLink({
   className,
   artifactId,
+  title,
   owner = false,
   format,
   variant = 'chip',
+  url,
+  onClose,
 }: {
   className: string;
   /** Enables the ACL dialog; without it this is just the copy button. */
   artifactId?: string;
+  /** The displayed name of the artifact being shared. */
+  title?: string | null;
   /** This viewer OWNS the artifact — only an owner manages its ACL (an editor never sees this popover). */
   owner?: boolean;
   /** The artifact's format — the writes row exists for a dataset and nothing else. */
   format?: string;
-  /** `menu` renders the trigger as a full-width document-control row. */
-  variant?: 'chip' | 'menu';
+  /** `menu` is a document-control row; `dialog` opens directly from an external menu. */
+  variant?: 'chip' | 'menu' | 'dialog';
+  /** Explicit artifact address when opened from a shelf or table. */
+  url?: string;
+  /** Dialog-only callers unmount the sharing surface when dismissed. */
+  onClose?: () => void;
 }) {
   const [copied, setCopied] = useState(false);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(variant === 'dialog');
   const [state, setState] = useState<SharingState | null>(null);
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -104,7 +113,7 @@ export default function ShareLink({
   };
 
   const copyLink = () => {
-    void navigator.clipboard?.writeText(`${location.origin}${location.pathname}`);
+    void navigator.clipboard?.writeText(url ? new URL(url, location.origin).href : `${location.origin}${location.pathname}`);
     setCopied(true);
   };
 
@@ -154,7 +163,7 @@ export default function ShareLink({
   const toggle = () => setOpen((o) => !o);
   return (
     <span className={variant === 'menu' ? 'relative block' : 'relative inline-flex items-center gap-1'}>
-      {variant === 'menu' ? (
+      {variant === 'dialog' ? null : variant === 'menu' ? (
         <button
           type="button"
           aria-label="Share"
@@ -182,7 +191,7 @@ export default function ShareLink({
       </Tooltip>
       )}
       {open && (
-        <SharePanel onClose={() => setOpen(false)}>
+        <SharePanel title={`Share “${title ?? (format === 'folder' ? 'Untitled folder' : 'Untitled')}”`} onClose={() => { setOpen(false); onClose?.(); }}>
           <button
             type="button"
             aria-label="Copy link"
@@ -382,7 +391,8 @@ export default function ShareLink({
 
 /** One viewport-level sharing surface. Portaling keeps it centered even when
  * its trigger lives inside an animated controls popover. */
-function SharePanel({ onClose, children }: {
+function SharePanel({ onClose, children, title }: {
+  title: string;
   onClose: () => void;
   children: React.ReactNode;
 }) {
@@ -413,8 +423,8 @@ function SharePanel({ onClose, children }: {
         style={{ maxHeight: 'calc(100svh - 24px)' }}
       >
         <header className="flex items-start gap-4 border-b border-edge px-4 py-4 sm:px-6">
-          <div>
-            <h2 className="text-base font-semibold text-fg">Share document</h2>
+          <div className="min-w-0 flex-1">
+            <h2 className="break-words text-base font-semibold text-fg">{title}</h2>
             <p className="mt-1 text-[11px] text-faint">Manage access, invite people, or copy the link.</p>
           </div>
           <button
@@ -422,7 +432,7 @@ function SharePanel({ onClose, children }: {
             aria-label="Close sharing"
             autoFocus
             onClick={onClose}
-            className="ml-auto inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-[4px] text-muted hover:bg-raised hover:text-fg"
+            className="ml-auto inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-muted hover:bg-raised hover:text-fg"
           >
             <X size={16} />
           </button>

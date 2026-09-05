@@ -18,7 +18,8 @@
  * the grid/list presentation and hands list mode to `ArtifactTable`.
  */
 import { useMemo, useState } from 'react';
-import { Check, Folder, FolderInput, FolderPlus, LayoutGrid, Link2, List as ListIcon, Pencil, Search, Trash2 } from 'lucide-react';
+import { Check, Folder, FolderInput, FolderPlus, LayoutGrid, Link2, List as ListIcon, Pencil, Search, Share2, Trash2 } from 'lucide-react';
+import ShareLink from '@/components/ShareLink';
 import RowMenu, { confirmDeleteArtifact } from '@/components/RowMenu';
 import { MoveMenu, type PickerFolder } from '@/components/FolderPicker';
 import { ArtifactTable } from '@/components/TokenBrowser';
@@ -255,6 +256,7 @@ const nameOf = (row: ShelfRow) => row.title ?? row.id;
 function Actions({ row, level, folders, childCount = 0, onDeleted, onRename }: { row: ShelfRow; level: ShelfActions; folders: PickerFolder[]; childCount?: number; onDeleted?: (id: string) => void; onRename?: () => void }) {
   const [copied, setCopied] = useState(false);
   const [moving, setMoving] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [parentId, setParentId] = useState(parentOfRow(row));
   const share = async () => {
     const url = row.url.startsWith('http') ? row.url : `${location.origin}${row.url}`;
@@ -294,6 +296,12 @@ function Actions({ row, level, folders, childCount = 0, onDeleted, onRename }: {
           <RowMenu
             name={nameOf(row)}
             items={[
+              {
+                label: `Manage sharing for ${nameOf(row)}`,
+                text: 'share',
+                icon: <Share2 size={12} />,
+                onSelect: () => setSharing(true),
+              },
               ...(onRename ? [{
                 label: `Rename ${nameOf(row)}`,
                 text: 'rename',
@@ -328,6 +336,9 @@ function Actions({ row, level, folders, childCount = 0, onDeleted, onRename }: {
             ]}
           />
         </>
+      )}
+      {sharing && (
+        <ShareLink className="" artifactId={row.id} title={row.title} owner format={row.format} url={row.url} variant="dialog" onClose={() => setSharing(false)} />
       )}
       {moving && (
         <MoveMenu

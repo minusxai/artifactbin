@@ -1,10 +1,11 @@
 'use client';
 
-import { Check, ChevronLeft, ChevronRight, EyeOff, FolderInput, Globe, Link2, Lock, Pencil, Search, Trash2 } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, EyeOff, FolderInput, Globe, Link2, Lock, Pencil, Search, Share2, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Tooltip } from '@/components/Tooltip';
 import { Badge, Button, dateStamp, FormatBadge, formatLabel, MicroLabel, PANEL, TABLE_ROW, timeAgo, TokenInput, VisibilityPill } from '@/components/ui';
 import { ViewsMark } from '@/components/ViewsMark';
+import ShareLink from '@/components/ShareLink';
 import RowMenu, { confirmDeleteArtifact } from '@/components/RowMenu';
 import { MoveMenu, type PickerFolder } from '@/components/FolderPicker';
 import { parentOfRow } from '@/lib/shelf';
@@ -217,6 +218,7 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
   // change to justify reloading the page the way delete does.
   const [movedFolders, setMovedFolders] = useState<Record<string, string>>({});
   const [movingId, setMovingId] = useState<string | null>(null);
+  const [sharingId, setSharingId] = useState<string | null>(null);
   const placeOf = (a: ArtifactSummary) => movedFolders[a.id] ?? parentOfRow(a) ?? '';
   // The tree the picker draws: what the page handed down, else whatever folders
   // are among these rows.
@@ -489,6 +491,12 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
                       name={a.title ?? a.id}
                       items={[
                         {
+                          label: `Manage sharing for ${a.title ?? a.id}`,
+                          text: 'share',
+                          icon: <Share2 size={12} />,
+                          onSelect: () => setSharingId(a.id),
+                        },
+                        {
                           label: `Move ${a.title ?? a.id}`,
                           text: 'move to folder',
                           icon: <FolderInput size={12} />,
@@ -505,6 +513,9 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
                         },
                       ]}
                     />
+                  )}
+                  {manage && sharingId === a.id && (
+                    <ShareLink className="" artifactId={a.id} title={a.title} owner format={a.format} url={a.url} variant="dialog" onClose={() => setSharingId(null)} />
                   )}
                   {manage && movingId === a.id && (
                     /* The menu is a positioning ancestor, so the picker hangs

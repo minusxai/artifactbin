@@ -259,3 +259,28 @@ describe('Shelf — assets stay separate', () => {
     expect(screen.getByLabelText('Artifact grid')).toHaveTextContent('Doc m1');
   });
 });
+
+
+describe('sharing from the overflow menu', () => {
+  it.each([
+    ['grid', 'markup'], ['list', 'markup'], ['grid', 'folder'], ['list', 'folder'],
+  ])('opens the sharing dialog for a %s %s and copies its address', async (view, format) => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ visibility: 'private', linkRole: 'viewer', shares: [] }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const copy = vi.fn();
+    Object.assign(navigator, { clipboard: { writeText: copy } });
+    render(<Shelf rows={[doc('share-target', 28, { format })]} actions="full" />);
+    if (view === 'list') fireEvent.click(screen.getByLabelText('List view'));
+    expect(fetchMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByLabelText('More actions for Doc share-target'));
+    fireEvent.click(screen.getByLabelText('Manage sharing for Doc share-target'));
+    expect(screen.getByRole('dialog', { name: 'Sharing' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Share “Doc share-target”' })).toBeInTheDocument();
+    await screen.findByLabelText('Make public');
+    expect(fetchMock).toHaveBeenCalledWith('/api/my/artifacts/share-target/sharing');
+    fireEvent.click(screen.getByLabelText('Copy link'));
+    expect(copy).toHaveBeenCalledWith(`${location.origin}/a/share-target`);
+    fireEvent.click(screen.getByLabelText('Close sharing'));
+    expect(screen.queryByRole('dialog', { name: 'Sharing' })).not.toBeInTheDocument();
+  });
+});
