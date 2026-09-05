@@ -10,7 +10,9 @@
  *
  *   1. /health through the proxy — answered by the PROXY itself (its health
  *      part is mounted before the forwarder; a probe that dies with the app
- *      it fronts reports the wrong process's health).
+ *      it fronts reports the wrong process's health) — and /api/health, the
+ *      whole stack's readiness, forwarded to the app, which probes sql and
+ *      browser for real here because they are real containers.
  *   2. an anonymous start — the ANON_MINT door at the proxy and the token mint
  *      at the app, returned once in the paste and response.
  *   3. a publish whose data is real: a `<Value type="table">` and a `<Query>`
@@ -150,6 +152,13 @@ async function main() {
   {
     const { res, body } = await json('/health');
     say('GET /health through the proxy', res.status === 200 && body?.ok === true, `${res.status} ${JSON.stringify(body)}`);
+  }
+
+  // 1b. The stack's readiness — blind on the wire, so `{ok:true}` and nothing else.
+  {
+    const { res, body } = await json('/api/health');
+    const blind = !!body && Object.keys(body).length === 1 && body.ok === true;
+    say('GET /api/health through the proxy — every service ready', res.status === 200 && blind, `${res.status} ${JSON.stringify(body)}`);
   }
 
   // 2. Anonymous start — mint + one-time token, exactly as the paste carries it.
