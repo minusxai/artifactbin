@@ -21,7 +21,7 @@ import { URL_ATTRS as URL_PROPS, URL_LIST_ATTRS as URL_LIST_PROPS, SVG_PAINT_ATT
 import { STORY_SVG_TAGS } from './component-names';
 import { carriesRef, REF_ATTRS, refName } from '@/lib/story/dataflow';
 import type { JsxAttribute } from '@/lib/jsx';
-import { substituteRow } from '@/lib/story/row-scope';
+import { substituteRow, parseRowRef } from '@/lib/story/row-scope';
 import type { ColumnTemplate } from '@/components/kit/data-table';
 
 export interface CellControlProps {
@@ -32,6 +32,8 @@ export interface CellControlProps {
   identity: string;
   column: string;
   rowKey: unknown;
+  tableName?: string;
+  valueField?: string;
   children?: React.ReactNode;
 }
 
@@ -103,7 +105,7 @@ export interface StoryInterpreterOptions {
    */
   keyFor?: (path: string) => string;
   row?: Record<string, unknown>;
-  cellScope?: { table: string; key: unknown; column: string };
+  cellScope?: { table: string; key: unknown; column: string; tableName?: string };
   cellControl?: React.ComponentType<CellControlProps>;
 }
 
@@ -184,7 +186,7 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
       return typeof cp.col === 'string' ? [{ col: cp.col, title: typeof cp.title === 'string' ? cp.title : undefined, props: cp, nodes: child.children, path: `${path}.${index}` }] : [];
     });
     const renderCell = (template: ColumnTemplate, row: Record<string, unknown>) => template.nodes.map((child, i) => renderNode(child, {
-      ...options, row, cellScope: { table: options.keyFor?.(path) ?? path, key: row[String(props.rowKey)], column: template.col },
+      ...options, row, cellScope: { table: options.keyFor?.(path) ?? path, key: row[String(props.rowKey)], column: template.col, tableName: refName(props.data) ?? undefined },
     }, `${template.path}.${i}`));
     const element = React.createElement(Component, { ...props, templates, renderCell, key: options.keyFor?.(path) ?? path });
     return options.decorateElement ? options.decorateElement(element, node, path) : element;
@@ -194,7 +196,7 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
   if (options.row && options.cellControl && run?.value.static && typeof run.value.json === 'string' && refName(run.value.json)) {
     const props = buildProps(node.attributes, isComponent, node.tag, path, options.row);
     const children = node.children.map((c, i) => renderNode(c, options, `${path}.${i}`));
-    return React.createElement(options.cellControl, { key: options.keyFor?.(path) ?? path, tag: node.tag, component: Component ?? undefined, props, row: options.row, identity: JSON.stringify([options.cellScope?.table, typeof options.cellScope?.key, options.cellScope?.key, options.cellScope?.column, path]), column: options.cellScope?.column ?? '', rowKey: options.cellScope?.key, children });
+    return React.createElement(options.cellControl, { key: options.keyFor?.(path) ?? path, tag: node.tag, component: Component ?? undefined, props, row: options.row, identity: JSON.stringify([options.cellScope?.table, typeof options.cellScope?.key, options.cellScope?.key, options.cellScope?.column, path]), column: options.cellScope?.column ?? '', rowKey: options.cellScope?.key, tableName: options.cellScope?.tableName, valueField: node.attributes.flatMap((a) => a.name === 'value' && a.value.static ? [parseRowRef(a.value.json)] : [])[0] ?? undefined, children });
   }
 
   // A `$`-bound image SOURCE goes to its own seam, for the same reason as the
