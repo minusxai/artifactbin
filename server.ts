@@ -26,9 +26,7 @@
  *
  * Boot: the database opens and applies its schema; the services are injected
  * once (DuckDB, Chromium, the event log — the in-process writer ensures the
- * events schema and runs the legacy backfill here), and the trash sweep is
- * started beside them (lib/trash — never awaited, so a process that has just
- * opened its database starts answering); the proxy's own
+ * events schema and runs the legacy backfill here); the proxy's own
  * proxy-owned OAuth tables in the `auth` schema are ensured; human login
  * (Better Auth) is composed from env;
  * the token reader (the proxy's one SELECT over the app-owned `tokens`) is
@@ -135,19 +133,6 @@ async function main(): Promise<void> {
    * that says whether the app or the proxy spoke.
    */
   const events = services().events;
-
-  /*
-   * THE TRASH SWEEP at boot — the purge for anything that has sat past the
-   * retention (lib/trash). Not awaited: a process that has just opened its
-   * database should start answering, and nothing about a purge is urgent. The
-   * request path runs it at most hourly after this, so a busy deployment
-   * sweeps without a scheduler and an idle one sweeps whenever it restarts.
-   */
-  void (async () => {
-    const { sweepTrashAtBoot } = await import('@/lib/trash');
-    const purged = await sweepTrashAtBoot();
-    if (purged.length) console.log(`[boot] purged ${purged.length} artifact(s) past the trash retention`);
-  })();
 
   // The SPA: Vite in middleware mode for dev (modules, HMR, index transform); the built tree in production.
   let vite: import('vite').ViteDevServer | null = null;

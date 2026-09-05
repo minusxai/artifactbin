@@ -83,20 +83,19 @@ describe('followFeed', () => {
     expect((await followFeed(carol.id, { limit: 2 })).map((e) => e.id)).toEqual(['f4', 'f3']);
   });
   /*
-   * THE PLACEMENT VERBS ARE NOT NEWS. `moved`, `trashed` and `restored` say
+   * THE PLACEMENT VERBS ARE NOT NEWS. `moved`, `deleted` and `restored` say
    * where somebody keeps their own files; a follower is shown what was made,
    * copied, liked and commented on. FOLLOW_VERBS is the whole mechanism — the
    * public cut is an allowlist, so a verb added to the catalogue is private
    * until somebody decides otherwise, which is the right default for a log
    * this feature keeps adding to.
    */
-  it('never carries a move, a trash or a restore, whoever did it and however public the document', async () => {
+  it('never carries a move, a delete or a restore, whoever did it and however public the document', async () => {
     await link(carol.id, 'follow', alice.id);
     await say('p1', ago(4), ['user', alice.id], 'created', 'artifact', pubA);
     await say('p2', ago(3), ['user', alice.id], 'moved', 'artifact', pubA, '{"from_parent_id":null,"to_parent_id":"fld123"}');
-    await say('p3', ago(2), ['user', alice.id], 'trashed', 'artifact', pubA, '{"format":"markup","subtree":0}');
-    await say('p4', ago(1), ['user', alice.id], 'restored', 'artifact', pubA, '{"landed_at_root":true}');
-    await say('p5', ago(0), ['user', alice.id], 'deleted', 'artifact', pubA);
+    await say('p3', ago(1), ['user', alice.id], 'restored', 'artifact', pubA, '{"landed_at_root":true}');
+    await say('p4', ago(0), ['user', alice.id], 'deleted', 'artifact', pubA, '{"format":"markup","subtree":0}');
     expect((await followFeed(carol.id)).map((e) => e.id)).toEqual(['p1']);
   });
 
@@ -104,7 +103,7 @@ describe('followFeed', () => {
     await say('p1', ago(2), ['user', alice.id], 'moved', 'artifact', pubA, '{"from_parent_id":null,"to_parent_id":"fld123"}');
     await say('p2', ago(1), ['user', alice.id], 'restored', 'artifact', pubA, '{"landed_at_root":true}');
     // `ownerFeed` filters on ownership, never on verb: what happened to what I
-    // own is all of it. A `trashed` is the one that cannot be read back this
+    // own is all of it. A `deleted` is the one that cannot be read back this
     // way while it is true — the trash gate takes the ROW out of every feed —
     // so it lives in the log alone until the row is restored.
     expect((await ownerFeed(alice.id)).map((e) => e.id)).toEqual(['p2', 'p1']);

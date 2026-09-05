@@ -1,12 +1,11 @@
 /**
  * THE PLACEMENT MOMENTS — the log's half of the folders and the trash.
  *
- * Four sentences, at the doors that actually change something: a `moved` at
+ * Three sentences, at the doors that actually change something: a `moved` at
  * both placement doors (the PATCH and a replace that files the row), a
- * `trashed` carrying what went with it, a `restored` saying where the row
- * landed, and `deleted` ONLY from the purge — which is the whole point of the
- * distinct vocabulary. A trash that said `deleted` would tell an operator a
- * document was erased while it is sitting in the owner's trash, restorable.
+ * `deleted` carrying what went with it, and a `restored` saying where the row
+ * landed. ONE deletion verb, because there is one deletion — nothing is ever
+ * erased, so a second verb would name a state the product does not have.
  *
  * `created`'s payload names the parent for the same reason: a folder create
  * and a filed create are the two moments this feature exists to make, and a
@@ -19,11 +18,9 @@ import { PATCH as patchRoute, DELETE as deleteRoute } from '@/app/api/my/artifac
 import { POST as restoreRoute } from '@/app/api/my/artifacts/[id]/restore/route';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { PUT as replaceOneRoute } from '@/app/api/artifacts/[id]/route';
-import { getDb } from '@/lib/db';
 import { setServices } from '@/lib/services';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser } from '@/lib/users';
-import { purgeTrash } from '@/lib/trash';
 
 useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -102,26 +99,29 @@ describe('a move is its own verb, at both placement doors', () => {
   });
 });
 
-describe('a trash is trashed, never deleted', () => {
-  it('DELETE says artifact.trashed with the format and no subtree, and never artifact.deleted', async () => {
+describe('a delete is said once, at the door, and never twice', () => {
+  it('DELETE says artifact.deleted with the format and no subtree, and says nothing else', async () => {
     const w = await world();
     const doc = await w.mk({ markup: '<h1>x</h1>', title: 'D' });
     listen();
     const r = await deleteRoute(request(`/api/my/artifacts/${doc.id}`, { method: 'DELETE', cookie: w.cookie }), params(doc.id));
     expect(r.status).toBe(200);
-    expect(said('trashed')).toHaveLength(1);
-    expect(said('trashed')[0]).toMatchObject({ object_id: doc.id, subject_kind: 'user', subject_id: w.userId, payload: { format: 'markup', subtree: 0 } });
-    expect(verbs()).not.toContain('deleted');
+    await new Promise((res) => setTimeout(res, 80));
+    expect(said('deleted')).toHaveLength(1);
+    expect(said('deleted')[0]).toMatchObject({ object_id: doc.id, subject_kind: 'user', subject_id: w.userId, payload: { format: 'markup', subtree: 0 } });
+    // The verb `trashed` does not exist: there is one deletion, and this is it.
+    expect(verbs()).not.toContain('trashed');
   });
 
-  it('trashing a folder counts what went with it', async () => {
+  it('deleting a folder counts what went with it', async () => {
     const w = await world();
     const folder = await w.mk({ format: 'folder', title: 'F' });
     await w.mk({ markup: '<h1>a</h1>', title: 'A', parent_id: folder.id });
     await w.mk({ markup: '<h1>b</h1>', title: 'B', parent_id: folder.id });
     listen();
     await deleteRoute(request(`/api/my/artifacts/${folder.id}`, { method: 'DELETE', cookie: w.cookie }), params(folder.id));
-    expect(said('trashed')[0]).toMatchObject({ object_id: folder.id, payload: { format: 'folder', subtree: 2 } });
+    await new Promise((res) => setTimeout(res, 80));
+    expect(said('deleted')[0]).toMatchObject({ object_id: folder.id, payload: { format: 'folder', subtree: 2 } });
   });
 
   it('a restore says where the row landed', async () => {
@@ -145,22 +145,5 @@ describe('a trash is trashed, never deleted', () => {
     listen();
     await restoreRoute(request(`/api/my/artifacts/${doc.id}/restore`, { method: 'POST', cookie: w.cookie }), params(doc.id));
     expect(said('restored')[0]?.payload).toMatchObject({ landed_at_root: true });
-  });
-});
-
-describe('deleted belongs to the purge', () => {
-  it('the sweep says artifact.deleted once per row it erased, and nothing else does', async () => {
-    const w = await world();
-    const doc = await w.mk({ markup: '<h1>x</h1>', title: 'D' });
-    await deleteRoute(request(`/api/my/artifacts/${doc.id}`, { method: 'DELETE', cookie: w.cookie }), params(doc.id));
-    const db = await getDb();
-    await db.query(`UPDATE artifacts SET deleted_at = now() - interval '40 days' WHERE id = $1`, [doc.id]);
-    listen();
-    const purged = await purgeTrash();
-    expect(purged).toContain(doc.id);
-    await new Promise((r) => setTimeout(r, 50));
-    const deleted = said('deleted');
-    expect(deleted).toHaveLength(1);
-    expect(deleted[0]).toMatchObject({ object_kind: 'artifact', object_id: doc.id });
   });
 });

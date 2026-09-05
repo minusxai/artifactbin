@@ -27,8 +27,8 @@ export interface ArtifactCreatedPayload extends ArtifactActorPayload { parent_id
 export interface AnnotationPayload { annotation_id: string }
 /** Where a row went. Either end may be the ROOT, which is null — a folder is an artifact, so both are artifact ids. */
 export interface MovedPayload { from_parent_id: string | null; to_parent_id: string | null }
-/** What went into the trash with it: the row's own format, and the descendants that followed (0 for a document). */
-export interface TrashedPayload { format: string; subtree: number }
+/** A delete also says what went with it: the row's own format, and the descendants that followed (0 for a document). */
+export interface ArtifactDeletedPayload extends ArtifactActorPayload { format?: string; subtree?: number }
 /** Whether the row came back where it was, or at the root because an ancestor was not there to hold it. */
 export interface RestoredPayload { landed_at_root: boolean }
 export interface TokenPayload { name?: string | null }
@@ -44,12 +44,15 @@ export interface EventVerbs {
     updated: ArtifactActorPayload;
     edited: ArtifactActorPayload;
     reverted: ArtifactActorPayload;
-    /** ERASED FOR GOOD — said by the purge, one per row, never by a delete a person can undo (that is `trashed`). */
-    deleted: ArtifactActorPayload;
+    /**
+     * DELETED — and that is the whole of it. Nothing in this product erases a
+     * row, so there is no second verb for "gone for good": the row is kept, the
+     * link stops working, and `restored` is the reverse. A folder takes its
+     * subtree, and `subtree` says how much went.
+     */
+    deleted: ArtifactDeletedPayload;
     /** Placement changed: the PATCH door, and a replace that files the row. A folder's subtree follows it silently. */
     moved: MovedPayload;
-    /** Into the trash, recoverable until the purge. A folder takes its subtree, and the count says how much went. */
-    trashed: TrashedPayload;
     /** Back out of the trash. */
     restored: RestoredPayload;
     exported: ArtifactActorPayload;
@@ -97,7 +100,7 @@ type Complete<K extends ObjectKind, T extends readonly EventVerb<K>[]> =
 const complete = <K extends ObjectKind>() => <const T extends readonly EventVerb<K>[]>(verbs: Complete<K, T>): readonly EventVerb<K>[] => verbs as T;
 
 export const EVENT_VERBS: { readonly [K in ObjectKind]: readonly EventVerb<K>[] } = {
-  artifact: complete<'artifact'>()(['created', 'updated', 'edited', 'reverted', 'deleted', 'moved', 'trashed', 'restored', 'exported', 'mutated', 'viewed', 'forked', 'annotated', 'annotation_resolved', 'annotation_deleted', 'sharing_changed', 'liked', 'unliked']),
+  artifact: complete<'artifact'>()(['created', 'updated', 'edited', 'reverted', 'deleted', 'moved', 'restored', 'exported', 'mutated', 'viewed', 'forked', 'annotated', 'annotation_resolved', 'annotation_deleted', 'sharing_changed', 'liked', 'unliked']),
   user: complete<'user'>()(['signed_up', 'login_sent', 'login_verified', 'oauth_linked', 'followed', 'unfollowed']),
   token: complete<'token'>()(['minted', 'claimed', 'revoked']),
   door: complete<'door'>()(['denied']),

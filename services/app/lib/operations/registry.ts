@@ -354,7 +354,7 @@ const deleteArtifactOp: Operation = {
   name: 'delete_artifact',
   title: 'Delete an artifact',
   http: { method: 'DELETE', path: '/api/artifacts/{id}' },
-  description: 'Move an artifact to the trash; the link stops working. It is recoverable with restore_artifact until the retention runs out (30 days), after which it is deleted for good. A FOLDER takes everything under it, and restore brings the whole subtree back. If other documents reference it (ref:), the call fails with has_dependents — pass force: true to break those links knowingly (the documents degrade to empty fallbacks).',
+  description: 'Move an artifact to the trash; the link stops working. Nothing is ever erased: it stays recoverable with restore_artifact for good, it still counts against the quota, and destroying it outright is an operator action outside this API. A FOLDER takes everything under it, and restore brings the whole subtree back. If other documents reference it (ref:), the call fails with has_dependents — pass force: true to break those links knowingly (the documents degrade to empty fallbacks).',
   input: { id: z.string(), force: z.boolean().optional() },
   annotations: { destructive: true },
   example: { input: { id: 'aB3xK9' } },

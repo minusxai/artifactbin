@@ -71,7 +71,7 @@ const EVENT_VERBS_BY_ANALYTICS = {
 export async function trackEvent(
   event: AnalyticsEvent,
   artifactId: string,
-  opts: { userId?: string | null; forkId?: string | null; parentId?: string | null } = {},
+  opts: { userId?: string | null; forkId?: string | null; parentId?: string | null; format?: string; subtree?: number } = {},
 ): Promise<void> {
   let client: string | null = null;
   let visitor: string | null = null;
@@ -131,6 +131,9 @@ export async function trackEvent(
     // themselves rather than as one anonymous `created` a reader must join
     // the artifacts table to place. Null is the root, which is most creates.
     else if (verb === 'created') await emit(subject, verb, object, { ...payload, parent_id: opts.parentId ?? null });
+    // A delete says what went with it: a folder takes its subtree, and the
+    // count is the difference between losing a document and losing a shelf.
+    else if (verb === 'deleted') await emit(subject, verb, object, { ...payload, ...(opts.format !== undefined ? { format: opts.format } : {}), ...(opts.subtree !== undefined ? { subtree: opts.subtree } : {}) });
     else await emit(subject, verb, object, payload);
   } catch {
     // trackEvent never rejects, whatever the mapping or the service did.

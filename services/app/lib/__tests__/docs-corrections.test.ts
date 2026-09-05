@@ -124,10 +124,22 @@ describe('folders and the trash', () => {
   it('§P4.2 delete is a trash, and restore is named', () => {
     expect(doc).toContain('DELETE is a TRASH');
     expect(doc).toContain('restore_artifact');
-    expect(flat(doc)).toContain('recoverable for 30 days');
+    expect(flat(doc)).toContain('restorable with no deadline');
+  });
+  /*
+   * THE THREE CONSEQUENCES OF HAVING NO PURGE. Each is a promise an agent may
+   * repeat to its user, and each was previously the opposite: there is no
+   * retention, deleting frees no quota, and the only real erasure is an
+   * operator's, outside this API. A doc that stops saying one of them is a doc
+   * that lets an agent promise something untrue.
+   */
+  it('§P5.1 nothing is ever erased, and the docs say so three ways', () => {
+    expect(flat(doc)).toContain('Nothing here is ever erased');
+    expect(flat(doc)).toContain('still counts against your quota');
+    expect(flat(doc)).toContain('an administrative act on the database, outside this API');
+    expect(flat(doc), 'no retention survives anywhere in the docs').not.toContain('30 days');
   });
   it('§P4.3 the two limits are stated, not implied away', () => {
-    expect(flat(doc)).toContain('Deleting a COMMENT is permanent');
     expect(flat(doc)).toContain('a restore can land a row deeper than the 6-level cap');
   });
 });

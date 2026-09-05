@@ -7,7 +7,7 @@
  * giving it its own address keeps that exception in one place.
  */
 import { json, unauthorized } from '@/lib/http';
-import { listTrashFor, TRASH_RETENTION_DAYS } from '@/lib/trash';
+import { listTrashFor } from '@/lib/trash';
 import { actorForArtifacts, sessionActor } from '@/lib/viewer';
 
 export async function GET(request: Request) {
@@ -15,5 +15,5 @@ export async function GET(request: Request) {
   const scoped = actorForArtifacts(actor);
   if (!scoped) return unauthorized(request);
   const files = await listTrashFor(scoped);
-  return json({ files, retentionDays: TRASH_RETENTION_DAYS }, 200, { 'Cache-Control': 'no-store' });
+  return json({ files }, 200, { 'Cache-Control': 'no-store' });
 }

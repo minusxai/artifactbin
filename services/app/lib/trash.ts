@@ -1,5 +1,11 @@
 /**
- * THE TRASH — deleting an artifact stamps `deleted_at` and nothing else.
+ * THE TRASH — deleting an artifact stamps `deleted_at` and nothing else, and
+ * that is the END of it. NOTHING IN THIS PRODUCT ERASES A ROW: there is no
+ * retention, no purge and no sweep, so `deleted_at` set is a terminal state
+ * that only `restoreArtifactFor` clears. The consequences are stated rather
+ * than hidden — a deleted document still counts against its owner's quota
+ * (lib/asset-quota, `artifactQuotaExceeded`), and erasing something for a
+ * legal request is an administrative act on the database, outside the product.
  *
  * The whole design is ONE GATE and one exception to it. The gate is
  * `LIVE_ARTIFACT_SQL`, composed into the row-loading seam (lib/artifacts: the
@@ -7,7 +13,7 @@
  * few readers that do not come through it, so a trashed row is the uniform 404
  * everywhere without a single caller remembering to say so. The exception is
  * THIS MODULE, which reads past the gate through `ownerPredicate`, because the
- * trash listing, restore and the purge are the readers the rows are kept for.
+ * trash listing and restore are the readers the rows are kept for.
  *
  * Three consequences worth stating, each of which is why this is a module and
  * not three statements spread over the doors:
@@ -30,12 +36,9 @@
  */
 import { trackEvent } from '@/lib/analytics';
 import { LIVE_ARTIFACT_SQL, ownerPredicate, type TokenActor } from '@/lib/artifacts';
-import { getDb, type Queryable } from '@/lib/db';
+import { getDb } from '@/lib/db';
 import { actorSubject, emit } from '@/lib/events';
 import { ancestorsForMove, notifyParent, parentOf } from '@/lib/folders';
-
-/** Days a row sits in the trash before the purge hard-deletes it. */
-export const TRASH_RETENTION_DAYS = 30;
 
 /** The row and everything under it — a document matches only itself. */
 const SUBTREE = '(id = $1 OR ancestor_ids @> ARRAY[$1])';
@@ -61,16 +64,15 @@ export async function trashArtifactFor(actor: TokenActor, id: string): Promise<b
   const named = r.rows.find((row) => row.id === id);
   if (!named) return false;
   /*
-   * `trashed`, NEVER `deleted`. The log keeps `deleted` for the purge, where
-   * it means what it has always meant — erased, nothing to come back to — and
-   * saying it here would tell an operator a document was destroyed while it is
-   * sitting in its owner's trash, restorable for thirty days. The count is what
-   * the statement above actually took, so a folder's sentence says how much
-   * went with it and a document's says nothing went.
+   * `deleted`, said HERE, because this is the only delete there is. The count
+   * is what the statement above actually took, so a folder's sentence says how
+   * much went with it and a document's says nothing went — and the legacy
+   * `analytics_events` row rides on the same call, which is why it is
+   * trackEvent rather than a bare emit.
    *
    * Fire-and-forget, and never inside a transaction (PGLite deadlock).
    */
-  void emit(actorSubject(actor), 'trashed', { kind: 'artifact', id }, { format: named.format, subtree: r.rows.length - 1 });
+  void trackEvent('delete', id, { userId: actor.userId, format: named.format, subtree: r.rows.length - 1 });
   await notifyParent(parentOf(named));
   return true;
 }
@@ -145,82 +147,4 @@ export async function listTrashFor(actor: TokenActor): Promise<TrashEntry[]> {
     [scope.val],
   );
   return r.rows;
-}
-
-/**
- * The HARD delete — the transaction that used to be `deleteArtifactScoped`,
- * moved here whole because the purge is now the only thing in the product that
- * performs one. Every table that names the artifact goes with it: the edit log
- * stores full text (its genesis row holds the whole document), so leaving it
- * would leave the content behind a delete that promised to be permanent.
- */
-async function hardDelete(tx: Queryable, id: string): Promise<void> {
-  await tx.query('DELETE FROM artifact_versions WHERE artifact_id = $1', [id]);
-  await tx.query('DELETE FROM artifact_edits WHERE artifact_id = $1', [id]);
-  await tx.query('DELETE FROM artifact_shares WHERE artifact_id = $1', [id]);
-  await tx.query('DELETE FROM annotations WHERE artifact_id = $1', [id]);
-  await tx.query('DELETE FROM artifacts WHERE id = $1', [id]);
-}
-
-/**
- * Hard-delete everything that has sat in the trash longer than the retention.
- * Returns the ids purged.
- *
- * Ordered DEEPEST FIRST, the way the forced folder delete was: a subtree
- * trashed together shares one stamp and so purges together, and taking the
- * rows from the bottom means nothing is ever orphaned mid-sweep. Bounded by
- * the trash rather than by the table, so it stays a sweep and never a scan.
- */
-export async function purgeTrash(opts: { olderThanDays?: number; now?: Date } = {}): Promise<string[]> {
-  const days = opts.olderThanDays ?? TRASH_RETENTION_DAYS;
-  const cutoff = new Date((opts.now ?? new Date()).getTime() - days * 86_400_000).toISOString();
-  const db = await getDb();
-  const due = await db.query<{ id: string; user_id: string | null }>(
-    `SELECT id, user_id FROM artifacts WHERE deleted_at IS NOT NULL AND deleted_at < $1::timestamptz
-      ORDER BY cardinality(ancestor_ids) DESC`,
-    [cutoff],
-  );
-  const ids = due.rows.map((r) => r.id);
-  if (!ids.length) return ids;
-  await db.transaction(async (tx) => {
-    for (const id of ids) await hardDelete(tx, id);
-  });
-  /*
-   * THE ONE PLACE THAT SAYS `deleted`. The verb kept its meaning when the
-   * delete door stopped erasing anything, so it moved here with the erasure —
-   * one sentence per row, after the transaction (lib/analytics is
-   * fire-and-forget and may not run inside one), with no subject: a sweep is
-   * the product's own housekeeping and nobody asked for it.
-   */
-  for (const row of due.rows) void trackEvent('delete', row.id, { userId: row.user_id });
-  return ids;
-}
-
-/**
- * THE LAZY SWEEP — the purge, run at most once an hour from whatever request
- * happens to arrive after the interval, plus once at boot (server.ts).
- *
- * A timestamp in module scope rather than a scheduler, because this product is
- * one process and a cron job is a second deployment artefact to keep in step
- * with it. It never throws and is never awaited by a request: the caller is
- * someone reading a document, and their answer must not wait on — or fail with
- * — a housekeeping sweep.
- */
-const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
-let lastSweep = 0;
-export function sweepTrashSoon(): void {
-  const now = Date.now();
-  if (now - lastSweep < SWEEP_INTERVAL_MS) return;
-  lastSweep = now;
-  void purgeTrash().catch(() => { /* housekeeping never fails a request */ });
-}
-
-/** Boot: run the sweep now, and count it as this hour's. Never throws. */
-export async function sweepTrashAtBoot(): Promise<string[]> {
-  lastSweep = Date.now();
-  try {
-    return await purgeTrash();
-  } catch {
-    return [];
-  }
 }

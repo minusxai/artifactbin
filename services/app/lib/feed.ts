@@ -260,7 +260,8 @@ export async function followFeed(userId: string, opts: { limit?: number } = {}):
    * nobody thought of as an ACL. The same `at DESC, id DESC` total order as
    * `ownerFeed`, for the same reason. The trash gate rides beside it: a
    * document its owner deleted must stop being news to their followers the
-   * moment they delete it, not thirty days later when the purge runs.
+   * moment they delete it — and the row is kept for ever, so this is the only
+   * thing that ever takes it out of a feed.
    */
   const r = await db.query<EventRow>(
     `SELECT e.* FROM ${EVENTS_SCHEMA}.events e

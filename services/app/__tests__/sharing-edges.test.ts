@@ -15,7 +15,6 @@ import { DELETE as deleteMineRoute } from '@/app/api/my/artifacts/[id]/route';
 import { PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { mintToken } from '@/lib/tokens';
-import { purgeTrash } from '@/lib/trash';
 import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/users';
 
 const BASE = 'http://localhost:3000';
@@ -69,16 +68,26 @@ beforeEach(async () => {
   sessionUser.email = '';
 });
 
-describe('share rows never outlive their artifact', () => {
+/*
+ * THE SHARE LIST OUTLIVES THE DELETE, and that is now the whole rule.
+ *
+ * This suite used to say the opposite — "share rows never outlive their
+ * artifact" — because a delete erased the row and a recycled id must never
+ * inherit a stranger's grant. Neither half is true any more: nothing erases an
+ * artifact, so no id is ever freed to be recycled, and a restored document has
+ * to come back shared with the same people. The grants are unreachable
+ * meanwhile for the reason every other dependent row is — the artifact answers
+ * the uniform 404 (trashed-rows.test.ts), so nothing can reach the ACL to use.
+ */
+describe('share rows survive their artifact\'s delete, and the id is never recycled', () => {
   const sharesFor = async (id: string) =>
     (await (await harness.db()).query('SELECT 1 FROM artifact_shares WHERE artifact_id = $1', [id])).rows.length;
-  /** Age the row past the retention and sweep — the delete is a trash, the purge is what erases. */
-  const purge = async (id: string) => {
-    await (await harness.db()).query(`UPDATE artifacts SET deleted_at = now() - interval '31 days' WHERE id = $1`, [id]);
-    expect(await purgeTrash({ olderThanDays: 30 })).toEqual([id]);
+  /** Age the stamp past any retention this product has ever had; nothing sweeps. */
+  const age = async (id: string) => {
+    await (await harness.db()).query(`UPDATE artifacts SET deleted_at = now() - interval '400 days' WHERE id = $1`, [id]);
   };
 
-  it('the bearer DELETE takes the share list with it', async () => {
+  it('the bearer DELETE keeps the share list', async () => {
     const { owner, token } = await ownerFixture();
     const doc = await create(token, { title: 'x', markup: '<h1>x</h1>' });
     sessionUser.id = owner.id;
@@ -87,12 +96,12 @@ describe('share rows never outlive their artifact', () => {
     expect(await sharesFor(doc.id)).toBe(1);
 
     expect((await deleteArtifactRoute(request(`/api/artifacts/${doc.id}`, { method: 'DELETE', token: token }), params({ id: doc.id }))).status).toBe(200);
-    // The trash keeps them: a restored document must come back shared with the
-    // same people. A recycled id must never inherit a stranger's grant, and
-    // that is the PURGE's promise now, asserted here where it was.
+    // A restored document must come back shared with the same people, and
+    // there is no later sweep to take them: the row and its grants are kept.
     expect(await sharesFor(doc.id)).toBe(1);
-    await purge(doc.id);
-    expect(await sharesFor(doc.id)).toBe(0);
+    await age(doc.id);
+    expect(await sharesFor(doc.id)).toBe(1);
+    expect((await (await harness.db()).query('SELECT 1 FROM artifacts WHERE id = $1', [doc.id])).rows).toHaveLength(1);
   });
 
   it('the session DELETE does too', async () => {
@@ -102,8 +111,8 @@ describe('share rows never outlive their artifact', () => {
     sessionUser.email = owner.email;
     await putSharingRoute(request(`/api/my/artifacts/${doc.id}/sharing`, { method: 'PUT', json: { shares: ['a@b.com'] } }), params({ id: doc.id }));
     expect((await deleteMineRoute(request(`/api/my/artifacts/${doc.id}`, { method: 'DELETE' }), params({ id: doc.id }))).status).toBe(200);
-    await purge(doc.id);
-    expect(await sharesFor(doc.id)).toBe(0);
+    await age(doc.id);
+    expect(await sharesFor(doc.id)).toBe(1);
   });
 });
 

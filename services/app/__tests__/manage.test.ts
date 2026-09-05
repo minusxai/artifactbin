@@ -15,7 +15,6 @@ import { POST as revertRoute } from '@/app/api/artifacts/[id]/revert/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { isVersionNotArchived, listVersionsFor, revertArtifactFor } from '@/lib/artifacts';
 import { mintToken } from '@/lib/tokens';
-import { purgeTrash } from '@/lib/trash';
 import { createUser, listAccountTokenRows, revokeUserToken } from '@/lib/users';
 
 const BASE = 'http://localhost:3000';
@@ -91,12 +90,16 @@ describe('artifact deletion', () => {
     expect((await serveArtifact(request(`/a/${art.id}/raw`), params({ id: art.id }))).status).toBe(404);
 
     const db = await harness.db();
-    // The history survives the delete, because restoring a document that had
-    // lost its history would be a worse answer than not restoring it at all.
+    /*
+     * The history survives the delete, because restoring a document that had
+     * lost its history would be a worse answer than not restoring it at all —
+     * and it survives it FOREVER, because nothing in this product erases a row.
+     * Ageing the stamp past any retention there has ever been changes nothing.
+     */
     expect((await db.query('SELECT 1 FROM artifact_versions WHERE artifact_id = $1', [art.id])).rows).toHaveLength(1);
-    await db.query(`UPDATE artifacts SET deleted_at = now() - interval '31 days' WHERE id = $1`, [art.id]);
-    expect(await purgeTrash({ olderThanDays: 30 })).toEqual([art.id]);
-    expect((await db.query('SELECT 1 FROM artifact_versions WHERE artifact_id = $1', [art.id])).rows).toHaveLength(0);
+    await db.query(`UPDATE artifacts SET deleted_at = now() - interval '400 days' WHERE id = $1`, [art.id]);
+    expect((await db.query('SELECT 1 FROM artifact_versions WHERE artifact_id = $1', [art.id])).rows).toHaveLength(1);
+    expect((await db.query('SELECT 1 FROM artifacts WHERE id = $1', [art.id])).rows).toHaveLength(1);
   });
 
   it("cannot delete another token's artifact (uniform 404)", async () => {

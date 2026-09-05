@@ -86,7 +86,7 @@ draws breadcrumbs and the url keeps working wherever a file moves.
 A folder's page is its own stored markup — a `<Query>` over its children table
 `ref_<folderId>`, drawn by `<Files>` ([markup-data.md](markup-data.md)) — so you
 edit one like any document. DELETE is a TRASH: a folder goes with everything
-under it, and `restore_artifact` takes it back for 30 days
+under it, and `restore_artifact` takes it back at any time
 ([publishing-versions.md](publishing-versions.md)).
 
 ### Edit part of a document

@@ -121,7 +121,7 @@ export function HomePage() {
         * the wire because a page served from an older bootstrap has none. */}
       <ActivityFeed mine={home.feed?.mine ?? []} following={home.feed?.following ?? []} />
       {/* THE ONE WAY BACK. Deleting is a trash now (lib/trash): a row is
-        * recoverable for 30 days, which is worth nothing if nothing on the
+        * recoverable for good, which is worth nothing if nothing on the
         * product leads to it. One quiet link at the foot of the account's own
         * page — an anonymous browser has no trash to reach. It sits BELOW the
         * activity section rather than between it and the shelves, where a bare

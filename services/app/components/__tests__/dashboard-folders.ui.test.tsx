@@ -41,7 +41,7 @@ describe('a folder tile carries the folder\u2019s own actions', () => {
     expect(del.textContent).toContain('1 inside');
     fireEvent.click(del);
     await waitFor(() => expect(deletes).toEqual(['/api/my/artifacts/rep001']));
-    expect(asked[0]).toBe('Delete Reports and the 1 item inside it? They go to the trash for 30 days.');
+    expect(asked[0]).toBe('Delete Reports and the 1 item inside it? They go to the trash, and you can restore them any time.');
     // The tile leaves the strip, and so does what was under it — no reload.
     await waitFor(() => expect(screen.queryByLabelText('Open folder Reports')).toBeNull());
     expect(screen.getByLabelText('Open folder Empty')).toBeTruthy();
@@ -76,10 +76,10 @@ describe('a folder tile carries the folder\u2019s own actions', () => {
      * P4: the wording a person answers has to be TRUE. It said "the link dies
      * and history is erased", which was the whole story when a delete was one
      * hard DELETE and is now half of it: the link does die, and everything
-     * else waits 30 days. Pinned here because this is the only branch that
+     * else is restorable. Pinned here because this is the only branch that
      * renders it — the folder branch above says its own sentence.
      */
-    expect(asked[0]).toBe('Delete "Empty"? The link stops working. It goes to the trash for 30 days, then it is gone for good.');
+    expect(asked[0]).toBe('Delete "Empty"? The link stops working. It goes to the trash, where you can restore it any time.');
   });
 
   it('moves a folder through the same picker every row uses', () => {
