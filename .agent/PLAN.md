@@ -1,6 +1,6 @@
 # PLAN — `rate-limits`: rate limiting becomes a policy file
 
-Worktree `/Users/ppsreejith/projects/artifact-bin-rate-limits`, branch `split-rate-limits` off `main`
+This worktree (the one holding `.agent/BRIEF.md`), branch `split-rate-limits` off `main`
 (744a21a). Port block 6600–6699. Planning only: nothing here implements the engine, and no existing test
 was edited or deleted.
 

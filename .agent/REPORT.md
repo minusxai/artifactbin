@@ -1,6 +1,6 @@
 # REPORT — planning phase `rate-limits`
 
-Worktree `/Users/ppsreejith/projects/artifact-bin-rate-limits`, branch `split-rate-limits` (base `main`
+This worktree (the one holding `.agent/BRIEF.md`), branch `split-rate-limits` (base `main`
 744a21a). Planning only: the engine is not implemented, no existing test was edited or deleted, no docker
 container was started, no browser gate was run, no PR was opened. Ports bound: none.
 
