@@ -37,6 +37,8 @@
  * it at all.
  */
 
+import { REPO_URL } from '@/lib/repo';
+
 /** The login door, when a link grants more than the anonymous ceiling lets a guest use. */
 export interface ReaderSignIn {
   unlocks: 'commenter' | 'editor';
@@ -124,7 +126,9 @@ const ICON = (paths: string, size = 20): string =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor"`
   + ` stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
 
+const ICON_STAR = ICON('<path d="m12 3 2.8 5.7 6.3.9-4.5 4.4 1.1 6.2L12 17.3l-5.7 3 1.1-6.2L2.9 9.6l6.3-.9z"/>', 13);
 const ICON_CHEVRON = ICON('<path d="m9 18 6-6-6-6"/>', 14);
+const ICON_GITHUB = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M12 .5A11.5 11.5 0 0 0 .5 12a11.5 11.5 0 0 0 7.86 10.92c.575.106.785-.25.785-.554 0-.273-.01-.997-.015-1.957-3.196.695-3.87-1.54-3.87-1.54-.523-1.33-1.277-1.684-1.277-1.684-1.043-.714.08-.699.08-.699 1.153.081 1.76 1.184 1.76 1.184 1.026 1.757 2.69 1.25 3.345.956.105-.743.401-1.25.73-1.538-2.552-.29-5.235-1.276-5.235-5.68 0-1.255.448-2.281 1.183-3.086-.119-.291-.513-1.46.112-3.044 0 0 .965-.309 3.163 1.179a10.98 10.98 0 0 1 2.88-.388c.977.005 1.961.132 2.88.388 2.196-1.488 3.16-1.179 3.16-1.179.626 1.584.232 2.753.114 3.044.737.805 1.181 1.831 1.181 3.086 0 4.415-2.687 5.386-5.247 5.671.412.355.78 1.056.78 2.129 0 1.537-.014 2.776-.014 3.154 0 .307.207.665.79.552A11.5 11.5 0 0 0 23.5 12 11.5 11.5 0 0 0 12 .5z"/></svg>';
 const ICON_HEART = ICON('<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21.2l7.7-7.7 1.1-1.1a5.5 5.5 0 0 0 0-7.8z"/>');
 const ICON_COMMENT = ICON('<path d="M21 11.5a8.4 8.4 0 0 1-9 8.5 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.2A8.4 8.4 0 0 1 4 12a8.4 8.4 0 0 1 8.5-9 8.4 8.4 0 0 1 8.5 8.5z"/>');
 const ICON_SEND = ICON('<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>');
@@ -226,6 +230,7 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
     + `${artifactId ? ` data-mx-artifact-id="${escapeHtml(artifactId)}"` : ''}>`
     + '<a class="mx-reader-home" href="/" target="_top" aria-label="Home" data-mx-reader-logo data-mx-tip="Home">'
     + '<img src="/logo-128.png" alt=""></a>'
+    + `<a class="mx-reader-github" href="${REPO_URL}" target="_blank" rel="noopener noreferrer" aria-label="Star artifactbin on GitHub (opens in a new tab)">${ICON_GITHUB}<span>STAR</span>${ICON_STAR}</a>`
     + '<div class="mx-reader-rail" data-mx-reader-rail>'
     + action(
       'like',
