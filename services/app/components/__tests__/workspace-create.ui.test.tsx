@@ -51,4 +51,17 @@ describe('WorkspaceCreate', () => {
     }));
     expect(dialog).not.toBeInTheDocument();
   });
+
+  it('creates a folder inside the current folder when the shared workspace is nested', async () => {
+    render(<WorkspaceCreate parentId="fold01" onCreated={() => {}} />);
+    fireEvent.click(screen.getByLabelText('Create'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'New folder' }));
+    fireEvent.change(screen.getByLabelText('Folder name'), { target: { value: 'Q4' } });
+    fireEvent.click(screen.getByRole('button', { name: 'create folder' }));
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/my/artifacts', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ format: 'folder', title: 'Q4', parent_id: 'fold01' }),
+    })));
+  });
 });

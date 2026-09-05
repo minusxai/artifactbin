@@ -8,6 +8,7 @@ import { takeBootstrap } from '../bootstrap';
 import { useLocation, useParams } from 'react-router';
 import ArtifactShell from '@/components/ArtifactShell';
 import ArtifactSurface from '@/components/ArtifactSurface';
+import type { AccountWorkspace } from '@/lib/workspace';
 import { FolderPage } from './Folder';
 import { NotFoundPage } from './NotFound';
 
@@ -22,7 +23,7 @@ import { NotFoundPage } from './NotFound';
  * second meaning for the word is how a payload starts lying about itself.
  */
 type Page =
-  | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; folder: Parameters<typeof FolderPage>[0]['folder']; surface?: undefined }
+  | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; folder: Parameters<typeof FolderPage>[0]['folder']; workspace?: AccountWorkspace; surface?: undefined }
   | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; like?: { liked: boolean; count: number }; follow?: { userId: string; following: boolean; count: number } | null; surface: Parameters<typeof ArtifactSurface>[0]; folder?: undefined };
 
 export function ArtifactPage({ id: given }: { id?: string } = {}) {
@@ -48,7 +49,7 @@ export function ArtifactPage({ id: given }: { id?: string } = {}) {
   if (page === 'missing') return <NotFoundPage />;
   // A folder is a listing, not a document: no shell (its chrome is the shelf's
   // own) and no surface (there is nothing to frame).
-  if (page.folder) return <FolderPage folder={page.folder} role={page.role} />;
+  if (page.folder) return <FolderPage folder={page.folder} role={page.role} workspace={page.workspace} />;
   return (
     <ArtifactShell role={page.role}>
       {/* The reader's `<Value>` selection travels in this page's own query

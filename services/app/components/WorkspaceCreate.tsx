@@ -9,10 +9,12 @@ type CreateKind = 'artifact' | 'folder';
 
 function CreateDialog({
   kind,
+  parentId,
   onClose,
   onCreated,
 }: {
   kind: CreateKind;
+  parentId: string | null;
   onClose: () => void;
   onCreated: () => void;
 }) {
@@ -55,7 +57,7 @@ function CreateDialog({
     const response = await fetch('/api/my/artifacts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ format: 'folder', title, parent_id: null }),
+      body: JSON.stringify({ format: 'folder', title, parent_id: parentId }),
     }).catch(() => null);
     setBusy(false);
     if (!response?.ok) {
@@ -105,6 +107,11 @@ function CreateDialog({
 
         {artifact ? (
           <div className="overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
+            {parentId && (
+              <p className="mb-4 rounded-[5px] border border-edge bg-raised px-3 py-2 font-mono text-[10px] text-muted">
+                create inside this folder with <code className="text-fg">parent_id: &quot;{parentId}&quot;</code>
+              </p>
+            )}
             <GetStarted heading={false} frame={false} />
           </div>
         ) : (
@@ -148,7 +155,7 @@ function CreateDialog({
 }
 
 /** The homepage's single creation door: choice first, details second. */
-export default function WorkspaceCreate({ onCreated }: { onCreated: () => void }) {
+export default function WorkspaceCreate({ onCreated, parentId = null }: { onCreated: () => void; parentId?: string | null }) {
   const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState<CreateKind | null>(null);
   const root = useRef<HTMLDivElement>(null);
@@ -225,7 +232,7 @@ export default function WorkspaceCreate({ onCreated }: { onCreated: () => void }
         </a>
       </nav>
 
-      {dialog && <CreateDialog kind={dialog} onClose={() => setDialog(null)} onCreated={onCreated} />}
+      {dialog && <CreateDialog kind={dialog} parentId={parentId} onClose={() => setDialog(null)} onCreated={onCreated} />}
     </div>
   );
 }

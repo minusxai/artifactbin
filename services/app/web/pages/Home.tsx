@@ -2,33 +2,20 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRefreshable } from '@/lib/navigation';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import ClaimBanner from '@/components/ClaimBanner';
-import Dashboard from '@/components/Dashboard';
 import GetStarted from '@/components/GetStarted';
 import Landing from '@/components/Landing';
 import LoginForm from '@/components/LoginForm';
 import SharedWithYou from '@/components/SharedWithYou';
 import Shelf from '@/components/Shelf';
 import UseCarousel from '@/components/UseCarousel';
-import WorkspaceCreate from '@/components/WorkspaceCreate';
-import type { FeedItem } from '@/lib/feed-wire';
+import WorkspaceLayout, { HOME_WORKSPACE_COLUMN } from '@/components/WorkspaceLayout';
+import type { AccountWorkspace } from '@/lib/workspace';
 import { PAGE_COLUMN } from '@/components/ui';
 import { useSession } from '@/web/session';
 
 type Home =
   | { signedIn: false; drafts?: Parameters<typeof Shelf>[0]['rows'] }
-  | {
-      signedIn: true;
-      artifacts: Array<Record<string, unknown> & { id: string }>;
-      viewsOverTime: number[];
-      likes?: number;
-      likesOverTime?: number[];
-      followers?: number;
-      forks?: number;
-      shared: Parameters<typeof SharedWithYou>[0]['items'];
-      feed?: { mine: FeedItem[]; following: FeedItem[] };
-    };
-
-const HOME_WORKSPACE_COLUMN = 'mx-auto max-w-[80rem] px-4 sm:px-6';
+  | ({ signedIn: true } & AccountWorkspace);
 
 /**
  * THE EMPTY LIBRARY IS THE ONLY PAGE THAT SAYS WHAT TO DO FIRST.
@@ -118,28 +105,10 @@ export function HomePage() {
           <UseCarousel label="Inspiration Zone" wheel={false} />
         </div>
       ) : (
-        <div aria-label="Home workspace" className="grid gap-y-3 lg:grid-cols-[minmax(0,1fr)_16rem] lg:gap-x-10 lg:gap-y-0 xl:grid-cols-[minmax(0,1fr)_18rem]">
-          <div className="lg:col-start-2 lg:row-start-1 lg:pl-6">
-            <WorkspaceCreate onCreated={load} />
-          </div>
-          <div className="min-w-0 lg:col-start-1 lg:row-start-1">
-            {home.artifacts.length > 0 && <Shelf actions="full" assets={false} scopeParentId={null} rows={home.artifacts as never} />}
-            <SharedWithYou items={home.shared} />
-          </div>
-          <aside aria-label="Dashboard rail" className="min-w-0 border-t border-edge pt-6 lg:col-start-2 lg:row-start-1 lg:border-t-0 lg:border-l lg:pt-24 lg:pl-6">
-            <div className="lg:sticky lg:top-6">
-              <Dashboard
-                rows={home.artifacts as never}
-                viewsOverTime={home.viewsOverTime}
-                likes={home.likes}
-                likesOverTime={home.likesOverTime}
-                followers={home.followers}
-                forks={home.forks}
-              />
-              <ActivityFeed compact mine={home.feed?.mine ?? []} following={home.feed?.following ?? []} />
-            </div>
-          </aside>
-        </div>
+        <WorkspaceLayout workspace={home} onCreated={load}>
+          {home.artifacts.length > 0 && <Shelf actions="full" assets={false} scopeParentId={null} rows={home.artifacts as never} />}
+          <SharedWithYou items={home.shared} />
+        </WorkspaceLayout>
       )}
       {/* A bare account has no right rail, but it may already follow people
         * and it may have just emptied itself into Trash. Keep both recovery

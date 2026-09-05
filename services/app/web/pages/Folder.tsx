@@ -28,15 +28,19 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Shelf from '@/components/Shelf';
+import WorkspaceLayout, { HOME_WORKSPACE_COLUMN } from '@/components/WorkspaceLayout';
 import { PAGE_COLUMN } from '@/components/ui';
 import type { ArtifactRole } from '@/lib/share-roles';
 import { canEdit } from '@/lib/share-roles';
 import type { FolderPage as FolderPageData } from '@/lib/folders';
 import { STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
+import type { AccountWorkspace } from '@/lib/workspace';
 
 export interface FolderPageProps {
   folder: FolderPageData;
   role: ArtifactRole;
+  /** Present only for an account owner; totals and activity remain account-wide. */
+  workspace?: AccountWorkspace;
 }
 
 /**
@@ -133,12 +137,17 @@ function Empty({ id, mayWrite }: { id: string; mayWrite: boolean }) {
   );
 }
 
-export function FolderPage({ folder: given, role }: FolderPageProps) {
+export function FolderPage({ folder: given, role, workspace: givenWorkspace }: FolderPageProps) {
   const [folder, setFolder] = useState(given);
+  const [workspace, setWorkspace] = useState(givenWorkspace);
   // The prop is the server's answer for THIS address; a client navigation to
   // another folder must not keep the previous one's shelf.
   const seeded = useRef(given);
-  if (seeded.current !== given) { seeded.current = given; if (folder.id !== given.id) setFolder(given); }
+  if (seeded.current !== given) {
+    seeded.current = given;
+    if (folder.id !== given.id) setFolder(given);
+    if (givenWorkspace !== workspace) setWorkspace(givenWorkspace);
+  }
 
   const mayWrite = canEdit(role);
 
@@ -154,22 +163,25 @@ export function FolderPage({ folder: given, role }: FolderPageProps) {
    * inlined, so what arrives is exactly what a fresh load would have shown.
    */
   const id = folder.id;
-  useEffect(() => {
-    const source = new EventSource(`/a/${id}/events`);
-    let alive = true;
-    const reread = () => {
-      void fetch(`/api/page/artifact/${id}`, { credentials: 'same-origin' })
-        .then((r) => (r.ok ? (r.json() as Promise<{ folder?: FolderPageData }>) : null))
-        .then((page) => { if (alive && page?.folder) setFolder(page.folder); })
-        .catch(() => { /* a dropped wakeup; the next ping retries */ });
-    };
-    source.addEventListener(STORY_DATA_EVENT, reread);
-    return () => { alive = false; source.removeEventListener(STORY_DATA_EVENT, reread); source.close(); };
+  const reread = useCallback(() => {
+    void fetch(`/api/page/artifact/${id}`, { credentials: 'same-origin' })
+      .then((r) => (r.ok ? (r.json() as Promise<{ folder?: FolderPageData; workspace?: AccountWorkspace }>) : null))
+      .then((page) => {
+        if (page?.folder) setFolder(page.folder);
+        if (page?.workspace) setWorkspace(page.workspace);
+      })
+      .catch(() => { /* a dropped wakeup; the next ping retries */ });
   }, [id]);
 
+  useEffect(() => {
+    const source = new EventSource(`/a/${id}/events`);
+    source.addEventListener(STORY_DATA_EVENT, reread);
+    return () => { source.removeEventListener(STORY_DATA_EVENT, reread); source.close(); };
+  }, [id, reread]);
+
   const summary = summarise(folder.count);
-  return (
-    <main aria-label="Folder" className={`${PAGE_COLUMN} mt-8 pb-24`}>
+  const contents = (
+    <>
       <header className="mb-6 border-b border-edge pb-4">
         {folder.trail.length > 0 && (
           /* THE TRAIL IS AN ADDRESS, so it is set in the face this app sets
@@ -208,13 +220,29 @@ export function FolderPage({ folder: given, role }: FolderPageProps) {
         * draws no chrome at all (the shelf renders nothing without rows or that
         * capability). */}
       <Shelf
-        rows={folder.rows}
+        rows={(workspace?.artifacts ?? folder.rows) as never}
         actions={mayWrite ? 'full' : 'share'}
-        canCreateFolders={mayWrite}
+        canCreateFolders={mayWrite && !workspace}
         parentId={folder.id}
         scopeParentId={folder.id}
-        assets
+        assets={false}
       />
+    </>
+  );
+
+  if (workspace) {
+    return (
+      <main aria-label="Folder" className={`${HOME_WORKSPACE_COLUMN} mt-8 pb-24`}>
+        <WorkspaceLayout workspace={workspace} parentId={folder.id} onCreated={reread} label="Folder workspace">
+          {contents}
+        </WorkspaceLayout>
+      </main>
+    );
+  }
+
+  return (
+    <main aria-label="Folder" className={`${PAGE_COLUMN} mt-8 pb-24`}>
+      {contents}
     </main>
   );
 }

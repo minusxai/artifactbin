@@ -13,17 +13,21 @@
  * page always draws a `<main>` — the export camera names that element, and a
  * folder with no children still has a card to take.
  */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
 import { FolderPage } from '@/web/pages/Folder';
+import type { AccountWorkspace } from '@/lib/workspace';
 
 vi.mock('@/web/session', () => ({ useSession: () => ({ session: { user: { id: 'usr_o', email: 'o@x.io' } } }) }));
+vi.mock('@/components/viz/VegaChart', () => ({
+  VegaChart: ({ ariaLabel }: { ariaLabel?: string }) => <div aria-label={ariaLabel ?? 'Vega chart'} />,
+}));
 
-const child = (id: string, format = 'markup', title = `Doc ${id}`) => ({
+const child = (id: string, format: 'markup' | 'folder' = 'markup', title = `Doc ${id}`) => ({
   id, url: `/a/${id}`, title, description: null, format, version: 1,
   visibility: 'public' as const, parent_id: 'fold01', ancestor_ids: ['fold01'],
-  updated_at: '2026-08-20T00:00:00.000Z',
+  updated_at: '2026-08-20T00:00:00.000Z', views: 0,
 });
 
 const folder = (over: Record<string, unknown> = {}) => ({
@@ -32,8 +36,36 @@ const folder = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-const draw = (props: { folder: ReturnType<typeof folder>; role: 'owner' | 'editor' | 'commenter' | 'viewer' }) =>
+const draw = (props: { folder: ReturnType<typeof folder>; role: 'owner' | 'editor' | 'commenter' | 'viewer'; workspace?: AccountWorkspace }) =>
   render(<MemoryRouter><FolderPage {...props} /></MemoryRouter>);
+
+const accountRow = (id: string, format: 'markup' | 'folder' = 'markup', title = `Doc ${id}`, ancestor_ids = ['fold01']) => {
+  const { parent_id: _pageOnly, ...row } = child(id, format, title);
+  return { ...row, ancestor_ids, sparkline: null };
+};
+
+const accountWorkspace = (): AccountWorkspace => ({
+  artifacts: [
+    accountRow('aaa111'),
+    accountRow('bbb222'),
+    accountRow('ccc333', 'folder', 'Q3'),
+    accountRow('root01', 'markup', 'At account root', []),
+  ],
+  viewsOverTime: [0, 2, 4],
+  likes: 1,
+  likesOverTime: [0, 0, 1],
+  followers: 2,
+  forks: 3,
+  shared: [],
+  feed: {
+    mine: [{
+      id: 'evt_1', at: '2026-09-05T00:00:00.000Z', verb: 'viewed',
+      subject: { kind: 'visitor', id: 'v'.repeat(32), handle: null },
+      object: { kind: 'artifact', id: 'aaa111', title: 'Doc aaa111' }, payload: {},
+    }],
+    following: [],
+  },
+});
 
 let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
@@ -126,6 +158,21 @@ describe('the shelf below the hairline', () => {
     draw({ folder: folder(), role: 'owner' });
     expect(screen.getByLabelText('New folder')).toBeInTheDocument();
     expect(screen.getByLabelText('Open folder Q3')).toBeInTheDocument();
+  });
+
+  it('uses the complete Home workspace for an account owner, changing only the shelf location', () => {
+    draw({ folder: folder(), role: 'owner', workspace: accountWorkspace() });
+    expect(screen.getByLabelText('Folder workspace')).toBeInTheDocument();
+    expect(screen.getByLabelText('Dashboard rail')).toBeInTheDocument();
+    expect(screen.getByLabelText('Create')).toBeInTheDocument();
+    expect(screen.getByLabelText('Assets')).toHaveAttribute('href', '/assets');
+    expect(screen.getByLabelText('Trash')).toHaveAttribute('href', '/trash');
+    expect(screen.getByLabelText('Activity')).toBeInTheDocument();
+    expect(screen.getByLabelText('Open Doc aaa111')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Open At account root')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('New folder')).not.toBeInTheDocument();
+    const metrics = within(screen.getByLabelText('Dashboard metrics'));
+    expect(metrics.getByText('artifacts').closest('dt')?.nextElementSibling).toHaveTextContent('3');
   });
 
   it('gives a stranger the documents and no verbs at all', () => {

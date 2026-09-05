@@ -125,9 +125,10 @@ export const ADMIN_SECRET = env('ADMIN', 'SECRET');
 
 /**
  * THE database env — the URL is the type (lib/db.ts parseDatabaseUrl):
- * unset ⇒ embedded PGLite at ./data/pglite; `pglite://<path>` ⇒ embedded
- * PGLite there (`pglite://memory` for RAM); anything else ⇒ Postgres,
- * passed to pg verbatim. Tests always run in-memory regardless.
+ * unset ⇒ embedded PGLite at the app package's data/pglite (stable across
+ * launch directories); `pglite://<path>` ⇒ embedded PGLite at that explicit
+ * path (`pglite://memory` for RAM); anything else ⇒ Postgres, passed to pg
+ * verbatim. Tests always run in-memory regardless.
  */
 export const DATABASE_URL = process.env.DATABASE_URL;
 
