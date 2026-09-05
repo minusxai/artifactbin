@@ -34,7 +34,7 @@ useAppHarness();
 const BASE = 'http://localhost:3000';
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 const create = async (token: string, body: Record<string, unknown>) => {
-  const res = await createArtifactRoute(request('/api/artifacts?v=2', { method: 'POST', token: token, json: body }));
+  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
   expect(res.status, await res.clone().text()).toBe(201);
   return (await res.json()) as { id: string; version: number; edit_id: string };
 };
@@ -107,7 +107,7 @@ describe('POST /a/<id>/mutate — the document\'s door', () => {
 
   it('is re-checked on EVERY call: a dataset flipped to read-only refuses with dataset_read_only', async () => {
     const { ds, t, doc } = await poll();
-    await putArtifactRoute(request(`/api/artifacts/${ds}?v=2`, { method: 'PUT', token: t.token, json: { dataset: ROWS, access: 'read' } }), params({ id: ds }));
+    await putArtifactRoute(request(`/api/artifacts/${ds}`, { method: 'PUT', token: t.token, json: { dataset: ROWS, access: 'read' } }), params({ id: ds }));
     const res = await mutate(doc, { mutation: 'vote', values: { choice: 'ramen' } });
     expect(res.status).toBe(403);
     expect(((await res.json()) as { error: string }).error).toBe('dataset_read_only');
@@ -195,7 +195,7 @@ describe('POST /api/artifacts/<id>/mutate — the owner\'s door', () => {
     const foreign = await mutateDatasetRoute(request(`/api/artifacts/${ds}/mutate`, { method: 'POST', token: other.token, json: { sql: `delete from ref_${ds}` } }), params({ id: ds }));
     expect(foreign.status).toBe(404);
 
-    await putArtifactRoute(request(`/api/artifacts/${ds}?v=2`, { method: 'PUT', token: t.token, json: { dataset: ROWS, access: 'read' } }), params({ id: ds }));
+    await putArtifactRoute(request(`/api/artifacts/${ds}`, { method: 'PUT', token: t.token, json: { dataset: ROWS, access: 'read' } }), params({ id: ds }));
     const ro = await mutateDatasetRoute(request(`/api/artifacts/${ds}/mutate`, { method: 'POST', token: t.token, json: { sql: `delete from ref_${ds}` } }), params({ id: ds }));
     expect(ro.status).toBe(403);
   });

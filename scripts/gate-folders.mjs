@@ -133,6 +133,16 @@ check(
   (await ownerFrame.locator('[aria-label="Open Quiet Note"] [data-glyph="markup"] svg').count()) === 1,
   'a private child draws a real format GLYPH, not a hole',
 );
+// THE HEAD. A folder's whole source is `<Files data="$children" />`, so its own
+// name, its trail and its count arrive on the island (lib/story-ui/folder-head)
+// rather than out of the markup — which means SSR and hydration must draw the
+// same one, and a mismatch here is silent to every assertion (React repaints
+// the root and the listing is still there). The console watch below is the
+// witness; this is the content.
+const headText = async (frame) => (await frame.locator('[data-slot="files-head"]').first().textContent()) ?? '';
+const ownerHead = await headText(ownerFrame);
+check(ownerHead.includes('Field Notes'), `the page names the folder it is (${ownerHead.trim().slice(0, 60)})`);
+check(/2 documents/.test(ownerHead), `and counts what is on the shelf (${ownerHead.trim().slice(0, 60)})`);
 
 // ── 2. New folder, inline, from the bar ──────────────────────────────────
 await owner.locator('[aria-label="Open artifact controls"]').click();
@@ -145,6 +155,27 @@ await Promise.all([
 check((await owner.locator('[aria-label="Folder name"]').count()) === 0, 'the name field closes on its own');
 await ownerFrame.locator('[aria-label="Open Archive"]').waitFor({ timeout: 20000 });
 check(true, 'the folder made from the bar lands INSIDE this one, with no navigation');
+
+// ── 2b. an EMPTY folder is an invitation, not a blank page ───────────────
+// Two facts have to be true before it may say so — the query ANSWERED, and
+// answered with nothing — and only the store knows the first. Blank while the
+// rows are still coming is paint-first; blank for ever was the bug.
+const archiveId = await ownerFrame.locator('[aria-label="Open Archive"]').getAttribute('href');
+await owner.goto(`${BASE}${archiveId}`, { waitUntil: 'load' });
+const archiveFrame = owner.frameLocator('iframe[title="artifact"]');
+await archiveFrame.locator('[data-slot="files-empty"]').waitFor({ timeout: 20000 });
+const emptyText = (await archiveFrame.locator('[data-slot="files-empty"]').textContent()) ?? '';
+check(emptyText.includes('Nothing here yet.'), 'an empty folder says it is empty');
+check(
+  emptyText.includes('menu') && emptyText.includes(`parent_id: "${archiveId.split('/').pop()}"`),
+  `and names both ways to fill it (${emptyText.trim().slice(0, 90)})`,
+);
+// NESTED, so it draws the trail — and the crumb is a link back up.
+const crumb = archiveFrame.locator('[aria-label="Up to Field Notes"]');
+check((await crumb.count()) === 1, 'a nested folder draws the trail above its name');
+check((await crumb.getAttribute('href')) === `/a/${folder.id}`, 'and the crumb links to the folder above it');
+await owner.goto(`${BASE}/a/${folder.id}`, { waitUntil: 'load' });
+await ownerFrame.locator('[aria-label="Open Archive"]').waitFor({ timeout: 20000 });
 
 // ── 3. an agent's publish reaches the open page, live ────────────────────
 // Mark the page and the frame ELEMENT: a reload loses the mark, and a frame
@@ -231,6 +262,22 @@ const del = owner.locator('[aria-label="Delete Field Notes"]').first();
 await del.waitFor({ timeout: 15000 });
 check(((await del.textContent()) ?? '').includes('inside'), 'the row says how much is in it');
 await owner.keyboard.press('Escape');
+
+// ── 6b. …and so does the owner's own profile root ────────────────────────
+// The same shelf under a different question, and it shipped without the one
+// control that puts something new on it (components/Shelf `canCreateFolders`).
+// A stranger's profile still shows none — gate-visibility asserts that half.
+const handle = await owner.evaluate(async () => (await (await fetch('/api/my/profile')).json()).username);
+await owner.goto(`${BASE}/@${handle}`, { waitUntil: 'load' });
+await owner.waitForSelector('[aria-label="Search artifacts"]', { timeout: 20000 });
+check((await owner.locator('[aria-label="New folder"]').count()) === 1, 'the owner’s own profile offers New folder too');
+// The masthead names the account by its HANDLE and links to the page it is
+// standing on — the same identity line on every page in the shell.
+const identity = owner.locator('[aria-label="Open your profile"]');
+check((await identity.count()) === 1 && (await identity.getAttribute('href')) === `/@${handle}`,
+  'and the masthead names the account by its handle, linking to the profile');
+// …and only that: a profile still withholds the row verbs it always withheld.
+check((await owner.locator('[aria-label="Move Field Notes"]').count()) === 0, 'without granting the row verbs a profile withholds');
 
 // ── 7. renaming a folder is the editor's Title field, and nothing else ────
 // A folder has no second rename door: the field writes `title` through the

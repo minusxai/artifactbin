@@ -2,6 +2,7 @@
 
 import { GitHubIcon } from '@/components/brand-icons';
 import { FORMAT_COLORS, formatLabel, LINK, PAGE_COLUMN } from '@/components/ui';
+import { Tooltip } from '@/components/Tooltip';
 import { REPO_URL } from '@/lib/repo';
 
 export interface HeaderStats {
@@ -55,9 +56,18 @@ function FormatDot({ format, count }: { format: string; count: number }) {
  */
 export default function HeaderBar({
   email,
+  username,
   stats,
 }: {
   email?: string | null;
+  /**
+   * The account's public handle. THE identity line when there is one: every
+   * document this account owns lives under `/@handle` and the profile is the
+   * page that lists them, so the masthead points there rather than printing an
+   * address nobody can click. Absent — an account whose lazy backfill has not
+   * run yet (lib/users ensureUsername) — and the header is what it always was.
+   */
+  username?: string | null;
   stats?: HeaderStats | null;
 }) {
   const formats = Object.entries(stats?.formats ?? {}).filter(([, n]) => n > 0);
@@ -96,7 +106,17 @@ export default function HeaderBar({
             </span>
           )}
           <span className="flex min-w-0 flex-col items-end gap-1">
-            {email ? (
+            {username ? (
+              /* The EMAIL rides in the tooltip rather than on a line of its
+                 own: this column is already four rows deep on a phone, and
+                 "which account is this" is asked once a session where "take me
+                 to my profile" is a thing to click. */
+              <Tooltip content={email ?? 'your profile'}>
+                <a href={`/@${username}`} aria-label="Open your profile" className={`min-w-0 truncate ${LINK}`}>
+                  @{username}
+                </a>
+              </Tooltip>
+            ) : email ? (
               <span className="min-w-0 truncate text-faint">{email}</span>
             ) : (
               /* Not aria-label "Login"/"Log in": the sidebar owns the

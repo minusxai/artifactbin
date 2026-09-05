@@ -9,6 +9,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { fakeBrowser } from '@artifactbin/utils';
+import type { RenderRequest } from '@artifactbin/contracts';
 import { GET as exportImage } from '@/app/a/[id]/export/route';
 import { GET as serveRaw } from '@/app/a/[id]/raw/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -18,6 +19,7 @@ import { POST as mintTokenRoute } from '@/app/api/tokens/route';
 import { EXPORT_RENDER_GENERATION, exportStoreKey, parseExportCapture, parseExportFormat, parseExportSlide, resetExportRenderer } from '@/lib/export';
 import { objectStore } from '@/lib/object-store';
 import { setServices } from '@/lib/services';
+import { DEFAULT_SOCIAL_PREVIEW_CROP } from '@/lib/story/social-preview';
 
 const BASE = 'http://localhost:3000';
 const SECRET = 'test-secret';
@@ -258,5 +260,95 @@ describe('the cache key names the renderer', () => {
     expect(exportStoreKey({ id: 'abc123', version: 3 }, 'png', 'full', 2)).toContain('slide-2');
     expect(exportStoreKey({ id: 'abc123', version: 3 }, 'png', 'card', 0)).toContain('card-1600x840-r2-');
     expect(exportStoreKey({ id: 'abc123', version: 3 }, 'png', 'preview', 0)).toContain('preview-v2-');
+  });
+});
+
+/**
+ * A FOLDER IS A DOCUMENT, AND ITS CARD IS A PICTURE OF ITS LISTING.
+ *
+ * Measured on production before this: `GET /a/<folder>/export` answered a
+ * 25-byte `{"error":"render_failed"}` for every folder, owner and stranger
+ * alike. The cause was one predicate — `lib/export` asked `format === 'markup'`
+ * to decide WHERE a row is photographed, so a folder was sent to `/a/<id>`
+ * (the app shell, which the exporter's `?key=` deliberately keeps on the SPA
+ * path) with `main` as its target, and the browser waited for an element the
+ * shell never draws.
+ *
+ * Everything the shot needs already existed on the other branch: `raw` serves a
+ * folder through the markup case, `chrome=0` settles its dataflow rather than
+ * painting first, `<Files>` draws glyphs instead of every child's own card, and
+ * the signed export key stands in for the session the headless browser has not
+ * got.
+ *
+ * WHAT IS ASSERTED, and why it is not a PNG: this suite has no browser (the
+ * BrowserService is faked), so the picture cannot be taken here. The two halves
+ * that can be measured are (1) the request the route builds — the address, the
+ * target and the card's crop — and (2) that the address it names actually
+ * RENDERS: the recorded URL is fed back into the raw route and the listing has
+ * to be in the HTML that comes out. Real bytes stay with the gates.
+ */
+describe('GET /a/<folder>/export', () => {
+  const recording = () => {
+    const fake = fakeBrowser({ ok: true, mime: 'image/png', bytes: EXPORT_BYTES });
+    setServices({ browser: fake });
+    // The RENDER REQUEST the route built, in the service's own contract type —
+    // the fake records `unknown[]`, and every field asserted below is one this
+    // route decides.
+    return () => fake.calls.at(-1) as RenderRequest;
+  };
+
+  /** A public folder holding one public child, created through the real doors. */
+  async function folderWithChild() {
+    const mintRes = await mintTokenRoute(request('/api/tokens', { method: 'POST', json: {}, headers: { 'x-shared-secret': SECRET } }));
+    const { token } = await mintRes.json();
+    const folderRes = await createArtifactRoute(
+      request('/api/artifacts', { method: 'POST', token, json: { format: 'folder', title: 'Field Notes', visibility: 'public' } }),
+    );
+    expect(folderRes.status).toBe(201);
+    const folder = (await folderRes.json()) as { id: string; version: number };
+    const childRes = await createArtifactRoute(
+      request('/api/artifacts', {
+        method: 'POST', token,
+        json: { title: 'Opening Note', visibility: 'public', parent_id: folder.id, markup: '<div><h1>Opening Note</h1></div>' },
+      }),
+    );
+    expect(childRes.status).toBe(201);
+    return { folder, token };
+  }
+
+  it('photographs the folder document itself, not the app shell', async () => {
+    const shotOf = recording();
+    const { folder } = await folderWithChild();
+    const res = await exportImage(request(`/a/${folder.id}/export`), params({ id: folder.id }));
+    expect(res.status).toBe(200);
+    const shot = shotOf();
+    // The document's OWN page, chrome stripped, carrying the signed key — the
+    // same address a markup document is shot at.
+    expect(shot.url).toContain(`/a/${folder.id}/raw`);
+    expect(shot.url).toContain('chrome=0');
+    expect(shot.url).toContain('key=');
+    expect(shot.selector).toBe('body');
+  });
+
+  it('and the address it names renders the listing', async () => {
+    const shotOf = recording();
+    const { folder } = await folderWithChild();
+    await exportImage(request(`/a/${folder.id}/export`), params({ id: folder.id }));
+    const shot = shotOf();
+    // Exactly what the headless browser would fetch — no session, the key
+    // alone, and the capture's own settled dataflow.
+    const framed = await serveRaw(request(new URL(shot.url).pathname + new URL(shot.url).search), params({ id: folder.id }));
+    expect(framed.status).toBe(200);
+    const html = await framed.text();
+    expect(html).toContain('Opening Note');
+    expect(html).toContain('aria-label="Files"');
+  });
+
+  it('gives the card the same crop every document gets', async () => {
+    const shotOf = recording();
+    const { folder } = await folderWithChild();
+    const res = await exportImage(request(`/a/${folder.id}/export?mode=card`), params({ id: folder.id }));
+    expect(res.status).toBe(200);
+    expect(shotOf().capture).toEqual({ card: DEFAULT_SOCIAL_PREVIEW_CROP });
   });
 });

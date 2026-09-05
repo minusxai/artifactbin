@@ -41,8 +41,12 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=min
+          # Same backend, same rule as ci.yml's `image` job: the layer cache
+          # is an optimisation, not a build product, so a cache-service outage
+          # degrades to a warning and a cold builder rather than losing a push
+          # of an image that built fine.
+          cache-from: type=gha,ignore-error=true
+          cache-to: type=gha,mode=min,ignore-error=true
 
   # The lean APP as an image of its own, for the split shape
   # (`SQL__SERVICE_URL` + `BROWSER__SERVICE_URL`): the whole app tree and
@@ -84,8 +88,8 @@ jobs:
           push: true
           tags: ${{ steps.meta-app.outputs.tags }}
           labels: ${{ steps.meta-app.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=min
+          cache-from: type=gha,ignore-error=true
+          cache-to: type=gha,mode=min,ignore-error=true
 
   # The SQL service as an image of its own, for the split shape
   # (`SQL__SERVICE_URL`): DuckDB and nothing else — the build-time assertions
@@ -125,8 +129,8 @@ jobs:
           push: true
           tags: ${{ steps.meta-sql.outputs.tags }}
           labels: ${{ steps.meta-sql.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=min
+          cache-from: type=gha,ignore-error=true
+          cache-to: type=gha,mode=min,ignore-error=true
 
   # The browser service as an image of its own, for the split shape
   # (`BROWSER__SERVICE_URL`): the headless Chromium and nothing else. Same
@@ -164,8 +168,8 @@ jobs:
           push: true
           tags: ${{ steps.meta-browser.outputs.tags }}
           labels: ${{ steps.meta-browser.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=min
+          cache-from: type=gha,ignore-error=true
+          cache-to: type=gha,mode=min,ignore-error=true
 
   deploy-staging:
     needs: [publish, publish-app, publish-sql, publish-browser]

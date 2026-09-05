@@ -64,7 +64,6 @@ export const RETIRED_ENV_NAMES: Readonly<Record<string, string>> = {
   MIXPANEL_TOKEN: 'MIXPANEL__TOKEN',
   MUTATION_MAX_PER_MINUTE: 'PROXY__RATE_LIMIT_CONFIG_FILE (a policy file, not a knob)',
   PORT: 'APP__PORT',
-  PREVIEW_FEATURES: 'PREVIEW__FEATURES',
   PUBLIC_BASE_URL: 'APP__PUBLIC_BASE_URL',
   QUERY_TIMEOUT_MS: 'SQL__QUERY_TIMEOUT_MS',
   RESEND_API_KEY: 'EMAIL__RESEND_API_KEY',
@@ -223,13 +222,6 @@ export const MAX_QUERY_ROWS = Number(env('SQL', 'MAX_QUERY_ROWS') ?? String(MAX_
  * own interrupt makes stopping one cheap and leaves the connection usable.
  */
 export const QUERY_TIMEOUT_MS = Number(env('SQL', 'QUERY_TIMEOUT_MS') ?? '5000');
-
-/**
- * Turn the PREVIEW features on for this whole deployment (lib/features/).
- * Unset, they are opt-in per REQUEST with `?v=2`. A staging box sets this; a
- * production one leaves it alone until a feature ships.
- */
-export const PREVIEW_FEATURES = env('PREVIEW', 'FEATURES') === '1';
 
 /** Where the local fallback writes when S3_URL is unset. */
 export const LOCAL_OBJECT_DIR = env('OBJECT_STORE', 'LOCAL_DIR') ?? '.artifact-objects';

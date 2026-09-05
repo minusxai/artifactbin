@@ -67,7 +67,7 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   if (linkRole instanceof Response) return linkRole;
   if (linkRole) patch.linkRole = linkRole;
 
-  const access = parseAccessValue(body.access, current.format, request);
+  const access = parseAccessValue(body.access, current.format);
   if (access instanceof Response) return access;
   if (access) patch.access = access;
   const shares = parseShareEntries(body.shares);

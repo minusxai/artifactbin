@@ -104,18 +104,18 @@ describe('the bearer and browser replace paths answer alike', () => {
     const mk = async () => {
       const t = await mintToken('ds');
       const made = await (await createArtifact(
-        request('/api/artifacts?v=2', { method: 'POST', token: t.token, json: { dataset: [{ a: 1 }], access: 'readwrite' } }),
+        request('/api/artifacts', { method: 'POST', token: t.token, json: { dataset: [{ a: 1 }], access: 'readwrite' } }),
       )).json();
       return { token: t.token, cookie: await agentCookie([t.id]), id: made.id as string };
     };
     const a = await mk();
     const viaBearer = await (await putBearer(
-      request(`/api/artifacts/${a.id}?v=2`, { method: 'PUT', token: a.token, json: { dataset: [{ a: 2 }] } }),
+      request(`/api/artifacts/${a.id}`, { method: 'PUT', token: a.token, json: { dataset: [{ a: 2 }] } }),
       params({ id: a.id }),
     )).json();
     const b = await mk();
     const viaBrowser = await (await putBrowser(
-      request(`/api/my/artifacts/${b.id}?v=2`, { method: 'PUT', cookie: b.cookie, json: { dataset: [{ a: 2 }] } }),
+      request(`/api/my/artifacts/${b.id}`, { method: 'PUT', cookie: b.cookie, json: { dataset: [{ a: 2 }] } }),
       params({ id: b.id }),
     )).json();
     expect(viaBearer.access).toBe('readwrite');

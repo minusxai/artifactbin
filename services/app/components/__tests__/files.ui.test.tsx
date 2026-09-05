@@ -50,3 +50,79 @@ describe('<Files>', () => {
     expect(container.querySelectorAll('a').length).toBe(0);
   });
 });
+
+/**
+ * THE EMPTY STATE IS A CLAIM, AND IT NEEDS TWO FACTS TO BE TRUE.
+ *
+ * "Nothing here yet" says the query ANSWERED and answered with nothing. P2
+ * shipped the component with only one of those — `rows` — so `undefined` (not
+ * asked yet) and `[]` (nothing here) drew the same blank page, and the honest
+ * fix is not a longer condition here but the second fact arriving as a prop:
+ * `settled`, which the runtime adapter reads off the store's own pending set.
+ *
+ * Blank while unsettled is PAINT-FIRST, not an oversight: the document arrives
+ * at final geometry and the rows land a round trip later, and a folder that
+ * flashed "Nothing here yet" on every open would be lying for that round trip.
+ */
+describe('<Files> with nothing in it', () => {
+  const folder = { id: 'vzbd2q', title: 'Field Notes', trail: [] };
+
+  it('says nothing while the query has not answered', () => {
+    render(<Files folder={folder} />);
+    expect(screen.queryByText(/Nothing here yet/)).toBeNull();
+  });
+
+  it('says nothing when it is settled and empty and has no folder to name', () => {
+    // An authored `<Files data="$q">` in an ordinary document: an empty result
+    // is not an empty folder, and there is no id to teach.
+    render(<Files rows={[]} settled />);
+    expect(screen.queryByText(/Nothing here yet/)).toBeNull();
+  });
+
+  it('once settled and empty, says so and names both ways to fill it', () => {
+    render(<Files rows={[]} settled folder={folder} />);
+    expect(screen.getByText('Nothing here yet.')).toBeTruthy();
+    const how = screen.getByText(/Move a document in/);
+    expect(how.textContent).toContain('\u22ef menu');
+    expect(how.textContent).toContain('parent_id: "vzbd2q"');
+  });
+
+  it('drops the empty state the moment there is a row', () => {
+    render(<Files rows={rows} settled folder={folder} />);
+    expect(screen.queryByText(/Nothing here yet/)).toBeNull();
+  });
+});
+
+/**
+ * THE HEAD — what makes a folder page read as a folder rather than as a bare
+ * grid. Three facts, all of them the SERVER's (the row's own title, the
+ * ancestors this viewer may read, its id), and none of them derivable from the
+ * children: a folder with one child and a folder with none must both say where
+ * they are.
+ */
+describe('<Files> head', () => {
+  it('names the folder and counts what is in it', () => {
+    render(<Files rows={rows} settled folder={{ id: 'vzbd2q', title: 'Field Notes', trail: [] }} />);
+    expect(screen.getByText('Field Notes')).toBeTruthy();
+    // Three documents and one folder, said as a sentence rather than as a
+    // meta string: a dataset is still something you opened the folder to find.
+    expect(screen.getByText('3 documents and 1 folder')).toBeTruthy();
+  });
+
+  it('draws the trail above the name only when the folder is nested', () => {
+    const { container, unmount } = render(
+      <Files rows={rows} settled folder={{ id: 'vzbd2q', title: 'Field Notes', trail: [{ id: 'rep001', title: 'Reports', url: '/a/rep001' }] }} />,
+    );
+    const up = screen.getByLabelText('Up to Reports');
+    expect(up.getAttribute('href')).toBe('/a/rep001');
+    expect(container.querySelector('[data-slot="files-trail"]')).not.toBeNull();
+    unmount();
+    render(<Files rows={rows} settled folder={{ id: 'vzbd2q', title: 'Field Notes', trail: [] }} />);
+    expect(screen.queryByLabelText(/^Up to /)).toBeNull();
+  });
+
+  it('draws no head at all for a listing that is not a folder', () => {
+    const { container } = render(<Files rows={rows} settled />);
+    expect(container.querySelector('[data-slot="files-head"]')).toBeNull();
+  });
+});

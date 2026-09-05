@@ -29,7 +29,7 @@ const inlined = (html: string) => {
 async function world() {
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_owner@example.com' }));
   const t = await mintToken('o'); await claimToken(owner.id, t.token);
-  const mk = async (body: Record<string, unknown>) => (await (await createArtifactRoute(new Request('http://localhost:3000/api/artifacts?v=2', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify(body) }))).json()) as { id: string };
+  const mk = async (body: Record<string, unknown>) => (await (await createArtifactRoute(new Request('http://localhost:3000/api/artifacts', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify(body) }))).json()) as { id: string };
   return { owner, pub: await mk({ title: 'Pub', markup: '<div><p>hi</p></div>', visibility: 'public' }), priv: await mk({ title: 'Priv', markup: '<div><p>secret</p></div>', visibility: 'private' }) };
 }
 
