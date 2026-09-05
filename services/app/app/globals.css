@@ -81,7 +81,30 @@
   --font-serif: var(--font-cormorant), 'EB Garamond', Georgia, serif;
 }
 
-:root[data-theme='dark'] {
+/* Editor chrome uses the app palette for its document's current mode. */
+[data-app-appearance='light'] {
+  --color-bg: #f6f7f8;
+  --color-surface: #ffffff;
+  --color-raised: #eef1f3;
+  --color-code: #dfe5ec;
+  --color-code-edge: #cdd6e0;
+  --color-comment: #f9fafb;
+  --color-comment-hover: #ffffff;
+  --color-edge: #e1e6ea;
+  --color-edge-bright: #c6cfd6;
+  --color-fg: #1a2129;
+  --color-muted: #5a6572;
+  --color-faint: #939daa;
+  --color-accent: #0e9d4f;
+  --color-accent-soft: #e2f5e9;
+  --color-danger: #c93c37;
+  --color-danger-soft: #fbe9e8;
+  color-scheme: light;
+}
+
+:root[data-theme='dark'],
+[data-app-appearance='dark'] {
+  color-scheme: dark;
   --color-bg: #0b0e11;
   --color-surface: #10151b;
   --color-raised: #151c24;
