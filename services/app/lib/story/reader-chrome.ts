@@ -262,6 +262,7 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
     + (login ? `<a class="mx-reader-signin" data-mx-login href="${escapeHtml(login.href)}" target="_top" aria-label="Sign in">sign in</a>` : '')
     + '<a href="/" target="_top">Artifacts</a><a href="/account" target="_top">Account</a>'
     + '<a href="/docs-human" target="_top">Human Docs</a><a href="/docs/artifactbin/SKILL.md" target="_top">Agent docs</a>'
+    + `<a href="${REPO_URL}" target="_blank" rel="noopener noreferrer">${ICON_GITHUB}Support artifactbin</a>`
     + '</nav>'
     + '<section class="mx-reader-panel mx-reader-panel--controls" data-mx-reader-panel="controls" aria-label="Artifact controls" hidden>'
     + '<h2>artifact controls</h2><h3>appearance</h3>'

@@ -583,7 +583,7 @@ export default function Shelf({ rows, actions = 'none', showVisibility = true, a
           <div className="mb-2 flex items-baseline gap-2">
             <MicroLabel>folders</MicroLabel>
           </div>
-          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <ul className={`grid gap-3 ${view === 'grid' ? 'grid-cols-2' : 'grid-cols-1 sm:grid-cols-2'} lg:grid-cols-4`}>
             {shelf.folders.map((row) => (
               <FolderTile showVisibility={showVisibility} key={row.id} row={row} count={inside(row.id)} level={actions} folders={pickable} onDeleted={trash} gallery={view === 'grid'} documents={available.filter((item) => parentOfRow(item) === row.id && item.format === 'markup')} />
             ))}
@@ -607,13 +607,13 @@ export default function Shelf({ rows, actions = 'none', showVisibility = true, a
                 </h2>
                 <span aria-hidden="true" className="h-px flex-1 bg-edge" />
               </div>
-              <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+              <ul className="grid grid-cols-2 gap-2 sm:gap-5 lg:grid-cols-4">
                 {group.rows.map((row) => {
                   const i = shelf.documents.indexOf(row);
                   return (
                     <li
                       key={row.id}
-                      className="reveal group relative flex flex-col duration-150 gallery-document rounded-md p-2 transition-colors hover:bg-raised/60"
+                      className="reveal group relative flex min-w-0 flex-col duration-150 gallery-document rounded-md p-1 sm:p-2 transition-colors hover:bg-raised/60"
                       style={{ animationDelay: `${Math.min(i * 35, 280)}ms` }}
                     >
                       <div className="relative">

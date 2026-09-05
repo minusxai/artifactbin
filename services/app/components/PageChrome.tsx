@@ -13,6 +13,8 @@ import {
 import { useEffect, useId, useState } from 'react';
 import MobileSheet, { useIsPhoneViewport } from '@/components/MobileSheet';
 import GitHubStar from '@/components/GitHubStar';
+import { GitHubIcon } from '@/components/brand-icons';
+import { REPO_URL } from '@/lib/repo';
 import { Tooltip } from '@/components/Tooltip';
 import { forgetTokens } from '@/lib/browser-session';
 import { crumbsFor } from '@/lib/breadcrumb';
@@ -160,6 +162,17 @@ export function PageMenu({
         {link('/account', 'Account', <User size={15} strokeWidth={1.5} />, pathname === '/account')}
         {link('/docs-human', 'Human Docs', <BookOpen size={15} strokeWidth={1.5} />, pathname === '/docs-human')}
         {link('/docs/artifactbin/SKILL.md', 'Agent docs', <Braces size={15} strokeWidth={1.5} />, pathname === '/docs/artifactbin/SKILL.md')}
+
+        <a
+          href={REPO_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`${ITEM} cursor-pointer text-muted hover:bg-raised hover:text-fg`}
+          onClick={() => setOpen(false)}
+        >
+          <GitHubIcon size={15} />
+          Support artifactbin
+        </a>
 
         <div className="mt-auto" />
         <div className="my-1 h-px bg-edge" />
@@ -439,15 +452,15 @@ export function AppBar({
   };
   return (
     <>
-    <GitHubStar />
-    <header aria-label="Page bar" className={`${fixed ? 'fixed inset-x-0 top-0' : 'sticky top-0'} z-40 flex h-11 items-center gap-3 border-b border-edge bg-surface/85 px-3 backdrop-blur-md`}>
+    <GitHubStar placement="desktop-corner" />
+    <header aria-label="Page bar" className={`${fixed ? 'fixed inset-x-0 top-0' : 'sticky top-0'} z-40 flex h-11 items-center gap-2 sm:gap-3 border-b border-edge bg-surface/85 px-3 backdrop-blur-md`}>
       {center && <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">{center}</div>}
       <a href="/" aria-label="Home" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] no-underline transition-colors hover:bg-raised">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo-128.png" alt="" className="h-9 w-9" />
       </a>
-      {/* The trail: the brand is the root crumb, then the way down to this page
-          (lib/breadcrumb). Desktop only — a phone keeps the logo alone. */}
+      <a href="/" className="min-w-0 truncate font-mono text-xs font-semibold text-fg no-underline hover:text-accent sm:hidden">artifactbin</a>
+      {/* Desktop breadcrumbs; phones keep the brand beside the logo. */}
       <nav aria-label="Current page" className="hidden min-w-0 items-center gap-1.5 font-mono text-xs text-muted sm:flex">
         <a href="/" className={`shrink-0 text-sm no-underline hover:text-accent ${trail.length === 0 ? 'font-semibold text-fg' : 'text-muted'}`}>artifactbin</a>
         {trail.length === 0 && (
@@ -468,6 +481,7 @@ export function AppBar({
         ))}
       </nav>
       <div className="ml-auto flex shrink-0 items-center gap-1">
+        <GitHubStar placement="mobile-bar" />
         {/* The document bar's glyphs, at its size and stroke, so the two bars read as one. */}
         {control('controls', label.toLowerCase(), <SlidersVertical size={20} strokeWidth={1.3} />)}
         {control('menu', 'menu', <CircleUser size={20} strokeWidth={1.3} />)}
