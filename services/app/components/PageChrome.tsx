@@ -464,7 +464,7 @@ export function AppBar({
           (lib/breadcrumb). Desktop only — a phone keeps the logo alone. */}
       <nav aria-label="Current page" className="hidden min-w-0 items-center gap-1.5 font-mono text-xs text-muted sm:flex">
         <a href="/" className={`shrink-0 text-sm no-underline hover:text-accent ${trail.length === 0 ? 'font-semibold text-fg' : 'text-muted'}`}>artifactbin</a>
-        {pathname === '/' && (
+        {trail.length === 0 && (
           <>
             <span aria-hidden="true" className="text-faint">·</span>
             <span className="truncate">Google Docs for agents</span>

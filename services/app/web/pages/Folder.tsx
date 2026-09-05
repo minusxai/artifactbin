@@ -41,6 +41,7 @@ export interface FolderPageProps {
   role: ArtifactRole;
   /** Present only for an account owner; totals and activity remain account-wide. */
   workspace?: AccountWorkspace;
+  ownerUsername?: string | null;
 }
 
 /**
@@ -137,7 +138,7 @@ function Empty({ id, mayWrite }: { id: string; mayWrite: boolean }) {
   );
 }
 
-export function FolderPage({ folder: given, role, workspace: givenWorkspace }: FolderPageProps) {
+export function FolderPage({ folder: given, role, workspace: givenWorkspace, ownerUsername }: FolderPageProps) {
   const [folder, setFolder] = useState(given);
   const [workspace, setWorkspace] = useState(givenWorkspace);
   // The prop is the server's answer for THIS address; a client navigation to
@@ -185,7 +186,9 @@ export function FolderPage({ folder: given, role, workspace: givenWorkspace }: F
       <header className="mb-6 border-b border-edge pb-4">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <nav aria-label="Folder trail" className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1 font-mono">
-            <a href="/" className={`${NAME_TYPE} text-muted no-underline transition-colors hover:text-accent`}>Home</a>
+            <a href={role !== 'owner' && ownerUsername ? `/@${ownerUsername}` : '/'} className={`${NAME_TYPE} text-muted no-underline transition-colors hover:text-accent`}>
+              {role !== 'owner' && ownerUsername ? `@${ownerUsername}` : 'Home'}
+            </a>
             {/* Only ancestors this viewer may read are included in the trail. */}
             {folder.trail.map((crumb) => (
               <span key={crumb.id} className="flex min-w-0 items-baseline gap-x-3">

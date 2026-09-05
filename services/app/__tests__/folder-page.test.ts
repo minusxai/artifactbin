@@ -25,7 +25,7 @@ import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as frameRoute } from '@/app/a/[id]/events/frame/route';
 import { getArtifactById, updateSharing } from '@/lib/artifacts';
 import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { claimToken, createUser, setUsername } from '@/lib/users';
 
 useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -216,9 +216,11 @@ describe('the folder page bootstrap', () => {
   });
 
   it('answers a STRANGER the public children only — never unlisted, never private, and no numbers', async () => {
-    const { f, pub, sub } = await world();
+    const { o, f, pub, sub } = await world();
+    await setUsername(o.userId, 'folderowner');
     const r = await pageAs(f.id);
     expect(r.status).toBe(200);
+    expect(r.body.ownerUsername).toBe('folderowner');
     const folder = r.body.folder;
     expect(folder.rows.map((x: any) => x.id).sort()).toEqual([pub.id, sub.id].sort());
     expect(folder.count).toEqual({ documents: 1, folders: 1 });

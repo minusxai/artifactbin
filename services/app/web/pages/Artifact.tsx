@@ -24,7 +24,7 @@ import { NotFoundPage } from './NotFound';
  * second meaning for the word is how a payload starts lying about itself.
  */
 type Page =
-  | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; folder: Parameters<typeof FolderPage>[0]['folder']; workspace?: AccountWorkspace; surface?: undefined }
+  | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; folder: Parameters<typeof FolderPage>[0]['folder']; workspace?: AccountWorkspace; ownerUsername?: string | null; surface?: undefined }
   | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; like?: { liked: boolean; count: number }; follow?: { userId: string; following: boolean; count: number } | null; surface: Parameters<typeof ArtifactSurface>[0]; folder?: undefined };
 
 export function ArtifactPage({ id: given }: { id?: string } = {}) {
@@ -49,11 +49,11 @@ export function ArtifactPage({ id: given }: { id?: string } = {}) {
   if (page === null) return <div aria-label="Loading page" />;
   if (page === 'missing') return <NotFoundPage />;
   // A folder is a listing, not a document: no ArtifactShell and no surface
-  // (there is nothing to frame). An account-owned folder does get the normal
-  // PAGE frame so its top bar and controls remain identical to Home.
+  // (there is nothing to frame). Every folder gets the normal PAGE frame;
+  // account-wide dashboard data is still supplied only to its owner.
   if (page.folder) {
-    const folder = <FolderPage folder={page.folder} role={page.role} workspace={page.workspace} />;
-    return page.workspace ? <ShellFrame hideBreadcrumb>{folder}</ShellFrame> : folder;
+    const folder = <FolderPage folder={page.folder} role={page.role} workspace={page.workspace} ownerUsername={page.ownerUsername} />;
+    return <ShellFrame hideBreadcrumb>{folder}</ShellFrame>;
   }
   return (
     <ArtifactShell role={page.role}>

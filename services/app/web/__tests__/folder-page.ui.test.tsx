@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
 import { ShellFrame } from '@/web/Shell';
 import { FolderPage } from '@/web/pages/Folder';
+import { ArtifactPage } from '@/web/pages/Artifact';
 import type { AccountWorkspace } from '@/lib/workspace';
 
 vi.mock('@/web/session', () => ({ useSession: () => ({ session: { user: { id: 'usr_o', email: 'o@x.io' } } }) }));
@@ -37,7 +38,7 @@ const folder = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-const draw = (props: { folder: ReturnType<typeof folder>; role: 'owner' | 'editor' | 'commenter' | 'viewer'; workspace?: AccountWorkspace }) =>
+const draw = (props: { folder: ReturnType<typeof folder>; role: 'owner' | 'editor' | 'commenter' | 'viewer'; workspace?: AccountWorkspace; ownerUsername?: string | null }) =>
   render(<MemoryRouter><FolderPage {...props} /></MemoryRouter>);
 
 const accountRow = (id: string, format: 'markup' | 'folder' = 'markup', title = `Doc ${id}`, ancestor_ids = ['fold01']) => {
@@ -108,6 +109,12 @@ describe('the head', () => {
     const links = [...trail.querySelectorAll('a')];
     expect(links.map((a) => a.textContent)).toEqual(['Home', 'Work', '2026']);
     expect(links.map((a) => a.getAttribute('href'))).toEqual(['/', '/a/r1', '/a/r2']);
+  });
+
+  it.each(['viewer', 'editor', 'commenter', 'owner'] as const)('links the breadcrumb root appropriately for %s', (role) => {
+    draw({ folder: folder(), role, ownerUsername: 'folderowner' });
+    const root = within(screen.getByLabelText('Folder trail')).getByRole('link', { name: role === 'owner' ? 'Home' : '@folderowner' });
+    expect(root).toHaveAttribute('href', role === 'owner' ? '/' : '/@folderowner');
   });
 
   it('always draws a <main> — the export camera names that element, empty folder or not', () => {
@@ -190,6 +197,18 @@ describe('the shelf below the hairline', () => {
     expect(screen.getByLabelText('Open menu')).toBeInTheDocument();
     expect(screen.getByLabelText('Open page controls')).toBeInTheDocument();
     expect(screen.getByLabelText('Folder workspace')).toBeInTheDocument();
+  });
+
+  it('renders the top bar and owner profile breadcrumb for a visitor through the artifact route', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({
+      canonical: window.location.pathname, role: 'viewer', kind: 'none',
+      ownerUsername: 'folderowner', folder: folder(),
+    }), { status: 200 }));
+    render(<MemoryRouter initialEntries={['/a/fold01']}><ArtifactPage id="fold01" /></MemoryRouter>);
+    expect(await screen.findByLabelText('Page bar')).toBeInTheDocument();
+    expect(screen.getByLabelText('Current page')).toHaveTextContent('artifactbin·Google Docs for agents');
+    expect(screen.getByRole('link', { name: '@folderowner' })).toHaveAttribute('href', '/@folderowner');
+    expect(screen.queryByLabelText('Dashboard rail')).not.toBeInTheDocument();
   });
 
   it('gives a stranger the documents and no verbs at all', () => {

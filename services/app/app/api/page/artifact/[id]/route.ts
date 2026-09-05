@@ -56,6 +56,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
    * count and nothing to frame.
    */
   if (artifact.format === 'folder') {
+    const handle = await ownerUsername(artifact.user_id);
     const [folder, workspace] = await Promise.all([
       folderPageFor(artifact, { userId: actor.viewer?.userId ?? null, email: actor.viewer?.email ?? null, tokenId: actor.tokenId ?? null }),
       role === 'owner' && actor.viewer?.userId
@@ -63,7 +64,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         : Promise.resolve(null),
     ]);
     return json({
-      canonical: canonicalArtifactPath(artifact, await ownerUsername(artifact.user_id)),
+      canonical: canonicalArtifactPath(artifact, handle),
+      ownerUsername: handle,
       role,
       kind,
       // The TOKEN travels beside the account, as everywhere the folder ACL is
