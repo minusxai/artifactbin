@@ -25,3 +25,14 @@ Entry points: `@artifactbin/sql` is the contract, the client and the server shel
 the engine and the ONLY entry that loads DuckDB; `./shape` is the pure column inference, safe in a browser bundle.
 
 Conformance: `__tests__/contract.test.ts` runs one suite over `createSql()` and over `sqlClient(serveSql(createSql()))`.
+
+Editable mutations optionally carry `row: { columns, values }`. The engine binds it as the native `$_row`
+STRUCT, with number, boolean, string and date fields matching the supplied columns. Date values travel as
+strings and use DuckDB's DATE conversion; absent values bind typed NULL. Dry-run mutations accept the same
+`row: { columns }` shape with every field NULL, so unknown fields and invalid typed expressions fail before
+publication. The caller owns the row schema and authorization; this binding does not establish row identity.
+
+`expectedAffected` optionally guards the exact changed-row count. A mismatch returns a failure with no new
+rows: `row_changed` when fewer rows changed, `row_not_unique` when more changed. The throwaway database is
+then discarded, so the caller has nothing to persist. Omitting this field preserves generic mutation behavior.
+`__tests__/editable-row.test.ts` exercises these rules through both local and HTTP transports.

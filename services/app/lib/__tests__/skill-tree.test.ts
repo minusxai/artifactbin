@@ -258,8 +258,9 @@ describe('each topic is taught by exactly its owner', () => {
   const owners = (needle: string | RegExp) => Object.keys(rendered).filter((p) => (typeof needle === 'string' ? rendered[p].includes(needle) : needle.test(rendered[p])));
   const R = 'artifactbin/references';
   const cases: Array<[string, string | RegExp, string[]]> = [
-    ['the <Mutation> grammar (a worked declaration)', '<Mutation name', [`${R}/markup-data.md`]],
+    ['the generic <Mutation> grammar', '<Mutation name>{`insert', [`${R}/markup-data.md`]],
     ['the Helmet cardinality rule', /at most ONE per document/i, [`${R}/markup.md`]],
+    ['editable table grammar and seven-editor example', '<DataTable data="$roadmap" rowKey="id">', [`${R}/markup-editing.md`]],
     ['the reader-control roster', '## Bindings: controls', [`${R}/markup-data.md`]],
     ['the <Helmet> :root override example', /:root \{ --background/, [`${R}/markup.md`]],
     ['the create endpoint', /^### Create an artifact/m, [`${R}/publishing.md`]],

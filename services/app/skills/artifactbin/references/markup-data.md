@@ -1,15 +1,13 @@
 ---
 name: markup-data
 description: >-
-  The data grammar beyond the brief's one query: <Value> filters, <Mutation>, chart recipes (minusx/trend@1 …), <DataTable> options, reader controls. Read only for filters, KPI tiles, tables or writes.
+  Queries, Values, Mutations, charts, DataTable settings and reader controls.
 order: 1
 ---
 ## Read first
 
-A document DECLARES its data in `<Helmet>` and refers to it everywhere else
-by name. One namespace; a name is either a TABLE (a `<Query>` or a table
-`<Value>`) or a SCALAR (a `<Value>`), checked at publish — a typo is a
-`400` naming the token.
+Declare data in `<Helmet>`; bind by name. One namespace: a TABLE (a `<Query>` or a table
+`<Value>`) or a SCALAR (a `<Value>`), checked at publish — typos return `400` naming the token.
 
 ```jsx
 <Helmet>
@@ -30,6 +28,8 @@ by name. One namespace; a name is either a TABLE (a `<Query>` or a table
 
 `ref:<id>` survives ONLY for images and recipes; `data="ref:<id>"`, inline
 `data={[…]}` and the old Param control are retired and refused by name.
+
+Editable cells: [editing](markup-editing.md).
 
 ## Contents
 

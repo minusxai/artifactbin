@@ -154,7 +154,11 @@ export function kitchenSinkMarkup(refs: KitchenSinkRefs): string {
   </div>
   <div className="mt-6 grid grid-cols-1 gap-6 @2xl:grid-cols-2">
     <Card><CardHeader><CardTitle>DataTable</CardTitle></CardHeader><CardContent>
-      <DataTable data="$sales" height="320px" sort={{col:"revenue", dir:"desc"}} columns={[{col:"month", title:"Month"}, {col:"region", title:"Region"}, {col:"revenue", title:"Revenue", fmt:"$,.0f", bar:true}]} />
+      <DataTable data="$sales" height="320px" sort={{col:"revenue", dir:"desc"}}>
+        <Column col="month" title="Month" />
+        <Column col="region" title="Region" />
+        <Column col="revenue" title="Revenue" fmt="$,.0f" bar />
+      </DataTable>
     </CardContent></Card>
     <Card><CardHeader><CardTitle>Files</CardTitle></CardHeader><CardContent>
       {/* A folder's listing. Bound like any other table — a real folder's own

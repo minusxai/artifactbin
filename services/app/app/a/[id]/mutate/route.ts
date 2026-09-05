@@ -75,11 +75,16 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const parsed = parseMutationRequest(body);
   if (parsed instanceof Response) return parsed;
 
-  const result = await runDocumentMutation(artifact, parsed.mutation, parsed.values ?? {});
+  const result = await runDocumentMutation(artifact, parsed.mutation, parsed.values ?? {}, parsed.row);
   if (!result.ok) {
     switch (result.reason) {
       case 'unknown_mutation':
         return json({ error: 'unknown_mutation', detail: `this document declares no <Mutation name="${parsed.mutation}">` }, 400, CORS);
+      case 'invalid_row':
+        return json({ error: 'invalid_row', detail: result.detail }, 400, CORS);
+      case 'row_changed':
+      case 'row_not_unique':
+        return json({ error: result.reason, detail: result.detail }, 409, CORS);
       case 'dataset_full':
         return json({ error: 'dataset_full', detail: result.detail }, 409, CORS);
       case 'contended':

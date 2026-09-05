@@ -1,7 +1,7 @@
 ---
 name: artifactbin
 description: >-
-  Publish documents to artifactbin over HTTP and share the link. Read first, always: everything a straightforward document needs. Use when asked to publish, share or host a page, report, dashboard, deck, dataset, chart or image.
+  Publish or edit documents over HTTP. Read first: publishing, layout, themes, datasets and the reference index.
 read_first_max: 8192
 ---
 ## Read first — everything a straightforward document needs
@@ -107,23 +107,23 @@ text flush to the viewport edge).
 
 [[ checkWork ]]
 
-**Prose, sections and a one-dataset chart are fully covered above**; anything
-more follows the reading path. Each ask has ONE file under
+**Prose and a one-dataset chart are fully covered above**. Each ask has ONE file under
 `references/` ([[ docsIndexHint ]]):
 | when the ask involves | read |
 |---|---|
-| the API in full — replace, `expectedVersion`, visibility, folders, forking, the error table | `publishing.md` |
+| API — replace, `expectedVersion`, visibility, folders, trash/restore, errors | `publishing.md` |
 | tokens — expiry, saved config, claiming, a 401 | `publishing-auth.md` |
-| uploading assets — CSV/sheet rows, images, PDFs (`<File>`), viz recipes | `publishing-datasets.md` |
+| upload CSV/sheets, images, PDFs (`<File>`), viz recipes | `publishing-datasets.md` |
 | pinned human feedback — reply, resolve, the anchor attribute | `publishing-annotations.md` |
 | connecting an MCP client — OAuth or bearer, the tool list | `publishing-mcp.md` |
 | history — versions, revert, the trash, export options | `publishing-versions.md` |
 | design craft — hierarchy, type, spacing, color, motifs | `design.md` |
-| the complete tag + component allowlists, `<Helmet>` in depth, layout rules | `markup.md` |
-| dataviz & charts (vega specs), controls, writable datasets, `<Mutation>`, formats | `markup-data.md` |
+| tag/component allowlists, `<Helmet>`, layout | `markup.md` |
+| charts (vega specs), controls, `<Mutation>`, data formats | `markup-data.md` |
+| editable cells, tags and reference pickers | `markup-editing.md` |
 | scroll reveals and ambient motion classes | `markup-motion.md` |
 | video embeds — the click-to-open card | `markup-video.md` |
 | inline SVG motifs and the allowed subset | `markup-svg.md` |
-| a long/intricate genre piece — act structure, full skeleton | `templates-<name>.md` (index: `templates.md`) |
-| the picked theme — tokens, accent class, chart palette | `themes-<name>.md` (index: `themes.md`) |
+| genre structure and full skeleton | `templates-<name>.md` (index: `templates.md`) |
+| theme tokens, accents, chart palette | `themes-<name>.md` (index: `themes.md`) |
 [[ docsMoreLine ]]

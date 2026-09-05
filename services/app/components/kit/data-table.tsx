@@ -19,11 +19,15 @@ import { useVirtualizer } from "@tanstack/react-virtual"
 
 import { cn } from "./cn"
 import {
-  barFraction, cellTint, formatCell, gridGeometry, parseTableHeight, resolveColumns, sortRows,
+  barFraction, cellTint, formatCell, gridGeometry, parseColumnSpecs, parseTableHeight, resolveColumns, sortRows,
   type DataTableColumnSpec, type ResolvedColumn, type SortSpec,
 } from "@/lib/story/data-table"
 import type { DatasetColumn } from "@/lib/story/dataset-shape"
 import type { Row } from "@/lib/story/dataflow"
+import type { JsxNode } from "@/lib/jsx"
+import { AST_PATH_ATTR } from "@/lib/story-ui/ast-path"
+
+export interface ColumnTemplate { col: string; title?: string; props: Record<string, unknown>; nodes: JsxNode[]; path: string }
 
 export interface DataTableProps {
   /** Absent (the bare registry entry, with no adapter) renders the empty state. */
@@ -62,6 +66,9 @@ export interface DataTableProps {
    * the whole point of the asset store above it.
    */
   resolveSrc?: (url: string) => string | null
+  rowKey?: string
+  templates?: ColumnTemplate[]
+  renderCell?: (template: ColumnTemplate, row: Row) => React.ReactNode
   className?: string
   /**
    * Unknown props reach the root div, like every other kit component — the
@@ -78,7 +85,7 @@ const ROW_H = 33
 
 export function DataTable({
   rows = [], columns = [], spec = null, sort: initialSort = null, height, sticky = true,
-  totalRows, truncated = false, loading = false, onSortChange, onLoadMore, resolveSrc, className, ...props
+  totalRows, truncated = false, loading = false, onSortChange, onLoadMore, resolveSrc, rowKey, templates = [], renderCell, className, ...props
 }: DataTableProps) {
   // A CEILING, not a reserved height: a three-row table hugs its rows and a
   // long one scrolls inside the cap, because `overflow-auto` gives the
@@ -88,7 +95,10 @@ export function DataTable({
   const [sort, setSort] = React.useState<SortSpec | null>(initialSort)
   React.useEffect(() => { setSort(initialSort) }, [initialSort?.col, initialSort?.dir]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const resolved = React.useMemo(() => resolveColumns(spec, columns, rows), [spec, columns, rows])
+  const resolved = React.useMemo(() => resolveColumns(
+    templates.length ? parseColumnSpecs(templates.map((template) => template.props)) : spec,
+    columns, rows,
+  ), [spec, columns, rows, templates])
   const remote = truncated && !!onSortChange
   const ordered = React.useMemo(() => (remote ? rows : sortRows(rows, sort)), [rows, sort, remote])
 
@@ -113,6 +123,7 @@ export function DataTable({
   }, [])
   const virtualizer = useVirtualizer({
     count: ordered.length,
+    getItemKey: (index) => rowIdentity(ordered[index], rowKey, index),
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_H,
     overscan: 12,
@@ -148,6 +159,16 @@ export function DataTable({
     : undefined
 
   const count = new Intl.NumberFormat(undefined)
+  if (rowKey) {
+    const seen = new Set<string>()
+    for (const row of rows) {
+      const value = row[rowKey]
+      if (value == null || (typeof value !== 'string' && typeof value !== 'number') || (typeof value === 'number' && !Number.isFinite(value))) return <div role="alert">rowKey must have a non-null string or number for every row</div>
+      const key = `${typeof value}:${value}`
+      if (seen.has(key)) return <div role="alert">rowKey must be unique; duplicate key {String(value)}</div>
+      seen.add(key)
+    }
+  }
   return (
     <div data-slot="data-table" aria-label="Data grid" className={cn("flex h-full w-full flex-col overflow-hidden rounded-md border border-border bg-card text-sm", className)} {...props}>
       <div
@@ -162,6 +183,7 @@ export function DataTable({
               {resolved.map((c) => (
                 <th
                   key={c.col}
+                  {...{ [AST_PATH_ATTR]: templates.find((template) => template.col === c.col)?.path }}
                   scope="col"
                   aria-label={`Sort by ${c.title}`}
                   aria-sort={sort?.col === c.col ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
@@ -181,13 +203,15 @@ export function DataTable({
               <tr style={virtual ? { display: 'block' } : undefined}><td colSpan={Math.max(1, resolved.length)} className="block px-3 py-6 text-center text-muted-foreground">no rows</td></tr>
             ) : visible.map(({ index, start }) => (
               <DataRow
-                key={index}
+                key={rowIdentity(ordered[index], rowKey, index)}
                 row={ordered[index]}
                 columns={resolved}
                 style={start === null ? undefined : { ...rowGrid, position: 'absolute', top: 0, left: 0, transform: `translateY(${start}px)` }}
                 measure={virtual ? virtualizer.measureElement : undefined}
                 index={index}
                 resolveSrc={resolveSrc}
+                templates={templates}
+                renderCell={renderCell}
               />
             ))}
           </tbody>
@@ -209,16 +233,18 @@ export function DataTable({
   )
 }
 
-function DataRow({ row, columns, style, measure, index, resolveSrc }: {
+function DataRow({ row, columns, style, measure, index, resolveSrc, templates, renderCell }: {
   row: Row
   columns: ResolvedColumn[]
   style?: React.CSSProperties
   measure?: (el: HTMLElement | null) => void
   index: number
   resolveSrc?: (url: string) => string | null
+  templates: ColumnTemplate[]
+  renderCell?: (template: ColumnTemplate, row: Row) => React.ReactNode
 }) {
   return (
-    <tr ref={measure} data-index={index} className="border-b border-border/50" style={style}>
+    <tr ref={measure} data-index={index} className="border-b border-border/50 transition-colors hover:bg-muted/30" style={style}>
       {columns.map((c) => {
         const value = row[c.col]
         const bar = barFraction(value, c)
@@ -226,7 +252,7 @@ function DataRow({ row, columns, style, measure, index, resolveSrc }: {
         return (
           <td
             key={c.col}
-            className={cn("relative whitespace-nowrap px-3 py-1.5", c.type === 'number' && "tabular-nums")}
+            className={cn("relative whitespace-nowrap px-3 py-1.5 align-middle", c.type === 'number' && "tabular-nums")}
             style={{ textAlign: c.align, width: c.width ? `${c.width}px` : undefined, ...(tint ? { background: tint } : {}) }}
           >
             {bar !== null && (
@@ -237,12 +263,18 @@ function DataRow({ row, columns, style, measure, index, resolveSrc }: {
                 style={{ width: `${Math.round(bar * 100)}%`, background: typeof c.bar === 'object' && c.bar.color ? c.bar.color : 'var(--chart-1)' }}
               />
             )}
-            <span className="relative">{imageCell(value, c, resolveSrc) ?? formatCell(value, c)}</span>
+            <span className="relative">{(() => { const template = templates.find((t) => t.col === c.col); return template && template.nodes.some((n) => n.type !== 'text' || n.value.trim()) && renderCell ? renderCell(template, row) : imageCell(value, c, resolveSrc) ?? formatCell(value, c); })()}</span>
           </td>
         )
       })}
     </tr>
   )
+}
+
+function rowIdentity(row: Row, key: string | undefined, index: number): string {
+  const value = key ? row[key] : undefined;
+  return value === null || value === undefined || (typeof value !== 'string' && typeof value !== 'number')
+    ? `index:${index}` : `${typeof value}:${String(value)}`;
 }
 
 /**
