@@ -56,7 +56,10 @@ export async function eventsTablePresent(): Promise<boolean> {
 /**
  * "What happened to what I own": every event whose object is one of the
  * user's artifacts, newest first — a view, a fork of it (the object IS the
- * original), a comment on it. Empty when the table is absent.
+ * original), a comment on it. Export delivery is deliberately excluded here,
+ * BEFORE the limit: shelf thumbnails request exports and those mechanical
+ * rows must never crowd all useful activity out of a short dashboard feed.
+ * Empty when the table is absent.
  */
 export async function ownerFeed(userId: string, opts: { limit?: number } = {}): Promise<EventEnvelope[]> {
   if (!(await eventsTablePresent())) return [];
@@ -66,7 +69,7 @@ export async function ownerFeed(userId: string, opts: { limit?: number } = {}): 
   const r = await db.query<EventRow>(
     `SELECT e.* FROM ${EVENTS_SCHEMA}.events e
        JOIN artifacts a ON a.id = e.object_id
-      WHERE a.user_id = $1 AND e.object_kind = 'artifact' AND a.${LIVE_ARTIFACT_SQL}
+      WHERE a.user_id = $1 AND e.object_kind = 'artifact' AND e.verb <> 'exported' AND a.${LIVE_ARTIFACT_SQL}
       ORDER BY e.at DESC, e.id DESC
       LIMIT $2`,
     [userId, opts.limit ?? FEED_DEFAULT_LIMIT],

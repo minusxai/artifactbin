@@ -109,6 +109,14 @@ describe('followFeed', () => {
     expect((await ownerFeed(alice.id)).map((e) => e.id)).toEqual(['p2', 'p1']);
   });
 
+  it('removes export delivery before LIMIT, so loading shelf images cannot blank Activity', async () => {
+    await say('meaningful', ago(30), ['user', alice.id], 'created', 'artifact', pubA);
+    for (let index = 0; index < 25; index++) {
+      await say(`export-${String(index).padStart(2, '0')}`, ago(25 - index), ['user', alice.id], 'exported', 'artifact', pubA);
+    }
+    expect((await ownerFeed(alice.id, { limit: 20 })).map((event) => event.id)).toEqual(['meaningful']);
+  });
+
   it('is empty when I follow nobody, or when the table is absent', async () => {
     await say('f1', ago(1), ['user', alice.id], 'created', 'artifact', pubA);
     expect(await followFeed(carol.id)).toEqual([]);
