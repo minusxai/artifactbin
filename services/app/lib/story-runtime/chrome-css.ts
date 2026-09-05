@@ -187,7 +187,8 @@ input.mx-rail-title { min-width: 0; width: 100%; background: transparent; border
  * A framed owner/editor copy hides all of it: its trusted parent supplies the
  * same controls plus the authenticated ones an opaque document cannot have.
  */
-:root.mx-framed .mx-reader-chrome { display: none !important; }
+/* The parent's edit mode owns the top of the page; it switches the chrome off. */
+.mx-reader-chrome--off { display: none !important; }
 .mx-reader-chrome {
   position: fixed !important; z-index: 2147483003 !important;
   color: var(--foreground, canvastext) !important;

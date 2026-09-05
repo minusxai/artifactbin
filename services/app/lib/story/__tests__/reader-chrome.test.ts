@@ -140,6 +140,14 @@ describe('renderReaderChrome', () => {
     expect(chrome()).not.toContain('data-mx-forked-from');
   });
 
+  it('offers Edit only to a writer, between share and settings', () => {
+    const html = chrome({ edit: true });
+    expect(html).toContain('data-mx-reader-action="edit" aria-label="Edit" data-mx-tip="Edit"');
+    expect(html.indexOf('data-mx-reader-action="edit"')).toBeGreaterThan(html.indexOf('data-mx-reader-action="share"'));
+    expect(html.indexOf('data-mx-reader-action="edit"')).toBeLessThan(html.indexOf('data-mx-reader-trigger="controls"'));
+    expect(chrome()).not.toContain('data-mx-reader-action="edit"');
+  });
+
   it('never renders the retired credits', () => {
     const html = chrome();
     expect(html).not.toContain('mx-artifact-credits');

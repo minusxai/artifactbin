@@ -24,7 +24,7 @@
  */
 
 import { READER_CHROME_HIDDEN_CLASS, type ReaderChromeState } from '@/lib/story/reader-chrome';
-import { STORY_MODE_HOOK } from './contract';
+import { STORY_MODE_HOOK, STORY_READER_ACTION_MESSAGE, STORY_READER_ACTION_RESULT_MESSAGE, STORY_READER_CHROME_MESSAGE, type StoryReaderActionKind, type StoryReaderActionMessage, type StoryReaderActionResultMessage, type StoryReaderChromeMessage } from './contract';
 import { applyReaderMode, persistReaderMode } from './reader-mode';
 import { chromeAfterSample, type ChromeState } from './reader-chrome-policy';
 
@@ -74,6 +74,18 @@ export function wireReaderChrome(win: Window, doc: Document): ReaderChromeHandle
     target.addEventListener(type, handler, options);
     cleanups.push(() => target.removeEventListener(type, handler, options));
   };
+
+  /*
+   * FRAMED — the owner's, an editor's or a commenter's copy inside the app
+   * page. The chrome is drawn here so it is the same chrome everyone sees, but
+   * this document holds no session and its panels would be the wrong panels
+   * (the page's carry share, history, the agent prompt). So every control
+   * posts UP, and the page acts: it holds the session and the real panels.
+   */
+  const framed = win.parent !== win;
+  const parent = win.parent;
+  const ask = (kind: StoryReaderActionKind, author?: string | null) =>
+    parent.postMessage({ type: STORY_READER_ACTION_MESSAGE, kind, ...(author ? { author } : {}) } satisfies StoryReaderActionMessage, '*');
 
   const triggers = Array.from(root.querySelectorAll<HTMLElement>('[data-mx-reader-trigger]'));
   const panels = Array.from(root.querySelectorAll<HTMLElement>('[data-mx-reader-panel]'));
@@ -132,6 +144,7 @@ export function wireReaderChrome(win: Window, doc: Document): ReaderChromeHandle
       // way a scroll up does, whichever direction the reader was going.
       reveal();
       const name = trigger.dataset.mxReaderTrigger;
+      if (framed) { ask(name === 'menu' ? 'menu' : 'controls'); return; }
       const opening = trigger.getAttribute('aria-expanded') !== 'true';
       closePanels();
       if (!opening) return;
@@ -215,6 +228,10 @@ export function wireReaderChrome(win: Window, doc: Document): ReaderChromeHandle
   for (const button of Array.from(root.querySelectorAll<HTMLElement>('[data-mx-reader-action]'))) {
     const kind = button.dataset.mxReaderAction;
     on(button, 'click', () => {
+      if (framed) {
+        if (kind === 'like' || kind === 'comment' || kind === 'share' || kind === 'follow' || kind === 'edit') ask(kind, button.dataset.mxAuthor ?? null);
+        return;
+      }
       if (kind === 'share') { share(); return; }
       // Like and comment are UI ONLY: the backend is somebody else's phase, and
       // a button that pretends to have saved something is worse than one that
@@ -233,6 +250,17 @@ export function wireReaderChrome(win: Window, doc: Document): ReaderChromeHandle
    * the root, after every control's own handler has run in the bubble.
    */
   on(root, 'click', (event) => event.stopPropagation());
+
+  if (framed) {
+    on(win, 'message', (event) => {
+      const { data, source } = event as MessageEvent<StoryReaderActionResultMessage | StoryReaderChromeMessage>;
+      if (source !== parent || !data || typeof data !== 'object') return;
+      // The page shared on our behalf; the toast is ours to show.
+      if (data.type === STORY_READER_ACTION_RESULT_MESSAGE && data.kind === 'share' && data.ok) say();
+      // Edit mode owns the top of the page: the chrome steps aside and back.
+      if (data.type === STORY_READER_CHROME_MESSAGE) root.classList.toggle('mx-reader-chrome--off', data.mode === 'off');
+    });
+  }
 
   // The first answer, now: the chrome is server-rendered hidden, and a
   // document that cannot scroll has to correct that before the reader looks.

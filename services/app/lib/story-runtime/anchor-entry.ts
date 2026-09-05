@@ -55,9 +55,11 @@ import { wireOutline } from './outline-nav';
  */
 if (typeof window !== 'undefined') {
   const framed = window.parent !== window;
-  if (!framed) {
-    wireReaderChrome(window, document);
-  } else {
+  // Framed or not: the chrome is the document's. Framed, its controls post up
+  // to the page (lib/story-runtime/reader-chrome-actions), and the scroll
+  // relay below keeps feeding the page as it always has.
+  wireReaderChrome(window, document);
+  if (framed) {
     const parentWindow = window.parent;
     /* 4px of slack for subpixel rounding and the mobile URL bar, which changes
      * `innerHeight` under us as it collapses. */

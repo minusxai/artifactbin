@@ -112,6 +112,27 @@ describe('wireReaderChrome — visibility', () => {
   });
 });
 
+describe('wireReaderChrome — framed', () => {
+  it('posts every control up to the page and opens nothing itself', () => {
+    const posts: unknown[] = [];
+    set(window, 'parent', { postMessage: (message: unknown) => { posts.push(message); } });
+    try {
+      mount();
+      click('[data-mx-reader-action="like"]');
+      click('[data-mx-reader-action="follow"]');
+      click('[data-mx-reader-trigger="controls"]');
+      expect(posts).toEqual([
+        { type: 'mx:reader-action', kind: 'like' },
+        { type: 'mx:reader-action', kind: 'follow', author: 'ada' },
+        { type: 'mx:reader-action', kind: 'controls' },
+      ]);
+      expect(document.querySelector<HTMLElement>('[data-mx-reader-panel="controls"]')!.hidden).toBe(true);
+    } finally {
+      set(window, 'parent', window);
+    }
+  });
+});
+
 describe('wireReaderChrome — the rail', () => {
   it('logs like and comment with the artifact id, and nothing else happens', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});

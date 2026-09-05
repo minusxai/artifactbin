@@ -22,6 +22,11 @@ export type AppearanceMode = 'light' | 'dark';
 
 const EDGE = 12;
 const OPEN_EVENT = 'mx:page-chrome-open';
+/** The framed document's chrome asks the page to open one of its panels. */
+const REQUEST_EVENT = 'mx:page-chrome-request';
+export function requestPageChrome(which: 'menu' | 'controls') {
+  window.dispatchEvent(new CustomEvent(REQUEST_EVENT, { detail: which }));
+}
 const ITEM =
   'flex w-full items-center gap-3 rounded-[5px] border-0 bg-transparent px-3 py-3 text-left font-mono text-sm no-underline transition-colors sm:gap-2.5 sm:px-2.5 sm:py-2 sm:text-xs';
 const FLOATING_BUTTON =
@@ -204,6 +209,21 @@ function useExclusiveLayer(open: boolean, setOpen: (open: boolean) => void) {
   return toggle;
 }
 
+/** Open on the framed chrome's request — exclusively, like a click on the trigger. */
+function useOpenOnRequest(which: 'menu' | 'controls', open: boolean, setOpen: (open: boolean) => void) {
+  const id = useId();
+  useEffect(() => {
+    const onRequest = (event: Event) => {
+      if ((event as CustomEvent<string>).detail !== which) return;
+      if (open) { setOpen(false); return; }
+      window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: id }));
+      setOpen(true);
+    };
+    window.addEventListener(REQUEST_EVENT, onRequest);
+    return () => window.removeEventListener(REQUEST_EVENT, onRequest);
+  }, [id, open, setOpen, which]);
+}
+
 function triggerPosition(side: 'left' | 'right', fixed: boolean, open: boolean) {
   const position = fixed || open ? 'fixed' : 'absolute';
   return `${position} top-3 ${side === 'left' ? 'left-3' : 'right-3'}`;
@@ -215,6 +235,7 @@ export function PageMenu({
   title,
   fixed = false,
   toolbar = false,
+  triggerless = false,
 }: {
   authed: boolean;
   anon?: boolean;
@@ -222,6 +243,8 @@ export function PageMenu({
   fixed?: boolean;
   /** Sit in the contextual editor bar instead of floating over the page. */
   toolbar?: boolean;
+  /** No button of its own: the framed document's chrome opens it (requestPageChrome). */
+  triggerless?: boolean;
 }) {
   const pathname = usePathname() ?? '';
   const trail = crumbsFor(pathname, title);
@@ -229,6 +252,7 @@ export function PageMenu({
   const phone = useIsPhoneViewport();
   const mobileBar = useMobileBarLayer(open);
   const toggle = useExclusiveLayer(open, setOpen);
+  useOpenOnRequest('menu', open, setOpen);
 
   useEffect(() => {
     if (!open) return;
@@ -255,11 +279,18 @@ export function PageMenu({
         type="button"
         aria-label="Close the menu"
         onClick={() => setOpen(false)}
-        className="fixed inset-0 z-40 cursor-default border-0 bg-black/25 p-0"
+        className={`fixed inset-0 z-40 cursor-default border-0 p-0 ${triggerless && !phone ? 'bg-transparent' : 'bg-black/25'}`}
       />
       <nav
         aria-label="Menu"
-        className="fixed inset-y-0 left-0 z-50 flex w-full animate-[drawer-in_.15s_ease-out] flex-col border-r border-edge bg-surface p-2 pt-16 shadow-xl sm:w-72"
+        /* Opened from the framed chrome it is a DROPDOWN under the bar (a bottom
+           sheet on a phone), the twin of the controls panel; on its own it stays
+           the app's left drawer. */
+        className={triggerless
+          ? (phone
+            ? 'fixed inset-x-0 bottom-0 z-50 flex animate-[rise_.14s_ease-out] flex-col rounded-t-[10px] border-t border-edge bg-surface p-3 pb-[max(20px,env(safe-area-inset-bottom))] shadow-xl'
+            : 'fixed right-3 top-14 z-50 flex w-72 animate-[rise_.14s_ease-out] flex-col rounded-[7px] border border-edge bg-surface p-2 shadow-xl')
+          : 'fixed inset-y-0 left-0 z-50 flex w-full animate-[drawer-in_.15s_ease-out] flex-col border-r border-edge bg-surface p-2 pt-16 shadow-xl sm:w-72'}
       >
         <button
           type="button"
@@ -333,7 +364,7 @@ export function PageMenu({
 
   return (
     <>
-      <Tooltip content={open ? 'close menu' : 'menu'} positioning={{ placement: mobileBar && phone ? 'top-start' : 'bottom-start' }}>
+      {!triggerless && <Tooltip content={open ? 'close menu' : 'menu'} positioning={{ placement: mobileBar && phone ? 'top-start' : 'bottom-start' }}>
         <button
           type="button"
           aria-label={open ? 'Close menu' : 'Open menu'}
@@ -350,7 +381,7 @@ export function PageMenu({
           {open ? <X size={17} strokeWidth={1.5} /> : <Menu size={17} strokeWidth={1.5} />}
           {mobileBar && <span data-mobile-label="" className={MOBILE_BAR_LABEL}>menu</span>}
         </button>
-      </Tooltip>
+      </Tooltip>}
       {layer && mobileBar && phone ? createPortal(layer, document.body) : layer}
     </>
   );
@@ -416,6 +447,7 @@ export function PageControls({
   active = false,
   badge = 0,
   children,
+  triggerless = false,
 }: {
   fixed?: boolean;
   /** Distance from the viewport's right edge. Artifact rails move the control
@@ -427,12 +459,15 @@ export function PageControls({
   active?: boolean;
   badge?: number;
   children?: React.ReactNode | ((close: () => void) => React.ReactNode);
+  /** No button of its own: the framed document's chrome opens it (requestPageChrome). */
+  triggerless?: boolean;
 }) {
   const phone = useIsPhoneViewport();
   const [open, setOpen] = useState(false);
   const mobileBar = useMobileBarLayer(open);
   const [appMode, setAppMode] = useState<AppearanceMode>(currentAppAppearance);
   const toggle = useExclusiveLayer(open, setOpen);
+  useOpenOnRequest('controls', open, setOpen);
   const mode = controlledMode ?? appMode;
 
   // Re-reads the page when a controlled document hands the control back. The
@@ -479,7 +514,7 @@ export function PageControls({
 
   return (
     <>
-      <Tooltip content={label.toLowerCase()} positioning={{ placement: mobileBar && phone ? 'top-end' : 'bottom-end' }}>
+      {!triggerless && <Tooltip content={label.toLowerCase()} positioning={{ placement: mobileBar && phone ? 'top-end' : 'bottom-end' }}>
         <button
           type="button"
           aria-label={open ? `Close ${label.toLowerCase()}` : `Open ${label.toLowerCase()}`}
@@ -506,7 +541,7 @@ export function PageControls({
             </span>
           )}
         </button>
-      </Tooltip>
+      </Tooltip>}
 
       {open && (phone ? (
         <MobileSheet label={label} onClose={close} header={header}>{body}</MobileSheet>

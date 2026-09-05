@@ -184,6 +184,8 @@ export interface StoryDocumentInput {
   fork?: { href: string } | null;
   /** "Sign in" in the profile menu, for a reader with no session (the route knows). */
   login?: { href: string } | null;
+  /** The rail offers Edit: this is a writer's framed copy (`?edit=1`). */
+  edit?: boolean;
 }
 
 /**
@@ -398,6 +400,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
       signIn,
       fork,
       login: input.login ?? null,
+      edit: !!input.edit,
     })
     : '';
 

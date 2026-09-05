@@ -24,7 +24,7 @@ import { LikeButton } from '@/components/LikeButton';
 import ShareLink from '@/components/ShareLink';
 import type { AnnotationWire } from '@/lib/annotations';
 import { readIntent, stripIntent } from '@/lib/intent';
-import { notifyPageChromeScroll, PageChromeBar, PageControls, PageMenu, type AppearanceMode } from '@/components/PageChrome';
+import { notifyPageChromeScroll, PageChromeBar, PageControls, PageMenu, requestPageChrome, type AppearanceMode } from '@/components/PageChrome';
 import { useIsPhoneViewport } from '@/components/MobileSheet';
 /* The editing bar's height is RESERVED by this page, never measured — and it
  * comes from a leaf module, because importing it from the editor would put the
@@ -32,6 +32,7 @@ import { useIsPhoneViewport } from '@/components/MobileSheet';
 import { EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
 import type { ArtifactFormat } from '@/lib/story/input';
 import { useLiveArtifact } from '@/lib/story/use-live-artifact';
+import { STORY_READER_ACTION_MESSAGE, STORY_READER_ACTION_RESULT_MESSAGE, STORY_READER_CHROME_MESSAGE, type StoryReaderActionMessage } from '@/lib/story-runtime/contract';
 import { STORY_ASSET_MESSAGE, STORY_ASSET_RESULT_MESSAGE, type StoryAssetRequest, type StoryAssetResult, STORY_DATA_MESSAGE, STORY_DOCUMENT_ACK_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_HELLO_MESSAGE, STORY_MUTATE_MESSAGE, STORY_MUTATE_RESULT_MESSAGE, STORY_PAINTED_MESSAGE, STORY_READER_MODE_MESSAGE, STORY_SCROLL_MESSAGE, type StoryDataUpdate, type StoryMutateRequest, type StoryMutateResult, type StoryScrollMessage, STORY_ADOPTS_MESSAGE, STORY_QUERY_MESSAGE, STORY_QUERY_RESULT_MESSAGE, isEditFrameMessage, isSessionMessage, isValuesMessage, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, type StoryDocumentUpdate, type StoryEditSelection, type StoryQueryRequest, type StoryQueryResult, type StorySelectionActionsMessage } from '@/lib/story-runtime/contract';
 import type { DataflowState } from '@/lib/story/dataflow';
 import { urlValuesSearch, writeUrlValues } from '@/lib/story/url-values';
@@ -916,6 +917,59 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   }, []);
   const enterEdit = useCallback(() => beginEdit(null), [beginEdit]);
 
+  /*
+   * THE FRAMED CHROME'S ASKS. The document draws the rail (the same one a
+   * stranger gets) and posts what was pressed; this page holds the session,
+   * the editor and the real panels, so it is the one that acts. Like, follow
+   * and a non-commenter's comment just log — the backend is another phase.
+   */
+  useEffect(() => {
+    if (format !== 'markup') return;
+    const onAction = (event: MessageEvent) => {
+      const data = event.data as Partial<StoryReaderActionMessage> | undefined;
+      if (!data || data.type !== STORY_READER_ACTION_MESSAGE || typeof data.kind !== 'string') return;
+      if (frameRef.current && event.source !== frameRef.current.contentWindow) return;
+      const frame = event.source as Window | null;
+      switch (data.kind) {
+        case 'like':
+        case 'follow':
+          console.log(`[artifactbin] ${data.kind}`, { artifact: id, ...(data.author ? { author: data.author } : {}) });
+          break;
+        case 'comment':
+          if (canAnnotate) setRailOpen((open) => !open);
+          else console.log('[artifactbin] comment', { artifact: id });
+          break;
+        case 'edit':
+          if (canEdit) enterEdit();
+          break;
+        case 'share': {
+          // The PAGE's address is the shareable one; the frame's is internal.
+          const url = window.location.href;
+          const done = () => frame?.postMessage({ type: STORY_READER_ACTION_RESULT_MESSAGE, kind: 'share', ok: true }, '*');
+          const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> };
+          if (typeof nav.share === 'function') void nav.share({ title: shownTitle ?? undefined, url }).catch(() => {});
+          else void navigator.clipboard?.writeText(url).then(done, () => {});
+          break;
+        }
+        case 'controls':
+        case 'menu':
+          requestPageChrome(data.kind);
+          break;
+        default:
+          break;
+      }
+    };
+    window.addEventListener('message', onAction);
+    return () => window.removeEventListener('message', onAction);
+  }, [canAnnotate, canEdit, enterEdit, format, id, shownTitle]);
+
+  // Edit mode owns the top of the page: the framed chrome steps aside for it.
+  useEffect(() => {
+    if (format !== 'markup' || !sessionNonce) return;
+    frameRef.current?.contentWindow?.postMessage({ type: STORY_READER_CHROME_MESSAGE, mode: editing ? 'off' : 'on' }, '*');
+  }, [editing, format, frameNonce, sessionNonce]);
+
+
   /**
    * Empty the editor's buffer and wait for it to land. The buffer is a timer
    * living inside the editor, so anything that takes the editor away — or races
@@ -1144,10 +1198,13 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
         {editing ? (
           <PageMenu authed={accountSession} anon={anonSession} title={shownTitle} fixed toolbar />
         ) : (
-          <PageChromeBar>
-            <PageMenu authed={accountSession} anon={anonSession} title={shownTitle} fixed />
+          /* The framed document draws the chrome (logo, rail, byline) — the
+             same one a stranger sees — and asks this page to open these. */
+          <>
+            <PageMenu authed={accountSession} anon={anonSession} title={shownTitle} fixed triggerless />
             <PageControls
               fixed
+              triggerless
               rightOffset={railOpen && !phone ? RIGHT_RAIL_W + 12 : 12}
               label="Artifact controls"
               mode={readerMode}
@@ -1157,7 +1214,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             >
               {documentControls}
             </PageControls>
-          </PageChromeBar>
+          </>
         )}
         <div
           aria-label="Artifact viewport"

@@ -269,6 +269,32 @@ export interface StoryReaderModeMessage {
   mode: 'light' | 'dark';
 }
 
+/**
+ * A FRAMED document's reader chrome asks its trusted parent to act. The chrome
+ * is drawn inside the document so it looks the same for everyone, but a frame
+ * holds no session: like, comment, follow, edit, share and the two panels are
+ * the PAGE's to perform, and it answers `share` so the frame can say "copied".
+ */
+export const STORY_READER_ACTION_MESSAGE = 'mx:reader-action';
+export type StoryReaderActionKind = 'like' | 'comment' | 'share' | 'follow' | 'edit' | 'controls' | 'menu';
+export interface StoryReaderActionMessage {
+  type: typeof STORY_READER_ACTION_MESSAGE;
+  kind: StoryReaderActionKind;
+  author?: string | null;
+}
+export const STORY_READER_ACTION_RESULT_MESSAGE = 'mx:reader-action-result';
+export interface StoryReaderActionResultMessage {
+  type: typeof STORY_READER_ACTION_RESULT_MESSAGE;
+  kind: StoryReaderActionKind;
+  ok: boolean;
+}
+/** The parent puts the framed chrome away (edit mode owns the top of the page) and brings it back. */
+export const STORY_READER_CHROME_MESSAGE = 'mx:reader-chrome';
+export interface StoryReaderChromeMessage {
+  type: typeof STORY_READER_CHROME_MESSAGE;
+  mode: 'on' | 'off';
+}
+
 /** A framed document's scroll port lives across an opaque-origin boundary
  * from the page chrome. This unprivileged sample lets the parent apply its
  * mobile bar visibility policy; the parent still checks the source window. */

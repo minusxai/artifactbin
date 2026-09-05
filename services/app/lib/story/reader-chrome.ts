@@ -71,6 +71,8 @@ export interface ReaderChromeInput {
   fork?: ReaderFork | null;
   /** A "Sign in" entry in the profile menu, for a reader with no session. Null when signed in. */
   login?: { href: string } | null;
+  /** This viewer may WRITE (the owner's or an editor's framed copy): the rail offers Edit. */
+  edit?: boolean;
 }
 
 /** The class the visibility policy toggles; the root is rendered with it. */
@@ -107,6 +109,7 @@ const ICON = (paths: string, size = 20): string =>
 const ICON_HEART = ICON('<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21.2l7.7-7.7 1.1-1.1a5.5 5.5 0 0 0 0-7.8z"/>');
 const ICON_COMMENT = ICON('<path d="M21 11.5a8.4 8.4 0 0 1-9 8.5 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.2A8.4 8.4 0 0 1 4 12a8.4 8.4 0 0 1 8.5-9 8.4 8.4 0 0 1 8.5 8.5z"/>');
 const ICON_SEND = ICON('<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>');
+const ICON_PENCIL = ICON('<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>');
 // `mx-rc-open`, like the sliders: the glyph a trigger swaps for the X while its panel is open.
 const ICON_PROFILE = '<svg class="mx-rc-open" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M6.2 19a6 6 0 0 1 11.6 0"/></svg>';
 const ICON_SLIDERS = `<svg class="mx-rc-open" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>`;
@@ -123,7 +126,7 @@ const label = (text: string): string =>
  * A rail ACTION — like, comment, share. A button, never a link: none of the
  * three navigates, and two of them do not even reach the network yet.
  */
-const action = (name: 'like' | 'comment' | 'share', aria: string, icon: string): string =>
+const action = (name: 'like' | 'comment' | 'share' | 'edit', aria: string, icon: string): string =>
   `<button type="button" class="mx-reader-action" data-mx-reader-action="${name}" aria-label="${aria}" data-mx-tip="${aria}">`
   + `${icon}${label(name)}</button>`;
 
@@ -172,7 +175,7 @@ const renderForkedFrom = (forkedFrom: ReaderForkedFrom): string => {
  * the title, the provenance label, the hrefs — is HTML-escaped on the way out.
  */
 export function renderReaderChrome(input: ReaderChromeInput): string {
-  const { artifactId, title, author, signIn = null, fork = null, login = null } = input;
+  const { artifactId, title, author, signIn = null, fork = null, login = null, edit = false } = input;
   const username = author?.username ?? null;
   const forkedFrom = author?.forkedFrom ?? null;
 
@@ -203,6 +206,7 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
     + action('like', 'Like', ICON_HEART)
     + action('comment', 'Comment', ICON_COMMENT)
     + action('share', 'Share', ICON_SEND)
+    + (edit ? action('edit', 'Edit', ICON_PENCIL) : '')
     + trigger('controls', 'Open artifact controls', ICON_SLIDERS, 'settings', 'Artifact settings')
     + trigger('menu', 'Open menu', ICON_PROFILE, 'profile', 'Profile')
     + '</div>'
