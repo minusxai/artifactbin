@@ -35,7 +35,7 @@ describe('Shelf — grid and list views', () => {
     first.unmount();
     render(<Shelf rows={[doc('one', 28)]} />);
     expect(screen.getByLabelText('List view')).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByLabelText('Artifact gallery')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Artifact grid')).toBeNull();
   });
 
   it('offers folder previews and paper cards in the grid, and compact folders in the list', () => {
@@ -53,8 +53,8 @@ describe('Shelf — grid and list views', () => {
     expect(screen.getByLabelText('Open Doc root').closest('li')).toHaveClass('gallery-document');
     expect(screen.queryByLabelText('Doc root card controls')).toBeNull();
     const cover = screen.getByLabelText('Preview of folder Reports');
-    expect(cover.querySelectorAll('img')).toHaveLength(2);
-    expect(cover).toHaveTextContent('+2more');
+    expect(cover.querySelectorAll('img')).toHaveLength(4);
+    expect(cover).not.toHaveTextContent('more');
     fireEvent.click(screen.getByLabelText('List view'));
     expect(screen.queryByLabelText('Preview of folder Reports')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Open folder Reports')).toBeInTheDocument();
@@ -189,10 +189,10 @@ describe('Shelf — data and capabilities', () => {
     expect(views.querySelector('[data-spline]')).toBeTruthy();
     expect(views.querySelector('[data-spline]')?.parentElement).toHaveClass('absolute', 'inset-0', 'w-full');
     expect(screen.getByText('42 views')).toHaveClass('text-[9px]', 'bg-surface/55', 'px-0.5');
-    expect(screen.getByLabelText('Doc a updated')).toHaveClass('ml-auto');
+    expect(views.closest('.gallery-fade')).not.toBeNull();
     rerender(<Shelf rows={[doc('a', 28)]} />);
     expect(screen.queryByLabelText('Doc a views')).toBeNull();
-    expect(screen.getByLabelText('Doc a updated')).not.toHaveClass('ml-auto');
+    expect(document.querySelector('.gallery-fade')).toBeNull();
   });
 
   it('shows visibility as a compact icon badge with its meaning in a tooltip', () => {
@@ -266,8 +266,8 @@ describe('Shelf — data and capabilities', () => {
     render(<Shelf rows={[doc('a', 28)]} actions="full" />);
     const open = screen.getByLabelText('Open Doc a');
     expect(open.tagName).toBe('A');
-    expect(open).toHaveClass('truncate');
-    expect(open).not.toHaveClass('line-clamp-2');
+    expect(open).toHaveClass('line-clamp-2');
+    expect(open).not.toHaveClass('truncate');
     expect(open.querySelector('button')).toBeNull();
   });
 });

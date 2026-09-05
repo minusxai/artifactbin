@@ -36,7 +36,7 @@ const doc = (id: string, day: number, extra: Partial<ShelfRow> = {}): ShelfRow =
 
 describe('the shelf reads as ONE shelf on a phone', () => {
   it('keeps grid controls on the paper: the badge over the preview, the actions in the foot tab', () => {
-    render(<Shelf rows={[doc('a', 28, { visibility: 'private' }), doc('b', 27, { visibility: 'public' })]} actions="full" />);
+    render(<Shelf rows={[doc('a', 28, { visibility: 'private', views: 3 }), doc('b', 27, { visibility: 'public' })]} actions="full" />);
 
     const card = screen.getByLabelText('Open Doc a').closest('li')!;
     const paper = card.querySelector('img')!.parentElement!.parentElement!;
