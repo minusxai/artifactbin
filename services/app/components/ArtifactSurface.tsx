@@ -24,7 +24,7 @@ import { LikeButton } from '@/components/LikeButton';
 import ShareLink from '@/components/ShareLink';
 import type { AnnotationWire } from '@/lib/annotations';
 import { readIntent, stripIntent } from '@/lib/intent';
-import { notifyPageChromeScroll, PageChromeBar, PageControls, PageMenu, requestPageChrome, type AppearanceMode } from '@/components/PageChrome';
+import PageChrome, { notifyPageChromeScroll, PageControls, PageMenu, requestPageChrome, type AppearanceMode } from '@/components/PageChrome';
 import { useIsPhoneViewport } from '@/components/MobileSheet';
 /* The editing bar's height is RESERVED by this page, never measured — and it
  * comes from a leaf module, because importing it from the editor would put the
@@ -1362,13 +1362,10 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   // or an image inside the app's own measure.
   return (
     <>
-      <PageChromeBar>
-        <PageMenu authed={accountSession} anon={anonSession} title={shownTitle} fixed />
-        <PageControls fixed label="Artifact controls">
-          {documentControls}
-        </PageControls>
-      </PageChromeBar>
-      <main className="mx-auto w-full max-w-5xl px-4 pt-16 pb-6">
+      <PageChrome authed={accountSession} anon={anonSession} title={shownTitle} label="Artifact controls">
+        {documentControls}
+      </PageChrome>
+      <main className="mx-auto w-full max-w-5xl px-4 pt-6 pb-6">
       {format === 'image' && (
         // eslint-disable-next-line @next/next/no-img-element -- the artifact IS the image; no optimizer.
         <img key={rawKey} src={`/a/${id}/raw`} alt={shownTitle} className="mt-4 max-w-full rounded-[6px] border border-edge" />

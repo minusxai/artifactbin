@@ -30,7 +30,7 @@ vi.mock('@/components/ArtifactEditor', () => ({
 import ArtifactShell from '../ArtifactShell';
 import ArtifactSurface, { type ArtifactSurfaceProps } from '../ArtifactSurface';
 import {
-  STORY_PAINTED_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, STORY_SELECTION_ACTION_MESSAGE, STORY_SESSION_MESSAGE,
+  STORY_PAINTED_MESSAGE, STORY_READER_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, STORY_SELECTION_ACTION_MESSAGE, STORY_SESSION_MESSAGE,
 } from '@/lib/story-runtime/contract';
 
 class FakeEventSource {
@@ -76,7 +76,24 @@ const surfaceProps = (over: Partial<ArtifactSurfaceProps>): ArtifactSurfaceProps
   ...over,
 });
 
-const openDocumentControls = () => fireEvent.click(screen.getByLabelText('Open artifact controls'));
+/**
+ * The page draws no controls button of its own on a markup document: the
+ * framed document's chrome carries it and ASKS the page (mx:reader-action),
+ * the way a stranger's copy would if it held a session. So "open the
+ * controls" is that message, from the frame's own window.
+ */
+const openDocumentControls = () => {
+  // A dataset or image page has no frame: its bar carries the button itself.
+  const button = screen.queryByLabelText('Open artifact controls');
+  if (button) { fireEvent.click(button); return; }
+  const frame = document.querySelector<HTMLIFrameElement>('iframe[title="artifact"]');
+  act(() => {
+    window.dispatchEvent(new MessageEvent('message', {
+      data: { type: STORY_READER_ACTION_MESSAGE, kind: 'controls' },
+      source: frame?.contentWindow as unknown as MessageEventSource,
+    }));
+  });
+};
 
 describe('the surface header buttons are owner chrome', () => {
   it('a reader gets the document without edit or share buttons', () => {
@@ -140,9 +157,10 @@ describe('the surface header buttons are owner chrome', () => {
     expect(document.title).toBe('doc [edit mode]');
 
     fireEvent.click(screen.getByLabelText('Exit edit mode'));
-    await waitFor(() => expect(screen.getByLabelText('Open artifact controls')).toBeInTheDocument());
-    expect(screen.getByLabelText('Open menu')).toHaveAttribute('data-chrome-placement', 'page');
-    expect(screen.getByLabelText('Open menu')).toHaveClass('rounded-full');
+    // Out of edit mode the page draws no trigger of its own: the framed
+    // document's chrome carries settings and profile and asks the page.
+    await waitFor(() => expect(screen.queryByLabelText('Open menu')).toBeNull());
+    expect(screen.queryByLabelText('Open artifact controls')).toBeNull();
     openDocumentControls();
     expect(screen.getByLabelText('Edit artifact')).toBeInTheDocument();
     expect(screen.getByLabelText('Edit artifact').querySelector('.lucide-pencil')).toBeTruthy();
@@ -160,7 +178,6 @@ describe('the surface header buttons are owner chrome', () => {
 
     // A panel, not a mode: edit stays offered, the hash is untouched, and the
     // title says nothing — there is no second mode for it to announce.
-    expect(screen.getByLabelText('Open artifact controls')).toHaveClass('text-accent');
     expect(window.location.hash).toBe('');
     expect(document.title).toBe('doc');
     // Opening the rail narrows the document so comments never cover it.

@@ -24,6 +24,11 @@ const EDGE = 12;
 const OPEN_EVENT = 'mx:page-chrome-open';
 /** The framed document's chrome asks the page to open one of its panels. */
 const REQUEST_EVENT = 'mx:page-chrome-request';
+/** A panel says whether it is open, so the bar's button can show the X. */
+const STATE_EVENT = 'mx:page-chrome-state';
+function announcePanel(which: 'menu' | 'controls', open: boolean) {
+  window.dispatchEvent(new CustomEvent(STATE_EVENT, { detail: { which, open } }));
+}
 export function requestPageChrome(which: 'menu' | 'controls') {
   window.dispatchEvent(new CustomEvent(REQUEST_EVENT, { detail: which }));
 }
@@ -253,6 +258,7 @@ export function PageMenu({
   const mobileBar = useMobileBarLayer(open);
   const toggle = useExclusiveLayer(open, setOpen);
   useOpenOnRequest('menu', open, setOpen);
+  useEffect(() => { announcePanel('menu', open); }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -468,6 +474,7 @@ export function PageControls({
   const [appMode, setAppMode] = useState<AppearanceMode>(currentAppAppearance);
   const toggle = useExclusiveLayer(open, setOpen);
   useOpenOnRequest('controls', open, setOpen);
+  useEffect(() => { announcePanel('controls', open); }, [open]);
   const mode = controlledMode ?? appMode;
 
   // Re-reads the page when a controlled document hands the control back. The
@@ -563,11 +570,93 @@ export function PageControls({
   );
 }
 
-export default function PageChrome({ authed, anon = false }: { authed: boolean; anon?: boolean }) {
+const BAR_BUTTON =
+  'flex h-9 w-9 cursor-pointer items-center justify-center rounded-[8px] border-0 bg-transparent text-muted transition-colors hover:bg-raised hover:text-fg';
+
+/**
+ * ONE BAR, ALWAYS THERE. The app pages used to float a hamburger in one corner
+ * and a controls button in the other (a dock on phones); now they carry one
+ * 44px bar in the page's own flow — the logo home on the left, the page's crumb
+ * beside it, and the two panels' buttons on the right — the same shape the
+ * reader's document bar has, so moving between a document and the app does
+ * not change where anything is. Sticky, not fixed, so it never covers content.
+ */
+export function AppBar({ title, label = 'Page controls' }: { title?: string | null; label?: string }) {
+  const pathname = usePathname() ?? '';
+  const trail = crumbsFor(pathname, title);
+  const [openPanel, setOpenPanel] = useState<'menu' | 'controls' | null>(null);
+  useEffect(() => {
+    const onState = (event: Event) => {
+      const { which, open } = (event as CustomEvent<{ which: 'menu' | 'controls'; open: boolean }>).detail;
+      setOpenPanel((current) => (open ? which : current === which ? null : current));
+    };
+    window.addEventListener(STATE_EVENT, onState);
+    return () => window.removeEventListener(STATE_EVENT, onState);
+  }, []);
+  const control = (which: 'menu' | 'controls', name: string, icon: React.ReactNode) => {
+    const open = openPanel === which;
+    return (
+      <Tooltip content={name} positioning={{ placement: 'bottom-end' }}>
+        <button
+          type="button"
+          aria-label={open ? `Close ${name}` : `Open ${name}`}
+          aria-expanded={open}
+          onClick={() => requestPageChrome(which)}
+          className={`${BAR_BUTTON} ${open ? 'text-accent' : ''}`}
+        >
+          {open ? <X size={17} strokeWidth={1.5} /> : icon}
+        </button>
+      </Tooltip>
+    );
+  };
   return (
-    <PageChromeBar>
-      <PageMenu authed={authed} anon={anon} />
-      <PageControls />
-    </PageChromeBar>
+    <header aria-label="Page bar" className="sticky top-0 z-40 flex h-11 items-center gap-3 border-b border-edge bg-surface/85 px-3 backdrop-blur-md">
+      <a href="/" aria-label="Home" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] no-underline transition-colors hover:bg-raised">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo-128.png" alt="" className="h-7 w-7" />
+      </a>
+      {trail.length > 0 && (
+        <nav aria-label="Current page" className="flex min-w-0 items-center gap-1 font-mono text-xs text-muted">
+          {trail.map((crumb, index) => (
+            <span key={`${crumb.href ?? ''}:${crumb.label}`} className="flex min-w-0 items-center gap-1">
+              {index > 0 && <ChevronRight size={12} className="shrink-0 text-faint" aria-hidden="true" />}
+              {crumb.href ? (
+                <a href={crumb.href} className="shrink-0 text-muted no-underline hover:text-accent">{crumb.label}</a>
+              ) : (
+                <span className="min-w-0 truncate text-fg">{crumb.label}</span>
+              )}
+            </span>
+          ))}
+        </nav>
+      )}
+      <div className="ml-auto flex items-center gap-1">
+        {control('controls', label.toLowerCase(), <SlidersHorizontal size={17} strokeWidth={1.5} />)}
+        {control('menu', 'menu', <User size={17} strokeWidth={1.5} />)}
+      </div>
+    </header>
+  );
+}
+
+export default function PageChrome({
+  authed,
+  anon = false,
+  title,
+  label = 'Page controls',
+  children,
+}: {
+  authed: boolean;
+  anon?: boolean;
+  title?: string | null;
+  /** The controls panel's name — "Artifact controls" on an artifact page. */
+  label?: string;
+  /** Extra rows for the controls panel (an artifact's own actions). */
+  children?: React.ReactNode | ((close: () => void) => React.ReactNode);
+}) {
+  return (
+    <>
+      <AppBar title={title} label={label} />
+      <PageMenu authed={authed} anon={anon} title={title} fixed triggerless />
+      <PageControls fixed triggerless label={label}>{children}</PageControls>
+    </>
   );
 }
