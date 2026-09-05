@@ -650,7 +650,7 @@ ok(placed.bottom > placed.top && (overDock.dockTop === null || overDock.bubbleBo
   `touch: and it stays clear of the page's bottom dock (bubble bottom ${Math.round(overDock.bubbleBottom)} vs dock top ${overDock.dockTop === null ? 'none' : Math.round(overDock.dockTop)})`);
 
 // A tap, not a click: the whole point is the finger.
-await docFrame.locator('[aria-label="Annotate selected text"]').tap();
+await docFrame.locator('[aria-label="Comment on selected text"]').tap();
 const composer = await (async () => {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     if (await touch.locator('[aria-label="Annotation comment"]').count() === 1) return true;
@@ -658,7 +658,7 @@ const composer = await (async () => {
   }
   return false;
 })();
-ok(composer, 'touch: tapping Annotate opens the composer on those words');
+ok(composer, 'touch: tapping Comment opens the composer on those words');
 await touch.close();
 
 await browser.close();

@@ -134,7 +134,9 @@ export function createFrameSelectionActions({
     const button = doc.createElement('button');
     button.type = 'button';
     button.setAttribute(SELECTION_ACTION_ATTR, action);
-    button.setAttribute('aria-label', action === 'edit' ? 'Edit selected text' : 'Annotate selected text');
+    // The word people see and hear is COMMENT; `annotate` stays the wire's and
+    // the capability's name, since that is what the server and the tests speak.
+    button.setAttribute('aria-label', action === 'edit' ? 'Edit selected text' : 'Comment on selected text');
     // A 28px row is under every touch-target floor there is; a thumb gets 44.
     if (isCoarsePointer(win)) button.classList.add(SELECTION_ACTION_COARSE_CLASS);
     // These are Lucide's Pencil and MessageSquare glyphs. Build their tiny SVG
@@ -160,7 +162,7 @@ export function createFrameSelectionActions({
       path.setAttribute('d', d);
       svg.appendChild(path);
     }
-    button.append(svg, doc.createTextNode(action));
+    button.append(svg, doc.createTextNode(action === 'edit' ? 'edit' : 'comment'));
     return button;
   };
 

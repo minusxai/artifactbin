@@ -183,7 +183,7 @@ try {
   check((await frame.locator('[aria-label="Edit selected text"]').count()) === 0,
     'the bubble offers annotate and NOT edit — the capability follows the role');
 
-  await frame.locator('[aria-label="Annotate selected text"]').click();
+  await frame.locator('[aria-label="Comment on selected text"]').click();
   const composer = await until(() => stranger.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
   check(composer === 1, 'the composer opens on those words');
   await stranger.locator('[aria-label="Annotation comment"]').fill('a stranger with the link, saying something');

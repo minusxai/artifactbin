@@ -100,7 +100,7 @@ describe('view-mode text selection actions', () => {
     heading.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
     await Promise.resolve();
 
-    document.querySelector<HTMLButtonElement>('[aria-label="Annotate selected text"]')!.click();
+    document.querySelector<HTMLButtonElement>('[aria-label="Comment on selected text"]')!.click();
     expect(onAction).toHaveBeenCalledTimes(1);
     expect(onAction.mock.calls[0][1]).toMatchObject({ path: '0.0', tag: 'h1' });
   });
@@ -113,7 +113,7 @@ describe('view-mode text selection actions', () => {
     expect(toolbar).not.toHaveAttribute('hidden');
     expect(toolbar.getAttribute('aria-label')).toBe('Text selection actions');
     expect(toolbar.querySelector('[aria-label="Edit selected text"] .lucide-pencil')).toBeTruthy();
-    expect(toolbar.querySelector('[aria-label="Annotate selected text"]')).toBeNull();
+    expect(toolbar.querySelector('[aria-label="Comment on selected text"]')).toBeNull();
 
     toolbar.querySelector<HTMLButtonElement>('[aria-label="Edit selected text"]')!.click();
     expect(onAction).toHaveBeenCalledWith('edit', expect.objectContaining({ path: '0', tag: 'p', kind: 'text' }));
@@ -125,7 +125,7 @@ describe('view-mode text selection actions', () => {
     await selectText();
     const toolbar = document.querySelector<HTMLElement>(`[${SELECTION_ACTIONS_ATTR}]`)!;
     expect(toolbar.querySelector('[aria-label="Edit selected text"]')).toBeNull();
-    expect(toolbar.querySelector('[aria-label="Annotate selected text"] .lucide-message-square')).toBeTruthy();
+    expect(toolbar.querySelector('[aria-label="Comment on selected text"] .lucide-message-square')).toBeTruthy();
   });
 
   it('targets the deepest source element at the selection edges, not their outer ancestor', async () => {
@@ -181,7 +181,7 @@ describe('view-mode text selection actions', () => {
     document.querySelector('p')!.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }));
     await Promise.resolve();
 
-    document.querySelector<HTMLButtonElement>('[aria-label="Annotate selected text"]')!.click();
+    document.querySelector<HTMLButtonElement>('[aria-label="Comment on selected text"]')!.click();
     expect(onAction).toHaveBeenCalledTimes(1);
     const [action, selection] = onAction.mock.calls[0];
     expect(action).toBe('annotate');
