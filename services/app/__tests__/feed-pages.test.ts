@@ -175,7 +175,7 @@ describe('GET /api/page/artifact/[id]', () => {
 });
 
 describe('GET /api/page/profile/@handle', () => {
-  it('a public profile carries the owner\'s id and the viewer\'s follow state; the owner\'s own listing carries neither', async () => {
+  it('every viewer gets the public profile; strangers also get follow state', async () => {
     await link(carol.id, 'follow', alice.id);
     const ctx = { params: Promise.resolve({ user: '@alice' }) };
     const asCarol = await (await profilePage(request('/api/page/profile/@alice', { actor: session(carol) }), ctx)).json();
@@ -188,7 +188,8 @@ describe('GET /api/page/profile/@handle', () => {
     expect(anonymous.owner).toEqual({ id: alice.id });
     expect(anonymous.follow).toEqual({ following: false, count: 1 });
     const own = await (await profilePage(request('/api/page/profile/@alice', { actor: session(alice) }), ctx)).json();
-    expect(own.kind).toBe('owner-listing');
+    expect(own.kind).toBe('public-profile');
+    expect(own.files).toEqual(asCarol.files);
     expect(own.owner).toBeUndefined();
     expect(own.follow).toBeUndefined();
   });

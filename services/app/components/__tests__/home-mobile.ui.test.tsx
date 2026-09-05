@@ -52,12 +52,11 @@ describe('the shelf reads as ONE shelf on a phone', () => {
     expect(overlay).toContainElement(screen.getByLabelText('Edit Doc a'));
   });
 
-  it('lets every grid title wrap to two lines', () => {
+  it('keeps every grid title to one ellipsized line', () => {
     render(<Shelf rows={[doc('a', 28), doc('b', 27)]} actions="full" />);
     for (const link of [screen.getByLabelText('Open Doc a'), screen.getByLabelText('Open Doc b')]) {
-      expect(link).toHaveClass('line-clamp-2');
-      // `truncate` sets white-space: nowrap, which would defeat the clamp.
-      expect(link).not.toHaveClass('truncate');
+      expect(link).toHaveClass('truncate');
+      expect(link).not.toHaveClass('line-clamp-2');
     }
   });
 
