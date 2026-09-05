@@ -36,6 +36,20 @@ const seedWebAsset = async (tokenId: string, url: string, bytes: number, userId:
 describe('asset byte quota', () => {
   beforeEach(() => setAssetByteQuotaForTests(null));
 
+  /* The same rule as the row cap: a deleted artifact's bytes are still stored,
+   * forever, so they are still charged. */
+  it('still charges an artifact the owner DELETED — the bytes are kept, so they count', async () => {
+    const user = await createUser({ email: 'mxmx_test_quota_del@example.com' });
+    const { id } = await mintToken('t', user.id);
+    const db = await getDb();
+    await db.query(
+      `insert into artifacts (id, token_id, user_id, content, format, meta, deleted_at)
+       values ('qdel01', $1, $2, '', 'image', '{"bytes":4000000}'::jsonb, now())`,
+      [id, user.id],
+    );
+    expect(await assetBytesForToken(id)).toBe(4_000_000);
+  });
+
   it('sums the bytes a token has imported', async () => {
     const { id } = await mintToken('t');
     expect(await assetBytesForToken(id)).toBe(0);

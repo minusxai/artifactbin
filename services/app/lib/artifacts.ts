@@ -302,10 +302,16 @@ export async function artifactQuotaExceeded(tokenId: string): Promise<boolean> {
   const cap = quotaOverride ?? ARTIFACT_QUOTA_PER_TOKEN;
   if (!cap) return false;
   const db = await getDb();
-  // A quota counts what is LIVE: a document in the trash still occupies a row
-  // for thirty days, and charging someone for it would make deleting a
-  // document not free them to publish another one.
-  const r = await db.query<{ n: number }>(`SELECT COUNT(*)::int AS n FROM artifacts WHERE token_id = $1 AND ${LIVE_ARTIFACT_SQL}`, [tokenId]);
+  /*
+   * EVERY ROW, deleted or not — the one deliberate reader past the trash gate
+   * outside lib/trash, and the only quota rule that survives having no purge.
+   * Nothing is ever erased, so a deleted document still occupies its row, its
+   * versions, its edit log and its bytes forever; counting live rows alone
+   * would make delete-and-recreate an unlimited cap with an extra call in it.
+   * The trade is stated in the docs rather than hidden: deleting does not free
+   * you to publish another one.
+   */
+  const r = await db.query<{ n: number }>('SELECT COUNT(*)::int AS n FROM artifacts WHERE token_id = $1', [tokenId]);
   return (r.rows[0]?.n ?? 0) >= cap;
 }
 

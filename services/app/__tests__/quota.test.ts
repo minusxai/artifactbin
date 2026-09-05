@@ -23,6 +23,25 @@ const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.re
 afterEach(() => setArtifactQuotaForTests(null));
 
 describe('per-token artifact quota', () => {
+  /*
+   * NOTHING IS ERASED, so the quota counts EVERY row a token made — deleted or
+   * not. A cap on live rows alone is bypassed by delete-and-recreate, in a
+   * product where the deleted row is kept forever and restorable: the cost the
+   * cap exists to bound is the row and its bytes, and a delete gives neither
+   * back.
+   */
+  it('counts a DELETED document too — there is no purge to free the row', async () => {
+    setArtifactQuotaForTests(1);
+    const t = await mintToken('t');
+    const first = await (
+      await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<p>1</p>' } }))
+    ).json() as { id: string };
+    await (await import('@/lib/trash')).trashArtifactFor({ tokenId: t.id, userId: null }, first.id);
+    const next = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<p>2</p>' } }));
+    expect(next.status).toBe(403);
+    expect(((await next.json()) as { error: string }).error).toBe('quota_exceeded');
+  });
+
   it('403s creation at the cap; updates still work; another token is unaffected', async () => {
     setArtifactQuotaForTests(2);
     const t = await mintToken('t');
