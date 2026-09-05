@@ -102,4 +102,57 @@ describe('atomic edit batch kernel', () => {
       .toEqual({ ok: false });
     expect(head).toBe('<main><p>other</p><p>two</p></main>');
   });
+
+  it('property: seeded dependent Unicode edits always lower to an exact base replay', () => {
+    let randomState = 0x5eed1234;
+    const random = () => {
+      randomState = (Math.imul(randomState, 1664525) + 1013904223) >>> 0;
+      return randomState;
+    };
+
+    for (let example = 0; example < 80; example++) {
+      const base = Array.from({ length: 7 }, (_, i) => `⟦${example}:${i}⟧${i % 2 ? 'é' : '😀'}`).join('|');
+      let expected = base;
+      const edits: Array<{ oldString: string; newString: string }> = [];
+
+      for (let step = 0; step < 8; step++) {
+        const tokens = [...expected.matchAll(/⟦[^⟧]+⟧(?:😀|é|Ω)?/gu)];
+        const first = random() % tokens.length;
+        const width = 1 + (random() % Math.min(3, tokens.length - first));
+        const start = tokens[first].index;
+        const last = tokens[first + width - 1];
+        const end = last.index + last[0].length;
+        const oldString = expected.slice(start, end);
+        const newString = `⟦${example}:new:${step}⟧${step % 2 ? 'Ω' : '😀'}`;
+        edits.push({ oldString, newString });
+        expected = expected.slice(0, start) + newString + expected.slice(end);
+
+        if (step % 3 === 0 || step % 5 === 0) {
+          edits.push({ oldString: newString, newString: `${newString}é` });
+          expected = expected.replace(newString, `${newString}é`);
+        }
+        if (step % 5 === 0) {
+          edits.push({ oldString: `${newString}é`, newString: oldString });
+          expected = expected.replace(`${newString}é`, oldString);
+        }
+      }
+
+      const result = resolveEditBatch(base, edits);
+      expect(result.ok).toBe(true);
+      if (!result.ok) continue;
+      expect(result.source).toBe(expected);
+      expect(result.changes.reduceRight((source, change) => applySplice(source, change.splice), base))
+        .toBe(expected);
+      for (let i = 0; i < result.changes.length; i++) {
+        const splice = result.changes[i].splice;
+        expect(base.slice(splice.start, splice.start + splice.removed.length)).toBe(splice.removed);
+        if (i > 0) {
+          const previous = result.changes[i - 1].splice;
+          expect(previous.start + previous.removed.length).toBeLessThanOrEqual(splice.start);
+        }
+        expect(splice.start === 0 || !/[\uD800-\uDBFF]/u.test(base[splice.start - 1])).toBe(true);
+        expect(!/[\uDC00-\uDFFF]/u.test(base[splice.start] ?? '')).toBe(true);
+      }
+    }
+  });
 });
