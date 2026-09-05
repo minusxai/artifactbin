@@ -10,13 +10,28 @@
  * No DB_TYPE, no PGLITE_DATA_DIR: the URL is the type.
  */
 import { describe, expect, it } from 'vitest';
-import { parseDatabaseUrl } from '../db';
+import { databaseTargetForRuntime, parseDatabaseUrl } from '../db';
 
 describe('parseDatabaseUrl', () => {
   it('defaults to embedded PGLite at ./data/pglite when unset or empty', () => {
     expect(parseDatabaseUrl(undefined)).toEqual({ engine: 'pglite', dataDir: './data/pglite' });
     expect(parseDatabaseUrl('')).toEqual({ engine: 'pglite', dataDir: './data/pglite' });
     expect(parseDatabaseUrl('   ')).toEqual({ engine: 'pglite', dataDir: './data/pglite' });
+  });
+
+  it('anchors only the implicit store to the app instead of the process cwd', () => {
+    expect(databaseTargetForRuntime(undefined, '/repo/services/app')).toEqual({
+      engine: 'pglite',
+      dataDir: '/repo/services/app/data/pglite',
+    });
+    expect(databaseTargetForRuntime('', '/repo/services/app')).toEqual({
+      engine: 'pglite',
+      dataDir: '/repo/services/app/data/pglite',
+    });
+    expect(databaseTargetForRuntime('pglite://./mine', '/repo/services/app')).toEqual({
+      engine: 'pglite',
+      dataDir: './mine',
+    });
   });
 
   it('pglite://<path> selects PGLite with the path taken literally', () => {

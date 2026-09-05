@@ -1,13 +1,12 @@
 'use client';
 
 /**
- * THE SHELF — one presentation for three queries.
+ * THE SHELF — one presentation for the homepage and public profiles.
  *
- * `/` (the dashboard), `/@me` (the owner's profile root) and `/@them` (a
- * stranger's) are different QUESTIONS about who owns what; they are the same
- * ANSWER on screen. This component is that answer, and it fetches nothing:
- * each page runs its own query and hands over rows plus what the viewer may
- * do with them.
+ * `/` (the dashboard) and `/@handle` (the public profile) answer different
+ * questions with the same drive-like presentation. This component fetches
+ * nothing: each page runs its own query and hands over rows plus what the
+ * viewer may do with them.
  *
  * The capability props are the seam. A profile passes no `views`, so no
  * spline is drawn and no column is reserved — OPTIONAL FIELDS DEGRADE, which
@@ -15,19 +14,22 @@
  * counts to the dashboard required touching the profile, this would be the
  * wrong shape.
  *
- * Tiering policy lives in `lib/shelf` (pure). This file only renders it, and
- * hands the dense tier to `ArtifactTable`, which already owns row actions and
- * paging.
+ * Partitioning and recency order live in `lib/shelf` (pure). This file owns
+ * the grid/list presentation and hands list mode to `ArtifactTable`.
  */
-import { useMemo, useState } from 'react';
-import { Check, Folder, FolderInput, FolderPlus, Link2, Pencil, Search, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Folder, FolderInput, FolderPlus, LayoutGrid, List as ListIcon, Pencil, Search, Share2, Trash2 } from 'lucide-react';
+import ShareLink from '@/components/ShareLink';
 import RowMenu, { confirmDeleteArtifact } from '@/components/RowMenu';
 import { MoveMenu, type PickerFolder } from '@/components/FolderPicker';
 import { ArtifactTable } from '@/components/TokenBrowser';
 import { Tooltip } from '@/components/Tooltip';
-import { dateStamp, MicroLabel, PANEL, Spark, timeAgo, VISIBILITY_TIPS, VisibilityPill } from '@/components/ui';
-import { buildShelf, parentOfRow, type ShelfRow } from '@/lib/shelf';
+import { dateStamp, MicroLabel, PANEL, timeAgo, VISIBILITY_TIPS, VisibilityPill } from '@/components/ui';
+import { ViewsMark } from '@/components/ViewsMark';
+import { buildShelf, groupShelfByRecency, parentOfRow, type ShelfRow } from '@/lib/shelf';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
+
+const FOLDER_PREVIEW_LIMIT = 5;
 
 /**
  * The row shape lives with the POLICY (lib/shelf), because it is what a page
@@ -54,6 +56,15 @@ export type ShelfActions = 'none' | 'share' | 'full';
 export interface ShelfProps {
   rows: ShelfRow[];
   actions?: ShelfActions;
+  showVisibility?: boolean;
+  /**
+   * Show only the immediate children of this location. `null` is the account
+   * root; `undefined` preserves the caller's already-scoped collection.
+   *
+   * The complete `rows` collection remains available to folder counts and the
+   * move picker, so scoping what is visible does not amputate the folder tree.
+   */
+  scopeParentId?: string | null;
   /**
    * Show the band of datasets and images. The dashboard is where material is
    * managed; a profile is about the documents, and listing the material there
@@ -68,39 +79,138 @@ export interface ShelfProps {
    * they can cite. Same split `dateStamp`/`timeAgo` have always drawn.
    */
   dates?: 'relative' | 'absolute';
-  /** Thumbnail-tier size. */
-  cards?: number;
-  /**
-   * WHERE A FOLDER MADE HERE GOES — the folder being viewed, or null at the
-   * dashboard root. It is the wire's own `parent_id`, so null is the root and
-   * an absent value is never "leave it".
-   */
+  /** The folder that a folder created from this shelf should belong to. */
   parentId?: string | null;
-  /**
-   * MAY THIS VIEWER MAKE A FOLDER HERE — a capability of its own, defaulting to
-   * the dashboard's `full`, because creating is not an action on any ROW.
-   *
-   * It rode `actions === 'full'` at first, which is why the owner's own profile
-   * shipped without it: a profile withholds edit, move and delete on purpose
-   * (its point is handing someone a link, not changing the document), and one
-   * level cannot say "no row verbs, but yes, this is your shelf". Promoting the
-   * profile to `full` to get one button would have granted the three verbs the
-   * level exists to withhold — so the prop is separate, and the file's own rule
-   * holds: withholding is the default.
-   */
+  /** Folder pages opt into creation without inheriting the homepage's row actions. */
   canCreateFolders?: boolean;
 }
 
-/**
- * THE FOLDERS STRIP — a third partition of the shelf (lib/shelf `folders`),
- * above the documents and absent for an account that has none, so nothing moves
- * for someone who never makes one.
- *
- * A folder is an artifact, so a tile is an ordinary link to `/a/<id>`; what it
- * adds over a document card is that a folder has no thumbnail worth taking (its
- * own card would be a picture of this listing) and a count instead.
- */
-function FolderTile({ row, count, level, folders, onDeleted }: { row: ShelfRow; count: number; level: ShelfActions; folders: PickerFolder[]; onDeleted: (id: string) => void }) {
+/** Create a child folder in place, preserving the shelf's current view state. */
+function NewFolder({ parentId, onMade }: { parentId: string | null; onMade: (row: ShelfRow) => void }) {
+  const [naming, setNaming] = useState(false);
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const create = async () => {
+    const title = name.trim();
+    if (!title || busy) return;
+    setBusy(true);
+    const response = await fetch('/api/my/artifacts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ format: 'folder', title, parent_id: parentId }),
+    }).catch(() => null);
+    setBusy(false);
+    if (!response?.ok) return;
+    const body = (await response.json().catch(() => null)) as (Partial<ShelfRow> & { id?: string }) | null;
+    if (!body?.id) return;
+    onMade({
+      ...body,
+      id: body.id,
+      url: body.url ?? `/a/${body.id}`,
+      title: body.title ?? title,
+      format: 'folder',
+      version: body.version ?? 1,
+      visibility: body.visibility ?? 'private',
+      updated_at: body.updated_at ?? new Date().toISOString(),
+      parent_id: body.parent_id ?? parentId,
+    });
+    setName('');
+    setNaming(false);
+  };
+
+  if (!naming) {
+    return (
+      <Tooltip content="create a folder here">
+        <button
+          type="button"
+          aria-label="New folder"
+          onClick={() => setNaming(true)}
+          className="inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-[4px] px-2 font-mono text-[10px] text-muted transition-colors hover:bg-raised hover:text-accent"
+        >
+          <FolderPlus size={12} /> new folder
+        </button>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <span className="inline-flex h-7 shrink-0 items-center gap-1">
+      <input
+        aria-label="Folder name"
+        placeholder="folder name"
+        autoFocus
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') { event.preventDefault(); void create(); }
+          if (event.key === 'Escape') { event.preventDefault(); setName(''); setNaming(false); }
+        }}
+        className="h-7 w-36 rounded-[4px] border border-edge bg-transparent px-1.5 font-mono text-[11px] text-fg focus:border-edge-bright focus:outline-none"
+      />
+      <span className="font-mono text-[10px] text-faint">{busy ? 'creating…' : 'enter'}</span>
+    </span>
+  );
+}
+
+/** Folder covers show a small stack of readable documents inside a tabbed sleeve. */
+function FolderCover({ row, documents, count, controls, showVisibility }: { showVisibility: boolean; row: ShelfRow; documents: ShelfRow[]; count: number; controls: React.ReactNode }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [loaded, setLoaded] = useState<ShelfRow[]>([]);
+  // Owner shelves already carry their children. Public profiles omit placement,
+  // so ask the folder's existing ACL-filtered page only as its cover comes into view.
+  useEffect(() => {
+    if (documents.length || !box.current || typeof IntersectionObserver === 'undefined') return;
+    const controller = new AbortController();
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      observer.disconnect();
+      void fetch(`/api/page/artifact/${row.id}`, { credentials: 'same-origin', signal: controller.signal })
+        .then((res) => res.ok ? res.json() : null)
+        .then((page) => { if (!controller.signal.aborted && page?.folder?.rows) setLoaded(page.folder.rows); })
+        .catch(() => {});
+    }, { rootMargin: '160px' });
+    observer.observe(box.current);
+    return () => { controller.abort(); observer.disconnect(); };
+  }, [row.id, documents.length]);
+  const contents = (documents.length ? documents : loaded)
+    .filter((item) => item.format === 'markup')
+    .slice().sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  const previews = contents.slice(0, FOLDER_PREVIEW_LIMIT);
+  const remaining = contents.length - previews.length;
+  const papers = previews.length ? previews : [null, null];
+  const paperCount = papers.length + (remaining > 0 ? 1 : 0);
+  const paperStyle = (index: number) => ({ '--paper-position': index / Math.max(1, paperCount - 1) } as React.CSSProperties);
+  const itemCount = count || documents.length || loaded.length;
+  return (
+    <div ref={box} aria-label={`Preview of folder ${row.title ?? row.id}`} className="folder-cover">
+      <a href={row.url} aria-label={`Open folder ${nameOf(row)}`} className="absolute inset-0 z-[2] rounded-md focus-visible:outline-2 focus-visible:outline-accent" />
+      <div className="folder-cover-tab">
+        <span className="truncate font-mono text-[10px] tabular-nums">{itemCount > 0 ? `${itemCount} artifact${itemCount === 1 ? '' : 's'}` : 'artifacts'}</span>
+      </div>
+      <div className="folder-cover-back" />
+      {showVisibility && row.visibility && <span className="folder-cover-visibility absolute left-2 top-[27px] z-[3]"><VisibilityPill compact overlay visibility={row.visibility} name={nameOf(row)} /></span>}
+      <div className="folder-cover-papers" style={{ '--paper-width': paperCount > 2 ? '48%' : '61%' } as React.CSSProperties}>
+        {papers.map((item, i) => (
+          <div key={item?.id ?? i} aria-hidden="true" className="folder-cover-paper" style={paperStyle(i)}>
+            {item ? <img src={`/a/${item.id}/export?format=jpg&mode=card&v=${item.version}&r=${CARD_RENDER_GENERATION}`} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.visibility = 'hidden'; }} /> : <div className="folder-cover-lines" />}
+          </div>
+        ))}
+        {remaining > 0 && (
+          <div className="folder-cover-paper folder-cover-more" style={paperStyle(papers.length)}>
+            <span>+{remaining}</span><span>more</span>
+          </div>
+        )}
+      </div>
+      <div className="folder-cover-front">
+        <span className="min-w-0 flex-1 truncate pr-2 font-mono text-[13px] font-semibold" title={nameOf(row)}>{nameOf(row)}</span>
+        <div className="relative z-[3] ml-auto flex min-w-0 items-center gap-1.5">{controls}</div>
+      </div>
+    </div>
+  );
+}
+
+function FolderTile({ row, count, level, folders, onDeleted, documents, gallery, showVisibility }: { showVisibility: boolean; row: ShelfRow; count: number; level: ShelfActions; folders: PickerFolder[]; onDeleted: (id: string) => void; documents: ShelfRow[]; gallery: boolean }) {
   /**
    * RENAMING IS THE ONE VERB A FOLDER HAS THAT A DOCUMENT DOES NOT NEED HERE.
    * A document is renamed in its editor's Title field; a folder has no content
@@ -143,9 +253,20 @@ function FolderTile({ row, count, level, folders, onDeleted }: { row: ShelfRow; 
       </li>
     );
   }
+  if (gallery) {
+    return (
+      <li className="reveal group relative rounded-md p-3 transition-colors hover:bg-raised/60">
+        <FolderCover row={shown} documents={documents} showVisibility={showVisibility} count={count} controls={<>
+          <Actions row={shown} level={level} folders={folders} childCount={count} onDeleted={onDeleted}
+            onRename={() => { setDraft(title ?? ''); setRenaming(true); }} />
+        </>} />
+      </li>
+    );
+  }
   return (
-    <li className={`reveal group relative flex items-center gap-2 px-3 py-2.5 ${PANEL} transition-colors hover:border-edge-bright`}>
+    <li className={`reveal group relative flex items-center gap-2 px-3 py-2.5 ${PANEL} hover:border-edge-bright transition-colors`}>
       <Folder size={14} className="shrink-0 text-faint transition-colors group-hover:text-accent" />
+      <div className="flex min-w-0 flex-1 items-center gap-2">
       {/* A STRETCHED LINK: the whole tile opens the folder, while the actions
           beside it sit above the pseudo-element rather than inside the anchor
           (a <button> in an <a> is invalid markup and swallows its own click). */}
@@ -161,7 +282,7 @@ function FolderTile({ row, count, level, folders, onDeleted }: { row: ShelfRow; 
           the folder's own page) — so a zero here would be a wrong number
           rather than an empty folder. */}
       {count > 0 && <span className="shrink-0 font-mono text-[10px] tabular-nums text-faint">{count}</span>}
-      {row.visibility && <VisibilityPill compact visibility={row.visibility} name={nameOf(shown)} />}
+      {showVisibility && row.visibility && <VisibilityPill compact visibility={row.visibility} name={nameOf(shown)} />}
       <Actions
         row={shown}
         level={level}
@@ -170,92 +291,8 @@ function FolderTile({ row, count, level, folders, onDeleted }: { row: ShelfRow; 
         onDeleted={onDeleted}
         onRename={() => { setDraft(title ?? ''); setRenaming(true); }}
       />
+      </div>
     </li>
-  );
-}
-
-/**
- * NEW FOLDER, INLINE — no dialog and no navigation. Enter creates, Escape
- * discards, and the tile appears where the strip already is.
- *
- * The door is the session twin of create (`POST /api/my/artifacts`), which is
- * the same pipeline an agent's `format: 'folder'` goes through: the scaffold is
- * stamped there, in the insert's own transaction, so a folder made from a
- * button and one made from a token are the same row.
- */
-function NewFolder({ parentId, onMade }: { parentId: string | null; onMade: (row: ShelfRow) => void }) {
-  const [naming, setNaming] = useState(false);
-  const [name, setName] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  const create = async () => {
-    const title = name.trim();
-    if (!title || busy) return;
-    setBusy(true);
-    const res = await fetch('/api/my/artifacts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ format: 'folder', title, parent_id: parentId }),
-    }).catch(() => null);
-    setBusy(false);
-    if (!res?.ok) return;
-    const body = (await res.json().catch(() => null)) as (Partial<ShelfRow> & { id?: string }) | null;
-    if (!body?.id) return;
-    const now = new Date().toISOString();
-    onMade({
-      ...body,
-      id: body.id,
-      url: body.url ?? `/a/${body.id}`,
-      title: body.title ?? title,
-      format: 'folder',
-      version: body.version ?? 1,
-      // Born private like any owned artifact — said here only so the tile can
-      // classify itself before the page is next loaded from the server.
-      visibility: body.visibility ?? 'private',
-      updated_at: body.updated_at ?? now,
-      parent_id: body.parent_id ?? parentId,
-    });
-    setName('');
-    setNaming(false);
-  };
-
-  if (!naming) {
-    return (
-      <Tooltip content="a folder is an artifact — it gets a link, sharing and versions like any other">
-        <button
-          type="button"
-          aria-label="New folder"
-          onClick={() => setNaming(true)}
-          className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-[4px] border border-edge bg-transparent px-2 py-0.5 font-mono text-[10px] text-muted transition-colors hover:border-accent hover:text-accent"
-        >
-          <FolderPlus size={12} /> new folder
-        </button>
-      </Tooltip>
-    );
-  }
-  return (
-    <span className="inline-flex shrink-0 items-center gap-1">
-      <input
-        aria-label="Folder name"
-        placeholder="folder name"
-        autoFocus
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            void create();
-          }
-          if (e.key === 'Escape') {
-            e.preventDefault();
-            setName('');
-            setNaming(false);
-          }
-        }}
-        className="w-36 rounded-[4px] border border-edge bg-transparent px-1.5 py-0.5 font-mono text-[11px] text-fg focus:border-edge-bright focus:outline-none"
-      />
-      <span className="font-mono text-[10px] text-faint">enter</span>
-    </span>
   );
 }
 
@@ -263,19 +300,13 @@ function NewFolder({ parentId, onMade }: { parentId: string | null; onMade: (row
 const ICON_ACTION =
   'inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[4px] border-0 bg-transparent p-0 text-muted transition-colors hover:text-accent';
 
-const CARD_ACTION_SURFACE =
-  'flex h-[26px] items-center rounded-[4px] border border-edge bg-surface/90 px-0.5';
-
 const VISIBILITY_ORDER = ['public', 'unlisted', 'private'] as const;
 
 const nameOf = (row: ShelfRow) => row.title ?? row.id;
 
 /**
- * Copy-link and edit, on EVERY tier.
- *
- * The tiers differ in weight, never in capability — needing to hunt for a
- * document in the dense rows to reach its editor would make the hero a
- * downgrade for the one document you are most likely to want.
+ * Copy-link and edit in grid mode. List mode exposes the same capability set
+ * through `ArtifactTable`.
  *
  * `relative z-10` is load-bearing: the card body is a STRETCHED LINK (an
  * anchor whose ::after covers the whole card), because a <button> nested
@@ -283,32 +314,12 @@ const nameOf = (row: ShelfRow) => row.title ?? row.id;
  * that pseudo-element instead of inside the anchor.
  */
 function Actions({ row, level, folders, childCount = 0, onDeleted, onRename }: { row: ShelfRow; level: ShelfActions; folders: PickerFolder[]; childCount?: number; onDeleted?: (id: string) => void; onRename?: () => void }) {
-  const [copied, setCopied] = useState(false);
   const [moving, setMoving] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [parentId, setParentId] = useState(parentOfRow(row));
-  const share = async () => {
-    const url = row.url.startsWith('http') ? row.url : `${location.origin}${row.url}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      window.open(url, '_blank');
-    }
-  };
-  if (level === 'none') return null;
+  if (level !== 'full') return null;
   return (
     <span className="relative z-10 inline-flex shrink-0 items-center gap-0.5">
-      <Tooltip content={copied ? 'copied!' : 'copy share link'}>
-        <button
-          type="button"
-          aria-label={`Share ${nameOf(row)}`}
-          onClick={share}
-          className={`${ICON_ACTION} ${copied ? 'text-accent' : ''}`}
-        >
-          {copied ? <Check size={13} /> : <Link2 size={13} />}
-        </button>
-      </Tooltip>
       {level === 'full' && (
         <>
           {/* A FOLDER HAS NO DOCUMENT TO EDIT, so it is offered no editor —
@@ -316,7 +327,7 @@ function Actions({ row, level, folders, childCount = 0, onDeleted, onRename }: {
               lives in the menu below instead. */}
           {!onRename && (
             <Tooltip content="edit">
-              <a aria-label={`Edit ${nameOf(row)}`} href={`/a/${row.id}#edit`} className={`${ICON_ACTION} no-underline`}>
+              <a aria-label={`Edit ${nameOf(row)}`} href={`/a/${row.id}#edit`} className={`${ICON_ACTION} shelf-secondary-action no-underline`}>
                 <Pencil size={13} />
               </a>
             </Tooltip>
@@ -324,6 +335,12 @@ function Actions({ row, level, folders, childCount = 0, onDeleted, onRename }: {
           <RowMenu
             name={nameOf(row)}
             items={[
+              {
+                label: `Manage sharing for ${nameOf(row)}`,
+                text: 'share',
+                icon: <Share2 size={12} />,
+                onSelect: () => setSharing(true),
+              },
               ...(onRename ? [{
                 label: `Rename ${nameOf(row)}`,
                 text: 'rename',
@@ -359,6 +376,9 @@ function Actions({ row, level, folders, childCount = 0, onDeleted, onRename }: {
           />
         </>
       )}
+      {sharing && (
+        <ShareLink className="" artifactId={row.id} title={row.title} owner format={row.format} url={row.url} variant="dialog" onClose={() => setSharing(false)} />
+      )}
       {moving && (
         <MoveMenu
           row={{ id: row.id, format: row.format, parent_id: parentId, ancestor_ids: row.ancestor_ids }}
@@ -371,86 +391,20 @@ function Actions({ row, level, folders, childCount = 0, onDeleted, onRename }: {
   );
 }
 
-/**
- * THE PICTURE CARRIES THE CHROME — on every tier, at the same corner.
- *
- * The hero used to keep its classification and controls at the top of its
- * RIGHT column, which reads correctly only while that column is beside the
- * thumbnail. On a phone the grid stacks, the column falls underneath, and the
- * two controls that overlay the picture on every card below sat in a band
- * under the picture on the one above them — the tiers stopped looking like
- * one shelf. Hanging them on the picture is ONE rule with no breakpoint fork,
- * and the hero's right column is then free to be nothing but the document.
- */
-function CardControls({ row, level, folders }: { row: ShelfRow; level: ShelfActions; folders: PickerFolder[] }) {
-  if (!row.visibility && level === 'none') return null;
-  return (
-    <div
-      aria-label={`${nameOf(row)} card controls`}
-      className="absolute inset-x-2.5 top-2.5 z-10 flex items-start justify-between gap-2"
-    >
-      <VisibilityTag row={row} overlay />
-      {level !== 'none' && (
-        <div className={`${CARD_ACTION_SURFACE} ml-auto`}>
-          <Actions row={row} level={level} folders={folders} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * Views + spline, or NOTHING. The old table printed `views ?? 0`, which told a
- * profile visitor that a document had zero readers when the truth was that
- * nobody had counted for them. The fluid-SVG mechanics live in ui's Spark —
- * the table draws the same mark at other sizes.
- */
-function ViewsMark({ row, spline = true, filled = true }: { row: ShelfRow; spline?: boolean; filled?: boolean }) {
-  if (row.views === undefined) return null;
-  return (
-    <Tooltip content="views · spline is the last 30 days">
-      <span aria-label={`${nameOf(row)} views`} className="flex min-w-0 flex-1 items-center gap-2">
-        {/* Count FIRST, and it says what it counts: with the spline between
-            them the bare count landed beside the timestamp and "1 · 5 hrs ago"
-            read as "1 5 hrs"; "1 view" cannot be misread. */}
-        <span className="shrink-0 font-mono text-xs tabular-nums text-muted">
-          {row.views} view{row.views === 1 ? '' : 's'}
-        </span>
-        {spline && row.sparkline && (
-          <Spark svg={row.sparkline} filled={filled} className="h-5 min-w-0 flex-1" />
-        )}
-      </span>
-    </Tooltip>
-  );
-}
-
-function Stamp({ row, mode }: { row: ShelfRow; mode: 'relative' | 'absolute' }) {
-  return (
-    <Tooltip content={new Date(row.updated_at).toLocaleString()}>
-      <time
-        aria-label={`${nameOf(row)} updated`}
-        dateTime={row.updated_at}
-        suppressHydrationWarning
-        className="ml-auto shrink-0 font-mono text-[11px] whitespace-nowrap text-muted"
-      >
-        {mode === 'absolute' ? dateStamp(row.updated_at) : timeAgo(row.updated_at)}
-      </time>
-    </Tooltip>
-  );
-}
-
-/** Document tiers already guarantee `markup`; visibility is the only
+/** The document collection already guarantees `markup`; visibility is the only
  * classification that adds information here. */
 function VisibilityTag({ row, overlay = false }: { row: ShelfRow; overlay?: boolean }) {
-  return row.visibility ? <VisibilityPill visibility={row.visibility} name={nameOf(row)} overlay={overlay} /> : null;
+  return row.visibility ? (
+    <VisibilityPill visibility={row.visibility} name={nameOf(row)} compact overlay={overlay} />
+  ) : null;
 }
 
-/** The artifact's own og card — one lazily-rendered image serves unfurls and this grid alike. */
+/** The artifact's own og card — one lazily-rendered image serves unfurls and the drive grid alike. */
 function Thumb({ row, className }: { row: ShelfRow; className: string }) {
   return (
     <span className={`relative block w-full overflow-hidden bg-raised ${className}`}>
       <span className="absolute inset-0 flex items-center justify-center">
-        <span className="h-5 w-5 animate-spin rounded-full border-2 border-edge-bright border-t-accent" />
+        <span className="h-4 w-4 animate-spin rounded-full border-2 border-edge-bright border-t-accent" />
       </span>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -464,8 +418,7 @@ function Thumb({ row, className }: { row: ShelfRow; className: string }) {
 }
 
 /**
- * The dense tier's page size. The hero and cards already carry what is recent,
- * so these are the archive — and a row is cheap where a thumbnail is not.
+ * Rows per page in list mode and in the separate assets table.
  */
 export const SHELF_LIST_PER_PAGE = 10;
 
@@ -488,15 +441,9 @@ function FilterChip({ value, active, onToggle }: { value: string; active: boolea
   );
 }
 
-export default function Shelf({ rows, actions = 'none', assets = true, dates = 'relative', cards = 3, parentId = null, canCreateFolders }: ShelfProps) {
+export default function Shelf({ rows, actions = 'none', showVisibility = true, assets = true, dates = 'relative', scopeParentId, parentId = null, canCreateFolders = false }: ShelfProps) {
   const [query, setQuery] = useState('');
   const [picks, setPicks] = useState<string[]>([]);
-  /*
-   * Folders MADE HERE, kept beside the page's own rows. Creating one is a
-   * metadata-sized act on a page that is otherwise a listing — reloading to
-   * show it would throw away the search, the filters and the scroll for a
-   * single new tile. The page's next load has it from the server.
-   */
   const [made, setMade] = useState<ShelfRow[]>([]);
   /*
    * Folders TRASHED here, and everything that went with them. A folder is
@@ -507,11 +454,33 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
    */
   const [trashed, setTrashed] = useState<string[]>([]);
   const trash = (id: string) => setTrashed((t) => [...t, id]);
+  const [view, setView] = useState<'grid' | 'list'>('grid');
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('artifactbin:shelf-view');
+      if (saved === 'grid' || saved === 'list') setView(saved);
+    } catch { /* Storage may be disabled; view switching still works. */ }
+  }, []);
+  const chooseView = (next: typeof view) => {
+    setView(next);
+    try { localStorage.setItem('artifactbin:shelf-view', next); } catch { /* Optional preference. */ }
+  };
   const q = query.trim().toLowerCase();
   const present = trashed.length
     ? rows.filter((r) => !trashed.includes(r.id) && !(r.ancestor_ids ?? []).some((a) => trashed.includes(a)))
     : rows;
-  const all = made.length ? [...made, ...present] : present;
+  // `assets={false}` removes supporting files from the whole shelf contract,
+  // including search counts and visibility chips. Their management surface is
+  // `/assets`; leaving them in these derivations would make Home report hidden
+  // matches that it can never render.
+  const available = made.length > 0 ? [...made, ...present] : present;
+  const inventory = assets ? available : available.filter((row) => row.format === 'markup' || row.format === 'folder');
+  // LOCATION decides what is drawn. Home passes null and becomes a true root
+  // shelf; folder pages pass their id and show immediate children only. A
+  // pre-scoped caller can omit the prop and keep its rows unchanged.
+  const all = scopeParentId === undefined
+    ? inventory
+    : inventory.filter((row) => parentOfRow(row) === scopeParentId);
 
   const togglePick = (v: string) => setPicks((p) => (p.includes(v) ? p.filter((x) => x !== v) : [...p, v]));
 
@@ -526,46 +495,42 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
         (!q || `${r.title ?? ''} ${r.description ?? ''} ${r.format}`.toLowerCase().includes(q)) &&
         (picks.length === 0 || (r.visibility != null && picks.includes(r.visibility))),
     );
-    // A text QUERY flattens; a visibility filter does not. Search is finding,
-    // and its results are already ordered by what was asked for. Filtering is
-    // still browsing — a narrower shelf is a shelf.
-    return buildShelf(matched, { cards, flat: Boolean(q) });
-  }, [all, q, picks, cards]);
+    return buildShelf(matched);
+  }, [all, q, picks]);
 
   /** The account's folders, for every picker on this shelf — the tree, unfiltered. */
   const pickable: PickerFolder[] = useMemo(
-    () => all.filter((r) => r.format === 'folder').map((r) => ({ id: r.id, title: r.title, ancestor_ids: r.ancestor_ids ?? [] })),
-    [all],
+    () => available.filter((r) => r.format === 'folder').map((r) => ({ id: r.id, title: r.title, ancestor_ids: r.ancestor_ids ?? [] })),
+    [available],
   );
   /**
    * How many rows THIS shelf holds inside a folder — what the page was given
    * and no more. The dashboard lists the whole account, so its number is the
    * folder's; a profile lists the ROOT, so it has none to count and shows none.
    */
-  const inside = (id: string): number => all.filter((r) => parentOfRow(r) === id).length;
+  const inside = (id: string): number => available.filter((r) => parentOfRow(r) === id).length;
+  const dateGroups = useMemo(() => groupShelfByRecency(shelf.documents), [shelf.documents]);
 
   const filtering = Boolean(q) || picks.length > 0;
-  const canMakeFolders = canCreateFolders ?? actions === 'full';
-  const nothing = !shelf.hero && shelf.cards.length === 0 && shelf.list.length === 0 && shelf.assets.length === 0;
+  const nothing = shelf.documents.length === 0 && shelf.assets.length === 0 && shelf.folders.length === 0;
 
   return (
-    <section aria-label="Shelf" className="flex flex-col gap-5">
-      {(all.length > 0 || canMakeFolders) && (
-        <div className={PANEL}>
-          {/* WRAPS, and the field has a floor: three visibility chips beside
-              the input left it ~130px on a phone, truncating its own
-              placeholder mid-word. Chips take a second line instead. */}
-          <div className="flex flex-wrap items-center gap-2 px-4 py-2">
+    <section aria-label="Shelf" data-shelf-view={view} className="flex flex-col gap-4">
+      {(all.length > 0 || canCreateFolders) && (
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2 sm:gap-y-1.5 sm:rounded-[6px] sm:border sm:border-edge sm:bg-surface sm:px-3 sm:py-1.5">
+          <div className={`flex min-w-0 items-center gap-2 px-3 py-1.5 ${PANEL} sm:flex-1 sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none`}>
             <Search size={13} className="shrink-0 text-faint" />
             <input
               aria-label="Search artifacts"
               placeholder="search artifacts"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="min-w-32 flex-1 border-0 bg-transparent font-mono text-xs text-fg placeholder:text-faint focus:outline-none"
+              className="h-7 min-w-0 flex-1 border-0 bg-transparent font-mono text-xs text-fg placeholder:text-faint focus:outline-none"
             />
+          </div>
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 px-0.5 sm:contents">
             {showChips && (
-              <span className="flex shrink-0 items-center gap-1.5 border-edge sm:ml-auto sm:border-l sm:pl-2">
+              <span className="flex shrink-0 items-center gap-1.5 sm:border-l sm:border-edge sm:pl-2">
                 {chips.map((v) => (
                   <FilterChip key={v} value={v} active={picks.includes(v)} onToggle={togglePick} />
                 ))}
@@ -576,11 +541,30 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
                 {shelf.total + shelf.assets.length}/{all.length}
               </span>
             )}
-            {canMakeFolders && (
-              <span className="shrink-0 border-edge sm:border-l sm:pl-2">
-                <NewFolder parentId={parentId} onMade={(row) => setMade((m) => [row, ...m])} />
-              </span>
-            )}
+          {canCreateFolders && (
+            <span className="shrink-0 border-l border-edge pl-1.5">
+              <NewFolder parentId={parentId} onMade={(row) => setMade((current) => [row, ...current])} />
+            </span>
+          )}
+          <div role="group" aria-label="Shelf view" className="ml-auto flex shrink-0 items-center border-l border-edge pl-1.5">
+            {([
+              ['grid', 'Grid view', LayoutGrid],
+              ['list', 'List view', ListIcon],
+            ] as const).map(([value, label, Icon]) => (
+              <button
+                key={value}
+                type="button"
+                aria-label={label}
+                aria-pressed={view === value}
+                onClick={() => chooseView(value)}
+                className={`inline-flex h-7 w-8 cursor-pointer items-center justify-center rounded-[4px] transition-all ${
+                  view === value ? 'bg-accent-soft text-accent' : 'text-faint hover:bg-raised hover:text-fg'
+                }`}
+              >
+                <Icon size={14} strokeWidth={1.7} />
+              </button>
+            ))}
+          </div>
           </div>
         </div>
       )}
@@ -603,9 +587,9 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
           <div className="mb-2 flex items-baseline gap-2">
             <MicroLabel>folders</MicroLabel>
           </div>
-          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className={`grid gap-3 ${view === 'grid' ? 'grid-cols-2' : 'grid-cols-1 sm:grid-cols-2'} lg:grid-cols-4`}>
             {shelf.folders.map((row) => (
-              <FolderTile key={row.id} row={row} count={inside(row.id)} level={actions} folders={pickable} onDeleted={trash} />
+              <FolderTile showVisibility={showVisibility} key={row.id} row={row} count={inside(row.id)} level={actions} folders={pickable} onDeleted={trash} gallery={view === 'grid'} documents={available.filter((item) => parentOfRow(item) === row.id && item.format === 'markup')} />
             ))}
           </ul>
         </section>
@@ -617,83 +601,60 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
         </p>
       )}
 
-      {/* TIER 1 — full width, because it is almost always the one you came back
-        * for. The label pins to the TOP of the column and the classification
-        * to the bottom, so the title owns the middle and the eye lands there
-        * first; a flat row of equal-weight chips beside it read as noise. */}
-      {shelf.hero && (
-        <article className={`reveal group relative grid grid-cols-1 overflow-hidden md:grid-cols-[1.35fr_1fr] ${PANEL} transition-colors hover:border-edge-bright`}>
-          <div className="relative">
-            <Thumb row={shelf.hero} className="aspect-[40/21] border-b border-edge md:h-full md:border-r md:border-b-0" />
-          </div>
-          {/* On the CARD, not the picture — the hero alone is two columns, so
-              its far corner is the right column's, where the actions belong.
-              Stacked (phone) the card's top IS the picture's top: same corner
-              as every tier below, still no breakpoint fork. */}
-          <CardControls row={shelf.hero} level={actions} folders={pickable} />
-          {/* Starts BELOW the control row on desktop, so the title gets the
-              column's full width instead of sharing its first line with the
-              buttons. On a phone the controls are on the picture — no clearance. */}
-          <div className="flex flex-col justify-between gap-4 p-3 md:pt-12">
-            <div className="min-w-0">
-              <a
-                href={shelf.hero.url}
-                aria-label={`Open ${nameOf(shelf.hero)} (most recent)`}
-                // Clamped at 3, not 1: the hero's right column is mostly air,
-                // and a title cut to one line beside that much empty space
-                // reads as a bug. Three lines still cannot push the views
-                // footer out of the panel the thumbnail sets the height of.
-                className="block line-clamp-2 sm:line-clamp-3 text-lg leading-snug font-semibold text-fg no-underline transition-colors after:absolute after:inset-0 group-hover:text-accent"
-              >
-                {shelf.hero.title ?? <span className="text-faint">(untitled)</span>}
-              </a>
-              {shelf.hero.description && (
-                <p className="mt-1.5 line-clamp-2 font-mono text-xs leading-relaxed text-muted">{shelf.hero.description}</p>
-              )}
-            </div>
-            <div className="flex w-full min-w-0 items-center gap-3 pt-2 sm:pt-3">
-              <ViewsMark row={shelf.hero} filled={false} />
-              <Stamp row={shelf.hero} mode={dates} />
-            </div>
-          </div>
-        </article>
-      )}
-
-      {/* TIER 2 — thumbnails, where the picture is worth its space. */}
-      {shelf.cards.length > 0 && (
-        <ul aria-label="Recent documents" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {shelf.cards.map((row, i) => (
-            <li
-              key={row.id}
-              className={`reveal group relative flex flex-col overflow-hidden ${PANEL} transition-colors hover:border-edge-bright`}
-              style={{ animationDelay: `${i * 45}ms` }}
-            >
-              <div className="relative">
-                <Thumb row={row} className="aspect-[40/21] border-b border-edge" />
-                <CardControls row={row} level={actions} folders={pickable} />
+      {view !== 'list' && shelf.documents.length > 0 && (
+        <div aria-label="Artifact grid" className="flex flex-col gap-7">
+          {dateGroups.map((group) => (
+            <section key={group.key} aria-label={`${group.label} artifacts`}>
+              <div className="mb-2.5 flex items-center gap-3 px-0.5">
+                <h2 className="shrink-0 font-mono text-[10px] font-medium uppercase tracking-[0.13em] text-muted">
+                  {group.label}
+                </h2>
+                <span aria-hidden="true" className="h-px flex-1 bg-edge" />
               </div>
-              <div className="flex flex-1 flex-col gap-2.5 p-3">
-                <a
-                  href={row.url}
-                  aria-label={`Open ${nameOf(row)}`}
-                  className="block line-clamp-2 sm:line-clamp-1 font-mono text-sm font-semibold text-fg no-underline transition-colors after:absolute after:inset-0 group-hover:text-accent"
-                >
-                  {row.title ?? 'Untitled'}
-                </a>
-                <div className="mt-auto flex min-w-0 items-center gap-2">
-                  <ViewsMark row={row}/>
-                  <Stamp row={row} mode={dates} />
-                </div>
-              </div>
-            </li>
+              <ul className="grid grid-cols-2 gap-2 sm:gap-5 lg:grid-cols-4">
+                {group.rows.map((row) => {
+                  const i = shelf.documents.indexOf(row);
+                  return (
+                    <li
+                      key={row.id}
+                      className="reveal group relative flex min-w-0 flex-col duration-150 gallery-document rounded-md p-1 sm:p-2 transition-colors hover:bg-raised/60"
+                      style={{ animationDelay: `${Math.min(i * 35, 280)}ms` }}
+                    >
+                      <div className="relative">
+                        <Thumb row={row} className="gallery-paper aspect-[5/3] rounded-[4px] border border-edge shadow-sm" />
+                        {showVisibility && row.visibility && <span className="gallery-fade-visibility absolute left-2 top-2 z-10"><VisibilityTag row={row} overlay /></span>}
+                        {(row.views !== undefined || actions === 'full') && (
+                          <div className="gallery-fade absolute inset-x-0 bottom-0 z-10 flex min-w-0 items-center gap-2">
+                            {row.views !== undefined && <div className="gallery-fade-views min-w-0 flex-1"><ViewsMark name={nameOf(row)} views={row.views} sparkline={row.sparkline} /></div>}
+                            {actions === 'full' && <div className="gallery-fade-actions ml-auto shrink-0"><Actions row={row} level={actions} folders={pickable} /></div>}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-1 flex-col gap-2 px-1 pt-2.5 pb-1">
+                        <div className="flex items-start justify-center gap-1.5">
+                        <a
+                          href={row.url}
+                          aria-label={`Open ${nameOf(row)}`}
+                          className={`block font-mono leading-snug font-semibold text-fg no-underline transition-colors after:absolute after:inset-0 group-hover:text-accent text-center text-[13px] line-clamp-2`}
+                        >
+                          {row.title ?? 'Untitled'}
+                        </a>
+                        </div>
+                        {row.description && <p className="m-0 line-clamp-2 text-center font-sans text-xs leading-relaxed text-muted">{row.description}</p>}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
           ))}
-        </ul>
+        </div>
       )}
 
-      {/* TIER 3 — dense rows, and the only tier that pages. */}
-      {shelf.list.length > 0 && (
+      {view === 'list' && shelf.documents.length > 0 && (
         <ArtifactTable
-          artifacts={shelf.list}
+          showVisibility={showVisibility}
+          artifacts={shelf.documents}
           folders={pickable}
           manage={actions === 'full'}
           canEdit={actions === 'full'}
@@ -715,7 +676,6 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
             folders={pickable}
             manage={actions === 'full'}
             canEdit={false}
-            canShare={false}
             showViews={false}
             filtersInline
             dates={dates}

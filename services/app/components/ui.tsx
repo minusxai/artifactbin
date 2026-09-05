@@ -99,9 +99,8 @@ export function FormatBadge({ format }: { format?: string }) {
   );
 }
 
-/** Visibility is one accent status family. The glyph and word carry the
- * state; the shared theme token supplies one green in light mode and one in
- * dark mode without assigning semantic severity colors to access levels. */
+/** Visibility is one accent status family. Dense and over-image placements
+ * use only the glyph; the tooltip and accessible label carry the full state. */
 const VISIBILITY_COLOR = 'var(--color-accent)';
 export const VISIBILITY_COLORS: Record<string, string> = {
   public: VISIBILITY_COLOR,
@@ -128,7 +127,7 @@ export function VisibilityPill({ visibility, name, compact = false, overlay = fa
    * it for anyone reading by other means.
    */
   compact?: boolean;
-  /** Flat, opaque-enough treatment for placement over preview imagery. */
+  /** Opaque treatment for placement over preview imagery. */
   overlay?: boolean;
 }) {
   const Glyph = VISIBILITY_ICON[visibility];
@@ -138,11 +137,11 @@ export function VisibilityPill({ visibility, name, compact = false, overlay = fa
         aria-label={`${name} is ${visibility}`}
         className={`inline-flex shrink-0 items-center gap-1 border font-mono text-[10px] leading-none whitespace-nowrap ${
           overlay
-            ? 'h-[26px] rounded-[4px] border-accent/40 bg-accent-soft px-2 text-accent'
+            ? `h-[26px] rounded-[4px] border-black/10 bg-white text-[#546170] shadow-sm ${compact ? 'w-[26px] justify-center px-0' : 'px-2'}`
             : `rounded-[3px] border-accent/40 bg-accent-soft py-0.5 text-accent ${compact ? 'px-1' : 'px-1.5'}`
         }`}
       >
-        <Glyph size={9} />
+        <Glyph size={compact ? 11 : 9} />
         {!compact && visibility}
       </span>
     </Tooltip>
@@ -193,18 +192,7 @@ export function Spark({ svg, filled = true, className = '' }: { svg: string; fil
   );
 }
 
-/**
- * THE COLUMN EVERY APP PAGE IS MEASURED AGAINST — masthead and content alike.
- *
- * One constant rather than a literal per page, because the two that drifted
- * apart were the masthead and the dashboard under it: the rule beneath the
- * logo stopped short of the panels below, and the same shelf laid out at two
- * different widths depending on whether it was reached at `/` or `/@handle`.
- *
- * Shared rather than widened: `HeaderBar` heads every page in the shell, and
- * account and docs are deliberately narrow for reading and forms. One width
- * they can all sit at beats a width threaded through as a prop.
- */
+/** Standard reading column for profiles, docs, and other focused app pages. */
 export const PAGE_COLUMN = 'mx-auto max-w-4xl px-4 sm:px-6';
 
 export const PANEL = 'rounded-[6px] border border-edge bg-surface';

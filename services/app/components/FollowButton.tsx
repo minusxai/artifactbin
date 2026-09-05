@@ -4,12 +4,7 @@
  * Anonymous readers get a link to /login. Never rendered on the owner's own
  * listing.
  *
- * LikeButton's twin, and deliberately its own file rather than a shared
- * control: this one sits in a page MASTHEAD (pill-shaped, beside a handle),
- * the other in a document-control sheet (a full-width row), and the door's
- * answer is keyed `following` rather than `liked`. What they share is the
- * rule, not the markup — the answer is the state, and a refusal changes
- * nothing.
+ * The answer is the state, and a refusal leaves the current state intact.
  */
 import { useCallback, useRef, useState } from 'react';
 

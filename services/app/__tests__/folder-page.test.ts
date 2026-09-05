@@ -25,7 +25,7 @@ import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as frameRoute } from '@/app/a/[id]/events/frame/route';
 import { getArtifactById, updateSharing } from '@/lib/artifacts';
 import { mintToken } from '@/lib/tokens';
-import { claimToken, createUser } from '@/lib/users';
+import { claimToken, createUser, setUsername } from '@/lib/users';
 
 useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -207,12 +207,20 @@ describe('the folder page bootstrap', () => {
     // A folder is never a document page: the surface it would frame is absent.
     expect(r.body.surface).toBeUndefined();
     expect(r.body.role).toBe('owner');
+    // The owner gets the SAME account-wide context as Home. The folder page
+    // scopes only the shelf; its dashboard/activity never shrink to this
+    // folder's children.
+    expect(r.body.workspace.artifacts.map((x: any) => x.id).sort()).toEqual([f.id, pub.id, priv.id, quiet.id, sub.id].sort());
+    expect(Array.isArray(r.body.workspace.viewsOverTime)).toBe(true);
+    expect(r.body.workspace.feed).toMatchObject({ mine: expect.any(Array), following: expect.any(Array) });
   });
 
   it('answers a STRANGER the public children only — never unlisted, never private, and no numbers', async () => {
-    const { f, pub, sub } = await world();
+    const { o, f, pub, sub } = await world();
+    await setUsername(o.userId, 'folderowner');
     const r = await pageAs(f.id);
     expect(r.status).toBe(200);
+    expect(r.body.ownerUsername).toBe('folderowner');
     const folder = r.body.folder;
     expect(folder.rows.map((x: any) => x.id).sort()).toEqual([pub.id, sub.id].sort());
     expect(folder.count).toEqual({ documents: 1, folders: 1 });
@@ -220,6 +228,7 @@ describe('the folder page bootstrap', () => {
       expect(row.views, 'a stranger is told no numbers').toBeUndefined();
       expect(row.sparkline).toBeUndefined();
     }
+    expect(r.body.workspace, 'a stranger never receives the owner dashboard').toBeUndefined();
   });
 
   it('answers an EDITOR of the folder the whole shelf, with the numbers', async () => {
@@ -231,6 +240,7 @@ describe('the folder page bootstrap', () => {
     expect(r.body.role).toBe('editor');
     expect(r.body.folder.rows.map((x: any) => x.id)).toContain(priv.id);
     expect(typeof r.body.folder.rows[0].views).toBe('number');
+    expect(r.body.workspace, 'an editor may edit this folder but cannot read the owner account dashboard').toBeUndefined();
   });
 
   it('names only the ancestors THIS viewer may read — an unreadable one is ABSENT, never redacted', async () => {

@@ -56,7 +56,10 @@ export async function eventsTablePresent(): Promise<boolean> {
 /**
  * "What happened to what I own": every event whose object is one of the
  * user's artifacts, newest first — a view, a fork of it (the object IS the
- * original), a comment on it. Empty when the table is absent.
+ * original), a comment on it. Export delivery is deliberately excluded here,
+ * BEFORE the limit: shelf thumbnails request exports and those mechanical
+ * rows must never crowd all useful activity out of a short dashboard feed.
+ * Empty when the table is absent.
  */
 export async function ownerFeed(userId: string, opts: { limit?: number } = {}): Promise<EventEnvelope[]> {
   if (!(await eventsTablePresent())) return [];
@@ -66,7 +69,7 @@ export async function ownerFeed(userId: string, opts: { limit?: number } = {}): 
   const r = await db.query<EventRow>(
     `SELECT e.* FROM ${EVENTS_SCHEMA}.events e
        JOIN artifacts a ON a.id = e.object_id
-      WHERE a.user_id = $1 AND e.object_kind = 'artifact' AND a.${LIVE_ARTIFACT_SQL}
+      WHERE a.user_id = $1 AND e.object_kind = 'artifact' AND e.verb <> 'exported' AND a.${LIVE_ARTIFACT_SQL}
       ORDER BY e.at DESC, e.id DESC
       LIMIT $2`,
     [userId, opts.limit ?? FEED_DEFAULT_LIMIT],
@@ -147,6 +150,18 @@ const LEGACY_DAILY = `SELECT to_char(date_trunc('day', e.created_at AT TIME ZONE
   GROUP BY day
   ORDER BY day`;
 
+const LOG_FORK_COUNT = `SELECT COUNT(*)::int AS n
+   FROM ${EVENTS_SCHEMA}.events e
+   JOIN artifacts a ON a.id = e.object_id
+  WHERE a.user_id = $1 AND e.object_kind = 'artifact' AND e.verb = 'forked'
+    AND a.format = 'markup' AND a.${LIVE_ARTIFACT_SQL}`;
+
+const LEGACY_FORK_COUNT = `SELECT COUNT(*)::int AS n
+   FROM analytics_events e
+   JOIN artifacts a ON a.id = e.artifact_id
+  WHERE a.user_id = $1 AND e.event = 'fork'
+    AND a.format = 'markup' AND a.${LIVE_ARTIFACT_SQL}`;
+
 /**
  * Daily view counts per artifact across everything the user owns, zero-filled
  * to exactly `days` buckets (oldest → newest, last bucket = today UTC), read
@@ -172,6 +187,58 @@ export async function viewSeriesByUser(userId: string, days: number = VIEW_SERIE
     series.set(row.artifact_id, buckets);
   }
   return series;
+}
+
+export interface LikeSummary {
+  /** Likes currently held by the user's live markup documents. */
+  total: number;
+  /** Those live likes grouped by the day the relation was first created. */
+  series: number[];
+}
+
+/**
+ * The dashboard's like readout follows the RELATIONS source of truth. Unlike
+ * the legacy analytics stream, this excludes unliked edges and supporting
+ * data files, so the headline total agrees with the like controls themselves.
+ */
+export async function likeSummaryByUser(userId: string, days: number = VIEW_SERIES_DAYS): Promise<LikeSummary> {
+  const db = await getDb();
+  const r = await db.query<{ day: string; n: number | string }>(
+    `SELECT to_char(date_trunc('day', r.created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
+       COUNT(*)::int AS n
+     FROM relations r
+     JOIN artifacts a ON a.id = r.object_id
+     WHERE r.verb = 'like' AND r.object_kind = 'artifact' AND r.deleted_at IS NULL
+       AND a.user_id = $1 AND a.format = 'markup' AND a.${LIVE_ARTIFACT_SQL}
+     GROUP BY day
+     ORDER BY day`,
+    [userId],
+  );
+  const today = Date.parse(new Date().toISOString().slice(0, 10));
+  const series = new Array<number>(days).fill(0);
+  let total = 0;
+  for (const row of r.rows) {
+    const count = Number(row.n);
+    total += count;
+    const age = Math.round((today - Date.parse(row.day)) / 86_400_000);
+    const index = days - 1 - age;
+    if (index >= 0 && index < days) series[index] = count;
+  }
+  return { total, series };
+}
+
+/**
+ * Forks made from the user's live markup artifacts. The canonical event log
+ * records the fork against its source artifact; the analytics table remains
+ * the fallback for split deployments that have not installed the log yet.
+ */
+export async function forkCountByUser(userId: string): Promise<number> {
+  const db = await getDb();
+  const r = await db.query<{ n: number | string }>(
+    (await eventsTablePresent()) ? LOG_FORK_COUNT : LEGACY_FORK_COUNT,
+    [userId],
+  );
+  return Number(r.rows[0]?.n ?? 0);
 }
 
 /**

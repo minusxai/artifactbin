@@ -12,6 +12,9 @@ import {
 } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
 import MobileSheet, { useIsPhoneViewport } from '@/components/MobileSheet';
+import GitHubStar from '@/components/GitHubStar';
+import { GitHubIcon } from '@/components/brand-icons';
+import { REPO_URL } from '@/lib/repo';
 import { Tooltip } from '@/components/Tooltip';
 import { forgetTokens } from '@/lib/browser-session';
 import { crumbsFor } from '@/lib/breadcrumb';
@@ -77,7 +80,6 @@ function triggerPosition(side: 'left' | 'right', fixed: boolean, open: boolean) 
 export function PageMenu({
   authed,
   anon = false,
-  title,
   fixed = false,
   triggerless = false,
   panelTop,
@@ -92,7 +94,6 @@ export function PageMenu({
   triggerless?: boolean;
 }) {
   const pathname = usePathname() ?? '';
-  const trail = crumbsFor(pathname, title);
   const [open, setOpen] = useState(false);
   const phone = useIsPhoneViewport();
   const toggle = useExclusiveLayer(open, setOpen);
@@ -157,25 +158,21 @@ export function PageMenu({
           artifactbin
         </a>
 
-        {trail.length > 0 && (
-          <div aria-label="Current page" className="mb-3 flex min-w-0 items-center gap-1 border-y border-edge px-2 py-2 font-mono text-xs text-muted">
-            {trail.map((crumb, index) => (
-              <span key={`${crumb.href ?? ''}:${crumb.label}`} className="flex min-w-0 items-center gap-1">
-                {index > 0 && <ChevronRight size={12} className="shrink-0 text-faint" aria-hidden="true" />}
-                {crumb.href ? (
-                  <a href={crumb.href} className="shrink-0 text-muted no-underline hover:text-accent">{crumb.label}</a>
-                ) : (
-                  <span className="min-w-0 truncate text-fg">{crumb.label}</span>
-                )}
-              </span>
-            ))}
-          </div>
-        )}
-
         {link('/', 'Artifacts', <FileText size={15} strokeWidth={1.5} />, pathname === '/')}
         {link('/account', 'Account', <User size={15} strokeWidth={1.5} />, pathname === '/account')}
         {link('/docs-human', 'Human Docs', <BookOpen size={15} strokeWidth={1.5} />, pathname === '/docs-human')}
         {link('/docs/artifactbin/SKILL.md', 'Agent docs', <Braces size={15} strokeWidth={1.5} />, pathname === '/docs/artifactbin/SKILL.md')}
+
+        <a
+          href={REPO_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`${ITEM} cursor-pointer text-muted hover:bg-raised hover:text-fg`}
+          onClick={() => setOpen(false)}
+        >
+          <GitHubIcon size={15} />
+          Support artifactbin
+        </a>
 
         <div className="mt-auto" />
         <div className="my-1 h-px bg-edge" />
@@ -413,11 +410,13 @@ const BAR_BUTTON =
  */
 export function AppBar({
   title,
+  hideBreadcrumb = false,
   label = 'Page controls',
   fixed = false,
   center,
 }: {
   title?: string | null;
+  hideBreadcrumb?: boolean;
   label?: string;
   /** Over a page that does not flow (the artifact page in edit mode) rather than in one. */
   fixed?: boolean;
@@ -425,7 +424,7 @@ export function AppBar({
   center?: React.ReactNode;
 }) {
   const pathname = usePathname() ?? '';
-  const trail = crumbsFor(pathname, title);
+  const trail = hideBreadcrumb ? [] : crumbsFor(pathname, title);
   const [openPanel, setOpenPanel] = useState<'menu' | 'controls' | null>(null);
   useEffect(() => {
     const onState = (event: Event) => {
@@ -452,16 +451,24 @@ export function AppBar({
     );
   };
   return (
-    <header aria-label="Page bar" className={`${fixed ? 'fixed inset-x-0 top-0' : 'sticky top-0'} z-40 flex h-11 items-center gap-3 border-b border-edge bg-surface/85 px-3 backdrop-blur-md`}>
+    <>
+    <GitHubStar placement="desktop-corner" />
+    <header aria-label="Page bar" className={`${fixed ? 'fixed inset-x-0 top-0' : 'sticky top-0'} z-40 flex h-11 items-center gap-2 sm:gap-3 border-b border-edge bg-surface/85 px-3 backdrop-blur-md`}>
       {center && <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">{center}</div>}
       <a href="/" aria-label="Home" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] no-underline transition-colors hover:bg-raised">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo-128.png" alt="" className="h-7 w-7" />
+        <img src="/logo-128.png" alt="" className="h-9 w-9" />
       </a>
-      {/* The trail: the brand is the root crumb, then the way down to this page
-          (lib/breadcrumb). Desktop only — a phone keeps the logo alone. */}
+      <a href="/" className="min-w-0 truncate font-mono text-xs font-semibold text-fg no-underline hover:text-accent sm:hidden">artifactbin</a>
+      {/* Desktop breadcrumbs; phones keep the brand beside the logo. */}
       <nav aria-label="Current page" className="hidden min-w-0 items-center gap-1.5 font-mono text-xs text-muted sm:flex">
-        <a href="/" className={`shrink-0 no-underline hover:text-accent ${trail.length === 0 ? 'font-semibold text-fg' : 'text-muted'}`}>artifactbin</a>
+        <a href="/" className={`shrink-0 text-sm no-underline hover:text-accent ${trail.length === 0 ? 'font-semibold text-fg' : 'text-muted'}`}>artifactbin</a>
+        {trail.length === 0 && (
+          <>
+            <span aria-hidden="true" className="text-faint">·</span>
+            <span className="truncate">Google Docs for agents</span>
+          </>
+        )}
         {trail.map((crumb) => (
           <span key={`${crumb.href ?? ''}:${crumb.label}`} className="flex min-w-0 items-center gap-1.5">
             <ChevronRight size={12} className="shrink-0 text-faint" aria-hidden="true" />
@@ -473,12 +480,14 @@ export function AppBar({
           </span>
         ))}
       </nav>
-      <div className="ml-auto flex items-center gap-1">
+      <div className="ml-auto flex shrink-0 items-center gap-1">
+        <GitHubStar placement="mobile-bar" />
         {/* The document bar's glyphs, at its size and stroke, so the two bars read as one. */}
         {control('controls', label.toLowerCase(), <SlidersVertical size={20} strokeWidth={1.3} />)}
         {control('menu', 'menu', <CircleUser size={20} strokeWidth={1.3} />)}
       </div>
     </header>
+    </>
   );
 }
 
@@ -486,12 +495,14 @@ export default function PageChrome({
   authed,
   anon = false,
   title,
+  hideBreadcrumb = false,
   label = 'Page controls',
   children,
 }: {
   authed: boolean;
   anon?: boolean;
   title?: string | null;
+  hideBreadcrumb?: boolean;
   /** The controls panel's name — "Artifact controls" on an artifact page. */
   label?: string;
   /** Extra rows for the controls panel (an artifact's own actions). */
@@ -499,7 +510,7 @@ export default function PageChrome({
 }) {
   return (
     <>
-      <AppBar title={title} label={label} />
+      <AppBar title={title} label={label} hideBreadcrumb={hideBreadcrumb} />
       <PageMenu authed={authed} anon={anon} title={title} fixed triggerless />
       <PageControls fixed triggerless label={label}>{children}</PageControls>
     </>

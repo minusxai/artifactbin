@@ -67,8 +67,8 @@ describe('inlined page data', () => {
     const w = await world();
     const res = await app.request(`/@${w.owner.username}`, { headers: as({ credential: 'session', userId: w.owner.id, email: w.owner.email }) });
     const data = inlined(await res.text());
-    expect(data.profile.kind).toBe('owner-listing');
-    expect(data.profile.files.map((f: { id: string }) => f.id).sort()).toEqual([w.pub.id, w.priv.id].sort());
+    expect(data.profile.kind).toBe('public-profile');
+    expect(data.profile.files.map((f: { id: string }) => f.id)).toEqual([w.pub.id]);
   });
 
   it('inlines NOTHING a viewer may not read — the 404 page carries no answer', async () => {

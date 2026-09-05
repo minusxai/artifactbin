@@ -29,6 +29,9 @@ vi.mock('@/web/bootstrap', () => ({
 
 afterEach(() => vi.unstubAllGlobals());
 
+/** The shell masthead. The tagline beside the brand belongs to the home page alone, so the bar is the mark. */
+const MASTHEAD = 'aria-label="Page bar"';
+
 const renderPath = (path: string) => {
   const url = new URL(path, 'https://example.test');
   vi.stubGlobal('window', {
@@ -43,9 +46,9 @@ const renderPath = (path: string) => {
 
 describe('artifact pages carry no app chrome', () => {
   it('the chrome lives in the SPA shell, and only there', () => {
-    expect(renderPath('/login')).toContain('Google Docs for agents');
-    expect(renderPath('/a/abc123')).not.toContain('Google Docs for agents');
-    expect(renderPath('/@owner/abc123-document')).not.toContain('Google Docs for agents');
+    expect(renderPath('/login')).toContain(MASTHEAD);
+    expect(renderPath('/a/abc123')).not.toContain(MASTHEAD);
+    expect(renderPath('/@owner/abc123-document')).not.toContain(MASTHEAD);
   });
 
   it('the artifact page is the shell around the document, and nothing else', () => {
@@ -53,7 +56,7 @@ describe('artifact pages carry no app chrome', () => {
     expect(html).toContain('aria-label="Artifact viewport"');
     expect(html).toContain('<iframe');
     expect(html).toContain('src="/a/abc123/raw?edit=1"');
-    expect(html).not.toContain('Google Docs for agents');
+    expect(html).not.toContain(MASTHEAD);
   });
 
   it('both artifact addresses render through that ONE page', () => {
@@ -71,6 +74,6 @@ describe('artifact pages carry no app chrome', () => {
     );
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('text/plain');
-    expect(renderPath('/docs-human')).toContain('Google Docs for agents');
+    expect(renderPath('/docs-human')).toContain(MASTHEAD);
   });
 });

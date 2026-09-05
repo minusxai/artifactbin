@@ -133,6 +133,7 @@ export interface TrashEntry {
   id: string;
   title: string | null;
   format: string;
+  version: number;
   deleted_at: string;
 }
 
@@ -141,7 +142,7 @@ export async function listTrashFor(actor: TokenActor): Promise<TrashEntry[]> {
   const db = await getDb();
   const scope = ownerPredicate(actor);
   const r = await db.query<TrashEntry>(
-    `SELECT id, title, format, deleted_at FROM artifacts
+    `SELECT id, title, format, version, deleted_at FROM artifacts
       WHERE deleted_at IS NOT NULL AND (${scope.where('$1')})
       ORDER BY deleted_at DESC, updated_at DESC LIMIT 200`,
     [scope.val],

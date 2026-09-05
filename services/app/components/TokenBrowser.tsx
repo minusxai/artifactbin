@@ -1,9 +1,11 @@
 'use client';
 
-import { Check, ChevronLeft, ChevronRight, EyeOff, FolderInput, Globe, Link2, Lock, Pencil, Search, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, EyeOff, FolderInput, Globe, Lock, Pencil, Search, Share2, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Tooltip } from '@/components/Tooltip';
-import { Badge, Button, dateStamp, FormatBadge, formatLabel, MicroLabel, PANEL, Spark, TABLE_ROW, timeAgo, TokenInput, VisibilityPill } from '@/components/ui';
+import { Badge, Button, dateStamp, FormatBadge, formatLabel, MicroLabel, PANEL, TABLE_ROW, timeAgo, TokenInput, VisibilityPill } from '@/components/ui';
+import { ViewsMark } from '@/components/ViewsMark';
+import ShareLink from '@/components/ShareLink';
 import RowMenu, { confirmDeleteArtifact } from '@/components/RowMenu';
 import { MoveMenu, type PickerFolder } from '@/components/FolderPicker';
 import { parentOfRow } from '@/lib/shelf';
@@ -165,16 +167,15 @@ const ICON_ACTION =
  * Rows per page when this table IS the list (the logged-out token browser):
  * one block in a taller page, which must not grow into everything below it.
  *
- * As a shelf's dense tier the count is raised (SHELF_LIST_PER_PAGE) — there
- * the hero and cards carry the recent work, so these rows are the archive and
- * are cheap. Five is also below the count at which a pager helps anyone: it
+ * In a shelf's list view the count is raised (SHELF_LIST_PER_PAGE), because
+ * rows are compact and cheap. Five is also below the count at which a pager helps anyone: it
  * costs a click to reveal what a little scrolling would have shown, which is
  * most of why the old dashboard list read as small.
  */
 export const ARTIFACTS_PER_PAGE = 5;
 
 /** `manage` enables the session-scoped delete — dashboard only. History lives in the page's edit mode. */
-export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = true, canShare = true, showViews = true, filtersInline = false, dates = 'relative', perPage = ARTIFACTS_PER_PAGE }: {
+export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = true, showVisibility = true, showViews = true, filtersInline = false, dates = 'relative', perPage = ARTIFACTS_PER_PAGE, searchLabel = 'Search artifacts', searchPlaceholder = 'search artifacts' }: {
   artifacts: ArtifactSummary[];
   /**
    * The account's folders, for the move picker. The dense tier holds documents
@@ -191,9 +192,7 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
    * move/delete menu — two different subsets, so one boolean cannot say both.
    */
   canEdit?: boolean;
-  /** Whether the row offers copy-link. Asset management tables can withhold
-   * document actions while retaining their move/delete menu. */
-  canShare?: boolean;
+  showVisibility?: boolean;
   /** Whether analytics telemetry belongs in this table's job. */
   showViews?: boolean;
   /** Keep quick filters in the search rail instead of spending a second row. */
@@ -202,8 +201,11 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
   dates?: 'relative' | 'absolute';
   /** Rows before a pager appears. */
   perPage?: number;
+  /** A standalone collection names its own search domain. */
+  searchLabel?: string;
+  searchPlaceholder?: string;
   /**
-   * Rendered as the dense tier of a `<Shelf>`, which owns the search box and
+   * Rendered as the list view of a `<Shelf>`, which owns the search box and
    * has already narrowed these rows. Suppresses this component's own search
    * header and filter chips so the page never carries two of either — the
    * rows, the actions and the pager are the part being reused.
@@ -214,6 +216,7 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
   // change to justify reloading the page the way delete does.
   const [movedFolders, setMovedFolders] = useState<Record<string, string>>({});
   const [movingId, setMovingId] = useState<string | null>(null);
+  const [sharingId, setSharingId] = useState<string | null>(null);
   const placeOf = (a: ArtifactSummary) => movedFolders[a.id] ?? parentOfRow(a) ?? '';
   // The tree the picker draws: what the page handed down, else whatever folders
   // are among these rows.
@@ -223,7 +226,6 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
   // the picker that now knows the account's own names.
   const placeName = (id: string): string => pickable.find((f) => f.id === id)?.title ?? id;
 
-  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
   // Quick filters: empty selection = no constraint. Within a group values OR,
@@ -245,17 +247,6 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
   const visibilityChips = VISIBILITY_ORDER.filter((v) => artifacts.some((a) => a.visibility === v));
   const showFormatChips = formatChips.length >= 2;
   const showVisibilityChips = visibilityChips.length >= 2;
-
-  const share = async (a: ArtifactSummary) => {
-    const url = a.url.startsWith('http') ? a.url : `${location.origin}${a.url}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopiedId(a.id);
-      setTimeout(() => setCopiedId((c) => (c === a.id ? null : c)), 1500);
-    } catch {
-      window.open(url, '_blank');
-    }
-  };
 
   // The views column follows the DATA, never the permission: a page that did
   // not ask for counts reserves no column and prints no zero. That is the same
@@ -318,8 +309,8 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
       <div className="flex flex-wrap items-center gap-2 border-b border-edge px-4 py-2">
         <Search size={13} className="shrink-0 text-faint" />
         <input
-          aria-label="Search artifacts"
-          placeholder="search artifacts"
+          aria-label={searchLabel}
+          placeholder={searchPlaceholder}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="min-w-32 flex-1 border-0 bg-transparent font-mono text-xs text-fg placeholder:text-faint focus:outline-none"
@@ -415,14 +406,7 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
                       )}
                       {hasViews && (
                         <>
-                          {/* The spline rides beside the count here too — the
-                              trend is the interesting half of the number, and
-                              a 12px-tall squash of the same server-rendered
-                              SVG costs the line nothing. */}
-                          <span className="inline-flex items-center gap-1.5">
-                            {a.sparkline && <Spark svg={a.sparkline} className="h-3 w-12" />}
-                            <span>{a.views ?? 0} view{a.views === 1 ? '' : 's'}</span>
-                          </span>
+                          <ViewsMark name={a.title ?? a.id} views={a.views ?? 0} sparkline={a.sparkline} className="w-24 shrink-0" />
                           <span aria-hidden="true">·</span>
                         </>
                       )}
@@ -434,7 +418,7 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
                   {/* Every row says who can read it — an unmarked row would
                       read as "unknown" now that the owner toggles visibility.
                       Public gets the louder ink; unlisted and private stay faint. */}
-                  {a.visibility && <VisibilityPill compact visibility={a.visibility} name={a.title ?? a.id} />}
+                  {showVisibility && a.visibility && <VisibilityPill compact visibility={a.visibility} name={a.title ?? a.id} />}
                 </span>
               </td>
               {/* A shelf's archive contains only markup documents; its type
@@ -453,17 +437,7 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
               )}
               {hasViews && (
                 <td className="hidden px-4 py-2.5 whitespace-nowrap sm:table-cell">
-                  <Tooltip content="views · spline is the last 30 days">
-                    <span
-                      aria-label={`${a.title ?? a.id} views`}
-                      className="inline-flex items-center gap-1.5"
-                    >
-                      {/* The spline is server-rendered SVG (lib/viz/sparkline) — decoration
-                          next to the count, so hidden from the accessibility tree. */}
-                      {a.sparkline && <Spark svg={a.sparkline} className="h-5 w-24" />}
-                      <span className="font-mono text-xs tabular-nums text-muted">{a.views ?? 0}</span>
-                    </span>
-                  </Tooltip>
+                  <ViewsMark name={a.title ?? a.id} views={a.views ?? 0} sparkline={a.sparkline} className="w-28" />
                 </td>
               )}
               <Tooltip content={new Date(a.updated_at).toLocaleString()}>
@@ -476,17 +450,6 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
               </Tooltip>
               <td className="px-2 py-3 text-right whitespace-nowrap sm:px-4 sm:py-2.5">
                 <span className="inline-flex items-center gap-1">
-                  {canShare && (
-                    <Tooltip content={copiedId === a.id ? 'copied!' : 'copy share link'}>
-                      <button
-                        className={`${ICON_ACTION} ${copiedId === a.id ? 'text-accent' : 'hover:text-accent'}`}
-                        aria-label={`Share ${a.title ?? a.id}`}
-                        onClick={() => void share(a)}
-                      >
-                        {copiedId === a.id ? <Check size={13} /> : <Link2 size={13} />}
-                      </button>
-                    </Tooltip>
-                  )}
                   {canEdit && (
                     <Tooltip content="edit">
                       <a
@@ -502,6 +465,12 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
                     <RowMenu
                       name={a.title ?? a.id}
                       items={[
+                        {
+                          label: `Manage sharing for ${a.title ?? a.id}`,
+                          text: 'share',
+                          icon: <Share2 size={12} />,
+                          onSelect: () => setSharingId(a.id),
+                        },
                         {
                           label: `Move ${a.title ?? a.id}`,
                           text: 'move to folder',
@@ -519,6 +488,9 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
                         },
                       ]}
                     />
+                  )}
+                  {manage && sharingId === a.id && (
+                    <ShareLink className="" artifactId={a.id} title={a.title} owner format={a.format} url={a.url} variant="dialog" onClose={() => setSharingId(null)} />
                   )}
                   {manage && movingId === a.id && (
                     /* The menu is a positioning ancestor, so the picker hangs

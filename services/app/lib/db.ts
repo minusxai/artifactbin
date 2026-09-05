@@ -5,12 +5,15 @@
  *
  * This is the only file that imports @electric-sql/pglite or pg.
  */
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { DATABASE_URL, IS_TEST } from './config';
 import { SCHEMA_STATEMENTS } from './schema';
 
 /**
  * The single database knob, dispatched on scheme — the URL IS the type:
- *   unset/empty      → embedded PGLite at ./data/pglite (zero-config dev)
+ *   unset/empty      → embedded PGLite in this app package's data/pglite
+ *                      directory (zero-config dev, independent of cwd)
  *   pglite://<path>  → embedded PGLite at <path>, taken literally after the
  *                      prefix (relative or absolute); pglite://memory → RAM
  *   anything else    → Postgres, URL handed to pg verbatim — database, user,
@@ -30,6 +33,24 @@ export function parseDatabaseUrl(url: string | undefined | null): DbTarget {
     return { engine: 'pglite', dataDir: path === 'memory' || path === '' ? null : path };
   }
   return { engine: 'pg', url: value };
+}
+
+/**
+ * An explicit relative `pglite://` URL belongs to its caller and remains
+ * relative to cwd. The implicit zero-config store belongs to the app, though:
+ * anchor that one beside the app package so `npm run dev` (cwd services/app)
+ * and `npx tsx server.ts` (cwd repo root) cannot silently open two libraries.
+ *
+ * The root is injectable because the path rule is product behaviour worth
+ * testing without making a test depend on where Vitest happens to run.
+ */
+export function databaseTargetForRuntime(
+  url: string | undefined | null,
+  appRoot = fileURLToPath(new URL('..', import.meta.url)),
+): DbTarget {
+  const target = parseDatabaseUrl(url);
+  if ((url ?? '').trim() || target.engine !== 'pglite' || !target.dataDir) return target;
+  return { ...target, dataDir: path.resolve(appRoot, 'data/pglite') };
 }
 
 export interface QueryResult<T> {
@@ -274,7 +295,7 @@ const toIso = (v: string) => new Date(v).toISOString();
 async function createDb(): Promise<Db> {
   // Tests always run in-memory PGLite so they never touch a data dir or a
   // real server, whatever the ambient DATABASE_URL says.
-  const target = IS_TEST ? ({ engine: 'pglite', dataDir: null } as const) : parseDatabaseUrl(DATABASE_URL);
+  const target = IS_TEST ? ({ engine: 'pglite', dataDir: null } as const) : databaseTargetForRuntime(DATABASE_URL);
 
   // Dynamic imports (the one sanctioned exception to top-level-imports): only
   // the selected engine's package is ever loaded, and Next never tries to
