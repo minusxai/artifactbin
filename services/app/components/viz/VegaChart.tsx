@@ -57,6 +57,8 @@ export interface VegaChartProps {
   envelope: VizEnvelope;
   rows: Record<string, unknown>[];
   colorMode: 'light' | 'dark';
+  /** Accessible name for this chart instance. */
+  ariaLabel?: string;
   /**
    * Fired after the user pans/zooms an interactive map (point_map / choropleth): the
    * settled view state as recipe params (point_map → `{center, zoom}`; choropleth →
@@ -97,7 +99,7 @@ function promoteFontAttrs(root: HTMLElement): void {
   }
 }
 
-export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChartProps) {
+export function VegaChart({ envelope, rows, colorMode, ariaLabel = 'Vega chart', onViewChange }: VegaChartProps) {
   /**
    * The view is rebuilt when the SPEC changes — by value, not by object
    * identity. Callers build this envelope inline from a document that is
@@ -532,7 +534,7 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
       )}
       <div
         ref={containerRef}
-        aria-label="Vega chart"
+        aria-label={ariaLabel}
         className="h-full w-full overflow-hidden [&_.vega-embed]:block [&_svg]:block"
       />
       {showZoomButtons && !error && (

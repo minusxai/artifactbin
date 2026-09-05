@@ -11,7 +11,7 @@
  *    phones encounter the working surface before analytics.
  *  - A profile renders only the public shelf with owner capabilities withheld.
  */
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import HeaderBar from '@/components/HeaderBar';
@@ -22,6 +22,9 @@ import { HomePage } from '@/web/pages/Home';
 import { ProfilePage } from '@/web/pages/Profile';
 
 vi.mock('@/web/session', () => ({ useSession: () => ({ session: { user: { id: 'usr_c', email: 'c@x.io' } } }) }));
+vi.mock('@/components/viz/VegaChart', () => ({
+  VegaChart: ({ ariaLabel }: { ariaLabel?: string }) => <div aria-label={ariaLabel ?? 'Vega chart'} />,
+}));
 
 const doc = (id: string) => ({
   id, url: `/a/${id}`, title: `Doc ${id}`, description: null, format: 'markup', version: 1,
@@ -84,17 +87,32 @@ describe('what the dashboard leads with', () => {
   });
 
   it('WITH artifacts: leads with the Drive-like shelf and keeps analytics in the right rail', async () => {
-    home = { signedIn: true, artifacts: [{ ...doc('a'), views: 7 }], viewsOverTime: [0, 2, 5], shared: [] };
+    home = {
+      signedIn: true,
+      artifacts: [
+        { ...doc('a'), views: 7 },
+        { ...doc('data'), title: 'Dataset', format: 'dataset', views: 99 },
+      ],
+      viewsOverTime: [0, 2, 5],
+      likes: 3,
+      likesOverTime: [0, 1, 2],
+      shared: [],
+    };
     render(<MemoryRouter><HomePage /></MemoryRouter>);
     await waitFor(() => expect(screen.getByLabelText('Open Doc a')).toBeInTheDocument());
     const dashboard = screen.getByLabelText('Dashboard');
     const shelf = screen.getByLabelText('Shelf');
-    expect(dashboard).toHaveTextContent('7');
+    const metrics = within(screen.getByLabelText('Dashboard metrics'));
+    expect(metrics.getByText('artifacts').nextElementSibling).toHaveTextContent('1');
+    expect(metrics.getByText('data files').nextElementSibling).toHaveTextContent('1');
+    expect(metrics.getByText('views').nextElementSibling).toHaveTextContent('7');
+    expect(metrics.getByText('likes').nextElementSibling).toHaveTextContent('3');
     expect(dashboard).toHaveTextContent('Your artifacts');
     expect(dashboard).not.toHaveTextContent('Your posts');
     expect(dashboard).not.toHaveTextContent('all time');
-    expect(dashboard).toHaveTextContent('Views over time');
-    expect(screen.getByRole('img', { name: 'Views over the last 30 days: 7' })).toBeInTheDocument();
+    expect(dashboard).toHaveTextContent('Engagement over time');
+    expect(screen.getByRole('group', { name: 'Interactive engagement chart: 7 views and 3 likes in the last 30 days' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Engagement Vega chart')).toBeInTheDocument();
     expect(dashboard).not.toHaveTextContent('Views by post');
     expect(shelf.compareDocumentPosition(dashboard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByLabelText('Dashboard rail')).toContainElement(dashboard);

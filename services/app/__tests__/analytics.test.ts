@@ -23,7 +23,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { DELETE as deleteMyArtifactRoute } from '@/app/api/my/artifacts/[id]/route';
 import { GET as listMyArtifactsRoute } from '@/app/api/my/artifacts/route';
 import { trackEvent } from '@/lib/analytics';
-import { viewSeriesByUser, VIEW_SERIES_DAYS } from '@/lib/feed';
+import { likeSummaryByUser, viewSeriesByUser, VIEW_SERIES_DAYS } from '@/lib/feed';
 import { mintExportKey } from '@/lib/export-key';
 import { resetLiveSubscriptions } from '@/lib/story/live';
 import { mintToken } from '@/lib/tokens';
@@ -337,6 +337,29 @@ describe('per-artifact totals', () => {
     const res = await listMyArtifactsRoute(request('/api/my/artifacts'));
     const body = (await res.json()) as { artifacts: { id: string; views: number }[] };
     expect(body.artifacts.find((r) => r.id === a.id)?.views).toBe(3);
+  });
+
+  it('likeSummaryByUser counts and buckets live likes on markup documents only', async () => {
+    const user = await createUser({ email: 'likes@minusx.ai' });
+    const t = await mintToken('laptop', user.id);
+    const document = await create(t.token, { markup: '<p>a</p>', title: 'a' });
+    const dataFile = await create(t.token, { markup: '<p>b</p>', title: 'b' });
+    const db = await harness.db();
+    await db.query(`UPDATE artifacts SET format = 'dataset' WHERE id = $1`, [dataFile.id]);
+    await db.query(
+      `INSERT INTO relations (subject_kind, subject_id, verb, object_kind, object_id, created_at) VALUES
+       ('user', 'reader-1', 'like', 'artifact', $1, now()),
+       ('user', 'reader-2', 'like', 'artifact', $1, now()),
+       ('user', 'reader-3', 'like', 'artifact', $1, now() - interval '2 days'),
+       ('user', 'reader-4', 'like', 'artifact', $2, now())`,
+      [document.id, dataFile.id],
+    );
+
+    const summary = await likeSummaryByUser(user.id);
+    expect(summary.total).toBe(3);
+    expect(summary.series).toHaveLength(VIEW_SERIES_DAYS);
+    expect(summary.series[VIEW_SERIES_DAYS - 1]).toBe(2);
+    expect(summary.series[VIEW_SERIES_DAYS - 3]).toBe(1);
   });
 });
 

@@ -19,6 +19,8 @@ type Home =
       signedIn: true;
       artifacts: Array<Record<string, unknown> & { id: string }>;
       viewsOverTime: number[];
+      likes?: number;
+      likesOverTime?: number[];
       shared: Parameters<typeof SharedWithYou>[0]['items'];
       feed?: { mine: FeedItem[]; following: FeedItem[] };
     };
@@ -119,7 +121,12 @@ export function HomePage() {
             <SharedWithYou items={home.shared} />
           </div>
           <aside aria-label="Dashboard rail" className="min-w-0 border-t border-edge pt-8 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
-            <Dashboard rows={home.artifacts as never} viewsOverTime={home.viewsOverTime} />
+            <Dashboard
+              rows={home.artifacts as never}
+              viewsOverTime={home.viewsOverTime}
+              likes={home.likes}
+              likesOverTime={home.likesOverTime}
+            />
           </aside>
         </div>
       )}

@@ -208,21 +208,6 @@ body {
   animation: rise 0.35s ease-out backwards;
 }
 
-/* The dashboard has one story: readership accumulating across the last month.
- * Draw that line once when it arrives; the area is already present so the
- * animation never delays comprehension. */
-.dashboard-trend-line {
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  animation: dashboard-trend-in 0.65s ease-out 0.12s forwards;
-}
-
-@keyframes dashboard-trend-in {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
 /* The get-started prompt's block cursor. steps(1) — a terminal caret snaps,
  * it does not fade. */
 .caret {
@@ -365,10 +350,6 @@ body {
     transition: none;
   }
 
-  .dashboard-trend-line {
-    animation: none;
-    stroke-dashoffset: 0;
-  }
 }
 
 /* The top bar's menu pane emerging from the left edge. */

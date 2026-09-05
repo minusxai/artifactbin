@@ -63,6 +63,8 @@ describe('GET /api/page/home', () => {
     expect(body.artifacts.map((a: { id: string }) => a.id).sort()).toEqual([w.pub.id, w.priv.id, w.box.id].sort());
     expect(body.artifacts[0]).toMatchObject({ url: expect.stringMatching(/^\/a\//), format: 'markup' });
     expect(body.viewsOverTime).toHaveLength(30);
+    expect(body.likes).toBe(0);
+    expect(body.likesOverTime).toHaveLength(30);
     expect(Array.isArray(body.shared)).toBe(true);
   });
 

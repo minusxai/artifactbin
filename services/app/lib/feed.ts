@@ -174,6 +174,44 @@ export async function viewSeriesByUser(userId: string, days: number = VIEW_SERIE
   return series;
 }
 
+export interface LikeSummary {
+  /** Likes currently held by the user's live markup documents. */
+  total: number;
+  /** Those live likes grouped by the day the relation was first created. */
+  series: number[];
+}
+
+/**
+ * The dashboard's like readout follows the RELATIONS source of truth. Unlike
+ * the legacy analytics stream, this excludes unliked edges and supporting
+ * data files, so the headline total agrees with the like controls themselves.
+ */
+export async function likeSummaryByUser(userId: string, days: number = VIEW_SERIES_DAYS): Promise<LikeSummary> {
+  const db = await getDb();
+  const r = await db.query<{ day: string; n: number | string }>(
+    `SELECT to_char(date_trunc('day', r.created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
+       COUNT(*)::int AS n
+     FROM relations r
+     JOIN artifacts a ON a.id = r.object_id
+     WHERE r.verb = 'like' AND r.object_kind = 'artifact' AND r.deleted_at IS NULL
+       AND a.user_id = $1 AND a.format = 'markup' AND a.${LIVE_ARTIFACT_SQL}
+     GROUP BY day
+     ORDER BY day`,
+    [userId],
+  );
+  const today = Date.parse(new Date().toISOString().slice(0, 10));
+  const series = new Array<number>(days).fill(0);
+  let total = 0;
+  for (const row of r.rows) {
+    const count = Number(row.n);
+    total += count;
+    const age = Math.round((today - Date.parse(row.day)) / 86_400_000);
+    const index = days - 1 - age;
+    if (index >= 0 && index < days) series[index] = count;
+  }
+  return { total, series };
+}
+
 /**
  * All-time daily view totals pooled across everything the user owns,
  * zero-filled from the first viewed day through today (empty when no views).

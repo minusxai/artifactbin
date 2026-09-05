@@ -8,7 +8,7 @@
  * database and must not spend a request per row learning names.
  */
 import { AGENT_COOKIE, decodeAgentSession } from '@/lib/agent-session';
-import { decorateFeed, followFeed, ownerFeed, VIEW_SERIES_DAYS, viewSeriesByUser } from '@/lib/feed';
+import { decorateFeed, followFeed, likeSummaryByUser, ownerFeed, VIEW_SERIES_DAYS, viewSeriesByUser } from '@/lib/feed';
 import { json, parseCookie } from '@/lib/http';
 import { listArtifactsByUser, listDraftsByTokenIds, listSharedWithEmail } from '@/lib/users';
 import { sessionActor } from '@/lib/viewer';
@@ -47,7 +47,9 @@ export async function GET(request: Request) {
    */
   const shared = (user.email ? await listSharedWithEmail(user.email, user.userId) : [])
     .map(({ ancestor_ids: _placement, ...row }) => row);
-  const series = documents.length ? await viewSeriesByUser(user.userId) : new Map<string, number[]>();
+  const [series, likes] = documents.length
+    ? await Promise.all([viewSeriesByUser(user.userId), likeSummaryByUser(user.userId)])
+    : [new Map<string, number[]>(), { total: 0, series: new Array<number>(VIEW_SERIES_DAYS).fill(0) }];
   const sparklines: Record<string, string> = {};
   for (const a of documents) {
     const s = series.get(a.id);
@@ -72,6 +74,8 @@ export async function GET(request: Request) {
       visibility: a.visibility, updated_at: a.updated_at, views: a.views, sparkline: sparklines[a.id] ?? null,
     })),
     viewsOverTime,
+    likes: likes.total,
+    likesOverTime: likes.series,
     shared,
   }, 200, { 'Cache-Control': 'no-store' });
 }
