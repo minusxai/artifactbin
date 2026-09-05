@@ -26,6 +26,10 @@ describe('ActivityFeed', () => {
     const { container } = render(<MemoryRouter><ActivityFeed mine={[]} following={[]} /></MemoryRouter>);
     expect(container.innerHTML).toBe('');
   });
+  it('does not show export delivery events as activity', () => {
+    const { container } = render(<MemoryRouter><ActivityFeed mine={[item({ id: 'e-export', verb: 'exported' })]} following={[]} /></MemoryRouter>);
+    expect(container.innerHTML).toBe('');
+  });
   it('reads each row as a sentence: handle, plain verb, the title as a link, a relative time', () => {
     render(<MemoryRouter><ActivityFeed
       mine={[
@@ -53,5 +57,33 @@ describe('ActivityFeed', () => {
     render(<MemoryRouter><ActivityFeed mine={[item({ id: 'e1', verb: 'forked', object: { kind: 'artifact', id: 'art0a9', title: null } })]} following={[]} /></MemoryRouter>);
     expect(screen.getByRole('link', { name: 'art0a9' }).getAttribute('href')).toBe('/a/art0a9');
     expect(screen.getByRole('listitem').textContent).toMatch(/forked/);
+  });
+  it('stacks both activity groups in the narrow dashboard rail', () => {
+    render(<MemoryRouter><ActivityFeed compact mine={[item({ id: 'e1', verb: 'liked' })]} following={[item({ id: 'e2', verb: 'created' })]} /></MemoryRouter>);
+    expect(screen.getByLabelText('Activity')).toHaveAttribute('data-layout', 'rail');
+    expect(screen.getByLabelText('Activity').querySelector('div')).not.toHaveClass('sm:flex-row');
+  });
+  it('shows the ten newest events across both groups and summarizes the rest', () => {
+    const now = Date.now();
+    const mine = Array.from({ length: 7 }, (_, index) => item({
+      id: `mine-${index}`,
+      verb: 'viewed',
+      at: new Date(now - index * 60_000).toISOString(),
+      object: { kind: 'artifact', id: `mine-artifact-${index}`, title: `Mine ${index}` },
+    }));
+    const following = Array.from({ length: 5 }, (_, index) => item({
+      id: `following-${index}`,
+      verb: 'created',
+      at: new Date(now - (index + 7) * 60_000).toISOString(),
+      object: { kind: 'artifact', id: `following-artifact-${index}`, title: `Following ${index}` },
+    }));
+
+    render(<MemoryRouter><ActivityFeed compact mine={mine} following={following} /></MemoryRouter>);
+
+    expect(screen.getAllByRole('listitem')).toHaveLength(10);
+    expect(screen.getByText('+ 2 more')).toBeTruthy();
+    expect(screen.getByLabelText('2 more activity events')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Following 2' })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Following 3' })).toBeNull();
   });
 });

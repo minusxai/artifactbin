@@ -28,16 +28,19 @@ describe('Dashboard', () => {
       />,
     );
 
+    const heading = screen.getByRole('heading', { name: 'Dashboard' });
+    expect(heading.querySelector('svg')).toBeTruthy();
+    expect(screen.queryByText('Your artifacts')).toBeNull();
     const metrics = within(screen.getByLabelText('Dashboard metrics'));
     const valueFor = (label: string) => metrics.getByText(label).closest('dt')?.nextElementSibling;
     expect(valueFor('artifacts')).toHaveTextContent('1');
-    expect(valueFor('data files')).toHaveTextContent('2');
+    expect(valueFor('assets')).toHaveTextContent('2');
     expect(valueFor('views')).toHaveTextContent('1.2k');
     expect(valueFor('views')).toHaveAttribute('title', '1,267 views');
     expect(valueFor('likes')).toHaveTextContent('3');
     expect(valueFor('followers')).toHaveTextContent('4');
     expect(valueFor('forks')).toHaveTextContent('5');
-    for (const label of ['artifacts', 'data files', 'views', 'likes', 'followers', 'forks']) {
+    for (const label of ['artifacts', 'assets', 'views', 'likes', 'followers', 'forks']) {
       expect(metrics.getByText(label).closest('dt')?.querySelector('svg')).toBeTruthy();
     }
 

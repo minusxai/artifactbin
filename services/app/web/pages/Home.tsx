@@ -28,7 +28,7 @@ type Home =
       feed?: { mine: FeedItem[]; following: FeedItem[] };
     };
 
-const HOME_WORKSPACE_COLUMN = 'mx-auto max-w-6xl px-4 sm:px-6';
+const HOME_WORKSPACE_COLUMN = 'mx-auto max-w-[80rem] px-4 sm:px-6';
 
 /**
  * THE EMPTY LIBRARY IS THE ONLY PAGE THAT SAYS WHAT TO DO FIRST.
@@ -118,7 +118,7 @@ export function HomePage() {
           <UseCarousel label="Inspiration Zone" wheel={false} />
         </div>
       ) : (
-        <div aria-label="Home workspace" className="grid gap-y-3 lg:grid-cols-[minmax(0,1fr)_15rem] lg:gap-x-10 lg:gap-y-0 xl:grid-cols-[minmax(0,1fr)_16rem]">
+        <div aria-label="Home workspace" className="grid gap-y-3 lg:grid-cols-[minmax(0,1fr)_16rem] lg:gap-x-10 lg:gap-y-0 xl:grid-cols-[minmax(0,1fr)_18rem]">
           <div className="lg:col-start-2 lg:row-start-1 lg:pl-6">
             <WorkspaceCreate onCreated={load} />
           </div>
@@ -127,41 +127,46 @@ export function HomePage() {
             <SharedWithYou items={home.shared} />
           </div>
           <aside aria-label="Dashboard rail" className="min-w-0 border-t border-edge pt-6 lg:col-start-2 lg:row-start-1 lg:border-t-0 lg:border-l lg:pt-20 lg:pl-6">
-            <Dashboard
-              rows={home.artifacts as never}
-              viewsOverTime={home.viewsOverTime}
-              likes={home.likes}
-              likesOverTime={home.likesOverTime}
-              followers={home.followers}
-              forks={home.forks}
-            />
+            <div className="lg:sticky lg:top-6">
+              <Dashboard
+                rows={home.artifacts as never}
+                viewsOverTime={home.viewsOverTime}
+                likes={home.likes}
+                likesOverTime={home.likesOverTime}
+                followers={home.followers}
+                forks={home.forks}
+              />
+              <ActivityFeed compact mine={home.feed?.mine ?? []} following={home.feed?.following ?? []} />
+              <p className="mt-8">
+                <a
+                  href="/trash"
+                  aria-label="Trash"
+                  className="font-mono text-[10px] text-faint no-underline transition-colors hover:text-accent"
+                >
+                  trash
+                </a>
+              </p>
+            </div>
           </aside>
         </div>
       )}
-      {/* AFTER the shelves, and OUTSIDE the empty/full branch: an account that
-        * owns nothing yet may already follow people, and hiding the one thing
-        * on its dashboard that has anything in it would be the wrong half of
-        * the flip. The section renders nothing at all when both lists are
-        * empty, so the bare library still reads as bare. `feed` is optional on
-        * the wire because a page served from an older bootstrap has none. */}
-      <ActivityFeed mine={home.feed?.mine ?? []} following={home.feed?.following ?? []} />
-      {/* THE ONE WAY BACK. Deleting is a trash now (lib/trash): a row is
-        * recoverable for good, which is worth nothing if nothing on the
-        * product leads to it. One quiet link at the foot of the account's own
-        * page — an anonymous browser has no trash to reach. It sits BELOW the
-        * activity section rather than between it and the shelves, where a bare
-        * link reads as that section's own heading; and OUTSIDE the empty/full
-        * flip on purpose, since an emptied library is exactly when someone is
-        * looking for what they just deleted. */}
-      <p className="mt-8">
-        <a
-          href="/trash"
-          aria-label="Trash"
-          className="font-mono text-[10px] text-faint no-underline transition-colors hover:text-accent"
-        >
-          trash
-        </a>
-      </p>
+      {/* A bare account has no right rail, but it may already follow people
+        * and it may have just emptied itself into Trash. Keep both recovery
+        * surfaces reachable until the workspace—and its rail—exists. */}
+      {empty && (
+        <>
+          <ActivityFeed mine={home.feed?.mine ?? []} following={home.feed?.following ?? []} />
+          <p className="mt-8">
+            <a
+              href="/trash"
+              aria-label="Trash"
+              className="font-mono text-[10px] text-faint no-underline transition-colors hover:text-accent"
+            >
+              trash
+            </a>
+          </p>
+        </>
+      )}
     </main>
   );
 }

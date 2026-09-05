@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Activity, Database, Eye, FileText, GitFork, Heart, Maximize2, Users, X, type LucideIcon } from 'lucide-react';
+import { Activity, Database, Eye, FileText, GitFork, Heart, LayoutDashboard, Maximize2, Users, X, type LucideIcon } from 'lucide-react';
 import dynamic from '@/lib/dynamic';
 import { Tooltip } from '@/components/Tooltip';
-import { MicroLabel } from '@/components/ui';
 import type { ShelfRow } from '@/components/Shelf';
 import type { VegaChartProps } from '@/components/viz/VegaChart';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
@@ -195,7 +194,7 @@ export function DashboardContent({
 
   const metrics: ReadonlyArray<{ label: string; value: number; Icon: LucideIcon }> = [
     { label: 'artifacts', value: documents.length, Icon: FileText },
-    { label: 'data files', value: dataFiles, Icon: Database },
+    { label: 'assets', value: dataFiles, Icon: Database },
     { label: 'views', value: totalViews, Icon: Eye },
     { label: 'likes', value: likes, Icon: Heart },
     { label: 'followers', value: followers, Icon: Users },
@@ -203,24 +202,24 @@ export function DashboardContent({
   ];
 
   return (
-    <section aria-label={expanded ? 'Expanded dashboard content' : 'Dashboard'} className={`min-w-0 ${expanded ? '' : 'reveal lg:sticky lg:top-6'}`}>
-      <div className={`mb-4 flex items-baseline justify-between gap-3 border-b border-edge pb-3 ${expanded ? 'pr-12' : ''}`}>
-        <MicroLabel>dashboard</MicroLabel>
-        <span className="flex items-center gap-2">
-          <h1 className={`${expanded ? 'font-mono text-sm text-fg' : 'text-[11px] text-muted'} font-medium tracking-tight`}>Your artifacts</h1>
-          {onExpand && (
-            <Tooltip content="open dashboard">
-              <button
-                type="button"
-                aria-label="Expand dashboard"
-                onClick={onExpand}
-                className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[4px] text-faint transition-colors hover:bg-raised hover:text-accent"
-              >
-                <Maximize2 aria-hidden="true" size={13} strokeWidth={1.7} />
-              </button>
-            </Tooltip>
-          )}
-        </span>
+    <section aria-label={expanded ? 'Expanded dashboard content' : 'Dashboard'} className={`min-w-0 ${expanded ? '' : 'reveal'}`}>
+      <div className={`mb-4 flex items-center justify-between gap-3 border-b border-edge pb-3 ${expanded ? 'pr-12' : ''}`}>
+        <h1 className={`flex items-center gap-1.5 font-mono font-semibold text-fg ${expanded ? 'text-sm' : 'text-xs'}`}>
+          <LayoutDashboard aria-hidden="true" className="size-3 stroke-[1.8] text-accent" />
+          Dashboard
+        </h1>
+        {onExpand && (
+          <Tooltip content="open dashboard">
+            <button
+              type="button"
+              aria-label="Expand dashboard"
+              onClick={onExpand}
+              className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[4px] text-faint transition-colors hover:bg-raised hover:text-accent"
+            >
+              <Maximize2 aria-hidden="true" size={13} strokeWidth={1.7} />
+            </button>
+          </Tooltip>
+        )}
       </div>
 
       <dl

@@ -57,7 +57,7 @@ describe('the homepage workspace and profile column', () => {
     profile = { kind: 'public-profile', handle: 'cee', files: [profileDoc('a')], email: 'c@x.io', authed: true, anon: false };
 
     const dash = render(<MemoryRouter><HomePage /></MemoryRouter>);
-    await waitFor(() => expect(mainWidth(dash.container)).toBe('max-w-6xl'));
+    await waitFor(() => expect(mainWidth(dash.container)).toBe('max-w-[80rem]'));
     expect(screen.getByLabelText('Home workspace')).toBeInTheDocument();
     expect(screen.getByLabelText('Dashboard rail')).toBeInTheDocument();
     cleanup();
@@ -99,6 +99,10 @@ describe('what the dashboard leads with', () => {
       followers: 4,
       forks: 2,
       shared: [],
+      feed: {
+        mine: [{ id: 'evt_1', at: new Date().toISOString(), verb: 'viewed', subject: { kind: 'user', id: 'usr_c', handle: 'cee' }, object: { kind: 'artifact', id: 'a', title: 'Doc a' }, payload: {} }],
+        following: [],
+      },
     };
     render(<MemoryRouter><HomePage /></MemoryRouter>);
     await waitFor(() => expect(screen.getByLabelText('Open Doc a')).toBeInTheDocument());
@@ -107,12 +111,13 @@ describe('what the dashboard leads with', () => {
     const metrics = within(screen.getByLabelText('Dashboard metrics'));
     const valueFor = (label: string) => metrics.getByText(label).closest('dt')?.nextElementSibling;
     expect(valueFor('artifacts')).toHaveTextContent('1');
-    expect(valueFor('data files')).toHaveTextContent('1');
+    expect(valueFor('assets')).toHaveTextContent('1');
     expect(valueFor('views')).toHaveTextContent('7');
     expect(valueFor('likes')).toHaveTextContent('3');
     expect(valueFor('followers')).toHaveTextContent('4');
     expect(valueFor('forks')).toHaveTextContent('2');
-    expect(dashboard).toHaveTextContent('Your artifacts');
+    expect(within(dashboard).getByRole('heading', { name: 'Dashboard' }).querySelector('svg')).toBeTruthy();
+    expect(dashboard).not.toHaveTextContent('Your artifacts');
     expect(dashboard).not.toHaveTextContent('Your posts');
     expect(dashboard).not.toHaveTextContent('all time');
     expect(dashboard).toHaveTextContent('Engagement over time');
@@ -121,6 +126,10 @@ describe('what the dashboard leads with', () => {
     expect(dashboard).not.toHaveTextContent('Views by post');
     expect(shelf.compareDocumentPosition(dashboard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByLabelText('Dashboard rail')).toContainElement(dashboard);
+    const activity = screen.getByLabelText('Activity');
+    expect(screen.getByLabelText('Dashboard rail')).toContainElement(activity);
+    expect(activity).toHaveAttribute('data-layout', 'rail');
+    expect(dashboard.compareDocumentPosition(activity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const create = screen.getByLabelText('Create');
     expect(screen.getAllByLabelText('Create')).toHaveLength(1);
     expect(create.compareDocumentPosition(shelf) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
