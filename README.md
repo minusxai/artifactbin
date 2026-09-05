@@ -34,7 +34,7 @@ run with `--help` for every option):
 curl -fsSL https://artifactbin.dev/install.sh | bash -s -- --dir="$HOME/artifactbin" --port=3030
 ```
 
-Verify with `curl -fsS http://localhost:3030/health`. Follow logs with
+Verify with `curl -fsS http://localhost:3030/health` — that process's own liveness; `/api/health` answers whether the whole stack is ready (see [operations](docs/operations.md)). Follow logs with
 `docker logs -f artifactbin`; stop it with `docker stop artifactbin`. Re-running
 the installer upgrades the fixed `artifactbin` container and keeps the target's
 `.env` and `data/`. Apple Silicon currently runs the `linux/amd64` image, so its
