@@ -9,6 +9,7 @@ import { useLocation, useParams } from 'react-router';
 import ArtifactShell from '@/components/ArtifactShell';
 import ArtifactSurface from '@/components/ArtifactSurface';
 import type { AccountWorkspace } from '@/lib/workspace';
+import { ShellFrame } from '@/web/Shell';
 import { FolderPage } from './Folder';
 import { NotFoundPage } from './NotFound';
 
@@ -47,9 +48,13 @@ export function ArtifactPage({ id: given }: { id?: string } = {}) {
   }, [page, search]);
   if (page === null) return <div aria-label="Loading page" />;
   if (page === 'missing') return <NotFoundPage />;
-  // A folder is a listing, not a document: no shell (its chrome is the shelf's
-  // own) and no surface (there is nothing to frame).
-  if (page.folder) return <FolderPage folder={page.folder} role={page.role} workspace={page.workspace} />;
+  // A folder is a listing, not a document: no ArtifactShell and no surface
+  // (there is nothing to frame). An account-owned folder does get the normal
+  // PAGE frame so its masthead and controls remain identical to Home.
+  if (page.folder) {
+    const folder = <FolderPage folder={page.folder} role={page.role} workspace={page.workspace} />;
+    return page.workspace ? <ShellFrame>{folder}</ShellFrame> : folder;
+  }
   return (
     <ArtifactShell role={page.role}>
       {/* The reader's `<Value>` selection travels in this page's own query

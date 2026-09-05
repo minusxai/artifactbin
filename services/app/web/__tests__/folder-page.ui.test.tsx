@@ -16,6 +16,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
+import { ShellFrame } from '@/web/Shell';
 import { FolderPage } from '@/web/pages/Folder';
 import type { AccountWorkspace } from '@/lib/workspace';
 
@@ -173,6 +174,20 @@ describe('the shelf below the hairline', () => {
     expect(screen.queryByLabelText('New folder')).not.toBeInTheDocument();
     const metrics = within(screen.getByLabelText('Dashboard metrics'));
     expect(metrics.getByText('artifacts').closest('dt')?.nextElementSibling).toHaveTextContent('3');
+  });
+
+  it('fits inside the exact Home chrome when the artifact route identifies an owned workspace', () => {
+    render(
+      <MemoryRouter>
+        <ShellFrame>
+          <FolderPage folder={folder()} role="owner" workspace={accountWorkspace()} />
+        </ShellFrame>
+      </MemoryRouter>,
+    );
+    expect(screen.getByLabelText('artifactbin home')).toBeInTheDocument();
+    expect(screen.getByLabelText('Open menu')).toBeInTheDocument();
+    expect(screen.getByLabelText('Open page controls')).toBeInTheDocument();
+    expect(screen.getByLabelText('Folder workspace')).toBeInTheDocument();
   });
 
   it('gives a stranger the documents and no verbs at all', () => {
