@@ -1,7 +1,7 @@
 ---
 name: publishing-versions
 description: >-
-  Version history, revert, delete, PNG export. Read to undo an edit, remove an artifact or hand over an image.
+  Version history, revert, delete/restore, PNG export. Read to undo an edit, remove one or hand over an image.
 order: 4
 ---
 ## Read first
@@ -21,17 +21,33 @@ missing/non-integer `version` is `400 version_required`; a checkpoint that was
 never archived (save-less edits coalesce) is `409 version_not_archived` — the
 list above shows the real ones.
 
-## Delete an artifact
+## Delete an artifact (it goes to the trash)
 
 ```
-DELETE [[ base ]]/api/artifacts/<id>
-→ 200 { "ok": true }
+DELETE [[ base ]]/api/artifacts/<id>          → 200 { "ok": true }
+POST   [[ base ]]/api/artifacts/<id>/restore  → 200 { "id", "url", "parent_id" }
 ```
 
-Permanent: the public link dies and version history is erased. Confirm with
-your user before deleting anything they shared. An artifact other documents
-reference (an image, a dataset) answers `409 has_dependents`; re-send with
-`?force=true` to break them knowingly.
+The link stops working at once, and the artifact is restorable with no deadline.
+A FOLDER takes everything under it, and restore brings the whole subtree back —
+if the folder it lived in is itself still deleted, it comes back at your root
+and the answer says so. Confirm with your user before deleting anything they
+shared. An artifact other documents reference (an image, a dataset) answers
+`409 has_dependents`; re-send with `?force=true` to break them knowingly.
+
+**Nothing here is ever erased.** A delete withdraws the link and nothing more:
+the row, its version history, its comments and its stored bytes are kept, and
+`restore_artifact` works a year later exactly as it does a minute later. Two
+things follow, and your user should hear both from you rather than discover
+them. A deleted artifact **still counts against your quota** — deleting does not
+free you to publish another one. And really destroying something, for a legal
+request or anything like it, is **an administrative act on the database, outside
+this API**; do not promise your user that a delete does it.
+
+One more limit worth knowing: the 6-level depth cap counts only what is LIVE, so
+a restore can land a row deeper than the 6-level cap if the folders above it
+grew while it was gone; the row is fine where it lands, and the next MOVE is
+what refuses.
 
 ## Screenshot / export as an image (curlable; readable = exportable)
 

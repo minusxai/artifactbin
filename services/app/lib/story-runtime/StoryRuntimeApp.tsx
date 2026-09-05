@@ -41,6 +41,7 @@ import { EMPTY_DATAFLOW, coerceScalarInput, refName, resolveRefTemplate, type Da
 import { isWebUrl, runtimeAssetUrl } from '@/lib/story/asset-url';
 import { Button } from '@/components/kit/button';
 import { DataTable } from '@/components/kit/data-table';
+import { Files } from '@/components/kit/files';
 import { GridItemContext } from '@/components/kit/grid';
 import { DateControl, SegmentedControl, SelectControl, SliderControl, SwitchControl, normalizeControlOptions, num, shellRest, str } from '@/components/kit/controls';
 import { parseColumnSpecs, parseSortSpec, parseTableHeight, type SortSpec } from '@/lib/story/data-table';
@@ -68,6 +69,14 @@ interface RuntimeEmbedContextValue {
   /** A window of one query's rows through the transport (a table reading past the cap). */
   fetchPage: DataflowStore['fetchPage'];
   refData: RefDataMap;
+  /**
+   * FALSE inside a `chrome=0` capture. An embed that must draw differently for
+   * a photograph reads it here rather than being told by the author: `<Files>`
+   * draws glyphs instead of every child's own og card, because a capture that
+   * waits on N captures is not a capture (and a private child's is a 404 to the
+   * session-less browser taking the shot).
+   */
+  chrome: boolean;
   glyphs?: GlyphMap;
   colorMode: 'light' | 'dark';
 }
@@ -80,6 +89,7 @@ const RuntimeEmbedContext = createContext<RuntimeEmbedContextValue>({
   setValue: () => {},
   fetchPage: () => Promise.reject(new Error('no store')),
   refData: {},
+  chrome: true,
   glyphs: {},
   colorMode: 'light',
 });
@@ -567,8 +577,29 @@ function DataTableAdapter(props: Record<string, unknown>) {
   );
 }
 
+/**
+ * `<Files data="$children">` — a folder's listing, live. The rows are the
+ * store's, exactly like every other bound embed: a folder's own <Query> runs
+ * through the transport its island already names, so the listing follows a
+ * child being created or moved with no reload (lib/folders notifyParent wakes
+ * the folder's own channel, and the store re-runs the query the ping dirties).
+ */
+function FilesAdapter(props: Record<string, unknown>) {
+  const ctx = useContext(RuntimeEmbedContext);
+  const name = refName(props.data);
+  const table = name ? ctx.state.tables[name] : undefined;
+  return (
+    <Files
+      rows={table?.rows}
+      variant={typeof props.variant === 'string' ? props.variant : undefined}
+      capture={!ctx.chrome}
+    />
+  );
+}
+
 const RUNTIME_REGISTRY: Record<string, ComponentType<Record<string, unknown>>> = {
   ...STORY_UI_COMPONENTS,
+  Files: FilesAdapter,
   Question: QuestionAdapter,
   Number: NumberAdapter,
   DataTable: DataTableAdapter,
@@ -927,7 +958,7 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, t
 
   const body = (
     <RuntimeAssetContext.Provider value={assets}>
-      <RuntimeEmbedContext.Provider value={{ store, flow: store.flow, state, pending, setValue, fetchPage: store.fetchPage, refData, colorMode }}>
+      <RuntimeEmbedContext.Provider value={{ store, flow: store.flow, state, pending, setValue, fetchPage: store.fetchPage, refData, chrome, colorMode }}>
         {renderStoryNodes(nodes, {
           // Identity across an adopted document: a live update re-renders this
           // tree, and positional keys would remount everything below the edit.

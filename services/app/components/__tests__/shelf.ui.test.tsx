@@ -229,17 +229,32 @@ describe('Shelf — every tier carries its actions and its time', () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body));
       patches.push({ url, body });
-      return new Response(JSON.stringify({ folder: body.folder }), { status: 200 });
+      return new Response(JSON.stringify({ parent_id: body.parent_id }), { status: 200 });
     }));
-    render(<Shelf rows={[doc('a', 28), doc('b', 27, { folder: 'drafts' })]} actions="full" />);
+    /*
+     * Placement is an ID on the wire — two sibling folders may share a name, so
+     * a path was ambiguous by construction — but the PERSON picks a folder by
+     * name, from the account's own tree. The shelf's folder rows ARE that tree,
+     * which is why the picker needs nothing fetched.
+     */
+    render(
+      <Shelf
+        actions="full"
+        rows={[
+          doc('a', 28),
+          doc('b', 27, { parent_id: 'dR4fts' }),
+          { ...doc('dR4fts', 26), title: 'Drafts', format: 'folder' },
+          { ...doc('Ar4Ch1', 25), title: 'Archive', format: 'folder' },
+        ]}
+      />,
+    );
     fireEvent.click(screen.getByLabelText('More actions for Doc b'));
     fireEvent.click(screen.getByLabelText('Move Doc b'));
-    const input = screen.getByLabelText('Folder path') as HTMLInputElement;
-    expect(input.value).toBe('drafts');
-    fireEvent.change(input, { target: { value: 'archive/2026' } });
-    fireEvent.click(screen.getByLabelText('Save folder'));
+    // It opens on where the row sits today.
+    expect(screen.getByLabelText('Move to Drafts').getAttribute('aria-current')).toBe('location');
+    fireEvent.click(screen.getByLabelText('Move to Archive'));
     await waitFor(() => expect(patches).toEqual([
-      { url: '/api/my/artifacts/b', body: { folder: 'archive/2026' } },
+      { url: '/api/my/artifacts/b', body: { parent_id: 'Ar4Ch1' } },
     ]));
   });
 

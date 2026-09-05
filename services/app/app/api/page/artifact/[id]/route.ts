@@ -41,6 +41,11 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     cssCompileVersion?: string | null;
   };
   const design = resolveStoredStoryDesign(meta.theme, meta.colorMode);
+  // A FOLDER is a markup document whose source we wrote (lib/folders
+  // folderScaffold), so every branch below that asks "is this a document?"
+  // must admit it — otherwise the page gets a folder with no sheet, no
+  // declarations and no comment count, which is a document that renders blank.
+  const isDoc = artifact.format === 'markup' || artifact.format === 'folder';
   const role = await roleFor(artifact, actor);
   const kind = await browserSessionKind(request);
   // The heart renders from THIS answer: asking a second door for it would
@@ -60,12 +65,12 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       format: artifact.format,
       title: artifact.title,
       source: artifact.source,
-      content: artifact.format === 'markup' ? '' : artifact.format === 'dataset' ? JSON.stringify(await loadDatasetRows(artifact)) : artifact.content,
+      content: isDoc ? '' : artifact.format === 'dataset' ? JSON.stringify(await loadDatasetRows(artifact)) : artifact.content,
       columns: meta.columns ?? [],
       // A stored FILE is not a document the app can render, so its view is the
       // two facts a person picks a file by plus the link that opens it.
       ...(artifact.format === 'pdf' ? { bytes: (meta as { bytes?: number }).bytes ?? 0, pages: (meta as { pages?: number }).pages ?? null } : {}),
-      compiledCss: artifact.format === 'markup' ? await currentStoryCss(meta, artifact.source) : meta.compiledCss ?? null,
+      compiledCss: isDoc ? await currentStoryCss(meta, artifact.source) : meta.compiledCss ?? null,
       theme: design.theme,
       colorMode: design.colorMode,
       template: meta.template ?? null,
@@ -74,7 +79,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // seed the editor, and the editor runs a draft's queries itself — so
       // running them here only held the owner's own page behind the SQL, with
       // the results inlined into its HTML (withBootstrap).
-      dataflow: artifact.format === 'markup' && artifact.source ? declarationsForRow(artifact) : null,
+      dataflow: isDoc && artifact.source ? declarationsForRow(artifact) : null,
       accountSession: kind === 'account',
       anonSession: kind === 'anon',
       preview: previewFrom(search),
@@ -82,7 +87,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // Anyone who may COMMENT has a comment badge to fill: computing this
       // for the owner alone left an editor's and a commenter's count at 0
       // forever, on a control they were being shown.
-      openAnnotations: canAnnotate(role) && artifact.format === 'markup' ? await countOpenAnnotations(artifact.id) : 0,
+      openAnnotations: canAnnotate(role) && isDoc ? await countOpenAnnotations(artifact.id) : 0,
     },
   }, 200, { 'Cache-Control': 'no-store' });
 }

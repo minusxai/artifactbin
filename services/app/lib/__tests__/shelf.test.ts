@@ -51,10 +51,26 @@ describe('buildShelf — assets are never peers', () => {
   });
 });
 
+describe('buildShelf — the folder partition', () => {
+  it('files folders on their own, never among the assets and never among the documents', () => {
+    const shelf = buildShelf([
+      { id: 'f1', format: 'folder', updated_at: '2026-01-03T00:00:00Z' },
+      { id: 'd1', format: 'markup', updated_at: '2026-01-02T00:00:00Z' },
+      { id: 'a1', format: 'dataset', updated_at: '2026-01-01T00:00:00Z' },
+    ]);
+    expect(ids(shelf.folders)).toEqual(['f1']);
+    expect(ids(shelf.assets)).toEqual(['a1']);
+    expect(shelf.hero?.id).toBe('d1');
+    // A folder is where deliverables ARE, not one of them: making one must
+    // never change what the shelf says you have.
+    expect(shelf.total).toBe(1);
+  });
+});
+
 describe('buildShelf — tiers', () => {
   it('is empty all the way down for no rows', () => {
     const shelf = buildShelf([]);
-    expect(shelf).toEqual({ hero: null, cards: [], list: [], assets: [], total: 0 });
+    expect(shelf).toEqual({ hero: null, cards: [], list: [], assets: [], folders: [], total: 0 });
   });
 
   it('one document is a hero and nothing else', () => {

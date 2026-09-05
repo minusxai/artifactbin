@@ -115,7 +115,7 @@ export function createOAuthStore(db: Queryable, schema = 'auth', appSchema?: str
     },
     async client(clientId) {
       const row = (await db.query<{ id: string; metadata: Record<string, unknown> | string }>(
-        `SELECT id, metadata FROM ${clients} WHERE id = $1 AND revoked_at IS NULL`,
+        `SELECT id, metadata FROM ${clients} WHERE id = $1 AND deleted_at IS NULL`,
         [clientId],
       )).rows[0];
       if (!row) return null;
@@ -138,7 +138,7 @@ export function createOAuthStore(db: Queryable, schema = 'auth', appSchema?: str
     async consumeAuthorizationCode(input, now = Date.now()) {
       const row = (await db.query<{ subject_id: string | null; payload: Record<string, unknown> | string }>(
         `UPDATE ${credentials} SET consumed_at = $3
-          WHERE kind = $1 AND credential_hash = $2 AND consumed_at IS NULL AND revoked_at IS NULL AND expires_at > $3
+          WHERE kind = $1 AND credential_hash = $2 AND consumed_at IS NULL AND deleted_at IS NULL AND expires_at > $3
         RETURNING subject_id, payload`,
         [AUTHORIZATION_CODE, hash(input.code), new Date(now).toISOString()],
       )).rows[0];
@@ -170,8 +170,8 @@ export function createOAuthStore(db: Queryable, schema = 'auth', appSchema?: str
               SET consumed_at = now()
             WHERE current.kind = $1 AND current.credential_hash = $2
               AND current.payload->>'client_id' = $3 AND current.payload->>'resource' = $4
-              AND current.consumed_at IS NULL AND current.revoked_at IS NULL AND current.expires_at > now()
-              AND EXISTS (SELECT 1 FROM ${accessTokens} access WHERE access.id = current.payload->>'access_token_id' AND access.revoked_at IS NULL)
+              AND current.consumed_at IS NULL AND current.deleted_at IS NULL AND current.expires_at > now()
+              AND EXISTS (SELECT 1 FROM ${accessTokens} access WHERE access.id = current.payload->>'access_token_id' AND access.deleted_at IS NULL)
           RETURNING current.subject_id, current.group_id, current.payload
          ), inserted AS (
            INSERT INTO ${credentials} (kind, credential_hash, subject_id, group_id, payload, expires_at)
@@ -182,11 +182,11 @@ export function createOAuthStore(db: Queryable, schema = 'auth', appSchema?: str
       )).rows[0];
       if (!row) {
         await db.query(
-          `UPDATE ${credentials} SET revoked_at = now()
+          `UPDATE ${credentials} SET deleted_at = now()
             WHERE kind = $1 AND group_id = (
               SELECT group_id FROM ${credentials}
                WHERE kind = $1 AND credential_hash = $2 AND payload->>'client_id' = $3 LIMIT 1
-            ) AND revoked_at IS NULL`,
+            ) AND deleted_at IS NULL`,
           [REFRESH_TOKEN, oldHash, clientId],
         );
         return null;
@@ -198,7 +198,7 @@ export function createOAuthStore(db: Queryable, schema = 'auth', appSchema?: str
     async bindRefresh(token, accessTokenId) {
       await db.query(
         `UPDATE ${credentials} SET payload = payload || $3::jsonb
-          WHERE kind = $1 AND credential_hash = $2 AND consumed_at IS NULL AND revoked_at IS NULL`,
+          WHERE kind = $1 AND credential_hash = $2 AND consumed_at IS NULL AND deleted_at IS NULL`,
         [REFRESH_TOKEN, hash(token), JSON.stringify({ access_token_id: accessTokenId })],
       );
     },

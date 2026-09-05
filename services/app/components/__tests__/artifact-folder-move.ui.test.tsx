@@ -1,8 +1,15 @@
 /**
  * Folder moves from the dashboard: a manage-mode row tucks "Move" and
  * "Delete" behind a "…" overflow menu (share and edit stay one click).
- * Move PATCHes { folder } (metadata-only — never the content PUT) and
- * reflects the new path in place. Non-manage rows get no menu at all.
+ * Move PATCHes `{ parent_id }` — the ID of a folder artifact, metadata-only,
+ * never the content PUT — and reflects the new placement in place. Non-manage
+ * rows get no menu at all.
+ *
+ * P2 replaced the id FIELD with the picker (components/FolderPicker): the row
+ * chooses from the account's own folders, with the moved folder's own subtree
+ * greyed out. The WIRE is unchanged and is what this asserts — including the
+ * distinction the field existed to make, that the ROOT is `null` and never an
+ * absent key, which the picker keeps by offering root as a row of its own.
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,10 +21,17 @@ const ROW = {
   title: 'Eating Healthy',
   format: 'markup',
   version: 3,
-  folder: '2026/08',
+  parent_id: 'f0Ld3r',
+  ancestor_ids: ['f0Ld3r'],
   visibility: 'private' as const,
   updated_at: new Date().toISOString(),
 };
+
+/** The account's folders, as the dashboard hands them down. */
+const FOLDERS = [
+  { id: 'f0Ld3r', title: 'Reports', ancestor_ids: [] },
+  { id: 'Ar4Ch1', title: 'Archive', ancestor_ids: [] },
+];
 
 const patches: Array<{ url: string; body: unknown }> = [];
 
@@ -27,7 +41,7 @@ beforeEach(() => {
     if (init?.method === 'PATCH') {
       const body = JSON.parse(String(init.body));
       patches.push({ url, body });
-      return new Response(JSON.stringify({ id: ROW.id, folder: body.folder }), { status: 200 });
+      return new Response(JSON.stringify({ id: ROW.id, parent_id: body.parent_id }), { status: 200 });
     }
     return new Response('{}', { status: 404 });
   }));
@@ -57,24 +71,47 @@ describe('ArtifactTable folder moves', () => {
     expect(screen.queryByLabelText('Delete Eating Healthy')).toBeNull();
   });
 
-  it('shows the folder and moves the file via PATCH', async () => {
-    render(<ArtifactTable manage artifacts={[ROW]} />);
-    expect(screen.getByText('2026/08')).toBeTruthy();
+  it('shows where the row sits and moves it via PATCH { parent_id }', async () => {
+    render(<ArtifactTable manage artifacts={[ROW]} folders={FOLDERS} />);
+    // The row says where it sits by NAME — an id was never something a person holds.
+    expect(screen.getByText('Reports')).toBeTruthy();
 
     fireEvent.click(screen.getByLabelText('More actions for Eating Healthy'));
     fireEvent.click(screen.getByLabelText('Move Eating Healthy'));
     // Picking an action closes the menu.
     expect(screen.queryByLabelText('Delete Eating Healthy')).toBeNull();
-    const input = screen.getByLabelText('Folder path') as HTMLInputElement;
-    expect(input.value).toBe('2026/08');
+    // The picker opens on the row's current location.
+    expect(screen.getByLabelText('Move to Reports').getAttribute('aria-current')).toBe('location');
 
-    fireEvent.change(input, { target: { value: 'archive/2026' } });
-    fireEvent.click(screen.getByLabelText('Save folder'));
+    fireEvent.click(screen.getByLabelText('Move to Archive'));
 
     await waitFor(() => expect(patches).toEqual([
-      { url: '/api/my/artifacts/Ab3xK9', body: { folder: 'archive/2026' } },
+      { url: '/api/my/artifacts/Ab3xK9', body: { parent_id: 'Ar4Ch1' } },
     ]));
-    await waitFor(() => expect(screen.getByText('archive/2026')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Archive')).toBeTruthy());
+  });
+
+  it('the ROOT is its own row, and the wire spells it null — never an absent field', async () => {
+    render(<ArtifactTable manage artifacts={[ROW]} folders={FOLDERS} />);
+    fireEvent.click(screen.getByLabelText('More actions for Eating Healthy'));
+    fireEvent.click(screen.getByLabelText('Move Eating Healthy'));
+    fireEvent.click(screen.getByLabelText('Move to root'));
+    // Absent would mean "leave it where it is"; null means "the root". The two
+    // must stay distinguishable on the wire.
+    await waitFor(() => expect(patches).toEqual([
+      { url: '/api/my/artifacts/Ab3xK9', body: { parent_id: null } },
+    ]));
+  });
+
+  it('greys out the moved FOLDER and everything under it — the cycle rule, drawn', () => {
+    const folder = { ...ROW, id: 'f0Ld3r', title: 'Reports', format: 'folder', parent_id: null, ancestor_ids: [] };
+    const nested = [...FOLDERS, { id: 'y2026x', title: '2026', ancestor_ids: ['f0Ld3r'] }];
+    render(<ArtifactTable manage artifacts={[folder]} folders={nested} />);
+    fireEvent.click(screen.getByLabelText('More actions for Reports'));
+    fireEvent.click(screen.getByLabelText('Move Reports'));
+    expect((screen.getByLabelText('Move to Reports') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByLabelText('Move to 2026') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByLabelText('Move to Archive') as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('says who can read every row — public AND private are both marked', () => {

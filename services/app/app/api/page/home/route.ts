@@ -35,7 +35,16 @@ export async function GET(request: Request) {
     }, 200, { 'Cache-Control': 'no-store' });
   }
   const artifacts = await listArtifactsByUser(user.userId);
-  const shared = user.email ? await listSharedWithEmail(user.email, user.userId) : [];
+  /*
+   * PLACEMENT is the owner's business, and the shared half is somebody else's
+   * row: `listSharedWithEmail` selects the summary columns, so `ancestor_ids`
+   * would hand every invited person the ids of the folders on their inviter's
+   * shelf — addresses they meet the uniform 404 at. The same projection rule
+   * the public profile follows. The viewer's OWN artifacts keep it below,
+   * because that is what draws their shelf.
+   */
+  const shared = (user.email ? await listSharedWithEmail(user.email, user.userId) : [])
+    .map(({ ancestor_ids: _placement, ...row }) => row);
   const series = artifacts.length ? await viewSeriesByUser(user.userId) : new Map<string, number[]>();
   const sparklines: Record<string, string> = {};
   for (const a of artifacts) {
@@ -50,7 +59,7 @@ export async function GET(request: Request) {
     signedIn: true,
     feed: { mine, following },
     artifacts: artifacts.map((a) => ({
-      id: a.id, url: `/a/${a.id}`, title: a.title, format: a.format, version: a.version, folder: a.folder,
+      id: a.id, url: `/a/${a.id}`, title: a.title, format: a.format, version: a.version, ancestor_ids: a.ancestor_ids,
       visibility: a.visibility, updated_at: a.updated_at, views: a.views, sparkline: sparklines[a.id] ?? null,
     })),
     shared,

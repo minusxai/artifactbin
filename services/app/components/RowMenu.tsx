@@ -24,6 +24,13 @@ export interface RowMenuItem {
   icon: React.ReactNode;
   onSelect: () => void;
   danger?: boolean;
+  /**
+   * OFFERED BUT REFUSED. A row that simply drops the item leaves the person
+   * wondering where it went; one that is visibly unavailable says what the
+   * rule is — which is why the caller puts the reason in `text`
+   * ("delete (12 inside)").
+   */
+  disabled?: boolean;
 }
 
 const ICON_ACTION =
@@ -71,7 +78,8 @@ export default function RowMenu({ name, items }: { name: string; items: RowMenuI
               key={item.label}
               type="button"
               aria-label={item.label}
-              className={`flex w-full cursor-pointer items-center gap-2 rounded-[4px] px-2 py-1 text-left text-muted hover:bg-raised ${item.danger ? 'hover:text-danger' : 'hover:text-fg'}`}
+              disabled={item.disabled}
+              className={`flex w-full items-center gap-2 rounded-[4px] px-2 py-1 text-left text-muted disabled:cursor-not-allowed disabled:text-faint disabled:hover:bg-transparent enabled:cursor-pointer enabled:hover:bg-raised ${item.danger ? 'enabled:hover:text-danger' : 'enabled:hover:text-fg'}`}
               onClick={() => {
                 setOpen(false);
                 item.onSelect();
@@ -87,12 +95,23 @@ export default function RowMenu({ name, items }: { name: string; items: RowMenuI
 }
 
 /**
- * Deleting an artifact, with the confirmation the act deserves — the link dies
- * and the history goes with it. Shared so the two menus cannot drift into
- * warning about different things.
+ * Deleting an artifact, with the confirmation the act deserves. Shared so the
+ * two menus cannot drift into warning about different things.
+ *
+ * A FOLDER NAMES WHAT GOES WITH IT. Deleting one is deleting everything under
+ * it — one statement, since placement is `ancestor_ids` (lib/trash) — so the
+ * count belongs in the sentence the person answers, not in a refusal they have
+ * to work around. It says the trash and the undo too, because what makes
+ * taking a folder full of documents an ordinary act rather than a cliff is
+ * that it is recoverable — which is why the plain sentence says it too. It
+ * used to read "the link dies and history is erased", written when a delete
+ * WAS one hard DELETE; with the trash under it, only the first half is true.
  */
-export async function confirmDeleteArtifact(id: string, name: string): Promise<boolean> {
-  if (!confirm(`Delete "${name}"? The link dies and history is erased.`)) return false;
+export async function confirmDeleteArtifact(id: string, name: string, inside = 0): Promise<boolean> {
+  const message = inside > 0
+    ? `Delete ${name} and the ${inside} item${inside === 1 ? '' : 's'} inside it? They go to the trash, and you can restore them any time.`
+    : `Delete "${name}"? The link stops working. It goes to the trash, where you can restore it any time.`;
+  if (!confirm(message)) return false;
   const res = await fetch(`/api/my/artifacts/${id}`, { method: 'DELETE' });
   return res.ok;
 }

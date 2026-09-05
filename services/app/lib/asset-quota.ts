@@ -23,6 +23,13 @@
  * The two sources of stored bytes, both already recorded:
  *   artifacts.meta->>'bytes'  — every image/PDF stored through storeImageContent
  *   web_assets.bytes          — every URL this importer was the first to fetch
+ *
+ * A DELETED asset is charged exactly like a live one, and neither sum names
+ * the trash gate. Nothing in this product is ever erased: the bytes of a
+ * deleted image are still in the object store, permanently, so not charging
+ * for them would price storage at zero for anyone willing to press delete —
+ * and the cap would be bypassed by delete-and-reimport. Stated in the docs
+ * beside the row cap, which counts the same way for the same reason.
  */
 import { getDb } from '@/lib/db';
 import { ASSETS_MAX_BYTES_PER_TOKEN } from '@/lib/config';

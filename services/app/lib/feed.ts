@@ -10,6 +10,11 @@
  * home page must not break because telemetry is off.
  */
 import type { EventEnvelope } from '@artifactbin/contracts';
+// The trash gate as a VALUE, the way lib/users takes it: every query here
+// builds its own SQL against `artifacts` rather than coming through the
+// row-loading seam, so each one has to name the gate itself. `git grep
+// LIVE_ARTIFACT_SQL` is still the whole audit.
+import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts';
 import { EVENTS_SCHEMA } from '@/lib/config';
 import { getDb } from '@/lib/db';
 import type { FeedItem } from '@/lib/feed-wire';
@@ -61,7 +66,7 @@ export async function ownerFeed(userId: string, opts: { limit?: number } = {}): 
   const r = await db.query<EventRow>(
     `SELECT e.* FROM ${EVENTS_SCHEMA}.events e
        JOIN artifacts a ON a.id = e.object_id
-      WHERE a.user_id = $1 AND e.object_kind = 'artifact'
+      WHERE a.user_id = $1 AND e.object_kind = 'artifact' AND a.${LIVE_ARTIFACT_SQL}
       ORDER BY e.at DESC, e.id DESC
       LIMIT $2`,
     [userId, opts.limit ?? FEED_DEFAULT_LIMIT],
@@ -108,14 +113,15 @@ const LOG_SERIES = `SELECT e.object_id AS artifact_id, to_char(date_trunc('day',
      COUNT(DISTINCT COALESCE(e.subject_id, e.id))::int AS n
    FROM ${EVENTS_SCHEMA}.events e
    JOIN artifacts a ON a.id = e.object_id
-  WHERE a.user_id = $1 AND e.object_kind = 'artifact' AND e.verb = 'viewed' AND e.at > now() - ($2::int * interval '1 day')
+  WHERE a.user_id = $1 AND e.object_kind = 'artifact' AND e.verb = 'viewed' AND a.${LIVE_ARTIFACT_SQL}
+    AND e.at > now() - ($2::int * interval '1 day')
   GROUP BY e.object_id, day`;
 
 const LOG_DAILY = `SELECT to_char(date_trunc('day', e.at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
      COUNT(DISTINCT COALESCE(e.subject_id, e.id))::int AS views
    FROM ${EVENTS_SCHEMA}.events e
    JOIN artifacts a ON a.id = e.object_id
-  WHERE a.user_id = $1 AND e.object_kind = 'artifact' AND e.verb = 'viewed'
+  WHERE a.user_id = $1 AND e.object_kind = 'artifact' AND e.verb = 'viewed' AND a.${LIVE_ARTIFACT_SQL}
   GROUP BY day
   ORDER BY day`;
 
@@ -129,14 +135,15 @@ const LEGACY_SERIES = `SELECT e.artifact_id, to_char(date_trunc('day', e.created
      COUNT(DISTINCT COALESCE(e.visitor, e.seq::text))::int AS n
    FROM analytics_events e
    JOIN artifacts a ON a.id = e.artifact_id
-  WHERE a.user_id = $1 AND e.event = 'view' AND e.created_at > now() - ($2::int * interval '1 day')
+  WHERE a.user_id = $1 AND e.event = 'view' AND a.${LIVE_ARTIFACT_SQL}
+    AND e.created_at > now() - ($2::int * interval '1 day')
   GROUP BY e.artifact_id, day`;
 
 const LEGACY_DAILY = `SELECT to_char(date_trunc('day', e.created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
      COUNT(DISTINCT COALESCE(e.visitor, e.seq::text))::int AS views
    FROM analytics_events e
    JOIN artifacts a ON a.id = e.artifact_id
-  WHERE a.user_id = $1 AND e.event = 'view'
+  WHERE a.user_id = $1 AND e.event = 'view' AND a.${LIVE_ARTIFACT_SQL}
   GROUP BY day
   ORDER BY day`;
 
@@ -217,7 +224,7 @@ export async function decorateFeed(events: EventEnvelope[]): Promise<FeedItem[]>
   }
   const titles = new Map<string, string>();
   if (objectIds.length > 0) {
-    const r = await db.query<{ id: string; title: string | null }>('SELECT id, title FROM artifacts WHERE id = ANY($1)', [objectIds]);
+    const r = await db.query<{ id: string; title: string | null }>(`SELECT id, title FROM artifacts WHERE id = ANY($1) AND ${LIVE_ARTIFACT_SQL}`, [objectIds]);
     for (const row of r.rows) if (row.title !== null) titles.set(row.id, row.title);
   }
   // A name we do not have is NULL, never a guess: a page that cannot say who
@@ -251,14 +258,17 @@ export async function followFeed(userId: string, opts: { limit?: number } = {}):
    * `visibility = 'public'` a follower would read the titles and ids of the
    * private and unlisted work of everyone they follow, off a table whose rows
    * nobody thought of as an ACL. The same `at DESC, id DESC` total order as
-   * `ownerFeed`, for the same reason.
+   * `ownerFeed`, for the same reason. The trash gate rides beside it: a
+   * document its owner deleted must stop being news to their followers the
+   * moment they delete it — and the row is kept for ever, so this is the only
+   * thing that ever takes it out of a feed.
    */
   const r = await db.query<EventRow>(
     `SELECT e.* FROM ${EVENTS_SCHEMA}.events e
        JOIN artifacts a ON a.id = e.object_id
       WHERE e.object_kind = 'artifact' AND e.subject_kind = 'user'
         AND e.subject_id = ANY($1) AND e.verb = ANY($2)
-        AND a.visibility = 'public'
+        AND a.visibility = 'public' AND a.${LIVE_ARTIFACT_SQL}
       ORDER BY e.at DESC, e.id DESC
       LIMIT $3`,
     [audience, FOLLOW_VERBS, opts.limit ?? FEED_DEFAULT_LIMIT],

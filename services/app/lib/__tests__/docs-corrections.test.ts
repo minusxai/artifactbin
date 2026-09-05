@@ -98,6 +98,56 @@ describe('the publishing skill', () => {
   });
 });
 
+/*
+ * ADDED (folders, P4). Three claims the folders work made load-bearing, each
+ * one an agent acts on rather than reads past.
+ *
+ * `unlisted` promises the document is listed NOWHERE, and a folder's page IS a
+ * listing — so a stranger holding the folder's link is handed its `public`
+ * children and nothing else. Said only beside `/@username` it reads as "not on
+ * your profile", which is now the smaller half of the promise.
+ *
+ * DELETE is no longer the end of a document. An agent that believes it is asks
+ * its user to confirm the wrong thing, and one that has never heard of
+ * `restore_artifact` cannot undo the mistake it has just made.
+ *
+ * And the two limits are STATED rather than fixed, which only helps if the
+ * words survive the next edit that needs a few bytes back: a comment does not
+ * go to the trash, and a restore can land a row below the depth cap.
+ */
+describe('folders and the trash', () => {
+  const doc = buildSkillDoc(BASE);
+  const flat = (t: string) => t.replace(/\s+/g, ' ');
+  it('§P4.1 unlisted is listed nowhere — a folder page included', () => {
+    expect(flat(doc)).toContain('unlisted is listed nowhere, a folder page included');
+  });
+  it('§P4.2 delete is a trash, and restore is named', () => {
+    expect(doc).toContain('DELETE is a TRASH');
+    expect(doc).toContain('restore_artifact');
+    expect(flat(doc)).toContain('restorable with no deadline');
+  });
+  /*
+   * THE THREE CONSEQUENCES OF HAVING NO PURGE. Each is a promise an agent may
+   * repeat to its user, and each was previously the opposite: there is no
+   * retention, deleting frees no quota, and the only real erasure is an
+   * operator's, outside this API. A doc that stops saying one of them is a doc
+   * that lets an agent promise something untrue.
+   */
+  it('§P5.2 a deleted COMMENT is not erased either — and an agent cannot undo one', () => {
+    expect(flat(doc)).toContain('A deleted thread is not erased');
+    expect(flat(doc)).toContain('there is no undo for it here');
+  });
+  it('§P5.1 nothing is ever erased, and the docs say so three ways', () => {
+    expect(flat(doc)).toContain('Nothing here is ever erased');
+    expect(flat(doc)).toContain('still counts against your quota');
+    expect(flat(doc)).toContain('an administrative act on the database, outside this API');
+    expect(flat(doc), 'no retention survives anywhere in the docs').not.toContain('30 days');
+  });
+  it('§P4.3 the two limits are stated, not implied away', () => {
+    expect(flat(doc)).toContain('a restore can land a row deeper than the 6-level cap');
+  });
+});
+
 describe('the markup skill', () => {
   const doc = buildMarkupDoc(BASE);
   it('§1.2 markdown is refused, never "auto-converted"', () => {

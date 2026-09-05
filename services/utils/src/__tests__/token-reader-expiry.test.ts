@@ -13,7 +13,7 @@
 import { describe, expect, it } from 'vitest';
 import { createTokenReader, hashToken } from '../tokens';
 
-type Row = { id: string; user_id: string | null; token_hash: string; revoked_at: number | null; expires_at: number | null };
+type Row = { id: string; user_id: string | null; token_hash: string; deleted_at: number | null; expires_at: number | null };
 
 function fakeDb(rows: Row[], clock: () => number) {
   const calls: string[] = [];
@@ -21,7 +21,7 @@ function fakeDb(rows: Row[], clock: () => number) {
     async query<T>(sql: string, params?: unknown[]) {
       calls.push(sql);
       const [param] = (params ?? []) as [string];
-      const live = rows.filter((r) => r.revoked_at === null && (r.expires_at === null || r.expires_at > clock()));
+      const live = rows.filter((r) => r.deleted_at === null && (r.expires_at === null || r.expires_at > clock()));
       const hit = live.find((r) => (/token_hash/.test(sql) ? r.token_hash === param : r.id === param));
       return { rows: (hit ? [{ id: hit.id, user_id: hit.user_id, expires_at: hit.expires_at }] : []) as T[], rowCount: hit ? 1 : 0 };
     },
@@ -30,7 +30,7 @@ function fakeDb(rows: Row[], clock: () => number) {
 }
 
 const SECRET = 'mx_' + 'a'.repeat(43);
-const token = (expires_at: number | null): Row => ({ id: 'tok_1', user_id: null, token_hash: hashToken(SECRET), revoked_at: null, expires_at });
+const token = (expires_at: number | null): Row => ({ id: 'tok_1', user_id: null, token_hash: hashToken(SECRET), deleted_at: null, expires_at });
 
 describe('createTokenReader and expiry', () => {
   it('(i) the SELECTs carry the expiry clause, by hash and by id', async () => {

@@ -101,7 +101,10 @@ function qualify(statements, schema) {
     s
       .replace(/^CREATE TABLE IF NOT EXISTS (\w+)\s*\(/, `CREATE TABLE IF NOT EXISTS ${schema}.$1 (`)
       .replace(/^ALTER TABLE (\w+) /, `ALTER TABLE ${schema}.$1 `)
-      .replace(/^(CREATE (?:UNIQUE )?INDEX IF NOT EXISTS \w+ ON) (\w+)\s*\(/, `$1 ${schema}.$2 (`),
+      // `USING <method>` sits between the table and the column list, so the
+      // qualifier steps over it — otherwise a GIN index reads as a shape this
+      // script does not know and the build fails.
+      .replace(/^(CREATE (?:UNIQUE )?INDEX IF NOT EXISTS \w+ ON) (\w+)( USING \w+)?\s*\(/, `$1 ${schema}.$2$3 (`),
   );
   for (const [i, s] of qualified.entries()) {
     if (!s.includes(`${schema}.`)) {

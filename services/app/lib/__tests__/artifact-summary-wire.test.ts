@@ -17,7 +17,7 @@ const summary = (format: 'markup' | 'dataset' | 'viz' | 'image', meta: Record<st
   version: 3,
   visibility: 'private' as const,
   access: 'read' as const,
-  folder: 'reports',
+  ancestor_ids: ['f00001'],
   created_at: '2026-08-01T00:00:00.000Z',
   updated_at: '2026-08-30T00:00:00.000Z',
   views: 12,
@@ -86,5 +86,16 @@ describe('artifactSummaryToWire', () => {
     ],
   ])('keeps only safe %s list metadata', (format, meta, expected) => {
     expect(artifactSummaryToWire(summary(format, meta), 'https://artifact.test').meta).toEqual(expected);
+  });
+});
+
+describe('placement on the wire (P1, seeded)', () => {
+  it('carries parent_id and ancestor_ids, never folder', () => {
+    const base = { id: 'Ab3xK9', title: 't', description: null, format: 'markup', version: 1, visibility: 'private', meta: {}, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' } as never;
+    const filed = artifactSummaryToWire({ ...(base as object), ancestor_ids: ['f00001', 'f00002'] } as never, 'https://x');
+    expect(filed).toMatchObject({ parent_id: 'f00002', ancestor_ids: ['f00001', 'f00002'] });
+    expect(filed).not.toHaveProperty('folder');
+    const root = artifactSummaryToWire({ ...(base as object), ancestor_ids: [] } as never, 'https://x');
+    expect(root).toMatchObject({ parent_id: null, ancestor_ids: [] });
   });
 });

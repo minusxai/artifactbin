@@ -33,9 +33,9 @@ import { agentCookie, cookieValue, request, useAppHarness } from './harness';
 const json = (r: Response) => r.json() as Promise<Record<string, unknown>>;
 const HOUR = 60 * 60 * 1000;
 const harness = useAppHarness();
-type Stamp = { expires_at: string | null; last_used_at: string | null; revoked_at: string | null; user_id: string | null };
+type Stamp = { expires_at: string | null; last_used_at: string | null; deleted_at: string | null; user_id: string | null };
 const row = async (id: string): Promise<Stamp> =>
-  (await (await harness.db()).query<Stamp>('SELECT expires_at, last_used_at, revoked_at, user_id FROM tokens WHERE id = $1', [id])).rows[0]!;
+  (await (await harness.db()).query<Stamp>('SELECT expires_at, last_used_at, deleted_at, user_id FROM tokens WHERE id = $1', [id])).rows[0]!;
 const setExpiry = async (id: string, msFromNow: number | null) => {
   const db = await harness.db();
   if (msFromNow === null) await db.query('UPDATE tokens SET expires_at = NULL WHERE id = $1', [id]);
@@ -85,17 +85,17 @@ describe('mint: expiry is a property of every token', () => {
 describe('status: derived, never stored twice', () => {
   const now = Date.parse('2026-09-01T12:00:00Z');
   it('active, expired, revoked — and revoked wins over expired', () => {
-    expect(tokenStatus({ revoked_at: null, expires_at: new Date(now + 1_000).toISOString() }, now)).toBe('active');
-    expect(tokenStatus({ revoked_at: null, expires_at: new Date(now - 1_000).toISOString() }, now)).toBe('expired');
-    expect(tokenStatus({ revoked_at: new Date(now - 5_000).toISOString(), expires_at: new Date(now + 1_000).toISOString() }, now)).toBe('revoked');
-    expect(tokenStatus({ revoked_at: new Date(now - 5_000).toISOString(), expires_at: new Date(now - 1_000).toISOString() }, now)).toBe('revoked');
+    expect(tokenStatus({ deleted_at: null, expires_at: new Date(now + 1_000).toISOString() }, now)).toBe('active');
+    expect(tokenStatus({ deleted_at: null, expires_at: new Date(now - 1_000).toISOString() }, now)).toBe('expired');
+    expect(tokenStatus({ deleted_at: new Date(now - 5_000).toISOString(), expires_at: new Date(now + 1_000).toISOString() }, now)).toBe('revoked');
+    expect(tokenStatus({ deleted_at: new Date(now - 5_000).toISOString(), expires_at: new Date(now - 1_000).toISOString() }, now)).toBe('revoked');
   });
   it('a NULL expires_at never expires (grandfathered rows from before this column)', () => {
-    expect(tokenStatus({ revoked_at: null, expires_at: null }, now)).toBe('active');
-    expect(tokenStatus({ revoked_at: null, expires_at: null }, now + 10 * 365 * 24 * HOUR)).toBe('active');
+    expect(tokenStatus({ deleted_at: null, expires_at: null }, now)).toBe('active');
+    expect(tokenStatus({ deleted_at: null, expires_at: null }, now + 10 * 365 * 24 * HOUR)).toBe('active');
   });
   it('accepts Date values as the driver may hand them back', () => {
-    expect(tokenStatus({ revoked_at: null, expires_at: new Date(now - 1) }, now)).toBe('expired');
+    expect(tokenStatus({ deleted_at: null, expires_at: new Date(now - 1) }, now)).toBe('expired');
   });
 });
 

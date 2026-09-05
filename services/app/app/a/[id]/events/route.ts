@@ -14,6 +14,7 @@
  */
 import { trackEvent } from '@/lib/analytics';
 import { canReadArtifact, datasetsForDocument, getArtifactById } from '@/lib/artifacts';
+import { isDocumentFormat } from '@/lib/story/input';
 import { isOwner, roleFor, sessionActor } from '@/lib/viewer';
 import { canAnnotate } from '@/lib/share-roles';
 import { authorHandle } from '@/lib/users';
@@ -191,7 +192,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // document that starts reading a dataset must be subscribed by the time
       // its reader can see the query, or a write landing in between reaches
       // nobody and the chart sits stale until the next interaction.
-      await followDatasets(row.format === 'markup' ? row.source : null);
+      // A FOLDER's one data dependency is ITSELF (its scaffold reads
+      // `ref_<own id>`), which is what makes a child's publish reach an open
+      // folder page through the path a dataset write already travels.
+      await followDatasets(isDocumentFormat(row.format) ? row.source : null);
       await send(frame);
       // An edit shifts anchors; the owner's pins must follow the document
       // frame that moved them. No-op on every non-owner connection.
@@ -220,7 +224,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     // queued rather than awaited (see below), so waiting for it would leave a
     // window in which a write to this document's dataset reached nobody.
     // Later frames adjust the set when an edit changes what the document reads.
-    await followDatasets(initial.format === 'markup' ? initial.source : null);
+    await followDatasets(isDocumentFormat(initial.format) ? initial.source : null);
     if (annotatorConnection) {
       try {
         annotationsUnsub = await subscribeToAnnotations(artifactId, () => void pushAnnotations());

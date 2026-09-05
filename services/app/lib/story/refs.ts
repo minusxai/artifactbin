@@ -215,7 +215,14 @@ export function findExternalSubresources(source: string): ValidationError[] {
   return errors;
 }
 
-const KIND_FOR_FORMAT: Record<string, RefUse['kind']> = { dataset: 'dataset', viz: 'viz', image: 'image', pdf: 'pdf' };
+/**
+ * A FOLDER READS AS A DATASET, and only in a read position. Its children are a
+ * table the dataflow registers under the same `ref_<id>` name, so a <Query>
+ * naming one is admitted exactly as a dataset is; the WRITE branch below
+ * refuses it separately, because a listing is computed and there is nothing
+ * there to write.
+ */
+const KIND_FOR_FORMAT: Record<string, RefUse['kind']> = { dataset: 'dataset', viz: 'viz', image: 'image', pdf: 'pdf', folder: 'dataset' };
 
 const colKind = (t: DatasetColumn['type']): 'quantitative' | 'temporal' | 'nominal' =>
   t === 'number' ? 'quantitative' : t === 'date' ? 'temporal' : 'nominal';
@@ -251,6 +258,14 @@ export async function validateRefs(source: string, load: RefLoader): Promise<
     // Both refusals name the fix; neither is an existence oracle (the row was
     // already admitted for reading by the rule above).
     if (use.write) {
+      // A folder's children are COMPUTED, per viewer, from the artifacts table
+      // — there is no stored table under it for a statement to change. Same
+      // message as a foreign dataset on purpose: the fix is the same one, a
+      // dataset of your own.
+      if (r.format === 'folder') {
+        details.push(`ref_${use.id} is not yours to write — a <Mutation> may only write a dataset you own (read it with a <Query> instead, or publish your own copy)`);
+        continue;
+      }
       if (!r.owned) {
         details.push(`ref_${use.id} is not yours to write — a <Mutation> may only write a dataset you own (read it with a <Query> instead, or publish your own copy)`);
         continue;
@@ -363,6 +378,7 @@ const EMBED_DATA_PROP: Record<string, { required: string; usage: string; table?:
   Question: { required: 'data', usage: 'Use data="$name" — a <Query> or table <Value> declared in <Helmet> — plus viz={{"kind":"vega-lite","spec":{…}}}', table: true },
   Number: { required: 'data', usage: 'Use data="$name" — a <Query> or table <Value> declared in <Helmet>', table: true },
   DataTable: { required: 'data', usage: 'Use data="$name" — a <Query> or table <Value> declared in <Helmet>', table: true },
+  Files: { required: 'data', usage: 'Use data="$name" — a <Query> over a folder\'s children (select * from ref_<folderId>)', table: true },
   Video: { required: 'src', usage: 'Use src="<YouTube/Vimeo/Loom link>" (+ optionally poster="ref:<image id>" for the thumbnail)' },
   File: { required: 'src', usage: 'Use src="ref:<pdf id>" — the id create_artifact returned for a pdf — or src="<public https link to a .pdf>" (+ optionally title="…")' },
 };

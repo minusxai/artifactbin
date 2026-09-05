@@ -26,7 +26,7 @@ function overridesFrom(raw: string): Record<string, unknown> | null {
 }
 
 /**
- * POST /api/artifacts/:id/fork { title?, visibility?, folder? } — the
+ * POST /api/artifacts/:id/fork { title?, visibility?, parent_id? } — the
  * `fork_artifact` OPERATION: copy anything this token can READ into a new
  * artifact of its own.
  *

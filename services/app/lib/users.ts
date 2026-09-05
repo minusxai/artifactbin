@@ -4,7 +4,10 @@
  * token backfills ownership onto everything it published.
  */
 import crypto from 'crypto';
-import type { ArtifactSummary, ShareRole } from './artifacts';
+// The trash gate (lib/artifacts LIVE_ARTIFACT_SQL) is a VALUE here rather
+// than an inherited predicate: these listings build their own statements
+// instead of going through the row-loading seam, so each one names the gate.
+import { LIVE_ARTIFACT_SQL, type ArtifactSummary, type ShareRole } from './artifacts';
 import { getDb } from './db';
 import { emit } from './events';
 import { generateInternalId } from './ids';
@@ -201,7 +204,7 @@ async function claimWhere(
       // transaction, so "token attached" and "artifacts owned" commit together.
       const token = (
         await tx.query<{ id: string; user_id: string | null; name: string | null }>(
-          `SELECT id, user_id, name FROM tokens WHERE ${where} AND revoked_at IS NULL`,
+          `SELECT id, user_id, name FROM tokens WHERE ${where} AND deleted_at IS NULL`,
           [value],
         )
       ).rows[0];
@@ -279,7 +282,7 @@ async function offerableTokens(
        FROM tokens t
        LEFT JOIN artifacts a ON a.token_id = t.id
       WHERE ${col} = ANY($1)
-        AND t.revoked_at IS NULL
+        AND t.deleted_at IS NULL
         AND t.user_id IS NULL
         AND t.created_at > now() - ($2::int * interval '1 hour')
       GROUP BY t.token_hash, t.id`,
@@ -293,13 +296,13 @@ async function offerableTokens(
   }));
 }
 
-const SUMMARY_COLS = 'id, title, description, format, meta, version, visibility, folder, created_at, updated_at';
+const SUMMARY_COLS = 'id, title, description, format, meta, version, visibility, ancestor_ids, created_at, updated_at';
 
 /** A dashboard row: the summary plus its all-time count of unique daily visitors. */
 export type OwnedArtifactSummary = ArtifactSummary & { views: number };
 
 /**
- * The stranger's view of a profile: public artifacts only, flat — folders and
+ * The stranger's view of a profile: public artifacts only, flat — placement and
  * view counts are the owner's business. 'public' means listed under the
  * owner's handle (the profile root IS the list), not merely link-reachable.
  *
@@ -312,7 +315,7 @@ export async function listPublicArtifactsByUser(userId: string): Promise<Artifac
   const db = await getDb();
   const r = await db.query<ArtifactSummary>(
     `SELECT ${SUMMARY_COLS} FROM artifacts
-     WHERE user_id = $1 AND visibility = 'public' AND format = 'markup'
+     WHERE user_id = $1 AND visibility = 'public' AND format = 'markup' AND ${LIVE_ARTIFACT_SQL}
      ORDER BY updated_at DESC LIMIT 200`,
     [userId],
   );
@@ -351,7 +354,7 @@ export async function listSharedWithEmail(email: string, excludeUserId?: string)
      FROM artifacts a
      JOIN artifact_shares s ON s.artifact_id = a.id
      LEFT JOIN users u ON u.id = a.user_id
-     WHERE s.email = $1 AND ($2::text IS NULL OR a.user_id IS DISTINCT FROM $2::text)
+     WHERE s.email = $1 AND ($2::text IS NULL OR a.user_id IS DISTINCT FROM $2::text) AND a.${LIVE_ARTIFACT_SQL}
      ORDER BY a.updated_at DESC LIMIT 200`,
     [email.toLowerCase().trim(), excludeUserId ?? null],
   );
@@ -374,7 +377,7 @@ export async function listDraftsByTokenIds(tokenIds: string[]): Promise<OwnedArt
         WHERE e.artifact_id = artifacts.id AND e.event = 'view') AS views
      FROM artifacts
      JOIN tokens ON tokens.id = artifacts.token_id
-     WHERE artifacts.token_id = ANY($1) AND artifacts.user_id IS NULL AND ${LIVE_TOKEN_SQL}
+     WHERE artifacts.token_id = ANY($1) AND artifacts.user_id IS NULL AND artifacts.${LIVE_ARTIFACT_SQL} AND ${LIVE_TOKEN_SQL}
      ORDER BY artifacts.updated_at DESC LIMIT 200`,
     [tokenIds],
   );
@@ -400,7 +403,7 @@ export async function listOwnedArtifacts(col: 'user_id' | 'token_id', value: str
     `SELECT ${SUMMARY_COLS},
        (SELECT COUNT(DISTINCT COALESCE(e.visitor, e.seq::text))::int FROM analytics_events e
         WHERE e.artifact_id = artifacts.id AND e.event = 'view') AS views
-     FROM artifacts WHERE ${col} = $1 ORDER BY updated_at DESC LIMIT 200`,
+     FROM artifacts WHERE ${col} = $1 AND ${LIVE_ARTIFACT_SQL} ORDER BY updated_at DESC LIMIT 200`,
     [value],
   );
   return r.rows;
@@ -411,17 +414,17 @@ export interface UserTokenRow {
   name: string | null;
   artifacts: number;
   created_at: string;
-  revoked_at: string | null;
+  deleted_at: string | null;
 }
 
 /** The user's machine tokens (revoked ones included, so the dashboard shows history). */
 export async function listAccountTokenRows(userId: string): Promise<UserTokenRow[]> {
   const db = await getDb();
   const r = await db.query<UserTokenRow & { artifacts: string | number }>(
-    `SELECT t.id, t.name, t.created_at, t.revoked_at, COUNT(a.id) AS artifacts
-     FROM tokens t LEFT JOIN artifacts a ON a.token_id = t.id
+    `SELECT t.id, t.name, t.created_at, t.deleted_at, COUNT(a.id) AS artifacts
+     FROM tokens t LEFT JOIN artifacts a ON a.token_id = t.id AND a.${LIVE_ARTIFACT_SQL}
      WHERE t.user_id = $1
-     GROUP BY t.id, t.name, t.created_at, t.revoked_at
+     GROUP BY t.id, t.name, t.created_at, t.deleted_at
      ORDER BY t.created_at DESC`,
     [userId],
   );
@@ -433,7 +436,7 @@ export async function listAccountTokenRows(userId: string): Promise<UserTokenRow
 export async function revokeUserToken(userId: string, tokenId: string): Promise<boolean> {
   const db = await getDb();
   const r = await db.query<{ name: string | null }>(
-    'UPDATE tokens SET revoked_at = now() WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL RETURNING name',
+    'UPDATE tokens SET deleted_at = now() WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL RETURNING name',
     [tokenId, userId],
   );
   const row = r.rows[0];

@@ -8,7 +8,7 @@
  * simply forgotten what they pressed has been made to do the work twice.
  *
  * Three rules, and they are the whole module:
- *  - a STRICT ALLOWLIST. `fork | comment` and nothing else; an unknown value
+ *  - a STRICT ALLOWLIST. `fork | comment | new-folder` and nothing else; an unknown value
  *    is not an error, it is silence — this parameter is on a SHARED link, so
  *    anyone may append anything to it, and the page must never do something it
  *    was not designed to be asked for.
@@ -22,7 +22,13 @@
  *    (`lib/story/url-values` learned this first and for the same reason).
  */
 
-export const INTENTS = ['fork', 'comment'] as const;
+/*
+ * `new-folder` is the folder's own version of the same problem: the served
+ * document is sandboxed at an opaque origin with no session, so its "new
+ * folder" control can only be an anchor with target="_top" that ASKS — the
+ * SHELL, which holds the credential, is what can actually create one.
+ */
+export const INTENTS = ['fork', 'comment', 'new-folder'] as const;
 export type Intent = (typeof INTENTS)[number];
 
 /** The parameter's name, in one place: the reader, the stripper and the writer. */

@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Tooltip } from '@/components/Tooltip';
 import { Badge, Button, dateStamp, FormatBadge, formatLabel, MicroLabel, PANEL, Spark, TABLE_ROW, timeAgo, TokenInput, VisibilityPill } from '@/components/ui';
 import RowMenu, { confirmDeleteArtifact } from '@/components/RowMenu';
+import { MoveMenu, type PickerFolder } from '@/components/FolderPicker';
+import { parentOfRow } from '@/lib/shelf';
 import { adoptToken } from '@/lib/browser-session';
 import type { Visibility } from '@/lib/artifacts';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
@@ -15,8 +17,10 @@ interface ArtifactSummary {
   title: string | null;
   format?: string;
   version: number;
-  /** Materialized folder path ('' = root); present on session rows. */
-  folder?: string;
+  /** The id of the folder artifact this row sits in; absent/null = the root. */
+  parent_id?: string | null;
+  /** The trail root->parent, so a folder's own subtree can be greyed in the picker. */
+  ancestor_ids?: string[];
   visibility?: Visibility;
   updated_at: string;
   /** All-time view count; present on dashboard (session) rows only. */
@@ -170,8 +174,15 @@ const ICON_ACTION =
 export const ARTIFACTS_PER_PAGE = 5;
 
 /** `manage` enables the session-scoped delete — dashboard only. History lives in the page's edit mode. */
-export function ArtifactTable({ artifacts, manage, embedded, canEdit = true, canShare = true, showViews = true, filtersInline = false, dates = 'relative', perPage = ARTIFACTS_PER_PAGE }: {
+export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = true, canShare = true, showViews = true, filtersInline = false, dates = 'relative', perPage = ARTIFACTS_PER_PAGE }: {
   artifacts: ArtifactSummary[];
+  /**
+   * The account's folders, for the move picker. The dense tier holds documents
+   * only, so its rows can never be the whole tree — the shelf hands its own
+   * `folders` partition down. Absent, the picker offers whatever folders these
+   * rows happen to contain, which is what the standalone token browser has.
+   */
+  folders?: PickerFolder[];
   manage?: boolean;
   /**
    * Whether a row may be opened in the editor. Separate from `manage` because
@@ -203,21 +214,14 @@ export function ArtifactTable({ artifacts, manage, embedded, canEdit = true, can
   // change to justify reloading the page the way delete does.
   const [movedFolders, setMovedFolders] = useState<Record<string, string>>({});
   const [movingId, setMovingId] = useState<string | null>(null);
-  const [folderDraft, setFolderDraft] = useState('');
-  const folderOf = (a: ArtifactSummary) => movedFolders[a.id] ?? a.folder ?? '';
-
-  const moveTo = async (a: ArtifactSummary) => {
-    const res = await fetch(`/api/my/artifacts/${a.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ folder: folderDraft.trim() }),
-    }).catch(() => null);
-    if (res?.ok) {
-      const body = (await res.json()) as { folder: string };
-      setMovedFolders((m) => ({ ...m, [a.id]: body.folder }));
-      setMovingId(null);
-    }
-  };
+  const placeOf = (a: ArtifactSummary) => movedFolders[a.id] ?? parentOfRow(a) ?? '';
+  // The tree the picker draws: what the page handed down, else whatever folders
+  // are among these rows.
+  const pickable: PickerFolder[] = folders
+    ?? artifacts.filter((a) => a.format === 'folder').map((a) => ({ id: a.id, title: a.title ?? null, ancestor_ids: a.ancestor_ids ?? [] }));
+  // A folder is named, never spelled: the id was only ever a placeholder for
+  // the picker that now knows the account's own names.
+  const placeName = (id: string): string => pickable.find((f) => f.id === id)?.title ?? id;
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -396,8 +400,8 @@ export function ArtifactTable({ artifacts, manage, embedded, canEdit = true, can
                       >
                         {a.title ?? <span className="text-faint">(untitled)</span>}
                       </a>
-                      {manage && movingId !== a.id && folderOf(a) && (
-                        <span className="shrink-0 font-mono text-[10px] text-faint">{folderOf(a)}</span>
+                      {manage && placeOf(a) && (
+                        <span className="shrink-0 font-mono text-[10px] text-faint">{placeName(placeOf(a))}</span>
                       )}
                     </span>
                     <span className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 font-mono text-[10px] leading-none text-faint sm:hidden">
@@ -432,25 +436,6 @@ export function ArtifactTable({ artifacts, manage, embedded, canEdit = true, can
                       Public gets the louder ink; unlisted and private stay faint. */}
                   {a.visibility && <VisibilityPill compact visibility={a.visibility} name={a.title ?? a.id} />}
                 </span>
-                {manage && movingId === a.id && (
-                  <form
-                    className="mt-1 flex items-center gap-1"
-                    onSubmit={(e) => { e.preventDefault(); void moveTo(a); }}
-                  >
-                    <input
-                      aria-label="Folder path"
-                      placeholder="folder/subfolder ('' = root)"
-                      value={folderDraft}
-                      onChange={(e) => setFolderDraft(e.target.value)}
-                      className="w-48 rounded-[4px] border border-edge bg-transparent px-1.5 py-0.5 font-mono text-[11px] text-fg focus:outline-none focus:border-edge-bright"
-                    />
-                    <Tooltip content="save">
-                      <button type="submit" aria-label="Save folder" className={`${ICON_ACTION} hover:text-accent`}>
-                        <Check size={12} />
-                      </button>
-                    </Tooltip>
-                  </form>
-                )}
               </td>
               {/* A shelf's archive contains only markup documents; its type
                   is guaranteed by the tier, so repeating it costs a column
@@ -521,7 +506,7 @@ export function ArtifactTable({ artifacts, manage, embedded, canEdit = true, can
                           label: `Move ${a.title ?? a.id}`,
                           text: 'move to folder',
                           icon: <FolderInput size={12} />,
-                          onSelect: () => { setMovingId(a.id); setFolderDraft(folderOf(a)); },
+                          onSelect: () => setMovingId(a.id),
                         },
                         {
                           label: `Delete ${a.title ?? a.id}`,
@@ -534,6 +519,19 @@ export function ArtifactTable({ artifacts, manage, embedded, canEdit = true, can
                         },
                       ]}
                     />
+                  )}
+                  {manage && movingId === a.id && (
+                    /* The menu is a positioning ancestor, so the picker hangs
+                       under the "…" it was opened from rather than under the
+                       row, which on the dense tier is a full table width away. */
+                    <span className="relative z-20 inline-flex">
+                      <MoveMenu
+                        row={{ id: a.id, format: a.format ?? 'markup', parent_id: placeOf(a) || null, ancestor_ids: a.ancestor_ids ?? [] }}
+                        folders={pickable}
+                        onMoved={(parentId) => setMovedFolders((m) => ({ ...m, [a.id]: parentId ?? '' }))}
+                        onClose={() => setMovingId(null)}
+                      />
+                    </span>
                   )}
                 </span>
               </td>

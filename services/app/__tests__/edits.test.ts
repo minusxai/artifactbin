@@ -481,7 +481,7 @@ describe('document-level meta edits', () => {
 });
 
 describe('deletion', () => {
-  it('erases the edit log too — the genesis row holds the whole document', async () => {
+  it('the purge erases the edit log too — the genesis row holds the whole document', async () => {
     const t = await mint();
     const doc = await createMarkup(t.token);
     await edit(t.token, doc.id, { edit_id: doc.edit_id, old_string: 'alpha text', new_string: 'SECRET' });
@@ -490,10 +490,16 @@ describe('deletion', () => {
 
     const gone = await deleteRoute(request(`/api/artifacts/${doc.id}`, { method: 'DELETE', token: t.token }), params({ id: doc.id }));
     expect(gone.status).toBe(200);
-    // "Permanent" must mean permanent: the log stores full text, so leaving it
-    // behind would keep the deleted document readable in the database.
-    const left = await db.query('SELECT inserted FROM artifact_edits WHERE artifact_id = $1', [doc.id]);
-    expect(left.rows).toEqual([]);
+    /*
+     * A delete is a TRASH, so the log survives it — it has to, or a restore
+     * would bring back a document with no history behind it — and there is no
+     * later sweep that takes it, because nothing in this product is erased.
+     * The honest consequence, stated in the docs: the deleted document's full
+     * text stays in the edit log, so "delete" is a withdrawal, not an erasure.
+     */
+    expect((await db.query('SELECT 1 FROM artifact_edits WHERE artifact_id = $1', [doc.id])).rows.length).toBeGreaterThan(0);
+    await db.query(`UPDATE artifacts SET deleted_at = now() - interval '400 days' WHERE id = $1`, [doc.id]);
+    expect((await db.query('SELECT 1 FROM artifact_edits WHERE artifact_id = $1', [doc.id])).rows.length).toBeGreaterThan(0);
   });
 });
 

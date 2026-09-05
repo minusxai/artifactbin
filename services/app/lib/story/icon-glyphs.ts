@@ -28,6 +28,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { icons } from 'lucide-react';
 import type { JsxNode } from '@/lib/jsx';
 import { iconGlyphKey, FALLBACK_ICON_KEY, type GlyphMap, type IconGlyph } from '@/lib/story-ui/icon-contract';
+import { FILE_GLYPH_NAMES } from '@/lib/story-ui/file-glyphs';
 
 const SVG_OPEN = /^<svg\b[^>]*>/;
 const CLASS_ATTR = /\bclass="([^"]*)"/;
@@ -69,8 +70,8 @@ export function buildGlyphMap(names: Iterable<string>): GlyphMap {
 }
 
 /**
- * Every `<Icon name>` in a document, in the author's own spelling, deduped —
- * plus whether the document draws an icon AT ALL, which is not the same question:
+ * Every icon a document draws, in the author's own spelling, deduped — plus
+ * whether it draws one AT ALL, which is not the same question:
  * `<Icon />` and `<Icon name="" />` name nothing, and the contract is that a bad
  * name shows the question mark rather than a silent hole. (A non-static
  * `name={x}` never gets this far — validateJsx refuses it at publish: "Attribute
@@ -86,6 +87,18 @@ export function scanIcons(nodes: JsxNode[]): { names: string[]; any: boolean } {
       const attr = node.attributes.find((a) => a.name === 'name');
       const value = attr?.value.static ? attr.value.json : null;
       if (typeof value === 'string' && value) found.add(value);
+    }
+    /*
+     * A `<Files>` LISTING draws an icon per row and names none of them: the
+     * glyph follows each row's FORMAT, chosen inside the component from rows
+     * that do not exist until the query answers. So the component's whole
+     * vocabulary is resolved for it (lib/story-ui/file-glyphs, the list both
+     * halves read) — which is what a folder needs, since its entire document is
+     * this one component and it would otherwise ship no glyphs at all.
+     */
+    if (node.tag === 'Files') {
+      any = true;
+      for (const name of FILE_GLYPH_NAMES) found.add(name);
     }
     for (const child of node.children) visit(child);
   };

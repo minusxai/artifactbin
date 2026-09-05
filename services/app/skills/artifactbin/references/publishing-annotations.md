@@ -69,7 +69,8 @@ client needs nothing: `initialize.clientInfo` already named it.
 
 `reply` alone keeps the thread open (say why, or ask back); `resolve` alone
 closes silently; `{ "reopen": true }` returns a resolved thread to the open
-list. A POST with none of the three is `400 invalid_annotation_action`.
+list. A POST with none of `reply`, `resolve: true` or `reopen: true` is `400 invalid_annotation_action`;
+a list `status` that is not `open`, `resolved` or `all` is `400 invalid_status`.
 Resolved annotations leave the inline list;
 `GET [[ base ]]/api/artifacts/<id>/annotations?status=all` shows history.
 
@@ -77,3 +78,8 @@ The threads themselves are server-held beside the document — your PUTs and
 edits can never delete or alter a comment; the ONLY annotation thing living
 in the markup is the `data-annotation-anchor` key, which is yours to
 preserve, never to author. Through MCP the same call is the `annotate` tool.
+
+Your user can delete a thread from their browser, and you cannot: there is no
+delete door on this side, only reply, resolve and reopen. A deleted thread is
+not erased — nothing in this product is — but there is no undo for it here
+either, so treat one as gone and never offer to bring it back.

@@ -11,8 +11,10 @@
  *   2. /a/<id> self-heals to /@username/... in the location bar, and a
  *      mangled pretty URL (wrong user, stale title) heals too
  *   3. the ShareLink dialog really flips visibility from the page
- *   4. the dashboard's folder move lands and the canonical URL follows
- *   5. profile/folder listings are owner-only
+ *   4. the dashboard's folder move lands through the PICKER, and the canonical
+ *      URL does NOT follow it — nesting is never in a URL
+ *   5. a folder is a document: its own visibility decides who may open it, and
+ *      the server decides per viewer what it lists
  *
  * The login code is read from the same local MAIL SINK gate-email-login uses:
  *
@@ -139,43 +141,85 @@ const wire = await page.evaluate(async (id) => (await (await fetch(`/api/my/arti
 const withEditId = await stranger.request.get(`${BASE}/a/${story.id}?key=${wire.edit_id}`);
 check(withEditId.status() === 404, 'edit_id does NOT work as a read key');
 
-// ── 4. dashboard folder move; canonical follows ────────────────────────────
+// ── 4. the dashboard's folder move, through the PICKER ────────────────────
+// Placement is an id on the wire and a NAME on the screen: the row chooses
+// from the account's own folders, and its own subtree is greyed (the cycle
+// rule, drawn) rather than refused after the fact.
+const reports = await api('/api/artifacts', { format: 'folder', title: 'Reports' });
+check(reports.format === 'folder', 'a folder is created with no content');
 await page.goto(`${BASE}/`, { waitUntil: 'load' });
-// Retry the opening click until the editor actually appears: the row is a
+// The strip is the folder's home on the dashboard.
+await page.waitForSelector('[aria-label="Open folder Reports"]', { timeout: 20000 });
+check(true, 'the dashboard lists the folder in its own strip');
+// Retry the opening click until the menu actually appears: the row is a
 // client component, and a pre-hydration click is silently swallowed.
-// Homepage v2 folded Move into the row's "More actions" menu.
 const openMove = async () => {
-  await page.locator('[aria-label="More actions for Cookie Proof"]').click();
-  await page.locator('[aria-label="Move Cookie Proof"]').click();
+  await page.locator('[aria-label="More actions for Cookie Proof"]').first().click();
+  await page.locator('[aria-label="Move Cookie Proof"]').first().click();
 };
 await openMove();
-await page.waitForSelector('[aria-label="Folder path"]', { timeout: 5000 }).catch(async () => {
+await page.waitForSelector('[aria-label="Filter folders"]', { timeout: 5000 }).catch(async () => {
   await openMove();
-  await page.waitForSelector('[aria-label="Folder path"]', { timeout: 15000 });
+  await page.waitForSelector('[aria-label="Filter folders"]', { timeout: 15000 });
 });
-await page.fill('[aria-label="Folder path"]', 'reports/2026');
 await Promise.all([
   page.waitForResponse((r) => r.request().method() === 'PATCH' && r.status() === 200, { timeout: 15000 }),
-  page.locator('[aria-label="Save folder"]').click(),
+  page.locator('[aria-label="Move to Reports"]').first().click(),
 ]);
 await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
+// THE ADDRESS DOES NOT MOVE. Nesting is never in a URL: a folder is an
+// artifact with its own address, and the trail is drawn on its page.
 check(
-  new URL(page.url()).pathname === `/@${username}/reports/2026/${doc.id}-cookie-proof`,
-  `the canonical URL follows the folder move (${new URL(page.url()).pathname})`,
+  new URL(page.url()).pathname === `/@${username}/${doc.id}-cookie-proof`,
+  `the canonical URL is id-anchored and survives the move (${new URL(page.url()).pathname})`,
 );
+const placed = await page.evaluate(async (id) => (await (await fetch(`/api/my/artifacts/${id}`)).json()), doc.id);
+check(placed.parent_id === reports.id, 'and the row really moved (parent_id names the folder)');
 
-// ── 5. listings are owner-only ─────────────────────────────────────────────
-await page.goto(`${BASE}/@${username}/reports/2026`, { waitUntil: 'load' });
-check((await page.textContent('body')).includes('Cookie Proof'), 'the owner browses the folder listing');
-// The profile ROOT is public surface now (public docs list there; an
-// all-private profile renders EMPTY, never 404 — an existence oracle
-// otherwise). This user's docs are all private again, so a stranger sees
-// the profile with nothing on it; folder pages stay owner-only.
+// ── 5. a folder is read by its own ACL, and lists by the reader's ─────────
+// A folder page IS a document, so "who may open it" is the artifact's own
+// visibility; what it LISTS is decided per viewer on the server.
+const shelf = await api('/api/artifacts', { format: 'folder', title: 'Shelf', visibility: 'public' });
+const shown = await api('/api/artifacts', { title: 'Public Child', markup: '<h1>public child</h1>', visibility: 'public', parent_id: shelf.id });
+check(shown.parent_id === shelf.id, 'a document is filed under the folder at publish');
+await api('/api/artifacts', { title: 'Hidden Child', markup: '<h1>hidden child</h1>', parent_id: shelf.id });
+
+// The OWNER is served the shell, so the listing is in the document frame.
+await page.goto(`${BASE}/a/${shelf.id}`, { waitUntil: 'load' });
+const ownerFrame = page.frameLocator('iframe[title="artifact"]');
+await ownerFrame.locator('[aria-label="Open Public Child"]').waitFor({ timeout: 20000 });
+await ownerFrame.locator('[aria-label="Open Hidden Child"]').waitFor({ timeout: 20000 });
+check(true, 'the owner sees every child of their folder');
+// The glyph is resolved by the SERVER for <Files>, which names no <Icon>: a
+// listing that draws no glyph is the failure this cannot see any other way.
+const glyphs = await ownerFrame.locator('[aria-label="Open Hidden Child"] [data-glyph] svg').count();
+check(glyphs > 0, 'a row with no card draws its format glyph');
+
+// A STRANGER reads the public folder top-level and sees the PUBLIC child only:
+// unlisted and private children are listed nowhere, and a folder page is a
+// listing.
+const strangerFolder = await stranger.goto(`${BASE}/a/${shelf.id}`, { waitUntil: 'load' });
+check(strangerFolder.status() === 200, 'a public folder opens for a stranger');
+await stranger.waitForSelector('[aria-label="Open Public Child"]', { timeout: 20000 });
+check(!(await stranger.textContent('body')).includes('Hidden Child'), 'a stranger never sees a private child in the listing');
+
+// A PRIVATE folder is the uniform 404, exactly like a private document.
+const vault = await api('/api/artifacts', { format: 'folder', title: 'Vault' });
+check(vault.visibility === 'private', 'an owned folder is born private');
+const strangerVault = await stranger.goto(`${BASE}/a/${vault.id}`, { waitUntil: 'load' });
+check(strangerVault.status() === 404, 'a private folder is the uniform 404 for a stranger');
+
+// The profile ROOT is public surface (public docs list there; an all-private
+// profile renders EMPTY, never 404 — an existence oracle otherwise).
 const strangerList = await stranger.goto(`${BASE}/@${username}`, { waitUntil: 'load' });
 check(strangerList.status() === 200 && !(await stranger.textContent('body')).includes('Cookie Proof'),
-  'a stranger sees an EMPTY profile — private docs never list');
-const strangerFolder = await stranger.goto(`${BASE}/@${username}/reports/2026`, { waitUntil: 'load' });
-check(!(await stranger.textContent('body')).includes('Cookie Proof'), 'folder pages stay owner-only');
+  'a stranger sees no private document on the profile');
+// And no FOLDER either, public or not: a stranger's profile is documents, flat.
+// The public index is `format = 'markup'` (lib/users listPublicArtifactsByUser),
+// so the strip the owner's own root grew has nothing to draw here.
+check((await stranger.locator('[aria-label="Folders"]').count()) === 0
+  && !(await stranger.textContent('body')).includes('Shelf'),
+  'a stranger\u2019s profile lists no folder, not even a public one');
 
 await browser.close();
 sink.close();

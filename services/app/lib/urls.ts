@@ -1,15 +1,21 @@
 /**
  * The URL grammar — pure functions, no DB, no Next.
  *
- * One rule anchors everything: the file ID resolves the document; username,
- * folders, and title slug in a URL are DECORATION. Any path whose last
- * segment starts with a valid id loads, then self-corrects to the canonical
- * form with a redirect. That is what makes renames (username, title, folder
- * moves) free: no link ever breaks, it just heals.
+ * One rule anchors everything: the file ID resolves the document; the username
+ * and the title slug in a URL are DECORATION. Any path whose last segment
+ * starts with a valid id loads, then self-corrects to the canonical form with
+ * a redirect. That is what makes renames (username, title, a move between
+ * folders) free: no link ever breaks, it just heals.
+ *
+ * NESTING IS NEVER IN A URL. A folder is an artifact with its own address, and
+ * two sibling folders may share a name — so a path through them is ambiguous
+ * by construction, and the address stayed decoration while the trail
+ * (`ancestor_ids`) is drawn on the page. The old folder segments and their
+ * grammar are gone, not kept.
  *
  * Canonical forms:
- *   /a/<id>                                        anonymous (or owner has no username yet)
- *   /@<username>/<folder>/.../<id>[-<title-slug>]  owned
+ *   /a/<id>                            anonymous (or owner has no username yet)
+ *   /@<username>/<id>[-<title-slug>]   owned
  */
 import { ID_RE } from './ids-shape';
 
@@ -29,9 +35,9 @@ const FILE_SEGMENT_RE = /^([a-zA-Z0-9]{6,12})(?:-(.*))?$/;
 
 /**
  * The forgiving parse: given the path segments AFTER /@username/, find the
- * file id. Null = the last segment can't carry one (so it's a folder path,
- * or nothing). Everything before the last segment is ignored on purpose —
- * resolution is by id alone.
+ * file id. Null = the last segment can't carry one. Everything before the last
+ * segment is ignored on purpose — resolution is by id alone, which is what
+ * lets an OLD link carrying folder names keep working after the grammar died.
  */
 export function parsePrettyPath(segments: string[]): { id: string } | null {
   const last = segments[segments.length - 1];
@@ -42,32 +48,10 @@ export function parsePrettyPath(segments: string[]): { id: string } | null {
 }
 
 export function canonicalArtifactPath(
-  doc: { id: string; title: string | null; folder: string },
+  doc: { id: string; title: string | null },
   ownerUsername: string | null,
 ): string {
   if (!ownerUsername) return `/a/${doc.id}`;
   const slug = titleSlug(doc.title);
-  const file = slug ? `${doc.id}-${slug}` : doc.id;
-  const folder = doc.folder ? `${doc.folder}/` : '';
-  return `/@${ownerUsername}/${folder}${file}`;
-}
-
-const FOLDER_SEGMENT_RE = /^[a-zA-Z0-9_-]{1,40}$/;
-const MAX_FOLDER_DEPTH = 8;
-const MAX_FOLDER_LENGTH = 200;
-
-/**
- * Normalize a folder path ('a/b/c'; '' = root). Stray and doubled slashes
- * collapse (they carry no meaning); a segment that fails the charset, or a
- * path too deep/long, is null — reject, never silently truncate.
- */
-export function parseFolder(value: string): string | null {
-  const segments = value.split('/').filter((s) => s !== '');
-  if (segments.length === 0) return '';
-  if (segments.length > MAX_FOLDER_DEPTH) return null;
-  for (const s of segments) {
-    if (!FOLDER_SEGMENT_RE.test(s)) return null;
-  }
-  const joined = segments.join('/');
-  return joined.length <= MAX_FOLDER_LENGTH ? joined : null;
+  return `/@${ownerUsername}/${slug ? `${doc.id}-${slug}` : doc.id}`;
 }

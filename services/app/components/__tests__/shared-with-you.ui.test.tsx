@@ -22,7 +22,7 @@ const row = (id: string, over: Partial<SharedArtifactSummary> = {}): SharedArtif
   access: 'read',
   visibility: 'private',
   edit_id: 'e'.repeat(32),
-  folder: '',
+  ancestor_ids: [],
   created_at: '2026-08-01T00:00:00.000Z',
   updated_at: '2026-08-01T00:00:00.000Z',
   owner_username: 'alice',

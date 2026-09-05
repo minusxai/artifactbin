@@ -15,7 +15,6 @@ by name. One namespace; a name is either a TABLE (a `<Query>` or a table
 <Helmet>
   <Value name="region" type="string" />
   <Value name="min_rev" type="number" default={1000} />
-  <Value name="tiny" type="table" value={[{"name":"John","age":34}]} />
   <Query name="regions">{`select distinct region from ref_<datasetId> order by 1`}</Query>
   <Query name="sales">{`
     select region, sum(revenue) as revenue
@@ -27,8 +26,6 @@ by name. One namespace; a name is either a TABLE (a `<Query>` or a table
 
 <select value="$region" options="$regions" />
 <Question title="Revenue by region" data="$sales" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"region","type":"nominal"},"y":{"field":"revenue","type":"quantitative"}}}}} height="430px" />
-<p>Total <Number data="$sales" col="revenue" agg="sum" prefix="$" format=",.0f" /></p>
-<DataTable data="$sales" height="420px" columns={[{"col":"region"},{"col":"revenue","fmt":"$,.0f","bar":true}]} />
 ```
 
 `ref:<id>` survives ONLY for images and recipes; `data="ref:<id>"`, inline
@@ -46,7 +43,7 @@ Declarations · Bindings: embeds · Bindings: controls.
   "$region is null" in SQL means "all". A scalar also travels in the LINK:
   the document accepts `?$region=EU` (empty = "all"), so you can hand your
   user a pre-filtered link — and a reader's own picks rewrite the address.
-- `<Value name type="table" value={[{…}, …]} />` — an inline table (flat
+- `<Value name="tiny" type="table" value={[{…}, …]} />` — an inline table (flat
   objects; `columns={[{name,type}]}` optional). Read it in SQL by its bare
   name (`from tiny`) or bind it directly (`data="$tiny"`).
 - `<Query name>{`select …`}</Query>` — SQL (DuckDB dialect) as a
@@ -56,12 +53,18 @@ Declarations · Bindings: embeds · Bindings: controls.
   scalar Value is the bound parameter `$name`, never interpolated. Dry-run
   at publish against the real columns: a bad column is a
   `400 {"error":"invalid_sql"}` carrying the engine's message with candidate
-  names. Results are cut at 10,000 rows; a query has 5 s.
+  names. Results are cut at 10,000 rows; a query has 5 s. A FOLDER is a table
+  too — `ref_<folderId>`, its children, which its own page lists with
+  `<Files data="$children" variant="icons|tiles" />`. Columns `id title format
+  level visibility updated_at url thumbnail views sparkline`, computed per
+  VIEWER: a stranger gets the `public` children, `thumbnail` (a card) is null
+  for a private child AND for every folder, `views`/`sparkline` null unless you
+  may edit the folder.
 - `<Mutation name>{`insert into ref_<datasetId> (a) values ($a)`}</Mutation>`
   — a `<Query>` that WRITES (preview: the dataset needs `access: readwrite`,
-  [publishing-datasets.md](publishing-datasets.md)). Exactly one INSERT | UPDATE | DELETE
+  [datasets](publishing-datasets.md)). Exactly one INSERT | UPDATE | DELETE
   naming exactly ONE dataset, which must be YOUR OWN (reading a public one
-  you do not own is fine; writing it is not); `$name` binds a scalar, never interpolated. It runs on demand, never at render:
+  you do not own is fine; writing it is not). It runs on demand, never at render:
   `<Button run="$name">` in the body, or `mx.mutate("name")` from your
   `<script>`; dry-run at publish, so a button that could not work is a `400`
   naming the fix. Anyone who can read the document can run it — a poll, a
@@ -70,8 +73,8 @@ Declarations · Bindings: embeds · Bindings: controls.
 
 ## Bindings: embeds (body)
 
-- `<Button run="$add">Add</Button>` — runs the named `<Mutation>` with the
-  document's current values; busy while in flight, a refusal shown beside it.
+- `<Button run="$add">Add</Button>` — runs the named `<Mutation>`; busy while
+  in flight, a refusal shown beside it.
 - `<Question data="$table" viz={…} height="430px" />` — a chart over a
   declared table. The `viz` prop REQUIRES a `kind` discriminator:
   `{"kind":"vega-lite","spec":{…}}` for an inline spec (encoding fields are
@@ -91,8 +94,7 @@ Declarations · Bindings: embeds · Bindings: controls.
   "alias":"Revenue"}}}` (several `value` columns = one card each; `params`:
   `compareMode: "last"|"previous"` — `previous` skips a partial current
   period; `trendColor`/`valueColor` — prefer a token like `"var(--chart-2)"`,
-  which follows theme switches). Reach for `single_value` only where history
-  is meaningless. All EIGHT shipped ids (slots validated at publish):
+  which follows theme switches). All EIGHT shipped ids (slots validated at publish):
   `minusx/trend@1`, `minusx/funnel@1` (`stage`, `value`), `minusx/waterfall@1`
   (`category`, `value`), `minusx/radar@1` (`metric`, `value` multi, optional
   `series`), `minusx/combo@1` (`x`, `bar`, `line`, optional `series`),
@@ -130,7 +132,7 @@ Declarations · Bindings: embeds · Bindings: controls.
   - `<DatePicker value="$since" min max />` (a `date` Value), `<Switch checked="$flag" />` (a boolean).
   Dropdowns belong in a control row, never inside a `<GridItem>`.
 - Native controls bind the same way, bare browser chrome: `<select value="$region"
-  options="$regions" />`; `<input type="range|number|text|date" value="$x" />`;
-  `<input type="checkbox" checked="$flag" />`; `<textarea value="$note" />`.
+  options="$regions" />`; `<input type="range|number|text|date" value="$x" />`
+  (`checked="$flag"` for a checkbox); `<textarea value="$note" />`.
   While a re-run is in flight an embed keeps its rows, dims, and shows an
   "updating…" chip; a failed query shows the engine's message in its place.

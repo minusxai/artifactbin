@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS app.tokens (
   audience TEXT,
   scope TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  revoked_at TIMESTAMPTZ,
+  deleted_at TIMESTAMPTZ,
   expires_at TIMESTAMPTZ,
   last_used_at TIMESTAMPTZ,
   PRIMARY KEY (id)
@@ -91,11 +91,22 @@ ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS scope TEXT;
 
 ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
-ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;
+ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 
 ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
 
 ALTER TABLE app.tokens ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema = 'app' AND table_name = 'tokens' AND column_name = 'revoked_at'
+  ) THEN
+    UPDATE app.tokens SET deleted_at = revoked_at WHERE deleted_at IS NULL AND revoked_at IS NOT NULL;
+    ALTER TABLE app.tokens DROP COLUMN IF EXISTS revoked_at;
+  END IF;
+END $$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_tokens_hash ON app.tokens (token_hash);
 
@@ -106,7 +117,7 @@ CREATE TABLE IF NOT EXISTS app.artifacts (
   visibility TEXT NOT NULL DEFAULT 'public',
   link_role TEXT,
   access TEXT NOT NULL DEFAULT 'read',
-  folder TEXT NOT NULL DEFAULT '',
+  ancestor_ids TEXT[] NOT NULL DEFAULT '{}',
   title TEXT,
   description TEXT,
   format TEXT NOT NULL DEFAULT 'markup',
@@ -120,6 +131,7 @@ CREATE TABLE IF NOT EXISTS app.artifacts (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   forked_from TEXT,
+  deleted_at TIMESTAMPTZ,
   PRIMARY KEY (id)
 );
 
@@ -135,7 +147,7 @@ ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS link_role TEXT;
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS access TEXT NOT NULL DEFAULT 'read';
 
-ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS folder TEXT NOT NULL DEFAULT '';
+ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS ancestor_ids TEXT[] NOT NULL DEFAULT '{}';
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS title TEXT;
 
@@ -163,7 +175,17 @@ ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NU
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS forked_from TEXT;
 
+ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+ALTER TABLE app.artifacts DROP COLUMN IF EXISTS folder;
+
 CREATE INDEX IF NOT EXISTS idx_artifacts_token_updated ON app.artifacts (token_id, updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_artifacts_ancestors ON app.artifacts USING gin (ancestor_ids);
+
+CREATE INDEX IF NOT EXISTS idx_artifacts_parent ON app.artifacts ((ancestor_ids[cardinality(ancestor_ids)]));
+
+CREATE INDEX IF NOT EXISTS idx_artifacts_user_level ON app.artifacts (user_id, (cardinality(ancestor_ids)));
 
 CREATE TABLE IF NOT EXISTS app.artifact_versions (
   artifact_id TEXT NOT NULL,
@@ -280,6 +302,7 @@ CREATE TABLE IF NOT EXISTS app.annotations (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   quote TEXT,
   range TEXT,
+  deleted_at TIMESTAMPTZ,
   PRIMARY KEY (id)
 );
 
@@ -318,6 +341,8 @@ ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT 
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS quote TEXT;
 
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS range TEXT;
+
+ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_annotations_artifact_seq ON app.annotations (artifact_id, seq);
 
@@ -478,7 +503,7 @@ CREATE TABLE IF NOT EXISTS auth.clients (
   metadata JSONB NOT NULL DEFAULT '{}',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  revoked_at TIMESTAMPTZ,
+  deleted_at TIMESTAMPTZ,
   PRIMARY KEY (id)
 );
 
@@ -492,7 +517,18 @@ ALTER TABLE auth.clients ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NUL
 
 ALTER TABLE auth.clients ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
-ALTER TABLE auth.clients ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;
+ALTER TABLE auth.clients ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema = 'auth' AND table_name = 'clients' AND column_name = 'revoked_at'
+  ) THEN
+    UPDATE auth.clients SET deleted_at = revoked_at WHERE deleted_at IS NULL AND revoked_at IS NOT NULL;
+    ALTER TABLE auth.clients DROP COLUMN IF EXISTS revoked_at;
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS auth.credentials (
   kind TEXT NOT NULL,
@@ -502,7 +538,7 @@ CREATE TABLE IF NOT EXISTS auth.credentials (
   payload JSONB NOT NULL DEFAULT '{}',
   expires_at TIMESTAMPTZ NOT NULL,
   consumed_at TIMESTAMPTZ,
-  revoked_at TIMESTAMPTZ,
+  deleted_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (kind, credential_hash)
 );
@@ -521,9 +557,20 @@ ALTER TABLE auth.credentials ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ NOT
 
 ALTER TABLE auth.credentials ADD COLUMN IF NOT EXISTS consumed_at TIMESTAMPTZ;
 
-ALTER TABLE auth.credentials ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;
+ALTER TABLE auth.credentials ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 
 ALTER TABLE auth.credentials ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema = 'auth' AND table_name = 'credentials' AND column_name = 'revoked_at'
+  ) THEN
+    UPDATE auth.credentials SET deleted_at = revoked_at WHERE deleted_at IS NULL AND revoked_at IS NOT NULL;
+    ALTER TABLE auth.credentials DROP COLUMN IF EXISTS revoked_at;
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_auth_credentials_group ON auth.credentials (group_id) WHERE group_id IS NOT NULL;
 

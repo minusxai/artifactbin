@@ -27,7 +27,7 @@ export async function createArtifactFromRequest(
     // account's when the token has one). The JSON body asks the second through
     // `ContentInputCtx.overByteQuota`; this branch never goes through that
     // door, so it asks here, before the bytes are read into memory.
-    if (await artifactQuotaExceeded(tokenId)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — delete documents you no longer need'] }, 403);
+    if (await artifactQuotaExceeded(tokenId)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
     if (await assetByteQuotaExceeded(tokenId)) {
       return json({ error: 'quota_exceeded', details: ['this account is over its stored-byte quota — delete assets you no longer need'] }, 403);
     }

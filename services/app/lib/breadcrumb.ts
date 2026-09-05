@@ -16,11 +16,12 @@
  *
  * TWO RULES, both about the 390px screen this is drawn on:
  *
- *  - AT MOST ONE ANCESTOR. A profile's folder path can be five deep, and five
- *    crumbs in a 44px bar is a row of ellipses. The handle is the one ancestor
- *    worth a tap; the folder segments already have their own breadcrumb in the
- *    profile's own hero (`app/[user]/[[...path]]` ListingHero), which is where
- *    there is width to draw them.
+ *  - AT MOST ONE ANCESTOR. The handle is the one crumb worth a tap in a 44px
+ *    bar. This survived folders becoming artifacts unchanged: nesting is not in
+ *    a URL (lib/urls), so a pretty address is `@handle` and one leaf, and the
+ *    trail through a folder is drawn on the folder's own document from
+ *    `ancestor_ids`. An OLD link still carrying folder names resolves by its id
+ *    and heals, and until it does its extra segments are ignored here.
  *  - THE TITLE WINS THE LEAF. A document names itself, and its address
  *    (`/@vivek/notes/ab12-my-doc`) is decoration around an id. Whoever renders
  *    a document passes the name it actually has.
@@ -40,7 +41,7 @@ const PAGE_NAMES: Record<string, string> = {
   '/login': 'log in',
 };
 
-/** A profile path — `/@handle`, optionally with folders and a document after it. */
+/** A profile path — `/@handle`, optionally with a document (and any decoration) after it. */
 const HANDLE_RE = /^\/(@[a-z0-9_]+)(\/.*)?$/;
 
 export function crumbsFor(pathname: string, title?: string | null): Crumb[] {
@@ -52,8 +53,8 @@ export function crumbsFor(pathname: string, title?: string | null): Crumb[] {
     const [, at, rest] = handle;
     // The handle itself: one crumb, and it IS the page.
     if (!rest) return [{ label: at }];
-    // Below it: the handle becomes the way back, and the leaf is the document
-    // by name — or, on a folder listing, the folder itself.
+    // Below it: the handle becomes the way back, and the leaf is the artifact
+    // by name — a document or a folder alike, since a folder is one.
     const last = rest.split('/').filter(Boolean).at(-1) ?? '';
     return [{ label: at, href: `/${at}` }, { label: named ?? last }];
   }
