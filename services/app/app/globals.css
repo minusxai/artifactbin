@@ -489,12 +489,6 @@ body {
   .group:hover > .folder-cover .folder-cover-paper { transform: none; }
 }
 
-.folder-cover-visibility > span {
-  border-color: var(--folder-edge);
-  background: var(--folder-back);
-  color: var(--folder-ink);
-}
-
 /* Gallery documents read as paper objects; other shelf modes retain their chrome. */
 .gallery-paper {
   width: 100%;
@@ -520,10 +514,10 @@ body {
   border-radius: 5px 5px 4px 4px;
   box-shadow: 0 -3px 8px #00000008;
 }
+/* One opaque neutral badge keeps visibility consistent over folders and previews. */
+.folder-cover-visibility > span,
 .gallery-fade-visibility > span {
   width: 23px; height: 23px; border: 1px solid #ffffff25;
-  background: rgb(8 16 24 / 55%); color: #fff;
+  background: #69727b; color: #fff;
   box-shadow: none;
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
 }

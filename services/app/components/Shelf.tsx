@@ -189,7 +189,7 @@ function FolderCover({ row, documents, count, controls, showVisibility }: { show
         <span className="truncate font-mono text-[10px] tabular-nums">{itemCount > 0 ? `${itemCount} artifact${itemCount === 1 ? '' : 's'}` : 'artifacts'}</span>
       </div>
       <div className="folder-cover-back" />
-      {showVisibility && row.visibility && <span className="folder-cover-visibility absolute left-2 top-[27px] z-[3]"><VisibilityPill compact visibility={row.visibility} name={nameOf(row)} /></span>}
+      {showVisibility && row.visibility && <span className="folder-cover-visibility absolute left-2 top-[27px] z-[3]"><VisibilityPill compact overlay visibility={row.visibility} name={nameOf(row)} /></span>}
       <div className="folder-cover-papers" style={{ '--paper-width': paperCount > 2 ? '48%' : '61%' } as React.CSSProperties}>
         {papers.map((item, i) => (
           <div key={item?.id ?? i} aria-hidden="true" className="folder-cover-paper" style={paperStyle(i)}>
