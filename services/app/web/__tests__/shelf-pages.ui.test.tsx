@@ -105,7 +105,7 @@ describe('what the dashboard leads with', () => {
 
   it('offers ONE way to the trash, and only to an account', async () => {
     /*
-     * P3 made delete a trash: a deleted row is recoverable for 30 days, which
+     * P3 made delete a trash: a deleted row is recoverable for ever, which
      * is worth nothing if there is no way to reach it. One link in the
      * dashboard's chrome, and nothing else — an anonymous browser has no
      * account to hold a trash, so it is not offered one.

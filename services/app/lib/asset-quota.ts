@@ -24,11 +24,13 @@
  *   artifacts.meta->>'bytes'  — every image/PDF stored through storeImageContent
  *   web_assets.bytes          — every URL this importer was the first to fetch
  *
- * A TRASHED asset is not charged (the gate is named in both sums): its bytes
- * are still on disk for the retention, but a quota someone cannot get back
- * under by deleting things is a quota that reads as broken.
+ * A DELETED asset is charged exactly like a live one, and neither sum names
+ * the trash gate. Nothing in this product is ever erased: the bytes of a
+ * deleted image are still in the object store, permanently, so not charging
+ * for them would price storage at zero for anyone willing to press delete —
+ * and the cap would be bypassed by delete-and-reimport. Stated in the docs
+ * beside the row cap, which counts the same way for the same reason.
  */
-import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts';
 import { getDb } from '@/lib/db';
 import { ASSETS_MAX_BYTES_PER_TOKEN } from '@/lib/config';
 
@@ -54,7 +56,7 @@ export async function assetBytesForToken(tokenId: string): Promise<number> {
     ? await db.query<{ n: number }>(
       `SELECT
          (SELECT COALESCE(SUM((meta->>'bytes')::bigint), 0) FROM artifacts
-           WHERE user_id = $1 AND meta ? 'bytes' AND ${LIVE_ARTIFACT_SQL})
+           WHERE user_id = $1 AND meta ? 'bytes')
        + (SELECT COALESCE(SUM(bytes), 0) FROM web_assets WHERE fetched_by_user_id = $1)
          AS n`,
       [userId],
@@ -62,7 +64,7 @@ export async function assetBytesForToken(tokenId: string): Promise<number> {
     : await db.query<{ n: number }>(
       `SELECT
          (SELECT COALESCE(SUM((meta->>'bytes')::bigint), 0) FROM artifacts
-           WHERE token_id = $1 AND user_id IS NULL AND meta ? 'bytes' AND ${LIVE_ARTIFACT_SQL})
+           WHERE token_id = $1 AND user_id IS NULL AND meta ? 'bytes')
        + (SELECT COALESCE(SUM(bytes), 0) FROM web_assets
            WHERE fetched_by_token_id = $1 AND fetched_by_user_id IS NULL)
          AS n`,

@@ -15,7 +15,6 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as mintTokenRoute } from '@/app/api/tokens/route';
 import { resetRateLimit } from '@/lib/auth';
 import { MAX_STALE_EDITS } from '@/lib/artifacts';
-import { purgeTrash } from '@/lib/trash';
 
 const BASE = 'http://localhost:3000';
 const SECRET = 'test-secret';
@@ -491,16 +490,16 @@ describe('deletion', () => {
 
     const gone = await deleteRoute(request(`/api/artifacts/${doc.id}`, { method: 'DELETE', token: t.token }), params({ id: doc.id }));
     expect(gone.status).toBe(200);
-    // A delete is a TRASH now, so the log survives it — it has to, or a
-    // restore would bring back a document with no history behind it.
+    /*
+     * A delete is a TRASH, so the log survives it — it has to, or a restore
+     * would bring back a document with no history behind it — and there is no
+     * later sweep that takes it, because nothing in this product is erased.
+     * The honest consequence, stated in the docs: the deleted document's full
+     * text stays in the edit log, so "delete" is a withdrawal, not an erasure.
+     */
     expect((await db.query('SELECT 1 FROM artifact_edits WHERE artifact_id = $1', [doc.id])).rows.length).toBeGreaterThan(0);
-    // The guarantee moved to the PURGE, and it is unchanged there: "permanent"
-    // must mean permanent, and the log stores full text, so leaving it behind
-    // would keep the deleted document readable in the database.
-    await db.query(`UPDATE artifacts SET deleted_at = now() - interval '31 days' WHERE id = $1`, [doc.id]);
-    expect(await purgeTrash({ olderThanDays: 30 })).toEqual([doc.id]);
-    const left = await db.query('SELECT inserted FROM artifact_edits WHERE artifact_id = $1', [doc.id]);
-    expect(left.rows).toEqual([]);
+    await db.query(`UPDATE artifacts SET deleted_at = now() - interval '400 days' WHERE id = $1`, [doc.id]);
+    expect((await db.query('SELECT 1 FROM artifact_edits WHERE artifact_id = $1', [doc.id])).rows.length).toBeGreaterThan(0);
   });
 });
 

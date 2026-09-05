@@ -16,7 +16,7 @@ interface TrashFile { id: string; title: string | null; format: string; deleted_
  */
 export function TrashPage() {
   const { session } = useSession();
-  const [data, setData] = useState<{ files: TrashFile[]; retentionDays: number } | null>(null);
+  const [data, setData] = useState<{ files: TrashFile[] } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const load = useCallback(() => {
     void fetch('/api/page/trash', { credentials: 'same-origin' })
@@ -43,7 +43,7 @@ export function TrashPage() {
     <main className="mx-auto mt-8 max-w-3xl px-6 pb-24">
       <h1 className="text-base font-semibold"><span className="text-accent">&gt;</span> trash</h1>
       <p className="mt-2 font-mono text-sm leading-relaxed text-muted">
-        Deleted documents stay here for {data?.retentionDays ?? 30} days, then go for good. A folder brings back everything that was deleted with it.
+        Deleted documents stay here. Nothing is ever erased, so there is no deadline to restore by — and a deleted document still counts against your quota. A folder brings back everything that was deleted with it.
       </p>
       {data && files.length === 0
         ? <p className="mt-6 font-mono text-xs text-faint">Nothing deleted.</p>

@@ -10,6 +10,7 @@ import { attachActor } from '@artifactbin/utils';
 import type { Actor } from '@artifactbin/contracts';
 import { AGENT_COOKIE, encodeAgentSession } from '@/lib/agent-session';
 import { resetRateLimit } from '@/lib/auth';
+import { EVENTS_SCHEMA } from '@/lib/config';
 import { getDb, resetDb } from '@/lib/db';
 import { SCHEMA_STATEMENTS } from '@/lib/schema';
 
@@ -103,6 +104,12 @@ export function useAppHarness(): AppHarness {
     for (const table of SCHEMA_TABLES.toReversed()) {
       await db.query(`DELETE FROM ${table}`);
     }
+    // The events table belongs to the events SERVICE, so it is not in the
+    // app's schema and no test file may wipe it itself (harness-rollout pins
+    // that). It exists only in a file that created it; guard on to_regclass so
+    // every other file's wipe stays a no-op rather than an error.
+    const present = await db.query<{ present: boolean }>('SELECT to_regclass($1) IS NOT NULL AS present', [`${EVENTS_SCHEMA}.events`]);
+    if (present.rows[0]?.present) await db.query(`DELETE FROM ${EVENTS_SCHEMA}.events`);
     resetRateLimit();
   });
 

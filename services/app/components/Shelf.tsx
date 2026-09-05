@@ -278,7 +278,7 @@ function Actions({ row, level, folders, childCount = 0, onDeleted }: { row: Shel
                 // The row SAYS how much goes with it, and the confirm says it
                 // again in a sentence: deleting a folder is deleting everything
                 // under it, in one statement, into a trash it can be taken back
-                // out of for 30 days (lib/trash).
+                // out of at any time (lib/trash).
                 text: childCount > 0 ? `delete (${childCount} inside)` : 'delete',
                 icon: <Trash2 size={12} />,
                 danger: true,

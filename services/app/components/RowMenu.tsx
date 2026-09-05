@@ -101,7 +101,7 @@ export default function RowMenu({ name, items }: { name: string; items: RowMenuI
  * A FOLDER NAMES WHAT GOES WITH IT. Deleting one is deleting everything under
  * it — one statement, since placement is `ancestor_ids` (lib/trash) — so the
  * count belongs in the sentence the person answers, not in a refusal they have
- * to work around. It says the trash and the 30 days too, because what makes
+ * to work around. It says the trash and the undo too, because what makes
  * taking a folder full of documents an ordinary act rather than a cliff is
  * that it is recoverable — which is why the plain sentence says it too. It
  * used to read "the link dies and history is erased", written when a delete
@@ -109,8 +109,8 @@ export default function RowMenu({ name, items }: { name: string; items: RowMenuI
  */
 export async function confirmDeleteArtifact(id: string, name: string, inside = 0): Promise<boolean> {
   const message = inside > 0
-    ? `Delete ${name} and the ${inside} item${inside === 1 ? '' : 's'} inside it? They go to the trash for 30 days.`
-    : `Delete "${name}"? The link stops working. It goes to the trash for 30 days, then it is gone for good.`;
+    ? `Delete ${name} and the ${inside} item${inside === 1 ? '' : 's'} inside it? They go to the trash, and you can restore them any time.`
+    : `Delete "${name}"? The link stops working. It goes to the trash, where you can restore it any time.`;
   if (!confirm(message)) return false;
   const res = await fetch(`/api/my/artifacts/${id}`, { method: 'DELETE' });
   return res.ok;

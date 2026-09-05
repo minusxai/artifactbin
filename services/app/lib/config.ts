@@ -394,3 +394,20 @@ export const INTERNAL_SERVICE_SECRET = env('INTERNAL', 'SERVICE_SECRET');
  * rows to register, never a document and never a credential.
  */
 export const SQL_SERVICE_URL = env('SQL', 'SERVICE_URL');
+
+/**
+ * Where the events log is WRITTEN. Set, every `emit` travels to that service
+ * (services/events, `node server` in its own container). Unset, the
+ * composition root registered the in-process writer, or nothing at all — a
+ * noop: nothing leaves the box, and the feed below reads empty. The app calls
+ * `services().events.emit(...)` and cannot tell which.
+ */
+export const EVENTS_SERVICE_URL = env('EVENTS', 'SERVICE_URL');
+
+/**
+ * The schema the events service OWNS, which this app reads with SELECT only
+ * (lib/feed). The schema comes from the environment; the table name is a
+ * constant — exactly how the proxy reads the app's `tokens` table
+ * (`APP__SCHEMA` + a literal). Default `events`; prod names its own.
+ */
+export const EVENTS_SCHEMA = env('EVENTS', 'SCHEMA') ?? 'events';

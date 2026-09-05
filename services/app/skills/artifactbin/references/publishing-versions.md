@@ -28,20 +28,26 @@ DELETE [[ base ]]/api/artifacts/<id>          → 200 { "ok": true }
 POST   [[ base ]]/api/artifacts/<id>/restore  → 200 { "id", "url", "parent_id" }
 ```
 
-The link stops working at once, and the artifact is recoverable for 30 days,
-after which it is deleted for good. A FOLDER takes everything under it, and
-restore brings the whole subtree back — if the folder it lived in is itself
-still deleted, it comes back at your root and the answer says so. Confirm with
-your user before deleting anything they shared. An artifact other documents
-reference (an image, a dataset) answers `409 has_dependents`; re-send with
-`?force=true` to break them knowingly.
+The link stops working at once, and the artifact is restorable with no deadline.
+A FOLDER takes everything under it, and restore brings the whole subtree back —
+if the folder it lived in is itself still deleted, it comes back at your root
+and the answer says so. Confirm with your user before deleting anything they
+shared. An artifact other documents reference (an image, a dataset) answers
+`409 has_dependents`; re-send with `?force=true` to break them knowingly.
 
-Two limits the trash does not cover, both worth knowing before you promise your
-user an undo. Deleting a COMMENT is permanent — the trash holds artifacts, and
-a thread you remove does not come back with a restore. And the 6-level depth
-cap counts only what is LIVE, so a restore can land a row deeper than the
-6-level cap if the folders above it grew while it was gone; the row is fine
-where it lands, and the next MOVE is what refuses.
+**Nothing here is ever erased.** A delete withdraws the link and nothing more:
+the row, its version history, its comments and its stored bytes are kept, and
+`restore_artifact` works a year later exactly as it does a minute later. Two
+things follow, and your user should hear both from you rather than discover
+them. A deleted artifact **still counts against your quota** — deleting does not
+free you to publish another one. And really destroying something, for a legal
+request or anything like it, is **an administrative act on the database, outside
+this API**; do not promise your user that a delete does it.
+
+One more limit worth knowing: the 6-level depth cap counts only what is LIVE, so
+a restore can land a row deeper than the 6-level cap if the folders above it
+grew while it was gone; the row is fine where it lands, and the next MOVE is
+what refuses.
 
 ## Screenshot / export as an image (curlable; readable = exportable)
 

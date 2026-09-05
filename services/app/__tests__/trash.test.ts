@@ -1,4 +1,9 @@
-/** P3 (seeded RED) — delete is a trash: gone everywhere, restorable, purged after 30 days. */
+/**
+ * P3 (seeded RED) — delete is a trash: gone everywhere, restorable, and now
+ * TERMINAL. Nothing in this product erases a row, so there is no retention and
+ * no purge: `deleted_at` set is the end state, and restore is the only thing
+ * that clears it.
+ */
 import { describe, expect, it } from 'vitest';
 import { request, useAppHarness } from './harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
@@ -7,7 +12,8 @@ import { getArtifactById, type TokenActor } from '@/lib/artifacts';
 import { getDb } from '@/lib/db';
 import { mintToken, resolveToken } from '@/lib/tokens';
 import { claimToken, createUser } from '@/lib/users';
-import { listTrashFor, purgeTrash, restoreArtifactFor } from '@/lib/trash';
+import { listTrashFor, restoreArtifactFor } from '@/lib/trash';
+import { createAppServer } from '@/server/app';
 
 useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -59,16 +65,31 @@ describe('the trash', () => {
     expect(r.body.error).toBeUndefined();
   });
 
-  it('the purge hard-deletes only what has sat in the trash longer than the retention', async () => {
+  /*
+   * THE TERMINAL STATE. There is no retention and nothing that sweeps: a row
+   * deleted a year ago is exactly as present, as listed and as restorable as
+   * one deleted a second ago. The check drives real API traffic in between,
+   * because the erasure that used to exist was hung off the request path.
+   */
+  it('NEVER erases: a row deleted a year ago is still listed and still restorable', async () => {
     const o = await owner();
-    const old = await create(o.token, { markup: '<p>old</p>' });
-    const fresh = await create(o.token, { markup: '<p>fresh</p>' });
-    await del(o.token, old.id); await del(o.token, fresh.id);
+    const ancient = await create(o.token, { markup: '<p>old</p>', title: 'Ancient' });
+    const fresh = await create(o.token, { markup: '<p>fresh</p>', title: 'Fresh' });
+    await del(o.token, ancient.id); await del(o.token, fresh.id);
     const db = await getDb();
-    await db.query(`UPDATE artifacts SET deleted_at = now() - interval '31 days' WHERE id = $1`, [old.id]);
-    expect((await purgeTrash({ olderThanDays: 30 })).sort()).toEqual([old.id]);
-    expect((await db.query('SELECT id FROM artifacts WHERE id = $1', [old.id])).rows).toHaveLength(0);
-    expect((await db.query('SELECT id FROM artifacts WHERE id = $1', [fresh.id])).rows).toHaveLength(1);
-    expect((await listTrashFor(o.actor)).map((r) => r.id)).toEqual([fresh.id]);
+    await db.query(`UPDATE artifacts SET deleted_at = now() - interval '400 days' WHERE id = $1`, [ancient.id]);
+    /*
+     * Through the REAL app server, not a route handler: the erasure this
+     * replaces hung off an `/api/*` middleware, so a test that calls handlers
+     * directly would never have run it and would pass either way.
+     */
+    const app = createAppServer({ webDir: 'dist/web' });
+    expect((await app.fetch(new Request(`http://localhost/api/artifacts/${fresh.id}`, { headers: { authorization: `Bearer ${o.token}` } }))).status).toBe(404);
+    // The sweep was unawaited by design; give it every chance to land.
+    await new Promise((r) => setTimeout(r, 300));
+    expect((await db.query('SELECT id FROM artifacts WHERE id = $1', [ancient.id])).rows).toHaveLength(1);
+    expect((await listTrashFor(o.actor)).map((r) => r.id).sort()).toEqual([ancient.id, fresh.id].sort());
+    expect(await restoreArtifactFor(o.actor, ancient.id)).not.toBeNull();
+    expect(await getArtifactById(ancient.id)).not.toBeNull();
   });
 });

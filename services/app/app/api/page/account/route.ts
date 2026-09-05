@@ -1,5 +1,5 @@
 /** The account page's data: the handle (assigned on sight if missing) and the daily-views chart. */
-import { dailyViewsByUser } from '@/lib/analytics';
+import { dailyViewsByUser } from '@/lib/feed';
 import { json, unauthorized } from '@/lib/http';
 import { ensureUsername, getUserById } from '@/lib/users';
 import { sessionActor } from '@/lib/viewer';

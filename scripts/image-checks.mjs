@@ -4,7 +4,7 @@
  * image, against a BUILT image. Not part of `npm test`: it needs docker and
  * an image tag, so it is run by CI beside the build and by hand:
  *
- *   node scripts/image-checks.mjs <kind> <image>   # kinds: app, proxy, sql, browser, full
+ *   node scripts/image-checks.mjs <kind> <image>   # kinds: app, proxy, sql, browser, events, full
  *
  * What it proves, per kind (the table below is the whole difference):
  *   1. CONTENTS — `require.resolve` inside the container: the package this
@@ -72,8 +72,9 @@ const KINDS = {
     probe: { path: '/health', check: (status, body) => status === 200 && body?.ok === true },
     /** The lean entry's own rule, proved the refusing way too (below). */
     env: { DATABASE_URL: 'pglite://memory', SQL__SERVICE_URL: 'http://127.0.0.1:9', BROWSER__SERVICE_URL: 'http://127.0.0.1:9' },
-    /** The entry's own assert, proved the refusing way (main's 2b). */
-    refusesWithoutEnv: true,
+    /** The entry's own assert, proved the refusing way (main's 2b): what a bare
+     *  `docker run` must NAME on its way out. */
+    refusesWithoutEnv: /SQL__SERVICE_URL and BROWSER__SERVICE_URL/,
     /** 414 MB measured on arm64 after the runtime CSS compiler was bundled,
      *  its toolchain left, and the unused Kysely dialect was removed. */
     budgetMB: 520,
@@ -116,6 +117,30 @@ const KINDS = {
     env: { INTERNAL__SERVICE_SECRET: SERVICE_SECRET },
     headers: { 'x-artifactbin-service-secret': SERVICE_SECRET },
     budgetMB: 1600,
+  },
+  /** The lean EVENTS service — the log's only writer, and the one lean image
+   *  that is STATEFUL: `runEvents` ensures its schema at boot and dies loudly
+   *  without a reachable DATABASE_URL, on purpose (a log service that quietly
+   *  accepted a batch it could not store is the failure that rule exists for).
+   *  So this check proves its CONTENTS, its SIZE and its REFUSAL; that it boots
+   *  and serves is proved by the compose walk, where it has its database. */
+  events: {
+    containerPort: 8080,
+    mustResolve: ['pg'],
+    mustCarry: ['node_modules/@artifactbin/utils', 'node_modules/@artifactbin/contracts'],
+    /** `vite`/`vitest` are NOT listed, and that is measured, not sloppy:
+     *  `npm ci --omit=dev -w <workspace>` does not omit that WORKSPACE's own
+     *  devDependencies unless `--legacy-peer-deps` rides along (measured
+     *  2026-09-05, node:22-slim, both -w services/events and -w services/sql),
+     *  so every lean image built this way carries the test runner. That is the
+     *  sql and browser images' condition today too — one repo-wide fix, not
+     *  this service's to make. */
+    mustThrow: ['playwright', '@duckdb/node-api', 'react', 'better-auth'],
+    /** No database here — see above; the boot leg is the compose walk's. */
+    boots: false,
+    refusesWithoutEnv: /DATABASE_URL/,
+    /** 240 MB measured on arm64: node:22-slim plus `pg` and one bundle. */
+    budgetMB: 320,
   },
   /** The full/co-hosted image intentionally carries both native services and
    *  the PGLite adapter; it still must not carry the CSS build toolchain. */
@@ -183,57 +208,63 @@ async function main() {
   //    kind names is the LEAST it needs to stand up (the app's service URLs,
   //    the proxy's upstream + actor secret) — never a whole deployment.
   const envArgs = Object.entries(spec.env ?? {}).flatMap(([k, v]) => ['-e', `${k}=${v}`]);
-  const port = await freePort();
-  const name = `image-checks-${kind}-${Date.now()}`;
-  const base = `http://127.0.0.1:${port}`;
-  const started = await run(['run', '--rm', '-d', '--name', name, '-p', `${port}:${spec.containerPort}`, ...envArgs, image]);
-  let booted = false;
-  try {
-    if (started.error) {
-      record(`${image}: docker run`, false, started.stderr.trim().split('\n').pop());
-    } else {
-      let health = null;
-      for (let i = 0; i < 60 && !health; i++) {
-        await new Promise((r) => setTimeout(r, 1000));
-        health = await fetch(`${base}/health`).then((r) => (r.ok ? r : null)).catch(() => null);
-      }
-      booted = !!health;
-      record(`${image}: GET /health`, booted, booted ? '200 {"ok":true}' : 'no 200 within 60s');
+  if (spec.boots === false) {
+    record(`${image}: boot and serve proved by the compose walk, not here`, true, 'stateful: it needs its database');
+  } else {
+    // The other kinds stand up alone: the env each names is the LEAST it needs.
+    const port = await freePort();
+    const name = `image-checks-${kind}-${Date.now()}`;
+    const base = `http://127.0.0.1:${port}`;
+    const started = await run(['run', '--rm', '-d', '--name', name, '-p', `${port}:${spec.containerPort}`, ...envArgs, image]);
+    let booted = false;
+    try {
+      if (started.error) {
+        record(`${image}: docker run`, false, started.stderr.trim().split('\n').pop());
+      } else {
+        let health = null;
+        for (let i = 0; i < 60 && !health; i++) {
+          await new Promise((r) => setTimeout(r, 1000));
+          health = await fetch(`${base}/health`).then((r) => (r.ok ? r : null)).catch(() => null);
+        }
+        booted = !!health;
+        record(`${image}: GET /health`, booted, booted ? '200 {"ok":true}' : 'no 200 within 60s');
 
-      if (booted && spec.probe) {
-        const { path, body, check } = spec.probe;
-        const method = body ? 'POST' : 'GET';
-        const headers = { ...(body ? { 'content-type': 'application/json' } : {}), ...(spec.headers ?? {}) };
-        const res = await fetch(`${base}${path}`, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
-        const bytes = new Uint8Array(await res.arrayBuffer());
-        const json = (res.headers.get('content-type') ?? '').includes('json') ? JSON.parse(new TextDecoder().decode(bytes)) : null;
-        const what = kind === 'sql' ? 'rows' : kind === 'browser' ? 'image/png' : 'ok';
-        record(`${image}: ${method} ${path} answers ${what}`, check(res.status, json, res.headers, bytes));
-      }
+        if (booted && spec.probe) {
+          const { path, body, check } = spec.probe;
+          const method = body ? 'POST' : 'GET';
+          const headers = { ...(body ? { 'content-type': 'application/json' } : {}), ...(spec.headers ?? {}) };
+          const res = await fetch(`${base}${path}`, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
+          const bytes = new Uint8Array(await res.arrayBuffer());
+          const json = (res.headers.get('content-type') ?? '').includes('json') ? JSON.parse(new TextDecoder().decode(bytes)) : null;
+          const what = kind === 'sql' ? 'rows' : kind === 'browser' ? 'image/png' : 'ok';
+          record(`${image}: ${method} ${path} answers ${what}`, check(res.status, json, res.headers, bytes));
+        }
 
-      // The proxy's own honesty: /health answered while the upstream is DEAD,
-      // and a forwarded request is a 5xx, promptly — never a hang.
-      if (booted && spec.deadUpstream) {
-        const { path, expectStatusAtLeast } = spec.deadUpstream;
-        const res = await fetch(`${base}${path}`, { signal: AbortSignal.timeout(15_000) }).catch(() => null);
-        const ok = !!res && res.status >= expectStatusAtLeast;
-        record(`${image}: GET ${path} with a dead upstream is a ${expectStatusAtLeast}xx, not a hang`, ok, res ? `status ${res.status}` : 'no answer within 15s');
+        // The proxy's own honesty: /health answered while the upstream is DEAD,
+        // and a forwarded request is a 5xx, promptly — never a hang.
+        if (booted && spec.deadUpstream) {
+          const { path, expectStatusAtLeast } = spec.deadUpstream;
+          const res = await fetch(`${base}${path}`, { signal: AbortSignal.timeout(15_000) }).catch(() => null);
+          const ok = !!res && res.status >= expectStatusAtLeast;
+          record(`${image}: GET ${path} with a dead upstream is a ${expectStatusAtLeast}xx, not a hang`, ok, res ? `status ${res.status}` : 'no answer within 15s');
+        }
       }
+    } finally {
+      await run(['rm', '-f', name]);
     }
-  } finally {
-    await run(['rm', '-f', name]);
   }
 
   // 2b. REFUSES TO BOOT without the env the entry demands — the lean app's
   //     own assert (RUNTIME__OMITS' replacement): an image that silently
   //     fell back to an engine it does not carry is the exact hole this closes.
   if (spec.refusesWithoutEnv) {
+    const wanted = spec.refusesWithoutEnv;
     const r = await run(['run', '--rm', image], { timeout: 30_000 });
-    const named = /SQL__SERVICE_URL and BROWSER__SERVICE_URL/.test(r.stderr);
+    const named = wanted.test(r.stderr);
     // The REFUSAL is the pass: a non-zero exit naming what it wants. An exit 0
     // means the entry no longer asserts its own shape.
-    record(`${image}: refuses to boot without SQL__SERVICE_URL and BROWSER__SERVICE_URL`, !!r.error && named,
-      r.error ? (named ? `exited ${r.error.code ?? 1} naming both URLs` : 'exited without naming the URLs') : 'exited 0 — the entry no longer asserts its own shape');
+    record(`${image}: refuses to boot without ${wanted.source}`, !!r.error && named,
+      r.error ? (named ? `exited ${r.error.code ?? 1} naming what it wants` : 'exited without naming it') : 'exited 0 — the entry no longer asserts its own shape');
   }
 
   // 3. SIZE — in-container du, never `docker images` (unreliable under colima).

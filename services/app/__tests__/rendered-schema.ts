@@ -11,7 +11,7 @@ export interface RenderedSchema {
   schema: string;
   roles: string;
   grants: string;
-  tables: Record<string, 'app' | 'proxy'>;
+  tables: Record<string, 'app' | 'proxy' | 'events'>;
 }
 
 /** How many subprocesses this process has spawned — the pin reads it. */

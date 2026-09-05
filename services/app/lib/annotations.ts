@@ -29,6 +29,7 @@ import {
 import { canGovern } from '@/lib/share-roles';
 import { ANNOTATION_ANCHOR_ATTR } from '@/lib/annotation-anchors';
 import { getDb, type Queryable } from '@/lib/db';
+import { actorSubject, emit } from '@/lib/events';
 import { generateInternalId } from '@/lib/ids';
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import {
@@ -356,6 +357,10 @@ export async function createAnnotationFor(
       quote, input.range ? JSON.stringify(input.range) : null],
   );
   await notify(db, artifactId, id);
+  // The row exists; the sentence is about the ARTIFACT (that is whose owner
+  // cares) and the payload names the thread. Nothing here is inside a
+  // transaction, so it is awaited like every other state change.
+  await emit(actorSubject(actor), 'annotated', { kind: 'artifact', id: artifactId }, { annotation_id: id });
 
   const fresh = await scopedRow(db, scope, artifactId);
   const [wire] = fresh ? await wireFor(db, fresh, inserted.rows) : [];
@@ -363,15 +368,18 @@ export async function createAnnotationFor(
 }
 
 /**
- * THE TRASH GATE for this table — `annotations.deleted_at IS NULL`, named in
+ * THE DELETE GATE for this table — `annotations.deleted_at IS NULL`, named in
  * every reader below the way lib/artifacts names its own.
  *
- * `deleteAnnotationFor` is still a HARD delete and nothing writes the column
- * today: erasing someone's words is a deliberate act with no restore door
- * behind it, so a comment does not go to a trash. The column and this gate are
- * what the pattern owes an adopted table — they make a row that carries the
- * stamp invisible, so adopting it for real is one statement rather than an
- * audit of every reader.
+ * `deleteAnnotationFor` WRITES the column: a comment is soft-deleted like
+ * everything else here, root and replies together, and nothing in this product
+ * erases a row. What makes a deleted thread gone is these readers, not a
+ * missing row — which is exactly what the column was added for, so adopting it
+ * was one statement rather than an audit of every reader.
+ *
+ * There is deliberately no restore door for a thread. Taking your words back is
+ * meant to read as final to the person who did it; the row is kept because the
+ * product keeps every row, not because anything offers it back.
  */
 const LIVE_ANNOTATION_SQL = 'deleted_at IS NULL';
 
@@ -469,7 +477,16 @@ export async function actOnAnnotationFor(
   const db = await getDb();
   const scope = annotationScope(actor);
 
-  const updated = await db.transaction(async (tx): Promise<AnnotationRowDb | null> => {
+  /*
+   * WHAT MOVED, decided inside the transaction and said outside it. Both
+   * sentences are about a state CHANGE, so the flags are set exactly where the
+   * writes happen: a reply that was actually inserted, and the one transition
+   * the catalogue has a verb for (open → resolved; a reopen says nothing).
+   * `emit` may not run in here — PGLite serialises the op queue behind an open
+   * transaction — so the callback hands the facts back and the log is told
+   * once the transaction has resolved.
+   */
+  const updated = await db.transaction(async (tx): Promise<{ row: AnnotationRowDb; replied: boolean; resolved: boolean } | null> => {
     const row = await scopedRow(tx, scope, artifactId);
     if (!row) return null;
     const found = await tx.query<AnnotationRowDb>(
@@ -479,7 +496,8 @@ export async function actOnAnnotationFor(
     const root = found.rows[0];
     if (!root) return null;
 
-    if (typeof action.reply === 'string' && action.reply.length > 0) {
+    const replied = typeof action.reply === 'string' && action.reply.length > 0;
+    if (replied) {
       await tx.query(
         `INSERT INTO annotations
            (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport, status, snippet)
@@ -487,28 +505,39 @@ export async function actOnAnnotationFor(
         ['ann_' + generateInternalId(), artifactId, root.id, action.reply, author.kind, actor.tokenId, actor.userId, author.label, author.transport],
       );
     }
+    let resolved = false;
     if (action.reopen && root.status === 'resolved') {
       await tx.query("UPDATE annotations SET status = 'open', resolved_at = NULL WHERE id = $1", [root.id]);
     } else if (action.resolve && root.status === 'open') {
       await tx.query("UPDATE annotations SET status = 'resolved', resolved_at = now() WHERE id = $1", [root.id]);
+      resolved = true;
     }
     const fresh = await tx.query<AnnotationRowDb>('SELECT * FROM annotations WHERE id = $1', [root.id]);
+    // The old shape returned the row itself, so a vanished one WAS the null;
+    // wrapping it in an object would have made every miss truthy.
+    if (!fresh.rows[0]) return null;
     await notify(tx, artifactId, root.id);
-    return fresh.rows[0];
+    return { row: fresh.rows[0], replied, resolved };
   });
   if (!updated) return null;
+  const subject = actorSubject(actor);
+  const thread = { kind: 'artifact', id: artifactId } as const;
+  // The payload names the ROOT for both, never the reply's own id: an owner's
+  // feed reads "commented on X", and the thread is what it opens.
+  if (updated.replied) await emit(subject, 'annotated', thread, { annotation_id: annotationId });
+  if (updated.resolved) await emit(subject, 'annotation_resolved', thread, { annotation_id: annotationId });
 
   const head = await scopedRow(db, scope, artifactId);
   if (!head) return null;
-  const [wire] = await wireFor(db, head, [updated]);
+  const [wire] = await wireFor(db, head, [updated.row]);
   return wire ?? null;
 }
 
 /**
  * Delete a thread outright — root and replies. A browser door only: an agent
- * may answer feedback, never erase it.
+ * may answer feedback, never take it away.
  *
- * ERASING IS NARROWER THAN COMMENTING. Reaching the document is the editor
+ * DELETING IS NARROWER THAN COMMENTING. Reaching the document is the editor
  * scope like every other annotation verb, but taking words away is then
  * checked again: the document's OWNER may remove any thread, and a named
  * editor only one they wrote themselves (`author_user_id`, already on the row —
@@ -536,7 +565,10 @@ export async function deleteAnnotationFor(actor: TokenActor, artifactId: string,
     if (found.rows.length === 0) return null;
     // An editor may take back their own words and no one else's.
     if (!owner && (!actor.userId || found.rows[0].author_user_id !== actor.userId)) return null;
-    await tx.query('DELETE FROM annotations WHERE id = $1 OR root_id = $1', [annotationId]);
+    // The root AND its replies, in one statement and one stamp: a conversation
+    // is deleted as a whole, and a reply left live under a deleted root would
+    // be a thread with no first message.
+    await tx.query('UPDATE annotations SET deleted_at = now() WHERE (id = $1 OR root_id = $1) AND deleted_at IS NULL', [annotationId]);
     const anchorKey = found.rows[0].anchor_key;
     if (!anchorKey) return { anchorKey: null };
     const others = await tx.query(`SELECT 1 FROM annotations WHERE artifact_id = $1 AND anchor_key = $2 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL}`, [artifactId, anchorKey]);
@@ -544,6 +576,10 @@ export async function deleteAnnotationFor(actor: TokenActor, artifactId: string,
     return { anchorKey: others.rows.length === 0 ? anchorKey : null };
   });
   if (!cleanup) return false;
+  // A cleanup is only produced when the UPDATE ran, so this is the deletion
+  // itself rather than an attempt at one. Said before the anchor is swept out
+  // of the source, which is a document edit with a verb of its own.
+  await emit(actorSubject(actor), 'annotation_deleted', { kind: 'artifact', id: artifactId }, { annotation_id: annotationId });
 
   if (cleanup.anchorKey) {
     const head = await scopedRow(db, scope, artifactId);

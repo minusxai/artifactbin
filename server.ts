@@ -24,9 +24,9 @@
  * human login and OAuth answer 404 here, which is exactly what a dev loop
  * that fronts this app with its own proxy wants to see.
  *
- * Boot: the database opens and applies its schema, and the trash sweep is
- * started beside it (lib/trash — never awaited, so a process that has just
- * opened its database starts answering); the proxy's own
+ * Boot: the database opens and applies its schema; the services are injected
+ * once (DuckDB, Chromium, the event log — the in-process writer ensures the
+ * events schema and runs the legacy backfill here); the proxy's own
  * proxy-owned OAuth tables in the `auth` schema are ensured; human login
  * (Better Auth) is composed from env;
  * the token reader (the proxy's one SELECT over the app-owned `tokens`) is
@@ -72,16 +72,28 @@ async function main(): Promise<void> {
   // An image built without an engine or a browser needs to be told where they
   // went — before a boot canary passes and the first export answers 503.
   const {
-    BROWSER_SERVICE_URL, MAX_QUERY_ROWS, QUERY_TIMEOUT_MS, SQL_SERVICE_URL,
+    BROWSER_SERVICE_URL, EVENTS_SCHEMA, EVENTS_SERVICE_URL, MAX_QUERY_ROWS, QUERY_TIMEOUT_MS, SQL_SERVICE_URL,
   } = await import('@/lib/config');
+
+  /*
+   * THE DATABASE OPENS FIRST, because one of the services below writes through
+   * it. The events writer runs IN THIS PROCESS on the app's OWN handle — a
+   * second engine pointed at one PGLite data directory is a corrupted database,
+   * not a second reader — and the proxy composition below shares this same
+   * `queryable`.
+   */
+  const db = await getDb();
+  const raw = db.raw();
+  const queryable = { query: async <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => (await db.query<T>(sql, params)) as { rows: T[] } };
 
   /**
    * THE SERVICES, INJECTED ONCE — this is the only place the process decides
-   * where DuckDB and Chromium run (`lib/services` registry). Registered only
-   * when no URL names a service, because `./local` is the entry that loads
-   * the native module and Playwright, and the lean image has neither.
+   * where DuckDB, Chromium and the event log live (`lib/services` registry).
+   * Registered only when no URL names a service, because `./local` is the
+   * entry that loads the native module, Playwright or the writer's own DDL,
+   * and the lean image has none of them.
    */
-  const { setServices } = await import('@/lib/services');
+  const { services, setServices } = await import('@/lib/services');
   if (!SQL_SERVICE_URL) {
     const { createSql } = await import('@artifactbin/sql/local');
     setServices({ sql: createSql({ maxRows: MAX_QUERY_ROWS, timeoutMs: QUERY_TIMEOUT_MS }) });
@@ -90,22 +102,37 @@ async function main(): Promise<void> {
     const { createBrowser } = await import('@artifactbin/browser/local');
     setServices({ browser: createBrowser() });
   }
-
-  const db = await getDb();
+  if (!EVENTS_SERVICE_URL) {
+    const { backfillAnalyticsEvents, createEvents, ensureEventsSchema } = await import('@artifactbin/events/local');
+    setServices({ events: createEvents({ db: queryable, schema: EVENTS_SCHEMA }) });
+    /*
+     * THE BOOT PAYS FOR THE SCHEMA HERE, not on the first emit as the writer
+     * alone would: the backfill has to INSERT into a table, so it has to exist
+     * before the statement runs. Both are idempotent — the copy happens only
+     * into a log holding no row of its own, because `trackEvent` dual-writes
+     * every moment and a copy beside a live sentence would say it twice — and both are wrapped,
+     * because telemetry may cost a boot a round trip but never the boot itself.
+     * The database here is the app's own (PGLite, or a Postgres it owns), so it
+     * holds `analytics_events` too; a SPLIT deployment's events role has no read
+     * on the app schema, so its operator runs the same statement once by hand
+     * (services/events/CONTRACT.md).
+     */
+    try {
+      await ensureEventsSchema(queryable, EVENTS_SCHEMA);
+      const copied = await backfillAnalyticsEvents(queryable, { schema: EVENTS_SCHEMA, from: 'analytics_events' });
+      if (copied > 0) console.log(`[events] copied ${copied} legacy analytics rows into ${EVENTS_SCHEMA}.events`);
+    } catch (error) {
+      console.error('[events] the legacy analytics backfill failed:', error);
+    }
+  }
   /*
-   * THE TRASH SWEEP at boot — the purge for anything that has sat past the
-   * retention (lib/trash). Not awaited: a process that has just opened its
-   * database should start answering, and nothing about a purge is urgent. The
-   * request path runs it at most hourly after this, so a busy deployment
-   * sweeps without a scheduler and an idle one sweeps whenever it restarts.
+   * ONE `events` FOR THE WHOLE PROCESS. The proxy's parts and Better Auth's
+   * hooks say their moments into the SAME writer the app emits through — the
+   * registry decided above once, never a second client — so the log this box
+   * keeps is one table with one connection behind it, and `source` is all
+   * that says whether the app or the proxy spoke.
    */
-  void (async () => {
-    const { sweepTrashAtBoot } = await import('@/lib/trash');
-    const purged = await sweepTrashAtBoot();
-    if (purged.length) console.log(`[boot] purged ${purged.length} artifact(s) past the trash retention`);
-  })();
-  const raw = db.raw();
-  const queryable = { query: async <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => (await db.query<T>(sql, params)) as { rows: T[] } };
+  const events = services().events;
 
   // The SPA: Vite in middleware mode for dev (modules, HMR, index transform); the built tree in production.
   let vite: import('vite').ViteDevServer | null = null;
@@ -153,6 +180,7 @@ async function main(): Promise<void> {
       secret: authSecret,
       baseURL,
       mail: mailer,
+      events,
       ...(raw.kind === 'pglite' ? { pglite: raw.instance } : { pool: raw.pool as import('pg').Pool }),
       ...loginProviders,
       secure: baseURL.startsWith('https://'),
@@ -190,6 +218,7 @@ async function main(): Promise<void> {
       secure: baseURL.startsWith('https://'),
       identityDb: queryable,
       appSchema: readEnv(env, 'APP__SCHEMA'),
+      events,
     })).fetch);
 
   /*

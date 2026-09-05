@@ -41,14 +41,28 @@ process.env.OBJECT_STORE__LOCAL_DIR ??= path.join(os.tmpdir(), `artifact-objects
  * launch, nothing to close, for a suite that never asks for a picture.
  */
 const { setServices } = await import('@/lib/services');
-const { MAX_QUERY_ROWS, QUERY_TIMEOUT_MS } = await import('@/lib/config');
+const { EVENTS_SCHEMA, MAX_QUERY_ROWS, QUERY_TIMEOUT_MS } = await import('@/lib/config');
 const { createSql } = await import('@artifactbin/sql/local');
+const { createEvents } = await import('@artifactbin/events/local');
+const { getDb } = await import('@/lib/db');
 
 let localBrowser: import('@artifactbin/contracts').BrowserService | undefined;
 const browser = async () => (localBrowser ??= (await import('@artifactbin/browser/local')).createBrowser());
 
 setServices({
   sql: createSql({ maxRows: MAX_QUERY_ROWS, timeoutMs: QUERY_TIMEOUT_MS }),
+  // THE REAL WRITER, on the file's own database — so `trackEvent` lands rows in
+  // the events schema in the suite exactly as it does in the single image, and
+  // the reads in lib/feed see what production sees. The handle is resolved PER
+  // QUERY, never here: this file runs for every test file in all three projects
+  // and an eager `await getDb()` would open a PGLite for each jsdom one too.
+  // The writer ensures its own schema on the first emit, and the harness wipes
+  // the table between tests; a file that fakes the service (`setServices` in the
+  // test) still wins, because the last registration is the one that answers.
+  events: createEvents({
+    db: { query: async <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => (await getDb()).query<T>(sql, params) },
+    schema: EVENTS_SCHEMA,
+  }),
   browser: {
     render: async (request) => (await browser()).render(request),
     // Never launches one just to close it: `resetExportRenderer` runs in

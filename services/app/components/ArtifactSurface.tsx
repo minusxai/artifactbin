@@ -20,6 +20,7 @@ import AnnotationLayer from '@/components/AnnotationLayer';
 import CopyAgentPrompt from '@/components/CopyAgentPrompt';
 import RefreshAssets from '@/components/RefreshAssets';
 import ForkArtifact, { ForkConfirm } from '@/components/ForkArtifact';
+import { LikeButton } from '@/components/LikeButton';
 import ShareLink from '@/components/ShareLink';
 import type { AnnotationWire } from '@/lib/annotations';
 import { readIntent, stripIntent } from '@/lib/intent';
@@ -87,6 +88,12 @@ export interface ArtifactSurfaceProps {
   version: number;
   /** Open-annotation count at render time (owners only) — seeds the annotate button's badge; live frames keep it current. */
   openAnnotations?: number;
+  /**
+   * The viewer's like state and the document's like count, from the page's own
+   * fetch. Optional because every other render of this surface (the export
+   * capture, the ui suite's fixtures) has nobody to ask.
+   */
+  like?: { liked: boolean; count: number };
   content: string;
   columns: Array<{ name: string; type?: string }>;
   compiledCss: string | null;
@@ -206,7 +213,7 @@ const selectionActionCapabilities = (canEdit: boolean, canAnnotate: boolean, inV
 
 export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const [copiedRef, setCopiedRef] = useState(false);
-  const { id, editId, format, title, source, content, columns, bytes: fileBytes = 0, pages: filePages = null, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', preview = false, accountSession = false, anonSession = false, version, captureKey = null, openAnnotations = 0 } = props;
+  const { id, editId, format, title, source, content, columns, bytes: fileBytes = 0, pages: filePages = null, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', preview = false, accountSession = false, anonSession = false, version, captureKey = null, openAnnotations = 0, like = { liked: false, count: 0 } } = props;
   const [editing, setEditing] = useState(false);
   /** A view-mode text selection asks edit mode to open on its containing node. */
   const [initialEditSelectionPath, setInitialEditSelectionPath] = useState<string | null>(null);
@@ -1046,6 +1053,10 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
         {/* Everyone the shell is served to — owner, editor, commenter — may
             take a copy of what they can read. */}
         <ForkArtifact id={id} variant="menu" />
+        {/* UNCONDITIONAL, for the fork row's reason: the count is public and
+            the door decides on the read ACL, not on ownership. An anonymous
+            reader gets the number and a way to sign in. */}
+        <LikeButton artifactId={id} liked={like.liked} count={like.count} signedIn={accountSession} />
         {/* EDIT IS ALSO RENAME, which is why a folder is offered it: the
             editor's Title field writes `title` through the edit protocol like
             any other change, so a folder needs no rename door of its own — and

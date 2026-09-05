@@ -3,7 +3,9 @@
  * nobody declares anybody else's: the app owns `app.*` (its DDL in
  * lib/schema.ts), the proxy owns `auth.*` (its DDL in its own schema module),
  * with no duplicated table concept across the boundary: app one-time codes
- * are `app.codes`; auth lifecycle state is `auth.credentials`.
+ * are `app.codes`; auth lifecycle state is `auth.credentials`; and the events
+ * service owns `events.*` — the app reads that log through a grant and never
+ * declares it.
  *
  * The declared set is read through the schema renderer — the ONE resolver of what is declared, the same one
  * __tests__/schema-sql-fresh.test.ts uses — so this test and the freshness
@@ -21,7 +23,7 @@ import { describe, expect, it } from 'vitest';
 import { renderedSchema } from '@/__tests__/rendered-schema';
 
 /** The declared tables, keyed "<schema>.<table>" → the owning package. */
-const declared = (): Record<string, 'app' | 'proxy'> => renderedSchema().tables;
+const declared = (): Record<string, 'app' | 'proxy' | 'events'> => renderedSchema().tables;
 
 /** The seed test's literal (CORE TEST 9) — the declared set, one owner each. */
 const DECLARED_SET = [
@@ -32,12 +34,14 @@ const DECLARED_SET = [
   'app.artifacts',
   'app.analytics_events',
   'app.codes',
+  'app.relations',
   'app.tokens',
   'app.users',
   'app.web_assets',
   'app.webfonts',
   'auth.clients',
   'auth.credentials',
+  'events.events',
 ];
 
 describe('table ownership', () => {

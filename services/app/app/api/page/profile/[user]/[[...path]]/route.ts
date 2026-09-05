@@ -15,6 +15,7 @@
  */
 import { canReadArtifact, getArtifactById, type ArtifactSummary } from '@/lib/artifacts';
 import { json } from '@/lib/http';
+import { count, has } from '@/lib/relations';
 import { canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
 import { getUserByUsername, listArtifactsByUser, listPublicArtifactsByUser, ownerUsername } from '@/lib/users';
 import { browserSessionKind, sessionActor } from '@/lib/viewer';
@@ -56,7 +57,15 @@ export async function GET(request: Request, ctx: { params: Promise<{ user: strin
   if (!viewer || viewer.userId !== owner.id) {
     const files = await listPublicArtifactsByUser(owner.id);
     const anon = !viewer && (await browserSessionKind(request)) === 'anon';
-    return json({ kind: 'public-profile', handle, files: strip(files).map(({ ancestor_ids: _placement, ...card }) => card), email: viewer?.email ?? null, authed: !!viewer, anon });
+    // The follow control needs the target's ID (the door is keyed by id, not
+    // by handle) and the state it renders in. Only on the STRANGER's branch:
+    // the owner's own listing below has nobody to follow, and shipping the
+    // fields there would be a control the page can never draw.
+    const follow = {
+      following: viewer?.userId ? await has(viewer.userId, 'follow', owner.id) : false,
+      count: await count('follow', owner.id),
+    };
+    return json({ kind: 'public-profile', handle, owner: { id: owner.id }, follow, files: strip(files).map(({ ancestor_ids: _placement, ...card }) => card), email: viewer?.email ?? null, authed: !!viewer, anon });
   }
   const all = await listArtifactsByUser(owner.id);
   // The ROOT: everything at level 0, folders among them as ordinary rows. A

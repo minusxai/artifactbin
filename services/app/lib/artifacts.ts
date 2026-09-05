@@ -11,6 +11,7 @@ import { sourceWithoutAnchors } from './annotation-anchors';
 import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN } from './config';
 import { assetByteQuotaExceeded } from './asset-quota';
 import { getDb, type Queryable } from './db';
+import { actorSubject, emit } from './events';
 import { generateFileId } from './ids';
 import { isDocumentFormat, parseContentInput, type ArtifactFormat } from './story/input';
 import { canonicalizeMarkup, publishJsx } from './story/jsx-tier';
@@ -301,10 +302,16 @@ export async function artifactQuotaExceeded(tokenId: string): Promise<boolean> {
   const cap = quotaOverride ?? ARTIFACT_QUOTA_PER_TOKEN;
   if (!cap) return false;
   const db = await getDb();
-  // A quota counts what is LIVE: a document in the trash still occupies a row
-  // for thirty days, and charging someone for it would make deleting a
-  // document not free them to publish another one.
-  const r = await db.query<{ n: number }>(`SELECT COUNT(*)::int AS n FROM artifacts WHERE token_id = $1 AND ${LIVE_ARTIFACT_SQL}`, [tokenId]);
+  /*
+   * EVERY ROW, deleted or not — the one deliberate reader past the trash gate
+   * outside lib/trash, and the only quota rule that survives having no purge.
+   * Nothing is ever erased, so a deleted document still occupies its row, its
+   * versions, its edit log and its bytes forever; counting live rows alone
+   * would make delete-and-recreate an unlimited cap with an extra call in it.
+   * The trade is stated in the docs rather than hidden: deleting does not free
+   * you to publish another one.
+   */
+  const r = await db.query<{ n: number }>('SELECT COUNT(*)::int AS n FROM artifacts WHERE token_id = $1', [tokenId]);
   return (r.rows[0]?.n ?? 0) >= cap;
 }
 
@@ -412,7 +419,7 @@ export async function createArtifact(
           atCreation.forkedFrom ?? null,
         ],
       );
-      void trackEvent('create', r.rows[0].id, { userId });
+      void trackEvent('create', r.rows[0].id, { userId, parentId: parentOf(r.rows[0]) });
       // A child arriving wakes the folder it landed in, so an open listing
       // re-runs its own query with no reload.
       await notifyParent(parentOf(r.rows[0]));
@@ -485,13 +492,13 @@ export async function forkArtifact(
   if (source.format === 'folder') {
     return json({ error: 'not_forkable', hint: "a folder cannot be forked — create one with format: 'folder' and file documents under it with parent_id" }, 400);
   }
-  if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — delete documents you no longer need'] }, 403);
+  if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
   const input = await forkInput(actor, source, overrides);
   if (input instanceof Response) return input;
   const row = await createArtifact(actor.tokenId, actor.userId, input, { forkedFrom: source.id, linkRole: source.link_role });
   // Against the SOURCE: "this was forked" is a fact about the original, and the
   // forker is who did it. Never inside a transaction (PGLite deadlock).
-  void trackEvent('fork', source.id, { userId: actor.userId });
+  void trackEvent('fork', source.id, { userId: actor.userId, forkId: row.id });
   return row;
 }
 
@@ -903,6 +910,7 @@ async function replaceScoped(
   if (result && !isVersionConflict(result)) void trackEvent('update', result.id, { userId: result.user_id });
   // BOTH ends of a move wake: the folder the row left and the one it joined.
   if (moved) await wakeParents(moved);
+  if (result && !isVersionConflict(result)) sayMoved(actor, result.id, moved);
   return result;
 }
 
@@ -914,6 +922,19 @@ async function replaceScoped(
  */
 async function wakeParents({ from, to }: { from: string | null; to: string | null }): Promise<void> {
   for (const id of new Set([from, to])) await notifyParent(id);
+}
+
+/**
+ * The MOVE, said once, by whichever of the two placement doors ran it — the
+ * PATCH that only files a row, and the replace that files it while writing it.
+ *
+ * Guarded on the ends being DIFFERENT, because a plain content write computes
+ * the same pair and would otherwise say a move on every save. Fire-and-forget
+ * and outside the transaction, like every other emit here (lib/events).
+ */
+function sayMoved(actor: TokenActor, id: string, moved: { from: string | null; to: string | null } | null): void {
+  if (!moved || moved.from === moved.to) return;
+  void emit(actorSubject(actor), 'moved', { kind: 'artifact', id }, { from_parent_id: moved.from, to_parent_id: moved.to });
 }
 
 // ── The concurrent-edit protocol (concurrent-artifacts-edits.md) ─────────────
@@ -1201,7 +1222,7 @@ async function setAccessScoped(scope: Scope, id: string, access: DatasetAccess):
  * writes what it is given, and the owner, cycle and depth rules live in the one
  * module that knows the hierarchy.
  */
-async function setParentScoped(scope: Scope, id: string, next: string[]): Promise<ArtifactRow | null> {
+async function setParentScoped(actor: TokenActor, scope: Scope, id: string, next: string[]): Promise<ArtifactRow | null> {
   const db = await getDb();
   let moved: { from: string | null; to: string | null } | null = null;
   const row = await db.transaction(async (tx) => {
@@ -1223,6 +1244,7 @@ async function setParentScoped(scope: Scope, id: string, next: string[]): Promis
   // Post-transaction, like every other wakeup here: an unawaited query from
   // inside the callback deadlocks PGLite's serialized op queue.
   if (moved) await wakeParents(moved);
+  if (row) sayMoved(actor, row.id, moved);
   return row;
 }
 
@@ -1310,6 +1332,16 @@ export async function updateSharingFor(actor: TokenActor, id: string, patch: Sha
     return true;
   });
   if (!done) return null;
+  /*
+   * AFTER the transaction, and only when the ACL actually moved. The payload
+   * carries the two axes a change can name and nothing else: the share list is
+   * email addresses, which never travel to the log — an operator reading
+   * "sharing_changed" learns the tier, not who is on it.
+   */
+  await emit(actorSubject(actor), 'sharing_changed', { kind: 'artifact', id }, {
+    visibility: patch.visibility ?? null,
+    link_role: patch.linkRole ?? null,
+  });
   return getSharingFor(actor, id);
 }
 
@@ -1479,7 +1511,7 @@ export function revertArtifactFor(actor: TokenActor, id: string, version: number
 
 /** File a row the actor OWNS under `next` (the resolved trail; `[]` is the root). */
 export function setParentFor(actor: TokenActor, id: string, next: string[]): Promise<ArtifactRow | null> {
-  return setParentScoped(ownerScope(actor), id, next);
+  return setParentScoped(actor, ownerScope(actor), id, next);
 }
 
 export function refLoaderForActor(actor: TokenActor): RefLoader {

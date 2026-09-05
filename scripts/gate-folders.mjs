@@ -252,8 +252,9 @@ check(renamed.title === 'Field Notes 2026', `the title field renames the folder 
 
 // ── 8. deleting a folder from the strip trashes it WITH its contents ─────
 // P3 made delete a trash: the folder and everything under it go in ONE
-// statement, recoverable for 30 days. So the strip's row is offered rather
-// than refused, and what it takes is what the confirm named.
+// statement, and nothing is ever erased, so it stays recoverable with no
+// deadline. The strip's row is offered rather than refused, and what it takes
+// is what the confirm named.
 await owner.goto(`${BASE}/`, { waitUntil: 'load' });
 await owner.waitForSelector('[aria-label="Folders"]', { timeout: 20000 });
 owner.once('dialog', (d) => {
@@ -265,7 +266,7 @@ await Promise.all([
   owner.waitForResponse((r) => r.request().method() === 'DELETE' && r.status() === 200, { timeout: 15000 }),
   owner.locator('[aria-label="Delete Field Notes 2026"]').first().click(),
 ]);
-check(/inside it\? They go to the trash for 30 days\./.test(confirmText), `the confirm names what goes with it (${confirmText})`);
+check(/inside it\? They go to the trash, and you can restore them any time\./.test(confirmText), `the confirm names what goes with it (${confirmText})`);
 await owner.locator('[aria-label="Open folder Field Notes 2026"]').waitFor({ state: 'detached', timeout: 15000 });
 check(true, 'the tile leaves the strip with no reload');
 // Read back through the OWNER's own door — the bearer route would answer 401

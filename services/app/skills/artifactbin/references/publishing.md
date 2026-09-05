@@ -86,7 +86,7 @@ draws breadcrumbs and the url keeps working wherever a file moves.
 A folder's page is its own stored markup — a `<Query>` over its children table
 `ref_<folderId>`, drawn by `<Files>` ([markup-data.md](markup-data.md)) — so you
 edit one like any document. DELETE is a TRASH: a folder goes with everything
-under it, and `restore_artifact` takes it back for 30 days
+under it, and `restore_artifact` takes it back at any time
 ([publishing-versions.md](publishing-versions.md)).
 
 ### Edit part of a document
@@ -151,7 +151,7 @@ too; there is no separate datasets endpoint.
 | 400 | `invalid_visibility` / `private_requires_account` / `public_not_enabled` | The three values are above; a deployment that does not offer `public` takes `unlisted` (already anyone-with-the-link) |
 | 400 | `invalid_parent` / `folder_retired` / `not_forkable` | `parent_id` is the id of a FOLDER you own, outside what you are moving, under 6 deep — one code, since naming which would say whether an id exists. `folder` paths are gone; a folder is not forkable |
 | 401 | `unauthorized` | Token wrong/revoked — ask your user, don't retry |
-| 403 | `quota_exceeded` | This token is at its cap — delete something, or use another |
+| 403 | `quota_exceeded` | At its cap — deleting frees nothing; use another token |
 | 404 | `not_found` | No artifact with that id is reachable by your token |
 | 409 | `version_conflict` | `expectedVersion` is stale — re-read, merge, retry (`400 invalid_expected_version`: it must be a number) |
 | 400 | `not_editable` | Not markup — PUT it whole |

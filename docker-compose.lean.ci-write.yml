@@ -18,6 +18,9 @@ services:
   sql:
     build:
       cache_to: ["type=gha,mode=min,scope=lean-sql"]
+  events:
+    build:
+      cache_to: ["type=gha,mode=min,scope=lean-events"]
   browser:
     build:
       cache_to: ["type=gha,mode=min,scope=lean-browser"]
