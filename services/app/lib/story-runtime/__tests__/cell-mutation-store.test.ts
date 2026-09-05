@@ -14,4 +14,10 @@ describe('invocation-local cell mutations',()=>{
     done[0]();await a;expect(store.mutating().has('edit')).toBe(true);
     done[1]();await b;expect(store.mutating().has('edit')).toBe(false);
   });
+  it('preserves the two-argument generic mutation transport call',async()=>{
+    const mutate=vi.fn().mockResolvedValue({dataset:'abc123'});
+    const store=createDataflowStore({flow},{transport:{mutate,run:vi.fn(),page:vi.fn()}});
+    await store.mutate('edit');
+    expect(mutate).toHaveBeenCalledWith({filter:'backlog'},'edit');
+  });
 });
