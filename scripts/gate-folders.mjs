@@ -271,6 +271,11 @@ const handle = await owner.evaluate(async () => (await (await fetch('/api/my/pro
 await owner.goto(`${BASE}/@${handle}`, { waitUntil: 'load' });
 await owner.waitForSelector('[aria-label="Search artifacts"]', { timeout: 20000 });
 check((await owner.locator('[aria-label="New folder"]').count()) === 1, 'the owner’s own profile offers New folder too');
+// The masthead names the account by its HANDLE and links to the page it is
+// standing on — the same identity line on every page in the shell.
+const identity = owner.locator('[aria-label="Open your profile"]');
+check((await identity.count()) === 1 && (await identity.getAttribute('href')) === `/@${handle}`,
+  'and the masthead names the account by its handle, linking to the profile');
 // …and only that: a profile still withholds the row verbs it always withheld.
 check((await owner.locator('[aria-label="Move Field Notes"]').count()) === 0, 'without granting the row verbs a profile withholds');
 

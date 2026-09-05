@@ -22,14 +22,21 @@ function statsOf(artifacts: { format: string }[]): HeaderStats {
  * App masthead + the shared column every listing view lives in. The controls
  * sit in the masthead's open top corners; no persistent strip is reserved.
  */
-export function ListingShell({ email, stats, authed = false, anon = false, children }: {
-  email: string | null; stats: HeaderStats | null; authed?: boolean; anon?: boolean;
+export function ListingShell({ email, username, stats, authed = false, anon = false, children }: {
+  email: string | null;
+  /**
+   * The VIEWER's own handle, not the profile's — this is the app masthead, and
+   * it says who is signed in wherever it appears. A stranger reading somebody
+   * else's profile still gets their own identity line, or the login door.
+   */
+  username?: string | null;
+  stats: HeaderStats | null; authed?: boolean; anon?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <>
       <PageChrome authed={authed} anon={anon} />
-      <HeaderBar email={email} stats={stats} />
+      <HeaderBar email={email} username={username} stats={stats} />
       {/* The SHARED column: a profile and the dashboard render the same
         * shelf, so they must be the same width, and the masthead above them
         * spans it too (web/__tests__/shelf-pages). */}
