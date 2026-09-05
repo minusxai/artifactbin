@@ -37,7 +37,7 @@
  * built from a silent sample is exactly the failure the row cap exists to
  * avoid.
  */
-import type { DuckDBConnection, DuckDBInstance, DuckDBPreparedStatement, DuckDBTypeId as DuckDBTypeIdT } from '@duckdb/node-api';
+import type { DuckDBConnection, DuckDBInstance, DuckDBPreparedStatement, DuckDBValue, DuckDBTypeId as DuckDBTypeIdT } from '@duckdb/node-api';
 import type { SqlCaps } from './caps';
 import { queryBounds } from './bounds';
 
@@ -181,6 +181,45 @@ function bindParams(prepared: { parameterCount: number; parameterName: (i: numbe
     else if (typeof v === 'number') prepared.bindDouble(i, v);
     else if (typeof v === 'boolean') prepared.bindBoolean(i, v);
     else prepared.bindVarchar(i, v);
+  }
+}
+
+/**
+ * Mutation-only extension of scalar binding. `$_row` is one native STRUCT,
+ * described by trusted dataset metadata; field names and values never become
+ * SQL text. Dates travel as ISO strings, then the same DuckDB DATE cast used
+ * by dataset registration produces native date fields (also for date functions).
+ */
+async function bindMutationParams(
+  conn: DuckDBConnection,
+  prepared: DuckDBPreparedStatement,
+  params: Record<string, Scalar>,
+  row?: { columns: DatasetColumn[]; values?: Record<string, Scalar> },
+): Promise<void> {
+  if (!row) { bindParams(prepared, params); return; }
+  const { BOOLEAN, DATE, DOUBLE, STRUCT, VARCHAR } = await duckdb();
+  const rowType = STRUCT(Object.fromEntries(row.columns.map((column) => [
+    column.name,
+    column.type === 'number' ? DOUBLE : column.type === 'boolean' ? BOOLEAN : column.type === 'date' ? DATE : VARCHAR,
+  ])));
+  const rowValues: Record<string, DuckDBValue> = Object.fromEntries(row.columns.map((column) => [column.name, row.values?.[column.name] ?? null]));
+  for (const column of row.columns) {
+    const value = row.values?.[column.name];
+    if (column.type === 'date' && value != null) {
+      const converted = await conn.runAndReadAll('SELECT CAST($value AS DATE) AS value', { value });
+      rowValues[column.name] = converted.getRows()[0][0];
+    }
+  }
+  for (let i = 1; i <= prepared.parameterCount; i++) {
+    const name = prepared.parameterName(i);
+    if (name === '_row') prepared.bindStruct(i, rowValues, rowType);
+    else {
+      const value = params[name];
+      if (value === undefined || value === null) prepared.bindNull(i);
+      else if (typeof value === 'number') prepared.bindDouble(i, value);
+      else if (typeof value === 'boolean') prepared.bindBoolean(i, value);
+      else prepared.bindVarchar(i, value);
+    }
   }
 }
 
@@ -363,13 +402,18 @@ export async function runMutation(input: MutationInput, caps: SqlCaps): Promise<
     await registerTable(conn, input.table.name, input.table);
     const guarded = await prepareGuarded(conn, input.sql, 'write');
     if (guarded.error !== undefined) return { error: guarded.error };
-    bindParams(guarded.prepared, input.params);
+    await bindMutationParams(conn, guarded.prepared, input.params, input.row);
     // The ceiling is applied again AT the timer: `queryBounds` already did it,
     // but the bound belongs where the resource is taken, so no future caller
     // can reach this line around it (and CodeQL can see it here).
     timer = setTimeout(() => { timedOut = true; conn.interrupt(); }, Math.min(timeoutMs, caps.timeoutMs));
     const result = await guarded.prepared.run();
     const affected = result.rowsChanged;
+    if (input.expectedAffected !== undefined && affected !== input.expectedAffected) {
+      if (affected === 0) return { error: 'the row changed since it was read', code: 'row_changed' };
+      if (affected > input.expectedAffected) return { error: `the mutation matched ${affected} rows; expected ${input.expectedAffected}`, code: 'row_not_unique' };
+      return { error: `the mutation changed ${affected} rows; expected ${input.expectedAffected}`, code: 'row_changed' };
+    }
     // The table as it is now: streamed one row past the cap, like a read.
     const reader = await conn.runAndReadUntil(`SELECT * FROM ${quoteIdent(input.table.name)}`, limit + 1);
     if (timer) { clearTimeout(timer); timer = null; }
@@ -413,7 +457,7 @@ export async function dryRunMutations(input: DryRunMutationsInput): Promise<DryR
       if (target) await registerTable(conn, `ref_${m.target}`, { rows: [], columns: target.columns });
       const guarded = await prepareGuarded(conn, m.sql, 'write');
       if (guarded.error !== undefined) { errors.push({ name: m.name, error: guarded.error }); continue; }
-      bindParams(guarded.prepared, params);
+      await bindMutationParams(conn, guarded.prepared, params, m.row);
       // Execute against the EMPTY table: binding alone leaves runtime casts
       // unchecked, and a write that fails on its first real click is the
       // failure an author cannot see coming.
