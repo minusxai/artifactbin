@@ -18,6 +18,7 @@
  *   usage: node scripts/gate-inplace-edit.mjs [base]
  */
 import { chromium } from 'playwright';
+import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
@@ -84,7 +85,7 @@ const browser = await chromium.launch();
   ok(readingAt > 500, `the reader is somewhere specific before editing (scrollY ${readingAt})`);
 
   // ENTER
-  await page.click('[aria-label="Open artifact controls"]');
+  await openArtifactControls(page);
   await page.click('[aria-label="Edit artifact"]');
   await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 20000 });
   await sleep(3000);
@@ -193,7 +194,7 @@ const browser = await chromium.launch();
   });
 
   const at = await (await api(start.id, start.token, '', {})).json();
-  await page.click('[aria-label="Open artifact controls"]');
+  await openArtifactControls(page);
   await page.click('[aria-label="Edit artifact"]');
   await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 20000 });
   await sleep(5000);

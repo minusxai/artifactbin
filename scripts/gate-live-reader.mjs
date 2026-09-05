@@ -16,7 +16,7 @@
  */
 import { chromium } from 'playwright';
 import { startDocument } from './lib/start-doc.mjs';
-import { revealReaderChrome } from './lib/reveal-chrome.mjs';
+import { openArtifactControls, revealReaderChrome } from './lib/reveal-chrome.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const failures = [];
@@ -125,7 +125,7 @@ const browser = await chromium.launch();
   ok(await page.evaluate(() => document.documentElement.classList.contains('light')), 'an unthemed document opens in the author default (light)');
   // The reader's chrome opens hidden; a scroll up is the gesture that reveals it.
   await revealReaderChrome(page);
-  await page.click('[data-mx-reader-trigger="controls"]');
+  await openArtifactControls(page);
   await page.click('[data-mx-mode-choice="dark"]');
   ok(await page.evaluate(() => document.documentElement.classList.contains('dark')), 'the top-right toggle flips the document dark');
 
@@ -147,7 +147,7 @@ const browser = await chromium.launch();
   await page.waitForFunction(() => /mode prose probe/.test(document.body.textContent ?? ''), null, { timeout: 20000 });
   await sleep(2000);
   await revealReaderChrome(page);
-  await page.click('[data-mx-reader-trigger="controls"]');
+  await openArtifactControls(page);
   await page.click('[data-mx-mode-choice="dark"]');
 
   await doc.write(prose('MODE PROSE REWRITTEN'));

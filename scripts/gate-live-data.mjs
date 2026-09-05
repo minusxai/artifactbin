@@ -15,6 +15,7 @@
  *   usage: node scripts/gate-live-data.mjs [base]
  */
 import { chromium } from 'playwright';
+import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
@@ -204,7 +205,7 @@ ok(refused === 403, `a write to a closed dataset is refused (${refused})`);
   // The dataset is still read-only: the share menu makes it writable here.
   await page.goto(`${BASE}/a/${ds2.id}`, { waitUntil: 'load' });
 
-  await page.getByLabel('Open artifact controls').click();
+  await openArtifactControls(page);
   await page.getByLabel('Share').click();
   const toggle = page.getByLabel('Make read & write');
   // The popover loads its state over the network, so WAIT rather than sampling:

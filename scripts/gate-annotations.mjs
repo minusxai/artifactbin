@@ -18,6 +18,7 @@
  *   usage: node scripts/gate-annotations.mjs [base]
  */
 import { chromium } from 'playwright';
+import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
@@ -100,11 +101,11 @@ const run = async () => {
     ok(true, 'saving tints the commented node');
 
     // ── the rail is a PANEL, not a mode ───────────────────────────────────
-    await page.locator('[aria-label="Open artifact controls"]').click();
+    await openArtifactControls(page);
     await page.locator('[aria-label="Toggle comments"]').click();
     await page.locator('[aria-label="Annotation sidebar"]').waitFor({ timeout: 8000 });
     ok(await page.evaluate(() => location.hash) === '', 'opening the rail moves no hash');
-    await page.locator('[aria-label="Open artifact controls"]').click();
+    await openArtifactControls(page);
     ok(await page.locator('[aria-label="Edit artifact"]').count() === 1, 'edit stays offered while the rail is open');
     await page.keyboard.press('Escape');
     const thread = page.locator('[aria-label="Annotation thread"]');
@@ -151,7 +152,7 @@ const run = async () => {
     // There is no second visibility state: annotations remain ambient and the
     // artifact controls only open the full rail.
     await page.mouse.move(400, 20);
-    await page.locator('[aria-label="Open artifact controls"]').click();
+    await openArtifactControls(page);
     ok(await page.locator('[aria-label="Hide comments"], [aria-label="Show comments"]').count() === 0,
       'artifact controls carry no annotation visibility toggle');
     await page.keyboard.press('Escape');
@@ -219,7 +220,7 @@ const run = async () => {
     // leaving edit mode. The comment's anchor is a real CAS edit and the
     // editor answers a 409 by adopting the server's document, so this is
     // exactly where un-drained typing would be thrown away.
-    await page.locator('[aria-label="Open artifact controls"]').click();
+    await openArtifactControls(page);
     await page.locator('[aria-label="Edit artifact"]').click();
     await until(() => page.evaluate(() => location.hash), (h) => h === '#edit');
     const editComments = await until(() => page.locator('[aria-label="Toggle comments"]').count(), (n) => n === 1, 5000);
@@ -491,7 +492,7 @@ async function markdownLeg(browser) {
 
   // Open the rail, and open the thread inside it: the compact surfaces show
   // the plain text on purpose, so only the opened thread renders the tree.
-  await page.locator('[aria-label="Open artifact controls"]').click();
+  await openArtifactControls(page);
   await page.locator('[aria-label="Toggle comments"]').click();
   await page.locator('[aria-label="Annotation sidebar"]').waitFor({ timeout: 8000 });
   await page.keyboard.press('Escape');
@@ -602,7 +603,7 @@ async function foldLeg(browser) {
   }, [id, ann.id, HUMAN_LAST_WORD]);
   ok(lastWord === 200, `the human answers shortly underneath (${lastWord})`);
 
-  await page.locator('[aria-label="Open artifact controls"]').click();
+  await openArtifactControls(page);
   await page.locator('[aria-label="Toggle comments"]').click();
   // No Escape here, unlike the desktop legs: on a phone the rail IS a sheet,
   // and Escape is how a sheet closes.

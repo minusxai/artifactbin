@@ -20,6 +20,7 @@
  *   node scripts/gate-collab-edit.mjs [base]
  */
 import { chromium } from 'playwright';
+import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
 
@@ -76,7 +77,7 @@ check(doc.visibility === 'public', 'a PUBLIC document — the case that had no w
 // ── 1. invite + promote from the share menu ──────────────────────────────
 const sharingPut = (page) => page.waitForResponse((r) => r.url().includes('/sharing') && r.request().method() === 'PUT' && r.status() === 200, { timeout: 15000 });
 await owner.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-await owner.locator('[aria-label="Open artifact controls"]').click();
+await openArtifactControls(owner);
 await owner.locator('[aria-label="Share"]').first().click();
 await owner.waitForSelector('[aria-label="Invite email"]', { timeout: 15000 });
 check(true, 'the people list is offered on a public document');
@@ -100,7 +101,7 @@ await roleTrigger(owner, COMMENTER_EMAIL).waitFor({ timeout: 15000 });
 await Promise.all([sharingPut(owner), pickRole(owner, COMMENTER_EMAIL, 'can comment')]);
 check(await roleReads(owner, COMMENTER_EMAIL, 'can comment'), 'promoted to can comment from the row');
 await commenter.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-await commenter.locator('[aria-label="Open artifact controls"]').click();
+await openArtifactControls(commenter);
 check((await commenter.locator('[aria-label="Edit artifact"]').count()) === 0, 'the commenter sees no edit button');
 const head = await api(`/api/artifacts/${doc.id}`);
 const annotated = await commenter.evaluate(async ({ id, editId }) => {
@@ -118,7 +119,7 @@ await commenterCtx.close();
 
 // ── 2. the editor gets the SHELL, with edit and without the owner's controls ──
 await editor.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-await editor.locator('[aria-label="Open artifact controls"]').click();
+await openArtifactControls(editor);
 const editBtn = editor.locator('[aria-label="Edit artifact"]');
 check((await editBtn.count()) === 1, 'the editor sees the edit button (the shell, not the served document)');
 // The ACL is the owner's: an editor's shell carries no share control at all.
@@ -178,7 +179,7 @@ await editor.goto(`${BASE}/a/${doc.id}#edit`, { waitUntil: 'load' });
 await editor.waitForTimeout(6000);
 await Promise.all([sharingPut(owner), (async () => {
   await owner.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-  await owner.locator('[aria-label="Open artifact controls"]').click();
+  await openArtifactControls(owner);
   await owner.locator('[aria-label="Share"]').first().click();
   await roleTrigger(owner, EDITOR_EMAIL).waitFor({ timeout: 15000 });
   await pickRole(owner, EDITOR_EMAIL, 'can view');

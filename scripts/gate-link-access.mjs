@@ -27,6 +27,7 @@
  *   node scripts/gate-link-access.mjs [base]
  */
 import { chromium } from 'playwright';
+import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
 
@@ -74,7 +75,7 @@ const CONTROLS = '[role="dialog"][aria-label="Artifact controls"]';
 const controlsOpen = (page) => page.locator(CONTROLS).isVisible().catch(() => false);
 const openControls = async (page) => {
   if (await controlsOpen(page)) return;
-  await page.locator('[aria-label="Open artifact controls"]').click({ timeout: 15000 });
+  await openArtifactControls(page);
   await page.locator(CONTROLS).waitFor({ timeout: 15000 });
 };
 const closeControls = async (page) => {

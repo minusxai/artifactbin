@@ -4,6 +4,7 @@
  * exact 1600×840 card → reset back to the top-left default.
  */
 import { chromium } from 'playwright';
+import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import sharp from 'sharp';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
@@ -44,7 +45,7 @@ const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
 try {
   await becomeOwner(page, BASE, start.token);
   await page.goto(`${BASE}/a/${start.id}`, { waitUntil: 'load' });
-  await page.getByLabel('Open artifact controls').click();
+  await openArtifactControls(page);
   await page.getByLabel('Edit social preview').click();
   const dialog = page.getByRole('dialog', { name: 'Social preview' });
   await dialog.waitFor();
@@ -86,7 +87,7 @@ try {
 
   // Reload to prove the frame is restored from persisted source, not dialog state.
   await page.reload({ waitUntil: 'load' });
-  await page.getByLabel('Open artifact controls').click();
+  await openArtifactControls(page);
   await page.getByLabel('Edit social preview').click();
   const resetDialog = page.getByRole('dialog', { name: 'Social preview' });
   await resetDialog.getByLabel('Move social preview crop').waitFor({ timeout: 30_000 });

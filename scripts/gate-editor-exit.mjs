@@ -18,6 +18,7 @@
  *   usage: node scripts/gate-editor-exit.mjs [base]
  */
 import { chromium } from 'playwright';
+import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
@@ -75,7 +76,7 @@ await becomeOwner(page, B, st.token);
     // The owner rail is decided client-side for a token owner (ArtifactShell
     // asks /api/artifacts), so the edit control appears a beat after load —
     // a fixed pause is a flake on a cold dev server.
-    await page.locator('[aria-label="Open artifact controls"]').click({ timeout: 30_000 });
+    await openArtifactControls(page);
     await page.locator('[aria-label="Edit artifact"]')
       .first().click({ timeout: 30_000 });
   } else {

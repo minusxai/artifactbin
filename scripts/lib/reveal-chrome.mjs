@@ -56,3 +56,47 @@ export async function revealReaderChrome(target) {
     document.querySelector('[data-mx-reader-chrome]')?.classList.contains('mx-reader-chrome--hidden') === false,
   ).catch(() => false);
 }
+
+/**
+ * WHERE THE CHROME LIVES for a page, now that the app pages carry a bar, a
+ * shared document carries its own chrome, and an owner's page frames a document
+ * that carries the same chrome and ASKS the page to open the panels:
+ *   - 'page'     — a frameless page (a dataset, an image, the home page): the
+ *                  bar's own button opens the panel;
+ *   - 'document' — a document served top-level: its chrome opens its own panel;
+ *   - 'frame'    — a framed document: its chrome asks, the page's panel opens.
+ */
+async function chromeHost(page) {
+  if (await page.locator('[aria-label="Open artifact controls"], [aria-label="Open page controls"], [aria-label="Open menu"]').count()) return { kind: 'page', target: page };
+  if (await page.locator('[data-mx-reader-chrome]').count()) return { kind: 'document', target: page };
+  const frame = page.frames().find((f) => f !== page.mainFrame() && f.url().includes('/raw'));
+  if (frame) {
+    await frame.waitForSelector('[data-mx-reader-chrome]', { state: 'attached', timeout: 30_000 }).catch(() => {});
+    return { kind: 'frame', target: frame };
+  }
+  return { kind: 'page', target: page };
+}
+
+/** Open the artifact (or page) controls panel, wherever the control is. */
+export async function openArtifactControls(page, { timeout = 30_000 } = {}) {
+  const host = await chromeHost(page);
+  if (host.kind === 'page') {
+    await page.locator('[aria-label="Open artifact controls"], [aria-label="Open page controls"]').first().click({ timeout });
+    return;
+  }
+  await revealReaderChrome(host.target);
+  await host.target.locator('[data-mx-reader-trigger="controls"]').click({ timeout });
+  if (host.kind === 'frame') await page.waitForSelector('[aria-label="Artifact controls"], [aria-label="Page controls"]', { timeout }).catch(() => {});
+}
+
+/** Open the menu (account / navigation) panel, wherever the control is. */
+export async function openMenu(page, { timeout = 30_000 } = {}) {
+  const host = await chromeHost(page);
+  if (host.kind === 'page') {
+    await page.locator('[aria-label="Open menu"]').first().click({ timeout });
+    return;
+  }
+  await revealReaderChrome(host.target);
+  await host.target.locator('[data-mx-reader-trigger="menu"]').click({ timeout });
+  if (host.kind === 'frame') await page.waitForSelector('nav[aria-label="Menu"]', { timeout }).catch(() => {});
+}

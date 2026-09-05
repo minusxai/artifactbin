@@ -25,6 +25,7 @@
  *   usage: node scripts/gate-mobile.mjs [base]
  */
 import { chromium } from 'playwright';
+import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
@@ -102,63 +103,35 @@ const fitsAcross = (page, label) => page.evaluate((l) => {
 const view = await open(PHONE);
 await view.waitForTimeout(2500);
 ok(!(await overflows(view)), 'viewer: the page does not scroll sideways');
-for (const label of ['Open menu', 'Home', 'Open artifact controls']) {
-  const control = await fitsAcross(view, label);
-  ok(control.fits, `viewer: ${label.toLowerCase()} fits (${control.left}..${control.right}px of ${control.viewport}px)`);
-}
-const dock = await view.evaluate(() => {
-  const menu = document.querySelector('[aria-label="Open menu"]')?.getBoundingClientRect();
-  const home = document.querySelector('[aria-label="Home"]')?.getBoundingClientRect();
-  const controls = document.querySelector('[aria-label="Open artifact controls"]')?.getBoundingClientRect();
-  const barElement = document.querySelector('[data-mx-reader-chrome], [aria-label="Page actions"]');
-  const bar = barElement?.getBoundingClientRect();
-  return {
-    menuTop: menu?.top ?? -1,
-    homeTop: home?.top ?? -1,
-    controlsTop: controls?.top ?? -1,
-    menuCenter: menu ? menu.left + menu.width / 2 : -1,
-    homeCenter: home ? home.left + home.width / 2 : -1,
-    controlsCenter: controls ? controls.left + controls.width / 2 : -1,
-    barLeft: bar?.left ?? -1,
-    barRight: bar?.right ?? -1,
-    labels: [...(barElement?.querySelectorAll('[data-mobile-label]') ?? [])].map((label) => label.textContent?.trim()),
-    width: window.innerWidth,
-    height: window.innerHeight,
-  };
-});
-ok(dock.menuTop > dock.height - 100 && dock.homeTop > dock.height - 100 && dock.controlsTop > dock.height - 100,
-  `viewer: all three actions sit in the bottom dock (tops ${Math.round(dock.menuTop)}, ${Math.round(dock.homeTop)}, ${Math.round(dock.controlsTop)} of ${dock.height}px)`);
-ok(Math.abs(dock.barLeft) <= 1 && Math.abs(dock.barRight - dock.width) <= 1,
-  `viewer: the bottom dock spans the viewport (${Math.round(dock.barLeft)}..${Math.round(dock.barRight)} of ${dock.width}px)`);
-ok(Math.abs(dock.homeCenter - dock.width / 2) <= 1,
-  `viewer: home is centered (${Math.round(dock.homeCenter)} of ${dock.width / 2}px)`);
-ok(
-  Math.abs(dock.menuCenter - dock.width / 6) <= 1
-    && Math.abs(dock.controlsCenter - dock.width * 5 / 6) <= 1,
-  `viewer: side actions are centered in equal thirds (${Math.round(dock.menuCenter)}, ${Math.round(dock.homeCenter)}, ${Math.round(dock.controlsCenter)}px)`,
-);
-ok(dock.labels.join(',') === 'menu,home,controls', `viewer: tiny labels read menu / home / controls (${dock.labels.join(', ')})`);
-
-const hiddenOn = (page) => page.evaluate(() => {
-  const action = document.querySelector('[aria-label="Open menu"]');
-  const host = action?.closest('[data-mx-reader-chrome], [aria-label="Page actions"]');
-  return host?.getAttribute('data-scroll-hidden') === 'true'
-    || host?.classList.contains('mx-reader-chrome--hidden') === true;
-});
-const dockHidden = () => hiddenOn(view);
+/*
+ * THE OWNER'S PAGE DRAWS NO DOCK OF ITS OWN ANY MORE. The framed document
+ * carries the same chrome a reader gets — logo, rail, byline — and asks the
+ * page for its panels (lib/story/reader-chrome; gate-reader-chrome measures
+ * that chrome's geometry). What this leg keeps is the SCROLL RULE, exercised
+ * in whichever document actually scrolls: hidden on load, a scroll down keeps
+ * it away, a scroll up brings it back.
+ */
+ok((await view.locator('[aria-label="Page actions"], [aria-label="Open menu"], [aria-label="Open artifact controls"]').count()) === 0,
+  'viewer: the page draws no dock or corner buttons of its own');
 // An owner reads through the sandboxed artifact frame; a public reader may be
 // served the document itself. Exercise whichever window actually scrolls.
 const readingFrame = view.frames().find((frame) => frame !== view.mainFrame()) ?? view.mainFrame();
+ok((await readingFrame.locator('[data-mx-reader-chrome]').count()) === 1, 'viewer: the document carries the chrome');
+const hiddenOn = (target) => target.evaluate(() => {
+  const root = document.querySelector('[data-mx-reader-chrome]');
+  return root?.classList.contains('mx-reader-chrome--hidden') === true;
+});
+const dockHidden = () => hiddenOn(readingFrame);
 await readingFrame.evaluate(() => window.scrollTo(0, 500));
 await view.waitForTimeout(300);
-ok(await dockHidden(), 'viewer: the bottom dock leaves on downward scroll');
+ok(await dockHidden(), 'viewer: the chrome stays away on a downward scroll');
 await readingFrame.evaluate(() => window.scrollBy(0, -80));
 await view.waitForTimeout(300);
-ok(!(await dockHidden()), 'viewer: the bottom dock returns on reverse scroll');
+ok(!(await dockHidden()), 'viewer: the chrome returns on a reverse scroll');
 
 // ── 2. the app menu on a phone ─────────────────────────────────────────────
 // Navigation folds out from the page's hamburger.
-await view.locator('[aria-label="Open menu"]').click({ timeout: 30_000 });
+await openMenu(view);
 await view.waitForSelector('[aria-label="Menu"]', { timeout: 10_000 });
 await view.waitForTimeout(300);
 const menu = await fitsAcross(view, 'Menu');
@@ -171,7 +144,7 @@ const clippedItems = await view.evaluate(() => {
 });
 ok(clippedItems === 0, `app menu: no item is cut off (${clippedItems} clipped)`);
 await view.keyboard.press('Escape');
-await view.click('[aria-label="Open artifact controls"]');
+await openArtifactControls(view);
 await view.waitForSelector('[aria-label="Artifact controls"]');
 const controls = await fitsAcross(view, 'Artifact controls');
 ok(controls.fits, `artifact controls: sheet fits the screen (${controls.left}..${controls.right}px of ${controls.viewport}px)`);
@@ -532,10 +505,10 @@ await framedView.waitForTimeout(2500);
 const chartFrame = framedView.frames().find((frame) => frame !== framedView.mainFrame()) ?? framedView.mainFrame();
 await chartFrame.evaluate(() => window.scrollTo(0, 400));
 await framedView.waitForTimeout(400);
-ok(await hiddenOn(framedView), 'framed: the dock leaves on a downward scroll inside the frame');
+ok(await hiddenOn(chartFrame), 'framed: the dock leaves on a downward scroll inside the frame');
 await chartFrame.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
 await framedView.waitForTimeout(400);
-ok(!(await hiddenOn(framedView)), 'framed: and comes back at the END of the document, where the footer is and there is no further scroll');
+ok(!(await hiddenOn(chartFrame)), 'framed: and comes back at the END of the document, where the footer is and there is no further scroll');
 await framedView.close();
 
 /*
