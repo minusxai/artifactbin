@@ -17,7 +17,13 @@ export const PUT = withTokenAuth(async (request: Request, { tokenId, userId, par
   return runOperation('update_artifact', request, { tokenId, userId }, { ...body, id: params.id });
 });
 
-/** DELETE /api/artifacts/:id — removes the artifact and its history; the link dies. `?force=true` breaks dependents' refs knowingly. */
+/**
+ * DELETE /api/artifacts/:id — TRASHES the artifact, and a FOLDER with its whole
+ * subtree (lib/trash, one statement): the link stops working at once, nothing is
+ * erased yet, `restore_artifact` takes it back for 30 days, and the PURGE is what
+ * finally removes the row and its history. `?force=true` breaks dependents' refs
+ * knowingly.
+ */
 export const DELETE = withTokenAuth((request: Request, { tokenId, userId, params }) =>
   runOperation('delete_artifact', request, { tokenId, userId }, {
     id: params.id,

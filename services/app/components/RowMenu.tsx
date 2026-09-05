@@ -103,12 +103,14 @@ export default function RowMenu({ name, items }: { name: string; items: RowMenuI
  * count belongs in the sentence the person answers, not in a refusal they have
  * to work around. It says the trash and the 30 days too, because what makes
  * taking a folder full of documents an ordinary act rather than a cliff is
- * that it is recoverable.
+ * that it is recoverable — which is why the plain sentence says it too. It
+ * used to read "the link dies and history is erased", written when a delete
+ * WAS one hard DELETE; with the trash under it, only the first half is true.
  */
 export async function confirmDeleteArtifact(id: string, name: string, inside = 0): Promise<boolean> {
   const message = inside > 0
     ? `Delete ${name} and the ${inside} item${inside === 1 ? '' : 's'} inside it? They go to the trash for 30 days.`
-    : `Delete "${name}"? The link dies and history is erased.`;
+    : `Delete "${name}"? The link stops working. It goes to the trash for 30 days, then it is gone for good.`;
   if (!confirm(message)) return false;
   const res = await fetch(`/api/my/artifacts/${id}`, { method: 'DELETE' });
   return res.ok;

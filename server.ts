@@ -14,18 +14,19 @@
  *
  * `--app-only` is the ONE deviation, and it is a flag rather than a second
  * entry file on purpose: two entries is one more place the Vite chain and
- * the canary order can drift. It skips the proxy composition (auth schema,
+ * the boot order can drift. It skips the proxy composition (auth schema,
  * mailer, human login, token reader, `assemble`) and serves the app's own
  * listener directly — the shape `npm run dev:app` runs when the proxy is a
- * separate process beside it (or not wanted at all): db → object-store
- * canary → register local sql/browser when no URL names them → Vite chain →
- * the app. The app resolves bearer/agent-cookie credentials itself in direct
- * mode (lib/viewer); what is deliberately absent is the PROXY's surface —
+ * separate process beside it (or not wanted at all): db → register local
+ * sql/browser when no URL names them → Vite chain → the app. The app resolves
+ * bearer/agent-cookie credentials itself in direct mode (lib/viewer); what is
+ * deliberately absent is the PROXY's surface —
  * human login and OAuth answer 404 here, which is exactly what a dev loop
  * that fronts this app with its own proxy wants to see.
  *
- * Boot: the database opens and applies its schema; the object-store canary
- * runs (a bad S3_URL fails HERE, with the store named); the proxy's own
+ * Boot: the database opens and applies its schema, and the trash sweep is
+ * started beside it (lib/trash — never awaited, so a process that has just
+ * opened its database starts answering); the proxy's own
  * proxy-owned OAuth tables in the `auth` schema are ensured; human login
  * (Better Auth) is composed from env;
  * the token reader (the proxy's one SELECT over the app-owned `tokens`) is

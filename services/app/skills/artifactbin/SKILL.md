@@ -112,12 +112,12 @@ more follows the reading path. Each ask has ONE file under
 `references/` ([[ docsIndexHint ]]):
 | when the ask involves | read |
 |---|---|
-| the API in full — replace, `expectedVersion`, visibility, forking, the error table | `publishing.md` |
+| the API in full — replace, `expectedVersion`, visibility, folders, forking, the error table | `publishing.md` |
 | tokens — expiry, saved config, claiming, a 401 | `publishing-auth.md` |
 | uploading assets — CSV/sheet rows, images, PDFs (`<File>`), viz recipes | `publishing-datasets.md` |
 | pinned human feedback — reply, resolve, the anchor attribute | `publishing-annotations.md` |
 | connecting an MCP client — OAuth or bearer, the tool list | `publishing-mcp.md` |
-| history — versions, revert, delete, export options | `publishing-versions.md` |
+| history — versions, revert, the trash, export options | `publishing-versions.md` |
 | design craft — hierarchy, type, spacing, color, motifs | `design.md` |
 | the complete tag + component allowlists, `<Helmet>` in depth, layout rules | `markup.md` |
 | dataviz & charts (vega specs), controls, writable datasets, `<Mutation>`, formats | `markup-data.md` |
