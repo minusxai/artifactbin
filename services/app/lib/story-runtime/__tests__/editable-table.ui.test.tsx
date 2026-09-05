@@ -1,4 +1,5 @@
 import React from 'react';
+import { renderToString } from 'react-dom/server';
 import { act, fireEvent, render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { parseJsx } from '@/lib/jsx';
@@ -17,7 +18,7 @@ function setup(body = '<Column col="id"/><Column col="item"><input aria-label="I
   const transport:QueryTransport={mutate,run:vi.fn().mockResolvedValue({tables:state.tables,errors:{}}),page:vi.fn()};
   const store=createDataflowStore(dataflow,{transport});
   const view=render(<StoryRuntimeApp nodes={nodes} refData={{}} dataflow={dataflow} store={store} colorMode="light" chrome={false}/>);
-  return {...view,store,mutate,transport};
+  return {...view,store,mutate,transport,nodes,dataflow};
 }
 describe('editable table runtime',()=>{
   it('keeps different row drafts isolated even when their labels are identical',()=>{
@@ -50,5 +51,35 @@ describe('editable table runtime',()=>{
     const v=setup(undefined,[{id:1,item:'one',hours:2},{id:1,item:'two',hours:3}]);
     expect(v.getByRole('alert').textContent).toMatch(/unique|duplicate/i);
     expect(v.queryAllByLabelText('Item')).toHaveLength(0);
+  });
+  it('commits a single Select once and disables its actual trigger while saving',async()=>{
+    const v=setup('<Column col="item"><Select label="Item {$_row.id}" value="$_row.item" options={["one","two","done"]} run="$set_item"/></Column>');
+    v.mutate.mockImplementation(()=>new Promise(()=>{}));
+    fireEvent.click(v.getByLabelText('Item 1'));
+    fireEvent.click(v.getByLabelText('done'));
+    await act(async()=>{});
+    expect(v.mutate).toHaveBeenCalledTimes(1);
+    expect(v.mutate).toHaveBeenCalledWith({_value:'done'},'set_item',{id:1,item:'one',hours:2});
+    expect((v.getByLabelText('Item 1') as HTMLButtonElement).disabled).toBe(true);
+  });
+  it('renders capture cell controls disabled and updates when a write transport attaches',async()=>{
+    const v=setup();
+    const store=createDataflowStore(v.dataflow);
+    const html=renderToString(<StoryRuntimeApp nodes={v.nodes} refData={{}} dataflow={v.dataflow} store={store} colorMode="light" chrome={false}/>);
+    expect(html).toContain('disabled=""');
+    await act(async()=>v.store.setTransport(null));
+    expect((v.getByLabelText('Hours 1') as HTMLInputElement).disabled).toBe(true);
+    await act(async()=>v.store.setTransport(v.transport));
+    expect((v.getByLabelText('Hours 1') as HTMLInputElement).disabled).toBe(false);
+  });
+  it('retains an immutable draft across filtering out and remounting the same keyed row',async()=>{
+    const v=setup();const input=v.getAllByLabelText('Item')[0];
+    fireEvent.focus(input);fireEvent.change(input,{target:{value:'draft'}});
+    await act(async()=>v.store.replaceFlow({...v.dataflow,state:{...v.dataflow.state,tables:{tasks:{columns,rows:[]}}}}));
+    expect(v.queryAllByLabelText('Item')).toHaveLength(0);
+    await act(async()=>v.store.replaceFlow({...v.dataflow,state:{...v.dataflow.state,tables:{tasks:{columns,rows:[{id:1,item:'changed elsewhere',hours:9}]}}}}));
+    const remounted=v.getByLabelText('Item') as HTMLInputElement;expect(remounted.value).toBe('draft');
+    fireEvent.keyDown(remounted,{key:'Enter'});await act(async()=>{});
+    expect(v.mutate).toHaveBeenCalledWith({_value:'draft'},'set_item',{id:1,item:'one',hours:2});
   });
 });
