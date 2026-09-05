@@ -719,7 +719,7 @@ async function logWholeDocumentWrite(tx: Queryable, before: ArtifactRow, after: 
  */
 export async function commitNormalizedMarkup(
   tx: Queryable,
-  actor: TokenActor,
+  actor: TokenActor | null,
   current: ArtifactRow,
   normalized: { source: string; content: string; meta: Record<string, unknown>; ids: readonly string[]; aliases?: readonly { legacyKey: string; nodeId: string; path: string }[] },
 ): Promise<ArtifactRow> {
@@ -728,7 +728,7 @@ export async function commitNormalizedMarkup(
   const result = await tx.query<ArtifactRow>(
     `UPDATE artifacts SET source=$2, content=$3, meta=$4::jsonb, version=version+1, edit_id=$5,
        actor_user_id=$6, actor_token_id=$7, updated_at=now() WHERE id=$1 RETURNING *`,
-    [current.id, normalized.source, normalized.content, JSON.stringify(normalized.meta), editId, ...actorStamp(actor)],
+    [current.id, normalized.source, normalized.content, JSON.stringify(normalized.meta), editId, ...(actor ? actorStamp(actor) : [null, null])],
   );
   const updated = result.rows[0];
   await tx.query(
@@ -747,6 +747,30 @@ export async function commitNormalizedMarkup(
   }
   await logWholeDocumentWrite(tx, current, updated);
   return updated;
+}
+
+/** Artifact-aware publish preparation shared with the administrative migration. */
+export async function publishMarkupForArtifact(
+  tx: Queryable,
+  current: ArtifactRow,
+  source: string,
+): Promise<Response | { source: string; content: string; meta: Record<string, unknown>; ids: string[]; aliases: Array<{ legacyKey: string; nodeId: string; path: string }> }> {
+  const currentMeta = current.meta as { theme?: unknown; template?: unknown; colorMode?: unknown };
+  const context = {
+    loadRef: refLoaderForActor(writerFor(current)),
+    importAsset: assetImporterFor(current.token_id, current.user_id),
+    resolveFont: fontResolver(),
+    overByteQuota: byteQuotaFor(current.token_id),
+  };
+  let published = await publishJsx({ theme: currentMeta.theme ?? null, template: currentMeta.template ?? null, colorMode: currentMeta.colorMode ?? null }, source, context);
+  if (published instanceof Response) return published;
+  const reserved = await tx.query<{ source_id: string }>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1', [current.id]);
+  const identity = stampNodeIds(published.source ?? '', { previousSource: current.source, reservedIds: reserved.rows.map((row) => row.source_id), retireLegacyAliases: true });
+  if (identity.source !== published.source) {
+    published = await publishJsx({ theme: currentMeta.theme ?? null, template: currentMeta.template ?? null, colorMode: currentMeta.colorMode ?? null }, identity.source, context);
+    if (published instanceof Response) return published;
+  }
+  return { source: published.source ?? '', content: published.content, meta: published.meta, ids: identity.ids, aliases: identity.aliases };
 }
 
 async function listVersionsScoped(scope: Scope, id: string): Promise<VersionSummary[] | null> {
