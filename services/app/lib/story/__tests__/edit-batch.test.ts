@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveEditBatch, rebaseEditBatch, MAX_BATCH_EDITS } from '../edit-batch';
+import { resolveEditBatch, rebaseEditBatch, MAX_BATCH_BYTES, MAX_BATCH_EDITS } from '../edit-batch';
 import { applySplice, deriveSpliceFromStrings, touchedSpanFor } from '../splice';
 import { parseJsx } from '@/lib/jsx';
 
@@ -53,5 +53,53 @@ describe('atomic edit batch kernel', () => {
     const result=resolveEditBatch('<p>Hi</p>',[{oldString:'</p>',newString:''}]);
     expect(result.ok).toBe(true);
     if(result.ok) expect(parseJsx(result.source).ok).toBe(false);
+  });
+
+  it('lowers dependent and overlapping edits to reconstructing disjoint base splices', () => {
+    const result = resolveEditBatch('abcdef', [
+      { oldString: 'bcd', newString: 'B-D' },
+      { oldString: 'B-D', newString: 'BCD!' },
+      { oldString: '!', newString: '?' },
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.source).toBe('aBCD?ef');
+    expect(result.changes.reduceRight((s, c) => applySplice(s, c.splice), 'abcdef')).toBe(result.source);
+    for (let i = 1; i < result.changes.length; i++) {
+      expect(result.changes[i - 1].splice.start).toBeLessThan(result.changes[i].splice.start);
+    }
+  });
+
+  it('removes net cancellations instead of publishing phantom changes', () => {
+    expect(resolveEditBatch('abc', [
+      { oldString: 'b', newString: 'B' },
+      { oldString: 'B', newString: 'b' },
+    ])).toEqual({ ok: true, source: 'abc', changes: [] });
+  });
+
+  it('keeps splice boundaries outside surrogate pairs', () => {
+    const result = resolveEditBatch('a😀b', [{ oldString: '😀', newString: '😎' }]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.changes).toHaveLength(1);
+    expect(result.changes[0].splice).toEqual({ start: 1, removed: '😀', inserted: '😎' });
+  });
+
+  it('enforces aggregate UTF-8 input work and exact failing indexes', () => {
+    expect(resolveEditBatch('x', [{ oldString: 'x', newString: 'x' }]))
+      .toEqual({ ok: false, reason: 'identical', editIndex: 0 });
+    expect(resolveEditBatch('x'.repeat(MAX_BATCH_BYTES + 1), [{ oldString: 'x', newString: 'y' }]))
+      .toEqual({ ok: false, reason: 'too_large' });
+  });
+
+  it('refuses at touching-span collisions and leaves the caller head untouched', () => {
+    const original = '<main><p>one</p><p>two</p></main>';
+    const batch = resolveEditBatch(original, [{ oldString: 'one', newString: 'ONE' }]);
+    const concurrent = deriveSpliceFromStrings(original, '<p>one</p>', '<p>other</p>');
+    if (!batch.ok || !concurrent.ok) throw new Error('expected valid fixtures');
+    const head = applySplice(original, concurrent.splice);
+    expect(rebaseEditBatch(head, batch.changes, [{ seq: 1, editId: 'collision', splice: concurrent.splice, span: touchedSpanFor(original, concurrent.splice) }]))
+      .toEqual({ ok: false });
+    expect(head).toBe('<main><p>other</p><p>two</p></main>');
   });
 });
