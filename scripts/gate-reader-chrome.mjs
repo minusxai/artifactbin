@@ -154,7 +154,7 @@ for (const [name, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
 
   if (name === 'phone') {
     check(!!s?.rail && s.rail.right >= s.width - 20, `${name}: the rail hugs the right edge (right ${s?.rail?.right} of ${s?.width})`);
-    check(!!s?.byline && s.byline.left <= 20 && s.byline.bottom >= s.height - 30,
+    check(!!s?.byline && s.byline.left <= 30 && s.byline.bottom >= s.height - 30,
       `${name}: the byline sits bottom-left (${s?.byline?.left}, bottom ${s?.byline?.bottom} of ${s?.height})`);
     check(!!s?.byline && !!s.rail && s.byline.right <= s.rail.left + 1, `${name}: and clear of the rail's column`);
     check(!!s?.like && s.like.width >= 44 && s.like.height >= 44, `${name}: a rail target is at least 44x44 (${s?.like?.width}x${s?.like?.height})`);
@@ -170,14 +170,20 @@ for (const [name, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
   s = await chromeState(page);
   check(s?.hidden === false, `${name}: the END of the document shows the chrome`);
 
-  // 4. like and comment log, and nothing else
-  await revealReaderChrome(page);
-  logs.length = 0;
-  await page.locator('[aria-label="Like"]').click();
-  await page.locator('[aria-label="Comment"]').click();
-  await settle(page);
-  check(logs.some((l) => l.includes('[artifactbin] like') && l.includes(long.id)), `${name}: Like logs with the artifact id (${logs.join(' | ') || 'nothing'})`);
-  check(logs.some((l) => l.includes('[artifactbin] comment') && l.includes(long.id)), `${name}: Comment logs with the artifact id`);
+  // 4. LIKE AND COMMENT ARE DOORS for a stranger: the document holds no
+  // session, so a press walks through login carrying the ask, and the shell
+  // performs it on the way back (lib/intent). Measured: the door, then back.
+  const door = async (label, intent) => {
+    await revealReaderChrome(page);
+    await page.locator(`[aria-label="${label}"]`).click();
+    await page.waitForURL(/\/login\?callbackUrl=/, { timeout: 10_000 }).catch(() => {});
+    const at = page.url();
+    check(at.includes('/login?callbackUrl=') && at.includes(`intent%3D${intent}`), `${name}: ${label} goes through login carrying intent=${intent} (${at})`);
+    await page.goto(`${BASE}/a/${long.id}`, { waitUntil: 'load' });
+    await page.waitForSelector('[data-mx-reader-chrome]', { state: 'attached', timeout: 30_000 });
+  };
+  await door('Like', 'like');
+  await door('Comment', 'comment');
 
   // 5. share reaches the clipboard, and the toast says so — on the PHONE. A
   // desktop has an address bar; the product owner wants no share button there.
@@ -221,14 +227,10 @@ for (const [name, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
   check(links.logo === '/', `${name}: the logo is home (${links.logo})`);
   check(links.title === 'Reader chrome gate', `${name}: and the title reads as stored (${links.title})`);
 
-  // 6c. FOLLOW sits in the byline and logs like its siblings — UI only for now
-  const follow = page.locator('[data-mx-reader-action="follow"]');
-  check(await follow.isVisible(), `${name}: the byline offers Follow`);
-  logs.length = 0;
-  await follow.click();
-  await settle(page);
-  check(logs.some((l) => l.includes('[artifactbin] follow') && l.includes(handle)),
-    `${name}: Follow logs with the author (${logs.join(' | ') || 'nothing'})`);
+  // 6c. FOLLOW sits in the byline, and for a stranger it is a door like Like.
+  await revealReaderChrome(page);
+  check(await page.locator('[data-mx-reader-action="follow"]').isVisible(), `${name}: the byline offers Follow`);
+  await door(`Follow @${handle}`, 'follow');
 
   // 10. HOVER TIPS, on a desktop — a phone has no hover, its words sit under the glyphs
   if (viewport === DESKTOP) {

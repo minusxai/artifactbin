@@ -66,12 +66,21 @@ export async function revealReaderChrome(target) {
  *   - 'document' — a document served top-level: its chrome opens its own panel;
  *   - 'frame'    — a framed document: its chrome asks, the page's panel opens.
  */
-async function chromeHost(page) {
-  if (await page.locator('[aria-label="Open artifact controls"], [aria-label="Open page controls"], [aria-label="Open menu"]').count()) return { kind: 'page', target: page };
+async function chromeHost(page, timeout = 30_000) {
+  // Whichever shape this page takes arrives after navigation, not with it:
+  // wait for the first sign of any of them.
+  await page.waitForSelector(
+    '[data-mx-reader-chrome], iframe[title="artifact"], [aria-label="Open artifact controls"], [aria-label="Open page controls"], [aria-label="Open menu"]',
+    { state: 'attached', timeout },
+  ).catch(() => {});
+  // A document served top-level IS the page, and its chrome carries "Open menu"
+  // too — so this is asked before the page-button question, or a hidden
+  // trigger gets clicked as if it were a bar button.
   if (await page.locator('[data-mx-reader-chrome]').count()) return { kind: 'document', target: page };
-  const frame = page.frames().find((f) => f !== page.mainFrame() && f.url().includes('/raw'));
+  const handle = await page.$('iframe[title="artifact"]');
+  const frame = handle ? await handle.contentFrame() : null;
   if (frame) {
-    await frame.waitForSelector('[data-mx-reader-chrome]', { state: 'attached', timeout: 30_000 }).catch(() => {});
+    await frame.waitForSelector('[data-mx-reader-chrome]', { state: 'attached', timeout }).catch(() => {});
     return { kind: 'frame', target: frame };
   }
   return { kind: 'page', target: page };
@@ -79,7 +88,7 @@ async function chromeHost(page) {
 
 /** Open the artifact (or page) controls panel, wherever the control is. */
 export async function openArtifactControls(page, { timeout = 30_000 } = {}) {
-  const host = await chromeHost(page);
+  const host = await chromeHost(page, timeout);
   if (host.kind === 'page') {
     await page.locator('[aria-label="Open artifact controls"], [aria-label="Open page controls"]').first().click({ timeout });
     return;
@@ -91,7 +100,7 @@ export async function openArtifactControls(page, { timeout = 30_000 } = {}) {
 
 /** Open the menu (account / navigation) panel, wherever the control is. */
 export async function openMenu(page, { timeout = 30_000 } = {}) {
-  const host = await chromeHost(page);
+  const host = await chromeHost(page, timeout);
   if (host.kind === 'page') {
     await page.locator('[aria-label="Open menu"]').first().click({ timeout });
     return;
