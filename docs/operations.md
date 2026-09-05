@@ -29,24 +29,31 @@
   (PGLite in-process, Postgres via one dedicated client). A missed
   notification is harmless: every wakeup triggers a fresh read, so the
   document converges either way.
-- The browser gates need a RUNNING server and are not part of `npm test`.
-  Run them as a set with `npm run test:gates -- <base>`, one with
-  `--only=<name>`, and list what exists with `--list` — the runner discovers
-  every `scripts/gate-*.mjs` from disk, so a new gate joins by existing and no
-  hand-written list can fall behind. A gate's verdict is its exit code.
+- The browser gates are not part of `npm test`. Run the set with
+  `npm run build && npm run test:gates`: with no arguments the runner BOOTS ITS
+  OWN servers from `dist/` — `min(6, availableParallelism())` of them, each with
+  in-memory PGLite, its own port and its own object dir — and deals the set
+  across them. That is exactly what CI does (`--servers=4`), and it is the
+  default on purpose: driving a DEV server instead means the SPA is served
+  through Vite, whose HMR websocket a fixed `connect-src 'self'` CSP refuses, so
+  the page never mounts and ~26 gates time out on a checkout where nothing is
+  wrong. `--servers=N` chooses the count (`--servers=0` falls back to
+  `http://localhost:3040`), and `npm run test:gates -- <base>` drives a server
+  you already have — point that one at
+  `PROXY__RATE_LIMIT_CONFIG_FILE=services/proxy/dev_rate_limits.yml`. Run one
+  gate with `--only=<name>` and list what exists with `--list` — the runner
+  discovers every `scripts/gate-*.mjs` from disk, so a new gate joins by
+  existing and no hand-written list can fall behind. A gate's verdict is its
+  exit code.
   Highlights: `app-flows` (whole app), `concurrent-edit` (a human typing while
   an agent edits), `full-kit` (every component through the served document:
   SSR, hydration, isolation, fonts, export), `script-slice` (an author
   `<script>` runs in view and is inert in the editor), `shell-seo` (a crawler
   is served the document itself, text and unfurl tags included), `visibility`
   (the ACL + pretty URLs, incl. a private artifact's sandboxed iframe carrying
-  the session cookie). Gates that log in need the dev server pointed at their
-  mail sink — see each file's header. To run them against a release-mode
-  server, start it with
-  `PROXY__RATE_LIMIT_CONFIG_FILE=services/proxy/dev_rate_limits.yml`: the
-  shipped default closes anonymous minting outright, and a full pass mints far
-  more than the self-host ceiling of 10 from one IP. `--servers` does it for
-  you.
+  the session cookie). Gates that log in need a mail sink; the booted servers
+  share one per run, and a server of your own must be pointed at its own — see
+  each file's header.
 - **Image export needs a headless browser**: run `npx playwright install chromium`
   once per host. Renders happen on demand (lazy singleton, 60s idle shutdown)
   and persist in the object store keyed by artifact version, so one render

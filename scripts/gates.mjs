@@ -3,6 +3,9 @@
  * Run the browser gates as a SET.
  *
  *   node scripts/gates.mjs [base-url ...] [--only=a,b] [--list] [--servers=N] [--shard=i/n]
+
+ * With no base URL it BUILDS NOTHING but boots `min(6, cores)` servers from
+ * dist/ — run `npm run build` first, exactly as CI does.
  *
  * Every gate is a standalone script that drives a running server and exits
  * non-zero when a contract breaks. Individually they were runnable and
@@ -26,17 +29,30 @@
  * is a port it binds alone.
  *
  * So the fan-out is over SERVERS, not over gates: pass several base URLs and
- * the set is dealt across them, or pass `--servers=N` and this runner boots N
- * of them itself (in-memory PGLite, its own object dir, its own port) from the
- * build in dist/. A single base URL behaves exactly as it always did.
+ * the set is dealt across them, or let this runner boot them itself (in-memory
+ * PGLite, its own object dir, its own port) from the build in dist/.
  *
- * AGAINST A PRODUCTION-MODE SERVER, RAISE THE MINT CEILING. The shipped default
- * policy file closes anonymous minting outright, and a full pass mints far more
- * than a handful of anonymous tokens from one IP — so every gate after the
- * ceiling dies on a 429 the START helper reports as `401 unauthorized` at
- * publish time, which reads like a broken build and is not one. Start the
- * server with `PROXY__RATE_LIMIT_CONFIG_FILE=services/proxy/dev_rate_limits.yml`
- * (2000/hour) to verify a production build; `--servers` does it for you.
+ * BOOTING THEM IS NOW THE DEFAULT, and that is the second half of the same
+ * lesson. With no arguments the runner used to drive whatever was listening on
+ * :3040 — a DEV server — and a local run therefore did not mean what CI's run
+ * means. CI builds and boots the bundle (`.github/workflows/ci.yml`:
+ * `npm run build`, then `gates.mjs --servers=4`); a dev server serves the SPA
+ * through Vite, whose HMR websocket is on a second port that the app's fixed
+ * `connect-src 'self'` CSP refuses, so the SPA never mounts and every gate
+ * waiting on the artifact iframe or a chart's marks times out. MEASURED: 26 of
+ * 42 gates failed that way on a clean checkout, and the SAME 26 failed on a
+ * commit that had changed nothing. So with no base URL the default is
+ * `min(6, availableParallelism())` servers of the CI shape
+ * (scripts/gates.servers.mjs). `--servers=N` still wins — `--servers=0` asks
+ * for the old behaviour — and a base URL still means DRIVE THAT SERVER.
+ *
+ * A BOOTED SERVER IS PRODUCTION-MODE, SO IT NEEDS THE DEV POLICY FILE. The
+ * shipped default closes anonymous minting outright, and a full pass mints far
+ * more than a handful of anonymous tokens from one IP — so every gate after the
+ * ceiling would die on a 429 the START helper reports as `401 unauthorized` at
+ * publish time, which reads like a broken build and is not one. `bootServer`
+ * points each one at `services/proxy/dev_rate_limits.yml` (2000/hour). Driving
+ * a server of your own, set `PROXY__RATE_LIMIT_CONFIG_FILE` to the same file.
  */
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { spawn } from 'node:child_process';
@@ -45,6 +61,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { GATE_SPECS, checkManifest, specFor } from './gates.manifest.mjs';
+import { resolveServers, runSecret } from './gates.servers.mjs';
 import { parseShard, shardOf } from './gates.shard.mjs';
 import { loadDotEnv } from './lib/dev-env.mjs';
 
@@ -54,8 +71,15 @@ const BUNDLE = path.join(ROOT, 'dist/proxy-server.mjs');
 
 const args = process.argv.slice(2);
 const only = args.find((a) => a.startsWith('--only='))?.slice('--only='.length).split(',').filter(Boolean);
-const servers = Number(args.find((a) => a.startsWith('--servers='))?.slice('--servers='.length) ?? 0);
 const bases = args.filter((a) => !a.startsWith('--'));
+let servers;
+let serversFrom;
+try {
+  ({ servers, source: serversFrom } = resolveServers({ args, bases, cpus: os.availableParallelism?.() }));
+} catch (error) {
+  console.error(String(error.message ?? error));
+  process.exit(2);
+}
 let shard;
 try {
   shard = parseShard(args.find((a) => a.startsWith('--shard=')));
@@ -128,7 +152,7 @@ const scratch = path.join(os.tmpdir(), `artifact-gates-${process.pid}`);
  * secret, the mail endpoint, S3 if the caller set one — is inherited, because
  * a gate run is only as honest as the environment it runs against.
  */
-async function bootServer(index, mailOutbox) {
+async function bootServer(index, mailOutbox, authSecret) {
   if (!existsSync(BUNDLE)) {
     console.error(`--servers needs a build: ${path.relative(ROOT, BUNDLE)} is missing. Run \`npm run build\`.`);
     process.exit(2);
@@ -149,6 +173,9 @@ async function bootServer(index, mailOutbox) {
       NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import ${pathToFileURL(path.join(HERE, 'lib/sheets-stub.mjs')).href}`.trim(),
       APP__PORT: String(port),
       APP__PUBLIC_BASE_URL: base,
+      // Production mode refuses to boot without it; CI hands its gates job one per run and so do we
+      // (scripts/gates.servers.mjs runSecret). Every server in the run shares the one value.
+      AUTH__SECRET: authSecret,
       DATABASE_URL: 'pglite://memory',
       // A seeded worktree names standalone service ports in .env. Throwaway
       // gate servers deliberately use the full bundle's local implementations.
@@ -177,11 +204,6 @@ const stopAll = () => { for (const child of started) { try { child.kill('SIGTERM
 process.on('exit', () => { stopAll(); try { rmSync(scratch, { recursive: true, force: true }); } catch { /* best effort */ } });
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { stopAll(); process.exit(130); });
 
-if (servers > 0 && bases.length > 0) {
-  console.error('Pass base URLs or --servers=N, not both.');
-  process.exit(2);
-}
-
 let targets = bases;
 const needsMail = selected.some((gate) => specFor(gate.name).needsMail);
 const mailOutbox = needsMail && servers > 0 ? path.join(scratch, 'dev-mail.jsonl') : null;
@@ -190,8 +212,9 @@ if (servers > 0) {
   // mail key and whatever store the caller configured, all of which live where
   // `npm run dev` finds them.
   loadDotEnv();
-  process.stdout.write(`booting ${servers} server(s)`);
-  targets = await Promise.all(Array.from({ length: servers }, (_, i) => bootServer(i, mailOutbox)));
+  const authSecret = runSecret(process.env);
+  process.stdout.write(`booting ${servers} server(s)${serversFrom === 'default' ? ` (one per core, capped — pass --servers=N to choose, or a base URL to drive a server you already have)` : ''}`);
+  targets = await Promise.all(Array.from({ length: servers }, (_, i) => bootServer(i, mailOutbox, authSecret)));
   console.log(` — ${targets.join(' ')}\n`);
 }
 if (targets.length === 0) targets = ['http://localhost:3040'];
