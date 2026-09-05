@@ -54,14 +54,14 @@ Declarations · Bindings: embeds · Bindings: controls.
   at publish against the real columns: a bad column is a
   `400 {"error":"invalid_sql"}` carrying the engine's message with candidate
   names. Results are cut at 10,000 rows; a query has 5 s. A FOLDER is a table
-  too — `ref_<folderId>`, its children, which its own page lists with
+  too — `ref_<folderId>`, its children, which a document can list with
   `<Files data="$children" variant="icons|tiles" />`. Columns `id title format
   level visibility updated_at url thumbnail views sparkline`, computed per
   VIEWER: a stranger gets the `public` children, `thumbnail` (a card) is null
   for a private child AND for every folder, `views`/`sparkline` null unless you
   may edit the folder.
 - `<Mutation name>{`insert into ref_<datasetId> (a) values ($a)`}</Mutation>`
-  — a `<Query>` that WRITES (preview: the dataset needs `access: readwrite`,
+  — a `<Query>` that WRITES (the dataset needs `access: readwrite`,
   [datasets](publishing-datasets.md)). Exactly one INSERT | UPDATE | DELETE
   naming exactly ONE dataset, which must be YOUR OWN (reading a public one
   you do not own is fine; writing it is not). It runs on demand, never at render:

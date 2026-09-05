@@ -38,7 +38,7 @@ const open = () => fireEvent.click(screen.getByLabelText('Share'));
 
 describe('ShareLink — writes', () => {
   it('offers the row for a DATASET only, and flips it with one PATCH-shaped PUT', async () => {
-    render(<ShareLink className="x" artifactId="k3Pq9z" owner format="dataset" preview />);
+    render(<ShareLink className="x" artifactId="k3Pq9z" owner format="dataset" />);
     open();
     await waitFor(() => expect(screen.getByLabelText('Make read & write')).toBeTruthy());
     expect(screen.getByLabelText('Make read-only').getAttribute('aria-pressed')).toBe('true');
@@ -50,14 +50,8 @@ describe('ShareLink — writes', () => {
     expect(screen.getByLabelText('Share').textContent).toContain('writable');
   });
 
-  it('is absent for a document, and for a dataset outside the preview', async () => {
-    const { unmount } = render(<ShareLink className="x" artifactId="Ab3xK9" owner format="markup" preview />);
-    open();
-    await waitFor(() => expect(screen.getByLabelText('Make public')).toBeTruthy());
-    expect(screen.queryByLabelText('Make read & write')).toBeNull();
-    unmount();
-
-    render(<ShareLink className="x" artifactId="k3Pq9z" owner format="dataset" />);
+  it('is absent for a document', async () => {
+    render(<ShareLink className="x" artifactId="Ab3xK9" owner format="markup" />);
     open();
     await waitFor(() => expect(screen.getByLabelText('Make public')).toBeTruthy());
     expect(screen.queryByLabelText('Make read & write')).toBeNull();
@@ -66,7 +60,7 @@ describe('ShareLink — writes', () => {
   it('names the documents that write here, and confirms before closing writes', async () => {
     state.access = 'readwrite';
     state.writtenBy = [{ id: 'Doc111', title: 'Lunch poll', mutations: ['vote'] }];
-    render(<ShareLink className="x" artifactId="k3Pq9z" owner format="dataset" preview />);
+    render(<ShareLink className="x" artifactId="k3Pq9z" owner format="dataset" />);
     open();
     await waitFor(() => expect(screen.getByLabelText('Make read-only')).toBeTruthy());
     expect(screen.getByText(/Lunch poll/)).toBeTruthy();
@@ -81,7 +75,7 @@ describe('ShareLink — writes', () => {
 
   it('skips the confirm when nothing writes here', async () => {
     state.access = 'readwrite';
-    render(<ShareLink className="x" artifactId="k3Pq9z" owner format="dataset" preview />);
+    render(<ShareLink className="x" artifactId="k3Pq9z" owner format="dataset" />);
     open();
     await waitFor(() => expect(screen.getByLabelText('Make read-only')).toBeTruthy());
     fireEvent.click(screen.getByLabelText('Make read-only'));
@@ -91,7 +85,7 @@ describe('ShareLink — writes', () => {
   it('hides `private` for an anonymous owner, who can still manage writes', async () => {
     state.canPrivate = false;
     state.visibility = 'public';
-    render(<ShareLink className="x" artifactId="k3Pq9z" owner format="dataset" preview />);
+    render(<ShareLink className="x" artifactId="k3Pq9z" owner format="dataset" />);
     open();
     await waitFor(() => expect(screen.getByLabelText('Make read & write')).toBeTruthy());
     expect(screen.queryByLabelText('Make private')).toBeNull();

@@ -40,7 +40,7 @@ const jreq = (path: string, method: string, body?: unknown, token?: string, cook
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
 const create = async (token: string, body: Record<string, unknown>) => {
-  const res = await createArtifactRoute(jreq('/api/artifacts?v=2', 'POST', body, token));
+  const res = await createArtifactRoute(jreq('/api/artifacts', 'POST', body, token));
   expect(res.status, await res.clone().text()).toBe(201);
   return (await res.json()) as { id: string; edit_id: string; version: number };
 };

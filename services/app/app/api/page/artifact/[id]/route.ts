@@ -11,7 +11,6 @@ import { folderPageFor } from '@/lib/folders';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { verifyExportKey } from '@/lib/export-key';
-import { previewFrom } from '@/lib/features';
 import { json } from '@/lib/http';
 import { ID_RE } from '@/lib/ids';
 import { count, has } from '@/lib/relations';
@@ -108,7 +107,6 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       dataflow: isDoc && artifact.source ? declarationsForRow(artifact) : null,
       accountSession: kind === 'account',
       anonSession: kind === 'anon',
-      preview: previewFrom(search),
       version: artifact.version,
       // Anyone who may COMMENT has a comment badge to fill: computing this
       // for the owner alone left an editor's and a commenter's count at 0

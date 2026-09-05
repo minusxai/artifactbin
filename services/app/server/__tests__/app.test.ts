@@ -30,7 +30,7 @@ const as = (actor: Parameters<typeof actorHeaders>[0]) => actorHeaders(actor, SE
 async function world() {
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_owner@example.com' }));
   const t = await mintToken('o'); await claimToken(owner.id, t.token);
-  const mk = async (body: Record<string, unknown>) => (await (await createArtifactRoute(new Request(`${BASE}/api/artifacts?v=2`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify(body) }))).json()) as { id: string };
+  const mk = async (body: Record<string, unknown>) => (await (await createArtifactRoute(new Request(`${BASE}/api/artifacts`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify(body) }))).json()) as { id: string };
   return { owner, t, pub: await mk({ title: 'Pub', markup: '<div><p>public words</p></div>', visibility: 'public' }), priv: await mk({ title: 'Priv', markup: '<div><p>secret words</p></div>', visibility: 'private' }) };
 }
 

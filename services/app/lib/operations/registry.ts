@@ -56,7 +56,7 @@ export interface OpContext {
   actor: TokenActor;
   /** The caller's own origin — every `url` in a reply is built from it. */
   base: string;
-  /** The transport's request — consulted only for per-request flags (the preview gate). */
+  /** The transport request passed through to the publish pipeline. */
   request: Request;
   /** Who a comment reply is attributed to; derived per transport. */
   author: AnnotationAuthor;
@@ -129,7 +129,7 @@ const CONTENT_FIELDS = {
   // has none.
   format: z.enum(['folder']).optional().describe("a folder: send it with NO content field. A folder is an artifact like any other — it has a url, visibility and sharing — and you file documents under it with parent_id"),
   parent_id: z.string().nullable().optional().describe("the id of a FOLDER artifact to file this under (create one with {\"format\":\"folder\",\"title\":\"…\"}), or null for your root. Ids, never paths: two sibling folders may share a name. The URL keeps working wherever the file moves"),
-  access: z.enum(['read', 'readwrite']).optional().describe("dataset WRITE ACL (preview): 'read' (default — documents may only read it) or 'readwrite' (documents you publish may add/change/remove rows through a <Mutation>). Needs the preview: pass ?v=2 on the request, or set PREVIEW__FEATURES=1 on the deployment."),
+  access: z.enum(['read', 'readwrite']).optional().describe("dataset WRITE ACL: 'read' (default — documents may only read it) or 'readwrite' (documents you publish may add/change/remove rows through a <Mutation>)."),
   visibility: z.enum(['public', 'private', 'unlisted']).optional().describe("read ACL: 'public' = anyone with the link, and it lists on the owner's public profile; 'unlisted' = anyone with the link, but never listed anywhere; 'private' = the owner + emails they share it with (needs a logged-in account — anonymous tokens can be public or unlisted). Defaults: account-owned tokens publish private — except images and datasets, born unlisted; anonymous tokens publish public."),
 };
 
@@ -172,7 +172,7 @@ const createArtifactOp: Operation = {
   name: 'create_artifact',
   title: 'Create an artifact',
   http: { method: 'POST', path: '/api/artifacts' },
-  description: 'Create an artifact (exactly one of markup | dataset | viz | image | pdf). Returns the public URL. markup is THE document format: story JSX over the component kit, HTML tags for everything else (prose is ordinary <p>/<h1>/<ul> — there is no markdown), and one top-level <Helmet> for <title>/<style>/<script> and the document\'s DATA: <Value name type default /> scalars and <Query name>{`select … from ref_<datasetId>`}</Query> (SQL over your datasets), bound in the body by name — <Question data="$q">, <DataTable data="$q">, <select value="$x" options="$q">. Recipes/images bind as ref:<id>, and a pdf as <File src="ref:<id>" />. No upload is needed for something already on the web: write <img src="https://…"> (or <Video poster>, <File src>) and publish stores a copy while your URL stays in the document. Dataset creation echoes the inferred columns and a ready-to-paste Query+Question. To ORGANISE: {"format":"folder","title":"Reports"} makes a folder (no content field), and parent_id: "<folderId>" on any create files it there.',
+  description: 'Create an artifact (exactly one of markup | dataset | viz | image | pdf). Returns the public URL. markup is THE document format: story JSX over the component kit, HTML tags for everything else (prose is ordinary <p>/<h1>/<ul> — there is no markdown), and one top-level <Helmet> for <title>/<style>/<script> and the document\'s DATA: <Value name type default /> scalars and <Query name>{`select … from ref_<datasetId>`}</Query> (SQL over your datasets), bound in the body by name — <Question data="$q">, <DataTable data="$q">, <select value="$x" options="$q">. Recipes/images bind as ref:<id>, and a pdf as <File src="ref:<id>" />. No upload is needed for something already on the web: write <img src="https://…"> (or <Video poster>, <File src>) and publish stores a copy while your URL stays in the document. Dataset creation echoes the inferred columns and a ready-to-paste Query+Question. To ORGANISE: {"format":"folder","title":"Reports"} makes a folder — a folder HAS no content, its page is the listing we render for whoever opens it — and parent_id: "<folderId>" on any create files it there.',
   input: CONTENT_FIELDS,
   annotations: {},
   example: {
@@ -192,7 +192,7 @@ const updateArtifactOp: Operation = {
   name: 'update_artifact',
   title: 'Replace an artifact',
   http: { method: 'PUT', path: '/api/artifacts/{id}' },
-  description: 'Full replace of an artifact you own (same one-of content fields as create). Archives the current state as a version; the URL never changes. Pass expectedVersion (from get_artifact) to fail with version_conflict instead of overwriting a concurrent edit — on conflict, re-read, merge, and retry with the reported currentVersion. Dataset/recipe refreshes return warnings naming dependent artifacts whose bindings broke.',
+  description: 'Full replace of an artifact you own (same one-of content fields as create). Archives the current state as a version; the URL never changes. Pass expectedVersion (from get_artifact) to fail with version_conflict instead of overwriting a concurrent edit — on conflict, re-read, merge, and retry with the reported currentVersion. Dataset/recipe refreshes return warnings naming dependent artifacts whose bindings broke. On a FOLDER only title, visibility and parent_id apply — renaming one is this call — and a content field answers not_editable, because a folder has no content.',
   input: { id: z.string(), expectedVersion: z.number().int().positive().optional(), ...CONTENT_FIELDS },
   annotations: { idempotent: true },
   example: {
@@ -244,7 +244,7 @@ const getArtifactOp: Operation = {
   name: 'get_artifact',
   title: 'Read an artifact',
   http: { method: 'GET', path: '/api/artifacts/{id}' },
-  description: 'Read one of your artifacts: markup (story JSX) source, dataset rows/columns, or recipe. A markup read also inlines OPEN annotations pinned to nodes of the document. Read them before editing. Each `anchor.key` matches an opaque `data-annotation-anchor` in the markup: preserve that attribute through edits and full rewrites, move it with its content, and never author or change its value. Dropping it orphans the feedback. Reply, resolve, or reopen with the annotate tool. Every read also carries parent_id and ancestor_ids — the folder it sits in, and the whole trail from your root down — so one call draws breadcrumbs.',
+  description: 'Read one of your artifacts: markup (story JSX) source, dataset rows/columns, or recipe. A markup read also inlines OPEN annotations pinned to nodes of the document. Read them before editing. Each `anchor.key` matches an opaque `data-annotation-anchor` in the markup: preserve that attribute through edits and full rewrites, move it with its content, and never author or change its value. Dropping it orphans the feedback. Reply, resolve, or reopen with the annotate tool. Every read also carries parent_id and ancestor_ids — the folder it sits in, and the whole trail from your root down — so one call draws breadcrumbs. A folder itself reads back with no content: it is a title and a place, and its page is the listing we render.',
   input: { id: z.string() },
   annotations: { readOnly: true },
   example: { input: { id: 'aB3xK9' } },
@@ -277,7 +277,7 @@ const listArtifactsOp: Operation = {
   name: 'list_artifacts',
   title: 'List your artifacts',
   http: { method: 'GET', path: '/api/artifacts' },
-  description: 'List your artifacts (newest first): id, title, format, version, url, parent_id, ancestor_ids — no content. Folders are artifacts too, so they list here beside documents; filter by parent_id (or an empty ancestor_ids for your root) to see one folder\'s contents. A claimed token lists the whole account.',
+  description: 'List your artifacts (newest first): id, title, format, version, url, parent_id, ancestor_ids — no content. Folders are artifacts too — a title and a place, with no content of their own — so they list here beside documents; filter by parent_id (or an empty ancestor_ids for your root) to see one folder\'s contents. A claimed token lists the whole account.',
   input: {},
   annotations: { readOnly: true },
   example: { input: {} },

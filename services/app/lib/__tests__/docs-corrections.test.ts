@@ -146,6 +146,22 @@ describe('folders and the trash', () => {
   it('§P4.3 the two limits are stated, not implied away', () => {
     expect(flat(doc)).toContain('a restore can land a row deeper than the 6-level cap');
   });
+  /*
+   * ADDED (the folder page). A folder was a DOCUMENT — created with a two-line
+   * scaffold as its stored source — and the docs said so: "A folder's page is
+   * its own stored markup … so you edit one like any document." It carries no
+   * content now, and its page is rendered by the app. That sentence is the
+   * shape of wrong claim this file exists for: an agent does not read past it,
+   * it acts on it, and the act is a `not_editable` on a document it was told
+   * it could edit. So the replacement is pinned by NAME, both halves — what a
+   * folder has (nothing) and what its PUT will take.
+   */
+  it('§FP.1 a folder has NO content, and the page is not something you edit', () => {
+    expect(flat(doc)).toContain('A FOLDER HAS NO CONTENT');
+    expect(flat(doc)).toContain('are all a PUT takes on one');
+    expect(flat(doc), 'the scaffold is gone').not.toContain('its own stored markup');
+    expect(flat(doc), 'a folder is not edited like a document').not.toContain('edit one like any document');
+  });
 });
 
 describe('the markup skill', () => {

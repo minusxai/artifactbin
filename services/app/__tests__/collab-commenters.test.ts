@@ -49,7 +49,7 @@ async function world() {
   const tv = await mintToken('viewer'); await claimToken(viewer.id, tv.token);
   const editor = await createUser({ email: 'mxmx_test_editor@example.com' });
   const te = await mintToken('editor'); await claimToken(editor.id, te.token);
-  const res = await createArtifactRoute(jreq('/api/artifacts?v=2', 'POST', { markup: '<div><p>hello</p></div>', visibility: 'private' }, to.token));
+  const res = await createArtifactRoute(jreq('/api/artifacts', 'POST', { markup: '<div><p>hello</p></div>', visibility: 'private' }, to.token));
   const doc = await res.json();
   asSession(owner);
   const put = await putSharingRoute(jreq(`/api/my/artifacts/${doc.id}/sharing`, 'PUT', { shares: [
@@ -104,7 +104,7 @@ describe('the commenter role', () => {
     const w = await world();
     const edit = await editsRoute(jreq(`/api/artifacts/${w.doc.id}/edits`, 'POST', { edit_id: w.row.edit_id, source: '<div><p>changed</p></div>' }, w.tc.token), params({ id: w.doc.id }));
     expect(edit.status).toBe(404);
-    const put = await putArtifactRoute(jreq(`/api/artifacts/${w.doc.id}?v=2`, 'PUT', { markup: '<div><p>changed</p></div>' }, w.tc.token), params({ id: w.doc.id }));
+    const put = await putArtifactRoute(jreq(`/api/artifacts/${w.doc.id}`, 'PUT', { markup: '<div><p>changed</p></div>' }, w.tc.token), params({ id: w.doc.id }));
     expect(put.status).toBe(404);
     expect((await getArtifactById(w.doc.id))!.version).toBe(1);
   });

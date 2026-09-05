@@ -1,6 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router';
 import MixpanelClient from '@/components/MixpanelClient';
-import PreviewParams from '@/components/PreviewParams';
 import { SessionProvider, useSession } from './session';
 import { Shell } from './Shell';
 import { AccountPage } from './pages/Account';
@@ -23,7 +22,6 @@ export function App() {
   return (
     <SessionProvider>
       <Analytics />
-      <PreviewParams />
       <Routes>
         <Route element={<Shell />}>
           <Route path="/" element={<HomePage />} />
