@@ -14,12 +14,14 @@ import { GET as exportImage } from '@/app/a/[id]/export/route';
 import { GET as serveRaw } from '@/app/a/[id]/raw/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as docsRoute } from '@/app/docs/[[...path]]/route';
+import { createAppServer } from '@/server/app';
 const getDoc = (r: Request) => docsRoute(r, { params: Promise.resolve({ path: 'artifactbin/references/publishing-versions.md' }) });
 import { POST as mintTokenRoute } from '@/app/api/tokens/route';
 import { EXPORT_RENDER_GENERATION, exportStoreKey, parseExportCapture, parseExportFormat, parseExportSlide, resetExportRenderer } from '@/lib/export';
 import { objectStore } from '@/lib/object-store';
 import { setServices } from '@/lib/services';
 import { DEFAULT_SOCIAL_PREVIEW_CROP } from '@/lib/story/social-preview';
+import { CARD_HEIGHT, CARD_WIDTH } from '@/lib/export-card';
 
 const BASE = 'http://localhost:3000';
 const SECRET = 'test-secret';
@@ -264,28 +266,24 @@ describe('the cache key names the renderer', () => {
 });
 
 /**
- * A FOLDER IS A DOCUMENT, AND ITS CARD IS A PICTURE OF ITS LISTING.
+ * A FOLDER IS PHOTOGRAPHED ON THE APP PAGE, BECAUSE THAT IS WHERE ITS LISTING IS.
  *
- * Measured on production before this: `GET /a/<folder>/export` answered a
- * 25-byte `{"error":"render_failed"}` for every folder, owner and stranger
- * alike. The cause was one predicate — `lib/export` asked `format === 'markup'`
- * to decide WHERE a row is photographed, so a folder was sent to `/a/<id>`
- * (the app shell, which the exporter's `?key=` deliberately keeps on the SPA
- * path) with `main` as its target, and the browser waited for an element the
- * shell never draws.
- *
- * Everything the shot needs already existed on the other branch: `raw` serves a
- * folder through the markup case, `chrome=0` settles its dataflow rather than
- * painting first, `<Files>` draws glyphs instead of every child's own card, and
- * the signed export key stands in for the session the headless browser has not
- * got.
+ * A folder has no document. Its listing is app data — answered by the page
+ * endpoint, inlined into the HTML, drawn by web/pages/Folder — so the camera is
+ * sent to `/a/<id>?key=` with `main` as its target, exactly the path the data
+ * tiers already take. The `?key=` is what keeps that address on the SPA
+ * (server/app `servesDocumentDirectly` bows out for a key), and the page
+ * endpoint honours the same signed key, so the shot carries the OWNER's shelf
+ * without the headless browser holding a session.
  *
  * WHAT IS ASSERTED, and why it is not a PNG: this suite has no browser (the
  * BrowserService is faked), so the picture cannot be taken here. The two halves
- * that can be measured are (1) the request the route builds — the address, the
- * target and the card's crop — and (2) that the address it names actually
- * RENDERS: the recorded URL is fed back into the raw route and the listing has
- * to be in the HTML that comes out. Real bytes stay with the gates.
+ * that can be measured are (1) the request the route builds — the address and
+ * the target — and (2) that the address it names really carries the listing IN
+ * ITS FIRST BYTE: the recorded URL is fetched from the real app server and the
+ * child's title has to be in the HTML, before any script has run. That second
+ * half is the paint-first requirement and the camera's requirement at once.
+ * Real bytes stay with the gates.
  */
 describe('GET /a/<folder>/export', () => {
   const recording = () => {
@@ -316,39 +314,48 @@ describe('GET /a/<folder>/export', () => {
     return { folder, token };
   }
 
-  it('photographs the folder document itself, not the app shell', async () => {
+  it('photographs the APP PAGE and names the element the folder page draws', async () => {
     const shotOf = recording();
     const { folder } = await folderWithChild();
     const res = await exportImage(request(`/a/${folder.id}/export`), params({ id: folder.id }));
     expect(res.status).toBe(200);
     const shot = shotOf();
-    // The document's OWN page, chrome stripped, carrying the signed key — the
-    // same address a markup document is shot at.
-    expect(shot.url).toContain(`/a/${folder.id}/raw`);
-    expect(shot.url).toContain('chrome=0');
-    expect(shot.url).toContain('key=');
-    expect(shot.selector).toBe('body');
+    const url = new URL(shot.url);
+    expect(url.pathname).toBe(`/a/${folder.id}`);
+    expect(url.searchParams.get('key')).toBeTruthy();
+    // A folder has no `raw` to photograph — the listing is not markup.
+    expect(shot.url).not.toContain('/raw');
+    expect(shot.url).not.toContain('chrome=0');
+    expect(shot.selector).toBe('main');
   });
 
-  it('and the address it names renders the listing', async () => {
+  it('and the address it names carries the listing in the FIRST HTML byte', async () => {
     const shotOf = recording();
     const { folder } = await folderWithChild();
     await exportImage(request(`/a/${folder.id}/export`), params({ id: folder.id }));
     const shot = shotOf();
-    // Exactly what the headless browser would fetch — no session, the key
-    // alone, and the capture's own settled dataflow.
-    const framed = await serveRaw(request(new URL(shot.url).pathname + new URL(shot.url).search), params({ id: folder.id }));
-    expect(framed.status).toBe(200);
-    const html = await framed.text();
+    // Exactly what the headless browser would fetch: no session, the signed key
+    // alone. The rows must be in the HTML the server hands back — the camera
+    // cannot wait for a fetch it has no session for, and neither should a reader.
+    // `</head>` is where the server inlines the page's data (withBootstrap),
+    // so the shell under test needs one to be a shell at all.
+    const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head></head><body><div id="root"></div></body></html>' });
+    const served = await app.request(new URL(shot.url).pathname + new URL(shot.url).search);
+    expect(served.status).toBe(200);
+    const html = await served.text();
     expect(html).toContain('Opening Note');
-    expect(html).toContain('aria-label="Files"');
+    expect(html).toContain('Field Notes');
   });
 
-  it('gives the card the same crop every document gets', async () => {
+  it('takes the card at the card viewport, with no document crop — a folder has no markup to crop by', async () => {
     const shotOf = recording();
     const { folder } = await folderWithChild();
     const res = await exportImage(request(`/a/${folder.id}/export?mode=card`), params({ id: folder.id }));
     expect(res.status).toBe(200);
-    expect(shotOf().capture).toEqual({ card: DEFAULT_SOCIAL_PREVIEW_CROP });
+    const shot = shotOf();
+    // The plain mode, not `{ card: <crop> }`: an author's own framing is read
+    // out of a document's source (socialPreviewCrop) and a folder has none.
+    expect(shot.capture).toBe('card');
+    expect(shot.viewport).toEqual({ width: CARD_WIDTH, height: CARD_HEIGHT });
   });
 });

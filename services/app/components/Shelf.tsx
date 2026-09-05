@@ -26,26 +26,16 @@ import { MoveMenu, type PickerFolder } from '@/components/FolderPicker';
 import { ArtifactTable } from '@/components/TokenBrowser';
 import { Tooltip } from '@/components/Tooltip';
 import { dateStamp, MicroLabel, PANEL, Spark, timeAgo, VISIBILITY_TIPS, VisibilityPill } from '@/components/ui';
-import { buildShelf, parentOfRow, type ShelfItem } from '@/lib/shelf';
-import type { Visibility } from '@/lib/artifacts';
+import { buildShelf, parentOfRow, type ShelfRow } from '@/lib/shelf';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
 
-/** The superset. Every field past the policy's two is optional by design. */
-export interface ShelfRow extends ShelfItem {
-  id: string;
-  url: string;
-  title: string | null;
-  description?: string | null;
-  version: number;
-  visibility?: Visibility;
-  /** The id of the folder artifact this row sits in; absent/null = the root. */
-  parent_id?: string | null;
-  /** The trail root->parent, so a folder's own subtree can be greyed in the picker. */
-  ancestor_ids?: string[];
-  views?: number;
-  /** Server-rendered 30-day spline (inline SVG). Absent = draw none. */
-  sparkline?: string;
-}
+/**
+ * The row shape lives with the POLICY (lib/shelf), because it is what a page
+ * ANSWERS rather than how the answer looks — three server modules build these
+ * rows and none of them may import React. Re-exported here so every existing
+ * `import type { ShelfRow } from '@/components/Shelf'` still reads.
+ */
+export type { ShelfRow } from '@/lib/shelf';
 
 /**
  * WHAT A VIEWER MAY DO WITH A ROW — a LEVEL, not a boolean, because the three
@@ -111,6 +101,48 @@ export interface ShelfProps {
  * own card would be a picture of this listing) and a count instead.
  */
 function FolderTile({ row, count, level, folders, onDeleted }: { row: ShelfRow; count: number; level: ShelfActions; folders: PickerFolder[]; onDeleted: (id: string) => void }) {
+  /**
+   * RENAMING IS THE ONE VERB A FOLDER HAS THAT A DOCUMENT DOES NOT NEED HERE.
+   * A document is renamed in its editor's Title field; a folder has no content
+   * and therefore no editor, so the pencil beside it opened on nothing. The
+   * verb moves into the menu with the other folder verbs and edits the tile in
+   * place, through the metadata door (PATCH {title}) rather than the replace
+   * one — a name should not archive a version.
+   */
+  const [renaming, setRenaming] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [title, setTitle] = useState<string | null>(row.title);
+  const shown = { ...row, title };
+  const save = () => {
+    const next = draft.trim();
+    setRenaming(false);
+    if (!next || next === title) return;
+    setTitle(next);
+    void fetch(`/api/my/artifacts/${row.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: next }),
+    }).catch(() => { /* the next load reads the server's answer */ });
+  };
+  if (renaming) {
+    return (
+      <li className={`reveal relative flex items-center gap-2 px-3 py-2.5 ${PANEL} border-accent`}>
+        <Folder size={14} className="shrink-0 text-accent" />
+        <input
+          aria-label="Folder name"
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={save}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); save(); }
+            if (e.key === 'Escape') setRenaming(false);
+          }}
+          className="min-w-0 flex-1 border-0 bg-transparent font-mono text-sm font-semibold text-fg focus:outline-none"
+        />
+      </li>
+    );
+  }
   return (
     <li className={`reveal group relative flex items-center gap-2 px-3 py-2.5 ${PANEL} transition-colors hover:border-edge-bright`}>
       <Folder size={14} className="shrink-0 text-faint transition-colors group-hover:text-accent" />
@@ -119,18 +151,25 @@ function FolderTile({ row, count, level, folders, onDeleted }: { row: ShelfRow; 
           (a <button> in an <a> is invalid markup and swallows its own click). */}
       <a
         href={row.url}
-        aria-label={`Open folder ${nameOf(row)}`}
+        aria-label={`Open folder ${nameOf(shown)}`}
         className="min-w-0 flex-1 truncate font-mono text-sm font-semibold text-fg no-underline transition-colors after:absolute after:inset-0 group-hover:text-accent"
       >
-        {row.title ?? row.id}
+        {title ?? row.id}
       </a>
       {/* Only when there IS one. This count is what THIS shelf holds under the
           folder, and a profile's listing is root-scoped (its children are on
           the folder's own page) — so a zero here would be a wrong number
           rather than an empty folder. */}
       {count > 0 && <span className="shrink-0 font-mono text-[10px] tabular-nums text-faint">{count}</span>}
-      {row.visibility && <VisibilityPill compact visibility={row.visibility} name={nameOf(row)} />}
-      <Actions row={row} level={level} folders={folders} childCount={count} onDeleted={onDeleted} />
+      {row.visibility && <VisibilityPill compact visibility={row.visibility} name={nameOf(shown)} />}
+      <Actions
+        row={shown}
+        level={level}
+        folders={folders}
+        childCount={count}
+        onDeleted={onDeleted}
+        onRename={() => { setDraft(title ?? ''); setRenaming(true); }}
+      />
     </li>
   );
 }
@@ -243,7 +282,7 @@ const nameOf = (row: ShelfRow) => row.title ?? row.id;
  * inside an <a> is invalid markup and swallows its own click. These sit above
  * that pseudo-element instead of inside the anchor.
  */
-function Actions({ row, level, folders, childCount = 0, onDeleted }: { row: ShelfRow; level: ShelfActions; folders: PickerFolder[]; childCount?: number; onDeleted?: (id: string) => void }) {
+function Actions({ row, level, folders, childCount = 0, onDeleted, onRename }: { row: ShelfRow; level: ShelfActions; folders: PickerFolder[]; childCount?: number; onDeleted?: (id: string) => void; onRename?: () => void }) {
   const [copied, setCopied] = useState(false);
   const [moving, setMoving] = useState(false);
   const [parentId, setParentId] = useState(parentOfRow(row));
@@ -272,14 +311,25 @@ function Actions({ row, level, folders, childCount = 0, onDeleted }: { row: Shel
       </Tooltip>
       {level === 'full' && (
         <>
-          <Tooltip content="edit">
-            <a aria-label={`Edit ${nameOf(row)}`} href={`/a/${row.id}#edit`} className={`${ICON_ACTION} no-underline`}>
-              <Pencil size={13} />
-            </a>
-          </Tooltip>
+          {/* A FOLDER HAS NO DOCUMENT TO EDIT, so it is offered no editor —
+              `#edit` on one would open a mode with nothing in it. Its rename
+              lives in the menu below instead. */}
+          {!onRename && (
+            <Tooltip content="edit">
+              <a aria-label={`Edit ${nameOf(row)}`} href={`/a/${row.id}#edit`} className={`${ICON_ACTION} no-underline`}>
+                <Pencil size={13} />
+              </a>
+            </Tooltip>
+          )}
           <RowMenu
             name={nameOf(row)}
             items={[
+              ...(onRename ? [{
+                label: `Rename ${nameOf(row)}`,
+                text: 'rename',
+                icon: <Pencil size={12} />,
+                onSelect: onRename,
+              }] : []),
               {
                 label: `Move ${nameOf(row)}`,
                 text: 'move to folder',

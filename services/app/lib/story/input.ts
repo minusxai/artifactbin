@@ -5,9 +5,10 @@
  *     HTML vocabulary and <Helmet>. The ONLY document input there is.
  *   - `dataset` | `viz` | `image` | `pdf` — the data tiers
  *   - `format: 'folder'` — the ONE body with no content field at all. A folder
- *     is a document whose source the CREATE door stamps (lib/folders
- *     folderScaffold), so there is nothing for a caller to send and nothing
- *     here to parse: it leaves with `content: ''`, `source: ''`.
+ *     has NO CONTENT: its page is a listing built from the row, so there is
+ *     nothing for a caller to send and nothing here to parse. It leaves with
+ *     `content: ''`, `source: ''`, and stays that way — the replace door
+ *     refuses content on a folder rather than turning it into a document.
  *
  * markdown and html are not inputs: HTML is the VOCABULARY inside a document,
  * and markdown is not an authoring language here at all. Both are rejected by
@@ -39,19 +40,28 @@ export const ARTIFACT_FORMATS = ['markup', 'dataset', 'viz', 'image', 'pdf', 'fo
 export type ArtifactFormat = (typeof ARTIFACT_FORMATS)[number];
 
 /**
- * THE FORMATS THAT ARE DOCUMENTS — the ones whose `source` is markup, served
- * through `raw`, rendered by the runtime and edited in place. Everything else
- * is a VALUE the app draws itself (a table, a picture, a file card).
+ * A DOCUMENT IS MARKUP, AND A FOLDER IS NOT ONE.
  *
- * A folder joined this set by being one: its two-line scaffold is ordinary
- * markup. The predicate exists because "is it markup" was written out by hand
- * in every place that meant "is it a document", and each of those was a
- * separate way for a folder to be quietly left out — the live stream followed
- * a document's data dependencies only for `format === 'markup'`, so a folder,
- * whose one dependency is ITSELF, subscribed to nothing and a child published
- * under it reached nobody.
+ * A folder was briefly a document — created with a two-line scaffold whose
+ * `<Files>` drew its own children — and this predicate is where that decision
+ * was spelled. It is markup alone again: a folder has no content, no source to
+ * serve, nothing to edit and nothing to render, and its listing is app chrome
+ * built from the row rather than from anything stored on it. Every caller that
+ * asks "is there a document here?" therefore gets `false` for a folder, which
+ * is what makes `raw`, the edit protocol and the frame refuse one by rule
+ * rather than by a branch each.
  */
-export const isDocumentFormat = (format: string): boolean => format === 'markup' || format === 'folder';
+export const isDocumentFormat = (format: string): boolean => format === 'markup';
+
+/**
+ * EVERY KEY THAT CARRIES CONTENT, named once. `parseContentInput` counts them
+ * to enforce "exactly one", and the replace door reads the same list to refuse
+ * content on a folder — a second spelling there would go stale the first time a
+ * tier is added and let that tier through the one door that must not take it.
+ */
+export const TEXT_CONTENT_FIELDS = ['markup'] as const;
+export const DATA_CONTENT_FIELDS = ['dataset', 'sheetUrl', 'csvUrl', 'imageUrl', 'viz', 'image', 'pdf', 'pdfUrl'] as const;
+export const CONTENT_FIELDS = [...TEXT_CONTENT_FIELDS, ...DATA_CONTENT_FIELDS] as const;
 
 import type { SourceRepair } from '@/lib/jsx/repair';
 
@@ -95,6 +105,20 @@ const imageTitleFromUrl = (url: string): string | null => {
 };
 
 export interface ContentInputCtx {
+  /**
+   * MAY THIS BODY MAKE A FOLDER — true only where a row is being CREATED.
+   *
+   * `format: 'folder'` is the one body with no content field, and read on a
+   * REPLACE it means "become a folder": measured on main, a plain
+   * `PUT {"format":"folder"}` at any document answered 200, emptied its source
+   * and filed the row in the folders partition — a document's whole content
+   * gone, with no content field in the body to say so. A replace never changes
+   * a row's format (lib/artifact-wire holds the other half of the rule, for a
+   * folder that must stay one), so the arm is off unless a caller says
+   * otherwise, and a replace that names the format then gets the ordinary
+   * one-of refusal for a body carrying no content.
+   */
+  creating?: boolean;
   /** Resolve a `ref:<id>` against the caller's own artifacts. Absent ⇒ ref checks skipped (preview). */
   loadRef?: import('./refs').RefLoader;
   /**
@@ -144,20 +168,19 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
     }
   }
 
-  const textPresent = (['markup'] as const).filter(
+  const textPresent = TEXT_CONTENT_FIELDS.filter(
     (k) => typeof body[k] === 'string' && (body[k] as string).length > 0,
   );
   // Data tiers carry structured payloads, not strings.
-  const dataPresent = (['dataset', 'sheetUrl', 'csvUrl', 'imageUrl', 'viz', 'image', 'pdf', 'pdfUrl'] as const).filter((k) => body[k] !== undefined && body[k] !== null);
+  const dataPresent = DATA_CONTENT_FIELDS.filter((k) => body[k] !== undefined && body[k] !== null);
   const present = [...textPresent, ...dataPresent];
   /*
-   * A FOLDER IS THE ONE BODY WITH NO CONTENT. Its source is a product-owned
-   * constant the create door stamps with the row's own id — which cannot be
-   * known here, because the id is minted at INSERT — so this returns the empty
-   * stored state and `createArtifact` fills it in. A body that names the format
-   * AND sends content is still the one-of refusal: it is asking for two things.
+   * A FOLDER IS THE ONE BODY WITH NO CONTENT, and it stays that way: its page
+   * is a listing computed from the row, so there is nothing to store and
+   * nothing to serve. A body that names the format AND sends content is still
+   * the one-of refusal — it is asking for two things.
    */
-  if (body.format === 'folder' && present.length === 0) {
+  if (ctx.creating && body.format === 'folder' && present.length === 0) {
     return { format: 'folder', content: '', source: '', meta: {}, derivedTitle: null };
   }
   if (present.length !== 1) return json({ error: 'one_of_markup_dataset_viz_image_pdf' }, 400);

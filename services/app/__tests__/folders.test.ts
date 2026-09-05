@@ -32,15 +32,16 @@ const move = async (cookie: string, id: string, parent_id: string | null) =>
   j(await patchMineRoute(request(`/api/my/artifacts/${id}`, { method: 'PATCH', json: { parent_id }, cookie, origin: 'same' }), params(id)));
 
 describe('creating a folder', () => {
-  it('is an artifact of format folder, at root, stamped with the scaffold naming its own id', async () => {
+  it('is an artifact of format folder, at root, with NO content of any kind', async () => {
     const o = await owner();
     const r = await create(o.token, { format: 'folder', title: 'Reports' });
     expect(r.status, JSON.stringify(r.body)).toBe(201);
     const row = (await getArtifactById(r.body.id))!;
     expect(row.format).toBe('folder');
     expect(row.ancestor_ids).toEqual([]);
-    expect(row.source).toContain(`ref_${r.body.id}`);
-    expect(row.source).toContain('<Files data="$children"');
+    // A folder's page is a listing computed from the row, so there is nothing
+    // stored on it and nothing to serve (__tests__/folder-page.test.ts).
+    expect(row.source).toBe('');
     expect(row.content).toBe('');
     const g = await readBack(o.token, r.body.id);
     expect(g.body.format).toBe('folder');
@@ -190,63 +191,39 @@ describe('deleting and forking a folder', () => {
   });
 });
 
-describe('a folder is served as a document', () => {
-  it('raw answers the folder document for its owner and the uniform 404 for a stranger when private', async () => {
+describe('a folder is not a document', () => {
+  /**
+   * NOTHING SERVES A FOLDER'S CONTENT, because it has none. `raw` is the
+   * uniform 404 for one — the same answer an unknown id gets — for its owner as
+   * much as for a stranger, and that is what keeps `/a/<folder>` on the app
+   * page for everybody: `servesDocumentDirectly` would otherwise hand a reader
+   * a 404 at the address they were given.
+   */
+  it('raw answers the uniform 404 for a folder, to its owner and to a stranger alike', async () => {
     const o = await owner();
-    const f = (await create(o.token, { format: 'folder', title: 'F', visibility: 'private' })).body;
-    const mine = await rawRoute(request(`/a/${f.id}/raw`, { cookie: o.cookie }), params(f.id));
-    expect(mine.status).toBe(200);
-    expect(mine.headers.get('content-type')).toContain('text/html');
-    expect(await mine.text()).toContain(`ref_${f.id}`);
-    const theirs = await rawRoute(request(`/a/${f.id}/raw`), params(f.id));
-    expect(theirs.status).toBe(404);
+    for (const visibility of ['public', 'private'] as const) {
+      const f = (await create(o.token, { format: 'folder', title: 'F', visibility })).body;
+      expect((await rawRoute(request(`/a/${f.id}/raw`, { cookie: o.cookie }), params(f.id))).status, visibility).toBe(404);
+      expect((await rawRoute(request(`/a/${f.id}/raw`), params(f.id))).status, visibility).toBe(404);
+    }
   });
 
   /**
-   * THE TRAIL IS VIEWER-DEPENDENT, AND THAT IS THE WHOLE OF IT.
-   *
-   * A folder's own page draws where it sits, which means naming its ancestors
-   * — and `ancestor_ids` on a PUBLIC folder can perfectly well name a PRIVATE
-   * parent. The ids were settled in P1 (a stranger's payload does not carry
-   * them); a TITLE is new exposure, so the trail is filtered on the server by
-   * the same read ACL every other surface uses, and an ancestor a viewer may
-   * not read is simply not in it. Not redacted, not shown unnamed: absent.
+   * A FOLDER TAKES NO EDIT, and it answers the code the DATA TIERS answer —
+   * `not_editable`, which already means "this is not a document, replace it
+   * whole instead". There is no second word to learn and no second rule: the
+   * edit protocol asks `isDocumentFormat`, and a folder is not one.
    */
-  it('names an ancestor in the served head only to a viewer who may read it', async () => {
-    const o = await owner();
-    const parent = (await create(o.token, { format: 'folder', title: 'Quarterly Ledger', visibility: 'private' })).body;
-    const child = (await create(o.token, { format: 'folder', title: 'Field Notes', visibility: 'public', parent_id: parent.id })).body;
-
-    const mine = await (await rawRoute(request(`/a/${child.id}/raw`, { cookie: o.cookie }), params(child.id))).text();
-    expect(mine).toContain('Field Notes');
-    expect(mine).toContain('Quarterly Ledger');
-
-    const theirs = await rawRoute(request(`/a/${child.id}/raw`), params(child.id));
-    expect(theirs.status).toBe(200);
-    const html = await theirs.text();
-    expect(html).toContain('Field Notes');
-    expect(html, 'a private ancestor was named to a stranger').not.toContain('Quarterly Ledger');
-  });
-
-  it('takes an EDIT like any document — which is what renaming one is', async () => {
-    /*
-     * RENAMING A FOLDER IS THE EDITOR'S TITLE FIELD, and that field writes
-     * through the edit protocol like every other change. The protocol refused
-     * a folder outright (`not_editable`, the guard that keeps the DATA TIERS
-     * out — a table and a picture are values, not documents), so the shell
-     * opened an editor on a folder that could never commit: the name went
-     * back to what it was, with a 400 nobody was shown. A folder's source is
-     * ordinary markup and the plan says it is edited like any document.
-     */
+  it('refuses the edit protocol with the code the data tiers answer', async () => {
     const o = await owner();
     const folder = (await create(o.token, { format: 'folder', title: 'Before' })).body;
-    const edited = j(await editRoute(
+    const refusedFolder = await j(await editRoute(
       request(`/api/artifacts/${folder.id}/edits`, { method: 'POST', token: o.token, json: { edit_id: folder.edit_id, title: 'After' } }),
       params(folder.id),
     ));
-    expect((await edited).status, JSON.stringify((await edited).body)).toBe(200);
-    expect((await getArtifactById(folder.id))!.title).toBe('After');
-    // A DATA TIER is still refused: it is a value, not a document.
+    expect(refusedFolder.status).toBe(400);
+    expect(refusedFolder.body).toMatchObject({ error: 'not_editable' });
+    expect((await getArtifactById(folder.id))!.title, 'the title is unchanged').toBe('Before');
     const ds = (await create(o.token, { dataset: [{ a: 1 }] })).body;
     const refused = await j(await editRoute(
       request(`/api/artifacts/${ds.id}/edits`, { method: 'POST', token: o.token, json: { edit_id: ds.edit_id, title: 'nope' } }),

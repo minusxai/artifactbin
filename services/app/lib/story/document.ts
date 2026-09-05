@@ -31,7 +31,6 @@ import { EMPTY_HELMET_CONTENT, type HelmetContent } from '@/lib/story/helmet';
 import { storyBodyFor } from '@/lib/story/body';
 import { assetLookupFrom, type WebAssetBox } from '@/lib/story/asset-url';
 import { AUTHOR_SCRIPT_TYPE, STORY_HELLO_MESSAGE, STORY_VALUES_HOOK, STORY_ISLAND_ID, STORY_PAINTED_MESSAGE, STORY_ROOT_ID, type StoryIslandData, type StoryIslandDataflow, type StorySsrBundle } from '@/lib/story-runtime/contract';
-import type { FolderHead } from '@/lib/story-ui/folder-head';
 import type { JsxNode } from '@/lib/jsx';
 import type { RefDataMap } from '@/lib/story/ref-data';
 import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
@@ -102,13 +101,6 @@ export interface StoryDocumentInput {
    * that never re-run (the canvas, unit tests).
    */
   queryUrl?: string | null;
-  /**
-   * THE FOLDER THIS DOCUMENT IS, when it is one (lib/story-ui/folder-head) —
-   * name, id and the ancestors this viewer may read, computed by the serving
-   * route because all three are the ROW's and none of them is in the source.
-   * Absent for every other document, which draws no head and looks unchanged.
-   */
-  folder?: FolderHead | null;
   /**
    * The document's own WRITE endpoint (StoryIslandData.mutateUrl) — set by the
    * serving route for a document that declares a `<Mutation>`; absent
@@ -550,10 +542,9 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    * first such field — `queryUrl`/`mutateUrl` only name a transport, so their
    * absence here is correct, while a bound `<img src="$pick">` has nowhere to
    * import from without this and rendered as a bare alt until hydration.
-   * `folder` is the second: it is a whole header on a folder's page.
    */
   const bodyHtml = split
-    ? loadSsrBundle().renderStoryBody({ nodes: split.body, refData, glyphs, ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}), ...(input.folder ? { folder: input.folder } : {}) })
+    ? loadSsrBundle().renderStoryBody({ nodes: split.body, refData, glyphs, ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}) })
     : `<pre>${escapeHtml(source)}</pre>`;
 
   // Style order mirrors the engine's injection order (compiled Tailwind → bare
@@ -643,7 +634,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
     ...(hydrates ? [runtimeSrc!, ...(drawsChart(split!.body) ? input.lazyChunks ?? [] : [])] : []),
   ].map((href) => `<link rel="modulepreload" href="${escapeHtml(href)}" crossorigin>`).join('');
 
-  const island: StoryIslandData = { nodes: split?.body ?? [], refData, ...(Object.keys(glyphs).length ? { glyphs } : {}), ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, ...(input.queryUrl ? { queryUrl: input.queryUrl } : {}), ...(input.mutateUrl ? { mutateUrl: input.mutateUrl } : {}), ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}), ...(input.folder ? { folder: input.folder } : {}) };
+  const island: StoryIslandData = { nodes: split?.body ?? [], refData, ...(Object.keys(glyphs).length ? { glyphs } : {}), ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, ...(input.queryUrl ? { queryUrl: input.queryUrl } : {}), ...(input.mutateUrl ? { mutateUrl: input.mutateUrl } : {}), ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}) };
   // `<` escaped so no row value can close the script element from inside JSON.
   const islandJson = JSON.stringify(island).replace(/</g, '\\u003c');
 

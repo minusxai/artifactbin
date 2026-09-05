@@ -403,3 +403,44 @@ describe('a PRIVATE document with a bound <img src> keeps its parent page', () =
     expect(await servedBy(readerRequest(`/a/${row.id}`))).toBe(`/a/${row.id}/raw`);
   });
 });
+
+describe('a FOLDER is the app page for everyone', () => {
+  /*
+   * A folder's listing is app data, not authored markup: it is answered by the
+   * page endpoint and inlined into the HTML, so the rows are in the first byte
+   * rather than behind a sandboxed runtime's boot. Nobody is served a folder
+   * top-level — there is no document to serve, and `raw` answers 404 for one.
+   *
+   * The ACL is unchanged: a folder this viewer may not read is still the
+   * uniform 404 the page answers, never a different shape from a missing one.
+   */
+  const folder = (tokenId: string, userId: string | null, visibility: 'public' | 'private' = 'public') =>
+    createArtifact(tokenId, userId, {
+      format: 'folder', content: '', source: '', meta: {},
+      title: 'Reports', description: null, visibility,
+    });
+
+  it('is the page for a stranger with no credential at all', async () => {
+    const t = await mintToken('t');
+    const row = await folder(t.id, null);
+    expect(await servedBy(readerRequest(`/a/${row.id}`))).toBe('page');
+    expect(await servedBy(readerRequest(`/@someone/${row.id}-reports`))).toBe('page');
+  });
+
+  it('is the page for its owner, and for a signed-in reader', async () => {
+    const user = await createUser({ email: 'fowner@example.com' });
+    const t = await mintToken('t', user.id);
+    const row = await folder(t.id, user.id);
+    expect(await servedBy(readerRequest(`/a/${row.id}`, await agentCookie([t.id])))).toBe('page');
+    sessionUser.id = (await createUser({ email: 'freader@example.com' })).id;
+    expect(await servedBy(readerRequest(`/a/${row.id}`))).toBe('page');
+  });
+
+  it('answers a folder nobody may read exactly as it answers an unknown id', async () => {
+    const user = await createUser({ email: 'shut@example.com' });
+    const t = await mintToken('t', user.id);
+    const row = await folder(t.id, user.id, 'private');
+    expect(await servedBy(readerRequest(`/a/${row.id}`))).toBe('page');
+    expect(await servedBy(readerRequest('/a/zzzzzz'))).toBe('page');
+  });
+});

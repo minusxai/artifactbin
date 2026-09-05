@@ -406,24 +406,23 @@ export async function exportImageResponse(
    * written (lib/story/url-values urlSelection).
    */
   /*
-   * A FOLDER IS A DOCUMENT HERE TOO, and this predicate is the whole of item
-   * one: `format === 'markup'` decided WHERE a row is photographed, so every
-   * folder was sent to `/a/<id>` — the app shell, which the `?key=` on this
-   * address deliberately keeps on the SPA path — with `main` as its target,
-   * and the browser waited out its timeout for an element the shell never
-   * draws. Measured on production: `{"error":"render_failed"}`, 25 bytes, for
-   * every folder there is.
+   * A FOLDER IS PHOTOGRAPHED ON THE APP PAGE, and that is the whole of it here:
+   * `isDocument` is markup alone again. A folder has no document — its listing
+   * is app data the page endpoint answers and `withBootstrap` inlines — so the
+   * camera goes to `/a/<id>?key=` with `main` as its target, the path every
+   * data tier already takes. The `?key=` is what keeps that address on the SPA
+   * (server/app `servesDocumentDirectly` bows out for a key), and the page
+   * endpoint honours the same signed key, so the shot carries the OWNER's shelf
+   * without the headless browser holding a session.
    *
-   * Nothing else had to move. `raw` already serves a folder through its markup
-   * case, `chrome=0` already settles the folder's dataflow under the capture's
-   * own viewer instead of painting first, `<Files>` already draws glyphs
-   * rather than waiting on N children's captures, and the signed key already
-   * stands in for the session the headless browser has not got. Named once and
-   * read at all three sites below — the address, the card's crop, and the
-   * declarations a selection is read through — because a folder that is a
+   * The card's crop goes with it: `socialPreviewCrop` reads a document's source
+   * for the author's own framing, and a folder has none.
+   *
+   * Named once and read at all three sites below — the address, the crop, and
+   * the declarations a selection is read through — because a row that is a
    * document for one of them and not the others is a card of the wrong thing.
    */
-  const isDocument = artifact.format === 'markup' || artifact.format === 'folder';
+  const isDocument = artifact.format === 'markup';
   const flow = isDocument && artifact.source ? declarationsOf(artifact.source) : null;
   const selection = capture === 'card' || capture === 'preview' ? { search: '', token: '' } : urlSelection(q.search ?? '', flow);
 

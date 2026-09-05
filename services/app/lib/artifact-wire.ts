@@ -25,7 +25,7 @@ import { json, readJson } from '@/lib/http';
 import { ID_RE } from '@/lib/ids-shape';
 import { PARENT_REFUSED, isParentRefusal, parentOf, resolveParent } from '@/lib/folders';
 import { loadDatasetRows } from '@/lib/story/dataset-store';
-import { parseContentInput } from '@/lib/story/input';
+import { CONTENT_FIELDS, parseContentInput, type StoredContent } from '@/lib/story/input';
 import { collectExternalAssetUrls } from '@/lib/story/external-images';
 import type { AssetWarning } from '@/lib/web-assets';
 import { refreshWebAssets, type WebAssetImporter } from '@/lib/web-assets';
@@ -394,12 +394,40 @@ export async function replaceArtifactWithBody(
   const owned = governs || body.parent_id !== undefined ? await getOwnedArtifactFor(actor, id) : null;
   if (governs && !owned) return json({ error: 'owner_only' }, 403);
   const owner = writerFor(current);
-  const parsed = await parseContentInput(body, {
-    loadRef: refLoaderForActor(owner),
-    importAsset: assetImporterFor(owner.tokenId, owner.userId),
-    resolveFont: fontResolver(),
-    overByteQuota: byteQuotaFor(owner.tokenId),
-  });
+  /*
+   * A FOLDER HAS NO CONTENT, AND THE REPLACE DOOR IS WHERE THAT IS ENFORCED.
+   *
+   * Measured on main before this: a plain `PUT {markup}` on a folder answered
+   * 200 and rewrote `format` to `'markup'` — which orphaned every child (their
+   * `ancestor_ids` still named a row that was no longer a folder), took the row
+   * out of the shelf's `folders` partition, and made the id permanently
+   * unusable as a `parent_id` (`resolveParent` refuses a non-folder). One
+   * `update_artifact` destroyed the folder, irreversibly as far as any door
+   * here is concerned.
+   *
+   * So the row's format is the truth and the body may not change it. Content
+   * is refused BY NAME with the code the data tiers already answer — a folder
+   * is a place, and `not_editable` is exactly what it means — and the METADATA
+   * a folder does have (title, visibility, placement) still goes through, which
+   * is how an agent renames one without a second door to learn.
+   *
+   * Above `parseContentInput` deliberately, for the reason the governance check
+   * above gives: that parse FETCHES, and a refused write must not import the
+   * caller's images on the way to being refused.
+   */
+  if (current.format === 'folder') {
+    if (CONTENT_FIELDS.some((f) => body[f] !== undefined)) {
+      return json({ error: 'not_editable', details: ['a folder has no content — its page is its listing. Send title, visibility or parent_id instead'] }, 400);
+    }
+  }
+  const parsed: StoredContent | Response = current.format === 'folder'
+    ? { format: 'folder', content: '', source: '', meta: {}, derivedTitle: null }
+    : await parseContentInput(body, {
+      loadRef: refLoaderForActor(owner),
+      importAsset: assetImporterFor(owner.tokenId, owner.userId),
+      resolveFont: fontResolver(),
+      overByteQuota: byteQuotaFor(owner.tokenId),
+    });
   if (parsed instanceof Response) return parsed;
 
   const visibility = parseVisibility(body, !!actor.userId);
@@ -485,6 +513,7 @@ export async function createArtifactFromBody(
 ): Promise<Response> {
   if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
   const parsed = await parseContentInput(body, {
+    creating: true,
     loadRef: refLoaderForActor(actor),
     importAsset: assetImporterFor(actor.tokenId, actor.userId),
     resolveFont: fontResolver(),

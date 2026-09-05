@@ -9,14 +9,17 @@ const folder = { ...doc, id: 'rep001', url: '/a/rep001', title: 'Reports', forma
 const posts: Array<{ url: string; body: any }> = [];
 const deletes: string[] = [];
 const asked: string[] = [];
+const patches: Array<{ url: string; body: any }> = [];
 beforeEach(() => {
   posts.length = 0;
   deletes.length = 0;
   asked.length = 0;
+  patches.length = 0;
   vi.stubGlobal('confirm', vi.fn((message: string) => { asked.push(message); return true; }));
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.method === 'POST') { const body = JSON.parse(String(init.body)); posts.push({ url, body }); return new Response(JSON.stringify({ id: 'new001', format: 'folder', title: body.title, parent_id: body.parent_id ?? null, ancestor_ids: [] }), { status: 201 }); }
     if (init?.method === 'DELETE') { deletes.push(String(url)); return new Response('{}', { status: 200 }); }
+    if (init?.method === 'PATCH') { const body = JSON.parse(String(init.body)); patches.push({ url, body }); return new Response(JSON.stringify({ id: 'rep001', ...body }), { status: 200 }); }
     return new Response('{}', { status: 404 });
   }));
 });
@@ -80,6 +83,31 @@ describe('a folder tile carries the folder\u2019s own actions', () => {
      * renders it — the folder branch above says its own sentence.
      */
     expect(asked[0]).toBe('Delete "Empty"? The link stops working. It goes to the trash, where you can restore it any time.');
+  });
+
+  /**
+   * RENAMING IS THE ONE THING A FOLDER HAS. It has no content, so the editor
+   * the pencil used to open would open on nothing — the verb it replaces, in
+   * the place the other folder verbs already live, writing through the same
+   * metadata door the folder page's own name uses (PATCH {title}: no version,
+   * no archived copy for a string).
+   */
+  it('renames a folder in place from its menu, and offers no editor to open', async () => {
+    render(<Shelf actions="full" rows={[folder] as never} />);
+    expect(screen.queryByLabelText('Edit Reports'), 'a folder has no document to edit').toBeNull();
+    fireEvent.click(screen.getByLabelText('More actions for Reports'));
+    fireEvent.click(screen.getByLabelText('Rename Reports'));
+    const field = screen.getByLabelText('Folder name') as HTMLInputElement;
+    expect(field.value).toBe('Reports');
+    fireEvent.change(field, { target: { value: 'Quarterly' } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+    await waitFor(() => expect(patches).toEqual([{ url: '/api/my/artifacts/rep001', body: { title: 'Quarterly' } }]));
+    expect(screen.getByLabelText('Open folder Quarterly')).toBeTruthy();
+  });
+
+  it('leaves a DOCUMENT its editor — only a folder loses the pencil', () => {
+    render(<Shelf actions="full" rows={[doc] as never} />);
+    expect(screen.getByLabelText('Edit Board update')).toBeTruthy();
   });
 
   it('moves a folder through the same picker every row uses', () => {

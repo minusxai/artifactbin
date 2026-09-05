@@ -8,9 +8,22 @@ import { takeBootstrap } from '../bootstrap';
 import { useLocation, useParams } from 'react-router';
 import ArtifactShell from '@/components/ArtifactShell';
 import ArtifactSurface from '@/components/ArtifactSurface';
+import { FolderPage } from './Folder';
 import { NotFoundPage } from './NotFound';
 
-type Page = { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; like?: { liked: boolean; count: number }; surface: Parameters<typeof ArtifactSurface>[0] };
+/**
+ * ONE ADDRESS, TWO PAGES, and `folder` is the discriminator.
+ *
+ * `/a/<id>` names any artifact, and a FOLDER has no document behind it — no
+ * source, no sheet, no frame — so the endpoint answers it with a listing
+ * instead of a `surface`, and this page hands that to the folder page. The
+ * discriminator is the block's PRESENCE rather than a `kind` field, because
+ * `kind` here already means the browser credential (account | anon) and a
+ * second meaning for the word is how a payload starts lying about itself.
+ */
+type Page =
+  | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; folder: Parameters<typeof FolderPage>[0]['folder']; surface?: undefined }
+  | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; like?: { liked: boolean; count: number }; surface: Parameters<typeof ArtifactSurface>[0]; folder?: undefined };
 
 export function ArtifactPage({ id: given }: { id?: string } = {}) {
   const params = useParams();
@@ -29,10 +42,13 @@ export function ArtifactPage({ id: given }: { id?: string } = {}) {
   }, [id, search, page]);
   useEffect(() => {
     // The address heals to the canonical one — after the ACL, which the fetch already passed.
-    if (page && page !== 'missing' && !page.surface.captureKey && page.canonical !== window.location.pathname) window.history.replaceState(null, '', page.canonical + search + window.location.hash);
+    if (page && page !== 'missing' && !page.surface?.captureKey && page.canonical !== window.location.pathname) window.history.replaceState(null, '', page.canonical + search + window.location.hash);
   }, [page, search]);
   if (page === null) return <div aria-label="Loading page" />;
   if (page === 'missing') return <NotFoundPage />;
+  // A folder is a listing, not a document: no shell (its chrome is the shelf's
+  // own) and no surface (there is nothing to frame).
+  if (page.folder) return <FolderPage folder={page.folder} role={page.role} />;
   return (
     <ArtifactShell role={page.role}>
       {/* The reader's `<Value>` selection travels in this page's own query
