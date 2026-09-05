@@ -943,12 +943,9 @@ export default function AnnotationLayer({
          * anchor would not describe it.
          */
         setSelection((previous) => {
-          if (!reported || !previous || reported.path !== previous.path) return reported;
-          return {
-            ...reported,
-            ...(reported.nodeId ? {} : previous.nodeId ? { nodeId: previous.nodeId } : {}),
-            ...(previous.quote ? { quote: previous.quote, range: previous.range } : {}),
-          };
+          const sameIdentity = reported?.nodeId && previous?.nodeId && reported.nodeId === previous.nodeId;
+          if (!sameIdentity) return reported;
+          return previous.quote ? { ...reported, quote: previous.quote, range: previous.range } : reported;
         });
         setFailure(null);
         if (reported) setOpenId(null);

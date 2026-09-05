@@ -324,7 +324,7 @@ describe('AnnotationLayer', () => {
   it('keeps the captured words when the frame re-reports the SAME node', async () => {
     const { frame, contentWindow } = makeFrame();
     const quoted = {
-      kind: 'text' as const, path: '1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [],
+      kind: 'text' as const, path: '1', nodeId: 'node-1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [],
       quote: 'grew 40% in Q3,',
       range: { v: 1 as const, parts: [{ rel: '', start: 12, end: 23, text: ' 40% in Q3,' }] },
     };
@@ -332,13 +332,58 @@ describe('AnnotationLayer', () => {
     await flush();
     await fromFrame(contentWindow, {
       type: STORY_SELECTION_MESSAGE, nonce: NONCE,
-      selection: { kind: 'text', path: '1', tag: 'p', rect: { x: 5, y: 40, width: 200, height: 40 }, className: '', style: '', ancestors: [] },
+      selection: { kind: 'text', path: '1', nodeId: 'node-1', tag: 'p', rect: { x: 5, y: 40, width: 200, height: 40 }, className: '', style: '', ancestors: [] },
     });
     fireEvent.change(await screen.findByLabelText('Annotation comment'), { target: { value: 'still about those words' } });
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
     const create = fetchCalls.find((c) => c.url.endsWith('/api/my/artifacts/doc1/annotations') && c.init?.method === 'POST');
     expect(JSON.parse(String(create!.init!.body))).toMatchObject({ quote: quoted.quote, range: quoted.range });
+  });
+
+  it('does not inherit a removed target identity into an id-less successor at the same path', async () => {
+    const { frame, contentWindow } = makeFrame();
+    render(layer(frame, {
+      railOpen: true,
+      initialSelection: {
+        kind: 'text', path: '1', nodeId: 'old-node', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [],
+        quote: 'old words', range: { v: 1, parts: [{ rel: '', start: 0, end: 9, text: 'old words' }] },
+      },
+    }));
+    await flush();
+    await fromFrame(contentWindow, {
+      type: STORY_SELECTION_MESSAGE, nonce: NONCE,
+      selection: { kind: 'text', path: '1', tag: 'p', rect: { x: 5, y: 40, width: 200, height: 40 }, className: '', style: '', ancestors: [] },
+    });
+    const composer = await screen.findByLabelText('Annotation comment');
+    fireEvent.change(composer, { target: { value: 'draft survives replacement' } });
+    const before = fetchCalls.length;
+    fireEvent.click(screen.getByLabelText('Save annotation'));
+    await flush();
+    expect(fetchCalls.slice(before).filter((call) => call.init?.method === 'POST')).toHaveLength(0);
+    expect(screen.getByRole('alert')).toHaveTextContent('Wait for this change to save');
+    expect(composer).toHaveValue('draft survives replacement');
+  });
+
+  it('drops the old quote and range when the same path reports a different durable node', async () => {
+    const { frame, contentWindow } = makeFrame();
+    render(layer(frame, {
+      railOpen: true,
+      initialSelection: {
+        kind: 'text', path: '1', nodeId: 'old-node', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [],
+        quote: 'old words', range: { v: 1, parts: [{ rel: '', start: 0, end: 9, text: 'old words' }] },
+      },
+    }));
+    await flush();
+    await fromFrame(contentWindow, {
+      type: STORY_SELECTION_MESSAGE, nonce: NONCE,
+      selection: { kind: 'text', path: '1', nodeId: 'new-node', tag: 'p', rect: { x: 5, y: 40, width: 200, height: 40 }, className: '', style: '', ancestors: [] },
+    });
+    fireEvent.change(await screen.findByLabelText('Annotation comment'), { target: { value: 'draft follows explicit target' } });
+    fireEvent.click(screen.getByLabelText('Save annotation'));
+    await flush();
+    const create = fetchCalls.find((call) => call.url.endsWith('/api/my/artifacts/doc1/annotations') && call.init?.method === 'POST');
+    expect(JSON.parse(String(create!.init!.body))).toEqual({ path: '1', node_id: 'new-node', body: 'draft follows explicit target' });
   });
 
   it('drops them when the composer is widened to a DIFFERENT node — they no longer describe it', async () => {
