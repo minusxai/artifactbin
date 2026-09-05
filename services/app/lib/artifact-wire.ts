@@ -434,7 +434,7 @@ export async function replaceArtifactWithBody(
   if (parsed.format === 'markup' && parsed.source) {
     const db = await getDb();
     const lifetime = await db.query<{ source_id: string }>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1', [current.id]);
-    const stamped = stampNodeIds(parsed.source, { previousSource: current.source, reservedIds: lifetime.rows.map((row) => row.source_id), retireLegacyAliases: true }).source;
+    const stamped = stampNodeIds(parsed.source, { previousSource: current.source, reservedIds: lifetime.rows.map((row) => row.source_id), retireLegacyAliases: false }).source;
     if (stamped !== parsed.source) {
       const checked = await parseContentInput({ ...body, markup: stamped }, {
         loadRef: refLoaderForActor(owner), importAsset: assetImporterFor(owner.tokenId, owner.userId),

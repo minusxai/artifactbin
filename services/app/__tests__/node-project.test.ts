@@ -9,6 +9,8 @@ import { GET as getRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { POST as commentRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
 import { DELETE as deleteCommentRoute } from '@/app/api/my/artifacts/[id]/annotations/[annId]/route';
+import { POST as revertRoute } from '@/app/api/artifacts/[id]/revert/route';
+import { createArtifact } from '@/lib/artifacts';
 useAppHarness();
 const params=(id:string)=>({params:Promise.resolve({id})});
 async function setup(markup:string) {
@@ -82,5 +84,21 @@ describe('node project through real routes',()=>{
     expect(nextIds).not.toContain(removed);
     const db=await getDb();const ledger=await db.query<{source_id:string;retired_version:number|null}>('SELECT source_id,retired_version FROM artifact_source_ids WHERE artifact_id=$1',[s.doc.id]);
     expect(ledger.rows.find(row=>row.source_id===removed)?.retired_version).toBe(head.version);
+  });
+  it('stamps direct storage creation rather than relying on an HTTP wire',async()=>{
+    const t=await mintToken('direct-create');
+    const row=await createArtifact(t.id,null,{format:'markup',content:'',source:'<main><p>Direct</p></main>',meta:{}});
+    const ids=bodyIds(row.source!);expect(ids).toHaveLength(2);expect(ids.every(Boolean)).toBe(true);
+  });
+  it('normalizes and reserves identities when reverting a pre-identity archive',async()=>{
+    const s=await setup('<main id="root"><p id="current">Current</p></main>');const db=await getDb();
+    await db.query('UPDATE artifacts SET version=2 WHERE id=$1',[s.doc.id]);
+    await db.query(`INSERT INTO artifact_versions(artifact_id,version,title,description,format,content,source,meta)
+      VALUES($1,1,'old',NULL,'markup','',$2,'{}')`,[s.doc.id,'<main><p>Archived</p></main>']);
+    const response=await revertRoute(request(`/api/artifacts/${s.doc.id}/revert`,{method:'POST',token:s.t.token,json:{version:1}}),params(s.doc.id));
+    expect(response.status,await response.clone().text()).toBe(200);
+    const head=await s.read();const ids=bodyIds(head.markup) as string[];expect(ids).toHaveLength(2);expect(ids.every(Boolean)).toBe(true);
+    const reserved=await db.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[s.doc.id]);
+    expect(ids.every(id=>reserved.rows.some(row=>row.source_id===id))).toBe(true);
   });
 });

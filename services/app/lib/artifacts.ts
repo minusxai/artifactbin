@@ -335,6 +335,7 @@ export async function createArtifact(
   atCreation: { forkedFrom?: string; linkRole?: ShareRole | null } = {},
 ): Promise<ArtifactRow> {
   const db = await getDb();
+  if (input.format === 'markup' && input.source) input = { ...input, source: stampNodeIds(input.source, { retireLegacyAliases: true }).source };
   const sourceIds = input.format === 'markup' && input.source ? [...nodeIndex(input.source).keys()] : [];
   // Birthday collisions at 62^6 are routine once the table is large, so the
   // PK-violation retry is a working path, not a theoretical one.
@@ -721,14 +722,14 @@ export async function commitNormalizedMarkup(
   tx: Queryable,
   actor: TokenActor | null,
   current: ArtifactRow,
-  normalized: { source: string; content: string; meta: Record<string, unknown>; ids: readonly string[]; aliases?: readonly { legacyKey: string; nodeId: string; path: string }[] },
+  normalized: { source: string; content: string; meta: Record<string, unknown>; ids: readonly string[]; aliases?: readonly { legacyKey: string; nodeId: string; path: string }[]; title?: string | null; description?: string | null },
 ): Promise<ArtifactRow> {
   await archiveVersion(tx, current);
   const editId = newEditId();
   const result = await tx.query<ArtifactRow>(
-    `UPDATE artifacts SET source=$2, content=$3, meta=$4::jsonb, version=version+1, edit_id=$5,
+    `UPDATE artifacts SET source=$2, content=$3, meta=$4::jsonb, title=$9, description=$10, version=version+1, edit_id=$5,
        actor_user_id=$6, actor_token_id=$7, updated_at=now() WHERE id=$1 AND edit_id=$8 RETURNING *`,
-    [current.id, normalized.source, normalized.content, JSON.stringify(normalized.meta), editId, ...(actor ? actorStamp(actor) : [null, null]), current.edit_id],
+    [current.id, normalized.source, normalized.content, JSON.stringify(normalized.meta), editId, ...(actor ? actorStamp(actor) : [null, null]), current.edit_id, normalized.title === undefined ? current.title : normalized.title, normalized.description === undefined ? current.description : normalized.description],
   );
   const updated = result.rows[0];
   if (!updated) throw new Error('artifact changed after identity preparation');
@@ -830,6 +831,12 @@ export function isVersionNotArchived(r: ArtifactRow | null | VersionNotArchived)
 async function revertScoped(actor: TokenActor, id: string, version: number): Promise<ArtifactRow | null | VersionNotArchived> {
   const db = await getDb();
   const scope = editorScope(actor);
+  const initial = (await db.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')}`, [id,scope.val])).rows[0];
+  if (!initial) return null;
+  const target = (await db.query<ArtifactRow>('SELECT title,description,format,content,source,meta FROM artifact_versions WHERE artifact_id=$1 AND version=$2',[id,version])).rows[0];
+  if (!target) return {notArchived:true};
+  const prepared = target.format === 'markup' ? await publishMarkupForArtifact(initial,target.source??'') : null;
+  if (prepared instanceof Response) return {notArchived:true};
   // Event fires post-txn: an unawaited query from inside the callback would
   // deadlock PGLite's serialized op queue.
   const result: ArtifactRow | null | VersionNotArchived = await db.transaction(async (tx) => {
@@ -837,13 +844,8 @@ async function revertScoped(actor: TokenActor, id: string, version: number): Pro
       await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val])
     ).rows[0];
     if (!current) return null;
-    const target = (
-      await tx.query<ArtifactRow>(
-        'SELECT title, description, format, content, source, meta FROM artifact_versions WHERE artifact_id = $1 AND version = $2',
-        [id, version],
-      )
-    ).rows[0];
-    if (!target) return { notArchived: true };
+    if(current.edit_id!==initial.edit_id) throw new Error('artifact changed during revert preparation');
+    if(prepared) return commitNormalizedMarkup(tx,actor,current,{...prepared,title:target.title,description:target.description});
 
     await archiveVersion(tx, current);
     const updated = await tx.query<ArtifactRow>(
@@ -909,6 +911,14 @@ async function replaceScoped(
       return { conflict: true, currentVersion: current.version };
     }
 
+    const replacementIdentity = input.format === 'markup' && input.source
+      ? stampNodeIds(input.source, {
+          previousSource: current.source,
+          reservedIds: (await tx.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[id])).rows.map(row=>row.source_id),
+          retireLegacyAliases: true,
+        })
+      : null;
+
     await archiveVersion(tx, current);
 
     const updated = await tx.query<ArtifactRow>(
@@ -923,7 +933,7 @@ async function replaceScoped(
         scope.val,
         input.format,
         input.content,
-        input.source,
+        replacementIdentity?.source ?? input.source,
         JSON.stringify(input.meta),
         input.title !== undefined ? input.title : current.title,
         input.description !== undefined ? input.description : current.description,
@@ -947,6 +957,11 @@ async function replaceScoped(
       await tx.query(`INSERT INTO artifact_source_ids (artifact_id,source_id,provenance,first_version)
         SELECT $1,value #>> '{}','authored',$2 FROM jsonb_array_elements($3::jsonb) ON CONFLICT DO NOTHING`, [id, updated.rows[0].version, JSON.stringify(ids)]);
       await tx.query(`UPDATE artifact_source_ids SET retired_version=$2 WHERE artifact_id=$1 AND retired_version IS NULL AND NOT (source_id = ANY($3::text[]))`, [id, updated.rows[0].version, ids]);
+      await tx.query('UPDATE artifact_source_ids SET retired_version=NULL WHERE artifact_id=$1 AND source_id=ANY($2::text[])',[id,ids]);
+      for(const alias of replacementIdentity?.aliases ?? []) {
+        await tx.query(`INSERT INTO artifact_node_aliases(artifact_id,legacy_key,source_id,source_path,created_version) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`,[id,alias.legacyKey,alias.nodeId,alias.path,updated.rows[0].version]);
+        await tx.query('UPDATE annotations SET anchor_key=$3 WHERE artifact_id=$1 AND anchor_key=$2',[id,alias.legacyKey,alias.nodeId]);
+      }
     }
     moved = { from: parentOf(current), to: parentOf(updated.rows[0]) };
     return updated.rows[0];
