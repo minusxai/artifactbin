@@ -963,14 +963,14 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   // A frame that (re)announces itself is told what is true now — it may have
   // been served before an intent-driven like landed, or been replaced since.
   useEffect(() => {
-    if (format !== 'markup' || !sessionNonce) return;
+    if (!isDocumentFormat || !sessionNonce) return;
     const frame = frameRef.current?.contentWindow ?? null;
     answer(frame, { kind: 'like', ok: true, ...likeRef.current });
     if (followRef.current) answer(frame, { kind: 'follow', ok: true, following: followRef.current.following, count: followRef.current.count });
   }, [answer, format, frameNonce, sessionNonce]);
   // The unresolved-comment count, kept live as threads open and resolve.
   useEffect(() => {
-    if (format !== 'markup' || !sessionNonce) return;
+    if (!isDocumentFormat || !sessionNonce) return;
     answer(frameRef.current?.contentWindow ?? null, { kind: 'comment', ok: true, count: openAnnotationCount });
   }, [answer, format, frameNonce, openAnnotationCount, sessionNonce]);
 
@@ -1064,7 +1064,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * and a non-commenter's comment just log — the backend is another phase.
    */
   useEffect(() => {
-    if (format !== 'markup') return;
+    if (!isDocumentFormat) return;
     const onAction = (event: MessageEvent) => {
       const data = event.data as Partial<StoryReaderActionMessage> | undefined;
       if (!data || data.type !== STORY_READER_ACTION_MESSAGE || typeof data.kind !== 'string') return;
@@ -1112,7 +1112,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   // EDIT MODE pins the document's bar at the top and sits the editor toolbar
   // under it; the document insets itself by both, so nothing is covered.
   useEffect(() => {
-    if (format !== 'markup' || !sessionNonce) return;
+    if (!isDocumentFormat || !sessionNonce) return;
     frameRef.current?.contentWindow?.postMessage({ type: STORY_READER_CHROME_MESSAGE, mode: editing ? 'pinned' : 'on', inset: EDIT_BAR_H }, '*');
   }, [editing, format, frameNonce, sessionNonce]);
 

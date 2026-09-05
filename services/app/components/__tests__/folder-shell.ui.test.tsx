@@ -17,7 +17,8 @@
  * (lib/folders notifyParent) — which is why nothing here reloads.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { STORY_READER_ACTION_MESSAGE } from '@/lib/story-runtime/contract';
 
 vi.mock('@/components/AnnotationLayer', () => ({ default: () => null }));
 vi.mock('@/components/ArtifactEditor', () => ({
@@ -69,7 +70,22 @@ const folderProps = (over: Partial<ArtifactSurfaceProps> = {}): ArtifactSurfaceP
   ...over,
 });
 
-const openDocumentControls = () => fireEvent.click(screen.getByLabelText('Open artifact controls'));
+/**
+ * The page draws no controls button of its own on a document: the framed
+ * document's chrome carries it and ASKS the page (mx:reader-action). A page
+ * with no frame (a dataset, an image) keeps a button in its bar.
+ */
+const openDocumentControls = () => {
+  const button = screen.queryByLabelText('Open artifact controls');
+  if (button) { fireEvent.click(button); return; }
+  const frame = document.querySelector<HTMLIFrameElement>('iframe[title="artifact"]');
+  act(() => {
+    window.dispatchEvent(new MessageEvent('message', {
+      data: { type: STORY_READER_ACTION_MESSAGE, kind: 'controls' },
+      source: frame?.contentWindow as unknown as MessageEventSource,
+    }));
+  });
+};
 
 describe('a folder in the shell', () => {
   it('is served in the document frame, like the document it is', () => {

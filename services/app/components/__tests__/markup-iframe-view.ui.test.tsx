@@ -9,6 +9,24 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 
 import ArtifactShell from '../ArtifactShell';
 import ArtifactSurface, { type ArtifactSurfaceProps } from '../ArtifactSurface';
+import { STORY_READER_ACTION_MESSAGE } from '@/lib/story-runtime/contract';
+
+/**
+ * The page draws no controls button of its own on a document: the framed
+ * document's chrome carries it and ASKS the page (mx:reader-action). A page
+ * with no frame (a dataset, an image) keeps a button in its bar.
+ */
+const openDocumentControls = () => {
+  const button = screen.queryByLabelText('Open artifact controls');
+  if (button) { fireEvent.click(button); return; }
+  const frame = document.querySelector<HTMLIFrameElement>('iframe[title="artifact"]');
+  act(() => {
+    window.dispatchEvent(new MessageEvent('message', {
+      data: { type: STORY_READER_ACTION_MESSAGE, kind: 'controls' },
+      source: frame?.contentWindow as unknown as MessageEventSource,
+    }));
+  });
+};
 
 class FakeEventSource {
   /** The named `data` channel (a dataset under the document changed). */
@@ -69,7 +87,7 @@ describe('markup view mode is the sandboxed /raw iframe', () => {
         <ArtifactSurface {...markupProps({})} />
       </ArtifactShell>,
     );
-    fireEvent.click(screen.getByLabelText('Open artifact controls'));
+    openDocumentControls();
     expect(screen.getByLabelText('Edit artifact')).toBeInTheDocument();
   });
 

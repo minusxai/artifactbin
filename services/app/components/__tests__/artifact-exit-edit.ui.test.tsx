@@ -117,14 +117,18 @@ describe('coming back from edit mode', () => {
     expect(loader()).toBeNull();
   });
 
-  it('reserves room for the editing bar rather than measuring it', async () => {
+  it('keeps the frame where it is across edit mode — the document insets itself under the bars', async () => {
+    // The editing bars (the document's own, pinned, and the editor toolbar
+    // under it) overlay the frame; the DOCUMENT adds the room under them
+    // (mx:reader-chrome pinned + inset), so the frame never moves and nothing
+    // the reader was looking at jumps.
     render(<ArtifactShell role="owner"><ArtifactSurface {...props()} /></ArtifactShell>);
     await painted();
     const viewport = screen.getByLabelText('Artifact viewport');
     const readingTop = viewport.style.top;
     goEdit();
     await waitFor(() => expect(screen.queryByLabelText('Editor stub')).not.toBeNull());
-    expect(viewport.style.top).not.toBe(readingTop);
+    expect(viewport.style.top).toBe(readingTop);
     leaveEdit();
     await waitFor(() => expect(screen.queryByLabelText('Editor stub')).toBeNull());
     expect(viewport.style.top).toBe(readingTop);
