@@ -52,8 +52,6 @@ export interface AnnotationLayerProps {
   sessionNonce: string | null;
   /** The thread rail is open — a panel, not a mode, and true in either mode. */
   railOpen: boolean;
-  /** The head the page currently believes in — creates anchor against it. */
-  currentEditId: string;
   /** The latest full open list from the live stream; null until the first frame. Replaces the fetch wholesale. */
   liveAnnotations: AnnotationWire[] | null;
   /** Open threads should mark the document edge (the ambient surface). */
@@ -64,13 +62,6 @@ export interface AnnotationLayerProps {
   initialSelection?: StoryEditSelection | null;
   /** Where the document's viewport starts: the top bar, plus the edit bar when one is up. */
   topOffset: number;
-  /**
-   * Run to completion BEFORE the anchor is stamped. The stamp is a real CAS
-   * edit and the editor answers a 409 by taking the server's document, so a
-   * comment on the node someone is typing in would discard their typing unless
-   * the editor's buffer is drained first. The same rule an image paste lives by.
-   */
-  beforeCreate?: () => Promise<void>;
 }
 
 const cardClass = 'rounded-[6px] border border-edge bg-raised text-sm';
@@ -750,8 +741,8 @@ function Thread({
 }
 
 export default function AnnotationLayer({
-  id, frameRef, sessionNonce, railOpen, currentEditId, liveAnnotations, showViewComments,
-  onRailOpenChange, initialSelection = null, topOffset, beforeCreate, onAnnotationsChange,
+  id, frameRef, sessionNonce, railOpen, liveAnnotations, showViewComments,
+  onRailOpenChange, initialSelection = null, topOffset, onAnnotationsChange,
 }: AnnotationLayerProps) {
   const [annotations, setAnnotations] = useState<AnnotationWire[]>([]);
   // The page's own count (the badge on the comment glyph) follows THIS list:
@@ -781,18 +772,12 @@ export default function AnnotationLayer({
 
   const nonceRef = useRef(sessionNonce);
   nonceRef.current = sessionNonce;
-  // Read at SAVE time, not at render: the drain above can bump the head between
-  // the click and the POST, and a captured value would spend a stale one.
-  const currentEditIdRef = useRef(currentEditId);
-  currentEditIdRef.current = currentEditId;
   const onRailOpenChangeRef = useRef(onRailOpenChange);
   onRailOpenChangeRef.current = onRailOpenChange;
   // A pin click arrives from a message listener that must not re-subscribe on
   // every list change, so the list it needs is read through a ref.
   const annotationsRef = useRef(annotations);
   annotationsRef.current = annotations;
-  const beforeCreateRef = useRef(beforeCreate);
-  beforeCreateRef.current = beforeCreate;
   /*
    * A selection report is only ours while a composer is already open — that is
    * the breadcrumb widening its target. Outside that, `mx:selection` is the
@@ -904,7 +889,10 @@ export default function AnnotationLayer({
         // The range travels with the pin so the frame can paint the words
         // themselves; ids, body paths and the words' own positions are still
         // the only annotation data that enters that realm — never the comment.
-        .map((a) => ({ id: a.id, path: a.anchor!.path, key: a.anchor!.key, range: a.range })),
+        .map((a) => {
+          const anchor = a.anchor! as typeof a.anchor & { nodeId?: string | null };
+          return { id: a.id, path: anchor.path, key: anchor.key, nodeId: anchor.nodeId, range: a.range };
+        }),
       openId,
       hoverId,
       selectedPath: selection?.path ?? null,
@@ -954,11 +942,14 @@ export default function AnnotationLayer({
          * ancestor is a different subject, and a range addressed from the old
          * anchor would not describe it.
          */
-        setSelection((previous) => (
-          reported && previous && reported.path === previous.path && previous.quote
-            ? { ...reported, quote: previous.quote, range: previous.range }
-            : reported
-        ));
+        setSelection((previous) => {
+          if (!reported || !previous || reported.path !== previous.path) return reported;
+          return {
+            ...reported,
+            ...(reported.nodeId ? {} : previous.nodeId ? { nodeId: previous.nodeId } : {}),
+            ...(previous.quote ? { quote: previous.quote, range: previous.range } : {}),
+          };
+        });
         setFailure(null);
         if (reported) setOpenId(null);
       }
@@ -1011,37 +1002,24 @@ export default function AnnotationLayer({
 
   const save = useCallback(async () => {
     if (!selection || !draft.trim()) return;
+    if (!selection.nodeId) {
+      setFailure('Wait for this change to save before commenting. Your draft is still here.');
+      return;
+    }
     setBusy(true);
     setFailure(null);
     try {
-      /*
-       * THE INVARIANT. The anchor stamp below is a real edit through the same
-       * CAS as every other write, and the editor answers a 409 by adopting the
-       * server's document — so if someone comments on the paragraph they were
-       * just typing in, the un-flushed keystrokes would be thrown away to make
-       * room for the anchor. Drain first, then stamp against the fresh head.
-       * (Bounded upstream; a drain that cannot reach the server must not strand
-       * a comment that is already written.)
-       */
-      await beforeCreateRef.current?.();
-      const post = (editId: string) => fetch(`/api/my/artifacts/${id}/annotations`, {
+      const res = await fetch(`/api/my/artifacts/${id}/annotations`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         // The exact words ride along when there are any: the frame captured
         // them from the live Range, and the page is the only side that can
         // store them. A caret comment simply carries neither key.
         body: JSON.stringify({
-          path: selection.path, edit_id: editId, body: draft,
+          path: selection.path, node_id: selection.nodeId, body: draft,
           ...(selection.quote ? { quote: selection.quote } : {}),
           ...(selection.range ? { range: selection.range } : {}),
         }),
       });
-      // The drain may itself have moved the head; the 409 path below covers it.
-      let res = await post(currentEditIdRef.current);
-      if (res.status === 409) {
-        // The document moved under the click; the refused answer carries head.
-        const head = (await res.json()) as { edit_id?: string };
-        if (head.edit_id) res = await post(head.edit_id);
-      }
       if (!res.ok) {
         setFailure(await annotationFailure(res));
         return;

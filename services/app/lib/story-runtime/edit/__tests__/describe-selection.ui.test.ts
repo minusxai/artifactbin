@@ -10,8 +10,8 @@ import { describe, it, expect } from 'vitest';
 import { parseJsx } from '@/lib/jsx';
 import { describeSelection, selectionKindAt, ancestorCrumbs } from '../describe-selection';
 
-const SRC = '<div className="p-8 max-w-2xl"><h1 className="text-3xl">Title</h1>'
-  + '<div className="flex gap-2"><p className="lede" style="color: red">hello world</p></div>'
+const SRC = '<div id="runtime-source-root" className="p-8 max-w-2xl"><h1 className="text-3xl">Title</h1>'
+  + '<div className="flex gap-2"><p id="persisted-paragraph" className="lede" style="color: red">hello world</p></div>'
   + '<Question data="$q" /><div className="empty"></div></div>';
 const nodes = (() => { const p = parseJsx(SRC); if (!p.ok) throw new Error('fixture does not parse'); return p.nodes; })();
 
@@ -21,7 +21,7 @@ function mount() {
     <div data-mx-ast="0" class="p-8 max-w-2xl">
       <h1 data-mx-ast="0.0" class="text-3xl">Title</h1>
       <div data-mx-ast="0.1" class="flex gap-2">
-        <p data-mx-ast="0.1.0" class="lede" style="color: red">hello world</p>
+        <p id="runtime-chrome-id" data-mx-ast="0.1.0" class="lede" style="color: red">hello world</p>
       </div>
       <div data-mx-ast="0.2" aria-label="Question embed"></div>
       <div data-mx-ast="0.3" class="empty"></div>
@@ -50,6 +50,7 @@ describe('describeSelection', () => {
     const at = mount();
     const sel = describeSelection(at('0.1.0'), nodes)!;
     expect(sel).toMatchObject({ kind: 'text', path: '0.1.0', tag: 'p', className: 'lede', style: 'color: red' });
+    expect(sel.nodeId).toBe('persisted-paragraph');
     expect(sel.rect).toEqual({
       x: expect.any(Number), y: expect.any(Number), width: expect.any(Number), height: expect.any(Number),
     });

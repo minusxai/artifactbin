@@ -64,10 +64,15 @@ export function describeSelection(el: Element, nodes: JsxNode[]): StoryEditSelec
   const kind = selectionKindAt(nodes, path);
   if (!kind) return null;
   const node = resolveJsxNodeAtPath(nodes, path) as JsxElement;
+  const authoredId = node.attributes.find((attr) => attr.name.toLowerCase() === 'id');
+  const nodeId = authoredId?.value.static && typeof authoredId.value.json === 'string'
+    ? authoredId.value.json
+    : undefined;
   const r = el.getBoundingClientRect();
   return {
     kind,
     path,
+    ...(nodeId ? { nodeId } : {}),
     tag: node.tag,
     rect: { x: r.x, y: r.y, width: r.width, height: r.height },
     className: el.getAttribute('class') ?? '',

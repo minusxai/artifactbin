@@ -122,20 +122,23 @@ afterEach(() => vi.unstubAllGlobals());
 
 const flush = () => act(async () => { await Promise.resolve(); });
 
-const layer = (frame: HTMLIFrameElement, over: Partial<Parameters<typeof AnnotationLayer>[0]> = {}) => (
-  <AnnotationLayer
+const layer = (frame: HTMLIFrameElement, over: Partial<Parameters<typeof AnnotationLayer>[0]> = {}) => {
+  const initialSelection = over.initialSelection && !Object.prototype.hasOwnProperty.call(over.initialSelection, 'nodeId')
+    ? { ...over.initialSelection, nodeId: `node-${over.initialSelection.path.replaceAll('.', '-')}` }
+    : over.initialSelection;
+  return <AnnotationLayer
     id="doc1"
     frameRef={{ current: frame }}
     sessionNonce={NONCE}
     railOpen={false}
-    currentEditId="e1"
     liveAnnotations={null}
     showViewComments={false}
     topOffset={100}
     onRailOpenChange={() => {}}
     {...over}
-  />
-);
+    initialSelection={initialSelection}
+  />;
+};
 
 describe('AnnotationLayer', () => {
   it('posts the pin set into the frame even in view mode (pins are owner view chrome)', async () => {
@@ -286,7 +289,7 @@ describe('AnnotationLayer', () => {
   it('forwards the selection quote and its anchor-relative range in the create POST', async () => {
     const { frame } = makeFrame();
     render(layer(frame, {
-      railOpen: true, currentEditId: 'e_head',
+      railOpen: true,
       initialSelection: {
         kind: 'text' as const, path: '1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [],
         quote: 'grew 40% in Q3,',
@@ -302,7 +305,7 @@ describe('AnnotationLayer', () => {
     await flush();
     const create = fetchCalls.find((c) => c.url.endsWith('/api/my/artifacts/doc1/annotations') && c.init?.method === 'POST');
     expect(JSON.parse(String(create!.init!.body))).toEqual({
-      path: '1', edit_id: 'e_head', body: 'which quarter?',
+      path: '1', node_id: 'node-1', body: 'which quarter?',
       quote: 'grew 40% in Q3,',
       range: { v: 1, parts: [
         { rel: '0', start: 8, end: 12, text: 'grew' },
@@ -325,7 +328,7 @@ describe('AnnotationLayer', () => {
       quote: 'grew 40% in Q3,',
       range: { v: 1 as const, parts: [{ rel: '', start: 12, end: 23, text: ' 40% in Q3,' }] },
     };
-    render(layer(frame, { railOpen: true, currentEditId: 'e_head', initialSelection: quoted }));
+    render(layer(frame, { railOpen: true, initialSelection: quoted }));
     await flush();
     await fromFrame(contentWindow, {
       type: STORY_SELECTION_MESSAGE, nonce: NONCE,
@@ -341,7 +344,7 @@ describe('AnnotationLayer', () => {
   it('drops them when the composer is widened to a DIFFERENT node — they no longer describe it', async () => {
     const { frame, contentWindow } = makeFrame();
     render(layer(frame, {
-      railOpen: true, currentEditId: 'e_head',
+      railOpen: true,
       initialSelection: {
         kind: 'text' as const, path: '1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [],
         quote: 'grew 40% in Q3,',
@@ -351,19 +354,19 @@ describe('AnnotationLayer', () => {
     await flush();
     await fromFrame(contentWindow, {
       type: STORY_SELECTION_MESSAGE, nonce: NONCE,
-      selection: { kind: 'element', path: '0', tag: 'section', rect: { x: 0, y: 0, width: 400, height: 90 }, className: '', style: '', ancestors: [] },
+      selection: { kind: 'element', path: '0', nodeId: 'node-0', tag: 'section', rect: { x: 0, y: 0, width: 400, height: 90 }, className: '', style: '', ancestors: [] },
     });
     fireEvent.change(await screen.findByLabelText('Annotation comment'), { target: { value: 'about the whole section' } });
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
     const create = fetchCalls.find((c) => c.url.endsWith('/api/my/artifacts/doc1/annotations') && c.init?.method === 'POST');
-    expect(JSON.parse(String(create!.init!.body))).toEqual({ path: '0', edit_id: 'e_head', body: 'about the whole section' });
+    expect(JSON.parse(String(create!.init!.body))).toEqual({ path: '0', node_id: 'node-0', body: 'about the whole section' });
   });
 
   it('sends no quote for a selection that has none — a caret comment is still a comment', async () => {
     const { frame } = makeFrame();
     render(layer(frame, {
-      railOpen: true, currentEditId: 'e_head',
+      railOpen: true,
       initialSelection: { kind: 'text' as const, path: '1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [] },
     }));
     await flush();
@@ -371,13 +374,13 @@ describe('AnnotationLayer', () => {
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
     const create = fetchCalls.find((c) => c.url.endsWith('/api/my/artifacts/doc1/annotations') && c.init?.method === 'POST');
-    expect(JSON.parse(String(create!.init!.body))).toEqual({ path: '1', edit_id: 'e_head', body: 'no words' });
+    expect(JSON.parse(String(create!.init!.body))).toEqual({ path: '1', node_id: 'node-1', body: 'no words' });
   });
 
   it('a handed-in selection opens an anchored page composer; save moves the comment to the rail', async () => {
     const { frame, postMessage } = makeFrame();
     render(layer(frame, {
-      railOpen: true, currentEditId: 'e_head',
+      railOpen: true,
       initialSelection: {
         kind: 'element' as const, path: '2.1', tag: 'div', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '',
         ancestors: [{ path: '2', tag: 'section', hint: 'max-w-2xl' }],
@@ -400,7 +403,7 @@ describe('AnnotationLayer', () => {
     fireEvent.click(screen.getByLabelText('Save annotation'));
     await flush();
     const create = fetchCalls.find((c) => c.url.endsWith('/api/my/artifacts/doc1/annotations') && c.init?.method === 'POST');
-    expect(JSON.parse(String(create!.init!.body))).toMatchObject({ path: '2.1', edit_id: 'e_head', body: 'fresh note' });
+    expect(JSON.parse(String(create!.init!.body))).toMatchObject({ path: '2.1', node_id: 'node-2-1', body: 'fresh note' });
     const clears = postMessage.mock.calls.map((c) => c[0]).filter((m) => m?.type === STORY_SELECT_MESSAGE);
     expect(clears.at(-1)).toMatchObject({ path: null });
     expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
@@ -410,7 +413,7 @@ describe('AnnotationLayer', () => {
   it('submits the composer with command-enter and gives only Comment the filled treatment', async () => {
     const { frame } = makeFrame();
     render(layer(frame, {
-      railOpen: true, currentEditId: 'e_head',
+      railOpen: true,
       initialSelection: { kind: 'text' as const, path: '0', tag: 'p', rect: { x: 0, y: 0, width: 100, height: 20 }, className: '', style: '', ancestors: [] },
     }));
     await flush();
@@ -446,7 +449,7 @@ describe('AnnotationLayer', () => {
     refuseCreate = true;
     const { frame } = makeFrame();
     render(layer(frame, {
-      railOpen: true, currentEditId: 'e_head',
+      railOpen: true,
       initialSelection: { kind: 'element' as const, path: '0', tag: 'p', rect: { x: 0, y: 0, width: 100, height: 20 }, className: '', style: '', ancestors: [] },
     }));
     await flush();
@@ -637,21 +640,10 @@ describe('AnnotationLayer', () => {
     expect(posted.at(-1)).toMatchObject({ mode: 'on' });
   });
 
-  /*
-   * THE INVARIANT. The anchor stamp is a real CAS edit, and the editor answers
-   * a 409 by taking the server's document — so a comment on the node someone
-   * is typing in must not race the flush that carries their typing. Draining
-   * first is the same rule an image paste already lives by.
-   */
-  it('creates a relation without draining the editor', async () => {
-    const order: string[] = [];
-    const { frame, contentWindow } = makeFrame();
-    const beforeCreate = vi.fn(async () => {
-      await Promise.resolve();
-      order.push('drain');
-    });
+  it('creates a relation directly without a source edit or head retry', async () => {
+    const { frame } = makeFrame();
     render(layer(frame, {
-      railOpen: true, beforeCreate,
+      railOpen: true,
       initialSelection: {
         kind: 'element' as const, path: '2.1', tag: 'div', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '',
         ancestors: [{ path: '2', tag: 'section', hint: '' }],
@@ -667,9 +659,27 @@ describe('AnnotationLayer', () => {
 
     const created = fetchCalls.slice(before).find((c) => c.init?.method === 'POST');
     expect(created).toBeTruthy();
-    order.push('post');
-    expect(beforeCreate).not.toHaveBeenCalled();
-    expect(order).toEqual(['post']);
+    expect(JSON.parse(String(created!.init!.body))).toMatchObject({ node_id: 'node-2-1', body: 'mid-sentence note' });
+    expect(String(created!.init!.body)).not.toContain('edit_id');
+  });
+
+  it('keeps an unsaved-node draft and asks the user to wait for ordinary autosave', async () => {
+    const { frame } = makeFrame();
+    render(layer(frame, {
+      railOpen: true,
+      initialSelection: {
+        kind: 'text', path: '2.1', nodeId: undefined, tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [],
+      },
+    }));
+    await flush();
+    const composer = await screen.findByLabelText('Annotation comment');
+    fireEvent.change(composer, { target: { value: 'keep this draft' } });
+    const before = fetchCalls.length;
+    fireEvent.click(screen.getByLabelText('Save annotation'));
+    await flush();
+    expect(fetchCalls).toHaveLength(before);
+    expect(screen.getByRole('alert')).toHaveTextContent('Wait for this change to save');
+    expect(composer).toHaveValue('keep this draft');
   });
 
   it('the live stream replaces the list wholesale', async () => {
