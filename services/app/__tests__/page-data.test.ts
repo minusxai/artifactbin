@@ -151,6 +151,30 @@ describe('GET /api/page/artifact/:id', () => {
 });
 
 describe('GET /api/page/profile/@user/...', () => {
+  it('keeps public folder contents inside their folder while preserving direct links', async () => {
+    const w = await world();
+    const h = w.owner.username!;
+    const create = async (body: Record<string, unknown>) => {
+      const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: w.t.token, json: body }));
+      expect(res.status).toBe(201);
+      return res.json() as Promise<{ id: string }>;
+    };
+    const folder = await create({ format: 'folder', title: 'Collection', visibility: 'public' });
+    const filed = await create({ title: 'Filed', markup: '<p>filed</p>', visibility: 'public', parent_id: folder.id });
+    const nested = await create({ format: 'folder', title: 'Nested', visibility: 'public', parent_id: folder.id });
+    const deep = await create({ title: 'Deep', markup: '<p>deep</p>', visibility: 'public', parent_id: nested.id });
+
+    for (const signedIn of [false, true]) {
+      if (signedIn) asSession(w.owner);
+      const root = await (await profilePage(request(`/api/page/profile/@${h}`), params({ user: `@${h}` }))).json();
+      expect(root.files.map((f: { id: string }) => f.id).sort()).toEqual([w.pub.id, folder.id].sort());
+      const page = await (await artifactPage(request(`/api/page/artifact/${folder.id}`), params({ id: folder.id }))).json();
+      expect(page.folder.rows.map((f: { id: string }) => f.id).sort()).toEqual([filed.id, nested.id].sort());
+      const direct = await (await profilePage(request(`/api/page/profile/@${h}/${deep.id}-deep`), params({ user: `@${h}`, path: `${deep.id}-deep` }))).json();
+      expect(direct).toEqual({ kind: 'artifact', id: deep.id });
+    }
+  });
+
   it('resolves an id-anchored path to the artifact (and says when the address should heal)', async () => {
     const w = await world();
     const h = w.owner.username!;
@@ -182,7 +206,7 @@ describe('GET /api/page/profile/@user/...', () => {
     }));
     const strangers = await (await profilePage(request(`/api/page/profile/@${h}`), params({ user: `@${h}` }))).json();
     expect(strangers.kind).toBe('public-profile');
-    expect(strangers.files.length).toBe(2);
+    expect(strangers.files.map((f: { id: string }) => f.id)).toEqual([w.pub.id]);
     for (const f of strangers.files) expect(f).not.toHaveProperty('ancestor_ids');
     expect(JSON.stringify(strangers)).not.toContain(w.box.id);
     asSession(w.owner);
@@ -191,7 +215,7 @@ describe('GET /api/page/profile/@user/...', () => {
     for (const f of root.files) expect(f).not.toHaveProperty('ancestor_ids');
   });
 
-  it('lists the same flat public index for the owner and every visitor', async () => {
+  it('lists the same public root for the owner and every visitor', async () => {
     const w = await world();
     const h = w.owner.username!;
     const strangers = await (await profilePage(request(`/api/page/profile/@${h}`), params({ user: `@${h}` }))).json();

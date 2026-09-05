@@ -2,7 +2,7 @@
  * The pretty-URL page's data. Resolution is FORGIVING and id-anchored: a path
  * whose last segment starts with a valid id names the artifact (the client
  * heals a mangled address to the canonical one — after the ACL, so a private
- * document never leaks its owner); anything else is the same flat public
+ * document never leaks its owner); anything else is the same public root
  * index for every viewer. An UNREADABLE artifact falls through to the listing
  * exactly like a nonexistent one: no existence oracle in the difference.
  *
@@ -45,7 +45,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ user: strin
   const owner = await getUserByUsername(handle);
   if (!owner) return notFound();
   // A profile is the same public index for its owner and every visitor.
-  // Public folders list alongside documents; private/unlisted work stays out.
+  // Root public folders list alongside root documents; filed work stays inside folders.
   const files = await listPublicArtifactsByUser(owner.id);
   const anon = !viewer && (await browserSessionKind(request)) === 'anon';
   const stranger = !viewer || viewer.userId !== owner.id;
