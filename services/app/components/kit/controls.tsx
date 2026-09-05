@@ -117,6 +117,9 @@ const CALENDAR = (
 // ── Select ──────────────────────────────────────────────────────────────────
 
 export interface SelectControlProps {
+  multiple?: boolean;
+  allowCreate?: boolean;
+  valueFormat?: 'json';
   label?: string;
   placeholder?: string;
   className?: string;
