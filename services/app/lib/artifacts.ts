@@ -413,7 +413,7 @@ export async function createArtifact(
           atCreation.forkedFrom ?? null,
         ],
       );
-      void trackEvent('create', r.rows[0].id, { userId });
+      void trackEvent('create', r.rows[0].id, { userId, parentId: parentOf(r.rows[0]) });
       // A child arriving wakes the folder it landed in, so an open listing
       // re-runs its own query with no reload.
       await notifyParent(parentOf(r.rows[0]));
@@ -904,6 +904,7 @@ async function replaceScoped(
   if (result && !isVersionConflict(result)) void trackEvent('update', result.id, { userId: result.user_id });
   // BOTH ends of a move wake: the folder the row left and the one it joined.
   if (moved) await wakeParents(moved);
+  if (result && !isVersionConflict(result)) sayMoved(actor, result.id, moved);
   return result;
 }
 
@@ -915,6 +916,19 @@ async function replaceScoped(
  */
 async function wakeParents({ from, to }: { from: string | null; to: string | null }): Promise<void> {
   for (const id of new Set([from, to])) await notifyParent(id);
+}
+
+/**
+ * The MOVE, said once, by whichever of the two placement doors ran it — the
+ * PATCH that only files a row, and the replace that files it while writing it.
+ *
+ * Guarded on the ends being DIFFERENT, because a plain content write computes
+ * the same pair and would otherwise say a move on every save. Fire-and-forget
+ * and outside the transaction, like every other emit here (lib/events).
+ */
+function sayMoved(actor: TokenActor, id: string, moved: { from: string | null; to: string | null } | null): void {
+  if (!moved || moved.from === moved.to) return;
+  void emit(actorSubject(actor), 'moved', { kind: 'artifact', id }, { from_parent_id: moved.from, to_parent_id: moved.to });
 }
 
 // ── The concurrent-edit protocol (concurrent-artifacts-edits.md) ─────────────
@@ -1202,7 +1216,7 @@ async function setAccessScoped(scope: Scope, id: string, access: DatasetAccess):
  * writes what it is given, and the owner, cycle and depth rules live in the one
  * module that knows the hierarchy.
  */
-async function setParentScoped(scope: Scope, id: string, next: string[]): Promise<ArtifactRow | null> {
+async function setParentScoped(actor: TokenActor, scope: Scope, id: string, next: string[]): Promise<ArtifactRow | null> {
   const db = await getDb();
   let moved: { from: string | null; to: string | null } | null = null;
   const row = await db.transaction(async (tx) => {
@@ -1224,6 +1238,7 @@ async function setParentScoped(scope: Scope, id: string, next: string[]): Promis
   // Post-transaction, like every other wakeup here: an unawaited query from
   // inside the callback deadlocks PGLite's serialized op queue.
   if (moved) await wakeParents(moved);
+  if (row) sayMoved(actor, row.id, moved);
   return row;
 }
 
@@ -1490,7 +1505,7 @@ export function revertArtifactFor(actor: TokenActor, id: string, version: number
 
 /** File a row the actor OWNS under `next` (the resolved trail; `[]` is the root). */
 export function setParentFor(actor: TokenActor, id: string, next: string[]): Promise<ArtifactRow | null> {
-  return setParentScoped(ownerScope(actor), id, next);
+  return setParentScoped(actor, ownerScope(actor), id, next);
 }
 
 export function refLoaderForActor(actor: TokenActor): RefLoader {

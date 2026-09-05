@@ -31,6 +31,7 @@
 import { trackEvent } from '@/lib/analytics';
 import { LIVE_ARTIFACT_SQL, ownerPredicate, type TokenActor } from '@/lib/artifacts';
 import { getDb, type Queryable } from '@/lib/db';
+import { actorSubject, emit } from '@/lib/events';
 import { ancestorsForMove, notifyParent, parentOf } from '@/lib/folders';
 
 /** Days a row sits in the trash before the purge hard-deletes it. */
@@ -51,16 +52,25 @@ const SUBTREE = '(id = $1 OR ancestor_ids @> ARRAY[$1])';
 export async function trashArtifactFor(actor: TokenActor, id: string): Promise<boolean> {
   const db = await getDb();
   const scope = ownerPredicate(actor);
-  const r = await db.query<{ id: string; ancestor_ids: string[] }>(
+  const r = await db.query<{ id: string; format: string; ancestor_ids: string[] }>(
     `UPDATE artifacts SET deleted_at = now()
       WHERE ${SUBTREE} AND ${LIVE_ARTIFACT_SQL} AND (${scope.where('$2')})
-      RETURNING id, ancestor_ids`,
+      RETURNING id, format, ancestor_ids`,
     [id, scope.val],
   );
   const named = r.rows.find((row) => row.id === id);
   if (!named) return false;
-  // Fire-and-forget, and never inside a transaction (PGLite deadlock).
-  void trackEvent('delete', id, { userId: actor.userId });
+  /*
+   * `trashed`, NEVER `deleted`. The log keeps `deleted` for the purge, where
+   * it means what it has always meant — erased, nothing to come back to — and
+   * saying it here would tell an operator a document was destroyed while it is
+   * sitting in its owner's trash, restorable for thirty days. The count is what
+   * the statement above actually took, so a folder's sentence says how much
+   * went with it and a document's says nothing went.
+   *
+   * Fire-and-forget, and never inside a transaction (PGLite deadlock).
+   */
+  void emit(actorSubject(actor), 'trashed', { kind: 'artifact', id }, { format: named.format, subtree: r.rows.length - 1 });
   await notifyParent(parentOf(named));
   return true;
 }
@@ -110,6 +120,9 @@ export async function restoreArtifactFor(actor: TokenActor, id: string): Promise
   });
   if (!placement) return null;
   await notifyParent(placement.length ? placement[placement.length - 1] : null);
+  // Where it LANDED, which is the one thing a restore can surprise someone
+  // with: a row whose folder is still in the trash comes back at the root.
+  void emit(actorSubject(actor), 'restored', { kind: 'artifact', id }, { landed_at_root: placement.length === 0 });
   return { id, ancestor_ids: placement };
 }
 
@@ -162,8 +175,8 @@ export async function purgeTrash(opts: { olderThanDays?: number; now?: Date } = 
   const days = opts.olderThanDays ?? TRASH_RETENTION_DAYS;
   const cutoff = new Date((opts.now ?? new Date()).getTime() - days * 86_400_000).toISOString();
   const db = await getDb();
-  const due = await db.query<{ id: string }>(
-    `SELECT id FROM artifacts WHERE deleted_at IS NOT NULL AND deleted_at < $1::timestamptz
+  const due = await db.query<{ id: string; user_id: string | null }>(
+    `SELECT id, user_id FROM artifacts WHERE deleted_at IS NOT NULL AND deleted_at < $1::timestamptz
       ORDER BY cardinality(ancestor_ids) DESC`,
     [cutoff],
   );
@@ -172,6 +185,14 @@ export async function purgeTrash(opts: { olderThanDays?: number; now?: Date } = 
   await db.transaction(async (tx) => {
     for (const id of ids) await hardDelete(tx, id);
   });
+  /*
+   * THE ONE PLACE THAT SAYS `deleted`. The verb kept its meaning when the
+   * delete door stopped erasing anything, so it moved here with the erasure —
+   * one sentence per row, after the transaction (lib/analytics is
+   * fire-and-forget and may not run inside one), with no subject: a sweep is
+   * the product's own housekeeping and nobody asked for it.
+   */
+  for (const row of due.rows) void trackEvent('delete', row.id, { userId: row.user_id });
   return ids;
 }
 
