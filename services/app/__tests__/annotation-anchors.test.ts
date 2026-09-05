@@ -32,7 +32,7 @@ const DOC = '<p>An intro paragraph here.</p><div>Revenue grew 40% in Q3.</div>';
 interface AnnotationWire {
   id: string;
   orphaned: boolean;
-  anchor: { key: string; path: string; spanStart: number; spanEnd: number } | null;
+  anchor: { key: string; nodeId?: string; path: string; spanStart: number; spanEnd: number } | null;
   anchor_version: number | null;
   snippet: string;
 }
@@ -73,13 +73,14 @@ const put = async (token: string, id: string, markup: string) => {
 };
 
 describe('the annotation anchor', () => {
-  it('the first comment stamps an opaque anchor key into the source as a real edit — new version, new edit_id', async () => {
+  it('the first comment relates to existing source identity without editing the document', async () => {
     const { t, doc, ann } = await setup();
     const h = await head(t.token, doc.id);
-    expect(h.version).toBe(doc.version + 1);
-    expect(h.edit_id).not.toBe(doc.edit_id);
-    expect(h.markup).toContain(`<div data-annotation-anchor="${ann.anchor!.key}">`);
-    expect(ann.anchor_version).toBe(doc.version + 1);
+    expect(h.version).toBe(doc.version);
+    expect(h.edit_id).toBe(doc.edit_id);
+    expect(h.markup).not.toContain('data-annotation-anchor');
+    expect(ann.anchor?.nodeId).toBe(ann.anchor!.key);
+    expect(ann.anchor_version).toBe(doc.version);
   });
 
   it('an ordinary edit elsewhere leaves the anchor standing', async () => {
@@ -120,25 +121,18 @@ describe('the annotation anchor', () => {
     expect(restored.anchor?.key).toBe(key);
   });
 
-  it('revert below the comment\'s version orphans it; revert forward restores it', async () => {
+  it('reverting an archived source restores its comment relation by source id', async () => {
     const { t, doc, ann } = await setup();
-    const afterCreate = await head(t.token, doc.id);
+    await put(t.token,doc.id,'<p>replacement</p>');
+    expect((await list(t.token,doc.id))[0].orphaned).toBe(true);
     const back = await revertRoute(
       request(`/api/artifacts/${doc.id}/revert`, { method: 'POST', token: t.token, json: { version: doc.version } }),
       params({ id: doc.id }),
     );
     expect(back.status, await back.clone().text()).toBe(200);
     const [below] = await list(t.token, doc.id);
-    expect(below.orphaned).toBe(true);
-
-    const forward = await revertRoute(
-      request(`/api/artifacts/${doc.id}/revert`, { method: 'POST', token: t.token, json: { version: afterCreate.version } }),
-      params({ id: doc.id }),
-    );
-    expect(forward.status, await forward.clone().text()).toBe(200);
-    const [restored] = await list(t.token, doc.id);
-    expect(restored.orphaned).toBe(false);
-    expect(restored.anchor?.key).toBe(ann.anchor!.key);
+    expect(below.orphaned).toBe(false);
+    expect(below.anchor?.key).toBe(ann.anchor!.key);
   });
 
   it('a second comment on the same node reuses its key — no second attribute, no version bump', async () => {
@@ -153,7 +147,7 @@ describe('the annotation anchor', () => {
     expect(b.anchor?.key).toBe(ann.anchor!.key);
     const after = await head(t.token, doc.id);
     expect(after.version).toBe(h.version);
-    expect((after.markup.match(/data-annotation-anchor=/g) ?? []).length).toBe(1);
+    expect((after.markup.match(/data-annotation-anchor=/g) ?? []).length).toBe(0);
   });
 
   it('deleting the last thread on a node cleans its attribute back out of the source', async () => {
@@ -167,15 +161,13 @@ describe('the annotation anchor', () => {
     expect(h.markup).not.toContain('data-annotation-anchor');
   });
 
-  it('a stale base answers 409 with head — the live page retries with fresh coordinates', async () => {
-    const { doc, cookie } = await setup();
+  it('a prior comment does not stale the document head', async () => {
+    const { t, doc, cookie } = await setup();
     const res = await myCreateAnnotationRoute(
       request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', cookie: cookie, json: { path: '0', edit_id: doc.edit_id, body: 'x' } }),
       params({ id: doc.id }),
     );
-    expect(res.status).toBe(409); // doc.edit_id predates the first comment's own stamping edit
-    const body = (await res.json()) as { error: string; edit_id: string };
-    expect(body.error).toBe('stale');
-    expect(body.edit_id).not.toBe(doc.edit_id);
+    expect(res.status).toBe(201);
+    expect((await head(t.token, doc.id)).edit_id).toBe(doc.edit_id);
   });
 });

@@ -43,7 +43,8 @@ describe('node project through real routes',()=>{
     const moved=await s.edit({edit_id:base.edit_id,edits:[{old_string:'<Card id="card">Hello</Card>',new_string:''},{old_string:'<section id="dest">',new_string:'<section id="dest"><Card id="card">Hello</Card>'}]});
     expect(moved.status,await moved.clone().text()).toBe(200);
     const head=await s.read();expect(head.version).toBe(base.version+2);expect(head.markup).toContain('Current');expect(head.markup).toContain('<section id="dest"><Card id="card">Hello</Card></section>');
-    expect((await history(s.doc.id)).edits).toHaveLength(3);
+    const logged=(await history(s.doc.id)).edits;expect(logged).toHaveLength(3);
+    expect(logged[2].changes).toHaveLength(2);
   });
   it('validates only final JSX for dependent batch steps',async()=>{
     const s=await setup('<p id="para">Hi</p>');const base=await s.read();
@@ -63,5 +64,23 @@ describe('node project through real routes',()=>{
     const commented=await s.read();expect(commented.edit_id).toBe(base.edit_id);expect(commented.markup).toBe(base.markup);expect(await history(s.doc.id)).toEqual(before);
     const deleted=await deleteCommentRoute(request(`/api/my/artifacts/${s.doc.id}/annotations/${ann.id}`,{method:'DELETE',cookie}),{params:Promise.resolve({id:s.doc.id,annId:ann.id})});
     expect(deleted.status).toBeLessThan(300);expect((await s.read()).markup).toBe(base.markup);expect(await history(s.doc.id)).toEqual(before);
+  });
+  it('rejects mixed edit forms by presence without touching history',async()=>{
+    const s=await setup('<p id="para">Hi</p>');const before=await history(s.doc.id);
+    for(const body of [
+      {edit_id:s.doc.edit_id,old_string:'Hi',new_string:'Bye',edits:null},
+      {edit_id:s.doc.edit_id,old_string:'Hi',edits:[{old_string:'Hi',new_string:'Bye'}]},
+    ]) expect((await s.edit(body)).status).toBe(400);
+    expect(await history(s.doc.id)).toEqual(before);
+  });
+  it('retires removed source ids and never assigns them to generated replacements',async()=>{
+    const s=await setup('<main><p>A</p><p>B</p></main>');const base=await s.read();
+    const ids=bodyIds(base.markup) as string[];const removed=ids[1];
+    const changed=await s.edit({edit_id:base.edit_id,old_string:`<p id="${removed}">A</p>`,new_string:'<section>New</section>'});
+    expect(changed.status,await changed.clone().text()).toBe(200);
+    const head=await s.read();const nextIds=bodyIds(head.markup) as string[];
+    expect(nextIds).not.toContain(removed);
+    const db=await getDb();const ledger=await db.query<{source_id:string;retired_version:number|null}>('SELECT source_id,retired_version FROM artifact_source_ids WHERE artifact_id=$1',[s.doc.id]);
+    expect(ledger.rows.find(row=>row.source_id===removed)?.retired_version).toBe(head.version);
   });
 });

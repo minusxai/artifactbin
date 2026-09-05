@@ -109,7 +109,7 @@ describe('creating (browser door, owner only)', () => {
     expect(notMarkup.status).toBe(400);
   });
 
-  it('does not misreport an anchor edit publish refusal as bad_path', async () => {
+  it('does not mutate an invalid legacy document to create an anchor', async () => {
     const { doc, cookie } = await publish();
     const db = await harness.db();
     // Simulate a pre-existing row that does not satisfy today's no-inline-style rule. The
@@ -119,8 +119,8 @@ describe('creating (browser door, owner only)', () => {
     const res = await annotate(doc.id, cookie, { path: '0', edit_id: doc.edit_id, body: 'look here' });
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string; details?: Array<{ message: string }> };
-    expect(body.error).toBe('invalid_jsx');
-    expect(body.details?.[0]?.message).toContain('Inline style');
+    expect(body.error).toBe('bad_path');
+    expect((await db.query<{source:string}>('SELECT source FROM artifacts WHERE id=$1',[doc.id])).rows[0].source).toBe('<p style="color:red">pre-existing</p>');
   });
 
   it('a stranger\'s cookie gets the uniform 404; a cross-site owner cookie is refused', async () => {
