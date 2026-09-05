@@ -18,6 +18,7 @@
  * Exits non-zero on the first failing section's summary.
  */
 import { chromium } from 'playwright';
+import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { mintAnonResponse } from './lib/mint-anon.mjs';
@@ -151,7 +152,7 @@ console.log('█ AUTH');
 const EMAIL = `mxmx_test_appflows_${Date.now().toString(36)}@example.com`;
 await p.goto(B, { waitUntil: 'load' });
 // All navigation lives behind the hamburger.
-await p.click('[aria-label="Open menu"]');
+await openMenu(p);
 ok((await p.locator('[aria-label="Login"]').count()) === 1, 'the menu offers the login link when logged out');
 ok((await p.locator('[aria-label="Log in"]').count()) === 0, 'no duplicate "Log in" accessible name');
 await p.keyboard.press('Escape');
@@ -176,7 +177,7 @@ if (await revoke.count()) {
   await revoke.click(); await p.waitForTimeout(2500);
   ok((await fetch(`${B}/api/artifacts`, { headers: { Authorization: `Bearer ${claimToken}` } })).status === 401, 'revoked token stops working');
 } else ok(false, 'tokens page offers revoke');
-await p.click('[aria-label="Open menu"]');
+await openMenu(p);
 await p.click('[aria-label="Sign out"]'); await p.waitForTimeout(3000);
 ok(!(await signedIn()) && (await p.locator('[aria-label="Log in from header"]').count()) === 1, 'sign out clears the session');
 // Logging back in to the SAME address must reuse the account, not make a second.
@@ -227,8 +228,9 @@ console.log('█ VIEWER');
 // dataDoc belongs to token T, and ownership resolves SESSION FIRST — so while
 // the AUTH section's user is signed in, they simply don't own this document and
 // get no owner chrome. Drop back to the token that does.
-if (await p.locator('[aria-label="Open menu"]').count()) {
-  await p.click('[aria-label="Open menu"]');
+// Wherever the menu lives now (the bar, a document's own chrome, a framed
+// document's), open it if it is there at all.
+if (await openMenu(p, { timeout: 8000 }).then(() => true, () => false)) {
   if (await p.locator('[aria-label="Sign out"]').count()) {
     await p.click('[aria-label="Sign out"]');
     await p.waitForTimeout(2500);
@@ -255,7 +257,7 @@ let after = before;
 for (let i = 0; i < 32 && after === before; i++) { await p.waitForTimeout(250); after = (await surface().getByText('Total:').first().textContent()).trim(); }
 ok(before !== after, 'a bound select re-runs the query and the live Number follows');
 ok((await surface().locator('svg.marks, canvas').count()) > 0, 'chart renders');
-await p.click('[aria-label="Open artifact controls"]');
+await openArtifactControls(p);
 ok((await p.locator('[aria-label="Edit artifact"]').count()) === 1, 'artifact controls offer Edit to the owner');
 // LIGHT is the app's default and carries NO attribute (app/globals.css puts
 // it on bare `:root`), so DARK is the one that gets stamped — the reverse of

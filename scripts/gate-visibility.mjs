@@ -24,6 +24,7 @@
  *     node scripts/gate-visibility.mjs [base]
  */
 import { chromium } from 'playwright';
+import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
 
@@ -99,7 +100,7 @@ const sharingPut = () => page.waitForResponse(
   { timeout: 15000 },
 );
 // Reading has no bar; the artifact controls carry the sharing surface.
-await page.locator('[aria-label="Open artifact controls"]').click();
+await openArtifactControls(page);
 await page.locator('[aria-label="Share"]').first().click();
 const sharingDialog = page.locator('[role="dialog"][aria-label="Sharing"]');
 await sharingDialog.waitFor({ timeout: 15000 });

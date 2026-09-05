@@ -16,6 +16,7 @@
  *   usage: node scripts/gate-data-ux.mjs [base]
  */
 import { chromium } from 'playwright';
+import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
 const B = process.argv[2] ?? 'http://localhost:3030';
@@ -47,8 +48,8 @@ const tableText = await p.locator('table').innerText();
 ok(tableText.includes('—'), 'a blank cell reads as missing, not as empty text');
 ok(tableText.includes('01234'), 'leading zero preserved through ingest');
 ok((await p.locator('[aria-label="Edit artifact"]').count()) === 0, 'no edit button on a dataset');
-await p.click('[aria-label="Open menu"]');
-ok((await p.locator('[aria-label="Current page"]').textContent()).includes('Q3 Revenue'), 'the menu carries the typed title as page context');
+await openMenu(p);
+ok((await p.locator('nav[aria-label="Menu"] [aria-label="Current page"]').first().textContent()).includes('Q3 Revenue'), 'the menu carries the typed title as page context');
 await p.keyboard.press('Escape');
 const w = await p.evaluate(() => ({ d: document.documentElement.scrollWidth, w: window.innerWidth }));
 ok(w.d <= w.w, 'no horizontal page scroll');
@@ -107,7 +108,7 @@ await readerCtx.close();
 await becomeOwner(p, B, st.token);
 await p.goto(`${B}/a/${st.id}`, { waitUntil: 'load' });
 await p.waitForTimeout(2500);
-await p.click('[aria-label="Open artifact controls"]');
+await openArtifactControls(p);
 ok((await p.locator('[aria-label="Edit this document"], [aria-label="Edit artifact"]').count()) >= 1, 'a document still offers edit to its owner');
 
 // (The upload form's error paths — bad URL, private sheet — are exercised at

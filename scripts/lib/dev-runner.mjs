@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 
 import { declaredPort, loadDotEnv, resolveHmrPort, resolvePort } from './dev-env.mjs';
@@ -58,13 +59,26 @@ export async function runDev({ appOnly, args = [] }) {
 
   const runtime = spawn('node', ['scripts/build-story-runtime.mjs'], { cwd: APP_ROOT, stdio: 'inherit' });
   await new Promise((resolve) => runtime.on('exit', resolve));
+  watchRuntimeSources();
 
   const nodeEnv = appOnly && process.env.NODE_ENV === 'test'
     ? 'development'
     : (process.env.NODE_ENV ?? 'development');
   const child = spawn(
     'npx',
-    ['tsx', path.join(ROOT, 'server.ts'), ...(appOnly ? ['--app-only'] : args)],
+    /*
+     * LIVE. `tsx watch` restarts the server when any file it imports changes —
+     * the document renderer, the chrome CSS the server inlines, a route. The
+     * reader RUNTIME is a separate esbuild bundle (public/story), rebuilt by the
+     * watcher below; its manifest is read once at boot (lib/story/runtime-asset),
+     * so the manifest itself is on the watch list and a rebuild restarts too.
+     */
+    // node_modules is excluded by name: Vite bundles its config into
+    // node_modules/.vite-temp on every boot, and a watcher that sees that file
+    // appear and vanish restarts forever.
+    ['tsx', 'watch', '--clear-screen=false', '--include', 'public/story/manifest.json',
+      '--exclude', path.join(ROOT, 'node_modules/**'), '--exclude', '**/.vite-temp/**',
+      path.join(ROOT, 'server.ts'), ...(appOnly ? ['--app-only'] : args)],
     {
       cwd: APP_ROOT,
       stdio: 'inherit',
@@ -72,4 +86,36 @@ export async function runDev({ appOnly, args = [] }) {
     },
   );
   child.on('exit', (code, signal) => process.exit(signal ? 1 : (code ?? 1)));
+}
+
+/**
+ * The sources the reader runtime is bundled from. A change under any of them
+ * rebuilds public/story (a few seconds of esbuild), debounced and serialised;
+ * the new manifest then restarts the server through tsx's own watch list.
+ */
+const RUNTIME_SOURCES = ['lib/story-runtime', 'lib/story-ui', 'lib/story', 'lib/viz', 'lib/data/story', 'components/kit'];
+
+function watchRuntimeSources() {
+  let timer = null;
+  let building = false;
+  let again = false;
+  const rebuild = () => {
+    if (building) { again = true; return; }
+    building = true;
+    console.log('[dev] reader runtime source changed — rebuilding public/story');
+    const run = spawn('node', ['scripts/build-story-runtime.mjs'], { cwd: APP_ROOT, stdio: 'inherit' });
+    run.on('exit', () => {
+      building = false;
+      if (again) { again = false; rebuild(); }
+    });
+  };
+  const onChange = (_event, file) => {
+    if (!file || !/\.(tsx?|css|mjs|json)$/.test(String(file)) || String(file).includes('__tests__')) return;
+    clearTimeout(timer);
+    timer = setTimeout(rebuild, 250);
+  };
+  for (const dir of RUNTIME_SOURCES) {
+    const full = path.join(APP_ROOT, dir);
+    if (fs.existsSync(full)) fs.watch(full, { recursive: true }, onChange);
+  }
 }

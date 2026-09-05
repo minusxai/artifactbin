@@ -23,7 +23,7 @@ import { NotFoundPage } from './NotFound';
  */
 type Page =
   | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; folder: Parameters<typeof FolderPage>[0]['folder']; surface?: undefined }
-  | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; like?: { liked: boolean; count: number }; surface: Parameters<typeof ArtifactSurface>[0]; folder?: undefined };
+  | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; like?: { liked: boolean; count: number }; follow?: { userId: string; following: boolean; count: number } | null; surface: Parameters<typeof ArtifactSurface>[0]; folder?: undefined };
 
 export function ArtifactPage({ id: given }: { id?: string } = {}) {
   const params = useParams();
@@ -59,7 +59,7 @@ export function ArtifactPage({ id: given }: { id?: string } = {}) {
           props are what the DOCUMENT is, and this is what the viewer is to
           it — one fetch either way, and the export capture (which has no
           viewer) never carries it. */}
-      <ArtifactSurface {...page.surface} search={search} {...(page.like ? { like: page.like } : {})} />
+      <ArtifactSurface {...page.surface} search={search} {...(page.like ? { like: page.like } : {})} {...(page.follow !== undefined ? { follow: page.follow } : {})} />
     </ArtifactShell>
   );
 }

@@ -28,7 +28,7 @@
  * folder" control can only be an anchor with target="_top" that ASKS — the
  * SHELL, which holds the credential, is what can actually create one.
  */
-export const INTENTS = ['fork', 'comment', 'new-folder'] as const;
+export const INTENTS = ['fork', 'comment', 'new-folder', 'like', 'follow'] as const;
 export type Intent = (typeof INTENTS)[number];
 
 /** The parameter's name, in one place: the reader, the stripper and the writer. */

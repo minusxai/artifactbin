@@ -23,6 +23,7 @@
  *   node scripts/gate-secure-arch.mjs [base]
  */
 import { chromium } from 'playwright';
+import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
 
@@ -140,7 +141,7 @@ check(ownerText === 'SEC-PROBE-DOC', 'owner sees the shell with the document in 
  */
 const sandboxBefore = await owner.evaluate(() =>
   document.querySelector('iframe[title="artifact"]')?.getAttribute('sandbox') ?? null);
-await owner.click('[aria-label="Open artifact controls"]');
+await openArtifactControls(owner);
 await owner.click('[aria-label="Edit artifact"]');
 await owner.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 20000 });
 await owner.waitForTimeout(3000);
@@ -216,7 +217,7 @@ const anonFrameText = await anonPage.frameLocator('iframe[title="artifact"]').lo
 check(anonFrameText === 'ANON-OWNED', 'after exchange: the anonymous owner gets the shell (iframe) at the same URL');
 
 // ── 6b. the anonymous owner can DISCONNECT — the cookie's own sign-out ──────
-await anonPage.click('[aria-label="Open menu"]');
+await openMenu(anonPage);
 check(await anonPage.locator('[aria-label="Disconnect this browser"]').isVisible(), 'the menu offers Disconnect (not account Sign out) to an anonymous owner');
 check((await anonPage.locator('[aria-label="Sign out"]').count()) === 0, 'and not account Sign out');
 await Promise.all([

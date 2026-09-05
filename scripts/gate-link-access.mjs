@@ -27,6 +27,7 @@
  *   node scripts/gate-link-access.mjs [base]
  */
 import { chromium } from 'playwright';
+import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
 
@@ -74,7 +75,7 @@ const CONTROLS = '[role="dialog"][aria-label="Artifact controls"]';
 const controlsOpen = (page) => page.locator(CONTROLS).isVisible().catch(() => false);
 const openControls = async (page) => {
   if (await controlsOpen(page)) return;
-  await page.locator('[aria-label="Open artifact controls"]').click({ timeout: 15000 });
+  await openArtifactControls(page);
   await page.locator(CONTROLS).waitFor({ timeout: 15000 });
 };
 const closeControls = async (page) => {
@@ -183,7 +184,7 @@ try {
   check((await frame.locator('[aria-label="Edit selected text"]').count()) === 0,
     'the bubble offers annotate and NOT edit — the capability follows the role');
 
-  await frame.locator('[aria-label="Annotate selected text"]').click();
+  await frame.locator('[aria-label="Comment on selected text"]').click();
   const composer = await until(() => stranger.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
   check(composer === 1, 'the composer opens on those words');
   await stranger.locator('[aria-label="Annotation comment"]').fill('a stranger with the link, saying something');
@@ -196,7 +197,9 @@ try {
   check(saved === 1, 'the comment is stored — a person nobody invited left feedback');
 
   // ── 5. the owner never reloaded ──────────────────────────────────────────
-  const live = await until(() => owner.locator('[aria-label="Open annotation count"]').textContent().catch(() => null), (t) => t === '1', 20000);
+  // The count rides the framed document's comment glyph now (the page keeps it live).
+  const ownerFrame = owner.frames().find((f) => f !== owner.mainFrame()) ?? owner.mainFrame();
+  const live = await until(() => ownerFrame.locator('[data-mx-reader-count="comment"]').textContent().catch(() => null), (t) => t === '1', 20000);
   check(live === '1', 'the owner watches the count arrive over the live stream — no reload');
 
   // ── 6. logged OUT on the same link: the anonymous ceiling ────────────────

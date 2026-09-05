@@ -45,6 +45,8 @@ import {
 } from '@/lib/story-runtime/contract';
 
 export interface AnnotationLayerProps {
+  /** Every change to the list this layer holds — creates, replies, resolves — so the page's count can follow it. */
+  onAnnotationsChange?: (annotations: AnnotationWire[]) => void;
   id: string;
   frameRef: { current: HTMLIFrameElement | null };
   sessionNonce: string | null;
@@ -749,9 +751,13 @@ function Thread({
 
 export default function AnnotationLayer({
   id, frameRef, sessionNonce, railOpen, currentEditId, liveAnnotations, showViewComments,
-  onRailOpenChange, initialSelection = null, topOffset, beforeCreate,
+  onRailOpenChange, initialSelection = null, topOffset, beforeCreate, onAnnotationsChange,
 }: AnnotationLayerProps) {
   const [annotations, setAnnotations] = useState<AnnotationWire[]>([]);
+  // The page's own count (the badge on the comment glyph) follows THIS list:
+  // a thread resolved or opened here is reflected at once, not when the live
+  // stream next says so — which in edit mode, with the stream off, is never.
+  useEffect(() => { onAnnotationsChange?.(annotations); }, [annotations, onAnnotationsChange]);
   const [resolvedList, setResolvedList] = useState<AnnotationWire[] | null>(null);
   const [openResolvedId, setOpenResolvedId] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);

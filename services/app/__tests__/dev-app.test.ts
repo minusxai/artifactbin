@@ -189,7 +189,13 @@ fs.writeFileSync(${JSON.stringify(shimOut)}, JSON.stringify({
   it('spawns `tsx server.ts --app-only` with cwd services/app, the derived ports, and the service URLs unset', () => {
     expect(res.error).toBeUndefined();
     expect(res.status).toBe(0);
-    expect(spawned.argv).toEqual(['tsx', SERVER_TS, '--app-only']);
+    // `tsx watch`, so a server-side change restarts the server; node_modules
+    // is excluded (Vite bundles its config there on every boot) and the reader
+    // runtime's manifest is included (its rebuild restarts the server too).
+    expect(spawned.argv.slice(0, 2)).toEqual(['tsx', 'watch']);
+    expect(spawned.argv.slice(-2)).toEqual([SERVER_TS, '--app-only']);
+    expect(spawned.argv).toContain('--include');
+    expect(spawned.argv).toContain('--exclude');
     expect(spawned.cwd).toBe(APP_ROOT);
     expect(spawned.env.APP__PORT).toBe('5221'); // the derived port reaches the child
     expect(spawned.env.APP__HMR_PORT).toBe('5222');

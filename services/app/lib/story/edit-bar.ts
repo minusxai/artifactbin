@@ -8,6 +8,9 @@
  */
 export const EDIT_BAR_H = 48;
 
+/** The page's own bar, drawn above the editor bar in edit mode (components/PageChrome AppBar). */
+export const APP_BAR_H = 44;
+
 /**
  * The RIGHT RAIL's width, reserved the same way: the page narrows the
  * document's viewport by exactly this while the rail is open, so the rail

@@ -83,6 +83,11 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     role,
     kind,
     like: { liked: viewerId ? await has(viewerId, 'like', artifact.id) : false, count: await count('like', artifact.id) },
+    // The follow control is keyed by the AUTHOR's id. Null for an anonymous
+    // document, and for the owner, who has nobody here to follow.
+    follow: artifact.user_id && artifact.user_id !== viewerId
+      ? { userId: artifact.user_id, following: viewerId ? await has(viewerId, 'follow', artifact.user_id) : false, count: await count('follow', artifact.user_id) }
+      : null,
     surface: {
       captureKey: exporting ? key : null,
       id: artifact.id,

@@ -1,7 +1,7 @@
 /** The page-level hamburger keeps the old navigation without reserving a bar. */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { PageMenu } from '@/components/PageChrome';
+import { AppBar, PageMenu } from '@/components/PageChrome';
 import { router, resetRouter } from '@/test/setup/router';
 
 beforeEach(resetRouter);
@@ -14,12 +14,14 @@ describe('page menu', () => {
     expect(container.querySelector('header')).toBeNull();
   });
 
-  it('becomes a flat, full-height toolbar action when editor chrome is present', () => {
-    render(<PageMenu authed toolbar />);
-    const burger = screen.getByLabelText('Open menu');
-    expect(burger).toHaveAttribute('data-chrome-placement', 'toolbar');
-    expect(burger).toHaveClass('fixed', 'left-0', 'top-0', 'h-12', 'w-12', 'border-0', 'bg-transparent');
-    expect(burger).not.toHaveClass('rounded-full', 'shadow-sm');
+  it('in edit mode the page bar carries the account button, fixed over the editor, with the mode named in the middle', () => {
+    render(<AppBar fixed center={<span aria-label="Edit mode">edit mode</span>} />);
+    const bar = screen.getByLabelText('Page bar');
+    expect(bar).toHaveClass('fixed', 'top-0');
+    expect(bar).toContainElement(screen.getByLabelText('Open menu'));
+    expect(bar).toContainElement(screen.getByLabelText('Open page controls'));
+    expect(screen.getByLabelText('Edit mode')).toHaveTextContent('edit mode');
+    expect(screen.queryByLabelText('Current page')).toHaveTextContent('artifactbin');
   });
 
   it('offers the complete navigation and account action when opened', () => {

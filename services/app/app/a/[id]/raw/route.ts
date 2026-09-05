@@ -19,7 +19,11 @@
  * Keep the repo middleware-free so nothing rewrites them.
  */
 import { canReadArtifact, dataflowForRow, declarationsForRow, getArtifactById, linkRoleOf, refDataForRow } from '@/lib/artifacts';
-import { withIntent } from '@/lib/intent';
+import { withIntent, type Intent } from '@/lib/intent';
+import { count, has } from '@/lib/relations';
+import { countOpenAnnotations } from '@/lib/annotations';
+import { roleFor } from '@/lib/viewer';
+import { canAnnotate } from '@/lib/share-roles';
 import { canonicalArtifactPath } from '@/lib/urls';
 import { roleBehindLogin } from '@/lib/share-roles';
 import { trackEvent } from '@/lib/analytics';
@@ -351,7 +355,29 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         chrome ? forkedFromCredit(artifact.forked_from) : Promise.resolve(null),
       ]);
       const runtime = storyRuntimeAssets();
+      /*
+       * THE DOORS. A top-level document holds no session, so like, follow and
+       * comment are ASKS it carries: a viewer's go straight back to this
+       * document with the intent, and the shell performs it; a stranger's go
+       * through login first. The same shape the fork door has always had.
+       */
+      const door = (kind: Intent) => (viewer
+        ? `/a/${artifact.id}${withIntent('', kind)}`
+        : `/login?callbackUrl=${encodeURIComponent(`/a/${artifact.id}${withIntent('', kind)}`)}`);
+      const viewerId = viewer?.userId ?? null;
+      const reactions = chrome
+        ? {
+          like: { count: await count('like', artifact.id), liked: viewerId ? await has(viewerId, 'like', artifact.id) : false, href: door('like') },
+          follow: artifact.user_id && artifact.user_id !== viewerId
+            ? { following: viewerId ? await has(viewerId, 'follow', artifact.user_id) : false, count: await count('follow', artifact.user_id), href: door('follow') }
+            : null,
+          // Unresolved threads — the number, not the words, and only for someone
+          // who may take part (the page hands the count to the same people).
+          comment: { count: canAnnotate(await roleFor(artifact, actor)) ? await countOpenAnnotations(artifact.id) : 0, href: door('comment') },
+        }
+        : null;
       const html = await buildStoryDocument({
+        reactions,
         assetUrls,
         chrome,
         editable,
@@ -371,7 +397,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           }
           : null,
     help: chrome ? { docs: `${base}/docs`, tokens: `${base}/tokens/new` } : null,
-        credits: chrome ? { creatorUsername, forkedFrom } : null,
+        author: chrome ? { username: creatorUsername, forkedFrom } : null,
         /*
          * THE WAY IN. A guest — no account, so ANONYMOUS_CEILING holds them at
          * `viewer` — on a link its owner set to `can comment` or `can edit` is
@@ -401,6 +427,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
          * the document only carries the ASK — it is sandboxed at an opaque
          * origin and holds no session, so it could not POST the fork itself.
          */
+        edit: chrome && editable,
+        login: chrome && !viewer ? { href: `/login?callbackUrl=${encodeURIComponent(`/a/${artifact.id}`)}` } : null,
         fork: chrome ? { href: viewer ? `/a/${artifact.id}${withIntent('', 'fork')}` : `/login?callbackUrl=${encodeURIComponent(`/a/${artifact.id}${withIntent('', 'fork')}`)}` } : null,
         source: artifact.source ?? '',
         compiledCss,

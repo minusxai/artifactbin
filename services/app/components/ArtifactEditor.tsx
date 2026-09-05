@@ -72,7 +72,7 @@ export interface EditorSeed {
   dataflow?: StoryIslandDataflow | null;
 }
 
-export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, sessionNonce, initialSelectionPath = null, onComment, onToggleComments, commentsOpen = false, commentCount = 0 }: {
+export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, sessionNonce, initialSelectionPath = null, onComment, onToggleComments, commentsOpen = false, commentCount = 0, rightInset = 0 }: {
   id: string;
   seed?: EditorSeed;
   onExit: () => void;
@@ -89,6 +89,7 @@ export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, s
   onComment?: (selection: StoryEditSelection) => void;
   onToggleComments?: () => void;
   commentsOpen?: boolean;
+  rightInset?: number;
   commentCount?: number;
   /** Where they are NOW, for the document they go back to. */
   /**
@@ -239,6 +240,7 @@ export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, s
       onComment={onComment}
       onToggleComments={onToggleComments}
       commentsOpen={commentsOpen}
+      rightInset={rightInset}
       commentCount={commentCount}
       onDone={onExit}
     />

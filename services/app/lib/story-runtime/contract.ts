@@ -269,6 +269,43 @@ export interface StoryReaderModeMessage {
   mode: 'light' | 'dark';
 }
 
+/**
+ * A FRAMED document's reader chrome asks its trusted parent to act. The chrome
+ * is drawn inside the document so it looks the same for everyone, but a frame
+ * holds no session: like, comment, follow, edit, share and the two panels are
+ * the PAGE's to perform, and it answers `share` so the frame can say "copied".
+ */
+export const STORY_READER_ACTION_MESSAGE = 'mx:reader-action';
+export type StoryReaderActionKind = 'like' | 'comment' | 'share' | 'follow' | 'edit' | 'controls' | 'menu';
+export interface StoryReaderActionMessage {
+  type: typeof STORY_READER_ACTION_MESSAGE;
+  kind: StoryReaderActionKind;
+  author?: string | null;
+}
+export const STORY_READER_ACTION_RESULT_MESSAGE = 'mx:reader-action-result';
+export interface StoryReaderActionResultMessage {
+  type: typeof STORY_READER_ACTION_RESULT_MESSAGE;
+  kind: StoryReaderActionKind;
+  ok: boolean;
+  /** `like`: the door's answer. */
+  liked?: boolean;
+  /** `follow`: the door's answer. */
+  following?: boolean;
+  count?: number;
+}
+/**
+ * The parent sets the framed chrome's mode: `on` (the reveal-on-scroll rule),
+ * `off` (gone), or `pinned` — held at the top for EDIT MODE, where the page's
+ * editor toolbar sits under it; `inset` is that toolbar's height, which the
+ * document adds under its own bar so nothing it shows is covered.
+ */
+export const STORY_READER_CHROME_MESSAGE = 'mx:reader-chrome';
+export interface StoryReaderChromeMessage {
+  type: typeof STORY_READER_CHROME_MESSAGE;
+  mode: 'on' | 'off' | 'pinned';
+  inset?: number;
+}
+
 /** A framed document's scroll port lives across an opaque-origin boundary
  * from the page chrome. This unprivileged sample lets the parent apply its
  * mobile bar visibility policy; the parent still checks the source window. */
@@ -276,6 +313,8 @@ export const STORY_SCROLL_MESSAGE = 'mx:reader-scroll';
 export interface StoryScrollMessage {
   type: typeof STORY_SCROLL_MESSAGE;
   scrollY: number;
+  /** The document's own scrollbar width, so page chrome drawn over the frame can stop where the document's does. */
+  gutter?: number;
   /**
    * "I have nothing further to scroll to" — the ANSWER, not the ingredients.
    * The parent cannot measure an opaque frame's height, so it used to compare

@@ -29,6 +29,10 @@ const framed = (scrollY: number, scrollHeight: number) => {
   set(window, 'scrollY', scrollY);
   set(window, 'innerHeight', 800);
   set(document.documentElement, 'scrollHeight', scrollHeight);
+  // A 15px scrollbar: the sample carries the gutter so page chrome over the
+  // frame can end where the document's own bar does.
+  set(window, 'innerWidth', 1000);
+  set(document.documentElement, 'clientWidth', 985);
   // The module batches samples into one animation frame; run it inline so the
   // assertion is about the message and not about jsdom's timer.
   set(window, 'requestAnimationFrame', (cb: FrameRequestCallback) => { cb(0); return 0; });
@@ -42,14 +46,14 @@ describe('the framed scroll sample', () => {
   it('carries the offset and says the document is not at its end', async () => {
     const posts = framed(500, 4000);
     await import('@/lib/story-runtime/anchor-entry');
-    expect(posts.at(-1)).toEqual({ type: STORY_SCROLL_MESSAGE, scrollY: 500, atBottom: false });
+    expect(posts.at(-1)).toEqual({ type: STORY_SCROLL_MESSAGE, scrollY: 500, atBottom: false, gutter: 15 });
   });
 
   it('says the document IS at its end, with the same 4px slack the page uses', async () => {
     // 3196 + 800 = 3996, which is 4000 - 4: the last scrollable pixel.
     const posts = framed(3196, 4000);
     await import('@/lib/story-runtime/anchor-entry');
-    expect(posts.at(-1)).toEqual({ type: STORY_SCROLL_MESSAGE, scrollY: 3196, atBottom: true });
+    expect(posts.at(-1)).toEqual({ type: STORY_SCROLL_MESSAGE, scrollY: 3196, atBottom: true, gutter: 15 });
   });
 
   it('samples once at load and again on every scroll', async () => {
@@ -58,7 +62,7 @@ describe('the framed scroll sample', () => {
     expect(posts).toHaveLength(1);
     set(window, 'scrollY', 900);
     window.dispatchEvent(new Event('scroll'));
-    expect(posts.at(-1)).toEqual({ type: STORY_SCROLL_MESSAGE, scrollY: 900, atBottom: false });
+    expect(posts.at(-1)).toEqual({ type: STORY_SCROLL_MESSAGE, scrollY: 900, atBottom: false, gutter: 15 });
     expect(posts).toHaveLength(2);
   });
 });

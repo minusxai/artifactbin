@@ -12,6 +12,7 @@
  * browser.  usage: node scripts/gate-concurrent-edit.mjs [base]
  */
 import { chromium } from 'playwright';
+import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3000';
@@ -123,7 +124,7 @@ check(/Typed by the human\./.test(await surface().locator('body').innerText()), 
   check(/Written while watching/.test(watched ?? ''), 'the viewer saw the live edit');
 
   // Reading is chromeless until the artifact controls are opened.
-  await viewer.click('[aria-label="Open artifact controls"]');
+  await openArtifactControls(viewer);
   await viewer.click('[aria-label="Edit artifact"]');
   await viewer.waitForTimeout(4000);
   const inEditor = await viewer.frames().find((f) => f !== viewer.mainFrame())?.locator('body').innerText();

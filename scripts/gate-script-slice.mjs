@@ -15,6 +15,7 @@
  * usage: node scripts/gate-script-slice.mjs [base]   (default :3040)
  */
 import { chromium } from 'playwright';
+import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { becomeOwner } from './lib/start-doc.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
 
@@ -219,7 +220,7 @@ const documentFrame = () => page.frames().find((f) => /\/raw/.test(f.url()));
 await page.evaluate(() => { document.querySelector('iframe[title="artifact"]').__probe = 'same-frame'; });
 const runsBefore = await documentFrame().evaluate("document.querySelectorAll('#script-made').length").catch(() => 0);
 
-await page.click('[aria-label="Open artifact controls"]');
+await openArtifactControls(page);
 await page.click('[aria-label="Edit artifact"]');
 await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 30000 });
 await page.waitForTimeout(4000);

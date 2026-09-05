@@ -18,6 +18,7 @@
  *   usage: node scripts/gate-annotations.mjs [base]
  */
 import { chromium } from 'playwright';
+import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
@@ -77,12 +78,12 @@ const run = async () => {
     }, (v) => v === true, 15000);
     ok(await bubble.isVisible(), 'selecting text in view mode raises the action bubble inside the document');
     ok(await frame.locator('[aria-label="Edit selected text"]').count() === 1
-      && await frame.locator('[aria-label="Annotate selected text"]').count() === 1,
+      && await frame.locator('[aria-label="Comment on selected text"]').count() === 1,
       'the owner is offered both edit and annotate');
 
     // Choosing Annotate opens the composer on those exact words — and enters
     // NOTHING. Commenting is a layer, so no hash moves and no mode opens.
-    await frame.locator('[aria-label="Annotate selected text"]').click();
+    await frame.locator('[aria-label="Comment on selected text"]').click();
     const seeded = await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
     ok(seeded === 1, 'the composer opens on the selected words — no second click on the same text');
     ok(await page.evaluate(() => location.hash) === '', 'commenting enters no mode: the hash is untouched');
@@ -100,11 +101,11 @@ const run = async () => {
     ok(true, 'saving tints the commented node');
 
     // ── the rail is a PANEL, not a mode ───────────────────────────────────
-    await page.locator('[aria-label="Open artifact controls"]').click();
+    await openArtifactControls(page);
     await page.locator('[aria-label="Toggle comments"]').click();
     await page.locator('[aria-label="Annotation sidebar"]').waitFor({ timeout: 8000 });
     ok(await page.evaluate(() => location.hash) === '', 'opening the rail moves no hash');
-    await page.locator('[aria-label="Open artifact controls"]').click();
+    await openArtifactControls(page);
     ok(await page.locator('[aria-label="Edit artifact"]').count() === 1, 'edit stays offered while the rail is open');
     await page.keyboard.press('Escape');
     const thread = page.locator('[aria-label="Annotation thread"]');
@@ -120,7 +121,8 @@ const run = async () => {
     // so it stays — and a compact identity marker floats beside it.
     const stillTinted = await until(() => frame.locator('#figure[data-mx-annotated]').count(), (n) => n === 1, 5000);
     ok(stillTinted === 1, 'the tint is ambient: a commented node stays marked with no rail and no mode');
-    ok((await page.locator('[aria-label="Open annotation count"]').textContent()) === '1', 'the comments button carries the unresolved count');
+    // The count rides the framed document's comment glyph now, kept live by the page.
+    ok((await frame.locator('[data-mx-reader-count="comment"]').textContent())?.trim() === '1', 'the comment glyph carries the unresolved count');
     const viewComments = page.locator('[aria-label="Open annotation comments"]');
     await viewComments.waitFor({ timeout: 8000 });
     const viewComment = page.locator('[aria-label^="Open annotation conversation by"]');
@@ -151,7 +153,7 @@ const run = async () => {
     // There is no second visibility state: annotations remain ambient and the
     // artifact controls only open the full rail.
     await page.mouse.move(400, 20);
-    await page.locator('[aria-label="Open artifact controls"]').click();
+    await openArtifactControls(page);
     ok(await page.locator('[aria-label="Hide comments"], [aria-label="Show comments"]').count() === 0,
       'artifact controls carry no annotation visibility toggle');
     await page.keyboard.press('Escape');
@@ -199,8 +201,8 @@ const run = async () => {
     ok(gone === 0, 'the resolve reaches the open tab live: the highlight lifts with no reload');
     const threadGone = await until(() => page.locator('[aria-label="Annotation thread"]').count(), (n) => n === 0, 8000);
     ok(threadGone === 0, 'the open-thread list empties live too');
-    const badgeGone = await until(() => page.locator('[aria-label="Open annotation count"]').count(), (n) => n === 0, 5000);
-    ok(badgeGone === 0, 'the count badge drops with the resolve');
+    const badgeGone = await until(() => frame.locator('[data-mx-reader-count="comment"]').textContent().then((t) => (t ?? '').trim()), (t) => t === '', 5000);
+    ok(badgeGone === '', 'the count badge drops with the resolve');
     const resolvedCard = await until(() => page.locator('[aria-label="Resolved annotation thread"]').count(), (n) => n === 1, 8000);
     ok(resolvedCard === 1, 'resolved history lists the closed thread below the open list');
 
@@ -219,11 +221,18 @@ const run = async () => {
     // leaving edit mode. The comment's anchor is a real CAS edit and the
     // editor answers a 409 by adopting the server's document, so this is
     // exactly where un-drained typing would be thrown away.
-    await page.locator('[aria-label="Open artifact controls"]').click();
+    await openArtifactControls(page);
     await page.locator('[aria-label="Edit artifact"]').click();
     await until(() => page.evaluate(() => location.hash), (h) => h === '#edit');
+    // In edit mode the comments control lives in the settings panel, opened
+    // through the document's own (pinned) chrome — no button in the editor bar.
+    await openArtifactControls(page);
     const editComments = await until(() => page.locator('[aria-label="Toggle comments"]').count(), (n) => n === 1, 5000);
     ok(editComments === 1, 'the comments control survives entering edit mode');
+    // Put the panel away: its click-away scrim covers the frame, and the
+    // paragraph click below must reach the document.
+    await page.keyboard.press('Escape');
+    await until(() => page.locator('[aria-label="Artifact controls"]').count(), (n) => n === 0, 5000);
 
     // Clicked-until-it-takes, like every other in-frame click here: the edit
     // chunk and the frame's re-render after the agent's PUT both land a beat
@@ -365,7 +374,7 @@ async function quoteLeg(browser) {
   }, (v) => v === true, 20000);
   ok(await bubble.isVisible(), 'a drag across two paragraphs raises the bubble');
 
-  await frame.locator('[aria-label="Annotate selected text"]').click();
+  await frame.locator('[aria-label="Comment on selected text"]').click();
   await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
   await page.locator('[aria-label="Annotation comment"]').fill('does this hold for both?');
   await page.locator('[aria-label="Save annotation"]').click();
@@ -491,7 +500,7 @@ async function markdownLeg(browser) {
 
   // Open the rail, and open the thread inside it: the compact surfaces show
   // the plain text on purpose, so only the opened thread renders the tree.
-  await page.locator('[aria-label="Open artifact controls"]').click();
+  await openArtifactControls(page);
   await page.locator('[aria-label="Toggle comments"]').click();
   await page.locator('[aria-label="Annotation sidebar"]').waitFor({ timeout: 8000 });
   await page.keyboard.press('Escape');
@@ -602,7 +611,7 @@ async function foldLeg(browser) {
   }, [id, ann.id, HUMAN_LAST_WORD]);
   ok(lastWord === 200, `the human answers shortly underneath (${lastWord})`);
 
-  await page.locator('[aria-label="Open artifact controls"]').click();
+  await openArtifactControls(page);
   await page.locator('[aria-label="Toggle comments"]').click();
   // No Escape here, unlike the desktop legs: on a phone the rail IS a sheet,
   // and Escape is how a sheet closes.
@@ -670,9 +679,8 @@ async function foldLeg(browser) {
   };
   const folded = await readSettled();
   ok(folded?.clamped === true, 'the sixty-line agent answer arrives folded');
-  // Without this, a hidden bar makes the bound below the SHEET's rect again —
-  // the bound that passed while the reply sat invisible behind the bar.
-  ok(folded?.barMeasured === true, 'the action bar is up: the bound below is the visible area, not the sheet rect');
+  // The page's floating action bar is gone (the chrome lives in the document
+  // now), so the sheet's own rect IS the visible area: nothing covers it.
   ok(/^show more \(\d+ lines\)$/.test(folded?.control ?? ''), `the fold offers to open itself (${JSON.stringify(folded?.control)})`);
   ok(folded?.hasLastLine === true, 'clamped, not truncated: the whole answer is still in the document');
   ok(!!folded?.reply

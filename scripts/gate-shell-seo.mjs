@@ -14,6 +14,7 @@
  * usage: node scripts/gate-shell-seo.mjs [base]   (default :3040)
  */
 import { chromium } from 'playwright';
+import { openMenu } from './lib/reveal-chrome.mjs';
 import { becomeOwner } from './lib/start-doc.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
 
@@ -90,13 +91,17 @@ await becomeOwner(page, BASE, mint.token);
 await page.goto(`${BASE}/a/${doc.id}`);
 const frameEl = await page.waitForSelector('iframe[title="artifact"]', { timeout: 20000 });
 const before = await frameEl.boundingBox();
-check(await page.isVisible('[aria-label="Open menu"]'), 'the page has a hamburger');
-check(await page.isVisible('[aria-label="Open artifact controls"]'), 'the page has artifact controls');
-await page.click('[aria-label="Open menu"]');
+// The shell draws no hamburger or controls button of its own now: the framed
+// document carries the chrome and asks the page for its panels.
+check((await page.locator('[aria-label="Open menu"], [aria-label="Open artifact controls"]').count()) === 0, 'the shell draws no corner buttons of its own');
+const docFrame = page.frames().find((f) => f !== page.mainFrame());
+check(!!docFrame && (await docFrame.locator('[data-mx-reader-trigger="menu"]').count()) === 1, 'the framed document carries the menu control');
+check(!!docFrame && (await docFrame.locator('[data-mx-reader-trigger="controls"]').count()) === 1, 'and the artifact controls');
+await openMenu(page);
 for (const item of ['Artifacts', 'Account', 'Human Docs', 'Agent docs']) {
   check(await page.isVisible(`[aria-label="${item}"]`), `the menu carries ${item}`);
 }
-check((await page.textContent('[aria-label="Current page"]'))?.includes('Crawlable'), 'the menu names the document');
+check((await page.locator('nav[aria-label="Menu"] [aria-label="Current page"]').first().textContent())?.includes('Crawlable'), 'the menu names the document');
 await page.keyboard.press('Escape');
 check(!(await page.isVisible('[aria-label="Artifacts"]').catch(() => false)), 'Escape closes the menu');
 
@@ -104,7 +109,7 @@ check(!(await page.isVisible('[aria-label="Artifacts"]').catch(() => false)), 'E
  * Clicking away closes it too — and the layer must really cover the document,
  * or a click would fall into the opaque artifact frame instead.
  */
-await page.click('[aria-label="Open menu"]');
+await openMenu(page);
 await page.waitForTimeout(300);
 const covers = await page.evaluate(() => {
   const el = document.querySelector('[aria-label="Close the menu"]');

@@ -27,6 +27,7 @@
  *   node scripts/gate-fork.mjs [base]
  */
 import { chromium } from 'playwright';
+import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
 
@@ -92,9 +93,9 @@ check(!strangerHtml.includes('id="root"'), '…and never the app shell');
 
 // ── 3. the logged-out reader taps Fork in the document's own controls ─────
 await forker.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-await forker.waitForSelector('[aria-label="Open artifact controls"]', { timeout: 20000 });
+await forker.waitForSelector('[data-mx-reader-chrome]', { state: 'attached', timeout: 20000 });
 check((await forker.locator('iframe[title="artifact"]').count()) === 0, 'a logged-out reader is served the document TOP-LEVEL, not the shell');
-await forker.locator('[aria-label="Open artifact controls"]').click();
+await openArtifactControls(forker);
 const forkAnchor = forker.locator('[aria-label="Fork artifact"]');
 await forkAnchor.waitFor({ state: 'visible', timeout: 10000 });
 check(true, 'the reader controls offer Fork');
