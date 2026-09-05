@@ -25,6 +25,8 @@ export interface TableResult {
 /** A query that could not run: the engine's own message, for the author. */
 export interface QueryFailure {
   error: string;
+  /** Stable machine-readable reason for a guarded edit cardinality failure. */
+  code?: 'row_changed' | 'row_not_unique';
   /** Set when the failure was our timeout rather than the author's SQL. */
   timedOut?: boolean;
   /** Set when a WRITE would have taken the table past the row cap (nothing was stored). */
@@ -63,6 +65,10 @@ export interface MutationInput {
   table: { name: string; rows: Row[]; columns: DatasetColumn[] };
   sql: string;
   params: Record<string, Scalar>;
+  /** Original row values, exposed to SQL as the native typed STRUCT `$_row`. */
+  row?: { columns: DatasetColumn[]; values: Record<string, Scalar> };
+  /** Required changed-row count for server-controlled writes such as cell edits. */
+  expectedAffected?: number;
   /** The most rows the table may hold AFTER the write. */
   limit?: number;
   timeoutMs?: number;
@@ -84,7 +90,13 @@ export interface DryRunResult {
 }
 export interface DryRunMutationsInput {
   tables: Record<string, { columns: DatasetColumn[] }>;
-  mutations: Array<{ name: string; sql: string; target: string }>;
+  mutations: Array<{
+    name: string;
+    sql: string;
+    target: string;
+    /** Shape of `$_row`; dry runs bind a typed STRUCT whose fields are NULL. */
+    row?: { columns: DatasetColumn[] };
+  }>;
   paramNames: string[];
 }
 export interface DryRunMutationsResult { errors: Array<{ name: string; error: string }> }
