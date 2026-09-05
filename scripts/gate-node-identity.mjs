@@ -43,13 +43,16 @@ const failed = await call(`${path}/edits`,'POST',{edit_id:beforeFailure.edit_id,
 assert.equal(failed.status,400);
 assert.equal((await failed.json()).edit_index,1);
 assert.equal((await read()).edit_id,beforeFailure.edit_id);
-for (const action of [{reply:'Moved successfully'},{resolve:true},{resolve:false}]) {
+for (const action of [{reply:'Moved successfully'},{resolve:true},{reopen:true}]) {
   await ok(`${commentPath}/${comment.id}`,'POST',action,cookie);
   assert.equal((await read()).edit_id,beforeFailure.edit_id,'comment action cannot edit source');
 }
 await ok(`${commentPath}/${comment.id}`,'DELETE',undefined,cookie);
 assert.equal((await read()).edit_id,beforeFailure.edit_id);
-const reverted = await ok(`${path}/revert`,'POST',{version:initial.version});
+// Whole-document replacement archives the previous head; rapid edits may
+// deliberately coalesce intermediate version snapshots.
+await ok(path,'PUT',{markup:beforeFailure.markup+'<p id="temporary">Temporary</p>'});
+const reverted = await ok(`${path}/revert`,'POST',{version:beforeFailure.version});
 assert(reverted.markup.includes('<Card id="card">Hello</Card>'));
 assert.equal(reverted.markup.match(/id="card"/g)?.length,1);
 console.log('PASS: atomic stale-base move, rollback, all five relation-only actions, identity-preserving revert');
