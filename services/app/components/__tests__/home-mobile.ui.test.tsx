@@ -35,13 +35,13 @@ const doc = (id: string, day: number, extra: Partial<ShelfRow> = {}): ShelfRow =
 });
 
 describe('the shelf reads as ONE shelf on a phone', () => {
-  it('hangs each item classification and controls over its preview', () => {
+  it('keeps icon view controls over the preview', () => {
     render(<Shelf rows={[doc('a', 28, { visibility: 'private' }), doc('b', 27, { visibility: 'public' })]} actions="full" />);
 
     const card = screen.getByLabelText('Open Doc a').closest('li')!;
     const overlay = screen.getByLabelText('Doc a card controls');
     expect(overlay.parentElement).toBe(card.querySelector('img')!.parentElement!.parentElement);
-    expect(overlay).toHaveClass('absolute', 'inset-x-2.5', 'top-2.5', 'justify-between');
+    expect(overlay).toHaveClass('absolute', 'z-10', 'justify-between');
     expect(overlay).toContainElement(screen.getByLabelText('Doc a is private'));
     expect(overlay).toContainElement(screen.getByLabelText('Share Doc a'));
     expect(overlay).toContainElement(screen.getByLabelText('Edit Doc a'));

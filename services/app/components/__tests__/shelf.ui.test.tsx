@@ -20,11 +20,49 @@ const asset = (id: string, day: number, format = 'dataset'): ShelfRow => ({
 });
 
 afterEach(() => {
+  localStorage.clear();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 describe('Shelf — grid and list views', () => {
+  it('remembers the view across remounts and ignores unknown stored values', () => {
+    localStorage.setItem('artifactbin:shelf-view', 'unknown');
+    const first = render(<Shelf rows={[doc('one', 28)]} />);
+    expect(screen.getByLabelText('Grid view')).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByLabelText('Gallery view'));
+    first.unmount();
+    render(<Shelf rows={[doc('one', 28)]} />);
+    expect(screen.getByLabelText('Gallery view')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('Artifact gallery')).toBeInTheDocument();
+  });
+
+  it('keeps folders compact in icon/list views and offers previews in Gallery', () => {
+    const rows = [
+      doc('folder', 28, { format: 'folder', title: 'Reports' }),
+      doc('root', 28, { description: 'A document summary.' }),
+      ...['one', 'two', 'three', 'four'].map((id) => doc(id, 27, { parent_id: 'folder' })),
+    ];
+    render(<Shelf rows={rows} scopeParentId={null} actions="full" />);
+    expect(screen.queryByLabelText('Preview of folder Reports')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Gallery view'));
+    expect(screen.getByLabelText('Gallery view')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('Artifact gallery')).toHaveTextContent('A document summary.');
+    const controls = screen.getByLabelText('Doc root card controls');
+    expect(controls).toHaveClass('relative');
+    expect(controls.parentElement).not.toContainElement(screen.getByLabelText('Open Doc root').closest('li')!.querySelector('img'));
+    fireEvent.click(screen.getByLabelText('Grid view'));
+    expect(screen.getByLabelText('Doc root card controls')).toHaveClass('absolute');
+    expect(screen.getByLabelText('Open Doc root').closest('li')).toHaveClass('bg-surface');
+    fireEvent.click(screen.getByLabelText('Gallery view'));
+    const cover = screen.getByLabelText('Preview of folder Reports');
+    expect(cover.querySelectorAll('img')).toHaveLength(2);
+    expect(cover).toHaveTextContent('+2more');
+    fireEvent.click(screen.getByLabelText('List view'));
+    expect(screen.queryByLabelText('Preview of folder Reports')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Open folder Reports')).toBeInTheDocument();
+  });
+
   it('draws only the immediate children of its current location', () => {
     const rootFolder = { ...doc('root-folder', 27), title: 'Root folder', format: 'folder' };
     const nestedFolder = {
@@ -160,10 +198,10 @@ describe('Shelf — data and capabilities', () => {
     expect(screen.getByLabelText('Doc a updated')).not.toHaveClass('ml-auto');
   });
 
-  it('shows visibility as a white icon badge with its meaning in hover chrome', () => {
+  it('shows visibility as a compact icon badge with its meaning in a tooltip', () => {
     render(<Shelf rows={[doc('a', 28, { visibility: 'private' })]} />);
     const badge = screen.getByLabelText('Doc a is private');
-    expect(badge).toHaveClass('bg-white', 'w-[26px]');
+    expect(badge.querySelector('svg')).not.toBeNull();
     expect(badge).toHaveTextContent('');
     expect(badge).toHaveAttribute('data-slot', 'tooltip-trigger');
   });
@@ -233,7 +271,7 @@ describe('Shelf — data and capabilities', () => {
     expect(open.tagName).toBe('A');
     expect(open).toHaveClass('truncate');
     expect(open).not.toHaveClass('line-clamp-2');
-    expect(open.parentElement).toHaveClass('gap-2', 'px-3', 'py-2.5');
+    expect(open.parentElement).toHaveClass('gap-2');
     expect(open.querySelector('button')).toBeNull();
   });
 });

@@ -17,8 +17,8 @@
  * Partitioning and recency order live in `lib/shelf` (pure). This file owns
  * the grid/list presentation and hands list mode to `ArtifactTable`.
  */
-import { useMemo, useState } from 'react';
-import { Check, Folder, FolderInput, FolderPlus, LayoutGrid, Link2, List as ListIcon, Pencil, Search, Share2, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Check, GalleryHorizontalEnd, Folder, FolderInput, FolderPlus, LayoutGrid, Link2, List as ListIcon, Pencil, Search, Share2, Trash2 } from 'lucide-react';
 import ShareLink from '@/components/ShareLink';
 import RowMenu, { confirmDeleteArtifact } from '@/components/RowMenu';
 import { MoveMenu, type PickerFolder } from '@/components/FolderPicker';
@@ -150,16 +150,57 @@ function NewFolder({ parentId, onMade }: { parentId: string | null; onMade: (row
   );
 }
 
-/**
- * THE FOLDERS STRIP — a third partition of the shelf (lib/shelf `folders`),
- * above the documents and absent for an account that has none, so nothing moves
- * for someone who never makes one.
- *
- * A folder is an artifact, so a tile is an ordinary link to `/a/<id>`; what it
- * adds over a document card is that a folder has no thumbnail worth taking (its
- * own card would be a picture of this listing) and a count instead.
- */
-function FolderTile({ row, count, level, folders, onDeleted }: { row: ShelfRow; count: number; level: ShelfActions; folders: PickerFolder[]; onDeleted: (id: string) => void }) {
+/** Folder covers show a small stack of readable documents inside a tabbed sleeve. */
+function FolderCover({ row, documents, controls }: { row: ShelfRow; documents: ShelfRow[]; controls: React.ReactNode }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [loaded, setLoaded] = useState<ShelfRow[]>([]);
+  // Owner shelves already carry their children. Public profiles omit placement,
+  // so ask the folder's existing ACL-filtered page only as its cover comes into view.
+  useEffect(() => {
+    if (documents.length || !box.current || typeof IntersectionObserver === 'undefined') return;
+    const controller = new AbortController();
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      observer.disconnect();
+      void fetch(`/api/page/artifact/${row.id}`, { credentials: 'same-origin', signal: controller.signal })
+        .then((res) => res.ok ? res.json() : null)
+        .then((page) => { if (!controller.signal.aborted && page?.folder?.rows) setLoaded(page.folder.rows); })
+        .catch(() => {});
+    }, { rootMargin: '160px' });
+    observer.observe(box.current);
+    return () => { controller.abort(); observer.disconnect(); };
+  }, [row.id, documents.length]);
+  const contents = (documents.length ? documents : loaded)
+    .filter((item) => item.format === 'markup')
+    .slice().sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  const previews = contents.slice(0, 2);
+  const remaining = contents.length - previews.length;
+  return (
+    <div ref={box} aria-label={`Preview of folder ${row.title ?? row.id}`} className="folder-cover">
+      <a href={row.url} aria-label={`Open folder ${nameOf(row)}`} className="absolute inset-0 z-[2] rounded-md focus-visible:outline-2 focus-visible:outline-accent" />
+      <div className="folder-cover-tab" title={nameOf(row)}><span className="truncate">{nameOf(row)}</span></div>
+      <div className="folder-cover-back" />
+      <div className={`folder-cover-papers${remaining > 0 ? ' folder-cover-papers--more' : ''}`}>
+        {(previews.length ? previews : [null, null]).map((item, i) => (
+          <div key={item?.id ?? i} aria-hidden="true" className="folder-cover-paper" style={{ '--paper-index': i } as React.CSSProperties}>
+            {item ? <img src={`/a/${item.id}/export?format=jpg&mode=card&v=${item.version}&r=${CARD_RENDER_GENERATION}`} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.visibility = 'hidden'; }} /> : <div className="folder-cover-lines" />}
+          </div>
+        ))}
+        {remaining > 0 && (
+          <div className="folder-cover-paper folder-cover-more" style={{ '--paper-index': 2 } as React.CSSProperties}>
+            <span>+{remaining}</span><span>more</span>
+          </div>
+        )}
+      </div>
+      <div className="folder-cover-front">
+        {row.visibility && <span className="folder-cover-visibility relative z-[3]"><VisibilityPill compact visibility={row.visibility} name={nameOf(row)} /></span>}
+        <div className="relative z-[3] ml-auto flex min-w-0 items-center gap-1.5">{controls}</div>
+      </div>
+    </div>
+  );
+}
+
+function FolderTile({ row, count, level, folders, onDeleted, documents, gallery }: { row: ShelfRow; count: number; level: ShelfActions; folders: PickerFolder[]; onDeleted: (id: string) => void; documents: ShelfRow[]; gallery: boolean }) {
   /**
    * RENAMING IS THE ONE VERB A FOLDER HAS THAT A DOCUMENT DOES NOT NEED HERE.
    * A document is renamed in its editor's Title field; a folder has no content
@@ -202,9 +243,21 @@ function FolderTile({ row, count, level, folders, onDeleted }: { row: ShelfRow; 
       </li>
     );
   }
+  if (gallery) {
+    return (
+      <li className="reveal group relative rounded-md p-3 transition-colors hover:bg-raised/60">
+        <FolderCover row={shown} documents={documents} controls={<>
+          {count > 0 && <span className="font-mono text-[10px] tabular-nums text-muted">{count}</span>}
+          <Actions row={shown} level={level} folders={folders} childCount={count} onDeleted={onDeleted}
+            onRename={() => { setDraft(title ?? ''); setRenaming(true); }} />
+        </>} />
+      </li>
+    );
+  }
   return (
-    <li className={`reveal group relative flex items-center gap-2 px-3 py-2.5 ${PANEL} transition-colors hover:border-edge-bright`}>
+    <li className={`reveal group relative flex items-center gap-2 px-3 py-2.5 ${PANEL} hover:border-edge-bright transition-colors`}>
       <Folder size={14} className="shrink-0 text-faint transition-colors group-hover:text-accent" />
+      <div className="flex min-w-0 flex-1 items-center gap-2">
       {/* A STRETCHED LINK: the whole tile opens the folder, while the actions
           beside it sit above the pseudo-element rather than inside the anchor
           (a <button> in an <a> is invalid markup and swallows its own click). */}
@@ -229,6 +282,7 @@ function FolderTile({ row, count, level, folders, onDeleted }: { row: ShelfRow; 
         onDeleted={onDeleted}
         onRename={() => { setDraft(title ?? ''); setRenaming(true); }}
       />
+      </div>
     </li>
   );
 }
@@ -236,9 +290,6 @@ function FolderTile({ row, count, level, folders, onDeleted }: { row: ShelfRow; 
 /** Icon-only row action — the label lives in the tooltip, not beside the glyph. */
 const ICON_ACTION =
   'inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[4px] border-0 bg-transparent p-0 text-muted transition-colors hover:text-accent';
-
-const CARD_ACTION_SURFACE =
-  'flex h-[26px] items-center rounded-[4px] border border-edge bg-surface/90 px-0.5';
 
 const VISIBILITY_ORDER = ['public', 'unlisted', 'private'] as const;
 
@@ -352,27 +403,17 @@ function Actions({ row, level, folders, childCount = 0, onDeleted, onRename }: {
   );
 }
 
-/**
- * THE PICTURE CARRIES THE CHROME — on every tier, at the same corner.
- *
- * The hero used to keep its classification and controls at the top of its
- * RIGHT column, which reads correctly only while that column is beside the
- * thumbnail. On a phone the grid stacks, the column falls underneath, and the
- * two controls that overlay the picture on every card below sat in a band
- * under the picture on the one above them — the tiers stopped looking like
- * one shelf. Hanging them on the picture is ONE rule with no breakpoint fork,
- * and the hero's right column is then free to be nothing but the document.
- */
-function CardControls({ row, level, folders }: { row: ShelfRow; level: ShelfActions; folders: PickerFolder[] }) {
+/** Keep controls outside the preview, accessible on touch and keyboard too. */
+function CardControls({ row, level, folders, gallery = false }: { row: ShelfRow; level: ShelfActions; folders: PickerFolder[]; gallery?: boolean }) {
   if (!row.visibility && level === 'none') return null;
   return (
     <div
       aria-label={`${nameOf(row)} card controls`}
-      className="absolute inset-x-2.5 top-2.5 z-10 flex items-start justify-between gap-2"
+      className={gallery ? "relative z-10 flex min-h-7 items-center justify-between gap-2" : "absolute inset-x-2.5 top-2.5 z-10 flex items-start justify-between gap-2"}
     >
-      <VisibilityTag row={row} overlay />
+      <VisibilityTag row={row} overlay={!gallery} />
       {level !== 'none' && (
-        <div className={`${CARD_ACTION_SURFACE} ml-auto`}>
+        <div className={`ml-auto ${gallery ? '' : 'flex h-[26px] items-center rounded-[4px] border border-edge bg-surface/90 px-0.5'}`}>
           <Actions row={row} level={level} folders={folders} />
         </div>
       )}
@@ -399,7 +440,7 @@ function Stamp({ row, mode, trailing = false }: { row: ShelfRow; mode: 'relative
  * classification that adds information here. */
 function VisibilityTag({ row, overlay = false }: { row: ShelfRow; overlay?: boolean }) {
   return row.visibility ? (
-    <VisibilityPill visibility={row.visibility} name={nameOf(row)} compact={overlay} overlay={overlay} />
+    <VisibilityPill visibility={row.visibility} name={nameOf(row)} compact overlay={overlay} />
   ) : null;
 }
 
@@ -458,7 +499,17 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
    */
   const [trashed, setTrashed] = useState<string[]>([]);
   const trash = (id: string) => setTrashed((t) => [...t, id]);
-  const [view, setView] = useState<'grid' | 'list'>('grid');
+  const [view, setView] = useState<'grid' | 'list' | 'gallery'>('grid');
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('artifactbin:shelf-view');
+      if (saved === 'grid' || saved === 'list' || saved === 'gallery') setView(saved);
+    } catch { /* Storage may be disabled; view switching still works. */ }
+  }, []);
+  const chooseView = (next: typeof view) => {
+    setView(next);
+    try { localStorage.setItem('artifactbin:shelf-view', next); } catch { /* Optional preference. */ }
+  };
   const q = query.trim().toLowerCase();
   const present = trashed.length
     ? rows.filter((r) => !trashed.includes(r.id) && !(r.ancestor_ids ?? []).some((a) => trashed.includes(a)))
@@ -541,13 +592,14 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
             {([
               ['grid', 'Grid view', LayoutGrid],
               ['list', 'List view', ListIcon],
+              ['gallery', 'Gallery view', GalleryHorizontalEnd],
             ] as const).map(([value, label, Icon]) => (
               <button
                 key={value}
                 type="button"
                 aria-label={label}
                 aria-pressed={view === value}
-                onClick={() => setView(value)}
+                onClick={() => chooseView(value)}
                 className={`inline-flex h-7 w-8 cursor-pointer items-center justify-center rounded-[4px] transition-all ${
                   view === value ? 'bg-accent-soft text-accent' : 'text-faint hover:bg-raised hover:text-fg'
                 }`}
@@ -577,9 +629,9 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
           <div className="mb-2 flex items-baseline gap-2">
             <MicroLabel>folders</MicroLabel>
           </div>
-          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${view === 'gallery' ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
             {shelf.folders.map((row) => (
-              <FolderTile key={row.id} row={row} count={inside(row.id)} level={actions} folders={pickable} onDeleted={trash} />
+              <FolderTile key={row.id} row={row} count={inside(row.id)} level={actions} folders={pickable} onDeleted={trash} gallery={view === 'gallery'} documents={available.filter((item) => parentOfRow(item) === row.id && item.format === 'markup')} />
             ))}
           </ul>
         </section>
@@ -591,8 +643,8 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
         </p>
       )}
 
-      {view === 'grid' && shelf.documents.length > 0 && (
-        <div aria-label="Artifact grid" className="flex flex-col gap-7">
+      {view !== 'list' && shelf.documents.length > 0 && (
+        <div aria-label={view === 'gallery' ? 'Artifact gallery' : 'Artifact grid'} className="flex flex-col gap-7">
           {dateGroups.map((group) => (
             <section key={group.key} aria-label={`${group.label} artifacts`}>
               <div className="mb-2.5 flex items-center gap-3 px-0.5">
@@ -601,33 +653,35 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
                 </h2>
                 <span aria-hidden="true" className="h-px flex-1 bg-edge" />
               </div>
-              <ul className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+              <ul className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 ${view === 'gallery' ? 'gap-5' : 'gap-3.5'}`}>
                 {group.rows.map((row) => {
                   const i = shelf.documents.indexOf(row);
                   return (
                     <li
                       key={row.id}
-                      className={`reveal group relative flex flex-col overflow-hidden ${PANEL} transition-[border-color,transform] duration-150 hover:-translate-y-0.5 hover:border-edge-bright`}
+                      className={`reveal group relative flex flex-col duration-150 ${view === 'gallery' ? 'rounded-md p-2 transition-colors hover:bg-raised/60' : `overflow-hidden ${PANEL} transition-[border-color,transform] hover:-translate-y-0.5 hover:border-edge-bright`}`}
                       style={{ animationDelay: `${Math.min(i * 35, 280)}ms` }}
                     >
                       <div className="relative">
-                        <Thumb row={row} className="aspect-[40/21] border-b border-edge" />
-                        <CardControls row={row} level={actions} folders={pickable} />
+                        <Thumb row={row} className={view === 'gallery' ? "aspect-[40/21] rounded-[5px] border border-edge shadow-sm transition-transform duration-150 motion-safe:group-hover:-translate-y-1" : "aspect-[40/21] border-b border-edge"} />
+                        {view !== 'gallery' && <CardControls row={row} level={actions} folders={pickable} />}
                       </div>
-                      <div className="flex flex-1 flex-col gap-2 px-3 py-2.5">
+                      <div className={`flex flex-1 flex-col gap-2 ${view === 'gallery' ? 'px-1 pt-2.5 pb-1' : 'px-3 py-2.5'}`}>
                         <a
                           href={row.url}
                           aria-label={`Open ${nameOf(row)}`}
-                          className="block truncate font-mono text-[13px] leading-snug font-semibold text-fg no-underline transition-colors after:absolute after:inset-0 group-hover:text-accent"
+                          className={`block font-mono leading-snug font-semibold text-fg no-underline transition-colors after:absolute after:inset-0 group-hover:text-accent ${view === 'gallery' ? 'text-[13px] line-clamp-2' : 'truncate text-[13px]'}`}
                         >
                           {row.title ?? 'Untitled'}
                         </a>
+                        {view === 'gallery' && row.description && <p className="m-0 line-clamp-2 font-sans text-xs leading-relaxed text-muted">{row.description}</p>}
                         <div className="mt-auto flex min-w-0 items-center gap-2">
                           {row.views !== undefined && (
                             <ViewsMark name={nameOf(row)} views={row.views} sparkline={row.sparkline} className="flex-1" />
                           )}
                           <Stamp row={row} mode={dates} trailing={row.views !== undefined} />
                         </div>
+                        {view === 'gallery' && <CardControls row={row} level={actions} folders={pickable} gallery />}
                       </div>
                     </li>
                   );
