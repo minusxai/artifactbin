@@ -48,9 +48,9 @@ describe('Shelf — grid and list views', () => {
     fireEvent.click(screen.getByLabelText('Gallery view'));
     expect(screen.getByLabelText('Gallery view')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByLabelText('Artifact gallery')).toHaveTextContent('A document summary.');
-    const controls = screen.getByLabelText('Doc root card controls');
-    expect(controls).toHaveClass('relative');
-    expect(controls.parentElement).not.toContainElement(screen.getByLabelText('Open Doc root').closest('li')!.querySelector('img'));
+    const edit = screen.getByLabelText('Edit Doc root');
+    expect(edit.closest('li')).toContainElement(edit);
+    expect(screen.getByLabelText('Open Doc root').closest('li')!.querySelector('img')!.parentElement!.parentElement).toContainElement(edit);
     fireEvent.click(screen.getByLabelText('Grid view'));
     expect(screen.getByLabelText('Doc root card controls')).toHaveClass('absolute');
     expect(screen.getByLabelText('Open Doc root').closest('li')).toHaveClass('bg-surface');
@@ -209,7 +209,7 @@ describe('Shelf — data and capabilities', () => {
   it('gives every grid item the full owner action set', () => {
     render(<Shelf rows={[doc('a', 28), doc('b', 27)]} actions="full" />);
     for (const id of ['a', 'b']) {
-      expect(screen.getByLabelText(`Share Doc ${id}`)).toBeTruthy();
+      expect(screen.queryByLabelText(`Share Doc ${id}`)).toBeNull();
       expect(screen.getByLabelText(`Edit Doc ${id}`)).toHaveAttribute('href', `/a/${id}#edit`);
       expect(screen.getByLabelText(`More actions for Doc ${id}`)).toBeTruthy();
     }
@@ -217,11 +217,11 @@ describe('Shelf — data and capabilities', () => {
 
   it('share-only profile mode cannot edit, move, or delete', () => {
     render(<Shelf rows={[doc('a', 28)]} actions="share" />);
-    expect(screen.getByLabelText('Share Doc a')).toBeTruthy();
+    expect(screen.queryByLabelText('Share Doc a')).toBeNull();
     expect(screen.queryByLabelText('Edit Doc a')).toBeNull();
     expect(screen.queryByLabelText('More actions for Doc a')).toBeNull();
     fireEvent.click(screen.getByLabelText('List view'));
-    expect(screen.getByLabelText('Share Doc a')).toBeTruthy();
+    expect(screen.queryByLabelText('Share Doc a')).toBeNull();
     expect(screen.queryByLabelText('Edit Doc a')).toBeNull();
     expect(screen.queryByLabelText('More actions for Doc a')).toBeNull();
   });
@@ -271,7 +271,6 @@ describe('Shelf — data and capabilities', () => {
     expect(open.tagName).toBe('A');
     expect(open).toHaveClass('truncate');
     expect(open).not.toHaveClass('line-clamp-2');
-    expect(open.parentElement).toHaveClass('gap-2');
     expect(open.querySelector('button')).toBeNull();
   });
 });

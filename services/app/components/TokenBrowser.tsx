@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, ChevronLeft, ChevronRight, EyeOff, FolderInput, Globe, Link2, Lock, Pencil, Search, Share2, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, EyeOff, FolderInput, Globe, Lock, Pencil, Search, Share2, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Tooltip } from '@/components/Tooltip';
 import { Badge, Button, dateStamp, FormatBadge, formatLabel, MicroLabel, PANEL, TABLE_ROW, timeAgo, TokenInput, VisibilityPill } from '@/components/ui';
@@ -175,7 +175,7 @@ const ICON_ACTION =
 export const ARTIFACTS_PER_PAGE = 5;
 
 /** `manage` enables the session-scoped delete — dashboard only. History lives in the page's edit mode. */
-export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = true, canShare = true, showViews = true, filtersInline = false, dates = 'relative', perPage = ARTIFACTS_PER_PAGE, searchLabel = 'Search artifacts', searchPlaceholder = 'search artifacts' }: {
+export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = true, showVisibility = true, showViews = true, filtersInline = false, dates = 'relative', perPage = ARTIFACTS_PER_PAGE, searchLabel = 'Search artifacts', searchPlaceholder = 'search artifacts' }: {
   artifacts: ArtifactSummary[];
   /**
    * The account's folders, for the move picker. The dense tier holds documents
@@ -192,9 +192,7 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
    * move/delete menu — two different subsets, so one boolean cannot say both.
    */
   canEdit?: boolean;
-  /** Whether the row offers copy-link. Asset management tables can withhold
-   * document actions while retaining their move/delete menu. */
-  canShare?: boolean;
+  showVisibility?: boolean;
   /** Whether analytics telemetry belongs in this table's job. */
   showViews?: boolean;
   /** Keep quick filters in the search rail instead of spending a second row. */
@@ -228,7 +226,6 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
   // the picker that now knows the account's own names.
   const placeName = (id: string): string => pickable.find((f) => f.id === id)?.title ?? id;
 
-  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
   // Quick filters: empty selection = no constraint. Within a group values OR,
@@ -250,17 +247,6 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
   const visibilityChips = VISIBILITY_ORDER.filter((v) => artifacts.some((a) => a.visibility === v));
   const showFormatChips = formatChips.length >= 2;
   const showVisibilityChips = visibilityChips.length >= 2;
-
-  const share = async (a: ArtifactSummary) => {
-    const url = a.url.startsWith('http') ? a.url : `${location.origin}${a.url}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopiedId(a.id);
-      setTimeout(() => setCopiedId((c) => (c === a.id ? null : c)), 1500);
-    } catch {
-      window.open(url, '_blank');
-    }
-  };
 
   // The views column follows the DATA, never the permission: a page that did
   // not ask for counts reserves no column and prints no zero. That is the same
@@ -432,7 +418,7 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
                   {/* Every row says who can read it — an unmarked row would
                       read as "unknown" now that the owner toggles visibility.
                       Public gets the louder ink; unlisted and private stay faint. */}
-                  {a.visibility && <VisibilityPill compact visibility={a.visibility} name={a.title ?? a.id} />}
+                  {showVisibility && a.visibility && <VisibilityPill compact visibility={a.visibility} name={a.title ?? a.id} />}
                 </span>
               </td>
               {/* A shelf's archive contains only markup documents; its type
@@ -464,17 +450,6 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
               </Tooltip>
               <td className="px-2 py-3 text-right whitespace-nowrap sm:px-4 sm:py-2.5">
                 <span className="inline-flex items-center gap-1">
-                  {canShare && (
-                    <Tooltip content={copiedId === a.id ? 'copied!' : 'copy share link'}>
-                      <button
-                        className={`${ICON_ACTION} ${copiedId === a.id ? 'text-accent' : 'hover:text-accent'}`}
-                        aria-label={`Share ${a.title ?? a.id}`}
-                        onClick={() => void share(a)}
-                      >
-                        {copiedId === a.id ? <Check size={13} /> : <Link2 size={13} />}
-                      </button>
-                    </Tooltip>
-                  )}
                   {canEdit && (
                     <Tooltip content="edit">
                       <a

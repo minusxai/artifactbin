@@ -86,6 +86,7 @@ function ProfileShelf({ handle, files }: { handle: string; files: Array<Record<s
   return (
     <Shelf
       actions="share"
+      showVisibility={false}
       assets={false}
       dates="absolute"
       rows={files.map((a) => ({ ...a, url: canonicalArtifactPath(a as never, handle) }) as never)}

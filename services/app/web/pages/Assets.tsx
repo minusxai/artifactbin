@@ -80,7 +80,6 @@ export function AssetsPage() {
             folders={folders}
             manage
             canEdit={false}
-            canShare={false}
             showViews={false}
             filtersInline
             perPage={SHELF_LIST_PER_PAGE}

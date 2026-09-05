@@ -43,7 +43,7 @@ describe('the shelf reads as ONE shelf on a phone', () => {
     expect(overlay.parentElement).toBe(card.querySelector('img')!.parentElement!.parentElement);
     expect(overlay).toHaveClass('absolute', 'z-10', 'justify-between');
     expect(overlay).toContainElement(screen.getByLabelText('Doc a is private'));
-    expect(overlay).toContainElement(screen.getByLabelText('Share Doc a'));
+    expect(screen.queryByLabelText('Share Doc a')).toBeNull();
     expect(overlay).toContainElement(screen.getByLabelText('Edit Doc a'));
   });
 

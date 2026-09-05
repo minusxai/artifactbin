@@ -431,18 +431,25 @@ body {
 }
 [data-theme='dark'] .folder-cover, [data-app-appearance='dark'] .folder-cover {
   --folder-back: #203c50; --folder-front: #2c536c; --folder-edge: #46728b; --folder-ink: #b6dff4;
+  --color-muted: #c4dce9;
+  --color-faint: #afccde;
+}
+[data-theme='dark'] [data-shelf-view='gallery'],
+[data-app-appearance='dark'] [data-shelf-view='gallery'] {
+  --color-muted: #aab5c3;
+  --color-faint: #8f9dad;
 }
 .folder-cover-tab {
   position: absolute; top: 0; left: 0; display: flex; align-items: center; gap: 5px;
-  height: 25px; width: fit-content; max-width: 50%; min-width: 48px; padding: 0 10px; border: 1px solid var(--folder-edge);
+  height: 20px; width: fit-content; max-width: 50%; min-width: 48px; padding: 0 10px; border: 1px solid var(--folder-edge);
   border-bottom: 0; border-radius: 6px 6px 0 0; background: var(--folder-back);
-  color: var(--folder-ink); font: 600 11px var(--font-mono); z-index: 1;
+  color: var(--folder-ink); font: 600 11px var(--font-mono); z-index: 3;
 }
 .folder-cover-back {
-  position: absolute; inset: 24px 0 0; border: 1px solid var(--folder-edge);
+  position: absolute; inset: 19px 0 0; border: 1px solid var(--folder-edge);
   border-radius: 0 7px 7px 7px; background: var(--folder-back);
 }
-.folder-cover-papers { position: absolute; inset: 29px 10px 8px; }
+.folder-cover-papers { position: absolute; inset: 24px 10px 8px; }
 .folder-cover-paper {
   position: absolute; width: 61%; height: 86px; top: calc(var(--paper-index) * 7px);
   left: calc(var(--paper-index) * 37%); overflow: hidden; border: 1px solid var(--color-edge);
@@ -487,4 +494,36 @@ body {
   border-color: var(--folder-edge);
   background: var(--folder-back);
   color: var(--folder-ink);
+}
+
+/* Gallery documents read as paper objects; other shelf modes retain their chrome. */
+.gallery-paper {
+  width: 100%;
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
+}
+.gallery-paper::after {
+  content: ''; position: absolute; top: -1px; right: -1px; width: 18px; height: 18px;
+  background: linear-gradient(45deg, var(--color-edge) 0 49%, transparent 50%);
+  border-bottom-left-radius: 3px; box-shadow: -1px 1px 2px #00000012;
+}
+
+/* A bottom scrim grounds Gallery controls without covering previews with a box. */
+.gallery-fade {
+  padding: 12px 9px 7px;
+  border-radius: 0 0 4px 4px;
+  background: linear-gradient(to bottom, transparent, rgb(8 16 24 / 38%) 65%, rgb(8 16 24 / 66%));
+  color: #fff;
+  --color-muted: #fff;
+  --color-accent: #70f0a3;
+}
+.gallery-fade-views [aria-label$=' views'] > span {
+  background: transparent;
+  text-shadow: 0 1px 3px #0008;
+}
+.gallery-fade-visibility > span {
+  width: 23px; height: 23px; border: 1px solid #ffffff25;
+  background: rgb(8 16 24 / 55%); color: #fff;
+  box-shadow: none;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
