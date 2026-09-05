@@ -49,7 +49,7 @@ export interface QueryTransport {
    * server's message. Absent on a transport that cannot write (the editor's
    * draft path, a capture) — the store then reports that plainly.
    */
-  mutate?(values: Record<string, Scalar>, name: string): Promise<{ dataset: string }>;
+  mutate?(values: Record<string, Scalar>, name: string, row?: Record<string, Scalar>): Promise<{ dataset: string }>;
   /**
    * Import one web URL the document ended up with (a bound `<img src="$pick">`,
    * a column of logos) and resolve with the ADDRESS of our copy.
@@ -85,7 +85,7 @@ export interface DataflowStore {
    * stream. Resolves when the write has landed (the re-run follows on its own);
    * rejects with the server's message, which the caller may show.
    */
-  mutate(name: string): Promise<void>;
+  mutate(name: string, overrides?: Record<string, Scalar>, row?: Record<string, Scalar>): Promise<void>;
   /** Mutations currently in flight (a bound <Button> shows itself busy). */
   mutating(): ReadonlySet<string>;
   /**
@@ -159,6 +159,7 @@ export function createDataflowStore(
   const dirty = new Set<string>();
   const inFlight = new Set<string>();
   const writing = new Set<string>();
+  const writingCounts = new Map<string, number>();
   let timer: ReturnType<typeof setTimeout> | null = null;
   // A run started before a later change must not overwrite it: results are
   // applied only if they belong to the newest run.
@@ -329,20 +330,22 @@ export function createDataflowStore(
     flush();
   };
 
-  const mutate: DataflowStore['mutate'] = async (name) => {
+  const mutate: DataflowStore['mutate'] = async (name, overrides, row) => {
     const decl = mutationsOf(flow).find((m) => m.name === name);
     if (!decl) throw new Error(`this document declares no <Mutation name="${name}">`);
     if (!transport?.mutate) throw new Error('this document cannot write from here');
-    if (writing.has(name)) return; // a double click is one write
+    if (!row && writing.has(name)) return; // generic Button double click is one write; row cells dedupe locally
+    writingCounts.set(name, (writingCounts.get(name) ?? 0) + 1);
     writing.add(name);
     commit({ ...state }); // `mutating()` changed — a bound Button shows itself busy
     try {
-      const { dataset } = await transport.mutate({ ...state.values }, name);
+      const { dataset } = await transport.mutate({ ...state.values, ...overrides }, name, row);
       // The click that writes is the click that redraws: the reader must not
       // wait for the live stream to tell this document about its own write.
       invalidateDatasets([dataset || decl.target]);
     } finally {
-      writing.delete(name);
+      const left = (writingCounts.get(name) ?? 1) - 1;
+      if (left > 0) writingCounts.set(name, left); else { writingCounts.delete(name); writing.delete(name); }
       commit({ ...state });
     }
   };

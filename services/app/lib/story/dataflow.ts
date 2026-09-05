@@ -95,6 +95,8 @@ export interface MutationDecl extends Span {
   target: string;
   /** Same as `[target]` — the shape the ref graph reads (lib/story/refs). */
   refs: string[];
+  /** Optional affected-row guard, enforced by the mutation engine before persistence. */
+  expectedAffected?: number;
 }
 
 /** Everything a document declares — the parsed `<Helmet>` data children. */
@@ -240,7 +242,7 @@ export const REF_ATTRS: {
     // two-way scalar bindings the native controls carry, in themed chrome.
     // `options` is a table exactly like `<select options>` (column 1 the
     // value, column 2 the label when present).
-    Select: { value: 'scalar', options: 'table' },
+    Select: { value: 'scalar', options: 'table', run: 'mutation' },
     Slider: { value: 'scalar' },
     DatePicker: { value: 'scalar' },
     Segmented: { value: 'scalar', options: 'table' },
@@ -251,9 +253,9 @@ export const REF_ATTRS: {
     Button: { run: 'mutation' },
   },
   html: {
-    input: { value: 'scalar', checked: 'scalar' },
-    textarea: { value: 'scalar' },
-    select: { value: 'scalar', options: 'table' },
+    input: { value: 'scalar', checked: 'scalar', run: 'mutation' },
+    textarea: { value: 'scalar', run: 'mutation' },
+    select: { value: 'scalar', options: 'table', run: 'mutation' },
     /*
      * `<img src="$pick">` — a BOUND SOURCE, and the one reference position that
      * is not a form control. It is read exactly like every other scalar
@@ -328,6 +330,10 @@ function checkName(el: JsxElement, tag: string, errors: ValidationError[]): stri
   }
   if (got.json.startsWith('ref_')) {
     errors.push(err(`<${tag}> name "${got.json}" is reserved — ref_<id> names a dataset table inside SQL`, got.attr, tag, 'name'));
+    return null;
+  }
+  if (got.json.startsWith('_')) {
+    errors.push(err(`<${tag}> name "${got.json}" is reserved — names beginning with _ belong to the row runtime`, got.attr, tag, 'name'));
     return null;
   }
   return got.json;
@@ -457,7 +463,7 @@ export function parseMutationDecl(el: JsxElement): ParseDeclResult<MutationDecl>
   const tag = MUTATION_TAG;
   const errors: ValidationError[] = [];
   for (const a of el.attributes) {
-    if (a.name !== 'name') errors.push(err(`<Mutation> takes only name= — the SQL is its child: <Mutation name="…">{\`insert into ref_<id> …\`}</Mutation>${a.name === 'sql' ? ' (not a sql= attribute)' : ''}`, a, tag, a.name));
+    if (a.name !== 'name' && a.name !== 'expectedAffected') errors.push(err(`<Mutation> takes only name= and expectedAffected= — the SQL is its child: <Mutation name="…">{\`insert into ref_<id> …\`}</Mutation>${a.name === 'sql' ? ' (not a sql= attribute)' : ''}`, a, tag, a.name));
   }
   if (errors.length) return { ok: false, errors };
   const name = checkName(el, tag, errors);
@@ -473,7 +479,11 @@ export function parseMutationDecl(el: JsxElement): ParseDeclResult<MutationDecl>
   if (refs.length !== 1) {
     return { ok: false, errors: [err(`<Mutation name="${name}"> must write exactly one dataset table (ref_<id>) — found ${refs.length === 0 ? 'none' : refs.map((r) => `ref_${r}`).join(', ')}`, el, tag)] };
   }
-  return { ok: true, decl: { name, sql, params: sqlParams(sql), target: refs[0], refs, start: el.start, end: el.end } };
+  const expected = staticAttr(el, 'expectedAffected');
+  if (expected && (typeof expected.json !== 'number' || !Number.isInteger(expected.json) || expected.json < 0)) {
+    return { ok: false, errors: [err(`<Mutation expectedAffected> must be a non-negative integer`, expected.attr, tag, 'expectedAffected')] };
+  }
+  return { ok: true, decl: { name, sql, params: sqlParams(sql), target: refs[0], refs, ...(expected ? { expectedAffected: expected.json as number } : {}), start: el.start, end: el.end } };
 }
 
 // ── the reference graph ─────────────────────────────────────────────────────
@@ -619,6 +629,7 @@ export function validateDataflow(flow: Dataflow, uses: RefNameUse[]): Validation
 
   const checkParams = (decl: { name: string; params: string[] } & Span, tag: string) => {
     for (const p of decl.params) {
+      if (tag === MUTATION_TAG && (p === '_row' || p === '_value')) continue;
       const kind = kinds.get(p);
       if (!kind) errors.push(err(`<${tag} name="${decl.name}"> binds $${p}, which is not a declared <Value>${hint}`, decl, tag));
       else if (kind === 'table') errors.push(err(`<${tag} name="${decl.name}"> binds $${p}, but "${p}" is a table — read a table by its bare name (… from ${p} …); $params bind scalar <Value>s`, decl, tag));

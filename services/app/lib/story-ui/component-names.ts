@@ -29,7 +29,7 @@ export const STORY_UI_COMPONENT_NAME_LIST = [
   // A PDF the document links, as a card that opens it (components/kit/file.tsx).
   'File',
   'Icon',
-  'DataTable',
+  'DataTable', 'Column',
   // A folder's listing (components/kit/files.tsx). Bound like every other data
   // embed — `data="$children"` — over the children table lib/folders computes.
   'Files',

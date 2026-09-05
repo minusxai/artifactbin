@@ -28,7 +28,7 @@
 import { trackEvent } from '@/lib/analytics';
 import { MAX_QUERY_ROWS } from '@/lib/config';
 import { getDb } from '@/lib/db';
-import { isQueryFailure, runMutation } from '@/lib/sql/engine';
+import { isQueryFailure, runMutation, type MutationInput } from '@/lib/sql/engine';
 import { LIVE_ARTIFACT_SQL, type ArtifactRow } from '@/lib/artifacts';
 import type { DatasetColumn } from './dataset-shape';
 import { loadDatasetRows, storeDatasetRows } from './dataset-store';
@@ -56,7 +56,7 @@ export interface MutationRefused {
    * the honest answer is "try again". (Unreachable on PGLite, which serializes
    * every operation; reachable on Postgres.)
    */
-  reason: 'invalid_sql' | 'dataset_full' | 'contended';
+  reason: 'invalid_sql' | 'dataset_full' | 'contended' | 'row_changed' | 'row_not_unique';
   detail: string;
 }
 
@@ -83,6 +83,7 @@ export async function mutateDataset(
   dataset: ArtifactRow,
   sql: string,
   params: Record<string, Scalar> = {},
+  guard: Pick<MutationInput, 'row' | 'expectedAffected'> = {},
 ): Promise<MutationApplied | MutationRefused> {
   const db = await getDb();
   const table = `ref_${dataset.id}`;
@@ -99,9 +100,9 @@ export async function mutateDataset(
 
     const columns = ((current.meta as { columns?: DatasetColumn[] }).columns) ?? [];
     const rows = await loadDatasetRows(current);
-    const out = await runMutation({ table: { name: table, rows, columns }, sql, params, limit: datasetRowCap() });
+    const out = await runMutation({ table: { name: table, rows, columns }, sql, params, ...guard, limit: datasetRowCap() });
     if (isQueryFailure(out)) {
-      return { reason: out.full ? 'dataset_full' : 'invalid_sql', detail: out.error };
+      return { reason: out.code ?? (out.full ? 'dataset_full' : 'invalid_sql'), detail: out.error };
     }
 
     // Store BEFORE the swap: a blob nobody points at is garbage, a pointer to

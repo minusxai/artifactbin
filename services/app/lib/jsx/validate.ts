@@ -5,6 +5,7 @@
  * HTML tags, no event handlers, no dangerous URL schemes. A JSX parser does NOT
  * give the "static" guarantee for free — this pass enforces it.
  */
+import { parseRowRef } from '@/lib/story/row-scope';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 // Shared with the render-time gate in lib/story-ui/interpreter.tsx — see
 // lib/jsx/url-attrs.ts for why these must not be maintained separately.
@@ -75,9 +76,11 @@ function walk(
   errors: ValidationError[],
   /** Inside an `<svg>` subtree, where `<title>` is the accessibility label. */
   inSvg: boolean,
+  inColumn = false,
+  parent?: string,
 ): void {
   if (node.type === 'expression') {
-    if (!node.value.static) {
+    if (!node.value.static && !(inColumn && parseRowRef(node.source.trim()))) {
       errors.push({ message: `Expression child must be a JSON literal, got ${node.value.exprType}`, start: node.start, end: node.end });
     }
     return;
@@ -85,7 +88,7 @@ function walk(
   if (node.type === 'text') return;
   validateElement(node, components, allowedHtml, stylePolicy, errors, inSvg);
   const childrenInSvg = inSvg || (!node.isComponent && node.tag.toLowerCase() === 'svg');
-  for (const child of node.children) walk(child, components, allowedHtml, stylePolicy, errors, childrenInSvg);
+  for (const child of node.children) walk(child, components, allowedHtml, stylePolicy, errors, childrenInSvg, node.tag === 'Column' ? parent === 'DataTable' : node.tag === 'DataTable' ? false : inColumn, node.tag);
 }
 
 function validateElement(

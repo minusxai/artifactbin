@@ -48,12 +48,12 @@ export function createFetchTransport(queryUrl: string, fetchFn: FetchLike = (i, 
      */
     ...(mutateUrl
       ? {
-        mutate: async (values: Record<string, unknown>, name: string) => {
+        mutate: async (values: Record<string, unknown>, name: string, row?: Record<string, unknown>) => {
           const res = await fetchFn(mutateUrl, {
             method: 'POST',
             credentials: 'omit',
             headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify({ mutation: name, values }),
+            body: JSON.stringify({ mutation: name, values, ...(row ? { row } : {}) }),
           });
           const body = (await res.json().catch(() => ({}))) as { ok?: boolean; dataset?: string; error?: string; detail?: string };
           if (!res.ok || !body.ok) throw new Error(body.detail ?? body.error ?? `write failed (${res.status})`);

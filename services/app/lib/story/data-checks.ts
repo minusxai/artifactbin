@@ -8,6 +8,7 @@
  * dataset. ONE function, so the publish door (jsx-tier) and the refresh path
  * (a dataset changed → which dependents broke?) cannot drift apart.
  */
+import { analyzeRowScopes, mutationUsesRow } from './row-scope';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { dryRunMutations, dryRunQueries } from '@/lib/sql/engine';
 import { mutationsOf, queryOrder, refName, type Dataflow } from './dataflow';
@@ -30,7 +31,7 @@ export async function checkDocumentData(source: string, load: RefLoader): Promis
   const flow: Dataflow = { values: split.content.values, queries: split.content.queries, mutations: split.content.mutations };
   if (flow.queries.length === 0 && mutationsOf(flow).length === 0) return { ok: true, refs: checked.refs };
 
-  const dry = await dryRunDataflow(flow, load);
+  const dry = await dryRunDataflow(flow, load, split.body);
   if (dry.kind === 'sql') return { ok: false, error: 'invalid_sql', details: dry.details };
   const bindings = await validateQueryBindings(split.body, dry.columns, load);
   if (bindings.length) return { ok: false, error: 'invalid_refs', details: bindings };
@@ -38,9 +39,9 @@ export async function checkDocumentData(source: string, load: RefLoader): Promis
 }
 
 /** Prepare every query against the shapes its refs resolve to. */
-async function dryRunDataflow(flow: Dataflow, load: RefLoader): Promise<
+export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxNode[] = []): Promise<
   | { kind: 'sql'; details: string[] }
-  | { kind: 'ok'; columns: Record<string, DatasetColumn[]> }
+  | { kind: 'ok'; columns: Record<string, DatasetColumn[]>; rowSchemas: Record<string, DatasetColumn[]> }
 > {
   const tables: Record<string, { columns: DatasetColumn[] }> = {};
   for (const v of flow.values) if (v.kind === 'table') tables[v.name] = { columns: v.columns };
@@ -58,15 +59,27 @@ async function dryRunDataflow(flow: Dataflow, load: RefLoader): Promise<
   const queries = order.map((n) => flow.queries.find((q) => q.name === n)!);
   const dry = await dryRunQueries({ tables, queries, paramNames });
   const details = dry.errors.map((e) => `<Query name="${e.name}">: ${e.error}`);
+  const columns = { ...Object.fromEntries(Object.entries(tables).map(([n, t]) => [n, t.columns])), ...dry.columns };
+  const scoped = analyzeRowScopes(body, columns);
+  details.push(...scoped.errors);
+  const rowSchemas: Record<string, DatasetColumn[]> = {};
+  for (const mutation of mutations) {
+    if (!mutationUsesRow(mutation.sql)) continue;
+    const names = scoped.mutationTables[mutation.name] ?? [];
+    const shapes = names.map((n) => columns[n]).filter((c): c is DatasetColumn[] => !!c);
+    if (!shapes.length) details.push(`row mutation "${mutation.name}" must be invoked inside a DataTable Column`);
+    else if (shapes.some((s) => JSON.stringify(s) !== JSON.stringify(shapes[0]))) details.push(`row mutation "${mutation.name}" has incompatible table scopes`);
+    else rowSchemas[mutation.name] = shapes[0];
+  }
   // Every <Mutation> prepares and executes against its (empty) target too —
   // a non-DML statement or an unknown column is a publish error, never a
   // button that fails on its first click.
   if (mutations.length) {
-    const wet = await dryRunMutations({ tables, mutations, paramNames });
+    const wet = await dryRunMutations({ tables, mutations: mutations.map((m) => ({ ...m, ...(rowSchemas[m.name] ? { row: { columns: rowSchemas[m.name] } } : {}) })), paramNames: [...paramNames, '_value'] });
     details.push(...wet.errors.map((e) => `<Mutation name="${e.name}">: ${e.error}`));
   }
   if (details.length) return { kind: 'sql', details };
-  return { kind: 'ok', columns: dry.columns };
+  return { kind: 'ok', columns, rowSchemas };
 }
 
 /** Every `<Question data="$q" viz>` checked against q's result columns (encodings, or recipe slots). */
