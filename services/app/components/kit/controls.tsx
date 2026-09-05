@@ -600,7 +600,7 @@ export function SegmentedControl({ label, placeholder = 'All', className, option
           const on = entry.value === value;
           return (
             <button
-              key={entry.value ?? ' null'}
+              key={entry.value ?? '\u0000null'}
               type="button"
               aria-pressed={on}
               disabled={inert}
