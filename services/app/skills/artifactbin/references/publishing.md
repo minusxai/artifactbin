@@ -8,13 +8,13 @@ description: >-
 - **Publish** is one `POST [[ base ]]/api/artifacts` of a self-contained
   document; the deliverable is the `url` you hand your user.
 - **Every `/api` call, `GET` included, sends `Authorization: Bearer mx_...`.**
-  No token? Read [auth](publishing-auth.md): use a pasted token or start link, or
-  STOP and ask your user for one at `[[ base ]]/tokens/new` — never mint your own.
+  No token? [auth](publishing-auth.md) — never mint one; ask your user at
+  `[[ base ]]/tokens/new`.
 - A document is **static JSX**, not HTML — tags, components and the JSX rules
   are [markup.md](markup.md).
 - Datasets, images and chart recipes are their own artifacts, created first:
-  [datasets](publishing-datasets.md). Also [annotations](publishing-annotations.md),
-  [versions](publishing-versions.md), [mcp](publishing-mcp.md).
+  [datasets](publishing-datasets.md). Also [annotations](publishing-annotations.md)
+  and [mcp](publishing-mcp.md).
 
 ## Contents
 
@@ -26,9 +26,8 @@ Served sandboxed at an opaque origin under a strict per-document CSP: **no
 outbound network except the same-origin endpoints it names** — `/a/<id>/query`
 (data), `/a/<id>/events` + `/events/frame` (live), `/a/<id>/mutate` (declared
 writes), `/geojson/` (maps). A CDN `<script src>`, an external stylesheet or any
-other `fetch`/XHR is a 400 at publish (a runtime `fetch()` is blocked silently);
-CSS and JS live in `<Helmet>` only; an image is a `data:` URI, a `ref:<id>` or
-an imported `https://` URL. Max [[ maxContentBytes ]] bytes.
+other `fetch`/XHR is a 400 at publish. CSS and JS live in `<Helmet>` only.
+Max [[ maxContentBytes ]] bytes.
 
 ## Endpoints
 
@@ -37,20 +36,20 @@ an imported `https://` URL. Max [[ maxContentBytes ]] bytes.
 ```
 POST [[ base ]]/api/artifacts
 { "title": "Optional title", "description": "Optional", "markup": "<h1 className=\"text-4xl font-bold\">Hello</h1>" }
-→ 201 { "id": "<6-char id>", "url": "[[ base ]]/a/<id>", "version": 1, "visibility": "public", "edit_id": "<head pointer>", "markup_changed": false }
+→ 201 { "id": "<6-char id>", "url": "[[ base ]]/a/<id>", "version": 1, "edit_id": "<head pointer>", "markup_changed": false }
 ```
 
 `markup` is one of the content fields — `markup | dataset | viz | image | pdf`
-— and every endpoint takes exactly ONE (a folder, below, takes none).
+— and every endpoint takes exactly ONE.
 `markup_changed` true means storing rewrote the document and the CANONICAL
-`markup` comes back; false means it stored it byte for byte. Edit against the
-echo (`/edits` always returns the resulting `markup`).
+`markup` comes back; edit against that echo (`/edits` always returns the
+resulting `markup`).
 
 **Visibility (who can open that url).** An account-owned token publishes
 `private` by default — **when your user wants a link for OTHER people, pass
 `"visibility": "public"` or `"unlisted"` on create or PUT.** `public` = anyone
-with the link, listed on `/@username`; `unlisted` = the same link, listed
-nowhere; `private` = the owner plus emails invited on the share page
+with the link, listed on `/@username`; unlisted is listed nowhere, a folder
+page included; `private` = the owner plus emails invited on the share page
 ([auth](publishing-auth.md)). Anonymous tokens publish `public`, images and
 datasets `unlisted`; `private` with no account is
 `400 private_requires_account`, never a silent downgrade.
@@ -65,14 +64,15 @@ PUT [[ base ]]/api/artifacts/<id>
 
 Full replacement — the complete new content, not a diff; the previous version is
 archived, omitted `title`/`description` keep their values, and it is also where
-`"visibility"` and `"parent_id"` go. Optionally `expectedVersion` (from your last
+`"visibility"` goes. Optionally `expectedVersion` (from your last
 read): a concurrent edit then answers `409 version_conflict` with its
 `currentVersion` instead of overwriting — re-read, merge, retry.
 
-### Folders
+### Folders, and the trash
 
-A folder is an artifact — its own url, title, visibility and sharing — whose page
-IS its listing, and the one body with NO content field.
+`format: 'folder'` with NO content field makes one — an artifact like any
+other, with its own url, title, visibility and sharing. `parent_id` files
+anything under it, on create, fork or PUT; `null` is your root.
 
 ```
 POST [[ base ]]/api/artifacts  { "format": "folder", "title": "Reports" } → 201 { "id": "hAoPxJ" }
@@ -83,7 +83,13 @@ Ids, never paths (two sibling folders may share a name); max 6 deep. Every read
 carries `parent_id` and `ancestor_ids` (the trail, root→parent), so one call
 draws breadcrumbs and the url keeps working wherever a file moves.
 
-### Edit part of a document (preferred for `markup`)
+A folder's page is its own stored markup — a `<Query>` over its children table
+`ref_<folderId>`, drawn by `<Files>` ([markup-data.md](markup-data.md)) — so you
+edit one like any document. DELETE is a TRASH: a folder goes with everything
+under it, and `restore_artifact` takes it back for 30 days
+([publishing-versions.md](publishing-versions.md)).
+
+### Edit part of a document
 
 ```
 POST [[ base ]]/api/artifacts/<id>/edits
@@ -106,7 +112,7 @@ invent one. Concurrency is per NODE, so most edits just apply:
 You may also set `title`, `theme` or `colorMode` in the same request, with or
 without a text change: document-level, so they never conflict.
 
-### Fork an artifact (adapt one you can read)
+### Fork an artifact
 
 ```
 POST [[ base ]]/api/artifacts/<id>/fork
@@ -114,13 +120,13 @@ POST [[ base ]]/api/artifacts/<id>/fork
 → 201 { "id": "<new id>", "url", "version": 1, "edit_id", "markup", "forked_from": "<id>" }
 ```
 
-**To adapt a document you can read, fork it, then edit the copy** — your own, one
-shared with your account, or any public/unlisted one. The reply is the create
+**To adapt a document you can read, fork it, then edit the copy** — yours, one
+shared with you, or any public/unlisted one. The reply is the create
 reply: `id` and `edit_id` go straight into the edit loop. Content and settings
 travel; history, comments and shares do not; the original is untouched; and refs
 re-check as YOU (someone else's `<Mutation>` target is `400 invalid_refs`).
 
-### Read one back (before editing)
+### Read one back
 
 ```
 GET [[ base ]]/api/artifacts/<id>
@@ -142,15 +148,13 @@ too; there is no separate datasets endpoint.
 | Status | Meaning | What to do |
 |---|---|---|
 | 400 | `invalid_json` / `markup_only` / `one_of_markup_dataset_viz_image_pdf` / `invalid_jsx` / `invalid_refs` / `invalid_sql` / `invalid_dataset` / `invalid_image` / `unknown_theme` / `retired_theme` | Fix the body — `details` names each problem with its span; a retired theme's hint names its successor |
-
-| 400 | `invalid_visibility` / `private_requires_account` / `public_not_enabled` | `visibility` is `public`, `unlisted` or `private`; `private` needs an account-owned token; a deployment that does not offer `public` takes `unlisted` (already anyone-with-the-link) |
+| 400 | `invalid_visibility` / `private_requires_account` / `public_not_enabled` | The three values are above; a deployment that does not offer `public` takes `unlisted` (already anyone-with-the-link) |
 | 400 | `invalid_parent` / `folder_retired` / `not_forkable` | `parent_id` is the id of a FOLDER you own, outside what you are moving, under 6 deep — one code, since naming which would say whether an id exists. `folder` paths are gone; a folder is not forkable |
 | 401 | `unauthorized` | Token wrong/revoked — ask your user, don't retry |
 | 403 | `quota_exceeded` | This token is at its cap — delete something, or use another |
 | 404 | `not_found` | No artifact with that id is reachable by your token |
-| 409 | `version_conflict` | `expectedVersion` is stale — re-read, merge, retry with `currentVersion` (`400 invalid_expected_version`: it must be a number) |
+| 409 | `version_conflict` | `expectedVersion` is stale — re-read, merge, retry (`400 invalid_expected_version`: it must be a number) |
 | 400 | `not_editable` | Not markup — PUT it whole |
-
 | 400 | `image_fetch_failed` | An `https://` image would not import (unreachable, not an image, private address, over the cap) — `details` names it |
 | 403 | `owner_only` | `visibility` and `access` are the owner's — you are a named editor here, so send the write without them |
 | 409 | `has_dependents` | Other documents reference it — re-send DELETE with `?force=true` |
