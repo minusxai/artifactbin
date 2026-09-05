@@ -580,7 +580,6 @@ function DataTableAdapter(props: Record<string, unknown>) {
   const spec = useMemo(() => parseColumnSpecs(props.columns), [props.columns]);
   const authoredSort = useMemo(() => parseSortSpec(props.sort), [props.sort]);
   const templates = Array.isArray(props.templates) ? props.templates as ColumnTemplate[] : [];
-  const templateSpec = templates.length ? templates.map((t) => ({ ...t.props, col: t.col })) : null;
   const sessions = useMemo(() => createCellSessions(), []);
   // A CEILING, not a reserved height (the kit's scroll box caps itself): outside a
   // grid cell the wrapper leaves the table to hug its rows, and the cap is the TABLE
@@ -631,7 +630,7 @@ function DataTableAdapter(props: Record<string, unknown>) {
       <CellSessionsContext.Provider value={sessions}><DataTable
         rows={shown}
         columns={table.columns}
-        spec={templateSpec ?? spec}
+        spec={spec}
         rowKey={typeof props.rowKey === 'string' ? props.rowKey : undefined}
         templates={templates}
         renderCell={typeof props.renderCell === 'function' ? props.renderCell as (template: ColumnTemplate, row: Row) => ReactNode : undefined}

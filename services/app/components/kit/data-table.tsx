@@ -19,12 +19,13 @@ import { useVirtualizer } from "@tanstack/react-virtual"
 
 import { cn } from "./cn"
 import {
-  barFraction, cellTint, formatCell, gridGeometry, parseTableHeight, resolveColumns, sortRows,
+  barFraction, cellTint, formatCell, gridGeometry, parseColumnSpecs, parseTableHeight, resolveColumns, sortRows,
   type DataTableColumnSpec, type ResolvedColumn, type SortSpec,
 } from "@/lib/story/data-table"
 import type { DatasetColumn } from "@/lib/story/dataset-shape"
 import type { Row } from "@/lib/story/dataflow"
 import type { JsxNode } from "@/lib/jsx"
+import { AST_PATH_ATTR } from "@/lib/story-ui/ast-path"
 
 export interface ColumnTemplate { col: string; title?: string; props: Record<string, unknown>; nodes: JsxNode[]; path: string }
 
@@ -94,7 +95,10 @@ export function DataTable({
   const [sort, setSort] = React.useState<SortSpec | null>(initialSort)
   React.useEffect(() => { setSort(initialSort) }, [initialSort?.col, initialSort?.dir]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const resolved = React.useMemo(() => resolveColumns(spec, columns, rows), [spec, columns, rows])
+  const resolved = React.useMemo(() => resolveColumns(
+    templates.length ? parseColumnSpecs(templates.map((template) => template.props)) : spec,
+    columns, rows,
+  ), [spec, columns, rows, templates])
   const remote = truncated && !!onSortChange
   const ordered = React.useMemo(() => (remote ? rows : sortRows(rows, sort)), [rows, sort, remote])
 
@@ -179,6 +183,7 @@ export function DataTable({
               {resolved.map((c) => (
                 <th
                   key={c.col}
+                  {...{ [AST_PATH_ATTR]: templates.find((template) => template.col === c.col)?.path }}
                   scope="col"
                   aria-label={`Sort by ${c.title}`}
                   aria-sort={sort?.col === c.col ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
