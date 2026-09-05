@@ -1,8 +1,7 @@
-/** The app chrome around every page: controls on the page, then its masthead. */
+/** The app chrome around every page: a compact top bar and page controls. */
 import type { ReactNode } from 'react';
 import { Outlet } from 'react-router';
 import AdoptLegacyToken from '@/components/AdoptLegacyToken';
-import HeaderBar from '@/components/HeaderBar';
 import { MixpanelIdentify } from '@/components/MixpanelClient';
 import PageChrome from '@/components/PageChrome';
 import { useSession } from './session';
@@ -12,14 +11,13 @@ import { useSession } from './session';
  * Document artifacts deliberately stay outside it; an owned folder is a
  * workspace location and should be visually indistinguishable from Home.
  */
-export function ShellFrame({ children }: { children: ReactNode }) {
+export function ShellFrame({ children, hideBreadcrumb = false }: { children: ReactNode; hideBreadcrumb?: boolean }) {
   const { session } = useSession();
   return (
     <>
       <AdoptLegacyToken />
       {session?.user && <MixpanelIdentify userId={session.user.id} email={session.user.email} />}
-      <PageChrome authed={!!session?.user} anon={session?.kind === 'anon'} />
-      <HeaderBar authed={!!session?.user} />
+      <PageChrome hideBreadcrumb={hideBreadcrumb} authed={!!session?.user} anon={session?.kind === 'anon'} />
       {children}
     </>
   );

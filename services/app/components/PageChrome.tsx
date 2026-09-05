@@ -413,11 +413,13 @@ const BAR_BUTTON =
  */
 export function AppBar({
   title,
+  hideBreadcrumb = false,
   label = 'Page controls',
   fixed = false,
   center,
 }: {
   title?: string | null;
+  hideBreadcrumb?: boolean;
   label?: string;
   /** Over a page that does not flow (the artifact page in edit mode) rather than in one. */
   fixed?: boolean;
@@ -425,7 +427,7 @@ export function AppBar({
   center?: React.ReactNode;
 }) {
   const pathname = usePathname() ?? '';
-  const trail = crumbsFor(pathname, title);
+  const trail = hideBreadcrumb ? [] : crumbsFor(pathname, title);
   const [openPanel, setOpenPanel] = useState<'menu' | 'controls' | null>(null);
   useEffect(() => {
     const onState = (event: Event) => {
@@ -456,12 +458,18 @@ export function AppBar({
       {center && <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">{center}</div>}
       <a href="/" aria-label="Home" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] no-underline transition-colors hover:bg-raised">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo-128.png" alt="" className="h-7 w-7" />
+        <img src="/logo-128.png" alt="" className="h-9 w-9" />
       </a>
       {/* The trail: the brand is the root crumb, then the way down to this page
           (lib/breadcrumb). Desktop only — a phone keeps the logo alone. */}
       <nav aria-label="Current page" className="hidden min-w-0 items-center gap-1.5 font-mono text-xs text-muted sm:flex">
-        <a href="/" className={`shrink-0 no-underline hover:text-accent ${trail.length === 0 ? 'font-semibold text-fg' : 'text-muted'}`}>artifactbin</a>
+        <a href="/" className={`shrink-0 text-sm no-underline hover:text-accent ${trail.length === 0 ? 'font-semibold text-fg' : 'text-muted'}`}>artifactbin</a>
+        {pathname === '/' && (
+          <>
+            <span aria-hidden="true" className="text-faint">·</span>
+            <span className="truncate">Google Docs for agents</span>
+          </>
+        )}
         {trail.map((crumb) => (
           <span key={`${crumb.href ?? ''}:${crumb.label}`} className="flex min-w-0 items-center gap-1.5">
             <ChevronRight size={12} className="shrink-0 text-faint" aria-hidden="true" />
@@ -486,12 +494,14 @@ export default function PageChrome({
   authed,
   anon = false,
   title,
+  hideBreadcrumb = false,
   label = 'Page controls',
   children,
 }: {
   authed: boolean;
   anon?: boolean;
   title?: string | null;
+  hideBreadcrumb?: boolean;
   /** The controls panel's name — "Artifact controls" on an artifact page. */
   label?: string;
   /** Extra rows for the controls panel (an artifact's own actions). */
@@ -499,7 +509,7 @@ export default function PageChrome({
 }) {
   return (
     <>
-      <AppBar title={title} label={label} />
+      <AppBar title={title} label={label} hideBreadcrumb={hideBreadcrumb} />
       <PageMenu authed={authed} anon={anon} title={title} fixed triggerless />
       <PageControls fixed triggerless label={label}>{children}</PageControls>
     </>

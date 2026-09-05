@@ -95,9 +95,10 @@ describe('the head', () => {
     expect(screen.queryByText(/^\d+ (document|folder)/)).not.toBeInTheDocument();
   });
 
-  it('draws the trail as plain links, root to parent, and none at the root', () => {
+  it('links Home and readable ancestors before the current folder', () => {
     const { unmount } = draw({ folder: folder(), role: 'viewer' });
-    expect(screen.queryByLabelText('Folder trail')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveAttribute('aria-current', 'page');
     unmount();
     draw({
       folder: folder({ trail: [{ id: 'r1', title: 'Work', url: '/a/r1' }, { id: 'r2', title: '2026', url: '/a/r2' }] }),
@@ -105,8 +106,8 @@ describe('the head', () => {
     });
     const trail = screen.getByLabelText('Folder trail');
     const links = [...trail.querySelectorAll('a')];
-    expect(links.map((a) => a.textContent)).toEqual(['Work', '2026']);
-    expect(links.map((a) => a.getAttribute('href'))).toEqual(['/a/r1', '/a/r2']);
+    expect(links.map((a) => a.textContent)).toEqual(['Home', 'Work', '2026']);
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(['/', '/a/r1', '/a/r2']);
   });
 
   it('always draws a <main> — the export camera names that element, empty folder or not', () => {
@@ -184,7 +185,8 @@ describe('the shelf below the hairline', () => {
         </ShellFrame>
       </MemoryRouter>,
     );
-    expect(screen.getByLabelText('artifactbin home')).toBeInTheDocument();
+    expect(screen.getByLabelText('Page bar')).toBeInTheDocument();
+    expect(screen.queryByLabelText('artifactbin home')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Open menu')).toBeInTheDocument();
     expect(screen.getByLabelText('Open page controls')).toBeInTheDocument();
     expect(screen.getByLabelText('Folder workspace')).toBeInTheDocument();

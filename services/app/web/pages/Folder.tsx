@@ -13,8 +13,8 @@
  *
  * WHAT THE PAGE IS. Nobody reads a folder; they scan it and leave. So exactly
  * one thing carries weight — the NAME — and everything else is set to stay out
- * of its way: the trail above it is an address and is set in the face this app
- * sets addresses in, the count below it is a sentence somebody would actually
+ * of its way: the breadcrumb links Home and readable ancestors to the current folder,
+ * the count beside it is a sentence somebody would actually
  * say ("3 documents and 1 folder", not "3 · 1"), and a single hairline divides
  * identity from contents. That hairline is the only line on the page and it is
  * structural rather than decorative. There is no FOLDER label (the address says
@@ -63,7 +63,7 @@ function summarise({ documents, folders }: FolderPageData['count']): string {
  * nothing on the page — which is the whole reason renaming happens here rather
  * than in a dialog.
  */
-const NAME_TYPE = 'font-serif text-[clamp(1.5rem,3vw,2rem)] leading-[1.15] font-medium tracking-[-0.01em] text-fg';
+const NAME_TYPE = 'font-mono text-base leading-normal font-medium tracking-[-0.01em] text-fg';
 
 function Name({ id, title, mayRename, onRenamed }: { id: string; title: string | null; mayRename: boolean; onRenamed: (title: string) => void }) {
   const [editing, setEditing] = useState(false);
@@ -183,26 +183,23 @@ export function FolderPage({ folder: given, role, workspace: givenWorkspace }: F
   const contents = (
     <>
       <header className="mb-6 border-b border-edge pb-4">
-        {folder.trail.length > 0 && (
-          /* THE TRAIL IS AN ADDRESS, so it is set in the face this app sets
-             addresses in and separated by the character a path is separated by.
-             Only the ancestors this viewer may read are here — an unreadable one
-             is absent rather than redacted (lib/folders folderHeadFor). */
-          <nav aria-label="Folder trail" className="mb-2 flex flex-wrap items-center gap-x-1.5 font-mono text-xs text-faint">
-            {folder.trail.map((crumb, i) => (
-              <span key={crumb.id} className="flex items-center gap-x-1.5">
-                {i > 0 && <span aria-hidden="true">/</span>}
-                <a href={crumb.url} className="text-faint no-underline transition-colors hover:text-accent">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <nav aria-label="Folder trail" className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1 font-mono">
+            <a href="/" className={`${NAME_TYPE} text-muted no-underline transition-colors hover:text-accent`}>Home</a>
+            {/* Only ancestors this viewer may read are included in the trail. */}
+            {folder.trail.map((crumb) => (
+              <span key={crumb.id} className="flex min-w-0 items-baseline gap-x-3">
+                <span aria-hidden="true" className="text-sm text-faint">&gt;</span>
+                <a href={crumb.url} className={`${NAME_TYPE} text-muted no-underline transition-colors hover:text-accent`}>
                   {crumb.title ?? crumb.id}
                 </a>
               </span>
             ))}
+            <span aria-hidden="true" className="text-sm text-faint">&gt;</span>
+            <h1 aria-current="page" className="m-0 min-w-0 break-words">
+              <Name id={folder.id} title={folder.title} mayRename={mayWrite} onRenamed={(title) => setFolder((f) => ({ ...f, title }))} />
+            </h1>
           </nav>
-        )}
-        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <h1 className="m-0 min-w-0 flex-1">
-            <Name id={folder.id} title={folder.title} mayRename={mayWrite} onRenamed={(title) => setFolder((f) => ({ ...f, title }))} />
-          </h1>
           {summary && <p className="m-0 shrink-0 font-sans text-sm text-muted">{summary}</p>}
         </div>
       </header>

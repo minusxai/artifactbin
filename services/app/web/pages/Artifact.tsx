@@ -50,10 +50,10 @@ export function ArtifactPage({ id: given }: { id?: string } = {}) {
   if (page === 'missing') return <NotFoundPage />;
   // A folder is a listing, not a document: no ArtifactShell and no surface
   // (there is nothing to frame). An account-owned folder does get the normal
-  // PAGE frame so its masthead and controls remain identical to Home.
+  // PAGE frame so its top bar and controls remain identical to Home.
   if (page.folder) {
     const folder = <FolderPage folder={page.folder} role={page.role} workspace={page.workspace} />;
-    return page.workspace ? <ShellFrame>{folder}</ShellFrame> : folder;
+    return page.workspace ? <ShellFrame hideBreadcrumb>{folder}</ShellFrame> : folder;
   }
   return (
     <ArtifactShell role={page.role}>
