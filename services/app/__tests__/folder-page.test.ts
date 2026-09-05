@@ -135,6 +135,25 @@ describe('a folder has no content', () => {
     expect((await getArtifactById(doc.id))!.title).toBe('Doc renamed');
   });
 
+  /*
+   * AND THE MIRROR IMAGE, which is worse: `parseContentInput` turns a body of
+   * `{"format":"folder"}` with no content into the empty stored state, so a PUT
+   * of that shape at a DOCUMENT would blank its source and file it in the
+   * folders partition — the same class of loss as the format flip above, with
+   * the document's content gone rather than its children. Format is the ROW's
+   * on replace, in BOTH directions.
+   */
+  it('never turns a document INTO a folder — format is the row\'s, whatever the body says', async () => {
+    const o = await owner('nodemote');
+    const doc = await create(o.token, { markup: '<h1>Real work</h1>', title: 'Doc' });
+    const r = await j(await putRoute(request(`/api/artifacts/${doc.id}`, {
+      method: 'PUT', token: o.token, json: { format: 'folder' },
+    }), params(doc.id)));
+    const row = (await getArtifactById(doc.id))!;
+    expect(row.format, JSON.stringify(r.body)).toBe('markup');
+    expect(row.source).toContain('Real work');
+  });
+
   it('has no document to serve: raw is the uniform 404', async () => {
     const o = await owner('noraw');
     const f = await create(o.token, { format: 'folder', title: 'Reports', visibility: 'public' });

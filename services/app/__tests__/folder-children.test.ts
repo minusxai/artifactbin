@@ -23,6 +23,8 @@ import { describe, expect, it } from 'vitest';
 import { agentCookie, request, useAppHarness } from './harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { GET as queryGet } from '@/app/a/[id]/query/route';
+import { GET as eventsRoute } from '@/app/a/[id]/events/route';
+import { STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
 import { getArtifactById, updateSharing } from '@/lib/artifacts';
 import { childrenTableFor } from '@/lib/folders';
 import { subscribeToArtifact } from '@/lib/story/live';
@@ -159,6 +161,44 @@ describe('the children table', () => {
     // children only. The document's own visibility opens the endpoint; the
     // folder's ACL decides the rows, and the two are separate questions.
     expect((r.body.tables.kids.rows as any[]).map((x) => x.id).sort()).toEqual([pub.id, sub.id].sort());
+  });
+
+  /**
+   * THE STREAM FOLLOWS A FOLDER TO ITSELF, and that rule is now STATED rather
+   * than inferred.
+   *
+   * It used to be inferred: a folder's source was a scaffold naming
+   * `ref_<own id>`, so `datasetsForDocument` returned its own id and the events
+   * route subscribed it as an ordinary dataset. A folder has no source now, so
+   * nothing would name it, and an open listing would sit stale until somebody
+   * reloaded — the exact regression a later edit to `followDatasets` would
+   * reintroduce in silence.
+   *
+   * Over the real route and a real socketless stream read, because the rule
+   * lives in the ROUTE: `childrenTableFor` and `notifyParent` are both fine
+   * either way, and the leg below already proves the NOTIFY fires.
+   */
+  it('the events stream subscribes a folder to its OWN channel, so a child arrives as a data frame', async () => {
+    const o = await owner();
+    const f = await create(o.token, { format: 'folder', title: 'Live', visibility: 'public' });
+    const stream = await eventsRoute(request(`/a/${f.id}/events`), params(f.id));
+    expect(stream.status).toBe(200);
+    const reader = stream.body!.getReader();
+    const decoder = new TextDecoder();
+    // Drain the opening frame before writing, so what is read after the create
+    // cannot be the connect frame arriving late.
+    await reader.read();
+    await create(o.token, { markup: '<p>new</p>', title: 'New', parent_id: f.id });
+    let seen = '';
+    const until = Date.now() + 5000;
+    while (!seen.includes(`event: ${STORY_DATA_EVENT}`) && Date.now() < until) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      seen += decoder.decode(chunk.value as Uint8Array);
+    }
+    await reader.cancel();
+    expect(seen, 'no data frame — the folder is not following its own channel').toContain(`event: ${STORY_DATA_EVENT}`);
+    expect(seen).toContain(`"datasets":["${f.id}"]`);
   });
 
   it('a child created under an open folder wakes the folder\'s own channel', async () => {

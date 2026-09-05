@@ -202,6 +202,11 @@ const updateArtifactOp: Operation = {
     NOT_FOUND,
     OWNER_ONLY,
     { status: 409, code: 'version_conflict', fix: 'someone wrote meanwhile — re-read, merge, retry with the reported currentVersion' },
+    // A folder has no content, and this door is where that is enforced — so it
+    // is declared HERE and not only on edit_artifact. The code is the same word
+    // the data tiers answer; the FIX has to be different, because "replace it
+    // whole instead" is the thing that just failed.
+    { status: 400, code: 'not_editable', fix: 'a folder has no content — send title, visibility or parent_id instead; its page is its listing' },
     ...CONTENT_ERRORS,
   ],
   async run(ctx, input) {

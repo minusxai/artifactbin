@@ -105,6 +105,20 @@ const imageTitleFromUrl = (url: string): string | null => {
 };
 
 export interface ContentInputCtx {
+  /**
+   * MAY THIS BODY MAKE A FOLDER — true only where a row is being CREATED.
+   *
+   * `format: 'folder'` is the one body with no content field, and read on a
+   * REPLACE it means "become a folder": measured on main, a plain
+   * `PUT {"format":"folder"}` at any document answered 200, emptied its source
+   * and filed the row in the folders partition — a document's whole content
+   * gone, with no content field in the body to say so. A replace never changes
+   * a row's format (lib/artifact-wire holds the other half of the rule, for a
+   * folder that must stay one), so the arm is off unless a caller says
+   * otherwise, and a replace that names the format then gets the ordinary
+   * one-of refusal for a body carrying no content.
+   */
+  creating?: boolean;
   /** Resolve a `ref:<id>` against the caller's own artifacts. Absent ⇒ ref checks skipped (preview). */
   loadRef?: import('./refs').RefLoader;
   /**
@@ -166,7 +180,7 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
    * nothing to serve. A body that names the format AND sends content is still
    * the one-of refusal — it is asking for two things.
    */
-  if (body.format === 'folder' && present.length === 0) {
+  if (ctx.creating && body.format === 'folder' && present.length === 0) {
     return { format: 'folder', content: '', source: '', meta: {}, derivedTitle: null };
   }
   if (present.length !== 1) return json({ error: 'one_of_markup_dataset_viz_image_pdf' }, 400);
