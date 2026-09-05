@@ -123,7 +123,7 @@ export function HomePage() {
             <WorkspaceCreate onCreated={load} />
           </div>
           <div className="min-w-0 lg:col-start-1 lg:row-start-1">
-            {home.artifacts.length > 0 && <Shelf actions="full" assets={false} rows={home.artifacts as never} />}
+            {home.artifacts.length > 0 && <Shelf actions="full" assets={false} scopeParentId={null} rows={home.artifacts as never} />}
             <SharedWithYou items={home.shared} />
           </div>
           <aside aria-label="Dashboard rail" className="min-w-0 border-t border-edge pt-6 lg:col-start-2 lg:row-start-1 lg:border-t-0 lg:border-l lg:pt-24 lg:pl-6">

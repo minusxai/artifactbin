@@ -54,6 +54,14 @@ export interface ShelfProps {
   rows: ShelfRow[];
   actions?: ShelfActions;
   /**
+   * Show only the immediate children of this location. `null` is the account
+   * root; `undefined` preserves the caller's already-scoped collection.
+   *
+   * The complete `rows` collection remains available to folder counts and the
+   * move picker, so scoping what is visible does not amputate the folder tree.
+   */
+  scopeParentId?: string | null;
+  /**
    * Show the band of datasets and images. The dashboard is where material is
    * managed; a profile is about the documents, and listing the material there
    * is the junk-drawer `listPublicArtifactsByUser` already refuses to be.
@@ -426,7 +434,7 @@ function FilterChip({ value, active, onToggle }: { value: string; active: boolea
   );
 }
 
-export default function Shelf({ rows, actions = 'none', assets = true, dates = 'relative', parentId = null, canCreateFolders = false }: ShelfProps) {
+export default function Shelf({ rows, actions = 'none', assets = true, dates = 'relative', scopeParentId, parentId = null, canCreateFolders = false }: ShelfProps) {
   const [query, setQuery] = useState('');
   const [picks, setPicks] = useState<string[]>([]);
   const [made, setMade] = useState<ShelfRow[]>([]);
@@ -449,7 +457,13 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
   // `/assets`; leaving them in these derivations would make Home report hidden
   // matches that it can never render.
   const available = made.length > 0 ? [...made, ...present] : present;
-  const all = assets ? available : available.filter((row) => row.format === 'markup' || row.format === 'folder');
+  const inventory = assets ? available : available.filter((row) => row.format === 'markup' || row.format === 'folder');
+  // LOCATION decides what is drawn. Home passes null and becomes a true root
+  // shelf; folder pages pass their id and show immediate children only. A
+  // pre-scoped caller can omit the prop and keep its rows unchanged.
+  const all = scopeParentId === undefined
+    ? inventory
+    : inventory.filter((row) => parentOfRow(row) === scopeParentId);
 
   const togglePick = (v: string) => setPicks((p) => (p.includes(v) ? p.filter((x) => x !== v) : [...p, v]));
 
@@ -469,15 +483,15 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
 
   /** The account's folders, for every picker on this shelf — the tree, unfiltered. */
   const pickable: PickerFolder[] = useMemo(
-    () => all.filter((r) => r.format === 'folder').map((r) => ({ id: r.id, title: r.title, ancestor_ids: r.ancestor_ids ?? [] })),
-    [all],
+    () => available.filter((r) => r.format === 'folder').map((r) => ({ id: r.id, title: r.title, ancestor_ids: r.ancestor_ids ?? [] })),
+    [available],
   );
   /**
    * How many rows THIS shelf holds inside a folder — what the page was given
    * and no more. The dashboard lists the whole account, so its number is the
    * folder's; a profile lists the ROOT, so it has none to count and shows none.
    */
-  const inside = (id: string): number => all.filter((r) => parentOfRow(r) === id).length;
+  const inside = (id: string): number => available.filter((r) => parentOfRow(r) === id).length;
   const dateGroups = useMemo(() => groupShelfByRecency(shelf.documents), [shelf.documents]);
 
   const filtering = Boolean(q) || picks.length > 0;

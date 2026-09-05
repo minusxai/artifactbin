@@ -25,6 +25,38 @@ afterEach(() => {
 });
 
 describe('Shelf — grid and list views', () => {
+  it('draws only the immediate children of its current location', () => {
+    const rootFolder = { ...doc('root-folder', 27), title: 'Root folder', format: 'folder' };
+    const nestedFolder = {
+      ...doc('nested-folder', 26),
+      title: 'Nested folder',
+      format: 'folder',
+      parent_id: 'root-folder',
+      ancestor_ids: ['root-folder'],
+    };
+    const nestedDoc = doc('nested', 25, { parent_id: 'root-folder', ancestor_ids: ['root-folder'] });
+    const nestedAsset = asset('nested-data', 25, 'dataset');
+    nestedAsset.parent_id = 'root-folder';
+    nestedAsset.ancestor_ids = ['root-folder'];
+    const grandchild = doc('grandchild', 24, {
+      parent_id: 'nested-folder',
+      ancestor_ids: ['root-folder', 'nested-folder'],
+    });
+    const rows = [doc('root', 28), rootFolder, nestedFolder, nestedDoc, nestedAsset, grandchild];
+
+    const root = render(<Shelf rows={rows} assets={false} scopeParentId={null} />);
+    expect(screen.getByLabelText('Artifact grid')).toHaveTextContent('Doc root');
+    expect(screen.queryByLabelText('Open Doc nested')).toBeNull();
+    expect(screen.getByLabelText('Open folder Root folder').parentElement).toHaveTextContent('3');
+    expect(screen.queryByLabelText('Open folder Nested folder')).toBeNull();
+
+    root.rerender(<Shelf rows={rows} scopeParentId="root-folder" />);
+    expect(screen.getByLabelText('Artifact grid')).toHaveTextContent('Doc nested');
+    expect(screen.queryByLabelText('Open Doc root')).toBeNull();
+    expect(screen.queryByLabelText('Open Doc grandchild')).toBeNull();
+    expect(screen.getByLabelText('Open folder Nested folder')).toBeInTheDocument();
+  });
+
   it('starts as one uniform grid with no promoted hero', () => {
     render(<Shelf rows={[doc('a', 20), doc('b', 28), doc('c', 26), doc('d', 24)]} />);
     const grid = screen.getByLabelText('Artifact grid');
@@ -90,6 +122,31 @@ describe('Shelf — grid and list views', () => {
 });
 
 describe('Shelf — data and capabilities', () => {
+  it('keeps the complete folder tree in the move picker while Home shows only root rows', () => {
+    render(
+      <Shelf
+        actions="full"
+        assets={false}
+        scopeParentId={null}
+        rows={[
+          doc('root', 28),
+          { ...doc('research', 27), title: 'Research', format: 'folder' },
+          {
+            ...doc('archive', 26),
+            title: 'Archive',
+            format: 'folder',
+            parent_id: 'research',
+            ancestor_ids: ['research'],
+          },
+        ]}
+      />,
+    );
+    expect(screen.queryByLabelText('Open folder Archive')).toBeNull();
+    fireEvent.click(screen.getByLabelText('More actions for Doc root'));
+    fireEvent.click(screen.getByLabelText('Move Doc root'));
+    expect(screen.getByLabelText('Move to Archive')).toBeInTheDocument();
+  });
+
   it('renders view telemetry only when the page supplies it', () => {
     const { rerender } = render(<Shelf rows={[doc('a', 28, { views: 42, sparkline: '<svg data-spline="1"></svg>' })]} />);
     const views = screen.getByLabelText('Doc a views');

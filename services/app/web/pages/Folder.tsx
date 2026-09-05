@@ -212,6 +212,7 @@ export function FolderPage({ folder: given, role }: FolderPageProps) {
         actions={mayWrite ? 'full' : 'share'}
         canCreateFolders={mayWrite}
         parentId={folder.id}
+        scopeParentId={folder.id}
         assets
       />
     </main>

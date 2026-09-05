@@ -143,6 +143,27 @@ describe('what the dashboard leads with', () => {
     expect(screen.queryByLabelText('What you can use it for')).toBeNull();
   });
 
+  it('shows only root files on Home while dashboard totals still include filed artifacts', async () => {
+    home = {
+      signedIn: true,
+      artifacts: [
+        doc('root'),
+        { ...doc('folder'), title: 'Research', format: 'folder' },
+        { ...doc('filed'), parent_id: 'folder', ancestor_ids: ['folder'] },
+      ],
+      viewsOverTime: [],
+      shared: [],
+    };
+    render(<MemoryRouter><HomePage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByLabelText('Open Doc root')).toBeInTheDocument());
+    expect(screen.getByLabelText('Open folder Research')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Open Doc filed')).toBeNull();
+
+    const metrics = within(screen.getByLabelText('Dashboard metrics'));
+    const artifacts = metrics.getByText('artifacts').closest('dt')?.nextElementSibling;
+    expect(artifacts).toHaveTextContent('2');
+  });
+
   it('offers ONE way to the trash, and only to an account', async () => {
     /*
      * P3 made delete a trash: a deleted row is recoverable for ever, which
