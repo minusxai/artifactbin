@@ -117,13 +117,13 @@ describe('GET /api/page/assets', () => {
 });
 
 describe('GET /api/page/account', () => {
-  it('is 401 for nobody and the handle plus views for an account', async () => {
+  it('is 401 for nobody and returns the handle for an account', async () => {
     expect((await accountPage(request('/api/page/account'))).status).toBe(401);
     const w = await world();
     asSession(w.owner);
     const body = await (await accountPage(request('/api/page/account'))).json();
     expect(body.username).toBe(w.owner.username);
-    expect(body).toHaveProperty('viewsChart');
+    expect(body).not.toHaveProperty('viewsChart');
   });
 });
 

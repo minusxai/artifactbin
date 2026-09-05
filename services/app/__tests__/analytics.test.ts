@@ -28,7 +28,7 @@ import { mintExportKey } from '@/lib/export-key';
 import { resetLiveSubscriptions } from '@/lib/story/live';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, listArtifactsByUser } from '@/lib/users';
-import { renderDailyViewsSvg, renderSparklineSvg } from '@/lib/viz/sparkline';
+import { renderSparklineSvg } from '@/lib/viz/sparkline';
 
 const BASE = 'http://localhost:3000';
 const harness = useAppHarness();
@@ -383,12 +383,5 @@ describe('sparkline rendering', () => {
     expect(svg.startsWith('<svg')).toBe(true);
   });
 
-  it('renders the daily histogram to inline SVG', async () => {
-    const svg = await renderDailyViewsSvg([
-      { day: '2026-08-10', views: 3 },
-      { day: '2026-08-11', views: 0 },
-      { day: '2026-08-12', views: 7 },
-    ]);
-    expect(svg.startsWith('<svg')).toBe(true);
-  });
+
 });

@@ -192,18 +192,7 @@ export function Spark({ svg, filled = true, className = '' }: { svg: string; fil
   );
 }
 
-/**
- * THE COLUMN EVERY APP PAGE IS MEASURED AGAINST — masthead and content alike.
- *
- * One constant rather than a literal per page, because the two that drifted
- * apart were the masthead and the dashboard under it: the rule beneath the
- * logo stopped short of the panels below, and the same shelf laid out at two
- * different widths depending on whether it was reached at `/` or `/@handle`.
- *
- * Shared rather than widened: `HeaderBar` heads every page in the shell, and
- * account and docs are deliberately narrow for reading and forms. One width
- * they can all sit at beats a width threaded through as a prop.
- */
+/** Standard reading column for profiles, docs, and other focused app pages. */
 export const PAGE_COLUMN = 'mx-auto max-w-4xl px-4 sm:px-6';
 
 export const PANEL = 'rounded-[6px] border border-edge bg-surface';

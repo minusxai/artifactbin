@@ -1,11 +1,7 @@
 /**
  * THE HOME PAGE ON A PHONE.
  *
- * The home page is three pieces of chrome stacked — the masthead, the shelf,
- * and the bar's drawer — and each of them was drawn for a desktop
- * column. This file is the one place their PHONE shape is pinned, because the
- * faults are not per-component bugs: they are the same fault (a width that was
- * always there is suddenly the scarce thing) landing in three files.
+ * Responsive coverage for the shelf and the top bar’s drawer.
  *
  * What is asserted here, and why each one is a real defect and not a taste:
  *
@@ -25,7 +21,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import HeaderBar from '@/components/HeaderBar';
 import Shelf, { type ShelfRow } from '@/components/Shelf';
 import { PageMenu } from '@/components/PageChrome';
 
@@ -69,36 +64,6 @@ describe('the shelf reads as ONE shelf on a phone', () => {
     expect(input).toHaveClass('min-w-32', 'flex-1');
     expect(input).not.toHaveClass('w-full');
     expect(screen.getByLabelText('Shelf view')).toHaveClass('shrink-0');
-  });
-});
-
-describe('the masthead is proportionate to the screen it is on', () => {
-  it('compresses the lockup — small mark and no tagline', () => {
-    render(<HeaderBar authed />);
-    const logo = screen.getByLabelText('artifactbin home').querySelector('img')!;
-    expect(logo).toHaveClass('h-8', 'w-8', 'sm:h-20', 'sm:w-20');
-    // The tagline is desktop's: for a signed-in phone it is marketing copy
-    // spending a line, and beside a small mark it read as one weird run-on.
-    expect(screen.getByText('Google Docs for agents')).toHaveClass('hidden', 'sm:block');
-    // ONE structure at every size — brand left, utility column right — so the
-    // phone is the desktop masthead scaled, not a second layout to maintain.
-    const header = screen.getByLabelText('artifactbin home').parentElement!;
-    expect(header).toHaveClass('flex', 'items-center', 'justify-between');
-  });
-
-  it('leaves artifact facts and signed-in identity to the working surfaces', () => {
-    render(<HeaderBar authed />);
-    expect(screen.queryByLabelText(/artifacts?$/)).toBeNull();
-    expect(screen.queryByText('a@b.co')).toBeNull();
-    expect(screen.getByLabelText('artifactbin on GitHub')).toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: 'Site links' })).toBeInTheDocument();
-  });
-
-  it('keeps the login door for strangers but omits it for an account', () => {
-    const { rerender } = render(<HeaderBar />);
-    expect(screen.getByLabelText('Log in from header')).toBeInTheDocument();
-    rerender(<HeaderBar authed />);
-    expect(screen.queryByLabelText('Log in from header')).toBeNull();
   });
 });
 

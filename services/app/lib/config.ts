@@ -281,21 +281,16 @@ export const LOGIN_EMAIL_FROM = env('EMAIL', 'FROM') ?? 'artifactbin <login@exam
 export const PUBLIC_BASE_URL = env('APP', 'PUBLIC_BASE_URL') ?? `http://localhost:${APP_PORT ?? '3030'}`;
 
 /**
- * Origin the EXPORT browser uses to reach this same process (markup rows
- * render via the live /v page). In a container the request's external origin
- * is not reachable from inside — compose sets http://127.0.0.1:3000. Unset ⇒
- * the request origin (right for bare `npm run dev`/`npm start`).
- */
-/**
  * Where the EXPORT browser reaches this process. Internal by default, for the
- * same reason the mint call is (see INTERNAL_ORIGIN below): a screenshot of
- * our own page has no business leaving the host, and a certificate the browser
+ * local browser: a screenshot of our own page has no business leaving the
+ * host, and a certificate the browser
  * does not trust ends the render — measured behind a TLS reverse proxy,
  * `net::ERR_CERT_AUTHORITY_INVALID` on every export, which is the ordinary
  * self-signed / internal-CA self-host. Set it explicitly when the browser is
  * somewhere else (`BROWSER__SERVICE_URL`), where this must resolve from THAT side.
+ * Blank values, as shipped in .env.example, also use the local default.
  */
-export const EXPORT_INTERNAL_ORIGIN = env('EXPORT', 'INTERNAL_ORIGIN') ?? THIS_PROCESS;
+export const EXPORT_INTERNAL_ORIGIN = env('EXPORT', 'INTERNAL_ORIGIN')?.trim() || THIS_PROCESS;
 
 /**
  * Mixpanel product analytics (components/MixpanelClient). Unset token ⇒

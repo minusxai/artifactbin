@@ -81,7 +81,7 @@ export function HomePage() {
       );
     }
     // A stranger has nothing to log into yet: the landing proves the product
-    // and hands over the instruction; the masthead keeps the login door.
+    // and hands over the instruction; the page menu keeps the login door.
     return <Landing />;
   }
   const empty = home.artifacts.length === 0 && home.shared.length === 0;

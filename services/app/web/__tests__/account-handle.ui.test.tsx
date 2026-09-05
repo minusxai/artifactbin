@@ -20,7 +20,7 @@ beforeEach(() => {
     if (String(url).includes('/api/page/account')) {
       // Late, as a network answer is.
       await new Promise((r) => setTimeout(r, 5));
-      return new Response(JSON.stringify({ username: 'davidgraeber99_do01', viewsChart: null }), { status: 200 });
+      return new Response(JSON.stringify({ username: 'davidgraeber99_do01' }), { status: 200 });
     }
     return new Response(JSON.stringify({}), { status: 200 });
   }));

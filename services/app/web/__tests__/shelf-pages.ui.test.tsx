@@ -14,8 +14,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import HeaderBar from '@/components/HeaderBar';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { REFRESH_EVENT } from '@/lib/navigation';
 import { router as routerDouble, resetRouter } from '@/test/setup/router';
 import { HomePage } from '@/web/pages/Home';
@@ -67,16 +65,13 @@ describe('the homepage workspace and profile column', () => {
     expect(mainWidth(prof.container)).toBe('max-w-4xl');
   });
 
-  it('keeps the masthead aligned with the standard profile column', () => {
-    const masthead = renderToStaticMarkup(HeaderBar({ authed: true }) as React.ReactElement);
-    expect(masthead).toContain('max-w-4xl');
-  });
+
 });
 
 describe('what the dashboard leads with', () => {
   // The signed-out door used to BE a login form. A stranger arriving from a
   // shared link has nothing to log into yet, so the landing proves the
-  // product first and leaves the login to the masthead.
+  // product first and leaves the login to the page menu.
   it('SIGNED OUT: shows the landing, not a login form and not the token browser', async () => {
     home = { signedIn: false };
     render(<MemoryRouter><HomePage /></MemoryRouter>);

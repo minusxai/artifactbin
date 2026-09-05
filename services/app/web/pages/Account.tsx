@@ -9,7 +9,7 @@ import { useSession } from '../session';
 
 export function AccountPage() {
   const { session } = useSession();
-  const [data, setData] = useState<{ username: string | null; viewsChart: string | null } | null>(null);
+  const [data, setData] = useState<{ username: string | null } | null>(null);
   const load = useCallback(() => { void fetch('/api/page/account', { credentials: 'same-origin' }).then((r) => (r.ok ? r.json() : null)).then(setData).catch(() => null); }, []);
   useEffect(load, [load]);
   useRefreshable(load);
@@ -31,8 +31,6 @@ export function AccountPage() {
       <div className="mt-6"><TokensPanel /></div>
       <h2 className="mt-8 text-base font-semibold"><span className="text-accent">&gt;</span> data</h2>
       <div className="mt-4"><DatasetUpload /></div>
-      <h2 className="mt-8 text-base font-semibold"><span className="text-accent">&gt;</span> views</h2>
-      {data?.viewsChart ? <div className="mt-3" dangerouslySetInnerHTML={{ __html: data.viewsChart }} /> : <p className="mt-2 font-mono text-xs text-faint">No views yet.</p>}
     </main>
   );
 }
