@@ -12,6 +12,13 @@ uuid, and the dedupe key), `at`, `source` and `payload`. The catalogue of verbs 
 `@artifactbin/contracts` (`EVENT_VERBS`); the derived name a forwarding rule matches on is `object_kind.verb`
 (`eventName`), never a stored column.
 
+One thing about the ARTIFACT vocabulary an operator with a sink has to know: `deleted` means ERASED FOR GOOD and
+is said by the purge alone, one per row it swept. A person deleting something says `trashed` (`{format, subtree}` —
+the descendants that went with it, 0 for a document); taking it back says `restored` (`{landed_at_root}`, because a
+row whose folder is still in the trash comes back at the root); and filing it somewhere says `moved`
+(`{from_parent_id, to_parent_id}`, either end null for the root). A folder is an artifact, so all three are artifact
+verbs and there is no `folder` object kind to match on.
+
 Rules the service enforces, whatever the caller says: `INTERNAL__SERVICE_SECRET` on every route but `/health`
 (`x-artifactbin-service-secret`), one statement per batch with every value BOUND, a 1 MiB body, and a schema name
 that is a plain identifier (it is interpolated into DDL). It holds no request identity and opens no outbound
