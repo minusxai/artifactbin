@@ -1,7 +1,7 @@
 ---
 name: markup
 description: >-
-  The vocabulary beyond the brief: the full component list, <Helmet> CSS/script/theme overrides, web fonts, layout. Read only for what the brief does not show, or a 400 the message does not settle.
+  JSX vocabulary, component allowlist, Helmet, CSS, scripts, fonts and layout.
 ---
 ## Read first
 
@@ -19,6 +19,7 @@ over a fixed component registry, never executed. A fault is a
   `<div data-design="tw" className="@container …">` wrapper with `@2xl:`
   container variants for responsive layout.
 - Data (`<Query>`, `<Value>`, `<Mutation>`, embeds, controls): [data](markup-data.md).
+  Editable dataset cells: [editing](markup-editing.md).
   [motion](markup-motion.md) · [video](markup-video.md) · [svg](markup-svg.md).
 
 ## Contents
@@ -49,7 +50,8 @@ Kit components ([[ components | length ]]):
 
 Plus the embeds `Question` `Number` and the Helmet declarations `Value`
 `Query` `Mutation`; a name outside that list is rejected with the registry
-echoed back. Component props are NOT validated; an unknown prop is ignored silently.
+echoed back. Unknown props are ignored; data bindings and Column contracts are checked
+at publish.
 
 **HTML tags: write the ordinary tag you mean** — [[ tags | length ]] are allowed
 (prose, headings, lists, tables, links, media, the bare controls `input`
