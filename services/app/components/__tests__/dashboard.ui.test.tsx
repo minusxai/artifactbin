@@ -29,12 +29,13 @@ describe('Dashboard', () => {
     );
 
     const metrics = within(screen.getByLabelText('Dashboard metrics'));
-    expect(metrics.getByText('artifacts').nextElementSibling).toHaveTextContent('1');
-    expect(metrics.getByText('data files').nextElementSibling).toHaveTextContent('2');
-    expect(metrics.getByText('views').nextElementSibling).toHaveTextContent('7');
-    expect(metrics.getByText('likes').nextElementSibling).toHaveTextContent('3');
-    expect(metrics.getByText('followers').nextElementSibling).toHaveTextContent('4');
-    expect(metrics.getByText('forks').nextElementSibling).toHaveTextContent('5');
+    const valueFor = (label: string) => metrics.getByText(label).closest('dt')?.nextElementSibling;
+    expect(valueFor('artifacts')).toHaveTextContent('1');
+    expect(valueFor('data files')).toHaveTextContent('2');
+    expect(valueFor('views')).toHaveTextContent('7');
+    expect(valueFor('likes')).toHaveTextContent('3');
+    expect(valueFor('followers')).toHaveTextContent('4');
+    expect(valueFor('forks')).toHaveTextContent('5');
     for (const label of ['artifacts', 'data files', 'views', 'likes', 'followers', 'forks']) {
       expect(metrics.getByText(label).closest('dt')?.querySelector('svg')).toBeTruthy();
     }

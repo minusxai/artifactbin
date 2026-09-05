@@ -437,18 +437,17 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
   return (
     <section aria-label="Shelf" className="flex flex-col gap-4">
       {all.length > 0 && (
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <div className={`flex min-w-0 flex-1 flex-wrap items-center gap-2 px-3 py-1.5 ${PANEL}`}>
+        <div className={`flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 px-3 py-1.5 ${PANEL}`}>
             <Search size={13} className="shrink-0 text-faint" />
             <input
               aria-label="Search artifacts"
               placeholder="search artifacts"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="min-w-32 flex-1 border-0 bg-transparent font-mono text-xs text-fg placeholder:text-faint focus:outline-none"
+              className="h-7 min-w-32 flex-1 border-0 bg-transparent font-mono text-xs text-fg placeholder:text-faint focus:outline-none"
             />
             {showChips && (
-              <span className="flex shrink-0 items-center gap-1.5 border-edge sm:border-l sm:pl-2">
+              <span className="flex shrink-0 items-center gap-1.5 border-l border-edge pl-2">
                 {chips.map((v) => (
                   <FilterChip key={v} value={v} active={picks.includes(v)} onToggle={togglePick} />
                 ))}
@@ -459,8 +458,7 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
                 {shelf.total + shelf.assets.length}/{all.length}
               </span>
             )}
-          </div>
-          <div role="group" aria-label="Shelf view" className={`flex shrink-0 items-center p-0.5 ${PANEL}`}>
+          <div role="group" aria-label="Shelf view" className="ml-auto flex shrink-0 items-center border-l border-edge pl-1.5">
             {([
               ['grid', 'Grid view', LayoutGrid],
               ['list', 'List view', ListIcon],

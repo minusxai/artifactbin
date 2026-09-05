@@ -105,12 +105,13 @@ describe('what the dashboard leads with', () => {
     const dashboard = screen.getByLabelText('Dashboard');
     const shelf = screen.getByLabelText('Shelf');
     const metrics = within(screen.getByLabelText('Dashboard metrics'));
-    expect(metrics.getByText('artifacts').nextElementSibling).toHaveTextContent('1');
-    expect(metrics.getByText('data files').nextElementSibling).toHaveTextContent('1');
-    expect(metrics.getByText('views').nextElementSibling).toHaveTextContent('7');
-    expect(metrics.getByText('likes').nextElementSibling).toHaveTextContent('3');
-    expect(metrics.getByText('followers').nextElementSibling).toHaveTextContent('4');
-    expect(metrics.getByText('forks').nextElementSibling).toHaveTextContent('2');
+    const valueFor = (label: string) => metrics.getByText(label).closest('dt')?.nextElementSibling;
+    expect(valueFor('artifacts')).toHaveTextContent('1');
+    expect(valueFor('data files')).toHaveTextContent('1');
+    expect(valueFor('views')).toHaveTextContent('7');
+    expect(valueFor('likes')).toHaveTextContent('3');
+    expect(valueFor('followers')).toHaveTextContent('4');
+    expect(valueFor('forks')).toHaveTextContent('2');
     expect(dashboard).toHaveTextContent('Your artifacts');
     expect(dashboard).not.toHaveTextContent('Your posts');
     expect(dashboard).not.toHaveTextContent('all time');
@@ -122,6 +123,7 @@ describe('what the dashboard leads with', () => {
     expect(screen.getByLabelText('Dashboard rail')).toContainElement(dashboard);
     const create = screen.getByLabelText('Create');
     expect(screen.getAllByLabelText('Create')).toHaveLength(1);
+    expect(create.compareDocumentPosition(shelf) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(create.compareDocumentPosition(dashboard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByLabelText('Artifact grid')).toBeInTheDocument();
     expect(screen.queryByLabelText('Get started')).toBeNull();

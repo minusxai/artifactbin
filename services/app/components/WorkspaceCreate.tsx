@@ -158,8 +158,15 @@ export default function WorkspaceCreate({ onCreated }: { onCreated: () => void }
     const close = (event: MouseEvent) => {
       if (!root.current?.contains(event.target as Node)) setOpen(false);
     };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
     window.addEventListener('mousedown', close);
-    return () => window.removeEventListener('mousedown', close);
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      window.removeEventListener('mousedown', close);
+      window.removeEventListener('keydown', closeOnEscape);
+    };
   }, [open]);
 
   const choose = (kind: CreateKind) => {
@@ -168,7 +175,7 @@ export default function WorkspaceCreate({ onCreated }: { onCreated: () => void }
   };
 
   return (
-    <div ref={root} className="relative z-30 mb-5 border-b border-edge pb-5">
+    <div ref={root} className="relative z-30 lg:border-b lg:border-edge lg:pb-5">
       <button
         type="button"
         aria-label="Create"
@@ -183,7 +190,7 @@ export default function WorkspaceCreate({ onCreated }: { onCreated: () => void }
       </button>
 
       {open && (
-        <div role="menu" aria-label="Create menu" className="absolute inset-x-0 top-[calc(100%-1.15rem)] overflow-hidden rounded-[6px] border border-edge-bright bg-surface p-1 shadow-xl">
+        <div role="menu" aria-label="Create menu" className="absolute inset-x-0 top-[calc(100%+0.35rem)] overflow-hidden rounded-[6px] border border-edge-bright bg-surface p-1 shadow-xl lg:top-[calc(100%-1.15rem)]">
           <button
             type="button"
             role="menuitem"

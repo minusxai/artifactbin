@@ -118,13 +118,15 @@ export function HomePage() {
           <UseCarousel label="Inspiration Zone" wheel={false} />
         </div>
       ) : (
-        <div aria-label="Home workspace" className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_15rem] xl:grid-cols-[minmax(0,1fr)_16rem]">
-          <div className="min-w-0">
+        <div aria-label="Home workspace" className="grid gap-y-3 lg:grid-cols-[minmax(0,1fr)_15rem] lg:gap-x-10 lg:gap-y-0 xl:grid-cols-[minmax(0,1fr)_16rem]">
+          <div className="lg:col-start-2 lg:row-start-1 lg:pl-6">
+            <WorkspaceCreate onCreated={load} />
+          </div>
+          <div className="min-w-0 lg:col-start-1 lg:row-start-1">
             {home.artifacts.length > 0 && <Shelf actions="full" rows={home.artifacts as never} />}
             <SharedWithYou items={home.shared} />
           </div>
-          <aside aria-label="Dashboard rail" className="min-w-0 border-t border-edge pt-8 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
-            <WorkspaceCreate onCreated={load} />
+          <aside aria-label="Dashboard rail" className="min-w-0 border-t border-edge pt-6 lg:col-start-2 lg:row-start-1 lg:border-t-0 lg:border-l lg:pt-20 lg:pl-6">
             <Dashboard
               rows={home.artifacts as never}
               viewsOverTime={home.viewsOverTime}
