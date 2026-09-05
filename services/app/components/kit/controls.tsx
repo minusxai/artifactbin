@@ -117,6 +117,10 @@ const CALENDAR = (
 // ── Select ──────────────────────────────────────────────────────────────────
 
 export interface SelectControlProps {
+  /** Cell chrome keeps the accessible name without repeating the column heading. */
+  appearance?: 'field' | 'cell';
+  /** Actions shown separately from selectable values (for example, add a reference). */
+  children?: React.ReactNode;
   multiple?: boolean;
   allowCreate?: boolean;
   valueFormat?: 'json';
@@ -149,7 +153,7 @@ const parseMultiValue = (raw: string | null | undefined): string[] | null => {
   return null;
 };
 
-export function SelectControl({ multiple = false, allowCreate = false, valueFormat, draftValue, onDraftChange, onOpenChange, onCommit, onCancel, label, placeholder = 'All', className, options, value, nullable, disabled, onChange, bound, rest }: SelectControlProps) {
+export function SelectControl({ appearance = 'field', children, multiple = false, allowCreate = false, valueFormat, draftValue, onDraftChange, onOpenChange, onCommit, onCancel, label, placeholder = 'All', className, options, value, nullable, disabled, onChange, bound, rest }: SelectControlProps) {
   void valueFormat;
   const [open, setOpen] = useState(false);
   const openRef = useRef(false);
@@ -214,7 +218,7 @@ export function SelectControl({ multiple = false, allowCreate = false, valueForm
     if (!open || inert) return;
     const doc = rootRef.current?.ownerDocument;
     if (!doc) return;
-    searchRef.current?.focus();
+    searchRef.current?.focus({ preventScroll: true });
     const onDown = (e: Event) => {
       const target = e.target as Node;
       if (rootRef.current?.contains(target) || popupRef.current?.contains(target)) return;
@@ -258,7 +262,9 @@ export function SelectControl({ multiple = false, allowCreate = false, valueForm
       createValue(query.trim());
     }
   };
-  const [position, setPosition] = useState<React.CSSProperties>({});
+  // The author CSS compiler deliberately removes fixed/sticky classes. Runtime
+  // overlays own their geometry, so their positioning cannot depend on that CSS.
+  const [position, setPosition] = useState<React.CSSProperties>({ position: 'fixed', zIndex: 50 });
   useLayoutEffect(() => {
     if (!open || inert) return;
     const root = rootRef.current!;
@@ -267,7 +273,9 @@ export function SelectControl({ multiple = false, allowCreate = false, valueForm
       const rect = root.getBoundingClientRect();
       const width = Math.min(Math.max(rect.width, 200), win.innerWidth - 16);
       const height = popupRef.current?.getBoundingClientRect().height ?? 0;
-      setPosition({width, left: Math.max(8, Math.min(rect.left, win.innerWidth - width - 8)), top: Math.max(8, Math.min(rect.bottom + 4, win.innerHeight - height - 8)), maxHeight: win.innerHeight - 16, overflowY:'auto'});
+      const below = win.innerHeight - rect.bottom - 12;
+      const top = below >= height || below >= rect.top - 12 ? rect.bottom + 4 : rect.top - height - 4;
+      setPosition({position:'fixed', zIndex:50, width, left: Math.max(8, Math.min(rect.left, win.innerWidth - width - 8)), top: Math.max(8, Math.min(top, win.innerHeight - height - 8)), maxHeight: win.innerHeight - 16, overflowY:'auto'});
     };
     place();
     win.addEventListener('resize', place);
@@ -297,8 +305,8 @@ export function SelectControl({ multiple = false, allowCreate = false, valueForm
   };
 
   return (
-    <ControlShell label={label} bound={bound} className={className} rest={rest}>
-      <div ref={rootRef} className="relative">
+    <ControlShell label={appearance === 'cell' ? undefined : label} bound={bound} className={cn(appearance === 'cell' && 'flex w-full min-w-0', className)} rest={rest}>
+      <div ref={rootRef} className="relative min-w-0">
         <button
           type="button"
           aria-label={label}
@@ -307,7 +315,7 @@ export function SelectControl({ multiple = false, allowCreate = false, valueForm
           disabled={inert}
           onClick={() => { if (open) multiple ? commitDraft() : finishClose(); else openList(); }}
           onKeyDown={onTriggerKeyDown}
-          className="inline-flex h-9 w-full min-w-36 items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm shadow-xs transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+          className={cn('inline-flex w-full items-center justify-between gap-2 rounded-md text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50', appearance === 'cell' ? 'h-8 min-w-0 border border-transparent bg-transparent px-2 hover:border-border hover:bg-muted/60' : 'h-9 min-w-36 border border-input bg-background px-3 shadow-xs hover:bg-muted/40')}
         >
           <span className={cn('truncate', value === null && 'text-muted-foreground')}>{currentLabel}</span>
           {CHEVRON}
@@ -320,7 +328,7 @@ export function SelectControl({ multiple = false, allowCreate = false, valueForm
             const next = e.relatedTarget as Node | null;
             if (next && (popupRef.current?.contains(next) || rootRef.current?.contains(next))) return;
             if (multiple) commitDraft(false); else finishClose(false);
-          }} onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelDraft(); } }} className={cn(themed?.classList.contains('dark') && 'dark', themed?.classList.contains('light') && 'light', 'fixed z-50 rounded-md border border-border bg-popover text-popover-foreground shadow-md')} style={position}>
+          }} onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelDraft(); } }} className={cn(themed?.classList.contains('dark') && 'dark', themed?.classList.contains('light') && 'light', 'rounded-md border border-border bg-popover text-popover-foreground shadow-md')} style={position}>
             <div className="border-b border-border p-1.5">
               <input
                 ref={searchRef}
@@ -369,6 +377,7 @@ export function SelectControl({ multiple = false, allowCreate = false, valueForm
                 <button type="button" role="option" aria-label={`Create ${query.trim()}`} aria-selected={false} onClick={() => createValue(query.trim())} onMouseEnter={() => setActive(filteredEntries.length)} className={cn('flex w-full cursor-pointer rounded-sm px-2 py-1.5 text-left text-sm', active === filteredEntries.length && 'bg-accent text-accent-foreground')}>Create “{query.trim()}”</button>
               ) : filteredEntries.length === 0 ? <div role="status" className="px-2 py-3 text-center text-sm text-muted-foreground">No matches</div> : null}
             </div>
+            {children ? <div className="border-t border-border p-1.5" onClick={cancelDraft}>{children}</div> : null}
             {multiple ? <div className="flex justify-end border-t border-border p-1.5"><button type="button" aria-label="Done" onClick={() => commitDraft()} className="rounded-sm px-2 py-1 text-sm font-medium hover:bg-accent">Done</button></div> : null}
           </div>;
         })(), rootRef.current.ownerDocument.body) : null}

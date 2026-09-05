@@ -42,6 +42,7 @@ import { createDataflowStore, EMPTY_STATE, type DataflowStore } from './store';
 import { EMPTY_DATAFLOW, coerceScalarInput, refName, resolveRefTemplate, type Dataflow, type DataflowState, type Row, type Scalar, type ScalarValueDecl, type TableResult } from '@/lib/story/dataflow';
 import { isWebUrl, runtimeAssetUrl } from '@/lib/story/asset-url';
 import { Button } from '@/components/kit/button';
+import { cn } from '@/components/kit/cn';
 import { DataTable } from '@/components/kit/data-table';
 import { Files } from '@/components/kit/files';
 import { GridItemContext } from '@/components/kit/grid';
@@ -80,7 +81,7 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
     const options = normalizeControlOptions(props.options, optsName ? ctx.state.tables[optsName] : undefined)
       .filter((option) => props.exclude === undefined || option.value !== String(props.exclude));
     return <><SelectControl
-      label={label} placeholder={str(props.placeholder)} className={str(props.className)} options={options}
+      appearance="cell" label={label} placeholder={str(props.placeholder) ?? 'None'} className={str(props.className)} options={options}
       value={value === null ? null : String(value)} nullable={props.nullable === true}
       onOpenChange={(open) => { if (open) begin(); }} onChange={(next) => change(selectValue(next))}
       onCommit={commit} onCancel={cancel}
@@ -88,7 +89,7 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
       onDraftChange={(next) => change(next)} multiple={props.multiple === true} allowCreate={props.allowCreate === true}
       valueFormat={props.valueFormat === 'json' ? 'json' : undefined} disabled={!ctx.chrome || !writable || busy || props.disabled === true}
       rest={{ ...shellRest(rest), 'aria-busy': busy || undefined }}
-    />{error}</>;
+    >{children}</SelectControl>{error}</>;
   }
   if (tag === 'input' || tag === 'textarea' || tag === 'select') {
     const Html = tag as 'input' | 'textarea' | 'select';
@@ -104,6 +105,7 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
       commit();
     };
     return <><Html {...(rest as Record<string, unknown>)} aria-label={label} value={value === null ? '' : String(value)} disabled={!ctx.chrome || !writable || busy || props.disabled === true}
+      className={cn('w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 py-1 text-sm outline-none transition-colors hover:border-border focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-50', tag === 'textarea' ? 'min-h-8 resize-y' : 'h-8', props.type === 'number' && 'text-right tabular-nums', str(props.className))}
       onFocus={begin} onChange={(e) => { change(tag === 'select' ? selectValue(e.currentTarget.value) : e.currentTarget.value); if (tag === 'select') commitDraft(e.currentTarget); }} onBlur={(e) => commitDraft(e.currentTarget)}
       onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); cancel(); e.currentTarget.blur(); } else if (e.key === 'Enter' && !(tag === 'textarea' && e.shiftKey)) { e.preventDefault(); commitDraft(e.currentTarget); } }}
     >{tag === 'input' ? undefined : children}</Html>{error}</>;
@@ -397,7 +399,7 @@ function SelectAdapter(props: Record<string, unknown>) {
       options={options} value={bind.current} nullable={bind.nullable}
       multiple={props.multiple === true} allowCreate={props.allowCreate === true} valueFormat={props.valueFormat === 'json' ? 'json' : undefined}
       onChange={bind.write} rest={shellRest(props)}
-    />
+    >{props.children as ReactNode}</SelectControl>
   );
 }
 

@@ -148,6 +148,7 @@ describe('rich Select resilience', () => {
     vi.spyOn(root, 'getBoundingClientRect').mockReturnValue({left:1000,bottom:760,width:200,top:724} as DOMRect);
     fireEvent.click(trigger);
     const popup = screen.getByLabelText('Search Tags').parentElement!.parentElement!;
+    expect(popup.style.position).toBe('fixed'); // authored CSS filtering must not control runtime portal layout
     expect(popup).toHaveAttribute('data-theme','nocturne');
     expect(popup).not.toHaveClass('p-20','container');
     expect(parseFloat(popup.style.left)).toBeLessThan(1000);
@@ -155,6 +156,25 @@ describe('rich Select resilience', () => {
     fireEvent.scroll(document);
     expect(popup.style.left).toBe('25px');
   });
+});
+
+it('renders a compact cell without repeating its accessible label above the trigger', () => {
+  const {container} = render(<SelectControl appearance="cell" label="Status 1" value="active" options={[{value:'active',label:'Active'}]} onChange={vi.fn()} />);
+  expect(screen.getByLabelText('Status 1')).toHaveTextContent('Active');
+  expect(container.querySelector('.mx-control > span')).toBeNull();
+});
+
+it('keeps reference-creation actions separate from values and cancels without writing', () => {
+  const change = vi.fn(), cancel = vi.fn(), add = vi.fn();
+  render(<SelectControl label="Sprint" value="one" options={[{value:'one',label:'One'}]} onChange={change} onCancel={cancel}><button aria-label="Add Sprint" onClick={add}>Add Sprint…</button></SelectControl>);
+  fireEvent.click(screen.getByLabelText('Sprint'));
+  const action = screen.getByLabelText('Add Sprint');
+  expect(action.closest('[role="listbox"]')).toBeNull();
+  fireEvent.click(action);
+  expect(add).toHaveBeenCalledOnce();
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(change).not.toHaveBeenCalled();
+  expect(screen.queryByLabelText('Search Sprint')).toBeNull();
 });
 
 it('commits when keyboard focus leaves the popup', () => {

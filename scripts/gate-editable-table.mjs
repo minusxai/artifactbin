@@ -16,7 +16,16 @@ try {
   await Promise.all([a.goto(fixture.url), b.goto(fixture.url)]);
   await Promise.all([a.getByLabel('Item 1', { exact: true }).waitFor(), b.getByLabel('Item 1', { exact: true }).waitFor()]);
   const select = async (page, label, option) => {
-    await page.getByLabel(label, { exact: true }).click();
+    const trigger = page.getByRole('button', { name: label, exact: true });
+    await trigger.scrollIntoViewIfNeeded();
+    const scrollBefore = await page.evaluate(() => scrollY);
+    await trigger.click();
+    const popup = page.getByRole('listbox').locator('..');
+    assert.equal(await popup.evaluate(el => getComputedStyle(el).position), 'fixed');
+    assert.equal(await page.evaluate(() => scrollY), scrollBefore, 'opening a menu must not scroll the page');
+    const menuBox = await popup.boundingBox();
+    const triggerBox = await trigger.boundingBox();
+    assert.ok(menuBox && triggerBox && Math.abs(menuBox.y - (triggerBox.y + triggerBox.height)) <= menuBox.height + 8, 'menu must remain beside its trigger');
     await commit(page, () => page.getByRole('option', { name: option, exact: true }).click());
   };
   const inputValue = async (page, label, expected) => page.waitForFunction(({ label, expected }) => document.querySelector(`[aria-label="${label}"]`)?.value === expected, {label, expected});

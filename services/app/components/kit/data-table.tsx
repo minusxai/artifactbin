@@ -244,7 +244,7 @@ function DataRow({ row, columns, style, measure, index, resolveSrc, templates, r
   renderCell?: (template: ColumnTemplate, row: Row) => React.ReactNode
 }) {
   return (
-    <tr ref={measure} data-index={index} className="border-b border-border/50" style={style}>
+    <tr ref={measure} data-index={index} className="border-b border-border/50 transition-colors hover:bg-muted/30" style={style}>
       {columns.map((c) => {
         const value = row[c.col]
         const bar = barFraction(value, c)
@@ -252,7 +252,7 @@ function DataRow({ row, columns, style, measure, index, resolveSrc, templates, r
         return (
           <td
             key={c.col}
-            className={cn("relative whitespace-nowrap px-3 py-1.5", c.type === 'number' && "tabular-nums")}
+            className={cn("relative whitespace-nowrap px-3 py-1.5 align-middle", c.type === 'number' && "tabular-nums")}
             style={{ textAlign: c.align, width: c.width ? `${c.width}px` : undefined, ...(tint ? { background: tint } : {}) }}
           >
             {bar !== null && (

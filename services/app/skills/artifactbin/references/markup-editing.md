@@ -97,13 +97,17 @@ Shift+Enter inserts a newline. Empty text writes `''`; an empty number writes
 write. Single Select saves on selection. Multi-select keeps a draft until
 Done or outside dismissal (including keyboard focus leaving); Escape cancels.
 
+Select children render as footer actions; clicking cancels the cell draft.
+For “Add Sprint…”, use a native button to open an author-script dialog,
+create with `mx.mutate`, then select the refreshed option.
+
 Multi-select requires `valueFormat="json"` and stores unique strings, with
 `[]` for no selections. Commas, quotes and Unicode round-trip through JSON.
 `allowCreate` adds values absent from the options. Missing selections remain visible by raw value and removable; options
 refreshes never drop them. Malformed JSON or non-string members block editing without erasing data.
 
-A pending cell is disabled; other cells remain editable. Saved values stay visible until query refresh confirms them. Errors retain drafts for retry/cancellation; refresh preserves original snapshots. Captures and static editor previews show
-controls disabled; writes require the interactive reader.
+Pending cells are disabled. Saved values stay visible until refreshed;
+errors retain drafts and original snapshots. Captures and static previews disable editors.
 
 Use **both** `expectedAffected={1}` and the original-value predicate shown
 above. `IS NOT DISTINCT FROM` compares nulls correctly and checks only the
@@ -116,11 +120,10 @@ value-based conflict detection: an A→B→A history is not detected.
 
 ## References and authorization
 
-Options queries use value/label columns; include references outside table filters. Dependency IDs are strings: this integer-ID
-example casts through BIGINT before VARCHAR so `1.0` cannot disagree with
-`"1"`. `exclude="$_row.id"` hides the current task from selectable options;
-the mutation's server-side predicate is what rejects a self-dependency.
-Sprint clearing writes the existing `''` sentinel via the Unscheduled option.
+Options queries use value/label columns, including references outside filters.
+Integer dependency IDs cast through BIGINT before VARCHAR to match JSON strings.
+`exclude="$_row.id"` hides self-options; the server predicate rejects self-writes.
+Unscheduled writes the existing `''` sprint sentinel.
 
 A query filter is **not authorization**: client-supplied row values do not
 prove query membership. Put any permitted-subset restriction in the stored
