@@ -1,0 +1,55 @@
+# THE DEVELOPMENT RATE LIMITS — `default_rate_limits.yml` with the anonymous mint wide open, so a
+# gate run, an eval leg or a `npm run dev` session cannot exhaust it. Never point a public deployment here.
+# else: there is no `RATE_LIMITER__<POLICY>_MAX` any more. A deployment points
+# `PROXY__RATE_LIMIT_CONFIG_FILE` at its own copy of this shape; unset, this file is the default.
+#
+# THIS FILE IS TODAY'S BEHAVIOUR, TRANSCRIBED. Every policy's four numbers are the old DOORS entry
+# and every route is a branch of the old `doorFor`, in the same order — the port changes no verdict.
+#
+# policies : a budget. max hits per window, keyed by `key`; `burst` multiplies max for a caller who
+#            proved a credential (same bucket); `repeat` (default 1) makes a hit whose exact URL was
+#            already seen in this window cost 1/repeat.
+# routes   : FIRST MATCH WINS. `path` is a regex over the pathname; `method` one or a list (absent =
+#            every method); `query` exact-matches named search params. ALL of a route's policies must
+#            allow, each counted in written order, and the FIRST refusal is the one reported.
+# always   : policies applied to every request before the route's. Empty: today nothing is global.
+
+policies:
+  # was DOORS.ANON_MINT — closed by default; a deployment that wants open minting ships its own file.
+  anon_mint:      { max: 2000, window: 1h, key: ip,    burst: 5 }
+  # was DOORS.LOGIN_SEND — per ADDRESS, not per ip: an office behind one NAT is many people.
+  login_send:     { max: 5,   window: 1h,  key: email }
+  # was DOORS.LOGIN_VERIFY — generous; the guess cap per CODE is Better Auth's (5).
+  login_verify:   { max: 60,  window: 15m, key: ip }
+  oauth_register: { max: 30,  window: 1m,  key: ip }
+  oauth_token:    { max: 30,  window: 1m,  key: ip }
+  mutate:         { max: 60,  window: 1m,  key: ip }
+  query:          { max: 600, window: 1m,  key: ip }
+  export:         { max: 30,  window: 1m,  key: actor }
+  edit:           { max: 600, window: 1m,  key: actor }
+  publish:        { max: 600, window: 1m,  key: actor }
+
+routes:
+  # `browser_only` is the anonymous mint's OTHER verdict, and it is POST-only on purpose: `/api/start`
+  # shares the budget and is posted by an agent with no browser at all.
+  - { method: POST, path: "^/api/tokens/anonymous$", policies: [anon_mint], browser_only: true }
+  - { path: "^/api/tokens/anonymous$", policies: [anon_mint] }
+  - { path: "^/api/start$",            policies: [anon_mint] }
+  - { method: POST, path: "^/api/auth/email-otp/send-verification-otp$", policies: [login_send] }
+  - { path: "^/api/auth/sign-in",           policies: [login_verify] }
+  - { path: "^/api/auth/email-otp/verify",  policies: [login_verify] }
+  - { path: "^/oauth/register$",            policies: [oauth_register] }
+  - { path: "^/oauth/token$",               policies: [oauth_token] }
+  - { path: "^/a/[A-Za-z0-9]+/mutate$",     policies: [mutate] }
+  - { path: "^/a/[A-Za-z0-9]+/query$",      policies: [query] }
+  - { path: "^/api/query$",                 policies: [query] }
+  - { path: "^/a/[A-Za-z0-9]+/export$",     policies: [export] }
+  - { path: "/edits$",                      policies: [edit] }
+  # was doorFor's `method !== GET && method !== HEAD` — a negation the file spells out as a list.
+  - { method: [POST, PUT, PATCH, DELETE, OPTIONS], path: "^/api/artifacts",    policies: [publish] }
+  - { method: [POST, PUT, PATCH, DELETE, OPTIONS], path: "^/api/my/artifacts", policies: [publish] }
+  - { method: [POST, PUT, PATCH, DELETE, OPTIONS], path: "^/mcp$",             policies: [publish] }
+
+# Today NOTHING is metered globally: DOORS.GLOBAL exists in the vocabulary and `doorFor` never
+# returns it. Adding it here would be a new limit, not a port — see PLAN §2 row R6.
+always: []
