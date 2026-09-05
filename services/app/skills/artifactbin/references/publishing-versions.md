@@ -36,6 +36,13 @@ your user before deleting anything they shared. An artifact other documents
 reference (an image, a dataset) answers `409 has_dependents`; re-send with
 `?force=true` to break them knowingly.
 
+Two limits the trash does not cover, both worth knowing before you promise your
+user an undo. Deleting a COMMENT is permanent — the trash holds artifacts, and
+a thread you remove does not come back with a restore. And the 6-level depth
+cap counts only what is LIVE, so a restore can land a row deeper than the
+6-level cap if the folders above it grew while it was gone; the row is fine
+where it lands, and the next MOVE is what refuses.
+
 ## Screenshot / export as an image (curlable; readable = exportable)
 
 ```
