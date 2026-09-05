@@ -88,6 +88,8 @@ export interface DataflowStore {
   mutate(name: string, overrides?: Record<string, Scalar>, row?: Record<string, Scalar>): Promise<void>;
   /** Mutations currently in flight (a bound <Button> shows itself busy). */
   mutating(): ReadonlySet<string>;
+  /** Whether the attached document transport can perform writes. */
+  canMutate(): boolean;
   /**
    * A dataset changed elsewhere (the live stream's `data` frame): mark every
    * query that reads it — and everything downstream — dirty, and re-run.
@@ -355,6 +357,7 @@ export function createDataflowStore(
     replaceFlow,
     mutate,
     mutating: () => writing,
+    canMutate: () => !!transport?.mutate,
     invalidateDatasets,
     getState: () => state,
     getValue: (name) => state.values[name] ?? null,
@@ -378,7 +381,7 @@ export function createDataflowStore(
      */
     start: () => { flush(); },
     subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    setTransport: (t) => { transport = t; flush(); },
+    setTransport: (t) => { transport = t; commit({ ...state }); flush(); },
     refresh: (only) => {
       const names = only ? [...only] : flow.queries.map((q) => q.name);
       for (const n of names) dirty.add(n);

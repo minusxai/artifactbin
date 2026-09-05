@@ -57,6 +57,7 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
   const ctx = useContext(RuntimeEmbedContext);
   const sessions = useContext(CellSessionsContext);
   const name = typeof props.run === 'string' ? refName(props.run) : null;
+  const writable = useSyncExternalStore(ctx.store?.subscribe ?? NO_SUBSCRIBE, () => ctx.store?.canMutate() ?? false, () => false);
   const initial = (props.value ?? null) as Scalar;
   const session = useSyncExternalStore(sessions?.subscribe ?? NO_SUBSCRIBE, () => sessions?.get(identity), () => undefined);
   useEffect(() => { sessions?.reconcile(identity, initial); }, [sessions, identity, initial, session?.phase]);
@@ -69,7 +70,7 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
   };
   const value = session ? session.draft : initial;
   const busy = session?.phase === 'pending' || session?.phase === 'saved';
-  const { run: _run, defaultValue: _defaultValue, value: _value, ...rest } = props;
+  const { run: _run, defaultValue: _defaultValue, value: _value, 'aria-label': _ariaLabel, disabled: _disabled, exclude: _exclude, ...rest } = props;
   const label = str(props['aria-label']) ?? str(props.label) ?? `${column} ${String(rowKey)}`;
   const error = session?.error ? <span role="alert" className="mx-write-error">{session.error}</span> : null;
   const selectValue = (next: string | null): Scalar => next === null ? null : typeof initial === 'number' ? Number(next) : typeof initial === 'boolean' ? next === 'true' : next;
@@ -84,8 +85,8 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
       onCommit={commit} onCancel={cancel}
       draftValue={session ? session.draft === null ? null : String(session.draft) : undefined}
       onDraftChange={(next) => change(next)} multiple={props.multiple === true} allowCreate={props.allowCreate === true}
-      valueFormat={props.valueFormat === 'json' ? 'json' : undefined}
-      rest={{ ...shellRest(rest), 'aria-label': label, disabled: busy || props.disabled === true, 'aria-busy': busy || undefined }}
+      valueFormat={props.valueFormat === 'json' ? 'json' : undefined} disabled={!writable || busy || props.disabled === true}
+      rest={{ ...shellRest(rest), 'aria-busy': busy || undefined }}
     />{error}</>;
   }
   if (tag === 'input' || tag === 'textarea' || tag === 'select') {
@@ -100,7 +101,7 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
       }
       commit();
     };
-    return <><Html {...(rest as Record<string, unknown>)} aria-label={label} value={value === null ? '' : String(value)} disabled={busy || props.disabled === true}
+    return <><Html {...(rest as Record<string, unknown>)} aria-label={label} value={value === null ? '' : String(value)} disabled={!writable || busy || props.disabled === true}
       onFocus={begin} onChange={(e) => { change(e.currentTarget.value); if (tag === 'select') commitDraft(); }} onBlur={commitDraft}
       onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); cancel(); e.currentTarget.blur(); } else if (e.key === 'Enter' && !(tag === 'textarea' && e.shiftKey)) { e.preventDefault(); commitDraft(); } }}
     >{tag === 'input' ? undefined : children}</Html>{error}</>;
