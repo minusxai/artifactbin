@@ -288,7 +288,10 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const owner = useArtifactOwner();
   const canEdit = useCanEditArtifact();
   const canAnnotate = useCanAnnotateArtifact();
-  const openAnnotationCount = liveAnnotations?.length ?? openAnnotations;
+  /** The layer's own list, when it is mounted: it moves the instant a thread
+   * is resolved or opened here, where the stream's copy waits for the ping. */
+  const [layerAnnotations, setLayerAnnotations] = useState<AnnotationWire[] | null>(null);
+  const openAnnotationCount = (layerAnnotations ?? liveAnnotations)?.filter((a) => a.status === 'open').length ?? openAnnotations;
   /*
    * The floating identity markers are ambient chrome for anyone who may comment, in EVERY
    * mode. The two gates that used to be here — `!editing` and `!annotating` —
@@ -1388,6 +1391,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             initialSelection={initialAnnotationSelection}
             topOffset={0}
             beforeCreate={drainEditor}
+            onAnnotationsChange={setLayerAnnotations}
           />
         )}
         {/* Edit mode is CHROME around the document, not a replacement for it. */}
