@@ -187,8 +187,12 @@ input.mx-rail-title { min-width: 0; width: 100%; background: transparent; border
  * A framed owner/editor copy hides all of it: its trusted parent supplies the
  * same controls plus the authenticated ones an opaque document cannot have.
  */
-/* The parent's edit mode owns the top of the page; it switches the chrome off. */
+/* The parent can switch the chrome off, or PIN it for edit mode: held at the
+   top, with the document inset under it and the page's editor toolbar. */
 .mx-reader-chrome--off { display: none !important; }
+.mx-reader-chrome--pinned { opacity: 1 !important; visibility: visible !important; transform: none !important; pointer-events: auto !important; }
+.mx-reader-chrome--pinned [data-mx-reader-action="edit"] { color: var(--primary, currentColor) !important; }
+body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; }
 .mx-reader-chrome {
   position: fixed !important; z-index: 2147483003 !important;
   color: var(--foreground, canvastext) !important;
@@ -420,6 +424,8 @@ input.mx-rail-title { min-width: 0; width: 100%; background: transparent; border
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--foreground, canvastext) 18%, transparent), 0 2px 8px rgba(0,0,0,.18) !important;
   }
   .mx-reader-home img { width: 30px !important; height: 30px !important; filter: none !important; }
+  /* Editing on a phone: the page's toolbar takes the top, and the tile would sit under it. */
+  .mx-reader-chrome--pinned .mx-reader-home { display: none !important; }
   /* Two lines: the title first, clipped with an ellipsis; then the handle with
      Follow beside it. Flex order does the swap so the markup (and the desktop
      bar, which reads handle · title · follow) stays as it is. */

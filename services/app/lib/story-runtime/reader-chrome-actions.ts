@@ -96,6 +96,8 @@ export function wireReaderChrome(win: Window, doc: Document): ReaderChromeHandle
 
   let state: ChromeState | null = null;
   let queued = false;
+  /** Edit mode: held at the top, the policy paused. */
+  let pinned = false;
 
   const paint = (visible: boolean) => {
     root.classList.toggle(READER_CHROME_HIDDEN_CLASS, !visible);
@@ -105,8 +107,8 @@ export function wireReaderChrome(win: Window, doc: Document): ReaderChromeHandle
   const sample = () => {
     queued = false;
     // An open panel FREEZES the chrome: the reader is inside a control, and a
-    // scroll behind it must not take the control away.
-    if (panelOpen()) return;
+    // scroll behind it must not take the control away. Pinned, it never moves.
+    if (panelOpen() || pinned) return;
     state = chromeAfterSample(state, {
       scrollY: Math.max(0, win.scrollY),
       viewportHeight: win.innerHeight,
@@ -257,8 +259,20 @@ export function wireReaderChrome(win: Window, doc: Document): ReaderChromeHandle
       if (source !== parent || !data || typeof data !== 'object') return;
       // The page shared on our behalf; the toast is ours to show.
       if (data.type === STORY_READER_ACTION_RESULT_MESSAGE && data.kind === 'share' && data.ok) say();
-      // Edit mode owns the top of the page: the chrome steps aside and back.
-      if (data.type === STORY_READER_CHROME_MESSAGE) root.classList.toggle('mx-reader-chrome--off', data.mode === 'off');
+      if (data.type === STORY_READER_CHROME_MESSAGE) {
+        // `off`: gone. `pinned` (edit mode): held at the top with the page's
+        // editor toolbar under it, and the document inset by both so nothing
+        // it shows is covered. `on`: back to the reveal-on-scroll rule.
+        root.classList.toggle('mx-reader-chrome--off', data.mode === 'off');
+        pinned = data.mode === 'pinned';
+        root.classList.toggle('mx-reader-chrome--pinned', pinned);
+        // The desktop bar is 44px tall; a phone draws no bar (its logo, rail
+        // and byline float), so its inset is the page's toolbar alone.
+        const bar = win.innerWidth >= 640 ? 44 : 0;
+        doc.documentElement.style.setProperty('--mx-chrome-inset', pinned ? `${bar + (data.inset ?? 0)}px` : '0px');
+        if (pinned) paint(true);
+        else sample();
+      }
     });
   }
 

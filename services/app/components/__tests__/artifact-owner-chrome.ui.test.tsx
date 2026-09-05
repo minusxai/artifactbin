@@ -151,9 +151,10 @@ describe('the surface header buttons are owner chrome', () => {
     expect(screen.getByLabelText('Exit edit mode').querySelector('.lucide-check')).toBeTruthy();
     expect(screen.getByLabelText('Exit edit mode')).toHaveTextContent('done');
     expect(screen.getByLabelText('Editor toolbar')).toContainElement(screen.getByLabelText('Title'));
+    // In edit mode too, the page draws no bar of its own: the document's own
+    // chrome stays, pinned at the top, and asks the page for the panels.
+    expect(screen.queryByLabelText('Open menu')).toBeNull();
     expect(screen.queryByLabelText('Open artifact controls')).toBeNull();
-    expect(screen.getByLabelText('Open menu')).toHaveAttribute('data-chrome-placement', 'toolbar');
-    expect(screen.getByLabelText('Open menu')).not.toHaveClass('rounded-full');
     expect(document.title).toBe('doc [edit mode]');
 
     fireEvent.click(screen.getByLabelText('Exit edit mode'));

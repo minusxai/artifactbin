@@ -24,12 +24,12 @@ import { LikeButton } from '@/components/LikeButton';
 import ShareLink from '@/components/ShareLink';
 import type { AnnotationWire } from '@/lib/annotations';
 import { readIntent, stripIntent } from '@/lib/intent';
-import PageChrome, { notifyPageChromeScroll, PageControls, PageMenu, requestPageChrome, type AppearanceMode } from '@/components/PageChrome';
+import PageChrome, { PageControls, PageMenu, requestPageChrome, type AppearanceMode } from '@/components/PageChrome';
 import { useIsPhoneViewport } from '@/components/MobileSheet';
 /* The editing bar's height is RESERVED by this page, never measured — and it
  * comes from a leaf module, because importing it from the editor would put the
  * editor in every reader's bundle (lib/__tests__/reader-bundle-hygiene). */
-import { EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
+import { APP_BAR_H, EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
 import type { ArtifactFormat } from '@/lib/story/input';
 import { useLiveArtifact } from '@/lib/story/use-live-artifact';
 import { STORY_READER_ACTION_MESSAGE, STORY_READER_ACTION_RESULT_MESSAGE, STORY_READER_CHROME_MESSAGE, type StoryReaderActionMessage } from '@/lib/story-runtime/contract';
@@ -222,6 +222,19 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * the hash is precisely the mistake this replaced.
    */
   const [railOpen, setRailOpen] = useState(false);
+  /** The frame's scrollbar width, reported with its scroll samples, so the
+   * editor toolbar can end where the document's own bar ends. */
+  const [frameGutter, setFrameGutter] = useState(0);
+  useEffect(() => {
+    const onScroll = (event: MessageEvent) => {
+      const data = event.data as Partial<StoryScrollMessage> | undefined;
+      if (!data || data.type !== STORY_SCROLL_MESSAGE || typeof data.gutter !== 'number') return;
+      if (frameRef.current && event.source !== frameRef.current.contentWindow) return;
+      setFrameGutter(data.gutter);
+    };
+    window.addEventListener('message', onScroll);
+    return () => window.removeEventListener('message', onScroll);
+  }, []);
   /** `?intent=fork` asked for a copy; the dialog asks the person (lib/intent). */
   const [forkAsked, setForkAsked] = useState(false);
   /** Naming a new folder under THIS one — the shell's only folder-specific act. */
@@ -436,23 +449,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const [frameNonce, setFrameNonce] = useState(0);
   /** Whether the frame has answered since we last asked. */
   const frameAliveRef = useRef(false);
-
-  /** The document owns the scroll port, while the mobile action bar lives in
-   * this parent page. Accept direction samples only from our current frame;
-   * its opaque origin cannot identify it, but its WindowProxy can. */
-  useEffect(() => {
-    if (format !== 'markup') return;
-    const onScroll = (event: MessageEvent) => {
-      const data = event.data as Partial<StoryScrollMessage> | undefined;
-      if (!data || data.type !== STORY_SCROLL_MESSAGE || typeof data.scrollY !== 'number') return;
-      if (frameRef.current && event.source !== frameRef.current.contentWindow) return;
-      // Read leniently: a document served before `atBottom` existed posts
-      // without it, and "no flag" must mean "not at the end", never a crash.
-      notifyPageChromeScroll(data.scrollY, data.atBottom === true);
-    };
-    window.addEventListener('message', onScroll);
-    return () => window.removeEventListener('message', onScroll);
-  }, [format]);
 
   const readerMode = readerModeOverride ?? resolveStoryMode(shownTheme, shownColorMode);
   const setReaderMode = useCallback((mode: AppearanceMode) => {
@@ -917,57 +913,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   }, []);
   const enterEdit = useCallback(() => beginEdit(null), [beginEdit]);
 
-  /*
-   * THE FRAMED CHROME'S ASKS. The document draws the rail (the same one a
-   * stranger gets) and posts what was pressed; this page holds the session,
-   * the editor and the real panels, so it is the one that acts. Like, follow
-   * and a non-commenter's comment just log — the backend is another phase.
-   */
-  useEffect(() => {
-    if (format !== 'markup') return;
-    const onAction = (event: MessageEvent) => {
-      const data = event.data as Partial<StoryReaderActionMessage> | undefined;
-      if (!data || data.type !== STORY_READER_ACTION_MESSAGE || typeof data.kind !== 'string') return;
-      if (frameRef.current && event.source !== frameRef.current.contentWindow) return;
-      const frame = event.source as Window | null;
-      switch (data.kind) {
-        case 'like':
-        case 'follow':
-          console.log(`[artifactbin] ${data.kind}`, { artifact: id, ...(data.author ? { author: data.author } : {}) });
-          break;
-        case 'comment':
-          if (canAnnotate) setRailOpen((open) => !open);
-          else console.log('[artifactbin] comment', { artifact: id });
-          break;
-        case 'edit':
-          if (canEdit) enterEdit();
-          break;
-        case 'share': {
-          // The PAGE's address is the shareable one; the frame's is internal.
-          const url = window.location.href;
-          const done = () => frame?.postMessage({ type: STORY_READER_ACTION_RESULT_MESSAGE, kind: 'share', ok: true }, '*');
-          const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> };
-          if (typeof nav.share === 'function') void nav.share({ title: shownTitle ?? undefined, url }).catch(() => {});
-          else void navigator.clipboard?.writeText(url).then(done, () => {});
-          break;
-        }
-        case 'controls':
-        case 'menu':
-          requestPageChrome(data.kind);
-          break;
-        default:
-          break;
-      }
-    };
-    window.addEventListener('message', onAction);
-    return () => window.removeEventListener('message', onAction);
-  }, [canAnnotate, canEdit, enterEdit, format, id, shownTitle]);
-
-  // Edit mode owns the top of the page: the framed chrome steps aside for it.
-  useEffect(() => {
-    if (format !== 'markup' || !sessionNonce) return;
-    frameRef.current?.contentWindow?.postMessage({ type: STORY_READER_CHROME_MESSAGE, mode: editing ? 'off' : 'on' }, '*');
-  }, [editing, format, frameNonce, sessionNonce]);
 
 
   /**
@@ -1050,6 +995,63 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     await editorFlush.current?.();
     exitEdit();
   }, [exitEdit]);
+
+  /*
+   * THE FRAMED CHROME'S ASKS. The document draws the rail (the same one a
+   * stranger gets) and posts what was pressed; this page holds the session,
+   * the editor and the real panels, so it is the one that acts. Like, follow
+   * and a non-commenter's comment just log — the backend is another phase.
+   */
+  useEffect(() => {
+    if (format !== 'markup') return;
+    const onAction = (event: MessageEvent) => {
+      const data = event.data as Partial<StoryReaderActionMessage> | undefined;
+      if (!data || data.type !== STORY_READER_ACTION_MESSAGE || typeof data.kind !== 'string') return;
+      if (frameRef.current && event.source !== frameRef.current.contentWindow) return;
+      const frame = event.source as Window | null;
+      switch (data.kind) {
+        case 'like':
+        case 'follow':
+          console.log(`[artifactbin] ${data.kind}`, { artifact: id, ...(data.author ? { author: data.author } : {}) });
+          break;
+        case 'comment':
+          if (canAnnotate) setRailOpen((open) => !open);
+          else console.log('[artifactbin] comment', { artifact: id });
+          break;
+        case 'edit':
+          // The pencil is "done" while editing: the same drain-first exit the
+          // toolbar's own button takes.
+          if (!canEdit) break;
+          if (editing) void finishEdit();
+          else enterEdit();
+          break;
+        case 'share': {
+          // The PAGE's address is the shareable one; the frame's is internal.
+          const url = window.location.href;
+          const done = () => frame?.postMessage({ type: STORY_READER_ACTION_RESULT_MESSAGE, kind: 'share', ok: true }, '*');
+          const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> };
+          if (typeof nav.share === 'function') void nav.share({ title: shownTitle ?? undefined, url }).catch(() => {});
+          else void navigator.clipboard?.writeText(url).then(done, () => {});
+          break;
+        }
+        case 'controls':
+        case 'menu':
+          requestPageChrome(data.kind);
+          break;
+        default:
+          break;
+      }
+    };
+    window.addEventListener('message', onAction);
+    return () => window.removeEventListener('message', onAction);
+  }, [canAnnotate, canEdit, editing, enterEdit, finishEdit, format, id, shownTitle]);
+
+  // EDIT MODE pins the document's bar at the top and sits the editor toolbar
+  // under it; the document insets itself by both, so nothing is covered.
+  useEffect(() => {
+    if (format !== 'markup' || !sessionNonce) return;
+    frameRef.current?.contentWindow?.postMessage({ type: STORY_READER_CHROME_MESSAGE, mode: editing ? 'pinned' : 'on', inset: EDIT_BAR_H }, '*');
+  }, [editing, format, frameNonce, sessionNonce]);
 
   /*
    * WHAT THE EDITOR IS GIVEN. Ownership is decided once, on the server, for
@@ -1196,7 +1198,14 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     return (
       <>
         {editing ? (
-          <PageMenu authed={accountSession} anon={anonSession} title={shownTitle} fixed toolbar />
+          /* EDIT MODE: the document's own bar stays, PINNED at the top, and the
+             editor's toolbar sits under it. The panels drop below both. */
+          <>
+            <PageMenu authed={accountSession} anon={anonSession} title={shownTitle} fixed triggerless panelTop={APP_BAR_H + EDIT_BAR_H + 8} />
+            <PageControls fixed triggerless label="Artifact controls" mode={readerMode} onModeChange={setReaderMode} active={railOpen} badge={openAnnotationCount} panelTop={APP_BAR_H + EDIT_BAR_H + 8}>
+              {documentControls}
+            </PageControls>
+          </>
         ) : (
           /* The framed document draws the chrome (logo, rail, byline) — the
              same one a stranger sees — and asks this page to open these. */
@@ -1239,7 +1248,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             // With the rail closed the document stays full-width and its
             // comments float over it. Style-only: the frame must never
             // re-parent.
-            top: editing ? EDIT_BAR_H : 0,
+            top: 0,
             // On a phone the rail is a bottom SHEET (AnnotationLayer), so the
             // document keeps its full width.
             right: railOpen && !phone ? RIGHT_RAIL_W : 0,
@@ -1321,7 +1330,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             showViewComments={showViewComments}
             onRailOpenChange={setRailOpen}
             initialSelection={initialAnnotationSelection}
-            topOffset={editing ? EDIT_BAR_H : 0}
+            topOffset={0}
             beforeCreate={drainEditor}
           />
         )}
@@ -1339,6 +1348,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             onToggleComments={canAnnotate ? () => setRailOpen((open) => !open) : undefined}
             commentsOpen={railOpen}
             commentCount={openAnnotationCount}
+            rightInset={(railOpen && !phone ? RIGHT_RAIL_W : 0) + frameGutter}
           />
         )}
         {forkAsked && <ForkConfirm id={id} title={shownTitle} onClose={() => setForkAsked(false)} />}

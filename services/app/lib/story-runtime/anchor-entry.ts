@@ -69,7 +69,7 @@ if (typeof window !== 'undefined') {
     const post = () => {
       queued = false;
       parentWindow.postMessage(
-        { type: STORY_SCROLL_MESSAGE, scrollY: Math.max(0, window.scrollY), atBottom: atBottom() } satisfies StoryScrollMessage,
+        { type: STORY_SCROLL_MESSAGE, scrollY: Math.max(0, window.scrollY), atBottom: atBottom(), gutter: Math.max(0, window.innerWidth - document.documentElement.clientWidth) } satisfies StoryScrollMessage,
         '*',
       );
     };

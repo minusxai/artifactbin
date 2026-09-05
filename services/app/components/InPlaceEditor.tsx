@@ -27,7 +27,8 @@ import { Check, Code, History, Image as ImageIcon, MessageSquare, Paintbrush } f
 
 import ThemePicker, { ModeChip, TemplateChip } from '@/components/ThemePicker';
 import { Tooltip } from '@/components/Tooltip';
-import { EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
+import { APP_BAR_H, EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
+import { useIsPhoneViewport } from '@/components/MobileSheet';
 import VersionHistory from '@/components/VersionHistory';
 import VizEditorPanel from '@/components/views/story/VizEditorPanel';
 import NumberEditorPanel from '@/components/views/story/NumberEditorPanel';
@@ -103,7 +104,7 @@ const refDataFor = (created: { id: string; rawUrl?: string }): { refData: RefDat
 });
 
 export default function InPlaceEditor({
-  art, frameRef, sessionNonce, flushRef, initialSelectionPath = null, onComment, onToggleComments, commentsOpen = false, commentCount = 0, onDone = () => {},
+  art, frameRef, sessionNonce, flushRef, initialSelectionPath = null, onComment, onToggleComments, commentsOpen = false, commentCount = 0, rightInset = 0, onDone = () => {},
 }: {
   art: EditorArtifact;
   /** The live document. Never remounted — that is the whole point. */
@@ -120,6 +121,8 @@ export default function InPlaceEditor({
    */
   onComment?: (selection: StoryEditSelection) => void;
   onToggleComments?: () => void;
+  /** How far the toolbar stops short of the viewport's right edge: the comments rail plus the frame's scrollbar. */
+  rightInset?: number;
   commentsOpen?: boolean;
   commentCount?: number;
   /** Drain-and-exit belongs to the page, because browser back uses the same contract. */
@@ -166,6 +169,9 @@ export default function InPlaceEditor({
 
   /** Read by callbacks that run after an await, when `source` may have moved on. */
   const sourceRef = useRef(source);
+  // The document's bar is 44px on a desktop; a phone draws none, so the toolbar takes the top there.
+  const phone = useIsPhoneViewport();
+  const barTop = phone ? 0 : APP_BAR_H;
   sourceRef.current = source;
   const cssRef = useRef(css);
   cssRef.current = css;
@@ -536,8 +542,8 @@ export default function InPlaceEditor({
     <>
       <header
         aria-label="Editor toolbar"
-        className="fixed inset-x-0 top-0 z-30 flex items-center gap-2 border-b border-edge bg-surface/95 pr-2 pl-14 backdrop-blur"
-        style={{ height: EDIT_BAR_H }}
+        className="fixed left-0 z-30 flex items-center gap-2 border-b border-edge bg-surface/95 px-3 backdrop-blur"
+        style={{ top: barTop, height: EDIT_BAR_H, right: rightInset }}
       >
         {/* The DOCUMENT's controls scroll; the ACTIONS never do. On a phone the
             bar's natural width is ~434px against a 390px viewport, and it was
@@ -671,20 +677,6 @@ export default function InPlaceEditor({
               </span>
             </button>
           </Tooltip>
-          {onToggleComments && (
-            <Tooltip content={commentsOpen ? 'close comments' : 'comments'}>
-              <button
-                type="button"
-                aria-label="Toggle comments"
-                aria-pressed={commentsOpen}
-                onClick={onToggleComments}
-                className={`relative inline-flex h-7 cursor-pointer items-center justify-center rounded-[4px] border px-2 ${commentsOpen ? 'border-accent/40 bg-accent-soft text-accent' : 'border-edge text-muted hover:text-fg'}`}
-              >
-                <MessageSquare size={13} />
-                {commentCount > 0 && <span className="ml-1 font-mono text-[10px]">{commentCount}</span>}
-              </button>
-            </Tooltip>
-          )}
           <Tooltip content="done editing">
             <button
               type="button"
@@ -703,7 +695,7 @@ export default function InPlaceEditor({
         <div
           aria-label="Image upload error"
           className="fixed inset-x-0 z-30 flex items-center justify-between gap-3 border-b border-red-300 bg-red-50 px-4 py-1.5 font-mono text-[11px] text-red-800"
-          style={{ top: EDIT_BAR_H }}
+          style={{ top: barTop + EDIT_BAR_H }}
         >
           <span>{imageError}</span>
           <button
@@ -722,7 +714,7 @@ export default function InPlaceEditor({
       {mode === 'code' && (
         <div
           className="fixed inset-x-0 bottom-0 z-20"
-          style={{ top: EDIT_BAR_H }}
+          style={{ top: barTop + EDIT_BAR_H }}
           aria-label="Source pane"
         >
           <SourceEditor
@@ -762,7 +754,7 @@ export default function InPlaceEditor({
         <aside
           aria-label={chart ? 'Chart inspector' : 'Number inspector'}
           className="fixed right-0 bottom-0 z-30 overflow-y-auto border-l border-edge bg-surface p-3"
-          style={{ top: EDIT_BAR_H, width: RIGHT_RAIL_W }}
+          style={{ top: barTop + EDIT_BAR_H, width: RIGHT_RAIL_W }}
         >
           {/* No delete here: the selection toolbar offers it for EVERY
               selection (lib/story/selection-toolbar ALWAYS_OFFERED), and a
