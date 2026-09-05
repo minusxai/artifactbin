@@ -31,6 +31,9 @@ const FIXTURES: Fixtures = {
     annotation_resolved: { annotation_id: 'ann_1' },
     annotation_deleted: { annotation_id: 'ann_1' },
     sharing_changed: { visibility: 'unlisted', link_role: 'viewer' },
+    moved: { from_parent_id: null, to_parent_id: 'fld123' },
+    trashed: { format: 'markup', subtree: 0 },
+    restored: { landed_at_root: true },
     liked: {},
     unliked: {},
   },
@@ -66,6 +69,38 @@ describe('envelope', () => {
     const a = envelope(null, 'viewed', { kind: 'artifact', id: 'a' }, {});
     const b = envelope(null, 'viewed', { kind: 'artifact', id: 'a' }, {});
     expect(a.id).not.toBe(b.id);
+  });
+});
+
+/**
+ * THE THREE PLACEMENT VERBS (folders + the trash). A folder is an artifact, so
+ * they are ARTIFACT verbs and there is no second object kind: a `folder` kind
+ * would fork every consumer of `object_kind.verb` for rows that live in one
+ * table. `deleted` keeps its old meaning — erased for good — and is said by the
+ * purge; a trash is `trashed`, and the two must never read as each other.
+ */
+describe('the placement verbs', () => {
+  it('a move names both ends, either of which may be the root', () => {
+    const e = envelope({ kind: 'user', id: 'usr_a' }, 'moved', { kind: 'artifact', id: 'abc123' }, { from_parent_id: 'fld111', to_parent_id: null });
+    expect(eventName(e)).toBe('artifact.moved');
+    expect(e.payload).toEqual({ from_parent_id: 'fld111', to_parent_id: null });
+  });
+  it('a trash carries what went with it — 0 for a document, the subtree size for a folder', () => {
+    const doc = envelope({ kind: 'user', id: 'usr_a' }, 'trashed', { kind: 'artifact', id: 'abc123' }, { format: 'markup', subtree: 0 });
+    expect(eventName(doc)).toBe('artifact.trashed');
+    expect(doc.payload).toEqual({ format: 'markup', subtree: 0 });
+    const folder = envelope({ kind: 'user', id: 'usr_a' }, 'trashed', { kind: 'artifact', id: 'fld123' }, { format: 'folder', subtree: 4 });
+    expect(folder.payload).toMatchObject({ format: 'folder', subtree: 4 });
+  });
+  it('a restore says whether the row came back where it was, or at the root', () => {
+    const e = envelope({ kind: 'user', id: 'usr_a' }, 'restored', { kind: 'artifact', id: 'abc123' }, { landed_at_root: true });
+    expect(eventName(e)).toBe('artifact.restored');
+    expect(e.payload).toEqual({ landed_at_root: true });
+  });
+  it('is a distinct vocabulary: the catalogue holds all three beside deleted', () => {
+    for (const verb of ['moved', 'trashed', 'restored', 'deleted']) {
+      expect(EVENT_VERBS.artifact, verb).toContain(verb);
+    }
   });
 });
 
