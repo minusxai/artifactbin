@@ -23,15 +23,17 @@ import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 import type { PolicyFile } from '@artifactbin/contracts/rate-limits';
 import { validatePolicyFile } from '@artifactbin/utils/rate-limits';
+import { readEnv } from './env';
 
 /**
  * The only env name that points at a policy file.
  *
- * READ IT THROUGH `loadConfig`'s `env('PROXY', 'RATE_LIMIT_CONFIG_FILE')`, NOT through `src/env.ts`'s
- * `readEnv`. The proxy has TWO independent registries of "names asked for" — `env.ts`'s module-level
- * `asked` set (which `server.ts` merges into the co-hosted audit) and `config.ts`'s `createEnv`, and ONLY
- * the latter feeds `ProxyConfig.unknownNames`. MEASURED in planning: a name read through `readEnv` alone
- * is still reported as "set but nothing reads it" by the standalone proxy's boot notice.
+ * IT IS READ THROUGH BOTH ENV REGISTRIES, and that is not belt-and-braces. The proxy has two independent
+ * sets of "names asked for" — `env.ts`'s module-level `asked` (which `server.ts` merges into the CO-HOSTED
+ * audit) and `config.ts`'s `createEnv` (which alone feeds the STANDALONE proxy's `unknownNames`) — and a
+ * name absent from either is reported as "set but nothing reads it" by that half. MEASURED both ways:
+ * `loadConfig` reads it for the standalone boot notice, and `resolvePolicyFilePath` below reads it through
+ * `readEnv` for the co-hosted one, which is the half `npm run dev` prints.
  */
 export const POLICY_FILE_ENV = 'PROXY__RATE_LIMIT_CONFIG_FILE';
 
@@ -62,7 +64,7 @@ export function defaultPolicyFilePath(): string {
  * above. Unset is a default, not a fallback: a path that IS set and does not exist is ENOENT at boot.
  */
 export function resolvePolicyFilePath(env: Record<string, string | undefined>): string {
-  const configured = env[POLICY_FILE_ENV]?.trim();
+  const configured = readEnv(env, POLICY_FILE_ENV)?.trim();
   if (configured) return isAbsolute(configured) ? configured : resolve(configured);
   return defaultPolicyFilePath();
 }
