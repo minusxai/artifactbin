@@ -517,17 +517,20 @@ export default function Shelf({ rows, actions = 'none', showVisibility = true, a
   return (
     <section aria-label="Shelf" data-shelf-view={view} className="flex flex-col gap-4">
       {(all.length > 0 || canCreateFolders) && (
-        <div className={`flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 px-3 py-1.5 ${PANEL}`}>
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2 sm:gap-y-1.5 sm:rounded-[6px] sm:border sm:border-edge sm:bg-surface sm:px-3 sm:py-1.5">
+          <div className={`flex min-w-0 items-center gap-2 px-3 py-1.5 ${PANEL} sm:flex-1 sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none`}>
             <Search size={13} className="shrink-0 text-faint" />
             <input
               aria-label="Search artifacts"
               placeholder="search artifacts"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="h-7 min-w-32 flex-1 border-0 bg-transparent font-mono text-xs text-fg placeholder:text-faint focus:outline-none"
+              className="h-7 min-w-0 flex-1 border-0 bg-transparent font-mono text-xs text-fg placeholder:text-faint focus:outline-none"
             />
+          </div>
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 px-0.5 sm:contents">
             {showChips && (
-              <span className="flex shrink-0 items-center gap-1.5 border-l border-edge pl-2">
+              <span className="flex shrink-0 items-center gap-1.5 sm:border-l sm:border-edge sm:pl-2">
                 {chips.map((v) => (
                   <FilterChip key={v} value={v} active={picks.includes(v)} onToggle={togglePick} />
                 ))}
@@ -561,6 +564,7 @@ export default function Shelf({ rows, actions = 'none', showVisibility = true, a
                 <Icon size={14} strokeWidth={1.7} />
               </button>
             ))}
+          </div>
           </div>
         </div>
       )}
