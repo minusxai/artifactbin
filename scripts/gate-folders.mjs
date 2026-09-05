@@ -13,8 +13,8 @@
  *      owner's own page — before any script has run — and the children have to
  *      be in it. Asserted on the BYTES rather than on the DOM, because a DOM
  *      assertion passes just as well when the rows arrive a second later.
- *   2. `New folder` in the shelf's bar makes one INSIDE this folder, inline:
- *      no dialog, no navigation, and the tile arrives on its own.
+ *   2. Create → New folder opens a dialog that makes one INSIDE this folder:
+ *      no navigation, and the tile arrives on its own.
  *   3. a document published BY AN AGENT appears in the open page with NO
  *      RELOAD — a folder follows its own channel on the events stream, so a
  *      child write arrives as the `data` frame a dataset write already sends.
@@ -170,8 +170,10 @@ check(new URL(await crumb.last().getAttribute('href'), BASE).pathname === `/a/${
 const mainBox = await owner.locator('main').first().boundingBox();
 check(Boolean(mainBox) && mainBox.height > 0, 'an empty folder still paints a <main> for the camera to photograph');
 
+const liveStream = owner.waitForResponse((response) => new URL(response.url()).pathname === `/a/${folder.id}/events`);
 await owner.goto(`${BASE}/a/${folder.id}`, { waitUntil: 'load' });
 await owner.locator('[aria-label="Open folder Archive"]').waitFor({ timeout: 20000 });
+check((await liveStream).status() === 200, 'the live folder stream is subscribed before publishing');
 
 // ── 3. an agent's publish reaches the open page, live ────────────────────
 // Mark the page: a reload loses the mark, and that is what "live" has to mean.
@@ -210,8 +212,8 @@ check((await stranger.locator('[aria-label="New folder"]').count()) === 0, 'with
 check((await stranger.locator('[aria-label="Rename folder"]').count()) === 0, 'and no way to rename it');
 check(!(await stranger.textContent('body')).includes('Quiet Note'), 'a private child is listed to NOBODY without a role');
 
-// ── 5. the picker moves the document out ─────────────────────────────────
-await owner.goto(`${BASE}/`, { waitUntil: 'load' });
+// ── 5. the picker moves the document out of its current folder ───────────
+await owner.goto(`${BASE}/a/${folder.id}`, { waitUntil: 'load' });
 const openMove = async () => {
   await owner.locator('[aria-label="More actions for Live Note"]').first().click();
   await owner.locator('[aria-label="Move Live Note"]').first().click();
@@ -248,7 +250,7 @@ check((await owner.locator('[aria-label="Rename Field Notes"]').count()) === 1, 
 check((await owner.locator('[aria-label="Edit Field Notes"]').count()) === 0, 'and no editor, because a folder has nothing to edit');
 await owner.keyboard.press('Escape');
 
-// ── 6b. …and so does the owner's own profile root ────────────────────────
+// ── 6b. the owner's profile stays a public listing ────────────────────────
 const handle = await owner.evaluate(async () => (await (await fetch('/api/my/profile')).json()).username);
 await owner.goto(`${BASE}/@${handle}`, { waitUntil: 'load' });
 await owner.waitForSelector('[aria-label="Search artifacts"]', { timeout: 20000 });
@@ -271,7 +273,7 @@ await owner.locator('[aria-label="Rename folder"]').click();
 await owner.fill('[aria-label="Folder name"]', 'Field Notes 2026');
 await Promise.all([
   owner.waitForResponse((r) => r.url().includes(`/api/my/artifacts/${folder.id}`) && r.request().method() === 'PATCH' && r.status() === 200, { timeout: 15000 }),
-  owner.getByRole('dialog', { name: 'Create new folder' }).getByLabel('Folder name').press('Enter'),
+  owner.getByLabel('Folder name', { exact: true }).press('Enter'),
 ]);
 const renamed = await owner.evaluate(async (id) => (await (await fetch(`/api/my/artifacts/${id}`)).json()), folder.id);
 check(renamed.title === 'Field Notes 2026', `the name renames the folder in place (${renamed.title})`);
