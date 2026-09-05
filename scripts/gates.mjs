@@ -43,8 +43,11 @@
  * 42 gates failed that way on a clean checkout, and the SAME 26 failed on a
  * commit that had changed nothing. So with no base URL the default is
  * `min(6, availableParallelism())` servers of the CI shape
- * (scripts/gates.servers.mjs). `--servers=N` still wins — `--servers=0` asks
- * for the old behaviour — and a base URL still means DRIVE THAT SERVER.
+ * (scripts/gates.servers.mjs). `--servers=N` still wins — `--servers=1` is a
+ * SERIAL run, for debugging one gate's interference, and `--servers=0` asks for
+ * the old "drive :3040" behaviour — and a base URL still means DRIVE THAT
+ * SERVER. The run prints how many servers and how many gates before it starts
+ * and the wall-clock when it ends, so a serial run is visible in any log.
  *
  * A BOOTED SERVER IS PRODUCTION-MODE, SO IT NEEDS THE DEV POLICY FILE. The
  * shipped default closes anonymous minting outright, and a full pass mints far
@@ -178,9 +181,13 @@ async function bootServer(index, mailOutbox, authSecret) {
       AUTH__SECRET: authSecret,
       DATABASE_URL: 'pglite://memory',
       // A seeded worktree names standalone service ports in .env. Throwaway
-      // gate servers deliberately use the full bundle's local implementations.
+      // gate servers deliberately use the full bundle's local implementations —
+      // and EVENTS is the same story with a quieter failure: left set, every
+      // booted server spends the run logging ECONNREFUSED at a log service
+      // nobody started. Unset means the app writes its own events, in process.
       SQL__SERVICE_URL: '',
       BROWSER__SERVICE_URL: '',
+      EVENTS__SERVICE_URL: '',
       // A .env written for the dev server names ITS port for the exporter's
       // fetch; inherited unchanged, every booted server would fetch from the
       // machine's other server. It is per-process.
@@ -213,11 +220,19 @@ if (servers > 0) {
   // `npm run dev` finds them.
   loadDotEnv();
   const authSecret = runSecret(process.env);
-  process.stdout.write(`booting ${servers} server(s)${serversFrom === 'default' ? ` (one per core, capped — pass --servers=N to choose, or a base URL to drive a server you already have)` : ''}`);
+  process.stdout.write(`booting ${servers} server(s)${serversFrom === 'default' ? ' (one per core, capped — pass --servers=N to choose, or a base URL to drive a server you already have)' : ''}`);
   targets = await Promise.all(Array.from({ length: servers }, (_, i) => bootServer(i, mailOutbox, authSecret)));
   console.log(` — ${targets.join(' ')}\n`);
 }
 if (targets.length === 0) targets = ['http://localhost:3040'];
+
+/*
+ * SAY HOW WIDE THE RUN IS, BEFORE IT RUNS. A serial pass and a parallel one differ by an order of magnitude
+ * in wall-clock and by nothing at all in output, so a log that does not say which it was cannot be read
+ * afterwards — and the failure mode this guards is silent: a `--servers=1` somewhere upstream turns a
+ * three-minute set into half an hour and looks exactly like a slow machine.
+ */
+
 
 /**
  * A gate's verdict is its EXIT CODE — the summary text is for the human, and
@@ -261,7 +276,7 @@ const withinSerialGroup = (serialGroup, task) => {
   return current;
 };
 
-console.log(`${selected.length} gate(s) against ${targets.length} server(s)\n`);
+console.log(`gates: ${targets.length} server(s), ${selected.length} gate(s)${serversFrom === 'default' ? ' (default: one per core, capped at 6 — --servers=1 is serial, for debugging)' : ''}\n`);
 const queue = [...selected];
 const failed = [];
 const timings = [];
@@ -318,7 +333,7 @@ if (failed.length > 0 && targets.length > 1) {
 stopAll();
 
 console.log('════════ gates ════════');
-console.log(`${selected.length - failed.length}/${selected.length} passed in ${((Date.now() - wall) / 1000).toFixed(0)}s`);
+console.log(`${selected.length - failed.length}/${selected.length} passed in ${((Date.now() - wall) / 1000).toFixed(0)}s wall-clock across ${targets.length} server(s)`);
 if (retried.length) console.log(`needed a retry alone (contention, not a fault): ${retried.join(', ')}`);
 // The slowest few, because the set's wall time is now the slowest WORKER's —
 // and one long gate is what a worker's queue ends up waiting on.
@@ -327,7 +342,7 @@ console.log(`slowest: ${timings.sort((a, b) => b.seconds - a.seconds).slice(0, 5
 if (failed.length) {
   console.log(`FAILED: ${failed.join(', ')}`);
   // Named individually so a re-run of just the broken ones is a copy-paste.
-  console.log(`re-run: node scripts/gates.mjs ${bases[0] ?? '--servers=1'} --only=${failed.join(',')}`);
+  console.log(`re-run: node scripts/gates.mjs ${bases[0] ?? ''} --only=${failed.join(',')}`.replace(/\s+/g, ' '));
   process.exit(1);
 }
 console.log('all gates passed');

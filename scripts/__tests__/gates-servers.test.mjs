@@ -11,14 +11,30 @@
  * out over them. An explicit base URL still wins — driving a server you already have is the whole point of
  * `npm run test:gates -- <base>` — and an explicit `--servers=N` still wins over the derived count.
  */
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import { resolveServers, runSecret, SERVER_CAP } from '../gates.servers.mjs';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 describe('resolveServers', () => {
   it('defaults to one server per core, capped, when neither a base URL nor --servers is given', () => {
     expect(resolveServers({ args: [], bases: [], cpus: 4 })).toEqual({ servers: 4, source: 'default' });
     expect(resolveServers({ args: ['--only=fork'], bases: [], cpus: 2 })).toEqual({ servers: 2, source: 'default' });
     expect(resolveServers({ args: [], bases: [], cpus: 1 })).toEqual({ servers: 1, source: 'default' });
+  });
+
+  it('is NEVER 1 on a machine with two cores or more, and never exceeds the cap — the two ends of the rule', () => {
+    // The bound the runner is judged by, stated as a rule rather than as three examples: a serial run must
+    // be something a person ASKED for, and no core count may talk the default past the cap.
+    for (let cores = 2; cores <= 64; cores++) {
+      const { servers, source } = resolveServers({ args: [], bases: [], cpus: cores });
+      expect(source, `${cores} cores`).toBe('default');
+      expect(servers, `${cores} cores must not run serially`).toBeGreaterThan(1);
+      expect(servers, `${cores} cores must not exceed the cap`).toBeLessThanOrEqual(SERVER_CAP);
+    }
   });
 
   it(`never boots more than ${SERVER_CAP} of them, however many cores the machine has`, () => {
@@ -69,5 +85,22 @@ describe('runSecret', () => {
     expect(a).toMatch(/^gates-local-[0-9a-f]{32}$/);
     expect(runSecret({ AUTH__SECRET: '' }), 'empty is unset').toMatch(/^gates-local-/);
     expect(runSecret({})).not.toBe(a);
+  });
+});
+
+describe('the npm script', () => {
+  const pkg = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+
+  it('runs the gates with NO --servers baked in, so the derived default is what a bare run gets', () => {
+    // A `--servers=1` (or any pinned count) in package.json would silently outrank the rule above and
+    // nothing else in this file would notice: the resolver would still be right and every local run
+    // still serial. The script is the other half of the default.
+    expect(pkg.scripts['test:gates']).toBe('node scripts/gates.mjs');
+    expect(pkg.scripts['test:gates']).not.toMatch(/--servers/);
+  });
+
+  it('and no other script pins a server count either', () => {
+    const offenders = Object.entries(pkg.scripts).filter(([, cmd]) => /gates\.mjs[^\n]*--servers=1\b/.test(cmd));
+    expect(offenders, 'a serial gate run is a debugging choice, never a default').toEqual([]);
   });
 });

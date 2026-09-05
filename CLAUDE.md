@@ -195,8 +195,11 @@ teaches any agent the whole protocol.
 npm run dev        # dev server (http://localhost:3030)
 npm run validate   # type check — USE THIS to verify code, never `npm run build`
 npm test           # Vitest API suite (in-memory PGLite)
-npm run test:gates -- <base>       # every scripts/gate-*.mjs against a RUNNING server
-npm run test:gates -- --servers=4  # …or boot 4 throwaway servers and shard the set across them
+npm run build && npm run test:gates  # every scripts/gate-*.mjs, PARALLEL BY DEFAULT: the runner boots
+                                   # min(6, cores) throwaway servers from dist/ and deals the set across
+                                   # them — the same shape CI runs. 42 gates, ~2 minutes.
+npm run test:gates -- <base>       # …or drive a server you already have (point it at dev_rate_limits.yml)
+npm run test:gates -- --servers=1  # SERIAL, for debugging one gate's interference — never the default
                                    # (--list to enumerate, --only=a,b for a subset)
 npm run mint -- <name>   # mint an agent token via HTTP (server must be running)
 npm run eval -- --harness <name> --model <id> --api-key-env <VAR> [--mode fetched_skill+api_action|fetched_skill+mcp_action|installed_skill+api_action|installed_skill+mcp_action] [--label L] [--tasks x,y] [--deployment URL]
@@ -212,7 +215,15 @@ joins the set by existing. They FAN OUT OVER SERVERS, not over gates: what made
 the set sequential was never the browser but the server — two gates sharing one
 share a mint ceiling, a login door and a listing — so a worker gets its own
 server (`--servers=N`: in-memory PGLite, its own object dir and port) and runs
-its own gates one at a time. 34 gates went from ~25 minutes to ~3. Below that the
+its own gates one at a time. **The gates run in parallel by default; a serial
+run is an explicit `--servers=1`, for debugging only.** The runner prints
+`gates: N server(s), M gate(s)` before it starts and the wall-clock when it
+ends, so a serial run is visible in any log. Booting is also the default
+because a DEV server is not what CI runs: Vite's HMR websocket is on a second
+port that the app's fixed `connect-src 'self'` CSP refuses, the SPA never
+mounts, and 26 of 42 gates time out on a checkout where nothing is wrong
+(measured, and the same 26 failed on a commit that had changed nothing).
+34 gates went from ~25 minutes to ~3. Below that the
 MACHINE is the floor — four workers on four vCPUs — so the set also SHARDS across
 runners (`--shard=i/n`, `scripts/gates.shard.mjs`), balanced by each gate's
 measured `timeoutMs` rather than by count, because app-flows is 75s and

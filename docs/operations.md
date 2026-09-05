@@ -33,7 +33,11 @@
   `npm run build && npm run test:gates`: with no arguments the runner BOOTS ITS
   OWN servers from `dist/` — `min(6, availableParallelism())` of them, each with
   in-memory PGLite, its own port and its own object dir — and deals the set
-  across them. That is exactly what CI does (`--servers=4`), and it is the
+  across them. **The gates run in parallel by default; a serial run is an
+  explicit `--servers=1`, for debugging only.** The runner prints
+  `gates: N server(s), M gate(s)` before it starts and the wall-clock when it
+  ends, so a serial run is visible in any log. That is exactly what CI does
+  (`--servers=4`), and it is the
   default on purpose: driving a DEV server instead means the SPA is served
   through Vite, whose HMR websocket a fixed `connect-src 'self'` CSP refuses, so
   the page never mounts and ~26 gates time out on a checkout where nothing is
