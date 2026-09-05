@@ -445,7 +445,6 @@ input.mx-rail-title { min-width: 0; width: 100%; background: transparent; border
     /* Solid ground for the first stretch, where the handle sits, then the fade. */
     background: linear-gradient(to top, var(--background, canvas) 0, color-mix(in srgb, var(--background, canvas) 96%, transparent) 56px, color-mix(in srgb, var(--background, canvas) 70%, transparent) 120px, transparent) !important;
   }
-  }
   /* Tips sit to the left of the rail (a phone rarely hovers; focus still shows them). */
   .mx-reader-chrome [data-mx-tip]:hover::after, .mx-reader-chrome [data-mx-tip]:focus-visible::after {
     right: calc(100% + 8px) !important; top: 50% !important; transform: translateY(-50%) !important;
