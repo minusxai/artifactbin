@@ -55,7 +55,7 @@ const HELMET = `<Helmet>` +
   `<Query name="sales">{\`select * from ref_${sales.id}\`}</Query>` +
   `<Query name="costs">{\`select * from ref_${costs.id}\`}</Query></Helmet>`;
 const story = HELMET + `<div data-design="tw" className="@container p-8">` +
-  `<h1 className="text-3xl font-bold">Quarterly review</h1>` +
+  `<h1 id="heading" className="text-3xl font-bold">Quarterly review</h1>` +
   `<p className="mt-2 text-base">A paragraph that must survive every chart edit.</p>` +
   `<Question title="Revenue" data="$sales" height="430px" /></div>`;
 await api(`/api/artifacts/${start.id}`, { method: 'PUT', body: JSON.stringify({ title: 'Review', markup: story, theme: 'manuscript' }) }, token);
@@ -139,7 +139,7 @@ let stored = await api(`/api/artifacts/${start.id}`, {}, token);
 ok(/"mark"\s*:\s*("bar"|\{[^}]*"type"\s*:\s*"bar")/.test(stored.markup), 'the bar mark is in the STORED document');
 ok(stored.markup.includes('"field":"region"') && stored.markup.includes('"field":"revenue"'), 'with both encodings');
 ok(stored.markup.includes('A paragraph that must survive'), 'and the prose around it is untouched');
-ok(stored.markup.includes('<h1 className="text-3xl font-bold">Quarterly review</h1>'), 'as is the heading');
+ok(stored.markup.includes('<h1 id="heading" className="text-3xl font-bold">Quarterly review</h1>'), 'as is the heading');
 
 // ── a SECOND edit, after a reload — where a canonical-form drift would show ──
 await openEditor();

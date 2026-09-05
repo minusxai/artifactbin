@@ -18,6 +18,13 @@ async function annotation(id:string,artifactId:string,key:string) {
 }
 
 describe('app-owned source identity migration contract',()=>{
+  it('maps crossing legacy aliases simultaneously rather than cascading comment targets',async()=>{
+    await artifact('aaaaaa','<p id="first" data-annotation-anchor="second">A</p><p id="second" data-annotation-anchor="first">B</p>');
+    await annotation('ann_a','aaaaaa','second');await annotation('ann_b','aaaaaa','first');
+    const db=await harness.db();
+    await runNodeIdentityMigrationBatch(db,{batchSize:10});
+    expect((await db.query('SELECT id,anchor_key FROM annotations ORDER BY id')).rows).toEqual([{id:'ann_a',anchor_key:'first'},{id:'ann_b',anchor_key:'second'}]);
+  });
   it('persists completion even when there are no artifacts',async()=>{
     const db=await harness.db();
     expect(await runNodeIdentityMigrationBatch(db,{batchSize:10})).toMatchObject({processed:0,done:true,cursor:null});

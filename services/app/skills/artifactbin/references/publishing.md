@@ -18,7 +18,7 @@ description: >-
 
 ## Contents
 
-Rules every document lives by · Endpoints (create, update, edit, folders, fork, read, list) · Errors.
+Rules · Endpoints · Errors.
 
 ## Rules every document lives by
 

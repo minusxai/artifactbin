@@ -336,13 +336,11 @@ export async function createArtifact(
 ): Promise<ArtifactRow> {
   const db = await getDb();
   if (input.format === 'markup' && input.source) {
-    try { input = { ...input, source: stampNodeIds(input.source, { retireLegacyAliases: true }).source }; }
-    catch { /* publish output can contain canonical Helmet CSS outside parser grammar; its body was stamped pre-publish */ }
+    input = { ...input, source: stampNodeIds(input.source, { retireLegacyAliases: true }).source };
   }
   let sourceIds: string[] = [];
   if(input.format==='markup'&&input.source) {
-    try { sourceIds=[...nodeIndex(input.source).keys()]; }
-    catch { sourceIds=[...input.source.matchAll(/\sid="([A-Za-z][A-Za-z0-9]{3})"/g)].map(match=>match[1]); }
+    sourceIds=[...nodeIndex(input.source).keys()];
   }
   // Birthday collisions at 62^6 are routine once the table is large, so the
   // PK-violation retry is a working path, not a theoretical one.
@@ -748,14 +746,13 @@ export async function commitNormalizedMarkup(
   );
   await tx.query('UPDATE artifact_source_ids SET retired_version=NULL WHERE artifact_id=$1 AND source_id=ANY($2::text[])',[current.id,normalized.ids]);
   await tx.query('UPDATE artifact_source_ids SET retired_version=$2 WHERE artifact_id=$1 AND retired_version IS NULL AND NOT(source_id=ANY($3::text[]))',[current.id,updated.version,normalized.ids]);
-  for (const alias of normalized.aliases ?? []) {
-    await tx.query(
-      `INSERT INTO artifact_node_aliases (artifact_id, legacy_key, source_id, source_path, created_version)
-       VALUES ($1,$2,$3,$4,$5) ON CONFLICT (artifact_id, legacy_key) DO NOTHING`,
-      [current.id, alias.legacyKey, alias.nodeId, alias.path, updated.version],
-    );
-    await tx.query('UPDATE annotations SET anchor_key=$3 WHERE artifact_id=$1 AND anchor_key=$2', [current.id, alias.legacyKey, alias.nodeId]);
-  }
+  await tx.query(`WITH added AS (
+    INSERT INTO artifact_node_aliases(artifact_id,legacy_key,source_id,source_path,created_version)
+    SELECT $1,x->>'legacyKey',x->>'nodeId',x->>'path',$3 FROM jsonb_array_elements($2::jsonb) x
+    ON CONFLICT DO NOTHING RETURNING legacy_key,source_id)
+    UPDATE annotations a SET anchor_key=x.source_id FROM added x
+    WHERE a.artifact_id=$1 AND a.anchor_key=x.legacy_key`,
+    [current.id, JSON.stringify(normalized.aliases ?? []),updated.version]);
   await logWholeDocumentWrite(tx, current, updated);
   return updated;
 }
@@ -777,7 +774,8 @@ export async function publishMarkupForArtifact(
   if (published instanceof Response) return published;
   const db = await getDb();
   const reserved = await db.query<{ source_id: string }>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1', [current.id]);
-  const identity = stampNodeIds(published.source ?? '', { previousSource: current.source, reservedIds: reserved.rows.map((row) => row.source_id), retireLegacyAliases: true });
+  const aliases = await db.query<{ legacy_key: string; source_id: string }>('SELECT legacy_key,source_id FROM artifact_node_aliases WHERE artifact_id=$1', [current.id]);
+  const identity = stampNodeIds(published.source ?? '', { previousSource: current.source, reservedIds: reserved.rows.map((row) => row.source_id), legacyAliases: new Map(aliases.rows.map(row => [row.legacy_key,row.source_id])), retireLegacyAliases: true });
   if (identity.source !== published.source) {
     published = await publishJsx({ theme: currentMeta.theme ?? null, template: currentMeta.template ?? null, colorMode: currentMeta.colorMode ?? null }, identity.source, context);
     if (published instanceof Response) return published;
@@ -978,10 +976,13 @@ async function replaceScoped(
         SELECT $1,value #>> '{}','authored',$2 FROM jsonb_array_elements($3::jsonb) ON CONFLICT DO NOTHING`, [id, updated.rows[0].version, JSON.stringify(ids)]);
       await tx.query(`UPDATE artifact_source_ids SET retired_version=$2 WHERE artifact_id=$1 AND retired_version IS NULL AND NOT (source_id = ANY($3::text[]))`, [id, updated.rows[0].version, ids]);
       await tx.query('UPDATE artifact_source_ids SET retired_version=NULL WHERE artifact_id=$1 AND source_id=ANY($2::text[])',[id,ids]);
-      for(const alias of replacementIdentity?.aliases ?? []) {
-        await tx.query(`INSERT INTO artifact_node_aliases(artifact_id,legacy_key,source_id,source_path,created_version) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`,[id,alias.legacyKey,alias.nodeId,alias.path,updated.rows[0].version]);
-        await tx.query('UPDATE annotations SET anchor_key=$3 WHERE artifact_id=$1 AND anchor_key=$2',[id,alias.legacyKey,alias.nodeId]);
-      }
+      await tx.query(`WITH added AS (
+        INSERT INTO artifact_node_aliases(artifact_id,legacy_key,source_id,source_path,created_version)
+        SELECT $1,x->>'legacyKey',x->>'nodeId',x->>'path',$3 FROM jsonb_array_elements($2::jsonb) x
+        ON CONFLICT DO NOTHING RETURNING legacy_key,source_id)
+        UPDATE annotations a SET anchor_key=x.source_id FROM added x
+        WHERE a.artifact_id=$1 AND a.anchor_key=x.legacy_key`,
+        [id,JSON.stringify(replacementIdentity?.aliases ?? []),updated.rows[0].version]);
     }
     moved = { from: parentOf(current), to: parentOf(updated.rows[0]) };
     return updated.rows[0];
@@ -1243,7 +1244,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
       if (prior && prior !== alias.nodeId) return json({ error: 'ambiguous_node_alias' }, 400);
       aliasTargets.set(alias.legacyKey, alias.nodeId);
     }
-    const storedText = published.source ?? '';
+    const storedText = input.change ? published.source ?? '' : headSource;
 
     // 5. Log what actually LANDED (the sanitizer may have rewritten the text),
     //    normalized for the same reason: the logged span is what every future
@@ -1292,10 +1293,11 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
          INSERT INTO artifact_node_aliases (artifact_id, legacy_key, source_id, source_path, created_version)
          SELECT $1, x->>'legacyKey', x->>'nodeId', x->>'path', $8 + 1 FROM jsonb_array_elements($28::jsonb) x
          WHERE EXISTS (SELECT 1 FROM updated) ON CONFLICT (artifact_id, legacy_key) DO NOTHING
+         RETURNING legacy_key,source_id
        ), migrated_annotations AS (
-         UPDATE annotations a SET anchor_key = x->>'nodeId'
-         FROM jsonb_array_elements($28::jsonb) x
-         WHERE a.artifact_id = $1 AND a.anchor_key = x->>'legacyKey' AND EXISTS (SELECT 1 FROM updated)
+         UPDATE annotations a SET anchor_key = x.source_id
+         FROM aliases x
+         WHERE a.artifact_id = $1 AND a.anchor_key = x.legacy_key AND EXISTS (SELECT 1 FROM updated)
        ), active_ids AS (
          UPDATE artifact_source_ids SET retired_version=NULL WHERE artifact_id=$1 AND source_id=ANY($29::text[])
            AND EXISTS (SELECT 1 FROM updated)
@@ -1307,7 +1309,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
        SELECT u.* FROM updated u WHERE EXISTS (SELECT 1 FROM logged)`,
       [
         id, scope.val,
-        published.content, published.source, JSON.stringify(published.meta), freshEditId, head.edit_id,
+        published.content, storedText, JSON.stringify(published.meta), freshEditId, head.edit_id,
         head.version, head.title, head.description, head.format, head.content, head.source, JSON.stringify(head.meta),
         EDIT_SNAPSHOT_WINDOW_MS,
         storedSplice.start, storedSplice.removed, storedSplice.inserted, storedSpan.start, storedSpan.end,

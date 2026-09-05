@@ -9,6 +9,8 @@ export interface NodeIdOptions {
   previousSource?: string | null;
   /** Lifetime ledger, not just the current head. Only fresh generation excludes these. */
   reservedIds?: Iterable<string>;
+  /** Durable legacy mapping when restoring pre-migration source. */
+  legacyAliases?: ReadonlyMap<string, string>;
   /** Defaults to cryptographic letter-first, four-character ids. */
   mint?: () => string;
   /** Removing conflicting legacy attributes requires atomic relation migration by caller. */
@@ -65,6 +67,20 @@ function parsed(source: string): JsxNode[] {
   const result = parseJsx(source);
   if (!result.ok) throw new Error(`node-ids: invalid JSX${result.pos === undefined ? '' : ` at ${result.pos}`}: ${result.error}`);
   return result.nodes;
+}
+
+/** Inspect real body attributes only; syntax errors remain the publisher's responsibility. */
+export function hasAmbiguousLegacyAliases(source: string): boolean {
+  const result = parseJsx(source);
+  if (!result.ok) return false;
+  const seen = new Set<string>();
+  for (const { node } of elements(result.nodes)) {
+    const key = stringValue(attr(node, LEGACY_ATTR));
+    if (!key) continue;
+    if (seen.has(key)) return true;
+    seen.add(key);
+  }
+  return false;
 }
 
 const encoded = (value: unknown): string => JSON.stringify(value) ?? 'undefined';
@@ -173,9 +189,15 @@ export function stampNodeIds(source: string, options: NodeIdOptions = {}): NodeI
     const explicit = stringValue(idAttribute);
     const originalId = reportedValue(idAttribute);
     const legacy = stringValue(attr(node, LEGACY_ATTR));
+    const restored = legacy ? options.legacyAliases?.get(legacy) : undefined;
     let id: string;
     if (explicit && !assigned.has(explicit)) {
       id = explicit;
+    } else if (!explicit && restored && !assigned.has(restored) && !explicitIds.has(restored)) {
+      id = restored;
+      setStringAttr(node, ID_ATTR, id);
+      aliases.push({ legacyKey: legacy!, nodeId: id, path });
+      if (options.retireLegacyAliases) removeAttr(node, LEGACY_ATTR);
     } else if (!explicit && legacy && !assigned.has(legacy) && !explicitIds.has(legacy)) {
       id = legacy;
       setStringAttr(node, ID_ATTR, id);

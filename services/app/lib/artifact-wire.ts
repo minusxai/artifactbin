@@ -14,7 +14,7 @@ import {
   type ArtifactInput, type ArtifactRow, type ArtifactSummary, type DatasetAccess, type EditInput, type EditOutcome, type ReplaceOpts, type ShareEntry, type ShareRole, type TokenActor, type Visibility,
 } from '@/lib/artifacts';
 import { actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type AnnotationAction, type AnnotationAuthor } from '@/lib/annotations';
-import { stampNodeIds } from '@/lib/story/node-ids';
+import { hasAmbiguousLegacyAliases, stampNodeIds } from '@/lib/story/node-ids';
 import { isMutationRefused, mutateDataset } from '@/lib/story/dataset-mutate';
 import type { SourceRepair } from '@/lib/jsx/repair';
 import type { Scalar } from '@/lib/story/dataflow';
@@ -396,12 +396,13 @@ export async function replaceArtifactWithBody(
   const owned = governs || body.parent_id !== undefined ? await getOwnedArtifactFor(actor, id) : null;
   if (governs && !owned) return json({ error: 'owner_only' }, 403);
   const owner = writerFor(current);
+  const sentMarkup = body.markup;
+  let normalizeMarkup: ((source: string) => string) | undefined;
   if(typeof body.markup==='string') {
-    const legacy=[...body.markup.matchAll(/data-annotation-anchor\s*=\s*["']([^"']+)["']/g)].map(match=>match[1]);
-    if(new Set(legacy).size!==legacy.length) return json({error:'ambiguous_node_alias'},409);
+    if(hasAmbiguousLegacyAliases(body.markup)) return json({error:'ambiguous_node_alias'},409);
     const db=await getDb();
     const lifetime=await db.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[current.id]);
-    body={...body,markup:stampNodeIds(body.markup,{previousSource:current.source,reservedIds:lifetime.rows.map(row=>row.source_id),retireLegacyAliases:false}).source};
+    normalizeMarkup = source => stampNodeIds(source,{previousSource:current.source,reservedIds:lifetime.rows.map(row=>row.source_id),retireLegacyAliases:false}).source;
   }
   /*
    * A FOLDER HAS NO CONTENT, AND THE REPLACE DOOR IS WHERE THAT IS ENFORCED.
@@ -432,6 +433,7 @@ export async function replaceArtifactWithBody(
   const parsed: StoredContent | Response = current.format === 'folder'
     ? { format: 'folder', content: '', source: '', meta: {}, derivedTitle: null }
     : await parseContentInput(body, {
+      normalizeMarkup,
       loadRef: refLoaderForActor(owner),
       importAsset: assetImporterFor(owner.tokenId, owner.userId),
       resolveFont: fontResolver(),
@@ -522,7 +524,7 @@ export async function replaceArtifactWithBody(
     // caller already had: still the answer to "what do I quote next", which is
     // the only thing it is for.
     edit_id: row.edit_id,
-    ...markupEcho(body.markup, row.source),
+    ...markupEcho(sentMarkup, row.source),
     // A dataset echoes its WRITE acl too: an agent that just set it should not
     // have to re-read to see what it got.
     ...(row.format === 'dataset' ? { access: row.access } : {}),
@@ -549,8 +551,8 @@ export async function createArtifactFromBody(
 ): Promise<Response> {
   if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
   const sentMarkup=body.markup;
-  if(typeof body.markup==='string') body={...body,markup:stampNodeIds(body.markup,{retireLegacyAliases:true}).source};
   const parsed = await parseContentInput(body, {
+    normalizeMarkup: source => stampNodeIds(source,{retireLegacyAliases:true}).source,
     creating: true,
     loadRef: refLoaderForActor(actor),
     importAsset: assetImporterFor(actor.tokenId, actor.userId),

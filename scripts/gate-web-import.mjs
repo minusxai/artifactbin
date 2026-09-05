@@ -57,7 +57,7 @@ const put = await fetch(`${B}/api/artifacts/${started.id}`, {
   headers: auth,
   body: JSON.stringify({
     title: 'web import gate',
-    markup: `<div className="p-8"><h1 className="text-2xl font-bold">Imported</h1><img id="shot" src="${WEB}/logo.png" alt="imported" /></div>`,
+    markup: `<div id="root" className="p-8"><h1 id="heading" className="text-2xl font-bold">Imported</h1><img id="shot" src="${WEB}/logo.png" alt="imported" /></div>`,
   }),
 });
 const body = await put.json();

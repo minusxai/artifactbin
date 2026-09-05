@@ -218,7 +218,7 @@ const editArtifactOp: Operation = {
   name: 'edit_artifact',
   title: 'Edit an artifact in place',
   http: { method: 'POST', path: '/api/artifacts/{id}/edits' },
-  description: 'Edit part of a markup artifact in place, like a file edit: old_string must appear EXACTLY ONCE in the version named by edit_id, and is replaced by new_string. Pass the edit_id from create/get/edit (never a guess — it proves you read the version you are changing). Edits to DIFFERENT nodes succeed even when someone else changed the document meanwhile; only a change to the SAME node fails, with doc_changed plus the current edit_id and source to rebase on and retry. Prefer this over update_artifact for targeted changes: it is smaller, and it lets a human edit the page live alongside you.',
+  description: 'Edit markup using one old_string/new_string pair OR an edits list of 1–64 pairs, never both. Each old_string must match EXACTLY ONCE against the evolving in-memory source. Only the final document is validated and committed: one version or nothing; failures identify zero-based edit_index. Use the edit_id from your last create/get/edit response. Preserve persistent ids when moving nodes; include the nearest id-bearing context to distinguish repeated text. Unrelated concurrent edits rebase; conflicting regions return doc_changed with the current edit_id and source. Prefer this targeted operation over update_artifact, which replaces the whole document.',
   input: {
     id: z.string(), edit_id: z.string(),
     old_string: z.string().optional(), new_string: z.string().optional(),
@@ -248,7 +248,7 @@ const getArtifactOp: Operation = {
   name: 'get_artifact',
   title: 'Read an artifact',
   http: { method: 'GET', path: '/api/artifacts/{id}' },
-  description: 'Read one of your artifacts: markup (story JSX) source, dataset rows/columns, or recipe. A markup read also inlines OPEN annotations pinned to nodes of the document. Read them before editing. Each `anchor.key` matches an opaque `data-annotation-anchor` in the markup: preserve that attribute through edits and full rewrites, move it with its content, and never author or change its value. Dropping it orphans the feedback. Reply, resolve, or reopen with the annotate tool. Every read also carries parent_id and ancestor_ids — the folder it sits in, and the whole trail from your root down — so one call draws breadcrumbs. A folder itself reads back with no content: it is a title and a place, and its page is the listing we render.',
+  description: 'Read markup source, dataset rows/columns, or a recipe, plus edit_id, parent_id and ancestor_ids. Markup reads inline OPEN annotations; inspect them before editing. anchor.nodeId identifies a persistent body id: preserve ids through edits and full rewrites, and move them with their nodes. Comments are relations and never rewrite source or flush the editor. Legacy data-annotation-anchor attributes are read compatibility only; do not author them. Reply, resolve or reopen with annotate. A folder has no content: its page is a viewer-scoped listing.',
   input: { id: z.string() },
   annotations: { readOnly: true },
   example: { input: { id: 'aB3xK9' } },

@@ -98,6 +98,8 @@ describe('Helmet publish contract', () => {
     const { markup } = (await res.json()) as { markup: string };
     expect(markup).not.toContain('evil.example');
     expect(markup).toContain('color: red');
+    const repeated = await create(t.token, { markup });
+    expect(repeated.status, await repeated.clone().text()).toBe(201);
   });
 
   it('canonical form is a fixpoint: republishing the echo returns it byte-identical', async () => {
