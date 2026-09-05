@@ -86,6 +86,19 @@ export interface ShelfProps {
    * an absent value is never "leave it".
    */
   parentId?: string | null;
+  /**
+   * MAY THIS VIEWER MAKE A FOLDER HERE — a capability of its own, defaulting to
+   * the dashboard's `full`, because creating is not an action on any ROW.
+   *
+   * It rode `actions === 'full'` at first, which is why the owner's own profile
+   * shipped without it: a profile withholds edit, move and delete on purpose
+   * (its point is handing someone a link, not changing the document), and one
+   * level cannot say "no row verbs, but yes, this is your shelf". Promoting the
+   * profile to `full` to get one button would have granted the three verbs the
+   * level exists to withhold — so the prop is separate, and the file's own rule
+   * holds: withholding is the default.
+   */
+  canCreateFolders?: boolean;
 }
 
 /**
@@ -425,7 +438,7 @@ function FilterChip({ value, active, onToggle }: { value: string; active: boolea
   );
 }
 
-export default function Shelf({ rows, actions = 'none', assets = true, dates = 'relative', cards = 3, parentId = null }: ShelfProps) {
+export default function Shelf({ rows, actions = 'none', assets = true, dates = 'relative', cards = 3, parentId = null, canCreateFolders }: ShelfProps) {
   const [query, setQuery] = useState('');
   const [picks, setPicks] = useState<string[]>([]);
   /*
@@ -482,7 +495,7 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
   const inside = (id: string): number => all.filter((r) => parentOfRow(r) === id).length;
 
   const filtering = Boolean(q) || picks.length > 0;
-  const canMakeFolders = actions === 'full';
+  const canMakeFolders = canCreateFolders ?? actions === 'full';
   const nothing = !shelf.hero && shelf.cards.length === 0 && shelf.list.length === 0 && shelf.assets.length === 0;
 
   return (

@@ -78,15 +78,27 @@ export function ProfileListing({ data }: { data: { kind: string; handle: string;
         // together, on the public branch only.
         {...(data.owner && data.follow ? { follow: { userId: data.owner.id, ...data.follow, signedIn: !!data.authed } } : {})}
       />
-      {data.files.length === 0 ? <NothingHere /> : <ProfileShelf handle={data.handle} files={data.files} />}
+      {data.files.length === 0 ? <NothingHere /> : <ProfileShelf handle={data.handle} files={data.files} owned={owned} />}
     </>
   );
 }
 
-function ProfileShelf({ handle, files }: { handle: string; files: Array<Record<string, unknown> & { id: string; format: string }> }) {
+/**
+ * The owner's own profile root is the dashboard's shelf asked a different
+ * question — same account, same root — so it gets the one control that puts
+ * something new on it. Never the row verbs: `actions` stays `share`, because a
+ * page whose whole point is handing someone a link should not be where a
+ * document is edited or deleted. A stranger's profile passes `owned` false and
+ * is unchanged.
+ */
+function ProfileShelf({ handle, files, owned = false }: { handle: string; files: Array<Record<string, unknown> & { id: string; format: string }>; owned?: boolean }) {
   return (
     <Shelf
       actions="share"
+      canCreateFolders={owned}
+      // The account ROOT is what this page lists, so a folder made here is a
+      // root folder — the wire's own null, never an absent value.
+      parentId={null}
       assets={false}
       dates="absolute"
       rows={files.map((a) => ({ ...a, url: canonicalArtifactPath(a as never, handle) }) as never)}
