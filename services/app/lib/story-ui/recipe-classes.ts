@@ -5,7 +5,6 @@
  * Regenerate with: npm run generate-story-ui-classes
  */
 export const STORY_UI_RECIPE_CLASSES: readonly string[] = [
-  "\u0000null",
   "#8b949e",
   "(value",
   "*:data-[slot=alert-description]:text-destructive/90",
@@ -193,6 +192,7 @@ export const STORY_UI_RECIPE_CLASSES: readonly string[] = [
   "[a&]:hover:underline",
   "[data-mx-slide]",
   "[data-theme],",
+  "\\u0000null",
   "__null__",
   "_blank",
   "a",
