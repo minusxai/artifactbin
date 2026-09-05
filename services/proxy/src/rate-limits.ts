@@ -14,9 +14,15 @@
  * No single module-relative path hits in all three (the two images bundle to different depths), and the
  * upward walk needs no Dockerfile change: both images already `COPY services ./services`.
  *
- * SKELETON — every body throws `rate-limits: implement …`.
+ * ONE read, at boot: `proxyParts` builds the limiter when it is composed, so a file that does not exist or
+ * does not parse is a REFUSAL TO BOOT, not a request that quietly meets built-in numbers.
  */
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { parse } from 'yaml';
 import type { PolicyFile } from '@artifactbin/contracts/rate-limits';
+import { validatePolicyFile } from '@artifactbin/utils/rate-limits';
 
 /**
  * The only env name that points at a policy file.
@@ -38,7 +44,17 @@ export const DEFAULT_POLICY_FILE = 'services/proxy/default_rate_limits.yml';
  * image (see the table above). Nothing found is a boot refusal naming the directories tried.
  */
 export function defaultPolicyFilePath(): string {
-  throw new Error('rate-limits: implement defaultPolicyFilePath');
+  const tried: string[] = [];
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (;;) {
+    tried.push(dir);
+    const candidate = join(dir, DEFAULT_POLICY_FILE);
+    if (existsSync(candidate)) return candidate;
+    const up = dirname(dir);
+    if (up === dir) break;
+    dir = up;
+  }
+  throw new Error(`${DEFAULT_POLICY_FILE} was not found above ${tried[0]} — tried ${tried.join(', ')}`);
 }
 
 /**
@@ -46,7 +62,9 @@ export function defaultPolicyFilePath(): string {
  * above. Unset is a default, not a fallback: a path that IS set and does not exist is ENOENT at boot.
  */
 export function resolvePolicyFilePath(env: Record<string, string | undefined>): string {
-  throw new Error('rate-limits: implement resolvePolicyFilePath');
+  const configured = env[POLICY_FILE_ENV]?.trim();
+  if (configured) return isAbsolute(configured) ? configured : resolve(configured);
+  return defaultPolicyFilePath();
 }
 
 /**
@@ -55,5 +73,13 @@ export function resolvePolicyFilePath(env: Record<string, string | undefined>): 
  * parse: every one REFUSES with the offending line named. Never a silent fallback to built-in numbers.
  */
 export function loadPolicyFile(path: string): PolicyFile {
-  throw new Error(`rate-limits: implement loadPolicyFile (${path})`);
+  let text: string;
+  try { text = readFileSync(path, 'utf8'); } catch (error) {
+    throw new Error(`${path}: ${(error as Error).message}`);
+  }
+  let doc: unknown;
+  try { doc = parse(text); } catch (error) {
+    throw new Error(`${path}: not valid YAML — ${(error as Error).message}`);
+  }
+  return validatePolicyFile(doc, path);
 }
