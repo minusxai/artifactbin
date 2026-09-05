@@ -29,21 +29,35 @@
   (PGLite in-process, Postgres via one dedicated client). A missed
   notification is harmless: every wakeup triggers a fresh read, so the
   document converges either way.
-- The browser gates need a RUNNING server and are not part of `npm test`.
-  Run them as a set with `npm run test:gates -- <base>`, one with
-  `--only=<name>`, and list what exists with `--list` — the runner discovers
-  every `scripts/gate-*.mjs` from disk, so a new gate joins by existing and no
-  hand-written list can fall behind. A gate's verdict is its exit code.
+- The browser gates are not part of `npm test`. Run the set with
+  `npm run build && npm run test:gates`: with no arguments the runner BOOTS ITS
+  OWN servers from `dist/` — `min(6, availableParallelism())` of them, each with
+  in-memory PGLite, its own port and its own object dir — and deals the set
+  across them. **The gates run in parallel by default; a serial run is an
+  explicit `--servers=1`, for debugging only.** The runner prints
+  `gates: N server(s), M gate(s)` before it starts and the wall-clock when it
+  ends, so a serial run is visible in any log. That is exactly what CI does
+  (`--servers=4`), and it is the
+  default on purpose: driving a DEV server instead means the SPA is served
+  through Vite, whose HMR websocket a fixed `connect-src 'self'` CSP refuses, so
+  the page never mounts and ~26 gates time out on a checkout where nothing is
+  wrong. `--servers=N` chooses the count (`--servers=0` falls back to
+  `http://localhost:3040`), and `npm run test:gates -- <base>` drives a server
+  you already have — point that one at
+  `PROXY__RATE_LIMIT_CONFIG_FILE=services/proxy/dev_rate_limits.yml`. Run one
+  gate with `--only=<name>` and list what exists with `--list` — the runner
+  discovers every `scripts/gate-*.mjs` from disk, so a new gate joins by
+  existing and no hand-written list can fall behind. A gate's verdict is its
+  exit code.
   Highlights: `app-flows` (whole app), `concurrent-edit` (a human typing while
   an agent edits), `full-kit` (every component through the served document:
   SSR, hydration, isolation, fonts, export), `script-slice` (an author
   `<script>` runs in view and is inert in the editor), `shell-seo` (a crawler
   is served the document itself, text and unfurl tags included), `visibility`
   (the ACL + pretty URLs, incl. a private artifact's sandboxed iframe carrying
-  the session cookie). Gates that log in need the dev server pointed at their
-  mail sink — see each file's header. To run them against a release-mode
-  server, start it with `RATE_LIMITER__ANON_MINT_MAX=2000`: the ceiling is 10 outside dev, and
-  a full pass mints more than that from one IP.
+  the session cookie). Gates that log in need a mail sink; the booted servers
+  share one per run, and a server of your own must be pointed at its own — see
+  each file's header.
 - **Image export needs a headless browser**: run `npx playwright install chromium`
   once per host. Renders happen on demand (lazy singleton, 60s idle shutdown)
   and persist in the object store keyed by artifact version, so one render
@@ -86,8 +100,45 @@ Before an upgrade, compare the deployment environment with `.env.example`.
 Production boot requires `AUTH__SECRET` and `APP__PUBLIC_BASE_URL`; identity
 needs permission to create and use its `AUTH__SCHEMA`; login email needs
 `EMAIL__RESEND_API_KEY`; and public listing and anonymous minting remain closed
-until `ARTIFACTS__ALLOW_PUBLIC` and `RATE_LIMITER__ANON_MINT_MAX` explicitly
-open them. Retired or misspelled names are reported at boot but are not read.
+until `ARTIFACTS__ALLOW_PUBLIC` and a `PROXY__RATE_LIMIT_CONFIG_FILE` whose
+`anon_mint` is not 0 explicitly open them. Retired or misspelled names are
+reported at boot but are not read.
+
+**The rate limits are a file.** Every number lives in a policy file, and
+`PROXY__RATE_LIMIT_CONFIG_FILE` says which one — it and
+`RATE_LIMITER__TRUSTED_PROXY_HOPS` are the only rate-limit env names there are.
+Three ship, differing only in the anonymous mint:
+
+| file | `anon_mint` | for |
+|---|---|---|
+| `services/proxy/default_rate_limits.yml` | 0 (closed) | production, and what an unset env resolves to |
+| `services/proxy/selfhost_rate_limits.yml` | 10/hour/ip | a self-host install (`docker-compose.yml`, the lean stack) |
+| `services/proxy/dev_rate_limits.yml` | 2000/hour/ip | `npm run dev`, the browser gates, the evals |
+
+All three are inside every image at `/app/services/proxy/`, so a deployment
+points the env at one of them or at a copy of its own. A file is
+`policies:` (a budget: `max` per `window`, keyed `ip` | `actor` | `ip+actor` |
+`email`; `burst` multiplies `max` for a caller who proved a credential, on the
+same bucket; `repeat: N` makes a hit whose exact URL was already seen inside the
+window cost `1/N` — what lets one unfurl be re-fetched by every reader of a
+shared link while still bounding how many DISTINCT documents an actor can have
+rendered), `routes:` (FIRST MATCH WINS: a method or list, a regex over the
+pathname, optionally exact `query` params, and `browser_only: true` where a
+non-browser must be refused before anything is counted), and `always:` (applied
+to every request first; empty in all three). All of a route's policies must
+allow, each is counted in written order, and the first refusal is the `door` the
+429 body and the `door.denied` event name.
+
+It is read ONCE, at boot. A missing file, an unparseable one, an unknown policy
+name in a route, a route with no policies, a path that is not a valid regex, an
+unknown key or a window that does not parse REFUSES THE BOOT with the offending
+line named — there is no silent fallback to built-in numbers. The boot log says
+which file it read (`rate limits ← /app/services/proxy/…`), and a leftover
+per-limit name from the retired door vocabulary is reported as
+`RATE_LIMITER__ANON_MINT_MAX is set but nothing reads it`.
+
+The limiter is per PROCESS: two replicas each keep their own counters, so the
+effective ceiling is `max × replicas`. One web replica by design anyway.
 
 **The images.** The default is ONE image with everything in it; the split
 shape is assembled from per-service images, all built from the same commit:

@@ -9,7 +9,6 @@ export { noopSql, noopBrowser, noopEvents, fakeSql, fakeBrowser, fakeEvents, fak
 export { TOKEN_RE, hashToken, createTokenReader } from './tokens';
 export { createCodeStore } from './codes';
 export { AGENT_COOKIE, AGENT_COOKIE_MAX_AGE, encodeAgentSession, decodeAgentSession, withToken, cookieName, setCookieHeader, clearCookieHeader, readCookie } from './agent-session';
-export { memoryBackend, doorConfig, createLimiter, doorsEnv } from './doors';
 export { renderSchema, ensureTable } from './schema';
 export { PROTECTED_RESOURCE_PATH, wwwAuthenticate } from './http-helpers';
 export { sqlClient, browserClient, eventsClient, queryBounds, type QueryCaps, type EventsClientOptions } from './clients';

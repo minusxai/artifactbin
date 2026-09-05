@@ -2,11 +2,10 @@
  * THE PROXY AS PARTS. One ordered literal — `proxyParts(o)` — is the whole
  * proxy: `session` resolves who is asking (bearer → the token reader; Better
  * Auth session; the agent cookie by id) and is the ONLY part that may touch
- * the actor; `anonMintDoor` refuses the anonymous mint to anything that is not
- * a browser, and sits BEFORE `rateLimit` on purpose — a refusal must not spend
- * the per-IP budget its own advice sends the human back to use; `rateLimit` is
- * the doors (these TWO are the proxy's own verdicts — everything else the app
- * answers); `loginRoutes` is Better Auth behind the invite gate; `oauthRoutes`
+ * the actor; `rateLimit` is the WHOLE of the rate limiting — the policy file's
+ * verdict on every request, the browser-only refusal included (it is asked
+ * BEFORE anything is counted, because a refusal must not spend the per-IP
+ * budget its own advice sends the human back to use); `loginRoutes` is Better Auth behind the invite gate; `oauthRoutes`
  * the MCP OAuth provider; `forwardedHeaders` owns the forwarding headers
  * (x-mx-actor and x-real-ip dropped inbound, x-forwarded-{for,host,proto}
  * ours); `forward` is LAST — everything not matched above reaches the app
@@ -20,10 +19,13 @@
  */
 import {
   ACTOR_HEADER, AGENT_HEADER, ANONYMOUS, declaredAgentSlug, denyResponse, FORWARDED_FOR, FORWARDED_HOST, FORWARDED_PROTO,
-  type Actor, type DoorName, type EventsService, type Limiter, type Part, type Queryable, type TokenReader, type Upstream,
+  type Actor, type EventsService, type Part, type Queryable, type TokenReader, type Upstream,
 } from '@artifactbin/contracts';
+import type { RateLimiter } from '@artifactbin/contracts/rate-limits';
 import { Hono, type Context } from 'hono';
-import { assemble, cookieName, createLimiter, decodeAgentSession, doorsEnv, memoryBackend, readCookie } from '@artifactbin/utils';
+import { assemble, cookieName, decodeAgentSession, readCookie } from '@artifactbin/utils';
+import { createRateLimiter, memoryBackend } from '@artifactbin/utils/rate-limits';
+import { loadPolicyFile, resolvePolicyFilePath } from './rate-limits';
 import { baseUrlOf, mountOAuthRoutes } from './routes/oauth';
 import { say, type ProxySubject } from './events';
 import { createOAuthStore } from './identity/oauth';
@@ -77,22 +79,8 @@ export interface ProxyOptions {
 }
 
 /** The context variables the parts share (Hono's `c.set`/`c.get`) — routes/oauth mounts on the same shape. */
-export type ProxyEnv = { Variables: { actor: Actor; limiter: Limiter } };
+export type ProxyEnv = { Variables: { actor: Actor; limiter: RateLimiter } };
 export type ProxyApp = Hono<ProxyEnv>;
-
-/** Which door a request opens, by route. LOGIN_SEND is keyed by the EMAIL in the body — applied in loginRoutes. */
-export function doorFor(method: string, pathname: string): DoorName | null {
-  if (pathname === '/api/tokens/anonymous' || pathname === '/api/start') return 'ANON_MINT';
-  if (pathname.startsWith('/api/auth/sign-in') || pathname.startsWith('/api/auth/email-otp/verify')) return 'LOGIN_VERIFY';
-  if (pathname === '/oauth/register') return 'OAUTH_REGISTER';
-  if (pathname === '/oauth/token') return 'OAUTH_TOKEN';
-  if (/^\/a\/[A-Za-z0-9]+\/mutate$/.test(pathname)) return 'MUTATE';
-  if (/^\/a\/[A-Za-z0-9]+\/query$/.test(pathname) || pathname === '/api/query') return 'QUERY';
-  if (/^\/a\/[A-Za-z0-9]+\/export$/.test(pathname)) return 'EXPORT';
-  if (/\/edits$/.test(pathname)) return 'EDIT';
-  if (method !== 'GET' && method !== 'HEAD' && (pathname.startsWith('/api/artifacts') || pathname.startsWith('/api/my/artifacts') || pathname === '/mcp')) return 'PUBLISH';
-  return null;
-}
 
 /**
  * IS THIS A REAL BROWSER? MEASURED on production: Chromium on `/tokens/new` sends
@@ -133,6 +121,9 @@ const hostOf = (value: string): string | null => {
  * TAGGED from `Artifactbin-Agent` when it names a harness we know, so the person who is asked for a token
  * lands on a page that knows who sent them.
  *
+ * THIS IS THE `browser_only` BODY, and it stays in OSS code verbatim: the policy file only says WHICH routes
+ * carry the flag, never what the refusal says.
+ *
  * 403, deliberately. The request is well formed and understood, and no credential the caller could add would
  * change the answer — which is exactly what 401 would invite it to go and try (and trying is the failure).
  * 404 would lie about a route the browser uses, and 429 would claim a rate limit that has not been hit.
@@ -151,33 +142,6 @@ export function anonMintRefusal(origin: string, agentHeader: string | null): Res
     tokens,
     docs: `${origin}/docs/artifactbin/references/publishing-auth.md`,
   }), { status: 403, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
-}
-
-/**
- * THE ANONYMOUS-MINT DOOR — a browser-context check beside the rate limit, and the SECOND verdict this proxy
- * gives on its own (the deny was the first).
- *
- * PATH-SPECIFIC, and that is not a detail: `doorFor` gives `/api/start` the same ANON_MINT rate-limit door,
- * and a start link is POSTed by an agent with no browser at all — gating it would kill the very flow the
- * refusal above steers people toward. Only `POST /api/tokens/anonymous` is guarded.
- */
-export function anonMintDoor(o: ProxyOptions): Part<ProxyEnv> {
-  return {
-    name: 'anonMintDoor',
-    mount: (app) => app.use('*', async (c, next) => {
-      const { pathname } = new URL(c.req.url);
-      if (c.req.method === 'POST' && pathname === '/api/tokens/anonymous') {
-        const hops = trustedHopsOf(o.env);
-        // What we CALL ourselves, and what this request actually reached us on — a browser on either is ours.
-        const configured = baseUrlOf(c.req.raw, hops, readEnv(o.env, 'APP__PUBLIC_BASE_URL'));
-        const observed = baseUrlOf(c.req.raw, hops);
-        if (!isBrowserContext(c.req.raw.headers, [configured, observed])) {
-          return anonMintRefusal(configured, c.req.raw.headers.get(AGENT_HEADER));
-        }
-      }
-      await next();
-    }),
-  };
 }
 
 /** How many hops in front of this proxy are ours (`RATE_LIMITER__TRUSTED_PROXY_HOPS`). Default 0: we are the outermost, and nothing inbound is believed. */
@@ -227,11 +191,18 @@ const subjectOf = (actor: Actor | undefined): ProxySubject | null => {
   return null;
 };
 
-/** ONE limiter per options object — the session part's `c.set('limiter')` and the rateLimit part's doors are the same counters. */
-const limiters = new WeakMap<ProxyOptions, Limiter>();
-const limiterFor = (o: ProxyOptions): Limiter => {
+/**
+ * ONE limiter per options object, built the FIRST time `proxyParts` composes them — which is boot. The
+ * policy file is read, parsed and validated exactly once there, so a missing file, an unparseable one or an
+ * unknown policy name REFUSES TO BOOT instead of meeting a request with built-in numbers nobody chose.
+ */
+const limiters = new WeakMap<ProxyOptions, RateLimiter>();
+const limiterFor = (o: ProxyOptions): RateLimiter => {
   let l = limiters.get(o);
-  if (!l) { l = createLimiter({ backend: memoryBackend(), env: doorsEnv(o.env) }); limiters.set(o, l); }
+  if (!l) {
+    l = createRateLimiter({ file: loadPolicyFile(resolvePolicyFilePath(o.env)), backend: memoryBackend() });
+    limiters.set(o, l);
+  }
   return l;
 };
 
@@ -247,32 +218,62 @@ export function session(o: ProxyOptions): Part<ProxyEnv> {
   };
 }
 
-/** THE DOORS — a rate-limit deny; see also `anonMintDoor`, the proxy's other own verdict. */
+/**
+ * THE RATE LIMITS — the proxy's ONE enforcement point, and the only place in the product that counts a
+ * request. Everything about WHICH limits apply where is the policy file; this part only translates HTTP into
+ * an `Identity` and a `Decision` into a response, in three beats:
+ *
+ *  1. `browser_only` — asked BEFORE anything is counted, so the refusal never spends the budget its own
+ *     advice sends the human back to use. The body is `anonMintRefusal`, unchanged, owned here.
+ *  2. an `email`-keyed policy needs the address the code would go to — read from the JSON body, lowercased;
+ *     no address is 400 `email_invalid`, on ANY such route rather than the one login handler that used to
+ *     do it by hand.
+ *  3. the verdict: `always` then the route's policies, and a refusal is a 429 naming the POLICY.
+ */
 export function rateLimit(o: ProxyOptions): Part<ProxyEnv> {
   return {
     name: 'rateLimit',
     mount: (app) => app.use('*', async (c, next) => {
-      const door = doorFor(c.req.method, new URL(c.req.url).pathname);
-      if (door) {
-        const actor = (c.get('actor') as Actor) ?? ANONYMOUS;
-        const trustedHops = trustedHopsOf(o.env);
-        const ip = clientIpOf(c.req.raw.headers, trustedHops, peerIpOf(c));
-        const decision = await limiterFor(o).limit(door, {
-          ip,
-          actorId: actor.userId ?? actor.tokenId ?? null,
-          holder: actor.credential !== 'none',
-        });
-        if (!decision.allowed) {
-          void say(o.events, subjectOf(actor), 'denied', { kind: 'door', id: door }, { door });
-          return denyResponse({ error: 'rate_limited', retryAfter: decision.retryAfter, door });
+      const limiter = limiterFor(o);
+      const request = { method: c.req.method, url: c.req.url };
+      const trustedHops = trustedHopsOf(o.env);
+      if (limiter.browserOnly(request)) {
+        // What we CALL ourselves, and what this request actually reached us on — a browser on either is ours.
+        const configured = baseUrlOf(c.req.raw, trustedHops, readEnv(o.env, 'APP__PUBLIC_BASE_URL'));
+        const observed = baseUrlOf(c.req.raw, trustedHops);
+        if (!isBrowserContext(c.req.raw.headers, [configured, observed])) {
+          return anonMintRefusal(configured, c.req.raw.headers.get(AGENT_HEADER));
         }
+      }
+      let email: string | null = null;
+      if (limiter.needsEmail(request)) {
+        const body = await c.req.raw.clone().json().catch(() => null) as { email?: unknown } | null;
+        email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
+        if (!email) return c.json({ error: 'email_invalid' }, 400);
+      }
+      const actor = (c.get('actor') as Actor) ?? ANONYMOUS;
+      const decision = await limiter.check(request, {
+        ip: clientIpOf(c.req.raw.headers, trustedHops, peerIpOf(c)),
+        actorId: actor.userId ?? actor.tokenId ?? null,
+        holder: actor.credential !== 'none',
+        url: c.req.url,
+        ...(email ? { email } : {}),
+      });
+      if (!decision.allowed) {
+        void say(o.events, subjectOf(actor), 'denied', { kind: 'door', id: decision.door }, { door: decision.door });
+        return denyResponse({ error: 'rate_limited', retryAfter: decision.retryAfter, door: decision.door });
       }
       await next();
     }),
   };
 }
 
-/** LOGIN — Better Auth's handler, behind the LOGIN_SEND door keyed by the ADDRESS the code goes to. */
+/**
+ * LOGIN — Better Auth's handler, and the ONE sentence the proxy says about it. The rate limit that used to
+ * live here — one door keyed by the address, counted by hand — is gone: it is the `login_send` policy on
+ * this route in the file, keyed `email`, and `rateLimit` has already refused or admitted the request — the
+ * 400 for a body with no address included — by the time this part is reached.
+ */
 export function loginRoutes(o: ProxyOptions): Part<ProxyEnv> {
   return {
     name: 'loginRoutes',
@@ -281,23 +282,16 @@ export function loginRoutes(o: ProxyOptions): Part<ProxyEnv> {
       a.post('/api/auth/email-otp/send-verification-otp', async (c, next) => {
         const body = await c.req.raw.clone().json().catch(() => null) as { email?: unknown } | null;
         const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
-        if (!email) return c.json({ error: 'email_invalid' }, 400);
-        const trustedHops = trustedHopsOf(o.env);
-        const decision = await limiterFor(o).limit('LOGIN_SEND', { ip: clientIpOf(c.req.raw.headers, trustedHops, peerIpOf(c)), actorId: email });
-        if (!decision.allowed) {
-          void say(o.events, subjectOf(c.get('actor') as Actor | undefined), 'denied', { kind: 'door', id: 'LOGIN_SEND' }, { door: 'LOGIN_SEND' });
-          return denyResponse({ error: 'rate_limited', retryAfter: decision.retryAfter, door: 'LOGIN_SEND' });
-        }
         await next();
         /*
-         * A CODE IS OUT. Said only once the door allowed AND Better Auth
+         * A CODE IS OUT. Said only once the rate limit allowed AND Better Auth
          * answered 2xx — a 400 (no address) or a 429 is not a code, and the
          * 429 has already said `door.denied` instead. The ADDRESS is the
          * object: at this step there is no account yet, so the address is the
          * only identity the moment has, and the catalogue admits it on the
          * identity verbs for exactly that reason.
          */
-        if (c.res.status >= 200 && c.res.status < 300) {
+        if (email && c.res.status >= 200 && c.res.status < 300) {
           void say(o.events, null, 'login_sent', { kind: 'user', id: email }, { email });
         }
       });
@@ -331,7 +325,10 @@ export function oauthRoutes(o: ProxyOptions): Part<ProxyEnv> {
  * list). A downstream replaces a part BY NAME through utils' `assemble`.
  */
 export function proxyParts(o: ProxyOptions): Part<ProxyEnv>[] {
-  return [session(o), anonMintDoor(o), rateLimit(o), loginRoutes(o), oauthRoutes(o), forwardedHeaders({ trustedHops: trustedHopsOf(o.env), ...(o.secure ? { secure: true } : {}) }), forward(o.upstream, o)];
+  // The limiter is built HERE, at composition — a policy file that does not exist or does not parse is a
+  // refusal to boot, never a request quietly metered by numbers nobody chose.
+  limiterFor(o);
+  return [session(o), rateLimit(o), loginRoutes(o), oauthRoutes(o), forwardedHeaders({ trustedHops: trustedHopsOf(o.env), ...(o.secure ? { secure: true } : {}) }), forward(o.upstream, o)];
 }
 
 /** The proxy, assembled from its parts. */

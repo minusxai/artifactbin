@@ -16,6 +16,7 @@
  * asked, and the two differ only in profile listing, which an ownerless
  * document never had.
  */
+import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useAppHarness } from '@/__tests__/harness';
 
@@ -24,6 +25,8 @@ useAppHarness();
 
 
 const BASE = 'http://localhost:3000';
+/** The wide-open policy file: this suite is about visibility, not about a mint ceiling. */
+const DEV_POLICY_FILE = path.resolve(__dirname, '../../proxy/dev_rate_limits.yml');
 const SECRET = 'test-secret';
 
 /** Re-import the world with the flag in a given state — config reads env at module load. */
@@ -32,8 +35,7 @@ async function withPublic(enabled: boolean) {
   vi.stubEnv('NODE_ENV', 'production');
   vi.stubEnv('ARTIFACTS__ALLOW_PUBLIC', enabled ? '1' : '');
   if (!enabled) delete process.env.ARTIFACTS__ALLOW_PUBLIC;
-  // The mint ceiling is closed in production; this suite is about visibility.
-  vi.stubEnv('RATE_LIMITER__ANON_MINT_MAX', '50');
+  vi.stubEnv('PROXY__RATE_LIMIT_CONFIG_FILE', DEV_POLICY_FILE);
   const [{ POST: createArtifact }, { POST: mint }] = await Promise.all([
     import('@/app/api/artifacts/route'),
     import('@/app/api/tokens/route'),

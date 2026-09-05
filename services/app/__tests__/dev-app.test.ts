@@ -78,7 +78,7 @@ describe('server.ts --app-only', () => {
       APP__PUBLIC_BASE_URL: base,
       DATABASE_URL: 'pglite://memory',
       OBJECT_STORE__LOCAL_DIR: objects,
-      RATE_LIMITER__ANON_MINT_MAX: '10',
+      PROXY__RATE_LIMIT_CONFIG_FILE: path.join(ROOT, 'services/proxy/selfhost_rate_limits.yml'),
       ARTIFACTS__ALLOW_PUBLIC: '1',
       EMAIL__RESEND_API_KEY: 'test-resend-key',
     });

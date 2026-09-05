@@ -1,0 +1,13 @@
+# A TEST FIXTURE, not a shipped file: tiny budgets so a refusal is two requests away.
+policies:
+  anon_mint:  { max: 1, window: 1h, key: ip, burst: 1 }
+  login_send: { max: 1, window: 1h, key: email }
+  export:     { max: 1, window: 1m, key: actor }
+routes:
+  - { method: POST, path: "^/api/tokens/anonymous$", policies: [anon_mint], browser_only: true }
+  - { path: "^/api/start$", policies: [anon_mint] }
+  - { method: POST, path: "^/api/auth/email-otp/send-verification-otp$", policies: [login_send] }
+  # an email-keyed route that `loginRoutes` does not own: the KEY is the engine's job now, not a special case
+  - { method: POST, path: "^/api/email-keyed$", policies: [login_send] }
+  - { path: "^/a/[A-Za-z0-9]+/export$", policies: [export] }
+always: []

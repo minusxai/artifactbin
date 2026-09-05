@@ -2,7 +2,6 @@
   "server": {
     "portBase": 3100,
     "env": {
-      "RATE_LIMITER__ANON_MINT_MAX": "2000",
       "QUOTA__ARTIFACTS_PER_TOKEN": "0",
       "WEB_INGEST__ALLOW_PRIVATE": "1"
     }
