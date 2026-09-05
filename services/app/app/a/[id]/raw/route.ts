@@ -21,6 +21,7 @@
 import { canReadArtifact, dataflowForRow, declarationsForRow, getArtifactById, linkRoleOf, refDataForRow } from '@/lib/artifacts';
 import { withIntent, type Intent } from '@/lib/intent';
 import { count, has } from '@/lib/relations';
+import { countOpenAnnotations } from '@/lib/annotations';
 import { canonicalArtifactPath } from '@/lib/urls';
 import { roleBehindLogin } from '@/lib/share-roles';
 import { trackEvent } from '@/lib/analytics';
@@ -368,7 +369,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           follow: artifact.user_id && artifact.user_id !== viewerId
             ? { following: viewerId ? await has(viewerId, 'follow', artifact.user_id) : false, count: await count('follow', artifact.user_id), href: door('follow') }
             : null,
-          commentHref: door('comment'),
+          // Unresolved threads — the number, not the words.
+          comment: { count: await countOpenAnnotations(artifact.id), href: door('comment') },
         }
         : null;
       const html = await buildStoryDocument({

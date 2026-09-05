@@ -70,7 +70,8 @@ export interface ReaderForkedFrom {
 export interface ReaderReactions {
   like: { count: number; liked: boolean; href: string };
   follow: { following: boolean; count: number; href: string } | null;
-  commentHref: string;
+  /** Unresolved threads, and the door. */
+  comment: { count: number; href: string };
 }
 
 export interface ReaderChromeInput {
@@ -231,7 +232,13 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
       // rewrites it when the page answers a press.
       `<span class="mx-reader-count" data-mx-reader-count="like">${reactions && reactions.like.count > 0 ? reactions.like.count : ''}</span>`,
     )
-    + action('comment', 'Comment', ICON_COMMENT, reactions ? ` data-mx-href="${escapeHtml(reactions.commentHref)}"` : '')
+    + action(
+      'comment',
+      'Comment',
+      ICON_COMMENT,
+      reactions ? ` data-mx-href="${escapeHtml(reactions.comment.href)}"` : '',
+      `<span class="mx-reader-count" data-mx-reader-count="comment">${reactions && reactions.comment.count > 0 ? reactions.comment.count : ''}</span>`,
+    )
     + action('share', 'Share', ICON_SEND)
     + (edit ? action('edit', 'Edit', ICON_PENCIL) : '')
     + trigger('controls', 'Open artifact controls', ICON_SLIDERS, 'settings', 'Artifact settings')

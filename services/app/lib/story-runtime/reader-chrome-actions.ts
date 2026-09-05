@@ -177,14 +177,17 @@ export function wireReaderChrome(win: Window, doc: Document): ReaderChromeHandle
 
   /* ---- THE RAIL ------------------------------------------------------ */
 
+  const showCount = (kind: 'like' | 'comment', count: number) => {
+    const counter = root.querySelector<HTMLElement>(`[data-mx-reader-count="${kind}"]`);
+    if (counter) counter.textContent = count > 0 ? String(count) : '';
+  };
   const showLike = (liked: boolean, count: number | null) => {
     const heart = root.querySelector<HTMLElement>('[data-mx-reader-action="like"]');
     if (!heart) return;
     heart.setAttribute('data-mx-liked', String(liked));
     heart.setAttribute('aria-label', liked ? 'Unlike' : 'Like');
     heart.setAttribute('data-mx-tip', liked ? 'Unlike' : 'Like');
-    const counter = heart.querySelector<HTMLElement>('[data-mx-reader-count="like"]');
-    if (counter && count !== null) counter.textContent = count > 0 ? String(count) : '';
+    if (count !== null) showCount('like', count);
   };
   const showFollow = (following: boolean) => {
     const pill = root.querySelector<HTMLElement>('[data-mx-reader-action="follow"]');
@@ -287,6 +290,7 @@ export function wireReaderChrome(win: Window, doc: Document): ReaderChromeHandle
         // The page liked or followed for us; the heart and the pill follow suit.
         if (data.kind === 'like' && data.ok && typeof data.liked === 'boolean') showLike(data.liked, data.count ?? null);
         if (data.kind === 'follow' && data.ok && typeof data.following === 'boolean') showFollow(data.following);
+        if (data.kind === 'comment' && data.ok && typeof data.count === 'number') showCount('comment', data.count);
       }
       if (data.type === STORY_READER_CHROME_MESSAGE) {
         // `off`: gone. `pinned` (edit mode): held at the top with the page's

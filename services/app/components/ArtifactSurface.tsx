@@ -965,6 +965,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     answer(frame, { kind: 'like', ok: true, ...likeRef.current });
     if (followRef.current) answer(frame, { kind: 'follow', ok: true, following: followRef.current.following, count: followRef.current.count });
   }, [answer, format, frameNonce, sessionNonce]);
+  // The unresolved-comment count, kept live as threads open and resolve.
+  useEffect(() => {
+    if (format !== 'markup' || !sessionNonce) return;
+    answer(frameRef.current?.contentWindow ?? null, { kind: 'comment', ok: true, count: openAnnotationCount });
+  }, [answer, format, frameNonce, openAnnotationCount, sessionNonce]);
 
 
 
