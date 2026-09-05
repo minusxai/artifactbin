@@ -225,12 +225,12 @@ describe('public profile listing', () => {
     expect(markup).not.toContain('Secret Doc');
     // Unlisted reads like public but never lists — that's its whole meaning.
     expect(markup).not.toContain('Quiet Doc');
-    // Blog-style absolute publish dates only — never relative times, which
-    // narrate the owner's activity ("5 mins ago" says they're at their desk).
+    // A paper card carries no per-row timestamp — recency is the date band it
+    // sits under — and never a relative time, which narrates the owner's
+    // activity ("5 mins ago" says they're at their desk).
     expect(markup).not.toContain('just now');
-    expect(markup).toContain(
-      new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
-    );
+    expect(markup).not.toMatch(/\d+[mhd] ago/);
+    expect(markup).not.toContain(' updated"');
     // The id is an address, not row chrome: it lives in the href only.
     expect(markup).not.toContain(`>${foldered.id}<`);
     // Each card carries the version-busted og-card export as its thumbnail,
@@ -322,9 +322,8 @@ describe('public profile listing', () => {
     expect(markup).not.toContain('Open folder 2026');
     expect(markup).not.toContain('My Numbers');
     expect(markup).not.toContain(`/a/${ds.id}/export`);
-    expect(markup).toContain(
-      new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
-    );
+    expect(markup).not.toContain('just now');
+    expect(markup).not.toContain(' updated"');
   });
 });
 
