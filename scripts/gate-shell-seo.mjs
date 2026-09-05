@@ -101,7 +101,7 @@ await openMenu(page);
 for (const item of ['Artifacts', 'Account', 'Human Docs', 'Agent docs']) {
   check(await page.isVisible(`[aria-label="${item}"]`), `the menu carries ${item}`);
 }
-check((await page.textContent('[aria-label="Current page"]'))?.includes('Crawlable'), 'the menu names the document');
+check((await page.locator('nav[aria-label="Menu"] [aria-label="Current page"]').first().textContent())?.includes('Crawlable'), 'the menu names the document');
 await page.keyboard.press('Escape');
 check(!(await page.isVisible('[aria-label="Artifacts"]').catch(() => false)), 'Escape closes the menu');
 

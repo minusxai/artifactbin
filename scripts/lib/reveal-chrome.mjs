@@ -95,7 +95,23 @@ export async function openArtifactControls(page, { timeout = 30_000 } = {}) {
   }
   await revealReaderChrome(host.target);
   await host.target.locator('[data-mx-reader-trigger="controls"]').click({ timeout });
-  if (host.kind === 'frame') await page.waitForSelector('[aria-label="Artifact controls"], [aria-label="Page controls"]', { timeout }).catch(() => {});
+  if (host.kind === 'frame') {
+    await page.waitForSelector('[aria-label="Artifact controls"], [aria-label="Page controls"]', { timeout }).catch(() => {});
+    await refocusPage(page, '[aria-label="Artifact controls"], [aria-label="Page controls"]');
+  }
+}
+
+/*
+ * A click inside the frame leaves the keyboard focus THERE, so a gate's next
+ * `keyboard.press('Escape')` would reach the document and never the page's
+ * panel. Hand focus to the panel the page just opened.
+ */
+async function refocusPage(page, panelSelector) {
+  await page.evaluate((sel) => {
+    const panel = document.querySelector(sel);
+    const target = panel?.querySelector('button, a, input, [tabindex]') ?? panel;
+    if (target && typeof target.focus === 'function') { target.tabIndex ??= -1; target.focus(); }
+  }, panelSelector).catch(() => {});
 }
 
 /** Open the menu (account / navigation) panel, wherever the control is. */
@@ -107,5 +123,8 @@ export async function openMenu(page, { timeout = 30_000 } = {}) {
   }
   await revealReaderChrome(host.target);
   await host.target.locator('[data-mx-reader-trigger="menu"]').click({ timeout });
-  if (host.kind === 'frame') await page.waitForSelector('nav[aria-label="Menu"]', { timeout }).catch(() => {});
+  if (host.kind === 'frame') {
+    await page.waitForSelector('nav[aria-label="Menu"]', { timeout }).catch(() => {});
+    await refocusPage(page, 'nav[aria-label="Menu"]');
+  }
 }

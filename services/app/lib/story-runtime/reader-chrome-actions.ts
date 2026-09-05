@@ -302,7 +302,17 @@ export function wireReaderChrome(win: Window, doc: Document): ReaderChromeHandle
         // The desktop bar is 44px tall; a phone draws no bar (its logo, rail
         // and byline float), so its inset is the page's toolbar alone.
         const bar = win.innerWidth >= 640 ? 44 : 0;
-        doc.documentElement.style.setProperty('--mx-chrome-inset', pinned ? `${bar + (data.inset ?? 0)}px` : '0px');
+        // The inset is a layout shift above everything the reader is looking
+        // at, and the browser's scroll anchoring would answer it by moving
+        // scrollY the same amount — which is the reader "moving" as far as
+        // the page can tell (gate-inplace-edit). Hold the scroll position
+        // through the change instead: the content slides under the bars, the
+        // reader's place is unchanged, the way it was when the frame itself
+        // used to move.
+        const html = doc.documentElement;
+        html.style.overflowAnchor = 'none';
+        html.style.setProperty('--mx-chrome-inset', pinned ? `${bar + (data.inset ?? 0)}px` : '0px');
+        win.requestAnimationFrame(() => { html.style.overflowAnchor = ''; });
         if (pinned) paint(true);
         else sample();
       }
