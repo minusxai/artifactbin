@@ -13,7 +13,7 @@ export function Shell() {
       <AdoptLegacyToken />
       {session?.user && <MixpanelIdentify userId={session.user.id} email={session.user.email} />}
       <PageChrome authed={!!session?.user} anon={session?.kind === 'anon'} />
-      <HeaderBar email={session?.user?.email ?? undefined} username={session?.user?.username ?? undefined} stats={session?.stats ?? null} />
+      <HeaderBar authed={!!session?.user} />
       <Outlet />
     </>
   );

@@ -74,57 +74,32 @@ describe('the shelf reads as ONE shelf on a phone', () => {
 });
 
 describe('the masthead is proportionate to the screen it is on', () => {
-  it('compresses the lockup — small mark, no tagline — instead of stacking the readout under it', () => {
-    render(<HeaderBar email="a@b.co" stats={{ total: 2, formats: { markup: 2 } }} />);
+  it('compresses the lockup — small mark and no tagline', () => {
+    render(<HeaderBar authed />);
     const logo = screen.getByLabelText('artifactbin home').querySelector('img')!;
     expect(logo).toHaveClass('h-8', 'w-8', 'sm:h-20', 'sm:w-20');
     // The tagline is desktop's: for a signed-in phone it is marketing copy
     // spending a line, and beside a small mark it read as one weird run-on.
     expect(screen.getByText('Google Docs for agents')).toHaveClass('hidden', 'sm:block');
-    // ONE structure at every size — brand left, readout column right — so the
+    // ONE structure at every size — brand left, utility column right — so the
     // phone is the desktop masthead scaled, not a second layout to maintain.
     const header = screen.getByLabelText('artifactbin home').parentElement!;
     expect(header).toHaveClass('flex', 'items-center', 'justify-between');
   });
 
-  it('keeps the readout an unruled block — no divider band eating vertical space', () => {
-    render(<HeaderBar email="a@b.co" stats={{ total: 2, formats: { markup: 2 } }} />);
-    const readout = screen.getByLabelText('2 artifacts').closest('div')!;
-    expect(readout.className).not.toContain('border-t');
-  });
-
-  it('reads the counts as a LEGEND — a colour dot per format, never coloured text', () => {
-    // The old readout printed "12 mx-markup" IN the format's hue. mx-markup's
-    // hue is pomegranate, so the largest number on the page was red text, and
-    // red text in a status line reads as a fault rather than a category. The
-    // dot carries the hue; the words stay legible ink.
-    render(<HeaderBar email="a@b.co" stats={{ total: 21, formats: { markup: 12, dataset: 9 } }} />);
-    const markup = screen.getByLabelText('12 mx-markup');
-    expect(markup.style.color).toBe('');
-    const dot = markup.querySelector('[data-format-dot]') as HTMLElement;
-    expect(dot).toBeTruthy();
-    expect(dot.style.background).toBe('rgb(192, 57, 43)'); // FORMAT_COLORS.markup
-  });
-
-  it('leads with the total, so the readout has one thing to land on', () => {
-    render(<HeaderBar stats={{ total: 21, formats: { markup: 12 } }} />);
-    expect(screen.getByLabelText('21 artifacts')).toHaveTextContent('21');
-  });
-
-  it('says only the total on a phone — the format legend is desktop detail', () => {
-    // At 390px the legend wrapped into a ragged second line; "21 artifacts"
-    // answers the phone's question and the breakdown waits for a screen with
-    // room to say it on one line.
-    render(<HeaderBar email="a@b.co" stats={{ total: 21, formats: { markup: 12, dataset: 9 } }} />);
-    for (const label of ['12 mx-markup', '9 dataset']) {
-      expect(screen.getByLabelText(label)).toHaveClass('hidden', 'sm:flex');
-    }
-    expect(screen.getByLabelText('21 artifacts').className).not.toContain('hidden');
-  });
-
-  it('says nothing about counts when the page counted nothing', () => {
-    render(<HeaderBar email="a@b.co" />);
+  it('leaves artifact facts and signed-in identity to the working surfaces', () => {
+    render(<HeaderBar authed />);
     expect(screen.queryByLabelText(/artifacts?$/)).toBeNull();
+    expect(screen.queryByText('a@b.co')).toBeNull();
+    expect(screen.getByLabelText('artifactbin on GitHub')).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Site links' })).toBeInTheDocument();
+  });
+
+  it('keeps the login door for strangers but omits it for an account', () => {
+    const { rerender } = render(<HeaderBar />);
+    expect(screen.getByLabelText('Log in from header')).toBeInTheDocument();
+    rerender(<HeaderBar authed />);
+    expect(screen.queryByLabelText('Log in from header')).toBeNull();
   });
 });
 

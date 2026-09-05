@@ -201,7 +201,7 @@ describe('public profile listing', () => {
     // The page menu reads the current path, so the tree is rendered inside a router.
     return renderToStaticMarkup((
       <MemoryRouter initialEntries={[`/${user}${p ? '/' + p : ''}`]}>
-      <ListingShell email={data.email} stats={null} authed={!!data.authed} anon={!!data.anon}>
+      <ListingShell authed={!!data.authed} anon={!!data.anon}>
         <ProfileListing data={data} />
       </ListingShell>
       </MemoryRouter>

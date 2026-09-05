@@ -41,20 +41,15 @@ async function world() {
 }
 
 describe('GET /api/page/session', () => {
-  it('names nobody, then the account with its stats', async () => {
-    expect(await (await sessionPage(request('/api/page/session'))).json()).toMatchObject({ user: null, kind: 'none', stats: null });
+  it('names nobody, then the account without duplicating shelf stats', async () => {
+    expect(await (await sessionPage(request('/api/page/session'))).json()).toMatchObject({ user: null, kind: 'none' });
     const w = await world();
     asSession(w.owner);
     const body = await (await sessionPage(request('/api/page/session'))).json();
-    // The HANDLE travels with the account: the masthead links to `/@handle`
-    // rather than printing an address nobody can click (components/HeaderBar).
-    // Read here, never assigned — `ensureUsername` is a login-time write.
-    expect(body.user).toEqual({ id: w.owner.id, email: w.owner.email, username: w.owner.username });
-    expect(typeof body.user.username).toBe('string');
+    expect(body.user).toEqual({ id: w.owner.id, email: w.owner.email });
     expect(body.kind).toBe('account');
-    // Three artifacts now: two documents and the folder they are filed under —
-    // a folder is a row in the one table like everything else.
-    expect(body.stats).toMatchObject({ total: 3, formats: { markup: 2, folder: 1 } });
+    // Library metrics belong to the dashboard, not duplicated in global chrome.
+    expect(body).not.toHaveProperty('stats');
   });
 });
 
@@ -67,6 +62,7 @@ describe('GET /api/page/home', () => {
     expect(body.signedIn).toBe(true);
     expect(body.artifacts.map((a: { id: string }) => a.id).sort()).toEqual([w.pub.id, w.priv.id, w.box.id].sort());
     expect(body.artifacts[0]).toMatchObject({ url: expect.stringMatching(/^\/a\//), format: 'markup' });
+    expect(body.viewsOverTime).toHaveLength(30);
     expect(Array.isArray(body.shared)).toBe(true);
   });
 

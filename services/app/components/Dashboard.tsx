@@ -1,74 +1,83 @@
-import { MicroLabel, timeAgo } from '@/components/ui';
+import { MicroLabel } from '@/components/ui';
 import type { ShelfRow } from '@/components/Shelf';
 
-/** A compact owner-only readout above the library. Profiles never mount it. */
-export default function Dashboard({ rows }: { rows: ShelfRow[] }) {
-  const posts = rows.filter((row) => row.format === 'markup');
-  const totalViews = posts.reduce((sum, row) => sum + (row.views ?? 0), 0);
-  const publicPosts = posts.filter((row) => row.visibility === 'public').length;
-  const notListed = posts.length - publicPosts;
-  const ranked = [...posts]
-    .sort((a, b) => (b.views ?? 0) - (a.views ?? 0) || b.updated_at.localeCompare(a.updated_at))
-    .slice(0, 5);
-  const maxViews = Math.max(1, ...ranked.map((row) => row.views ?? 0));
+const CHART_WIDTH = 720;
+const CHART_TOP = 6;
+const CHART_HEIGHT = 168;
+const CHART_BOTTOM = 162;
+
+/** A compact owner-only readout in the homepage rail. Profiles never mount it. */
+export default function Dashboard({ rows, viewsOverTime = [] }: { rows: ShelfRow[]; viewsOverTime?: number[] }) {
+  const totalViews = rows.reduce((sum, row) => sum + (row.views ?? 0), 0);
+  const publicArtifacts = rows.filter((row) => row.visibility === 'public').length;
+  const notListed = rows.length - publicArtifacts;
+  const periodViews = viewsOverTime.reduce((sum, views) => sum + views, 0);
+  const maxViews = Math.max(1, ...viewsOverTime);
+  const points = viewsOverTime.map((views, index) => {
+    const x = viewsOverTime.length < 2 ? CHART_WIDTH / 2 : (index / (viewsOverTime.length - 1)) * CHART_WIDTH;
+    const y = CHART_BOTTOM - (views / maxViews) * (CHART_BOTTOM - CHART_TOP);
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  }).join(' ');
+  const area = points ? `M 0 ${CHART_BOTTOM} L ${points.replaceAll(' ', ' L ')} L ${CHART_WIDTH} ${CHART_BOTTOM} Z` : '';
 
   return (
-    <section aria-label="Dashboard" className="reveal mb-10">
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <MicroLabel>dashboard</MicroLabel>
-          <h1 className="mt-1 text-xl font-semibold tracking-tight text-fg">Your posts</h1>
-        </div>
-        <span className="font-mono text-[10px] text-faint">all-time readership</span>
+    <section aria-label="Dashboard" className="reveal lg:sticky lg:top-6">
+      <div className="mb-4 flex items-baseline justify-between gap-3 border-b border-edge pb-3">
+        <MicroLabel>dashboard</MicroLabel>
+        <h1 className="text-[11px] font-medium tracking-tight text-muted">Your artifacts</h1>
       </div>
 
-      <dl className="grid grid-cols-2 border-y border-edge sm:grid-cols-4">
+      <dl className="grid grid-cols-2 border-b border-edge">
         {[
-          ['posts', posts.length],
-          ['public', publicPosts],
+          ['artifacts', rows.length],
+          ['public', publicArtifacts],
           ['not listed', notListed],
           ['views', totalViews],
         ].map(([label, value], index) => (
           <div
             key={label}
-            className={`py-3 pr-4 ${index % 2 ? 'border-l border-edge pl-4' : ''} ${
-              index > 1 ? 'border-t border-edge sm:border-t-0' : ''
-            } ${index > 0 ? 'sm:border-l sm:border-edge sm:pl-4' : ''}`}
+            className={`py-2.5 ${index % 2 ? 'border-l border-edge pl-3' : 'pr-3'} ${
+              index > 1 ? 'border-t border-edge' : ''
+            }`}
           >
-            <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">{label}</dt>
-            <dd className="mt-1 font-mono text-2xl leading-none font-medium tabular-nums text-fg">{value}</dd>
+            <dt className="font-mono text-[9px] uppercase tracking-[0.11em] text-faint">{label}</dt>
+            <dd className="mt-1 font-mono text-lg leading-none font-medium tabular-nums text-fg">{value}</dd>
           </div>
         ))}
       </dl>
 
       <div className="mt-5">
-        <div className="mb-3 flex items-baseline justify-between gap-4">
-          <h2 className="font-mono text-xs font-semibold text-fg">Views by post</h2>
-          {posts[0] && (
-            <span className="font-mono text-[10px] text-faint">updated {timeAgo(posts[0].updated_at)}</span>
-          )}
+        <div className="mb-3">
+          <h2 className="font-mono text-xs font-semibold text-fg">Views over time</h2>
+          <p className="mt-1 font-mono text-[10px] tabular-nums text-faint">{periodViews} in the last 30 days</p>
         </div>
-        {ranked.length === 0 ? (
-          <p className="font-mono text-xs text-faint">No posts yet.</p>
+        {periodViews === 0 ? (
+          <div className="flex h-36 items-end border-b border-edge pb-3">
+            <p className="font-mono text-[11px] text-faint">No views in the last 30 days.</p>
+          </div>
         ) : (
-          <ol className="space-y-2" aria-label="Top posts by views">
-            {ranked.map((row, index) => {
-              const views = row.views ?? 0;
-              return (
-                <li key={row.id} className="reveal grid grid-cols-[minmax(7rem,0.8fr)_minmax(6rem,1.4fr)_2.5rem] items-center gap-3" style={{ animationDelay: `${index * 45}ms` }}>
-                  <span className="truncate text-xs text-muted">{row.title ?? 'Untitled'}</span>
-                  <span className="h-1.5 overflow-hidden rounded-full bg-raised" aria-hidden="true">
-                    <span
-                      className="block h-full rounded-full bg-accent transition-[width] duration-500 ease-out"
-                      style={{ width: views === 0 ? '0%' : `${Math.max(3, (views / maxViews) * 100)}%` }}
-                    />
-                  </span>
-                  <span className="text-right font-mono text-[11px] tabular-nums text-muted">{views}</span>
-                </li>
-              );
-            })}
-          </ol>
+          <div role="img" aria-label={`Views over the last 30 days: ${periodViews}`}>
+            <svg className="h-36 w-full overflow-visible text-accent" viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} preserveAspectRatio="none" aria-hidden="true">
+              <line x1="0" x2={CHART_WIDTH} y1={CHART_BOTTOM} y2={CHART_BOTTOM} stroke="currentColor" strokeOpacity="0.18" vectorEffect="non-scaling-stroke" />
+              <path d={area} fill="currentColor" fillOpacity="0.09" />
+              <polyline
+                className="dashboard-trend-line"
+                points={points}
+                pathLength="1"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                vectorEffect="non-scaling-stroke"
+              />
+            </svg>
+          </div>
         )}
+        <div className="mt-1 flex justify-between font-mono text-[9px] uppercase tracking-[0.1em] text-faint" aria-hidden="true">
+          <span>30 days ago</span>
+          <span>today</span>
+        </div>
       </div>
     </section>
   );

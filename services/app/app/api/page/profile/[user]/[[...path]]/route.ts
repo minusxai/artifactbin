@@ -64,7 +64,6 @@ export async function GET(request: Request, ctx: { params: Promise<{ user: strin
     handle,
     ...relationship,
     files: strip(files).map(({ ancestor_ids: _placement, ...card }) => card),
-    email: viewer?.email ?? null,
     authed: !!viewer,
     anon,
   });

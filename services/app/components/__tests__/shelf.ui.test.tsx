@@ -19,17 +19,44 @@ const asset = (id: string, day: number, format = 'dataset'): ShelfRow => ({
   format,
 });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe('Shelf — grid and list views', () => {
   it('starts as one uniform grid with no promoted hero', () => {
     render(<Shelf rows={[doc('a', 20), doc('b', 28), doc('c', 26), doc('d', 24)]} />);
     const grid = screen.getByLabelText('Artifact grid');
-    expect(grid).toHaveClass('lg:grid-cols-4');
+    expect(grid.querySelector('ul')).toHaveClass('lg:grid-cols-4');
     expect(grid).toHaveTextContent('Doc a');
     expect(grid).toHaveTextContent('Doc b');
     expect(screen.queryByLabelText(/most recent/)).toBeNull();
     expect(screen.getByLabelText('Grid view')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('breaks a long icon grid into Finder-like date bands', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-04T12:00:00'));
+    render(
+      <Shelf
+        rows={[
+          doc('today', 28, { updated_at: '2026-09-04T09:00:00' }),
+          doc('yesterday', 28, { updated_at: '2026-09-03T09:00:00' }),
+          doc('week', 28, { updated_at: '2026-08-31T09:00:00' }),
+          doc('month', 28, { updated_at: '2026-08-12T09:00:00' }),
+        ]}
+      />,
+    );
+    for (const label of ['Today', 'Yesterday', 'This Week', 'Last Month']) {
+      expect(screen.getByRole('heading', { name: label })).toBeTruthy();
+    }
+    expect(screen.getByLabelText('Yesterday artifacts')).toHaveTextContent('Doc yesterday');
+    expect(screen.getByLabelText('Last Month artifacts')).toHaveTextContent('Doc month');
+    expect(screen.queryByLabelText('Older artifacts')).toBeNull();
+
+    fireEvent.click(screen.getByLabelText('List view'));
+    expect(screen.queryByLabelText('Yesterday artifacts')).toBeNull();
   });
 
   it('toggles the same documents into a paged list', () => {
@@ -65,10 +92,23 @@ describe('Shelf — grid and list views', () => {
 describe('Shelf — data and capabilities', () => {
   it('renders view telemetry only when the page supplies it', () => {
     const { rerender } = render(<Shelf rows={[doc('a', 28, { views: 42, sparkline: '<svg data-spline="1"></svg>' })]} />);
-    expect(screen.getByLabelText('Doc a views')).toHaveTextContent('42 views');
-    expect(screen.getByLabelText('Doc a views').querySelector('[data-spline]')).toBeTruthy();
+    const views = screen.getByLabelText('Doc a views');
+    expect(views).toHaveTextContent('42 views');
+    expect(views.querySelector('[data-spline]')).toBeTruthy();
+    expect(views.querySelector('[data-spline]')?.parentElement).toHaveClass('absolute', 'inset-0', 'w-full');
+    expect(screen.getByText('42 views')).toHaveClass('text-[9px]', 'bg-surface/55', 'px-0.5');
+    expect(screen.getByLabelText('Doc a updated')).toHaveClass('ml-auto');
     rerender(<Shelf rows={[doc('a', 28)]} />);
     expect(screen.queryByLabelText('Doc a views')).toBeNull();
+    expect(screen.getByLabelText('Doc a updated')).not.toHaveClass('ml-auto');
+  });
+
+  it('shows visibility as a white icon badge with its meaning in hover chrome', () => {
+    render(<Shelf rows={[doc('a', 28, { visibility: 'private' })]} />);
+    const badge = screen.getByLabelText('Doc a is private');
+    expect(badge).toHaveClass('bg-white', 'w-[26px]');
+    expect(badge).toHaveTextContent('');
+    expect(badge).toHaveAttribute('data-slot', 'tooltip-trigger');
   });
 
   it('gives every grid item the full owner action set', () => {
@@ -129,6 +169,9 @@ describe('Shelf — data and capabilities', () => {
     render(<Shelf rows={[doc('a', 28)]} actions="full" />);
     const open = screen.getByLabelText('Open Doc a');
     expect(open.tagName).toBe('A');
+    expect(open).toHaveClass('truncate');
+    expect(open).not.toHaveClass('line-clamp-2');
+    expect(open.parentElement).toHaveClass('gap-2', 'px-3', 'py-2.5');
     expect(open.querySelector('button')).toBeNull();
   });
 });

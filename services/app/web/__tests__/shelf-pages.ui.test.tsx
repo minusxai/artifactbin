@@ -1,16 +1,14 @@
 /**
- * THE DASHBOARD AND SHELF PAGES: ONE COLUMN, AND WHAT EACH ONE LEADS WITH.
+ * THE HOMEPAGE WORKSPACE AND PUBLIC PROFILE: EACH HAS ONE PRIMARY SURFACE.
  *
  * Ported from master's `page-column`, `dashboard-shape` and `profile-shelf`
  * tests, which rendered the Next pages this branch replaced. The RULES are
  * master's and unchanged — only the thing being rendered moved:
  *
- *  - The dashboard and a profile are the same shelf, so they must be the same
- *    WIDTH, and the masthead above them must span that same column. A literal
- *    that drifts back into one of these pages is exactly the failure, so this
- *    is asserted through the rendered pages rather than by reading the shared
- *    constant.
- *  - A populated homepage leads with its dashboard, followed by the shelf.
+ *  - A populated homepage widens for a primary shelf plus a narrow dashboard
+ *    rail; the public profile remains a calm single-column shelf.
+ *  - The shelf comes first in the document and the dashboard is secondary, so
+ *    phones encounter the working surface before analytics.
  *  - A profile renders only the public shelf with owner capabilities withheld.
  */
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -50,27 +48,25 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 const mainWidth = (el: HTMLElement): string | undefined =>
   el.querySelector('main')?.className.match(/max-w-\S+/)?.[0];
 
-describe('the shelf pages share one column', () => {
-  it('the dashboard and the profile are exactly as wide as each other', async () => {
-    home = { signedIn: true, artifacts: [doc('a'), doc('b')], shared: [] };
+describe('the homepage workspace and profile column', () => {
+  it('widens a populated home for the dashboard rail while keeping profiles focused', async () => {
+    home = { signedIn: true, artifacts: [doc('a'), doc('b')], viewsOverTime: [], shared: [] };
     profile = { kind: 'public-profile', handle: 'cee', files: [profileDoc('a')], email: 'c@x.io', authed: true, anon: false };
 
     const dash = render(<MemoryRouter><HomePage /></MemoryRouter>);
-    await waitFor(() => expect(mainWidth(dash.container)).toBeDefined());
-    const dashWidth = mainWidth(dash.container);
+    await waitFor(() => expect(mainWidth(dash.container)).toBe('max-w-6xl'));
+    expect(screen.getByLabelText('Home workspace')).toBeInTheDocument();
+    expect(screen.getByLabelText('Dashboard rail')).toBeInTheDocument();
     cleanup();
 
     const prof = render(<MemoryRouter initialEntries={['/@cee']}><Routes><Route path="/:user/*" element={<ProfilePage />} /></Routes></MemoryRouter>);
     await waitFor(() => expect(mainWidth(prof.container)).toBeDefined());
-    expect(mainWidth(prof.container)).toBe(dashWidth);
+    expect(mainWidth(prof.container)).toBe('max-w-4xl');
   });
 
-  it('and the masthead spans the same column it heads', async () => {
-    home = { signedIn: true, artifacts: [doc('a')], shared: [] };
-    const dash = render(<MemoryRouter><HomePage /></MemoryRouter>);
-    await waitFor(() => expect(mainWidth(dash.container)).toBeDefined());
-    const masthead = renderToStaticMarkup(HeaderBar({ email: 'c@x.io', stats: null }) as React.ReactElement);
-    expect(masthead).toContain(mainWidth(dash.container)!);
+  it('keeps the masthead aligned with the standard profile column', () => {
+    const masthead = renderToStaticMarkup(HeaderBar({ authed: true }) as React.ReactElement);
+    expect(masthead).toContain('max-w-4xl');
   });
 });
 
@@ -87,14 +83,21 @@ describe('what the dashboard leads with', () => {
     expect(screen.queryByLabelText('Browse artifacts by agent token')).toBeNull();
   });
 
-  it('WITH artifacts: leads with the dashboard and then the Drive-like shelf', async () => {
-    home = { signedIn: true, artifacts: [{ ...doc('a'), views: 7 }], shared: [] };
+  it('WITH artifacts: leads with the Drive-like shelf and keeps analytics in the right rail', async () => {
+    home = { signedIn: true, artifacts: [{ ...doc('a'), views: 7 }], viewsOverTime: [0, 2, 5], shared: [] };
     render(<MemoryRouter><HomePage /></MemoryRouter>);
     await waitFor(() => expect(screen.getByLabelText('Open Doc a')).toBeInTheDocument());
     const dashboard = screen.getByLabelText('Dashboard');
     const shelf = screen.getByLabelText('Shelf');
     expect(dashboard).toHaveTextContent('7');
-    expect(dashboard.compareDocumentPosition(shelf) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(dashboard).toHaveTextContent('Your artifacts');
+    expect(dashboard).not.toHaveTextContent('Your posts');
+    expect(dashboard).not.toHaveTextContent('all time');
+    expect(dashboard).toHaveTextContent('Views over time');
+    expect(screen.getByRole('img', { name: 'Views over the last 30 days: 7' })).toBeInTheDocument();
+    expect(dashboard).not.toHaveTextContent('Views by post');
+    expect(shelf.compareDocumentPosition(dashboard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByLabelText('Dashboard rail')).toContainElement(dashboard);
     expect(screen.getByLabelText('Artifact grid')).toBeInTheDocument();
     expect(screen.queryByLabelText('Get started')).toBeNull();
     expect(screen.queryByLabelText('What you can use it for')).toBeNull();
@@ -139,7 +142,7 @@ describe('what the dashboard leads with', () => {
     expect(panel.compareDocumentPosition(examples) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('WITHOUT owned artifacts: the zero-state dashboard leads shared work', async () => {
+  it('WITHOUT owned artifacts: shared work remains primary and the zero-state dashboard is secondary', async () => {
     home = {
       signedIn: true,
       artifacts: [],
@@ -149,7 +152,7 @@ describe('what the dashboard leads with', () => {
     const dashboard = await screen.findByLabelText('Dashboard');
     const shared = await screen.findByLabelText('Open shared artifact shared');
     expect(dashboard).toHaveTextContent('0');
-    expect(dashboard.compareDocumentPosition(shared) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(shared.compareDocumentPosition(dashboard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // Work shared WITH someone is still a library, so it is not the empty page.
     expect(screen.queryByLabelText('Create your first artifact')).toBeNull();
     expect(screen.queryByLabelText('Claim a token')).toBeNull();

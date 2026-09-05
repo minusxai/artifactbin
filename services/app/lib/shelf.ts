@@ -72,6 +72,50 @@ export interface Shelf<T> {
   total: number;
 }
 
+export type ShelfRecency = 'today' | 'yesterday' | 'this-week' | 'last-month' | 'older';
+
+export interface ShelfDateGroup<T> {
+  key: ShelfRecency;
+  label: string;
+  rows: T[];
+}
+
+const RECENCY_GROUPS: ReadonlyArray<{ key: ShelfRecency; label: string }> = [
+  { key: 'today', label: 'Today' },
+  { key: 'yesterday', label: 'Yesterday' },
+  { key: 'this-week', label: 'This Week' },
+  { key: 'last-month', label: 'Last Month' },
+  { key: 'older', label: 'Older' },
+];
+
+const DAY = 86_400_000;
+
+/** Local calendar days, so a late-night edit does not jump groups after only
+ * a few hours. Converting the local date parts to UTC also sidesteps DST days. */
+const calendarDay = (date: Date): number => Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+
+const recencyOf = (iso: string, now: Date): ShelfRecency => {
+  const edited = new Date(iso);
+  if (Number.isNaN(edited.getTime())) return 'older';
+  const daysAgo = Math.max(0, Math.round((calendarDay(now) - calendarDay(edited)) / DAY));
+  if (daysAgo === 0) return 'today';
+  if (daysAgo === 1) return 'yesterday';
+  if (daysAgo <= 7) return 'this-week';
+  if (daysAgo <= 31) return 'last-month';
+  return 'older';
+};
+
+/** Finder-like date bands for the icon view. Empty bands disappear and row
+ * order is preserved, so the shelf's existing newest-first policy still wins. */
+export function groupShelfByRecency<T extends ShelfItem>(rows: readonly T[], now = new Date()): ShelfDateGroup<T>[] {
+  const grouped = new Map<ShelfRecency, T[]>(RECENCY_GROUPS.map(({ key }) => [key, []]));
+  for (const row of rows) grouped.get(recencyOf(row.updated_at, now))!.push(row);
+  return RECENCY_GROUPS.flatMap(({ key, label }) => {
+    const members = grouped.get(key)!;
+    return members.length > 0 ? [{ key, label, rows: members }] : [];
+  });
+}
+
 /** A document is markup; a folder is a place; everything else is material a document is built from. */
 const isDocument = (row: ShelfItem): boolean => row.format === 'markup';
 const isFolder = (row: ShelfItem): boolean => row.format === 'folder';

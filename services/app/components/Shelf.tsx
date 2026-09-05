@@ -24,7 +24,7 @@ import { MoveMenu, type PickerFolder } from '@/components/FolderPicker';
 import { ArtifactTable } from '@/components/TokenBrowser';
 import { Tooltip } from '@/components/Tooltip';
 import { dateStamp, MicroLabel, PANEL, Spark, timeAgo, VISIBILITY_TIPS, VisibilityPill } from '@/components/ui';
-import { buildShelf, parentOfRow, type ShelfRow } from '@/lib/shelf';
+import { buildShelf, groupShelfByRecency, parentOfRow, type ShelfRow } from '@/lib/shelf';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
 
 /**
@@ -400,31 +400,36 @@ function CardControls({ row, level, folders }: { row: ShelfRow; level: ShelfActi
  */
 function ViewsMark({ row, spline = true, filled = true }: { row: ShelfRow; spline?: boolean; filled?: boolean }) {
   if (row.views === undefined) return null;
+  const hasSpline = spline && Boolean(row.sparkline);
   return (
     <Tooltip content="views · spline is the last 30 days">
-      <span aria-label={`${nameOf(row)} views`} className="flex min-w-0 flex-1 items-center gap-2">
-        {/* Count FIRST, and it says what it counts: with the spline between
-            them the bare count landed beside the timestamp and "1 · 5 hrs ago"
-            read as "1 5 hrs"; "1 view" cannot be misread. */}
-        <span className="shrink-0 font-mono text-xs tabular-nums text-muted">
+      <span aria-label={`${nameOf(row)} views`} className="relative flex h-5 min-w-0 flex-1 items-center">
+        {hasSpline && (
+          <Spark svg={row.sparkline!} filled={filled} className="absolute inset-0 h-full w-full" />
+        )}
+        {/* The count rides on the chart instead of reserving a column beside
+            it. Its small surface keeps the number legible over a spike while
+            the spline gets the entire width between title and timestamp. */}
+        <span
+          className={`z-[1] shrink-0 rounded-[3px] font-mono text-[9px] leading-none tabular-nums text-muted ${
+            hasSpline ? 'bg-surface/55 px-0.5 py-px' : ''
+          }`}
+        >
           {row.views} view{row.views === 1 ? '' : 's'}
         </span>
-        {spline && row.sparkline && (
-          <Spark svg={row.sparkline} filled={filled} className="h-5 min-w-0 flex-1" />
-        )}
       </span>
     </Tooltip>
   );
 }
 
-function Stamp({ row, mode }: { row: ShelfRow; mode: 'relative' | 'absolute' }) {
+function Stamp({ row, mode, trailing = false }: { row: ShelfRow; mode: 'relative' | 'absolute'; trailing?: boolean }) {
   return (
     <Tooltip content={new Date(row.updated_at).toLocaleString()}>
       <time
         aria-label={`${nameOf(row)} updated`}
         dateTime={row.updated_at}
         suppressHydrationWarning
-        className="ml-auto shrink-0 font-mono text-[11px] whitespace-nowrap text-muted"
+        className={`${trailing ? 'ml-auto' : ''} shrink-0 font-mono text-[11px] whitespace-nowrap text-muted`}
       >
         {mode === 'absolute' ? dateStamp(row.updated_at) : timeAgo(row.updated_at)}
       </time>
@@ -435,7 +440,9 @@ function Stamp({ row, mode }: { row: ShelfRow; mode: 'relative' | 'absolute' }) 
 /** The document collection already guarantees `markup`; visibility is the only
  * classification that adds information here. */
 function VisibilityTag({ row, overlay = false }: { row: ShelfRow; overlay?: boolean }) {
-  return row.visibility ? <VisibilityPill visibility={row.visibility} name={nameOf(row)} overlay={overlay} /> : null;
+  return row.visibility ? (
+    <VisibilityPill visibility={row.visibility} name={nameOf(row)} compact={overlay} overlay={overlay} />
+  ) : null;
 }
 
 /** The artifact's own og card — one lazily-rendered image serves unfurls and the drive grid alike. */
@@ -533,6 +540,7 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
    * folder's; a profile lists the ROOT, so it has none to count and shows none.
    */
   const inside = (id: string): number => all.filter((r) => parentOfRow(r) === id).length;
+  const dateGroups = useMemo(() => groupShelfByRecency(shelf.documents), [shelf.documents]);
 
   const filtering = Boolean(q) || picks.length > 0;
   const canMakeFolders = canCreateFolders ?? actions === 'full';
@@ -542,7 +550,7 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
     <section aria-label="Shelf" className="flex flex-col gap-4">
       {(all.length > 0 || canMakeFolders) && (
         <div className="flex flex-col gap-2 sm:flex-row">
-          <div className={`flex min-w-0 flex-1 flex-wrap items-center gap-2 px-3.5 py-2.5 ${PANEL}`}>
+          <div className={`flex min-w-0 flex-1 flex-wrap items-center gap-2 px-3 py-1.5 ${PANEL}`}>
             <Search size={13} className="shrink-0 text-faint" />
             <input
               aria-label="Search artifacts"
@@ -569,7 +577,7 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
               </span>
             )}
           </div>
-          <div role="group" aria-label="Shelf view" className={`flex shrink-0 items-center p-1 ${PANEL}`}>
+          <div role="group" aria-label="Shelf view" className={`flex shrink-0 items-center p-0.5 ${PANEL}`}>
             {([
               ['grid', 'Grid view', LayoutGrid],
               ['list', 'List view', ListIcon],
@@ -580,11 +588,11 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
                 aria-label={label}
                 aria-pressed={view === value}
                 onClick={() => setView(value)}
-                className={`inline-flex h-8 w-9 cursor-pointer items-center justify-center rounded-[4px] transition-all ${
+                className={`inline-flex h-7 w-8 cursor-pointer items-center justify-center rounded-[4px] transition-all ${
                   view === value ? 'bg-accent-soft text-accent' : 'text-faint hover:bg-raised hover:text-fg'
                 }`}
               >
-                <Icon size={15} strokeWidth={1.7} />
+                <Icon size={14} strokeWidth={1.7} />
               </button>
             ))}
           </div>
@@ -624,33 +632,48 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
       )}
 
       {view === 'grid' && shelf.documents.length > 0 && (
-        <ul aria-label="Artifact grid" className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
-          {shelf.documents.map((row, i) => (
-            <li
-              key={row.id}
-              className={`reveal group relative flex flex-col overflow-hidden ${PANEL} transition-[border-color,transform] duration-150 hover:-translate-y-0.5 hover:border-edge-bright`}
-              style={{ animationDelay: `${Math.min(i * 35, 280)}ms` }}
-            >
-              <div className="relative">
-                <Thumb row={row} className="aspect-[40/21] border-b border-edge" />
-                <CardControls row={row} level={actions} folders={pickable} />
+        <div aria-label="Artifact grid" className="flex flex-col gap-7">
+          {dateGroups.map((group) => (
+            <section key={group.key} aria-label={`${group.label} artifacts`}>
+              <div className="mb-2.5 flex items-center gap-3 px-0.5">
+                <h2 className="shrink-0 font-mono text-[10px] font-medium uppercase tracking-[0.13em] text-muted">
+                  {group.label}
+                </h2>
+                <span aria-hidden="true" className="h-px flex-1 bg-edge" />
               </div>
-              <div className="flex flex-1 flex-col gap-2.5 p-3">
-                <a
-                  href={row.url}
-                  aria-label={`Open ${nameOf(row)}`}
-                  className="block line-clamp-2 font-mono text-[13px] leading-snug font-semibold text-fg no-underline transition-colors after:absolute after:inset-0 group-hover:text-accent"
-                >
-                  {row.title ?? 'Untitled'}
-                </a>
-                <div className="mt-auto flex min-w-0 items-center gap-2">
-                  <ViewsMark row={row}/>
-                  <Stamp row={row} mode={dates} />
-                </div>
-              </div>
-            </li>
+              <ul className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+                {group.rows.map((row) => {
+                  const i = shelf.documents.indexOf(row);
+                  return (
+                    <li
+                      key={row.id}
+                      className={`reveal group relative flex flex-col overflow-hidden ${PANEL} transition-[border-color,transform] duration-150 hover:-translate-y-0.5 hover:border-edge-bright`}
+                      style={{ animationDelay: `${Math.min(i * 35, 280)}ms` }}
+                    >
+                      <div className="relative">
+                        <Thumb row={row} className="aspect-[40/21] border-b border-edge" />
+                        <CardControls row={row} level={actions} folders={pickable} />
+                      </div>
+                      <div className="flex flex-1 flex-col gap-2 px-3 py-2.5">
+                        <a
+                          href={row.url}
+                          aria-label={`Open ${nameOf(row)}`}
+                          className="block truncate font-mono text-[13px] leading-snug font-semibold text-fg no-underline transition-colors after:absolute after:inset-0 group-hover:text-accent"
+                        >
+                          {row.title ?? 'Untitled'}
+                        </a>
+                        <div className="mt-auto flex min-w-0 items-center gap-2">
+                          <ViewsMark row={row} />
+                          <Stamp row={row} mode={dates} trailing={row.views !== undefined} />
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
           ))}
-        </ul>
+        </div>
       )}
 
       {view === 'list' && shelf.documents.length > 0 && (

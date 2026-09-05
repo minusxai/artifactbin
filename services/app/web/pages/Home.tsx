@@ -15,7 +15,15 @@ import { useSession } from '@/web/session';
 
 type Home =
   | { signedIn: false; drafts?: Parameters<typeof Shelf>[0]['rows'] }
-  | { signedIn: true; artifacts: Array<Record<string, unknown> & { id: string }>; shared: Parameters<typeof SharedWithYou>[0]['items']; feed?: { mine: FeedItem[]; following: FeedItem[] } };
+  | {
+      signedIn: true;
+      artifacts: Array<Record<string, unknown> & { id: string }>;
+      viewsOverTime: number[];
+      shared: Parameters<typeof SharedWithYou>[0]['items'];
+      feed?: { mine: FeedItem[]; following: FeedItem[] };
+    };
+
+const HOME_WORKSPACE_COLUMN = 'mx-auto max-w-6xl px-4 sm:px-6';
 
 /**
  * THE EMPTY LIBRARY IS THE ONLY PAGE THAT SAYS WHAT TO DO FIRST.
@@ -86,15 +94,13 @@ export function HomePage() {
   }
   const empty = home.artifacts.length === 0 && home.shared.length === 0;
   return (
-    <main className={`${PAGE_COLUMN} mt-8 pb-24`}>
+    <main className={`${empty ? PAGE_COLUMN : HOME_WORKSPACE_COLUMN} mt-8 pb-24`}>
       {empty ? (
         <>
           <FirstArtifact />
           <div className="mb-6"><GetStarted /></div>
         </>
-      ) : (
-        <Dashboard rows={home.artifacts as never} />
-      )}
+      ) : null}
       {/* Kept outside the empty/full branch so a successful claim can report
         * its result while the page refreshes into the dashboard. */}
       <ClaimBanner />
@@ -107,10 +113,15 @@ export function HomePage() {
           <UseCarousel label="Inspiration Zone" wheel={false} />
         </div>
       ) : (
-        <>
-          {home.artifacts.length > 0 && <Shelf actions="full" rows={home.artifacts as never} />}
-          <SharedWithYou items={home.shared} />
-        </>
+        <div aria-label="Home workspace" className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_15rem] xl:grid-cols-[minmax(0,1fr)_16rem]">
+          <div className="min-w-0">
+            {home.artifacts.length > 0 && <Shelf actions="full" rows={home.artifacts as never} />}
+            <SharedWithYou items={home.shared} />
+          </div>
+          <aside aria-label="Dashboard rail" className="min-w-0 border-t border-edge pt-8 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
+            <Dashboard rows={home.artifacts as never} viewsOverTime={home.viewsOverTime} />
+          </aside>
+        </div>
       )}
       {/* AFTER the shelves, and OUTSIDE the empty/full branch: an account that
         * owns nothing yet may already follow people, and hiding the one thing

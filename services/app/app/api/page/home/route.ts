@@ -1,13 +1,14 @@
 /**
  * The dashboard's data: a stranger gets the landing; an account gets its
  * library (with each document's view sparkline, rendered here as SVG so the
- * page draws nothing), what is shared with it, and the two activity lists —
+ * page draws nothing, plus one pooled 30-day series), what is shared with it,
+ * and the two activity lists —
  * what happened to its documents, and what the people it follows did in
  * public. Both come decorated (handles, titles) because the SPA holds no
  * database and must not spend a request per row learning names.
  */
 import { AGENT_COOKIE, decodeAgentSession } from '@/lib/agent-session';
-import { decorateFeed, followFeed, ownerFeed, viewSeriesByUser } from '@/lib/feed';
+import { decorateFeed, followFeed, ownerFeed, VIEW_SERIES_DAYS, viewSeriesByUser } from '@/lib/feed';
 import { json, parseCookie } from '@/lib/http';
 import { listArtifactsByUser, listDraftsByTokenIds, listSharedWithEmail } from '@/lib/users';
 import { sessionActor } from '@/lib/viewer';
@@ -35,6 +36,7 @@ export async function GET(request: Request) {
     }, 200, { 'Cache-Control': 'no-store' });
   }
   const artifacts = await listArtifactsByUser(user.userId);
+  const documents = artifacts.filter((artifact) => artifact.format === 'markup');
   /*
    * PLACEMENT is the owner's business, and the shared half is somebody else's
    * row: `listSharedWithEmail` selects the summary columns, so `ancestor_ids`
@@ -45,9 +47,9 @@ export async function GET(request: Request) {
    */
   const shared = (user.email ? await listSharedWithEmail(user.email, user.userId) : [])
     .map(({ ancestor_ids: _placement, ...row }) => row);
-  const series = artifacts.length ? await viewSeriesByUser(user.userId) : new Map<string, number[]>();
+  const series = documents.length ? await viewSeriesByUser(user.userId) : new Map<string, number[]>();
   const sparklines: Record<string, string> = {};
-  for (const a of artifacts) {
+  for (const a of documents) {
     const s = series.get(a.id);
     if (s?.some((n) => n > 0)) sparklines[a.id] = await renderSparklineSvg(s);
   }
@@ -55,6 +57,13 @@ export async function GET(request: Request) {
     ownerFeed(user.userId, { limit: ACTIVITY_LIMIT }).then(decorateFeed),
     followFeed(user.userId, { limit: ACTIVITY_LIMIT }).then(decorateFeed),
   ]);
+  // The dashboard is about the library as a whole, not a leaderboard. Pool
+  // the same exact 30 daily buckets that feed the per-artifact shelf splines.
+  const viewsOverTime = new Array<number>(VIEW_SERIES_DAYS).fill(0);
+  for (const artifact of documents) {
+    const buckets = series.get(artifact.id) ?? [];
+    buckets.forEach((views, day) => { viewsOverTime[day] += views; });
+  }
   return json({
     signedIn: true,
     feed: { mine, following },
@@ -62,6 +71,7 @@ export async function GET(request: Request) {
       id: a.id, url: `/a/${a.id}`, title: a.title, format: a.format, version: a.version, ancestor_ids: a.ancestor_ids,
       visibility: a.visibility, updated_at: a.updated_at, views: a.views, sparkline: sparklines[a.id] ?? null,
     })),
+    viewsOverTime,
     shared,
   }, 200, { 'Cache-Control': 'no-store' });
 }

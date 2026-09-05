@@ -1,6 +1,6 @@
 /** The shelf policy: documents, folders, and assets stay separate and rank by recency. */
 import { describe, expect, it } from 'vitest';
-import { buildShelf, type ShelfItem } from '@/lib/shelf';
+import { buildShelf, groupShelfByRecency, type ShelfItem } from '@/lib/shelf';
 
 const docs = (n: number) =>
   Array.from({ length: n }, (_, i) => ({
@@ -48,5 +48,35 @@ describe('buildShelf', () => {
     const shelf = buildShelf<Row>([row]);
     expect(shelf.documents[0]).toBe(row);
     expect(shelf.documents[0].views).toBe(9);
+  });
+});
+
+describe('groupShelfByRecency', () => {
+  it('creates Finder-like calendar groups, omits empty bands, and preserves row order', () => {
+    const rows = [
+      { id: 'today', format: 'markup', updated_at: '2026-09-04T09:00:00' },
+      { id: 'yesterday', format: 'markup', updated_at: '2026-09-03T09:00:00' },
+      { id: 'week-newer', format: 'markup', updated_at: '2026-09-01T09:00:00' },
+      { id: 'week-older', format: 'markup', updated_at: '2026-08-29T09:00:00' },
+      { id: 'month', format: 'markup', updated_at: '2026-08-12T09:00:00' },
+      { id: 'old', format: 'markup', updated_at: '2026-07-01T09:00:00' },
+    ];
+    const groups = groupShelfByRecency(rows, new Date('2026-09-04T12:00:00'));
+    expect(groups.map(({ label }) => label)).toEqual(['Today', 'Yesterday', 'This Week', 'Last Month', 'Older']);
+    expect(groups.map(({ rows: members }) => ids(members))).toEqual([
+      ['today'],
+      ['yesterday'],
+      ['week-newer', 'week-older'],
+      ['month'],
+      ['old'],
+    ]);
+  });
+
+  it('does not render empty date groups', () => {
+    const groups = groupShelfByRecency(
+      [{ id: 'today', format: 'markup', updated_at: '2026-09-04T09:00:00' }],
+      new Date('2026-09-04T12:00:00'),
+    );
+    expect(groups.map(({ label }) => label)).toEqual(['Today']);
   });
 });

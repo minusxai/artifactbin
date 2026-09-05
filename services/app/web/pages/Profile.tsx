@@ -2,7 +2,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { takeBootstrap } from '../bootstrap';
 import { Navigate, useLocation, useParams } from 'react-router';
-import { useSession } from '../session';
 import { ListingHero, ListingShell, NothingHere } from '@/components/Listing';
 import Shelf from '@/components/Shelf';
 import { canonicalArtifactPath } from '@/lib/urls';
@@ -12,12 +11,10 @@ import { NotFoundPage } from './NotFound';
 type Resolved =
   | { kind: 'redirect'; to: string }
   | { kind: 'artifact'; id: string }
-  | { kind: 'public-profile'; handle: string; owner?: { id: string }; follow?: { following: boolean; count: number }; files: never[]; email: string | null; authed: boolean; anon: boolean };
+  | { kind: 'public-profile'; handle: string; owner?: { id: string }; follow?: { following: boolean; count: number }; files: never[]; authed: boolean; anon: boolean };
 
 export function ProfilePage() {
   const { user, '*': rest } = useParams();
-  const { session } = useSession();
-  const viewerHandle = session?.user?.username ?? null;
   const { pathname } = useLocation();
   const [page, setPage] = useState<Resolved | 'missing' | null>(() => takeBootstrap<Resolved>(window.location.pathname, 'profile'));
   const served = useRef<string | null>(page ? window.location.pathname : null);
@@ -42,10 +39,8 @@ export function ProfilePage() {
   if (page === 'missing') return <NotFoundPage />;
   if (page.kind === 'redirect') return <Navigate to={page.to} replace />;
   if (page.kind === 'artifact') return <ArtifactPage id={page.id} />;
-  // The masthead names the VIEWER, on a profile as everywhere else — which is
-  // the session's handle, never the profile's (components/HeaderBar).
   return (
-    <ListingShell email={page.email} username={viewerHandle} stats={null} authed={page.authed} anon={page.anon}>
+    <ListingShell authed={page.authed} anon={page.anon}>
       <ProfileListing data={page} />
     </ListingShell>
   );
