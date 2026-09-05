@@ -72,6 +72,14 @@ describe('a folder tile carries the folder\u2019s own actions', () => {
     fireEvent.click(del);
     await waitFor(() => expect(deletes).toEqual(['/api/my/artifacts/emp001']));
     expect(asked[0]).not.toContain('inside it');
+    /*
+     * P4: the wording a person answers has to be TRUE. It said "the link dies
+     * and history is erased", which was the whole story when a delete was one
+     * hard DELETE and is now half of it: the link does die, and everything
+     * else waits 30 days. Pinned here because this is the only branch that
+     * renders it — the folder branch above says its own sentence.
+     */
+    expect(asked[0]).toBe('Delete "Empty"? The link stops working. It goes to the trash for 30 days, then it is gone for good.');
   });
 
   it('moves a folder through the same picker every row uses', () => {
