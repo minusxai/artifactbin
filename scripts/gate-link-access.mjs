@@ -197,7 +197,9 @@ try {
   check(saved === 1, 'the comment is stored — a person nobody invited left feedback');
 
   // ── 5. the owner never reloaded ──────────────────────────────────────────
-  const live = await until(() => owner.locator('[aria-label="Open annotation count"]').textContent().catch(() => null), (t) => t === '1', 20000);
+  // The count rides the framed document's comment glyph now (the page keeps it live).
+  const ownerFrame = owner.frames().find((f) => f !== owner.mainFrame()) ?? owner.mainFrame();
+  const live = await until(() => ownerFrame.locator('[data-mx-reader-count="comment"]').textContent().catch(() => null), (t) => t === '1', 20000);
   check(live === '1', 'the owner watches the count arrive over the live stream — no reload');
 
   // ── 6. logged OUT on the same link: the anonymous ceiling ────────────────

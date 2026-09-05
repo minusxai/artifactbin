@@ -47,9 +47,12 @@ export async function revealReaderChrome(target) {
      * of 40px downward and the chrome stays hidden — which is the product
      * working, and cost this helper its first version.
      */
+    // Down, then back up by the SAME amount: the reveal is the direction, and
+    // the reader's place must be exactly where it was (gate-inplace-edit
+    // measures scrollY across it).
     await target.evaluate(() => window.scrollBy(0, 160));
     await new Promise((resolve) => setTimeout(resolve, 200));
-    await target.evaluate(() => window.scrollBy(0, -120));
+    await target.evaluate(() => window.scrollBy(0, -160));
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
   return target.evaluate(() =>
@@ -108,9 +111,15 @@ export async function openArtifactControls(page, { timeout = 30_000 } = {}) {
  */
 async function refocusPage(page, panelSelector) {
   await page.evaluate((sel) => {
+    // Blur the frame first: that alone returns keyboard focus to the page.
+    // Then prefer a focusable that is actually rendered — the panel's first
+    // control may be a phone-only button that display:none makes unfocusable.
+    const active = document.activeElement;
+    if (active && active !== document.body && typeof active.blur === 'function') active.blur();
     const panel = document.querySelector(sel);
-    const target = panel?.querySelector('button, a, input, [tabindex]') ?? panel;
-    if (target && typeof target.focus === 'function') { target.tabIndex ??= -1; target.focus(); }
+    const candidates = panel ? Array.from(panel.querySelectorAll('button, a, input, [tabindex]')) : [];
+    const visible = candidates.find((el) => el.getClientRects().length > 0);
+    if (visible) visible.focus();
   }, panelSelector).catch(() => {});
 }
 

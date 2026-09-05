@@ -121,7 +121,8 @@ const run = async () => {
     // so it stays — and a compact identity marker floats beside it.
     const stillTinted = await until(() => frame.locator('#figure[data-mx-annotated]').count(), (n) => n === 1, 5000);
     ok(stillTinted === 1, 'the tint is ambient: a commented node stays marked with no rail and no mode');
-    ok((await page.locator('[aria-label="Open annotation count"]').textContent()) === '1', 'the comments button carries the unresolved count');
+    // The count rides the framed document's comment glyph now, kept live by the page.
+    ok((await frame.locator('[data-mx-reader-count="comment"]').textContent())?.trim() === '1', 'the comment glyph carries the unresolved count');
     const viewComments = page.locator('[aria-label="Open annotation comments"]');
     await viewComments.waitFor({ timeout: 8000 });
     const viewComment = page.locator('[aria-label^="Open annotation conversation by"]');
@@ -200,8 +201,8 @@ const run = async () => {
     ok(gone === 0, 'the resolve reaches the open tab live: the highlight lifts with no reload');
     const threadGone = await until(() => page.locator('[aria-label="Annotation thread"]').count(), (n) => n === 0, 8000);
     ok(threadGone === 0, 'the open-thread list empties live too');
-    const badgeGone = await until(() => page.locator('[aria-label="Open annotation count"]').count(), (n) => n === 0, 5000);
-    ok(badgeGone === 0, 'the count badge drops with the resolve');
+    const badgeGone = await until(() => frame.locator('[data-mx-reader-count="comment"]').textContent().then((t) => (t ?? '').trim()), (t) => t === '', 5000);
+    ok(badgeGone === '', 'the count badge drops with the resolve');
     const resolvedCard = await until(() => page.locator('[aria-label="Resolved annotation thread"]').count(), (n) => n === 1, 8000);
     ok(resolvedCard === 1, 'resolved history lists the closed thread below the open list');
 
@@ -223,6 +224,9 @@ const run = async () => {
     await openArtifactControls(page);
     await page.locator('[aria-label="Edit artifact"]').click();
     await until(() => page.evaluate(() => location.hash), (h) => h === '#edit');
+    // In edit mode the comments control lives in the settings panel, opened
+    // through the document's own (pinned) chrome — no button in the editor bar.
+    await openArtifactControls(page);
     const editComments = await until(() => page.locator('[aria-label="Toggle comments"]').count(), (n) => n === 1, 5000);
     ok(editComments === 1, 'the comments control survives entering edit mode');
 
@@ -671,9 +675,8 @@ async function foldLeg(browser) {
   };
   const folded = await readSettled();
   ok(folded?.clamped === true, 'the sixty-line agent answer arrives folded');
-  // Without this, a hidden bar makes the bound below the SHEET's rect again —
-  // the bound that passed while the reply sat invisible behind the bar.
-  ok(folded?.barMeasured === true, 'the action bar is up: the bound below is the visible area, not the sheet rect');
+  // The page's floating action bar is gone (the chrome lives in the document
+  // now), so the sheet's own rect IS the visible area: nothing covers it.
   ok(/^show more \(\d+ lines\)$/.test(folded?.control ?? ''), `the fold offers to open itself (${JSON.stringify(folded?.control)})`);
   ok(folded?.hasLastLine === true, 'clamped, not truncated: the whole answer is still in the document');
   ok(!!folded?.reply

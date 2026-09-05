@@ -234,6 +234,8 @@ for (const [name, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
 
   // 10. HOVER TIPS, on a desktop — a phone has no hover, its words sit under the glyphs
   if (viewport === DESKTOP) {
+    // The doors above reloaded the document; its chrome arrives hidden again.
+    await revealReaderChrome(page);
     const tip = async (sel) => {
       await page.hover(sel);
       await page.waitForTimeout(500);
