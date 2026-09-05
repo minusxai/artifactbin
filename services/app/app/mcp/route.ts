@@ -37,11 +37,8 @@ const actorFrom = (extra: unknown): TokenActor => {
 const BASE = PUBLIC_BASE_URL;
 
 /**
- * `request` is threaded in for ONE reason: the preview flag (lib/features) is
- * resolved per request, and the write-ACL field must be admitted here on
- * exactly the terms the HTTP door admits it — otherwise the two surfaces
- * disagree about what is allowed, which is the drift the shared registry
- * exists to prevent.
+ * One server is built per request so the shared operation handlers receive
+ * the same request context as the HTTP routes.
  */
 function buildServer(request: Request, author: AnnotationAuthor): McpServer {
   const server = new McpServer({ name: 'artifactbin', version: '0.1.0' }, { instructions: buildMcpInstructions(BASE) });

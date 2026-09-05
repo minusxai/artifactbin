@@ -22,7 +22,7 @@ useAppHarness();
 const BASE = 'http://localhost:3000';
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 const create = (token: string, body: Record<string, unknown>) =>
-  createArtifactRoute(request('/api/artifacts?v=2', { method: 'POST', token: token, json: body }));
+  createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
 const ROWS = [{ choice: 'ramen', who: 'seed' }];
 const dataset = async (token: string, extra: Record<string, unknown> = {}) => {
   const res = await create(token, { dataset: ROWS, ...extra });
@@ -104,7 +104,7 @@ describe('publishing a document with a <Mutation>', () => {
     const t = await mintToken('t');
     const ds = await dataset(t.token, { access: 'readwrite' });
     const doc = ((await (await create(t.token, { markup: POLL(ds) })).json()) as { id: string }).id;
-    await putArtifactRoute(request(`/api/artifacts/${ds}?v=2`, { method: 'PUT', token: t.token, json: { dataset: ROWS, access: 'read' } }), params({ id: ds }));
+    await putArtifactRoute(request(`/api/artifacts/${ds}`, { method: 'PUT', token: t.token, json: { dataset: ROWS, access: 'read' } }), params({ id: ds }));
     const res = await putArtifactRoute(request(`/api/artifacts/${doc}`, { method: 'PUT', token: t.token, json: { markup: POLL(ds) } }), params({ id: doc }));
     expect(res.status).toBe(400);
     expect(await details(res)).toMatch(/read-only/);

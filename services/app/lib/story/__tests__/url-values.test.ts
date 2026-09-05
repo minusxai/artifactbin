@@ -32,7 +32,7 @@ describe('readUrlValues', () => {
   });
 
   it('ignores undeclared names, table values and the reserved keys, and never throws', () => {
-    expect(readUrlValues('?$nope=1&$rows=[1]&key=abc&chrome=0&edit=1&v=2&season=2020-21', flow)).toEqual({});
+    expect(readUrlValues('?$nope=1&$rows=[1]&key=abc&chrome=0&edit=1&ref=2&season=2020-21', flow)).toEqual({});
     expect(readUrlValues('?$season=%E2', flow)).toEqual({}); // bad percent-encoding
     expect(readUrlValues('', flow)).toEqual({});
     expect(readUrlValues('?', flow)).toEqual({});
@@ -51,8 +51,8 @@ describe('readUrlValues', () => {
 
 describe('writeUrlValues', () => {
   it('writes only the values that differ from the defaults, keeping every non-$ param', () => {
-    expect(writeUrlValues('?v=2&key=k', flow, { season: '2024-25', team: 'LAL', top: 10, live: false, since: null }))
-      .toBe('?v=2&key=k&$season=2024-25&$team=LAL');
+    expect(writeUrlValues('?ref=2&key=k', flow, { season: '2024-25', team: 'LAL', top: 10, live: false, since: null }))
+      .toBe('?ref=2&key=k&$season=2024-25&$team=LAL');
   });
 
   it('writes null as an empty value when the default is not null, and drops a $ param that returned to default', () => {

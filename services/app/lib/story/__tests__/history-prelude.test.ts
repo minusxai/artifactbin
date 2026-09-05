@@ -117,12 +117,12 @@ describe('the narrow URL capability the prelude exposes (spike S2)', () => {
     expect(w.location.search).toBe('');
   });
 
-  it('leaves every param that is not ours untouched — ?v=2 survives', () => {
-    const w = realm(`${START}?v=2`);
+  it('leaves every param that is not ours untouched', () => {
+    const w = realm(`${START}?ref=2`);
     w.__mxValues!({ season: '2024-25' });
-    expect(new URLSearchParams(w.location.search).get('v')).toBe('2');
+    expect(new URLSearchParams(w.location.search).get('ref')).toBe('2');
     w.__mxValues!({ season: null });
-    expect(new URLSearchParams(w.location.search).get('v')).toBe('2');
+    expect(new URLSearchParams(w.location.search).get('ref')).toBe('2');
   });
 
   it('cannot be reassigned or deleted, and fails silently in sloppy mode', () => {

@@ -41,7 +41,7 @@ const mutationRequest = (path: string, init: { token?: string; cookie?: string; 
   request(path, { method: 'POST', token: init.token, cookie: init.cookie, origin: init.origin, headers: { 'Content-Type': 'text/plain' }, json: init.body ?? {} });
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 const create = async (token: string, body: Record<string, unknown>) => {
-  const res = await createArtifactRoute(new Request(`${BASE}/api/artifacts?v=2`, {
+  const res = await createArtifactRoute(new Request(`${BASE}/api/artifacts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify(body),

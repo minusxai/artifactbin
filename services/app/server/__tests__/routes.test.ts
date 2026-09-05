@@ -46,7 +46,7 @@ describe('handlers through Hono', () => {
     expect((await app.request('/docs')).status).toBe(200);
     expect((await app.request('/a/nope00/raw')).status).toBe(404);
     const t = await mintToken('t');
-    const created = await app.request('/api/artifacts?v=2', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify({ markup: '<div><p>via hono</p></div>' }) });
+    const created = await app.request('/api/artifacts', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify({ markup: '<div><p>via hono</p></div>' }) });
     expect(created.status).toBe(201);
     const { id } = await created.json();
     const read = await app.request(`/api/artifacts/${id}`, { headers: { authorization: `Bearer ${t.token}` } });

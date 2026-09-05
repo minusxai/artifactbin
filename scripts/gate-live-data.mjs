@@ -58,7 +58,7 @@ const dashboard = (ds) =>
   + '<p>rows: <Number data="$all" col="n" agg="sum" /></p></div>';
 
 async function publish(token, id, markup) {
-  const res = await fetch(`${BASE}/api/artifacts/${id}?v=2`, {
+  const res = await fetch(`${BASE}/api/artifacts/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ markup }),
@@ -66,9 +66,9 @@ async function publish(token, id, markup) {
   if (!res.ok) throw new Error(`PUT ${id} → ${res.status} ${await res.text()}`);
 }
 
-// ── the data, made WRITABLE (the preview flag rides the request) ─────────────
+// ── the data, made WRITABLE ──────────────────────────────────────────────────
 const seed = await startDocument(BASE);
-const dsRes = await fetch(`${BASE}/api/artifacts?v=2`, {
+const dsRes = await fetch(`${BASE}/api/artifacts`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${seed.token}` },
   body: JSON.stringify({
@@ -157,7 +157,7 @@ const kept = await watcher.evaluate(() => !!document.querySelector('[aria-presse
 ok(kept, "the watcher's own selection survived someone else's write");
 
 // ── the toggle is the gate: close writes, and the button stops ───────────────
-const shut = await fetch(`${BASE}/api/artifacts/${ds}?v=2`, {
+const shut = await fetch(`${BASE}/api/artifacts/${ds}`, {
   method: 'PUT',
   headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${seed.token}` },
   body: JSON.stringify({ dataset: [{ choice: 'ramen', who: 'seed' }], access: 'read' }),
@@ -172,7 +172,7 @@ const refused = await voter.evaluate(async (id) => {
 }, seed.id).catch(() => 0);
 ok(refused === 403, `a write to a closed dataset is refused (${refused})`);
 
-// ── 2. THE RELAY PATH, and the URL-only flag, in a real browser ─────────────
+// ── 2. THE RELAY PATH and browser sharing control ────────────────────────────
 //
 // A document INSIDE a parent page is opaque-origin and cannot present a
 // session, so its writes go through the page (mx:mutate → POST /a/<id>/mutate).
@@ -180,15 +180,13 @@ ok(refused === 403, `a write to a closed dataset is refused (${refused})`);
 // their own document gets the shell, so this exercises exactly the code a
 // private document's readers use, without needing an email login.
 //
-// The same page proves the flag: `?v=2` lives ONLY in the URL, so the share
-// menu's own PUT has to carry it because the fetch patch re-appends it. If the
-// patch were missing, the toggle below would come back 400 preview_feature.
+// The same page proves that the normal share menu can make a dataset writable.
 {
   // The dataset and the document share ONE owner: a <Mutation> may only write
   // a dataset its own publisher owns, so two anonymous tokens would (rightly)
   // be refused at publish.
   const owner = await startDocument(BASE);
-  const ds2 = await fetch(`${BASE}/api/artifacts?v=2`, {
+  const ds2 = await fetch(`${BASE}/api/artifacts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${owner.token}` },
     body: JSON.stringify({
@@ -203,11 +201,8 @@ ok(refused === 403, `a write to a closed dataset is refused (${refused})`);
   const page = await ctx.newPage();
   await becomeOwner(page, BASE, owner.token);
 
-  // THE FLAG IS IN THE URL AND NOWHERE ELSE. The dataset is still read-only:
-  // the share menu is the only way it becomes writable from here.
-  await page.goto(`${BASE}/a/${ds2.id}?v=2`, { waitUntil: 'load' });
-  const cookies = await ctx.cookies();
-  ok(!cookies.some((c) => c.name === 'mx_v'), 'no preview cookie is ever set');
+  // The dataset is still read-only: the share menu makes it writable here.
+  await page.goto(`${BASE}/a/${ds2.id}`, { waitUntil: 'load' });
 
   await page.getByLabel('Open artifact controls').click();
   await page.getByLabel('Share').click();
@@ -215,14 +210,12 @@ ok(refused === 403, `a write to a closed dataset is refused (${refused})`);
   // The popover loads its state over the network, so WAIT rather than sampling:
   // a bare isVisible() here races the fetch and reports a false negative.
   const rowShown = await toggle.waitFor({ state: 'visible', timeout: 8000 }).then(() => true, () => false);
-  ok(rowShown, 'the writes row appears under ?v=2');
+  ok(rowShown, 'the writes row appears for a dataset owner');
 
-  // The PUT this fires carries ?v=2 only because the fetch patch put it there.
-  const [request] = await Promise.all([
+  await Promise.all([
     page.waitForRequest((r) => r.url().includes('/sharing') && r.method() === 'PUT', { timeout: 8000 }),
     toggle.click(),
   ]);
-  ok(request.url().includes('v=2'), `the share PUT carries the flag: ${new URL(request.url()).search}`);
   await until(async () => (await fetch(`${BASE}/api/artifacts/${ds2.id}`, { headers: { Authorization: `Bearer ${owner.token}` } }).then((r) => r.json())).access, (a) => a === 'readwrite');
   const access = (await fetch(`${BASE}/api/artifacts/${ds2.id}`, { headers: { Authorization: `Bearer ${owner.token}` } }).then((r) => r.json())).access;
   ok(access === 'readwrite', `the toggle actually opened the dataset (${access})`);
@@ -230,15 +223,6 @@ ok(refused === 403, `a write to a closed dataset is refused (${refused})`);
   // Only NOW can the poll publish — which is itself the proof that the toggle
   // is the gate: the same PUT would have been refused a moment ago.
   await publish(owner.token, owner.id, poll(ds2.id));
-
-  // …and WITHOUT the flag the row is not offered at all.
-  const plain = await ctx.newPage();
-  await plain.goto(`${BASE}/a/${ds2.id}`, { waitUntil: 'load' });
-  await plain.getByLabel('Open artifact controls').click();
-  await plain.getByLabel('Share').click();
-  await sleep(600);
-  ok(!(await plain.getByLabel('Make read & write').isVisible().catch(() => false)), 'no flag, no writes row');
-  await plain.close();
 
   // Now the RELAY write: the owner's own document, framed, writing through the page.
   await page.goto(`${BASE}/a/${owner.id}`, { waitUntil: 'load' });

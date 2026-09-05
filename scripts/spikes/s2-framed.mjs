@@ -14,7 +14,7 @@ if (!put.ok) throw new Error(`PUT ${put.status} ${await put.text()}`);
 const browser = await chromium.launch();
 const page = await browser.newPage();
 await becomeOwner(page, BASE, token);
-await page.goto(`${BASE}/a/${id}?v=2`, { waitUntil: 'load' });
+await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
 await page.waitForSelector('iframe[title="artifact"]');
 await page.waitForTimeout(1200);
 const frame = page.frames().find((f) => f.url().includes(`/a/${id}/raw`));

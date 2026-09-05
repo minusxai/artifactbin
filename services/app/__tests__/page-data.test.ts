@@ -33,7 +33,7 @@ beforeEach(async () => {
 async function world() {
   const owner = await ensureUsername(await createUser({ email: 'mxmx_test_owner@example.com' }));
   const t = await mintToken('o'); await claimToken(owner.id, t.token);
-  const mk = async (body: Record<string, unknown>) => (await (await createArtifactRoute(new Request(`${BASE}/api/artifacts?v=2`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify(body) }))).json()) as { id: string; edit_id: string };
+  const mk = async (body: Record<string, unknown>) => (await (await createArtifactRoute(new Request(`${BASE}/api/artifacts`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify(body) }))).json()) as { id: string; edit_id: string };
   const pub = await mk({ title: 'Public one', markup: '<div><p>hello</p></div>', visibility: 'public' });
   const box = await mk({ format: 'folder', title: 'August' });
   const priv = await mk({ title: 'Secret', markup: '<div><p>secret</p></div>', visibility: 'private', parent_id: box.id });
@@ -159,7 +159,7 @@ describe('GET /api/page/profile/@user/...', () => {
   it('keeps placement out of the public profile projection', async () => {
     const w = await world();
     const h = w.owner.username!;
-    await createArtifactRoute(new Request(`${BASE}/api/artifacts?v=2`, {
+    await createArtifactRoute(new Request(`${BASE}/api/artifacts`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${w.t.token}` },
       body: JSON.stringify({ title: 'Filed', markup: '<div><p>filed</p></div>', visibility: 'public', parent_id: w.box.id }),

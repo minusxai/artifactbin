@@ -79,8 +79,6 @@ export interface ArtifactSurfaceProps {
    * document's, and is deliberately left behind.
    */
   search?: string;
-  /** This browser is in the preview (lib/features) — gates the share menu's writes row. */
-  preview?: boolean;
   /** An ACCOUNT session (NextAuth) holds this browser — the bar offers Sign out. */
   accountSession?: boolean;
   /** An ANONYMOUS session (agent cookie, no account) — the bar offers Disconnect. */
@@ -213,7 +211,7 @@ const selectionActionCapabilities = (canEdit: boolean, canAnnotate: boolean, inV
 
 export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const [copiedRef, setCopiedRef] = useState(false);
-  const { id, editId, format, title, source, content, columns, bytes: fileBytes = 0, pages: filePages = null, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', preview = false, accountSession = false, anonSession = false, version, captureKey = null, openAnnotations = 0, like = { liked: false, count: 0 } } = props;
+  const { id, editId, format, title, source, content, columns, bytes: fileBytes = 0, pages: filePages = null, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', accountSession = false, anonSession = false, version, captureKey = null, openAnnotations = 0, like = { liked: false, count: 0 } } = props;
   const [editing, setEditing] = useState(false);
   /** A view-mode text selection asks edit mode to open on its containing node. */
   const [initialEditSelectionPath, setInitialEditSelectionPath] = useState<string | null>(null);
@@ -1127,7 +1125,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
               {copiedRef ? 'copied dataset reference' : `copy ref:${id}`}
             </button>
           )}
-          <ShareLink artifactId={id} owner format={format} preview={preview} variant="menu" className="" />
+          <ShareLink artifactId={id} owner format={format} variant="menu" className="" />
         </section>
       )}
     </div>

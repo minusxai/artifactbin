@@ -102,16 +102,15 @@ refused publish. It counts against the same per-document import cap.
 A pdf cannot be PREVIEWED (`400 pdf_not_previewable`): storing the file is what
 publishing it means, so send it to `POST [[ base ]]/api/artifacts`.
 
-## Writable datasets (preview)
+## Writable datasets
 
 A dataset carries a write ACL beside its visibility: `"access": "read"` (the
 default — documents may only read it) or `"access": "readwrite"`. Set it on
 create or PUT with your bearer token, or your user flips it from the
 document's share menu in the browser (`/api/my/*` is a browser-session
-surface and answers a bearer token 401). It is in PREVIEW: add `?v=2` to the
-request that sets it (a browser opens any app page with `?v=2` and the app
-carries it from there). Nothing else needs the flag — a document that writes
-a writable dataset works for every reader, and readers never carry it.
+surface and answers a bearer token 401). Writable datasets are supported on
+the normal API and browser surfaces; no preview parameter is needed. A
+document that writes a writable dataset works for every reader.
 
 A document writes it by declaring a `<Mutation>` in `<Helmet>` — a `<Query>`
 that writes — and running it with `<Button run="$name">` or
