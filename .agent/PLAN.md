@@ -165,6 +165,26 @@ services/proxy/Dockerfile:74 COPY --from=builder /app/dist/proxy.mjs ./services/
 Those last two lines are §2 R1: the bundle does **not** sit where the source sits, and the brief's
 `new URL('../default_rate_limits.yml', import.meta.url)` therefore resolves to nothing in either image.
 
+And the three `.yml` files survive the BUILD CONTEXT — measured against `.dockerignore`, not assumed
+(`COPY services ./services` cannot ship what the context filtered out, and a local suite would never notice):
+
+```
+$ python3 -c "…fnmatch every pattern against the path and each of its prefixes…"
+patterns: ['node_modules', '.next', 'data', '.git', '.env', '*.log', 'test', '__tests__', 'scripts/parity', 'vitest.config.ts']
+included services/proxy/default_rate_limits.yml
+included services/proxy/selfhost_rate_limits.yml
+included services/proxy/dev_rate_limits.yml
+included services/proxy/src/rate-limits.ts
+```
+
+**TWO ENV REGISTRIES, and only one is audited.** `src/env.ts` keeps a module-level `asked` set that
+`readEnv` writes to (`server.ts:239` merges it into the CO-HOSTED audit); `src/config.ts:155`'s `createEnv`
+keeps its own, and ONLY that one feeds `ProxyConfig.unknownNames` — the STANDALONE proxy's boot notice.
+`PROXY__RATE_LIMIT_CONFIG_FILE` and `RATE_LIMITER__TRUSTED_PROXY_HOPS` must therefore be read EAGERLY in
+`loadConfig` (`env('PROXY','RATE_LIMIT_CONFIG_FILE')`, `env('RATE_LIMITER','TRUSTED_PROXY_HOPS')`) or R9's
+widened audit calls them unknown on a correctly configured box. `trustedHopsOf(o.env)` in `parts.ts:184`
+keeps working off the raw source; `loadConfig` reads the name only to register it. MEASURED in R9.
+
 ### 1.5 Every `RATE_LIMITER__*` outside code
 
 ```
@@ -274,8 +294,9 @@ and the brief's exact expression, run first, with the file present at the source
 
 **MITIGATION (chosen, seeded):** `defaultPolicyFilePath()` walks up from `import.meta.url`'s directory for
 `services/proxy/default_rate_limits.yml`. Zero Dockerfile changes — both images already `COPY services
-./services`. Not found = a boot refusal naming the directories tried. Seeded as a skeleton with the table
-above in its doc-comment, and pinned by `rate-limits-file.test.ts`.
+./services`, and `.dockerignore` does not filter the files (measured, §1.4). Not found = a boot refusal
+naming the directories tried. Seeded as a skeleton with the table above in its doc-comment, and pinned by
+`rate-limits-file.test.ts`.
 
 ### R2 — `yaml` in the bundle and in the lean closure · **MEASURED · clean, unlike prod's**
 
@@ -432,8 +453,9 @@ auditable in the proxy.** (The APP's own audit, `services/app/lib/config.ts:100�
 `CONSUMED_BY_PREFIX` is emptied; the standalone proxy does not.)
 
 **MITIGATION (M1):** widen `OURS` to `/^[A-Z][A-Z0-9_]*__[A-Z0-9_]+$/`, drop `consumedByPrefix:
-['RATE_LIMITER__']` at `config.ts:155`, and read both survivors through `createEnv` so they are never
-"unknown". Pinned by the seeded `rate-limits-parts.test.ts` ("a stale per-door env name is LOUD"), which
+['RATE_LIMITER__']` at `config.ts:155`, and read BOTH survivors through `createEnv` — `env('PROXY',
+'RATE_LIMIT_CONFIG_FILE')` and `env('RATE_LIMITER','TRUSTED_PROXY_HOPS')` — so they are never "unknown".
+`readEnv` is NOT enough: the two registries are distinct (§1.4). Pinned by the seeded `rate-limits-parts.test.ts` ("a stale per-door env name is LOUD"), which
 asserts `config.unknownNames === ['RATE_LIMITER__ANON_MINT_MAX','RATE_LIMITER__EXPORT_MAX']`. Widening
 `OURS` touches every service's audit — `services/utils/__tests__/env.test.ts` is the guard to re-run.
 
@@ -445,6 +467,13 @@ are a CONCURRENCY door, and the policy-file design has no concurrency concept. M
 → only `utils/src/doors.ts:51,114,118`, `contracts/src/doors.ts:57,64` and that test). The plan **deletes**
 the lease half with the rest, and the seeded contract has no `acquire`. If a stream cap is ever wanted it
 comes back as a `concurrency:` policy shape, deliberately. Flag for the orchestrator — this is a brief gap.
+
+### R10b — `retryAfter` on a CLOSED policy · **parity pinned**
+
+`utils/src/doors.ts:107` answers `retryAfter: cfg.windowSeconds || 60` when `max <= 0`, and it reaches the
+caller in the 429 body through `denyResponse`. For `anon_mint` that is **3600** — production's one closed
+door. A rewrite that answers 0 or 60 there is a silent, observable change, so the seeded utils test asserts
+both `3600` and the `|| 60` fallback for a zero-second window.
 
 ### R11 — the limiter is PER PROCESS · **unchanged, noted**
 

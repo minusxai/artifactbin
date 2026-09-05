@@ -18,7 +18,15 @@
  */
 import type { PolicyFile } from '@artifactbin/contracts/rate-limits';
 
-/** The only env name that points at a policy file. Read through the proxy's audited `readEnv`. */
+/**
+ * The only env name that points at a policy file.
+ *
+ * READ IT THROUGH `loadConfig`'s `env('PROXY', 'RATE_LIMIT_CONFIG_FILE')`, NOT through `src/env.ts`'s
+ * `readEnv`. The proxy has TWO independent registries of "names asked for" — `env.ts`'s module-level
+ * `asked` set (which `server.ts` merges into the co-hosted audit) and `config.ts`'s `createEnv`, and ONLY
+ * the latter feeds `ProxyConfig.unknownNames`. MEASURED in planning: a name read through `readEnv` alone
+ * is still reported as "set but nothing reads it" by the standalone proxy's boot notice.
+ */
 export const POLICY_FILE_ENV = 'PROXY__RATE_LIMIT_CONFIG_FILE';
 
 /** The path, relative to whatever directory the walk is standing in, that identifies the package's default. */

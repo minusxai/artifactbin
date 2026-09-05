@@ -42,7 +42,7 @@ describe('the three shipped files', () => {
     const loaded = files.map((f) => loadPolicyFile(shipped(f)));
     expect(loaded.map((f) => f.policies.anon_mint!.max)).toEqual([0, 10, 2000]);
     for (const f of loaded) {
-      expect(Object.keys(f.policies).sort()).toEqual(loaded[0]!.policies && Object.keys(loaded[0]!.policies).sort());
+      expect(Object.keys(f.policies).sort()).toEqual(Object.keys(loaded[0]!.policies).sort());
       expect(f.routes.map((r) => r.path)).toEqual(loaded[0]!.routes.map((r) => r.path));
       expect(f.always, 'nothing is metered globally today — see PLAN §2 R6').toEqual([]);
     }

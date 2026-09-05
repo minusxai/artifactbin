@@ -60,7 +60,7 @@ describe('validatePolicyFile — a malformed file REFUSES, naming the offender',
   it('expands the shorthand: window to seconds, burst and repeat to 1', () => {
     const f = file();
     expect(f.policies.ip_flood).toEqual({ max: 600, windowSeconds: 60, burst: 1, key: 'ip', repeat: 1 });
-    expect(f.policies.anon_mint).toEqual({ max: 0 + 2, windowSeconds: 3600, burst: 3, key: 'ip', repeat: 1 });
+    expect(f.policies.anon_mint).toEqual({ max: 2, windowSeconds: 3600, burst: 3, key: 'ip', repeat: 1 });
     expect(f.policies.card.repeat).toBe(20);
     expect(f.always).toEqual(['ip_flood']);
   });
@@ -135,11 +135,21 @@ describe('the limiter', () => {
     expect(d.door).toBe('ip_flood');
   });
 
-  it('MAX=0 closes a policy for everyone, holder included', async () => {
+  it('MAX=0 closes a policy for everyone, holder included — and answers the WHOLE window as retryAfter', async () => {
     const closed = validatePolicyFile({ ...DOC, policies: { ...DOC.policies, anon_mint: { max: 0, window: '1h', key: 'ip', burst: 5 } } }, 'test.yml');
     const l = limiter(closed);
-    expect((await l.check({ method: 'POST', url: url('/api/start') }, { ip: IP })).allowed).toBe(false);
-    expect((await l.check({ method: 'POST', url: url('/api/start') }, { ip: IP, holder: true })).allowed).toBe(false);
+    const stranger = await l.check({ method: 'POST', url: url('/api/start') }, { ip: IP });
+    expect(stranger.allowed).toBe(false);
+    // PARITY with utils/src/doors.ts:107 — `retryAfter: cfg.windowSeconds || 60` reaches the 429 body, and
+    // production's ONE closed door is anon_mint at 3600. A rewrite answering 0 or 60 here is a silent change.
+    expect(stranger.retryAfter).toBe(3600);
+    expect(stranger.door).toBe('anon_mint');
+    const holder = await l.check({ method: 'POST', url: url('/api/start') }, { ip: IP, holder: true });
+    expect(holder.allowed).toBe(false);
+    expect(holder.retryAfter).toBe(3600);
+    // a zero-second window falls back to 60, exactly as the old engine did
+    const zero = validatePolicyFile({ policies: { p: { max: 0, window: 0, key: 'ip' } }, routes: [{ path: '^/x$', policies: ['p'] }], always: [] }, 'test.yml');
+    expect((await limiter(zero).check({ method: 'GET', url: url('/x') }, { ip: IP })).retryAfter).toBe(60);
   });
 
   it('BURST raises the ceiling for a holder on the SAME bucket, and a denied attempt is not counted', async () => {
