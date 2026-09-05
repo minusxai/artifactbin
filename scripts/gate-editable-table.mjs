@@ -52,6 +52,29 @@ try {
   await inputValue(b,'Hours 1','8');
   check('owner, sprint and numeric editors persist');
 
+  const invalidWrites = [];
+  const watchInvalid = request => {
+    if (request.url().endsWith(`/a/${fixture.id}/mutate`) && request.method() === 'POST') invalidWrites.push(request.postDataJSON());
+  };
+  a.on('request', watchInvalid);
+  await a.getByLabel('Hours 1', { exact: true }).fill('-1');
+  await a.getByLabel('Hours 1', { exact: true }).press('Enter');
+  await a.getByLabel('Hours 1', { exact: true }).fill('');
+  await a.getByLabel('Hours 1', { exact: true }).press('e');
+  assert.equal(await a.getByLabel('Hours 1', { exact: true }).evaluate(el => el.validity.badInput), true);
+  await a.getByLabel('Hours 1', { exact: true }).press('Tab');
+  await select(a, 'Owner 2', '@vivek');
+  a.off('request', watchInvalid);
+  assert.equal(invalidWrites.filter(write => write.mutation === 'set_hours').length, 0);
+  await a.getByLabel('Hours 1', { exact: true }).press('Escape');
+  await a.getByLabel('Hours 1', { exact: true }).fill('');
+  await commit(a, () => a.getByLabel('Hours 1', { exact: true }).press('Enter'));
+  await inputValue(b, 'Hours 1', '');
+  assert.equal((await fixture.api(`/api/artifacts/${fixture.datasetId}`, undefined, 'GET')).rows.find(row => row.id === 1).hours, null);
+  await a.getByLabel('Hours 1', { exact: true }).fill('8');
+  await commit(a, () => a.getByLabel('Hours 1', { exact: true }).press('Enter'));
+  check('invalid numeric text/ranges never write; an intentional clear writes null');
+
   await a.getByLabel('Tags 1',{exact:true}).click();
   await a.getByRole('option',{name:'design,ux',exact:true}).click();
   await a.getByRole('button',{name:'Done',exact:true}).click();
