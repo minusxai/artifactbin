@@ -10,7 +10,8 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 
 import { mintToken } from '@/lib/tokens';
-import { request, useAppHarness } from '@/__tests__/harness';
+import { claimToken, createUser, setUsername } from '@/lib/users';
+import { agentCookie, request, useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
 
@@ -26,6 +27,18 @@ const SECTIONED = '<article data-design="tw" className="mx-auto max-w-2xl">'
   + '<table><thead><tr><th>a</th></tr></thead><tbody><tr><td>1</td></tr></tbody></table></article>';
 
 describe('the served document', () => {
+  it('shows the owner a handle and title breadcrumb even without a stored title', async () => {
+    const t = await mintToken('owner');
+    const user = await createUser({ email: 'breadcrumb@example.com' });
+    await setUsername(user.id, 'breadcrumbowner');
+    await claimToken(user.id, t.token);
+    const id = await create(t.token, '<h1>Quarterly review</h1>');
+    const html = await (await rawRoute(request(`/a/${id}/raw`, { cookie: await agentCookie([t.id]) }), params({ id }))).text();
+    expect(html).toContain('data-mx-reader-byline data-mx-owner-breadcrumb');
+    expect(html).toContain('href="/@breadcrumbowner"');
+    expect(html).toContain('<span class="mx-reader-title">Quarterly review</span>');
+  });
+
   it('carries the outline rail in its SSR body, and the table rules in its head', async () => {
     const t = await mintToken('t');
     const id = await create(t.token, SECTIONED);

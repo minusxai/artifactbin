@@ -62,26 +62,25 @@ export async function loginViaEmail(page, base, sink, email) {
   await page.fill('[aria-label="Login code"]', code);
   await page.click('[aria-label="Verify code"]');
   await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 20_000 }).catch(() => {});
-  // The pages render in the browser from /api/page/*, so "logged in" is when
-  // the SESSION has landed — not when the URL changed, and not when the chrome
-  // is up: the menu button renders before the session fetch answers, and a
-  // gate that read the DOM at that moment found the header without its email.
-  //
-  // WHAT THE HEADER SAYS IS THE HANDLE, and the email only where there is none
-  // yet — so EITHER is the session having landed. Waiting on the address alone
-  // was right while the masthead printed it, and turned every logging-in gate
-  // red the moment it printed `@handle` instead: fourteen gates failing at the
-  // login step for a change in one line of chrome. A timeout is named rather
-  // than swallowed, because the assertion that follows would otherwise fail a
-  // step later with nothing to say why.
-  await page
-    .waitForFunction(
-      (e) => Boolean(document.querySelector('[aria-label="Open your profile"]')) || document.body.textContent?.includes(e),
-      email,
-      { timeout: 20_000 },
-    )
-    .catch(() => {
-      throw new Error(`logged in as ${email}, but the page never showed the session within 20s (url ${page.url()})`);
-    });
+  // Verify the cookie-backed identity through the same endpoint the app uses.
+  // The dashboard no longer prints an email or a profile link in its chrome.
+  await page.waitForFunction(async (expectedEmail) => {
+    try {
+      const response = await fetch('/api/page/session', { credentials: 'same-origin' });
+      if (!response.ok) return false;
+      const session = await response.json();
+      return session.kind === 'account' && session.user?.email === expectedEmail;
+    } catch { return false; }
+  }, email, { timeout: 20_000 }).catch(() => {
+    throw new Error(`login did not establish the session for ${email} within 20s (url ${page.url()})`);
+  });
   return email;
+}
+
+/** Read the browser's authenticated identity without depending on page chrome. */
+export async function isSignedInAs(page, email) {
+  const response = await page.request.get(new URL('/api/page/session', page.url()).href);
+  if (!response.ok()) return false;
+  const session = await response.json();
+  return session.kind === 'account' && session.user?.email === email;
 }

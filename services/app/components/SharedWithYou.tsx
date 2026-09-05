@@ -42,7 +42,9 @@ function FilterChip({ value, label, active, onToggle }: {
   );
 }
 
-export default function SharedWithYou({ items }: { items: SharedArtifactSummary[] }) {
+type SharedListItem = Omit<SharedArtifactSummary, 'ancestor_ids'>;
+
+export default function SharedWithYou({ items }: { items: SharedListItem[] }) {
   const [query, setQuery] = useState('');
   const [formatPicks, setFormatPicks] = useState<string[]>([]);
   const [rolePicks, setRolePicks] = useState<string[]>([]);

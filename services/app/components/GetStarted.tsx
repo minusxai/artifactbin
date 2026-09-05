@@ -111,29 +111,6 @@ const remember = (key: SurfaceKey) => {
   }
 };
 
-/**
- * THE ONE PLACE a raw `?source=` becomes a surface. An agent sent this human here and named where it
- * is running, so the page can open on the card that answers them instead of asking a question they have
- * already answered. It is a surface key and never anything secret — the rule that a token never rides a
- * URL is untouched. Unknown, absent or malformed is `null`, which means "show the picker": this is user
- * input off a query string and must never throw.
- *
- * The case is FOLDED before the key is matched. An AGENT writes this string, not a human, and getting
- * the case wrong does not produce a wrong card — it produces NO card, which is the worse of the two
- * failures by a distance. Folding cannot invent an answer: anything that is still not a key afterwards
- * is `null`, exactly as `nonsense` is.
- */
-export function sourceSurface(search: string): SurfaceKey | null {
-  try {
-    const named = new URLSearchParams(search).get('source');
-    const folded = named === null ? null : named.toLowerCase();
-    return isSurface(folded) ? folded : null;
-  } catch {
-    // Nothing a URL can carry is worth an exception on the page whose job is to hand over a token.
-    return null;
-  }
-}
-
 /** Matches AgentLink's status line exactly — the two option foot lines sit a
  * block apart and must read as the same voice. */
 const FOOT = 'mt-1.5 font-mono text-[11px] text-muted';

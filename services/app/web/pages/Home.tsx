@@ -8,13 +8,14 @@ import LoginForm from '@/components/LoginForm';
 import SharedWithYou from '@/components/SharedWithYou';
 import Shelf from '@/components/Shelf';
 import UseCarousel from '@/components/UseCarousel';
-import type { FeedItem } from '@/lib/feed-wire';
+import WorkspaceLayout, { HOME_WORKSPACE_COLUMN } from '@/components/WorkspaceLayout';
+import type { AccountWorkspace } from '@/lib/workspace';
 import { PAGE_COLUMN } from '@/components/ui';
 import { useSession } from '@/web/session';
 
 type Home =
   | { signedIn: false; drafts?: Parameters<typeof Shelf>[0]['rows'] }
-  | { signedIn: true; artifacts: Array<Record<string, unknown> & { id: string }>; shared: Parameters<typeof SharedWithYou>[0]['items']; feed?: { mine: FeedItem[]; following: FeedItem[] } };
+  | ({ signedIn: true } & AccountWorkspace);
 
 /**
  * THE EMPTY LIBRARY IS THE ONLY PAGE THAT SAYS WHAT TO DO FIRST.
@@ -80,24 +81,20 @@ export function HomePage() {
       );
     }
     // A stranger has nothing to log into yet: the landing proves the product
-    // and hands over the instruction; the masthead keeps the login door.
+    // and hands over the instruction; the page menu keeps the login door.
     return <Landing />;
   }
-  // ONE FRONT DOOR, ONE NAME, EVERY SURFACE. The dashboard used to fold this
-  // panel into a strip called "connect an agent" while the landing showed it
-  // open under another name; the reader had to open the strip to discover
-  // they were the same thing. There is one presentation now.
   const empty = home.artifacts.length === 0 && home.shared.length === 0;
   return (
-    <main className={`${PAGE_COLUMN} mt-8 pb-24`}>
-      {/* The product's front door is stable: owned work, shared work, or an
-        * empty library must never reorder it below secondary content — and the
-        * pieces that CARRY STATE hold ONE slot across that flip. Claiming turns
-        * an empty library into a full one, so a branch that swapped the whole
-        * subtree remounted the banner mid-claim and threw away the result it
-        * had just been asked to report. */}
-      {empty && <FirstArtifact />}
-      <div className="mb-6"><GetStarted /></div>
+    <main className={`${empty ? PAGE_COLUMN : HOME_WORKSPACE_COLUMN} mt-8 pb-24`}>
+      {empty ? (
+        <>
+          <FirstArtifact />
+          <div className="mb-6"><GetStarted /></div>
+        </>
+      ) : null}
+      {/* Kept outside the empty/full branch so a successful claim can report
+        * its result while the page refreshes into the dashboard. */}
       <ClaimBanner />
       {empty ? (
         /* Inspiration, not decoration: an empty library has no examples of its
@@ -108,35 +105,28 @@ export function HomePage() {
           <UseCarousel label="Inspiration Zone" wheel={false} />
         </div>
       ) : (
-        <>
-          {home.artifacts.length > 0 && <Shelf actions="full" rows={home.artifacts as never} />}
+        <WorkspaceLayout workspace={home} onCreated={load}>
+          {home.artifacts.length > 0 && <Shelf actions="full" assets={false} scopeParentId={null} rows={home.artifacts as never} />}
           <SharedWithYou items={home.shared} />
+        </WorkspaceLayout>
+      )}
+      {/* A bare account has no right rail, but it may already follow people
+        * and it may have just emptied itself into Trash. Keep both recovery
+        * surfaces reachable until the workspace—and its rail—exists. */}
+      {empty && (
+        <>
+          <ActivityFeed mine={home.feed?.mine ?? []} following={home.feed?.following ?? []} />
+          <p className="mt-8">
+            <a
+              href="/trash"
+              aria-label="Trash"
+              className="font-mono text-[10px] text-faint no-underline transition-colors hover:text-accent"
+            >
+              trash
+            </a>
+          </p>
         </>
       )}
-      {/* AFTER the shelves, and OUTSIDE the empty/full branch: an account that
-        * owns nothing yet may already follow people, and hiding the one thing
-        * on its dashboard that has anything in it would be the wrong half of
-        * the flip. The section renders nothing at all when both lists are
-        * empty, so the bare library still reads as bare. `feed` is optional on
-        * the wire because a page served from an older bootstrap has none. */}
-      <ActivityFeed mine={home.feed?.mine ?? []} following={home.feed?.following ?? []} />
-      {/* THE ONE WAY BACK. Deleting is a trash now (lib/trash): a row is
-        * recoverable for good, which is worth nothing if nothing on the
-        * product leads to it. One quiet link at the foot of the account's own
-        * page — an anonymous browser has no trash to reach. It sits BELOW the
-        * activity section rather than between it and the shelves, where a bare
-        * link reads as that section's own heading; and OUTSIDE the empty/full
-        * flip on purpose, since an emptied library is exactly when someone is
-        * looking for what they just deleted. */}
-      <p className="mt-8">
-        <a
-          href="/trash"
-          aria-label="Trash"
-          className="font-mono text-[10px] text-faint no-underline transition-colors hover:text-accent"
-        >
-          trash
-        </a>
-      </p>
     </main>
   );
 }

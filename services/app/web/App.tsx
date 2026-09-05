@@ -3,6 +3,7 @@ import MixpanelClient from '@/components/MixpanelClient';
 import { SessionProvider, useSession } from './session';
 import { Shell } from './Shell';
 import { AccountPage } from './pages/Account';
+import { AssetsPage } from './pages/Assets';
 import { ArtifactPage } from './pages/Artifact';
 import { DocsPage } from './pages/Docs';
 import { HomePage } from './pages/Home';
@@ -31,6 +32,7 @@ export function App() {
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/account" element={<AccountPage />} />
+          <Route path="/assets" element={<AssetsPage />} />
           <Route path="/tokens" element={<Navigate to="/account" replace />} />
           <Route path="/tokens/new" element={<TokensNewPage />} />
           <Route path="/trash" element={<TrashPage />} />

@@ -1,45 +1,23 @@
 /**
- * The profile and folder listings — the pretty-URL page's chrome, rendered
+ * The public profile listing — the pretty-URL page's chrome, rendered
  * in the browser from /api/page/profile. Moved out of the Next page as-is.
  */
 import { FollowButton } from '@/components/FollowButton';
-import HeaderBar, { type HeaderStats } from '@/components/HeaderBar';
 import PageChrome from '@/components/PageChrome';
-import { PAGE_COLUMN, Badge, dateStamp, FormatBadge, MicroLabel, timeAgo } from '@/components/ui';
-import { canonicalArtifactPath } from '@/lib/urls';
-import type { ArtifactSummary } from '@/lib/artifacts';
-import type { Viewer } from '@/lib/artifacts';
-
-function statsOf(artifacts: { format: string }[]): HeaderStats {
-  const formats: Record<string, number> = { markup: 0, html: 0 };
-  for (const a of artifacts) {
-    formats[a.format] = (formats[a.format] ?? 0) + 1;
-  }
-  return { total: artifacts.length, formats };
-}
+import { PAGE_COLUMN, MicroLabel } from '@/components/ui';
 
 /**
- * App masthead + the shared column every listing view lives in. The controls
- * sit in the masthead's open top corners; no persistent strip is reserved.
+ * Compact app bar and the shared column every listing view lives in.
  */
-export function ListingShell({ email, username, stats, authed = false, anon = false, children }: {
-  email: string | null;
-  /**
-   * The VIEWER's own handle, not the profile's — this is the app masthead, and
-   * it says who is signed in wherever it appears. A stranger reading somebody
-   * else's profile still gets their own identity line, or the login door.
-   */
-  username?: string | null;
-  stats: HeaderStats | null; authed?: boolean; anon?: boolean;
+export function ListingShell({ authed = false, anon = false, children }: {
+  authed?: boolean; anon?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <>
       <PageChrome authed={authed} anon={anon} />
-      <HeaderBar email={email} username={username} stats={stats} />
-      {/* The SHARED column: a profile and the dashboard render the same
-        * shelf, so they must be the same width, and the masthead above them
-        * spans it too (web/__tests__/shelf-pages). */}
+      {/* Profiles keep the standard reading column. The populated homepage
+        * widens separately because it also carries the analytics rail. */}
       <main className={`${PAGE_COLUMN} pt-10 pb-24`}>{children}</main>
     </>
   );
@@ -91,6 +69,3 @@ export function NothingHere() {
     </p>
   );
 }
-
-const delay = (i: number) => ({ animationDelay: `${Math.min(i * 45, 450)}ms` });
-

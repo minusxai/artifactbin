@@ -15,6 +15,13 @@ const chrome = (over: Partial<ReaderChromeInput> = {}): string =>
   });
 
 describe('renderReaderChrome', () => {
+  it('marks the owner byline as a breadcrumb and escapes the artifact name', () => {
+    const html = chrome({ ownerBreadcrumb: true, title: 'Report <2026>' });
+    expect(html).toContain('data-mx-owner-breadcrumb');
+    expect(html).toContain('href="/@ada"');
+    expect(html).toContain('Report &lt;2026&gt;');
+    expect(chrome()).not.toContain('data-mx-owner-breadcrumb');
+  });
   it('renders HIDDEN, stamped with the artifact id', () => {
     const html = chrome();
     expect(html).toContain('<div class="mx-reader-chrome mx-reader-chrome--hidden" data-mx-reader-chrome data-mx-reader-state="hidden" data-mx-artifact-id="ab12cd">');

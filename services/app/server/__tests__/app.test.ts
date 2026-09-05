@@ -112,7 +112,7 @@ describe('the address heals for the page, never for the reader', () => {
 
 describe('the app\'s paths', () => {
   it('serve the SPA under the app CSP, and anything else is a 404', async () => {
-    for (const p of ['/', '/login', '/account', '/docs-human']) {
+    for (const p of ['/', '/login', '/account', '/assets', '/trash', '/docs-human']) {
       const res = await app.request(p);
       expect(res.status, p).toBe(200);
       expect(res.headers.get('content-security-policy'), p).toContain('frame-ancestors');

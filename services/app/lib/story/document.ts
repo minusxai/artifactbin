@@ -186,6 +186,8 @@ export interface StoryDocumentInput {
   login?: { href: string } | null;
   /** The rail offers Edit: this is a writer's framed copy (`?edit=1`). */
   edit?: boolean;
+  /** The owner sees the artifact title beside the handle as a breadcrumb. */
+  ownerBreadcrumb?: boolean;
   /** Like and follow counts, this viewer's own state, and the doors (lib/story/reader-chrome ReaderReactions). */
   reactions?: ReaderReactions | null;
 }
@@ -403,6 +405,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
       fork,
       login: input.login ?? null,
       edit: !!input.edit,
+      ownerBreadcrumb: input.ownerBreadcrumb,
       reactions: input.reactions ?? null,
     })
     : '';

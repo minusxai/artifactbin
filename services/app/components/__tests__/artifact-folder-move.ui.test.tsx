@@ -1,6 +1,6 @@
 /**
  * Folder moves from the dashboard: a manage-mode row tucks "Move" and
- * "Delete" behind a "…" overflow menu (share and edit stay one click).
+ * "Delete" and sharing behind a "…" overflow menu (edit stays one click).
  * Move PATCHes `{ parent_id }` — the ID of a folder artifact, metadata-only,
  * never the content PUT — and reflects the new placement in place. Non-manage
  * rows get no menu at all.
@@ -53,20 +53,22 @@ afterEach(() => {
 });
 
 describe('ArtifactTable folder moves', () => {
-  it('keeps move and delete behind the overflow menu', () => {
+  it('keeps sharing, move and delete behind the overflow menu', () => {
     render(<ArtifactTable manage artifacts={[ROW]} />);
-    // Share and edit are one click; move/delete only exist once the menu opens.
-    expect(screen.getByLabelText('Share Eating Healthy')).toBeTruthy();
+    // Edit stays on the row; management actions appear when the menu opens.
+    expect(screen.queryByLabelText('Manage sharing for Eating Healthy')).toBeNull();
     expect(screen.getByLabelText('Edit Eating Healthy')).toBeTruthy();
     expect(screen.queryByLabelText('Move Eating Healthy')).toBeNull();
     expect(screen.queryByLabelText('Delete Eating Healthy')).toBeNull();
 
     fireEvent.click(screen.getByLabelText('More actions for Eating Healthy'));
+    expect(screen.getByLabelText('Manage sharing for Eating Healthy')).toBeTruthy();
     expect(screen.getByLabelText('Move Eating Healthy')).toBeTruthy();
     expect(screen.getByLabelText('Delete Eating Healthy')).toBeTruthy();
 
     // Toggling shut hides them again.
     fireEvent.click(screen.getByLabelText('More actions for Eating Healthy'));
+    expect(screen.queryByLabelText('Manage sharing for Eating Healthy')).toBeNull();
     expect(screen.queryByLabelText('Move Eating Healthy')).toBeNull();
     expect(screen.queryByLabelText('Delete Eating Healthy')).toBeNull();
   });

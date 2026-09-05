@@ -43,7 +43,7 @@ import { ANONYMOUS_CEILING, canRead, capRole, maxRole, shareRolesAtLeast, type A
 
 /**
  * The read ACL. 'public' = anyone with the link may read, and owned docs list
- * on the owner's profile root (/@handle — folder pages stay owner-only);
+ * on the owner's profile root (/@handle);
  * 'unlisted' = reads exactly like public but never lists anywhere (the
  * pre-profile meaning of public, kept nameable); 'private' = the owner plus
  * the emails in artifact_shares. Defaults at create: user-owned → 'private',
