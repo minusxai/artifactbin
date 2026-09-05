@@ -58,7 +58,8 @@ Declarations · Bindings: embeds · Bindings: controls.
   `<Files data="$children" variant="icons|tiles" />`. Columns `id title format
   level visibility updated_at url thumbnail views sparkline`, computed per
   VIEWER: a stranger gets the `public` children, `thumbnail` (a card) is null
-  for a private one, `views`/`sparkline` null unless you may edit the folder.
+  for a private child AND for every folder, `views`/`sparkline` null unless you
+  may edit the folder.
 - `<Mutation name>{`insert into ref_<datasetId> (a) values ($a)`}</Mutation>`
   — a `<Query>` that WRITES (preview: the dataset needs `access: readwrite`,
   [datasets](publishing-datasets.md)). Exactly one INSERT | UPDATE | DELETE
