@@ -475,8 +475,8 @@ export function AppBar({
       </nav>
       <div className="ml-auto flex items-center gap-1">
         {/* The document bar's glyphs, at its size and stroke, so the two bars read as one. */}
-        {control('controls', label.toLowerCase(), <SlidersVertical size={20} strokeWidth={1.7} />)}
-        {control('menu', 'menu', <CircleUser size={20} strokeWidth={1.7} />)}
+        {control('controls', label.toLowerCase(), <SlidersVertical size={20} strokeWidth={1.3} />)}
+        {control('menu', 'menu', <CircleUser size={20} strokeWidth={1.3} />)}
       </div>
     </header>
   );

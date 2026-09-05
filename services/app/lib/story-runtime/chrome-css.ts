@@ -417,7 +417,7 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
   .mx-reader-action svg, .mx-reader-trigger svg, .mx-reader-home img {
     filter: drop-shadow(0 1px 1.5px var(--background, canvas)) drop-shadow(0 0 6px color-mix(in srgb, var(--background, canvas) 85%, transparent)) !important;
   }
-  .mx-reader-action svg, .mx-reader-trigger svg { width: 26px !important; height: 26px !important; }
+  .mx-reader-action svg, .mx-reader-trigger svg { width: 24px !important; height: 24px !important; }
   .mx-reader-home {
     width: 48px !important; height: 48px !important; border-radius: 12px !important;
     background: var(--background, canvas) !important;
