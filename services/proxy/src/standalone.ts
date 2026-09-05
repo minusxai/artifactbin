@@ -7,7 +7,9 @@
  * `buildDeps(config, overrides)` builds what the composition needs from config alone (session-less without
  * DATABASE_URL), the log's client included — `overrides.events` replaces it, `close()` flushes it either way.
  * `runStandalone(config, overrides)` boots it: deps → proxy → listening socket, and returns the handle to
- * close it — the whole boot a downstream `main.ts` needs, so it can be ten lines of policy.
+ * close it — the whole boot a downstream `main.ts` needs, so it can be ten lines of policy. It names the
+ * POLICY FILE the rate limits came from, because "which numbers is this box running" must be answerable
+ * from the log rather than by guessing which of three shipped files an env pointed at.
  */
 import { Pool } from 'pg';
 import { assemble, createTokenReader, eventsClient, log, noopEvents, overHttp, serve } from '@artifactbin/utils';
@@ -18,6 +20,7 @@ import type { ProxyConfig } from './config';
 import { sessionStoreOf } from './index';
 import { DEV_OUTBOX_DEFAULT_PATH, mailerForRuntime, usesDevOutbox } from './mail';
 import { proxyParts, type SessionStore } from './parts';
+import { resolvePolicyFilePath } from './rate-limits';
 import { ensureProxySchema } from './schema';
 
 /** What the composition needs beyond config. Session-less when tokens/sessions are absent. */
@@ -166,7 +169,10 @@ export async function runStandalone(config: ProxyConfig, overrides: StandaloneOv
   else if (!config.mail.apiKey) boot.warn('EMAIL__RESEND_API_KEY unset — production login mail cannot be sent');
 
   const deps = await buildDeps(config, overrides);
+  // Composing the parts READS the policy file (proxyParts builds the limiter), so by the time this line is
+  // printed the file has been found, parsed and validated — a bad one has already refused the boot.
   const proxy = createStandaloneProxy(config, deps, overrides);
+  boot.info(`rate limits ← ${resolvePolicyFilePath(config.env)}`);
   const listening = serve(proxy, config.port, config.host ? { host: config.host } : {});
   try {
     await listening.ready;

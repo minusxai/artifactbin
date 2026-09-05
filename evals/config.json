@@ -2,7 +2,7 @@
   "server": {
     "portBase": 3100,
     "env": {
-      "RATE_LIMITER__ANON_MINT_MAX": "2000",
+      "PROXY__RATE_LIMIT_CONFIG_FILE": "services/proxy/dev_rate_limits.yml",
       "QUOTA__ARTIFACTS_PER_TOKEN": "0",
       "WEB_INGEST__ALLOW_PRIVATE": "1"
     }

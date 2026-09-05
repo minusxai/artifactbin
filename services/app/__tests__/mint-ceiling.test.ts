@@ -1,13 +1,13 @@
 /**
- * THE APP COUNTS NO MINT DOOR (P2 §H).
+ * THE APP COUNTS NO MINT LIMIT (P2 §H).
  *
  * This file used to pin the app-side ANON_MINT valve: a credential RAISED the
  * ceiling on the same per-IP bucket rather than removing it — a holder got
  * MAX×BURST, a stranger MAX, one shared bucket. That rule is still the
- * product's, and it is still pinned — where the door lives now:
- * `services/utils/__tests__/doors.test.ts` ("a holder gets max×burst on the
- * same bucket") pins the engine, and the proxy's `doorFor()` firing on
- * `/api/start` and `/api/tokens/anonymous` is the proxy's own suite.
+ * product's, and it is still pinned — where the limit lives now:
+ * `services/utils/__tests__/rate-limits.test.ts` ("BURST raises the ceiling for
+ * a holder on the SAME bucket") pins the engine, and the `anon_mint` routes for
+ * `/api/start` and `/api/tokens/anonymous` are the proxy's own suite.
  *
  * What THIS file pins is the app half of the split: the handlers serve the
  * mint and never refuse on a budget of their own — because a second count in
@@ -15,19 +15,20 @@
  * found: a stranger's effective cap was 5 against an env that said 10).
  */
 import { describe, expect, it } from 'vitest';
-import { doorConfig } from '@artifactbin/utils';
+import { loadPolicyFile, resolvePolicyFilePath } from '@artifactbin/proxy';
 import { POST as startRoute } from '@/app/api/start/route';
 import { POST as anonymousMint } from '@/app/api/tokens/anonymous/route';
-import { rateLimiterEnv } from '@/lib/config';
-
 import { mintToken } from '@/lib/tokens';
 import { useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
 
-/** Past BOTH the stranger cap and the holder ceiling (MAX×burst, burst ≥ 2). */
-const mintDoor = doorConfig('ANON_MINT', rateLimiterEnv());
-const PAST_EVERY_CAP = mintDoor.max * mintDoor.burst + 2;
+/**
+ * Past BOTH the stranger cap and the holder ceiling (max×burst, burst ≥ 2), read from THE POLICY FILE this
+ * suite points at — there is no ceiling anywhere else to read, and no multiplier to keep in step by hand.
+ */
+const mintPolicy = loadPolicyFile(resolvePolicyFilePath(process.env)).policies.anon_mint!;
+const PAST_EVERY_CAP = mintPolicy.max * mintPolicy.burst + 2;
 const IP = '203.0.113.42';
 /** The limiter reads the address the outermost trusted proxy saw — the LAST hop. */
 const mint = (extra: Record<string, string> = {}) => new Request('http://localhost:3000/api/tokens/anonymous', {
@@ -40,7 +41,7 @@ const start = (token?: string) => startRoute(new Request('http://localhost:3000/
 }));
 
 describe('the app\'s mint handlers carry no door of their own', () => {
-  it('POST /api/tokens/anonymous serves a stranger past every cap — the proxy\'s ANON_MINT door is the only count', async () => {
+  it('POST /api/tokens/anonymous serves a stranger past every cap — the proxy\'s anon_mint policy is the only count', async () => {
     for (let i = 0; i < PAST_EVERY_CAP; i++) {
       const res = await anonymousMint(mint());
       expect(res.status, `mint ${i + 1} of ${PAST_EVERY_CAP}`).toBe(201);

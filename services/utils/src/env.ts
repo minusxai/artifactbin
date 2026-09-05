@@ -5,7 +5,7 @@
  * This only works when every package reads EAGERLY at construction.
  */
 export interface EnvOptions {
-  /** Prefixes read dynamically (RATE_LIMITER__<DOOR>_MAX): never "unknown". */
+  /** Prefixes a service reads dynamically, by group rather than by name: never "unknown". */
   consumedByPrefix?: string[];
   /** Old name → its replacement. */
   retired?: Record<string, string>;
@@ -18,7 +18,14 @@ export interface Env {
   retiredInUse(): Array<{ name: string; replacement: string }>;
 }
 
-const OURS = /^[A-Z][A-Z0-9]*__[A-Z0-9_]+$/;
+/**
+ * WHAT COUNTS AS ONE OF OUR NAMES. The module half admits an UNDERSCORE, and that is not cosmetic: while it
+ * did not, NO name in a multi-word module was auditable at all, so a knob left behind by a retired
+ * vocabulary sat on a box looking live and the boot notice said nothing about it. MEASURED when the rate
+ * limits moved into a policy file; the app's own audit (`services/app/lib/config.ts`) has always used the
+ * wider shape, and this is the two of them agreeing.
+ */
+const OURS = /^[A-Z][A-Z0-9_]*__[A-Z0-9_]+$/;
 
 export function createEnv(source: Record<string, string | undefined>, opts: EnvOptions = {}): Env {
   const asked = new Set<string>();

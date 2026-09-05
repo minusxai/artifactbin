@@ -1,4 +1,5 @@
 /** Shared by the proxy's tests: options over one in-memory PGLite, no secrets, no network. */
+import path from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { createTokenReader } from '@artifactbin/utils';
 import { ensureProxySchema } from '../src/schema';
@@ -57,17 +58,27 @@ export async function mintTestToken(o: { id: string; userId: string | null; pg: 
 
 /**
  * What Chromium actually sends on the `/tokens/new` mint fetch (MEASURED on production). Any test that mints
- * through the composed proxy needs these now: `anonMintDoor` refuses that ONE path to a non-browser. Kept
- * here rather than typed into each file, so the measured shape has a single home.
+ * through the composed proxy needs these now: the mint route is `browser_only` in every policy file, and the
+ * proxy refuses that ONE path to a non-browser. Kept here rather than typed into each file, so the measured
+ * shape has a single home.
  */
 export const BROWSER_MINT_HEADERS: Readonly<Record<string, string>> = { origin: 'http://localhost', 'sec-fetch-site': 'same-origin' };
+
+/**
+ * THE SUITE'S DEFAULT POLICY FILE — the shipped DEV one, whose anonymous mint is wide open, so a test that
+ * is not about a rate limit never trips one. A test that IS about a limit names its own fixture
+ * (`__tests__/fixtures/*.yml`) through `env: { PROXY__RATE_LIMIT_CONFIG_FILE: … }`.
+ */
+export const RELAXED_POLICY_FILE = path.resolve(__dirname, '../dev_rate_limits.yml');
+/** One fixture by name — `policyFile('mint_1.yml')`. */
+export const policyFile = (name: string): string => path.resolve(__dirname, 'fixtures', name);
 
 export async function testProxyOptions(overrides: Partial<ProxyOptions> = {}): Promise<ProxyOptions> {
   const { query } = testDb();
   await ensureTestSchema();
   return {
     upstream: async () => new Response('{"ok":true}', { headers: { 'content-type': 'application/json' } }),
-    env: { RATE_LIMITER__ANON_MINT_MAX: '1000' },
+    env: { PROXY__RATE_LIMIT_CONFIG_FILE: RELAXED_POLICY_FILE },
     tokens: createTokenReader({ db: { query } }),
     sessions: {
       resolve: async () => null,

@@ -26,7 +26,11 @@ services:
       # the container).
       APP__PUBLIC_BASE_URL: http://localhost:${APP__PORT:-3030}
       QUOTA__ARTIFACTS_PER_TOKEN: ${QUOTA__ARTIFACTS_PER_TOKEN:-1000}
-      RATE_LIMITER__ANON_MINT_MAX: ${RATE_LIMITER__ANON_MINT_MAX:-10}
+      # WHICH POLICY FILE the rate limits come from — every number is in it. The
+      # image carries all three under /app/services/proxy; this one opens the
+      # anonymous mint at 10/hour/ip. Point it at default_rate_limits.yml to
+      # close minting, or at a copy of your own.
+      PROXY__RATE_LIMIT_CONFIG_FILE: ${PROXY__RATE_LIMIT_CONFIG_FILE:-/app/services/proxy/selfhost_rate_limits.yml}
       # Proxies in front that rewrite X-Forwarded-For. 1 = the TLS-terminating
       # proxy this file assumes; 2 if a CDN sits in front of that. Too high and
       # the rate limiter starts reading caller-supplied values.

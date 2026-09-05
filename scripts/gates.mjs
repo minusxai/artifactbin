@@ -30,13 +30,13 @@
  * of them itself (in-memory PGLite, its own object dir, its own port) from the
  * build in dist/. A single base URL behaves exactly as it always did.
  *
- * AGAINST A PRODUCTION-MODE SERVER, RAISE THE MINT CEILING. `ANON_MINT_MAX`
- * defaults to 1000 in dev but 10 in production (lib/config), and a full pass
- * mints far more than ten anonymous tokens from one IP — so every gate after
- * the tenth dies on a 429 the START helper reports as `401 unauthorized` at
+ * AGAINST A PRODUCTION-MODE SERVER, RAISE THE MINT CEILING. The shipped default
+ * policy file closes anonymous minting outright, and a full pass mints far more
+ * than a handful of anonymous tokens from one IP — so every gate after the
+ * ceiling dies on a 429 the START helper reports as `401 unauthorized` at
  * publish time, which reads like a broken build and is not one. Start the
- * server with `RATE_LIMITER__ANON_MINT_MAX=2000` to verify a production build;
- * `--servers` does it for you.
+ * server with `PROXY__RATE_LIMIT_CONFIG_FILE=services/proxy/dev_rate_limits.yml`
+ * (2000/hour) to verify a production build; `--servers` does it for you.
  */
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { spawn } from 'node:child_process';
@@ -160,7 +160,7 @@ async function bootServer(index, mailOutbox) {
       EXPORT__INTERNAL_ORIGIN: `http://127.0.0.1:${port}`,
       OBJECT_STORE__LOCAL_DIR: objects,
       ARTIFACTS__ALLOW_PUBLIC: process.env.ARTIFACTS__ALLOW_PUBLIC ?? '1',
-      RATE_LIMITER__ANON_MINT_MAX: process.env.RATE_LIMITER__ANON_MINT_MAX ?? '2000',
+      PROXY__RATE_LIMIT_CONFIG_FILE: process.env.PROXY__RATE_LIMIT_CONFIG_FILE ?? path.join(ROOT, 'services/proxy/dev_rate_limits.yml'),
       // A gate's "web" is a fixture host on 127.0.0.1, and a production-mode
       // server refuses to fetch one (lib/web-ingest/guard) — the same reason
       // the mint ceiling is raised here rather than in the gate.

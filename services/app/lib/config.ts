@@ -40,7 +40,7 @@ export function env(module: string, name: string): string | undefined {
  */
 export const RETIRED_ENV_NAMES: Readonly<Record<string, string>> = {
   ADMIN_SECRET: 'ADMIN__SECRET',
-  ANON_MINT_MAX: 'RATE_LIMITER__ANON_MINT_MAX',
+  ANON_MINT_MAX: 'PROXY__RATE_LIMIT_CONFIG_FILE (a policy file, not a knob)',
   ARTIFACT_QUOTA_PER_TOKEN: 'QUOTA__ARTIFACTS_PER_TOKEN',
   AUTH_SECRET: 'AUTH__SECRET',
   // Namespaced→namespaced, unlike every other row: the browser seam stopped
@@ -51,9 +51,6 @@ export const RETIRED_ENV_NAMES: Readonly<Record<string, string>> = {
   BROWSER__WS_URL: 'BROWSER__SERVICE_URL',
   EVENTS__DATABASE_URL: 'removed (the proxy has one forwarder; the app owns events)',
   APP__INTERNAL_ORIGIN: 'removed (app and proxy compose in-process)',
-  RATE_LIMITER__BACKEND: 'removed (the proxy owns its limiter backend)',
-  RATE_LIMITER__DENYLIST_FILE: 'removed (the proxy owns request admission)',
-  RATE_LIMITER__ALLOWLIST_FILE: 'removed (the proxy owns request admission)',
   CONTRACT__ACTOR_SECRET: 'removed (in-process composition carries the actor on the request)',
   EXPORT_INTERNAL_ORIGIN: 'EXPORT__INTERNAL_ORIGIN',
   INVITE__CODE: 'removed (the invite gate retired at GA)',
@@ -65,7 +62,7 @@ export const RETIRED_ENV_NAMES: Readonly<Record<string, string>> = {
   MAX_ROWS_LIMIT: 'SQL__MAX_ROWS',
   MIXPANEL_HOST: 'MIXPANEL__HOST',
   MIXPANEL_TOKEN: 'MIXPANEL__TOKEN',
-  MUTATION_MAX_PER_MINUTE: 'RATE_LIMITER__MUTATE_MAX',
+  MUTATION_MAX_PER_MINUTE: 'PROXY__RATE_LIMIT_CONFIG_FILE (a policy file, not a knob)',
   PORT: 'APP__PORT',
   PREVIEW_FEATURES: 'PREVIEW__FEATURES',
   PUBLIC_BASE_URL: 'APP__PUBLIC_BASE_URL',
@@ -99,26 +96,8 @@ export function unknownEnvNames(
 ): string[] {
   return Object.keys(environment)
     .filter((k) => k.includes('__') && /^[A-Z][A-Z0-9_]*$/.test(k))
-    .filter((k) => !read.has(k) && !CONSUMED_BY_PREFIX.some((p) => k.startsWith(p)))
+    .filter((k) => !read.has(k))
     .sort();
-}
-
-/**
- * Read wholesale rather than by name: every `RATE_LIMITER__*` goes to the
- * doors as a group (`rateLimiterEnv`), so a knob for a door nobody has read
- * yet is still a knob, not a typo.
- */
-const CONSUMED_BY_PREFIX = ['RATE_LIMITER__'];
-/** Every `RATE_LIMITER__*` value — what lib/rate-limiter reads. */
-export function rateLimiterEnv(): Record<string, string | undefined> {
-  const out: Record<string, string | undefined> = {};
-  for (const [k, v] of Object.entries(process.env)) if (k.startsWith('RATE_LIMITER__')) out[k] = v;
-  // The ENVIRONMENT-dependent default (development relaxes the anonymous-mint
-  // door so a gate run cannot exhaust it) lives on the constant below; the door
-  // must see it too, or `npm run dev` closes minting the first time it is asked.
-  if (out.RATE_LIMITER__ANON_MINT_MAX === undefined) out.RATE_LIMITER__ANON_MINT_MAX = String(ANON_MINT_MAX);
-  if (out.RATE_LIMITER__MUTATE_MAX === undefined) out.RATE_LIMITER__MUTATE_MAX = String(MUTATION_MAX_PER_MINUTE);
-  return out;
 }
 
 /**
@@ -186,24 +165,6 @@ export const ARTIFACT_QUOTA_PER_TOKEN = Number(env('QUOTA', 'ARTIFACTS_PER_TOKEN
 export const ASSETS_MAX_BYTES_PER_TOKEN = Number(env('ASSETS', 'MAX_BYTES_PER_TOKEN') ?? '536870912');
 
 /**
- * Anonymous-mint ceiling, per IP per hour — the abuse valve on the endpoints
- * that hand out a capability for free (`/api/tokens/anonymous`, `/api/start`,
- * and the login-code request).
- *
- * 10 is the number for a deployment reachable from the internet. It is the
- * WRONG number for localhost, where the only caller is the developer and this
- * repo's own browser gates mint on every run — a few `scripts/gate-*.mjs` in a
- * row exhaust the hour, the window is in-memory, and the only recovery is
- * restarting the dev server in the middle of whatever you were verifying.
- *
- * So the DEFAULT follows the environment while the KNOB stays absolute: an
- * explicit ANON_MINT_MAX wins everywhere. The relaxed default is reachable only
- * under `next dev` — `next build` and `next start` both force
- * NODE_ENV=production — so it can never be what a deployment runs on.
- */
-export const ANON_MINT_MAX = Number(env('RATE_LIMITER', 'ANON_MINT_MAX') ?? (IS_DEV ? '1000' : '0'));
-
-/**
  * How many proxies sit in front of this app — which is to say, how much of
  * `X-Forwarded-For` was written by something we trust.
  *
@@ -269,15 +230,6 @@ export const QUERY_TIMEOUT_MS = Number(env('SQL', 'QUERY_TIMEOUT_MS') ?? '5000')
  * production one leaves it alone until a feature ships.
  */
 export const PREVIEW_FEATURES = env('PREVIEW', 'FEATURES') === '1';
-
-/**
- * How many dataset writes one VISITOR may make per minute through documents
- * (`POST /a/<id>/mutate`, keyed by client IP — the same identity the
- * anonymous-mint valve uses). A public writable dataset behind a public
- * document is an open inbox by design (that is what a poll is); this is what
- * keeps one script from filling it. Well clear of a human clicking.
- */
-export const MUTATION_MAX_PER_MINUTE = Number(env('RATE_LIMITER', 'MUTATE_MAX') ?? '60');
 
 /** Where the local fallback writes when S3_URL is unset. */
 export const LOCAL_OBJECT_DIR = env('OBJECT_STORE', 'LOCAL_DIR') ?? '.artifact-objects';

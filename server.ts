@@ -40,7 +40,7 @@ import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { getRequestListener } from '@hono/node-server';
 import { assemble, createTokenReader, inProcess } from '@artifactbin/utils';
-import { ensureProxySchema, proxyEnvNamesRead, proxyParts, readEnv, mailerForRuntime, createHumanAuth, loginProvidersOf, sessionStoreOf } from '@artifactbin/proxy';
+import { ensureProxySchema, proxyEnvNamesRead, proxyParts, readEnv, resolvePolicyFilePath, mailerForRuntime, createHumanAuth, loginProvidersOf, sessionStoreOf } from '@artifactbin/proxy';
 
 async function main(): Promise<void> {
   const env = process.env;
@@ -220,6 +220,9 @@ async function main(): Promise<void> {
       appSchema: readEnv(env, 'APP__SCHEMA'),
       events,
     })).fetch);
+  // Composing the parts READS the policy file, so this line is printed only once it has been found,
+  // parsed and validated: "which numbers is this box running" is answerable from the log.
+  if (!appOnly) console.log(`[boot] rate limits ← ${resolvePolicyFilePath(env)}`);
 
   /*
    * SAY SOMETHING ABOUT AN ENV NOBODY READ. There is exactly one spelling of

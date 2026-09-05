@@ -17,7 +17,7 @@ describe('serverPorts', () => {
 
 describe('serverEnv', () => {
   const base = { PATH: '/usr/bin', HOME: '/home/u', ANTHROPIC_API_KEY: 'k1', FIREWORKS_API_KEY: 'k2', RANDOM: 'x' };
-  const env = serverEnv({ base, ports: { server: 3100, proxy: 3101 }, dataDir: '/tmp/leg', extra: { RATE_LIMITER__ANON_MINT_MAX: '2000' } });
+  const env = serverEnv({ base, ports: { server: 3100, proxy: 3101 }, dataDir: '/tmp/leg', extra: { PROXY__RATE_LIMIT_CONFIG_FILE: 'services/proxy/dev_rate_limits.yml' } });
 
   it('strips every provider key — the product never needs them and every child would inherit them', () => {
     expect(env.ANTHROPIC_API_KEY).toBeUndefined();
@@ -42,7 +42,7 @@ describe('serverEnv', () => {
   });
 
   it('applies config extras last', () => {
-    expect(env.RATE_LIMITER__ANON_MINT_MAX).toBe('2000');
+    expect(env.PROXY__RATE_LIMIT_CONFIG_FILE).toBe('services/proxy/dev_rate_limits.yml');
   });
 });
 
