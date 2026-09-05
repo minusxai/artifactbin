@@ -1,7 +1,7 @@
 ---
 name: artifactbin
 description: >-
-  Publish documents to artifactbin over HTTP and share the link. Read first, always: everything a straightforward document needs. Use when asked to publish, share or host a page, report, dashboard, deck, dataset, chart or image.
+  Publish or edit documents over HTTP. Read first: publishing, layout, themes, datasets and the reference index.
 read_first_max: 8192
 ---
 ## Read first — everything a straightforward document needs
@@ -107,8 +107,7 @@ text flush to the viewport edge).
 
 [[ checkWork ]]
 
-**Prose, sections and a one-dataset chart are fully covered above**; anything
-more follows the reading path. Each ask has ONE file under
+**Prose and a one-dataset chart are fully covered above**. Each ask has ONE file under
 `references/` ([[ docsIndexHint ]]):
 | when the ask involves | read |
 |---|---|
@@ -121,6 +120,7 @@ more follows the reading path. Each ask has ONE file under
 | design craft — hierarchy, type, spacing, color, motifs | `design.md` |
 | the complete tag + component allowlists, `<Helmet>` in depth, layout rules | `markup.md` |
 | dataviz & charts (vega specs), controls, writable datasets, `<Mutation>`, formats | `markup-data.md` |
+| editable cells, tags and reference pickers | `markup-editing.md` |
 | scroll reveals and ambient motion classes | `markup-motion.md` |
 | video embeds — the click-to-open card | `markup-video.md` |
 | inline SVG motifs and the allowed subset | `markup-svg.md` |
