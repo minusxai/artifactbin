@@ -79,9 +79,9 @@ POST [[ base ]]/api/artifacts  { "format": "folder", "title": "Reports" } → 20
 POST [[ base ]]/api/artifacts  { "markup": "…", "parent_id": "hAoPxJ" }
 ```
 
-Ids, never paths (two sibling folders may share a name). Every read carries
-`parent_id` and `ancestor_ids` (the trail, root→parent), so one call draws
-breadcrumbs and a move costs no url.
+Ids, never paths (two sibling folders may share a name); max 6 deep. Every
+read carries `parent_id` and `ancestor_ids` (the trail, root→parent), so one
+call draws breadcrumbs and a move costs no url.
 
 A FOLDER HAS NO CONTENT: its page IS the listing, rendered per viewer —
 everything for you, the `public` children for a stranger. `title` (renaming),
@@ -142,7 +142,7 @@ GET [[ base ]]/api/artifacts → 200 { "artifacts": [ { "id", "url", "title", "f
 ```
 
 EVERYTHING you own — datasets, images, recipes and folders are artifacts too;
-there is no separate datasets endpoint.
+no separate datasets endpoint.
 
 ## Errors
 
