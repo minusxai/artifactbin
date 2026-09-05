@@ -104,8 +104,8 @@ function signatures(nodes: JsxNode[]): Map<JsxElement, string> {
 }
 
 function defaultMint(): string {
-  const bytes = crypto.randomBytes(4);
-  return FIRST[bytes[0] % FIRST.length] + Array.from(bytes.slice(1), (byte) => REST[byte % REST.length]).join('');
+  return FIRST[crypto.randomInt(FIRST.length)]
+    + Array.from({ length: 3 }, () => REST[crypto.randomInt(REST.length)]).join('');
 }
 
 function setStringAttr(node: JsxElement, name: string, value: string): void {

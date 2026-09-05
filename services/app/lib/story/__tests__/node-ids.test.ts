@@ -1,9 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import crypto from 'crypto';
 import { stampNodeIds, nodeIndex } from '../node-ids';
 import { canonicalizeMarkup } from '../jsx-tier';
 
 const mint = (...ids: string[]) => { let index=0; return ()=>ids[index++] ?? `z${String(index).padStart(3,'0')}`; };
 describe('persisted source node identity', () => {
+  it('samples each generated character with unbiased cryptographic integer bounds',()=>{
+    const uniform=vi.spyOn(crypto,'randomInt');
+    try {
+      expect(stampNodeIds('<p>New</p>').ids[0]).toMatch(/^[A-Za-z][A-Za-z0-9]{3}$/);
+      expect(uniform).toHaveBeenNthCalledWith(1,52);
+      for(let i=2;i<=4;i++) expect(uniform).toHaveBeenNthCalledWith(i,62);
+      expect(uniform).toHaveBeenCalledTimes(4);
+    } finally {uniform.mockRestore();}
+  });
   it('stamps native, SVG and component body nodes but excludes Helmet subtree', () => {
     const result=stampNodeIds('<Helmet><title>T</title></Helmet><main><p>A</p><svg><path d="M0 0" /></svg><Card>Hi</Card></main>',{mint:mint('a001','a002','a003','a004','a005')});
     expect(result.ids).toEqual(['a001','a002','a003','a004','a005']);
