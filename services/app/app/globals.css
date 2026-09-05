@@ -506,48 +506,19 @@ body {
   border-bottom-left-radius: 3px; box-shadow: -1px 1px 2px #00000012;
 }
 
-/* Gallery controls sit ON the paper as ink chips — the same chip the visibility
-   badge already wears — instead of under a dark scrim. A scrim is a photo idiom
-   (shadow at a far edge); on a white page it read as a gray smudge and vanished
-   on a dark one. Chips are built from ink, so they read the same on both, and
-   the only thing without a chip, the sparkline, gets a soft halo plus a faint
-   progressive blur of the page beneath it. */
+/* Gallery controls sit on a TAB at the foot of the paper — the folder's front
+   strip, on a document: opaque, hairline-edged, lifted by a soft upward shadow,
+   in the paper's own chrome tones. Nothing is painted over the preview, so a
+   white page stays white and a dark one stays dark, and the mark reads in the
+   theme's ordinary colours rather than white-on-ink. */
 .gallery-fade {
-  --gallery-ink: rgb(8 16 24 / 55%);
-  --gallery-hairline: #ffffff25;
-  padding: 14px 8px 7px;
-  border-radius: 0 0 4px 4px;
-  color: #fff;
-  --color-muted: #fff;
-  --color-accent: #70f0a3;
-}
-.gallery-fade::before {
-  content: ''; position: absolute; inset: 0; z-index: -1;
-  border-radius: inherit;
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
-  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 60%);
-  mask-image: linear-gradient(to bottom, transparent, #000 60%);
-}
-.gallery-fade-views svg {
-  filter: drop-shadow(0 0 1px rgb(8 16 24 / 90%)) drop-shadow(0 1px 2px rgb(8 16 24 / 50%));
-}
-/* The count is the mark's one non-hidden child; the aria-hidden sibling is the
-   sparkline wrapper, which stretches the whole box and must stay unchipped. */
-.gallery-fade-views [aria-label$=' views'] > span:not([aria-hidden]),
-.gallery-fade-actions > span {
-  border: 1px solid var(--gallery-hairline);
-  background: var(--gallery-ink);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-}
-.gallery-fade-views [aria-label$=' views'] > span:not([aria-hidden]) {
-  padding: 4px 6px;
-  border-radius: 4px;
-}
-.gallery-fade-actions > span {
-  padding: 1px;
-  border-radius: 5px;
+  height: 36px;
+  padding: 0 8px 0 10px;
+  color: var(--color-fg);
+  background: var(--color-raised);
+  border: 1px solid var(--color-edge);
+  border-radius: 5px 5px 4px 4px;
+  box-shadow: 0 -3px 8px #00000008;
 }
 .gallery-fade-visibility > span {
   width: 23px; height: 23px; border: 1px solid #ffffff25;
