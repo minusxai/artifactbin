@@ -26,11 +26,13 @@ policies:
   mutate:         { max: 60,  window: 1m,  key: ip }
   query:          { max: 600, window: 1m,  key: ip }
   export:         { max: 30,  window: 1m,  key: actor }
-  # NEW at M2, and the only route in this file the old `doorFor` could not express: an UNFURL. The ceiling on
-  # DISTINCT documents is `export`'s, unchanged — what `repeat` buys is that the 2nd..50th fetch of the SAME
-  # card costs a fiftieth of a render, because every reader of one shared link fetches the identical URL and
-  # none of them asked for it. See PLAN §2 R4 and R12.
-  card:           { max: 30,  window: 1m,  key: actor, repeat: 50 }
+  # NEW at M2, and the only route in this file the old `doorFor` could not express: a THUMBNAIL. Its ceiling
+  # is twenty times `export`'s on purpose — ONE PAGE can carry sixty cards that all load at once for one
+  # viewer (a profile, a folder, a shelf), so `export`'s 30 would lose every thumbnail past the thirtieth on
+  # a page doing nothing wrong. And a card is CACHED per artifact version, so the 2nd..20th fetch of one is
+  # not a render at all: `repeat: 20` is what says so, and it is why 600 fetches of a single shared link cost
+  # about 30. See PLAN §2 R4; R12's concern was shipping this route BEFORE `repeat` existed, not the ceiling.
+  card:           { max: 600, window: 1m,  key: actor, repeat: 20 }
   edit:           { max: 600, window: 1m,  key: actor }
   publish:        { max: 600, window: 1m,  key: actor }
 

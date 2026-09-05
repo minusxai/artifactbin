@@ -79,9 +79,9 @@ const PARITY: Array<[method: string, url: string, policy: string | null, max: nu
   ['GET', '/a/abc123/export', 'export', 30, 60, 1, 'actor', false],
   ['GET', '/a/abc123/export?mode=png', 'export', 30, 60, 1, 'actor', false],
   // M2: the query row sits ABOVE the plain export row, so `?mode=card` never reaches `export`.
-  ['GET', '/a/abc123/export?mode=card', 'card', 30, 60, 1, 'actor', false],
+  ['GET', '/a/abc123/export?mode=card', 'card', 600, 60, 1, 'actor', false],
   // the real unfurl shape a served document puts in its og:image — extra params must not lose the row
-  ['GET', '/a/abc123/export?mode=card&v=1&r=2', 'card', 30, 60, 1, 'actor', false],
+  ['GET', '/a/abc123/export?mode=card&v=1&r=2', 'card', 600, 60, 1, 'actor', false],
   ['POST', '/a/abc123/edits', 'edit', 600, 60, 1, 'actor', false],
   ['GET', '/a/abc123/edits', 'edit', 600, 60, 1, 'actor', false],
   ['POST', '/api/artifacts', 'publish', 600, 60, 1, 'actor', false],
@@ -132,17 +132,32 @@ describe('the port is a NO-OP: default_rate_limits.yml reproduces every old door
 
 /**
  * THE CARD ROUTE (M2) — what `repeat` is FOR, measured on the SHIPPED file rather than on a literal, because
- * the numbers that matter are the ones a deployment actually runs. Two claims, and they are in tension:
- * re-fetching ONE card must be nearly free (every reader of a shared link fetches the same unfurl), while
- * the number of DISTINCT documents one actor can have RENDERED must stay exactly where `export` had it.
+ * the numbers that matter are the ones a deployment actually runs.
+ *
+ * A CARD IS NOT AN EXPORT, and the ceiling says so. ONE PAGE can carry sixty thumbnails that all load at
+ * once for one viewer — a profile, a folder, a shelf — so a card budget at `export`'s 30 would lose every
+ * thumbnail past the thirtieth on a page doing nothing wrong. Cards are also CACHED per artifact version, so
+ * the second and later fetch of one is not a render at all, and `repeat: 20` is what says so. Hence 600
+ * distinct cards a minute where a real render still gets 30.
  */
-describe('the card route: one card is nearly free, thirty distinct documents is still the ceiling', () => {
+describe('the card route: a shelf of sixty loads, one card is nearly free, six hundred is the ceiling', () => {
   const file = () => loadPolicyFile(shipped('default_rate_limits.yml'));
   const limiter = () => createRateLimiter({ file: file(), backend: memoryBackend() });
   const ME = { ip: '203.0.113.9', actorId: 'usr_card', holder: true };
   const at = (s: number) => 1_700_000_000_000 + s * 1000;
 
-  it('600 fetches of ONE card export all pass — the readers of one shared link cost one render', async () => {
+  it('a shelf of SIXTY distinct cards loads in one go — the page this route exists for', async () => {
+    const l = limiter();
+    const refused: string[] = [];
+    for (let i = 0; i < 60; i++) {
+      const url = `http://localhost:6601/a/shelf${i}/export?mode=card&v=1&r=2`;
+      const d = await l.check({ method: 'GET', url }, { ...ME, url }, { now: at(0) });
+      if (!d.allowed) refused.push(`thumbnail ${i + 1} refused by ${d.door}`);
+    }
+    expect(refused, 'a sixty-card profile must not lose a thumbnail').toEqual([]);
+  });
+
+  it('600 fetches of ONE card export all pass, and cost about 30 of the 600 — a cached card is not a render', async () => {
     const l = limiter();
     const url = 'http://localhost:6601/a/abc123/export?mode=card&v=1&r=2';
     const refused: string[] = [];
@@ -151,22 +166,28 @@ describe('the card route: one card is nearly free, thirty distinct documents is 
       if (!d.allowed) refused.push(`fetch ${i + 1} refused by ${d.door}`);
     }
     expect(refused).toEqual([]);
+    // …and what those 600 actually SPENT: the first is a render, the other 599 a twentieth each.
+    // 1 + 599/20 = 30.95, so the same actor still has ~569 FRESH cards left inside the same minute.
+    const card = file().policies.card!;
+    const spent = 1 + 599 / card.repeat;
+    expect(spent).toBeCloseTo(30.95, 2);
+    expect(spent, 'a page re-fetching one card must not eat the shelf budget').toBeLessThan(card.max / 10);
   });
 
-  it('but the 31st DISTINCT card is refused — `repeat` discounts a re-fetch, it does not raise the ceiling', async () => {
+  it('but the 601st DISTINCT card in one minute IS refused — `repeat` discounts a re-fetch, it never removes the ceiling', async () => {
     const l = limiter();
     const card = (n: number) => `http://localhost:6601/a/doc${n}/export?mode=card&v=1&r=2`;
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 600; i++) {
       const url = card(i);
       expect((await l.check({ method: 'GET', url }, { ...ME, url }, { now: at(0) })).allowed, `distinct card ${i + 1}`).toBe(true);
     }
-    const url = card(30);
+    const url = card(600);
     const denied = await l.check({ method: 'GET', url }, { ...ME, url }, { now: at(0) });
     expect(denied.allowed).toBe(false);
     expect(denied.door).toBe('card');
   });
 
-  it('and 31 plain exports are refused exactly as before — the card route took nothing from `export`', async () => {
+  it('and the 31st plain export is refused exactly as before — a real render still costs a real render', async () => {
     const l = limiter();
     const plain = (n: number) => `http://localhost:6601/a/doc${n}/export`;
     for (let i = 0; i < 30; i++) {
