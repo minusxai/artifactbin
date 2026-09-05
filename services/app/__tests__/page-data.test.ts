@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET as sessionPage } from '@/app/api/page/session/route';
 import { GET as homePage } from '@/app/api/page/home/route';
 import { GET as accountPage } from '@/app/api/page/account/route';
+import { GET as assetsPage } from '@/app/api/page/assets/route';
 import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
 import { GET as profilePage } from '@/app/api/page/profile/[user]/[[...path]]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -91,6 +92,27 @@ describe('GET /api/page/home', () => {
     asSession(w.owner);
     const own = await (await homePage(request('/api/page/home'))).json();
     expect(own.artifacts[0]).toHaveProperty('ancestor_ids');
+  });
+});
+
+describe('GET /api/page/assets', () => {
+  it('returns only supporting files plus folder destinations for an account', async () => {
+    expect((await assetsPage(request('/api/page/assets'))).status).toBe(401);
+    const w = await world();
+    const created = await (await createArtifactRoute(new Request(`${BASE}/api/artifacts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${w.t.token}` },
+      body: JSON.stringify({ title: 'Rows', dataset: [{ value: 1 }] }),
+    }))).json() as { id: string };
+    asSession(w.owner);
+
+    const result = await (await assetsPage(request('/api/page/assets'))).json();
+    expect(result.assets).toHaveLength(1);
+    expect(result.assets[0]).toMatchObject({ id: created.id, title: 'Rows', format: 'dataset', url: `/a/${created.id}` });
+    expect(result.folders).toHaveLength(1);
+    expect(result.folders[0]).toMatchObject({ id: w.box.id, format: 'folder' });
+    expect(JSON.stringify(result.assets)).not.toContain(w.pub.id);
+    expect(JSON.stringify(result.assets)).not.toContain(w.priv.id);
   });
 });
 

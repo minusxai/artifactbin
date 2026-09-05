@@ -173,7 +173,7 @@ const ICON_ACTION =
 export const ARTIFACTS_PER_PAGE = 5;
 
 /** `manage` enables the session-scoped delete — dashboard only. History lives in the page's edit mode. */
-export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = true, canShare = true, showViews = true, filtersInline = false, dates = 'relative', perPage = ARTIFACTS_PER_PAGE }: {
+export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = true, canShare = true, showViews = true, filtersInline = false, dates = 'relative', perPage = ARTIFACTS_PER_PAGE, searchLabel = 'Search artifacts', searchPlaceholder = 'search artifacts' }: {
   artifacts: ArtifactSummary[];
   /**
    * The account's folders, for the move picker. The dense tier holds documents
@@ -201,6 +201,9 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
   dates?: 'relative' | 'absolute';
   /** Rows before a pager appears. */
   perPage?: number;
+  /** A standalone collection names its own search domain. */
+  searchLabel?: string;
+  searchPlaceholder?: string;
   /**
    * Rendered as the list view of a `<Shelf>`, which owns the search box and
    * has already narrowed these rows. Suppresses this component's own search
@@ -317,8 +320,8 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
       <div className="flex flex-wrap items-center gap-2 border-b border-edge px-4 py-2">
         <Search size={13} className="shrink-0 text-faint" />
         <input
-          aria-label="Search artifacts"
-          placeholder="search artifacts"
+          aria-label={searchLabel}
+          placeholder={searchPlaceholder}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="min-w-32 flex-1 border-0 bg-transparent font-mono text-xs text-fg placeholder:text-faint focus:outline-none"

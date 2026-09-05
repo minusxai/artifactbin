@@ -400,7 +400,11 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
   const present = trashed.length
     ? rows.filter((r) => !trashed.includes(r.id) && !(r.ancestor_ids ?? []).some((a) => trashed.includes(a)))
     : rows;
-  const all = present;
+  // `assets={false}` removes supporting files from the whole shelf contract,
+  // including search counts and visibility chips. Their management surface is
+  // `/assets`; leaving them in these derivations would make Home report hidden
+  // matches that it can never render.
+  const all = assets ? present : present.filter((row) => row.format === 'markup' || row.format === 'folder');
 
   const togglePick = (v: string) => setPicks((p) => (p.includes(v) ? p.filter((x) => x !== v) : [...p, v]));
 

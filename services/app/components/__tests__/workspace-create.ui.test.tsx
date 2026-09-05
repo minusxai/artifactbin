@@ -12,6 +12,16 @@ afterEach(() => {
 });
 
 describe('WorkspaceCreate', () => {
+  it('places the asset and trash shortcuts side by side under Create', () => {
+    render(<WorkspaceCreate onCreated={() => {}} />);
+    const shortcuts = screen.getByRole('navigation', { name: 'Workspace shortcuts' });
+    expect(shortcuts).toHaveClass('grid-cols-2');
+    expect(screen.getByLabelText('Assets')).toHaveAttribute('href', '/assets');
+    expect(screen.getByLabelText('Assets').querySelector('svg')).toBeTruthy();
+    expect(screen.getByLabelText('Trash')).toHaveAttribute('href', '/trash');
+    expect(screen.getByLabelText('Trash').querySelector('svg')).toBeTruthy();
+  });
+
   it('opens Getting Started for a new artifact', () => {
     render(<WorkspaceCreate onCreated={() => {}} />);
     fireEvent.click(screen.getByLabelText('Create'));

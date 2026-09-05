@@ -126,6 +126,7 @@ describe('what the dashboard leads with', () => {
     expect(dashboard).not.toHaveTextContent('Views by post');
     expect(shelf.compareDocumentPosition(dashboard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByLabelText('Dashboard rail')).toContainElement(dashboard);
+    expect(screen.getByLabelText('Dashboard rail')).toHaveClass('lg:pt-24');
     const activity = screen.getByLabelText('Activity');
     expect(screen.getByLabelText('Dashboard rail')).toContainElement(activity);
     expect(activity).toHaveAttribute('data-layout', 'rail');
@@ -134,7 +135,10 @@ describe('what the dashboard leads with', () => {
     expect(screen.getAllByLabelText('Create')).toHaveLength(1);
     expect(create.compareDocumentPosition(shelf) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(create.compareDocumentPosition(dashboard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByLabelText('Assets')).toHaveAttribute('href', '/assets');
+    expect(screen.getByLabelText('Trash')).toHaveAttribute('href', '/trash');
     expect(screen.getByLabelText('Artifact grid')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Assets' })).toBeNull();
     expect(screen.queryByLabelText('Get started')).toBeNull();
     expect(screen.queryByLabelText('What you can use it for')).toBeNull();
   });

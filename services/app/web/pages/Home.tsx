@@ -123,10 +123,10 @@ export function HomePage() {
             <WorkspaceCreate onCreated={load} />
           </div>
           <div className="min-w-0 lg:col-start-1 lg:row-start-1">
-            {home.artifacts.length > 0 && <Shelf actions="full" rows={home.artifacts as never} />}
+            {home.artifacts.length > 0 && <Shelf actions="full" assets={false} rows={home.artifacts as never} />}
             <SharedWithYou items={home.shared} />
           </div>
-          <aside aria-label="Dashboard rail" className="min-w-0 border-t border-edge pt-6 lg:col-start-2 lg:row-start-1 lg:border-t-0 lg:border-l lg:pt-20 lg:pl-6">
+          <aside aria-label="Dashboard rail" className="min-w-0 border-t border-edge pt-6 lg:col-start-2 lg:row-start-1 lg:border-t-0 lg:border-l lg:pt-24 lg:pl-6">
             <div className="lg:sticky lg:top-6">
               <Dashboard
                 rows={home.artifacts as never}
@@ -137,15 +137,6 @@ export function HomePage() {
                 forks={home.forks}
               />
               <ActivityFeed compact mine={home.feed?.mine ?? []} following={home.feed?.following ?? []} />
-              <p className="mt-8">
-                <a
-                  href="/trash"
-                  aria-label="Trash"
-                  className="font-mono text-[10px] text-faint no-underline transition-colors hover:text-accent"
-                >
-                  trash
-                </a>
-              </p>
             </div>
           </aside>
         </div>
