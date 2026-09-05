@@ -107,6 +107,9 @@ The 42 failures are exactly the 42 seeded; the 3 failing files are exactly the 3
   and `vitest.config.ts` both want 10, and neither production's 0 nor dev's 2000 is right for them.
 - **C10** CLAUDE.md forbids committing `.agent/`; the brief demands it. Committed with `git add -f`.
   **The orchestrator should `git rm --cached .agent/PLAN.md .agent/REPORT.md` before merging to `main`.**
+  Committing them also put this worktree's own path under `scripts/check-residual-names.mjs` (it scans
+  `git ls-files`) and turned `npm run validate` RED on `artifact-bin` — fixed by not writing the path, but
+  it is a second, concrete reason `.agent/` does not belong in the repo.
 
 ## Milestones (from the register, riskiest first)
 
