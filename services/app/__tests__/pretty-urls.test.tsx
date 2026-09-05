@@ -241,6 +241,24 @@ describe('public profile listing', () => {
     expect(markup).not.toContain('animate-pulse');
   });
 
+  it('lists public folders for visitors and owners without revealing private placement', async () => {
+    const { ownedToken, owner } = await fixtures();
+    const privateFolder = await create(ownedToken, { format: 'folder', title: 'Private Parent' });
+    const publicFolder = await create(ownedToken, { format: 'folder', title: 'Public Collection', visibility: 'public', parent_id: privateFolder.id });
+    await create(ownedToken, { format: 'folder', title: 'Unlisted Collection', visibility: 'unlisted' });
+
+    for (const signedIn of [false, true]) {
+      if (signedIn) { sessionUser.id = owner.id; sessionUser.email = owner.email; }
+      const markup = await markupOf('@mxmx_owner');
+      expect(markup).toContain('Open folder Public Collection');
+      expect(markup).toContain(`/@mxmx_owner/${publicFolder.id}-public-collection`);
+      expect(markup).toContain('1 public artifact');
+      expect(markup).not.toContain('Private Parent');
+      expect(markup).not.toContain(privateFolder.id);
+      expect(markup).not.toContain('Unlisted Collection');
+    }
+  });
+
   it('supporting files never list — the profile is documents, not storage', async () => {
     // Datasets and images are the material documents are BUILT from (bound as
     // ref:<id>); public visibility keeps them link-reachable for the documents

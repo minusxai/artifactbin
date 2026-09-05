@@ -45,8 +45,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ user: strin
   const owner = await getUserByUsername(handle);
   if (!owner) return notFound();
   // A profile is the same public index for its owner and every visitor.
-  // Private/unlisted work and folder navigation belong to the dashboard;
-  // keeping them out here also means this endpoint has one listing shape.
+  // Public folders list alongside documents; private/unlisted work stays out.
   const files = await listPublicArtifactsByUser(owner.id);
   const anon = !viewer && (await browserSessionKind(request)) === 'anon';
   const stranger = !viewer || viewer.userId !== owner.id;

@@ -52,8 +52,8 @@ export function ProfilePage() {
  * by hand, which is how it came to assert a listing the page had stopped
  * rendering.
  *
- * DOCUMENTS, not artifacts, in the count: the assets band is withheld below,
- * so counting datasets would promise rows that are not there.
+ * Count documents and folders: the assets band is withheld below, so counting
+ * datasets would promise rows that are not there.
  */
 export function ProfileListing({ data }: { data: { handle: string; owner?: { id: string }; follow?: { following: boolean; count: number }; authed?: boolean; files: Array<Record<string, unknown> & { id: string; format: string }> } }) {
   // Folders are ROWS in this listing now (`format: 'folder'`), reached at their
@@ -63,7 +63,7 @@ export function ProfileListing({ data }: { data: { handle: string; owner?: { id:
       <ListingHero
         handle={data.handle}
         label="public index"
-        count={data.files.filter((a) => a.format === 'markup').length}
+        count={data.files.filter((a) => a.format === 'markup' || a.format === 'folder').length}
         noun="public artifact"
         // Both halves or neither: the route ships `owner` and `follow`
         // together, on the public branch only.

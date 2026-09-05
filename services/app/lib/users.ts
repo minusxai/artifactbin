@@ -306,7 +306,7 @@ export type OwnedArtifactSummary = ArtifactSummary & { views: number };
  * artifacts only and flat, with no view counts. 'public' means listed under
  * the owner's handle (the profile root IS the list), not merely link-reachable.
  *
- * DOCUMENT tiers only: datasets, images and viz recipes are the material
+ * Documents and folders only: datasets, images and viz recipes are the material
  * documents are built from (bound as ref:<id>), so 'public' keeps them
  * link-reachable for the documents that embed them — but a profile that lists
  * them reads as a junk drawer, one row of supporting files per real page.
@@ -315,7 +315,7 @@ export async function listPublicArtifactsByUser(userId: string): Promise<Artifac
   const db = await getDb();
   const r = await db.query<ArtifactSummary>(
     `SELECT ${SUMMARY_COLS} FROM artifacts
-     WHERE user_id = $1 AND visibility = 'public' AND format = 'markup' AND ${LIVE_ARTIFACT_SQL}
+     WHERE user_id = $1 AND visibility = 'public' AND format IN ('markup', 'folder') AND ${LIVE_ARTIFACT_SQL}
      ORDER BY updated_at DESC LIMIT 200`,
     [userId],
   );
