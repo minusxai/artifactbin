@@ -152,17 +152,22 @@ await page.goto(`${BASE}/`, { waitUntil: 'load' });
 // The strip is the folder's home on the dashboard.
 await page.waitForSelector('[aria-label="Open folder Reports"]', { timeout: 20000 });
 check(true, 'the dashboard lists the folder in its own strip');
-// Retry the opening click until the menu actually appears: the row is a
-// client component, and a pre-hydration click is silently swallowed.
-const openMove = async () => {
-  await page.locator('[aria-label="More actions for Cookie Proof"]').first().click();
-  await page.locator('[aria-label="Move Cookie Proof"]').first().click();
-};
-await openMove();
-await page.waitForSelector('[aria-label="Filter folders"]', { timeout: 5000 }).catch(async () => {
-  await openMove();
-  await page.waitForSelector('[aria-label="Filter folders"]', { timeout: 15000 });
-});
+// Retry only opening the menu, before attempting its action. Waiting for the
+// picker after both clicks cannot recover a lost opening click: the Move
+// locator times out first, outside that retry. Never repeat the move itself.
+const more = page.getByRole('button', { name: 'More actions for Cookie Proof', exact: true });
+const move = page.getByRole('button', { name: 'Move Cookie Proof', exact: true });
+for (let attempt = 0; attempt < 3; attempt++) {
+  if (await more.getAttribute('aria-expanded') !== 'true') await more.click();
+  try {
+    await move.waitFor({ state: 'visible', timeout: 2000 });
+    break;
+  } catch (error) {
+    if (attempt === 2) throw error;
+  }
+}
+await move.click();
+await page.getByRole('textbox', { name: 'Filter folders', exact: true }).waitFor({ timeout: 15000 });
 await Promise.all([
   page.waitForResponse((r) => r.request().method() === 'PATCH' && r.status() === 200, { timeout: 15000 }),
   page.locator('[aria-label="Move to Reports"]').first().click(),
