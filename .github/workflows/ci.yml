@@ -402,14 +402,30 @@ jobs:
           push: false
           load: true
           tags: artifactbin:ci
-          cache-from: type=gha
+          # THE LAYER CACHE IS AN OPTIMISATION, NOT A BUILD PRODUCT, and
+          # `ignore-error=true` is what says so on both ends. On 2026-09-05 this
+          # job went red on a green commit: the image had already been built and
+          # loaded — `#47 exporting to docker image format ... DONE 73.9s`,
+          # `#48 loading layer ... DONE 19.6s` — and then
+          # `#49 exporting to GitHub Actions Cache` answered
+          # `ERROR: Post ".../CacheService/GetCacheEntryDownloadURL": dial tcp
+          # 140.82.113.22:443: i/o timeout`, which buildx reports as
+          # `failed to build: failed to solve: DeadlineExceeded` (run
+          # 33939641406, job 101234399760; the same commit's `publish` workflow
+          # had pushed all four images minutes earlier). A merge gate must never
+          # depend on a third party being up. With the attribute a cache miss or
+          # a cache-service outage costs a warning and a colder builder next
+          # time, nothing more: measured against an unreachable backend, the
+          # build exits 1 without it and 0 with it, and against a reachable one
+          # it still exports AND restores.
+          cache-from: type=gha,ignore-error=true
           # mode=min, not max. `max` exports EVERY intermediate layer of both
           # stages, and this image is large — the export was a big share of the
           # 339s the build step took, which was itself the whole reason this job
           # ran 7.6m while nothing else passed 5m. `min` exports only what the
           # final stage needs, so a rebuild whose dependencies did not change
           # still restores; a dependency change pays for a colder builder.
-          cache-to: type=gha,mode=min
+          cache-to: type=gha,mode=min,ignore-error=true
           # No provenance attestation: it is generated and attached during the
           # export, and nothing here consumes it.
           provenance: false
