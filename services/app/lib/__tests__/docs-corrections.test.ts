@@ -133,6 +133,10 @@ describe('folders and the trash', () => {
    * operator's, outside this API. A doc that stops saying one of them is a doc
    * that lets an agent promise something untrue.
    */
+  it('§P5.2 a deleted COMMENT is not erased either — and an agent cannot undo one', () => {
+    expect(flat(doc)).toContain('A deleted thread is not erased');
+    expect(flat(doc)).toContain('there is no undo for it here');
+  });
   it('§P5.1 nothing is ever erased, and the docs say so three ways', () => {
     expect(flat(doc)).toContain('Nothing here is ever erased');
     expect(flat(doc)).toContain('still counts against your quota');

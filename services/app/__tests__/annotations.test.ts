@@ -22,6 +22,7 @@ import { DELETE as myDeleteAnnotationRoute, POST as myActOnAnnotationRoute } fro
 import { GET as myListAnnotationsRoute, POST as myCreateAnnotationRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, setUsername } from '@/lib/users';
+import { countOpenAnnotations } from '@/lib/annotations';
 
 const BASE = 'http://localhost:3000';
 const harness = useAppHarness();
@@ -295,9 +296,21 @@ describe('lifecycle', () => {
       params({ id: doc.id, annId: a.id }),
     );
     expect(deleted.status).toBe(200);
+    /*
+     * SOFT, like every other delete in this product: the root AND its replies
+     * are stamped rather than removed. Nothing is erased anywhere here, and a
+     * conversation is the last thing that should be the exception — the words
+     * survive, and the five gated readers are what make the thread gone.
+     */
     const db = await harness.db();
-    const left = await db.query('SELECT 1 FROM annotations WHERE id = $1 OR root_id = $1', [a.id]);
-    expect(left.rows).toHaveLength(0); // the reply went with the root
+    const rows = await db.query<{ id: string; deleted_at: string | null }>(
+      'SELECT id, deleted_at FROM annotations WHERE id = $1 OR root_id = $1', [a.id]);
+    expect(rows.rows, 'the root and its reply are both still there').toHaveLength(2);
+    for (const r of rows.rows) expect(r.deleted_at, r.id).not.toBeNull();
+    // …and gone from every reader, which is what "deleted" means here.
+    expect(await countOpenAnnotations(doc.id)).toBe(0);
+    const list = (await (await getArtifactRoute(request(`/api/artifacts/${doc.id}`, { token: t.token }), params({ id: doc.id }))).json()) as { annotations?: unknown[] };
+    expect(list.annotations ?? []).toHaveLength(0);
   });
 
   it('a deleted artifact KEEPS its annotation rows, and keeps them forever', async () => {
