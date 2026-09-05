@@ -30,6 +30,7 @@ import { CONTENT_FIELDS, parseContentInput, type StoredContent } from '@/lib/sto
 import { collectExternalAssetUrls } from '@/lib/story/external-images';
 import type { AssetWarning } from '@/lib/web-assets';
 import { refreshWebAssets, type WebAssetImporter } from '@/lib/web-assets';
+import { getDb } from '@/lib/db';
 
 const safeJson = (s: string): unknown => { try { return JSON.parse(s); } catch { return null; } };
 
@@ -430,7 +431,19 @@ export async function replaceArtifactWithBody(
       overByteQuota: byteQuotaFor(owner.tokenId),
     });
   if (parsed instanceof Response) return parsed;
-  if (parsed.format === 'markup' && parsed.source) parsed.source = stampNodeIds(parsed.source).source;
+  if (parsed.format === 'markup' && parsed.source) {
+    const db = await getDb();
+    const lifetime = await db.query<{ source_id: string }>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1', [current.id]);
+    const stamped = stampNodeIds(parsed.source, { previousSource: current.source, reservedIds: lifetime.rows.map((row) => row.source_id), retireLegacyAliases: true }).source;
+    if (stamped !== parsed.source) {
+      const checked = await parseContentInput({ ...body, markup: stamped }, {
+        loadRef: refLoaderForActor(owner), importAsset: assetImporterFor(owner.tokenId, owner.userId),
+        resolveFont: fontResolver(), overByteQuota: byteQuotaFor(owner.tokenId),
+      });
+      if (checked instanceof Response) return checked;
+      Object.assign(parsed, checked);
+    }
+  }
 
   const visibility = parseVisibility(body, !!actor.userId);
   if (visibility instanceof Response) return visibility;
@@ -549,7 +562,17 @@ export async function createArtifactFromBody(
     overByteQuota: byteQuotaFor(actor.tokenId),
   });
   if (parsed instanceof Response) return parsed;
-  if (parsed.format === 'markup' && parsed.source) parsed.source = stampNodeIds(parsed.source).source;
+  if (parsed.format === 'markup' && parsed.source) {
+    const stamped = stampNodeIds(parsed.source).source;
+    if (stamped !== parsed.source) {
+      const checked = await parseContentInput({ ...body, markup: stamped }, {
+        creating: true, loadRef: refLoaderForActor(actor), importAsset: assetImporterFor(actor.tokenId, actor.userId),
+        resolveFont: fontResolver(), overByteQuota: byteQuotaFor(actor.tokenId),
+      });
+      if (checked instanceof Response) return checked;
+      Object.assign(parsed, checked);
+    }
+  }
   const visibility = parseVisibility(body, !!actor.userId);
   if (visibility instanceof Response) return visibility;
   const access = parseAccessField(body, parsed.format);
@@ -615,13 +638,17 @@ function parseEditBody(body: Record<string, unknown>): EditInput | null {
   const editId = body.edit_id;
   if (typeof editId !== 'string' || editId.length === 0) return null;
 
+  const mentionsDiff = Object.hasOwn(body, 'old_string') || Object.hasOwn(body, 'new_string');
+  const mentionsSource = Object.hasOwn(body, 'source');
+  const mentionsBatch = Object.hasOwn(body, 'edits');
+  if ([mentionsDiff, mentionsSource, mentionsBatch].filter(Boolean).length > 1) return null;
   const hasDiff = typeof body.old_string === 'string' && typeof body.new_string === 'string';
   const hasSource = typeof body.source === 'string';
   const hasBatch = Array.isArray(body.edits) && body.edits.length > 0 && body.edits.length <= 64
     && body.edits.every((edit) => !!edit && typeof edit === 'object'
       && typeof (edit as Record<string, unknown>).old_string === 'string'
       && typeof (edit as Record<string, unknown>).new_string === 'string');
-  if ([hasDiff, hasSource, hasBatch].filter(Boolean).length > 1 || (Array.isArray(body.edits) && !hasBatch)) return null;
+  if ((mentionsDiff && !hasDiff) || (mentionsSource && !hasSource) || (mentionsBatch && !hasBatch)) return null;
   const change = hasDiff
     ? { oldString: body.old_string as string, newString: body.new_string as string }
     : hasSource

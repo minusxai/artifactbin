@@ -727,10 +727,11 @@ export async function commitNormalizedMarkup(
   const editId = newEditId();
   const result = await tx.query<ArtifactRow>(
     `UPDATE artifacts SET source=$2, content=$3, meta=$4::jsonb, version=version+1, edit_id=$5,
-       actor_user_id=$6, actor_token_id=$7, updated_at=now() WHERE id=$1 RETURNING *`,
-    [current.id, normalized.source, normalized.content, JSON.stringify(normalized.meta), editId, ...(actor ? actorStamp(actor) : [null, null])],
+       actor_user_id=$6, actor_token_id=$7, updated_at=now() WHERE id=$1 AND edit_id=$8 RETURNING *`,
+    [current.id, normalized.source, normalized.content, JSON.stringify(normalized.meta), editId, ...(actor ? actorStamp(actor) : [null, null]), current.edit_id],
   );
   const updated = result.rows[0];
+  if (!updated) throw new Error('artifact changed after identity preparation');
   await tx.query(
     `INSERT INTO artifact_source_ids (artifact_id, source_id, provenance, first_version)
      SELECT $1, value #>> '{}', 'migration', $2 FROM jsonb_array_elements($3::jsonb)
@@ -751,7 +752,6 @@ export async function commitNormalizedMarkup(
 
 /** Artifact-aware publish preparation shared with the administrative migration. */
 export async function publishMarkupForArtifact(
-  tx: Queryable,
   current: ArtifactRow,
   source: string,
 ): Promise<Response | { source: string; content: string; meta: Record<string, unknown>; ids: string[]; aliases: Array<{ legacyKey: string; nodeId: string; path: string }> }> {
@@ -764,7 +764,8 @@ export async function publishMarkupForArtifact(
   };
   let published = await publishJsx({ theme: currentMeta.theme ?? null, template: currentMeta.template ?? null, colorMode: currentMeta.colorMode ?? null }, source, context);
   if (published instanceof Response) return published;
-  const reserved = await tx.query<{ source_id: string }>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1', [current.id]);
+  const db = await getDb();
+  const reserved = await db.query<{ source_id: string }>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1', [current.id]);
   const identity = stampNodeIds(published.source ?? '', { previousSource: current.source, reservedIds: reserved.rows.map((row) => row.source_id), retireLegacyAliases: true });
   if (identity.source !== published.source) {
     published = await publishJsx({ theme: currentMeta.theme ?? null, template: currentMeta.template ?? null, colorMode: currentMeta.colorMode ?? null }, identity.source, context);
@@ -833,7 +834,7 @@ async function revertScoped(actor: TokenActor, id: string, version: number): Pro
   // deadlock PGLite's serialized op queue.
   const result: ArtifactRow | null | VersionNotArchived = await db.transaction(async (tx) => {
     const current = (
-      await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val])
+      await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val])
     ).rows[0];
     if (!current) return null;
     const target = (
@@ -853,6 +854,11 @@ async function revertScoped(actor: TokenActor, id: string, version: number): Pro
       [id, scope.val, target.title, target.description, target.format, target.content, target.source, JSON.stringify(target.meta), newEditId(), ...actorStamp(actor)],
     );
     await logWholeDocumentWrite(tx, current, updated.rows[0]);
+    if (updated.rows[0].format === 'markup' && updated.rows[0].source) {
+      const ids = [...nodeIndex(updated.rows[0].source).keys()];
+      await tx.query('UPDATE artifact_source_ids SET retired_version=NULL WHERE artifact_id=$1 AND source_id=ANY($2::text[])', [id, ids]);
+      await tx.query('UPDATE artifact_source_ids SET retired_version=$2 WHERE artifact_id=$1 AND retired_version IS NULL AND NOT (source_id=ANY($3::text[]))', [id, updated.rows[0].version, ids]);
+    }
     return updated.rows[0];
   });
   if (result && !isVersionNotArchived(result)) void trackEvent('revert', result.id, { userId: result.user_id });
@@ -896,7 +902,7 @@ async function replaceScoped(
   let moved: { from: string | null; to: string | null } | null = null;
   const result: ArtifactRow | null | VersionConflict = await db.transaction(async (tx) => {
     const current = (
-      await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val])
+      await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val])
     ).rows[0];
     if (!current) return null;
     if (opts.expectedVersion !== undefined && current.version !== opts.expectedVersion) {
@@ -936,6 +942,12 @@ async function replaceScoped(
       await tx.query(swap.sql, swap.params);
     }
     await logWholeDocumentWrite(tx, current, updated.rows[0]);
+    if (updated.rows[0].format === 'markup' && updated.rows[0].source) {
+      const ids = [...nodeIndex(updated.rows[0].source).keys()];
+      await tx.query(`INSERT INTO artifact_source_ids (artifact_id,source_id,provenance,first_version)
+        SELECT $1,value #>> '{}','authored',$2 FROM jsonb_array_elements($3::jsonb) ON CONFLICT DO NOTHING`, [id, updated.rows[0].version, JSON.stringify(ids)]);
+      await tx.query(`UPDATE artifact_source_ids SET retired_version=$2 WHERE artifact_id=$1 AND retired_version IS NULL AND NOT (source_id = ANY($3::text[]))`, [id, updated.rows[0].version, ids]);
+    }
     moved = { from: parentOf(current), to: parentOf(updated.rows[0]) };
     return updated.rows[0];
   });
@@ -1169,13 +1181,16 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
       },
     );
     if (published instanceof Response) return published;
-    const reserved = await db.query<{ source_id: string }>('SELECT source_id FROM artifact_source_ids WHERE artifact_id = $1', [id]);
-    const identity = stampNodeIds(published.source ?? '', {
-      previousSource: headSource,
-      reservedIds: reserved.rows.map((entry) => entry.source_id),
-      retireLegacyAliases: true,
-    });
-    if (identity.source !== published.source) {
+    let identity = { source: published.source ?? '', ids: [...nodeIndex(published.source ?? '').keys()], aliases: [] as Array<{ legacyKey: string; nodeId: string; path: string }> };
+    if (input.change) {
+      const reserved = await db.query<{ source_id: string }>('SELECT source_id FROM artifact_source_ids WHERE artifact_id = $1', [id]);
+      identity = stampNodeIds(published.source ?? '', {
+        previousSource: headSource,
+        reservedIds: reserved.rows.map((entry) => entry.source_id),
+        retireLegacyAliases: true,
+      });
+    }
+    if (input.change && identity.source !== published.source) {
       published = await publishJsx(
         {
           theme: input.meta?.theme !== undefined ? input.meta.theme : meta.theme ?? null,
@@ -1186,6 +1201,12 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
         { loadRef: refLoaderForActor(writerFor(head)), importAsset: assetImporterFor(head.token_id, head.user_id), resolveFont: fontResolver(), overByteQuota: byteQuotaFor(head.token_id) },
       );
       if (published instanceof Response) return published;
+    }
+    const aliasTargets = new Map<string, string>();
+    for (const alias of identity.aliases) {
+      const prior = aliasTargets.get(alias.legacyKey);
+      if (prior && prior !== alias.nodeId) return json({ error: 'ambiguous_node_alias' }, 400);
+      aliasTargets.set(alias.legacyKey, alias.nodeId);
     }
     const storedText = published.source ?? '';
 
@@ -1240,6 +1261,13 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
          UPDATE annotations a SET anchor_key = x->>'nodeId'
          FROM jsonb_array_elements($28::jsonb) x
          WHERE a.artifact_id = $1 AND a.anchor_key = x->>'legacyKey' AND EXISTS (SELECT 1 FROM updated)
+       ), active_ids AS (
+         UPDATE artifact_source_ids SET retired_version=NULL WHERE artifact_id=$1 AND source_id=ANY($29::text[])
+           AND EXISTS (SELECT 1 FROM updated)
+       ), retired_ids AS (
+         UPDATE artifact_source_ids SET retired_version=$8+1
+         WHERE artifact_id=$1 AND retired_version IS NULL AND NOT (source_id=ANY($29::text[]))
+           AND EXISTS (SELECT 1 FROM updated)
        )
        SELECT u.* FROM updated u WHERE EXISTS (SELECT 1 FROM logged)`,
       [
@@ -1254,6 +1282,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
         storedChanges ? JSON.stringify(storedChanges) : null,
         JSON.stringify(identity.ids),
         JSON.stringify(identity.aliases),
+        identity.ids,
       ],
     );
     if (updated.rows[0]) {

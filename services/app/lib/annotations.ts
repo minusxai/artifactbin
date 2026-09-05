@@ -52,6 +52,8 @@ export { ANNOTATION_ANCHOR_ATTR };
 export interface AnnotationAnchor {
   /** The node's opaque annotation-anchor key. */
   key: string;
+  /** Stable source identity. `key` remains as a legacy wire alias. */
+  nodeId?: string;
   path: string;
   spanStart: number;
   spanEnd: number;
@@ -311,47 +313,40 @@ export async function createAnnotationFor(
 ): Promise<AnnotationWire | CreateAnnotationRefusal | Response | null> {
   const db = await getDb();
   const scope = annotationScope(actor);
-  const row = await scopedRow(db, scope, artifactId);
-  if (!row) return null;
-  if (row.format !== 'markup') return { refused: 'not_markup' };
   const stale = (head: { editId: string; version: number }) => ({ refused: 'stale' as const, head });
-  if (input.baseEditId && input.baseEditId !== row.edit_id) return stale({ editId: row.edit_id, version: row.version });
-
-  const source = row.source ?? '';
-  const parsed = parseJsx(source);
-  if (!parsed.ok) return { refused: 'bad_path' };
-  const node = input.nodeId
-    ? anchorIndex(source).get(input.nodeId)?.node
-    : resolveJsxNodeAtPath(parsed.nodes, bodyPathToSourcePath(source, input.bodyPath!));
-  if (!node || node.type !== 'element') return { refused: 'bad_path' };
-
-  const anchorKey = anchorKeyOf(node);
-  if (!anchorKey) return { refused: 'bad_path' };
-  const head = { version: row.version, editId: row.edit_id };
-
   const id = 'ann_' + generateInternalId();
   // Canonical and capped HERE, the one place the columns are written — the
   // door validates the range's grammar, this owns the stored form.
   const quote = input.quote === undefined ? null : canonicalQuote(input.quote) || null;
-  const inserted = await db.query<AnnotationRowDb>(
+  const made = await db.transaction(async (tx): Promise<AnnotationWire | CreateAnnotationRefusal | null> => {
+    const row = (await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')} FOR UPDATE`, [artifactId, scope.val])).rows[0];
+    if (!row) return null;
+    if (row.format !== 'markup') return { refused: 'not_markup' };
+    if (input.baseEditId && input.baseEditId !== row.edit_id) return stale({ editId: row.edit_id, version: row.version });
+    const source = row.source ?? '';
+    const parsed = parseJsx(source);
+    if (!parsed.ok) return { refused: 'bad_path' };
+    const node = input.nodeId ? anchorIndex(source).get(input.nodeId)?.node : resolveJsxNodeAtPath(parsed.nodes, bodyPathToSourcePath(source, input.bodyPath!));
+    if (!node || node.type !== 'element') return { refused: 'bad_path' };
+    const anchorKey = anchorKeyOf(node);
+    if (!anchorKey) return { refused: 'bad_path' };
+    const inserted = await tx.query<AnnotationRowDb>(
     `INSERT INTO annotations
        (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport,
         status, anchor_key, anchor_version, snippet, quote, range)
      VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, $13)
      RETURNING *`,
     [id, artifactId, input.body, author.kind, actor.tokenId, actor.userId, author.label, author.transport,
-      anchorKey, head.version, snippetOf(source.slice(node.start, node.end)),
+      anchorKey, row.version, snippetOf(source.slice(node.start, node.end)),
       quote, input.range ? JSON.stringify(input.range) : null],
-  );
-  await notify(db, artifactId, id);
-  // The row exists; the sentence is about the ARTIFACT (that is whose owner
-  // cares) and the payload names the thread. Nothing here is inside a
-  // transaction, so it is awaited like every other state change.
+    );
+    await notify(tx, artifactId, id);
+    const [wire] = await wireFor(tx, row, inserted.rows);
+    return wire ?? null;
+  });
+  if (!made || 'refused' in made) return made;
   await emit(actorSubject(actor), 'annotated', { kind: 'artifact', id: artifactId }, { annotation_id: id });
-
-  const fresh = await scopedRow(db, scope, artifactId);
-  const [wire] = fresh ? await wireFor(db, fresh, inserted.rows) : [];
-  return wire ?? null;
+  return made;
 }
 
 /**
@@ -396,7 +391,7 @@ async function wireFor(db: Queryable, head: ArtifactRow, roots: AnnotationRowDb[
       id: root.id,
       status: root.status,
       anchor: anchored
-        ? { key: root.anchor_key!, path: bodyPath!, spanStart: found.node.start, spanEnd: found.node.end }
+        ? { key: root.anchor_key!, nodeId: root.anchor_key!, path: bodyPath!, spanStart: found.node.start, spanEnd: found.node.end }
         : null,
       orphaned: !anchored,
       anchor_version: root.anchor_version,
