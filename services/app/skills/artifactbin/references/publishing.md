@@ -18,7 +18,7 @@ description: >-
 
 ## Contents
 
-Rules every document lives by · Endpoints (create, update, edit, folders, fork, read, list) · Errors.
+Rules · Endpoints · Errors.
 
 ## Rules every document lives by
 
@@ -28,6 +28,10 @@ outbound network except the same-origin endpoints it names** — `/a/<id>/query`
 writes), `/geojson/` (maps). A CDN `<script src>`, an external stylesheet or any
 other `fetch`/XHR is a 400 at publish. CSS and JS live in `<Helmet>` only.
 Max [[ maxContentBytes ]] bytes.
+
+Every BODY element has a persistent `id`; storing generates omitted IDs.
+Preserve this lifetime identity in edits/replacements; move
+the node with the same ID and never reuse a removed ID for different content.
 
 ## Endpoints
 
@@ -62,9 +66,10 @@ PUT [[ base ]]/api/artifacts/<id>
 → 200 { "id", "url", "version": <bumped> }
 ```
 
-Full replacement — the complete new content, not a diff; the previous version is
-archived, omitted `title`/`description` keep their values, and it is also where
-`"visibility"` goes. Optionally `expectedVersion` (from your last
+`update_artifact` is full replacement, not a diff. It archives the previous
+version; omitted `title`/`description` keep their values, supplied metadata
+changes them, and no metadata is inferred from the body. Optionally
+`expectedVersion` (from your last
 read): a concurrent edit then answers `409 version_conflict` with its
 `currentVersion` instead of overwriting — re-read, merge, retry.
 
@@ -98,20 +103,18 @@ POST [[ base ]]/api/artifacts/<id>/edits
 → 200 { "id", "version", "edit_id": "<new>", "markup", ... }
 ```
 
-Like editing a file: `old_string` must appear EXACTLY ONCE in the version named
-by `edit_id`. Prefer it over PUT: smaller, and A HUMAN MAY BE EDITING THE SAME
-PAGE LIVE. `edit_id` is opaque, returned by every create/read/edit — never
-invent one. Concurrency is per NODE, so most edits just apply:
+`edit_artifact` is targeted: one pair XOR nonempty `edits` (max 64).
+[Versions](publishing-versions.md) has atomic rules and a move example.
+Prefer it over PUT. Never invent `edit_id`; use the last response's.
 
 | Result | Meaning | What to do |
 |---|---|---|
 | 200 | Applied — even if someone edited a DIFFERENT part | Use the returned `edit_id` |
 | 409 `doc_changed` | Someone changed the SAME part | Re-anchor on the returned `edit_id` + `source`, retry |
 | 409 `stale_edit_id` | That `edit_id` is unknown (too old, or never read) | `GET` it, start from its `edit_id` |
-| 400 `bad_diff` | `old_string` matched zero or many times | Pick a longer unique anchor |
+| 400 `bad_diff` | A pair is invalid | Fix the reported `edit_index`; nothing was written |
 
-You may also set `title`, `theme` or `colorMode` in the same request, with or
-without a text change: document-level, so they never conflict.
+Stale batches rebase over unrelated edits.
 
 ### Fork an artifact
 

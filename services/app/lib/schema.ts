@@ -197,6 +197,7 @@ const ARTIFACT_EDITS: Table = {
     { name: 'inserted', type: 'TEXT', notNull: true },
     { name: 'span_start', type: 'INTEGER', notNull: true },
     { name: 'span_end', type: 'INTEGER', notNull: true },
+    { name: 'changes', type: 'JSONB' },
     // Who made the splice — NULL on rows that predate attribution.
     { name: 'actor_user_id', type: 'TEXT' },
     { name: 'actor_token_id', type: 'TEXT' },
@@ -205,6 +206,44 @@ const ARTIFACT_EDITS: Table = {
   primaryKey: ['seq'],
   uniques: [['edit_id']],
   indexes: [{ name: 'idx_artifact_edits_artifact_seq', columns: ['artifact_id', 'seq'] }],
+};
+
+/** Lifetime identity ledger: source ids are never reused within an artifact. */
+const ARTIFACT_SOURCE_IDS: Table = {
+  name: 'artifact_source_ids',
+  columns: [
+    { name: 'artifact_id', type: 'TEXT', notNull: true },
+    { name: 'source_id', type: 'TEXT', notNull: true },
+    { name: 'provenance', type: 'TEXT', notNull: true },
+    { name: 'first_version', type: 'INTEGER', notNull: true },
+    { name: 'retired_version', type: 'INTEGER' },
+  ],
+  primaryKey: ['artifact_id', 'source_id'],
+};
+
+/** Explicit migration map from retired annotation keys to source identity. */
+const ARTIFACT_NODE_ALIASES: Table = {
+  name: 'artifact_node_aliases',
+  columns: [
+    { name: 'artifact_id', type: 'TEXT', notNull: true },
+    { name: 'legacy_key', type: 'TEXT', notNull: true },
+    { name: 'source_id', type: 'TEXT', notNull: true },
+    { name: 'source_path', type: 'TEXT', notNull: true },
+    { name: 'created_version', type: 'INTEGER', notNull: true },
+  ],
+  primaryKey: ['artifact_id', 'legacy_key'],
+};
+
+const NODE_IDENTITY_MIGRATION_JOBS: Table = {
+  name: 'node_identity_migration_jobs',
+  columns: [
+    { name: 'name', type: 'TEXT', notNull: true },
+    { name: 'version', type: 'INTEGER', notNull: true },
+    { name: 'cursor', type: 'TEXT' },
+    { name: 'completed_at', type: 'TIMESTAMPTZ' },
+    { name: 'updated_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
+  ],
+  primaryKey: ['name'],
 };
 
 /**
@@ -455,7 +494,7 @@ const RELATIONS: Table = {
  * re-qualify (a rename's DO block names its own schema twice) is exactly what
  * that indirection could not survive.
  */
-export const TABLES: Table[] = [USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS];
+export const TABLES: Table[] = [USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);

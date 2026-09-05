@@ -85,8 +85,8 @@ describe('a document stored before the nesting rule existed', () => {
     expect(got.markup).toContain('Second para.');
     // The write is what migrates the row: canonical from here on.
     expect(got.markup).not.toContain('<p className="mx-auto mt-7 max-w-2xl text-justify">');
-    expect(got.markup).toContain('<div className="mx-auto mt-7 max-w-2xl text-justify">');
-    expect(got.markup).toContain('<h1 className="text-5xl">Built something cool?</h1>');
+    expect(got.markup).toMatch(/<div className="mx-auto mt-7 max-w-2xl text-justify" id="[^"]+">/);
+    expect(got.markup).toMatch(/<h1 className="text-5xl" id="[^"]+">Built something cool\?<\/h1>/);
   });
 
   it('a second edit is ordinary — the migration is not paid twice', async () => {
@@ -115,7 +115,7 @@ describe('a document stored before the nesting rule existed', () => {
      */
     const mintRes = await mintTokenRoute(request('/api/tokens', { method: 'POST', json: { name: 't' }, headers: { 'x-shared-secret': 'test-secret' } }));
     const { token } = await mintRes.json();
-    const clean = '<div className="wrap"><h1>T</h1><p>Only words here.</p></div>';
+    const clean = '<div className="wrap" id="root"><h1 id="heading">T</h1><p id="body">Only words here.</p></div>';
     const created = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: { title: 'clean', markup: clean } }));
     const doc = await created.json();
     // Clean markup needs no rewriting — the write states that rather than echoing.
@@ -123,15 +123,15 @@ describe('a document stored before the nesting rule existed', () => {
     expect(storedMarkup(doc, clean)).toBe(clean);
 
     const res = await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: { edit_id: doc.edit_id, source: clean.replace('<p>Only words here.</p>', '<p className="lede"><div>Now a block.</div></p>') } }),
+      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: { edit_id: doc.edit_id, source: clean.replace('<p id="body">Only words here.</p>', '<p className="lede" id="body"><div id="block">Now a block.</div></p>') } }),
       params({ id: doc.id }),
     );
     expect(res.status).toBe(200);
     const out = await res.json();
-    expect(out.markup).toContain('<div className="lede"><div>Now a block.</div></div>');
+    expect(out.markup).toContain('<div className="lede" id="body"><div id="block">Now a block.</div></div>');
     expect(out.markup).not.toContain('<p className="lede">');
     // The rest of the document is untouched by the rewrite.
-    expect(out.markup).toContain('<h1>T</h1>');
+    expect(out.markup).toContain('<h1 id="heading">T</h1>');
   });
 
   it('a narrow edit elsewhere in the document still applies', async () => {
@@ -149,7 +149,7 @@ describe('a document stored before the nesting rule existed', () => {
     // …and it migrates the row too: the old_string/new_string form splices the
     // stored text, but the accepted result is re-canonicalized before it lands,
     // so one write of any kind is enough to retire the fault permanently.
-    expect(out.markup).toContain('<div className="mx-auto mt-7 max-w-2xl text-justify">');
+    expect(out.markup).toMatch(/<div className="mx-auto mt-7 max-w-2xl text-justify" id="[^"]+">/);
     expect(out.markup).not.toContain('<p className="mx-auto mt-7 max-w-2xl text-justify">');
   });
 });

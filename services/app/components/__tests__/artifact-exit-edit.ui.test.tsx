@@ -14,8 +14,23 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 
+const surfaceSpies = vi.hoisted(() => ({
+  flush: vi.fn(async () => {}),
+  annotationProps: [] as Array<Record<string, unknown>>,
+}));
+
 vi.mock('@/components/ArtifactEditor', () => ({
-  default: () => <div aria-label="Editor stub" />,
+  default: ({ flushRef }: { flushRef?: { current: null | (() => Promise<void>) } }) => {
+    if (flushRef) flushRef.current = surfaceSpies.flush;
+    return <div aria-label="Editor stub" />;
+  },
+}));
+
+vi.mock('@/components/AnnotationLayer', () => ({
+  default: (props: Record<string, unknown>) => {
+    surfaceSpies.annotationProps.push(props);
+    return <div aria-label="Annotations stub" />;
+  },
 }));
 
 import ArtifactSurface, { type ArtifactSurfaceProps } from '../ArtifactSurface';
@@ -34,6 +49,8 @@ class FakeEventSource {
 }
 
 beforeEach(() => {
+  surfaceSpies.flush.mockClear();
+  surfaceSpies.annotationProps.length = 0;
   vi.stubGlobal('EventSource', FakeEventSource);
   vi.stubGlobal('fetch', (async () => { throw new Error('unexpected fetch'); }) as unknown as typeof fetch);
   const windows = new WeakMap<HTMLIFrameElement, Window>();
@@ -77,6 +94,16 @@ const goEdit = () => act(() => { window.location.hash = '#edit'; window.dispatch
 const leaveEdit = () => act(() => { window.location.hash = ''; window.dispatchEvent(new HashChangeEvent('hashchange')); });
 
 describe('coming back from edit mode', () => {
+  it('never gives comment creation an editor drain, while normal edit exit still flushes', async () => {
+    render(<ArtifactShell role="owner"><ArtifactSurface {...props()} /></ArtifactShell>);
+    expect(surfaceSpies.annotationProps.at(-1)).not.toHaveProperty('beforeCreate');
+    goEdit();
+    await waitFor(() => expect(screen.queryByLabelText('Editor stub')).not.toBeNull());
+    expect(surfaceSpies.flush).not.toHaveBeenCalled();
+    leaveEdit();
+    await waitFor(() => expect(surfaceSpies.flush).toHaveBeenCalledTimes(1));
+  });
+
   it('keeps the SAME frame element through edit and back — a mode, not a reload', async () => {
     vi.useFakeTimers();
     try {

@@ -16,7 +16,7 @@
  * from inside the document, which is what lets it live in an opaque-origin
  * sandbox.
  */
-import { cloneElement, createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { cloneElement, createContext, useContext, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { CSSProperties, ReactElement, ReactNode } from 'react';
 import type { JsxElement } from '@/lib/jsx';
 import type { ComponentType } from 'react';
@@ -45,6 +45,7 @@ import { Files } from '@/components/kit/files';
 import { GridItemContext } from '@/components/kit/grid';
 import { DateControl, SegmentedControl, SelectControl, SliderControl, SwitchControl, normalizeControlOptions, num, shellRest, str } from '@/components/kit/controls';
 import { parseColumnSpecs, parseSortSpec, parseTableHeight, type SortSpec } from '@/lib/story/data-table';
+import { createPreviewIdentityAllocator } from './preview-identity';
 
 export type { StoryIslandData } from './contract';
 import type { StoryIslandData } from './contract';
@@ -427,6 +428,18 @@ function ButtonAdapter(props: Record<string, unknown>) {
   );
 }
 
+/**
+ * The authored identity that belongs on an adapter's existing outer DOM
+ * target. Keep this deliberately narrow: embed props include data/viz objects
+ * and binding strings that must never be spread onto a host element.
+ */
+function runtimeTargetIdentity(props: Record<string, unknown>): { id?: string; [AST_PATH_ATTR]?: string } {
+  return {
+    ...(typeof props.id === 'string' ? { id: props.id } : {}),
+    ...(typeof props[AST_PATH_ATTR] === 'string' ? { [AST_PATH_ATTR]: props[AST_PATH_ATTR] } : {}),
+  };
+}
+
 function QuestionAdapter(props: Record<string, unknown>) {
   const ctx = useContext(RuntimeEmbedContext);
   // The SAME sizing contract as the editor canvas (StoryJsxBody) — a chart
@@ -441,14 +454,11 @@ function QuestionAdapter(props: Record<string, unknown>) {
   const busy = table !== null && ctx.pending.has(table);
   return (
     <div
+      {...runtimeTargetIdentity(props)}
       aria-label="Question embed"
       aria-busy={busy}
       className={busy ? 'mx-busy' : undefined}
       style={{ width: '100%', height: inGridItem ? '100%' : `${h}px` }}
-      /* A chart is most of a screen: a reader parked on one is parked HERE, and
-         without the stamp the anchor could only name the wrapper around the
-         whole document (lib/story/scroll-anchor). */
-      {...{ [AST_PATH_ATTR]: props[AST_PATH_ATTR] as string | undefined }}
     >
       <QuestionEmbed
         data={props.data}
@@ -471,7 +481,7 @@ function NumberAdapter(props: Record<string, unknown>) {
   // The figure stays while its query re-runs (no flash to a dash); the wrapper
   // says so — dimmed by the embed CSS, announced by aria-busy.
   return (
-    <span aria-busy={busy} className={busy ? 'mx-busy-inline' : undefined}>
+    <span {...runtimeTargetIdentity(props)} aria-busy={busy} className={busy ? 'mx-busy-inline' : undefined}>
       <InlineNumber
         data={props.data}
         col={typeof props.col === 'string' ? props.col : undefined}
@@ -539,7 +549,7 @@ function DataTableAdapter(props: Record<string, unknown>) {
     const error = name ? ctx.state.errors[name] : undefined;
     const pending = name !== null && ctx.pending.has(name);
     return (
-      <div aria-label="DataTable embed" className="flex w-full flex-col items-center justify-center gap-2.5 rounded-md border border-border p-4 text-sm text-muted-foreground" style={wrapper}>
+      <div {...runtimeTargetIdentity(props)} aria-label="DataTable embed" className="flex w-full flex-col items-center justify-center gap-2.5 rounded-md border border-border p-4 text-sm text-muted-foreground" style={wrapper}>
         {/* Pending speaks the platform loading lockup (see QuestionEmbed's `waiting`). */}
         {pending ? (
           <>
@@ -558,7 +568,7 @@ function DataTableAdapter(props: Record<string, unknown>) {
   const shown = paged.sort && paged.rows.length ? paged.rows : [...table.rows, ...paged.rows];
   const busy = name !== null && ctx.pending.has(name);
   return (
-    <div aria-label="DataTable embed" aria-busy={busy} className={busy ? 'mx-busy' : undefined} style={wrapper}>
+    <div {...runtimeTargetIdentity(props)} aria-label="DataTable embed" aria-busy={busy} className={busy ? 'mx-busy' : undefined} style={wrapper}>
       <DataTable
         rows={shown}
         columns={table.columns}
@@ -651,14 +661,20 @@ const PREVIEW_REGISTRY: Record<string, ComponentType<Record<string, unknown>>> =
   Video: PREVIEW_EMBED('video'),
 };
 
-function SlideRail({ slides, active, onGo, onRename }: {
+function SlideRail({ slides, documentNodes, active, onGo, onRename }: {
   slides: DiscoveredSlide[];
+  documentNodes: StoryRuntimeAppProps['nodes'];
   active: number;
   onGo: (index: number) => void;
   /** Present only while the owner is editing: renaming is the rail's one edit. */
   onRename?: (path: string, title: string) => void;
 }) {
   const [renaming, setRenaming] = useState<string | null>(null);
+  const instanceKey = useId();
+  const allocatePreviewIdentity = useMemo(
+    () => createPreviewIdentityAllocator(documentNodes, instanceKey),
+    [documentNodes, instanceKey],
+  );
   return (
     <nav className="mx-rail" aria-label="Slides">
       {slides.map((slide) => (
@@ -707,7 +723,10 @@ function SlideRail({ slides, active, onGo, onRename }: {
                 `--mx-vh` is pinned locally: a slide sizes itself against the
                 viewport, and in here the viewport is this box. */}
             <div style={{ ['--mx-vh' as string]: '800px' }}>
-              {renderStoryNodes([slide.node], { components: PREVIEW_REGISTRY })}
+              {renderStoryNodes([slide.node], {
+                components: PREVIEW_REGISTRY,
+                decorateElement: allocatePreviewIdentity([slide.node], slide.path),
+              })}
             </div>
           </span>
         </button>
@@ -984,7 +1003,7 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, t
 
   return withGlyphs(
     <div className="mx-deck">
-      <SlideRail slides={slides} active={active} onGo={go} onRename={onSlideRename} />
+      <SlideRail slides={slides} documentNodes={nodes} active={active} onGo={go} onRename={onSlideRename} />
       <div className="mx-doc">{body}</div>
       <PresentBar active={active} total={slides.length} onGo={go} />
     </div>,

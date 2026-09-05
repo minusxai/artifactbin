@@ -44,13 +44,13 @@ describe('the bearer and browser replace paths answer alike', () => {
   it('both return the same FIELDS on a successful replace', async () => {
     const a = await subject();
     const viaBearer = await (await putBearer(
-      request(`/api/artifacts/${a.id}`, { method: 'PUT', token: a.token, json: { markup: '<h1>bearer</h1>' } }),
+      request(`/api/artifacts/${a.id}`, { method: 'PUT', token: a.token, json: { markup: '<h1 id="heading">bearer</h1>' } }),
       params({ id: a.id }),
     )).json();
 
     const b = await subject();
     const viaBrowser = await (await putBrowser(
-      request(`/api/my/artifacts/${b.id}`, { method: 'PUT', cookie: b.cookie, json: { markup: '<h1>browser</h1>' } }),
+      request(`/api/my/artifacts/${b.id}`, { method: 'PUT', cookie: b.cookie, json: { markup: '<h1 id="heading">browser</h1>' } }),
       params({ id: b.id }),
     )).json();
 

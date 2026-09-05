@@ -35,11 +35,15 @@ type CreateBodyResult = { input: CreateAnnotationInput } | { error: 'invalid_ann
 
 function parseCreateBody(body: Record<string, unknown>): CreateBodyResult {
   const invalid = { error: 'invalid_annotation_body' } as const;
-  if (typeof body.path !== 'string' || !/^\d+(\.\d+)*$/.test(body.path)) return invalid;
-  if (typeof body.edit_id !== 'string' || body.edit_id.length === 0) return invalid;
+  const hasNode = typeof body.node_id === 'string' && body.node_id.length > 0;
+  const hasLegacy = typeof body.path === 'string' && /^\d+(\.\d+)*$/.test(body.path)
+    && typeof body.edit_id === 'string' && body.edit_id.length > 0;
+  if (!hasNode && !hasLegacy) return invalid;
   if (typeof body.body !== 'string' || body.body.trim().length === 0) return invalid;
   if (body.quote !== undefined && typeof body.quote !== 'string') return invalid;
-  const input: CreateAnnotationInput = { bodyPath: body.path, baseEditId: body.edit_id, body: body.body };
+  const input: CreateAnnotationInput = { body: body.body };
+  if (hasNode) input.nodeId = body.node_id as string;
+  else { input.bodyPath = body.path as string; input.baseEditId = body.edit_id as string; }
   if (typeof body.quote === 'string') input.quote = body.quote;
   if (body.range !== undefined && body.range !== null) {
     const range = parseAnnotationRange(body.range);

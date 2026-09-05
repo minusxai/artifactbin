@@ -18,10 +18,10 @@ useAppHarness();
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
-const JSX_DOC = `<div data-design="tw" className="@container w-full p-8">
-  <h1 className="text-4xl font-bold">Quarterly Revenue</h1>
-  <Card className="mt-6"><CardHeader><CardTitle>MRR</CardTitle></CardHeader>
-    <CardContent><p className="text-2xl">$1.2M</p></CardContent></Card>
+const JSX_DOC = `<div data-design="tw" className="@container w-full p-8" id="root">
+  <h1 className="text-4xl font-bold" id="heading">Quarterly Revenue</h1>
+  <Card className="mt-6" id="card"><CardHeader id="card-head"><CardTitle id="card-title">MRR</CardTitle></CardHeader>
+    <CardContent id="card-body"><p className="text-2xl" id="mrr">$1.2M</p></CardContent></Card>
 </div>`;
 
 describe('jsx tier publish', () => {

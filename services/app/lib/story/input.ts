@@ -105,6 +105,8 @@ const imageTitleFromUrl = (url: string): string | null => {
 };
 
 export interface ContentInputCtx {
+  /** Identity normalization after caller-coordinate validation, before compilation. */
+  normalizeMarkup?: (source: string) => string;
   /**
    * MAY THIS BODY MAKE A FOLDER — true only where a row is being CREATED.
    *

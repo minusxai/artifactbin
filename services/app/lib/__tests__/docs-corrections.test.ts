@@ -68,19 +68,12 @@ describe('the publishing skill', () => {
     expect(quote).toContain('selected');
     expect(doc).toContain('quote_found');
   });
-  /*
-   * ADDED (docs phase). The ONE rule the anchor design leaves resting on the
-   * agent: an anchor lives in the markup, and a regenerated document that drops
-   * the attribute orphans every comment on that node. CLAUDE.md has said for
-   * two phases that this file pins that sentence — it did not, and a guarantee
-   * nothing checks is how the sentence goes missing in the next edit that needs
-   * a few bytes back.
-   */
-  it('§1.9 the anchor attribute is preserved, moved with the content, and never authored', () => {
+  it('§1.9 current comments use persistent IDs and legacy anchors are preservation-only', () => {
     const text = doc.replace(/\s+/g, ' ');
-    expect(text).toContain('That attribute IS the anchor. Preserve it when you edit');
-    expect(text).toContain('move it with the content');
-    expect(text).toContain('Never add, change, or reuse `data-annotation-anchor` values yourself.');
+    expect(text).toContain("sidecar relations to the node's persistent BODY `id`");
+    expect(text).toContain('preserve an existing value with its element');
+    expect(text).toContain('never author, change or reuse one');
+    expect(text).toContain('New comments do not add it');
   });
   /*
    * ADDED (F8). Forking became an AGENT verb, and the thing an agent needs is

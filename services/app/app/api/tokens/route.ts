@@ -8,23 +8,9 @@
  * right now. Failures are a uniform 404: for anyone without the secret, the
  * endpoint does not exist. Unset ⇒ it does not exist for anyone.
  */
-import crypto from 'crypto';
-import { env } from '@/lib/config';
+import { hasAdminCredential } from '@/lib/admin-auth';
 import { json } from '@/lib/http';
-import { MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, mintToken, sha256 } from '@/lib/tokens';
-
-/** True iff the request carries the admin shared secret (`x-shared-secret`, or the same value as a Bearer). */
-export function hasAdminCredential(request: Request): boolean {
-  const secret = env('ADMIN', 'SECRET');
-  if (!secret) return false;
-  const bearer = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '').trim() ?? '';
-  const presented = request.headers.get('x-shared-secret') ?? bearer;
-  if (!presented) return false;
-  // Compared as timingSafeEqual over sha256 of both sides so length can't leak.
-  const a = Buffer.from(sha256(presented), 'hex');
-  const b = Buffer.from(sha256(secret), 'hex');
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
-}
+import { MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, mintToken } from '@/lib/tokens';
 
 export async function POST(request: Request) {
   if (!hasAdminCredential(request)) return json({ error: 'not_found' }, 404);

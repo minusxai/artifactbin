@@ -19,6 +19,8 @@
  * `url(&quot;…&quot;)` can't smuggle past it; the strip itself removes the ORIGINAL text.
  */
 
+import { parseJsx, serializeJsx } from '@/lib/jsx';
+
 /** Tailwind utilities that compile to a banned position (variant/important forms handled). */
 const BANNED_POSITION_UTILITIES = ['fixed', 'sticky'] as const;
 
@@ -191,8 +193,21 @@ const STYLE_ATTR_RE = /(\bstyle\s*=\s*)("([^"]*)"|'([^']*)')/gi;
  */
 export function sanitizeStoryMarkupCss(markup: string): string {
   return markup
-    .replace(STYLE_BLOCK_RE, (_, open: string, css: string, close: string) =>
-      `${open}${sanitizeCssText(css)}${close}`)
+    .replace(STYLE_BLOCK_RE, (_, open: string, css: string, close: string) => {
+      // JSX string expressions are a container, not CSS syntax. Sanitizing
+      // their braces/quotes as CSS can produce a document that cannot reparse.
+      const parsed = parseJsx(`${open}${css}${close}`);
+      const style = parsed.ok ? parsed.nodes[0] : null;
+      if (style?.type === 'element' && style.children.some(child => child.type === 'expression')
+        && style.children.every(child => child.type === 'text' || (child.type === 'expression' && child.value.static && typeof child.value.json === 'string'))) {
+        for (const child of style.children) {
+          if (child.type === 'expression' && child.value.static && typeof child.value.json === 'string') child.value = { static: true, json: sanitizeCssText(child.value.json) };
+          else if (child.type === 'text') child.value = sanitizeCssText(child.value);
+        }
+        return serializeJsx([style]);
+      }
+      return `${open}${sanitizeCssText(css)}${close}`;
+    })
     .replace(STYLE_ATTR_RE, (_, prefix: string, _quoted: string, dq: string | undefined, sq: string | undefined) => {
       const value = dq ?? sq ?? '';
       const quote = dq !== undefined ? '"' : "'";

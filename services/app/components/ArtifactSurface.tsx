@@ -1384,13 +1384,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             frameRef={frameRef}
             sessionNonce={sessionNonce}
             railOpen={railOpen}
-            currentEditId={live?.editId ?? editId}
             liveAnnotations={liveAnnotations}
             showViewComments={showViewComments}
             onRailOpenChange={setRailOpen}
             initialSelection={initialAnnotationSelection}
             topOffset={0}
-            beforeCreate={drainEditor}
             onAnnotationsChange={setLayerAnnotations}
           />
         )}
