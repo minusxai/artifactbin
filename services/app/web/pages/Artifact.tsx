@@ -10,7 +10,7 @@ import ArtifactShell from '@/components/ArtifactShell';
 import ArtifactSurface from '@/components/ArtifactSurface';
 import { NotFoundPage } from './NotFound';
 
-type Page = { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; surface: Parameters<typeof ArtifactSurface>[0] };
+type Page = { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; like?: { liked: boolean; count: number }; surface: Parameters<typeof ArtifactSurface>[0] };
 
 export function ArtifactPage({ id: given }: { id?: string } = {}) {
   const params = useParams();
@@ -39,7 +39,11 @@ export function ArtifactPage({ id: given }: { id?: string } = {}) {
           string (`?$region=west`); the surface forwards its `$` params into
           the document it frames. From the ROUTER, never `window.location` —
           nothing may read that during render. */}
-      <ArtifactSurface {...page.surface} search={search} />
+      {/* `like` rides beside `surface` rather than inside it: the surface's own
+          props are what the DOCUMENT is, and this is what the viewer is to
+          it — one fetch either way, and the export capture (which has no
+          viewer) never carries it. */}
+      <ArtifactSurface {...page.surface} search={search} {...(page.like ? { like: page.like } : {})} />
     </ArtifactShell>
   );
 }

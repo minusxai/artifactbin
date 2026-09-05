@@ -9,6 +9,7 @@ import crypto from 'crypto';
 // instead of going through the row-loading seam, so each one names the gate.
 import { LIVE_ARTIFACT_SQL, type ArtifactSummary, type ShareRole } from './artifacts';
 import { getDb } from './db';
+import { emit } from './events';
 import { generateInternalId } from './ids';
 import { LIVE_TOKEN_SQL, sha256 } from './tokens';
 
@@ -192,12 +193,18 @@ async function claimWhere(
   value: string,
 ): Promise<{ tokenId: string; claimedArtifacts: number } | null> {
     const db = await getDb();
-    return db.transaction(async (tx) => {
+    /*
+     * The NAME rides out of the transaction alongside the claim, purely so the
+     * log's sentence reads as something a person recognises ("cli-one") rather
+     * than an opaque id. It is stripped off again below: the callers' contract
+     * is unchanged.
+     */
+    const claimed = await db.transaction(async (tx) => {
       // The token table is the app's own: attach and backfill in ONE
       // transaction, so "token attached" and "artifacts owned" commit together.
       const token = (
-        await tx.query<{ id: string; user_id: string | null }>(
-          `SELECT id, user_id FROM tokens WHERE ${where} AND deleted_at IS NULL`,
+        await tx.query<{ id: string; user_id: string | null; name: string | null }>(
+          `SELECT id, user_id, name FROM tokens WHERE ${where} AND deleted_at IS NULL`,
           [value],
         )
       ).rows[0];
@@ -214,8 +221,14 @@ async function claimWhere(
         'UPDATE artifacts SET user_id = $1 WHERE token_id = $2 AND user_id IS NULL',
         [userId, token.id],
       );
-      return { tokenId: token.id, claimedArtifacts: backfilled.rowCount };
+      return { tokenId: token.id, claimedArtifacts: backfilled.rowCount, name: token.name };
     });
+    if (!claimed) return null;
+    // After the transaction, never inside it: PGLite serialises the op queue
+    // behind an open one and the log writes to the same database.
+    const { name, ...claim } = claimed;
+    await emit({ kind: 'user', id: userId }, 'claimed', { kind: 'token', id: claim.tokenId }, { name });
+    return claim;
 }
 
 /**
@@ -422,9 +435,13 @@ export async function listAccountTokenRows(userId: string): Promise<UserTokenRow
 /** Soft-revoke one of YOUR OWN live tokens. False for foreign/unknown/already-revoked. */
 export async function revokeUserToken(userId: string, tokenId: string): Promise<boolean> {
   const db = await getDb();
-  const r = await db.query(
-    'UPDATE tokens SET deleted_at = now() WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
+  const r = await db.query<{ name: string | null }>(
+    'UPDATE tokens SET deleted_at = now() WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL RETURNING name',
     [tokenId, userId],
   );
-  return r.rowCount > 0;
+  const row = r.rows[0];
+  if (!row) return false;
+  // The owner is the one acting; the same statement hands back the name.
+  await emit({ kind: 'user', id: userId }, 'revoked', { kind: 'token', id: tokenId }, { name: row.name });
+  return true;
 }

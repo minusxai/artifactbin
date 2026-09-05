@@ -1,6 +1,8 @@
 /**
- * Fire-and-forget usage analytics — the only module that touches
- * `analytics_events`.
+ * Fire-and-forget usage analytics — the only module that WRITES
+ * `analytics_events`, and, since the log arrived, only a writer: the dashboard
+ * reads its view counts out of `lib/feed` (the events log, with this table as
+ * the fallback while it still exists).
  *
  * The contract that matters: `trackEvent` NEVER rejects and never throws. It
  * is called as `void trackEvent(...)` from request paths, and an unhandled
@@ -18,18 +20,21 @@
  * ever gate on this value.
  *
  * The `visitor` column is a daily-rotating fingerprint —
- * sha256(day:ip:ua:ANALYTICS_SECRET) — its OWN secret (ANALYTICS__SECRET, falling back to the auth secret), so rotating auth never rewrites every "views" number — and every "views" number this module
- * reports is COUNT(DISTINCT visitor): unique people per day, so a refresh
+ * sha256(day:ip:ua:ANALYTICS_SECRET) — its OWN secret (ANALYTICS__SECRET, falling back to the auth secret), so rotating auth never rewrites every "views" number — and every "views" number counted off
+ * this column (lib/users' per-artifact totals, lib/feed's daily series) is
+ * COUNT(DISTINCT visitor): unique people per day, so a refresh
  * never inflates a count. No raw IP or UA is ever stored, the embedded day
  * kills cross-day identity, and legacy NULL-visitor rows coalesce to their
- * own seq (each counts once, undedupable). Known trade: one office NAT +
+ * own seq — their own row id once copied into the log (each counts once, undedupable). Known trade: one office NAT +
  * one browser build = one visitor that day.
  */
 import { createHash } from 'crypto';
 import { currentHeaders } from './request-context';
+import type { EventVerb } from '@artifactbin/contracts';
 import { forwardedFor, identifyClient } from '@/lib/client-identity';
 import { ANALYTICS_SECRET, TRUSTED_PROXY_HOPS } from '@/lib/config';
 import { getDb } from '@/lib/db';
+import { emit, type EventSubject } from '@/lib/events';
 
 export type AnalyticsEvent =
   | 'view'
@@ -45,40 +50,57 @@ export type AnalyticsEvent =
   | 'fork'
   | 'delete';
 
+/**
+ * The same moment, said in the log's words. `sse_connect` is not a moment
+ * anyone reads back, so it stays a row and never becomes a sentence.
+ */
+const EVENT_VERBS_BY_ANALYTICS = {
+  view: 'viewed',
+  export: 'exported',
+  create: 'created',
+  update: 'updated',
+  edit: 'edited',
+  mutate: 'mutated',
+  revert: 'reverted',
+  fork: 'forked',
+  delete: 'deleted',
+  sse_connect: null,
+} as const satisfies Record<AnalyticsEvent, EventVerb<'artifact'> | null>;
+
 /** Fire-and-forget: never rejects. Callers write `void trackEvent(...)`; tests may await it. */
 export async function trackEvent(
   event: AnalyticsEvent,
   artifactId: string,
-  opts: { userId?: string | null } = {},
+  opts: { userId?: string | null; forkId?: string | null } = {},
 ): Promise<void> {
+  let client: string | null = null;
+  let visitor: string | null = null;
   try {
-    let client: string | null = null;
-    let visitor: string | null = null;
-    try {
-      const h = await currentHeaders();
-      if (!h) throw new Error('off-request');
-      const ua = h.get('user-agent');
-      client = identifyClient({ userAgent: ua }).harness;
-      // The visitor key: a DAILY-ROTATING salted hash, never the raw IP or UA
-      // (Plausible-style). Same person, same day → same key, so a refresh is
-      // not a new view; the embedded day means no cross-day identity exists,
-      // and the secret keeps the tiny IPv4 space from being brute-forced back
-      // out of the hash. The user id joins the hash when present, so two
-      // accounts behind one NAT + browser still count as two people. The IP is
-      // the hop the nearest TRUSTED proxy appended (lib/client-identity
-      // forwardedFor) — reading the caller-supplied head instead would let a
-      // header split one visitor into unlimited distinct ones.
-      const ip = forwardedFor(h, TRUSTED_PROXY_HOPS);
-      if (ip || ua) {
-        const day = new Date().toISOString().slice(0, 10);
-        visitor = createHash('sha256')
-          .update(`${day}:${ip}:${ua ?? ''}:${opts.userId ?? ''}:${ANALYTICS_SECRET}`)
-          .digest('hex')
-          .slice(0, 32);
-      }
-    } catch {
-      // Outside a Next request scope (tests, detached work) — no UA to read.
+    const h = await currentHeaders();
+    if (!h) throw new Error('off-request');
+    const ua = h.get('user-agent');
+    client = identifyClient({ userAgent: ua }).harness;
+    // The visitor key: a DAILY-ROTATING salted hash, never the raw IP or UA
+    // (Plausible-style). Same person, same day → same key, so a refresh is
+    // not a new view; the embedded day means no cross-day identity exists,
+    // and the secret keeps the tiny IPv4 space from being brute-forced back
+    // out of the hash. The user id joins the hash when present, so two
+    // accounts behind one NAT + browser still count as two people. The IP is
+    // the hop the nearest TRUSTED proxy appended (lib/client-identity
+    // forwardedFor) — reading the caller-supplied head instead would let a
+    // header split one visitor into unlimited distinct ones.
+    const ip = forwardedFor(h, TRUSTED_PROXY_HOPS);
+    if (ip || ua) {
+      const day = new Date().toISOString().slice(0, 10);
+      visitor = createHash('sha256')
+        .update(`${day}:${ip}:${ua ?? ''}:${opts.userId ?? ''}:${ANALYTICS_SECRET}`)
+        .digest('hex')
+        .slice(0, 32);
     }
+  } catch {
+    // Outside a Next request scope (tests, detached work) — no UA to read.
+  }
+  try {
     const db = await getDb();
     await db.query('INSERT INTO analytics_events (event, artifact_id, user_id, client, visitor) VALUES ($1, $2, $3, $4, $5)', [
       event,
@@ -90,79 +112,23 @@ export async function trackEvent(
   } catch {
     // Analytics must never take a request down with it.
   }
-}
-
-/** How many days of history the dashboard splines show. */
-export const VIEW_SERIES_DAYS = 30;
-
-/**
- * Daily view counts per artifact across everything the user owns, zero-filled
- * to exactly `days` buckets (oldest → newest, last bucket = today UTC).
- * Artifacts with no views in the window are absent from the map.
- */
-export async function viewSeriesByUser(
-  userId: string,
-  days: number = VIEW_SERIES_DAYS,
-): Promise<Map<string, number[]>> {
-  const db = await getDb();
-  // to_char pins the bucket key to a plain UTC date string — TIMESTAMPTZ
-  // round-trips as driver-dependent Date/string shapes, a text key doesn't.
-  // AT TIME ZONE 'UTC' pins the DAY itself: bare date_trunc cuts in the
-  // session timezone (PGLite inherits the machine's), and the JS zero-fill
-  // below counts UTC days — on a PDT laptop the two disagreed from 5pm to
-  // midnight, and "today" came back empty.
-  const r = await db.query<{ artifact_id: string; day: string; n: number }>(
-    `SELECT e.artifact_id, to_char(date_trunc('day', e.created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
-       COUNT(DISTINCT COALESCE(e.visitor, e.seq::text))::int AS n
-     FROM analytics_events e
-     JOIN artifacts a ON a.id = e.artifact_id
-     WHERE a.user_id = $1 AND e.event = 'view' AND e.created_at > now() - ($2::int * interval '1 day')
-     GROUP BY e.artifact_id, day`,
-    [userId, days],
-  );
-  const today = Date.parse(new Date().toISOString().slice(0, 10));
-  const series = new Map<string, number[]>();
-  for (const row of r.rows) {
-    const age = Math.round((today - Date.parse(row.day)) / 86_400_000);
-    const idx = days - 1 - age;
-    if (idx < 0 || idx >= days) continue;
-    const buckets = series.get(row.artifact_id) ?? new Array<number>(days).fill(0);
-    buckets[idx] = row.n;
-    series.set(row.artifact_id, buckets);
+  // The counter row and the sentence are INDEPENDENT telemetry, dual-written
+  // for one release: neither one failing may stop the other, and `emit` itself
+  // never rejects.
+  try {
+    const verb = EVENT_VERBS_BY_ANALYTICS[event];
+    if (!verb) return;
+    const visitorSubject: EventSubject | null = visitor ? { kind: 'visitor', id: visitor } : null;
+    // A VIEW's subject is ALWAYS the daily visitor hash, signed in or not —
+    // the view counts dedupe on it, and the account rides in the payload.
+    const subject: EventSubject | null =
+      verb === 'viewed' ? visitorSubject : opts.userId ? { kind: 'user', id: opts.userId } : visitorSubject;
+    const object = { kind: 'artifact', id: artifactId } as const;
+    const payload = { client, user_id: opts.userId ?? null };
+    // The fork is recorded against the ORIGINAL; the copy is the payload.
+    if (verb === 'forked') await emit(subject, verb, object, { ...payload, fork_id: opts.forkId ?? null });
+    else await emit(subject, verb, object, payload);
+  } catch {
+    // trackEvent never rejects, whatever the mapping or the service did.
   }
-  return series;
-}
-
-export interface DailyViews {
-  /** UTC calendar day, 'YYYY-MM-DD'. */
-  day: string;
-  views: number;
-}
-
-/**
- * All-time daily view totals pooled across everything the user owns,
- * zero-filled from the first viewed day through today (empty when no views).
- */
-export async function dailyViewsByUser(userId: string): Promise<DailyViews[]> {
-  const db = await getDb();
-  const r = await db.query<{ day: string; views: number }>(
-    `SELECT to_char(date_trunc('day', e.created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
-       COUNT(DISTINCT COALESCE(e.visitor, e.seq::text))::int AS views
-     FROM analytics_events e
-     JOIN artifacts a ON a.id = e.artifact_id
-     WHERE a.user_id = $1 AND e.event = 'view'
-     GROUP BY day
-     ORDER BY day`,
-    [userId],
-  );
-  if (r.rows.length === 0) return [];
-  const byDay = new Map(r.rows.map((row) => [row.day, row.views]));
-  const out: DailyViews[] = [];
-  const today = new Date().toISOString().slice(0, 10);
-  for (let t = Date.parse(r.rows[0].day); ; t += 86_400_000) {
-    const day = new Date(t).toISOString().slice(0, 10);
-    out.push({ day, views: byDay.get(day) ?? 0 });
-    if (day >= today) break;
-  }
-  return out;
 }

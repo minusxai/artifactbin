@@ -4,14 +4,15 @@
  * `createStandaloneProxy(config, deps, overrides)` assembles `[health, ...proxyParts(...)]`; the ONE hook is
  * `overrides.parts`, which receives that literal list and returns the list to assemble — a deployment drops,
  * replaces or inserts parts BY NAME (`p.name === 'forward'`) and never edits a part's internals.
- * `buildDeps(config)` builds what the composition needs from config alone (session-less without DATABASE_URL).
+ * `buildDeps(config, overrides)` builds what the composition needs from config alone (session-less without
+ * DATABASE_URL), the log's client included — `overrides.events` replaces it, `close()` flushes it either way.
  * `runStandalone(config, overrides)` boots it: deps → proxy → listening socket, and returns the handle to
  * close it — the whole boot a downstream `main.ts` needs, so it can be ten lines of policy.
  */
 import { Pool } from 'pg';
-import { assemble, createTokenReader, log, overHttp, serve } from '@artifactbin/utils';
+import { assemble, createTokenReader, eventsClient, log, noopEvents, overHttp, serve } from '@artifactbin/utils';
 import type { Hono } from 'hono';
-import type { Part, Queryable, TokenReader, Upstream } from '@artifactbin/contracts';
+import type { EventsService, Part, Queryable, TokenReader, Upstream } from '@artifactbin/contracts';
 import { createHumanAuth, type HumanAuthOptions, type Mailer } from './auth/human';
 import type { ProxyConfig } from './config';
 import { sessionStoreOf } from './index';
@@ -25,6 +26,8 @@ export interface StandaloneDeps {
   tokens?: TokenReader;
   sessions?: SessionStore;
   identityDb?: Queryable;
+  /** The log's writer or client (see ProxyOptions.events); `buildDeps` builds one from EVENTS__SERVICE_URL, closing it (a flush) on shutdown. */
+  events?: EventsService;
 }
 
 /** `buildDeps`' result: the deps plus what must be closed on shutdown. */
@@ -41,6 +44,8 @@ export interface StandaloneOverrides {
    * list is mounted exactly as given (no dedup, no reordering).
    */
   parts?: (assembled: Part[]) => Part[];
+  /** The log's writer or client to use INSTEAD of the one `buildDeps` would build from EVENTS__SERVICE_URL — a test's fake, or a deployment's own. Closed (flushed) by `close()` either way. */
+  events?: EventsService;
 }
 
 /** What `runStandalone` hands back: where it listens and how to stop it (socket, then deps). */
@@ -73,6 +78,7 @@ export function createStandaloneProxy(config: ProxyConfig, deps: StandaloneDeps,
       ...(deps.identityDb ? { identityDb: deps.identityDb } : {}),
       appSchema: config.appSchema,
       upstreamDeadlineMs: config.upstreamDeadlineMs,
+      ...(deps.events ? { events: deps.events } : {}),
     }),
   ];
   return assemble(overrides.parts ? overrides.parts(parts) : parts);
@@ -102,9 +108,24 @@ export function humanAuthOptionsFor(config: ProxyConfig, mail: Mailer): Omit<Hum
   };
 }
 
-export async function buildDeps(config: ProxyConfig): Promise<BuiltDeps> {
+/**
+ * WHERE THE PROXY'S SENTENCES GO. A deployment's own writer wins (`overrides.events`
+ * — a test's fake, or a composition that already holds one); otherwise an HTTP client
+ * to `EVENTS__SERVICE_URL` carrying `INTERNAL__SERVICE_SECRET`; otherwise the noop,
+ * which is the documented shape of an unconfigured box: nothing leaves it.
+ */
+const eventsFor = (config: ProxyConfig, overrides: StandaloneOverrides): EventsService => {
+  if (overrides.events) return overrides.events;
+  if (!config.eventsServiceUrl) return noopEvents();
+  return eventsClient(config.eventsServiceUrl, config.internalServiceSecret ? { serviceSecret: config.internalServiceSecret } : {});
+};
+
+export async function buildDeps(config: ProxyConfig, overrides: StandaloneOverrides = {}): Promise<BuiltDeps> {
   const upstream = overHttp(config.upstreamUrl, config.actorSecret);
-  if (!config.databaseUrl) return { upstream, close: async () => {} };
+  // The client BATCHES, so closing it is the flush: it happens before the pool
+  // goes, and before anything else this function opened.
+  const events = eventsFor(config, overrides);
+  if (!config.databaseUrl) return { upstream, events, close: async () => { await events.close?.(); } };
   const pool = new Pool({ connectionString: config.databaseUrl });
   const db = poolQueryable(pool);
   await ensureProxySchema(db, config.authSchema);
@@ -113,6 +134,7 @@ export async function buildDeps(config: ProxyConfig): Promise<BuiltDeps> {
       ...config.mail,
       publicBaseUrl: config.publicBaseUrl ?? `http://localhost:${config.port}`,
     })),
+    events,
     pool,
   });
   return {
@@ -120,8 +142,11 @@ export async function buildDeps(config: ProxyConfig): Promise<BuiltDeps> {
     tokens: createTokenReader({ db, ttlMs: 5000, schema: config.appSchema }),
     sessions: sessionStoreOf(human),
     identityDb: db,
+    events,
     pool,
-    close: async () => { await pool.end(); },
+    close: async () => {
+      try { await events.close?.(); } finally { await pool.end(); }
+    },
   };
 }
 
@@ -140,7 +165,7 @@ export async function runStandalone(config: ProxyConfig, overrides: StandaloneOv
   if (usesDevOutbox(publicBaseUrl)) boot.info(`development mail → ${config.mail.devOutboxPath ?? DEV_OUTBOX_DEFAULT_PATH}`);
   else if (!config.mail.apiKey) boot.warn('EMAIL__RESEND_API_KEY unset — production login mail cannot be sent');
 
-  const deps = await buildDeps(config);
+  const deps = await buildDeps(config, overrides);
   const proxy = createStandaloneProxy(config, deps, overrides);
   const listening = serve(proxy, config.port, config.host ? { host: config.host } : {});
   try {

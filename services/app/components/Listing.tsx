@@ -2,6 +2,7 @@
  * The profile and folder listings — the pretty-URL page's chrome, rendered
  * in the browser from /api/page/profile. Moved out of the Next page as-is.
  */
+import { FollowButton } from '@/components/FollowButton';
 import HeaderBar, { type HeaderStats } from '@/components/HeaderBar';
 import PageChrome from '@/components/PageChrome';
 import { PAGE_COLUMN, Badge, dateStamp, FormatBadge, MicroLabel, timeAgo } from '@/components/ui';
@@ -47,8 +48,14 @@ export function ListingShell({ email, stats, authed = false, anon = false, child
  * own address, this page is the account ROOT, and the trail from `ancestor_ids`
  * is drawn on the folder's own document. So there is nothing here to segment.
  */
-export function ListingHero({ handle, label, count, noun }: {
+export function ListingHero({ handle, label, count, noun, follow }: {
   handle: string; label: string; count: number; noun: string;
+  /**
+   * The follow control, on a STRANGER's profile only — the page route ships
+   * `owner`/`follow` on that branch alone, so an absent prop is exactly the
+   * owner looking at their own listing, with nobody to follow.
+   */
+  follow?: { userId: string; following: boolean; count: number; signedIn: boolean };
 }) {
   return (
     <header className="reveal mb-8">
@@ -58,10 +65,13 @@ export function ListingHero({ handle, label, count, noun }: {
           <span className="text-accent">@</span>{handle}
         </a>
       </h1>
-      <p className="mt-3 font-mono text-xs text-muted">
-        {count} {noun}
-        {count === 1 ? '' : 's'}
-      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <p className="font-mono text-xs text-muted">
+          {count} {noun}
+          {count === 1 ? '' : 's'}
+        </p>
+        {follow && <FollowButton {...follow} />}
+      </div>
     </header>
   );
 }

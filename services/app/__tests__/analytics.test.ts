@@ -22,7 +22,8 @@ import { POST as revertRoute } from '@/app/api/artifacts/[id]/revert/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { DELETE as deleteMyArtifactRoute } from '@/app/api/my/artifacts/[id]/route';
 import { GET as listMyArtifactsRoute } from '@/app/api/my/artifacts/route';
-import { dailyViewsByUser, trackEvent, viewSeriesByUser, VIEW_SERIES_DAYS } from '@/lib/analytics';
+import { trackEvent } from '@/lib/analytics';
+import { viewSeriesByUser, VIEW_SERIES_DAYS } from '@/lib/feed';
 import { mintExportKey } from '@/lib/export-key';
 import { resetLiveSubscriptions } from '@/lib/story/live';
 import { mintToken } from '@/lib/tokens';
@@ -272,7 +273,6 @@ describe('unique daily visitors', () => {
     expect((await listArtifactsByUser(user.id))[0].views).toBe(2);
     const series = (await viewSeriesByUser(user.id)).get(doc.id)!;
     expect(series[VIEW_SERIES_DAYS - 1]).toBe(2);
-    expect((await dailyViewsByUser(user.id)).at(-1)?.views).toBe(2);
   });
 
   it('a signed-in account disambiguates: two users behind one NAT + browser are two visitors', async () => {
@@ -313,26 +313,8 @@ describe('unique daily visitors', () => {
   });
 });
 
-describe('aggregates', () => {
-  it('viewSeriesByUser zero-fills daily buckets, oldest first', async () => {
-    const user = await createUser({ email: 'v@minusx.ai' });
-    const t = await mintToken('laptop', user.id);
-    const doc = await create(t.token, { markup: '<p>x</p>' });
-    const db = await harness.db();
-    await db.query(
-      `INSERT INTO analytics_events (event, artifact_id, created_at) VALUES
-       ('view', $1, now()), ('view', $1, now()), ('view', $1, now() - interval '2 days'),
-       ('export', $1, now())`,
-      [doc.id],
-    );
-    const series = (await viewSeriesByUser(user.id)).get(doc.id);
-    expect(series).toHaveLength(VIEW_SERIES_DAYS);
-    expect(series![VIEW_SERIES_DAYS - 1]).toBe(2); // today
-    expect(series![VIEW_SERIES_DAYS - 3]).toBe(1); // two days ago
-    expect(series!.reduce((a, b) => a + b, 0)).toBe(3); // exports don't count
-  });
-
-  it('dailyViewsByUser buckets all owned artifacts per day, zero-filled to today; listArtifactsByUser carries views', async () => {
+describe('per-artifact totals', () => {
+  it('listArtifactsByUser carries each artifact\'s view total, and the list route reports it', async () => {
     const user = await createUser({ email: 'v@minusx.ai' });
     const t = await mintToken('laptop', user.id);
     const a = await create(t.token, { markup: '<p>a</p>', title: 'a' });
@@ -346,14 +328,8 @@ describe('aggregates', () => {
       [a.id, b.id],
     );
 
-    // Both artifacts pool into one series; the gap day is present as zero.
-    const daily = await dailyViewsByUser(user.id);
-    expect(daily).toHaveLength(3);
-    expect(daily.map((d) => d.views)).toEqual([1, 0, 3]);
-    expect(daily[2].day > daily[0].day).toBe(true);
-
     const listed = await listArtifactsByUser(user.id);
-    expect(listed.find((r) => r.id === a.id)?.views).toBe(3);
+    expect(listed.find((r) => r.id === a.id)?.views).toBe(3); // exports don't count
     expect(listed.find((r) => r.id === b.id)?.views).toBe(1);
 
     sessionUser.id = user.id;

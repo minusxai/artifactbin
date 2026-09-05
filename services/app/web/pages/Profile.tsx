@@ -11,7 +11,7 @@ import { NotFoundPage } from './NotFound';
 type Resolved =
   | { kind: 'redirect'; to: string }
   | { kind: 'artifact'; id: string }
-  | { kind: 'public-profile'; handle: string; files: never[]; email: string | null; authed: boolean; anon: boolean }
+  | { kind: 'public-profile'; handle: string; owner: { id: string }; follow: { following: boolean; count: number }; files: never[]; email: string | null; authed: boolean; anon: boolean }
   | { kind: 'owner-listing'; handle: string; files: never[]; total: number; stats: { total: number; formats: Record<string, number> }; email: string | null };
 
 export function ProfilePage() {
@@ -63,7 +63,7 @@ export function ProfilePage() {
  * DOCUMENTS, not artifacts, in the count: the assets band is withheld below,
  * so counting datasets would promise rows that are not there.
  */
-export function ProfileListing({ data }: { data: { kind: string; handle: string; files: Array<Record<string, unknown> & { id: string; format: string }> } }) {
+export function ProfileListing({ data }: { data: { kind: string; handle: string; owner?: { id: string }; follow?: { following: boolean; count: number }; authed?: boolean; files: Array<Record<string, unknown> & { id: string; format: string }> } }) {
   const owned = data.kind === 'owner-listing';
   // Folders are ROWS in this listing now (`format: 'folder'`), reached at their
   // own address, so there is no derived folder panel and no path crumb to draw.
@@ -74,6 +74,9 @@ export function ProfileListing({ data }: { data: { kind: string; handle: string;
         label={owned ? 'your artifacts' : 'public index'}
         count={data.files.filter((a) => a.format === 'markup').length}
         noun={owned ? 'document' : 'public artifact'}
+        // Both halves or neither: the route ships `owner` and `follow`
+        // together, on the public branch only.
+        {...(data.owner && data.follow ? { follow: { userId: data.owner.id, ...data.follow, signedIn: !!data.authed } } : {})}
       />
       {data.files.length === 0 ? <NothingHere /> : <ProfileShelf handle={data.handle} files={data.files} />}
     </>

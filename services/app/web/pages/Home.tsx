@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRefreshable } from '@/lib/navigation';
+import { ActivityFeed } from '@/components/ActivityFeed';
 import ClaimBanner from '@/components/ClaimBanner';
 import GetStarted from '@/components/GetStarted';
 import Landing from '@/components/Landing';
@@ -7,12 +8,13 @@ import LoginForm from '@/components/LoginForm';
 import SharedWithYou from '@/components/SharedWithYou';
 import Shelf from '@/components/Shelf';
 import UseCarousel from '@/components/UseCarousel';
+import type { FeedItem } from '@/lib/feed-wire';
 import { PAGE_COLUMN } from '@/components/ui';
 import { useSession } from '@/web/session';
 
 type Home =
   | { signedIn: false; drafts?: Parameters<typeof Shelf>[0]['rows'] }
-  | { signedIn: true; artifacts: Array<Record<string, unknown> & { id: string }>; shared: Parameters<typeof SharedWithYou>[0]['items'] };
+  | { signedIn: true; artifacts: Array<Record<string, unknown> & { id: string }>; shared: Parameters<typeof SharedWithYou>[0]['items']; feed?: { mine: FeedItem[]; following: FeedItem[] } };
 
 /**
  * THE EMPTY LIBRARY IS THE ONLY PAGE THAT SAYS WHAT TO DO FIRST.
@@ -111,12 +113,21 @@ export function HomePage() {
           <SharedWithYou items={home.shared} />
         </>
       )}
+      {/* AFTER the shelves, and OUTSIDE the empty/full branch: an account that
+        * owns nothing yet may already follow people, and hiding the one thing
+        * on its dashboard that has anything in it would be the wrong half of
+        * the flip. The section renders nothing at all when both lists are
+        * empty, so the bare library still reads as bare. `feed` is optional on
+        * the wire because a page served from an older bootstrap has none. */}
+      <ActivityFeed mine={home.feed?.mine ?? []} following={home.feed?.following ?? []} />
       {/* THE ONE WAY BACK. Deleting is a trash now (lib/trash): a row is
         * recoverable for 30 days, which is worth nothing if nothing on the
-        * product leads to it. One quiet link under the library, on the
-        * account's own page — an anonymous browser has no trash to reach.
-        * OUTSIDE the empty/full flip on purpose: an emptied library is exactly
-        * when someone is looking for what they just deleted. */}
+        * product leads to it. One quiet link at the foot of the account's own
+        * page — an anonymous browser has no trash to reach. It sits BELOW the
+        * activity section rather than between it and the shelves, where a bare
+        * link reads as that section's own heading; and OUTSIDE the empty/full
+        * flip on purpose, since an emptied library is exactly when someone is
+        * looking for what they just deleted. */}
       <p className="mt-8">
         <a
           href="/trash"

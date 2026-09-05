@@ -404,6 +404,37 @@ CREATE INDEX IF NOT EXISTS idx_analytics_events_artifact_created ON app.analytic
 
 CREATE INDEX IF NOT EXISTS idx_analytics_events_event ON app.analytics_events (event);
 
+CREATE TABLE IF NOT EXISTS app.relations (
+  subject_kind TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  verb TEXT NOT NULL,
+  object_kind TEXT NOT NULL,
+  object_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ,
+  PRIMARY KEY (subject_kind, subject_id, verb, object_kind, object_id)
+);
+
+ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS subject_kind TEXT NOT NULL;
+
+ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS subject_id TEXT NOT NULL;
+
+ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS verb TEXT NOT NULL;
+
+ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS object_kind TEXT NOT NULL;
+
+ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS object_id TEXT NOT NULL;
+
+ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE app.relations ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS idx_relations_like_object ON app.relations (object_id) WHERE verb = 'like' AND deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_relations_follow_subject ON app.relations (subject_id) WHERE verb = 'follow' AND deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_relations_follow_object ON app.relations (object_id) WHERE verb = 'follow' AND deleted_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS app.webfonts (
   family TEXT NOT NULL,
   assets JSONB NOT NULL DEFAULT '[]',
@@ -544,4 +575,43 @@ END $$;
 CREATE INDEX IF NOT EXISTS idx_auth_credentials_group ON auth.credentials (group_id) WHERE group_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_auth_credentials_expiry ON auth.credentials (expires_at);
+
+-- schema "events" — owned by the events role; tables declared by services/events/src/schema.ts
+
+CREATE TABLE IF NOT EXISTS events.events (
+  id TEXT NOT NULL,
+  at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  source TEXT NOT NULL,
+  subject_kind TEXT,
+  subject_id TEXT,
+  verb TEXT NOT NULL,
+  object_kind TEXT NOT NULL,
+  object_id TEXT NOT NULL,
+  payload JSONB NOT NULL DEFAULT '{}',
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE events.events ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE events.events ADD COLUMN IF NOT EXISTS at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE events.events ADD COLUMN IF NOT EXISTS source TEXT NOT NULL;
+
+ALTER TABLE events.events ADD COLUMN IF NOT EXISTS subject_kind TEXT;
+
+ALTER TABLE events.events ADD COLUMN IF NOT EXISTS subject_id TEXT;
+
+ALTER TABLE events.events ADD COLUMN IF NOT EXISTS verb TEXT NOT NULL;
+
+ALTER TABLE events.events ADD COLUMN IF NOT EXISTS object_kind TEXT NOT NULL;
+
+ALTER TABLE events.events ADD COLUMN IF NOT EXISTS object_id TEXT NOT NULL;
+
+ALTER TABLE events.events ADD COLUMN IF NOT EXISTS payload JSONB NOT NULL DEFAULT '{}';
+
+CREATE INDEX IF NOT EXISTS idx_events_object_at ON events.events (object_id, at);
+
+CREATE INDEX IF NOT EXISTS idx_events_subject_at ON events.events (subject_id, at);
+
+CREATE INDEX IF NOT EXISTS idx_events_kind_verb_at ON events.events (object_kind, verb, at);
 

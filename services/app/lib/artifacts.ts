@@ -11,6 +11,7 @@ import { sourceWithoutAnchors } from './annotation-anchors';
 import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN } from './config';
 import { assetByteQuotaExceeded } from './asset-quota';
 import { getDb, type Queryable } from './db';
+import { actorSubject, emit } from './events';
 import { generateFileId } from './ids';
 import { isDocumentFormat, parseContentInput, type ArtifactFormat } from './story/input';
 import { canonicalizeMarkup, publishJsx } from './story/jsx-tier';
@@ -491,7 +492,7 @@ export async function forkArtifact(
   const row = await createArtifact(actor.tokenId, actor.userId, input, { forkedFrom: source.id, linkRole: source.link_role });
   // Against the SOURCE: "this was forked" is a fact about the original, and the
   // forker is who did it. Never inside a transaction (PGLite deadlock).
-  void trackEvent('fork', source.id, { userId: actor.userId });
+  void trackEvent('fork', source.id, { userId: actor.userId, forkId: row.id });
   return row;
 }
 
@@ -1310,6 +1311,16 @@ export async function updateSharingFor(actor: TokenActor, id: string, patch: Sha
     return true;
   });
   if (!done) return null;
+  /*
+   * AFTER the transaction, and only when the ACL actually moved. The payload
+   * carries the two axes a change can name and nothing else: the share list is
+   * email addresses, which never travel to the log — an operator reading
+   * "sharing_changed" learns the tier, not who is on it.
+   */
+  await emit(actorSubject(actor), 'sharing_changed', { kind: 'artifact', id }, {
+    visibility: patch.visibility ?? null,
+    link_role: patch.linkRole ?? null,
+  });
   return getSharingFor(actor, id);
 }
 

@@ -13,6 +13,7 @@ import { verifyExportKey } from '@/lib/export-key';
 import { previewFrom } from '@/lib/features';
 import { json } from '@/lib/http';
 import { ID_RE } from '@/lib/ids';
+import { count, has } from '@/lib/relations';
 import { loadDatasetRows } from '@/lib/story/dataset-store';
 import { ARTIFACT_FORMATS, type ArtifactFormat } from '@/lib/story/input';
 import { canonicalArtifactPath } from '@/lib/urls';
@@ -47,10 +48,16 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const isDoc = artifact.format === 'markup' || artifact.format === 'folder';
   const role = await roleFor(artifact, actor);
   const kind = await browserSessionKind(request);
+  // The heart renders from THIS answer: asking a second door for it would
+  // leave the control blank (or wrong) for a frame on every page load. An
+  // anonymous reader still gets the count — it is the number, not the button,
+  // that everyone can see.
+  const viewerId = actor.viewer?.userId ?? null;
   return json({
     canonical: canonicalArtifactPath(artifact, await ownerUsername(artifact.user_id)),
     role,
     kind,
+    like: { liked: viewerId ? await has(viewerId, 'like', artifact.id) : false, count: await count('like', artifact.id) },
     surface: {
       captureKey: exporting ? key : null,
       id: artifact.id,
