@@ -9,6 +9,7 @@ import LoginForm from '@/components/LoginForm';
 import SharedWithYou from '@/components/SharedWithYou';
 import Shelf from '@/components/Shelf';
 import UseCarousel from '@/components/UseCarousel';
+import WorkspaceCreate from '@/components/WorkspaceCreate';
 import type { FeedItem } from '@/lib/feed-wire';
 import { PAGE_COLUMN } from '@/components/ui';
 import { useSession } from '@/web/session';
@@ -21,6 +22,8 @@ type Home =
       viewsOverTime: number[];
       likes?: number;
       likesOverTime?: number[];
+      followers?: number;
+      forks?: number;
       shared: Parameters<typeof SharedWithYou>[0]['items'];
       feed?: { mine: FeedItem[]; following: FeedItem[] };
     };
@@ -121,11 +124,14 @@ export function HomePage() {
             <SharedWithYou items={home.shared} />
           </div>
           <aside aria-label="Dashboard rail" className="min-w-0 border-t border-edge pt-8 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
+            <WorkspaceCreate onCreated={load} />
             <Dashboard
               rows={home.artifacts as never}
               viewsOverTime={home.viewsOverTime}
               likes={home.likes}
               likesOverTime={home.likesOverTime}
+              followers={home.followers}
+              forks={home.forks}
             />
           </aside>
         </div>

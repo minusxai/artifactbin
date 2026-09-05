@@ -23,7 +23,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { DELETE as deleteMyArtifactRoute } from '@/app/api/my/artifacts/[id]/route';
 import { GET as listMyArtifactsRoute } from '@/app/api/my/artifacts/route';
 import { trackEvent } from '@/lib/analytics';
-import { likeSummaryByUser, viewSeriesByUser, VIEW_SERIES_DAYS } from '@/lib/feed';
+import { forkCountByUser, likeSummaryByUser, viewSeriesByUser, VIEW_SERIES_DAYS } from '@/lib/feed';
 import { mintExportKey } from '@/lib/export-key';
 import { resetLiveSubscriptions } from '@/lib/story/live';
 import { mintToken } from '@/lib/tokens';
@@ -360,6 +360,20 @@ describe('per-artifact totals', () => {
     expect(summary.series).toHaveLength(VIEW_SERIES_DAYS);
     expect(summary.series[VIEW_SERIES_DAYS - 1]).toBe(2);
     expect(summary.series[VIEW_SERIES_DAYS - 3]).toBe(1);
+  });
+
+  it('forkCountByUser reads canonical fork events for live markup documents only', async () => {
+    const user = await createUser({ email: 'forks@minusx.ai' });
+    const t = await mintToken('laptop', user.id);
+    const document = await create(t.token, { markup: '<p>a</p>', title: 'a' });
+    const dataFile = await create(t.token, { markup: '<p>b</p>', title: 'b' });
+    const db = await harness.db();
+    await db.query(`UPDATE artifacts SET format = 'dataset' WHERE id = $1`, [dataFile.id]);
+    await trackEvent('fork', document.id, { forkId: 'copy-1' });
+    await trackEvent('fork', document.id, { forkId: 'copy-2' });
+    await trackEvent('fork', dataFile.id, { forkId: 'copy-3' });
+
+    expect(await forkCountByUser(user.id)).toBe(2);
   });
 });
 

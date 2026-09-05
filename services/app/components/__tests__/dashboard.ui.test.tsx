@@ -23,6 +23,8 @@ describe('Dashboard', () => {
         viewsOverTime={[0, 2, 5]}
         likes={3}
         likesOverTime={[0, 1, 2]}
+        followers={4}
+        forks={5}
       />,
     );
 
@@ -31,6 +33,11 @@ describe('Dashboard', () => {
     expect(metrics.getByText('data files').nextElementSibling).toHaveTextContent('2');
     expect(metrics.getByText('views').nextElementSibling).toHaveTextContent('7');
     expect(metrics.getByText('likes').nextElementSibling).toHaveTextContent('3');
+    expect(metrics.getByText('followers').nextElementSibling).toHaveTextContent('4');
+    expect(metrics.getByText('forks').nextElementSibling).toHaveTextContent('5');
+    for (const label of ['artifacts', 'data files', 'views', 'likes', 'followers', 'forks']) {
+      expect(metrics.getByText(label).closest('dt')?.querySelector('svg')).toBeTruthy();
+    }
 
     const chart = await screen.findByLabelText('Engagement Vega chart', undefined, { timeout: 15_000 });
     await waitFor(() => expect(chart.querySelector('svg')).toBeTruthy(), { timeout: 15_000 });

@@ -8,8 +8,9 @@
  * database and must not spend a request per row learning names.
  */
 import { AGENT_COOKIE, decodeAgentSession } from '@/lib/agent-session';
-import { decorateFeed, followFeed, likeSummaryByUser, ownerFeed, VIEW_SERIES_DAYS, viewSeriesByUser } from '@/lib/feed';
+import { decorateFeed, followFeed, forkCountByUser, likeSummaryByUser, ownerFeed, VIEW_SERIES_DAYS, viewSeriesByUser } from '@/lib/feed';
 import { json, parseCookie } from '@/lib/http';
+import { count } from '@/lib/relations';
 import { listArtifactsByUser, listDraftsByTokenIds, listSharedWithEmail } from '@/lib/users';
 import { sessionActor } from '@/lib/viewer';
 import { renderSparklineSvg } from '@/lib/viz/sparkline';
@@ -55,9 +56,11 @@ export async function GET(request: Request) {
     const s = series.get(a.id);
     if (s?.some((n) => n > 0)) sparklines[a.id] = await renderSparklineSvg(s);
   }
-  const [mine, following] = await Promise.all([
+  const [mine, following, followers, forks] = await Promise.all([
     ownerFeed(user.userId, { limit: ACTIVITY_LIMIT }).then(decorateFeed),
     followFeed(user.userId, { limit: ACTIVITY_LIMIT }).then(decorateFeed),
+    count('follow', user.userId),
+    documents.length ? forkCountByUser(user.userId) : Promise.resolve(0),
   ]);
   // The dashboard is about the library as a whole, not a leaderboard. Pool
   // the same exact 30 daily buckets that feed the per-artifact shelf splines.
@@ -76,6 +79,8 @@ export async function GET(request: Request) {
     viewsOverTime,
     likes: likes.total,
     likesOverTime: likes.series,
+    followers,
+    forks,
     shared,
   }, 200, { 'Cache-Control': 'no-store' });
 }

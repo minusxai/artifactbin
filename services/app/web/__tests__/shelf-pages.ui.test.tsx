@@ -96,6 +96,8 @@ describe('what the dashboard leads with', () => {
       viewsOverTime: [0, 2, 5],
       likes: 3,
       likesOverTime: [0, 1, 2],
+      followers: 4,
+      forks: 2,
       shared: [],
     };
     render(<MemoryRouter><HomePage /></MemoryRouter>);
@@ -107,6 +109,8 @@ describe('what the dashboard leads with', () => {
     expect(metrics.getByText('data files').nextElementSibling).toHaveTextContent('1');
     expect(metrics.getByText('views').nextElementSibling).toHaveTextContent('7');
     expect(metrics.getByText('likes').nextElementSibling).toHaveTextContent('3');
+    expect(metrics.getByText('followers').nextElementSibling).toHaveTextContent('4');
+    expect(metrics.getByText('forks').nextElementSibling).toHaveTextContent('2');
     expect(dashboard).toHaveTextContent('Your artifacts');
     expect(dashboard).not.toHaveTextContent('Your posts');
     expect(dashboard).not.toHaveTextContent('all time');
@@ -116,6 +120,9 @@ describe('what the dashboard leads with', () => {
     expect(dashboard).not.toHaveTextContent('Views by post');
     expect(shelf.compareDocumentPosition(dashboard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByLabelText('Dashboard rail')).toContainElement(dashboard);
+    const create = screen.getByLabelText('Create');
+    expect(screen.getAllByLabelText('Create')).toHaveLength(1);
+    expect(create.compareDocumentPosition(dashboard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByLabelText('Artifact grid')).toBeInTheDocument();
     expect(screen.queryByLabelText('Get started')).toBeNull();
     expect(screen.queryByLabelText('What you can use it for')).toBeNull();

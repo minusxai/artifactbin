@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { Activity, Database, Eye, FileText, GitFork, Heart, Users, type LucideIcon } from 'lucide-react';
 import dynamic from '@/lib/dynamic';
 import { MicroLabel } from '@/components/ui';
 import type { ShelfRow } from '@/components/Shelf';
@@ -137,11 +138,15 @@ export default function Dashboard({
   viewsOverTime = EMPTY_SERIES,
   likes = 0,
   likesOverTime = EMPTY_SERIES,
+  followers = 0,
+  forks = 0,
 }: {
   rows: ShelfRow[];
   viewsOverTime?: number[];
   likes?: number;
   likesOverTime?: number[];
+  followers?: number;
+  forks?: number;
 }) {
   const documents = rows.filter((row) => row.format === 'markup');
   const dataFiles = rows.filter((row) => row.format !== 'markup' && row.format !== 'folder').length;
@@ -152,11 +157,13 @@ export default function Dashboard({
   const chartRows = useMemo(() => engagementRows(viewsOverTime, likesOverTime), [viewsOverTime, likesOverTime]);
   const colorMode = useAppMode();
 
-  const metrics: ReadonlyArray<readonly [string, number]> = [
-    ['artifacts', documents.length],
-    ['data files', dataFiles],
-    ['views', totalViews],
-    ['likes', likes],
+  const metrics: ReadonlyArray<{ label: string; value: number; Icon: LucideIcon }> = [
+    { label: 'artifacts', value: documents.length, Icon: FileText },
+    { label: 'data files', value: dataFiles, Icon: Database },
+    { label: 'views', value: totalViews, Icon: Eye },
+    { label: 'likes', value: likes, Icon: Heart },
+    { label: 'followers', value: followers, Icon: Users },
+    { label: 'forks', value: forks, Icon: GitFork },
   ];
 
   return (
@@ -167,14 +174,17 @@ export default function Dashboard({
       </div>
 
       <dl aria-label="Dashboard metrics" className="grid grid-cols-2 border-b border-edge">
-        {metrics.map(([label, value], index) => (
+        {metrics.map(({ label, value, Icon }, index) => (
           <div
             key={label}
-            className={`py-2.5 ${index % 2 ? 'border-l border-edge pl-3' : 'pr-3'} ${
+            className={`group py-2.5 ${index % 2 ? 'border-l border-edge pl-3' : 'pr-3'} ${
               index > 1 ? 'border-t border-edge' : ''
             }`}
           >
-            <dt className="font-mono text-[9px] uppercase tracking-[0.11em] text-faint">{label}</dt>
+            <dt className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.11em] text-faint">
+              <Icon aria-hidden="true" className="size-2.5 stroke-[1.7] transition-colors group-hover:text-accent" />
+              <span>{label}</span>
+            </dt>
             <dd className="mt-1 font-mono text-lg leading-none font-medium tabular-nums text-fg">{value}</dd>
           </div>
         ))}
@@ -182,9 +192,14 @@ export default function Dashboard({
 
       <div className="mt-5">
         <div className="mb-2.5">
-          <h2 className="font-mono text-xs font-semibold text-fg">Engagement over time</h2>
-          <p className="mt-1 font-mono text-[9px] tabular-nums text-faint">
-            {periodViews} views · {periodLikes} likes · last 30 days
+          <h2 className="flex items-center gap-1.5 font-mono text-xs font-semibold text-fg">
+            <Activity aria-hidden="true" className="size-3 stroke-[1.8] text-accent" />
+            Engagement over time
+          </h2>
+          <p className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 font-mono text-[9px] tabular-nums text-faint">
+            <span className="inline-flex items-center gap-1"><Eye aria-hidden="true" className="size-2.5" />{periodViews} views</span>
+            <span className="inline-flex items-center gap-1"><Heart aria-hidden="true" className="size-2.5" />{periodLikes} likes</span>
+            <span>last 30 days</span>
           </p>
         </div>
         {engagement === 0 ? (

@@ -65,6 +65,8 @@ describe('GET /api/page/home', () => {
     expect(body.viewsOverTime).toHaveLength(30);
     expect(body.likes).toBe(0);
     expect(body.likesOverTime).toHaveLength(30);
+    expect(body.followers).toBe(0);
+    expect(body.forks).toBe(0);
     expect(Array.isArray(body.shared)).toBe(true);
   });
 

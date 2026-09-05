@@ -18,7 +18,7 @@
  * the grid/list presentation and hands list mode to `ArtifactTable`.
  */
 import { useMemo, useState } from 'react';
-import { Check, Folder, FolderInput, FolderPlus, LayoutGrid, Link2, List as ListIcon, Pencil, Search, Trash2 } from 'lucide-react';
+import { Check, Folder, FolderInput, LayoutGrid, Link2, List as ListIcon, Pencil, Search, Trash2 } from 'lucide-react';
 import RowMenu, { confirmDeleteArtifact } from '@/components/RowMenu';
 import { MoveMenu, type PickerFolder } from '@/components/FolderPicker';
 import { ArtifactTable } from '@/components/TokenBrowser';
@@ -66,25 +66,6 @@ export interface ShelfProps {
    * they can cite. Same split `dateStamp`/`timeAgo` have always drawn.
    */
   dates?: 'relative' | 'absolute';
-  /**
-   * WHERE A FOLDER MADE HERE GOES — the folder being viewed, or null at the
-   * dashboard root. It is the wire's own `parent_id`, so null is the root and
-   * an absent value is never "leave it".
-   */
-  parentId?: string | null;
-  /**
-   * MAY THIS VIEWER MAKE A FOLDER HERE — a capability of its own, defaulting to
-   * the dashboard's `full`, because creating is not an action on any ROW.
-   *
-   * It rode `actions === 'full'` at first, which is why the owner's own profile
-   * shipped without it: a profile withholds edit, move and delete on purpose
-   * (its point is handing someone a link, not changing the document), and one
-   * level cannot say "no row verbs, but yes, this is your shelf". Promoting the
-   * profile to `full` to get one button would have granted the three verbs the
-   * level exists to withhold — so the prop is separate, and the file's own rule
-   * holds: withholding is the default.
-   */
-  canCreateFolders?: boolean;
 }
 
 /**
@@ -167,91 +148,6 @@ function FolderTile({ row, count, level, folders, onDeleted }: { row: ShelfRow; 
         onRename={() => { setDraft(title ?? ''); setRenaming(true); }}
       />
     </li>
-  );
-}
-
-/**
- * NEW FOLDER, INLINE — no dialog and no navigation. Enter creates, Escape
- * discards, and the tile appears where the strip already is.
- *
- * The door is the session twin of create (`POST /api/my/artifacts`), which is
- * the same pipeline an agent's `format: 'folder'` goes through: the scaffold is
- * stamped there, in the insert's own transaction, so a folder made from a
- * button and one made from a token are the same row.
- */
-function NewFolder({ parentId, onMade }: { parentId: string | null; onMade: (row: ShelfRow) => void }) {
-  const [naming, setNaming] = useState(false);
-  const [name, setName] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  const create = async () => {
-    const title = name.trim();
-    if (!title || busy) return;
-    setBusy(true);
-    const res = await fetch('/api/my/artifacts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ format: 'folder', title, parent_id: parentId }),
-    }).catch(() => null);
-    setBusy(false);
-    if (!res?.ok) return;
-    const body = (await res.json().catch(() => null)) as (Partial<ShelfRow> & { id?: string }) | null;
-    if (!body?.id) return;
-    const now = new Date().toISOString();
-    onMade({
-      ...body,
-      id: body.id,
-      url: body.url ?? `/a/${body.id}`,
-      title: body.title ?? title,
-      format: 'folder',
-      version: body.version ?? 1,
-      // Born private like any owned artifact — said here only so the tile can
-      // classify itself before the page is next loaded from the server.
-      visibility: body.visibility ?? 'private',
-      updated_at: body.updated_at ?? now,
-      parent_id: body.parent_id ?? parentId,
-    });
-    setName('');
-    setNaming(false);
-  };
-
-  if (!naming) {
-    return (
-      <Tooltip content="a folder is an artifact — it gets a link, sharing and versions like any other">
-        <button
-          type="button"
-          aria-label="New folder"
-          onClick={() => setNaming(true)}
-          className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-[4px] border border-edge bg-transparent px-2 py-0.5 font-mono text-[10px] text-muted transition-colors hover:border-accent hover:text-accent"
-        >
-          <FolderPlus size={12} /> new folder
-        </button>
-      </Tooltip>
-    );
-  }
-  return (
-    <span className="inline-flex shrink-0 items-center gap-1">
-      <input
-        aria-label="Folder name"
-        placeholder="folder name"
-        autoFocus
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            void create();
-          }
-          if (e.key === 'Escape') {
-            e.preventDefault();
-            setName('');
-            setNaming(false);
-          }
-        }}
-        className="w-36 rounded-[4px] border border-edge bg-transparent px-1.5 py-0.5 font-mono text-[11px] text-fg focus:border-edge-bright focus:outline-none"
-      />
-      <span className="font-mono text-[10px] text-faint">enter</span>
-    </span>
   );
 }
 
@@ -487,16 +383,9 @@ function FilterChip({ value, active, onToggle }: { value: string; active: boolea
   );
 }
 
-export default function Shelf({ rows, actions = 'none', assets = true, dates = 'relative', parentId = null, canCreateFolders }: ShelfProps) {
+export default function Shelf({ rows, actions = 'none', assets = true, dates = 'relative' }: ShelfProps) {
   const [query, setQuery] = useState('');
   const [picks, setPicks] = useState<string[]>([]);
-  /*
-   * Folders MADE HERE, kept beside the page's own rows. Creating one is a
-   * metadata-sized act on a page that is otherwise a listing — reloading to
-   * show it would throw away the search, the filters and the scroll for a
-   * single new tile. The page's next load has it from the server.
-   */
-  const [made, setMade] = useState<ShelfRow[]>([]);
   /*
    * Folders TRASHED here, and everything that went with them. A folder is
    * deleted with its whole subtree in one statement (lib/trash), so dropping
@@ -511,7 +400,7 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
   const present = trashed.length
     ? rows.filter((r) => !trashed.includes(r.id) && !(r.ancestor_ids ?? []).some((a) => trashed.includes(a)))
     : rows;
-  const all = made.length ? [...made, ...present] : present;
+  const all = present;
 
   const togglePick = (v: string) => setPicks((p) => (p.includes(v) ? p.filter((x) => x !== v) : [...p, v]));
 
@@ -543,12 +432,11 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
   const dateGroups = useMemo(() => groupShelfByRecency(shelf.documents), [shelf.documents]);
 
   const filtering = Boolean(q) || picks.length > 0;
-  const canMakeFolders = canCreateFolders ?? actions === 'full';
   const nothing = shelf.documents.length === 0 && shelf.assets.length === 0 && shelf.folders.length === 0;
 
   return (
     <section aria-label="Shelf" className="flex flex-col gap-4">
-      {(all.length > 0 || canMakeFolders) && (
+      {all.length > 0 && (
         <div className="flex flex-col gap-2 sm:flex-row">
           <div className={`flex min-w-0 flex-1 flex-wrap items-center gap-2 px-3 py-1.5 ${PANEL}`}>
             <Search size={13} className="shrink-0 text-faint" />
@@ -569,11 +457,6 @@ export default function Shelf({ rows, actions = 'none', assets = true, dates = '
             {filtering && (
               <span className="shrink-0 border-l border-edge pl-2 font-mono text-[10px] tabular-nums text-faint">
                 {shelf.total + shelf.assets.length}/{all.length}
-              </span>
-            )}
-            {canMakeFolders && (
-              <span className="shrink-0 border-edge sm:border-l sm:pl-2">
-                <NewFolder parentId={parentId} onMade={(row) => setMade((m) => [row, ...m])} />
               </span>
             )}
           </div>

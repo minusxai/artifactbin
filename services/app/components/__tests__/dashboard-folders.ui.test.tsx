@@ -1,4 +1,4 @@
-/** P2 (seeded RED) — the dashboard's folders strip and the inline create. */
+/** The dashboard shelf's folders strip and row operations. */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Shelf from '@/components/Shelf';
@@ -130,18 +130,9 @@ describe('the folders strip', () => {
     expect(screen.getByLabelText('Open folder Reports').getAttribute('href')).toBe('/a/rep001');
   });
 
-  it('New folder is an inline name field: Enter creates a folder artifact at the current location, Escape discards', async () => {
+  it('leaves creation to the homepage rail instead of adding another button to the shelf', () => {
     render(<Shelf actions="full" rows={[doc] as never} />);
-    fireEvent.click(screen.getByLabelText('New folder'));
-    const input = screen.getByLabelText('Folder name') as HTMLInputElement;
-    fireEvent.change(input, { target: { value: 'Decks' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-    await waitFor(() => expect(posts.length).toBe(1));
-    expect(posts[0].body).toMatchObject({ format: 'folder', title: 'Decks', parent_id: null });
-    await waitFor(() => expect(screen.getByLabelText('Open folder Decks')).toBeTruthy());
-    fireEvent.click(screen.getByLabelText('New folder'));
-    fireEvent.keyDown(screen.getByLabelText('Folder name'), { key: 'Escape' });
-    expect(screen.queryByLabelText('Folder name')).toBeNull();
-    expect(posts.length).toBe(1);
+    expect(screen.queryByLabelText('New folder')).toBeNull();
+    expect(screen.getByLabelText('Search artifacts')).toBeTruthy();
   });
 });

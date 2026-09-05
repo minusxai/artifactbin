@@ -147,6 +147,18 @@ const LEGACY_DAILY = `SELECT to_char(date_trunc('day', e.created_at AT TIME ZONE
   GROUP BY day
   ORDER BY day`;
 
+const LOG_FORK_COUNT = `SELECT COUNT(*)::int AS n
+   FROM ${EVENTS_SCHEMA}.events e
+   JOIN artifacts a ON a.id = e.object_id
+  WHERE a.user_id = $1 AND e.object_kind = 'artifact' AND e.verb = 'forked'
+    AND a.format = 'markup' AND a.${LIVE_ARTIFACT_SQL}`;
+
+const LEGACY_FORK_COUNT = `SELECT COUNT(*)::int AS n
+   FROM analytics_events e
+   JOIN artifacts a ON a.id = e.artifact_id
+  WHERE a.user_id = $1 AND e.event = 'fork'
+    AND a.format = 'markup' AND a.${LIVE_ARTIFACT_SQL}`;
+
 /**
  * Daily view counts per artifact across everything the user owns, zero-filled
  * to exactly `days` buckets (oldest → newest, last bucket = today UTC), read
@@ -210,6 +222,20 @@ export async function likeSummaryByUser(userId: string, days: number = VIEW_SERI
     if (index >= 0 && index < days) series[index] = count;
   }
   return { total, series };
+}
+
+/**
+ * Forks made from the user's live markup artifacts. The canonical event log
+ * records the fork against its source artifact; the analytics table remains
+ * the fallback for split deployments that have not installed the log yet.
+ */
+export async function forkCountByUser(userId: string): Promise<number> {
+  const db = await getDb();
+  const r = await db.query<{ n: number | string }>(
+    (await eventsTablePresent()) ? LOG_FORK_COUNT : LEGACY_FORK_COUNT,
+    [userId],
+  );
+  return Number(r.rows[0]?.n ?? 0);
 }
 
 /**
