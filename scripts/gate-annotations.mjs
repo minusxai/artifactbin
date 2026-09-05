@@ -229,6 +229,10 @@ const run = async () => {
     await openArtifactControls(page);
     const editComments = await until(() => page.locator('[aria-label="Toggle comments"]').count(), (n) => n === 1, 5000);
     ok(editComments === 1, 'the comments control survives entering edit mode');
+    // Put the panel away: its click-away scrim covers the frame, and the
+    // paragraph click below must reach the document.
+    await page.keyboard.press('Escape');
+    await until(() => page.locator('[aria-label="Artifact controls"]').count(), (n) => n === 0, 5000);
 
     // Clicked-until-it-takes, like every other in-frame click here: the edit
     // chunk and the frame's re-render after the agent's PUT both land a beat
