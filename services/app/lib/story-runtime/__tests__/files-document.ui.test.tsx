@@ -31,12 +31,14 @@ const ROWS = [
   { id: 'sub001', title: 'Q3', format: 'folder', level: 1, visibility: 'public', updated_at: '2026-09-04T10:00:00Z', url: '/a/sub001', thumbnail: null, views: null, sparkline: null },
 ];
 
-function renderFolder(chrome: boolean) {
+const FLOW: Dataflow = { values: [], queries: [{ name: 'children', sql: 'select * from ref_abc123', params: [], refs: ['abc123'], start: 0, end: 0 }] };
+const HEAD = { id: 'abc123', title: 'Field Notes', trail: [] };
+
+function renderFolder(chrome: boolean, over: Partial<React.ComponentProps<typeof StoryRuntimeApp>> = {}) {
   const parsed = parseJsx(FOLDER);
   if (!parsed.ok) throw new Error(parsed.error);
   // The declaration the scaffold carries, by hand: what this exercises is the
   // adapter between the store and the component, not the parser above it.
-  const flow: Dataflow = { values: [], queries: [{ name: 'children', sql: 'select * from ref_abc123', params: [], refs: ['abc123'], start: 0, end: 0 }] };
   return renderWithProviders(
     <StoryRuntimeApp
       nodes={parsed.nodes}
@@ -44,7 +46,9 @@ function renderFolder(chrome: boolean) {
       glyphs={glyphsForNodes(parsed.nodes)}
       colorMode="light"
       chrome={chrome}
-      dataflow={{ flow, state: { values: {}, tables: { children: { rows: ROWS, columns: [] } }, errors: {} } }}
+      folder={HEAD}
+      dataflow={{ flow: FLOW, state: { values: {}, tables: { children: { rows: ROWS, columns: [] } }, errors: {} } }}
+      {...over}
     />,
   );
 }
@@ -62,5 +66,51 @@ describe('a folder document', () => {
     const { container } = renderFolder(false);
     expect(container.querySelector('img'), 'a capture pulled in another artifact’s card').toBeNull();
     expect(container.querySelector('[aria-label="Open Board update"] [data-glyph="markup"] svg')).toBeTruthy();
+  });
+});
+
+/**
+ * SETTLED IS THE STORE'S OWN WORD, and the adapter is the only place that can
+ * translate it. `<Files>` is handed rows; whether the absence of rows is "not
+ * yet" or "nothing here" is a fact about the query, which lives in the store's
+ * pending set and reaches the component through nothing else.
+ *
+ * The three cases below are the three the folder page actually has, and the
+ * first is the one P2 got wrong in the other direction: a document that
+ * arrives WITHOUT its rows (paint-first — the reader's normal case) has its
+ * query marked dirty by the store itself, so it is pending, so it is not
+ * settled, so the page is blank rather than claiming to be empty.
+ */
+describe('a folder with nothing in it', () => {
+  it('stays blank while the rows have not arrived', () => {
+    // No `state`: the paint-first shape. The store marks every declared query
+    // dirty, which is exactly what `pending` reports on both sides of
+    // hydration.
+    const { container } = renderFolder(true, { dataflow: { flow: FLOW } });
+    expect(container.textContent).not.toContain('Nothing here yet');
+  });
+
+  it('says so once the query has answered with no rows', () => {
+    const { container } = renderFolder(true, {
+      dataflow: { flow: FLOW, state: { values: {}, tables: { children: { rows: [], columns: [] } }, errors: {} } },
+    });
+    expect(container.textContent).toContain('Nothing here yet.');
+    expect(container.textContent).toContain('parent_id: "abc123"');
+  });
+
+  it('never calls a FAILED query an empty folder', () => {
+    const { container } = renderFolder(true, {
+      dataflow: { flow: FLOW, state: { values: {}, tables: {}, errors: { children: 'no such table: ref_abc123' } } },
+    });
+    expect(container.textContent).not.toContain('Nothing here yet');
+  });
+});
+
+/** The head is the island's, so the served document and the browser draw the same one. */
+describe('a folder head', () => {
+  it('names the folder above its listing', () => {
+    const { container } = renderFolder(true);
+    expect(container.querySelector('[data-slot="files-head"]')).toBeTruthy();
+    expect(container.textContent).toContain('Field Notes');
   });
 });

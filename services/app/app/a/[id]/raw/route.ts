@@ -19,6 +19,7 @@
  * Keep the repo middleware-free so nothing rewrites them.
  */
 import { canReadArtifact, dataflowForRow, declarationsForRow, getArtifactById, linkRoleOf, refDataForRow } from '@/lib/artifacts';
+import { folderHeadFor } from '@/lib/folders';
 import { withIntent } from '@/lib/intent';
 import { canonicalArtifactPath } from '@/lib/urls';
 import { roleBehindLogin } from '@/lib/share-roles';
@@ -329,7 +330,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       const search = new URL(request.url).search;
       const urlValues = declared ? readUrlValues(search, declared.flow) : {};
       const hasUrlValues = Object.keys(urlValues).length > 0;
-      const [assetUrls, refData, dataflow, creatorUsername, forkedFrom] = await Promise.all([
+      const [assetUrls, refData, dataflow, creatorUsername, forkedFrom, folderHead] = await Promise.all([
         // Our copies of the web URLs this document names (lib/web-assets): the
         // served <img> points at them, with the box and the blur the row
         // recorded, and the reader's browser reaches no third party.
@@ -352,6 +353,20 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           : dataflowForRow(artifact, { values: urlValues, viewer: { userId: viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: viewer?.email ?? null } }),
         chrome ? ownerUsername(artifact.user_id) : Promise.resolve(null),
         chrome ? forkedFromCredit(artifact.forked_from) : Promise.resolve(null),
+        /*
+         * WHERE THIS FOLDER SITS. A folder's whole source is
+         * `<Files data="$children" />`, which knows only what is on the shelf —
+         * so its name, its id and its trail arrive on the island beside the
+         * rows (lib/story-ui/folder-head). Computed for THIS viewer, because a
+         * public folder's ancestors can be private and a crumb is a name.
+         *
+         * On the CAPTURE too: an og card of a folder that says nothing about
+         * which folder it is previews nothing, and the capture's viewer is the
+         * same one the children table is already computed for a line above.
+         */
+        artifact.format === 'folder'
+          ? folderHeadFor(artifact, { userId: viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: viewer?.email ?? null })
+          : Promise.resolve(null),
       ]);
       const runtime = storyRuntimeAssets();
       const html = await buildStoryDocument({
@@ -424,6 +439,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         // Where this document fetches its re-runs when it IS the page (the
         // reader path); inside a parent the relay is chosen instead.
         queryUrl: queryPath(artifact.id),
+        folder: folderHead,
         /*
          * …and where it imports an image URL only its reader can compute (a
          * bound <img src="$pick">). Unconditional, unlike mutateUrl: a source

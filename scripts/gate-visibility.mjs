@@ -220,6 +220,11 @@ check(strangerList.status() === 200 && !(await stranger.textContent('body')).inc
 check((await stranger.locator('[aria-label="Folders"]').count()) === 0
   && !(await stranger.textContent('body')).includes('Shelf'),
   'a stranger\u2019s profile lists no folder, not even a public one');
+// …and no way to MAKE one. The create control is its own capability now
+// (components/Shelf `canCreateFolders`), granted to the owner's own profile
+// and to nobody else — the pair this gate already asserts from one side.
+check((await stranger.locator('[aria-label="New folder"]').count()) === 0,
+  'and is offered no way to make one');
 
 await browser.close();
 sink.close();

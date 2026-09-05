@@ -57,7 +57,9 @@ await becomeOwner(p, B, anon.token);
 // ── they log in ─────────────────────────────────────────────────────────────
 const email = `mxmx_test_claim_${Date.now().toString(36)}@example.com`;
 await loginViaEmail(p, B, sink, email);
-ok((await p.textContent('body')).includes(email), 'logging in with an emailed code signs you in');
+// The masthead's identity line is the HANDLE now, not the address, so being
+// signed in is that link existing (components/HeaderBar).
+ok((await p.locator('[aria-label="Open your profile"]').count()) === 1, 'logging in with an emailed code signs you in');
 
 // ── the banner names the drafts, without being asked for a token ────────────
 await p.waitForSelector('[aria-label="Unclaimed drafts"]', { timeout: 20000 }).catch(() => {});

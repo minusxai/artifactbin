@@ -223,7 +223,9 @@ check(paneAfter.includes('Agent wrote while code was open:'), 'and the open code
 // the account, so this one call covers what used to be /signup.
 const email = `mxmx_test_editor_${Date.now().toString(36)}@example.com`;
 await loginViaEmail(page, BASE, sink, email);
-check((await page.textContent('body')).includes(email), 'logging in with a code signs you in');
+// Signed in is the masthead's identity line — the handle, linking to the
+// profile — since the header stopped printing the address (components/HeaderBar).
+check((await page.locator('[aria-label="Open your profile"]').count()) === 1, 'logging in with a code signs you in');
 await page.goto(`${BASE}/account`, { waitUntil: 'load' });
 await page.fill('[aria-label="Token to claim"]', token);
 await page.click('[aria-label="Claim token"]');

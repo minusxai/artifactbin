@@ -26,6 +26,7 @@ import { renderSparklineSvg } from '@/lib/viz/sparkline';
 // one: these columns are registered into the engine, so their types are the
 // engine's vocabulary.
 import type { DatasetColumn } from '@/lib/story/dataset-shape';
+import type { FolderHead } from '@/lib/story-ui/folder-head';
 
 /**
  * No chain may be longer than this. A row's level IS `ancestor_ids.length`, so
@@ -267,6 +268,51 @@ export async function childrenTableFor(
     });
   }
   return { rows, columns: CHILDREN_COLUMNS };
+}
+
+/**
+ * WHERE A FOLDER SITS, for the folder's own page — its name, its id, and the
+ * ancestors THIS viewer may read (lib/story-ui/folder-head).
+ *
+ * The trail is the half with a rule in it. `ancestor_ids` on a PUBLIC folder
+ * can name a PRIVATE parent, so a page that drew the whole array would publish
+ * one folder's existence and NAME to every stranger holding the child's link —
+ * and P1 already settled the ids half by keeping the array out of a stranger's
+ * payload. An ancestor a viewer may not read is simply ABSENT: not redacted,
+ * not drawn unnamed, because a crumb saying "a folder you may not see" is the
+ * existence oracle the uniform 404 exists to avoid.
+ *
+ * The reach test is `effectiveRole`, the same one every other surface asks, so
+ * a public ancestor is named to everybody, a shared one to the person it was
+ * shared with, and an anonymous token's own folder to the browser holding it.
+ * One indexed read for the whole trail (`id = ANY(ancestor_ids)`, 1.4 ms
+ * measured), ordered back into root→parent by the array rather than by the
+ * database.
+ */
+export async function folderHeadFor(
+  folder: Pick<ArtifactRow, 'id' | 'title' | 'ancestor_ids'>,
+  viewer: { userId: string | null; email: string | null; tokenId: string | null } | null,
+): Promise<FolderHead> {
+  const head: FolderHead = { id: folder.id, title: folder.title, trail: [] };
+  const ids = folder.ancestor_ids ?? [];
+  if (!ids.length) return head;
+  const db = await getDb();
+  const actor: RoleActor = { userId: viewer?.userId ?? null, tokenId: viewer?.tokenId ?? null, email: viewer?.email ?? null };
+  const r = await db.query<Pick<ArtifactRow, 'id' | 'title' | 'user_id' | 'token_id' | 'visibility' | 'link_role'>>(
+    `SELECT id, title, user_id, token_id, visibility, link_role FROM artifacts
+      WHERE id = ANY($1::text[]) AND ${LIVE_ARTIFACT_SQL}`,
+    [ids],
+  );
+  const byId = new Map(r.rows.map((row) => [row.id, row]));
+  for (const id of ids) {
+    const row = byId.get(id);
+    // A trashed ancestor is not in `byId` at all (the gate above), and one this
+    // viewer cannot read is dropped here. Either way the trail is shorter, and
+    // shorter is the honest answer.
+    if (!row || !canRead(await effectiveRole(row, actor))) continue;
+    head.trail.push({ id: row.id, title: row.title, url: `/a/${row.id}` });
+  }
+  return head;
 }
 
 /**

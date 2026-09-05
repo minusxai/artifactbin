@@ -46,7 +46,11 @@ describe('GET /api/page/session', () => {
     const w = await world();
     asSession(w.owner);
     const body = await (await sessionPage(request('/api/page/session'))).json();
-    expect(body.user).toEqual({ id: w.owner.id, email: w.owner.email });
+    // The HANDLE travels with the account: the masthead links to `/@handle`
+    // rather than printing an address nobody can click (components/HeaderBar).
+    // Read here, never assigned — `ensureUsername` is a login-time write.
+    expect(body.user).toEqual({ id: w.owner.id, email: w.owner.email, username: w.owner.username });
+    expect(typeof body.user.username).toBe('string');
     expect(body.kind).toBe('account');
     // Three artifacts now: two documents and the folder they are filed under —
     // a folder is a row in the one table like everything else.
