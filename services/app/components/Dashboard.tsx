@@ -24,6 +24,20 @@ const InteractiveVegaChart = dynamic<VegaChartProps>(
   },
 );
 
+// A separate lazy boundary lets the wide chart initialize independently of
+// the compact instance that is finalized as the modal opens.
+const ExpandedInteractiveVegaChart = dynamic<VegaChartProps>(
+  () => import('@/components/viz/VegaChart').then((module) => module.VegaChart),
+  {
+    ssr: false,
+    loading: () => (
+      <div aria-label="Expanded engagement chart loading" className="flex h-full w-full items-center justify-center">
+        <span aria-hidden="true" className="size-4 animate-spin rounded-full border-2 border-edge border-t-accent" />
+      </div>
+    ),
+  },
+);
+
 export interface EngagementDatum extends Record<string, unknown> {
   day: string;
   series: 'views' | 'likes';
@@ -177,6 +191,7 @@ export function DashboardContent({
   const engagement = periodViews + periodLikes;
   const chartRows = useMemo(() => engagementRows(viewsOverTime, likesOverTime), [viewsOverTime, likesOverTime]);
   const colorMode = useAppMode();
+  const EngagementChart = expanded ? ExpandedInteractiveVegaChart : InteractiveVegaChart;
 
   const metrics: ReadonlyArray<{ label: string; value: number; Icon: LucideIcon }> = [
     { label: 'artifacts', value: documents.length, Icon: FileText },
@@ -189,7 +204,7 @@ export function DashboardContent({
 
   return (
     <section aria-label={expanded ? 'Expanded dashboard content' : 'Dashboard'} className={`min-w-0 ${expanded ? '' : 'reveal lg:sticky lg:top-6'}`}>
-      <div className={`mb-4 flex items-baseline justify-between gap-3 border-b border-edge pb-3 ${expanded ? 'pr-10' : ''}`}>
+      <div className={`mb-4 flex items-baseline justify-between gap-3 border-b border-edge pb-3 ${expanded ? 'pr-12' : ''}`}>
         <MicroLabel>dashboard</MicroLabel>
         <span className="flex items-center gap-2">
           <h1 className={`${expanded ? 'font-mono text-sm text-fg' : 'text-[11px] text-muted'} font-medium tracking-tight`}>Your artifacts</h1>
@@ -255,7 +270,7 @@ export function DashboardContent({
             aria-label={`Interactive engagement chart: ${periodViews} views and ${periodLikes} likes in the last 30 days`}
           >
             <div className={`flex min-h-0 w-full ${expanded ? 'h-[18rem] sm:h-[26rem]' : 'h-[14.25rem]'}`}>
-              <InteractiveVegaChart
+              <EngagementChart
                 envelope={ENGAGEMENT_ENVELOPE}
                 rows={chartRows}
                 colorMode={colorMode}
