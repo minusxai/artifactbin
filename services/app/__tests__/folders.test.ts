@@ -7,10 +7,11 @@ import { agentCookie, request, useAppHarness } from './harness';
 import { POST as createRoute, GET as listRoute } from '@/app/api/artifacts/route';
 import { GET as getRoute, DELETE as deleteRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as forkOpRoute } from '@/app/api/artifacts/[id]/fork/route';
-import { PATCH as patchMineRoute } from '@/app/api/my/artifacts/[id]/route';
+import { PATCH as patchMineRoute, PUT as putMineRoute } from '@/app/api/my/artifacts/[id]/route';
+import { PUT as putRoute } from '@/app/api/artifacts/[id]/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
-import { getArtifactById } from '@/lib/artifacts';
+import { getArtifactById, updateSharing } from '@/lib/artifacts';
 import { getDb } from '@/lib/db';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser } from '@/lib/users';
@@ -247,5 +248,133 @@ describe('a folder is not a document', () => {
     expect(shelf.folders.map((r: any) => r.id)).toEqual([f.id]);
     expect(shelf.assets).toEqual([]);
     expect(shelf.total).toBe(1);
+  });
+});
+
+/*
+ * A FOLDER'S PUT IS A METADATA EDIT, AND METADATA HAS ONE CODE PATH.
+ *
+ * A folder has no content, so nothing about one is ever "replaced": the whole
+ * body a folder takes — `title`, `visibility`, `parent_id` — is the metadata
+ * the PATCH door already writes, and routing it through the replace door meant
+ * a version, an archived copy of the empty state and an edit-log row for a
+ * string. The version number is what a caller diffs to learn "the document
+ * changed", so a rename that moves it says a document changed when nothing did.
+ *
+ * So both doors run the SAME writes (lib/artifacts setMetadataFor): PATCH is
+ * unchanged, and PUT on a folder now does what PATCH does.
+ */
+describe("a folder's PUT is a metadata edit", () => {
+  /** The two ledgers a replace writes and a metadata write must not. */
+  const ledgers = async (id: string) => {
+    const db = await getDb();
+    const v = await db.query<{ n: number }>('SELECT count(*)::int AS n FROM artifact_versions WHERE artifact_id = $1', [id]);
+    const e = await db.query<{ n: number }>('SELECT count(*)::int AS n FROM artifact_edits WHERE artifact_id = $1', [id]);
+    return { versions: v.rows[0].n, edits: e.rows[0].n };
+  };
+  const putBearer = async (token: string, id: string, body: Record<string, unknown>) =>
+    j(await putRoute(request(`/api/artifacts/${id}`, { method: 'PUT', json: body, token }), params(id)));
+  const putSession = async (cookie: string, id: string, body: Record<string, unknown>) =>
+    j(await putMineRoute(request(`/api/my/artifacts/${id}`, { method: 'PUT', json: body, cookie, origin: 'same' }), params(id)));
+
+  it('renames through PUT with no version, no archived copy and no edit-log row — at either door', async () => {
+    const o = await owner();
+    for (const [door, run] of [
+      ['bearer', (id: string) => putBearer(o.token, id, { title: 'Renamed' })],
+      ['session', (id: string) => putSession(o.cookie, id, { title: 'Renamed' })],
+    ] as const) {
+      const f = (await create(o.token, { format: 'folder', title: 'Reports' })).body;
+      const before = (await getArtifactById(f.id))!;
+      const beforeLedgers = await ledgers(f.id);
+      const r = await run(f.id);
+      expect(r.status, `${door}: ${JSON.stringify(r.body)}`).toBe(200);
+      const after = (await getArtifactById(f.id))!;
+      expect(after.title, door).toBe('Renamed');
+      expect(after.version, door).toBe(before.version);
+      expect(await ledgers(f.id), door).toEqual(beforeLedgers);
+      // …and the reply is the ordinary update reply, at the version the row is at.
+      expect(r.body, door).toMatchObject({ id: f.id, version: before.version, visibility: after.visibility });
+    }
+  });
+
+  it('files and re-tiers through PUT the same way — placement and visibility move nothing else', async () => {
+    const o = await owner();
+    const box = (await create(o.token, { format: 'folder', title: 'Box' })).body;
+    const f = (await create(o.token, { format: 'folder', title: 'Reports' })).body;
+    const before = (await getArtifactById(f.id))!;
+    const beforeLedgers = await ledgers(f.id);
+    expect((await putBearer(o.token, f.id, { parent_id: box.id })).status).toBe(200);
+    let after = (await getArtifactById(f.id))!;
+    expect(after.ancestor_ids).toEqual([box.id]);
+    expect(after.version).toBe(before.version);
+    expect(await ledgers(f.id)).toEqual(beforeLedgers);
+    expect((await putBearer(o.token, f.id, { visibility: 'unlisted' })).status).toBe(200);
+    after = (await getArtifactById(f.id))!;
+    expect(after.visibility).toBe('unlisted');
+    expect(after.version).toBe(before.version);
+    expect(await ledgers(f.id)).toEqual(beforeLedgers);
+  });
+
+  /*
+   * THE CAS SURVIVES THE CHANGE. `expectedVersion` is a caller asking to be
+   * REFUSED if the row moved under them, and a door where nothing moves the
+   * version would answer 200 to every one of them — honouring it by accident
+   * for as long as the replace door happened to be the one running.
+   */
+  it('still refuses a stale expectedVersion, and takes a current one', async () => {
+    const o = await owner();
+    const f = (await create(o.token, { format: 'folder', title: 'Reports' })).body;
+    const version = (await getArtifactById(f.id))!.version;
+    const stale = await putBearer(o.token, f.id, { title: 'Nope', expectedVersion: version + 1 });
+    expect(stale.status, JSON.stringify(stale.body)).toBe(409);
+    expect(stale.body).toMatchObject({ error: 'version_conflict', currentVersion: version });
+    expect((await getArtifactById(f.id))!.title, 'and nothing was written').toBe('Reports');
+    const ok = await putBearer(o.token, f.id, { title: 'Renamed', expectedVersion: version });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect((await getArtifactById(f.id))!.title).toBe('Renamed');
+  });
+
+  /*
+   * …AND METADATA IS THE OWNER'S, at this door as at every other one. The
+   * replace door runs under `editorScope` — an editor may rewrite a DOCUMENT —
+   * but a folder has no document to rewrite, and its name, tier and placement
+   * are the owner's the way sharing and deletion are (lib/artifacts
+   * ownerScope). The refusal is the uniform 404, which is what every other
+   * owner-only surface answers them.
+   */
+  it("is the owner's: a named editor of a folder is the uniform 404", async () => {
+    const o = await owner('boxowner');
+    const editor = await owner('boxeditor');
+    const f = (await create(o.token, { format: 'folder', title: 'Reports' })).body;
+    await updateSharing(o.userId, f.id, { shares: [{ email: 'boxeditor@example.com', role: 'editor' }] });
+    const r = await putBearer(editor.token, f.id, { title: 'Theirs' });
+    expect(r.status, JSON.stringify(r.body)).toBe(404);
+    expect((await getArtifactById(f.id))!.title).toBe('Reports');
+  });
+
+  /*
+   * ONE ACT, TWO DOORS. The title is sent with the whitespace a person's field
+   * or an agent's JSON carries, because a trim that happens at only one door is
+   * exactly how the two paths drift while both look right.
+   */
+  it('is the same act as PATCH: the same trimmed title, and a row byte-identical apart from title and updated_at', async () => {
+    const o = await owner();
+    const rest = (row: Record<string, unknown>) => {
+      const { title, updated_at, ...keep } = row;
+      return keep;
+    };
+    const doors = [
+      ['PATCH', async (id: string) => j(await patchMineRoute(request(`/api/my/artifacts/${id}`, { method: 'PATCH', json: { title: '  Quarterly  ' }, cookie: o.cookie, origin: 'same' }), params(id)))],
+      ['PUT', async (id: string) => putBearer(o.token, id, { title: '  Quarterly  ' })],
+    ] as const;
+    for (const [door, run] of doors) {
+      const f = (await create(o.token, { format: 'folder', title: 'Reports' })).body;
+      const before = (await getArtifactById(f.id))!;
+      const r = await run(f.id);
+      expect(r.status, `${door}: ${JSON.stringify(r.body)}`).toBe(200);
+      const after = (await getArtifactById(f.id))!;
+      expect(after.title, door).toBe('Quarterly');
+      expect(rest(after as unknown as Record<string, unknown>), door).toEqual(rest(before as unknown as Record<string, unknown>));
+    }
   });
 });

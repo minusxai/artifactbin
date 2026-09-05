@@ -10,7 +10,7 @@
  * answer with the same shape (`edit_id` and refresh `warnings` included).
  */
 import {
-  DATASET_ACCESS, SHARE_ROLES, artifactQuotaExceeded, byteQuotaFor, canWriteDataset, createArtifact, fontResolver, getArtifactFor, getOwnedArtifactFor, assetImporterFor, isVersionConflict, refLoaderForActor, refreshWarningsFor, replaceArtifactFor, writerFor,
+  DATASET_ACCESS, SHARE_ROLES, artifactQuotaExceeded, byteQuotaFor, canWriteDataset, createArtifact, fontResolver, getArtifactFor, getOwnedArtifactFor, assetImporterFor, isVersionConflict, refLoaderForActor, refreshWarningsFor, replaceArtifactFor, setMetadataFor, writerFor,
   type ArtifactInput, type ArtifactRow, type ArtifactSummary, type DatasetAccess, type EditInput, type EditOutcome, type ReplaceOpts, type ShareEntry, type ShareRole, type TokenActor, type Visibility,
 } from '@/lib/artifacts';
 import { actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type AnnotationAction, type AnnotationAuthor } from '@/lib/annotations';
@@ -473,7 +473,31 @@ export async function replaceArtifactWithBody(
     ...(placement ? { ancestor_ids: placement.ancestor_ids } : {}),
     ...(access ? { access } : {}),
   };
-  const row = await replaceArtifactFor(actor, id, input, expected);
+  /*
+   * A FOLDER'S WRITE IS THE METADATA WRITE — the PATCH door's, not a replace.
+   *
+   * Everything a folder takes is metadata (the content fields were refused
+   * above), so there is nothing to archive and nothing to diff: routing it
+   * through the replace door filed an archived copy of an empty state, wrote an
+   * edit-log row and moved the version — the one number a caller reads to learn
+   * that a document changed — for a rename. One code path (lib/artifacts
+   * setMetadataFor) means the browser renaming a folder and an agent's
+   * `update_artifact` are the same act, down to the trim on the title.
+   *
+   * The CAS is answered here rather than lost with the replace: a caller that
+   * sent `expectedVersion` asked for a refusal, and a door that always says 200
+   * because nothing moves the version is not a door that honoured it.
+   */
+  if (current.format === 'folder' && expected.expectedVersion !== undefined && current.version !== expected.expectedVersion) {
+    return json({ error: 'version_conflict', currentVersion: current.version }, 409);
+  }
+  const row = current.format === 'folder'
+    ? await setMetadataFor(actor, id, {
+      ...(typeof body.title === 'string' ? { title: body.title } : {}),
+      ...(visibility ? { visibility } : {}),
+      ...(placement ? { ancestor_ids: placement.ancestor_ids } : {}),
+    })
+    : await replaceArtifactFor(actor, id, input, expected);
   if (isVersionConflict(row)) return json({ error: 'version_conflict', currentVersion: row.currentVersion }, 409);
   if (!row) return json({ error: 'not_found' }, 404);
 
