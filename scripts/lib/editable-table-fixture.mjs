@@ -1,7 +1,7 @@
 /** The same disposable roadmap drives the browser gate and a local review link. */
 import { startDocument } from './start-doc.mjs';
 
-export async function createEditableTableFixture(base, count = 500) {
+export async function createEditableTableFixture(base, count = 500, source = {}) {
   const seed = await startDocument(base);
   const headers = { Authorization: `Bearer ${seed.token}`, 'Content-Type': 'application/json' };
   const api = async (path, body, method = 'POST') => {
@@ -10,9 +10,9 @@ export async function createEditableTableFixture(base, count = 500) {
     if (!response.ok) throw new Error(`${method} ${path}: ${response.status} ${text}`);
     return JSON.parse(text);
   };
-  const rows = Array.from({ length: count }, (_, i) => ({ id: i + 1, item: `Task ${i + 1}`, owner: 'TBD', hours: 2, depends_on: '[]', tags: '[]', status: 'backlog', sprint: '' }));
+  const rows = source.rows ?? Array.from({ length: count }, (_, i) => ({ id: i + 1, item: `Task ${i + 1}`, owner: 'TBD', hours: 2, depends_on: '[]', tags: '[]', status: 'backlog', sprint: '' }));
   const dataset = await api('/api/artifacts', { title: 'Editable roadmap gate data', dataset: rows, access: 'readwrite', visibility: 'unlisted' });
-  const sprints = await api('/api/artifacts', { title: 'Editable roadmap gate sprints', dataset: [{ name: 'Sprint 1' }, { name: 'Sprint 2' }], visibility: 'unlisted' });
+  const sprints = await api('/api/artifacts', { title: 'Editable roadmap gate sprints', dataset: source.sprints ?? [{ name: 'Sprint 1' }, { name: 'Sprint 2' }], access: 'readwrite', visibility: 'unlisted' });
   const fields = ['item', 'owner', 'hours', 'depends_on', 'tags', 'status', 'sprint'];
   const mutations = fields.map(field => `<Mutation name="set_${field}" expectedAffected={1}>{\`update ref_${dataset.id} set ${field}=$_value where id=$_row.id and ${field} is not distinct from $_row.${field}${field === 'depends_on' ? ' and not list_contains(cast($_value as varchar[]), cast(cast($_row.id as bigint) as varchar))' : ''}\`}</Mutation>`).join('\n');
   const markup = `<Helmet><title>Editable roadmap review</title>
@@ -34,5 +34,5 @@ ${mutations}</Helmet>
 <Column col="sprint" title="Sprint"><Select label="Sprint {$_row.id}" value="$_row.sprint" options="$sprints" run="$set_sprint" /></Column>
 </DataTable></div>`;
   await api(`/api/artifacts/${seed.id}`, { title: 'Editable roadmap review', markup }, 'PUT');
-  return { id: seed.id, datasetId: dataset.id, url: `${base}/a/${seed.id}`, api, token: seed.token };
+  return { id: seed.id, datasetId: dataset.id, sprintsId: sprints.id, markup, url: `${base}/a/${seed.id}`, api, token: seed.token };
 }

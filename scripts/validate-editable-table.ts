@@ -46,7 +46,7 @@ try {
     const mutate = async (rows: typeof initial, sql: string, params: Record<string, string | number | null>) => {
       const out = await svc.mutate({ table: { name: 'ref_tasks', rows, columns }, sql, params });
       assert.ok(!('error' in out), JSON.stringify(out));
-      return out as { rows: typeof initial; affected: number };
+      return out as unknown as { rows: typeof initial; affected: number };
     };
     const first = await mutate(initial, 'update ref_tasks set status=$next where id=$id', { next: 'active', id: 1 });
     const overwrite = await mutate(first.rows, 'update ref_tasks set status=$next where id=$id', { next: 'done', id: 1 });
