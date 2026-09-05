@@ -643,7 +643,7 @@ describe('AnnotationLayer', () => {
    * is typing in must not race the flush that carries their typing. Draining
    * first is the same rule an image paste already lives by.
    */
-  it('drains the editor BEFORE it stamps the anchor', async () => {
+  it('creates a relation without draining the editor', async () => {
     const order: string[] = [];
     const { frame, contentWindow } = makeFrame();
     const beforeCreate = vi.fn(async () => {
@@ -668,8 +668,8 @@ describe('AnnotationLayer', () => {
     const created = fetchCalls.slice(before).find((c) => c.init?.method === 'POST');
     expect(created).toBeTruthy();
     order.push('post');
-    expect(beforeCreate).toHaveBeenCalledTimes(1);
-    expect(order).toEqual(['drain', 'post']);
+    expect(beforeCreate).not.toHaveBeenCalled();
+    expect(order).toEqual(['post']);
   });
 
   it('the live stream replaces the list wholesale', async () => {

@@ -56,6 +56,18 @@ afterEach(() => {
 });
 
 describe('view-mode annotation geometry', () => {
+  it('resolves persisted source IDs without requiring legacy anchor attributes', () => {
+    const anchor = document.querySelector('main p')!;
+    anchor.removeAttribute('data-annotation-anchor');
+    anchor.id = PIN.key;
+    anchor.setAttribute('data-mx-ast', '9');
+    session.update(state('on'));
+    expect(layouts().at(-1)).toMatchObject({
+      positions: [{ id: PIN.id, rect: { x: 40, y: 220, width: 300, height: 28 } }],
+    });
+    expect(anchor).toHaveAttribute('data-mx-annotated');
+  });
+
   it('uses the main document anchor rather than a deck thumbnail copy, and refreshes it on scroll', () => {
     session.update(state('on'));
     expect(layouts().at(-1)).toMatchObject({
