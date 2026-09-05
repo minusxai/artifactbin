@@ -180,10 +180,13 @@ export function DataTable({
         <table className="w-full border-collapse text-sm" style={virtual ? { display: 'block' } : undefined}>
           <thead className={cn("bg-card text-left text-muted-foreground", sticky && "sticky top-0 z-10")} style={virtual ? { display: 'block' } : undefined}>
             <tr className="border-b border-border" style={rowGrid}>
-              {resolved.map((c) => (
+              {resolved.map((c) => {
+                const template = templates.find((candidate) => candidate.col === c.col)
+                return (
                 <th
                   key={c.col}
-                  {...{ [AST_PATH_ATTR]: templates.find((template) => template.col === c.col)?.path }}
+                  id={typeof template?.props.id === 'string' ? template.props.id : undefined}
+                  {...{ [AST_PATH_ATTR]: template?.path }}
                   scope="col"
                   aria-label={`Sort by ${c.title}`}
                   aria-sort={sort?.col === c.col ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
@@ -195,7 +198,8 @@ export function DataTable({
                   {c.title}
                   {sort?.col === c.col ? <span aria-hidden="true" className="ml-1 opacity-70">{sort.dir === 'asc' ? '▲' : '▼'}</span> : null}
                 </th>
-              ))}
+                )
+              })}
             </tr>
           </thead>
           <tbody style={virtual ? { display: 'block', height: `${total}px`, position: 'relative' } : undefined}>
