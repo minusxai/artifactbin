@@ -405,14 +405,33 @@ export async function exportImageResponse(
    * byte for byte, and one selection has one identity however its link was
    * written (lib/story/url-values urlSelection).
    */
-  const flow = artifact.format === 'markup' && artifact.source ? declarationsOf(artifact.source) : null;
+  /*
+   * A FOLDER IS A DOCUMENT HERE TOO, and this predicate is the whole of item
+   * one: `format === 'markup'` decided WHERE a row is photographed, so every
+   * folder was sent to `/a/<id>` — the app shell, which the `?key=` on this
+   * address deliberately keeps on the SPA path — with `main` as its target,
+   * and the browser waited out its timeout for an element the shell never
+   * draws. Measured on production: `{"error":"render_failed"}`, 25 bytes, for
+   * every folder there is.
+   *
+   * Nothing else had to move. `raw` already serves a folder through its markup
+   * case, `chrome=0` already settles the folder's dataflow under the capture's
+   * own viewer instead of painting first, `<Files>` already draws glyphs
+   * rather than waiting on N children's captures, and the signed key already
+   * stands in for the session the headless browser has not got. Named once and
+   * read at all three sites below — the address, the card's crop, and the
+   * declarations a selection is read through — because a folder that is a
+   * document for one of them and not the others is a card of the wrong thing.
+   */
+  const isDocument = artifact.format === 'markup' || artifact.format === 'folder';
+  const flow = isDocument && artifact.source ? declarationsOf(artifact.source) : null;
   const selection = capture === 'card' || capture === 'preview' ? { search: '', token: '' } : urlSelection(q.search ?? '', flow);
 
   const rendered = await renderArtifactImage(artifact, format, {
     capture,
     ...(draftCrop
       ? { crop: draftCrop, volatile: true }
-      : capture === 'card' && artifact.format === 'markup'
+      : capture === 'card' && isDocument
         ? { crop: socialPreviewCrop(artifact.source ?? '') }
       : {}),
     ...(selection.token ? { selection: selection.token } : {}),
@@ -426,13 +445,13 @@ export async function exportImageResponse(
     // the document with none of the reading chrome); the data tiers have no
     // document of their own and render inside the app's <main>.
     pageUrl: () => new URL(
-      artifact.format === 'markup'
+      isDocument
         ? `/a/${artifact.id}/raw?chrome=0&key=${mintExportKey(artifact.id)}${selection.search ? `&${selection.search}` : ''}`
         : `/a/${artifact.id}?key=${mintExportKey(artifact.id)}`,
       EXPORT_INTERNAL_ORIGIN ?? base,
     ).toString(),
     // BY NAME, not by position: a served document is the page itself.
-    target: artifact.format === 'markup' ? 'body' : 'main',
+    target: isDocument ? 'body' : 'main',
     ...(slide > 0 ? { slide } : {}),
   });
   if (!rendered.ok) {
