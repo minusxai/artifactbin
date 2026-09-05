@@ -22,6 +22,7 @@ import { PUT as putMineRoute, PATCH as patchMineRoute } from '@/app/api/my/artif
 import { PUT as putRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
+import { GET as frameRoute } from '@/app/a/[id]/events/frame/route';
 import { getArtifactById, updateSharing } from '@/lib/artifacts';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser } from '@/lib/users';
@@ -159,11 +160,23 @@ describe('a folder has no content', () => {
     expect(row.source).toContain('Real work');
   });
 
-  it('has no document to serve: raw is the uniform 404', async () => {
+  /*
+   * NOTHING SERVES A FOLDER'S CONTENT, at EITHER address. `raw` is the obvious
+   * one; the live frame is the one that hides, because it is its own route with
+   * its own ACL and never goes through `raw`'s switch — `liveFrameFor` handles
+   * a non-markup row by falling back to `source: null` rather than refusing, so
+   * a folder answered 200 with an empty frame: a meaningless body at a public
+   * address, and a line in a report that nobody had run.
+   */
+  it('has no document to serve: raw AND the live frame are the uniform 404', async () => {
     const o = await owner('noraw');
     const f = await create(o.token, { format: 'folder', title: 'Reports', visibility: 'public' });
-    const r = await rawRoute(request(`/a/${f.id}/raw`), params(f.id));
-    expect(r.status).toBe(404);
+    expect((await rawRoute(request(`/a/${f.id}/raw`), params(f.id))).status, 'raw').toBe(404);
+    expect((await frameRoute(request(`/a/${f.id}/events/frame`), params(f.id))).status, 'events/frame').toBe(404);
+    // …and a real document still has both.
+    const doc = await create(o.token, { markup: '<h1>doc</h1>', title: 'Doc', visibility: 'public' });
+    expect((await rawRoute(request(`/a/${doc.id}/raw`), params(doc.id))).status, 'raw of a document').toBe(200);
+    expect((await frameRoute(request(`/a/${doc.id}/events/frame`), params(doc.id))).status, 'frame of a document').toBe(200);
   });
 });
 
