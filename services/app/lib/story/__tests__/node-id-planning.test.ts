@@ -6,6 +6,7 @@ import { assignNodeKeys } from '@/lib/story-ui/node-identity';
 import { canonicalizeMarkup } from '../jsx-tier';
 import { deriveSpliceFromStrings, touchedSpanFor, spansOverlap, applySplice } from '../splice';
 import { getDb } from '@/lib/db';
+import { useAppHarness } from '@/__tests__/harness';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { IconGlyphProvider } from '@/components/kit/icon';
@@ -22,6 +23,7 @@ const nodes = (source: string) => {
 };
 
 describe('node identity planning counterexamples', () => {
+  useAppHarness();
   it('executes all four captured OpenCode GLM-5.3 edit responses through the existing kernel', () => {
     const list = '<ul id="list"><li id="aaaa">Same</li><li id="bbbb">Same</li><li id="cccc">Same</li></ul>';
     const cases = [
