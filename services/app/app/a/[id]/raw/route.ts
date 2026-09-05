@@ -19,7 +19,8 @@
  * Keep the repo middleware-free so nothing rewrites them.
  */
 import { canReadArtifact, dataflowForRow, declarationsForRow, getArtifactById, linkRoleOf, refDataForRow } from '@/lib/artifacts';
-import { withIntent } from '@/lib/intent';
+import { withIntent, type Intent } from '@/lib/intent';
+import { count, has } from '@/lib/relations';
 import { canonicalArtifactPath } from '@/lib/urls';
 import { roleBehindLogin } from '@/lib/share-roles';
 import { trackEvent } from '@/lib/analytics';
@@ -351,7 +352,27 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         chrome ? forkedFromCredit(artifact.forked_from) : Promise.resolve(null),
       ]);
       const runtime = storyRuntimeAssets();
+      /*
+       * THE DOORS. A top-level document holds no session, so like, follow and
+       * comment are ASKS it carries: a viewer's go straight back to this
+       * document with the intent, and the shell performs it; a stranger's go
+       * through login first. The same shape the fork door has always had.
+       */
+      const door = (kind: Intent) => (viewer
+        ? `/a/${artifact.id}${withIntent('', kind)}`
+        : `/login?callbackUrl=${encodeURIComponent(`/a/${artifact.id}${withIntent('', kind)}`)}`);
+      const viewerId = viewer?.userId ?? null;
+      const reactions = chrome
+        ? {
+          like: { count: await count('like', artifact.id), liked: viewerId ? await has(viewerId, 'like', artifact.id) : false, href: door('like') },
+          follow: artifact.user_id && artifact.user_id !== viewerId
+            ? { following: viewerId ? await has(viewerId, 'follow', artifact.user_id) : false, count: await count('follow', artifact.user_id), href: door('follow') }
+            : null,
+          commentHref: door('comment'),
+        }
+        : null;
       const html = await buildStoryDocument({
+        reactions,
         assetUrls,
         chrome,
         editable,

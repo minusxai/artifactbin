@@ -60,6 +60,19 @@ export interface ReaderForkedFrom {
   href: string | null;
 }
 
+/**
+ * WHAT THE RAIL SAYS ABOUT THIS DOCUMENT AND ITS AUTHOR, and where each ask
+ * goes. Counts are everyone's; `liked`/`following` are this viewer's; each
+ * `href` is the door a TOP-LEVEL document navigates to (a framed copy asks its
+ * page instead). `follow` is null when there is nobody to follow — an
+ * anonymous document, or the author reading their own.
+ */
+export interface ReaderReactions {
+  like: { count: number; liked: boolean; href: string };
+  follow: { following: boolean; count: number; href: string } | null;
+  commentHref: string;
+}
+
 export interface ReaderChromeInput {
   /** Stamped on the root (`data-mx-artifact-id`) so the like/comment log can name the document. Omitted when null. */
   artifactId: string | null;
@@ -73,6 +86,8 @@ export interface ReaderChromeInput {
   login?: { href: string } | null;
   /** This viewer may WRITE (the owner's or an editor's framed copy): the rail offers Edit. */
   edit?: boolean;
+  /** Counts, the viewer's own state, and the doors. Absent: the rail is inert (tests, previews). */
+  reactions?: ReaderReactions | null;
 }
 
 /** The class the visibility policy toggles; the root is rendered with it. */
@@ -126,9 +141,9 @@ const label = (text: string): string =>
  * A rail ACTION — like, comment, share. A button, never a link: none of the
  * three navigates, and two of them do not even reach the network yet.
  */
-const action = (name: 'like' | 'comment' | 'share' | 'edit', aria: string, icon: string): string =>
-  `<button type="button" class="mx-reader-action" data-mx-reader-action="${name}" aria-label="${aria}" data-mx-tip="${aria}">`
-  + `${icon}${label(name)}</button>`;
+const action = (name: 'like' | 'comment' | 'share' | 'edit', aria: string, icon: string, extra = '', inner = ''): string =>
+  `<button type="button" class="mx-reader-action" data-mx-reader-action="${name}" aria-label="${aria}" data-mx-tip="${aria}"${extra}>`
+  + `${icon}${inner}${label(name)}</button>`;
 
 /**
  * A PANEL trigger. The open/close glyph pair and the aria-label flip are the
@@ -175,9 +190,11 @@ const renderForkedFrom = (forkedFrom: ReaderForkedFrom): string => {
  * the title, the provenance label, the hrefs — is HTML-escaped on the way out.
  */
 export function renderReaderChrome(input: ReaderChromeInput): string {
-  const { artifactId, title, author, signIn = null, fork = null, login = null, edit = false } = input;
+  const { artifactId, title, author, signIn = null, fork = null, login = null, edit = false, reactions = null } = input;
   const username = author?.username ?? null;
   const forkedFrom = author?.forkedFrom ?? null;
+  const following = reactions?.follow?.following ?? false;
+  const followAria = `${following ? 'Unfollow' : 'Follow'} @${escapeHtml(username ?? '')}`;
 
   const byline = '<div class="mx-reader-byline" data-mx-reader-byline>'
     + (username
@@ -188,9 +205,11 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
     // one: an anonymous document has nobody to follow. UI only for now — the
     // entry logs it with the author, the way like and comment log.
     + (title ? `<span class="mx-reader-title">${escapeHtml(title)}</span>` : '')
-    + (username
+    + (username && (!reactions || reactions.follow)
       ? `<button type="button" class="mx-reader-follow" data-mx-reader-action="follow" data-mx-author="${escapeHtml(username)}"`
-        + ` aria-label="Follow @${escapeHtml(username)}" data-mx-tip="Follow @${escapeHtml(username)}">follow</button>`
+        + ` aria-label="${followAria}" data-mx-tip="${followAria}"`
+        + (reactions?.follow ? ` data-mx-following="${following}" data-mx-href="${escapeHtml(reactions.follow.href)}"` : '')
+        + `>${following ? 'following' : 'follow'}</button>`
       : '')
     + '</div>';
 
@@ -203,8 +222,16 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
     + '<a class="mx-reader-home" href="/" target="_top" aria-label="Home" data-mx-reader-logo data-mx-tip="Home">'
     + '<img src="/logo-128.png" alt=""></a>'
     + '<div class="mx-reader-rail" data-mx-reader-rail>'
-    + action('like', 'Like', ICON_HEART)
-    + action('comment', 'Comment', ICON_COMMENT)
+    + action(
+      'like',
+      reactions?.like.liked ? 'Unlike' : 'Like',
+      ICON_HEART,
+      reactions ? ` data-mx-liked="${reactions.like.liked}" data-mx-href="${escapeHtml(reactions.like.href)}"` : '',
+      // The count is everyone's; empty (and so hidden) at zero. The entry
+      // rewrites it when the page answers a press.
+      `<span class="mx-reader-count" data-mx-reader-count="like">${reactions && reactions.like.count > 0 ? reactions.like.count : ''}</span>`,
+    )
+    + action('comment', 'Comment', ICON_COMMENT, reactions ? ` data-mx-href="${escapeHtml(reactions.commentHref)}"` : '')
     + action('share', 'Share', ICON_SEND)
     + (edit ? action('edit', 'Edit', ICON_PENCIL) : '')
     + trigger('controls', 'Open artifact controls', ICON_SLIDERS, 'settings', 'Artifact settings')

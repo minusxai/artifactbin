@@ -177,6 +177,25 @@ export function wireReaderChrome(win: Window, doc: Document): ReaderChromeHandle
 
   /* ---- THE RAIL ------------------------------------------------------ */
 
+  const showLike = (liked: boolean, count: number | null) => {
+    const heart = root.querySelector<HTMLElement>('[data-mx-reader-action="like"]');
+    if (!heart) return;
+    heart.setAttribute('data-mx-liked', String(liked));
+    heart.setAttribute('aria-label', liked ? 'Unlike' : 'Like');
+    heart.setAttribute('data-mx-tip', liked ? 'Unlike' : 'Like');
+    const counter = heart.querySelector<HTMLElement>('[data-mx-reader-count="like"]');
+    if (counter && count !== null) counter.textContent = count > 0 ? String(count) : '';
+  };
+  const showFollow = (following: boolean) => {
+    const pill = root.querySelector<HTMLElement>('[data-mx-reader-action="follow"]');
+    if (!pill) return;
+    const who = pill.dataset.mxAuthor ?? '';
+    pill.setAttribute('data-mx-following', String(following));
+    pill.setAttribute('aria-label', `${following ? 'Unfollow' : 'Follow'} @${who}`);
+    pill.setAttribute('data-mx-tip', `${following ? 'Unfollow' : 'Follow'} @${who}`);
+    pill.textContent = following ? 'following' : 'follow';
+  };
+
   const toast = root.querySelector<HTMLElement>('[data-mx-reader-toast]');
   let toastTimer = 0;
   const say = () => {
@@ -238,6 +257,11 @@ export function wireReaderChrome(win: Window, doc: Document): ReaderChromeHandle
       // Like and comment are UI ONLY: the backend is somebody else's phase, and
       // a button that pretends to have saved something is worse than one that
       // says plainly where it got to.
+      // TOP-LEVEL, the document holds no session: like, comment and follow are
+      // doors it walks through (login and back, or straight back with the ask
+      // for a viewer). Without a door — a preview, a test — they only say so.
+      const door = button.dataset.mxHref;
+      if (door) { win.location.assign(door); return; }
       if (kind === 'like' || kind === 'comment') console.log(`[artifactbin] ${kind}`, { artifact });
       if (kind === 'follow') console.log('[artifactbin] follow', { artifact, author: button.dataset.mxAuthor ?? null });
     });
@@ -257,8 +281,13 @@ export function wireReaderChrome(win: Window, doc: Document): ReaderChromeHandle
     on(win, 'message', (event) => {
       const { data, source } = event as MessageEvent<StoryReaderActionResultMessage | StoryReaderChromeMessage>;
       if (source !== parent || !data || typeof data !== 'object') return;
-      // The page shared on our behalf; the toast is ours to show.
-      if (data.type === STORY_READER_ACTION_RESULT_MESSAGE && data.kind === 'share' && data.ok) say();
+      if (data.type === STORY_READER_ACTION_RESULT_MESSAGE) {
+        // The page shared on our behalf; the toast is ours to show.
+        if (data.kind === 'share' && data.ok) say();
+        // The page liked or followed for us; the heart and the pill follow suit.
+        if (data.kind === 'like' && data.ok && typeof data.liked === 'boolean') showLike(data.liked, data.count ?? null);
+        if (data.kind === 'follow' && data.ok && typeof data.following === 'boolean') showFollow(data.following);
+      }
       if (data.type === STORY_READER_CHROME_MESSAGE) {
         // `off`: gone. `pinned` (edit mode): held at the top with the page's
         // editor toolbar under it, and the document inset by both so nothing

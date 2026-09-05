@@ -36,7 +36,7 @@ import type { RefDataMap } from '@/lib/story/ref-data';
 import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
 import { STORY_ROOT_ATTR } from '@/lib/story-surface';
-import { escapeHtml, renderReaderChrome, type ReaderForkedFrom } from '@/lib/story/reader-chrome';
+import { escapeHtml, renderReaderChrome, type ReaderForkedFrom, type ReaderReactions } from '@/lib/story/reader-chrome';
 import { criticalStoryFonts, getStoryFontCss, storyFontFaceCss, STORY_FONTS_ATTR } from '@/lib/data/story/story-fonts';
 import { documentFonts, documentFontCss } from './document-fonts';
 import { webFontAssets } from '@/lib/webfonts';
@@ -186,6 +186,8 @@ export interface StoryDocumentInput {
   login?: { href: string } | null;
   /** The rail offers Edit: this is a writer's framed copy (`?edit=1`). */
   edit?: boolean;
+  /** Like and follow counts, this viewer's own state, and the doors (lib/story/reader-chrome ReaderReactions). */
+  reactions?: ReaderReactions | null;
 }
 
 /**
@@ -401,6 +403,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
       fork,
       login: input.login ?? null,
       edit: !!input.edit,
+      reactions: input.reactions ?? null,
     })
     : '';
 

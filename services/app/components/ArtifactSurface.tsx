@@ -20,10 +20,9 @@ import AnnotationLayer from '@/components/AnnotationLayer';
 import CopyAgentPrompt from '@/components/CopyAgentPrompt';
 import RefreshAssets from '@/components/RefreshAssets';
 import ForkArtifact, { ForkConfirm } from '@/components/ForkArtifact';
-import { LikeButton } from '@/components/LikeButton';
 import ShareLink from '@/components/ShareLink';
 import type { AnnotationWire } from '@/lib/annotations';
-import { readIntent, stripIntent } from '@/lib/intent';
+import { readIntent, stripIntent, withIntent } from '@/lib/intent';
 import PageChrome, { PageControls, PageMenu, requestPageChrome, type AppearanceMode } from '@/components/PageChrome';
 import { useIsPhoneViewport } from '@/components/MobileSheet';
 /* The editing bar's height is RESERVED by this page, never measured — and it
@@ -32,7 +31,7 @@ import { useIsPhoneViewport } from '@/components/MobileSheet';
 import { APP_BAR_H, EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
 import type { ArtifactFormat } from '@/lib/story/input';
 import { useLiveArtifact } from '@/lib/story/use-live-artifact';
-import { STORY_READER_ACTION_MESSAGE, STORY_READER_ACTION_RESULT_MESSAGE, STORY_READER_CHROME_MESSAGE, type StoryReaderActionMessage } from '@/lib/story-runtime/contract';
+import { STORY_READER_ACTION_MESSAGE, STORY_READER_ACTION_RESULT_MESSAGE, STORY_READER_CHROME_MESSAGE, type StoryReaderActionMessage, type StoryReaderActionResultMessage } from '@/lib/story-runtime/contract';
 import { STORY_ASSET_MESSAGE, STORY_ASSET_RESULT_MESSAGE, type StoryAssetRequest, type StoryAssetResult, STORY_DATA_MESSAGE, STORY_DOCUMENT_ACK_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_HELLO_MESSAGE, STORY_MUTATE_MESSAGE, STORY_MUTATE_RESULT_MESSAGE, STORY_PAINTED_MESSAGE, STORY_READER_MODE_MESSAGE, STORY_SCROLL_MESSAGE, type StoryDataUpdate, type StoryMutateRequest, type StoryMutateResult, type StoryScrollMessage, STORY_ADOPTS_MESSAGE, STORY_QUERY_MESSAGE, STORY_QUERY_RESULT_MESSAGE, isEditFrameMessage, isSessionMessage, isValuesMessage, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, type StoryDocumentUpdate, type StoryEditSelection, type StoryQueryRequest, type StoryQueryResult, type StorySelectionActionsMessage } from '@/lib/story-runtime/contract';
 import type { DataflowState } from '@/lib/story/dataflow';
 import { urlValuesSearch, writeUrlValues } from '@/lib/story/url-values';
@@ -93,6 +92,8 @@ export interface ArtifactSurfaceProps {
    * capture, the ui suite's fixtures) has nobody to ask.
    */
   like?: { liked: boolean; count: number };
+  /** Who to follow and whether we do — null for an anonymous document, or the owner's own. */
+  follow?: { userId: string; following: boolean; count: number } | null;
   content: string;
   columns: Array<{ name: string; type?: string }>;
   compiledCss: string | null;
@@ -212,7 +213,7 @@ const selectionActionCapabilities = (canEdit: boolean, canAnnotate: boolean, inV
 
 export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const [copiedRef, setCopiedRef] = useState(false);
-  const { id, editId, format, title, source, content, columns, bytes: fileBytes = 0, pages: filePages = null, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', accountSession = false, anonSession = false, version, captureKey = null, openAnnotations = 0, like = { liked: false, count: 0 } } = props;
+  const { id, editId, format, title, source, content, columns, bytes: fileBytes = 0, pages: filePages = null, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', accountSession = false, anonSession = false, version, captureKey = null, openAnnotations = 0, like = { liked: false, count: 0 }, follow = null } = props;
   const [editing, setEditing] = useState(false);
   /** A view-mode text selection asks edit mode to open on its containing node. */
   const [initialEditSelectionPath, setInitialEditSelectionPath] = useState<string | null>(null);
@@ -336,6 +337,10 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     // shell holds the credential, so this is where the field opens. Gated by
     // the same capability the bar's row is, for the same reason.
     else if (intent === 'new-folder' && isFolder && canEdit) setNamingFolder(true);
+    // The document's heart and pill can only ASK; a reader who pressed one
+    // arrives here (via login, or straight back) and the shell performs it.
+    else if (intent === 'like') void toggleLike(frameRef.current?.contentWindow ?? null, true);
+    else if (intent === 'follow') void toggleFollow(frameRef.current?.contentWindow ?? null, true);
     const next = stripIntent(window.location.search);
     if (next !== window.location.search) {
       window.history.replaceState(null, '', window.location.pathname + next + window.location.hash);
@@ -913,6 +918,54 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   }, []);
   const enterEdit = useCallback(() => beginEdit(null), [beginEdit]);
 
+  /*
+   * LIKE AND FOLLOW, performed here. The framed document draws the heart and
+   * the pill and ASKS; this page holds the session, calls the door, and hands
+   * the door's own answer back down so the chrome shows what is true rather
+   * than what was hoped. A page with no account walks through login and back
+   * with the ask, the way a stranger's document does.
+   */
+  const likeRef = useRef(like);
+  const followRef = useRef(follow);
+  const answer = useCallback((frame: Window | null, reply: Omit<StoryReaderActionResultMessage, 'type'>) => {
+    frame?.postMessage({ type: STORY_READER_ACTION_RESULT_MESSAGE, ...reply } satisfies StoryReaderActionResultMessage, '*');
+  }, []);
+  const toggleLike = useCallback(async (frame: Window | null, want?: boolean) => {
+    if (!accountSession) {
+      window.location.assign(`/login?callbackUrl=${encodeURIComponent(`${window.location.pathname}${withIntent('', 'like')}`)}`);
+      return;
+    }
+    const next = want ?? !likeRef.current.liked;
+    if (next === likeRef.current.liked) { answer(frame, { kind: 'like', ok: true, ...likeRef.current }); return; }
+    const res = await fetch(`/api/my/artifacts/${id}/like`, { method: next ? 'POST' : 'DELETE', credentials: 'same-origin' }).catch(() => null);
+    if (!res?.ok) return;
+    likeRef.current = (await res.json()) as { liked: boolean; count: number };
+    answer(frame, { kind: 'like', ok: true, ...likeRef.current });
+  }, [accountSession, answer, id]);
+  const toggleFollow = useCallback(async (frame: Window | null, want?: boolean) => {
+    const target = followRef.current;
+    if (!target) return;
+    if (!accountSession) {
+      window.location.assign(`/login?callbackUrl=${encodeURIComponent(`${window.location.pathname}${withIntent('', 'follow')}`)}`);
+      return;
+    }
+    const next = want ?? !target.following;
+    if (next === target.following) { answer(frame, { kind: 'follow', ok: true, following: target.following, count: target.count }); return; }
+    const res = await fetch(`/api/users/${target.userId}/follow`, { method: next ? 'POST' : 'DELETE', credentials: 'same-origin' }).catch(() => null);
+    if (!res?.ok) return;
+    const state = (await res.json()) as { following: boolean; count: number };
+    followRef.current = { ...target, ...state };
+    answer(frame, { kind: 'follow', ok: true, ...state });
+  }, [accountSession, answer]);
+  // A frame that (re)announces itself is told what is true now — it may have
+  // been served before an intent-driven like landed, or been replaced since.
+  useEffect(() => {
+    if (format !== 'markup' || !sessionNonce) return;
+    const frame = frameRef.current?.contentWindow ?? null;
+    answer(frame, { kind: 'like', ok: true, ...likeRef.current });
+    if (followRef.current) answer(frame, { kind: 'follow', ok: true, following: followRef.current.following, count: followRef.current.count });
+  }, [answer, format, frameNonce, sessionNonce]);
+
 
 
   /**
@@ -1011,8 +1064,10 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       const frame = event.source as Window | null;
       switch (data.kind) {
         case 'like':
+          void toggleLike(frame);
+          break;
         case 'follow':
-          console.log(`[artifactbin] ${data.kind}`, { artifact: id, ...(data.author ? { author: data.author } : {}) });
+          void toggleFollow(frame);
           break;
         case 'comment':
           if (canAnnotate) setRailOpen((open) => !open);
@@ -1044,7 +1099,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     };
     window.addEventListener('message', onAction);
     return () => window.removeEventListener('message', onAction);
-  }, [canAnnotate, canEdit, editing, enterEdit, finishEdit, format, id, shownTitle]);
+  }, [canAnnotate, canEdit, editing, enterEdit, finishEdit, format, id, shownTitle, toggleFollow, toggleLike]);
 
   // EDIT MODE pins the document's bar at the top and sits the editor toolbar
   // under it; the document insets itself by both, so nothing is covered.
@@ -1107,10 +1162,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
         {/* Everyone the shell is served to — owner, editor, commenter — may
             take a copy of what they can read. */}
         <ForkArtifact id={id} variant="menu" />
-        {/* UNCONDITIONAL, for the fork row's reason: the count is public and
-            the door decides on the read ACL, not on ownership. An anonymous
-            reader gets the number and a way to sign in. */}
-        <LikeButton artifactId={id} liked={like.liked} count={like.count} signedIn={accountSession} />
         {/* EDIT IS ALSO RENAME, which is why a folder is offered it: the
             editor's Title field writes `title` through the edit protocol like
             any other change, so a folder needs no rename door of its own — and

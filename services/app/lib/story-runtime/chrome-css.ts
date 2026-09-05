@@ -323,6 +323,14 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
 .mx-reader-follow:hover { background: var(--primary, currentColor) !important; color: var(--primary-foreground, canvas) !important; }
 .mx-reader-follow:active { transform: scale(.96) !important; }
 
+/* A liked heart fills in the accent; a followed author's pill fills too; the
+   count sits beside the glyph and disappears at zero. */
+.mx-reader-action[data-mx-liked="true"] { color: var(--primary, currentColor) !important; }
+.mx-reader-action[data-mx-liked="true"] svg { fill: var(--primary, currentColor) !important; }
+.mx-reader-count { font: 500 11px/1 var(--font-mono, ui-monospace, monospace) !important; letter-spacing: .02em !important; }
+.mx-reader-count:empty { display: none !important; }
+.mx-reader-follow[data-mx-following="true"] { background: var(--primary, currentColor) !important; color: var(--primary-foreground, canvas) !important; }
+
 /* TIPS — CSS only, because a document of prose ships no runtime to draw one.
    Every control names itself in data-mx-tip; a hover or a keyboard focus
    shows the word after a beat. Placement is the layout's (below the bar on a
@@ -375,6 +383,7 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
   }
   .mx-reader-rail { order: 2 !important; display: flex !important; align-items: center !important; gap: 2px !important; flex: 0 0 auto !important; }
   .mx-reader-action, .mx-reader-trigger { width: 34px !important; height: 34px !important; }
+  .mx-reader-action:has(.mx-reader-count:not(:empty)) { width: auto !important; padding: 0 8px 0 6px !important; gap: 4px !important; }
 
 }
 
@@ -418,6 +427,9 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
     filter: drop-shadow(0 1px 1.5px var(--background, canvas)) drop-shadow(0 0 6px color-mix(in srgb, var(--background, canvas) 85%, transparent)) !important;
   }
   .mx-reader-action svg, .mx-reader-trigger svg { width: 24px !important; height: 24px !important; }
+  /* The count sits under the glyph on a phone. */
+  .mx-reader-action { flex-direction: column !important; gap: 0 !important; }
+  .mx-reader-action .mx-reader-count { font-size: 10px !important; }
   .mx-reader-home {
     width: 48px !important; height: 48px !important; border-radius: 12px !important;
     background: var(--background, canvas) !important;

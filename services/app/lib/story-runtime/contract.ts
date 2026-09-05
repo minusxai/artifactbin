@@ -287,6 +287,11 @@ export interface StoryReaderActionResultMessage {
   type: typeof STORY_READER_ACTION_RESULT_MESSAGE;
   kind: StoryReaderActionKind;
   ok: boolean;
+  /** `like`: the door's answer. */
+  liked?: boolean;
+  /** `follow`: the door's answer. */
+  following?: boolean;
+  count?: number;
 }
 /**
  * The parent sets the framed chrome's mode: `on` (the reveal-on-scroll rule),

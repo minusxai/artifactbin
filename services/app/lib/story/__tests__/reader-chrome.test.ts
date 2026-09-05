@@ -148,6 +148,27 @@ describe('renderReaderChrome', () => {
     expect(chrome()).not.toContain('data-mx-reader-action="edit"');
   });
 
+  it("carries the counts, the viewer's own state and the doors when the route gives them", () => {
+    const html = chrome({ reactions: {
+      like: { count: 128, liked: true, href: '/a/ab12cd?intent=like' },
+      follow: { following: false, count: 12, href: '/login?callbackUrl=%2Fa%2Fab12cd%3Fintent%3Dfollow' },
+      commentHref: '/a/ab12cd?intent=comment',
+    } });
+    expect(html).toContain('data-mx-reader-action="like" aria-label="Unlike" data-mx-tip="Unlike" data-mx-liked="true" data-mx-href="/a/ab12cd?intent=like"');
+    expect(html).toContain('<span class="mx-reader-count" data-mx-reader-count="like">128</span>');
+    expect(html).toContain('data-mx-reader-action="comment" aria-label="Comment" data-mx-tip="Comment" data-mx-href="/a/ab12cd?intent=comment"');
+    expect(html).toContain('aria-label="Follow @ada" data-mx-tip="Follow @ada" data-mx-following="false" data-mx-href="/login?callbackUrl=%2Fa%2Fab12cd%3Fintent%3Dfollow">follow</button>');
+
+    const followed = chrome({ reactions: { like: { count: 0, liked: false, href: '/x' }, follow: { following: true, count: 1, href: '/y' }, commentHref: '/z' } });
+    expect(followed).toContain('aria-label="Unfollow @ada" data-mx-tip="Unfollow @ada" data-mx-following="true" data-mx-href="/y">following</button>');
+    expect(followed).toContain('<span class="mx-reader-count" data-mx-reader-count="like"></span>');
+    expect(followed).toContain('data-mx-liked="false"');
+
+    // Nobody to follow — the author reading their own, an anonymous document.
+    const own = chrome({ reactions: { like: { count: 3, liked: false, href: '/x' }, follow: null, commentHref: '/z' } });
+    expect(own).not.toContain('data-mx-reader-action="follow"');
+  });
+
   it('never renders the retired credits', () => {
     const html = chrome();
     expect(html).not.toContain('mx-artifact-credits');
