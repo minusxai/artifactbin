@@ -15,14 +15,14 @@
  *  - the *Control primitives take RESOLVED props + onChange and are what the
  *    runtime adapters wire to the store (lib/story-runtime/StoryRuntimeApp).
  *
- * The dropdown is our own inline searchable combobox/listbox, deliberately not
- * a portal: the SSR string is deterministic (closed), nothing needs `useId`,
+ * The dropdown is our own searchable listbox, portaled into its ownerDocument: the SSR string is deterministic (closed), nothing needs `useId`,
  * and it works unchanged inside the sandboxed document and the canvas's
  * nested-root iframe (outside-click listens on `ownerDocument`, never the
  * module's global — the canvas renders into another realm's document).
  */
 import * as React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { format as d3format } from 'd3-format';
 import { refName, type TableResult } from '@/lib/story/dataflow';
 import { cn } from './cn';
@@ -120,6 +120,12 @@ export interface SelectControlProps {
   multiple?: boolean;
   allowCreate?: boolean;
   valueFormat?: 'json';
+  /** Optional controlled draft, encoded using the same scalar format as value. */
+  draftValue?: string | null;
+  onDraftChange?: (value: string | null) => void;
+  onOpenChange?: (open: boolean) => void;
+  onCommit?: (value: string | null) => void;
+  onCancel?: () => void;
   label?: string;
   placeholder?: string;
   className?: string;
@@ -134,16 +140,34 @@ export interface SelectControlProps {
   rest?: Record<string, unknown>;
 }
 
-export function SelectControl({ label, placeholder = 'All', className, options, value, nullable, disabled, onChange, bound, rest }: SelectControlProps) {
+const parseMultiValue = (raw: string | null | undefined): string[] | null => {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.every((item): item is string => typeof item === 'string')) return [...new Set(parsed)];
+  } catch { /* Invalid persisted values must never become an empty write. */ }
+  return null;
+};
+
+export function SelectControl({ multiple = false, allowCreate = false, valueFormat, draftValue, onDraftChange, onOpenChange, onCommit, onCancel, label, placeholder = 'All', className, options, value, nullable, disabled, onChange, bound, rest }: SelectControlProps) {
+  void valueFormat;
   const [open, setOpen] = useState(false);
+  const openRef = useRef(false);
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(-1);
+  const [internalDraft, setInternalDraft] = useState<string[]>(() => parseMultiValue(value) ?? []);
   const rootRef = useRef<HTMLDivElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
-  const inert = disabled || !onChange;
+  const draft = draftValue === undefined ? internalDraft : parseMultiValue(draftValue) ?? [];
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const invalid = multiple && (parseMultiValue(value) === null || (draftValue !== undefined && parseMultiValue(draftValue) === null));
+  const inert = disabled || !onChange || invalid;
   const entries: { value: string | null; label: string }[] = [
-    ...(nullable ? [{ value: null, label: placeholder }] : []),
+    ...(!multiple && nullable ? [{ value: null, label: placeholder }] : []),
     ...options,
+    ...(multiple ? draft.filter((item) => !options.some((option) => option.value === item)).map((item) => ({value:item, label:item})) : []),
   ];
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const filteredEntries = normalizedQuery
@@ -151,57 +175,122 @@ export function SelectControl({ label, placeholder = 'All', className, options, 
       entry.label.toLocaleLowerCase().includes(normalizedQuery)
       || (entry.value !== null && entry.value.toLocaleLowerCase().includes(normalizedQuery)))
     : entries;
-  const currentLabel = value === null
-    ? placeholder
-    : options.find((o) => o.value === value)?.label ?? value;
+  const canCreate = multiple && allowCreate && !!query.trim() && !entries.some((entry) => entry.value === query.trim());
+  const selectedValues = multiple ? parseMultiValue(value) ?? [] : [];
+  const currentLabel = multiple
+    ? (selectedValues.length ? selectedValues.map((item) => options.find((o) => o.value === item)?.label ?? item).join(', ') : placeholder)
+    : value === null ? placeholder : options.find((o) => o.value === value)?.label ?? value;
 
-  const close = () => { setOpen(false); setQuery(''); setActive(-1); };
+  const updateDraft = (next: string[]) => {
+    const unique = [...new Set(next)];
+    draftRef.current = unique;
+    if (draftValue === undefined) setInternalDraft(unique);
+    onDraftChange?.(JSON.stringify(unique));
+  };
+  const setOpened = (next: boolean) => { openRef.current = next; setOpen(next); onOpenChange?.(next); };
+  const finishClose = (restoreFocus = true) => { setOpened(false); setQuery(''); setActive(-1); if (restoreFocus) rootRef.current?.querySelector('button')?.focus(); };
+  const commitDraft = (restoreFocus = true) => {
+    if (inert || !openRef.current) return;
+    openRef.current = false;
+    const encoded = JSON.stringify(draftRef.current);
+    onChange?.(encoded);
+    onCommit?.(encoded);
+    finishClose(restoreFocus);
+  };
+  const cancelDraft = () => { if (!openRef.current) return; openRef.current = false; onCancel?.(); finishClose(); };
+  useEffect(() => {
+    if (inert && openRef.current) setOpened(false);
+  }, [inert]);
+
   const openList = () => {
     if (inert || open) return;
-    setOpen(true);
+    if (multiple && draftValue === undefined) setInternalDraft(parseMultiValue(value) ?? []);
+    setOpened(true);
     setQuery('');
     setActive(-1);
   };
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || inert) return;
     const doc = rootRef.current?.ownerDocument;
     if (!doc) return;
     searchRef.current?.focus();
-    const onDown = (e: Event) => { if (!rootRef.current?.contains(e.target as Node)) close(); };
+    const onDown = (e: Event) => {
+      const target = e.target as Node;
+      if (rootRef.current?.contains(target) || popupRef.current?.contains(target)) return;
+      if (multiple) commitDraft(false); else finishClose(false);
+    };
     doc.addEventListener('mousedown', onDown);
     return () => doc.removeEventListener('mousedown', onDown);
-  }, [open]);
+  }, [open, inert, onChange, onCommit, onOpenChange]);
 
-  const choose = (v: string | null) => { onChange?.(v); close(); };
+  const choose = (v: string | null) => {
+    if (inert) return;
+    if (multiple && v !== null) {
+      updateDraft(draftRef.current.includes(v) ? draftRef.current.filter((item) => item !== v) : [...draftRef.current, v]);
+      setQuery('');
+      setActive(-1);
+      searchRef.current?.focus();
+      return;
+    }
+    onChange?.(v);
+    onCommit?.(v);
+    finishClose();
+  };
+  const createValue = (created: string) => {
+    if (!draftRef.current.includes(created)) updateDraft([...draftRef.current, created]);
+    setQuery('');
+    setActive(-1);
+  };
   const moveActive = (direction: 1 | -1) => {
-    setActive((i) => Math.max(0, Math.min(filteredEntries.length - 1, i + direction)));
+    setActive((i) => Math.max(0, Math.min(filteredEntries.length + (canCreate ? 1 : 0) - 1, i + direction)));
   };
   const onSearchKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') { close(); return; }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelDraft(); return; }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       moveActive(e.key === 'ArrowDown' ? 1 : -1);
-    } else if (e.key === 'Enter' && active >= 0) {
+    } else if (e.key === 'Enter' && active >= 0 && filteredEntries[active]) {
       e.preventDefault();
-      choose(filteredEntries[active]?.value ?? null);
+      choose(filteredEntries[active].value);
+    } else if (e.key === 'Enter' && multiple && allowCreate && query.trim()) {
+      e.preventDefault();
+      createValue(query.trim());
     }
   };
+  const [position, setPosition] = useState<React.CSSProperties>({});
+  useLayoutEffect(() => {
+    if (!open || inert) return;
+    const root = rootRef.current!;
+    const win = root.ownerDocument.defaultView!;
+    const place = () => {
+      const rect = root.getBoundingClientRect();
+      const width = Math.min(Math.max(rect.width, 200), win.innerWidth - 16);
+      const height = popupRef.current?.getBoundingClientRect().height ?? 0;
+      setPosition({width, left: Math.max(8, Math.min(rect.left, win.innerWidth - width - 8)), top: Math.max(8, Math.min(rect.bottom + 4, win.innerHeight - height - 8)), maxHeight: win.innerHeight - 16, overflowY:'auto'});
+    };
+    place();
+    win.addEventListener('resize', place);
+    root.ownerDocument.addEventListener('scroll', place, true);
+    return () => { win.removeEventListener('resize', place); root.ownerDocument.removeEventListener('scroll', place, true); };
+  }, [open, inert, query, draft.length]);
   const onTriggerKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') { close(); return; }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelDraft(); return; }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       openList();
       setActive(e.key === 'ArrowDown' ? 0 : Math.max(0, entries.length - 1));
       return;
     }
+    if (inert) return;
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
       e.preventDefault();
       const normalized = e.key.toLocaleLowerCase();
       const hasMatch = entries.some((entry) =>
         entry.label.toLocaleLowerCase().includes(normalized)
         || (entry.value !== null && entry.value.toLocaleLowerCase().includes(normalized)));
-      setOpen(true);
+      if (multiple && draftValue === undefined) setInternalDraft(parseMultiValue(value) ?? []);
+      setOpened(true);
       setQuery(e.key);
       setActive(hasMatch ? 0 : -1);
     }
@@ -216,15 +305,22 @@ export function SelectControl({ label, placeholder = 'All', className, options, 
           aria-haspopup="listbox"
           aria-expanded={open}
           disabled={inert}
-          onClick={() => { if (open) close(); else openList(); }}
+          onClick={() => { if (open) multiple ? commitDraft() : finishClose(); else openList(); }}
           onKeyDown={onTriggerKeyDown}
           className="inline-flex h-9 w-full min-w-36 items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm shadow-xs transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <span className={cn('truncate', value === null && 'text-muted-foreground')}>{currentLabel}</span>
           {CHEVRON}
         </button>
-        {open ? (
-          <div className="absolute left-0 top-full z-50 mt-1 min-w-full rounded-md border border-border bg-popover text-popover-foreground shadow-md">
+        {invalid ? <span role="alert">Expected a JSON array of strings.</span> : null}
+        {open && !inert && rootRef.current ? createPortal((() => {
+          const themed = rootRef.current!.closest('[data-theme], .dark, .light') as HTMLElement | null;
+          return <div ref={popupRef} data-theme={themed?.dataset.theme} onBlur={(e) => {
+            if (!openRef.current) return;
+            const next = e.relatedTarget as Node | null;
+            if (next && (popupRef.current?.contains(next) || rootRef.current?.contains(next))) return;
+            if (multiple) commitDraft(false); else finishClose(false);
+          }} onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelDraft(); } }} className={cn(themed?.classList.contains('dark') && 'dark', themed?.classList.contains('light') && 'light', 'fixed z-50 rounded-md border border-border bg-popover text-popover-foreground shadow-md')} style={position}>
             <div className="border-b border-border p-1.5">
               <input
                 ref={searchRef}
@@ -246,15 +342,16 @@ export function SelectControl({ label, placeholder = 'All', className, options, 
                 className="h-8 w-full min-w-36 rounded-sm border border-input bg-background px-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
               />
             </div>
-            <div role="listbox" aria-label={label} className="max-h-56 overflow-y-auto p-1">
+            <div role="listbox" aria-multiselectable={multiple || undefined} aria-label={label} className="max-h-56 overflow-y-auto p-1">
               {filteredEntries.map((entry, i) => {
-                const selected = entry.value === value;
+                const selected = multiple ? entry.value !== null && draft.includes(entry.value) : entry.value === value;
                 return (
                   <button
                     key={entry.value ?? '__null__'}
                     type="button"
                     role="option"
                     aria-selected={selected}
+                    aria-label={entry.label}
                     onClick={() => choose(entry.value)}
                     onMouseEnter={() => setActive(i)}
                     className={cn(
@@ -268,12 +365,13 @@ export function SelectControl({ label, placeholder = 'All', className, options, 
                   </button>
                 );
               })}
-              {filteredEntries.length === 0 ? (
-                <div role="status" className="px-2 py-3 text-center text-sm text-muted-foreground">No matches</div>
-              ) : null}
+              {canCreate ? (
+                <button type="button" role="option" aria-label={`Create ${query.trim()}`} aria-selected={false} onClick={() => createValue(query.trim())} onMouseEnter={() => setActive(filteredEntries.length)} className={cn('flex w-full cursor-pointer rounded-sm px-2 py-1.5 text-left text-sm', active === filteredEntries.length && 'bg-accent text-accent-foreground')}>Create “{query.trim()}”</button>
+              ) : filteredEntries.length === 0 ? <div role="status" className="px-2 py-3 text-center text-sm text-muted-foreground">No matches</div> : null}
             </div>
-          </div>
-        ) : null}
+            {multiple ? <div className="flex justify-end border-t border-border p-1.5"><button type="button" aria-label="Done" onClick={() => commitDraft()} className="rounded-sm px-2 py-1 text-sm font-medium hover:bg-accent">Done</button></div> : null}
+          </div>;
+        })(), rootRef.current.ownerDocument.body) : null}
       </div>
     </ControlShell>
   );
@@ -564,7 +662,7 @@ export function SwitchControl({ label, className, checked, disabled, onChange, b
 
 type Authored = Record<string, unknown>;
 
-export const shellRest = ({ label, placeholder, className, value, options, checked, min, max, step, format, prefix, suffix, disabled, children, ...rest }: Authored): Record<string, unknown> => rest;
+export const shellRest = ({ label, placeholder, className, value, options, multiple, allowCreate, valueFormat, checked, min, max, step, format, prefix, suffix, disabled, children, ...rest }: Authored): Record<string, unknown> => rest;
 
 export function Select(props: Authored) {
   return (
@@ -572,6 +670,9 @@ export function Select(props: Authored) {
       label={str(props.label)}
       placeholder={str(props.placeholder)}
       className={str(props.className)}
+      multiple={props.multiple === true}
+      allowCreate={props.allowCreate === true}
+      valueFormat={props.valueFormat === 'json' ? 'json' : undefined}
       options={normalizeControlOptions(props.options)}
       value={literalString(props.value)}
       nullable={false}
