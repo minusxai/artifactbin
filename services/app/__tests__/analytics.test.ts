@@ -26,6 +26,7 @@ import { trackEvent } from '@/lib/analytics';
 import { viewSeriesByUser, VIEW_SERIES_DAYS } from '@/lib/feed';
 import { mintExportKey } from '@/lib/export-key';
 import { resetLiveSubscriptions } from '@/lib/story/live';
+import { purgeTrash } from '@/lib/trash';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, listArtifactsByUser } from '@/lib/users';
 import { renderDailyViewsSvg, renderSparklineSvg } from '@/lib/viz/sparkline';
@@ -134,7 +135,7 @@ describe('write events', () => {
     expect(await expectEvent(doc.id, 'create')).toMatchObject({ user_id: user.id });
   });
 
-  it('PUT logs update; revert logs revert; DELETE logs delete (and does not deadlock)', async () => {
+  it('PUT logs update; revert logs revert; DELETE logs nothing until the purge does (and does not deadlock)', async () => {
     const t = await mintToken('t');
     const doc = await create(t.token, { markup: '<h1>v1</h1>' });
 
@@ -144,9 +145,23 @@ describe('write events', () => {
     expect((await revertRoute(request(`/api/artifacts/${doc.id}/revert`, { method: 'POST', token: t.token, json: { version: 1 } }), params({ id: doc.id }))).status).toBe(200);
     await expectEvent(doc.id, 'revert');
 
-    // The delete path is transactional: this completing at all proves the
-    // event fires OUTSIDE the txn (an inside fire deadlocks PGLite's queue).
+    /*
+     * A DELETE IS A TRASH, so `delete` — which has always meant erased — is
+     * logged by the PURGE, and by nothing else (lib/trash). The door itself
+     * says `trashed` to the events log and writes no analytics row: the legacy
+     * table's vocabulary is closed and being retired, and giving it a word for
+     * a trash would be extending it on the way out.
+     *
+     * Both paths are transactional: these completing at all proves the event
+     * fires OUTSIDE the txn (an inside fire deadlocks PGLite's queue).
+     */
     expect((await deleteArtifactRoute(request(`/api/artifacts/${doc.id}`, { method: 'DELETE', token: t.token }), params({ id: doc.id }))).status).toBe(200);
+    await settle();
+    expect((await eventRows(doc.id)).filter((r) => r.event === 'delete')).toHaveLength(0);
+
+    const db = await harness.db();
+    await db.query(`UPDATE artifacts SET deleted_at = now() - interval '40 days' WHERE id = $1`, [doc.id]);
+    expect(await purgeTrash()).toContain(doc.id);
     await expectEvent(doc.id, 'delete');
   });
 
@@ -170,13 +185,19 @@ describe('write events', () => {
     await expectEvent(doc.id, 'edit');
   });
 
-  it('the session (dashboard) delete logs delete with the user', async () => {
+  it('the purge that erases a dashboard delete logs delete with the user who owned it', async () => {
     const user = await createUser({ email: 'v@minusx.ai' });
     const t = await mintToken('laptop', user.id);
     const doc = await create(t.token, { markup: '<p>x</p>' });
     sessionUser.id = user.id;
     sessionUser.email = user.email;
     expect((await deleteMyArtifactRoute(request(`/api/my/artifacts/${doc.id}`, { method: 'DELETE' }), params({ id: doc.id }))).status).toBe(200);
+    // The sweep has no request and no actor, so the owner comes off the row it
+    // is about to erase — read before the hard delete, or there is nobody left
+    // to name.
+    const db = await harness.db();
+    await db.query(`UPDATE artifacts SET deleted_at = now() - interval '40 days' WHERE id = $1`, [doc.id]);
+    expect(await purgeTrash()).toContain(doc.id);
     expect(await expectEvent(doc.id, 'delete')).toMatchObject({ user_id: user.id });
   });
 });
