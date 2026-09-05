@@ -32,6 +32,11 @@ describe('where the export browser is sent', () => {
     expect(await origin({ 'EXPORT__INTERNAL_ORIGIN': 'http://app.internal:3000' })).toBe('http://app.internal:3000');
   });
 
+  it.each(['', '   '])('uses the local port when the override is blank (%j)', async (value) => {
+    const base = await origin({ APP__PORT: '3040', EXPORT__INTERNAL_ORIGIN: value });
+    expect(new URL('/a/example/raw?chrome=0', base).toString()).toBe('http://127.0.0.1:3040/a/example/raw?chrome=0');
+  });
+
   it('never falls back to the public name', async () => {
     const url = await origin({ APP__PUBLIC_BASE_URL: 'https://artifactbin.dev' });
     expect(url).toBeTruthy();

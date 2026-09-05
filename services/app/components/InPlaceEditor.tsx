@@ -539,7 +539,7 @@ export default function InPlaceEditor({
   }, [history]);
 
   return (
-    <>
+    <div className="contents" data-app-appearance={surfaceMode}>
       <header
         aria-label="Editor toolbar"
         className="fixed left-0 z-30 flex items-center gap-2 border-y border-edge bg-surface/95 px-3 backdrop-blur"
@@ -798,6 +798,6 @@ export default function InPlaceEditor({
           busy={history.busy}
         />
       )}
-    </>
+    </div>
   );
 }

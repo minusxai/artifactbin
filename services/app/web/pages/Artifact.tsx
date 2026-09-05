@@ -8,6 +8,8 @@ import { takeBootstrap } from '../bootstrap';
 import { useLocation, useParams } from 'react-router';
 import ArtifactShell from '@/components/ArtifactShell';
 import ArtifactSurface from '@/components/ArtifactSurface';
+import type { AccountWorkspace } from '@/lib/workspace';
+import { ShellFrame } from '@/web/Shell';
 import { FolderPage } from './Folder';
 import { NotFoundPage } from './NotFound';
 
@@ -22,7 +24,7 @@ import { NotFoundPage } from './NotFound';
  * second meaning for the word is how a payload starts lying about itself.
  */
 type Page =
-  | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; folder: Parameters<typeof FolderPage>[0]['folder']; surface?: undefined }
+  | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; folder: Parameters<typeof FolderPage>[0]['folder']; workspace?: AccountWorkspace; ownerUsername?: string | null; surface?: undefined }
   | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; like?: { liked: boolean; count: number }; follow?: { userId: string; following: boolean; count: number } | null; surface: Parameters<typeof ArtifactSurface>[0]; folder?: undefined };
 
 export function ArtifactPage({ id: given }: { id?: string } = {}) {
@@ -46,9 +48,13 @@ export function ArtifactPage({ id: given }: { id?: string } = {}) {
   }, [page, search]);
   if (page === null) return <div aria-label="Loading page" />;
   if (page === 'missing') return <NotFoundPage />;
-  // A folder is a listing, not a document: no shell (its chrome is the shelf's
-  // own) and no surface (there is nothing to frame).
-  if (page.folder) return <FolderPage folder={page.folder} role={page.role} />;
+  // A folder is a listing, not a document: no ArtifactShell and no surface
+  // (there is nothing to frame). Every folder gets the normal PAGE frame;
+  // account-wide dashboard data is still supplied only to its owner.
+  if (page.folder) {
+    const folder = <FolderPage folder={page.folder} role={page.role} workspace={page.workspace} ownerUsername={page.ownerUsername} />;
+    return <ShellFrame hideBreadcrumb>{folder}</ShellFrame>;
+  }
   return (
     <ArtifactShell role={page.role}>
       {/* The reader's `<Value>` selection travels in this page's own query

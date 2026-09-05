@@ -1,9 +1,8 @@
 /**
  * ArtifactTable views column (dashboard only): each managed row shows its
- * view count with the server-rendered spline riding alongside — the column is
- * a DESKTOP one (`hidden sm:table-cell`), so the spline's width is spent where
- * there is width to spend; the phone's stacked meta line carries the number
- * alone. The logged-out token browser passes no views, so no column appears.
+ * view count over the server-rendered spline. Desktop and mobile use the same
+ * views mark at different widths; the logged-out token browser passes no
+ * views, so no column or mobile mark appears.
  */
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
@@ -21,12 +20,13 @@ describe('ArtifactTable — the views column follows the DATA, not the permissio
 
   it('shows it as soon as the page supplies one, permission unchanged', () => {
     render(<ArtifactTable artifacts={[{ ...bare, views: 12 }]} />);
-    expect(screen.getByLabelText('Bare views')).toHaveTextContent('12');
+    expect(screen.getAllByLabelText('Bare views')).toHaveLength(2);
+    for (const mark of screen.getAllByLabelText('Bare views')) expect(mark).toHaveTextContent('12 views');
   });
 
   it('can withhold the editor while still offering the link', () => {
     render(<ArtifactTable artifacts={[bare]} canEdit={false} />);
-    expect(screen.getByLabelText('Share Bare')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Open Bare' })).toHaveAttribute('href', '/a/aa');
     expect(screen.queryByLabelText('Edit Bare')).toBeNull();
   });
 });
@@ -62,31 +62,28 @@ const row = (views?: number, sparkline?: string) => [
 describe('ArtifactTable views column', () => {
   it('shows the count and the spline on managed rows', () => {
     render(<ArtifactTable manage artifacts={row(3, '<svg data-testid="spark"></svg>')} />);
-    const cell = screen.getByLabelText('Artifact 0 views');
-    expect(cell.textContent).toContain('3');
-    expect(cell.innerHTML).toContain('<svg');
-    // …and the column stays desktop-only — its width is spent where there is
-    // width to spend…
-    expect(cell.closest('td')).toHaveClass('hidden', 'sm:table-cell');
+    const marks = screen.getAllByLabelText('Artifact 0 views');
+    expect(marks).toHaveLength(2);
+    for (const mark of marks) {
+      expect(mark).toHaveTextContent('3 views');
+      expect(mark.querySelector('svg')).toHaveAttribute('preserveAspectRatio', 'none');
+      expect(mark.lastElementChild).toHaveClass('bg-surface/55', 'z-[1]');
+    }
+    const desktop = marks.find((mark) => !mark.closest('.mt-1'))!;
+    const mobile = marks.find((mark) => mark.closest('.mt-1'))!;
+    expect(desktop.closest('td')).toHaveClass('hidden', 'sm:table-cell');
     expect(screen.getByLabelText('Open Artifact 0')).toHaveClass('font-semibold', 'flex-1');
-    // …while the phone's stacked meta line keeps the SPLINE beside the count:
-    // the trend is the interesting half of the number, and a mark 12px tall
-    // costs the line nothing. Squashed fluid (viewBox + preserveAspectRatio),
-    // never clipped.
-    const metaViews = screen.getByText('3 views');
-    expect(metaViews.parentElement!.querySelector('svg')).toBeTruthy();
-    expect(metaViews.parentElement!.querySelector('svg')).toHaveAttribute('preserveAspectRatio', 'none');
-    expect(metaViews.closest('.mt-1')).toHaveClass('sm:hidden');
+    expect(mobile.closest('.mt-1')).toHaveClass('sm:hidden');
   });
 
   it('renders zero views without a spline', () => {
     render(<ArtifactTable manage artifacts={row(0)} />);
-    const cell = screen.getByLabelText('Artifact 0 views');
-    expect(cell.textContent).toContain('0');
-    expect(cell.innerHTML).not.toContain('<svg');
-    // The phone line says the number plainly too — no mark to draw from nothing.
-    const metaViews = screen.getByText('0 views');
-    expect(metaViews.parentElement!.querySelector('svg')).toBeNull();
+    const marks = screen.getAllByLabelText('Artifact 0 views');
+    expect(marks).toHaveLength(2);
+    for (const mark of marks) {
+      expect(mark).toHaveTextContent('0 views');
+      expect(mark.querySelector('svg')).toBeNull();
+    }
   });
 
   // WAS: "has no views column outside manage mode". The column used to be
@@ -97,6 +94,6 @@ describe('ArtifactTable views column', () => {
   // nothing. The absence case is asserted at the top of this file.
   it('shows a count the page supplied even when the viewer cannot manage', () => {
     render(<ArtifactTable artifacts={row(3)} />);
-    expect(screen.getByLabelText('Artifact 0 views')).toHaveTextContent('3');
+    for (const mark of screen.getAllByLabelText('Artifact 0 views')) expect(mark).toHaveTextContent('3 views');
   });
 });

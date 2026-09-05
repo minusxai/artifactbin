@@ -1240,7 +1240,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
               {copiedRef ? 'copied dataset reference' : `copy ref:${id}`}
             </button>
           )}
-          <ShareLink artifactId={id} owner format={format} variant="menu" className="" />
+          <ShareLink artifactId={id} title={shownTitle} owner format={format} variant="menu" className="" />
         </section>
       )}
     </div>

@@ -6,14 +6,8 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { useRefreshable } from '@/lib/navigation';
 
 export interface SessionState {
-  /**
-   * The account, when a session names one. `username` is the PUBLIC handle the
-   * masthead links to (`/@handle`) and is null only until the lazy backfill
-   * assigns one at login — the header falls back to the email for that gap.
-   */
-  user: { id: string; email: string | null; username: string | null } | null;
+  user: { id: string; email: string | null } | null;
   kind: 'account' | 'anon' | 'none';
-  stats: { total: number; formats: Record<string, number> } | null;
   mixpanel: { token: string | null; host: string };
 }
 

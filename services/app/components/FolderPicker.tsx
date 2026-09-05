@@ -20,6 +20,8 @@
  * "Move to <title>". Plan: ~/projects/artifactbin-folders.md.
  */
 import * as React from 'react';
+import { createPortal } from 'react-dom';
+import { Folder, X } from 'lucide-react';
 
 export interface PickerFolder { id: string; title: string | null; ancestor_ids: string[] }
 export interface FolderPickerProps {
@@ -31,6 +33,8 @@ export interface FolderPickerProps {
   current: string | null;
   onMove: (parentId: string | null) => void;
   onClose: () => void;
+  /** Fixed viewport placement when the picker is portalled out of a card. */
+  floatingStyle?: React.CSSProperties;
 }
 
 const nameOf = (folder: PickerFolder): string => folder.title ?? folder.id;
@@ -68,7 +72,7 @@ function inTreeOrder(folders: PickerFolder[]): PickerFolder[] {
 const ROW =
   'flex w-full cursor-pointer items-center gap-1.5 rounded-[4px] py-1 pr-2 text-left font-mono text-xs text-muted hover:bg-raised hover:text-fg disabled:cursor-not-allowed disabled:text-faint disabled:hover:bg-transparent';
 
-export function FolderPicker({ folders, moving, current, onMove, onClose }: FolderPickerProps): React.ReactElement {
+export function FolderPicker({ folders, moving, current, onMove, onClose, floatingStyle }: FolderPickerProps): React.ReactElement {
   const [filter, setFilter] = React.useState('');
   const q = filter.trim().toLowerCase();
   const ordered = React.useMemo(() => inTreeOrder(folders), [folders]);
@@ -83,7 +87,11 @@ export function FolderPicker({ folders, moving, current, onMove, onClose }: Fold
 
   return (
     <div
-      className="absolute right-0 top-full z-30 mt-1 w-64 rounded-[6px] border border-edge bg-surface p-1.5 shadow-lg"
+      role="dialog"
+      aria-label="Move to folder"
+      data-floating-folder-picker={floatingStyle ? '' : undefined}
+      style={floatingStyle}
+      className={`${floatingStyle ? 'fixed z-[70]' : 'absolute right-0 top-full z-30 mt-1 w-72'} max-w-[calc(100vw-1rem)] rounded-[7px] border border-edge-bright bg-surface p-2 shadow-xl`}
       onKeyDown={(e) => {
         if (e.key === 'Escape') {
           e.stopPropagation();
@@ -91,13 +99,25 @@ export function FolderPicker({ folders, moving, current, onMove, onClose }: Fold
         }
       }}
     >
+      <div className="mb-2 flex items-center gap-2 px-0.5">
+        <Folder size={12} className="shrink-0 text-accent" />
+        <span className="font-mono text-[10px] tracking-[0.12em] text-faint uppercase">move to folder</span>
+        <button
+          type="button"
+          aria-label="Close folder picker"
+          onClick={onClose}
+          className="ml-auto inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-[3px] text-faint transition-colors hover:bg-raised hover:text-fg"
+        >
+          <X size={12} />
+        </button>
+      </div>
       <input
         aria-label="Filter folders"
         placeholder="filter folders"
         autoFocus
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
-        className="mb-1 w-full rounded-[4px] border border-edge bg-transparent px-1.5 py-0.5 font-mono text-[11px] text-fg focus:border-edge-bright focus:outline-none"
+        className="mb-1.5 w-full rounded-[4px] border border-edge bg-transparent px-2 py-1.5 font-mono text-[11px] text-fg focus:border-accent focus:outline-none"
       />
       <div className="max-h-64 overflow-y-auto">
         {/* The ROOT is always offered and never filtered away: it is where a row
@@ -107,7 +127,7 @@ export function FolderPicker({ folders, moving, current, onMove, onClose }: Fold
           aria-label="Move to root"
           aria-current={current === null ? 'location' : undefined}
           onClick={() => onMove(null)}
-          className={`${ROW} pl-2`}
+          className={`${ROW} pl-2 ${current === null ? 'bg-raised text-fg' : ''}`}
         >
           <span className="truncate">(root)</span>
           {current === null && <span className="ml-auto shrink-0 text-accent">here</span>}
@@ -124,7 +144,7 @@ export function FolderPicker({ folders, moving, current, onMove, onClose }: Fold
               data-depth={String(depth)}
               disabled={forbidden(folder)}
               onClick={() => onMove(folder.id)}
-              className={ROW}
+              className={`${ROW} ${here ? 'bg-raised text-fg' : ''}`}
               style={{ paddingLeft: `${8 + depth * 12}px` }}
             >
               <span className="truncate">{nameOf(folder)}</span>
@@ -164,6 +184,44 @@ export function MoveMenu({ row, folders, onMoved, onClose }: {
   onMoved: (parentId: string | null) => void;
   onClose: () => void;
 }): React.ReactElement {
+  const anchor = React.useRef<HTMLSpanElement>(null);
+  const [floatingStyle, setFloatingStyle] = React.useState<React.CSSProperties | null>(null);
+
+  /*
+   * Cards clip their artwork and footer to the rounded card boundary. The
+   * picker cannot live inside that overflow context: z-index changes paint
+   * order, but it cannot escape clipping. Measure a zero-size anchor beside
+   * the action, then portal the picker to the page so it stays whole above
+   * neighboring cards. It widens inward and flips above when the lower edge
+   * of the viewport is the tighter side.
+   */
+  React.useLayoutEffect(() => {
+    const place = () => {
+      const rect = anchor.current?.getBoundingClientRect();
+      if (!rect) return;
+      const gutter = 8;
+      const gap = 5;
+      const width = Math.min(288, Math.max(0, window.innerWidth - gutter * 2));
+      const left = Math.min(
+        Math.max(gutter, rect.right - width),
+        Math.max(gutter, window.innerWidth - width - gutter),
+      );
+      const estimatedHeight = Math.min(316, 88 + (folders.length + 1) * 28);
+      const spaceBelow = window.innerHeight - rect.bottom - gutter;
+      const spaceAbove = rect.top - gutter;
+      setFloatingStyle(spaceBelow < estimatedHeight && spaceAbove > spaceBelow
+        ? { left, bottom: Math.max(gutter, window.innerHeight - rect.top + gap), width }
+        : { left, top: rect.bottom + gap, width });
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [folders.length]);
+
   const move = async (parentId: string | null): Promise<void> => {
     const res = await fetch(`/api/my/artifacts/${row.id}`, {
       method: 'PATCH',
@@ -179,12 +237,19 @@ export function MoveMenu({ row, folders, onMoved, onClose }: {
     onClose();
   };
   return (
-    <FolderPicker
-      folders={folders}
-      moving={{ id: row.id, format: row.format ?? 'markup', ancestor_ids: row.ancestor_ids ?? [] }}
-      current={row.parent_id ?? null}
-      onMove={move}
-      onClose={onClose}
-    />
+    <>
+      <span ref={anchor} aria-hidden="true" className="pointer-events-none absolute top-full right-0 h-px w-px" />
+      {floatingStyle && typeof document !== 'undefined' && createPortal(
+        <FolderPicker
+          folders={folders}
+          moving={{ id: row.id, format: row.format ?? 'markup', ancestor_ids: row.ancestor_ids ?? [] }}
+          current={row.parent_id ?? null}
+          onMove={move}
+          onClose={onClose}
+          floatingStyle={floatingStyle}
+        />,
+        document.body,
+      )}
+    </>
   );
 }

@@ -49,7 +49,7 @@ ok(tableText.includes('—'), 'a blank cell reads as missing, not as empty text'
 ok(tableText.includes('01234'), 'leading zero preserved through ingest');
 ok((await p.locator('[aria-label="Edit artifact"]').count()) === 0, 'no edit button on a dataset');
 await openMenu(p);
-ok((await p.locator('nav[aria-label="Menu"] [aria-label="Current page"]').first().textContent()).includes('Q3 Revenue'), 'the menu carries the typed title as page context');
+ok((await p.locator('[aria-label="Page bar"] [aria-label="Current page"]').first().textContent()).includes('Q3 Revenue'), 'the page bar carries the typed title as page context');
 await p.keyboard.press('Escape');
 const w = await p.evaluate(() => ({ d: document.documentElement.scrollWidth, w: window.innerWidth }));
 ok(w.d <= w.w, 'no horizontal page scroll');

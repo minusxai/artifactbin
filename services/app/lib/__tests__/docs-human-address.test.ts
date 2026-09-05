@@ -20,7 +20,7 @@ const code = (s: string) => s.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\/
 
 describe('the human docs address', () => {
   it('every human link points at /docs-human', () => {
-    for (const f of ['components/HeaderBar.tsx', 'components/LandingFooter.tsx', 'components/PageChrome.tsx', 'web/pages/TokensNew.tsx', 'web/App.tsx', 'lib/story/reader-chrome.ts']) {
+    for (const f of ['components/LandingFooter.tsx', 'components/PageChrome.tsx', 'web/pages/TokensNew.tsx', 'web/App.tsx', 'lib/story/reader-chrome.ts']) {
       expect(code(read(f)), f).toContain('/docs-human');
     }
   });

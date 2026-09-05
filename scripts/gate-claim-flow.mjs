@@ -19,7 +19,7 @@
  */
 import { chromium } from 'playwright';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
-import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
+import { startMailSink, loginViaEmail, isSignedInAs } from './lib/mail-login.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
@@ -59,7 +59,7 @@ const email = `mxmx_test_claim_${Date.now().toString(36)}@example.com`;
 await loginViaEmail(p, B, sink, email);
 // The masthead's identity line is the HANDLE now, not the address, so being
 // signed in is that link existing (components/HeaderBar).
-ok((await p.locator('[aria-label="Open your profile"]').count()) === 1, 'logging in with an emailed code signs you in');
+ok(await isSignedInAs(p, email), 'logging in with an emailed code signs you in');
 
 // ── the banner names the drafts, without being asked for a token ────────────
 await p.waitForSelector('[aria-label="Unclaimed drafts"]', { timeout: 20000 }).catch(() => {});

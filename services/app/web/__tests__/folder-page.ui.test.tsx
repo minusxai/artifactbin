@@ -13,17 +13,23 @@
  * page always draws a `<main>` — the export camera names that element, and a
  * folder with no children still has a card to take.
  */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
+import { ShellFrame } from '@/web/Shell';
 import { FolderPage } from '@/web/pages/Folder';
+import { ArtifactPage } from '@/web/pages/Artifact';
+import type { AccountWorkspace } from '@/lib/workspace';
 
 vi.mock('@/web/session', () => ({ useSession: () => ({ session: { user: { id: 'usr_o', email: 'o@x.io' } } }) }));
+vi.mock('@/components/viz/VegaChart', () => ({
+  VegaChart: ({ ariaLabel }: { ariaLabel?: string }) => <div aria-label={ariaLabel ?? 'Vega chart'} />,
+}));
 
-const child = (id: string, format = 'markup', title = `Doc ${id}`) => ({
+const child = (id: string, format: 'markup' | 'folder' = 'markup', title = `Doc ${id}`) => ({
   id, url: `/a/${id}`, title, description: null, format, version: 1,
   visibility: 'public' as const, parent_id: 'fold01', ancestor_ids: ['fold01'],
-  updated_at: '2026-08-20T00:00:00.000Z',
+  updated_at: '2026-08-20T00:00:00.000Z', views: 0,
 });
 
 const folder = (over: Record<string, unknown> = {}) => ({
@@ -32,8 +38,36 @@ const folder = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-const draw = (props: { folder: ReturnType<typeof folder>; role: 'owner' | 'editor' | 'commenter' | 'viewer' }) =>
+const draw = (props: { folder: ReturnType<typeof folder>; role: 'owner' | 'editor' | 'commenter' | 'viewer'; workspace?: AccountWorkspace; ownerUsername?: string | null }) =>
   render(<MemoryRouter><FolderPage {...props} /></MemoryRouter>);
+
+const accountRow = (id: string, format: 'markup' | 'folder' = 'markup', title = `Doc ${id}`, ancestor_ids = ['fold01']) => {
+  const { parent_id: _pageOnly, ...row } = child(id, format, title);
+  return { ...row, ancestor_ids, sparkline: null };
+};
+
+const accountWorkspace = (): AccountWorkspace => ({
+  artifacts: [
+    accountRow('aaa111'),
+    accountRow('bbb222'),
+    accountRow('ccc333', 'folder', 'Q3'),
+    accountRow('root01', 'markup', 'At account root', []),
+  ],
+  viewsOverTime: [0, 2, 4],
+  likes: 1,
+  likesOverTime: [0, 0, 1],
+  followers: 2,
+  forks: 3,
+  shared: [],
+  feed: {
+    mine: [{
+      id: 'evt_1', at: '2026-09-05T00:00:00.000Z', verb: 'viewed',
+      subject: { kind: 'visitor', id: 'v'.repeat(32), handle: null },
+      object: { kind: 'artifact', id: 'aaa111', title: 'Doc aaa111' }, payload: {},
+    }],
+    following: [],
+  },
+});
 
 let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
@@ -62,9 +96,10 @@ describe('the head', () => {
     expect(screen.queryByText(/^\d+ (document|folder)/)).not.toBeInTheDocument();
   });
 
-  it('draws the trail as plain links, root to parent, and none at the root', () => {
+  it('links Home and readable ancestors before the current folder', () => {
     const { unmount } = draw({ folder: folder(), role: 'viewer' });
-    expect(screen.queryByLabelText('Folder trail')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveAttribute('aria-current', 'page');
     unmount();
     draw({
       folder: folder({ trail: [{ id: 'r1', title: 'Work', url: '/a/r1' }, { id: 'r2', title: '2026', url: '/a/r2' }] }),
@@ -72,8 +107,14 @@ describe('the head', () => {
     });
     const trail = screen.getByLabelText('Folder trail');
     const links = [...trail.querySelectorAll('a')];
-    expect(links.map((a) => a.textContent)).toEqual(['Work', '2026']);
-    expect(links.map((a) => a.getAttribute('href'))).toEqual(['/a/r1', '/a/r2']);
+    expect(links.map((a) => a.textContent)).toEqual(['Home', 'Work', '2026']);
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(['/', '/a/r1', '/a/r2']);
+  });
+
+  it.each(['viewer', 'editor', 'commenter', 'owner'] as const)('links the breadcrumb root appropriately for %s', (role) => {
+    draw({ folder: folder(), role, ownerUsername: 'folderowner' });
+    const root = within(screen.getByLabelText('Folder trail')).getByRole('link', { name: role === 'owner' ? 'Home' : '@folderowner' });
+    expect(root).toHaveAttribute('href', role === 'owner' ? '/' : '/@folderowner');
   });
 
   it('always draws a <main> — the export camera names that element, empty folder or not', () => {
@@ -126,6 +167,48 @@ describe('the shelf below the hairline', () => {
     draw({ folder: folder(), role: 'owner' });
     expect(screen.getByLabelText('New folder')).toBeInTheDocument();
     expect(screen.getByLabelText('Open folder Q3')).toBeInTheDocument();
+  });
+
+  it('uses the complete Home workspace for an account owner, changing only the shelf location', () => {
+    draw({ folder: folder(), role: 'owner', workspace: accountWorkspace() });
+    expect(screen.getByLabelText('Folder workspace')).toBeInTheDocument();
+    expect(screen.getByLabelText('Dashboard rail')).toBeInTheDocument();
+    expect(screen.getByLabelText('Create')).toBeInTheDocument();
+    expect(screen.getByLabelText('Assets')).toHaveAttribute('href', '/assets');
+    expect(screen.getByLabelText('Trash')).toHaveAttribute('href', '/trash');
+    expect(screen.getByLabelText('Activity')).toBeInTheDocument();
+    expect(screen.getByLabelText('Open Doc aaa111')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Open At account root')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('New folder')).not.toBeInTheDocument();
+    const metrics = within(screen.getByLabelText('Dashboard metrics'));
+    expect(metrics.getByText('artifacts').closest('dt')?.nextElementSibling).toHaveTextContent('3');
+  });
+
+  it('fits inside the exact Home chrome when the artifact route identifies an owned workspace', () => {
+    render(
+      <MemoryRouter>
+        <ShellFrame>
+          <FolderPage folder={folder()} role="owner" workspace={accountWorkspace()} />
+        </ShellFrame>
+      </MemoryRouter>,
+    );
+    expect(screen.getByLabelText('Page bar')).toBeInTheDocument();
+    expect(screen.queryByLabelText('artifactbin home')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Open menu')).toBeInTheDocument();
+    expect(screen.getByLabelText('Open page controls')).toBeInTheDocument();
+    expect(screen.getByLabelText('Folder workspace')).toBeInTheDocument();
+  });
+
+  it('renders the top bar and owner profile breadcrumb for a visitor through the artifact route', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({
+      canonical: window.location.pathname, role: 'viewer', kind: 'none',
+      ownerUsername: 'folderowner', folder: folder(),
+    }), { status: 200 }));
+    render(<MemoryRouter initialEntries={['/a/fold01']}><ArtifactPage id="fold01" /></MemoryRouter>);
+    expect(await screen.findByLabelText('Page bar')).toBeInTheDocument();
+    expect(screen.getByLabelText('Current page')).toHaveTextContent('artifactbin·Google Docs for agents');
+    expect(screen.getByRole('link', { name: '@folderowner' })).toHaveAttribute('href', '/@folderowner');
+    expect(screen.queryByLabelText('Dashboard rail')).not.toBeInTheDocument();
   });
 
   it('gives a stranger the documents and no verbs at all', () => {

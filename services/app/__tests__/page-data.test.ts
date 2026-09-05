@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET as sessionPage } from '@/app/api/page/session/route';
 import { GET as homePage } from '@/app/api/page/home/route';
 import { GET as accountPage } from '@/app/api/page/account/route';
+import { GET as assetsPage } from '@/app/api/page/assets/route';
 import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
 import { GET as profilePage } from '@/app/api/page/profile/[user]/[[...path]]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -41,20 +42,15 @@ async function world() {
 }
 
 describe('GET /api/page/session', () => {
-  it('names nobody, then the account with its stats', async () => {
-    expect(await (await sessionPage(request('/api/page/session'))).json()).toMatchObject({ user: null, kind: 'none', stats: null });
+  it('names nobody, then the account without duplicating shelf stats', async () => {
+    expect(await (await sessionPage(request('/api/page/session'))).json()).toMatchObject({ user: null, kind: 'none' });
     const w = await world();
     asSession(w.owner);
     const body = await (await sessionPage(request('/api/page/session'))).json();
-    // The HANDLE travels with the account: the masthead links to `/@handle`
-    // rather than printing an address nobody can click (components/HeaderBar).
-    // Read here, never assigned — `ensureUsername` is a login-time write.
-    expect(body.user).toEqual({ id: w.owner.id, email: w.owner.email, username: w.owner.username });
-    expect(typeof body.user.username).toBe('string');
+    expect(body.user).toEqual({ id: w.owner.id, email: w.owner.email });
     expect(body.kind).toBe('account');
-    // Three artifacts now: two documents and the folder they are filed under —
-    // a folder is a row in the one table like everything else.
-    expect(body.stats).toMatchObject({ total: 3, formats: { markup: 2, folder: 1 } });
+    // Library metrics belong to the dashboard, not duplicated in global chrome.
+    expect(body).not.toHaveProperty('stats');
   });
 });
 
@@ -67,6 +63,11 @@ describe('GET /api/page/home', () => {
     expect(body.signedIn).toBe(true);
     expect(body.artifacts.map((a: { id: string }) => a.id).sort()).toEqual([w.pub.id, w.priv.id, w.box.id].sort());
     expect(body.artifacts[0]).toMatchObject({ url: expect.stringMatching(/^\/a\//), format: 'markup' });
+    expect(body.viewsOverTime).toHaveLength(30);
+    expect(body.likes).toBe(0);
+    expect(body.likesOverTime).toHaveLength(30);
+    expect(body.followers).toBe(0);
+    expect(body.forks).toBe(0);
     expect(Array.isArray(body.shared)).toBe(true);
   });
 
@@ -94,14 +95,35 @@ describe('GET /api/page/home', () => {
   });
 });
 
+describe('GET /api/page/assets', () => {
+  it('returns only supporting files plus folder destinations for an account', async () => {
+    expect((await assetsPage(request('/api/page/assets'))).status).toBe(401);
+    const w = await world();
+    const created = await (await createArtifactRoute(new Request(`${BASE}/api/artifacts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${w.t.token}` },
+      body: JSON.stringify({ title: 'Rows', dataset: [{ value: 1 }] }),
+    }))).json() as { id: string };
+    asSession(w.owner);
+
+    const result = await (await assetsPage(request('/api/page/assets'))).json();
+    expect(result.assets).toHaveLength(1);
+    expect(result.assets[0]).toMatchObject({ id: created.id, title: 'Rows', format: 'dataset', url: `/a/${created.id}` });
+    expect(result.folders).toHaveLength(1);
+    expect(result.folders[0]).toMatchObject({ id: w.box.id, format: 'folder' });
+    expect(JSON.stringify(result.assets)).not.toContain(w.pub.id);
+    expect(JSON.stringify(result.assets)).not.toContain(w.priv.id);
+  });
+});
+
 describe('GET /api/page/account', () => {
-  it('is 401 for nobody and the handle plus views for an account', async () => {
+  it('is 401 for nobody and returns the handle for an account', async () => {
     expect((await accountPage(request('/api/page/account'))).status).toBe(401);
     const w = await world();
     asSession(w.owner);
     const body = await (await accountPage(request('/api/page/account'))).json();
     expect(body.username).toBe(w.owner.username);
-    expect(body).toHaveProperty('viewsChart');
+    expect(body).not.toHaveProperty('viewsChart');
   });
 });
 
@@ -142,19 +164,13 @@ describe('GET /api/page/profile/@user/...', () => {
     expect((await profilePage(request(`/api/page/profile/@${h}/nope00-secret`), params({ user: `@${h}`, path: 'nope00-secret' }))).status).toBe(404);
   });
   /*
-   * There is no folder BRANCH here any more. A folder is an artifact with its
-   * own address, so the owner's root is the rows at level 0 — the folder among
-   * them, as an ordinary row — and every other segment under the handle is the
-   * uniform 404, whether the viewer owns the profile or not.
-   */
-  /*
    * PLACEMENT IS THE OWNER'S BUSINESS. `ancestor_ids` names folders by id, and
    * a public document filed inside a private folder would hand every stranger
    * that folder's address in the profile payload — breadcrumbs to a place they
    * get the uniform 404 on, which buys the reader nothing and says something
    * about the owner's shelf. Ids are addresses rather than secrets, so this is
-   * a projection rule and not a hole; the owner's own listing still carries it,
-   * because the owner's listing is what draws the shelf.
+   * a projection rule and not a hole. The same public projection is returned
+   * to the owner, because private organization belongs to the dashboard.
    */
   it('keeps placement out of the public profile projection', async () => {
     const w = await world();
@@ -171,10 +187,11 @@ describe('GET /api/page/profile/@user/...', () => {
     expect(JSON.stringify(strangers)).not.toContain(w.box.id);
     asSession(w.owner);
     const root = await (await profilePage(request(`/api/page/profile/@${h}`), params({ user: `@${h}` }))).json();
-    for (const f of root.files) expect(f).toHaveProperty('ancestor_ids');
+    expect(root.files).toEqual(strangers.files);
+    for (const f of root.files) expect(f).not.toHaveProperty('ancestor_ids');
   });
 
-  it('lists the public index for a stranger and the ROOT for the owner; a nested path is the 404 either way', async () => {
+  it('lists the same flat public index for the owner and every visitor', async () => {
     const w = await world();
     const h = w.owner.username!;
     const strangers = await (await profilePage(request(`/api/page/profile/@${h}`), params({ user: `@${h}` }))).json();
@@ -183,12 +200,12 @@ describe('GET /api/page/profile/@user/...', () => {
     expect((await profilePage(request(`/api/page/profile/@${h}/2026/08`), params({ user: `@${h}`, path: '2026/08' }))).status).toBe(404);
     asSession(w.owner);
     const root = await (await profilePage(request(`/api/page/profile/@${h}`), params({ user: `@${h}` }))).json();
-    expect(root.kind).toBe('owner-listing');
+    expect(root.kind).toBe('public-profile');
+    expect(root.files).toEqual(strangers.files);
+    expect(root.files[0]).not.toHaveProperty('views');
+    expect(root.files[0]).not.toHaveProperty('sparkline');
     expect(root).not.toHaveProperty('folders');
-    // Level 0: the public document and the folder. The document INSIDE the
-    // folder is not at the root, and is reached at its own address.
-    expect(root.files.map((f: { id: string }) => f.id).sort()).toEqual([w.pub.id, w.box.id].sort());
-    expect(root.files.find((f: { id: string }) => f.id === w.box.id).format).toBe('folder');
+    expect(root).not.toHaveProperty('stats');
     expect((await profilePage(request(`/api/page/profile/@${h}/2026/08`), params({ user: `@${h}`, path: '2026/08' }))).status).toBe(404);
     expect((await profilePage(request('/api/page/profile/nobody'), params({ user: 'nobody' }))).status).toBe(404);
   });

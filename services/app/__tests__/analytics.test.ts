@@ -23,12 +23,12 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { DELETE as deleteMyArtifactRoute } from '@/app/api/my/artifacts/[id]/route';
 import { GET as listMyArtifactsRoute } from '@/app/api/my/artifacts/route';
 import { trackEvent } from '@/lib/analytics';
-import { viewSeriesByUser, VIEW_SERIES_DAYS } from '@/lib/feed';
+import { forkCountByUser, likeSummaryByUser, viewSeriesByUser, VIEW_SERIES_DAYS } from '@/lib/feed';
 import { mintExportKey } from '@/lib/export-key';
 import { resetLiveSubscriptions } from '@/lib/story/live';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, listArtifactsByUser } from '@/lib/users';
-import { renderDailyViewsSvg, renderSparklineSvg } from '@/lib/viz/sparkline';
+import { renderSparklineSvg } from '@/lib/viz/sparkline';
 
 const BASE = 'http://localhost:3000';
 const harness = useAppHarness();
@@ -338,6 +338,43 @@ describe('per-artifact totals', () => {
     const body = (await res.json()) as { artifacts: { id: string; views: number }[] };
     expect(body.artifacts.find((r) => r.id === a.id)?.views).toBe(3);
   });
+
+  it('likeSummaryByUser counts and buckets live likes on markup documents only', async () => {
+    const user = await createUser({ email: 'likes@minusx.ai' });
+    const t = await mintToken('laptop', user.id);
+    const document = await create(t.token, { markup: '<p>a</p>', title: 'a' });
+    const dataFile = await create(t.token, { markup: '<p>b</p>', title: 'b' });
+    const db = await harness.db();
+    await db.query(`UPDATE artifacts SET format = 'dataset' WHERE id = $1`, [dataFile.id]);
+    await db.query(
+      `INSERT INTO relations (subject_kind, subject_id, verb, object_kind, object_id, created_at) VALUES
+       ('user', 'reader-1', 'like', 'artifact', $1, now()),
+       ('user', 'reader-2', 'like', 'artifact', $1, now()),
+       ('user', 'reader-3', 'like', 'artifact', $1, now() - interval '2 days'),
+       ('user', 'reader-4', 'like', 'artifact', $2, now())`,
+      [document.id, dataFile.id],
+    );
+
+    const summary = await likeSummaryByUser(user.id);
+    expect(summary.total).toBe(3);
+    expect(summary.series).toHaveLength(VIEW_SERIES_DAYS);
+    expect(summary.series[VIEW_SERIES_DAYS - 1]).toBe(2);
+    expect(summary.series[VIEW_SERIES_DAYS - 3]).toBe(1);
+  });
+
+  it('forkCountByUser reads canonical fork events for live markup documents only', async () => {
+    const user = await createUser({ email: 'forks@minusx.ai' });
+    const t = await mintToken('laptop', user.id);
+    const document = await create(t.token, { markup: '<p>a</p>', title: 'a' });
+    const dataFile = await create(t.token, { markup: '<p>b</p>', title: 'b' });
+    const db = await harness.db();
+    await db.query(`UPDATE artifacts SET format = 'dataset' WHERE id = $1`, [dataFile.id]);
+    await trackEvent('fork', document.id, { forkId: 'copy-1' });
+    await trackEvent('fork', document.id, { forkId: 'copy-2' });
+    await trackEvent('fork', dataFile.id, { forkId: 'copy-3' });
+
+    expect(await forkCountByUser(user.id)).toBe(2);
+  });
 });
 
 describe('sparkline rendering', () => {
@@ -346,12 +383,5 @@ describe('sparkline rendering', () => {
     expect(svg.startsWith('<svg')).toBe(true);
   });
 
-  it('renders the daily histogram to inline SVG', async () => {
-    const svg = await renderDailyViewsSvg([
-      { day: '2026-08-10', views: 3 },
-      { day: '2026-08-11', views: 0 },
-      { day: '2026-08-12', views: 7 },
-    ]);
-    expect(svg.startsWith('<svg')).toBe(true);
-  });
+
 });
