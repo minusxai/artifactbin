@@ -56,6 +56,11 @@ describe('the three shipped files', () => {
  * THE FROZEN PARITY TABLE — every representative request, and the policy the OLD code gave it. Measured in
  * planning by walking both implementations (`.agent/PLAN.md` §2 R3, 33 requests, 0 differences).
  * `—` means no limit at all: `doorFor` returned null and nothing global was applied.
+ *
+ * THE TWO `?mode=card` ROWS ARE THE ONE DELIBERATE DIFFERENCE (M2). `doorFor` gave them EXPORT, because it
+ * could not see a query string at all; the file routes them to `card`, which keeps the SAME ceiling on
+ * DISTINCT documents and makes re-fetching ONE of them nearly free. That is the whole point of the route —
+ * an unfurl of one page is fetched by every reader who sees the link, and none of them asked for a render.
  */
 const PARITY: Array<[method: string, url: string, policy: string | null, max: number, windowSeconds: number, burst: number, key: string, browserOnly: boolean]> = [
   ['POST', '/api/tokens/anonymous', 'anon_mint', 0, 3600, 5, 'ip', true],
@@ -73,6 +78,10 @@ const PARITY: Array<[method: string, url: string, policy: string | null, max: nu
   ['POST', '/api/query', 'query', 600, 60, 1, 'ip', false],
   ['GET', '/a/abc123/export', 'export', 30, 60, 1, 'actor', false],
   ['GET', '/a/abc123/export?mode=png', 'export', 30, 60, 1, 'actor', false],
+  // M2: the query row sits ABOVE the plain export row, so `?mode=card` never reaches `export`.
+  ['GET', '/a/abc123/export?mode=card', 'card', 30, 60, 1, 'actor', false],
+  // the real unfurl shape a served document puts in its og:image — extra params must not lose the row
+  ['GET', '/a/abc123/export?mode=card&v=1&r=2', 'card', 30, 60, 1, 'actor', false],
   ['POST', '/a/abc123/edits', 'edit', 600, 60, 1, 'actor', false],
   ['GET', '/a/abc123/edits', 'edit', 600, 60, 1, 'actor', false],
   ['POST', '/api/artifacts', 'publish', 600, 60, 1, 'actor', false],
@@ -112,12 +121,70 @@ describe('the port is a NO-OP: default_rate_limits.yml reproduces every old door
       if (isBrowserOnly !== browserOnly) diffs.push(`${method} ${url}: browser_only ${isBrowserOnly}, expected ${browserOnly}`);
     }
     expect(diffs).toEqual([]);
-    expect(PARITY).toHaveLength(31);
+    expect(PARITY).toHaveLength(33);
   });
 
   it('the vocabulary that `doorFor` never reached is GONE, not transcribed: no global, start_link or events_streams policy', () => {
     const file = loadPolicyFile(shipped('default_rate_limits.yml'));
-    expect(Object.keys(file.policies).sort()).toEqual(['anon_mint', 'edit', 'export', 'login_send', 'login_verify', 'mutate', 'oauth_register', 'oauth_token', 'publish', 'query']);
+    expect(Object.keys(file.policies).sort()).toEqual(['anon_mint', 'card', 'edit', 'export', 'login_send', 'login_verify', 'mutate', 'oauth_register', 'oauth_token', 'publish', 'query']);
+  });
+});
+
+/**
+ * THE CARD ROUTE (M2) — what `repeat` is FOR, measured on the SHIPPED file rather than on a literal, because
+ * the numbers that matter are the ones a deployment actually runs. Two claims, and they are in tension:
+ * re-fetching ONE card must be nearly free (every reader of a shared link fetches the same unfurl), while
+ * the number of DISTINCT documents one actor can have RENDERED must stay exactly where `export` had it.
+ */
+describe('the card route: one card is nearly free, thirty distinct documents is still the ceiling', () => {
+  const file = () => loadPolicyFile(shipped('default_rate_limits.yml'));
+  const limiter = () => createRateLimiter({ file: file(), backend: memoryBackend() });
+  const ME = { ip: '203.0.113.9', actorId: 'usr_card', holder: true };
+  const at = (s: number) => 1_700_000_000_000 + s * 1000;
+
+  it('600 fetches of ONE card export all pass — the readers of one shared link cost one render', async () => {
+    const l = limiter();
+    const url = 'http://localhost:6601/a/abc123/export?mode=card&v=1&r=2';
+    const refused: string[] = [];
+    for (let i = 0; i < 600; i++) {
+      const d = await l.check({ method: 'GET', url }, { ...ME, url }, { now: at(0) });
+      if (!d.allowed) refused.push(`fetch ${i + 1} refused by ${d.door}`);
+    }
+    expect(refused).toEqual([]);
+  });
+
+  it('but the 31st DISTINCT card is refused — `repeat` discounts a re-fetch, it does not raise the ceiling', async () => {
+    const l = limiter();
+    const card = (n: number) => `http://localhost:6601/a/doc${n}/export?mode=card&v=1&r=2`;
+    for (let i = 0; i < 30; i++) {
+      const url = card(i);
+      expect((await l.check({ method: 'GET', url }, { ...ME, url }, { now: at(0) })).allowed, `distinct card ${i + 1}`).toBe(true);
+    }
+    const url = card(30);
+    const denied = await l.check({ method: 'GET', url }, { ...ME, url }, { now: at(0) });
+    expect(denied.allowed).toBe(false);
+    expect(denied.door).toBe('card');
+  });
+
+  it('and 31 plain exports are refused exactly as before — the card route took nothing from `export`', async () => {
+    const l = limiter();
+    const plain = (n: number) => `http://localhost:6601/a/doc${n}/export`;
+    for (let i = 0; i < 30; i++) {
+      const url = plain(i);
+      expect((await l.check({ method: 'GET', url }, { ...ME, url }, { now: at(0) })).allowed, `export ${i + 1}`).toBe(true);
+    }
+    const url = plain(30);
+    const denied = await l.check({ method: 'GET', url }, { ...ME, url }, { now: at(0) });
+    expect(denied.allowed).toBe(false);
+    expect(denied.door).toBe('export');
+  });
+
+  it('a card and a plain export of the SAME document are separate budgets', async () => {
+    const l = limiter();
+    const card = 'http://localhost:6601/a/abc123/export?mode=card';
+    const plain = 'http://localhost:6601/a/abc123/export';
+    expect((await l.check({ method: 'GET', url: card }, { ...ME, url: card })).door).toBe('card');
+    expect((await l.check({ method: 'GET', url: plain }, { ...ME, url: plain })).door).toBe('export');
   });
 });
 

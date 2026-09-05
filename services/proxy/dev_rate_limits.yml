@@ -8,7 +8,8 @@
 #
 # policies : a budget. max hits per window, keyed by `key`; `burst` multiplies max for a caller who
 #            proved a credential (same bucket); `repeat` (default 1) makes a hit whose exact URL was
-#            already seen in this window cost 1/repeat.
+#            already seen in this window cost 1/repeat (an unfurl re-fetched by every reader
+#            of one link is one render, not a thousand).
 # routes   : FIRST MATCH WINS. `path` is a regex over the pathname; `method` one or a list (absent =
 #            every method); `query` exact-matches named search params. ALL of a route's policies must
 #            allow, each counted in written order, and the FIRST refusal is the one reported.
@@ -26,6 +27,11 @@ policies:
   mutate:         { max: 60,  window: 1m,  key: ip }
   query:          { max: 600, window: 1m,  key: ip }
   export:         { max: 30,  window: 1m,  key: actor }
+  # NEW at M2, and the only route in this file the old `doorFor` could not express: an UNFURL. The ceiling on
+  # DISTINCT documents is `export`'s, unchanged — what `repeat` buys is that the 2nd..50th fetch of the SAME
+  # card costs a fiftieth of a render, because every reader of one shared link fetches the identical URL and
+  # none of them asked for it. See PLAN §2 R4 and R12.
+  card:           { max: 30,  window: 1m,  key: actor, repeat: 50 }
   edit:           { max: 600, window: 1m,  key: actor }
   publish:        { max: 600, window: 1m,  key: actor }
 
@@ -43,6 +49,8 @@ routes:
   - { path: "^/a/[A-Za-z0-9]+/mutate$",     policies: [mutate] }
   - { path: "^/a/[A-Za-z0-9]+/query$",      policies: [query] }
   - { path: "^/api/query$",                 policies: [query] }
+  # `?mode=card` FIRST: first match wins, so the plain export row below never sees an unfurl.
+  - { path: "^/a/[A-Za-z0-9]+/export$", query: { mode: card }, policies: [card] }
   - { path: "^/a/[A-Za-z0-9]+/export$",     policies: [export] }
   - { path: "/edits$",                      policies: [edit] }
   # was doorFor's `method !== GET && method !== HEAD` — a negation the file spells out as a list.
