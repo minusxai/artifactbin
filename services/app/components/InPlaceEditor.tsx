@@ -542,7 +542,7 @@ export default function InPlaceEditor({
     <>
       <header
         aria-label="Editor toolbar"
-        className="fixed left-0 z-30 flex items-center gap-2 border-b border-edge bg-surface/95 px-3 backdrop-blur"
+        className="fixed left-0 z-30 flex items-center gap-2 border-y border-edge bg-surface/95 px-3 backdrop-blur"
         style={{ top: barTop, height: EDIT_BAR_H, right: rightInset }}
       >
         {/* The DOCUMENT's controls scroll; the ACTIONS never do. On a phone the

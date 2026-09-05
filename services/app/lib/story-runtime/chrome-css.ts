@@ -323,12 +323,22 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
 .mx-reader-follow:hover { background: var(--primary, currentColor) !important; color: var(--primary-foreground, canvas) !important; }
 .mx-reader-follow:active { transform: scale(.96) !important; }
 
-/* A liked heart fills in the accent; a followed author's pill fills too; the
-   count sits beside the glyph and disappears at zero. */
+/* A liked heart fills in the accent; a followed author's pill fills too. The
+   COUNT is a badge on the glyph's shoulder — up and out far enough that the
+   glyph stays whole — filled in the accent, ringed in the ground so it reads
+   over the glyph's own strokes; gone at zero. Liked, it flips to ink on
+   ground so the accent heart and an accent badge do not fight. */
 .mx-reader-action[data-mx-liked="true"] { color: var(--primary, currentColor) !important; }
 .mx-reader-action[data-mx-liked="true"] svg { fill: var(--primary, currentColor) !important; }
-.mx-reader-count { font: 500 11px/1 var(--font-mono, ui-monospace, monospace) !important; letter-spacing: .02em !important; }
+.mx-reader-count {
+  position: absolute !important; top: -2px !important; right: -3px !important;
+  box-sizing: border-box !important; min-width: 15px !important; height: 15px !important; padding: 0 4px !important;
+  border-radius: 999px !important; background: var(--primary, currentColor) !important; color: var(--primary-foreground, canvas) !important;
+  font: 700 9px/15px var(--font-mono, ui-monospace, monospace) !important; letter-spacing: 0 !important; text-align: center !important;
+  box-shadow: 0 0 0 2px var(--background, canvas) !important; pointer-events: none !important;
+}
 .mx-reader-count:empty { display: none !important; }
+.mx-reader-action[data-mx-liked="true"] .mx-reader-count { background: var(--foreground, canvastext) !important; color: var(--background, canvas) !important; }
 .mx-reader-follow[data-mx-following="true"] { background: var(--primary, currentColor) !important; color: var(--primary-foreground, canvas) !important; }
 
 /* TIPS — CSS only, because a document of prose ships no runtime to draw one.
@@ -383,7 +393,6 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
   }
   .mx-reader-rail { order: 2 !important; display: flex !important; align-items: center !important; gap: 2px !important; flex: 0 0 auto !important; }
   .mx-reader-action, .mx-reader-trigger { width: 34px !important; height: 34px !important; }
-  .mx-reader-action:has(.mx-reader-count:not(:empty)) { width: auto !important; padding: 0 8px 0 6px !important; gap: 4px !important; }
 
 }
 
@@ -427,9 +436,8 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
     filter: drop-shadow(0 1px 1.5px var(--background, canvas)) drop-shadow(0 0 6px color-mix(in srgb, var(--background, canvas) 85%, transparent)) !important;
   }
   .mx-reader-action svg, .mx-reader-trigger svg { width: 24px !important; height: 24px !important; }
-  /* The count sits under the glyph on a phone. */
-  .mx-reader-action { flex-direction: column !important; gap: 0 !important; }
-  .mx-reader-action .mx-reader-count { font-size: 10px !important; }
+  /* The badge on a 44px target with a 24px glyph. */
+  .mx-reader-count { top: 2px !important; right: 1px !important; }
   .mx-reader-home {
     width: 48px !important; height: 48px !important; border-radius: 12px !important;
     background: var(--background, canvas) !important;
