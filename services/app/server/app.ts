@@ -138,13 +138,12 @@ export async function servesDocumentDirectly(request: Request): Promise<string |
    */
   if (!anonymous && readIntent(url.search) !== null) return null;
   const artifact = await getArtifactById(found.id);
-  // A FOLDER is served exactly like a markup document — the scaffold IS the
-  // document. Which side of the reader/owner split it lands on is then decided
-  // by the rules below with no folder branch: its <Query> means
-  // `declaresLiveData` is true, so a PRIVATE folder gets the shell (whose relay
-  // holds the session its own transport cannot) and a public one is served
-  // top-level.
-  if (!artifact || (artifact.format !== 'markup' && artifact.format !== 'folder')) return null;
+  // A FOLDER IS NEVER SERVED TOP-LEVEL. It has no document — its listing is app
+  // data the page endpoint answers and `withBootstrap` inlines — so `raw` is a
+  // 404 for one and there is nothing here to hand over. Everyone gets the app
+  // page, and the ACL is unchanged: a folder this viewer may not read is the
+  // same uniform 404 the page already answers for an unknown id.
+  if (!artifact || artifact.format !== 'markup') return null;
   const needsSessionForData = declaresLiveData(artifact.source) && !(await canReadArtifact(artifact, null));
   if (needsSessionForData) return null;
   // The shell is for anyone who may do more than READ it — today owner,

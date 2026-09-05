@@ -47,7 +47,6 @@ import { DateControl, SegmentedControl, SelectControl, SliderControl, SwitchCont
 import { parseColumnSpecs, parseSortSpec, parseTableHeight, type SortSpec } from '@/lib/story/data-table';
 
 export type { StoryIslandData } from './contract';
-import type { FolderHead } from '@/lib/story-ui/folder-head';
 import type { StoryIslandData } from './contract';
 
 /**
@@ -80,12 +79,6 @@ interface RuntimeEmbedContextValue {
   chrome: boolean;
   glyphs?: GlyphMap;
   colorMode: 'light' | 'dark';
-  /**
-   * The folder this document IS, when it is one — the only embed that reads it
-   * is `<Files>`, and it cannot be authored: it is the ROW's, carried on the
-   * island (lib/story-ui/folder-head).
-   */
-  folder?: FolderHead;
 }
 
 const RuntimeEmbedContext = createContext<RuntimeEmbedContextValue>({
@@ -585,34 +578,20 @@ function DataTableAdapter(props: Record<string, unknown>) {
 }
 
 /**
- * `<Files data="$children">` — a folder's listing, live. The rows are the
- * store's, exactly like every other bound embed: a folder's own <Query> runs
- * through the transport its island already names, so the listing follows a
- * child being created or moved with no reload (lib/folders notifyParent wakes
- * the folder's own channel, and the store re-runs the query the ping dirties).
+ * `<Files data="$q">` — a bound LISTING, live. The rows are the store's,
+ * exactly like every other bound embed: the document's own <Query> over
+ * `ref_<folderId>` runs through the transport its island already names, so the
+ * listing follows a child being created or moved with no reload (lib/folders
+ * notifyParent wakes the folder's channel, and the store re-runs the query the
+ * ping dirties).
  */
 function FilesAdapter(props: Record<string, unknown>) {
   const ctx = useContext(RuntimeEmbedContext);
   const name = refName(props.data);
   const table = name ? ctx.state.tables[name] : undefined;
-  /*
-   * SETTLED — the second fact the empty state needs, and the reason it is
-   * computed HERE. `pending` is "not current": dirty as well as in flight, so
-   * a document that arrived without its rows (paint-first, the reader's normal
-   * case) reports its query pending on BOTH sides of hydration and the listing
-   * is blank rather than claiming to be empty for the round trip.
-   *
-   * An ERROR is not emptiness. A query that failed leaves no table and no
-   * pending mark, which is the same shape as "answered with nothing" — and
-   * telling someone their folder is empty because the SQL broke is the worse
-   * of the two wrong answers.
-   */
-  const settled = name !== null && !ctx.pending.has(name) && !ctx.state.errors[name];
   return (
     <Files
       rows={table?.rows}
-      settled={settled}
-      {...(ctx.folder ? { folder: ctx.folder } : {})}
       variant={typeof props.variant === 'string' ? props.variant : undefined}
       capture={!ctx.chrome}
     />
@@ -941,7 +920,7 @@ const EMPTY_GLYPHS: GlyphMap = {};
 /** A store-less subscribe (a Button rendered outside a document): nothing ever changes. */
 const NO_SUBSCRIBE = () => () => {};
 
-export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, template = null, chrome = true, assetsUrl = null, folder, importAsset, store: givenStore, onMounted, editDecorate, onSlideRename }: StoryRuntimeAppProps) {
+export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, template = null, chrome = true, assetsUrl = null, importAsset, store: givenStore, onMounted, editDecorate, onSlideRename }: StoryRuntimeAppProps) {
   const [store] = useState<DataflowStore>(() => givenStore ?? createDataflowStore(dataflow ?? { flow: EMPTY_DATAFLOW }));
   const mountedRef = useRef(onMounted);
   mountedRef.current = onMounted;
@@ -980,7 +959,7 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, t
 
   const body = (
     <RuntimeAssetContext.Provider value={assets}>
-      <RuntimeEmbedContext.Provider value={{ store, flow: store.flow, state, pending, setValue, fetchPage: store.fetchPage, refData, chrome, colorMode, folder }}>
+      <RuntimeEmbedContext.Provider value={{ store, flow: store.flow, state, pending, setValue, fetchPage: store.fetchPage, refData, chrome, colorMode }}>
         {renderStoryNodes(nodes, {
           // Identity across an adopted document: a live update re-renders this
           // tree, and positional keys would remount everything below the edit.

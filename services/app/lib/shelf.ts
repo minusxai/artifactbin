@@ -32,6 +32,11 @@
  * rows through untouched.
  */
 
+// TYPE-ONLY, so the module stays runtime-pure: the visibility vocabulary is
+// declared once in lib/artifacts and re-listing it here would be the second
+// spelling this codebase keeps refusing.
+import type { Visibility } from '@/lib/artifacts';
+
 /**
  * THE FOLDER A ROW SITS IN, from either half of the placement wire.
  *
@@ -48,6 +53,32 @@ export const parentOfRow = (row: { parent_id?: string | null; ancestor_ids?: str
 export interface ShelfItem {
   format: string;
   updated_at: string;
+}
+
+/**
+ * ONE ROW AS EVERY SHELF DRAWS IT — the superset, with every field past the
+ * policy's two optional by design.
+ *
+ * It lives HERE, beside the policy, rather than in the component that renders
+ * it, because it is what a page ANSWERS and not how the answer looks: the
+ * dashboard, the profile and now a folder's page each build these rows on the
+ * server, and a server module may not import React. `components/Shelf.tsx`
+ * re-exports it, so nothing that already named it had to move.
+ */
+export interface ShelfRow extends ShelfItem {
+  id: string;
+  url: string;
+  title: string | null;
+  description?: string | null;
+  version: number;
+  visibility?: Visibility;
+  /** The id of the folder artifact this row sits in; absent/null = the root. */
+  parent_id?: string | null;
+  /** The trail root->parent, so a folder's own subtree can be greyed in the picker. */
+  ancestor_ids?: string[];
+  views?: number;
+  /** Server-rendered spline (inline SVG). Absent = draw none. */
+  sparkline?: string;
 }
 
 export interface ShelfOptions {

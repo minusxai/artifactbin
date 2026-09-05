@@ -9,7 +9,6 @@
  */
 import type { AnnotationRange } from '@/lib/story/annotation-range';
 import type { JsxNode } from '@/lib/jsx';
-import type { FolderHead } from '@/lib/story-ui/folder-head';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 import type { RefDataMap } from '@/lib/story/ref-data';
 import type { Dataflow, DataflowState, Scalar } from '@/lib/story/dataflow';
@@ -106,18 +105,6 @@ export interface StoryIslandData {
    * render that is not a served document, where a bound image renders static.
    */
   assetsUrl?: string | null;
-  /**
-   * THE FOLDER THIS DOCUMENT IS, when it is one (lib/story-ui/folder-head):
-   * its name, its id, and the ancestors THIS viewer may read. A folder's whole
-   * source is `<Files data="$children" />`, which knows only what is on the
-   * shelf — so where the shelf IS has to arrive beside it.
-   *
-   * The second island field after `assetsUrl` that CHANGES WHAT IS DRAWN, so
-   * it goes to the SSR render and the island alike (lib/story/document): a
-   * head on one side and none on the other is a hydration mismatch, and React
-   * answers that by discarding the whole server tree.
-   */
-  folder?: FolderHead;
 }
 
 /** The GET query endpoint's one parameter: the JSON of a QueryRequest (lib/story/query-request). */

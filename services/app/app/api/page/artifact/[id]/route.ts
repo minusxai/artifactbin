@@ -7,6 +7,7 @@
  */
 import { countOpenAnnotations } from '@/lib/annotations';
 import { canReadArtifact, declarationsForRow, getArtifactById } from '@/lib/artifacts';
+import { folderPageFor } from '@/lib/folders';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { verifyExportKey } from '@/lib/export-key';
@@ -35,19 +36,44 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   if (!exporting && !(await canReadArtifact(artifact, actor.viewer))) return notFound();
   if (!ARTIFACT_FORMATS.includes(artifact.format as ArtifactFormat)) return notFound();
 
+  const role = await roleFor(artifact, actor);
+  const kind = await browserSessionKind(request);
+
+  /*
+   * A FOLDER IS A LISTING, NOT A DOCUMENT — so its page is answered HERE and
+   * carries no `surface` at all.
+   *
+   * Measured on production while a folder was a document: shell HTML 0.25 s,
+   * the frame's document 0.98 s, the sandboxed runtime booted 2.59 s, the
+   * children query answered 2.86 s — with the server idle for all of it (the
+   * query is ~50 ms). The listing was last because it was authored markup
+   * inside an opaque origin that cannot cache the runtime it needed. It is app
+   * data now: computed once here, inlined into the HTML by `withBootstrap`, so
+   * the rows are in the first byte and the first paint is the final geometry.
+   *
+   * Above every `isDoc` branch below, because none of them applies: there is no
+   * source to compile a sheet for, no declarations to seed, no annotations to
+   * count and nothing to frame.
+   */
+  if (artifact.format === 'folder') {
+    return json({
+      canonical: canonicalArtifactPath(artifact, await ownerUsername(artifact.user_id)),
+      role,
+      kind,
+      // The TOKEN travels beside the account, as everywhere the folder ACL is
+      // asked: an unclaimed folder is owned by the token that made it, and the
+      // account viewer alone would answer its own owner a stranger's shelf.
+      folder: await folderPageFor(artifact, { userId: actor.viewer?.userId ?? null, email: actor.viewer?.email ?? null, tokenId: actor.tokenId ?? null }),
+    }, 200, { 'Cache-Control': 'no-store' });
+  }
+
   const meta = (artifact.meta ?? {}) as {
     theme?: StoryThemeName | null; colorMode?: 'light' | 'dark' | null; compiledCss?: string | null;
     columns?: Array<{ name: string; type?: string }>; template?: string | null; refs?: Array<{ id: string; kind: string }>;
     cssCompileVersion?: string | null;
   };
   const design = resolveStoredStoryDesign(meta.theme, meta.colorMode);
-  // A FOLDER is a markup document whose source we wrote (lib/folders
-  // folderScaffold), so every branch below that asks "is this a document?"
-  // must admit it — otherwise the page gets a folder with no sheet, no
-  // declarations and no comment count, which is a document that renders blank.
-  const isDoc = artifact.format === 'markup' || artifact.format === 'folder';
-  const role = await roleFor(artifact, actor);
-  const kind = await browserSessionKind(request);
+  const isDoc = artifact.format === 'markup';
   // The heart renders from THIS answer: asking a second door for it would
   // leave the control blank (or wrong) for a frame on every page load. An
   // anonymous reader still gets the count — it is the number, not the button,

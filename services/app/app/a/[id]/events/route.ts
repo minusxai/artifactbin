@@ -138,10 +138,22 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     void sendData({ datasets: [datasetId], version: dataset?.version ?? 0 });
   };
 
-  /** Follow exactly the datasets this version of the document depends on. */
-  const followDatasets = async (source: string | null) => {
+  /**
+   * Follow exactly the datasets this version of the row depends on.
+   *
+   * A FOLDER DEPENDS ON ITSELF, and that rule is stated here rather than
+   * inferred from its stored source. It used to be inferred: a folder's source
+   * was a scaffold naming `ref_<own id>`, so `datasetsForDocument` returned its
+   * own id and a child write — which NOTIFYs the parent's channel (lib/folders
+   * notifyParent) — arrived as an ordinary `data` frame. A folder has no source
+   * now, so nothing would name it, and an open listing would sit stale until
+   * someone reloaded. The wire is unchanged: the same `event: data` frame
+   * naming the same id, so the folder page and an authored `<Files>` document
+   * both re-read on exactly the ping they already read on.
+   */
+  const followDatasets = async (row: { format: string; id: string; source: string | null }) => {
     if (closed) return;
-    const wanted = new Set(datasetsForDocument(source));
+    const wanted = new Set(row.format === 'folder' ? [row.id] : datasetsForDocument(isDocumentFormat(row.format) ? row.source : null));
     for (const [datasetId, drop] of datasetUnsubs) {
       if (wanted.has(datasetId)) continue;
       datasetUnsubs.delete(datasetId);
@@ -192,10 +204,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // document that starts reading a dataset must be subscribed by the time
       // its reader can see the query, or a write landing in between reaches
       // nobody and the chart sits stale until the next interaction.
-      // A FOLDER's one data dependency is ITSELF (its scaffold reads
-      // `ref_<own id>`), which is what makes a child's publish reach an open
-      // folder page through the path a dataset write already travels.
-      await followDatasets(isDocumentFormat(row.format) ? row.source : null);
+      // A FOLDER's one data dependency is ITSELF, which is what makes a
+      // child's publish reach an open folder page through the path a dataset
+      // write already travels.
+      await followDatasets(row);
       await send(frame);
       // An edit shifts anchors; the owner's pins must follow the document
       // frame that moved them. No-op on every non-owner connection.
@@ -224,7 +236,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     // queued rather than awaited (see below), so waiting for it would leave a
     // window in which a write to this document's dataset reached nobody.
     // Later frames adjust the set when an edit changes what the document reads.
-    await followDatasets(isDocumentFormat(initial.format) ? initial.source : null);
+    await followDatasets(initial);
     if (annotatorConnection) {
       try {
         annotationsUnsub = await subscribeToAnnotations(artifactId, () => void pushAnnotations());

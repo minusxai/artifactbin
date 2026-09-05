@@ -26,26 +26,16 @@ import { MoveMenu, type PickerFolder } from '@/components/FolderPicker';
 import { ArtifactTable } from '@/components/TokenBrowser';
 import { Tooltip } from '@/components/Tooltip';
 import { dateStamp, MicroLabel, PANEL, Spark, timeAgo, VISIBILITY_TIPS, VisibilityPill } from '@/components/ui';
-import { buildShelf, parentOfRow, type ShelfItem } from '@/lib/shelf';
-import type { Visibility } from '@/lib/artifacts';
+import { buildShelf, parentOfRow, type ShelfRow } from '@/lib/shelf';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
 
-/** The superset. Every field past the policy's two is optional by design. */
-export interface ShelfRow extends ShelfItem {
-  id: string;
-  url: string;
-  title: string | null;
-  description?: string | null;
-  version: number;
-  visibility?: Visibility;
-  /** The id of the folder artifact this row sits in; absent/null = the root. */
-  parent_id?: string | null;
-  /** The trail root->parent, so a folder's own subtree can be greyed in the picker. */
-  ancestor_ids?: string[];
-  views?: number;
-  /** Server-rendered 30-day spline (inline SVG). Absent = draw none. */
-  sparkline?: string;
-}
+/**
+ * The row shape lives with the POLICY (lib/shelf), because it is what a page
+ * ANSWERS rather than how the answer looks — three server modules build these
+ * rows and none of them may import React. Re-exported here so every existing
+ * `import type { ShelfRow } from '@/components/Shelf'` still reads.
+ */
+export type { ShelfRow } from '@/lib/shelf';
 
 /**
  * WHAT A VIEWER MAY DO WITH A ROW — a LEVEL, not a boolean, because the three

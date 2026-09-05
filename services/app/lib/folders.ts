@@ -26,7 +26,7 @@ import { renderSparklineSvg } from '@/lib/viz/sparkline';
 // one: these columns are registered into the engine, so their types are the
 // engine's vocabulary.
 import type { DatasetColumn } from '@/lib/story/dataset-shape';
-import type { FolderHead } from '@/lib/story-ui/folder-head';
+import type { ShelfRow } from '@/lib/shelf';
 
 /**
  * No chain may be longer than this. A row's level IS `ancestor_ids.length`, so
@@ -60,15 +60,173 @@ export const PARENT_REFUSED: ParentRefusal = { error: 'invalid_parent' };
 export const isParentRefusal = (r: { ancestor_ids: string[] } | ParentRefusal): r is ParentRefusal => 'error' in r;
 
 /**
- * The stored source a new folder is stamped with, its own id filled in.
+ * WHERE A FOLDER SITS — its ancestors, as the page's trail draws them.
  *
- * Two lines that will not change: everything visual lives in `<Files>`, which
- * is runtime code and improves for every folder at once. It is ORDINARY markup
- * — no sentinel, no read-time substitution — so `raw` serves it, the editor
- * edits it, and an agent reading the document back sees exactly what renders.
+ * It was `lib/story-ui/folder-head` while a folder's listing lived inside a
+ * document and had to reach the kit through the island. The listing is app
+ * chrome now, so the shape belongs beside the module that computes it.
  */
-export function folderScaffold(id: string): string {
-  return `<Helmet><Query name="children">{\`select * from ref_${id} order by updated_at desc\`}</Query></Helmet>\n<Files data="$children" variant="icons" />`;
+export interface FolderCrumb {
+  id: string;
+  title: string | null;
+  /** Where the crumb links — the ancestor's own address. */
+  url: string;
+}
+
+/**
+ * A FOLDER'S WHOLE PAGE, answered in ONE server call and inlined into the HTML
+ * (server/app withBootstrap), so the listing is in the first byte.
+ *
+ * A folder has NO CONTENT: its row carries a title, a placement and an ACL and
+ * nothing else, so everything a person sees on the page is on this object.
+ * There is no document to render, no source to fetch and no frame to boot —
+ * which is the whole point of the change: the listing used to arrive behind a
+ * sandboxed runtime an opaque origin cannot cache.
+ */
+export interface FolderPage {
+  id: string;
+  title: string | null;
+  /** Root → parent, and ONLY the ancestors this viewer may read. */
+  trail: FolderCrumb[];
+  /**
+   * WHAT THIS VIEWER CAN SEE, counted from the rows below and never by a
+   * separate `COUNT(*)`. A count that included children they may not read
+   * would be the existence oracle every other surface here refuses.
+   */
+  count: { documents: number; folders: number };
+  /** The children, in the shape every other shelf takes. */
+  rows: ShelfRow[];
+}
+
+/**
+ * A folder's page, for ONE viewer. The trail and the shelf, and nothing else.
+ *
+ * Thumbnails here are the shelf's OWN (`/a/<child>/export?mode=card`), loaded
+ * by the app page WITH the session — which is the one thing the old in-document
+ * listing could not do, since a sandboxed frame carries no cookie and a private
+ * child's card 404s for its own owner. Numbers follow the same rule the virtual
+ * table uses: only a viewer who may EDIT the folder gets them.
+ */
+export async function folderPageFor(
+  folder: ArtifactRow,
+  viewer: Viewer,
+): Promise<FolderPage> {
+  const [head, picked] = await Promise.all([folderHeadFor(folder, viewer), selectChildren(folder, viewer)]);
+  const rows: ShelfRow[] = [];
+  let documents = 0;
+  let folders = 0;
+  for (const c of picked.children) {
+    if (c.format === 'folder') folders++;
+    else if (c.format === 'markup') documents++;
+    rows.push({
+      id: c.id,
+      url: `/a/${c.id}`,
+      title: c.title,
+      format: c.format,
+      version: c.version,
+      visibility: c.visibility,
+      updated_at: c.updated_at,
+      // The picker greys a folder's own subtree, and the shelf reads placement
+      // from either half of the wire — so both travel (lib/shelf parentOfRow).
+      parent_id: folder.id,
+      ancestor_ids: [...(folder.ancestor_ids ?? []), folder.id],
+      // ABSENT, never zero: 'not counted for you' and 'nobody came' are
+      // different facts, and the shelf omits the mark for the first.
+      ...(picked.numbers ? { views: c.views, sparkline: await picked.sparkline(c.id) } : {}),
+    });
+  }
+  return { ...head, count: { documents, folders }, rows };
+}
+
+/**
+ * WHICH CHILDREN THIS VIEWER GETS, and whether they get the numbers — asked
+ * ONCE, by the folder page and by the `ref_<folderId>` virtual table alike.
+ *
+ * The two callers PROJECT differently and deliberately: the table answers a
+ * document's SQL, so it emits `CHILDREN_COLUMNS` and nulls a private child's
+ * thumbnail (a sandboxed frame carries no cookie, so that card would 404 even
+ * for its owner); the page answers app chrome, so it emits `ShelfRow` and lets
+ * the shelf load every card WITH the session. What must never fork is the part
+ * above — who is listed at all, and who is told the numbers — so that part
+ * lives here and nowhere else.
+ *
+ * Three viewer-dependent facts, each decided here:
+ *  - WHICH ROWS — decided by the viewer's relationship to the FOLDER, then to
+ *    each child, and NOT by "may they read it". `unlisted` means "reads like
+ *    public, listed nowhere", and a folder's page is a listing: a stranger who
+ *    holds the folder's address may open an unlisted child by ITS address and
+ *    must still not be handed it here. So anyone with a ROLE on the folder —
+ *    owner, editor or commenter, which is `canAnnotate` and therefore above
+ *    what a public link alone grants — reads the whole shelf, and everyone
+ *    else gets the `public` children plus any child they are personally named
+ *    on (`roleWithoutLink`: ownership or a share, never the link).
+ *  - THE NUMBERS — `views` and `sparkline` only when the viewer may EDIT the
+ *    folder (its owner, or someone named editor on it). Everyone else gets
+ *    none, decided on the server rather than hidden in the markup.
+ *  - THE CAP — 500 rows, oldest dropped. The count both callers report is
+ *    therefore what this shelf HOLDS, not a `COUNT(*)`: a separate count would
+ *    include children the viewer may not read, which is the existence oracle
+ *    every other surface here refuses.
+ */
+async function selectChildren(
+  folder: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | 'visibility' | 'link_role'>,
+  viewer: Viewer,
+): Promise<{ children: ChildRow[]; numbers: boolean; sparkline: (id: string) => Promise<string> }> {
+  const db = await getDb();
+  const actor: RoleActor = { userId: viewer?.userId ?? null, tokenId: viewer?.tokenId ?? null, email: viewer?.email ?? null };
+  const folderRole = await effectiveRole(folder as ArtifactRow, actor);
+  const numbers = canEdit(folderRole);
+  // A role on the FOLDER is read as a role on its shelf. `canAnnotate` rather
+  // than `canRead` is the whole point: a public folder's link grants `viewer`
+  // to every stranger, so a `canRead` threshold would make "has a role here"
+  // true for anybody holding the address and list the unlisted children to
+  // them — which is the one thing `unlisted` promises will not happen.
+  const insider = canAnnotate(folderRole);
+  const r = await db.query<ChildRow>(
+    `SELECT id, title, format, cardinality(ancestor_ids)::int AS level, visibility, updated_at,
+            user_id, token_id, link_role, version,
+            (SELECT COUNT(DISTINCT COALESCE(e.visitor, e.seq::text))::int FROM analytics_events e
+             WHERE e.artifact_id = artifacts.id AND e.event = 'view') AS views
+       FROM artifacts
+      WHERE ancestor_ids[cardinality(ancestor_ids)] = $1 AND ${LIVE_ARTIFACT_SQL}
+      ORDER BY updated_at DESC
+      LIMIT 500`,
+    [folder.id],
+  );
+  const children: ChildRow[] = [];
+  for (const c of r.rows) {
+    /*
+     * Three cheap answers before any query: an insider reads everything, a
+     * `public` child is listed to everybody, and only what is left — a private
+     * or unlisted child, for a viewer with no role on the folder — costs the
+     * share lookup that decides whether they were named on it personally. That
+     * lookup also STAMPS resolved shares, so asking it per row unconditionally
+     * was up to 500 UPDATEs inside one query response; now it is asked only
+     * for the rows that cannot be settled without it, and never at all for an
+     * anonymous viewer (`roleWithoutLink` returns `none` with no query).
+     * Measured at 100 children read by a signed-in stranger: 25ms → 1ms.
+     */
+    if (!insider && c.visibility !== 'public' && !canRead(await roleWithoutLink(c, actor))) continue;
+    children.push(c);
+  }
+  const series = numbers && children.length ? await viewSeries(children.map((c) => c.id)) : new Map<string, number[]>();
+  /*
+   * ONE Vega render per distinct SERIES, not per row. A sparkline costs ~2.3ms
+   * to draw, so a folder of 100 documents spent 230ms of a response drawing
+   * charts — and a folder whose documents are new draws the SAME flat line for
+   * every one of them. The key is the series itself, so identical histories
+   * collapse and different ones still each get their own picture. Measured at
+   * 100 children: 230ms → 6ms.
+   */
+  const drawn = new Map<string, Promise<string>>();
+  const sparkline = (id: string): Promise<string> => {
+    const s = series.get(id) ?? new Array<number>(SPARKLINE_DAYS).fill(0);
+    const key = s.join(',');
+    let svg = drawn.get(key);
+    if (!svg) drawn.set(key, (svg = renderSparklineSvg(s)));
+    return svg;
+  };
+  return { children, numbers, sparkline };
 }
 
 /** The parent of a row (last of ancestor_ids) or null at root. */
@@ -159,7 +317,10 @@ export function ancestorsForMove(
   };
 }
 
-/** One child as the table reads it, before the viewer's own columns are filled. */
+/** Whoever is asking. Null is a stranger with no credential at all. */
+type Viewer = { userId: string | null; email: string | null; tokenId: string | null } | null;
+
+/** One child as the selection reads it, before either caller projects it. */
 interface ChildRow {
   id: string;
   title: string | null;
@@ -175,84 +336,30 @@ interface ChildRow {
 }
 
 /**
- * The children VIRTUAL TABLE for a folder, computed for ONE viewer on the
- * server and never filtered on the client.
+ * The children VIRTUAL TABLE for a folder (`ref_<folderId>` in a `<Query>`),
+ * computed for ONE viewer on the server and never filtered on the client.
  *
- * Three viewer-dependent facts, each decided here:
- *  - WHICH ROWS — decided by the viewer's relationship to the FOLDER, then to
- *    each child, and NOT by "may they read it". `unlisted` means "reads like
- *    public, listed nowhere", and a folder's page is a listing: a stranger who
- *    holds the folder's address may open an unlisted child by ITS address and
- *    must still not be handed it here. So anyone with a ROLE on the folder —
- *    owner, editor or commenter, which is `canAnnotate` and therefore above
- *    what a public link alone grants — reads the whole shelf, and everyone
- *    else gets the `public` children plus any child they are personally named
- *    on (`roleWithoutLink`: ownership or a share, never the link).
- *  - THE THUMBNAIL — `/a/<child>/export?mode=card` for a public or unlisted
- *    DOCUMENT, null otherwise. A request the sandboxed frame makes carries no
- *    session, so a private child's card would 404 even for its owner; and a
- *    folder's own card is a picture of this listing, which is not worth
- *    drawing inside it.
- *  - THE NUMBERS — `views` and `sparkline` only when the viewer may EDIT the
- *    folder (its owner, or someone named editor on it). Everyone else gets
- *    nulls, decided on the server rather than hidden in the markup.
+ * A PROJECTION over `selectChildren`, which owns who is listed and who is told
+ * the numbers. This half owns only the shape a document's SQL reads and the
+ * one rule the app page does not share — the thumbnail.
+ *
+ * It survives the folder page's move into app chrome because it was never the
+ * folder page's: a document may list a folder's children with `<Files>`, and
+ * that is the feature this table is for.
  */
 export async function childrenTableFor(
   folder: ArtifactRow,
-  viewer: { userId: string | null; email: string | null; tokenId: string | null } | null,
+  viewer: Viewer,
 ): Promise<{ rows: Record<string, unknown>[]; columns: DatasetColumn[] }> {
-  const db = await getDb();
-  const actor: RoleActor = { userId: viewer?.userId ?? null, tokenId: viewer?.tokenId ?? null, email: viewer?.email ?? null };
-  const folderRole = await effectiveRole(folder, actor);
-  const numbers = canEdit(folderRole);
-  // A role on the FOLDER is read as a role on its shelf. `canAnnotate` rather
-  // than `canRead` is the whole point: a public folder's link grants `viewer`
-  // to every stranger, so a `canRead` threshold would make "has a role here"
-  // true for anybody holding the address and list the unlisted children to
-  // them — which is the one thing `unlisted` promises will not happen.
-  const insider = canAnnotate(folderRole);
-  const r = await db.query<ChildRow>(
-    `SELECT id, title, format, cardinality(ancestor_ids)::int AS level, visibility, updated_at,
-            user_id, token_id, link_role, version,
-            (SELECT COUNT(DISTINCT COALESCE(e.visitor, e.seq::text))::int FROM analytics_events e
-             WHERE e.artifact_id = artifacts.id AND e.event = 'view') AS views
-       FROM artifacts
-      WHERE ancestor_ids[cardinality(ancestor_ids)] = $1 AND ${LIVE_ARTIFACT_SQL}
-      ORDER BY updated_at DESC
-      LIMIT 500`,
-    [folder.id],
-  );
-  const series = numbers && r.rows.length ? await viewSeries(r.rows.map((c) => c.id)) : new Map<string, number[]>();
-  /*
-   * ONE Vega render per distinct SERIES, not per row. A sparkline costs ~2.3ms
-   * to draw, so a folder of 100 documents spent 230ms of a query response
-   * drawing charts — and a folder whose documents are new draws the SAME flat
-   * line for every one of them. The key is the series itself, so identical
-   * histories collapse and different ones still each get their own picture.
-   * Measured at 100 children: 230ms → 6ms.
-   */
-  const drawn = new Map<string, Promise<string>>();
-  const sparkline = (id: string): Promise<string> => {
-    const s = series.get(id) ?? new Array<number>(SPARKLINE_DAYS).fill(0);
-    const key = s.join(',');
-    let svg = drawn.get(key);
-    if (!svg) drawn.set(key, (svg = renderSparklineSvg(s)));
-    return svg;
-  };
+  const picked = await selectChildren(folder, viewer);
   const rows: Record<string, unknown>[] = [];
-  for (const c of r.rows) {
-    /*
-     * Three cheap answers before any query: an insider reads everything, a
-     * `public` child is listed to everybody, and only what is left — a private
-     * or unlisted child, for a viewer with no role on the folder — costs the
-     * share lookup that decides whether they were named on it personally. That
-     * lookup also STAMPS resolved shares, so asking it per row unconditionally
-     * was up to 500 UPDATEs inside one query response; now it is asked only
-     * for the rows that cannot be settled without it, and never at all for an
-     * anonymous viewer (`roleWithoutLink` returns `none` with no query).
-     * Measured at 100 children read by a signed-in stranger: 25ms → 1ms.
-     */
-    if (!insider && c.visibility !== 'public' && !canRead(await roleWithoutLink(c, actor))) continue;
+  for (const c of picked.children) {
+    // THE THUMBNAIL is this projection's own decision, and the only rule the
+    // page does not share: `/a/<child>/export?mode=card` for a public or
+    // unlisted DOCUMENT, null otherwise. A request the sandboxed frame makes
+    // carries no session, so a private child's card would 404 even for its
+    // owner; and a folder's own card is a picture of a listing, which is not
+    // worth drawing inside another one.
     const linkable = c.visibility === 'public' || c.visibility === 'unlisted';
     rows.push({
       id: c.id,
@@ -263,8 +370,8 @@ export async function childrenTableFor(
       updated_at: c.updated_at,
       url: `/a/${c.id}`,
       thumbnail: linkable && c.format !== 'folder' ? `/a/${c.id}/export?mode=card&v=${c.version}` : null,
-      views: numbers ? c.views : null,
-      sparkline: numbers ? await sparkline(c.id) : null,
+      views: picked.numbers ? c.views : null,
+      sparkline: picked.numbers ? await picked.sparkline(c.id) : null,
     });
   }
   return { rows, columns: CHILDREN_COLUMNS };
@@ -291,9 +398,9 @@ export async function childrenTableFor(
  */
 export async function folderHeadFor(
   folder: Pick<ArtifactRow, 'id' | 'title' | 'ancestor_ids'>,
-  viewer: { userId: string | null; email: string | null; tokenId: string | null } | null,
-): Promise<FolderHead> {
-  const head: FolderHead = { id: folder.id, title: folder.title, trail: [] };
+  viewer: Viewer,
+): Promise<{ id: string; title: string | null; trail: FolderCrumb[] }> {
+  const head = { id: folder.id, title: folder.title, trail: [] as FolderCrumb[] };
   const ids = folder.ancestor_ids ?? [];
   if (!ids.length) return head;
   const db = await getDb();

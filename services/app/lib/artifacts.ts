@@ -31,8 +31,7 @@ import { splitHelmet } from '@/lib/story/helmet';
 import { datasetRefsInDataflow, initialValues, isEmptyDataflow, mutationTargets, type Dataflow, type Row, type Scalar } from '@/lib/story/dataflow';
 import { isMutationRefused, mutateDataset } from '@/lib/story/dataset-mutate';
 import { runDataflow, type DatasetTables } from '@/lib/sql/run-dataflow';
-import { ancestorsForMove, childrenTableFor, CHILDREN_COLUMNS, folderScaffold, notifyParent, parentOf } from '@/lib/folders';
-import { compileStoryCss, storyCssCompileVersion } from '@/lib/data/story/story-css.server';
+import { ancestorsForMove, childrenTableFor, CHILDREN_COLUMNS, notifyParent, parentOf } from '@/lib/folders';
 import type { RanDataflow, StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { RefLoader, ResolvedRef } from '@/lib/story/refs';
 import type { DatasetColumn } from '@/lib/story/data-tiers';
@@ -315,29 +314,6 @@ export async function artifactQuotaExceeded(tokenId: string): Promise<boolean> {
   return (r.rows[0]?.n ?? 0) >= cap;
 }
 
-/**
- * THE FOLDER SCAFFOLD'S SHEET, COMPILED ONCE PER PROCESS.
- *
- * A folder's source is a product-owned CONSTANT — two lines whose only variable
- * part is the folder's own id, inside a SQL string that contributes no classes.
- * So the sheet is identical for every folder in the deployment and is compiled
- * against one canonical id and reused, rather than recompiled per create
- * (compileStoryCss memoizes by full source, which the id would defeat).
- *
- * This is the one place a stored `source` bypasses the publish door. It is
- * allowed to because the content is OURS: the door's job is to judge what a
- * caller sent, and nobody sent this.
- */
-const SCAFFOLD_CSS_ID = 'folder';
-let scaffoldSheet: Promise<{ compiledCss: string | null; cssCompileVersion: string }> | null = null;
-function folderMeta(): Promise<{ compiledCss: string | null; cssCompileVersion: string }> {
-  scaffoldSheet ??= (async () => ({
-    compiledCss: await compileStoryCss(folderScaffold(SCAFFOLD_CSS_ID), { force: true }),
-    cssCompileVersion: storyCssCompileVersion(),
-  }))();
-  return scaffoldSheet;
-}
-
 export async function createArtifact(
   tokenId: string,
   userId: string | null,
@@ -361,20 +337,7 @@ export async function createArtifact(
   // PK-violation retry is a working path, not a theoretical one.
   const ID_MINT_ATTEMPTS = 5;
   for (let attempt = 0; ; attempt++) {
-    /*
-     * The id is minted HERE, in JS, and a folder's whole stored state follows
-     * from it — so the scaffold is built BEFORE the INSERT rather than stamped
-     * into the row afterwards. That keeps the genesis edit row honest: the CTE
-     * below logs `COALESCE(source, content)`, and an insert-then-stamp would
-     * log an empty genesis for a head that already carries the scaffold, which
-     * is a base the first agent edit cannot reconstruct. Re-minted per attempt,
-     * because each retry is a new id and therefore a new scaffold.
-     */
     const id = generateFileId();
-    const folder = input.format === 'folder';
-    const stored = folder
-      ? { source: folderScaffold(id), meta: { ...input.meta, ...(await folderMeta()) } }
-      : { source: input.source, meta: input.meta };
     try {
       const r = await db.query<ArtifactRow>(
         // The genesis edit row makes the creation's edit_id resolvable like any
@@ -397,8 +360,8 @@ export async function createArtifact(
           input.description ?? null,
           input.format,
           input.content,
-          stored.source,
-          JSON.stringify(stored.meta),
+          input.source,
+          JSON.stringify(input.meta),
           // Born private when someone owns it, public when nobody could ever
           // manage an ACL for it — except assets (images/datasets), born
           // unlisted: a public document reaches them at read time, and a
@@ -1512,6 +1475,32 @@ export function revertArtifactFor(actor: TokenActor, id: string, version: number
 /** File a row the actor OWNS under `next` (the resolved trail; `[]` is the root). */
 export function setParentFor(actor: TokenActor, id: string, next: string[]): Promise<ArtifactRow | null> {
   return setParentScoped(actor, ownerScope(actor), id, next);
+}
+
+/**
+ * RENAME A ROW THE ACTOR OWNS — metadata, so no version bump and no archive.
+ *
+ * A folder has no content, so a rename is the ONLY thing a person changes about
+ * one, and routing it through the replace door would mean a version, an
+ * archived copy and an edit-log row for a title. It is the same act on a
+ * document, where the editor's Title field has always meant exactly this.
+ *
+ * The PARENT is woken, not the row: a rename changes what the folder ABOVE
+ * lists, and an open listing re-reads on that ping. `updated_at` moves, which
+ * is what keeps the shelf's ranking honest about the last time anything about
+ * a row changed.
+ */
+export async function setTitleFor(actor: TokenActor, id: string, title: string): Promise<ArtifactRow | null> {
+  const db = await getDb();
+  const scope = ownerScope(actor);
+  const r = await db.query<ArtifactRow>(
+    `UPDATE artifacts SET title = $3, updated_at = now()
+      WHERE id = $1 AND ${scope.where('$2')} AND ${LIVE_ARTIFACT_SQL} RETURNING *`,
+    [id, scope.val, title],
+  );
+  const row = r.rows[0] ?? null;
+  if (row) await notifyParent(parentOf(row));
+  return row;
 }
 
 export function refLoaderForActor(actor: TokenActor): RefLoader {

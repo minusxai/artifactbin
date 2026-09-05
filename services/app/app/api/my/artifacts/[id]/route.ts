@@ -9,7 +9,7 @@
  * present and unforgeable.
  */
 import { artifactToWire, artifactToWireWithAnnotations, parseAccessValue, parseParentField, replaceArtifactFromRequest } from '@/lib/artifact-wire';
-import { getArtifactFor, setAccessFor, setParentFor, writerFor } from '@/lib/artifacts';
+import { getArtifactFor, setAccessFor, setParentFor, setTitleFor, writerFor } from '@/lib/artifacts';
 import { isParentRefusal, parentOf, resolveParent } from '@/lib/folders';
 import { browserActor } from '@/lib/auth';
 import { trashArtifactFor } from '@/lib/trash';
@@ -46,10 +46,17 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
 }
 
 /**
- * PATCH /api/my/artifacts/:id — metadata-only changes: `{ parent_id }` and
- * `{ access }`. Deliberately NOT the PUT: neither filing a document under a
- * folder nor opening a dataset for writes should require resending content or
- * bump the version — they are policy about the artifact, not an edit of it.
+ * PATCH /api/my/artifacts/:id — metadata-only changes: `{ title }`,
+ * `{ parent_id }` and `{ access }`. Deliberately NOT the PUT: renaming a row,
+ * filing it under a folder and opening a dataset for writes should none of them
+ * require resending content or bump the version — they are policy about the
+ * artifact, not an edit of it.
+ *
+ * `title` is here because a FOLDER has nothing else: it has no content, so a
+ * rename is the only thing a person ever changes about one, and sending it
+ * through the replace door would archive a version and write an edit-log row
+ * for a string. It is the same act on a document, where the editor's Title
+ * field has always meant exactly this.
  *
  * THE ROW IS RESOLVED FIRST, and that ordering is the point. `parent_id` is
  * checked against the caller's own folders, which is a DATABASE READ — so a
@@ -67,12 +74,21 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
   if (parent instanceof Response) return parent;
   const { id } = await ctx.params;
   const hasAccess = body.access !== undefined && body.access !== null;
-  if (!hasAccess && parent === undefined) return json({ error: 'nothing_to_change' }, 400);
+  // Shape only, like `parent_id` above: a title is a string, and an empty one
+  // is the untitled row every listing already knows how to draw.
+  if (body.title !== undefined && typeof body.title !== 'string') return json({ error: 'invalid_title' }, 400);
+  const title = typeof body.title === 'string' ? body.title.trim() : undefined;
+  if (!hasAccess && parent === undefined && title === undefined) return json({ error: 'nothing_to_change' }, 400);
 
   const current = await getArtifactFor(scoped, id);
   if (!current) return json({ error: 'not_found' }, 404);
 
   let row = current;
+  if (title !== undefined) {
+    const renamed = await setTitleFor(scoped, id, title);
+    if (!renamed) return json({ error: 'not_found' }, 404);
+    row = renamed;
+  }
   if (hasAccess) {
     const access = parseAccessValue(body.access, current.format, request);
     if (access instanceof Response) return access;
@@ -89,7 +105,7 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
     if (!moved) return json({ error: 'not_found' }, 404);
     row = moved;
   }
-  return json({ id: row.id, parent_id: parentOf(row), ancestor_ids: row.ancestor_ids, ...(row.format === 'dataset' ? { access: row.access } : {}) });
+  return json({ id: row.id, title: row.title, parent_id: parentOf(row), ancestor_ids: row.ancestor_ids, ...(row.format === 'dataset' ? { access: row.access } : {}) });
 }
 
 /**
