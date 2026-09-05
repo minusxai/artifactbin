@@ -202,6 +202,32 @@ describe('a folder is served as a document', () => {
     expect(theirs.status).toBe(404);
   });
 
+  /**
+   * THE TRAIL IS VIEWER-DEPENDENT, AND THAT IS THE WHOLE OF IT.
+   *
+   * A folder's own page draws where it sits, which means naming its ancestors
+   * — and `ancestor_ids` on a PUBLIC folder can perfectly well name a PRIVATE
+   * parent. The ids were settled in P1 (a stranger's payload does not carry
+   * them); a TITLE is new exposure, so the trail is filtered on the server by
+   * the same read ACL every other surface uses, and an ancestor a viewer may
+   * not read is simply not in it. Not redacted, not shown unnamed: absent.
+   */
+  it('names an ancestor in the served head only to a viewer who may read it', async () => {
+    const o = await owner();
+    const parent = (await create(o.token, { format: 'folder', title: 'Quarterly Ledger', visibility: 'private' })).body;
+    const child = (await create(o.token, { format: 'folder', title: 'Field Notes', visibility: 'public', parent_id: parent.id })).body;
+
+    const mine = await (await rawRoute(request(`/a/${child.id}/raw`, { cookie: o.cookie }), params(child.id))).text();
+    expect(mine).toContain('Field Notes');
+    expect(mine).toContain('Quarterly Ledger');
+
+    const theirs = await rawRoute(request(`/a/${child.id}/raw`), params(child.id));
+    expect(theirs.status).toBe(200);
+    const html = await theirs.text();
+    expect(html).toContain('Field Notes');
+    expect(html, 'a private ancestor was named to a stranger').not.toContain('Quarterly Ledger');
+  });
+
   it('takes an EDIT like any document — which is what renaming one is', async () => {
     /*
      * RENAMING A FOLDER IS THE EDITOR'S TITLE FIELD, and that field writes
