@@ -1,6 +1,6 @@
 /** The page-level hamburger keeps the old navigation without reserving a bar. */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { AppBar, PageMenu } from '@/components/PageChrome';
 import { router, resetRouter } from '@/test/setup/router';
 
@@ -34,14 +34,16 @@ describe('page menu', () => {
     expect(screen.queryByLabelText('Tokens')).toBeNull();
   });
 
-  it('puts page context inside the menu instead of across the viewport', () => {
+  it('puts page context in the page bar and keeps it out of the account menu', () => {
     router.path = '/@vivek/notes/ab12cd-my-doc';
-    render(<PageMenu authed title="My doc" />);
+    render(<><AppBar title="My doc" /><PageMenu authed title="My doc" triggerless /></>);
     fireEvent.click(screen.getByLabelText('Open menu'));
     const context = screen.getByLabelText('Current page');
     expect(context).toHaveTextContent('@vivek');
     expect(context).toHaveTextContent('My doc');
-    expect(context.querySelector('a')).toHaveAttribute('href', '/@vivek');
+    expect(within(context).getByRole('link', { name: '@vivek' })).toHaveAttribute('href', '/@vivek');
+    expect(screen.getByLabelText('Page bar')).toContainElement(context);
+    expect(screen.getByLabelText('Menu')).not.toContainElement(context);
   });
 
   it('highlights the current destination', () => {

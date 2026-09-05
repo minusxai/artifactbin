@@ -26,7 +26,7 @@ describe('ArtifactTable — the views column follows the DATA, not the permissio
 
   it('can withhold the editor while still offering the link', () => {
     render(<ArtifactTable artifacts={[bare]} canEdit={false} />);
-    expect(screen.getByLabelText('Share Bare')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Open Bare' })).toHaveAttribute('href', '/a/aa');
     expect(screen.queryByLabelText('Edit Bare')).toBeNull();
   });
 });

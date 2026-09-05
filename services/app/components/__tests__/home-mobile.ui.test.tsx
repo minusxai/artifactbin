@@ -7,9 +7,8 @@
  *
  *  1. EVERY GRID ITEM WEARS ITS CHROME ON THE PREVIEW.
  *  2. A TITLE GETS TWO LINES ON A PHONE rather than truncating to one.
- *  3. THE SEARCH ROW WRAPS. Three visibility chips beside the input left it
- *     ~130px wide, and its own placeholder was truncated mid-word. Chips fall
- *     to a second line rather than eating the field.
+ *  3. SEARCH GETS ITS OWN ROW. Filters sit below the field on phones and
+ *     rejoin it from sm up, keeping the placeholder readable.
  *  4. THE DRAWER IS A SHEET. A 240px pane over a 390px screen is a desktop
  *     menu shown on a phone; the same markup is a full-width sheet there.
  *
@@ -62,11 +61,14 @@ describe('the shelf reads as ONE shelf on a phone', () => {
   it('drops the filter chips below the search field rather than squeezing it', () => {
     render(<Shelf rows={[doc('a', 28, { visibility: 'public' }), doc('b', 27, { visibility: 'private' })]} />);
     const input = screen.getByLabelText('Search artifacts');
-    const row = input.parentElement!;
-    expect(row).toHaveClass('flex-wrap');
-    // A floor, so the field is a field even on the line it shares.
-    expect(input).toHaveClass('min-w-32', 'flex-1');
-    expect(input).not.toHaveClass('w-full');
+    const searchRow = input.parentElement!;
+    const toolbar = searchRow.parentElement!;
+    expect(toolbar).toHaveClass('flex-col', 'sm:flex-row', 'sm:flex-wrap');
+    expect(searchRow).toHaveClass('min-w-0', 'sm:flex-1');
+    expect(input).toHaveClass('min-w-0', 'flex-1');
+    const filters = searchRow.nextElementSibling as HTMLElement;
+    expect(filters).toHaveClass('flex-wrap', 'sm:contents');
+    expect(filters).toContainElement(screen.getByLabelText('Shelf view'));
     expect(screen.getByLabelText('Shelf view')).toHaveClass('shrink-0');
   });
 });
