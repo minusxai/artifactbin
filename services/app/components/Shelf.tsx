@@ -29,6 +29,8 @@ import { ViewsMark } from '@/components/ViewsMark';
 import { buildShelf, groupShelfByRecency, parentOfRow, type ShelfRow } from '@/lib/shelf';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
 
+const FOLDER_PREVIEW_LIMIT = 5;
+
 /**
  * The row shape lives with the POLICY (lib/shelf), because it is what a page
  * ANSWERS rather than how the answer looks — three server modules build these
@@ -174,24 +176,28 @@ function FolderCover({ row, documents, count, controls, showVisibility }: { show
   const contents = (documents.length ? documents : loaded)
     .filter((item) => item.format === 'markup')
     .slice().sort((a, b) => b.updated_at.localeCompare(a.updated_at));
-  const previews = contents.slice(0, 2);
+  const previews = contents.slice(0, FOLDER_PREVIEW_LIMIT);
   const remaining = contents.length - previews.length;
+  const papers = previews.length ? previews : [null, null];
+  const paperCount = papers.length + (remaining > 0 ? 1 : 0);
+  const paperStyle = (index: number) => ({ '--paper-position': index / Math.max(1, paperCount - 1) } as React.CSSProperties);
+  const itemCount = count || documents.length || loaded.length;
   return (
     <div ref={box} aria-label={`Preview of folder ${row.title ?? row.id}`} className="folder-cover">
       <a href={row.url} aria-label={`Open folder ${nameOf(row)}`} className="absolute inset-0 z-[2] rounded-md focus-visible:outline-2 focus-visible:outline-accent" />
       <div className="folder-cover-tab">
-        {showVisibility && row.visibility && <span className="folder-cover-visibility"><VisibilityPill compact visibility={row.visibility} name={nameOf(row)} /></span>}
-        {count > 0 && <span className="truncate font-mono text-[10px] tabular-nums">{count}</span>}
+        <span className="truncate font-mono text-[10px] tabular-nums">{itemCount > 0 ? `${itemCount} artifact${itemCount === 1 ? '' : 's'}` : 'artifacts'}</span>
       </div>
       <div className="folder-cover-back" />
-      <div className={`folder-cover-papers${remaining > 0 ? ' folder-cover-papers--more' : ''}`}>
-        {(previews.length ? previews : [null, null]).map((item, i) => (
-          <div key={item?.id ?? i} aria-hidden="true" className="folder-cover-paper" style={{ '--paper-index': i } as React.CSSProperties}>
+      {showVisibility && row.visibility && <span className="folder-cover-visibility absolute left-2 top-[27px] z-[3]"><VisibilityPill compact visibility={row.visibility} name={nameOf(row)} /></span>}
+      <div className="folder-cover-papers" style={{ '--paper-width': paperCount > 2 ? '48%' : '61%' } as React.CSSProperties}>
+        {papers.map((item, i) => (
+          <div key={item?.id ?? i} aria-hidden="true" className="folder-cover-paper" style={paperStyle(i)}>
             {item ? <img src={`/a/${item.id}/export?format=jpg&mode=card&v=${item.version}&r=${CARD_RENDER_GENERATION}`} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.visibility = 'hidden'; }} /> : <div className="folder-cover-lines" />}
           </div>
         ))}
         {remaining > 0 && (
-          <div className="folder-cover-paper folder-cover-more" style={{ '--paper-index': 2 } as React.CSSProperties}>
+          <div className="folder-cover-paper folder-cover-more" style={paperStyle(papers.length)}>
             <span>+{remaining}</span><span>more</span>
           </div>
         )}
