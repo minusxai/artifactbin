@@ -55,7 +55,7 @@ const HELMET = '<Helmet><Value name="pick" type="string" default="a" /></Helmet>
 
 describe('a bound src is a binding, not an external URL', () => {
   it('publishes `<img src="$pick">` — the fall-through that called it an "External URL" is gone', async () => {
-    const { res, body } = await publish(`${HELMET}<div><img src="$pick" alt="the pick" /></div>`);
+    const { res, body } = await publish(`${HELMET}<div id="root"><img src="$pick" alt="the pick" id="image" /></div>`);
     expect(res.status).toBe(201);
     expect(body.markup_changed).toBe(false);
     expect((await getArtifactById(body.id as string))!.source).toContain('src="$pick"');

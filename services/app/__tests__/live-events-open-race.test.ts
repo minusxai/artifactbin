@@ -83,14 +83,14 @@ describe('a write that commits while the stream is opening', () => {
     const mint = await mintTokenRoute(request('/api/tokens', { method: 'POST', json: { name: 't' }, headers: { 'x-shared-secret': 'test-secret' } }));
     const { token } = (await mint.json()) as { token: string };
     const created = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: token, json: { title: 'doc', markup: '<p>before</p>' } }),
+      request('/api/artifacts', { method: 'POST', token: token, json: { title: 'doc', markup: '<p id="status">before</p>' } }),
     );
     const doc = (await created.json()) as { id: string };
 
     let newEditId = '';
     duringSetup = async () => {
       const put = await putArtifact(
-        request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { markup: '<p>after</p>' } }),
+        request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { markup: '<p id="status">after</p>' } }),
         params({ id: doc.id }),
       );
       expect(put.status).toBe(200);
@@ -108,7 +108,7 @@ describe('a write that commits while the stream is opening', () => {
     ).toBe(newEditId);
     // …and the frame that ping points at is the state after the write.
     const frame = await (await frameRoute(request(`/a/${doc.id}/events/frame`), params({ id: doc.id }))).json();
-    expect(frame.source).toBe('<p>after</p>');
+    expect(frame.source).toBe('<p id="status">after</p>');
     await resetLiveSubscriptions();
   });
 });

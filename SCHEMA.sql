@@ -233,6 +233,7 @@ CREATE TABLE IF NOT EXISTS app.artifact_edits (
   inserted TEXT NOT NULL,
   span_start INTEGER NOT NULL,
   span_end INTEGER NOT NULL,
+  changes JSONB,
   actor_user_id TEXT,
   actor_token_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -256,6 +257,8 @@ ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS span_start INTEGER NOT N
 
 ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS span_end INTEGER NOT NULL;
 
+ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS changes JSONB;
+
 ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS actor_user_id TEXT;
 
 ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS actor_token_id TEXT;
@@ -263,6 +266,63 @@ ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS actor_token_id TEXT;
 ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 CREATE INDEX IF NOT EXISTS idx_artifact_edits_artifact_seq ON app.artifact_edits (artifact_id, seq);
+
+CREATE TABLE IF NOT EXISTS app.artifact_source_ids (
+  artifact_id TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  provenance TEXT NOT NULL,
+  first_version INTEGER NOT NULL,
+  retired_version INTEGER,
+  PRIMARY KEY (artifact_id, source_id)
+);
+
+ALTER TABLE app.artifact_source_ids ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
+
+ALTER TABLE app.artifact_source_ids ADD COLUMN IF NOT EXISTS source_id TEXT NOT NULL;
+
+ALTER TABLE app.artifact_source_ids ADD COLUMN IF NOT EXISTS provenance TEXT NOT NULL;
+
+ALTER TABLE app.artifact_source_ids ADD COLUMN IF NOT EXISTS first_version INTEGER NOT NULL;
+
+ALTER TABLE app.artifact_source_ids ADD COLUMN IF NOT EXISTS retired_version INTEGER;
+
+CREATE TABLE IF NOT EXISTS app.artifact_node_aliases (
+  artifact_id TEXT NOT NULL,
+  legacy_key TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  source_path TEXT NOT NULL,
+  created_version INTEGER NOT NULL,
+  PRIMARY KEY (artifact_id, legacy_key)
+);
+
+ALTER TABLE app.artifact_node_aliases ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
+
+ALTER TABLE app.artifact_node_aliases ADD COLUMN IF NOT EXISTS legacy_key TEXT NOT NULL;
+
+ALTER TABLE app.artifact_node_aliases ADD COLUMN IF NOT EXISTS source_id TEXT NOT NULL;
+
+ALTER TABLE app.artifact_node_aliases ADD COLUMN IF NOT EXISTS source_path TEXT NOT NULL;
+
+ALTER TABLE app.artifact_node_aliases ADD COLUMN IF NOT EXISTS created_version INTEGER NOT NULL;
+
+CREATE TABLE IF NOT EXISTS app.node_identity_migration_jobs (
+  name TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  cursor TEXT,
+  completed_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (name)
+);
+
+ALTER TABLE app.node_identity_migration_jobs ADD COLUMN IF NOT EXISTS name TEXT NOT NULL;
+
+ALTER TABLE app.node_identity_migration_jobs ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL;
+
+ALTER TABLE app.node_identity_migration_jobs ADD COLUMN IF NOT EXISTS cursor TEXT;
+
+ALTER TABLE app.node_identity_migration_jobs ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
+
+ALTER TABLE app.node_identity_migration_jobs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 CREATE TABLE IF NOT EXISTS app.artifact_shares (
   artifact_id TEXT NOT NULL,

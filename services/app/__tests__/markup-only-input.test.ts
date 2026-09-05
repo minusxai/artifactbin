@@ -43,15 +43,15 @@ describe('markup is the only document input', () => {
   it('accepts prose written as ordinary HTML, and stores it as markup', async () => {
     const t = await mintToken('t');
     const res = await create(t.token, {
-      markup: '<h1>Quarterly</h1><p>Revenue was <strong>up</strong>.</p>',
+      markup: '<h1 id="heading">Quarterly</h1><p id="body">Revenue was <strong id="trend">up</strong>.</p>',
     });
     expect(res.status).toBe(201);
     const body = (await res.json()) as { format: string; markup?: string; markup_changed?: boolean };
     expect(body.format).toBe('markup');
     // Prose needed no rewriting, so the write says so instead of repeating it.
     expect(body.markup_changed).toBe(false);
-    const stored = storedMarkup(body, '<h1>Quarterly</h1><p>Revenue was <strong>up</strong>.</p>');
-    expect(stored).toContain('<h1>');
+    const stored = storedMarkup(body, '<h1 id="heading">Quarterly</h1><p id="body">Revenue was <strong id="trend">up</strong>.</p>');
+    expect(stored).toContain('<h1 id="heading">');
     // The title is DERIVED at display time (nothing is stored) from the
     // document's own first heading.
     expect(displayTitle({ title: null, source: stored })).toBe('Quarterly');

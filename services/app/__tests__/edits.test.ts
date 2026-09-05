@@ -29,6 +29,11 @@ async function mint(): Promise<{ id: string; token: string }> {
 }
 
 const MARKUP = '<section className="wrap"><p>alpha text</p><p>beta text</p></section>';
+const elementWith = (source: string, text: string) => {
+  const match = source.match(new RegExp(`<p[^>]*>${text}</p>`));
+  if (!match) throw new Error(`missing paragraph: ${text}`);
+  return match[0];
+};
 
 interface Wire {
   id: string;
@@ -158,7 +163,7 @@ describe('rejects', () => {
     const doc = await createMarkup(t.token);
     const res = await edit(t.token, doc.id, {
       edit_id: doc.edit_id,
-      old_string: '<p>alpha text</p>',
+      old_string: elementWith(doc.markup!, 'alpha text'),
       new_string: '<script>alert(1)</script>',
     });
     expect(res.status).toBe(400);
@@ -215,8 +220,8 @@ describe('rejects', () => {
       const doc = await createMarkup(t.token, WITH_HELMET);
       const res = await edit(t.token, doc.id, {
         edit_id: doc.edit_id,
-        old_string: '<section className="wrap">',
-        new_string: '<Helmet><title>Sneaky</title></Helmet><section className="wrap">',
+        old_string: doc.markup!.match(/<section[^>]*>/)![0],
+        new_string: '<Helmet><title>Sneaky</title></Helmet>' + doc.markup!.match(/<section[^>]*>/)![0],
       });
       expect(res.status).toBe(400);
       const body = (await res.json()) as { error: string; details?: Array<{ message: string }> };
@@ -297,19 +302,19 @@ describe('stale bases — the node-scope decision', () => {
     const first = await edit(t.token, doc.id, { edit_id: doc.edit_id, old_string: 'beta text', new_string: 'BETA' });
     expect(first.status).toBe(200);
     // Stale-base whole-source form inserting a new paragraph between the two.
-    const gap = doc.markup!.indexOf('<p>beta');
+    const gap = doc.markup!.indexOf(elementWith(doc.markup!, 'beta text'));
     const withNew = doc.markup!.slice(0, gap) + '<p>fresh</p>' + doc.markup!.slice(gap);
     const second = await edit(t.token, doc.id, { edit_id: doc.edit_id, source: withNew });
     expect(second.status).toBe(200);
     const final = (await second.json()) as Wire;
-    expect(final.markup).toContain('<p>fresh</p>');
+    expect(final.markup).toMatch(/<p[^>]*>fresh<\/p>/);
     expect(final.markup).toContain('BETA');
   });
 
   it('deleting a node conflicts with a stale edit inside it', async () => {
     const t = await mint();
     const doc = await createMarkup(t.token);
-    const del = await edit(t.token, doc.id, { edit_id: doc.edit_id, old_string: '<p>beta text</p>', new_string: '' });
+    const del = await edit(t.token, doc.id, { edit_id: doc.edit_id, old_string: elementWith(doc.markup!, 'beta text'), new_string: '' });
     expect(del.status).toBe(200);
     const inside = await edit(t.token, doc.id, { edit_id: doc.edit_id, old_string: 'beta', new_string: 'B' });
     expect(inside.status).toBe(409);
@@ -355,7 +360,7 @@ describe('stale bases — E-anchored matching and log fidelity', () => {
     const t = await mint();
     const doc = await createMarkup(t.token);
     // Head gains an exact duplicate of the target text as a new sibling…
-    const gap = doc.markup!.indexOf('<p>beta');
+    const gap = doc.markup!.indexOf(elementWith(doc.markup!, 'beta text'));
     const withDup = doc.markup!.slice(0, gap) + '<p>beta text</p>' + doc.markup!.slice(gap);
     const first = await edit(t.token, doc.id, { edit_id: doc.edit_id, source: withDup });
     expect(first.status).toBe(200);
@@ -367,8 +372,8 @@ describe('stale bases — E-anchored matching and log fidelity', () => {
     const second = await edit(t.token, doc.id, { edit_id: doc.edit_id, old_string: 'beta text', new_string: 'BETA' });
     expect(second.status).toBe(200);
     const final = (await second.json()) as Wire;
-    expect(final.markup!.match(/<p>BETA<\/p>/g)).toHaveLength(1);
-    expect(final.markup!.match(/<p>beta text<\/p>/g)).toHaveLength(1);
+    expect(final.markup!.match(/<p[^>]*>BETA<\/p>/g)).toHaveLength(1);
+    expect(final.markup!.match(/<p[^>]*>beta text<\/p>/g)).toHaveLength(1);
   });
 
   it('the log records what actually landed (post-rewrite), keeping stale bases resolvable', async () => {
@@ -384,8 +389,8 @@ describe('stale bases — E-anchored matching and log fidelity', () => {
     // delta is NOT the caller's literal new_string.
     const first = await edit(t.token, doc.id, {
       edit_id: doc.edit_id,
-      old_string: '<p>alpha text</p>',
-      new_string: `<p>alpha text</p><Question data="$rows" viz={{kind:"table"}} height="200px" />`,
+      old_string: elementWith(doc.markup!, 'alpha text'),
+      new_string: `${elementWith(doc.markup!, 'alpha text')}<Question data="$rows" viz={{kind:"table"}} height="200px" />`,
     });
     expect(first.status).toBe(200);
     const w1 = (await first.json()) as Wire;

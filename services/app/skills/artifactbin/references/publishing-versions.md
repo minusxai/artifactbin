@@ -21,6 +21,39 @@ missing/non-integer `version` is `400 version_required`; a checkpoint that was
 never archived (save-less edits coalesce) is `409 version_not_archived` — the
 list above shows the real ones.
 
+## Contents
+
+History and revert · Atomic edit batches · Delete and restore · Export.
+
+## Atomic edit batches
+
+`edit_artifact` accepts exactly ONE content form: one top-level `old_string` +
+`new_string` pair, OR `"edits": [{"old_string":"…","new_string":"…"}, …]`.
+The array must be nonempty and has a maximum of 64 pairs; never combine it with
+the top-level pair. Each old string must match exactly once in the sequential
+in-memory result. Later steps may edit earlier insertions and intermediate JSX
+may be incomplete: only the final result is validated.
+
+The batch is atomic. Success creates one version and one new `edit_id`; if any
+step or final validation fails, nothing is written. `edit_index` is the
+zero-based failing step. A stale batch rebases over unrelated edits, but a
+concurrent change to any region it touches rejects the whole batch.
+
+Move a node by removing and reinserting the same ID-bearing source in one call:
+
+```json
+{
+  "edit_id": "<from your last read>",
+  "edits": [
+    { "old_string": "<Card id=\"summary-card\">Summary</Card>", "new_string": "" },
+    { "old_string": "<section id=\"details\">", "new_string": "<section id=\"details\"><Card id=\"summary-card\">Summary</Card>" }
+  ]
+}
+```
+
+The first step is the source removal and the second is the destination insert;
+the moved card keeps `id="summary-card"`. Use one pair for one local change.
+
 ## Delete an artifact (it goes to the trash)
 
 ```

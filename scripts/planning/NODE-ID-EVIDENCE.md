@@ -1,0 +1,55 @@
+# Node identity planning evidence — 5 September 2026
+
+Scope: planning experiments, not a production implementation. Checkout 35f3074.
+Canonical plan: https://artifactbin.dev/a/Qud0y1
+
+## Reproduce
+
+- `npx vitest run --project=node services/app/lib/story/__tests__/node-id-planning.test.ts --reporter=verbose`: 11 passing tests, including four captured model-generated edits through the actual splice kernel.
+- `node scripts/planning-node-transactions.mjs`: five passing Postgres rehearsals. Requires the dedicated container `artifactbin-node-planning-pg`, created with `docker run --detach --name artifactbin-node-planning-pg --env POSTGRES_PASSWORD=planning-only --publish 127.0.0.1::5432 postgres:17-alpine`. Only prototype tables in this disposable container are modified. Uses two independent psql connections and waits for a confirmed lock-holder barrier.
+- `npm run validate`: type/residual-name checks passed.
+
+## Postgres observations
+
+Deletion-first: comment's locked read sees removal; no relation inserted.
+Comment-first: relation commits; later removal leaves an orphan.
+Migration: injected division-by-zero after source/archive writes rolls back all changes. Retrying twice produces one archive and one version increment, with migrated relation key.
+Historical-source prototype: normalizing the old alias preserves authored id and the migrated relation.
+Reservation: a unique (artifact_id,node_id) ledger rejects retired ids for the same artifact and permits the same id in a different artifact.
+Container restarted and the rehearsal rerun successfully. This is not proof of deploying/rolling back a future application binary.
+
+## Real browser and existing API
+
+BrowserOS neo, local running deployment on port 5000; its container image is not asserted to equal the source checkout.
+Disposable document VwN6mK: Tabs ids survive switching panes. Popover trigger/content/text ids survive opening; context-only Popover root has no DOM box. Hydrated Number, DataTable and Question render data but drop authored ids. Source inspection corroborates adapter gaps in StoryRuntimeApp.tsx.
+
+Disposable document pwTHPz: create pre-id source, replace with authored id, revert original version. Actual revert returns `<p>Before IDs</p>`: normalization is missing today. Replacing with normalized markup then editing by id succeeds.
+Two sibling edits from the same base edit_id both return 200. Final source contains both `aaaa: done` and `bbbb: blocked`.
+
+Blank-page DOM prototype in real browser: preview IDs initially steal global getElementById. Prefixing preview IDs and rewriting local `for`, fragment `href` and SVG `url(#...)` references yields zero duplicate IDs, correct preview label control and SVG reference, and a main-document `:target`. Production transformation must also handle all supported IDREF/token-list/CSS forms; this probe is not an exhaustive sanitizer.
+
+## OpenCode GLM-5.3
+
+Harness: opencode 1.18.23, `run --pure --format json --model fireworks-ai/accounts/fireworks/models/glm-5p3`, existing Fireworks credential passed via environment. No credentials included here.
+Two requests, no retries. Prompts explicitly request exact-once old_string/new_string JSON, smallest unique context, preserved IDs, no tools/files.
+First: change only second repeated `active` label to blocked. Returned `id="bbbb">active` → `id="bbbb">blocked`.
+Second: delete bbbb, insert after bbbb, move cccc before aaaa in three identical list items. All three outputs valid. Captured exact edits are in node-id-planning.test.ts and execute through the existing kernel.
+Reported costs: 0.02860868 + 0.0355486 USD. Four edit cases passed; move quotes the sibling region, so it has the expected broad conflict footprint.
+This is model-generated edit validation, not autonomous MCP task completion or a head-to-head structural-tool benchmark. The agreed V1 has no structural edit API; such a benchmark is not a prerequisite for this plan.
+
+## Implementation acceptance (not claimed complete)
+
+### Integrated checks, 5 September
+
+- OpenCode GLM-5.3 through `scripts/planning-node-batch-model.mjs`: four model-generated batches passed the real HTTP API on their first attempt (move, wrapping with invalid intermediate JSX, dependent insert/edit, repeated-label targeting), including an unrelated concurrent edit. Reported cost $0.0920042. This is generated-edit evaluation, not autonomous MCP execution.
+- Real PostgreSQL server: node-identity, concurrent-edit and editor-exit gates passed. The annotations gate passed after updating its assertions for persisted IDs and relation-only comments; typing remains in the editor and the ordinary editor exit saves it.
+- Browser preview checks found no duplicate IDs; label control and SVG gradient references resolved inside the preview namespace while the main document retained its IDs.
+- Regression tests exposed replacement echo omission, malformed-input throws before validation, and CSS sanitization producing unparseable JSX. Focused API checks passed after fixes. Full-suite and final migration acceptance remain pending; these observations are not a release sign-off.
+- Integrated migration rehearsal: `ADMIN__SECRET=<local test secret> node scripts/planning-node-migration-e2e.mjs`, on the dedicated PostgreSQL database `node_identity_e2e_20260905` and the built server at port 5220. Dry-run scanned 16 documents without writes; batches of two completed with one legacy fixture changed. Comment target, alias, lifetime IDs and both byte-exact historical versions were asserted. Re-run processed zero documents. This is not a production backfill.
+- After stopping and restarting that built application against the same PostgreSQL database, the administrative CLI again reported `processed=0 changed=0 done=true`; the real-HTTP node-identity gate passed against the restarted server.
+- Additional RED→GREEN route regressions: metadata-only edits preserve noncanonical legacy bytes; crossing aliases migrate simultaneously; historical restore reuses its saved alias without repointing newer comments; expression-form duplicate legacy anchors reject replacement. The two integrated acceptance files pass 34 tests.
+- The first full 44-gate run passed 41, with seven named isolated retries (reading-chrome, ref-image, script-slice, real-paste, social-preview, secure-arch, web-assets). Reader-chrome remained red; viz-editor and web-import had obsolete ID-free fixture assertions, subsequently corrected. Long worker timeouts also invalidated the concurrent unit-suite run. Clean isolated reruns are required; this run is not recorded as green.
+
+Production routes must integrate the reservation ledger/alias mapping, versioned backfill, normalizing revert, relation-only comment actions, adapter forwarding and preview namespace transformation. Test actual archives/events/ACL and rollout/rollback using the future compatibility build. Old pre-compatibility binaries are not valid rollback targets after migration. Apply every prototype's cases to integrated routes before release.
+
+The files node-ids.ts and node-ids.acceptance.ts in this directory are older UNIMPLEMENTED contract sketches. They are kept outside production and automatic test discovery; their assumptions are superseded by the canonical plan. They are not passing tests or completed feature code.

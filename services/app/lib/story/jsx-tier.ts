@@ -30,7 +30,7 @@ import { remapMarkupStyleViewportUnits } from '@/lib/story-surface/viewport-unit
 import { compileStoryCss, storyCssCompileVersion } from '@/lib/data/story/story-css.server';
 import { STORY_THEME_NAMES, STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import { json } from '../http';
-import type { ContentInputCtx, StoredContent } from './input';
+import { MAX_CONTENT_BYTES, type ContentInputCtx, type StoredContent } from './input';
 import { findBrokenEmbeds, findExternalSubresources } from './refs';
 import { collectExternalAssetUrls } from './external-images';
 import type { AssetWarning } from '@/lib/web-assets';
@@ -236,7 +236,9 @@ export async function publishJsx(body: Record<string, unknown>, sourceIn: string
   // content, then remap viewport-height units in it — authored `<style>` renders
   // straight through the interpreter, so the compiled-sheet injection remap
   // never sees it (lib/story-surface/viewport-units.ts).
-  const sanitized = canonicalizeMarkup(remapMarkupStyleViewportUnits(sanitizeStoryMarkupCss(source)));
+  const normalized = ctx.normalizeMarkup?.(canonicalizeMarkup(source)) ?? source;
+  const sanitized = canonicalizeMarkup(remapMarkupStyleViewportUnits(sanitizeStoryMarkupCss(normalized)));
+  if (Buffer.byteLength(sanitized, 'utf8') > MAX_CONTENT_BYTES) return json({ error: 'too_large', maxBytes: MAX_CONTENT_BYTES }, 413);
 
   // The reference graph: every ref:<id> resolves to one of the
   // caller's artifacts, with bidirectional binding validation. Skipped when no
@@ -278,4 +280,3 @@ export async function publishJsx(body: Record<string, unknown>, sourceIn: string
     ...repairsEcho,
   };
 }
-

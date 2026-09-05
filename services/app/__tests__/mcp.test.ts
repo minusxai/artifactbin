@@ -148,7 +148,8 @@ describe('MCP server', () => {
     const getDescription = body.result.tools.find((tool) => tool.name === 'get_artifact')?.description ?? '';
     expect(getDescription).toContain('data-annotation-anchor');
     expect(getDescription).toMatch(/preserve/i);
-    expect(getDescription).toMatch(/never author or change/i);
+    expect(getDescription).toMatch(/do not author/i);
+    expect(getDescription).toContain('anchor.nodeId');
   });
 
   it('create → get → update round-trips a markup artifact with refs, token-scoped', async () => {

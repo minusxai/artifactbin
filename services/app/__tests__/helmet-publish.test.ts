@@ -22,7 +22,7 @@ const create = async (token: string, body: Record<string, unknown>) =>
 
 const HELMET =
   '<Helmet><title>Scripted doc</title><style>{`h1 { letter-spacing: -0.02em; }`}</style><script>{`document.body.dataset.ran = "1";`}</script></Helmet>';
-const BODY = '<h1 className="text-4xl font-bold">Hello</h1>';
+const BODY = '<h1 className="text-4xl font-bold" id="heading">Hello</h1>';
 
 describe('Helmet publish contract', () => {
   it('publishes a Helmet-bearing document; already-canonical source is stored verbatim', async () => {
@@ -98,6 +98,8 @@ describe('Helmet publish contract', () => {
     const { markup } = (await res.json()) as { markup: string };
     expect(markup).not.toContain('evil.example');
     expect(markup).toContain('color: red');
+    const repeated = await create(t.token, { markup });
+    expect(repeated.status, await repeated.clone().text()).toBe(201);
   });
 
   it('canonical form is a fixpoint: republishing the echo returns it byte-identical', async () => {

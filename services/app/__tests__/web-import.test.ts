@@ -104,7 +104,7 @@ describe('imageUrl — an image artifact straight from a URL', () => {
 describe('the agent door — external <img src> is imported and the URL is KEPT', () => {
   it('stores the URL verbatim and serves our copy', async () => {
     const t = await mintToken('t');
-    const markup = `<div className="p-8"><h1>Doc</h1><img src="${web}/logo.png" alt="logo" /></div>`;
+    const markup = `<div className="p-8" id="root"><h1 id="heading">Doc</h1><img id="logo" src="${web}/logo.png" alt="logo" /></div>`;
     const res = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup } }));
     expect(res.status).toBe(201);
     const body = await res.json();
@@ -218,11 +218,11 @@ describe('the agent door — external <img src> is imported and the URL is KEPT'
 
   it('the EDITS door REPORTS what it could not import, like create and PUT', async () => {
     const t = await mintToken('t');
-    const made = await (await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<div><p>hello</p></div>' } }))).json();
+    const made = await (await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<div id="root"><p id="body">hello</p></div>' } }))).json();
     const res = await editsRoute(request(`/api/artifacts/${made.id}/edits`, { method: 'POST', token: t.token, json: {
       edit_id: made.edit_id,
-      old_string: '<p>hello</p>',
-      new_string: `<p>hello</p><img src="${web}/gone.png" alt="missing" />`,
+      old_string: '<p id="body">hello</p>',
+      new_string: `<p id="body">hello</p><img id="missing" src="${web}/gone.png" alt="missing" />`,
     } }), params({ id: made.id }));
     expect(res.status).toBe(200);
     // The edit path runs the SAME publish door, so it must answer the same way:
@@ -232,11 +232,11 @@ describe('the agent door — external <img src> is imported and the URL is KEPT'
 
   it('the EDITS door imports too — an agent pasting a web image mid-edit', async () => {
     const t = await mintToken('t');
-    const made = await (await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<div><p>hello</p></div>' } }))).json();
+    const made = await (await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<div id="root"><p id="body">hello</p></div>' } }))).json();
     const res = await editsRoute(request(`/api/artifacts/${made.id}/edits`, { method: 'POST', token: t.token, json: {
       edit_id: made.edit_id,
-      old_string: '<p>hello</p>',
-      new_string: `<p>hello</p><img src="${web}/logo.png" />`,
+      old_string: '<p id="body">hello</p>',
+      new_string: `<p id="body">hello</p><img id="logo" src="${web}/logo.png" />`,
     } }), params({ id: made.id }));
     expect(res.status).toBe(200);
     expect((await getArtifactById(made.id))!.source).toContain(`${web}/logo.png`);

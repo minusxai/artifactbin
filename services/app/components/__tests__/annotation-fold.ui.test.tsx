@@ -147,7 +147,6 @@ const layer = (frame: HTMLIFrameElement, over: Partial<Parameters<typeof Annotat
     frameRef={{ current: frame }}
     sessionNonce={NONCE}
     railOpen
-    currentEditId="e1"
     liveAnnotations={null}
     showViewComments={false}
     topOffset={100}

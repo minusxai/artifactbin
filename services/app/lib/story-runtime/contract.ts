@@ -540,6 +540,8 @@ export interface StoryEditSelection {
   /** 'text': a focused editable host · 'element': a click-selected container · 'embed': a component. */
   kind: 'text' | 'element' | 'embed';
   path: string;
+  /** Authored persistent DOM id of the source node. Absent until autosave has persisted one. */
+  nodeId?: string;
   tag: string;
   rect: StoryEditRect;
   className: string;
@@ -694,6 +696,8 @@ export interface StoryAnnotationsMessage {
     id: string;
     path: string;
     key: string | null;
+    /** Persistent authored node id; absent on historical anchor-only threads. */
+    nodeId?: string | null;
     /**
      * The exact words the comment is on, addressed relative to the anchored
      * node — the frame re-finds them by TEXT and paints them. Absent on a

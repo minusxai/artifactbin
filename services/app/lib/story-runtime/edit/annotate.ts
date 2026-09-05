@@ -176,15 +176,17 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
     mainElementMatching(`[${AST_PATH_ATTR}="${CSS.escape(path)}"]`);
 
   /**
-   * A pin's element: by its opaque source anchor first — the durable identity, which a
-   * plain tag carries straight into this DOM — then by path (components keep
-   * the attribute in SOURCE only, so their rendered output is found
-   * positionally).
+   * A pin's element: current authored id first, then the historical opaque
+   * source-anchor attribute. A durable identity that no longer resolves is an
+   * orphan; only old payloads with neither identity may use their path.
    */
-  const elementForPin = (pin: { path: string; key: string | null }): HTMLElement | null =>
-    (pin.key
-      ? mainElementMatching(`[data-annotation-anchor="${CSS.escape(pin.key)}"]`)
-      : null) ?? elementFor(pin.path);
+  const elementForPin = (pin: { path: string; key: string | null; nodeId?: string | null }): HTMLElement | null => {
+    if (pin.nodeId) return mainElementMatching(`#${CSS.escape(pin.nodeId)}`);
+    if (pin.key) return mainElementMatching(`[data-annotation-anchor="${CSS.escape(pin.key)}"]`);
+    // Only genuinely keyless historical payloads may use a positional address.
+    // A missing durable target is orphaned, never whichever node inherited its path.
+    return elementFor(pin.path);
+  };
 
   /**
    * The layer's stylesheet, base rules plus one `::highlight()` rule per
@@ -342,9 +344,11 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
     const annotated = target.closest(`[${ANNOTATED_ATTR}]`);
     if (annotated) {
       event.preventDefault();
+      const nodeId = annotated.id || null;
       const key = annotated.getAttribute('data-annotation-anchor');
       const path = annotated.getAttribute(AST_PATH_ATTR);
-      const pin = state.pins.find((p) => (key && p.key === key) || p.path === path);
+      const pin = state.pins.find((p) =>
+        (p.nodeId ? p.nodeId === nodeId : p.key ? p.key === key : p.path === path));
       if (pin) {
         const r = annotated.getBoundingClientRect();
         post({ type: STORY_ANNOTATION_PIN_MESSAGE, id: pin.id, rect: { x: r.x, y: r.y, width: r.width, height: r.height } });
@@ -360,8 +364,10 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
     let el = start.closest<HTMLElement>(`[${AST_PATH_ATTR}]`);
     while (el) {
       const key = el.getAttribute('data-annotation-anchor');
+      const nodeId = el.id || null;
       const path = el.getAttribute(AST_PATH_ATTR);
-      const pin = state?.pins.find((candidate) => (key && candidate.key === key) || candidate.path === path);
+      const pin = state?.pins.find((candidate) =>
+        (candidate.nodeId ? candidate.nodeId === nodeId : candidate.key ? candidate.key === key : candidate.path === path));
       if (pin) return pin;
       el = el.parentElement?.closest<HTMLElement>(`[${AST_PATH_ATTR}]`) ?? null;
     }
