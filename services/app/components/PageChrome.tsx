@@ -615,20 +615,21 @@ export function AppBar({ title, label = 'Page controls' }: { title?: string | nu
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo-128.png" alt="" className="h-7 w-7" />
       </a>
-      {trail.length > 0 && (
-        <nav aria-label="Current page" className="flex min-w-0 items-center gap-1 font-mono text-xs text-muted">
-          {trail.map((crumb, index) => (
-            <span key={`${crumb.href ?? ''}:${crumb.label}`} className="flex min-w-0 items-center gap-1">
-              {index > 0 && <ChevronRight size={12} className="shrink-0 text-faint" aria-hidden="true" />}
-              {crumb.href ? (
-                <a href={crumb.href} className="shrink-0 text-muted no-underline hover:text-accent">{crumb.label}</a>
-              ) : (
-                <span className="min-w-0 truncate text-fg">{crumb.label}</span>
-              )}
-            </span>
-          ))}
-        </nav>
-      )}
+      {/* The trail: the brand is the root crumb, then the way down to this page
+          (lib/breadcrumb). Desktop only — a phone keeps the logo alone. */}
+      <nav aria-label="Current page" className="hidden min-w-0 items-center gap-1.5 font-mono text-xs text-muted sm:flex">
+        <a href="/" className={`shrink-0 no-underline hover:text-accent ${trail.length === 0 ? 'font-semibold text-fg' : 'text-muted'}`}>artifactbin</a>
+        {trail.map((crumb) => (
+          <span key={`${crumb.href ?? ''}:${crumb.label}`} className="flex min-w-0 items-center gap-1.5">
+            <ChevronRight size={12} className="shrink-0 text-faint" aria-hidden="true" />
+            {crumb.href ? (
+              <a href={crumb.href} className="shrink-0 text-muted no-underline hover:text-accent">{crumb.label}</a>
+            ) : (
+              <span className="min-w-0 truncate font-semibold text-fg">{crumb.label}</span>
+            )}
+          </span>
+        ))}
+      </nav>
       <div className="ml-auto flex items-center gap-1">
         {control('controls', label.toLowerCase(), <SlidersHorizontal size={17} strokeWidth={1.5} />)}
         {control('menu', 'menu', <User size={17} strokeWidth={1.5} />)}
