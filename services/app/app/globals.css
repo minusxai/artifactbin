@@ -434,8 +434,8 @@ body {
   --color-muted: #c4dce9;
   --color-faint: #afccde;
 }
-[data-theme='dark'] [data-shelf-view='gallery'],
-[data-app-appearance='dark'] [data-shelf-view='gallery'] {
+[data-theme='dark'] [data-shelf-view='grid'],
+[data-app-appearance='dark'] [data-shelf-view='grid'] {
   --color-muted: #aab5c3;
   --color-faint: #8f9dad;
 }

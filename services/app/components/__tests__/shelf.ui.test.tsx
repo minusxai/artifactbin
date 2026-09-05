@@ -30,31 +30,28 @@ describe('Shelf — grid and list views', () => {
     localStorage.setItem('artifactbin:shelf-view', 'unknown');
     const first = render(<Shelf rows={[doc('one', 28)]} />);
     expect(screen.getByLabelText('Grid view')).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(screen.getByLabelText('Gallery view'));
+    expect(screen.queryByLabelText('Gallery view')).toBeNull();
+    fireEvent.click(screen.getByLabelText('List view'));
     first.unmount();
     render(<Shelf rows={[doc('one', 28)]} />);
-    expect(screen.getByLabelText('Gallery view')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('List view')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByLabelText('Artifact gallery')).toBeInTheDocument();
   });
 
-  it('keeps folders compact in icon/list views and offers previews in Gallery', () => {
+  it('offers folder previews and paper cards in the grid, and compact folders in the list', () => {
     const rows = [
       doc('folder', 28, { format: 'folder', title: 'Reports' }),
       doc('root', 28, { description: 'A document summary.' }),
       ...['one', 'two', 'three', 'four'].map((id) => doc(id, 27, { parent_id: 'folder' })),
     ];
     render(<Shelf rows={rows} scopeParentId={null} actions="full" />);
-    expect(screen.queryByLabelText('Preview of folder Reports')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByLabelText('Gallery view'));
-    expect(screen.getByLabelText('Gallery view')).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByLabelText('Artifact gallery')).toHaveTextContent('A document summary.');
+    expect(screen.getByLabelText('Grid view')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('Artifact grid')).toHaveTextContent('A document summary.');
     const edit = screen.getByLabelText('Edit Doc root');
     expect(edit.closest('li')).toContainElement(edit);
     expect(screen.getByLabelText('Open Doc root').closest('li')!.querySelector('img')!.parentElement!.parentElement).toContainElement(edit);
-    fireEvent.click(screen.getByLabelText('Grid view'));
-    expect(screen.getByLabelText('Doc root card controls')).toHaveClass('absolute');
-    expect(screen.getByLabelText('Open Doc root').closest('li')).toHaveClass('bg-surface');
-    fireEvent.click(screen.getByLabelText('Gallery view'));
+    expect(screen.getByLabelText('Open Doc root').closest('li')).toHaveClass('gallery-document');
+    expect(screen.queryByLabelText('Doc root card controls')).toBeNull();
     const cover = screen.getByLabelText('Preview of folder Reports');
     expect(cover.querySelectorAll('img')).toHaveLength(2);
     expect(cover).toHaveTextContent('+2more');

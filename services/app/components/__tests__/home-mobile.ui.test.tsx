@@ -35,23 +35,27 @@ const doc = (id: string, day: number, extra: Partial<ShelfRow> = {}): ShelfRow =
 });
 
 describe('the shelf reads as ONE shelf on a phone', () => {
-  it('keeps icon view controls over the preview', () => {
+  it('keeps grid controls on the paper: the badge over the preview, the actions in the foot tab', () => {
     render(<Shelf rows={[doc('a', 28, { visibility: 'private' }), doc('b', 27, { visibility: 'public' })]} actions="full" />);
 
     const card = screen.getByLabelText('Open Doc a').closest('li')!;
-    const overlay = screen.getByLabelText('Doc a card controls');
-    expect(overlay.parentElement).toBe(card.querySelector('img')!.parentElement!.parentElement);
-    expect(overlay).toHaveClass('absolute', 'z-10', 'justify-between');
-    expect(overlay).toContainElement(screen.getByLabelText('Doc a is private'));
+    const paper = card.querySelector('img')!.parentElement!.parentElement!;
+    const badge = screen.getByLabelText('Doc a is private');
+    expect(paper).toContainElement(badge);
+    expect(badge.closest('.gallery-fade-visibility')).toHaveClass('absolute');
+    const foot = card.querySelector('.gallery-fade')!;
+    expect(foot.parentElement).toBe(paper);
+    expect(foot).toHaveClass('absolute', 'bottom-0');
+    expect(foot).toContainElement(screen.getByLabelText('Edit Doc a'));
+    expect(foot).toContainElement(screen.getByLabelText('Doc a views'));
     expect(screen.queryByLabelText('Share Doc a')).toBeNull();
-    expect(overlay).toContainElement(screen.getByLabelText('Edit Doc a'));
   });
 
-  it('keeps every grid title to one ellipsized line', () => {
+  it('caps every grid title at two lines', () => {
     render(<Shelf rows={[doc('a', 28), doc('b', 27)]} actions="full" />);
     for (const link of [screen.getByLabelText('Open Doc a'), screen.getByLabelText('Open Doc b')]) {
-      expect(link).toHaveClass('truncate');
-      expect(link).not.toHaveClass('line-clamp-2');
+      expect(link).toHaveClass('line-clamp-2');
+      expect(link).not.toHaveClass('truncate');
     }
   });
 

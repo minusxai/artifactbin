@@ -18,7 +18,7 @@
  * the grid/list presentation and hands list mode to `ArtifactTable`.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { GalleryHorizontalEnd, Folder, FolderInput, FolderPlus, LayoutGrid, List as ListIcon, Pencil, Search, Share2, Trash2 } from 'lucide-react';
+import { Folder, FolderInput, FolderPlus, LayoutGrid, List as ListIcon, Pencil, Search, Share2, Trash2 } from 'lucide-react';
 import ShareLink from '@/components/ShareLink';
 import RowMenu, { confirmDeleteArtifact } from '@/components/RowMenu';
 import { MoveMenu, type PickerFolder } from '@/components/FolderPicker';
@@ -391,39 +391,6 @@ function Actions({ row, level, folders, childCount = 0, onDeleted, onRename }: {
   );
 }
 
-/** Keep controls outside the preview, accessible on touch and keyboard too. */
-function CardControls({ row, level, folders, gallery = false, showVisibility = true }: { showVisibility?: boolean; row: ShelfRow; level: ShelfActions; folders: PickerFolder[]; gallery?: boolean }) {
-  if (!row.visibility && level === 'none') return null;
-  return (
-    <div
-      aria-label={`${nameOf(row)} card controls`}
-      className={gallery ? "relative z-10 flex min-h-7 items-center justify-between gap-2" : "absolute inset-x-2.5 top-2.5 z-10 flex items-start justify-between gap-2"}
-    >
-      {showVisibility && !gallery && <VisibilityTag row={row} overlay />}
-      {level !== 'none' && (
-        <div className={`ml-auto ${gallery ? '' : 'flex h-[26px] items-center rounded-[4px] border border-edge bg-surface/90 px-0.5'}`}>
-          <Actions row={row} level={level} folders={folders} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Stamp({ row, mode, trailing = false }: { row: ShelfRow; mode: 'relative' | 'absolute'; trailing?: boolean }) {
-  return (
-    <Tooltip content={new Date(row.updated_at).toLocaleString()}>
-      <time
-        aria-label={`${nameOf(row)} updated`}
-        dateTime={row.updated_at}
-        suppressHydrationWarning
-        className={`${trailing ? 'ml-auto' : ''} shrink-0 font-mono text-[11px] whitespace-nowrap text-muted`}
-      >
-        {mode === 'absolute' ? dateStamp(row.updated_at) : timeAgo(row.updated_at)}
-      </time>
-    </Tooltip>
-  );
-}
-
 /** The document collection already guarantees `markup`; visibility is the only
  * classification that adds information here. */
 function VisibilityTag({ row, overlay = false }: { row: ShelfRow; overlay?: boolean }) {
@@ -487,11 +454,11 @@ export default function Shelf({ rows, actions = 'none', showVisibility = true, a
    */
   const [trashed, setTrashed] = useState<string[]>([]);
   const trash = (id: string) => setTrashed((t) => [...t, id]);
-  const [view, setView] = useState<'grid' | 'list' | 'gallery'>('grid');
+  const [view, setView] = useState<'grid' | 'list'>('grid');
   useEffect(() => {
     try {
       const saved = localStorage.getItem('artifactbin:shelf-view');
-      if (saved === 'grid' || saved === 'list' || saved === 'gallery') setView(saved);
+      if (saved === 'grid' || saved === 'list') setView(saved);
     } catch { /* Storage may be disabled; view switching still works. */ }
   }, []);
   const chooseView = (next: typeof view) => {
@@ -580,7 +547,6 @@ export default function Shelf({ rows, actions = 'none', showVisibility = true, a
             {([
               ['grid', 'Grid view', LayoutGrid],
               ['list', 'List view', ListIcon],
-              ['gallery', 'Gallery view', GalleryHorizontalEnd],
             ] as const).map(([value, label, Icon]) => (
               <button
                 key={value}
@@ -617,9 +583,9 @@ export default function Shelf({ rows, actions = 'none', showVisibility = true, a
           <div className="mb-2 flex items-baseline gap-2">
             <MicroLabel>folders</MicroLabel>
           </div>
-          <ul className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${view === 'gallery' ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
+          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {shelf.folders.map((row) => (
-              <FolderTile showVisibility={showVisibility} key={row.id} row={row} count={inside(row.id)} level={actions} folders={pickable} onDeleted={trash} gallery={view === 'gallery'} documents={available.filter((item) => parentOfRow(item) === row.id && item.format === 'markup')} />
+              <FolderTile showVisibility={showVisibility} key={row.id} row={row} count={inside(row.id)} level={actions} folders={pickable} onDeleted={trash} gallery={view === 'grid'} documents={available.filter((item) => parentOfRow(item) === row.id && item.format === 'markup')} />
             ))}
           </ul>
         </section>
@@ -632,7 +598,7 @@ export default function Shelf({ rows, actions = 'none', showVisibility = true, a
       )}
 
       {view !== 'list' && shelf.documents.length > 0 && (
-        <div aria-label={view === 'gallery' ? 'Artifact gallery' : 'Artifact grid'} className="flex flex-col gap-7">
+        <div aria-label="Artifact grid" className="flex flex-col gap-7">
           {dateGroups.map((group) => (
             <section key={group.key} aria-label={`${group.label} artifacts`}>
               <div className="mb-2.5 flex items-center gap-3 px-0.5">
@@ -641,43 +607,36 @@ export default function Shelf({ rows, actions = 'none', showVisibility = true, a
                 </h2>
                 <span aria-hidden="true" className="h-px flex-1 bg-edge" />
               </div>
-              <ul className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 ${view === 'gallery' ? 'gap-5' : 'gap-3.5'}`}>
+              <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
                 {group.rows.map((row) => {
                   const i = shelf.documents.indexOf(row);
                   return (
                     <li
                       key={row.id}
-                      className={`reveal group relative flex flex-col duration-150 ${view === 'gallery' ? 'gallery-document rounded-md p-2 transition-colors hover:bg-raised/60' : `overflow-hidden ${PANEL} transition-[border-color,transform] hover:-translate-y-0.5 hover:border-edge-bright`}`}
+                      className="reveal group relative flex flex-col duration-150 gallery-document rounded-md p-2 transition-colors hover:bg-raised/60"
                       style={{ animationDelay: `${Math.min(i * 35, 280)}ms` }}
                     >
                       <div className="relative">
-                        <Thumb row={row} className={view === 'gallery' ? "gallery-paper aspect-[5/3] rounded-[4px] border border-edge shadow-sm" : "aspect-[40/21] border-b border-edge"} />
-                        {view === 'gallery' && showVisibility && row.visibility && <span className="gallery-fade-visibility absolute left-2 top-2 z-10"><VisibilityTag row={row} overlay /></span>}
-                        {view === 'gallery' && (row.views !== undefined || actions === 'full') && (
+                        <Thumb row={row} className="gallery-paper aspect-[5/3] rounded-[4px] border border-edge shadow-sm" />
+                        {showVisibility && row.visibility && <span className="gallery-fade-visibility absolute left-2 top-2 z-10"><VisibilityTag row={row} overlay /></span>}
+                        {(row.views !== undefined || actions === 'full') && (
                           <div className="gallery-fade absolute inset-x-0 bottom-0 z-10 flex min-w-0 items-center gap-2">
                             {row.views !== undefined && <div className="gallery-fade-views min-w-0 flex-1"><ViewsMark name={nameOf(row)} views={row.views} sparkline={row.sparkline} /></div>}
                             {actions === 'full' && <div className="gallery-fade-actions ml-auto shrink-0"><Actions row={row} level={actions} folders={pickable} /></div>}
                           </div>
                         )}
-                        {view !== 'gallery' && <CardControls showVisibility={showVisibility} row={row} level={actions} folders={pickable} />}
                       </div>
-                      <div className={`flex flex-1 flex-col gap-2 ${view === 'gallery' ? 'px-1 pt-2.5 pb-1' : 'px-3 py-2.5'}`}>
-                        <div className={view === 'gallery' ? 'flex items-start justify-center gap-1.5' : ''}>
+                      <div className="flex flex-1 flex-col gap-2 px-1 pt-2.5 pb-1">
+                        <div className="flex items-start justify-center gap-1.5">
                         <a
                           href={row.url}
                           aria-label={`Open ${nameOf(row)}`}
-                          className={`block font-mono leading-snug font-semibold text-fg no-underline transition-colors after:absolute after:inset-0 group-hover:text-accent ${view === 'gallery' ? 'text-center text-[13px] line-clamp-2' : 'truncate text-[13px]'}`}
+                          className={`block font-mono leading-snug font-semibold text-fg no-underline transition-colors after:absolute after:inset-0 group-hover:text-accent text-center text-[13px] line-clamp-2`}
                         >
                           {row.title ?? 'Untitled'}
                         </a>
                         </div>
-                        {view === 'gallery' && row.description && <p className="m-0 line-clamp-2 text-center font-sans text-xs leading-relaxed text-muted">{row.description}</p>}
-                        {view !== 'gallery' && <div className="mt-auto flex min-w-0 items-center gap-2">
-                          {row.views !== undefined && (
-                            <ViewsMark name={nameOf(row)} views={row.views} sparkline={row.sparkline} className="flex-1" />
-                          )}
-                          <Stamp row={row} mode={dates} trailing={row.views !== undefined} />
-                        </div>}
+                        {row.description && <p className="m-0 line-clamp-2 text-center font-sans text-xs leading-relaxed text-muted">{row.description}</p>}
                       </div>
                     </li>
                   );
