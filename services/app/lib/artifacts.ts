@@ -1171,6 +1171,25 @@ async function setAccessScoped(scope: Scope, id: string, access: DatasetAccess):
 }
 
 /**
+ * Set the read TIER — metadata, exactly like the access setter above: no
+ * version bump, no archive, no edit-log row, and the row is otherwise
+ * untouched.
+ *
+ * DELIBERATELY SILENT. `sharing_changed` belongs to the SHARING door, which is
+ * where an ACL is managed and where that emit lives; the replace door this
+ * serves has never said it, and a metadata write is not the place to give a
+ * door a verb it never had.
+ */
+async function setVisibilityScoped(scope: Scope, id: string, visibility: Visibility): Promise<ArtifactRow | null> {
+  const db = await getDb();
+  const r = await db.query<ArtifactRow>(
+    `UPDATE artifacts SET visibility = $3 WHERE id = $1 AND ${scope.where('$2')} RETURNING *`,
+    [id, scope.val, visibility],
+  );
+  return r.rows[0] ?? null;
+}
+
+/**
  * FILE a row under a folder (or back at the root) — metadata only: no version
  * bump, no edit-log row, no content change, and `updated_at` untouched. A move
  * is not an edit of the document, and moving `updated_at` would silently
@@ -1500,6 +1519,53 @@ export async function setTitleFor(actor: TokenActor, id: string, title: string):
   );
   const row = r.rows[0] ?? null;
   if (row) await notifyParent(parentOf(row));
+  return row;
+}
+
+/** What a METADATA write may change: policy ABOUT a row, never its content. */
+export interface MetadataPatch {
+  /** The name. Trimmed HERE, so two doors cannot write two different strings. */
+  title?: string;
+  visibility?: Visibility;
+  access?: DatasetAccess;
+  /** The RESOLVED trail (lib/folders resolveParent); `[]` is the root. */
+  ancestor_ids?: string[];
+}
+
+/**
+ * THE METADATA WRITE — the one code path for the fields that are policy about
+ * a row rather than an edit of it: its name, who may read it, whether its rows
+ * are open, and where it is filed. No version bump, no archived copy, no
+ * edit-log row, no `edit_id` rotation — none of which a rename has any business
+ * buying.
+ *
+ * It exists because a FOLDER has nothing else. A folder has no content, so
+ * `title`, `visibility` and `parent_id` are the entire body it takes, and the
+ * REPLACE door was writing them the way it writes a document — archiving the
+ * empty state and moving the version number, which is the one thing a caller
+ * diffs to learn that a document changed. Both doors now run this, so the
+ * browser's PATCH and an agent's PUT are the same act with the same effects.
+ *
+ * OWNER-SCOPED throughout, through the setters it composes: placement, tier and
+ * dataset access are on ownerScope's list already, and a name is the same kind
+ * of fact about a row. Null is the uniform 404, answered BEFORE anything is
+ * written — a caller who cannot reach the row learns nothing else about it.
+ *
+ * Composition, not one statement, and the honest cost is stated: a multi-field
+ * patch is two or three statements rather than one transaction, so a crash
+ * between them leaves a rename applied and a move not. That is exactly the
+ * property the PATCH door has always had, and each setter is the one place its
+ * own wakeups and events live (`setParentFor` NOTIFYs both ends of a move and
+ * emits `moved`); collapsing them into a single UPDATE would mean writing those
+ * a second time.
+ */
+export async function setMetadataFor(actor: TokenActor, id: string, patch: MetadataPatch): Promise<ArtifactRow | null> {
+  let row = await getOwnedArtifactFor(actor, id);
+  if (!row) return null;
+  if (patch.title !== undefined) row = await setTitleFor(actor, id, patch.title.trim());
+  if (row && patch.access) row = await setAccessFor(actor, id, patch.access);
+  if (row && patch.visibility) row = await setVisibilityScoped(ownerScope(actor), id, patch.visibility);
+  if (row && patch.ancestor_ids) row = await setParentFor(actor, id, patch.ancestor_ids);
   return row;
 }
 

@@ -192,7 +192,7 @@ const updateArtifactOp: Operation = {
   name: 'update_artifact',
   title: 'Replace an artifact',
   http: { method: 'PUT', path: '/api/artifacts/{id}' },
-  description: 'Full replace of an artifact you own (same one-of content fields as create). Archives the current state as a version; the URL never changes. Pass expectedVersion (from get_artifact) to fail with version_conflict instead of overwriting a concurrent edit — on conflict, re-read, merge, and retry with the reported currentVersion. Dataset/recipe refreshes return warnings naming dependent artifacts whose bindings broke. On a FOLDER only title, visibility and parent_id apply — renaming one is this call — and a content field answers not_editable, because a folder has no content.',
+  description: 'Full replace of an artifact you own (same one-of content fields as create). Archives the current state as a version; the URL never changes. Pass expectedVersion (from get_artifact) to fail with version_conflict instead of overwriting a concurrent edit — on conflict, re-read, merge, and retry with the reported currentVersion. Dataset/recipe refreshes return warnings naming dependent artifacts whose bindings broke. On a FOLDER only title, visibility and parent_id apply, and they apply as METADATA — no new version, nothing archived — because a folder has no content to replace; renaming one is this call, and a content field answers not_editable.',
   input: { id: z.string(), expectedVersion: z.number().int().positive().optional(), ...CONTENT_FIELDS },
   annotations: { idempotent: true },
   example: {

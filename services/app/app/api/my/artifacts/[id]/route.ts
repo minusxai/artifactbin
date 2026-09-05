@@ -9,7 +9,7 @@
  * present and unforgeable.
  */
 import { artifactToWire, artifactToWireWithAnnotations, parseAccessValue, parseParentField, replaceArtifactFromRequest } from '@/lib/artifact-wire';
-import { getArtifactFor, setAccessFor, setParentFor, setTitleFor, writerFor } from '@/lib/artifacts';
+import { getArtifactFor, setMetadataFor, writerFor, type MetadataPatch } from '@/lib/artifacts';
 import { isParentRefusal, parentOf, resolveParent } from '@/lib/folders';
 import { browserActor } from '@/lib/auth';
 import { trashArtifactFor } from '@/lib/trash';
@@ -75,36 +75,31 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
   const { id } = await ctx.params;
   const hasAccess = body.access !== undefined && body.access !== null;
   // Shape only, like `parent_id` above: a title is a string, and an empty one
-  // is the untitled row every listing already knows how to draw.
+  // is the untitled row every listing already knows how to draw. The TRIM is
+  // the metadata path's (lib/artifacts setMetadataFor), so the replace door
+  // writing the same field cannot disagree about what the name is.
   if (body.title !== undefined && typeof body.title !== 'string') return json({ error: 'invalid_title' }, 400);
-  const title = typeof body.title === 'string' ? body.title.trim() : undefined;
+  const title = typeof body.title === 'string' ? body.title : undefined;
   if (!hasAccess && parent === undefined && title === undefined) return json({ error: 'nothing_to_change' }, 400);
 
   const current = await getArtifactFor(scoped, id);
   if (!current) return json({ error: 'not_found' }, 404);
 
-  let row = current;
-  if (title !== undefined) {
-    const renamed = await setTitleFor(scoped, id, title);
-    if (!renamed) return json({ error: 'not_found' }, 404);
-    row = renamed;
-  }
+  const patch: MetadataPatch = { ...(title !== undefined ? { title } : {}) };
   if (hasAccess) {
     const access = parseAccessValue(body.access, current.format);
     if (access instanceof Response) return access;
-    if (access) {
-      const accessed = await setAccessFor(scoped, id, access);
-      if (!accessed) return json({ error: 'not_found' }, 404);
-      row = accessed;
-    }
+    if (access) patch.access = access;
   }
   if (parent !== undefined) {
     const placement = await resolveParent(writerFor(current), parent, { id: current.id, format: current.format });
     if (isParentRefusal(placement)) return json(placement, 400);
-    const moved = await setParentFor(scoped, id, placement.ancestor_ids);
-    if (!moved) return json({ error: 'not_found' }, 404);
-    row = moved;
+    patch.ancestor_ids = placement.ancestor_ids;
   }
+  // ONE metadata write, shared with the replace door's folder branch — which is
+  // what keeps `PUT {title}` on a folder and this rename the same act.
+  const row = await setMetadataFor(scoped, id, patch);
+  if (!row) return json({ error: 'not_found' }, 404);
   return json({ id: row.id, title: row.title, parent_id: parentOf(row), ancestor_ids: row.ancestor_ids, ...(row.format === 'dataset' ? { access: row.access } : {}) });
 }
 
