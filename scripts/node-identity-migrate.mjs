@@ -20,6 +20,7 @@ export function parseMigrationArgs(argv,environment=process.env){
   }
   let url;
   try{url=new URL(out.url);}catch{throw new Error('invalid migration URL');}
+  if(url.username||url.password) throw new Error('migration URL must not contain userinfo credentials');
   const loopback=['localhost','127.0.0.1','::1','[::1]'].includes(url.hostname);
   if(url.protocol!=='https:'&&!(url.protocol==='http:'&&loopback)) throw new Error('refusing cleartext credential transport to a non-loopback host');
   out.url=url.origin;
@@ -30,13 +31,15 @@ const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 
 export async function runMigrationCli(options){
   const fetchFn=options.fetch??fetch;
-  const write=options.write??(line=>console.log(line));
+  const rawWrite=options.write??(line=>console.log(line));
+  const write=line=>rawWrite(String(line).split(options.secret).join('[REDACTED]'));
   const endpoint=`${options.url}/api/admin/node-identity`;
+  let lastCursor;
   for(;;){
     let response;
     for(let attempt=0;;attempt++){
       try{
-        response=await fetchFn(endpoint,{method:'POST',headers:{'content-type':'application/json','x-shared-secret':options.secret},body:JSON.stringify({
+        response=await fetchFn(endpoint,{method:'POST',redirect:'error',signal:AbortSignal.timeout(options.timeoutMs??30_000),headers:{'content-type':'application/json','x-shared-secret':options.secret},body:JSON.stringify({
           batchSize:options.batchSize,dryRun:options.dryRun,maxHistoricalVersionsPerArtifact:options.historyLimit??1000,
         })});
       }catch{
@@ -54,6 +57,8 @@ export async function runMigrationCli(options){
     if(!response.ok||!body){write(`migration request failed with HTTP ${response.status}`);return {ok:false,reason:'response'};}
     write(`${body.dryRun?'dry-run':'apply'}: processed=${body.processed} changed=${body.changed} cursor=${body.cursor??'-'} done=${body.done}`);
     if(options.dryRun||body.done) return {ok:true,report:body};
+    if(!(body.processed>0)||body.cursor===lastCursor){write('migration stopped: successful response made no cursor progress');return {ok:false,reason:'no_progress',report:body};}
+    lastCursor=body.cursor;
   }
 }
 
