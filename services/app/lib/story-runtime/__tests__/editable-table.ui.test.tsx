@@ -109,4 +109,18 @@ describe('editable table runtime',()=>{
     const capture=render(<StoryRuntimeApp nodes={v.nodes} refData={{}} dataflow={v.dataflow} store={v.store} colorMode="light" chrome={false}/>);
     expect((capture.getByLabelText('Hours 1') as HTMLInputElement).disabled).toBe(true);
   });
+  it('does not commit a number outside its native range or with bad input',async()=>{
+    const v=setup('<Column col="hours"><input type="number" min={1} max={5} aria-label="Hours {$_row.id}" value="$_row.hours" run="$set_hours"/></Column>');
+    const input=v.getByLabelText('Hours 1') as HTMLInputElement;
+    fireEvent.focus(input);fireEvent.change(input,{target:{value:'6'}});fireEvent.blur(input);
+    await act(async()=>{});expect(v.mutate).not.toHaveBeenCalled();
+    Object.defineProperty(input,'validity',{configurable:true,value:{valid:false,badInput:true}});
+    fireEvent.change(input,{target:{value:''}});fireEvent.keyDown(input,{key:'Enter'});
+    await act(async()=>{});expect(v.mutate).not.toHaveBeenCalled();
+  });
+  it('coerces native select values from the invocation query column schema',async()=>{
+    const v=setup('<Column col="hours"><select aria-label="Hours {$_row.id}" value="$_row.hours" run="$set_hours"><option value="">None</option><option value="2">Two</option></select></Column>',[{id:1,item:'one',hours:null}]);
+    const input=v.getByLabelText('Hours 1');fireEvent.focus(input);fireEvent.change(input,{target:{value:'2'}});
+    await act(async()=>{});expect(v.mutate).toHaveBeenCalledWith({_value:2},'set_hours',{id:1,item:'one',hours:null});
+  });
 });

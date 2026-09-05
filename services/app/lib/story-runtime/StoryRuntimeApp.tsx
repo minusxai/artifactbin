@@ -74,7 +74,7 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
   const label = str(props['aria-label']) ?? str(props.label) ?? `${column} ${String(rowKey)}`;
   const error = session?.error ? <span role="alert" className="mx-write-error">{session.error}</span> : null;
   const valueType = tableName ? ctx.state.tables[tableName]?.columns.find((c) => c.name === valueField)?.type : undefined;
-  const selectValue = (next: string | null): Scalar => next === null ? null : valueType === 'number' ? Number(next) : valueType === 'boolean' ? next === 'true' : next;
+  const selectValue = (next: string | null): Scalar => next === null ? null : valueType === 'number' ? next === '' ? null : Number(next) : valueType === 'boolean' ? next === 'true' : next;
   if (tag === 'Select') {
     const optsName = refName(props.options);
     const options = normalizeControlOptions(props.options, optsName ? ctx.state.tables[optsName] : undefined)
@@ -92,7 +92,8 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
   }
   if (tag === 'input' || tag === 'textarea' || tag === 'select') {
     const Html = tag as 'input' | 'textarea' | 'select';
-    const commitDraft = () => {
+    const commitDraft = (element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement) => {
+      if (!element.validity.valid) { element.reportValidity(); return; }
       const active = sessions?.get(identity);
       if (!active || (active.phase !== 'editing' && active.phase !== 'error')) return;
       if (props.type === 'number') {
@@ -103,8 +104,8 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
       commit();
     };
     return <><Html {...(rest as Record<string, unknown>)} aria-label={label} value={value === null ? '' : String(value)} disabled={!ctx.chrome || !writable || busy || props.disabled === true}
-      onFocus={begin} onChange={(e) => { change(e.currentTarget.value); if (tag === 'select') commitDraft(); }} onBlur={commitDraft}
-      onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); cancel(); e.currentTarget.blur(); } else if (e.key === 'Enter' && !(tag === 'textarea' && e.shiftKey)) { e.preventDefault(); commitDraft(); } }}
+      onFocus={begin} onChange={(e) => { change(tag === 'select' ? selectValue(e.currentTarget.value) : e.currentTarget.value); if (tag === 'select') commitDraft(e.currentTarget); }} onBlur={(e) => commitDraft(e.currentTarget)}
+      onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); cancel(); e.currentTarget.blur(); } else if (e.key === 'Enter' && !(tag === 'textarea' && e.shiftKey)) { e.preventDefault(); commitDraft(e.currentTarget); } }}
     >{tag === 'input' ? undefined : children}</Html>{error}</>;
   }
   return Component ? <Component {...rest}>{children}</Component> : null;
