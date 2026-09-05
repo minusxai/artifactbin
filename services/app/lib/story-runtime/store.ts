@@ -341,7 +341,8 @@ export function createDataflowStore(
     writing.add(name);
     commit({ ...state }); // `mutating()` changed — a bound Button shows itself busy
     try {
-      const { dataset } = await transport.mutate({ ...state.values, ...overrides }, name, row);
+      const values = { ...state.values, ...overrides };
+      const { dataset } = await (row === undefined ? transport.mutate(values, name) : transport.mutate(values, name, row));
       // The click that writes is the click that redraws: the reader must not
       // wait for the live stream to tell this document about its own write.
       invalidateDatasets([dataset || decl.target]);
