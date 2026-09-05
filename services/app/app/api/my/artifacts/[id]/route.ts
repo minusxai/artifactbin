@@ -74,7 +74,7 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
 
   let row = current;
   if (hasAccess) {
-    const access = parseAccessValue(body.access, current.format, request);
+    const access = parseAccessValue(body.access, current.format);
     if (access instanceof Response) return access;
     if (access) {
       const accessed = await setAccessFor(scoped, id, access);

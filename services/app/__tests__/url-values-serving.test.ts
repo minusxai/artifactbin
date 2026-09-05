@@ -72,8 +72,8 @@ describe('the reader\'s document, opened at a link that names a selection', () =
   it('ignores what the flow does not declare, and a value the type refuses', async () => {
     const { id } = await published();
     // `nope` is undeclared; `top` is a number and "ten" is not one; `chrome`,
-    // `edit` and `v` are the server's own keys and carry no `$`.
-    const data = island(await raw(id, '?$nope=1&$top=ten&chrome=1&edit=0&v=2'));
+    // `edit` and `ref` carry no `$` and are not document values.
+    const data = island(await raw(id, '?$nope=1&$top=ten&chrome=1&edit=0&ref=2'));
     expect(data.dataflow?.values).toBeUndefined();
   });
 

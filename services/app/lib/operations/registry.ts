@@ -56,7 +56,7 @@ export interface OpContext {
   actor: TokenActor;
   /** The caller's own origin — every `url` in a reply is built from it. */
   base: string;
-  /** The transport's request — consulted only for per-request flags (the preview gate). */
+  /** The transport request passed through to the publish pipeline. */
   request: Request;
   /** Who a comment reply is attributed to; derived per transport. */
   author: AnnotationAuthor;
@@ -129,7 +129,7 @@ const CONTENT_FIELDS = {
   // has none.
   format: z.enum(['folder']).optional().describe("a folder: send it with NO content field. A folder is an artifact like any other — it has a url, visibility and sharing — and you file documents under it with parent_id"),
   parent_id: z.string().nullable().optional().describe("the id of a FOLDER artifact to file this under (create one with {\"format\":\"folder\",\"title\":\"…\"}), or null for your root. Ids, never paths: two sibling folders may share a name. The URL keeps working wherever the file moves"),
-  access: z.enum(['read', 'readwrite']).optional().describe("dataset WRITE ACL (preview): 'read' (default — documents may only read it) or 'readwrite' (documents you publish may add/change/remove rows through a <Mutation>). Needs the preview: pass ?v=2 on the request, or set PREVIEW__FEATURES=1 on the deployment."),
+  access: z.enum(['read', 'readwrite']).optional().describe("dataset WRITE ACL: 'read' (default — documents may only read it) or 'readwrite' (documents you publish may add/change/remove rows through a <Mutation>)."),
   visibility: z.enum(['public', 'private', 'unlisted']).optional().describe("read ACL: 'public' = anyone with the link, and it lists on the owner's public profile; 'unlisted' = anyone with the link, but never listed anywhere; 'private' = the owner + emails they share it with (needs a logged-in account — anonymous tokens can be public or unlisted). Defaults: account-owned tokens publish private — except images and datasets, born unlisted; anonymous tokens publish public."),
 };
 

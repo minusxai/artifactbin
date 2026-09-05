@@ -52,7 +52,6 @@ export default function ShareLink({
   artifactId,
   owner = false,
   format,
-  preview = false,
   variant = 'chip',
 }: {
   className: string;
@@ -62,8 +61,6 @@ export default function ShareLink({
   owner?: boolean;
   /** The artifact's format — the writes row exists for a dataset and nothing else. */
   format?: string;
-  /** Whether this browser is in the preview (lib/features `?v=2`), which is what gates writes. */
-  preview?: boolean;
   /** `menu` renders the trigger as a full-width document-control row. */
   variant?: 'chip' | 'menu';
 }) {
@@ -136,7 +133,7 @@ export default function ShareLink({
 
   const VerdictIcon = VISIBILITY_ICONS[state?.visibility ?? 'private'];
   /*
-   * The WRITES row (datasets only, preview only — lib/features).
+   * The WRITES row (datasets only).
    *
    * It lives here rather than in its own control because it answers the same
    * question the rest of this dialog does: who can do what with this thing.
@@ -145,7 +142,7 @@ export default function ShareLink({
    */
   const writable = state?.access === 'readwrite';
   const writers = state?.writtenBy ?? [];
-  const showWrites = preview && format === 'dataset' && !!state;
+  const showWrites = format === 'dataset' && !!state;
   const setAccess = (next: DatasetAccess) => {
     // Closing writes never touches the ROWS — every mutate call re-checks — but
     // it does stop the documents that write, so it says which ones first. With

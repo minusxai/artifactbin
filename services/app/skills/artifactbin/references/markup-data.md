@@ -61,7 +61,7 @@ Declarations · Bindings: embeds · Bindings: controls.
   for a private child AND for every folder, `views`/`sparkline` null unless you
   may edit the folder.
 - `<Mutation name>{`insert into ref_<datasetId> (a) values ($a)`}</Mutation>`
-  — a `<Query>` that WRITES (preview: the dataset needs `access: readwrite`,
+  — a `<Query>` that WRITES (the dataset needs `access: readwrite`,
   [datasets](publishing-datasets.md)). Exactly one INSERT | UPDATE | DELETE
   naming exactly ONE dataset, which must be YOUR OWN (reading a public one
   you do not own is fine; writing it is not). It runs on demand, never at render:

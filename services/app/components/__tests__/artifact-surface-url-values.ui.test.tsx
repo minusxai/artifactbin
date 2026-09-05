@@ -81,15 +81,15 @@ const picked = (win: Window, values: Record<string, unknown>, nonce = NONCE) => 
 
 describe('the iframe src carries the link\'s selection', () => {
   it('forwards the page\'s $ params — and only those — into the document it frames', () => {
-    render(<ArtifactSurface {...props({ search: '?$region=west&v=2&key=nope' })} />);
+    render(<ArtifactSurface {...props({ search: '?$region=west&ref=2&key=nope' })} />);
     const src = frame().getAttribute('src')!;
     expect(src).toContain('$region=west');
-    expect(src).not.toContain('v=2');
+    expect(src).not.toContain('ref=2');
     expect(src).not.toContain('key=nope');
   });
 
   it('adds nothing when the link names no selection', () => {
-    render(<ArtifactSurface {...props({ search: '?v=2' })} />);
+    render(<ArtifactSurface {...props({ search: '?ref=2' })} />);
     expect(frame().getAttribute('src')).toBe('/a/story1/raw');
   });
 
@@ -109,13 +109,13 @@ describe('the iframe src carries the link\'s selection', () => {
 
 describe('mx:values from the framed document', () => {
   it('rewrites the address, keeping every other param and the hash', () => {
-    window.history.replaceState(null, '', '/a/story1?v=2#section-3');
-    render(<ArtifactSurface {...props({ search: '?v=2' })} />);
+    window.history.replaceState(null, '', '/a/story1?ref=2#section-3');
+    render(<ArtifactSurface {...props({ search: '?ref=2' })} />);
     const win = frame().contentWindow!;
     announce(win);
     picked(win, { region: 'south', top: 10 });
     // `top` is at its declared default, so it is not in the link at all.
-    expect(window.location.search).toBe('?v=2&$region=south');
+    expect(window.location.search).toBe('?ref=2&$region=south');
     expect(window.location.hash).toBe('#section-3');
     expect(window.location.pathname).toBe('/a/story1');
   });

@@ -20,7 +20,6 @@ import type { Scalar } from '@/lib/story/dataflow';
 import { datasetCreateFields } from '@/lib/story/dataset-usage';
 import { imageRawUrl, pdfRawUrl } from '@/lib/story/ref-data';
 import { ALLOW_PUBLIC_VISIBILITY } from '@/lib/config';
-import { canSetDatasetAccess } from '@/lib/features';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { json, readJson } from '@/lib/http';
 import { ID_RE } from '@/lib/ids-shape';
@@ -294,24 +293,13 @@ export function parseLinkRoleValue(v: unknown): ShareRole | undefined | Response
  * is nothing to write there, and accepting the field would teach an agent a
  * knob that does nothing.
  */
-export function parseAccessValue(v: unknown, format: string | undefined, request: Request): DatasetAccess | undefined | Response {
+export function parseAccessValue(v: unknown, format: string | undefined): DatasetAccess | undefined | Response {
   if (v === undefined || v === null || v === '') return undefined;
   if (!DATASET_ACCESS.includes(v as DatasetAccess)) {
     return json({ error: 'invalid_access', allowed: [...DATASET_ACCESS] }, 400);
   }
   if (format !== undefined && format !== 'dataset') {
     return json({ error: 'access_datasets_only', details: [`access is the write ACL of a dataset — a ${format} artifact has no rows to write`] }, 400);
-  }
-  // THE ONE PREVIEW GATE for writable datasets (lib/features/): making a
-  // dataset writable is the single act everything else follows from, so this
-  // is the only place the flag is consulted. Reading and serving are never
-  // gated — a document published in the preview keeps working for readers who
-  // have no flag, which is what makes a shareable link safe to gate at all.
-  if (v === 'readwrite' && !canSetDatasetAccess(request)) {
-    return json({
-      error: 'preview_feature',
-      details: ['writable datasets are in preview — add ?v=2 to this request (a browser carries it from the page URL), or set PREVIEW__FEATURES=1 on the deployment'],
-    }, 400);
   }
   return v as DatasetAccess;
 }
@@ -341,8 +329,8 @@ export function parseShareEntries(v: unknown): ShareEntry[] | undefined | Respon
   return entries;
 }
 
-function parseAccessField(body: Record<string, unknown>, format: string | undefined, request: Request): DatasetAccess | undefined | Response {
-  return parseAccessValue(body.access, format, request);
+function parseAccessField(body: Record<string, unknown>, format: string | undefined): DatasetAccess | undefined | Response {
+  return parseAccessValue(body.access, format);
 }
 
 function parseVisibility(body: Record<string, unknown>, canPrivate: boolean): Visibility | undefined | Response {
@@ -418,7 +406,7 @@ export async function replaceArtifactWithBody(
   if (visibility instanceof Response) return visibility;
   const parent = parseParentField(body);
   if (parent instanceof Response) return parent;
-  const access = parseAccessField(body, parsed.format, request);
+  const access = parseAccessField(body, parsed.format);
   if (access instanceof Response) return access;
   const expected = parseExpectedVersion(body);
   if (expected instanceof Response) return expected;
@@ -505,7 +493,7 @@ export async function createArtifactFromBody(
   if (parsed instanceof Response) return parsed;
   const visibility = parseVisibility(body, !!actor.userId);
   if (visibility instanceof Response) return visibility;
-  const access = parseAccessField(body, parsed.format, request);
+  const access = parseAccessField(body, parsed.format);
   if (access instanceof Response) return access;
   const parent = parseParentField(body);
   if (parent instanceof Response) return parent;
