@@ -213,15 +213,12 @@ check(strangerVault.status() === 404, 'a private folder is the uniform 404 for a
 const strangerList = await stranger.goto(`${BASE}/@${username}`, { waitUntil: 'load' });
 check(strangerList.status() === 200 && !(await stranger.textContent('body')).includes('Cookie Proof'),
   'a stranger sees no private document on the profile');
-// And no FOLDER either, public or not: a stranger's profile is documents, flat.
-// The public index is `format = 'markup'` (lib/users listPublicArtifactsByUser),
-// so the strip the owner's own root grew has nothing to draw here.
-check((await stranger.locator('[aria-label="Folders"]').count()) === 0
-  && !(await stranger.textContent('body')).includes('Shelf'),
-  'a stranger\u2019s profile lists no folder, not even a public one');
+// Public folders belong on the public index; private folders stay absent.
+check(await stranger.locator('[aria-label="Open folder Shelf"]').isVisible()
+  && (await stranger.locator('[aria-label="Open folder Vault"]').count()) === 0,
+  'a stranger’s profile lists public folders and withholds private ones');
 // …and no way to MAKE one. The create control is its own capability now
-// (components/Shelf `canCreateFolders`), granted to the owner's own profile
-// and to nobody else — the pair this gate already asserts from one side.
+// (components/Shelf `canCreateFolders`), reserved for the workspace.
 check((await stranger.locator('[aria-label="New folder"]').count()) === 0,
   'and is offered no way to make one');
 

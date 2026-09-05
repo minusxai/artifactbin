@@ -19,7 +19,7 @@
  */
 import { chromium } from 'playwright';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
-import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
+import { startMailSink, loginViaEmail, isSignedInAs } from './lib/mail-login.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3000';
@@ -225,7 +225,7 @@ const email = `mxmx_test_editor_${Date.now().toString(36)}@example.com`;
 await loginViaEmail(page, BASE, sink, email);
 // Signed in is the masthead's identity line — the handle, linking to the
 // profile — since the header stopped printing the address (components/HeaderBar).
-check((await page.locator('[aria-label="Open your profile"]').count()) === 1, 'logging in with a code signs you in');
+check(await isSignedInAs(page, email), 'logging in with a code signs you in');
 await page.goto(`${BASE}/account`, { waitUntil: 'load' });
 await page.fill('[aria-label="Token to claim"]', token);
 await page.click('[aria-label="Claim token"]');
