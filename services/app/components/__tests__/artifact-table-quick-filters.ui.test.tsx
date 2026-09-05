@@ -46,6 +46,22 @@ const shownTitles = () =>
 afterEach(cleanup);
 
 describe('ArtifactTable quick filters', () => {
+  it('uses the card views mark in both mobile and desktop rows', () => {
+    render(
+      <ArtifactTable
+        artifacts={[row({ title: 'Trend', views: 22, sparkline: '<svg data-spline="1"></svg>' })]}
+      />,
+    );
+    const marks = screen.getAllByLabelText('Trend views');
+    expect(marks).toHaveLength(2);
+    for (const mark of marks) {
+      expect(mark).toHaveClass('relative', 'h-5');
+      expect(mark).toHaveTextContent('22 views');
+      expect(mark.querySelector('[data-spline]')?.parentElement).toHaveClass('absolute', 'inset-0', 'w-full');
+      expect(mark.lastElementChild).toHaveClass('bg-surface/55');
+    }
+  });
+
   it('renders a chip per format and visibility present; mx-markup starts pressed, filtering the rows', () => {
     render(<ArtifactTable artifacts={FLEET} />);
     expect(screen.getByLabelText('Filter markup').getAttribute('aria-pressed')).toBe('true');
