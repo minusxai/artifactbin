@@ -189,13 +189,34 @@ input.mx-rail-title { min-width: 0; width: 100%; background: transparent; border
  */
 /* The parent can switch the chrome off, or PIN it for edit mode: held at the
    top, with the document inset under it and the page's editor toolbar. */
+/* App controls follow light/dark mode using the app's own fixed palettes.
+   Document theme colors never supply these tokens. */
+.mx-reader-chrome {
+  --mx-reader-bg: #ffffff;
+  --mx-reader-fg: #1a2129;
+  --mx-reader-muted: #5a6572;
+  --mx-reader-border: #e1e6ea;
+  --mx-reader-accent: #0e9d4f;
+  --mx-reader-on-accent: #ffffff;
+  --mx-reader-scheme: light;
+}
+html.dark .mx-reader-chrome {
+  --mx-reader-bg: #10151b;
+  --mx-reader-fg: #e6edf3;
+  --mx-reader-muted: #7d8590;
+  --mx-reader-border: #202832;
+  --mx-reader-accent: #3fe77b;
+  --mx-reader-on-accent: #10151b;
+  --mx-reader-scheme: dark;
+}
 .mx-reader-chrome--off { display: none !important; }
 .mx-reader-chrome--pinned { opacity: 1 !important; visibility: visible !important; transform: none !important; pointer-events: auto !important; }
-.mx-reader-chrome--pinned [data-mx-reader-action="edit"] { color: var(--primary, currentColor) !important; }
+.mx-reader-chrome--pinned [data-mx-reader-action="edit"] { color: var(--mx-reader-accent) !important; }
 body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; }
 .mx-reader-chrome {
   position: fixed !important; z-index: 2147483003 !important;
-  color: var(--foreground, canvastext) !important;
+  color-scheme: var(--mx-reader-scheme) !important;
+  color: var(--mx-reader-fg) !important;
   font-family: var(--font-mono, ui-monospace, monospace) !important;
   transition: opacity 200ms ease-out, transform 200ms ease-out, visibility 200ms !important;
 }
@@ -205,12 +226,12 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
   display: flex !important; align-items: center !important; justify-content: center !important;
   box-sizing: border-box !important; margin: 0 !important; cursor: pointer !important;
   border: 0 !important; border-radius: 10px !important; background: transparent !important;
-  color: var(--foreground, canvastext) !important; font: inherit !important; text-decoration: none !important;
+  color: var(--mx-reader-fg) !important; font: inherit !important; text-decoration: none !important;
   transition: color 120ms ease, background 120ms ease, transform 120ms ease !important;
 }
 .mx-reader-action:hover, .mx-reader-trigger:hover, .mx-reader-home:hover:hover {
-  background: color-mix(in srgb, var(--foreground, gray) 10%, transparent) !important;
-  color: var(--foreground, canvastext) !important;
+  background: color-mix(in srgb, var(--mx-reader-fg) 10%, transparent) !important;
+  color: var(--mx-reader-fg) !important;
 }
 .mx-reader-action:active, .mx-reader-trigger:active:active { transform: scale(.94) !important; }
 .mx-reader-home img { display: block !important; width: 22px !important; height: 22px !important; margin: 0 !important; border: 0 !important; }
@@ -225,13 +246,13 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
    one must carry no author mark anywhere in it, stylesheet included. The byline
    holds exactly two anchors, and the other one is create. */
 .mx-reader-byline > a {
-  color: var(--foreground, canvastext) !important; font-weight: 700 !important;
+  color: var(--mx-reader-fg) !important; font-weight: 700 !important;
   text-decoration: none !important; white-space: nowrap !important;
 }
-.mx-reader-byline > a:hover { color: var(--primary, currentColor) !important; }
+.mx-reader-byline > a:hover { color: var(--mx-reader-accent) !important; }
 .mx-reader-chevron { display: none !important; }
 .mx-reader-title {
-  color: var(--muted-foreground, gray) !important; min-width: 0 !important;
+  color: var(--mx-reader-muted) !important; min-width: 0 !important;
   overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important;
 }
 /* The toast says what just happened and then gets out of the way. */
@@ -239,8 +260,8 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
   position: fixed !important; left: 50% !important; transform: translateX(-50%) !important;
   bottom: max(84px, calc(env(safe-area-inset-bottom) + 84px)) !important; z-index: 2147483004 !important;
   padding: 7px 12px !important; border-radius: 999px !important;
-  border: 1px solid var(--border, rgba(128,128,128,.3)) !important;
-  background: var(--background, canvas) !important; color: var(--foreground, canvastext) !important;
+  border: 1px solid var(--mx-reader-border) !important;
+  background: var(--mx-reader-bg) !important; color: var(--mx-reader-fg) !important;
   font: 500 11px/1 var(--font-mono, ui-monospace, monospace) !important;
   box-shadow: 0 8px 24px rgba(0,0,0,.18) !important;
 }
@@ -257,8 +278,8 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
 }
 .mx-reader-panel {
   position: fixed !important; z-index: 2147483002 !important; box-sizing: border-box !important;
-  border: 1px solid var(--border, rgba(128,128,128,.3)) !important;
-  background: var(--background, canvas) !important; color: var(--foreground, canvastext) !important;
+  border: 1px solid var(--mx-reader-border) !important;
+  background: var(--mx-reader-bg) !important; color: var(--mx-reader-fg) !important;
   box-shadow: 0 14px 42px rgba(0,0,0,.2) !important;
   font: 500 12px/1.35 var(--font-mono, ui-monospace, monospace) !important;
 }
@@ -270,12 +291,12 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
 .mx-reader-panel--menu a {
   display: flex !important; align-items: center !important; gap: 10px !important; box-sizing: border-box !important;
   width: 100% !important; padding: 9px 10px !important; border-radius: 5px !important;
-  color: var(--muted-foreground, canvastext) !important; text-decoration: none !important;
+  color: var(--mx-reader-muted) !important; text-decoration: none !important;
 }
-.mx-reader-panel--menu a:hover { background: color-mix(in srgb, var(--foreground, gray) 8%, transparent) !important; color: var(--foreground, canvastext) !important; }
+.mx-reader-panel--menu a:hover { background: color-mix(in srgb, var(--mx-reader-fg) 8%, transparent) !important; color: var(--mx-reader-fg) !important; }
 .mx-reader-panel--menu .mx-reader-brand {
-  margin-bottom: 10px !important; padding-bottom: 12px !important; border-bottom: 1px solid var(--border, rgba(128,128,128,.3)) !important;
-  color: var(--foreground, canvastext) !important; font-size: 14px !important; font-weight: 700 !important;
+  margin-bottom: 10px !important; padding-bottom: 12px !important; border-bottom: 1px solid var(--mx-reader-border) !important;
+  color: var(--mx-reader-fg) !important; font-size: 14px !important; font-weight: 700 !important;
 }
 .mx-reader-brand img { width: 28px !important; height: 28px !important; margin: 0 !important; border: 0 !important; }
 .mx-reader-panel--controls {
@@ -284,29 +305,29 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
 }
 .mx-reader-panel--controls h2, .mx-reader-panel--controls h3 { margin: 0 !important; font-family: inherit !important; }
 .mx-reader-panel--controls h2 { margin-bottom: 14px !important; font-size: 12px !important; }
-.mx-reader-panel--controls h3 { margin-bottom: 7px !important; color: var(--muted-foreground, canvastext) !important; font-size: 10px !important; letter-spacing: .14em !important; text-transform: uppercase !important; }
-.mx-reader-modes { display: flex !important; overflow: hidden !important; border: 1px solid var(--border, rgba(128,128,128,.3)) !important; border-radius: 5px !important; }
+.mx-reader-panel--controls h3 { margin-bottom: 7px !important; color: var(--mx-reader-muted) !important; font-size: 10px !important; letter-spacing: .14em !important; text-transform: uppercase !important; }
+.mx-reader-modes { display: flex !important; overflow: hidden !important; border: 1px solid var(--mx-reader-border) !important; border-radius: 5px !important; }
 .mx-reader-modes button {
   display: flex !important; flex: 1 1 0 !important; align-items: center !important; justify-content: center !important; gap: 7px !important;
   min-height: 36px !important; margin: 0 !important; padding: 7px 10px !important; cursor: pointer !important;
-  border: 0 !important; background: transparent !important; color: var(--muted-foreground, canvastext) !important; font: inherit !important;
+  border: 0 !important; background: transparent !important; color: var(--mx-reader-muted) !important; font: inherit !important;
 }
-.mx-reader-modes button[aria-pressed="true"] { background: color-mix(in srgb, var(--primary, currentColor) 12%, transparent) !important; color: var(--primary, currentColor) !important; }
+.mx-reader-modes button[aria-pressed="true"] { background: color-mix(in srgb, var(--mx-reader-accent) 12%, transparent) !important; color: var(--mx-reader-accent) !important; }
 /* The login door and the fork ask, under their own heading. Sized like a mode
    button so the panel reads as one column of controls. */
 .mx-reader-panel--controls h3 + .mx-reader-signin { margin-top: 0 !important; }
 .mx-reader-signin {
   display: flex !important; align-items: center !important; justify-content: center !important; gap: 7px !important;
   min-height: 36px !important; margin: 0 0 7px !important; padding: 7px 10px !important;
-  border: 1px solid var(--border, rgba(128,128,128,.3)) !important; border-radius: 5px !important;
-  background: color-mix(in srgb, var(--primary, currentColor) 10%, transparent) !important;
-  color: var(--primary, currentColor) !important; font: inherit !important; text-decoration: none !important;
+  border: 1px solid var(--mx-reader-border) !important; border-radius: 5px !important;
+  background: color-mix(in srgb, var(--mx-reader-accent) 10%, transparent) !important;
+  color: var(--mx-reader-accent) !important; font: inherit !important; text-decoration: none !important;
 }
-.mx-reader-signin:hover { background: color-mix(in srgb, var(--primary, currentColor) 18%, transparent) !important; }
+.mx-reader-signin:hover { background: color-mix(in srgb, var(--mx-reader-accent) 18%, transparent) !important; }
 /* PROVENANCE — a sentence, not a control. */
-.mx-reader-forked { display: block !important; color: var(--muted-foreground, gray) !important; font: inherit !important; }
-.mx-reader-forked a { color: var(--muted-foreground, gray) !important; text-decoration: underline !important; }
-.mx-reader-forked a:hover { color: var(--primary, currentColor) !important; }
+.mx-reader-forked { display: block !important; color: var(--mx-reader-muted) !important; font: inherit !important; }
+.mx-reader-forked a { color: var(--mx-reader-muted) !important; text-decoration: underline !important; }
+.mx-reader-forked a:hover { color: var(--mx-reader-accent) !important; }
 .mx-reader-panel--controls .mx-reader-modes + h3 { margin-top: 14px !important; }
 @keyframes mx-reader-rise { from { opacity: 0; transform: translateY(-4px); } }
 
@@ -315,32 +336,32 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
 .mx-reader-follow {
   display: inline-flex !important; align-items: center !important; justify-content: center !important;
   box-sizing: border-box !important; height: 24px !important; margin: 0 !important; padding: 0 9px !important;
-  border: 1px solid var(--primary, currentColor) !important; border-radius: 6px !important;
-  background: transparent !important; color: var(--primary, currentColor) !important;
+  border: 1px solid var(--mx-reader-accent) !important; border-radius: 6px !important;
+  background: transparent !important; color: var(--mx-reader-accent) !important;
   font: 600 11px/1 var(--font-mono, ui-monospace, monospace) !important; text-transform: capitalize !important;
   letter-spacing: .02em !important; white-space: nowrap !important; cursor: pointer !important;
   transition: color 120ms ease, background 120ms ease, transform 120ms ease !important;
 }
-.mx-reader-follow:hover { background: var(--primary, currentColor) !important; color: var(--primary-foreground, canvas) !important; }
+.mx-reader-follow:hover { background: var(--mx-reader-accent) !important; color: var(--mx-reader-on-accent) !important; }
 .mx-reader-follow:active { transform: scale(.96) !important; }
 
-/* A liked heart fills in the accent; a followed author's pill fills too. The
+/* A liked heart is always red; a followed author's pill uses app green. The
    COUNT is a badge on the glyph's shoulder — up and out far enough that the
    glyph stays whole — filled in the accent, ringed in the ground so it reads
    over the glyph's own strokes; gone at zero. Liked, it flips to ink on
    ground so the accent heart and an accent badge do not fight. */
-.mx-reader-action[data-mx-liked="true"] { color: var(--primary, currentColor) !important; }
-.mx-reader-action[data-mx-liked="true"] svg { fill: var(--primary, currentColor) !important; }
+.mx-reader-action[data-mx-liked="true"] { color: #dc2626 !important; }
+.mx-reader-action[data-mx-liked="true"] svg { fill: #dc2626 !important; }
 .mx-reader-count {
   position: absolute !important; top: -2px !important; right: -3px !important;
   box-sizing: border-box !important; min-width: 15px !important; height: 15px !important; padding: 0 4px !important;
-  border-radius: 999px !important; background: var(--primary, currentColor) !important; color: var(--primary-foreground, canvas) !important;
+  border-radius: 999px !important; background: var(--mx-reader-accent) !important; color: var(--mx-reader-on-accent) !important;
   font: 700 9px/15px var(--font-mono, ui-monospace, monospace) !important; letter-spacing: 0 !important; text-align: center !important;
-  box-shadow: 0 0 0 2px var(--background, canvas) !important; pointer-events: none !important;
+  box-shadow: 0 0 0 2px var(--mx-reader-bg) !important; pointer-events: none !important;
 }
 .mx-reader-count:empty { display: none !important; }
-.mx-reader-action[data-mx-liked="true"] .mx-reader-count { background: var(--foreground, canvastext) !important; color: var(--background, canvas) !important; }
-.mx-reader-follow[data-mx-following="true"] { background: var(--primary, currentColor) !important; color: var(--primary-foreground, canvas) !important; }
+.mx-reader-action[data-mx-liked="true"] .mx-reader-count { background: var(--mx-reader-fg) !important; color: var(--mx-reader-bg) !important; }
+.mx-reader-follow[data-mx-following="true"] { background: var(--mx-reader-accent) !important; color: var(--mx-reader-on-accent) !important; }
 
 /* TIPS — CSS only, because a document of prose ships no runtime to draw one.
    Every control names itself in data-mx-tip; a hover or a keyboard focus
@@ -350,7 +371,7 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
 .mx-reader-chrome [data-mx-tip]:hover::after, .mx-reader-chrome [data-mx-tip]:focus-visible::after {
   content: attr(data-mx-tip); position: absolute; z-index: 2147483005; pointer-events: none; white-space: nowrap;
   padding: 5px 8px; border-radius: 6px;
-  background: var(--foreground, canvastext); color: var(--background, canvas);
+  background: var(--mx-reader-fg); color: var(--mx-reader-bg);
   font: 500 11px/1 var(--font-mono, ui-monospace, monospace); letter-spacing: .02em; text-transform: none;
   box-shadow: 0 4px 14px rgba(0,0,0,.18);
   animation: mx-reader-tip 120ms ease-out 350ms both;
@@ -371,9 +392,9 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
      panels, and a scrim the size of the bar closes nothing when clicked away. */
   .mx-reader-chrome::before {
     content: '' !important; position: absolute !important; inset: 0 !important; z-index: -1 !important;
-    background: color-mix(in srgb, var(--background, canvas) 84%, transparent) !important;
+    background: var(--mx-reader-bg) !important;
     -webkit-backdrop-filter: blur(16px) saturate(1.5) !important; backdrop-filter: blur(16px) saturate(1.5) !important;
-    box-shadow: 0 1px 0 color-mix(in srgb, var(--foreground, canvastext) 12%, transparent), 0 10px 28px -18px rgba(0,0,0,.45) !important;
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--mx-reader-fg) 12%, transparent), 0 10px 28px -18px rgba(0,0,0,.45) !important;
   }
   .mx-reader-chrome--hidden { transform: translateY(-100%) !important; }
   .mx-reader-panel--menu .mx-reader-signin { margin-bottom: 8px !important; }
@@ -386,7 +407,7 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
   }
   .mx-reader-byline .mx-reader-title::before { content: '/ ' !important; }
   .mx-reader-byline[data-mx-owner-breadcrumb] .mx-reader-title::before { content: none !important; }
-  .mx-reader-byline .mx-reader-chevron { display: inline-flex !important; flex-shrink: 0 !important; color: var(--muted-foreground, gray) !important; }
+  .mx-reader-byline .mx-reader-chevron { display: inline-flex !important; flex-shrink: 0 !important; color: var(--mx-reader-muted) !important; }
   .mx-reader-byline[data-mx-owner-breadcrumb] > a { flex-shrink: 0 !important; }
   .mx-reader-follow { order: 1 !important; flex: 0 0 auto !important; }
   /* A desktop has an address bar; the owner wants no share button there. */
@@ -426,26 +447,26 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
     right: 68px !important; bottom: max(20px, env(safe-area-inset-bottom)) !important;
     display: flex !important; align-items: center !important; gap: 8px !important;
     box-sizing: border-box !important; padding: 0 !important; font-size: 12px !important;
-    text-shadow: 0 1px 2px var(--background, canvas), 0 0 8px var(--background, canvas) !important;
+    text-shadow: 0 1px 2px var(--mx-reader-bg), 0 0 8px var(--mx-reader-bg) !important;
   }
   .mx-reader-follow { flex: 0 0 auto !important; }
 
-  .mx-reader-follow { background: color-mix(in srgb, var(--background, canvas) 72%, transparent) !important; }
+  .mx-reader-follow { background: color-mix(in srgb, var(--mx-reader-bg) 72%, transparent) !important; }
   /* NO SURFACE, the way a Reel does it. The glyphs sit straight on the content
      and carry a soft halo in the page's OWN ground colour — white around ink on a
      light page, black around white on a dark one — so they read over text and
      over a photograph alike, and nothing boxes them in. */
   .mx-reader-rail, .mx-reader-byline { background: none !important; box-shadow: none !important; }
   .mx-reader-action svg, .mx-reader-trigger svg, .mx-reader-home img {
-    filter: drop-shadow(0 1px 1.5px var(--background, canvas)) drop-shadow(0 0 6px color-mix(in srgb, var(--background, canvas) 85%, transparent)) !important;
+    filter: drop-shadow(0 1px 1.5px var(--mx-reader-bg)) drop-shadow(0 0 6px color-mix(in srgb, var(--mx-reader-bg) 85%, transparent)) !important;
   }
   .mx-reader-action svg, .mx-reader-trigger svg { width: 24px !important; height: 24px !important; }
   /* The badge on a 44px target with a 24px glyph. */
   .mx-reader-count { top: 2px !important; right: 1px !important; }
   .mx-reader-home {
     width: 48px !important; height: 48px !important; border-radius: 12px !important;
-    background: var(--background, canvas) !important;
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--foreground, canvastext) 18%, transparent), 0 2px 8px rgba(0,0,0,.18) !important;
+    background: var(--mx-reader-bg) !important;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mx-reader-fg) 18%, transparent), 0 2px 8px rgba(0,0,0,.18) !important;
   }
   .mx-reader-home img { width: 30px !important; height: 30px !important; filter: none !important; }
   /* Editing on a phone: the page's toolbar takes the top, and the tile would sit under it. */
@@ -456,7 +477,7 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
   .mx-reader-byline { font-size: 14px !important; flex-wrap: wrap !important; row-gap: 5px !important; column-gap: 8px !important; }
   .mx-reader-byline .mx-reader-title {
     order: 0 !important; flex: 1 1 100% !important; min-width: 0 !important;
-    color: var(--foreground, canvastext) !important; font-weight: 600 !important;
+    color: var(--mx-reader-fg) !important; font-weight: 600 !important;
   }
   .mx-reader-byline > a { order: 1 !important; font-size: 13px !important; font-weight: 500 !important; }
   .mx-reader-follow { order: 2 !important; }
@@ -465,7 +486,7 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
   .mx-reader-chrome::before {
     content: '' !important; position: absolute !important; top: 35% !important; right: 0 !important; bottom: 0 !important;
     width: 140px !important; z-index: -1 !important; pointer-events: none !important;
-    background: linear-gradient(to left, color-mix(in srgb, var(--background, canvas) 88%, transparent), transparent) !important;
+    background: linear-gradient(to left, color-mix(in srgb, var(--mx-reader-bg) 88%, transparent), transparent) !important;
   }
   /* The vignette: a fade to the ground colour along the bottom, behind the rail
      and the byline. Invisible on a plain page (same colour), and on an image it
@@ -474,7 +495,7 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
     content: '' !important; position: absolute !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
     height: 220px !important; z-index: -1 !important; pointer-events: none !important;
     /* Solid ground for the first stretch, where the handle sits, then the fade. */
-    background: linear-gradient(to top, var(--background, canvas) 0, color-mix(in srgb, var(--background, canvas) 96%, transparent) 56px, color-mix(in srgb, var(--background, canvas) 70%, transparent) 120px, transparent) !important;
+    background: linear-gradient(to top, var(--mx-reader-bg) 0, color-mix(in srgb, var(--mx-reader-bg) 96%, transparent) 56px, color-mix(in srgb, var(--mx-reader-bg) 70%, transparent) 120px, transparent) !important;
   }
   /* Tips sit to the left of the rail (a phone rarely hovers; focus still shows them). */
   .mx-reader-chrome [data-mx-tip]:hover::after, .mx-reader-chrome [data-mx-tip]:focus-visible::after {
