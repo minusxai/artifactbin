@@ -8,9 +8,12 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./shape": "./src/shape.ts"
+    "./shape": "./src/shape.ts",
+    "./rate-limits": "./src/rate-limits.ts"
   },
-  "files": ["src"],
+  "files": [
+    "src"
+  ],
   "dependencies": {
     "@artifactbin/contracts": "*",
     "hono": "4.13.5",

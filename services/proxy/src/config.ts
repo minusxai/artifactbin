@@ -20,9 +20,12 @@
  *
  * Every optional name is read EAGERLY here so the audit is honest: a
  * MODULE__NAME-shaped name nobody asked for is a typo that looks live, and
- * `unknownNames` says so at boot (utils createEnv). RATE_LIMITER__<DOOR>_*
- * are read by PREFIX in the parts (doorsEnv), so the prefix — not each
- * spelled name — is what the audit knows.
+ * `unknownNames` says so at boot (utils createEnv). THE RATE LIMITS HAVE
+ * EXACTLY TWO NAMES — `PROXY__RATE_LIMIT_CONFIG_FILE` (which policy file) and
+ * `RATE_LIMITER__TRUSTED_PROXY_HOPS` (how much of X-Forwarded-For to believe);
+ * every NUMBER lives in the file. Both are read here, and only here, so a
+ * leftover per-door knob from the old vocabulary is reported as unread rather
+ * than silently exempted by a prefix.
  */
 import { randomBytes } from 'node:crypto';
 import { createEnv } from '@artifactbin/utils';
@@ -77,7 +80,7 @@ export interface ProxyConfig {
   mail: ProxyMailConfig;
   /** Cookies carry Secure. */
   secure: boolean;
-  /** The raw source, handed to the parts (their doors read RATE_LIMITER__<DOOR>_* by prefix). */
+  /** The raw source, handed to the parts — where the policy file's path and the trusted-hop count are read. */
   env: Record<string, string | undefined>;
   /** MODULE__NAME names set but read by nothing — a typo that looks live. */
   unknownNames: string[];
@@ -152,7 +155,7 @@ export function loadConfig(source: Record<string, string | undefined>, opts: Loa
     return value === undefined || value.trim() === '';
   });
   if (missing.length) throw new Error(`Required environment names are missing or empty: ${missing.join(', ')}`);
-  const { env, must, unknownNames } = createEnv(source, { consumedByPrefix: ['RATE_LIMITER__'] });
+  const { env, must, unknownNames } = createEnv(source);
   const loginProviders = loginProvidersOf(source);
   const upstreamUrl = must('APP', 'UPSTREAM_URL');
   const actorSecret = must('CONTRACT', 'ACTOR_SECRET');
@@ -185,6 +188,11 @@ export function loadConfig(source: Record<string, string | undefined>, opts: Loa
   // The log the proxy speaks into, and the header that service demands. Both
   // are SHARED names — the app carries the same two — read here so the audit
   // never calls them unknown on a proxy that is configured correctly.
+  // The rate limits' two names, read for the audit's sake as much as for their values: `parts.ts` reads
+  // both off the raw source (it holds the env object, not this config), and a name nothing asked for here
+  // is reported at boot as unread.
+  env('PROXY', 'RATE_LIMIT_CONFIG_FILE');
+  env('RATE_LIMITER', 'TRUSTED_PROXY_HOPS');
   const eventsServiceUrl = env('EVENTS', 'SERVICE_URL') || undefined;
   const internalServiceSecret = env('INTERNAL', 'SERVICE_SECRET') || undefined;
   // A conventional exception (DATABASE_URL/S3_URL) — no MODULE__NAME shape,

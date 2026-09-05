@@ -17,7 +17,7 @@ import { proxyEnvelope, say } from '../src/events';
 import { sessionStoreOf } from '../src/index';
 import { proxyParts } from '../src/parts';
 import { createStandaloneProxy, runStandalone } from '../src/standalone';
-import { BROWSER_MINT_HEADERS, testProxyOptions } from './helpers';
+import { BROWSER_MINT_HEADERS, policyFile, RELAXED_POLICY_FILE, testProxyOptions } from './helpers';
 
 const BASE = 'http://localhost:6421';
 const sent: Array<{ to: string; otp?: string }> = [];
@@ -27,7 +27,7 @@ let pg: PGlite;
 let auth: HumanAuth;
 let fake: FakeEvents;
 
-const proxy = async (env: Record<string, string | undefined> = { RATE_LIMITER__ANON_MINT_MAX: '1000' }): Promise<App> =>
+const proxy = async (env: Record<string, string | undefined> = { PROXY__RATE_LIMIT_CONFIG_FILE: RELAXED_POLICY_FILE }): Promise<App> =>
   assemble(proxyParts(await testProxyOptions({ env, sessions: sessionStoreOf(auth), events: fake }))) as unknown as App;
 type App = { request: (input: string, init?: RequestInit) => Promise<Response> };
 const call = (app: App, path: string, body: unknown, cookie?: string) =>
@@ -44,8 +44,8 @@ afterEach(async () => { await pg.close(); });
 
 describe('proxyEnvelope / say', () => {
   it('builds the app\'s row shape with source proxy, and say never rejects — even with no service at all', async () => {
-    const e = proxyEnvelope(null, 'denied', { kind: 'door', id: 'LOGIN_SEND' }, { door: 'LOGIN_SEND' });
-    expect(e).toMatchObject({ source: 'proxy', subject_kind: null, subject_id: null, verb: 'denied', object_kind: 'door', object_id: 'LOGIN_SEND', payload: { door: 'LOGIN_SEND' } });
+    const e = proxyEnvelope(null, 'denied', { kind: 'door', id: 'login_send' }, { door: 'login_send' });
+    expect(e).toMatchObject({ source: 'proxy', subject_kind: null, subject_id: null, verb: 'denied', object_kind: 'door', object_id: 'login_send', payload: { door: 'login_send' } });
     expect(e.id).toMatch(/^[0-9a-f-]{36}$/);
     await expect(say(undefined, null, 'denied', { kind: 'door', id: 'X' }, { door: 'X' })).resolves.toBeUndefined();
     fake.fail = new Error('log down');
@@ -88,20 +88,20 @@ describe('the login moments', () => {
   });
 });
 
-describe('the doors', () => {
-  it('a rate-limit denial says door.denied at both denial sites, the door named, the anonymous subject null', async () => {
-    const app = await proxy({ RATE_LIMITER__ANON_MINT_MAX: '1', RATE_LIMITER__ANON_MINT_WINDOW: '3600', RATE_LIMITER__ANON_MINT_BURST: '1' });
+describe('the rate limits', () => {
+  it('a rate-limit denial says door.denied for either policy, the policy named, the anonymous subject null', async () => {
+    const app = await proxy({ PROXY__RATE_LIMIT_CONFIG_FILE: policyFile('mint_1.yml') });
     expect((await app.request('/api/tokens/anonymous', { method: 'POST', headers: BROWSER_MINT_HEADERS })).status).not.toBe(429);
     expect((await app.request('/api/tokens/anonymous', { method: 'POST', headers: BROWSER_MINT_HEADERS })).status).toBe(429);
     expect(fake.events).toHaveLength(1);
-    expect(fake.events[0]).toMatchObject({ source: 'proxy', verb: 'denied', object_kind: 'door', object_id: 'ANON_MINT', subject_kind: null, payload: { door: 'ANON_MINT' } });
+    expect(fake.events[0]).toMatchObject({ source: 'proxy', verb: 'denied', object_kind: 'door', object_id: 'anon_mint', subject_kind: null, payload: { door: 'anon_mint' } });
 
     fake.events.length = 0;
     for (let i = 0; i < 5; i += 1) await call(app, '/api/auth/email-otp/send-verification-otp', { email: 'busy@example.com', type: 'sign-in' });
     expect((await call(app, '/api/auth/email-otp/send-verification-otp', { email: 'busy@example.com', type: 'sign-in' })).status).toBe(429);
     const denied = fake.events.filter((e) => e.verb === 'denied');
     expect(denied).toHaveLength(1);
-    expect(denied[0]).toMatchObject({ object_id: 'LOGIN_SEND', payload: { door: 'LOGIN_SEND' } });
+    expect(denied[0]).toMatchObject({ object_id: 'login_send', payload: { door: 'login_send' } });
     // No email rides on a denial: the address is the identity only on the login verbs.
     expect(JSON.stringify(denied[0])).not.toMatch(/@/);
   });
@@ -118,7 +118,7 @@ describe('the composition', () => {
   });
   it('createStandaloneProxy hands deps.events to the parts: a denial reaches it', async () => {
     // Relative path, as parts.test.ts does: the anon-mint door's browser check compares origins.
-    const config = loadConfig({ ...REQUIRED, RATE_LIMITER__ANON_MINT_MAX: '1', RATE_LIMITER__ANON_MINT_WINDOW: '3600', RATE_LIMITER__ANON_MINT_BURST: '1' });
+    const config = loadConfig({ ...REQUIRED, PROXY__RATE_LIMIT_CONFIG_FILE: policyFile('mint_1.yml') });
     const app = createStandaloneProxy(config, { upstream: async () => Response.json({ ok: true }), events: fake }) as unknown as App;
     await app.request('/api/tokens/anonymous', { method: 'POST', headers: BROWSER_MINT_HEADERS });
     expect((await app.request('/api/tokens/anonymous', { method: 'POST', headers: BROWSER_MINT_HEADERS })).status).toBe(429);

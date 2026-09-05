@@ -28,8 +28,9 @@ export default defineConfig({
       APP_PACKAGE_ROOT: path.resolve(import.meta.dirname, 'services/app'),
       ADMIN__SECRET: 'test-secret',
       // The OSS default closes anonymous minting (0/hour) and refuses `public`;
-      // the suite runs with the PUBLIC deployment's shape so every valve is exercised.
-      RATE_LIMITER__ANON_MINT_MAX: '10',
+      // the suite runs with the PUBLIC deployment's shape so every valve is
+      // exercised — the self-host policy file, whose mint is 10/hour/ip.
+      PROXY__RATE_LIMIT_CONFIG_FILE: path.resolve(import.meta.dirname, 'services/proxy/selfhost_rate_limits.yml'),
       ARTIFACTS__ALLOW_PUBLIC: '1',
       // lib/email refuses to send without a key (a login code in a log is an
       // auth bypass), so the suite supplies one. No test reaches the network:

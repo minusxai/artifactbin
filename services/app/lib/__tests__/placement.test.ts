@@ -2,7 +2,7 @@
  * testmig-7 seed — where a test lives says what it is.
  *
  * `services/app/__tests__/` is for HTTP routes and full-app composition (the api project). Ten pure config/domain/
- * architecture tests sit there today. Five web UI tests omit the `.ui` suffix and are carried by a directory
+ * architecture tests sat there; nine moved and one was deleted with the rule it pinned. Five web UI tests omit the `.ui` suffix and are carried by a directory
  * exception in vitest's config. Two suites duplicate others (`docs-claim` ⊂ `docs`; `schema-tokens-lifecycle`'s DDL
  * strings ⊂ the schema render + upgrade). Three tests read component/markdown SOURCE instead of behaviour. The paste
  * sentence agents receive is asserted character-exact in more than one place. Six pins; red at handoff.
@@ -28,7 +28,9 @@ const allTests = (): string[] => {
   walk(APP);
   return out.sort();
 };
-const MISFILED = ['agent-cookie-name', 'agent-guidance', 'anon-mint-dev-default', 'app-layout', 'client-identity', 'export-origin', 'schema-sql-fresh', 'selection-contrast', 'visitor-fingerprint', 'workflows'];
+// `anon-mint-dev-default` was one of the ten; the NODE_ENV-dependent mint default it pinned no longer
+// exists (every rate-limit number lives in a policy file), so the file is deleted rather than moved.
+const MISFILED = ['agent-cookie-name', 'agent-guidance', 'app-layout', 'client-identity', 'export-origin', 'schema-sql-fresh', 'selection-contrast', 'visitor-fingerprint', 'workflows'];
 
 describe('placement', () => {
   it('1. the ten pure tests have left the route directory and live with what they test (lib/**/__tests__ or server/__tests__)', () => {

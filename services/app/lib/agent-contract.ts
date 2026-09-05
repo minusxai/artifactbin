@@ -13,7 +13,8 @@
  * `POST /api/tokens/anonymous` is NOT on the ladder and is never named to an agent, anywhere. An agent that
  * mints its own token publishes documents its human CANNOT REACH; the sentence that used to sit here — "without
  * a human in the loop … mint" — is exactly how we taught them to. The proxy now refuses that door to anything
- * that is not a browser (proxy `anonMintDoor`), and this string is why an agent never asks it in the first place.
+ * that is not a browser (the `browser_only: true` route in the proxy's policy file), and this string is why an
+ * agent never asks it in the first place.
  */
 /**
  * WHICH SURFACE is being told. An MCP client authenticated over OAuth holds no token and can acquire

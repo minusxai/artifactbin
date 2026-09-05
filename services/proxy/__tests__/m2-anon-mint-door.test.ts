@@ -10,13 +10,13 @@
 import { describe, it, expect } from 'vitest';
 import { assemble } from '@artifactbin/utils';
 import { isBrowserContext, proxyParts } from '../src/parts';
-import { BROWSER_MINT_HEADERS, testProxyOptions } from './helpers';
+import { BROWSER_MINT_HEADERS, policyFile, RELAXED_POLICY_FILE, testProxyOptions } from './helpers';
 
 const BROWSER = { 'content-type': 'application/json', origin: 'http://localhost', 'sec-fetch-site': 'same-origin' };
 
 const proxyFor = async (upstream?: (req: Request) => Promise<Response>) =>
   assemble(await proxyParts(await testProxyOptions({
-    env: { RATE_LIMITER__ANON_MINT_MAX: '1000' },
+    env: { PROXY__RATE_LIMIT_CONFIG_FILE: RELAXED_POLICY_FILE },
     ...(upstream ? { upstream } : {}),
   })));
 
@@ -87,7 +87,7 @@ describe('the anonymous mint door', () => {
   it('lets the real page through behind a TLS-terminating hop', async () => {
     let reached = false;
     const proxy = assemble(await proxyParts(await testProxyOptions({
-      env: { RATE_LIMITER__ANON_MINT_MAX: '1000', APP__PUBLIC_BASE_URL: 'https://artifactbin.dev' },
+      env: { PROXY__RATE_LIMIT_CONFIG_FILE: RELAXED_POLICY_FILE, APP__PUBLIC_BASE_URL: 'https://artifactbin.dev' },
       upstream: async () => { reached = true; return new Response('{"token":"mx_x"}', { status: 201 }); },
     })));
     const res = await proxy.fetch(new Request('http://localhost/api/tokens/anonymous', {
@@ -120,7 +120,7 @@ describe('the door beside the limiter, and the hosts it calls its own', () => {
   it('does not spend the ANON_MINT budget its own advice sends the human back to use', async () => {
     // The refusal says "ask your human for a token at /tokens/new". If the refusals themselves counted,
     // an agent retrying a few times would 429 the human it just sent to that page — same IP, same NAT.
-    const options = await testProxyOptions({ env: { RATE_LIMITER__ANON_MINT_MAX: '2', RATE_LIMITER__ANON_MINT_BURST: '2' } });
+    const options = await testProxyOptions({ env: { PROXY__RATE_LIMIT_CONFIG_FILE: policyFile('mint_2_burst_2.yml') } });
     const proxy = assemble(await proxyParts(options));
     for (let i = 0; i < 6; i += 1) {
       expect((await proxy.fetch(new Request('http://localhost/api/tokens/anonymous', { method: 'POST' }))).status).toBe(403);
@@ -137,7 +137,7 @@ describe('the door beside the limiter, and the hosts it calls its own', () => {
     // symptom is "Could not generate a token", with nothing in the logs saying why.
     let reached = false;
     const proxy = assemble(await proxyParts(await testProxyOptions({
-      env: { RATE_LIMITER__ANON_MINT_MAX: '1000', APP__PUBLIC_BASE_URL: 'http://localhost:5401' },
+      env: { PROXY__RATE_LIMIT_CONFIG_FILE: RELAXED_POLICY_FILE, APP__PUBLIC_BASE_URL: 'http://localhost:5401' },
       upstream: async () => { reached = true; return new Response('{"token":"mx_x"}', { status: 201 }); },
     })));
     const res = await proxy.fetch(new Request('http://127.0.0.1:5401/api/tokens/anonymous', {
@@ -149,7 +149,7 @@ describe('the door beside the limiter, and the hosts it calls its own', () => {
 
   it('still refuses a stranger host that is neither', async () => {
     const proxy = assemble(await proxyParts(await testProxyOptions({
-      env: { RATE_LIMITER__ANON_MINT_MAX: '1000', APP__PUBLIC_BASE_URL: 'http://localhost:5401' },
+      env: { PROXY__RATE_LIMIT_CONFIG_FILE: RELAXED_POLICY_FILE, APP__PUBLIC_BASE_URL: 'http://localhost:5401' },
     })));
     const res = await proxy.fetch(new Request('http://127.0.0.1:5401/api/tokens/anonymous', {
       method: 'POST', headers: { origin: 'https://evil.test', 'sec-fetch-site': 'same-origin' },

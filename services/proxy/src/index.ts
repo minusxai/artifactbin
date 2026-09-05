@@ -2,7 +2,7 @@
  * THE OSS PROXY — the parts literal (src/parts.ts) assembled. The authenticating,
  * rate-limiting, login-serving, OAuth-providing forwarder in front of the app:
  * it never answers 401 itself (absent or invalid credential → the app decides),
- * and its only own verdict is a door's 429.
+ * and its only own verdicts are the policy file's 429 and its `browser_only` 403.
  *
  * `createProxy` is pure of transport: `upstream` is the ONE seam — in-process
  * (utils `inProcess`, the actor riding the Request) or over HTTP (utils
@@ -11,7 +11,7 @@
 /** The proxy's public surface: the parts literal and what composes it. */
 export {
   proxyParts, createProxy, forward, forwardedHeaders, session, rateLimit, loginRoutes, oauthRoutes,
-  doorFor, clientIpOf, peerIpOf, trustedHopsOf,
+  clientIpOf, peerIpOf, trustedHopsOf,
   type ProxyOptions, type SessionStore, type SessionInfo,
 } from './parts';
 export { PROXY_TABLES, ensureProxySchema } from './schema';
@@ -21,6 +21,7 @@ export {
   DEV_OUTBOX_RELATIVE_PATH, DEV_OUTBOX_DEFAULT_PATH, MailNotConfigured, MailSendFailed,
 } from './mail';
 export { proxyEnvNamesRead, readEnv } from './env';
+export { POLICY_FILE_ENV, DEFAULT_POLICY_FILE, defaultPolicyFilePath, resolvePolicyFilePath, loadPolicyFile } from './rate-limits';
 export { loginProvidersOf, loadConfig, loadProcessConfig, type LoginProviders, type LoadConfigOptions, type ProxyConfig } from './config';
 export {
   createStandaloneProxy, humanAuthOptionsFor, buildDeps, runStandalone,

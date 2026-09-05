@@ -8,6 +8,8 @@ import path from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { devOutboxPath, serverDataDir, serverEnv, serverPorts, startServer } from '../lib/server';
 
+const REPO_ROOT = path.resolve(__dirname, '..', '..');
+
 describe('serverPorts', () => {
   it('gives each leg a server port and a proxy port beside it', () => {
     expect(serverPorts(3100, 0)).toEqual({ server: 3100, proxy: 3101 });
@@ -17,7 +19,7 @@ describe('serverPorts', () => {
 
 describe('serverEnv', () => {
   const base = { PATH: '/usr/bin', HOME: '/home/u', ANTHROPIC_API_KEY: 'k1', FIREWORKS_API_KEY: 'k2', RANDOM: 'x' };
-  const env = serverEnv({ base, ports: { server: 3100, proxy: 3101 }, dataDir: '/tmp/leg', extra: { RATE_LIMITER__ANON_MINT_MAX: '2000' } });
+  const env = serverEnv({ base, ports: { server: 3100, proxy: 3101 }, dataDir: '/tmp/leg', repoRoot: REPO_ROOT, extra: {} });
 
   it('strips every provider key — the product never needs them and every child would inherit them', () => {
     expect(env.ANTHROPIC_API_KEY).toBeUndefined();
@@ -42,7 +44,43 @@ describe('serverEnv', () => {
   });
 
   it('applies config extras last', () => {
-    expect(env.RATE_LIMITER__ANON_MINT_MAX).toBe('2000');
+    const withExtra = serverEnv({ base, ports: { server: 3100, proxy: 3101 }, dataDir: '/tmp/leg', repoRoot: REPO_ROOT, extra: { QUOTA__ARTIFACTS_PER_TOKEN: '0' } });
+    expect(withExtra.QUOTA__ARTIFACTS_PER_TOKEN).toBe('0');
+  });
+
+  /**
+   * THE POLICY FILE IS AN ABSOLUTE PATH, AND THE CHILD'S CWD IS NOT WHERE IT WOULD BE FOUND.
+   *
+   * `startServer` spawns the bundle with `cwd: <repo>/services/app` (the bundle resolves `dist/web` and
+   * `public/` against it), so a RELATIVE `PROXY__RATE_LIMIT_CONFIG_FILE` resolves to
+   * `services/app/services/proxy/dev_rate_limits.yml` — which does not exist, and the loader refuses the
+   * boot rather than quietly meeting requests with numbers nobody chose. That is the loader working; the
+   * bug was handing it a path that depends on a cwd this driver deliberately does not control. It cost the
+   * four "agent smoke" jobs on PR #32, and no unit test could see it because the env builder was handed a
+   * relative literal and asked only whether it came back unchanged.
+   *
+   * So the RUNNER resolves it, against the repo root it already knows, and the test asks the filesystem.
+   */
+  it('hands the server an ABSOLUTE policy-file path that EXISTS — a relative one resolves under the child\'s cwd and refuses the boot', () => {
+    expect(path.isAbsolute(env.PROXY__RATE_LIMIT_CONFIG_FILE!)).toBe(true);
+    expect(env.PROXY__RATE_LIMIT_CONFIG_FILE).toBe(path.join(REPO_ROOT, 'services/proxy/dev_rate_limits.yml'));
+    expect(fs.existsSync(env.PROXY__RATE_LIMIT_CONFIG_FILE!), `${env.PROXY__RATE_LIMIT_CONFIG_FILE} does not exist`).toBe(true);
+  });
+
+  it('and a RELATIVE one in the config extras is resolved too, not passed through', () => {
+    // config.json is edited by hand; the guarantee must not depend on it holding an absolute path.
+    const relative = serverEnv({
+      base, ports: { server: 3100, proxy: 3101 }, dataDir: '/tmp/leg', repoRoot: REPO_ROOT,
+      extra: { PROXY__RATE_LIMIT_CONFIG_FILE: 'services/proxy/dev_rate_limits.yml' },
+    });
+    expect(relative.PROXY__RATE_LIMIT_CONFIG_FILE).toBe(path.join(REPO_ROOT, 'services/proxy/dev_rate_limits.yml'));
+    expect(fs.existsSync(relative.PROXY__RATE_LIMIT_CONFIG_FILE!)).toBe(true);
+    // an absolute one is left exactly as given
+    const abs = serverEnv({
+      base, ports: { server: 3100, proxy: 3101 }, dataDir: '/tmp/leg', repoRoot: REPO_ROOT,
+      extra: { PROXY__RATE_LIMIT_CONFIG_FILE: path.join(REPO_ROOT, 'services/proxy/selfhost_rate_limits.yml') },
+    });
+    expect(abs.PROXY__RATE_LIMIT_CONFIG_FILE).toBe(path.join(REPO_ROOT, 'services/proxy/selfhost_rate_limits.yml'));
   });
 });
 
@@ -73,12 +111,12 @@ describe('the local server can send login mail to a file', () => {
   it('serverEnv names a dev outbox under the data dir and never a real Resend key', () => {
     // (the seeded call named parameters `serverEnv` does not have — corrected to the real signature,
     // assertions unchanged)
-    const env = serverEnv({ base: {}, ports: { server: 3100, proxy: 3101 }, dataDir: '/tmp/eval-data', extra: {} });
+    const env = serverEnv({ base: {}, ports: { server: 3100, proxy: 3101 }, dataDir: '/tmp/eval-data', repoRoot: REPO_ROOT, extra: {} });
     expect(env.EMAIL__DEV_OUTBOX_PATH).toMatch(/^\/tmp\/eval-data\//);
     expect(env.EMAIL__RESEND_API_KEY).toBe('eval-no-mail');
   });
   it('names the same file the driver reads the code from — one definition, two readers', () => {
-    const env = serverEnv({ base: {}, ports: { server: 3100, proxy: 3101 }, dataDir: serverDataDir('/tmp/leg'), extra: {} });
+    const env = serverEnv({ base: {}, ports: { server: 3100, proxy: 3101 }, dataDir: serverDataDir('/tmp/leg'), repoRoot: REPO_ROOT, extra: {} });
     expect(env.EMAIL__DEV_OUTBOX_PATH).toBe(devOutboxPath(serverDataDir('/tmp/leg')));
     expect(env.OBJECT_STORE__LOCAL_DIR).toBe('/tmp/leg/server/objects');
   });

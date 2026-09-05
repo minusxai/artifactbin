@@ -31,9 +31,9 @@ describe('env()', () => {
 
   it('reads the namespaced name and nothing else', async () => {
     const { env } = await import('../config');
-    vi.stubEnv('RATE_LIMITER__MUTATE_MAX', '7');
-    expect(env('RATE_LIMITER', 'MUTATE_MAX')).toBe('7');
-    expect(env('RATE_LIMITER', 'NOPE')).toBeUndefined();
+    vi.stubEnv('QUOTA__ARTIFACTS_PER_TOKEN', '7');
+    expect(env('QUOTA', 'ARTIFACTS_PER_TOKEN')).toBe('7');
+    expect(env('QUOTA', 'NOPE')).toBeUndefined();
   });
 });
 
@@ -102,12 +102,12 @@ describe('the unread notice does not cry wolf', () => {
     expect(lazy, 'a name read only on an untaken path reports as unread').toEqual([]);
   });
 
-  it('knows the door knobs by their prefix — they are read wholesale, not by name', async () => {
+  it('names a knob from the retired door vocabulary — every rate-limit number lives in a policy file now', async () => {
     const { unknownEnvNames } = await import('../config');
     const found = unknownEnvNames(
       { RATE_LIMITER__LOGIN_SEND_MAX: '5', RATE_LIMITER__QUERY_KEY: 'ip', WOBBLE__THING: 'x' },
       new Set(),
     );
-    expect(found).toEqual(['WOBBLE__THING']);
+    expect(found, 'a leftover per-door knob is LOUD, not exempted by a prefix').toEqual(['RATE_LIMITER__LOGIN_SEND_MAX', 'RATE_LIMITER__QUERY_KEY', 'WOBBLE__THING']);
   });
 });

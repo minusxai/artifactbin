@@ -2,22 +2,18 @@
 import { describe, expect, it } from 'vitest';
 import { assemble } from '@artifactbin/utils';
 import { proxyParts, type ProxyOptions } from '../src/parts';
-import { BROWSER_MINT_HEADERS, testProxyOptions } from './helpers';
+import { BROWSER_MINT_HEADERS, policyFile, testProxyOptions } from './helpers';
 
 describe('proxyParts', () => {
-  it('names are exactly ["session","anonMintDoor","rateLimit","loginRoutes","oauthRoutes","forwardedHeaders","forward"] in that order', async () => {
-    expect((await proxyParts(await testProxyOptions())).map((p) => p.name)).toEqual(['session', 'anonMintDoor', 'rateLimit', 'loginRoutes', 'oauthRoutes', 'forwardedHeaders', 'forward']);
+  it('names are exactly ["session","rateLimit","loginRoutes","oauthRoutes","forwardedHeaders","forward"] in that order', async () => {
+    expect((await proxyParts(await testProxyOptions())).map((p) => p.name)).toEqual(['session', 'rateLimit', 'loginRoutes', 'oauthRoutes', 'forwardedHeaders', 'forward']);
   });
   it('forward is LAST — positional ownership replaces the hand-kept prefix list', async () => {
     const parts = await proxyParts(await testProxyOptions());
     expect(parts.at(-1)?.name).toBe('forward');
   });
   it('overriding rateLimit with null actually removes the rate-limit verdict', async () => {
-    const options = await testProxyOptions({ env: {
-      RATE_LIMITER__ANON_MINT_MAX: '1',
-      RATE_LIMITER__ANON_MINT_WINDOW: '3600',
-      RATE_LIMITER__ANON_MINT_BURST: '1',
-    } });
+    const options = await testProxyOptions({ env: { PROXY__RATE_LIMIT_CONFIG_FILE: policyFile('mint_1.yml') } });
     const parts = await proxyParts(options);
     const limited = assemble(parts);
     expect((await limited.request('/api/tokens/anonymous', { method: 'POST', headers: BROWSER_MINT_HEADERS })).status).not.toBe(429);

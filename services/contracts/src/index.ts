@@ -5,7 +5,7 @@ export * from './sql';
 export * from './browser';
 export * from './events';
 export * from './relations';
-export * from './doors';
+export * from './rate-limits';
 export * from './agent';
 export * from './deny';
 export * from './routes';

@@ -32,13 +32,14 @@ export interface TokenContext {
 type TokenHandler = (request: Request, ctx: TokenContext) => Promise<Response>;
 
 /*
- * A DOOR IS ENFORCED IN EXACTLY ONE PLACE (P2 §H): every door the proxy's
- * doorFor() maps — ANON_MINT, MUTATE, PUBLISH, QUERY, EDIT, EXPORT, the LOGIN
- * and OAUTH ones — is counted by the PROXY, before the request is forwarded.
- * The app helpers that used to count the same doors in the same process are
- * gone (they halved every configured ceiling); what stays below is a QUOTA,
- * counted per URL inside one publish, which no proxy can see. Guarded by
- * lib/__tests__/doors-one-place.test.ts.
+ * A RATE LIMIT IS ENFORCED IN EXACTLY ONE PLACE (P2 §H): every policy the
+ * proxy's file names — anon_mint, mutate, publish, query, edit, export, card
+ * and the login/oauth ones — is counted by the PROXY, before the request is
+ * forwarded. The app helpers that used to count the same budgets in the same
+ * process are gone (they halved every configured ceiling); what stays below is
+ * a QUOTA, counted per URL inside one publish, which no proxy can see. Guarded
+ * by lib/__tests__/doors-one-place.test.ts, which reads the policy names out of
+ * services/proxy/default_rate_limits.yml.
  */
 
 /** Test hook — clears the app's in-memory web-ingest quota state. */
@@ -49,7 +50,7 @@ export function resetRateLimit(): void {
 // ── Web-ingest allowance ─────────────────────────────────────────────────────
 // Importing an asset makes THIS SERVER fetch a URL, so an identity gets a
 // bounded number of fetch ATTEMPTS per hour — attempts, not successes, because
-// the abuse shape is probing, and probes fail. A QUOTA, not a door: it is
+// the abuse shape is probing, and probes fail. A QUOTA, not a rate limit: it is
 // counted per URL INSIDE one publish request, which a proxy cannot see.
 const WEB_INGEST_WINDOW_MS = 60 * 60 * 1000;
 const webIngestTimes = new Map<string, number[]>();
@@ -76,7 +77,7 @@ function hourlyAttemptsExhausted(key: string, max: number, now: number): boolean
  *
  * Keyed on the document rather than on a caller, because the caller is
  * whichever stranger happens to be reading and the thing being protected is
- * this server's outbound fetching. It is an APP quota and not a proxy door for
+ * this server's outbound fetching. It is an APP quota and not a proxy policy for
  * the reason CLAUDE.md gives — the proxy's verdicts are per client IP and it
  * cannot see which document an address names, so "this document has done
  * enough importing for one hour" is a question only the app can ask.

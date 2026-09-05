@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { assemble } from '@artifactbin/utils';
 import { createHumanAuth, sessionStoreOf, type HumanAuth } from '../src/index';
 import { proxyParts, type ProxyOptions } from '../src/parts';
-import { testProxyOptions } from './helpers';
+import { RELAXED_POLICY_FILE, testProxyOptions } from './helpers';
 
 const BASE = 'http://localhost:4794';
 const sent: Array<{ to: string; otp?: string }> = [];
@@ -44,20 +44,20 @@ afterEach(async () => { await pg.close(); });
 
 describe('the login door is open (the invite gate is retired)', () => {
   it('sends the code even when stale launch settings remain set', async () => {
-    const open = await proxy({ INVITE__CODE: 'golden', WAITLIST__WEBHOOK_URL: 'https://hook.test/x', RATE_LIMITER__ANON_MINT_MAX: '1000' });
+    const open = await proxy({ INVITE__CODE: 'golden', WAITLIST__WEBHOOK_URL: 'https://hook.test/x', PROXY__RATE_LIMIT_CONFIG_FILE: RELAXED_POLICY_FILE });
     expect((await send(open)).status).toBe(200);
     expect(sent.map((m) => m.to)).toEqual(['i@example.com']);
   });
 });
 
-describe('the LOGIN_SEND door', () => {
+describe('the login_send policy', () => {
   it('limits code SENDS per address — five an hour — and not per address-sharing office', async () => {
-    const app = await proxy({ RATE_LIMITER__ANON_MINT_MAX: '1000' });
+    const app = await proxy({ PROXY__RATE_LIMIT_CONFIG_FILE: RELAXED_POLICY_FILE });
     const sendAs = (email: string) => app.request(`${BASE}/api/auth/email-otp/send-verification-otp`, { method: 'POST', headers: { 'content-type': 'application/json', origin: BASE }, body: JSON.stringify({ email, type: 'sign-in' }) });
     for (let i = 0; i < 5; i++) expect((await sendAs('busy@example.com')).status, `send ${i + 1}`).toBe(200);
     const denied = await sendAs('busy@example.com');
     expect(denied.status).toBe(429);
-    expect(await denied.json()).toMatchObject({ error: 'rate_limited', door: 'LOGIN_SEND' });
+    expect(await denied.json()).toMatchObject({ error: 'rate_limited', door: 'login_send' });
     expect((await sendAs('colleague@example.com')).status, 'same ip, another address').toBe(200);
     expect((await sendAs('')).status).toBe(400);
   });
@@ -65,7 +65,7 @@ describe('the LOGIN_SEND door', () => {
 
 describe('a human through the proxy', () => {
   it('logs in by OTP through /api/auth and forwards as a session actor under our usr_ ids', async () => {
-    const app = await proxy({ RATE_LIMITER__ANON_MINT_MAX: '1000' });
+    const app = await proxy({ PROXY__RATE_LIMIT_CONFIG_FILE: RELAXED_POLICY_FILE });
     const call = (path: string, body: unknown, cookie?: string) => app.request(`${BASE}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', origin: BASE, ...(cookie ? { cookie } : {}) }, body: JSON.stringify(body) });
     expect((await call('/api/auth/email-otp/send-verification-otp', { email: 'h@example.com', type: 'sign-in' })).status).toBe(200);
     const otp = sent.find((m) => m.to === 'h@example.com')!.otp!;

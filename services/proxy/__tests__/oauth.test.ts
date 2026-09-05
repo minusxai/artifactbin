@@ -6,7 +6,7 @@ import { createHumanAuth, type HumanAuth } from '../src/auth/human';
 import { consumeAuthCode, createAuthCode, createOAuthStore, isAllowedRedirectUri, sameRedirectTarget, s256 } from '../src/identity/oauth';
 import { proxyParts, type ProxyOptions } from '../src/parts';
 import { ensureProxySchema } from '../src/schema';
-import { resetTestDb, testDb, testProxyOptions } from './helpers';
+import { RELAXED_POLICY_FILE, resetTestDb, testDb, testProxyOptions } from './helpers';
 
 const BASE = 'http://localhost:4794';
 const RESOURCE = `${BASE}/mcp`;
@@ -22,7 +22,7 @@ let mintedCount = 0;
 const optionsOf = async (): Promise<ProxyOptions> => {
   const { query } = testDb();
   const base = await testProxyOptions({
-    env: { RATE_LIMITER__ANON_MINT_MAX: '1000', APP__PUBLIC_BASE_URL: BASE },
+    env: { PROXY__RATE_LIMIT_CONFIG_FILE: RELAXED_POLICY_FILE, APP__PUBLIC_BASE_URL: BASE },
     sessions: {
       resolve: async () => session ? { userId: session.userId, email: session.email, emailVerified: true } : null,
     },

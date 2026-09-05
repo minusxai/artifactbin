@@ -436,7 +436,7 @@ jobs:
           docker run -d --name ab -p 3399:3000 \
             -e DATABASE_URL=pglite://memory -e AUTH__SECRET=$(openssl rand -base64 32) \
             -e APP__PUBLIC_BASE_URL=http://127.0.0.1:3399 \
-            -e ARTIFACTS__ALLOW_PUBLIC=1 -e RATE_LIMITER__ANON_MINT_MAX=500 \
+            -e ARTIFACTS__ALLOW_PUBLIC=1 -e PROXY__RATE_LIMIT_CONFIG_FILE=/app/services/proxy/dev_rate_limits.yml \
             artifactbin:ci
           for i in $(seq 1 60); do
             code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3399/health || true)

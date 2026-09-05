@@ -38,6 +38,14 @@ export async function runDev({ appOnly, args = [] }) {
     // One dependable mailbox for a human or coding agent even when somebody
     // else owns the dev-server terminal. Never persisted in .env.
     EMAIL__DEV_OUTBOX_PATH: path.join(ROOT, '.artifactbin', 'dev-mail.jsonl'),
+    // THE DEV POLICY FILE, unless one is named. The shipped default closes the
+    // anonymous mint, and 10 is the wrong number for a laptop: this repo's own
+    // browser gates mint on every run, a few in a row exhaust the hour, the
+    // window is in memory, and the only recovery is restarting the dev server
+    // in the middle of whatever you were verifying. A .env or an explicit
+    // PROXY__RATE_LIMIT_CONFIG_FILE wins, so nothing here can reach production.
+    PROXY__RATE_LIMIT_CONFIG_FILE: process.env.PROXY__RATE_LIMIT_CONFIG_FILE
+      ?? path.join(ROOT, 'services/proxy/dev_rate_limits.yml'),
   };
   delete env.EMAIL__RESEND_BASE_URL;
   if (appOnly) {

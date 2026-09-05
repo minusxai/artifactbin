@@ -139,7 +139,7 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
     productUrl = config.deployment;
   } else {
     log(`${leg.label}: booting server :${ports.server}`);
-    const serverEnvironment = serverEnv({ base: process.env, ports, dataDir: serverDataDir(legDir), extra: config.server.env });
+    const serverEnvironment = serverEnv({ base: process.env, ports, dataDir: serverDataDir(legDir), repoRoot: REPO_ROOT, extra: config.server.env });
     const server = await startServer({
       repoRoot: REPO_ROOT,
       env: serverEnvironment,
