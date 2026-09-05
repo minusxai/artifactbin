@@ -30,12 +30,12 @@ const start = async (): Promise<Start> => {
   return (await res.json()) as Start;
 };
 
-/** The heading /api/start seeds, verbatim — the anchor an agent's first edit uses. */
-const PLACEHOLDER_H1 = '<h1 className="text-2xl font-semibold tracking-tight">Untitled</h1>';
+/** Match the seeded heading text without depending on its freshly generated id. */
+const PLACEHOLDER_H1 = '>Untitled</h1>';
 
 const retitle = async (doc: Start, heading: string) => {
   const res = await editRoute(
-    request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: doc.token, json: { edit_id: doc.edit_id, old_string: PLACEHOLDER_H1, new_string: `<h1 className="text-2xl font-semibold tracking-tight">${heading}</h1>` } }),
+    request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: doc.token, json: { edit_id: doc.edit_id, old_string: PLACEHOLDER_H1, new_string: `>${heading}</h1>` } }),
     params({ id: doc.id }),
   );
   expect(res.status).toBe(200);
@@ -77,10 +77,11 @@ describe('the page title follows the document', () => {
     );
     expect(res.status).toBe(200);
     const after = (await res.json()) as { edit_id: string };
-    await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: doc.token, json: { edit_id: after.edit_id, old_string: PLACEHOLDER_H1, new_string: '<h1 className="text-2xl font-semibold tracking-tight">A New Heading</h1>' } }),
+    const headingEdit = await editRoute(
+      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: doc.token, json: { edit_id: after.edit_id, old_string: PLACEHOLDER_H1, new_string: '>A New Heading</h1>' } }),
       params({ id: doc.id }),
     );
+    expect(headingEdit.status).toBe(200);
     expect(await pageTitle(doc.id)).toBe('Named by hand');
   });
 

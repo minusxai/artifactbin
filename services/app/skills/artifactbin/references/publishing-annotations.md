@@ -6,14 +6,17 @@ order: 3
 ---
 ## Read first
 
-Your user can select any node of a published document in their browser and
-attach a comment. The commented node carries a `data-annotation-anchor="<key>"`
-attribute in the markup — the value is only an opaque node key, never the
-comment text. **That attribute IS the anchor. Preserve it when you edit:
-keep it on the element it marks, move it with the content, and carry it
-through full rewrites.** Deleting the node (or dropping the attribute)
-orphans the comment; putting it back re-anchors it. Never add, change, or
-reuse `data-annotation-anchor` values yourself.
+Your user can select any node of a published document and attach a comment.
+Comments are sidecar relations to the node's persistent BODY `id`: creating,
+replying, resolving or reopening a comment does not rewrite the document,
+stamp its source, flush an editor, or create a document version. Preserve the
+node ID through edits and moves. Deleting that node or replacing it with a new
+ID orphans its comments; never reuse the removed ID for different content.
+
+Older documents may carry `data-annotation-anchor="<key>"`. That attribute is
+legacy read compatibility, not the current authoring model: preserve an
+existing value with its element, but never author, change or reuse one. New
+comments do not add it.
 
 Open annotations arrive INLINE on `GET [[ base ]]/api/artifacts/<id>`; when you
 have acted on one (or have a question), answer it — reply, resolve, or both
@@ -33,7 +36,7 @@ POST [[ base ]]/api/artifacts/<id>/annotations/<annotation_id>
   "snippet": "Revenue grew 40% in Q3",           ← the annotated node's text, as it reads NOW
   "quote": "grew 40% in Q3",                      ← the words they actually selected (null if none)
   "quote_found": true,                            ← are those words still in the document?
-  "anchor": { "key": "a1a2b3c4", "path": "0.3", "spanStart": 812, "spanEnd": 964 },
+  "anchor": { "nodeId": "revenue-q3", "key": null, "path": "0.3", "spanStart": 812, "spanEnd": 964 },
   "anchor_version": 7,                            ← the version it was made against
   "orphaned": false,
   "thread": [ { "body": "this number looks wrong — check the Q3 sheet",
@@ -44,8 +47,10 @@ POST [[ base ]]/api/artifacts/<id>/annotations/<annotation_id>
 
 Read them before editing. `quote` is the comment's subject — the exact words —
 while `snippet` is the whole node they sit in, recomputed on every read;
-`anchor.key` tells you which node that is (find
-`data-annotation-anchor="a1a2b3c4"` in the markup). `"quote_found": false`
+`anchor.nodeId` tells you which current element that is (`id="revenue-q3"`).
+On a historical thread it may be absent while `anchor.key` names an existing
+legacy `data-annotation-anchor`; preserve that attribute but do not create one.
+`"quote_found": false`
 means those words are already gone from the current version. An
 `"orphaned": true` annotation's node is not in the current version — the
 snippet still says what it pointed at.
@@ -75,9 +80,8 @@ Resolved annotations leave the inline list;
 `GET [[ base ]]/api/artifacts/<id>/annotations?status=all` shows history.
 
 The threads themselves are server-held beside the document — your PUTs and
-edits can never delete or alter a comment; the ONLY annotation thing living
-in the markup is the `data-annotation-anchor` key, which is yours to
-preserve, never to author. Through MCP the same call is the `annotate` tool.
+edits can never delete or alter a comment. Through MCP the same call is the
+`annotate` tool.
 
 Your user can delete a thread from their browser, and you cannot: there is no
 delete door on this side, only reply, resolve and reopen. A deleted thread is

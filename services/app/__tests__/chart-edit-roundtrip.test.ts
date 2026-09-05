@@ -126,7 +126,7 @@ describe('a chart edit through /edits', () => {
     const final = await readBack(story.id);
     expect(readQuestionChart(final.markup, PATH)!.viz).toEqual(LINE);
     // The rest of the story is still there — the whole point of a scoped splice.
-    expect(final.markup).toContain('<h1 className="text-2xl">Report</h1>');
+    expect(final.markup).toMatch(/<h1 className="text-2xl" id="[^"]+">Report<\/h1>/);
     expect(final.markup).toContain('title="Revenue"');
     expect(final.version).toBe(3); // create, edit, edit
   });

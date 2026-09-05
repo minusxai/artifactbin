@@ -172,7 +172,7 @@ const run = async () => {
     const ann = wire.annotations?.[0];
     ok(!!ann && ann.snippet.includes('Revenue grew 40%'), 'GET /api/artifacts/<id> inlines the annotation with its snippet');
     ok(wire.open_annotations === 1, 'the wire carries the open count');
-    ok(typeof ann?.anchor?.key === 'string' && wire.markup.includes(`data-annotation-anchor="${ann.anchor.key}"`), 'the markup carries only the opaque annotation anchor key');
+    ok(typeof ann?.anchor?.nodeId === 'string' && wire.markup.includes(`id="${ann.anchor.nodeId}"`), 'the comment addresses a persisted source id');
 
     // The case the ids exist for: a full-replace PUT that keeps the attribute keeps the annotation.
     const rewritten = wire.markup.replace('grew 40%', 'grew 34%');
@@ -257,16 +257,16 @@ const run = async () => {
     await page.locator('[aria-label="Save annotation"]').click();
     await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 0, 10000);
 
-    // BOTH writes survived, in order: the drain landed the keystrokes, then
-    // the anchor was stamped against the fresh head.
+    // Commenting is relation-only. The editor may still hold these keystrokes
+    // until its ordinary autosave/exit; the comment must not discard them.
     const afterMid = await until(
       async () => (await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: { Authorization: `Bearer ${token}` } })).json()),
       (w) => (w?.annotations?.length ?? 0) === 1,
       15000,
     );
     ok((afterMid?.annotations?.length ?? 0) === 1, 'the mid-edit comment reached storage');
-    ok(typeof afterMid?.markup === 'string' && afterMid.markup.includes('MIDSENTENCE'),
-      'the typing before it survived: the editor was drained before the anchor was stamped');
+    ok((await frame.locator('#figure').innerText()).includes('MIDSENTENCE'),
+      'uncommitted typing survives a relation-only comment');
 
     // …and the layer is ambient INSIDE the editor: the node just commented on
     // is tinted while the document is still editable.
@@ -275,6 +275,12 @@ const run = async () => {
 
     await page.locator('[aria-label="Exit edit mode"]').click();
     await until(() => page.evaluate(() => location.hash), (h) => h === '');
+    const persistedTyping = await until(
+      async () => (await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: { Authorization: `Bearer ${token}` } })).json()),
+      (w) => typeof w?.markup === 'string' && w.markup.includes('MIDSENTENCE'),
+      15000,
+    );
+    ok(persistedTyping?.markup?.includes('MIDSENTENCE'), 'ordinary editor exit persists the typing without comment-triggered writes');
 
     // ── a logged-out reader sees nothing ──────────────────────────────────
     const strangerCtx = await browser.newContext();

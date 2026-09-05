@@ -137,7 +137,7 @@ describe('document editing', () => {
     if (row === null || 'conflict' in row) throw new Error('replace failed');
     expect(row?.version).toBe(2);
     expect(row?.source).toContain('Edited');
-    expect(row?.source).toContain('<h1>');
+    expect(row?.source).toMatch(/<h1\s[^>]*id="[^"]+"[^>]*>/);
 
     const other = await createUser({ email: 'other@x.com' });
     expect(await replaceArtifactFor({ tokenId: '', userId: other.id }, created.id, parsed)).toBeNull();

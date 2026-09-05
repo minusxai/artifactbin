@@ -14,6 +14,7 @@ import {
   type ArtifactInput, type ArtifactRow, type ArtifactSummary, type DatasetAccess, type EditInput, type EditOutcome, type ReplaceOpts, type ShareEntry, type ShareRole, type TokenActor, type Visibility,
 } from '@/lib/artifacts';
 import { actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type AnnotationAction, type AnnotationAuthor } from '@/lib/annotations';
+import { hasAmbiguousLegacyAliases, stampNodeIds } from '@/lib/story/node-ids';
 import { isMutationRefused, mutateDataset } from '@/lib/story/dataset-mutate';
 import type { SourceRepair } from '@/lib/jsx/repair';
 import type { Scalar } from '@/lib/story/dataflow';
@@ -29,6 +30,7 @@ import { CONTENT_FIELDS, parseContentInput, type StoredContent } from '@/lib/sto
 import { collectExternalAssetUrls } from '@/lib/story/external-images';
 import type { AssetWarning } from '@/lib/web-assets';
 import { refreshWebAssets, type WebAssetImporter } from '@/lib/web-assets';
+import { getDb } from '@/lib/db';
 
 const safeJson = (s: string): unknown => { try { return JSON.parse(s); } catch { return null; } };
 
@@ -394,6 +396,14 @@ export async function replaceArtifactWithBody(
   const owned = governs || body.parent_id !== undefined ? await getOwnedArtifactFor(actor, id) : null;
   if (governs && !owned) return json({ error: 'owner_only' }, 403);
   const owner = writerFor(current);
+  const sentMarkup = body.markup;
+  let normalizeMarkup: ((source: string) => string) | undefined;
+  if(typeof body.markup==='string') {
+    if(hasAmbiguousLegacyAliases(body.markup)) return json({error:'ambiguous_node_alias'},409);
+    const db=await getDb();
+    const lifetime=await db.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[current.id]);
+    normalizeMarkup = source => stampNodeIds(source,{previousSource:current.source,reservedIds:lifetime.rows.map(row=>row.source_id),retireLegacyAliases:false}).source;
+  }
   /*
    * A FOLDER HAS NO CONTENT, AND THE REPLACE DOOR IS WHERE THAT IS ENFORCED.
    *
@@ -423,6 +433,7 @@ export async function replaceArtifactWithBody(
   const parsed: StoredContent | Response = current.format === 'folder'
     ? { format: 'folder', content: '', source: '', meta: {}, derivedTitle: null }
     : await parseContentInput(body, {
+      normalizeMarkup,
       loadRef: refLoaderForActor(owner),
       importAsset: assetImporterFor(owner.tokenId, owner.userId),
       resolveFont: fontResolver(),
@@ -513,7 +524,7 @@ export async function replaceArtifactWithBody(
     // caller already had: still the answer to "what do I quote next", which is
     // the only thing it is for.
     edit_id: row.edit_id,
-    ...markupEcho(body.markup, row.source),
+    ...markupEcho(sentMarkup, row.source),
     // A dataset echoes its WRITE acl too: an agent that just set it should not
     // have to re-read to see what it got.
     ...(row.format === 'dataset' ? { access: row.access } : {}),
@@ -539,7 +550,9 @@ export async function createArtifactFromBody(
   request: Request,
 ): Promise<Response> {
   if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
+  const sentMarkup=body.markup;
   const parsed = await parseContentInput(body, {
+    normalizeMarkup: source => stampNodeIds(source,{retireLegacyAliases:true}).source,
     creating: true,
     loadRef: refLoaderForActor(actor),
     importAsset: assetImporterFor(actor.tokenId, actor.userId),
@@ -568,7 +581,7 @@ export async function createArtifactFromBody(
     ancestor_ids: placement.ancestor_ids,
   });
   return json({
-    ...createdArtifactWire(row, base, body.markup),
+    ...createdArtifactWire(row, base, sentMarkup),
     ...assetWarningsEcho(parsed.warnings),
     ...sourceRepairsEcho(parsed.repairs),
   }, 201);
@@ -612,14 +625,24 @@ function parseEditBody(body: Record<string, unknown>): EditInput | null {
   const editId = body.edit_id;
   if (typeof editId !== 'string' || editId.length === 0) return null;
 
+  const mentionsDiff = Object.hasOwn(body, 'old_string') || Object.hasOwn(body, 'new_string');
+  const mentionsSource = Object.hasOwn(body, 'source');
+  const mentionsBatch = Object.hasOwn(body, 'edits');
+  if ([mentionsDiff, mentionsSource, mentionsBatch].filter(Boolean).length > 1) return null;
   const hasDiff = typeof body.old_string === 'string' && typeof body.new_string === 'string';
   const hasSource = typeof body.source === 'string';
-  if (hasDiff && hasSource) return null; // at most one content form
+  const hasBatch = Array.isArray(body.edits) && body.edits.length > 0 && body.edits.length <= 64
+    && body.edits.every((edit) => !!edit && typeof edit === 'object'
+      && typeof (edit as Record<string, unknown>).old_string === 'string'
+      && typeof (edit as Record<string, unknown>).new_string === 'string');
+  if ((mentionsDiff && !hasDiff) || (mentionsSource && !hasSource) || (mentionsBatch && !hasBatch)) return null;
   const change = hasDiff
     ? { oldString: body.old_string as string, newString: body.new_string as string }
     : hasSource
       ? { newSource: body.source as string }
-      : undefined;
+      : hasBatch
+        ? { edits: (body.edits as Array<Record<string, string>>).map((edit) => ({ oldString: edit.old_string, newString: edit.new_string })) }
+        : undefined;
 
   // Document-level attributes; each optional, each only when well-typed.
   const meta: NonNullable<EditInput['meta']> = {};
@@ -659,7 +682,7 @@ export async function respondToEdit(
     case 'doc_changed':
       return json({ error: outcome.reason, edit_id: outcome.head.editId, source: outcome.head.source, version: outcome.head.version }, 409);
     case 'bad_diff':
-      return json({ error: 'bad_diff', detail: outcome.detail }, 400);
+      return json({ error: 'bad_diff', detail: outcome.detail, ...(outcome.editIndex === undefined ? {} : { edit_index: outcome.editIndex }) }, 400);
     case 'not_editable':
       return json({ error: 'not_editable' }, 400);
   }

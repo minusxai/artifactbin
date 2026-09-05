@@ -77,8 +77,8 @@ describe('token management', () => {
 describe('artifact deletion', () => {
   it('trashes an artifact — the public link dies at once, the version history goes at the purge', async () => {
     const t = await mintToken('t');
-    const art = await create(t.token, '<h1>v1</h1>');
-    await put(t.token, art.id, '<h1>v2</h1>');
+    const art = await create(t.token, '<h1 id="head">v1</h1>');
+    await put(t.token, art.id, '<h1 id="head">v2</h1>');
 
     const res = await deleteArtifactRoute(
       request(`/api/artifacts/${art.id}`, { method: 'DELETE', token: t.token }),
@@ -130,8 +130,8 @@ describe('versions + revert', () => {
 
   it('reverts to an archived version as a NEW version; the link stays stable', async () => {
     const t = await mintToken('t');
-    const art = await create(t.token, '<h1>v1</h1>');
-    await put(t.token, art.id, '<h1>v2</h1>');
+    const art = await create(t.token, '<h1 id="head">v1</h1>');
+    await put(t.token, art.id, '<h1 id="head">v2</h1>');
 
     const res = await revertRoute(
       request(`/api/artifacts/${art.id}/revert`, { method: 'POST', token: t.token, json: { version: 1 } }),
@@ -146,7 +146,7 @@ describe('versions + revert', () => {
     expect(body.url).toBe(art.url);
 
     const read = await getArtifactRoute(request(`/api/artifacts/${art.id}`, { token: t.token }), params({ id: art.id }));
-    expect((await read.json()).markup).toBe('<h1>v1</h1>');
+    expect((await read.json()).markup).toBe('<h1 id="head">v1</h1>');
 
     // v2 was archived by the revert, so both prior states remain recoverable.
     const versions = await (
@@ -183,8 +183,8 @@ describe('user-scoped versions + revert (dashboard)', () => {
   it('lists and reverts across any of the user’s tokens', async () => {
     const user = await createUser({ email: 'v@minusx.ai' });
     const t = await mintToken('laptop', user.id);
-    const art = await create(t.token, '<h1>v1</h1>');
-    await put(t.token, art.id, '<h1>v2</h1>');
+    const art = await create(t.token, '<h1 id="head">v1</h1>');
+    await put(t.token, art.id, '<h1 id="head">v2</h1>');
 
     const versions = await listVersionsFor({ tokenId: '', userId: user.id }, art.id);
     expect(versions?.map((v) => v.version)).toEqual([1]);
@@ -194,7 +194,7 @@ describe('user-scoped versions + revert (dashboard)', () => {
     if (isVersionNotArchived(reverted)) return;
     expect(reverted?.version).toBe(3);
     // A document's truth is `source`; markup rows keep `content` empty.
-    expect(reverted?.source).toBe('<h1>v1</h1>');
+    expect(reverted?.source).toBe('<h1 id="head">v1</h1>');
   });
 
   it("returns null for another user's artifact", async () => {

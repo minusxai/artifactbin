@@ -98,7 +98,6 @@ const layer = (frame: HTMLIFrameElement, over: Partial<Parameters<typeof Annotat
     frameRef={{ current: frame }}
     sessionNonce={NONCE}
     railOpen={false}
-    currentEditId="e1"
     liveAnnotations={null}
     showViewComments={false}
     topOffset={100}
@@ -108,7 +107,7 @@ const layer = (frame: HTMLIFrameElement, over: Partial<Parameters<typeof Annotat
 );
 
 const SELECTION = {
-  kind: 'text' as const, path: '1', tag: 'p',
+  kind: 'text' as const, path: '1', nodeId: 'node-1', tag: 'p',
   rect: { x: 5, y: 6, width: 200, height: 40 },
   className: '', style: '', ancestors: [],
 };
@@ -266,14 +265,14 @@ describe('the composer writes markdown, and sends TEXT', () => {
 
   it('⌘↵ still posts the RAW markdown — the wire never carries the rendering', async () => {
     const { frame } = makeFrame();
-    render(layer(frame, { railOpen: true, currentEditId: 'e_head', initialSelection: SELECTION }));
+    render(layer(frame, { railOpen: true, initialSelection: SELECTION }));
     await flush();
     const field = await typeDraft('Fixed in `lib/config.ts`:\n\n```ts\nconst MAX = 10;\n```');
     fireEvent.keyDown(field, { key: 'Enter', metaKey: true });
     await flush();
     const create = fetchCalls.find((c) => c.url.endsWith('/api/my/artifacts/doc1/annotations') && c.init?.method === 'POST');
     expect(JSON.parse(String(create!.init!.body))).toEqual({
-      path: '1', edit_id: 'e_head', body: 'Fixed in `lib/config.ts`:\n\n```ts\nconst MAX = 10;\n```',
+      path: '1', node_id: 'node-1', body: 'Fixed in `lib/config.ts`:\n\n```ts\nconst MAX = 10;\n```',
     });
   });
 

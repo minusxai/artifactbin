@@ -12,6 +12,15 @@ import { z } from 'zod';
 import { OPERATIONS } from '@/lib/operations/registry';
 
 describe('the registry is curated, not generated', () => {
+  it('teaches atomic batches and persistent ids in the model-facing descriptions',()=>{
+    const edit=OPERATIONS.find(op=>op.name==='edit_artifact')!.description;
+    expect(edit).toMatch(/edits.*64/);
+    expect(edit).toMatch(/final.*validat/i);
+    expect(edit).toMatch(/preserve.*ids/i);
+    const read=OPERATIONS.find(op=>op.name==='get_artifact')!.description;
+    expect(read).toContain('anchor.nodeId');
+    expect(read).toMatch(/relations.*never.*source/i);
+  });
   it('names are unique snake_case verbs', () => {
     const names = OPERATIONS.map((o) => o.name);
     expect(new Set(names).size).toBe(names.length);
