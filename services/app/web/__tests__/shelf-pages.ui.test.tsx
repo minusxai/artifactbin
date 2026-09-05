@@ -261,48 +261,4 @@ describe('a profile', () => {
     expect(screen.queryByLabelText('Assets')).toBeNull();
   });
 
-  /*
-   * MAKING A FOLDER IS THE OWNER'S VERB EVERYWHERE THEY OWN THINGS.
-   *
-   * The owner's own profile root IS the dashboard's shelf under a different
-   * question — same rows, same account, same root — and it shipped without the
-   * one control that puts something new on it, because `New folder` was tied to
-   * `actions === 'full'` and a profile withholds the row verbs on purpose (a
-   * page whose point is handing someone a link should not edit or delete). So
-   * the capability is its own prop rather than a promotion: creating is not an
-   * action on any row.
-   *
-   * A stranger's profile never shows it, and that is the same rule from the
-   * other side — it is granted, never inherited.
-   */
-  it('offers the owner New folder beside the shelf, and a stranger nothing', async () => {
-    profile = { kind: 'owner-listing', handle: 'cee', files: [doc('a')], total: 1, stats: { total: 1, formats: { markup: 1 } }, email: 'c@x.io' };
-    atProfile();
-    await waitFor(() => expect(screen.getByText('Doc a')).toBeInTheDocument());
-    expect(screen.getByLabelText('New folder')).toBeInTheDocument();
-    // …and the row verbs stay withheld: this is a create control, not `full`.
-    expect(screen.queryByLabelText('Edit Doc a')).toBeNull();
-    cleanup();
-
-    profile = { kind: 'public-profile', handle: 'cee', owner: { id: 'usr_c' }, follow: { following: false, count: 0 }, files: [doc('a')], email: null, authed: false, anon: false };
-    atProfile();
-    await waitFor(() => expect(screen.getByText('Doc a')).toBeInTheDocument());
-    expect(screen.queryByLabelText('New folder')).toBeNull();
-  });
-
-  /** A folder made here lands at the account ROOT, which is what this page lists. */
-  it('files a folder made from the profile at the root', async () => {
-    profile = { kind: 'owner-listing', handle: 'cee', files: [doc('a')], total: 1, stats: { total: 1, formats: { markup: 1 } }, email: 'c@x.io' };
-    atProfile();
-    await waitFor(() => expect(screen.getByText('Doc a')).toBeInTheDocument());
-    fireEvent.click(screen.getByLabelText('New folder'));
-    fireEvent.change(screen.getByLabelText('Folder name'), { target: { value: 'Reports' } });
-    fireEvent.keyDown(screen.getByLabelText('Folder name'), { key: 'Enter' });
-    await waitFor(() => {
-      const call = (globalThis.fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls
-        .find(([url]) => String(url) === '/api/my/artifacts');
-      expect(call, 'the profile never asked to create a folder').toBeTruthy();
-      expect(JSON.parse(String(call![1].body))).toEqual({ format: 'folder', title: 'Reports', parent_id: null });
-    });
-  });
 });

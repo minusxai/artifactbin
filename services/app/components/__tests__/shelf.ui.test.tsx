@@ -157,6 +157,11 @@ describe('Shelf — data and capabilities', () => {
     );
     fireEvent.click(screen.getByLabelText('More actions for Doc b'));
     fireEvent.click(screen.getByLabelText('Move Doc b'));
+    // Grid cards clip their contents to preserve the rounded thumbnail. The
+    // picker must escape that clipping context and float at viewport level.
+    const picker = screen.getByRole('dialog', { name: 'Move to folder' });
+    expect(picker.parentElement).toBe(document.body);
+    expect(picker).toHaveClass('fixed', 'z-[70]');
     // It opens on where the row sits today.
     expect(screen.getByLabelText('Move to Drafts').getAttribute('aria-current')).toBe('location');
     fireEvent.click(screen.getByLabelText('Move to Archive'));
