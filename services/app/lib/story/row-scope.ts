@@ -111,6 +111,10 @@ export function analyzeRowScopes(nodes: JsxNode[], columns?: Record<string, impo
     }
     const run = ref(attr(node, 'run'));
     if (run && inColumn && scope) {
+      const inputType = attr(node, 'type');
+      if (!['Select', 'input', 'textarea', 'select'].includes(node.tag) || (node.tag === 'input' && inputType !== undefined && inputType !== 'text' && inputType !== 'number')) {
+        errors.push('Column run= supports Select, input type="text" or "number", textarea, and native select');
+      }
       if (typeof scope.key !== 'string' || !scope.key) errors.push('editable DataTable requires rowKey=');
       else if (columns && !columns[scope.table]?.some((c) => c.name === scope.key)) errors.push(`rowKey "${scope.key}" is absent from $${scope.table}`);
       if (!(mutationTables[run] ??= []).includes(scope.table)) mutationTables[run].push(scope.table);

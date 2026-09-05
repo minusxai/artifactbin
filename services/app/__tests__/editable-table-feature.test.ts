@@ -68,4 +68,12 @@ describe('editable DataTable feature',()=>{
     const same=await Promise.all([update('set_status','backlog',current),update('set_status','done',current)]);
     expect(same.map(r=>r.status).sort()).toEqual([200,409]);
   });
+  it('rejects unsupported editors and a generic mutation wired as a cell editor',async()=>{
+    const t=await mintToken('editors');const ds=await create(t.token,{dataset:[{id:1,status:'backlog'}],access:'readwrite'});
+    const source=markup(ds.id);
+    for(const bad of [source.replace('<Select value=','<Slider value='),source.replace('<Select value=','<Button value='),source.replace('<Select value=','<input type="checkbox" value='),source.replace('status=$_value where id=$_row.id and status is not distinct from $_row.status',"status='done'")]) {
+      const res=await createArtifact(request('/api/artifacts',{method:'POST',token:t.token,json:{markup:bad}}));
+      expect(res.status,await res.clone().text()).toBe(400);
+    }
+  });
 });

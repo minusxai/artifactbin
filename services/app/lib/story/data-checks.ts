@@ -63,6 +63,10 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
   const scoped = analyzeRowScopes(body, columns);
   details.push(...scoped.errors);
   const rowSchemas: Record<string, DatasetColumn[]> = {};
+  for (const name of Object.keys(scoped.mutationTables)) {
+    const mutation = mutations.find((m) => m.name === name);
+    if (mutation && !mutationUsesRow(mutation.sql)) details.push(`Column run="$${name}" requires a row mutation using $_row or $_value`);
+  }
   for (const mutation of mutations) {
     if (!mutationUsesRow(mutation.sql)) continue;
     const names = scoped.mutationTables[mutation.name] ?? [];
