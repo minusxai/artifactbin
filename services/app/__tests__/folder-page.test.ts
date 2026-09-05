@@ -112,6 +112,11 @@ describe('a folder has no content', () => {
     expect(row.visibility).toBe('unlisted');
     expect(row.ancestor_ids).toEqual([parent.id]);
     expect(row.format).toBe('folder');
+    // This door is the REPLACE door, so it does what a replace does — the
+    // version moves. That is the honest cost of an agent having one door for
+    // every write; a person renaming from the page takes PATCH below, which
+    // moves nothing.
+    expect(row.version).toBe(2);
   });
 
   it('renames from the browser through PATCH {title} — metadata-only, no version bump', async () => {

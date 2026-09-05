@@ -229,7 +229,7 @@ const editArtifactOp: Operation = {
     { status: 409, code: 'doc_changed', fix: 'the touched node changed under you — rebase on the returned source + edit_id and retry' },
     { status: 409, code: 'stale_edit_id', fix: 'your edit_id is not the head — take the returned edit_id and source' },
     { status: 400, code: 'bad_diff', fix: 'old_string must appear exactly once — widen it until it is unique' },
-    { status: 400, code: 'not_editable', fix: 'only markup artifacts take edits — replace a data tier whole instead' },
+    { status: 400, code: 'not_editable', fix: 'only markup artifacts take edits — a data tier is replaced whole, and a folder has no content at all (rename one with update_artifact {title})' },
     INVALID_JSX,
     // An edit re-publishes the whole document, refs included, so it answers
     // this exactly as create and replace do.

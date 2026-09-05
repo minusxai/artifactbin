@@ -177,31 +177,29 @@ const placed = await page.evaluate(async (id) => (await (await fetch(`/api/my/ar
 check(placed.parent_id === reports.id, 'and the row really moved (parent_id names the folder)');
 
 // ── 5. a folder is read by its own ACL, and lists by the reader's ─────────
-// A folder page IS a document, so "who may open it" is the artifact's own
-// visibility; what it LISTS is decided per viewer on the server.
+// A folder's PAGE is app chrome and its ROW is an ordinary artifact, so "who
+// may open it" is the artifact's own visibility; what it LISTS is decided per
+// viewer on the server and inlined into the HTML.
 const shelf = await api('/api/artifacts', { format: 'folder', title: 'Shelf', visibility: 'public' });
 const shown = await api('/api/artifacts', { title: 'Public Child', markup: '<h1>public child</h1>', visibility: 'public', parent_id: shelf.id });
 check(shown.parent_id === shelf.id, 'a document is filed under the folder at publish');
 await api('/api/artifacts', { title: 'Hidden Child', markup: '<h1>hidden child</h1>', parent_id: shelf.id });
 
-// The OWNER is served the shell, so the listing is in the document frame.
+// EVERYONE gets the app page for a folder — there is no document to serve —
+// and the listing is in the first HTML byte.
 await page.goto(`${BASE}/a/${shelf.id}`, { waitUntil: 'load' });
-const ownerFrame = page.frameLocator('iframe[title="artifact"]');
-await ownerFrame.locator('[aria-label="Open Public Child"]').waitFor({ timeout: 20000 });
-await ownerFrame.locator('[aria-label="Open Hidden Child"]').waitFor({ timeout: 20000 });
+check((await page.locator('iframe[title="artifact"]').count()) === 0, 'a folder is never framed — it has no document');
+await page.locator('[aria-label^="Open Public Child"]').waitFor({ timeout: 20000 });
+await page.locator('[aria-label^="Open Hidden Child"]').waitFor({ timeout: 20000 });
 check(true, 'the owner sees every child of their folder');
-// The glyph is resolved by the SERVER for <Files>, which names no <Icon>: a
-// listing that draws no glyph is the failure this cannot see any other way.
-const glyphs = await ownerFrame.locator('[aria-label="Open Hidden Child"] [data-glyph] svg').count();
-check(glyphs > 0, 'a row with no card draws its format glyph');
 
-// A STRANGER reads the public folder top-level and sees the PUBLIC child only:
-// unlisted and private children are listed nowhere, and a folder page is a
-// listing.
+// A STRANGER gets the same page and sees the PUBLIC child only: unlisted and
+// private children are listed nowhere.
 const strangerFolder = await stranger.goto(`${BASE}/a/${shelf.id}`, { waitUntil: 'load' });
 check(strangerFolder.status() === 200, 'a public folder opens for a stranger');
-await stranger.waitForSelector('[aria-label="Open Public Child"]', { timeout: 20000 });
+await stranger.waitForSelector('[aria-label^="Open Public Child"]', { timeout: 20000 });
 check(!(await stranger.textContent('body')).includes('Hidden Child'), 'a stranger never sees a private child in the listing');
+check((await stranger.locator('[aria-label="Rename folder"]').count()) === 0, 'and is offered none of the owner\u2019s verbs on it');
 
 // A PRIVATE folder is the uniform 404, exactly like a private document.
 const vault = await api('/api/artifacts', { format: 'folder', title: 'Vault' });
