@@ -508,7 +508,10 @@ export async function replaceArtifactWithBody(
   return json({
     id: row.id, url: `${base}/a/${row.id}`, version: row.version, visibility: row.visibility,
     // A replace moves the head pointer — hand back the new one so the caller
-    // can keep editing without a re-read.
+    // can keep editing without a re-read. A FOLDER's metadata write moves
+    // neither the version nor this pointer, so what comes back is the head the
+    // caller already had: still the answer to "what do I quote next", which is
+    // the only thing it is for.
     edit_id: row.edit_id,
     ...markupEcho(body.markup, row.source),
     // A dataset echoes its WRITE acl too: an agent that just set it should not
