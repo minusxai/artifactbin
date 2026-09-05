@@ -30,8 +30,33 @@ export function configuredServiceUrls(): ServiceUrls {
   return { sql: SQL_SERVICE_URL || null, browser: BROWSER_SERVICE_URL || null, events: EVENTS_SERVICE_URL || null };
 }
 
+/** The order a failure is reported in — the order the services are listed here. */
+const SERVICE_NAMES: readonly ServiceName[] = ['sql', 'browser', 'events'];
+
+/**
+ * One service's own `/health`. Healthy is a 2xx inside the deadline and
+ * nothing else: a refused connection, a timeout, a 500 and a 404 are the same
+ * answer to "can a user be served" — no. The probe carries no credential;
+ * every service answers `/health` before its secret check.
+ */
+async function probe(base: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${base.replace(/\/+$/, '')}/health`, {
+      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+      redirect: 'manual',
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** Probe every configured service's `/health` in parallel; never throws. */
 export async function stackHealth(urls: ServiceUrls = configuredServiceUrls()): Promise<StackHealth> {
-  void urls;
-  throw new Error('api-health: implement stackHealth');
+  const healthy = await Promise.all(SERVICE_NAMES.map((name) => {
+    const base = urls[name];
+    return base ? probe(base) : Promise.resolve(true);
+  }));
+  const failing = SERVICE_NAMES.filter((_, index) => !healthy[index]);
+  return { ok: failing.length === 0, failing };
 }

@@ -9,6 +9,20 @@
   Schema applies additively on boot; there are no migration scripts, ever.
 - **Exactly one server process may own the PGLite directory.** CLI tools go
   through HTTP for this reason; horizontal scaling requires `DATABASE_URL`.
+- **Two health URLs, answering two different questions.** `/health` on any
+  process — proxy, app, sql, browser — is THAT process's own liveness, and it
+  is what an orchestrator should restart a container on: it touches neither
+  the database nor the object store, so a storage blip never restarts a server
+  that would have recovered on its own. `/api/health` is the STACK's
+  readiness: it arrives through the proxy, is answered by the app, and the app
+  first asks every service it was configured with (`SQL__SERVICE_URL`,
+  `BROWSER__SERVICE_URL`, `EVENTS__SERVICE_URL` — an unset one runs in-process
+  and needs no probe) for its own `/health`, in parallel, with a two-second
+  deadline. It is blind by design: `200 {"ok":true}` or `503 {"ok":false}`,
+  never a service name, because topology is nobody's business but yours. Point
+  an uptime monitor at `/api/health` and read the app's log to learn WHICH hop
+  failed — `[health] upstream unhealthy: sql, events`, logged only when one
+  does.
 - `npm run validate` type-checks (never `npm run build` to verify);
   `npm test` runs the Vitest suite against in-memory PGLite.
 - **Live editing needs LISTEN/NOTIFY**, which both storage modes provide

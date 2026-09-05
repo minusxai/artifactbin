@@ -10,9 +10,9 @@
  *
  * Seeded RED by the orchestrator.
  */
-import { createServer, type Server } from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { request } from '@/__tests__/harness';
+import { withHttpServer, type RunningServer } from '@/__tests__/net';
 import { GET as apiHealth } from '@/app/api/health/route';
 import { stackHealth } from '@/lib/health';
 
@@ -25,24 +25,28 @@ vi.mock('@/lib/config', async (importOriginal) => ({
   get EVENTS_SERVICE_URL() { return urls.events; },
 }));
 
-const servers: Server[] = [];
+const servers: RunningServer[] = [];
 const seen: Array<Record<string, string | string[] | undefined>> = [];
 afterEach(async () => {
-  for (const s of servers.splice(0)) await new Promise((resolve) => s.close(() => resolve(null)));
+  for (const s of servers.splice(0)) await s.close();
   seen.length = 0;
   delete urls.sql; delete urls.browser; delete urls.events;
   vi.restoreAllMocks();
 });
 
-/** A throwaway service whose `/health` answers `status` after `delayMs`. */
+/**
+ * A throwaway service whose `/health` answers `status` after `delayMs`. The
+ * socket belongs to `__tests__/net` (process-socket rule 1): a slow leg here
+ * is abandoned mid-flight by the probe's deadline, and only that fixture's
+ * close tears the live connection down instead of waiting on it.
+ */
 async function serve(status: number, delayMs = 0): Promise<string> {
-  const s = createServer((req, res) => {
+  const running = await withHttpServer((req, res) => {
     seen.push(req.headers);
     setTimeout(() => { res.statusCode = req.url === '/health' ? status : 404; res.setHeader('content-type', 'application/json'); res.end('{"ok":true}'); }, delayMs);
   });
-  await new Promise<void>((resolve) => s.listen(0, '127.0.0.1', () => resolve()));
-  servers.push(s);
-  return `http://127.0.0.1:${(s.address() as { port: number }).port}`;
+  servers.push(running);
+  return running.base;
 }
 
 describe('stackHealth', () => {
