@@ -157,7 +157,12 @@ ok((await p.locator('[aria-label="Log in"]').count()) === 0, 'no duplicate "Log 
 await p.keyboard.press('Escape');
 // One flow for both: a verified code for an unknown address creates the account.
 await loginViaEmail(p, B, sink, EMAIL);
-ok((await p.textContent('body')).includes(EMAIL), 'a first login with a code creates the account and signs you in');
+// SIGNED IN IS THE MASTHEAD'S IDENTITY LINE. It printed the address once; it
+// prints the account's HANDLE now, linking to the profile (components/HeaderBar),
+// so the address is no longer the thing to look for — and its ABSENCE is no
+// longer proof of being signed out either.
+const signedIn = async () => (await p.locator('[aria-label="Open your profile"]').count()) === 1;
+ok(await signedIn(), 'a first login with a code creates the account and signs you in');
 ok((await p.locator('[aria-label="Password"]').count()) === 0, 'no password is asked for anywhere');
 const claimToken = await mint();
 await J('/api/artifacts', { method: 'POST', body: JSON.stringify({ title: 'Claimed artifact', markup: '<h1>claimed</h1>' }) }, claimToken);
@@ -173,10 +178,10 @@ if (await revoke.count()) {
 } else ok(false, 'tokens page offers revoke');
 await p.click('[aria-label="Open menu"]');
 await p.click('[aria-label="Sign out"]'); await p.waitForTimeout(3000);
-ok(!(await p.textContent('body')).includes(EMAIL), 'sign out clears the session');
+ok(!(await signedIn()) && (await p.locator('[aria-label="Log in from header"]').count()) === 1, 'sign out clears the session');
 // Logging back in to the SAME address must reuse the account, not make a second.
 await loginViaEmail(p, B, sink, EMAIL);
-ok((await p.textContent('body')).includes(EMAIL), 'log back in with a fresh code works');
+ok(await signedIn(), 'log back in with a fresh code works');
 
 // ───────────────────────────── VIEWER ─────────────────────────────
 console.log('█ SANDBOX');

@@ -66,11 +66,22 @@ export async function loginViaEmail(page, base, sink, email) {
   // the SESSION has landed — not when the URL changed, and not when the chrome
   // is up: the menu button renders before the session fetch answers, and a
   // gate that read the DOM at that moment found the header without its email.
-  // The header shows the signed-in address, so that is the thing to wait for;
-  // a timeout is named rather than swallowed, because the assertion that
-  // follows would otherwise fail one step later with nothing to say why.
-  await page.waitForFunction((e) => document.body.textContent?.includes(e), email, { timeout: 20_000 }).catch(() => {
-    throw new Error(`logged in as ${email}, but the page never showed the session within 20s (url ${page.url()})`);
-  });
+  //
+  // WHAT THE HEADER SAYS IS THE HANDLE, and the email only where there is none
+  // yet — so EITHER is the session having landed. Waiting on the address alone
+  // was right while the masthead printed it, and turned every logging-in gate
+  // red the moment it printed `@handle` instead: fourteen gates failing at the
+  // login step for a change in one line of chrome. A timeout is named rather
+  // than swallowed, because the assertion that follows would otherwise fail a
+  // step later with nothing to say why.
+  await page
+    .waitForFunction(
+      (e) => Boolean(document.querySelector('[aria-label="Open your profile"]')) || document.body.textContent?.includes(e),
+      email,
+      { timeout: 20_000 },
+    )
+    .catch(() => {
+      throw new Error(`logged in as ${email}, but the page never showed the session within 20s (url ${page.url()})`);
+    });
   return email;
 }
