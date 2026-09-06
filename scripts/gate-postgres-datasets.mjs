@@ -87,6 +87,7 @@ try {
   await owner.getByLabel('Use SSL', { exact: true }).uncheck();
   const secretResponse = owner.waitForResponse(response => new URL(response.url()).pathname === '/api/my/secrets' && response.request().method() === 'POST');
   const discovery = await uiResponse(owner, '/api/my/datasets/discover', () => owner.getByLabel('Test and discover', { exact: true }).click());
+  assert.match(await owner.getByLabel('Dataset connection', { exact: true }).getByRole('status').innerText(), /Connected.*2 tables/);
   const credential = await secretResponse;
   assert.equal(credential.status(), 201); secretFree(await credential.json());
   await owner.getByLabel('Password status', { exact: true }).waitFor();
@@ -122,6 +123,14 @@ try {
   assert.ok(!Object.hasOwn(metadata.body.meta.catalog.connection, 'password'));
   assert.equal((await guestApi(`/a/${datasetId}/tables`, { sql: 'select * from orders' })).status, 404, 'private dataset must reject an anonymous reader');
   assert.equal((await ownerApi(owner, `/api/my/artifacts/${datasetId}/sharing`, 'PUT', { visibility: 'unlisted' })).status, 200);
+  await guest.goto(`${base}/a/${datasetId}`, { waitUntil: 'load' });
+  await previewContains(guest, '120');
+  await guest.getByLabel('Browse dataset schema', { exact: true }).click();
+  const schemaBrowser = await guest.getByLabel('Dataset schema browser', { exact: true }).innerText();
+  for (const name of ['sales', 'orders', 'region', 'amount', 'support', 'tickets', 'subject']) assert.ok(schemaBrowser.includes(name));
+  assert.ok(!schemaBrowser.includes('customer_secret'));
+  assert.equal(await guest.getByLabel('Edit dataset', { exact: true }).count(), 0);
+  log('read-only schema browser lists all exposed relations and columns without editor access');
 
   const markup = '<Helmet><Value name="region" type="string" default="west" />'
     + `<Query name="orders" source="${datasetId}">{\`select id, region, amount from orders where $region is null or region=$region order by id\`}</Query></Helmet>`
@@ -157,13 +166,13 @@ try {
   await owner.getByLabel('Add notebook cell', { exact: true }).click();
   await owner.getByLabel('Cell name 1', { exact: true }).fill('raw_orders');
   await owner.getByLabel('Cell SQL 1', { exact: true }).fill('select region, amount from sales.orders');
-  await uiResponse(owner, '/api/my/datasets/notebook/preview', () => owner.getByLabel('Run cell 1', { exact: true }).click());
+  await uiResponse(owner, '/api/my/datasets/notebook/preview', () => owner.getByLabel('Cell SQL 1', { exact: true }).press('Control+Enter'));
   await previewContains(owner, '120', 'Cell preview 1');
   assert.equal(await owner.getByLabel('Expose cell 1', { exact: true }).isChecked(), false);
   await owner.getByLabel('Add notebook cell', { exact: true }).click();
   await owner.getByLabel('Cell name 2', { exact: true }).fill('region_totals');
   await owner.getByLabel('Cell SQL 2', { exact: true }).fill('select region, sum(amount)::int as total from raw_orders group by region order by region');
-  await uiResponse(owner, '/api/my/datasets/notebook/preview', () => owner.getByLabel('Run cell 2', { exact: true }).click());
+  await uiResponse(owner, '/api/my/datasets/notebook/preview', () => owner.getByLabel('Cell SQL 2', { exact: true }).press('Meta+Enter'));
   await previewContains(owner, '150', 'Cell preview 2');
   await owner.getByLabel('Expose cell 2', { exact: true }).check();
   assert.equal(await owner.getByLabel('Expose table models.region_totals', { exact: true }).isChecked(), true);
