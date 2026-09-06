@@ -1,4 +1,5 @@
 import {prepareCatalog,catalogOf} from '@/lib/datasets/catalog';
+import {DatasetError} from '@/lib/datasets/errors';
 /**
  * The wire ↔ storage translation for one artifact: what a read echoes, how a
  * write body is validated, and the replace pipeline both write paths run.
@@ -578,14 +579,15 @@ export async function createArtifactFromBody(
   const placement = parent === undefined ? { ancestor_ids: [] } : await resolveParent(actor, parent, null);
   if (isParentRefusal(placement)) return json(placement, 400);
 
-  const row = await createArtifact(actor.tokenId, actor.userId, {
+  let row;
+  try{row = await createArtifact(actor.tokenId, actor.userId, {
     ...parsed,
     title: typeof body.title === 'string' ? body.title : parsed.derivedTitle,
     description: typeof body.description === 'string' ? body.description : null,
     ...(visibility ? { visibility } : {}),
     ...(access ? { access } : {}),
     ancestor_ids: placement.ancestor_ids,
-  });
+  });}catch(error){if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
   return json({
     ...createdArtifactWire(row, base, sentMarkup),
     ...assetWarningsEcho(parsed.warnings),

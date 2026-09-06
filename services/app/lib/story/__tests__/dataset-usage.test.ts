@@ -3,7 +3,7 @@ import { datasetCreateFields } from '../dataset-usage';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 
 const catalog: DatasetCatalog = {
-  kind: 'postgres', connectionId: 'owner-connection', defaultSchema: 'sales', refreshSeconds: 60,
+  kind: 'postgres', defaultSchema: 'sales', refreshSeconds: 60,
   tables: [
     { schema: 'crm', name: 'contacts', columns: [{ name: 'email', type: 'string' }] },
     { schema: 'sales', name: 'orders', columns: [{ name: 'region', type: 'string' }, { name: 'revenue', type: 'number' }] },
@@ -23,7 +23,7 @@ describe('canonical dataset authoring hints', () => {
     expect(result.ref).toBe('ref:abc123'); // compatibility field stays on the wire
   });
   it('teaches sourced mutations for writable stored catalogs', () => {
-    const result = datasetCreateFields('abc123', [], 2, { catalog: { ...catalog, kind: 'stored', connectionId: undefined } }, 'readwrite');
+    const result = datasetCreateFields('abc123', [], 2, { catalog: { ...catalog, kind: 'stored' } }, 'readwrite');
     expect(result.usage).toContain('<Mutation name="add" source="abc123">{`insert into "sales"."orders"');
     expect(result.usage).not.toContain('ref_abc123');
   });

@@ -1,6 +1,7 @@
 import {catalogOf} from '@/lib/datasets/catalog';
 import {executeCatalog} from '@/lib/datasets/execute';
-import {connectionConfig} from '@/lib/datasets/connections';
+import {claimPendingDatasetSecret,resolveDatasetConnection} from '@/lib/datasets/secrets';
+import {DatasetError} from '@/lib/datasets/errors';
 /**
  * All artifact SQL. Every read/write is scoped by ownership — an id the caller
  * cannot reach is indistinguishable from a nonexistent one (callers answer a
@@ -353,7 +354,10 @@ export async function createArtifact(
   for (let attempt = 0; ; attempt++) {
     const id = generateFileId();
     try {
-      const r = await db.query<ArtifactRow>(
+      const r = await db.transaction(async tx=>{
+        const catalog=catalogOf(input);
+        if(catalog?.kind==='postgres'&&catalog.connection)await claimPendingDatasetSecret(catalog.connection,{tokenId,userId},id,tx);
+        return tx.query<ArtifactRow>(
         // The genesis edit row makes the creation's edit_id resolvable like any
         // other: an agent that creates and then edits against that id is on an
         // ordinary (if empty) base, not an unknown one. Data-modifying CTEs
@@ -399,7 +403,8 @@ export async function createArtifact(
           atCreation.forkedFrom ?? null,
           JSON.stringify(sourceIds),
         ],
-      );
+        );
+      });
       void trackEvent('create', r.rows[0].id, { userId, parentId: parentOf(r.rows[0]) });
       // A child arriving wakes the folder it landed in, so an open listing
       // re-runs its own query with no reload.
@@ -529,9 +534,8 @@ async function postgresForkRefusal(actor:TokenActor,source:ArtifactRow):Promise<
   if(source.format!=='dataset')return null;
   const catalog=catalogOf(source);
   if(catalog?.kind!=='postgres')return null;
-  if(!catalog.connectionId)return json({error:'not_forkable',hint:'this Postgres dataset has no usable connection'},400);
-  try{await connectionConfig(catalog.connectionId,actor);return null;}
-  catch{return json({error:'connection_owner_only',hint:'forking this Postgres dataset requires ownership of its connection'},403);}
+  if(catalog.connection)return json({error:'not_forkable',hint:'Postgres credentials remain bound to the original dataset'},403);
+  return json({error:'not_forkable',hint:'Postgres credentials remain bound to the original dataset'},403);
 }
 
 async function getArtifact(tokenId: string, id: string): Promise<ArtifactRow | null> {
@@ -873,6 +877,14 @@ async function revertScoped(actor: TokenActor, id: string, version: number): Pro
     if (!current) return null;
     if(current.edit_id!==initial.edit_id) return {notArchived:true,conflictVersion:current.version};
     if(prepared) return commitNormalizedMarkup(tx,actor,current,{...prepared,title:target.title,description:target.description,format:target.format});
+    const targetCatalog=catalogOf(target);
+    if(targetCatalog?.kind==='postgres'&&targetCatalog.connection){
+      try{await resolveDatasetConnection(targetCatalog.connection,undefined,current.id,tx);}
+      catch(error){
+        if(error instanceof DatasetError)return {notArchived:true,refusal:json({error:'dataset_error',details:[error.message]},error.status)};
+        throw error;
+      }
+    }
 
     await archiveVersion(tx, current);
     const updated = await tx.query<ArtifactRow>(
@@ -937,6 +949,8 @@ async function replaceScoped(
     if (opts.expectedVersion !== undefined && current.version !== opts.expectedVersion) {
       return { conflict: true, currentVersion: current.version };
     }
+    const replacementCatalog=catalogOf(input);
+    if(replacementCatalog?.kind==='postgres'&&replacementCatalog.connection)await resolveDatasetConnection(replacementCatalog.connection,undefined,current.id,tx);
 
     const replacementIdentity = input.format === 'markup' && input.source
       ? stampNodeIds(input.source, {
@@ -1786,7 +1800,7 @@ function rowToResolvedRef(row: ArtifactRow, owned = false): ResolvedRef {
     id: row.id,
     format: row.format,
     owned,
-    ...(row.format === 'dataset' ? { columns: meta.columns ?? [], access: row.access, catalog:catalogOf(row)??undefined, query: async(sql:string,params:Record<string,Scalar>,paramTypes?:Record<string,DatasetColumn["type"]>) => executeCatalog(catalogOf(row)!,sql,params,{limit:1,refresh:true,paramTypes}) } : {}),
+    ...(row.format === 'dataset' ? { columns: meta.columns ?? [], access: row.access, catalog:catalogOf(row)??undefined, query: async(sql:string,params:Record<string,Scalar>,paramTypes?:Record<string,DatasetColumn["type"]>) => executeCatalog(catalogOf(row)!,sql,params,{datasetId:row.id,limit:1,refresh:true,paramTypes}) } : {}),
     // A folder's shape is FIXED and computed, never stored — the publish door
     // and the dry run both need it to judge a <Query> over `ref_<folderId>`.
     ...(row.format === 'folder' ? { columns: CHILDREN_COLUMNS } : {}),
@@ -2082,7 +2096,7 @@ export async function runDocumentDataflow(
     sourceQuery:async(q,values,page)=>{
       const catalog=(datasets[q.source!] as RefTable|undefined)?.catalog;
       if(!catalog)throw new Error('Dataset source is unavailable');
-      return executeCatalog(catalog,q.sql,values,{limit:page?.limit,offset:page?.offset,sort:page?.sort,paramTypes:Object.fromEntries(flow.values.filter(v=>v.kind==='scalar').map(v=>[v.name,v.type]))});
+      return executeCatalog(catalog,q.sql,values,{datasetId:q.source!,limit:page?.limit,offset:page?.offset,sort:page?.sort,paramTypes:Object.fromEntries(flow.values.filter(v=>v.kind==='scalar').map(v=>[v.name,v.type]))});
     },
   });
   return { flow, state };

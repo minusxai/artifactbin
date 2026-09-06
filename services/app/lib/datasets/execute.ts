@@ -3,10 +3,12 @@ import {runQueries,isQueryFailure} from '@/lib/sql/engine';
 import type {Scalar,TableResult} from '@/lib/story/dataflow';
 import {compileDatasetSql} from './sql';
 import {queryPostgres} from './postgres';
-import {connectionConfig,DatasetError} from './connections';
+import {DatasetError} from './errors';
+import {resolveDatasetConnection} from './secrets';
+import type {TokenActor} from '@/lib/artifacts';
 import {storedTables} from './catalog';
 import type {DatasetCatalog} from './types';
-export interface CatalogQueryOptions {limit?:number;offset?:number;refresh?:boolean;sort?:{col:string;dir:'asc'|'desc'};paramTypes?:Record<string,import('@/lib/story/dataset-shape').DatasetColumn['type']>}
+export interface CatalogQueryOptions {limit?:number;offset?:number;refresh?:boolean;sort?:{col:string;dir:'asc'|'desc'};paramTypes?:Record<string,import('@/lib/story/dataset-shape').DatasetColumn['type']>;datasetId?:string;actor?:TokenActor}
 export type CatalogResult=TableResult&{refreshedAt:string};
 const MAX_CACHE_BYTES=32*1024*1024;
 const MAX_CACHE_ENTRIES=100;
@@ -30,7 +32,7 @@ function remember(key:string,result:CatalogResult,refreshSeconds:number):void {
 export async function executeCatalog(catalog:DatasetCatalog,sql:string,params:Record<string,Scalar>={},opts:CatalogQueryOptions={}):Promise<CatalogResult> {
  const limit=Math.min(10000,Math.max(1,Math.floor(opts.limit??1000)));const offset=Math.max(0,Math.floor(opts.offset??0));
  if(!Number.isFinite(limit)||!Number.isSafeInteger(offset))throw new DatasetError('Invalid query window');
- const config=catalog.kind==='postgres'?await connectionConfig(catalog.connectionId!):null;
+ const config=catalog.kind==='postgres'?(catalog.connection?await resolveDatasetConnection(catalog.connection,opts.actor,opts.datasetId):(()=>{throw new DatasetError('Postgres dataset credentials are unavailable')})()):null;
  const sorted=(query:string)=>opts.sort?`SELECT * FROM (${query}) AS dataset_sorted ORDER BY "${opts.sort.col.replaceAll('"','""')}" ${opts.sort.dir==='desc'?'DESC':'ASC'}`:query;
  const cacheKey=createHash('sha256').update(JSON.stringify([catalog,config,sql,params,opts.paramTypes,opts.sort,limit,offset])).digest('hex');
  expireCached(Date.now());

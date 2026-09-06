@@ -1,7 +1,7 @@
 import {requestOrSessionActor,actorForArtifacts} from '@/lib/viewer';
 import {refusesCrossSite} from '@/lib/auth';
 import {json,unauthorized} from '@/lib/http';
-import {DatasetError} from './connections';
+import {DatasetError} from './errors';
 export async function datasetActor(request:Request){
  const actor=await requestOrSessionActor(request);
  if(refusesCrossSite(request,actor))return json({error:'forbidden'},403);

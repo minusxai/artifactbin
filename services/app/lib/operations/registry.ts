@@ -1,4 +1,4 @@
-import {CONNECTION_OPERATIONS} from '@/lib/datasets/operations';
+import {DATASET_OPERATIONS} from '@/lib/datasets/operations';
 /**
  * THE OPERATIONS REGISTRY — one curated array of everything an agent can do
  * to an artifact, rendered three ways: the MCP tools (`app/mcp/route.ts`
@@ -593,7 +593,7 @@ const refreshAssetOp: Operation = {
 };
 
 export const OPERATIONS: Operation[] = [
-  ...CONNECTION_OPERATIONS,
+  ...DATASET_OPERATIONS,
   createArtifactOp, updateArtifactOp, editArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
   listVersionsOp, getVersionOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, mutateDatasetOp,
   exportArtifactOp, refreshAssetOp,

@@ -9,5 +9,5 @@ export async function POST(request:Request){
  const previous=typeof body.datasetId==='string'?await getArtifactFor(actor,body.datasetId):undefined;
  if(body.datasetId&&!previous)return json({error:'not_found'},404);
  const prepared=await prepareCatalog(body.dataset,actor,previous??undefined);if(prepared instanceof Response)return prepared;
- return datasetResponse(()=>executeCatalog(catalogOf(prepared)!,body.sql as string,{}, {limit:50,refresh:true}));
+ return datasetResponse(()=>executeCatalog(catalogOf(prepared)!,body.sql as string,{}, {limit:50,refresh:true,datasetId:previous?.id,actor}));
 }

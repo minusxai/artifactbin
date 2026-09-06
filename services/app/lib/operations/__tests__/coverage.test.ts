@@ -46,7 +46,8 @@ describe('the registry covers the surface', () => {
   it('every operation path is a real route file', () => {
     const routes = new Set([
       ...routePaths(path.join(ROOT, 'app/api/artifacts'), '/api/artifacts'),
-      ...routePaths(path.join(ROOT, 'app/api/connections'), '/api/connections'),
+      ...routePaths(path.join(ROOT, 'app/api/datasets'), '/api/datasets'),
+      ...routePaths(path.join(ROOT, 'app/api/secrets'), '/api/secrets'),
       // export_artifact's HTTP twin lives under the document's own sub-path.
       ...routePaths(path.join(ROOT, 'app/a'), '/a'),
     ].map(normalize));

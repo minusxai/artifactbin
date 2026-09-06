@@ -237,7 +237,7 @@ describe('the surface header buttons are owner chrome', () => {
     Object.assign(navigator, { clipboard: { writeText } });
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ visibility: 'private', shares: [], access: 'readwrite', rows: [], columns: [], refreshedAt: '2026-09-06T10:00:00Z' }))));
     render(<ArtifactShell role="owner"><ArtifactSurface {...surfaceProps({ format: 'dataset', catalog: {
-      kind: 'postgres', connectionId: 'owner-connection', defaultSchema: 'sales', refreshSeconds: 60,
+      kind: 'postgres', defaultSchema: 'sales', refreshSeconds: 60,
       tables: [
         { schema: 'crm', name: 'contacts', columns: [], source: { schema: 'external', table: 'contact_source' } },
         { schema: 'sales', name: 'orders', columns: [], source: { schema: 'external', table: 'order_source' } },

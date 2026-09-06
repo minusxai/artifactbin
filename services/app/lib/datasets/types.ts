@@ -17,7 +17,6 @@ export interface NotebookCell { id: string; name: string; sql: string }
 export interface DatasetNotebook { cells: NotebookCell[] }
 export interface DatasetCatalog {
   kind: 'postgres' | 'stored';
-  connectionId?: string;
   connection?: DatasetConnection;
   notebook?: DatasetNotebook;
   /** Server execution metadata; never part of a reader's public catalog. */
@@ -28,7 +27,6 @@ export interface DatasetCatalog {
 }
 export interface CatalogInput {
   kind: 'postgres' | 'stored';
-  connectionId?: string;
   connection?: DatasetConnection;
   notebook?: DatasetNotebook;
   defaultSchema?: string;
@@ -41,15 +39,6 @@ export interface PostgresConfig {
   database: string;
   username: string;
   password: string;
-  ssl: boolean;
-}
-export interface ConnectionSummary {
-  id: string;
-  name: string;
-  host: string;
-  port: number;
-  database: string;
-  username: string;
   ssl: boolean;
 }
 export interface DiscoveredTable { schema: string; name: string; columns: DatasetColumn[] }

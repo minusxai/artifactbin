@@ -2,11 +2,11 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { DatasetCatalog } from '../types';
 const fixture = vi.hoisted(() => ({ query: vi.fn() }));
 vi.mock('../postgres', () => ({ queryPostgres: fixture.query }));
-vi.mock('../connections', () => ({ connectionConfig: async () => ({ host: 'db.example.com', password: 'fixture' }), DatasetError: class extends Error {} }));
+vi.mock('../secrets', () => ({ resolveDatasetConnection: async () => ({ host: 'db.example.com',port:5432,database:'app',username:'reader',ssl:true,password: 'fixture' }) }));
 vi.mock('../catalog', () => ({ storedTables: vi.fn() }));
 vi.mock('@/lib/sql/engine', () => ({ runQueries: vi.fn(), isQueryFailure: () => false }));
 import { executeCatalog } from '../execute';
-const catalog: DatasetCatalog = { kind: 'postgres', connectionId: 'cache-fixture', refreshSeconds: 60, defaultSchema: 'public', tables: [{ schema: 'public', name: 'rows', source: { schema: 'public', table: 'rows' }, columns: [{ name: 'payload', type: 'string' }] }] };
+const catalog: DatasetCatalog = { kind: 'postgres', connection:{host:'db.example.com',port:5432,database:'app',username:'reader',ssl:true,passwordSecretId:'secret'}, refreshSeconds: 60, defaultSchema: 'public', tables: [{ schema: 'public', name: 'rows', source: { schema: 'public', table: 'rows' }, columns: [{ name: 'payload', type: 'string' }] }] };
 const run = (key: number, refresh = false) => executeCatalog(catalog, 'select payload from rows where $key > 0', { key }, { refresh });
 let clock = Date.now();
 beforeEach(() => {

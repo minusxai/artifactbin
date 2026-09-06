@@ -1,25 +1,24 @@
 ---
 name: databases
-description: Postgres connections, named dataset tables, SQL models, permissions and migration.
+description: Dataset-bound Postgres credentials, notebook models, whitelisting, queries and migration.
 ---
 
 ## Read first
 
-A dataset can expose multiple schemas and named tables. Its source is stored rows or a Postgres connection. Connections hold encrypted credentials server-side; datasets hold an exposed catalog and ordinary artifact sharing. Postgres is read-only. Stored datasets can allow row mutations.
+A dataset can expose multiple schemas, physical tables and notebook model outputs. Postgres connection settings belong to the dataset. Passwords are write-only, encrypted and bound to one exact destination and dataset. Postgres is read-only. Stored datasets can allow row mutations.
 
-## Connections
+## Password, discovery and notebook
 
-Bearer API (browser equivalents use `/api/my/connections`):
-- `GET /api/connections` — list your connections; never returns passwords.
-- `POST /api/connections` — create `{name,host,port,database,username,password,ssl}`. Port defaults to 5432; ssl defaults true with certificate verification.
-- `PUT /api/connections/<id>` — replace connection settings; omitted/blank password retains it.
-- `POST /api/connections/<id>/test` — discover readable schemas, tables and columns.
+Bearer API (browser equivalents add `/my`):
+- `POST /api/secrets` with `{value,connection,datasetId?}` returns only `{secret:{id}}`. `connection` is `{host,port,database,username,ssl}`. Use `datasetId` when replacing credentials for an existing dataset.
+- `POST /api/datasets/discover` with `{connection,datasetId?}` discovers raw schemas, tables and columns. `connection` includes `passwordSecretId`.
+- `POST /api/datasets/notebook/preview` with `{connection,notebook,cellId,datasetId?}` runs one named cell and its dependencies before whitelisting.
 
-MCP equivalents: `list_connections`, `create_connection`, `update_connection`, `test_connection`. A connection is owner-managed. Sharing a dataset never reveals credentials or grants access to the rest of the connection.
+MCP equivalents are `create_dataset_secret`, `discover_dataset_source`, and `preview_dataset_notebook`. Dataset editors control its connection, notebook and whitelist. A new secret is required to redirect the destination or replace the password.
 
-Forking a Postgres dataset requires ownership of its connection; read or edit access to the dataset alone is insufficient and returns `403 connection_owner_only`. This prevents a copy from retaining connection access after the original dataset share is revoked. Stored datasets remain forkable by readers.
+Postgres datasets cannot carry their bound password into a fork. Stored datasets remain forkable by readers.
 
-Use a dedicated read-only Postgres login. Query execution also uses a read-only transaction, server timeout, result limits and a catalog-restricted SQL compiler. Unsupported syntax/functions fail closed. Errors use `dataset_error` with details; inaccessible connections return 404. Connection credentials are encrypted using a key derived from AUTH__SECRET; preserve that secret across deployments or re-enter credentials after rotation.
+Use a dedicated read-only Postgres login. Query execution uses a read-only transaction, server timeout, result limits and a catalog-restricted SQL compiler. Unsupported syntax/functions fail closed. Preserve AUTH__SECRET across deployments or create replacement password secrets after rotation.
 
 Public deployments block private/loopback destinations. Self-hosted operators may explicitly set `DATASET__ALLOW_PRIVATE_NETWORKS=true` for their database network. Metadata/link-local/multicast destinations remain blocked. Host resolution is pinned and TLS verifies the original hostname.
 
@@ -33,18 +32,21 @@ Use the normal create/update artifact operation, with an object in `dataset`:
   "visibility": "private",
   "dataset": {
     "kind": "postgres",
-    "connectionId": "conn_...",
+    "connection": {"host":"db.example.com","port":5432,"database":"commerce","username":"reader","ssl":true,"passwordSecretId":"sec_..."},
     "defaultSchema": "analytics",
     "refreshSeconds": 60,
+    "notebook": {"cells":[
+      {"id":"activity","name":"activity","sql":"select user_id, count(*) as events from public.events group by user_id"}
+    ]},
     "tables": [
       {"schema":"analytics","name":"events","source":{"schema":"public","table":"events"},"columns":["user_id","occurred_at"]},
-      {"schema":"analytics","name":"activity","sql":"select user_id, count(*) as events from analytics.events group by user_id"}
+      {"schema":"analytics","name":"activity","modelCellId":"activity","columns":["user_id","events"]}
     ]
   }
 }
 ```
 
-Every source table has an explicit column list. New database objects are excluded until selected. Logical schema/table names need not match physical names. SQL models query exposed tables or other models; output columns are discovered on save. Invalid or cyclic dependencies refuse the save. Models are virtual: no warehouse tables are created.
+Notebook cells can query every discovered raw table and compose earlier or later named cells through a validated dependency graph. The final whitelist independently selects physical columns and model output columns. Intermediate cells are never queryable by dataset readers. Invalid or cyclic dependencies refuse the save. Models are virtual: no warehouse tables are created.
 
 For stored tables, use `kind:"stored"` and entries such as `{"schema":"public","name":"items","rows":[{"id":1,"status":"todo"}]}`. Omit rows on an existing table to retain its data. Arrays/CSV remain accepted as the single-table `public.rows` case.
 
@@ -62,13 +64,13 @@ The default schema is fixed after creation. A bare `events` resolves only there;
 <DataTable data="$activity" />
 ```
 
-`source` is a literal dataset ID. SQL names exposed schema/table identifiers. Parameters come from declared scalar Values, with explicit Postgres type binding. A sourced query runs on that dataset's engine; it cannot directly reference another document query. A later query without source may consume its result through the existing local dataflow.
+`source` is a literal dataset ID. Runtime SQL names only final-whitelist schema/table identifiers. Parameters come from declared scalar Values, with explicit Postgres type binding.
 
-Stored writes use `<Mutation name="edit" source="<datasetId>">{\`update public.items set status=$_value where id=$_row.id\`}</Mutation>`. The dataset must be writable and the viewer must have edit permission. Postgres writes are unavailable. Dataset editors may edit models within existing source exposure; only the dataset owner with connection authority may expand exposure or change its connection.
+Stored writes use `<Mutation name="edit" source="<datasetId>">{\`update public.items set status=$_value where id=$_row.id\`}</Mutation>`. The dataset must be writable and the viewer must have edit permission. Postgres writes are unavailable. Dataset editors may change connection settings, notebook cells and the final whitelist, but password values remain write-only.
 
 ## Preview and freshness
 
-The UI at `/datasets/new` creates connections/catalogs; `/datasets/<id>/edit` edits them. The dataset page offers schema/table selection, paginated rows and Refresh.
+The UI at `/datasets/new` follows connection → notebook → whitelist; `/datasets/<id>/edit` edits the same canonical dataset definition. The dataset page offers exposed schema/table selection, paginated rows and Refresh.
 
 `POST /a/<id>/tables` takes `{sql,limit?,offset?,refresh?}` and returns `{rows,columns,truncated?,refreshedAt}` after dataset read authorization. `refresh:true` bypasses cached results. `refreshSeconds:0` disables caching; otherwise it is the cache lifetime. External database writes do not emit Artifactbin live events: use Refresh or rerun the document query. Database edits never create dataset definition versions.
 
