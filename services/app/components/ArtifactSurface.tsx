@@ -1,3 +1,4 @@
+import {DatasetCatalogView} from '@/components/DatasetCatalogView';
 'use client';
 
 /**
@@ -96,6 +97,7 @@ export interface ArtifactSurfaceProps {
   follow?: { userId: string; following: boolean; count: number } | null;
   content: string;
   columns: Array<{ name: string; type?: string }>;
+  catalog?: import("@/lib/datasets/types").DatasetCatalog;
   compiledCss: string | null;
   theme: StoryThemeName | null;
   colorMode: 'light' | 'dark' | null;
@@ -1460,7 +1462,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
         </div>
       )}
 
-      {format === 'dataset' && (
+      {format === 'dataset' && props.catalog && <DatasetCatalogView id={id} catalog={props.catalog} canEdit={canEdit} />}
+      {format === 'dataset' && !props.catalog && (
         <>
           <p className="mt-4 font-sans text-xs text-muted" aria-label="Dataset summary">
             {safeRows(shownContent).length.toLocaleString()} rows · {columns.length} columns

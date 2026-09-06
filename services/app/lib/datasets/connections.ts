@@ -26,7 +26,7 @@ function open(ciphertext:string,id:string):PostgresConfig {
  return JSON.parse(Buffer.concat([decipher.update(bytes.subarray(12,-16)),decipher.final()]).toString('utf8'));
 }
 interface ConnectionRow {id:string;name:string;token_id:string;user_id:string|null;config:string}
-const scope=(actor:TokenActor)=>actor.userId?{where:'user_id=$2',value:actor.userId}:{where:'token_id=$2 AND user_id IS NULL',value:actor.tokenId};
+const scope=(actor:TokenActor)=>actor.userId?{where:'(user_id=$2 OR token_id IN (SELECT id FROM tokens WHERE user_id=$2))',value:actor.userId}:{where:'token_id=$2 AND user_id IS NULL',value:actor.tokenId};
 function publicRow(row:ConnectionRow):ConnectionSummary {
  const {password:_,...safe}=open(row.config,row.id);return {id:row.id,name:row.name,...safe};
 }
@@ -44,7 +44,7 @@ export async function saveConnection(actor:TokenActor,input:unknown,id?:string):
 }
 export async function listConnections(actor:TokenActor):Promise<ConnectionSummary[]> {
  const db=await getDb();const s=scope(actor);
- return (await db.query<ConnectionRow>(`SELECT * FROM dataset_connections WHERE ${s.where.replace('$2','$1')} ORDER BY updated_at DESC`,[s.value])).rows.map(publicRow);
+ return (await db.query<ConnectionRow>(`SELECT * FROM dataset_connections WHERE ${s.where.replaceAll('$2','$1')} ORDER BY updated_at DESC`,[s.value])).rows.map(publicRow);
 }
 /** Omitting actor is only for execution of an already-authorized dataset catalog. */
 export async function connectionConfig(id:string,actor?:TokenActor):Promise<PostgresConfig> {

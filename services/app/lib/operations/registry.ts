@@ -1,3 +1,4 @@
+import {CONNECTION_OPERATIONS} from '@/lib/datasets/operations';
 /**
  * THE OPERATIONS REGISTRY — one curated array of everything an agent can do
  * to an artifact, rendered three ways: the MCP tools (`app/mcp/route.ts`
@@ -106,7 +107,7 @@ const reply = (body: Record<string, unknown>, status = 200): OpReply => ({ statu
  */
 const CONTENT_FIELDS = {
   markup: z.string().optional().describe(MARKUP_FIELD_GUIDANCE),
-  dataset: z.union([z.array(z.record(z.string(), z.unknown())), z.string()]).optional().describe(DATASET_FIELD_GUIDANCE),
+  dataset: z.union([z.array(z.record(z.string(), z.unknown())), z.record(z.string(),z.unknown()), z.string()]).optional().describe(DATASET_FIELD_GUIDANCE),
   sheetUrl: z.string().optional().describe(SHEET_URL_FIELD_GUIDANCE),
   columns: z.array(z.object({ name: z.string(), type: z.enum(['string', 'number', 'boolean', 'date']) })).optional().describe('dataset: declared column types (win over inference)'),
   viz: z.record(z.string(), z.unknown()).optional().describe('viz tier: a recipe {description, engine, bindings, params?, template} with {{slot}} tokens'),
@@ -591,6 +592,7 @@ const refreshAssetOp: Operation = {
 };
 
 export const OPERATIONS: Operation[] = [
+  ...CONNECTION_OPERATIONS,
   createArtifactOp, updateArtifactOp, editArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
   listVersionsOp, getVersionOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, mutateDatasetOp,
   exportArtifactOp, refreshAssetOp,

@@ -37,6 +37,8 @@ export interface RefUse {
 export type RefAccess = 'read' | 'readwrite';
 
 export interface ResolvedRef {
+  catalog?:import("@/lib/datasets/types").DatasetCatalog;
+  query?: (sql:string,params:Record<string,import("./dataflow").Scalar>,paramTypes?:Record<string,DatasetColumn["type"]>)=>Promise<import("./dataflow").TableResult>;
   id: string;
   format: string;
   /** dataset: parsed columns; viz: parsed recipe. */

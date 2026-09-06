@@ -113,6 +113,7 @@ text flush to the viewport edge).
 |---|---|
 | API — replace, `expectedVersion`, visibility, folders, trash/restore, errors | `publishing.md` |
 | tokens — expiry, saved config, claiming, a 401 | `publishing-auth.md` |
+| Postgres connections, multi-table datasets, SQL models | `databases.md` |
 | upload CSV/sheets, images, PDFs (`<File>`), viz recipes | `publishing-datasets.md` |
 | pinned human feedback — reply, resolve, the anchor attribute | `publishing-annotations.md` |
 | connecting an MCP client — OAuth or bearer, the tool list | `publishing-mcp.md` |

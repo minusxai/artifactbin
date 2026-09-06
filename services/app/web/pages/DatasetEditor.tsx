@@ -104,7 +104,7 @@ export function DatasetEditorPage() {
   });
   const save = () => run('save', async () => {
     const dataset = buildCatalog();
-    const data = await request<{ id: string }>(id ? `/api/my/artifacts/${encodeURIComponent(id)}` : '/api/my/artifacts', { title, dataset, ...(id ? { expectedVersion: version } : { visibility: 'private' }) }, id ? 'PUT' : 'POST');
+    const data = await request<{ id: string }>(id ? `/api/my/artifacts/${encodeURIComponent(id)}` : '/api/my/artifacts', { title, dataset, ...(id ? { expectedVersion: version } : {visibility:session?.user?'private':'unlisted'}) }, id ? 'PUT' : 'POST');
     setConnection(initialConnection());
     router.push(`/a/${data.id}`);
   });

@@ -105,6 +105,7 @@ const imageTitleFromUrl = (url: string): string | null => {
 };
 
 export interface ContentInputCtx {
+  prepareDataset?: (input:unknown)=>Promise<StoredContent|Response>;
   /** Identity normalization after caller-coordinate validation, before compilation. */
   normalizeMarkup?: (source: string) => string;
   /**
@@ -190,6 +191,9 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
   // `dataset` accepts a JSON array (what an agent hand-writes) OR raw CSV text
   // (what a file or a sheet actually contains); `sheetUrl` fetches a public
   // Google Sheet. All three converge on the same rows — see lib/data-ingest.
+  if (kind === 'dataset' && body.dataset && typeof body.dataset === 'object' && !Array.isArray(body.dataset)) {
+    return ctx.prepareDataset ? ctx.prepareDataset(body.dataset) : json({error:'dataset_not_previewable',details:['Use the dataset preview endpoint']},400);
+  }
   if (kind === 'dataset' || kind === 'sheetUrl' || kind === 'csvUrl') {
     const source =
       kind === 'sheetUrl' ? { kind: 'sheetUrl' as const, url: String(body.sheetUrl) }

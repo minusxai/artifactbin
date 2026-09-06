@@ -157,7 +157,7 @@ export async function servesDocumentDirectly(request: Request): Promise<string |
   return found.id;
 }
 
-const SPA_PATHS = /^(\/|\/login|\/account|\/assets|\/trash|\/tokens|\/docs-human)$/;
+const SPA_PATHS = /^(\/|\/login|\/account|\/assets|\/trash|\/tokens|\/docs-human|\/datasets\/new|\/datasets\/[A-Za-z0-9]+\/edit)$/;
 
 /**
  * A guessed machine address is answered in the machine's language. `/docs`

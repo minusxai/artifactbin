@@ -1,3 +1,4 @@
+import {prepareCatalog,catalogOf} from '@/lib/datasets/catalog';
 /**
  * The wire ↔ storage translation for one artifact: what a read echoes, how a
  * write body is validated, and the replace pipeline both write paths run.
@@ -191,6 +192,7 @@ export async function artifactToWire(row: ArtifactRow, base: string) {
           // The write ACL, beside the read one — an agent has to know before
           // it publishes a <Mutation> naming this dataset.
           access: row.access,
+          ...(catalogOf(row)?{meta:{catalog:catalogOf(row)}}:{}),
           columns: (meta as { columns?: unknown }).columns ?? [],
           rowCount: (meta as { rowCount?: unknown }).rowCount ?? 0,
           ...(meta as { totalRows?: number; truncated?: boolean }).truncated
@@ -433,6 +435,7 @@ export async function replaceArtifactWithBody(
   const parsed: StoredContent | Response = current.format === 'folder'
     ? { format: 'folder', content: '', source: '', meta: {}, derivedTitle: null }
     : await parseContentInput(body, {
+      prepareDataset: input => prepareCatalog(input,actor,current),
       normalizeMarkup,
       loadRef: refLoaderForActor(owner),
       importAsset: assetImporterFor(owner.tokenId, owner.userId),
@@ -447,6 +450,7 @@ export async function replaceArtifactWithBody(
   if (parent instanceof Response) return parent;
   const access = parseAccessField(body, parsed.format);
   if (access instanceof Response) return access;
+  if(access==='readwrite'&&catalogOf(parsed)?.kind==='postgres')return json({error:'dataset_read_only',details:['Postgres datasets are read-only']},400);
   const expected = parseExpectedVersion(body);
   if (expected instanceof Response) return expected;
   /*
@@ -554,6 +558,7 @@ export async function createArtifactFromBody(
   const parsed = await parseContentInput(body, {
     normalizeMarkup: source => stampNodeIds(source,{retireLegacyAliases:true}).source,
     creating: true,
+    prepareDataset: input => prepareCatalog(input,actor),
     loadRef: refLoaderForActor(actor),
     importAsset: assetImporterFor(actor.tokenId, actor.userId),
     resolveFont: fontResolver(),
@@ -564,6 +569,7 @@ export async function createArtifactFromBody(
   if (visibility instanceof Response) return visibility;
   const access = parseAccessField(body, parsed.format);
   if (access instanceof Response) return access;
+  if(access==='readwrite'&&catalogOf(parsed)?.kind==='postgres')return json({error:'dataset_read_only',details:['Postgres datasets are read-only']},400);
   const parent = parseParentField(body);
   if (parent instanceof Response) return parent;
   // Nothing exists yet to be unreachable, so there is no ordering question

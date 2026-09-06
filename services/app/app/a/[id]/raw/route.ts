@@ -126,7 +126,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
 
   switch (artifact.format) {
     case 'dataset':
-      return new Response(JSON.stringify(await loadDatasetRows(artifact)), {
+      return new Response(JSON.stringify((artifact.meta as Record<string,unknown>).catalog ? {catalog:(artifact.meta as Record<string,unknown>).catalog} : await loadDatasetRows(artifact)), {
         status: 200,
         headers: { 'Content-Type': 'application/json; charset=utf-8', ...COMMON },
       });

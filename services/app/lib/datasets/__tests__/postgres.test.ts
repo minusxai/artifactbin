@@ -1,12 +1,14 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import pg from 'pg';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { compileDatasetSql } from '../sql';
 import { discoverPostgres, queryPostgres } from '../postgres';
 import type { DatasetCatalog, PostgresConfig } from '../types';
 import type { Scalar } from '@/lib/story/dataflow';
 import type { DatasetColumn } from '@/lib/story/dataset-shape';
+
+vi.mock('@/lib/config',async original=>({...await original<object>(),DATASET_ALLOW_PRIVATE_NETWORKS:true}));
 
 const catalog: DatasetCatalog = { kind: 'postgres', defaultSchema: 'analytics', refreshSeconds: 60, tables: [
   { schema: 'analytics', name: 'people', source: { schema: 'private_data', table: 'people' }, columns: [{ name: 'id', type: 'number' }, { name: 'name', type: 'string' }] },

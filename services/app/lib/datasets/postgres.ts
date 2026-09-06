@@ -1,3 +1,6 @@
+import {DATASET_ALLOW_PRIVATE_NETWORKS} from '@/lib/config';
+import {resolvePostgresHost} from './network';
+import {isIP} from 'node:net';
 import pg from 'pg';
 import type { DatasetColumn } from '@/lib/story/dataset-shape';
 import type { Scalar, TableResult } from '@/lib/story/dataflow';
@@ -18,9 +21,10 @@ function bounded(value: number | undefined, fallback: number, min: number, max: 
 /** One short-lived connection per operation. Server statement_timeout performs
  * actual cancellation; the client timeout additionally bounds a broken network. */
 async function transaction<T>(config: PostgresConfig, timeoutMs: number, work: (client: pg.Client) => Promise<T>): Promise<T> {
+  const address=await resolvePostgresHost(config.host,DATASET_ALLOW_PRIVATE_NETWORKS);
   const client = new pg.Client({
-    host: config.host, port: config.port, database: config.database, user: config.username, password: config.password,
-    ssl: config.ssl ? { rejectUnauthorized: true } : false,
+    host: address, port: config.port, database: config.database, user: config.username, password: config.password,
+    ssl: config.ssl ? { rejectUnauthorized: true, ...(!isIP(config.host)?{servername:config.host}:{}) } : false,
     connectionTimeoutMillis: 5_000, query_timeout: timeoutMs + 1_000,
     statement_timeout: timeoutMs, application_name: 'artifactbin-dataset',
     types: { getTypeParser(oid, format) {
