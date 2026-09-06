@@ -109,6 +109,21 @@ describe.skipIf(!dockerAvailable)('Postgres catalog isolation and bounded execut
     expect(result.rows[0]).toEqual({ big: '9223372036854775807', nan: null, flag: true, obj: { a: 1 } });
     expect(() => JSON.stringify(result)).not.toThrow();
   });
+  it('stops at the JSON byte budget and closes the streaming portal', async () => {
+    await admin.query("CREATE TABLE private_data.large_rows AS SELECT id, repeat('x', 600000) AS payload FROM generate_series(1,30) id; GRANT SELECT ON private_data.large_rows TO reader");
+    const largeCatalog = { ...catalog, tables: [{ schema: 'analytics', name: 'large_rows', source: { schema: 'private_data', table: 'large_rows' }, columns: [{ name: 'id', type: 'number' as const }, { name: 'payload', type: 'string' as const }] }] };
+    const compiled = compileDatasetSql(largeCatalog, 'select * from large_rows order by id');
+    const result = await queryPostgres(config, compiled.sql, compiled.values);
+    expect(result.truncated).toBe(true);
+    expect(result.rows.length).toBeGreaterThan(0); expect(result.rows.length).toBeLessThan(30);
+    expect(Buffer.byteLength(JSON.stringify(result.rows))).toBeLessThanOrEqual(8 * 1024 * 1024);
+    expect((await admin.query("select count(*)::int as n from pg_stat_activity where usename='reader'")).rows[0].n).toBe(0);
+  });
+  it('refuses an individual oversized row without echoing its contents', async () => {
+    const outcome = await queryPostgres(config, "select repeat('sensitive-row-data',600000) as payload", []).then(() => 'accepted', error => error.message);
+    expect(outcome).toBe('Postgres result row is too large');
+    expect((await admin.query("select count(*)::int as n from pg_stat_activity where usename='reader'")).rows[0].n).toBe(0);
+  });
   it('discovers only current-role permitted non-system columns', async () => {
     const tables = await discoverPostgres(config);
     expect(tables.find(t => t.name === 'people')?.columns).toHaveLength(3);
