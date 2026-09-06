@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 import type { DatasetColumn } from '@/lib/story/dataset-shape';
@@ -38,11 +39,33 @@ export function DatasetCatalogView({ id, catalog, canEdit }: { id: string; catal
     if (!response.ok) throw new Error(data.details?.[0] ?? data.error ?? 'Could not load this query.');
     return data;
   }, [id]);
-  return <DatasetExplorer catalog={catalog} query={query} editHref={canEdit ? `/datasets/${encodeURIComponent(id)}/edit` : undefined} />;
+  return <DatasetExplorer catalog={catalog} query={query} schemaTables={catalog.tables} editHref={canEdit ? `/datasets/${encodeURIComponent(id)}/edit` : undefined} />;
+}
+
+/** Browsing schema metadata is local and never expands the reader's data access. */
+function DatasetSchemaBrowser({ tables }: { tables: DatasetCatalog['tables'] }) {
+  const [open, setOpen] = useState(false);
+  const regionId = useId();
+  const schemas = [...new Set(tables.map(table => table.schema))];
+  return <div className="min-w-0 rounded border border-edge bg-surface">
+    <button type="button" aria-label="Browse dataset schema" aria-expanded={open} aria-controls={regionId} onClick={() => setOpen(value => !value)} className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-xs text-muted hover:text-fg focus-visible:outline-2 focus-visible:outline-accent">
+      <span>Schema browser <span className="ml-1 text-faint">· {tables.length} table{tables.length === 1 ? '' : 's'}</span></span><ChevronDown size={14} className={open ? 'rotate-180' : ''} />
+    </button>
+    {open && <div id={regionId} aria-label="Dataset schema browser" className="grid max-h-72 gap-4 overflow-auto border-t border-edge p-3 sm:grid-cols-2">
+      {!schemas.length && <p className="text-xs text-faint">No exposed tables.</p>}
+      {schemas.map(schema => <section key={schema} className="min-w-0 space-y-3">
+        <h3 className="break-all font-mono text-xs font-semibold text-fg">{schema}</h3>
+        {tables.filter(table => table.schema === schema).map(table => <div key={table.name} className="min-w-0 border-l border-edge pl-3">
+          <p className="break-all font-mono text-xs text-fg">{table.name}</p>
+          <ul className="mt-1 space-y-1">{table.columns.map(column => <li key={column.name} className="flex min-w-0 items-baseline justify-between gap-3 font-mono text-[11px]"><span className="min-w-0 break-all text-muted">{column.name}</span><span className="shrink-0 text-faint">{column.type}</span></li>)}</ul>
+        </div>)}
+      </section>)}
+    </div>}
+  </div>;
 }
 
 /** One execution cursor owns SQL, refresh and paging; editing text never changes that cursor. */
-export function DatasetExplorer({ catalog, query, paginate = true, editHref }: { catalog: ExplorerCatalog; query: CatalogQuery; paginate?: boolean; editHref?: string }) {
+export function DatasetExplorer({ catalog, query, paginate = true, editHref, schemaTables }: { catalog: ExplorerCatalog; query: CatalogQuery; paginate?: boolean; editHref?: string; schemaTables?: DatasetCatalog['tables'] }) {
   const [selection, setSelection] = useState(() => {
     const table = catalog.tables.find(t => t.schema === catalog.defaultSchema) ?? catalog.tables[0];
     return { schema: table?.schema ?? catalog.defaultSchema, name: table?.name ?? '', offset: 0 };
@@ -98,6 +121,7 @@ export function DatasetExplorer({ catalog, query, paginate = true, editHref }: {
       <Button aria-label="SQL view" aria-pressed={mode === 'sql'} variant={mode === 'sql' ? 'solid' : 'ghost'} onClick={() => { setMode('sql'); if (!sqlDraft) setSqlDraft(tableSql); }}>Run SQL</Button>
       {editHref && <a aria-label="Edit dataset" href={editHref} className="ml-auto text-sm text-accent underline underline-offset-4">Edit dataset</a>}
     </div>
+    {schemaTables && <DatasetSchemaBrowser tables={schemaTables} />}
     {mode === 'table' ? <div className="flex flex-wrap items-end gap-3">
       <label className="grid min-w-0 gap-1 text-xs text-muted">Schema<select aria-label="Dataset schema" className={selectClass} value={selection.schema} onChange={e => choose(e.target.value, catalog.tables.find(t => t.schema === e.target.value)?.name ?? '')}>{schemas.map(schema => <option key={schema}>{schema}</option>)}</select></label>
       <label className="grid min-w-0 gap-1 text-xs text-muted">Table<select aria-label="Dataset table" className={selectClass} value={selection.name} onChange={e => choose(selection.schema, e.target.value)}>{catalog.tables.filter(t => t.schema === selection.schema).map(t => <option key={t.name}>{t.name}</option>)}</select></label>

@@ -21,14 +21,17 @@ let failPreview = false;
 let loadedCatalog = catalog;
 let discoveryTables = tables;
 let discoveryReply: (() => Promise<Response>) | undefined;
+let secretReply: (() => Promise<Response>) | undefined;
+let notebookReply: (() => Promise<Response>) | undefined;
 let previewColumns = [{ name: 'id', type: 'number' }];
 beforeEach(() => {
-  calls = []; discoveryTables = tables; discoveryReply = undefined; failSave = false; failPreview = false; loadedCatalog = catalog; previewColumns = [{ name: 'id', type: 'number' }]; viewerSession = { user: { id: 'editor-1' } };
+  calls = []; discoveryTables = tables; discoveryReply = undefined; secretReply = undefined; notebookReply = undefined; failSave = false; failPreview = false; loadedCatalog = catalog; previewColumns = [{ name: 'id', type: 'number' }]; viewerSession = { user: { id: 'editor-1' } };
   vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     const method = init?.method ?? 'GET'; calls.push({ url, body, method });
-    if (url === '/api/my/secrets') return reply({ secret: { id: 'secret-new' } }, 201);
+    if (url === '/api/my/secrets') return secretReply ? secretReply() : reply({ secret: { id: 'secret-new' } }, 201);
     if (url === '/api/my/datasets/discover') return discoveryReply ? discoveryReply() : reply({ tables: discoveryTables });
+    if (url.endsWith('/notebook/preview') && notebookReply) return notebookReply();
     if (url.endsWith('/preview') || url.endsWith('/tables')) return failPreview ? reply({ error: 'Query refused' }, 400) : reply({ rows: [{ id: 42 }], columns: previewColumns, refreshedAt: '2026-09-06T10:00:00Z', truncated: true });
     if (method === 'GET') return reply({ id: 'data-1', title: 'Orders', version: 7, meta: { catalog: loadedCatalog } });
     return failSave ? reply({ error: 'Version conflict' }, 409) : reply({ id: 'data-1', version: 8 });
@@ -89,7 +92,8 @@ describe('dataset editor', () => {
   });
   it('shows discovery progress and success beside the connection action, clearing stale success when edited', async () => {
     let finish!: (response: Response) => void;
-    discoveryReply = () => new Promise(resolve => { finish = resolve; });
+    const pending = new Promise<Response>(resolve => { finish = resolve; });
+    discoveryReply = () => pending;
     editor(true); await screen.findByLabelText('Password status'); click('Test and discover');
     const panel = within(screen.getByLabelText('Dataset connection'));
     expect(panel.getByRole('status')).toHaveTextContent(/connecting/i);
@@ -109,6 +113,64 @@ describe('dataset editor', () => {
     discoveryReply = undefined; click('Test and discover');
     await waitFor(() => expect(panel.getByRole('status')).toHaveTextContent('Connected'));
     expect(panel.queryByRole('alert')).not.toBeInTheDocument();
+  });
+  it.each(['validation', 'secret', 'network'] as const)('shows %s discovery failures only below the connection action', async failure => {
+    editor(); click('PostgreSQL');
+    if (failure !== 'validation') {
+      for (const [label,value] of [['Host',connection.host],['Database','analytics'],['Username','reader'],['Password','private-password']]) change(label,value);
+    }
+    if (failure === 'secret') secretReply=()=>reply({error:'Could not store credentials'},503);
+    if (failure === 'network') discoveryReply=()=>Promise.reject(new Error('Network unavailable'));
+    click('Test and discover');
+    const panel=within(screen.getByLabelText('Dataset connection'));
+    const alert=await panel.findByRole('alert');
+    expect(alert).toHaveAttribute('aria-label','Dataset error');
+    expect(screen.getAllByLabelText('Dataset error')).toHaveLength(1);
+    expect(panel.getByLabelText('Test and discover').compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(alert).toHaveTextContent(failure === 'validation' ? /host.*port.*database.*username/i : failure === 'secret' ? 'Could not store credentials' : 'Network unavailable');
+  });
+  it('explains an empty discovery result and clears its success when replacing the password', async () => {
+    discoveryTables=[]; editor(true); await screen.findByLabelText('Password status'); click('Test and discover');
+    const panel=within(screen.getByLabelText('Dataset connection'));
+    await waitFor(() => expect(panel.getByRole('status')).toHaveTextContent(/connected.*no tables/i));
+    expect(screen.getAllByLabelText('Dataset notice')).toHaveLength(1);
+    click('Replace password'); expect(panel.queryByRole('status')).not.toBeInTheDocument();
+  });
+  it.each([{repeat:true},{isComposing:true},{keyCode:229}])('does not run a notebook shortcut during repeated or composing key events: %j', async extra => {
+    editor(); await discover(); click('Add notebook cell'); change('Cell SQL 1','select id from sales.orders');
+    fireEvent.keyDown(screen.getByLabelText('Cell SQL 1'),{key:'Enter',metaKey:true,...extra});
+    expect(calls.filter(c => c.url.endsWith('/notebook/preview'))).toHaveLength(0);
+  });
+  it('runs the focused cell once and ignores shortcuts while another run is pending or source is open', async () => {
+    editor(); await discover(); await addCell('base','select id from sales.orders'); click('Add notebook cell'); change('Cell SQL 2','select * from base');
+    let finish!: (response:Response)=>void; notebookReply=()=>new Promise(resolve=>{finish=resolve;});
+    fireEvent.keyDown(screen.getByLabelText('Cell SQL 2'),{key:'Enter',ctrlKey:true});
+    await waitFor(() => expect(calls.filter(c=>c.url.endsWith('/notebook/preview'))).toHaveLength(2));
+    const executed=calls.filter(c=>c.url.endsWith('/notebook/preview')).at(-1)?.body;
+    expect(executed.cellId).toBe(executed.notebook.cells[1].id);
+    fireEvent.keyDown(screen.getByLabelText('Cell SQL 1'),{key:'Enter',metaKey:true});
+    expect(calls.filter(c=>c.url.endsWith('/notebook/preview'))).toHaveLength(2);
+    finish(new Response(JSON.stringify({rows:[{id:42}],columns:[{name:'id',type:'number'}],refreshedAt:'2026-09-06T10:00:00Z'})));
+    await screen.findByLabelText('Cell preview 2'); click('Edit dataset source');
+    fireEvent.keyDown(screen.getByLabelText('Cell SQL 1'),{key:'Enter',ctrlKey:true});
+    expect(calls.filter(c=>c.url.endsWith('/notebook/preview'))).toHaveLength(2);
+  });
+  it('ignores notebook shortcuts on an incomplete cell and keeps non-connection errors above the form', async () => {
+    editor(true); await screen.findByLabelText('Password status'); click('Add notebook cell');
+    fireEvent.keyDown(screen.getByLabelText('Cell SQL 1'),{key:'Enter',metaKey:true});
+    expect(calls.filter(c=>c.url.endsWith('/notebook/preview'))).toHaveLength(0);
+    click('Remove cell 1'); failSave=true; click('Save dataset');
+    await waitFor(()=>expect(screen.getByLabelText('Dataset error')).toHaveTextContent('Version conflict'));
+    expect(within(screen.getByLabelText('Dataset connection')).queryByRole('alert')).not.toBeInTheDocument();
+  });
+  it('keeps the reader schema browser available in SQL mode and updates only public metadata', async () => {
+    const view=render(<DatasetCatalogView id="data-1" catalog={{...catalog,notebook:{cells:[{id:'hidden',name:'hidden_helper',sql:'select secret from private.raw'}]},notebookSources:tables}} canEdit={false} />);
+    await screen.findByLabelText('Table preview'); click('SQL view'); click('Browse dataset schema');
+    const browser=screen.getByLabelText('Dataset schema browser');
+    expect(browser).toHaveTextContent('number'); expect(browser).not.toHaveTextContent('hidden_helper'); expect(browser).not.toHaveTextContent(connection.host); expect(browser).not.toHaveTextContent('secret');
+    view.rerender(<DatasetCatalogView id="data-1" catalog={{...catalog,tables:[{schema:'reports',name:'summary',columns:[{name:'total',type:'number'}]}]}} canEdit={false} />);
+    expect(browser).toHaveTextContent('reports'); expect(browser).toHaveTextContent('summary'); expect(browser).toHaveTextContent('total'); expect(browser).not.toHaveTextContent('orders');
+    click('Browse dataset schema'); expect(screen.queryByLabelText('Dataset schema browser')).not.toBeInTheDocument();
   });
   it('uses a neutral create label while the session is loading and never fetches connections', async () => {
     viewerSession = null; editor();

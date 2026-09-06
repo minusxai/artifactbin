@@ -44,11 +44,11 @@ export function DatasetEditorPage() {
   const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const [connectionFeedback, setConnectionFeedback] = useState<{ kind: 'connecting' | 'success' | 'error'; message: string } | null>(null);
   const [sourceText, setSourceText] = useState<string | null>(null);
 
   const loadDefinition = (input: CatalogInput, metadata?: DatasetCatalog, preserveDraft = false) => {
-    setKind(input.kind); setConnection(input.connection ?? initialConnection()); setPassword('');
+    setKind(input.kind); setConnection(input.connection ?? initialConnection()); setPassword(''); setConnectionFeedback(null);
     setDefaultSchema(input.defaultSchema ?? 'public'); setRefreshSeconds(input.refreshSeconds ?? 0);
     const sameConnection = Boolean(input.connection && Object.entries(connection).every(([key, value]) => input.connection![key as keyof DatasetConnection] === value));
     const discoveries = metadata?.notebookSources ?? (preserveDraft && sameConnection ? sources.map(s => s.discovery) : []);
@@ -89,8 +89,14 @@ export function DatasetEditorPage() {
   }, [id]);
 
   const run = async (operation: string, action: () => Promise<void>) => {
-    setBusy(operation); setError(''); setNotice('');
-    try { await action(); } catch (err) { setError(err instanceof Error ? err.message : 'Could not reach the server.'); } finally { setBusy(''); }
+    setBusy(operation); setError('');
+    if (operation === 'discover') setConnectionFeedback({ kind: 'connecting', message: 'Connecting to PostgreSQL…' });
+    else setConnectionFeedback(value => value?.kind === 'error' ? null : value);
+    try { await action(); } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not reach the server.';
+      if (operation === 'discover') setConnectionFeedback({ kind: 'error', message });
+      else setError(message);
+    } finally { setBusy(''); }
   };
   const invalidate = (items: ModelDraft[], from: number) => items.map((item, index) => index >= from ? { ...item, stale: true, preview: undefined } : item);
   const updateModel = (index: number, patch: Partial<NotebookCell>) => setModels(items => invalidate(items.map((item, i) => i === index ? { ...item, cell: { ...item.cell, ...patch } } : item), index));
@@ -101,7 +107,7 @@ export function DatasetEditorPage() {
     return next;
   });
   const updateConnection = (patch: Partial<DatasetConnection>) => {
-    setConnection(value => ({ ...value, ...patch, passwordSecretId: '' })); setModels(items => invalidate(items, 0));
+    setConnectionFeedback(null); setConnection(value => ({ ...value, ...patch, passwordSecretId: '' })); setModels(items => invalidate(items, 0));
   };
   const ensureConnection = async () => {
     if (!connection.host.trim() || !connection.database.trim() || !connection.username.trim() || !Number.isInteger(connection.port) || connection.port < 1 || connection.port > 65535) throw new Error('Enter a host, port, database and username.');
@@ -136,17 +142,19 @@ export function DatasetEditorPage() {
     }
     return { kind, ...(kind === 'postgres' ? { connection: configured, notebook: notebook() } : {}), defaultSchema, refreshSeconds, tables };
   };
-  const runCell = (index: number) => void run(`cell-${models[index].cell.id}`, async () => {
+  const runCell = (index: number) => {
     const model = models[index];
-    if (!model.cell.name.trim() || !model.cell.sql.trim()) throw new Error('Give this cell a name and a SQL query.');
-    const allCells = notebook().cells;
-    const cells = allCells.slice(0, allCells.findIndex(cell => cell.id === model.cell.id) + 1);
-    if (new Set(cells.map(c => c.name)).size !== cells.length || cells.some(c => !c.name.trim())) throw new Error('Give every notebook cell a unique name.');
-    const preview = model.legacy
-      ? await request<CatalogPreview>('/api/my/datasets/preview', { dataset: buildCatalog(connection, false), sql: model.cell.sql, ...(id ? { datasetId: id } : {}) })
-      : await request<CatalogPreview>('/api/my/datasets/notebook/preview', { connection: await ensureConnection(), notebook: { cells }, cellId: model.cell.id, ...(id ? { datasetId: id } : {}) });
-    setModels(items => items.map(item => item.cell.id === model.cell.id ? { ...item, preview, columns: preview.columns, selected: item.legacy && !item.selected.length ? preview.columns.map(c => c.name) : item.selected.filter(name => preview.columns.some(c => c.name === name)), stale: false } : item));
-  });
+    if (busy || sourceText !== null || !model?.cell.name.trim() || !model.cell.sql.trim()) return;
+    void run(`cell-${model.cell.id}`, async () => {
+      const allCells = notebook().cells;
+      const cells = allCells.slice(0, allCells.findIndex(cell => cell.id === model.cell.id) + 1);
+      if (new Set(cells.map(c => c.name)).size !== cells.length || cells.some(c => !c.name.trim())) throw new Error('Give every notebook cell a unique name.');
+      const preview = model.legacy
+        ? await request<CatalogPreview>('/api/my/datasets/preview', { dataset: buildCatalog(connection, false), sql: model.cell.sql, ...(id ? { datasetId: id } : {}) })
+        : await request<CatalogPreview>('/api/my/datasets/notebook/preview', { connection: await ensureConnection(), notebook: { cells }, cellId: model.cell.id, ...(id ? { datasetId: id } : {}) });
+      setModels(items => items.map(item => item.cell.id === model.cell.id ? { ...item, preview, columns: preview.columns, selected: item.legacy && !item.selected.length ? preview.columns.map(c => c.name) : item.selected.filter(name => preview.columns.some(c => c.name === name)), stale: false } : item));
+    });
+  };
   const discover = () => void run('discover', async () => {
     const configured = await ensureConnection();
     const data = await request<{ tables: DiscoveredTable[] }>('/api/my/datasets/discover', { connection: configured, ...(id ? { datasetId: id } : {}) });
@@ -159,7 +167,7 @@ export function DatasetEditorPage() {
       });
       return [...discovered, ...current.filter(previous => previous.included && !data.tables.some(d => sourceKey(d) === sourceKey(previous.discovery)))];
     });
-    setNotice(`Connected. Found ${data.tables.length} tables. Choose what to expose below.`);
+    setConnectionFeedback({ kind: 'success', message: data.tables.length ? `Connected. Found ${data.tables.length} table${data.tables.length === 1 ? '' : 's'}. Choose what to expose below.` : 'Connected. No tables found for this database account.' });
   });
   const exposures: SourceDraft[] = [...sources, ...models.filter(m => !m.legacy).map(m => ({ discovery: { schema: m.schema, name: m.cell.name || 'Untitled cell', columns: m.stale ? [] : m.columns }, schema: m.schema, name: m.cell.name, columns: m.selected, included: m.selected.length > 0, modelCellId: m.cell.id, stale: m.stale }))];
   const changeExposures = (next: SourceDraft[]) => {
@@ -186,7 +194,6 @@ export function DatasetEditorPage() {
   return <main className="mx-auto w-full min-w-0 max-w-5xl space-y-6 px-4 py-8 sm:px-6">
     <header className="flex flex-wrap items-start justify-between gap-4"><div><a aria-label="Back to assets" href="/assets" className="text-xs text-muted hover:text-fg">← Assets</a><h1 className="mt-3 text-2xl font-semibold tracking-tight text-fg">{id ? 'Edit dataset' : 'Create dataset'}</h1><p className="mt-2 max-w-xl text-sm text-muted">Connect your data, shape it with SQL, and choose what readers can query.</p></div><Database className="mt-6 text-faint" size={24} /></header>
     {error && <p role="alert" aria-label="Dataset error" className="rounded border border-danger/30 bg-danger-soft p-3 text-sm text-danger">{error}</p>}
-    {notice && <p role="status" aria-label="Dataset notice" className="text-sm text-accent">{notice}</p>}
     {loading ? <p className="text-sm text-muted">Loading dataset…</p> : loadFailed ? <p className="text-sm text-muted">The dataset could not be opened for editing.</p> : <>
       <fieldset disabled={Boolean(busy) || sourceText !== null} className="min-w-0 space-y-6">
         <Field name="Dataset title"><Input aria-label="Dataset title" value={title} onChange={e => setTitle(e.target.value)} placeholder="Weekly sales" /></Field>
@@ -195,8 +202,9 @@ export function DatasetEditorPage() {
           <div><h2 className="text-sm font-semibold text-fg">1. Connection</h2><p className="mt-1 text-xs text-muted">Use a database account with read access. The password is stored securely and cannot be retrieved.</p></div>
           <div className="grid gap-4 sm:grid-cols-[1fr_7rem]"><Field name="Host"><Input aria-label="Host" autoComplete="off" placeholder="db.example.com" value={connection.host} onChange={e => updateConnection({ host: e.target.value })} /></Field><Field name="Port"><Input aria-label="Port" type="number" min={1} max={65535} value={connection.port} onChange={e => updateConnection({ port: Number(e.target.value) })} /></Field></div>
           <div className="grid gap-4 sm:grid-cols-2"><Field name="Database"><Input aria-label="Database" autoComplete="off" value={connection.database} onChange={e => updateConnection({ database: e.target.value })} /></Field><Field name="Username"><Input aria-label="Username" autoComplete="off" value={connection.username} onChange={e => updateConnection({ username: e.target.value })} /></Field></div>
-          {connection.passwordSecretId ? <div className="flex items-center gap-3"><span aria-label="Password status" className="text-xs text-muted">Password · Configured</span><Button aria-label="Replace password" variant="ghost" onClick={() => { setConnection(value => ({ ...value, passwordSecretId: '' })); setPassword(''); }}>Replace</Button></div> : <Field name="Password"><Input aria-label="Password" type="password" autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} /></Field>}
+          {connection.passwordSecretId ? <div className="flex items-center gap-3"><span aria-label="Password status" className="text-xs text-muted">Password · Configured</span><Button aria-label="Replace password" variant="ghost" onClick={() => { setConnectionFeedback(null); setConnection(value => ({ ...value, passwordSecretId: '' })); setPassword(''); }}>Replace</Button></div> : <Field name="Password"><Input aria-label="Password" type="password" autoComplete="new-password" value={password} onChange={e => { setConnectionFeedback(null); setPassword(e.target.value); }} /></Field>}
           <div className="flex flex-wrap items-center justify-between gap-3"><label className="flex items-center gap-2 text-xs text-muted"><input aria-label="Use SSL" type="checkbox" className="accent-accent" checked={connection.ssl} onChange={e => updateConnection({ ssl: e.target.checked })} />Use SSL / TLS</label><Button aria-label="Test and discover" variant="ghost" onClick={discover}>{busy === 'discover' ? 'Connecting…' : 'Test and discover'}</Button></div>
+          {connectionFeedback && <p role={connectionFeedback.kind === 'error' ? 'alert' : 'status'} aria-label={connectionFeedback.kind === 'error' ? 'Dataset error' : 'Dataset notice'} className={`text-xs leading-5 ${connectionFeedback.kind === 'error' ? 'text-danger' : connectionFeedback.kind === 'success' ? 'text-accent' : 'text-muted'}`}>{connectionFeedback.message}</p>}
         </section> : <section aria-label="Stored tables editor" className={`${PANEL} space-y-4 p-4 sm:p-5`}>
           <div><h2 className="text-sm font-semibold text-fg">Stored tables</h2><p className="mt-1 text-xs text-muted">Add JSON rows to a named table. Existing rows are retained unless you replace them.</p></div>
           {stored.map((table, index) => <div key={table.key} className="space-y-3 border-t border-edge pt-4"><div className="grid gap-3 sm:grid-cols-2"><Field name="Schema"><Input aria-label={`Stored schema ${index + 1}`} disabled={table.retained} value={table.schema} onChange={e => setStored(items => items.map(s => s.key === table.key ? { ...s, schema: e.target.value } : s))} /></Field><Field name="Table name"><Input aria-label={`Stored table name ${index + 1}`} disabled={table.retained} value={table.name} onChange={e => setStored(items => items.map(s => s.key === table.key ? { ...s, name: e.target.value } : s))} /></Field></div><Field name={table.retained ? 'Replace rows (optional)' : 'Rows'}><textarea aria-label={`Stored rows ${index + 1}`} className={`${control} min-h-32`} spellCheck={false} value={table.rows} placeholder='[{"id": 1}]' onChange={e => setStored(items => items.map(s => s.key === table.key ? { ...s, rows: e.target.value } : s))} /></Field><Button aria-label={`Remove stored table ${index + 1}`} variant="ghost" onClick={() => setStored(items => items.filter(s => s.key !== table.key))}>Remove table</Button></div>)}
@@ -211,11 +219,15 @@ export function DatasetEditorPage() {
                 <button type="button" aria-label={`Collapse cell ${index + 1}`} aria-expanded={!model.collapsed} className="rounded p-1 text-muted hover:text-fg" onClick={() => setModels(items => items.map(m => m.cell.id === model.cell.id ? { ...m, collapsed: !m.collapsed } : m))}>{model.collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}</button>
                 <span className="font-mono text-xs text-faint">{String(index + 1).padStart(2, '0')}</span><Input aria-label={`Cell name ${index + 1}`} className="min-w-24 max-w-64 flex-1 bg-transparent text-xs" placeholder="model_name" value={model.cell.name} onChange={e => updateModel(index, { name: e.target.value })} />
                 {!model.legacy && <label className="ml-auto flex items-center gap-2 text-xs text-muted"><input aria-label={`Expose cell ${index + 1}`} type="checkbox" className="accent-accent" disabled={model.stale || !model.columns.length} checked={!model.stale && model.selected.length === model.columns.length && model.columns.length > 0} aria-checked={!model.stale && model.selected.length > 0 && model.selected.length < model.columns.length ? 'mixed' : !model.stale && model.selected.length > 0} ref={node => { if (node) node.indeterminate = !model.stale && model.selected.length > 0 && model.selected.length < model.columns.length; }} onChange={e => setModels(items => items.map(m => m.cell.id === model.cell.id ? { ...m, selected: e.target.checked ? m.columns.map(c => c.name) : [] } : m))} />Expose</label>}
-                <Button aria-label={`Run cell ${index + 1}`} variant="ghost" disabled={!model.cell.name.trim() || !model.cell.sql.trim()} onClick={() => runCell(index)} className="inline-flex items-center gap-1.5"><Play size={12} />Run</Button>
+                <Button aria-label={`Run cell ${index + 1}`} aria-keyshortcuts="Meta+Enter Control+Enter" variant="ghost" disabled={!model.cell.name.trim() || !model.cell.sql.trim()} onClick={() => runCell(index)} className="inline-flex items-center gap-1.5"><Play size={12} />Run</Button>
               </header>
               {!model.collapsed && <div className="space-y-3 p-3">
                 {model.legacy && <Field name="Model schema"><Input aria-label={`Model schema ${index + 1}`} value={model.schema} onChange={e => setModels(items => items.map(m => m.cell.id === model.cell.id ? { ...m, schema: e.target.value } : m))} /></Field>}
-                <textarea aria-label={`Cell SQL ${index + 1}`} spellCheck={false} className={`${control} min-h-36 resize-y border-transparent bg-transparent leading-6`} placeholder={index ? `SELECT * FROM ${models[index - 1].cell.name || 'previous_cell'}` : 'SELECT * FROM public.orders'} value={model.cell.sql} onChange={e => updateModel(index, { sql: e.target.value })} />
+                <textarea aria-label={`Cell SQL ${index + 1}`} spellCheck={false} onKeyDown={event => {
+                  if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey) || event.repeat || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || event.currentTarget.matches(':disabled') || busy || sourceText !== null) return;
+                  event.preventDefault(); runCell(index);
+                }} className={`${control} min-h-36 resize-y border-transparent bg-transparent leading-6`} placeholder={index ? `SELECT * FROM ${models[index - 1].cell.name || 'previous_cell'}` : 'SELECT * FROM public.orders'} value={model.cell.sql} onChange={e => updateModel(index, { sql: e.target.value })} />
+                <p className="text-[11px] text-faint">Run this cell with <kbd className="font-mono">⌘ Enter</kbd> or <kbd className="font-mono">Ctrl Enter</kbd>.</p>
                 {model.preview ? <CatalogRows result={model.preview} label={`Cell preview ${index + 1}`} /> : <p className="text-xs text-faint">{model.stale ? 'Run this cell to inspect its current output columns.' : `${model.columns.length} saved output columns · run to preview rows`}</p>}
                 <div className="flex flex-wrap justify-between gap-2"><Button aria-label={`Insert cell after ${index + 1}`} variant="ghost" className="inline-flex items-center gap-1" onClick={() => addModel(index)}><Plus size={12} />Insert cell below</Button><Button aria-label={`Remove cell ${index + 1}`} variant="ghost" onClick={() => setModels(items => invalidate(items.filter(m => m.cell.id !== model.cell.id), index))}>Remove</Button></div>
               </div>}
