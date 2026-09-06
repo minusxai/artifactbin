@@ -10,7 +10,7 @@ import {connectionShape,secretTargetShape} from './input';
 const target=secretTargetShape;
 const connection=connectionShape;
 const notebook=z.object({cells:z.array(z.object({id:z.string(),name:z.string(),sql:z.string()}))});
-const errors=[{status:400,code:'invalid_dataset',fix:'Check the dataset connection and query.'},{status:403,code:'credential_unavailable',fix:'Create a target-bound secret or request dataset editor access.'},{status:404,code:'not_found',fix:'Use a dataset you can edit.'}];
+const errors=[{status:400,code:'dataset_error',fix:'Check the dataset input, target-bound credentials, and dataset editor access.'}];
 async function response(work:()=>Promise<Record<string,unknown>>,status=200):Promise<OpReply>{try{return {status,body:await work()};}catch(error){return {status:error instanceof DatasetError?error.status:400,body:{error:'dataset_error',details:[error instanceof Error?error.message:'Dataset request failed']}};}}
 async function editable(actor:Parameters<typeof getArtifactFor>[0],datasetId?:string){if(!datasetId)return;const row=await getArtifactFor(actor,datasetId);if(!row||row.format!=='dataset')throw new DatasetError('Dataset not found',404);}
 export const DATASET_OPERATIONS:Operation[]=[
