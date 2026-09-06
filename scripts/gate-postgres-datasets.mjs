@@ -119,10 +119,11 @@ try {
 
   const markup = '<Helmet><Value name="region" type="string" default="west" />'
     + `<Query name="orders" source="${datasetId}">{\`select id, region, amount from orders where $region is null or region=$region order by id\`}</Query></Helmet>`
-    + '<div data-design="tw" className="p-8"><h1>Regional orders</h1><Input label="Region" value="$region" /><DataTable data="$orders" /></div>';
+    + '<div data-design="tw" className="p-8"><h1>Regional orders</h1><input aria-label="Region" value="$region" /><DataTable data="$orders" /></div>';
   const published = await fetch(`${base}/api/artifacts/${start.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${start.token}` }, body: JSON.stringify({ title: 'Postgres sourced document', markup, visibility: 'unlisted' }) });
-  assert.equal(published.status, 200, 'same-owner document must accept a sourced filtered query');
-  secretFree(await published.json());
+  const publication = await published.json();
+  secretFree(publication);
+  assert.equal(published.status, 200, `same-owner document must accept a sourced filtered query: ${JSON.stringify(publication)}`);
   await guest.goto(`${base}/a/${start.id}`, { waitUntil: 'load' });
   await previewContains(guest, '120', 'DataTable embed');
   assert.ok(!(await guest.getByLabel('DataTable embed', { exact: true }).innerText()).includes('90'));
