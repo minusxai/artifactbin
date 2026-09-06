@@ -58,6 +58,22 @@ function savedDefinition() {
   return write ? parseDatasetDefinition(write.body.dataset) : undefined;
 }
 describe('dataset editor', () => {
+  it('lets a reader browse every exposed schema, table and column without editing or fetching raw discovery', async () => {
+    render(<DatasetCatalogView id="data-1" catalog={{...catalog,tables:[catalog.tables[0],{...tables[1],source:{schema:'crm',table:'people'}}]}} canEdit={false} />);
+    await screen.findByLabelText('Table preview');
+    const before = calls.length;
+    click('Browse dataset schema');
+    const browser = within(screen.getByLabelText('Dataset schema browser'));
+    expect(browser.getByText('sales')).toBeInTheDocument();
+    expect(browser.getByText('orders')).toBeInTheDocument();
+    expect(browser.getByText('id')).toBeInTheDocument();
+    expect(browser.getByText('crm')).toBeInTheDocument();
+    expect(browser.getByText('people')).toBeInTheDocument();
+    expect(browser.getByText('name')).toBeInTheDocument();
+    expect(browser.queryByText('secret')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Edit dataset')).not.toBeInTheDocument();
+    expect(calls).toHaveLength(before);
+  });
   it.each(['metaKey', 'ctrlKey'])('runs the focused notebook cell with %s+Enter while plain Enter stays editable', async modifier => {
     editor(); await discover(); click('Add notebook cell');
     change('Cell name 1', 'orders_preview'); change('Cell SQL 1', 'select id from sales.orders');
