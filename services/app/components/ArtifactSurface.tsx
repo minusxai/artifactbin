@@ -1,5 +1,9 @@
 'use client';
 
+import type { DatasetCatalog } from '@/lib/datasets/types';
+import { datasetQuerySnippet } from '@/lib/story/dataset-usage';
+import { DatasetCatalogView } from '@/components/DatasetCatalogView';
+
 /**
  * The client half of /a/<id>: what the artifact LOOKS like, and whether we
  * are viewing or editing it.
@@ -96,6 +100,7 @@ export interface ArtifactSurfaceProps {
   follow?: { userId: string; following: boolean; count: number } | null;
   content: string;
   columns: Array<{ name: string; type?: string }>;
+  catalog?: DatasetCatalog;
   compiledCss: string | null;
   theme: StoryThemeName | null;
   colorMode: 'light' | 'dark' | null;
@@ -380,6 +385,26 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     );
   }, []);
   const live = useLiveArtifact(id, editId, version, !editing, undefined, onLiveData, setLiveAnnotations);
+  const [liveCatalog, setLiveCatalog] = useState<{ id: string; version: number; catalog: DatasetCatalog } | null>(null);
+  // Dataset version frames carry rows, not catalog definitions. Re-read the
+  // authorized page metadata on this existing stream's wakeup; the viewer
+  // keeps its table selection while it adopts new columns/models/stored rows.
+  useEffect(() => {
+    if (format !== 'dataset' || live?.format !== 'dataset') return;
+    let alive = true;
+    const minimumVersion = live.version;
+    void fetch(`/api/page/artifact/${encodeURIComponent(id)}`, { credentials: 'same-origin' })
+      .then(response => response.ok ? response.json() as Promise<{ surface?: { version: number; catalog?: DatasetCatalog } }> : null)
+      .then(page => {
+        const surface = page?.surface;
+        if (alive && surface?.catalog && surface.version >= minimumVersion) {
+          setLiveCatalog({ id, version: surface.version, catalog: surface.catalog });
+        }
+      }).catch(() => { /* Keep the current table; another stream wakeup retries. */ });
+    return () => { alive = false; };
+  }, [id, format, live]);
+  const shownCatalog = liveCatalog?.id === id && liveCatalog.version >= version ? liveCatalog.catalog : props.catalog;
+
   /*
    * THE READER'S `<Value>` SELECTION, AND THE ADDRESS BAR (lib/story/url-values).
    *
@@ -1224,13 +1249,13 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             <button
               type="button"
               aria-label="Copy dataset reference"
-              onClick={() => { void navigator.clipboard?.writeText(`ref:${id}`); setCopiedRef(true); }}
+              onClick={() => { void navigator.clipboard?.writeText(shownCatalog ? datasetQuerySnippet(id, shownCatalog, 'data') : `ref:${id}`); setCopiedRef(true); }}
               className={`${CONTROL_ROW} text-accent`}
             >
-              {copiedRef ? 'copied dataset reference' : `copy ref:${id}`}
+              {copiedRef ? 'copied dataset reference' : shownCatalog ? `copy query · source="${id}"` : `copy ref:${id}`}
             </button>
           )}
-          <ShareLink artifactId={id} title={shownTitle} owner format={format} variant="menu" className="" onSocialPreview={canEdit && shownSource !== null && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />
+          <ShareLink artifactId={id} title={shownTitle} owner format={format} datasetKind={shownCatalog?.kind} variant="menu" className="" onSocialPreview={canEdit && shownSource !== null && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />
         </section>
       )}
     </div>
@@ -1450,7 +1475,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
         </div>
       )}
 
-      {format === 'dataset' && (
+      {format === 'dataset' && shownCatalog && <DatasetCatalogView id={id} catalog={shownCatalog} canEdit={canEdit} />}
+      {format === 'dataset' && !shownCatalog && (
         <>
           <p className="mt-4 font-sans text-xs text-muted" aria-label="Dataset summary">
             {safeRows(shownContent).length.toLocaleString()} rows · {columns.length} columns

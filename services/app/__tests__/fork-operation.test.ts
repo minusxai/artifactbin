@@ -76,6 +76,8 @@ describe('fork_artifact on the operations registry', () => {
     // A folder's source names its own children table: a copy would list the
     // children of the original, so the door refuses by name.
     expect(codes).toContain('not_forkable');
+    expect(codes).not.toContain('connection_owner_only');
+    expect(op!.description).toMatch(/Postgres secret remains bound to the original dataset/);
     expect(op!.description.length).toBeGreaterThan(80);
     expect(op!.example.input).toMatchObject({ id: expect.any(String) });
   });

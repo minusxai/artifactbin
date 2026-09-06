@@ -145,6 +145,8 @@ export const IS_DEV = process.env.NODE_ENV === 'development';
 
 /** NextAuth JWT-session signing secret. The fallback is for local dev only. */
 export const AUTH_SECRET = env('AUTH', 'SECRET') ?? 'dev-only-secret-change-me';
+/** Operator opt-in for databases on a private/self-hosted network. */
+export const DATASET_ALLOW_PRIVATE_NETWORKS = env('DATASET','ALLOW_PRIVATE_NETWORKS') === 'true';
 
 /**
  * Per-token artifact cap — creation answers

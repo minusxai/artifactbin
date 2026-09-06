@@ -102,6 +102,7 @@ jobs:
         run: npx playwright install --with-deps chromium
       - if: steps.playwright.outputs.cache-hit == 'true'
         run: npx playwright install chromium
+      - run: docker pull postgres:17-alpine
       - run: npx vitest run --project=node --shard=${{ matrix.shard }}/3
 
   # jsdom setup dominates the ui project (~110s serial on a 4-vCPU runner —
@@ -375,10 +376,12 @@ jobs:
       # within-machine fan-out bottomed out at 192s on four vCPUs; the shard is
       # balanced by each gate's measured weight, not by count, so neither half
       # ends up holding every slow gate (scripts/gates.shard.mjs).
+      - run: docker pull postgres:17-alpine
       - name: every gate, four servers
         run: node scripts/gates.mjs --servers=4 --shard=${{ matrix.shard }}/2
         env:
           AUTH__SECRET: gates-ci-${{ github.run_id }}
+          DATASET__ALLOW_PRIVATE_NETWORKS: 'true'
 
   # THE IMAGE IS THE ARTIFACT THAT DEPLOYS, and nothing else here proves it
   # builds or runs. `npm run build` produces the bundle from the FULL

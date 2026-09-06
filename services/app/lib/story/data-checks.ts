@@ -1,3 +1,4 @@
+import {compileStoredMutation} from '@/lib/datasets/stored-mutation';
 /**
  * The document's DATA checks — everything about a markup document's data that
  * can only be judged with the caller's artifacts in hand: refs resolve and are
@@ -57,8 +58,16 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
   const paramNames = flow.values.filter((v) => v.kind === 'scalar').map((v) => v.name);
   const order = queryOrder(flow) ?? [];
   const queries = order.map((n) => flow.queries.find((q) => q.name === n)!);
-  const dry = await dryRunQueries({ tables, queries, paramNames });
-  const details = dry.errors.map((e) => `<Query name="${e.name}">: ${e.error}`);
+  const sourceErrors:string[]=[];
+  for(const query of queries.filter(q=>q.source)){
+    try{
+      const ref=await load(query.source!);if(!ref?.query)throw new Error('Dataset source is unavailable');
+      const params=Object.fromEntries(flow.values.filter(v=>v.kind==='scalar').map(v=>[v.name,v.default]));
+      tables[query.name]={columns:(await ref.query(query.sql,params,Object.fromEntries(flow.values.filter(v=>v.kind==='scalar').map(v=>[v.name,v.type])))).columns};
+    }catch(error){sourceErrors.push(`<Query name="${query.name}">: ${error instanceof Error?error.message:'Dataset query failed'}`);}
+  }
+  const dry = await dryRunQueries({ tables, queries:queries.filter(q=>!q.source), paramNames });
+  const details = [...sourceErrors,...dry.errors.map((e) => `<Query name="${e.name}">: ${e.error}`)];
   const columns = { ...Object.fromEntries(Object.entries(tables).map(([n, t]) => [n, t.columns])), ...dry.columns };
   const scoped = analyzeRowScopes(body, columns);
   details.push(...scoped.errors);
@@ -79,8 +88,16 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
   // a non-DML statement or an unknown column is a publish error, never a
   // button that fails on its first click.
   if (mutations.length) {
-    const wet = await dryRunMutations({ tables, mutations: mutations.map((m) => ({ ...m, ...(rowSchemas[m.name] ? { row: { columns: rowSchemas[m.name] } } : {}) })), paramNames: [...paramNames, '_value'] });
-    details.push(...wet.errors.map((e) => `<Mutation name="${e.name}">: ${e.error}`));
+    const groups=mutations.some(m=>m.source)?mutations.map(m=>[m]):[mutations];
+    for(const group of groups){
+      const inputTables={...tables};const prepared=[];
+      for(const m of group){
+        let sql=m.sql;
+        if(m.source){try{const ref=await load(m.source);if(!ref?.catalog)throw new Error('Dataset source is unavailable');const compiled=compileStoredMutation(ref.catalog,sql,`ref_${m.target}`);sql=compiled.sql;inputTables[`ref_${m.target}`]={columns:compiled.table.columns};}catch(error){details.push(`<Mutation name="${m.name}">: ${error instanceof Error?error.message:'Invalid mutation'}`);continue;}}
+        prepared.push({...m,sql,...(rowSchemas[m.name]?{row:{columns:rowSchemas[m.name]}}:{})});
+      }
+      if(prepared.length){const wet=await dryRunMutations({tables:inputTables,mutations:prepared,paramNames:[...paramNames,'_value']});details.push(...wet.errors.map(e=>`<Mutation name="${e.name}">: ${e.error}`));}
+    }
   }
   if (details.length) return { kind: 'sql', details };
   return { kind: 'ok', columns, rowSchemas };

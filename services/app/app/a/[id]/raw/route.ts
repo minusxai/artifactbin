@@ -48,6 +48,7 @@ import { ownerUsername } from '@/lib/users';
 import { displayTitle } from '@/lib/story/title';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
+import { catalogOf,publicCatalogOf } from '@/lib/datasets/catalog';
 
 // The markup document's policy — per document, built in lib/story/markup-csp:
 // content-independent except for the ONE connect-src that admits exactly this
@@ -126,10 +127,14 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
 
   switch (artifact.format) {
     case 'dataset':
-      return new Response(JSON.stringify(await loadDatasetRows(artifact)), {
+    {
+      const catalog=catalogOf(artifact);
+      const legacyFlat=catalog?.kind==='stored'&&catalog.tables.length===1&&catalog.tables[0].schema==='public'&&catalog.tables[0].name==='rows'&&typeof (artifact.meta as Record<string,unknown>).objectKey==='string';
+      return new Response(JSON.stringify(legacyFlat||!catalog ? await loadDatasetRows(artifact) : {catalog:publicCatalogOf(artifact)}), {
         status: 200,
         headers: { 'Content-Type': 'application/json; charset=utf-8', ...COMMON },
       });
+    }
 
     case 'viz':
       return new Response(artifact.content, {

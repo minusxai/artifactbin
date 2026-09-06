@@ -1,14 +1,4 @@
-/**
- * What an agent is told the MOMENT it creates a dataset.
- *
- * The deeper cause of the broken-chart bug. Told only `{id, url, columns}`,
- * ChatGPT had to already know that the way to consume a dataset is
- * `data="ref:<id>"` — and it guessed `source=` instead. Schema wording helps,
- * but the create RESPONSE is where the agent has maximum context: it has just
- * made this thing and is about to use it. Handing back the reference and a
- * ready-to-paste embed there closes the gap at the point of use rather than
- * hoping the agent read a field description earlier.
- */
+/** Create responses teach canonical source queries with real columns; the legacy ref field remains compatible. */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 
@@ -44,8 +34,9 @@ describe('creating a dataset returns how to USE it', () => {
     const usage = body.usage as string;
     // The exact prop names the agent got wrong, bound to this dataset's columns —
     // through a <Query> over the dataset's SQL table, which is how a document reads one.
-    expect(usage).toContain(`<Query name="rows">`);
-    expect(usage).toContain(`ref_${body.id}`);
+    expect(usage).toContain(`<Query name="rows" source="${body.id}">`);
+    expect(usage).toContain('FROM "public"."rows"');
+    expect(usage).not.toContain(`ref_${body.id}`);
     expect(usage).toContain('data="$rows"');
     expect(usage).toContain('viz=');
     expect(usage).toContain('vega-lite');

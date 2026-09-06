@@ -122,9 +122,10 @@ describe('the design skill leads with the rules an agent can act on', () => {
 
 describe('the brief — the one text every agent reads', () => {
   const sheet = buildQuickSheet(BASE);
-  it('carries the data vocabulary a dashboard needs (Query over ref_, bound by $name)', () => {
+  it('carries the data vocabulary a dashboard needs (sourced Query, bound by $name)', () => {
     expect(sheet).toContain('<Query');
-    expect(sheet).toContain('ref_');
+    expect(sheet).toContain('source="<datasetId>"');
+    expect(sheet).toContain('public.rows');
     expect(sheet).toContain('data="$');
   });
   it('does not forbid h-screen / vh — the platform rewrites both on every path', () => {

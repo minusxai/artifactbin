@@ -1,3 +1,7 @@
+import {catalogOf} from '@/lib/datasets/catalog';
+import {executeCatalog} from '@/lib/datasets/execute';
+import {claimPendingDatasetSecret,resolveDatasetConnection} from '@/lib/datasets/secrets';
+import {DatasetError} from '@/lib/datasets/errors';
 /**
  * All artifact SQL. Every read/write is scoped by ownership — an id the caller
  * cannot reach is indistinguishable from a nonexistent one (callers answer a
@@ -350,7 +354,10 @@ export async function createArtifact(
   for (let attempt = 0; ; attempt++) {
     const id = generateFileId();
     try {
-      const r = await db.query<ArtifactRow>(
+      const r = await db.transaction(async tx=>{
+        const catalog=catalogOf(input);
+        if(catalog?.kind==='postgres'&&catalog.connection)await claimPendingDatasetSecret(catalog.connection,{tokenId,userId},id,tx);
+        return tx.query<ArtifactRow>(
         // The genesis edit row makes the creation's edit_id resolvable like any
         // other: an agent that creates and then edits against that id is on an
         // ordinary (if empty) base, not an unknown one. Data-modifying CTEs
@@ -396,7 +403,8 @@ export async function createArtifact(
           atCreation.forkedFrom ?? null,
           JSON.stringify(sourceIds),
         ],
-      );
+        );
+      });
       void trackEvent('create', r.rows[0].id, { userId, parentId: parentOf(r.rows[0]) });
       // A child arriving wakes the folder it landed in, so an open listing
       // re-runs its own query with no reload.
@@ -446,8 +454,8 @@ export interface ForkOverrides {
  * (`writerFor` resolves as the document's owner, which the copy no longer is),
  * and one reading the owner's PRIVATE image or dataset is refused rather than
  * rendering broken for its new owner. The refusal Response passes through
- * verbatim. The data tiers have nothing to re-validate — their content is bytes
- * behind a key — so they are copied straight across.
+ * verbatim. Stored data-tier content is immutable bytes behind a key and copies
+ * directly; a Postgres catalog copies only when the forker owns its live connection.
  *
  * `overrides` are the three things a forker changes FIRST (the browser door
  * passes none; the agent operation passes what its caller sent, already
@@ -496,6 +504,8 @@ async function forkInput(actor: TokenActor, source: ArtifactRow, overrides: Fork
     ...(overrides.ancestor_ids !== undefined ? { ancestor_ids: overrides.ancestor_ids } : {}),
   };
   if (source.format !== 'markup') {
+    const refusal=postgresForkRefusal(source);
+    if(refusal)return refusal;
     return { ...carried, format: source.format, content: source.content, source: source.source, meta: source.meta };
   }
   const meta = source.meta as { theme?: string; template?: string; colorMode?: 'light' | 'dark' | null };
@@ -517,6 +527,14 @@ async function forkInput(actor: TokenActor, source: ArtifactRow, overrides: Fork
   if (parsed instanceof Response) return parsed;
   const { derivedTitle: _derived, ...stored } = parsed;
   return { ...carried, ...stored };
+}
+
+/** A live remote catalog cannot copy its dataset-bound secret to a new id. */
+function postgresForkRefusal(source:ArtifactRow):Response|null {
+  if(source.format!=='dataset')return null;
+  const catalog=catalogOf(source);
+  if(catalog?.kind!=='postgres')return null;
+  return json({error:'not_forkable',hint:'Postgres credentials remain bound to the original dataset'},403);
 }
 
 async function getArtifact(tokenId: string, id: string): Promise<ArtifactRow | null> {
@@ -858,6 +876,14 @@ async function revertScoped(actor: TokenActor, id: string, version: number): Pro
     if (!current) return null;
     if(current.edit_id!==initial.edit_id) return {notArchived:true,conflictVersion:current.version};
     if(prepared) return commitNormalizedMarkup(tx,actor,current,{...prepared,title:target.title,description:target.description,format:target.format});
+    const targetCatalog=catalogOf(target);
+    if(targetCatalog?.kind==='postgres'&&targetCatalog.connection){
+      try{await resolveDatasetConnection(targetCatalog.connection,undefined,current.id,tx);}
+      catch(error){
+        if(error instanceof DatasetError)return {notArchived:true,refusal:json({error:'dataset_error',details:[error.message]},error.status)};
+        throw error;
+      }
+    }
 
     await archiveVersion(tx, current);
     const updated = await tx.query<ArtifactRow>(
@@ -922,6 +948,8 @@ async function replaceScoped(
     if (opts.expectedVersion !== undefined && current.version !== opts.expectedVersion) {
       return { conflict: true, currentVersion: current.version };
     }
+    const replacementCatalog=catalogOf(input);
+    if(replacementCatalog?.kind==='postgres'&&replacementCatalog.connection)await resolveDatasetConnection(replacementCatalog.connection,undefined,current.id,tx);
 
     const replacementIdentity = input.format === 'markup' && input.source
       ? stampNodeIds(input.source, {
@@ -1352,7 +1380,7 @@ export function setAccessFor(actor: TokenActor, id: string, access: DatasetAcces
 async function setAccessScoped(scope: Scope, id: string, access: DatasetAccess): Promise<ArtifactRow | null> {
   const db = await getDb();
   const r = await db.query<ArtifactRow>(
-    `UPDATE artifacts SET access = $3 WHERE id = $1 AND ${scope.where('$2')} AND format = 'dataset' RETURNING *, pg_notify('artifact_' || lower(id), edit_id)`,
+    `UPDATE artifacts SET access = $3 WHERE id = $1 AND ${scope.where('$2')} AND format = 'dataset' AND ($3 <> 'readwrite' OR COALESCE(meta->'catalog'->>'kind','stored') <> 'postgres') RETURNING *, pg_notify('artifact_' || lower(id), edit_id)`,
     [id, scope.val, access],
   );
   return r.rows[0] ?? null;
@@ -1428,6 +1456,7 @@ export interface SharingState {
   shares: ShareEntry[];
   /** Datasets: the write ACL, and the documents that would stop working if it were closed. */
   access?: DatasetAccess;
+  datasetKind?: 'stored' | 'postgres';
   writtenBy?: Array<{ id: string; title: string | null; mutations: string[] }>;
   /** False for an anonymous owner: `private` has no ACL to anchor without an account. */
   canPrivate?: boolean;
@@ -1455,7 +1484,7 @@ export async function getSharingFor(actor: TokenActor, id: string): Promise<Shar
     shares: shares.rows,
     canPrivate: !!actor.userId,
     ...(row.format === 'dataset'
-      ? { access: row.access, writtenBy: await findWritersFor(actor, id) }
+      ? { access: row.access, datasetKind: catalogOf(row)?.kind ?? 'stored', writtenBy: await findWritersFor(actor, id) }
       : {}),
   };
 }
@@ -1490,7 +1519,7 @@ export async function updateSharingFor(actor: TokenActor, id: string, patch: Sha
     if (patch.access) {
       // Datasets only — the SQL says so rather than the caller, so a document
       // can never acquire a write ACL by way of this surface.
-      await tx.query(`UPDATE artifacts SET access = $3 WHERE id = $1 AND ${scope.where('$2')} AND format = 'dataset'`, [id, scope.val, patch.access]);
+      await tx.query(`UPDATE artifacts SET access = $3 WHERE id = $1 AND ${scope.where('$2')} AND format = 'dataset' AND ($3 <> 'readwrite' OR COALESCE(meta->'catalog'->>'kind','stored') <> 'postgres')`, [id, scope.val, patch.access]);
     }
     if (patch.shares) {
       const entries = new Map(patch.shares.map((e) => [e.email.toLowerCase().trim(), e.role]));
@@ -1770,7 +1799,7 @@ function rowToResolvedRef(row: ArtifactRow, owned = false): ResolvedRef {
     id: row.id,
     format: row.format,
     owned,
-    ...(row.format === 'dataset' ? { columns: meta.columns ?? [], access: row.access } : {}),
+    ...(row.format === 'dataset' ? { columns: meta.columns ?? [], access: row.access, catalog:catalogOf(row)??undefined, query: async(sql:string,params:Record<string,Scalar>,paramTypes?:Record<string,DatasetColumn["type"]>) => executeCatalog(catalogOf(row)!,sql,params,{datasetId:row.id,limit:1,refresh:true,paramTypes}) } : {}),
     // A folder's shape is FIXED and computed, never stored — the publish door
     // and the dry run both need it to judge a <Query> over `ref_<folderId>`.
     ...(row.format === 'folder' ? { columns: CHILDREN_COLUMNS } : {}),
@@ -1787,6 +1816,7 @@ export type WriteRefusal = 'not_a_dataset' | 'dataset_read_only';
 /** The dataset must allow writes AND the current actor must hold its editor role. */
 export async function canWriteDataset(dataset: ArtifactRow, actor: RoleActor): Promise<WriteRefusal | null> {
   if (dataset.format !== 'dataset') return 'not_a_dataset';
+  if(catalogOf(dataset)?.kind==='postgres')return 'dataset_read_only';
   // An unreachable dataset is reported as read-only, never as "not yours":
   // the caller answers a uniform 404 for anything it could not resolve, and
   // this one it could — the document names it, so its existence is not news.
@@ -1853,7 +1883,7 @@ export async function runDocumentMutation(
   } else if (row !== undefined || Object.hasOwn(values, '_value')) {
     return { ok: false, reason: 'invalid_row', detail: 'this mutation does not accept a row or _value' };
   }
-  const result = await mutateDataset(dataset, actor, decl.sql, bound, { row: rowBinding, expectedAffected: decl.expectedAffected });
+  const result = await mutateDataset(dataset, actor, decl.sql, bound, { row: rowBinding, expectedAffected: decl.expectedAffected, source:!!decl.source });
   if (isMutationRefused(result)) return { ok: false, reason: result.reason, detail: result.detail };
   return { ok: true, dataset: result.row, affected: result.affected, rowCount: result.rowCount };
 }
@@ -1995,7 +2025,7 @@ export interface DataflowRunOptions {
 export type DatasetResolver = (id: string) => Promise<RefTable | null>;
 
 /** What a resolved ref contributes to the run: rows and their shape. */
-export type RefTable = { rows: Row[]; columns: DatasetColumn[] };
+export type RefTable = { rows: Row[]; columns: DatasetColumn[]; catalog?:import('@/lib/datasets/types').DatasetCatalog };
 
 /** A resolved ref row → its table, under the viewer whose run this is. */
 async function tableForRef(r: ArtifactRow | null, viewer: RoleActor | null): Promise<RefTable | null> {
@@ -2006,7 +2036,7 @@ async function tableForRef(r: ArtifactRow | null, viewer: RoleActor | null): Pro
   if (r.format !== 'dataset') return null; // wrong kind → the query reports the missing table
   const m = r.meta as { columns?: DatasetColumn[] };
   try {
-    return { rows: await loadDatasetRows(r), columns: m.columns ?? [] };
+    return { rows: await loadDatasetRows(r), columns: m.columns ?? [], ...(catalogOf(r)?{catalog:catalogOf(r)!}:{}) };
   } catch { return null; } // the query reports the missing table
 }
 
@@ -2061,7 +2091,13 @@ export async function runDocumentDataflow(
     const table = await resolve(id);
     if (table) datasets[id] = table;
   }
-  const state = await runDataflow(flow, datasets, { values: opts.values, only: opts.only, page: opts.page });
+  const state = await runDataflow(flow, datasets, { values: opts.values, only: opts.only, page: opts.page,
+    sourceQuery:async(q,values,page)=>{
+      const catalog=(datasets[q.source!] as RefTable|undefined)?.catalog;
+      if(!catalog)throw new Error('Dataset source is unavailable');
+      return executeCatalog(catalog,q.sql,values,{datasetId:q.source!,limit:page?.limit,offset:page?.offset,sort:page?.sort,paramTypes:Object.fromEntries(flow.values.filter(v=>v.kind==='scalar').map(v=>[v.name,v.type]))});
+    },
+  });
   return { flow, state };
 }
 

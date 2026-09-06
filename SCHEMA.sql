@@ -555,6 +555,33 @@ CREATE INDEX IF NOT EXISTS idx_web_assets_token ON app.web_assets (fetched_by_to
 
 CREATE INDEX IF NOT EXISTS idx_web_assets_user ON app.web_assets (fetched_by_user_id);
 
+CREATE TABLE IF NOT EXISTS app.dataset_secrets (
+  id TEXT NOT NULL,
+  token_id TEXT NOT NULL,
+  user_id TEXT,
+  dataset_id TEXT,
+  target_hash TEXT NOT NULL,
+  ciphertext TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE app.dataset_secrets ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE app.dataset_secrets ADD COLUMN IF NOT EXISTS token_id TEXT NOT NULL;
+
+ALTER TABLE app.dataset_secrets ADD COLUMN IF NOT EXISTS user_id TEXT;
+
+ALTER TABLE app.dataset_secrets ADD COLUMN IF NOT EXISTS dataset_id TEXT;
+
+ALTER TABLE app.dataset_secrets ADD COLUMN IF NOT EXISTS target_hash TEXT NOT NULL;
+
+ALTER TABLE app.dataset_secrets ADD COLUMN IF NOT EXISTS ciphertext TEXT NOT NULL;
+
+ALTER TABLE app.dataset_secrets ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE INDEX IF NOT EXISTS idx_dataset_secrets_dataset ON app.dataset_secrets (dataset_id);
+
 -- schema "auth" — owned by the proxy role; tables declared by the proxy's schema module
 
 CREATE TABLE IF NOT EXISTS auth.clients (

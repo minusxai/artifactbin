@@ -21,10 +21,12 @@ import { createPortal } from 'react-dom';
 import { Crop, Check, EyeOff, Globe, Link as LinkIcon, Lock, PenLine, X } from 'lucide-react';
 import { SelectMenu } from '@/components/SelectMenu';
 import { Tooltip } from '@/components/Tooltip';
+import type { DatasetCatalog } from '@/lib/datasets/types';
 import type { DatasetAccess, SharingPatch, Visibility } from '@/lib/artifacts';
 import { SHARE_ROLES, SHARE_ROLE_LABEL, type ShareEntry, type ShareRole } from '@/lib/share-roles';
 
 interface SharingState {
+  datasetKind?: DatasetCatalog['kind'];
   visibility: Visibility;
   /** GENERAL ACCESS: what the link grants whoever holds it. Meaningless while `private`. */
   linkRole: ShareRole;
@@ -53,6 +55,7 @@ export default function ShareLink({
   title,
   owner = false,
   format,
+  datasetKind,
   variant = 'chip',
   url,
   onClose,
@@ -67,6 +70,8 @@ export default function ShareLink({
   owner?: boolean;
   /** The artifact's format — the writes row exists for a dataset and nothing else. */
   format?: string;
+  /** Known before sharing loads; the API also supplies this for shelf callers. */
+  datasetKind?: DatasetCatalog['kind'];
   /** `menu` is a document-control row; `dialog` opens directly from an external menu. */
   variant?: 'chip' | 'menu' | 'dialog';
   /** Explicit artifact address when opened from a shelf or table. */
@@ -152,9 +157,10 @@ export default function ShareLink({
    * `visibility` is who may READ it; `access` is who may CHANGE it through a
    * document. Neither implies the other, so they are two rows, not one picker.
    */
-  const writable = state?.access === 'readwrite';
+  const postgres = format === 'dataset' && (datasetKind === 'postgres' || state?.datasetKind === 'postgres');
+  const writable = !postgres && state?.access === 'readwrite';
   const writers = state?.writtenBy ?? [];
-  const showWrites = format === 'dataset' && !!state;
+  const showWrites = format === 'dataset' && !!state && !postgres;
   const setAccess = (next: DatasetAccess) => {
     // Closing writes never touches the ROWS — every mutate call re-checks — but
     // it does stop the documents that write, so it says which ones first. With
@@ -259,6 +265,7 @@ export default function ShareLink({
                   </span>
                 </label>
               )}
+              {postgres && <p aria-label="PostgreSQL read-only access" className="mt-5 border-t border-edge pt-4 leading-relaxed text-muted">Editors can manage the connection, notebook and whitelist. Viewers can query exposed data. Database rows cannot be changed here.</p>}
               {showWrites && (
                 <div className="mt-5 border-t border-edge pt-4">
                   <p className="mb-1 flex items-center justify-between text-faint">

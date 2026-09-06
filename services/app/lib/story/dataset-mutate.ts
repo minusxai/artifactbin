@@ -1,3 +1,5 @@
+import {catalogOf} from '@/lib/datasets/catalog';
+import {compileStoredMutation} from '@/lib/datasets/stored-mutation';
 /**
  * WRITING a dataset — the other half of lib/story/dataset-store.
  *
@@ -83,7 +85,7 @@ export async function mutateDataset(
   actor: RoleActor,
   sql: string,
   params: Record<string, Scalar> = {},
-  guard: Pick<MutationInput, 'row' | 'expectedAffected'> = {},
+  guard: Pick<MutationInput, 'row' | 'expectedAffected'> & {source?:boolean} = {},
 ): Promise<MutationApplied | MutationRefused> {
   const db = await getDb();
   const table = `ref_${dataset.id}`;
@@ -100,9 +102,17 @@ export async function mutateDataset(
     if (!current) return { reason: 'invalid_sql', detail: 'the dataset no longer exists' };
     if (await canWriteDataset(current, actor)) return {reason:'dataset_read_only',detail:'You no longer have edit access to a writable dataset.'};
 
-    const columns = ((current.meta as { columns?: DatasetColumn[] }).columns) ?? [];
-    const rows = await loadDatasetRows(current);
-    const out = await runMutation({ table: { name: table, rows, columns }, sql, params, ...guard, limit: datasetRowCap() });
+    const catalog=catalogOf(current);
+    let selected:import('@/lib/datasets/types').DatasetTable|undefined;
+    let executedSql=sql;
+    if(guard.source){
+      try{if(!catalog)throw new Error('Dataset catalog unavailable');const compiled=compileStoredMutation(catalog,sql,table);selected=compiled.table;executedSql=compiled.sql;}
+      catch(error){return {reason:'invalid_sql',detail:error instanceof Error?error.message:'Invalid stored mutation'};}
+    }
+    const columns = selected?.columns ?? ((current.meta as { columns?: DatasetColumn[] }).columns) ?? [];
+    const rows = await loadDatasetRows(selected?{content:'',meta:{objectKey:selected.objectKey}}:current);
+    const {source:_,...mutationGuard}=guard;
+    const out = await runMutation({ table: { name: table, rows, columns }, sql:executedSql, params, ...mutationGuard, limit: datasetRowCap() });
     if (isQueryFailure(out)) {
       return { reason: out.code ?? (out.full ? 'dataset_full' : 'invalid_sql'), detail: out.error };
     }
@@ -118,10 +128,15 @@ export async function mutateDataset(
       columns: out.columns.length ? out.columns : columns,
       rowCount: out.rows.length,
       objectKey: located.objectKey,
+      ...(catalog?{catalog:{...catalog,tables:catalog.tables.map(t=>t===(selected??catalog.tables.find(t=>t.schema==='public'&&t.name==='rows'))?{...t,objectKey:located.objectKey,columns:out.columns.length?out.columns:columns}:t)}}:{}),
       // A written dataset is no longer "the first N rows of a bigger source".
       totalRows: undefined,
       truncated: undefined,
     };
+    if(selected && (selected.schema!=='public'||selected.name!=='rows')){
+      const old=current.meta as typeof meta;
+      meta.columns=old.columns;meta.objectKey=old.objectKey;meta.rowCount=old.rowCount;
+    }
     delete meta.totalRows;
     delete meta.truncated;
 

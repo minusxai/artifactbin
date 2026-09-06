@@ -1,3 +1,4 @@
+import {DATASET_OPERATIONS} from '@/lib/datasets/operations';
 /**
  * THE OPERATIONS REGISTRY — one curated array of everything an agent can do
  * to an artifact, rendered three ways: the MCP tools (`app/mcp/route.ts`
@@ -106,7 +107,7 @@ const reply = (body: Record<string, unknown>, status = 200): OpReply => ({ statu
  */
 const CONTENT_FIELDS = {
   markup: z.string().optional().describe(MARKUP_FIELD_GUIDANCE),
-  dataset: z.union([z.array(z.record(z.string(), z.unknown())), z.string()]).optional().describe(DATASET_FIELD_GUIDANCE),
+  dataset: z.union([z.array(z.record(z.string(), z.unknown())), z.record(z.string(),z.unknown()), z.string()]).optional().describe(DATASET_FIELD_GUIDANCE),
   sheetUrl: z.string().optional().describe(SHEET_URL_FIELD_GUIDANCE),
   columns: z.array(z.object({ name: z.string(), type: z.enum(['string', 'number', 'boolean', 'date']) })).optional().describe('dataset: declared column types (win over inference)'),
   viz: z.record(z.string(), z.unknown()).optional().describe('viz tier: a recipe {description, engine, bindings, params?, template} with {{slot}} tokens'),
@@ -145,7 +146,7 @@ const FOLDER_RETIRED: OperationError = { status: 400, code: 'folder_retired', fi
  */
 const OWNER_ONLY: OperationError = { status: 403, code: 'owner_only', fix: "visibility and access belong to the artifact's owner — you hold an editor share on it, so send the update without them" };
 
-const NOT_FORKABLE: OperationError = { status: 400, code: 'not_forkable', fix: "a folder cannot be forked — create your own with {\"format\":\"folder\"} and file documents under it with parent_id" };
+const NOT_FORKABLE: OperationError = { status: 400, code: 'not_forkable', fix: "a folder cannot be forked — create your own with {\"format\":\"folder\"} and file documents under it with parent_id. A Postgres dataset must have a usable connection" };
 
 const INVALID_JSX: OperationError = { status: 400, code: 'invalid_jsx', fix: 'details names each problem with its span; a refused tag answer carries allowed_html_tags — pick from it' };
 const INVALID_REFS: OperationError = { status: 400, code: 'invalid_refs', fix: 'details names each ref: an id that does not resolve for YOU, a wrong kind, or a <Mutation> target that is not your own readwrite dataset — publish your own copy of it' };
@@ -172,7 +173,7 @@ const createArtifactOp: Operation = {
   name: 'create_artifact',
   title: 'Create an artifact',
   http: { method: 'POST', path: '/api/artifacts' },
-  description: 'Create an artifact (exactly one of markup | dataset | viz | image | pdf). Returns the public URL. markup is THE document format: story JSX over the component kit, HTML tags for everything else (prose is ordinary <p>/<h1>/<ul> — there is no markdown), and one top-level <Helmet> for <title>/<style>/<script> and the document\'s DATA: <Value name type default /> scalars and <Query name>{`select … from ref_<datasetId>`}</Query> (SQL over your datasets), bound in the body by name — <Question data="$q">, <DataTable data="$q">, <select value="$x" options="$q">. Recipes/images bind as ref:<id>, and a pdf as <File src="ref:<id>" />. No upload is needed for something already on the web: write <img src="https://…"> (or <Video poster>, <File src>) and publish stores a copy while your URL stays in the document. Dataset creation echoes the inferred columns and a ready-to-paste Query+Question. To ORGANISE: {"format":"folder","title":"Reports"} makes a folder — a folder HAS no content, its page is the listing we render for whoever opens it — and parent_id: "<folderId>" on any create files it there.',
+  description: 'Create an artifact (exactly one of markup | dataset | viz | image | pdf). Returns the public URL. markup is THE document format: story JSX over the component kit, HTML tags for everything else (prose is ordinary <p>/<h1>/<ul> — there is no markdown), and one top-level <Helmet> for <title>/<style>/<script> and the document\'s DATA: <Value name type default /> scalars and <Query name source="<datasetId>">{`select … from public.rows`}</Query> (SQL over named tables in one dataset; PostgreSQL datasets are read-only), bound in the body by name — <Question data="$q">, <DataTable data="$q">, <select value="$x" options="$q">. Recipes/images bind as ref:<id>, and a pdf as <File src="ref:<id>" />. No upload is needed for something already on the web: write <img src="https://…"> (or <Video poster>, <File src>) and publish stores a copy while your URL stays in the document. Dataset creation echoes the inferred columns and a ready-to-paste Query+Question. To ORGANISE: {"format":"folder","title":"Reports"} makes a folder — a folder HAS no content, its page is the listing we render for whoever opens it — and parent_id: "<folderId>" on any create files it there.',
   input: CONTENT_FIELDS,
   annotations: {},
   example: {
@@ -494,7 +495,7 @@ const forkArtifactOp: Operation = {
   name: 'fork_artifact',
   title: 'Fork an artifact',
   http: { method: 'POST', path: '/api/artifacts/{id}/fork' },
-  description: 'Copy an artifact you can READ — your own, one shared with your account, or any public/unlisted one — into a new artifact of your own at a new id and url. Use it instead of create_artifact when you are adapting a document that already exists: fork it, then edit the copy with edit_artifact. Content, title, theme, template and settings travel; version history, comments and shares do not (the copy is version 1, with its own edit_id). Every ref: image, dataset and recipe is re-validated AS YOU, so a document whose <Mutation> writes someone else\'s dataset, or that reads a private one, is refused by name instead of copied broken. Optional title, visibility and parent_id land on the copy only — the original is never touched. A FOLDER cannot be forked (not_forkable): its source names its own children table, so a copy would list the children of the original. Answers the create reply plus forked_from.',
+  description: 'Copy an artifact you can READ — your own, one shared with your account, or any public/unlisted one — into a new artifact of your own at a new id and url. Use it instead of create_artifact when you are adapting a document that already exists: fork it, then edit the copy with edit_artifact. Content, title, theme, template and settings travel; version history, comments and shares do not (the copy is version 1, with its own edit_id). Every ref: image, dataset and recipe is re-validated AS YOU, so a document whose <Mutation> writes someone else\'s dataset, or that reads a private one, is refused by name instead of copied broken. Optional title, visibility and parent_id land on the copy only — the original is never touched. Folders and live Postgres datasets are not forkable: a folder source names the original children, while a Postgres secret remains bound to the original dataset. Answers the create reply plus forked_from.',
   input: {
     id: z.string(),
     title: z.string().optional().describe('title for the COPY; omit to keep the original\'s'),
@@ -591,6 +592,7 @@ const refreshAssetOp: Operation = {
 };
 
 export const OPERATIONS: Operation[] = [
+  ...DATASET_OPERATIONS,
   createArtifactOp, updateArtifactOp, editArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
   listVersionsOp, getVersionOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, mutateDatasetOp,
   exportArtifactOp, refreshAssetOp,

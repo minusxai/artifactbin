@@ -55,6 +55,20 @@ const w = await p.evaluate(() => ({ d: document.documentElement.scrollWidth, w: 
 ok(w.d <= w.w, 'no horizontal page scroll');
 await p.screenshot({ path: '/tmp/ux-dataset.png' });
 
+// The catalog page follows stored row changes through its existing live stream.
+const writable = await fetch(`${B}/api/artifacts/${made.id}`, { method: 'PUT',
+  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
+  body: JSON.stringify({ dataset: csv, access: 'readwrite' }) });
+ok(writable.status === 200, 'the owner can enable stored row edits');
+if (!writable.ok) throw new Error(`Enable writes: ${writable.status} ${await writable.text()}`);
+const changed = await fetch(`${B}/api/artifacts/${made.id}/mutate`, { method: 'POST',
+  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
+  body: JSON.stringify({ sql: `update ref_${made.id} set revenue=125 where month='2026-01'` }) });
+ok(changed.status === 200, 'a stored row mutation succeeds');
+if (!changed.ok) throw new Error(`Mutate rows: ${changed.status} ${await changed.text()}`);
+await p.getByLabel('Table preview', { exact: true }).getByText('125', { exact: true }).waitFor();
+ok((await p.getByLabel('Dataset table', { exact: true }).inputValue()) === 'rows', 'live rows refresh without navigating or losing table selection');
+
 // ── a chart must render in EDIT mode too ───────────────────────────────────
 // View mode resolves refs on the server; the editor resolves them client-side
 // through /api/artifacts/:id. When rows moved to the object store the editor's

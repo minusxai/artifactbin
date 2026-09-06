@@ -19,6 +19,7 @@ import type { DatasetColumn } from '@/lib/story/dataset-shape';
 export type DatasetTables = Record<string, { rows: Row[]; columns: DatasetColumn[] }>;
 
 export interface RunDataflowOptions {
+  sourceQuery?: (query:Dataflow["queries"][number],values:Record<string,Scalar>,page?:QueryPage)=>Promise<import("@/lib/story/dataflow").TableResult>;
   /** Override the declared defaults (a reader's current selections). Unknown names are ignored. */
   values?: Record<string, Scalar>;
   /** Run only these queries (and register the rest as empty) — a re-run after a value change. */
@@ -65,15 +66,23 @@ export async function runDataflow(flow: Dataflow, datasets: DatasetTables, opts:
       const q = byName.get(name);
       if (!q || wanted!.has(name)) return;
       wanted!.add(name);
-      for (const d of queryDeps(q.sql, tableNames)) visit(d);
+      for (const d of q.source ? [] : queryDeps(q.sql, tableNames)) visit(d);
     };
     for (const name of only) visit(name);
   }
   const queries = order.map((n) => flow.queries.find((q) => q.name === n)!).filter((q) => !wanted || wanted.has(q.name));
   if (queries.length === 0) return { values, tables, errors };
 
-  const out = await runQueries({ tables: inputs, queries, params: values, limit: opts.limit, timeoutMs: opts.timeoutMs, page: opts.page });
-  for (const q of queries) {
+  await Promise.all(queries.filter(q=>q.source).map(async q=>{
+    try{
+      if(!opts.sourceQuery)throw new Error('Dataset source is unavailable');
+      const result=await opts.sourceQuery(q,values,opts.page?.name===q.name?opts.page:undefined);
+      inputs[q.name]=result;tables[q.name]=result;
+    }catch(error){errors[q.name]=error instanceof Error?error.message:'Dataset query failed';}
+  }));
+  const localQueries=queries.filter(q=>!q.source);
+  const out = localQueries.length ? await runQueries({ tables: inputs, queries:localQueries, params: values, limit: opts.limit, timeoutMs: opts.timeoutMs, page: opts.page }) : {};
+  for (const q of localQueries) {
     const o = out[q.name];
     if (!o) continue;
     if (isQueryFailure(o)) errors[q.name] = o.error;

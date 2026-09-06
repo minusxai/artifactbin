@@ -78,6 +78,7 @@ export interface TableValueDecl extends Span {
 export type ValueDecl = ScalarValueDecl | TableValueDecl;
 
 export interface QueryDecl extends Span {
+  source?: string;
   name: string;
   sql: string;
   /** `$name` parameters the SQL mentions, in first-appearance order (deduped). */
@@ -87,6 +88,7 @@ export interface QueryDecl extends Span {
 }
 
 export interface MutationDecl extends Span {
+  source?: string;
   name: string;
   sql: string;
   /** `$name` parameters the SQL mentions, in first-appearance order (deduped). */
@@ -429,15 +431,26 @@ export function parseValueDecl(el: JsxElement): ParseDeclResult<ValueDecl> {
 
 /**
  * `<Query name>{`sql`}</Query>` → a declaration with its params and dataset
- * refs, or the errors: `name` is the only attribute; the single child is a
+ * refs, or the errors: `name` and optional `source` are the attributes; the single child is a
  * template literal (SQL keeps `<`, `>` and braces raw that way — the same rule
  * as `<style>`); the SQL is non-empty.
  */
+function sourceAttribute(el:JsxElement,sql:string,errors:ValidationError[]):string|undefined {
+  const attribute=el.attributes.find(a=>a.name==='source');
+  if(!attribute)return;
+  const source=attribute.value.static?attribute.value.json:undefined;
+  if(typeof source!=='string'||!/^([A-Za-z0-9]{6,12})$/.test(source)){
+    errors.push(err('source must be a literal dataset id',attribute,el.tag,'source'));return;
+  }
+  if(datasetRefsInSql(sql).length)errors.push(err('Use schema.table with source; do not mix source with ref_<id> SQL references',el,el.tag,'source'));
+  return source;
+}
+
 export function parseQueryDecl(el: JsxElement): ParseDeclResult<QueryDecl> {
   const tag = QUERY_TAG;
   const errors: ValidationError[] = [];
   for (const a of el.attributes) {
-    if (a.name !== 'name') errors.push(err(`<Query> takes only name= — the SQL is its child: <Query name="…">{\`select …\`}</Query>${a.name === 'sql' ? ' (not a sql= attribute)' : ''}`, a, tag, a.name));
+    if (a.name !== 'name' && a.name !== 'source') errors.push(err(`<Query> takes only name= and source= — the SQL is its child: <Query name="…">{\`select …\`}</Query>${a.name === 'sql' ? ' (not a sql= attribute)' : ''}`, a, tag, a.name));
   }
   if (errors.length) return { ok: false, errors };
   const name = checkName(el, tag, errors);
@@ -449,7 +462,9 @@ export function parseQueryDecl(el: JsxElement): ParseDeclResult<QueryDecl> {
     return { ok: false, errors: [err(`<Query name="${name}"> holds a single template-literal child with the SQL: <Query name="${name}">{\`select …\`}</Query>`, el, tag)] };
   }
   if (sql.trim() === '') return { ok: false, errors: [err(`<Query name="${name}"> has empty SQL`, el, tag)] };
-  return { ok: true, decl: { name, sql, params: sqlParams(sql), refs: datasetRefsInSql(sql), start: el.start, end: el.end } };
+  const source = sourceAttribute(el, sql, errors);
+  if (errors.length) return {ok:false,errors};
+  return { ok: true, decl: { name, sql, ...(source ? {source} : {}), params: sqlParams(sql), refs: source ? [source] : datasetRefsInSql(sql), start: el.start, end: el.end } };
 }
 
 /**
@@ -465,7 +480,7 @@ export function parseMutationDecl(el: JsxElement): ParseDeclResult<MutationDecl>
   const tag = MUTATION_TAG;
   const errors: ValidationError[] = [];
   for (const a of el.attributes) {
-    if (a.name !== 'name' && a.name !== 'expectedAffected') errors.push(err(`<Mutation> takes only name= and expectedAffected= — the SQL is its child: <Mutation name="…">{\`insert into ref_<id> …\`}</Mutation>${a.name === 'sql' ? ' (not a sql= attribute)' : ''}`, a, tag, a.name));
+    if (a.name !== 'name' && a.name !== 'source' && a.name !== 'expectedAffected') errors.push(err(`<Mutation> takes only name=, source= and expectedAffected= — the SQL is its child: <Mutation name="…" source="<datasetId>">{\`insert into public.rows …\`}</Mutation>${a.name === 'sql' ? ' (not a sql= attribute)' : ''}`, a, tag, a.name));
   }
   if (errors.length) return { ok: false, errors };
   const name = checkName(el, tag, errors);
@@ -477,7 +492,9 @@ export function parseMutationDecl(el: JsxElement): ParseDeclResult<MutationDecl>
     return { ok: false, errors: [err(`<Mutation name="${name}"> holds a single template-literal child with the SQL: <Mutation name="${name}">{\`insert into ref_<id> …\`}</Mutation>`, el, tag)] };
   }
   if (sql.trim() === '') return { ok: false, errors: [err(`<Mutation name="${name}"> has empty SQL`, el, tag)] };
-  const refs = datasetRefsInSql(sql);
+  const source = sourceAttribute(el, sql, errors);
+  if (errors.length) return {ok:false,errors};
+  const refs = source ? [source] : datasetRefsInSql(sql);
   if (refs.length !== 1) {
     return { ok: false, errors: [err(`<Mutation name="${name}"> must write exactly one dataset table (ref_<id>) — found ${refs.length === 0 ? 'none' : refs.map((r) => `ref_${r}`).join(', ')}`, el, tag)] };
   }
@@ -485,7 +502,7 @@ export function parseMutationDecl(el: JsxElement): ParseDeclResult<MutationDecl>
   if (expected && (typeof expected.json !== 'number' || !Number.isInteger(expected.json) || expected.json < 0)) {
     return { ok: false, errors: [err(`<Mutation expectedAffected> must be a non-negative integer`, expected.attr, tag, 'expectedAffected')] };
   }
-  return { ok: true, decl: { name, sql, params: sqlParams(sql), target: refs[0], refs, ...(expected ? { expectedAffected: expected.json as number } : {}), start: el.start, end: el.end } };
+  return { ok: true, decl: { name, sql, ...(source ? {source} : {}), params: sqlParams(sql), target: refs[0], refs, ...(expected ? { expectedAffected: expected.json as number } : {}), start: el.start, end: el.end } };
 }
 
 // ── the reference graph ─────────────────────────────────────────────────────
@@ -555,7 +572,7 @@ const tableNamesOf = (flow: Dataflow): string[] => [
 const depGraph = (flow: Dataflow): Map<string, string[]> => {
   const tables = tableNamesOf(flow);
   const queryNames = new Set(flow.queries.map((q) => q.name));
-  return new Map(flow.queries.map((q) => [q.name, queryDeps(q.sql, tables).filter((d) => queryNames.has(d))]));
+  return new Map(flow.queries.map((q) => [q.name, (q.source ? [] : queryDeps(q.sql, tables)).filter((d) => queryNames.has(d))]));
 };
 
 /**

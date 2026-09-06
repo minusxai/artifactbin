@@ -34,6 +34,8 @@ import {
 } from '@/lib/story-runtime/contract';
 
 class FakeEventSource {
+  static last: FakeEventSource | null = null;
+  constructor() { FakeEventSource.last = this; }
   /** The named `data` channel (a dataset under the document changed). */
   listeners: Record<string, Array<(e: MessageEvent) => void>> = {};
   addEventListener(type: string, fn: (e: MessageEvent) => void) { (this.listeners[type] ??= []).push(fn); }
@@ -202,6 +204,51 @@ describe('the surface header buttons are owner chrome', () => {
 
     render(<ArtifactSurface {...surfaceProps({ openAnnotations: 2 })} />);
     expect(screen.getByLabelText('Artifact viewport').style.right).toBe('0px');
+  });
+
+  it('refreshes authoritative catalog metadata and rows after a live dataset mutation without losing the chosen table', async () => {
+    const initialCatalog = { kind: 'stored' as const, defaultSchema: 'sales', refreshSeconds: 0, tables: [
+      { schema: 'sales', name: 'orders', objectKey: 'v1', columns: [{ name: 'value', type: 'number' as const }] },
+      { schema: 'sales', name: 'other', objectKey: 'v1-other', columns: [{ name: 'value', type: 'number' as const }] },
+    ] };
+    let latest = 1;
+    const requests: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      requests.push(url);
+      if (url.endsWith('/events/frame')) return new Response(JSON.stringify({ editId: 'edit_2', version: 2, format: 'dataset', content: '[]', title: 'updated' }));
+      if (url === '/api/page/artifact/story1') return new Response(JSON.stringify({ surface: { version: 2, catalog: { ...initialCatalog, tables: initialCatalog.tables.map(t => ({ ...t, objectKey: 'v2', columns: [...t.columns, { name: 'added', type: 'string' }] })) } } }));
+      return new Response(JSON.stringify({ rows: [{ value: latest === 1 ? 42 : 84, added: 'new column' }], columns: latest === 1 ? [{ name: 'value', type: 'number' }] : [{ name: 'value', type: 'number' }, { name: 'added', type: 'string' }], truncated: false, refreshedAt: '2026-09-06T10:00:00Z' }));
+    }));
+    render(<ArtifactSurface {...surfaceProps({ format: 'dataset', catalog: initialCatalog })} />);
+    await waitFor(() => expect(screen.getByLabelText('Table preview')).toHaveTextContent('42'));
+    fireEvent.change(screen.getByLabelText('Dataset table'), { target: { value: 'other' } });
+    await waitFor(() => expect(screen.getByLabelText('Table preview')).toHaveTextContent('42'));
+    latest = 2;
+    act(() => FakeEventSource.last!.onmessage?.({ data: JSON.stringify({ editId: 'edit_2', version: 2 }) } as MessageEvent));
+    await waitFor(() => expect(screen.getByLabelText('Table preview')).toHaveTextContent('84'));
+    expect(screen.getByLabelText('Table preview')).toHaveTextContent('added');
+    expect(screen.getByLabelText('Dataset table')).toHaveValue('other');
+    expect(screen.getByLabelText('Dataset schema')).toHaveValue('sales');
+    expect(requests).toContain('/api/page/artifact/story1');
+  });
+
+  it('copies a canonical catalog query using the logical table in the default schema', async () => {
+    const writeText = vi.fn();
+    Object.assign(navigator, { clipboard: { writeText } });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ visibility: 'private', shares: [], access: 'readwrite', rows: [], columns: [], refreshedAt: '2026-09-06T10:00:00Z' }))));
+    render(<ArtifactShell role="owner"><ArtifactSurface {...surfaceProps({ format: 'dataset', catalog: {
+      kind: 'postgres', defaultSchema: 'sales', refreshSeconds: 60,
+      tables: [
+        { schema: 'crm', name: 'contacts', columns: [], source: { schema: 'external', table: 'contact_source' } },
+        { schema: 'sales', name: 'orders', columns: [], source: { schema: 'external', table: 'order_source' } },
+      ],
+    } })} /></ArtifactShell>);
+    openDocumentControls();
+    fireEvent.click(screen.getByLabelText('Copy dataset reference'));
+    expect(writeText).toHaveBeenCalledWith('<Query name="data" source="story1">{`SELECT * FROM "sales"."orders"`}</Query>');
+    fireEvent.click(screen.getByLabelText('Share'));
+    await screen.findByLabelText('PostgreSQL read-only access');
+    expect(screen.queryByLabelText('Make read & write')).not.toBeInTheDocument();
   });
 
   it('dataset tier: the ref copy is for authors, not readers', () => {
