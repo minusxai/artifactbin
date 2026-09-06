@@ -130,3 +130,15 @@ describe('ShareLink', () => {
     expect((screen.getByLabelText('Make public') as HTMLElement).className).not.toContain('bg-accent-soft');
   });
 });
+
+it('opens social preview from sharing for an editor without exposing access controls', () => {
+  const editPreview = vi.fn();
+  render(<ShareLink className="x" artifactId="Ab3xK9" onSocialPreview={editPreview} />);
+  fireEvent.click(screen.getByLabelText('Share'));
+  expect(screen.getByRole('dialog', { name: 'Sharing' })).toBeInTheDocument();
+  expect(screen.queryByLabelText('Make public')).not.toBeInTheDocument();
+  expect(fetch).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByLabelText('Edit social preview'));
+  expect(editPreview).toHaveBeenCalledOnce();
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+});

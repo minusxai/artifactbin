@@ -109,6 +109,11 @@ never on line one.
   ask the user. `colorMode`
   (`light | dark`) is the AUTHOR'S DEFAULT — readers flip it, so design in theme tokens.
 
+For an uploaded social preview, put
+`<meta name="artifactbin:og-image" content="ref:IMAGE_ID" />` in Helmet after
+uploading the image asset. This overrides the document's saved crop; remove
+it to restore framing. See [publishing-versions.md](publishing-versions.md#set-a-social-preview-image).
+
 ## Images and icons
 
 - `<img src="ref:<imageId>" />` — an uploaded image
