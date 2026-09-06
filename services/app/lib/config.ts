@@ -1,3 +1,5 @@
+import {isIP} from 'node:net';
+
 /**
  * The ONLY file that reads process.env (minusx convention — keeps runtime
  * configuration auditable in one place).
@@ -147,6 +149,14 @@ export const IS_DEV = process.env.NODE_ENV === 'development';
 export const AUTH_SECRET = env('AUTH', 'SECRET') ?? 'dev-only-secret-change-me';
 /** Operator opt-in for databases on a private/self-hosted network. */
 export const DATASET_ALLOW_PRIVATE_NETWORKS = env('DATASET','ALLOW_PRIVATE_NETWORKS') === 'true';
+export function parseDatasetDnsServers(value:string|undefined):readonly string[]{
+  if(value===undefined||value.trim()==='')return [];
+  const servers=value.split(',').map(server=>server.trim());
+  if(servers.some(server=>!server||isIP(server)===0))throw new Error('DATASET__DNS_SERVERS must contain only literal DNS server IP addresses.');
+  return Object.freeze(servers);
+}
+/** Optional resolver list used only for remote dataset PostgreSQL hosts. */
+export const DATASET_DNS_SERVERS=parseDatasetDnsServers(env('DATASET','DNS_SERVERS'));
 
 /**
  * Per-token artifact cap — creation answers

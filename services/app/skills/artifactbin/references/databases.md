@@ -25,7 +25,7 @@ Postgres datasets cannot carry their bound password into a fork. Stored datasets
 
 Use a dedicated read-only Postgres login. Query execution uses a read-only transaction, server timeout, result limits and a catalog-restricted SQL compiler. Unsupported syntax/functions fail closed. Preserve AUTH__SECRET across deployments or create replacement password secrets after rotation.
 
-Public deployments block private/loopback destinations. Self-hosted operators may explicitly set `DATASET__ALLOW_PRIVATE_NETWORKS=true` for their database network. Metadata/link-local/multicast destinations remain blocked. Host resolution is pinned and TLS verifies the original hostname.
+Public deployments block private/loopback destinations. Self-hosted operators may explicitly set `DATASET__ALLOW_PRIVATE_NETWORKS=true` for their database network. Metadata/link-local/multicast destinations remain blocked. Host resolution is pinned and TLS verifies the original hostname. An operator whose system resolver returns a split-horizon private address may set `DATASET__DNS_SERVERS` to a comma-separated list of literal DNS server IPs. That resolver override applies only to dataset PostgreSQL hosts; unset or empty keeps the operating system resolver.
 
 ## Publish a catalog
 

@@ -37,6 +37,21 @@ describe('env()', () => {
   });
 });
 
+describe('dataset DNS servers',()=>{
+  it('accepts trimmed literal IPv4 and IPv6 servers and treats empty as the OS default',async()=>{
+    const {parseDatasetDnsServers}=await import('../config');
+    expect(parseDatasetDnsServers(undefined)).toEqual([]);
+    expect(parseDatasetDnsServers(' 1.1.1.1, 2606:4700:4700::1111 ')).toEqual(['1.1.1.1','2606:4700:4700::1111']);
+  });
+  it('rejects hostnames and empty list entries without echoing their values',async()=>{
+    const {parseDatasetDnsServers}=await import('../config');
+    for(const value of ['resolver.example.com','1.1.1.1,,8.8.8.8','1.1.1.1,']){
+      expect(()=>parseDatasetDnsServers(value)).toThrow('DATASET__DNS_SERVERS must contain only literal DNS server IP addresses.');
+      try{parseDatasetDnsServers(value);}catch(error){expect(String(error)).not.toContain(value);}
+    }
+  });
+});
+
 describe('a retired name', () => {
   afterEach(() => { vi.unstubAllEnvs(); vi.resetModules(); });
 

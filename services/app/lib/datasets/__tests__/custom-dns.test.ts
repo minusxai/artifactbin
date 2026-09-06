@@ -21,4 +21,23 @@ describe('dataset-specific operator DNS',()=>{
  it('bypasses custom DNS for literals and still refuses metadata even with private access enabled',async()=>{
   expect(await resolvePostgresHost('8.8.8.8',false,['1.1.1.1'])).toBe('8.8.8.8');await expect(resolvePostgresHost('169.254.169.254',true,['1.1.1.1'])).rejects.toThrow(/not permitted/);expect(dns.construct).not.toHaveBeenCalled();
  });
+ it('cancels a custom resolver at the shared deadline',async()=>{
+  vi.useFakeTimers();const rejectors:((error:Error)=>void)[]=[];
+  dns.resolve4.mockImplementation(()=>new Promise((_resolve,reject)=>rejectors.push(reject)));
+  dns.resolve6.mockImplementation(()=>new Promise((_resolve,reject)=>rejectors.push(reject)));
+  dns.cancel.mockImplementation(()=>rejectors.splice(0).forEach(reject=>reject(Object.assign(new Error('cancelled'),{code:'ECANCELLED'}))));
+  const pending=resolvePostgresHost('slow.example.com',false,['1.1.1.1']);const refused=expect(pending).rejects.toThrow('PostgreSQL host resolution timed out.');await vi.advanceTimersByTimeAsync(3000);
+  await refused;expect(dns.cancel).toHaveBeenCalledOnce();vi.useRealTimers();
+ });
+ it('shares the eight-slot cap and keeps reservations until custom jobs settle',async()=>{
+  vi.useFakeTimers();const rejectors:((error:Error)=>void)[]=[];
+  dns.resolve4.mockImplementation(()=>new Promise((_resolve,reject)=>rejectors.push(reject)));
+  dns.resolve6.mockImplementation(()=>new Promise((_resolve,reject)=>rejectors.push(reject)));
+  dns.cancel.mockImplementation(()=>rejectors.splice(0).forEach(reject=>reject(Object.assign(new Error('cancelled'),{code:'ECANCELLED'}))));
+  const pending=Array.from({length:8},(_,index)=>resolvePostgresHost(`slow-${index}.example.com`,false,['1.1.1.1']).catch(error=>String(error)));
+  await expect(resolvePostgresHost('ninth.example.com',false,['1.1.1.1'])).rejects.toThrow('PostgreSQL host resolver is busy.');
+  await vi.advanceTimersByTimeAsync(3000);await Promise.all(pending);expect(dns.cancel).toHaveBeenCalled();
+  dns.resolve4.mockResolvedValue(['8.8.4.4']);dns.resolve6.mockRejectedValue(Object.assign(new Error('absent'),{code:'ENODATA'}));
+  await expect(resolvePostgresHost('recovered.example.com',false,['1.1.1.1'])).resolves.toBe('8.8.4.4');vi.useRealTimers();
+ });
 });
