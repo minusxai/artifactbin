@@ -303,8 +303,8 @@ export type OwnedArtifactSummary = ArtifactSummary & { views: number };
 
 /**
  * The one profile view for every visitor, including its owner: public
- * artifacts only and flat, with no view counts. 'public' means listed under
- * the owner's handle (the profile root IS the list), not merely link-reachable.
+ * root artifacts only, with no view counts. Filed artifacts belong on their
+ * folder's page; they never also appear at the profile root.
  *
  * Documents and folders only: datasets, images and viz recipes are the material
  * documents are built from (bound as ref:<id>), so 'public' keeps them
@@ -316,6 +316,7 @@ export async function listPublicArtifactsByUser(userId: string): Promise<Artifac
   const r = await db.query<ArtifactSummary>(
     `SELECT ${SUMMARY_COLS} FROM artifacts
      WHERE user_id = $1 AND visibility = 'public' AND format IN ('markup', 'folder') AND ${LIVE_ARTIFACT_SQL}
+       AND cardinality(ancestor_ids) = 0
      ORDER BY updated_at DESC LIMIT 200`,
     [userId],
   );

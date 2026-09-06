@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronLeft, ChevronRight, EyeOff, FolderInput, Globe, Lock, Pencil, Search, Share2, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Folder, EyeOff, FolderInput, Globe, Lock, Pencil, Search, Share2, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Tooltip } from '@/components/Tooltip';
 import { Badge, Button, dateStamp, FormatBadge, formatLabel, MicroLabel, PANEL, TABLE_ROW, timeAgo, TokenInput, VisibilityPill } from '@/components/ui';
@@ -175,13 +175,14 @@ const ICON_ACTION =
 export const ARTIFACTS_PER_PAGE = 5;
 
 /** `manage` enables the session-scoped delete — dashboard only. History lives in the page's edit mode. */
-export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = true, showVisibility = true, showViews = true, filtersInline = false, dates = 'relative', perPage = ARTIFACTS_PER_PAGE, searchLabel = 'Search artifacts', searchPlaceholder = 'search artifacts' }: {
+export function ArtifactTable({ artifacts, treeRows, includeAssets = true, folders, manage, embedded, canEdit = true, showVisibility = true, showViews = true, filtersInline = false, dates = 'relative', perPage = ARTIFACTS_PER_PAGE, searchLabel = 'Search artifacts', searchPlaceholder = 'search artifacts' }: {
   artifacts: ArtifactSummary[];
+  /** Complete local inventory for expandable folder rows; pagination counts roots. */
+  treeRows?: ArtifactSummary[];
+  includeAssets?: boolean;
   /**
-   * The account's folders, for the move picker. The dense tier holds documents
-   * only, so its rows can never be the whole tree — the shelf hands its own
-   * `folders` partition down. Absent, the picker offers whatever folders these
-   * rows happen to contain, which is what the standalone token browser has.
+   * The account's folders, for the move picker. A scoped table may contain
+   * only part of the tree, so the shelf supplies the complete folder list.
    */
   folders?: PickerFolder[];
   manage?: boolean;
@@ -215,6 +216,45 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
   // Folder moves land as local overrides — a metadata PATCH is too small a
   // change to justify reloading the page the way delete does.
   const [movedFolders, setMovedFolders] = useState<Record<string, string>>({});
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [loadedChildren, setLoadedChildren] = useState<Record<string, ArtifactSummary[]>>({});
+  const [folderStatus, setFolderStatus] = useState<Record<string, 'loading' | 'error'>>({});
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [draftTitle, setDraftTitle] = useState('');
+  const [titles, setTitles] = useState<Record<string, string>>({});
+  const inventory = [...new Map([...Object.values(loadedChildren).flat(), ...(treeRows ?? artifacts)]
+    .map((row) => [row.id, row])).values()];
+  const childrenOf = (id: string) => inventory
+    .filter((row) => (movedFolders[row.id] ?? parentOfRow(row)) === id && (includeAssets || row.format === 'folder' || row.format === 'markup'))
+    .sort((a, b) => Number(b.format === 'folder') - Number(a.format === 'folder') || b.updated_at.localeCompare(a.updated_at));
+  const toggleFolder = async (id: string) => {
+    if (expanded.has(id)) {
+      setExpanded((current) => { const next = new Set(current); next.delete(id); return next; });
+      return;
+    }
+    setExpanded((current) => new Set(current).add(id));
+    if (childrenOf(id).length || loadedChildren[id] || folderStatus[id] === 'loading') return;
+    setFolderStatus((current) => ({ ...current, [id]: 'loading' }));
+    try {
+      const response = await fetch(`/api/page/artifact/${id}`, { credentials: 'same-origin' });
+      if (!response.ok) throw new Error('Folder unavailable');
+      const page = await response.json();
+      if (!Array.isArray(page?.folder?.rows)) throw new Error('Folder unavailable');
+      setLoadedChildren((current) => ({ ...current, [id]: page.folder.rows.map((row: ArtifactSummary) => ({ ...row, parent_id: id })) }));
+      setFolderStatus((current) => { const next = { ...current }; delete next[id]; return next; });
+    } catch {
+      setFolderStatus((current) => ({ ...current, [id]: 'error' }));
+    }
+  };
+  const saveTitle = async (a: ArtifactSummary) => {
+    const title = draftTitle.trim();
+    setRenamingId(null);
+    if (!title) return;
+    const response = await fetch(`/api/my/artifacts/${a.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }),
+    }).catch(() => null);
+    if (response?.ok) setTitles((current) => ({ ...current, [a.id]: title }));
+  };
   const [movingId, setMovingId] = useState<string | null>(null);
   const [sharingId, setSharingId] = useState<string | null>(null);
   const placeOf = (a: ArtifactSummary) => movedFolders[a.id] ?? parentOfRow(a) ?? '';
@@ -254,11 +294,11 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
   // The column itself is DESKTOP-only, so the spline's width comes out of the
   // width a phone never had; there, the stacked meta line carries the count
   // with a 12px squash of the same spline beside it.
-  const hasViews = showViews && artifacts.some((a) => a.views !== undefined);
+  const hasViews = showViews && inventory.some((a) => a.views !== undefined);
 
   const q = query.trim().toLowerCase();
   const filtering = Boolean(q) || formatPicks.length > 0 || visibilityPicks.length > 0;
-  const visible = filtering
+  const visible = !embedded && filtering
     ? artifacts.filter(
         (a) =>
           (!q || `${a.title ?? ''} ${a.format ?? ''}`.toLowerCase().includes(q)) &&
@@ -274,6 +314,21 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
   const current = Math.min(page, pageCount - 1);
   const start = current * perPage;
   const rows = visible.slice(start, start + perPage);
+  const displayRows: Array<{ row: ArtifactSummary; depth: number; message?: string }> = [];
+  const appendRows = (items: ArtifactSummary[], depth: number, trail: string[] = []) => {
+    for (const item of items) {
+      if (trail.includes(item.id)) continue;
+      const row = { ...item, title: titles[item.id] ?? item.title };
+      displayRows.push({ row, depth });
+      if (treeRows && row.format === 'folder' && expanded.has(row.id)) {
+        const children = childrenOf(row.id);
+        appendRows(children, depth + 1, [...trail, row.id]);
+        if (!children.length) displayRows.push({ row, depth: depth + 1, message:
+          folderStatus[row.id] === 'loading' ? 'Loading…' : folderStatus[row.id] === 'error' ? 'Could not load folder. Collapse and expand to retry.' : 'No items in this folder.' });
+      }
+    }
+  };
+  appendRows(rows, 0);
   const hasFilters = showFormatChips || showVisibilityChips;
   const filterControls = (
     <>
@@ -357,13 +412,20 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
               </td>
             </tr>
           )}
-          {rows.map((a, i) => (
+          {displayRows.map(({ row: a, depth, message }, i) => message ? (
+            <tr key={`${a.id}-status`} className={TABLE_ROW}>
+              <td colSpan={(embedded ? 3 : 5) + (hasViews ? 1 : 0)} className="px-4 py-3 font-mono text-xs text-faint" style={{ paddingLeft: 16 + depth * 16 }} role="status">{message}</td>
+            </tr>
+          ) : (
             <tr key={a.id} className={`${TABLE_ROW} reveal`} style={{ animationDelay: `${i * 40}ms` }}>
               {/* w-full + max-w-0 makes this the flexible column: it absorbs
                   the leftover width, so `truncate` on the title actually bites
                   and the badges never wrap onto a second line. */}
               <td className="w-full max-w-0 px-3 py-3 sm:px-4 sm:py-2.5">
-                <span className="flex min-w-0 items-center gap-2">
+                <span className="flex min-w-0 items-center gap-2" style={treeRows ? { paddingLeft: depth * 16 } : undefined}>
+                  {treeRows && a.format === 'folder' && <button type="button" aria-label={`${expanded.has(a.id) ? 'Collapse' : 'Expand'} folder ${a.title ?? a.id}`} aria-expanded={expanded.has(a.id)} onClick={() => void toggleFolder(a.id)} className="flex h-6 w-9 shrink-0 cursor-pointer items-center gap-1 text-faint hover:text-accent">
+                    {expanded.has(a.id) ? <ChevronDown size={12} /> : <ChevronRight size={12} />}<Folder size={16} />
+                  </button>}
                   {/* The row's own picture, tiny. A dense list is scanned by
                       SIGHT before it is read, and these rows are the archive —
                       the tier where a title alone is least likely to be
@@ -382,16 +444,20 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
                   )}
                   <span className="min-w-0 flex-1">
                     <span className="flex min-w-0 items-center gap-2">
-                      <a
+                      {renamingId === a.id ? <input aria-label="Folder name" autoFocus value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} onBlur={() => void saveTitle(a)} onKeyDown={(event) => {
+                        if (event.key === 'Enter') { event.preventDefault(); void saveTitle(a); }
+                        if (event.key === 'Escape') setRenamingId(null);
+                      }} className="min-w-0 flex-1 bg-transparent font-semibold text-fg focus:outline-none" /> : <a
                         href={a.url}
                         target="_blank"
                         rel="noreferrer"
                         className="min-w-0 flex-1 truncate font-semibold text-fg no-underline underline-offset-4 hover:underline"
-                        aria-label={`Open ${a.title ?? a.id}`}
+                        aria-label={`Open ${a.format === 'folder' ? 'folder ' : ''}${a.title ?? a.id}`}
                       >
                         {a.title ?? <span className="text-faint">(untitled)</span>}
-                      </a>
-                      {manage && placeOf(a) && (
+                      </a>}
+                      {treeRows && a.format === 'folder' && childrenOf(a.id).length > 0 && <span className="font-mono text-[10px] text-faint">{childrenOf(a.id).length}</span>}
+                      {manage && !treeRows && placeOf(a) && (
                         <span className="shrink-0 font-mono text-[10px] text-faint">{placeName(placeOf(a))}</span>
                       )}
                     </span>
@@ -404,7 +470,7 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
                           <span aria-hidden="true">·</span>
                         </>
                       )}
-                      {hasViews && (
+                      {hasViews && a.format !== 'folder' && (
                         <>
                           <ViewsMark name={a.title ?? a.id} views={a.views ?? 0} sparkline={a.sparkline} className="w-24 shrink-0" />
                           <span aria-hidden="true">·</span>
@@ -437,7 +503,7 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
               )}
               {hasViews && (
                 <td className="hidden px-4 py-2.5 whitespace-nowrap sm:table-cell">
-                  <ViewsMark name={a.title ?? a.id} views={a.views ?? 0} sparkline={a.sparkline} className="w-28" />
+                  {a.format !== 'folder' && <ViewsMark name={a.title ?? a.id} views={a.views ?? 0} sparkline={a.sparkline} className="w-28" />}
                 </td>
               )}
               <Tooltip content={new Date(a.updated_at).toLocaleString()}>
@@ -450,7 +516,7 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
               </Tooltip>
               <td className="px-2 py-3 text-right whitespace-nowrap sm:px-4 sm:py-2.5">
                 <span className="inline-flex items-center gap-1">
-                  {canEdit && (
+                  {canEdit && a.format !== 'folder' && (
                     <Tooltip content="edit">
                       <a
                         href={`/a/${a.id}#edit`}
@@ -465,6 +531,7 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
                     <RowMenu
                       name={a.title ?? a.id}
                       items={[
+                        ...(a.format === 'folder' ? [{ label: `Rename ${a.title ?? a.id}`, text: 'rename', icon: <Pencil size={12} />, onSelect: () => { setDraftTitle(a.title ?? ''); setRenamingId(a.id); } }] : []),
                         {
                           label: `Manage sharing for ${a.title ?? a.id}`,
                           text: 'share',
@@ -483,7 +550,7 @@ export function ArtifactTable({ artifacts, folders, manage, embedded, canEdit = 
                           icon: <Trash2 size={12} />,
                           danger: true,
                           onSelect: () => {
-                            void confirmDeleteArtifact(a.id, a.title ?? a.id).then((ok) => ok && window.location.reload());
+                            void confirmDeleteArtifact(a.id, a.title ?? a.id, a.format === 'folder' ? childrenOf(a.id).length : 0).then((ok) => ok && window.location.reload());
                           },
                         },
                       ]}

@@ -136,3 +136,46 @@ describe('the folders strip', () => {
     expect(screen.getByLabelText('Search artifacts')).toBeTruthy();
   });
 });
+
+describe('folders in list view', () => {
+  afterEach(() => localStorage.clear());
+
+  it('expands nested contents in the same table and collapses the subtree', () => {
+    const nested = { ...folder, id: 'nested', title: 'Nested', parent_id: folder.id, ancestor_ids: [folder.id] };
+    const child = { ...doc, parent_id: nested.id, ancestor_ids: [folder.id, nested.id] };
+    render(<Shelf actions="full" scopeParentId={null} rows={[folder, nested, child]} />);
+    fireEvent.click(screen.getByLabelText('List view'));
+    expect(screen.queryByLabelText('Folders')).toBeNull();
+    expect(screen.queryByLabelText('Open Board update')).toBeNull();
+    fireEvent.click(screen.getByLabelText('Expand folder Reports'));
+    expect(screen.getByLabelText('Collapse folder Reports').getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(screen.getByLabelText('Expand folder Nested'));
+    expect(screen.getByLabelText('Open Board update').closest('table')).toBe(screen.getByLabelText('Open folder Reports').closest('table'));
+    expect(screen.queryByLabelText('Edit Reports')).toBeNull();
+    fireEvent.click(screen.getByLabelText('Collapse folder Reports'));
+    expect(screen.queryByLabelText('Open Board update')).toBeNull();
+    expect(screen.queryByLabelText('Open folder Nested')).toBeNull();
+  });
+
+  it('loads contents for a folder whose children were not supplied', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ folder: { rows: [doc] } })));
+    render(<Shelf rows={[folder]} assets={false} />);
+    fireEvent.click(screen.getByLabelText('List view'));
+    fireEvent.click(screen.getByLabelText('Expand folder Reports'));
+    await waitFor(() => expect(screen.getByLabelText('Open Board update')).toBeTruthy());
+    expect(fetch).toHaveBeenCalledWith('/api/page/artifact/rep001', { credentials: 'same-origin' });
+  });
+
+  it('keeps expanded children with their parent when paginating root rows', () => {
+    const roots = Array.from({ length: 10 }, (_, i) => ({ ...doc, id: `root${i}`, title: `Root ${i}` }));
+    const child = { ...doc, title: 'Inside', parent_id: folder.id, ancestor_ids: [folder.id] };
+    render(<Shelf scopeParentId={null} rows={[folder, child, ...roots]} />);
+    fireEvent.click(screen.getByLabelText('List view'));
+    fireEvent.click(screen.getByLabelText('Expand folder Reports'));
+    expect(screen.getByLabelText('Open Inside')).toBeTruthy();
+    expect(screen.getByLabelText('Page range').textContent).toBe('1-10 of 11');
+    fireEvent.click(screen.getByLabelText('Next page'));
+    expect(screen.queryByLabelText('Open Inside')).toBeNull();
+    expect(screen.getByLabelText('Page range').textContent).toBe('11-11 of 11');
+  });
+});

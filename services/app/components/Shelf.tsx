@@ -574,7 +574,7 @@ export default function Shelf({ rows, actions = 'none', showVisibility = true, a
         * it is neither a document tier nor an asset (lib/shelf's third
         * partition), and `total` still counts documents: making a folder never
         * changes what the shelf says you have. */}
-      {shelf.folders.length > 0 && (
+      {view === 'grid' && shelf.folders.length > 0 && (
         /*
          * `relative z-20` is load-bearing, and was found by a real click. Every
          * row here carries `.reveal`, which is a CSS ANIMATION — so each row is
@@ -651,10 +651,12 @@ export default function Shelf({ rows, actions = 'none', showVisibility = true, a
         </div>
       )}
 
-      {view === 'list' && shelf.documents.length > 0 && (
+      {view === 'list' && (shelf.documents.length > 0 || shelf.folders.length > 0) && (
         <ArtifactTable
           showVisibility={showVisibility}
-          artifacts={shelf.documents}
+          artifacts={[...shelf.folders, ...shelf.documents].filter((row, _, roots) => !roots.some((folder) => folder.format === 'folder' && folder.id === parentOfRow(row)))}
+          treeRows={inventory}
+          includeAssets={assets}
           folders={pickable}
           manage={actions === 'full'}
           canEdit={actions === 'full'}
