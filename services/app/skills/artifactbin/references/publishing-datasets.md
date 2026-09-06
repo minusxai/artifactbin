@@ -19,11 +19,11 @@ POST [[ base ]]/api/artifacts
 → 201 { "id", "url", "columns": [...], "rowCount", "access": "read", "ref": "ref:<id>", "usage": "<Helmet><Query …" }
 ```
 
-- A dataset is read by SQL (DuckDB dialect, one SELECT) as the table
-  `ref_<datasetId>` inside a `<Query>`; `columns` type declarations are
-  optional and win over the sniffer. Rows over 10,000 are truncated and the
-  response says so (`totalRows`, `truncated`, a `note`). `usage` is the
-  ready-to-paste Query+Question over the real columns.
+- Use `<Query name="rows" source="<datasetId>">{`select * from public.rows`}</Query>`
+  in `<Helmet>`. Flat uploads use `public.rows`; [catalogs](databases.md) expose named tables.
+  PostgreSQL is read-only; stored data uses DuckDB. Legacy `ref_<datasetId>` remains compatible.
+  `columns` overrides inference. Responses report truncation over 10,000 rows
+  and include a ready-to-paste `usage`.
 - Images and recipes bind as `ref:<id>`; `data="ref:<id>"` and the old
   `<Param>` control are retired (400 with the replacement named).
 - An imported URL is NOT an artifact: it never appears in

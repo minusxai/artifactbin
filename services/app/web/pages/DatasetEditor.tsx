@@ -109,6 +109,7 @@ export function DatasetEditorPage() {
     router.push(`/a/${data.id}`);
   });
   const selectedSchemas = [...new Set([...(kind === 'postgres' ? sources.filter(s => s.included).map(s => s.schema) : stored.map(s => s.schema)), ...models.map(m => m.schema)])].filter(Boolean);
+  const sharedConnection = Boolean(id && kind === 'postgres' && connectionId && !connections.some(c => c.id === connectionId));
   const discoverySchemas = [...new Set(sources.map(s => s.discovery.schema))];
 
   if (session && !session.user) return <Navigate to={`/login?callbackUrl=${encodeURIComponent(id ? `/datasets/${id}/edit` : '/datasets/new')}`} replace />;
@@ -123,8 +124,9 @@ export function DatasetEditorPage() {
       </div>
       <fieldset disabled={Boolean(busy)} className="min-w-0 space-y-5 disabled:opacity-70">
         {kind === 'postgres' && <section className={`${PANEL} space-y-4 p-4`} aria-label="PostgreSQL connection">
-          <div className="flex flex-wrap items-end gap-3"><div className="min-w-48 flex-1"><Field name="Connection"><select aria-label="Connection" className={control} value={connectionId} onChange={e => { setConnectionId(e.target.value); setSources([]); }}><option value="">Choose a connection</option>{connectionId && !connections.some(c => c.id === connectionId) && <option value={connectionId}>Current dataset connection</option>}{connections.map(c => <option key={c.id} value={c.id}>{c.name} · {c.database}</option>)}</select></Field></div><Button aria-label="New connection" variant="ghost" onClick={() => { setNewConnection(v => !v); setConnection(initialConnection()); }}>New connection</Button></div>
-          {newConnection && <div className="space-y-3 border-t border-edge pt-4">
+          <div className="flex flex-wrap items-end gap-3"><div className="min-w-48 flex-1"><Field name="Connection"><select aria-label="Connection" disabled={sharedConnection} className={control} value={connectionId} onChange={e => { setConnectionId(e.target.value); setSources([]); }}><option value="">Choose a connection</option>{connectionId && !connections.some(c => c.id === connectionId) && <option value={connectionId}>Current dataset connection</option>}{connections.map(c => <option key={c.id} value={c.id}>{c.name} · {c.database}</option>)}</select></Field></div>{!sharedConnection && <Button aria-label="New connection" variant="ghost" onClick={() => { setNewConnection(v => !v); setConnection(initialConnection()); }}>New connection</Button>}</div>
+          {sharedConnection && <p aria-label="Shared dataset connection" className="text-sm text-muted">The dataset owner manages this connection and the exposed tables. You can edit SQL models using the selected columns below.</p>}
+          {newConnection && !sharedConnection && <div className="space-y-3 border-t border-edge pt-4">
             <div className="grid gap-3 sm:grid-cols-2">{(['name', 'host', 'port', 'database', 'username', 'password'] as const).map(key => {
               const label = key === 'name' ? 'Connection name' : key[0].toUpperCase() + key.slice(1);
               return <Field key={key} name={label}><Input aria-label={label} type={key === 'password' ? 'password' : key === 'port' ? 'number' : 'text'} autoComplete="off" value={connection[key]} onChange={e => setConnection(c => ({ ...c, [key]: key === 'port' ? Number(e.target.value) : e.target.value }))} /></Field>;
@@ -135,9 +137,9 @@ export function DatasetEditorPage() {
               setConnections(items => [...items, data.connection]); setConnectionId(data.connection.id); setSources([]); setConnection(initialConnection()); setNewConnection(false); setNotice('Connection saved. Test it to discover tables.');
             })}>Save connection</Button>
           </div>}
-          <Button aria-label="Test and discover" variant="ghost" disabled={!connectionId} onClick={() => void discover()}>Test and discover</Button>
+          <Button aria-label="Test and discover" variant="ghost" disabled={!connectionId || sharedConnection} onClick={() => void discover()}>Test and discover</Button>
         </section>}
-        {kind === 'postgres' && sources.length > 0 && <section className={`${PANEL} space-y-4 p-4`} aria-label="Source exposure">
+        {kind === 'postgres' && sources.length > 0 && <fieldset disabled={sharedConnection} className={`${PANEL} min-w-0 space-y-4 p-4`} aria-label="Source exposure">
           <div><h2 className="font-medium text-fg">Choose what to expose</h2><p className="mt-1 text-sm text-muted">Tables and columns start excluded. Documents can query only the columns you select.</p></div>
           {discoverySchemas.map(schema => <div key={schema} className="space-y-2 border-t border-edge pt-3">
             <label className="flex items-center gap-2 font-mono text-sm text-fg"><input type="checkbox" aria-label={`Expose schema ${schema}`} checked={sources.filter(s => s.discovery.schema === schema).every(s => s.included)} onChange={e => setSources(items => items.map(s => s.discovery.schema === schema ? { ...s, included: e.target.checked } : s))} />{schema}</label>
@@ -148,7 +150,7 @@ export function DatasetEditorPage() {
               </div>}
             </div>)}
           </div>)}
-        </section>}
+        </fieldset>}
         {kind === 'stored' && <section className={`${PANEL} space-y-4 p-4`} aria-label="Stored tables">
           <h2 className="font-medium text-fg">Stored tables</h2>
           {stored.map((table, index) => <div key={table.key} className="space-y-3 border-t border-edge pt-3"><div className="grid gap-3 sm:grid-cols-2"><Field name="Schema"><Input aria-label={`Stored schema ${index + 1}`} value={table.schema} onChange={e => updateStored(table.key, { schema: e.target.value })} disabled={table.retained} /></Field><Field name="Table name"><Input aria-label={`Stored table name ${index + 1}`} value={table.name} onChange={e => updateStored(table.key, { name: e.target.value })} disabled={table.retained} /></Field></div><Field name={table.retained ? 'Rows (leave blank to keep stored rows)' : 'Rows as JSON'}><textarea aria-label={`Stored rows ${index + 1}`} className={`${control} min-h-28`} value={table.rows} onChange={e => updateStored(table.key, { rows: e.target.value })} placeholder='[{"id": 1}]' /></Field><Button aria-label={`Remove stored table ${index + 1}`} variant="ghost" onClick={() => setStored(items => items.filter(s => s.key !== table.key))}>Remove table</Button></div>)}
@@ -160,9 +162,9 @@ export function DatasetEditorPage() {
           })}>Preview</Button><Button aria-label={`Remove model ${index + 1}`} variant="ghost" onClick={() => setModels(items => items.filter(m => m.key !== model.key))}>Remove model</Button></div>{model.preview && <CatalogRows result={model.preview} label={`Model preview ${index + 1}`} />}</div>)}
           <Button aria-label="Add SQL model" variant="ghost" onClick={() => setModels(items => [...items, { key: Math.max(-1, ...items.map(i => i.key)) + 1, schema: defaultSchema || 'main', name: '', sql: '' }])}>Add SQL model</Button>
         </section>
-        <div className="grid gap-4 sm:grid-cols-2"><Field name="Default schema"><select aria-label="Default schema" className={control} value={defaultSchema} onChange={e => setDefaultSchema(e.target.value)}><option value="">Choose explicitly</option>{[...new Set([...selectedSchemas, ...(defaultSchema ? [defaultSchema] : [])])].map(schema => <option key={schema}>{schema}</option>)}</select></Field><Field name="Refresh interval (seconds, 0 = manual)"><Input aria-label="Refresh interval" type="number" min={0} step={1} value={refreshSeconds} onChange={e => setRefreshSeconds(Number(e.target.value))} /></Field></div>
+        <div className="grid gap-4 sm:grid-cols-2"><Field name="Default schema"><select aria-label="Default schema" disabled={Boolean(id)} className={control} value={defaultSchema} onChange={e => setDefaultSchema(e.target.value)}><option value="">Choose explicitly</option>{[...new Set([...selectedSchemas, ...(defaultSchema ? [defaultSchema] : [])])].map(schema => <option key={schema}>{schema}</option>)}</select></Field><Field name="Refresh interval (seconds, 0 = manual)"><Input aria-label="Refresh interval" type="number" min={0} step={1} value={refreshSeconds} onChange={e => setRefreshSeconds(Number(e.target.value))} /></Field></div>
       </fieldset>
-      <div className="flex items-center gap-4"><Button aria-label="Save dataset" disabled={Boolean(busy)} onClick={() => void save()}>{busy === 'save' ? 'Saving…' : id ? 'Save changes' : 'Create private dataset'}</Button>{busy && <span role="status" className="text-sm text-muted">Working…</span>}</div>
+      <div className="flex items-center gap-4"><Button aria-label="Save dataset" disabled={Boolean(busy)} onClick={() => void save()}>{busy === 'save' ? 'Saving…' : id ? 'Save changes' : 'Create dataset'}</Button>{busy && <span role="status" className="text-sm text-muted">Working…</span>}</div>
     </>}
   </main>;
 }

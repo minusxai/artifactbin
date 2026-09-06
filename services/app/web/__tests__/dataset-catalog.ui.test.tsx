@@ -5,6 +5,9 @@ import { DatasetEditorPage } from '../pages/DatasetEditor';
 import { DatasetCatalogView } from '@/components/DatasetCatalogView';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 
+let viewerSession: { user: { id: string } | null } | null = { user: { id: 'editor-1' } };
+vi.mock('@/web/session', () => ({ useSession: () => ({ session: viewerSession }) }));
+
 const connection = { id: 'conn-1', name: 'Warehouse', host: 'db.example.com', port: 5432, database: 'analytics', username: 'reader', ssl: true };
 const tables = [
   { schema: 'sales', name: 'orders', columns: [{ name: 'id', type: 'number' }, { name: 'secret', type: 'string' }] },
@@ -15,21 +18,23 @@ const reply = (body: unknown, status = 200) => Promise.resolve(new Response(JSON
 let calls: Array<{ url: string; body: any; method: string }>;
 let failSave = false;
 let failPreview = false;
+let ownsConnection = true;
+let loadedCatalog = catalog;
 beforeEach(() => {
-  calls = []; failSave = false; failPreview = false;
+  calls = []; failSave = false; failPreview = false; ownsConnection = true; loadedCatalog = catalog; viewerSession = { user: { id: 'editor-1' } };
   vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     const method = init?.method ?? 'GET'; calls.push({ url, body, method });
     if (url.endsWith('/test')) return reply({ tables });
-    if (url === '/api/my/connections') return reply(method === 'POST' ? { connection } : { connections: [connection] });
+    if (url === '/api/my/connections') return reply(method === 'POST' ? { connection } : { connections: ownsConnection ? [connection] : [] });
     if (url.endsWith('/preview') || url.endsWith('/tables')) return failPreview ? reply({ error: 'Query refused' }, 400) : reply({ rows: [{ id: 42 }], columns: [{ name: 'id', type: 'number' }], refreshedAt: '2026-09-06T10:00:00Z', truncated: true });
-    if (method === 'GET') return reply({ id: 'data-1', title: 'Orders', version: 7, meta: { catalog } });
+    if (method === 'GET') return reply({ id: 'data-1', title: 'Orders', version: 7, meta: { catalog: loadedCatalog } });
     return failSave ? reply({ error: 'Version conflict' }, 409) : reply({ id: 'data-1', version: 8 });
   }));
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 function editor(edit = false) {
-  render(<MemoryRouter initialEntries={[edit ? '/datasets/data-1/edit' : '/datasets/new']}><Routes><Route path="/datasets/new" element={<DatasetEditorPage />} /><Route path="/datasets/:id/edit" element={<DatasetEditorPage />} /></Routes></MemoryRouter>);
+  render(<MemoryRouter initialEntries={[edit ? '/datasets/data-1/edit' : '/datasets/new']}><Routes><Route path="/login" element={<p aria-label="Dataset login">Log in to create a dataset</p>} /><Route path="/datasets/new" element={<DatasetEditorPage />} /><Route path="/datasets/:id/edit" element={<DatasetEditorPage />} /></Routes></MemoryRouter>);
 }
 const change = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
 async function discover() {
@@ -46,6 +51,18 @@ async function selectOrders() {
   change('Default schema', 'sales');
 }
 describe('dataset editor', () => {
+  it('uses a neutral create label while the session is loading', async () => {
+    viewerSession = null;
+    editor();
+    expect(await screen.findByLabelText('Save dataset')).toHaveTextContent(/^Create dataset$/);
+  });
+  it('sends a signed-out user to login before offering dataset creation', async () => {
+    viewerSession = { user: null };
+    editor();
+    await screen.findByLabelText('Dataset login');
+    expect(screen.queryByLabelText('Save dataset')).not.toBeInTheDocument();
+  });
+
   it('creates a connection with TLS by default and clears its write-only password', async () => {
     editor();
     fireEvent.click(await screen.findByLabelText('PostgreSQL'));
@@ -95,6 +112,34 @@ describe('dataset editor', () => {
     expect(screen.getByLabelText('Dataset title')).toHaveValue('New title');
     expect(calls.find(c => c.method === 'PUT')?.body.expectedVersion).toBe(7);
   });
+  it('lets a shared editor preview and save models while preserving the owner connection and source exposure', async () => {
+    ownsConnection = false;
+    loadedCatalog = { ...catalog, tables: [...catalog.tables, { schema: 'sales', name: 'summary', sql: 'select id from sales.orders', columns: [{ name: 'id', type: 'number' }] }] };
+    editor(true);
+    await waitFor(() => expect(screen.getByLabelText('Dataset title')).toHaveValue('Orders'));
+    expect(screen.getByLabelText('Shared dataset connection')).toHaveTextContent(/owner/);
+    expect(screen.getByLabelText('Connection')).toBeDisabled();
+    expect(screen.getByLabelText('Test and discover')).toBeDisabled();
+    expect(screen.getByLabelText('Expose table sales.orders')).toBeDisabled();
+    expect(screen.getByLabelText('Expose column sales.orders.id')).toBeChecked();
+    expect(screen.getByLabelText('Expose column sales.orders.id')).toBeDisabled();
+    expect(screen.queryByLabelText('New connection')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Model SQL 1')).toHaveValue('select id from sales.orders');
+    change('Model SQL 1', 'select id from sales.orders where id > 0');
+    fireEvent.click(screen.getByLabelText('Preview model 1'));
+    await screen.findByLabelText('Model preview 1');
+    fireEvent.click(screen.getByLabelText('Save dataset'));
+    await waitFor(() => expect(calls.find(c => c.method === 'PUT')?.body.dataset.tables).toEqual([
+      { schema: 'sales', name: 'orders', source: { schema: 'sales', table: 'orders' }, columns: ['id'] },
+      { schema: 'sales', name: 'summary', sql: 'select id from sales.orders where id > 0' },
+    ]));
+    expect(calls.find(c => c.url.endsWith('/preview'))?.body.datasetId).toBe('data-1');
+    expect(calls.find(c => c.method === 'PUT')?.body.dataset.connectionId).toBe('conn-1');
+    expect(screen.getByLabelText('Default schema')).toHaveValue('sales');
+    expect(screen.getByLabelText('Default schema')).toBeDisabled();
+    expect(calls.some(c => c.url.endsWith('/test'))).toBe(false);
+  });
+
   it('includes the existing dataset id when previewing an edited model', async () => {
     editor(true);
     await waitFor(() => expect(screen.getByLabelText('Dataset title')).toHaveValue('Orders'));

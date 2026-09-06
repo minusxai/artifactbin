@@ -198,6 +198,25 @@ describe('the surface header buttons are owner chrome', () => {
     expect(screen.getByLabelText('Artifact viewport').style.right).toBe('0px');
   });
 
+  it('copies a canonical catalog query using the logical table in the default schema', async () => {
+    const writeText = vi.fn();
+    Object.assign(navigator, { clipboard: { writeText } });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ visibility: 'private', shares: [], access: 'readwrite', rows: [], columns: [], refreshedAt: '2026-09-06T10:00:00Z' }))));
+    render(<ArtifactShell role="owner"><ArtifactSurface {...surfaceProps({ format: 'dataset', catalog: {
+      kind: 'postgres', connectionId: 'owner-connection', defaultSchema: 'sales', refreshSeconds: 60,
+      tables: [
+        { schema: 'crm', name: 'contacts', columns: [], source: { schema: 'external', table: 'contact_source' } },
+        { schema: 'sales', name: 'orders', columns: [], source: { schema: 'external', table: 'order_source' } },
+      ],
+    } })} /></ArtifactShell>);
+    openDocumentControls();
+    fireEvent.click(screen.getByLabelText('Copy dataset reference'));
+    expect(writeText).toHaveBeenCalledWith('<Query name="data" source="story1">{`SELECT * FROM "sales"."orders"`}</Query>');
+    fireEvent.click(screen.getByLabelText('Share'));
+    await screen.findByLabelText('PostgreSQL read-only access');
+    expect(screen.queryByLabelText('Make read & write')).not.toBeInTheDocument();
+  });
+
   it('dataset tier: the ref copy is for authors, not readers', () => {
     const dataset = surfaceProps({ format: 'dataset', content: '[{"a":1}]', columns: [{ name: 'a', type: 'number' }] });
     const reader = render(<ArtifactSurface {...dataset} />);

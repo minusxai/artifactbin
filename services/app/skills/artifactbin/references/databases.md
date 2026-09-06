@@ -3,7 +3,7 @@ name: databases
 description: Postgres connections, named dataset tables, SQL models, permissions and migration.
 ---
 
-# Databases and named dataset tables
+## Read first
 
 A dataset can expose multiple schemas and named tables. Its source is stored rows or a Postgres connection. Connections hold encrypted credentials server-side; datasets hold an exposed catalog and ordinary artifact sharing. Postgres is read-only. Stored datasets can allow row mutations.
 

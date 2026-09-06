@@ -64,10 +64,10 @@ any `https://` URL (publish copies it, your URL stays); web fonts: a Google fami
 
 **Data in a document** — three moves: upload the rows, declare a `<Query>` over
 them in the `<Helmet>`, bind an embed by `$name`. The rows are their own
-artifact (`{"dataset":"month,revenue\n2026-01,120"}`); its response echoes a ready-to-paste Query+Question.
+artifact (`{"dataset":"month,revenue\n2026-01,120"}`); `source` selects its ID; SQL names a table (`public.rows` for flat uploads).
 
 ```jsx
-<Helmet><Query name="sales">{`select region, sum(revenue) revenue from ref_<datasetId> group by 1`}</Query></Helmet>
+<Helmet><Query name="sales" source="<datasetId>">{`select region, sum(revenue) revenue from public.rows group by 1`}</Query></Helmet>
 <Question data="$sales" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"region","type":"nominal"},"y":{"field":"revenue","type":"quantitative"}}}}} />
 ```
 

@@ -1,5 +1,7 @@
-import {DatasetCatalogView} from '@/components/DatasetCatalogView';
 'use client';
+
+import { datasetQuerySnippet } from '@/lib/story/dataset-usage';
+import { DatasetCatalogView } from '@/components/DatasetCatalogView';
 
 /**
  * The client half of /a/<id>: what the artifact LOOKS like, and whether we
@@ -1236,13 +1238,13 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             <button
               type="button"
               aria-label="Copy dataset reference"
-              onClick={() => { void navigator.clipboard?.writeText(`ref:${id}`); setCopiedRef(true); }}
+              onClick={() => { void navigator.clipboard?.writeText(props.catalog ? datasetQuerySnippet(id, props.catalog, 'data') : `ref:${id}`); setCopiedRef(true); }}
               className={`${CONTROL_ROW} text-accent`}
             >
-              {copiedRef ? 'copied dataset reference' : `copy ref:${id}`}
+              {copiedRef ? 'copied dataset reference' : props.catalog ? `copy query · source="${id}"` : `copy ref:${id}`}
             </button>
           )}
-          <ShareLink artifactId={id} title={shownTitle} owner format={format} variant="menu" className="" />
+          <ShareLink artifactId={id} title={shownTitle} owner format={format} datasetKind={props.catalog?.kind} variant="menu" className="" />
         </section>
       )}
     </div>

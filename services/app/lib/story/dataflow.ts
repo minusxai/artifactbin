@@ -431,7 +431,7 @@ export function parseValueDecl(el: JsxElement): ParseDeclResult<ValueDecl> {
 
 /**
  * `<Query name>{`sql`}</Query>` → a declaration with its params and dataset
- * refs, or the errors: `name` is the only attribute; the single child is a
+ * refs, or the errors: `name` and optional `source` are the attributes; the single child is a
  * template literal (SQL keeps `<`, `>` and braces raw that way — the same rule
  * as `<style>`); the SQL is non-empty.
  */
@@ -450,7 +450,7 @@ export function parseQueryDecl(el: JsxElement): ParseDeclResult<QueryDecl> {
   const tag = QUERY_TAG;
   const errors: ValidationError[] = [];
   for (const a of el.attributes) {
-    if (a.name !== 'name' && a.name !== 'source') errors.push(err(`<Query> takes only name= — the SQL is its child: <Query name="…">{\`select …\`}</Query>${a.name === 'sql' ? ' (not a sql= attribute)' : ''}`, a, tag, a.name));
+    if (a.name !== 'name' && a.name !== 'source') errors.push(err(`<Query> takes only name= and source= — the SQL is its child: <Query name="…">{\`select …\`}</Query>${a.name === 'sql' ? ' (not a sql= attribute)' : ''}`, a, tag, a.name));
   }
   if (errors.length) return { ok: false, errors };
   const name = checkName(el, tag, errors);
@@ -480,7 +480,7 @@ export function parseMutationDecl(el: JsxElement): ParseDeclResult<MutationDecl>
   const tag = MUTATION_TAG;
   const errors: ValidationError[] = [];
   for (const a of el.attributes) {
-    if (a.name !== 'name' && a.name !== 'source' && a.name !== 'expectedAffected') errors.push(err(`<Mutation> takes only name= and expectedAffected= — the SQL is its child: <Mutation name="…">{\`insert into ref_<id> …\`}</Mutation>${a.name === 'sql' ? ' (not a sql= attribute)' : ''}`, a, tag, a.name));
+    if (a.name !== 'name' && a.name !== 'source' && a.name !== 'expectedAffected') errors.push(err(`<Mutation> takes only name=, source= and expectedAffected= — the SQL is its child: <Mutation name="…" source="<datasetId>">{\`insert into public.rows …\`}</Mutation>${a.name === 'sql' ? ' (not a sql= attribute)' : ''}`, a, tag, a.name));
   }
   if (errors.length) return { ok: false, errors };
   const name = checkName(el, tag, errors);
