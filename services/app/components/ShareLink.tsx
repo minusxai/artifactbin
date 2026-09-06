@@ -265,7 +265,7 @@ export default function ShareLink({
                   </span>
                 </label>
               )}
-              {postgres && <p aria-label="PostgreSQL read-only access" className="mt-5 border-t border-edge pt-4 leading-relaxed text-muted">PostgreSQL datasets are read-only. Editors can update SQL models within the exposed tables; database rows cannot be changed here.</p>}
+              {postgres && <p aria-label="PostgreSQL read-only access" className="mt-5 border-t border-edge pt-4 leading-relaxed text-muted">Editors can manage the connection, notebook and whitelist. Viewers can query exposed data. Database rows cannot be changed here.</p>}
               {showWrites && (
                 <div className="mt-5 border-t border-edge pt-4">
                   <p className="mb-1 flex items-center justify-between text-faint">

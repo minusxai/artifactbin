@@ -43,7 +43,7 @@ describe('ShareLink — writes', () => {
     state.access = 'readwrite'; // Never advertise an unsupported legacy flag.
     render(<ShareLink className="x" artifactId="k3Pq9z" owner format="dataset" />);
     open();
-    await waitFor(() => expect(screen.getByLabelText('PostgreSQL read-only access')).toHaveTextContent(/PostgreSQL datasets are read-only/));
+    await waitFor(() => expect(screen.getByLabelText('PostgreSQL read-only access')).toHaveTextContent('Editors can manage the connection, notebook and whitelist. Viewers can query exposed data. Database rows cannot be changed here.'));
     expect(screen.queryByLabelText('Make read & write')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Make read-only')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Share')).not.toHaveTextContent('writable');

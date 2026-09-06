@@ -36,6 +36,7 @@ describe('canonical dataset authoring hints', () => {
     expect(result.access).toBe('read');
     expect(result.usage).not.toContain('<Mutation');
     expect(result.writes).toMatch(/PostgreSQL.*read-only/);
+    expect(result.writes).toContain('Editors can manage the connection, notebook and whitelist. Viewers can query exposed data.');
     expect(result.writes).not.toContain('PATCH');
   });
 });
