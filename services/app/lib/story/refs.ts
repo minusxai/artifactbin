@@ -97,6 +97,10 @@ export function collectRefUses(source: string): RefUse[] | null {
       if (m.ok && m.decl.scope !== 'local') uses.push({ id: m.decl.target, kind: 'dataset', via: 'sql', write: true });
       return;
     }
+    if (!el.isComponent && tag.toLowerCase() === 'meta' && attrValue(el, 'name') === 'artifactbin:og-image') {
+      const image = refId(attrValue(el, 'content'));
+      if (image) uses.push({ id: image, kind: 'image' });
+    }
     const data = attrValue(el, 'data');
     const viz = attrValue(el, 'viz') as Record<string, unknown> | undefined;
     const recipeRef = viz ? refId(viz.recipe) : null;

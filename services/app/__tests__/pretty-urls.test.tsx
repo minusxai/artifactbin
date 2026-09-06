@@ -208,9 +208,9 @@ describe('public profile listing', () => {
     ) as ReactElement);
   };
 
-  it('strangers see a flat list of public artifacts — private ones never appear', async () => {
+  it('strangers see root public artifacts — filed and private ones never appear', async () => {
     const { ownedToken } = await fixtures();
-    await create(ownedToken, { title: 'Open Doc', markup: '<h1>x</h1>', visibility: 'public' });
+    const open = await create(ownedToken, { title: 'Open Doc', markup: '<h1>x</h1>', visibility: 'public' });
     const box = await create(ownedToken, { format: 'folder', title: 'August' });
     const foldered = await create(ownedToken, { title: 'Foldered Doc', markup: '<h1>x</h1>', visibility: 'public', parent_id: box.id });
     await create(ownedToken, { title: 'Secret Doc', markup: '<h1>x</h1>' }); // default private
@@ -218,10 +218,8 @@ describe('public profile listing', () => {
 
     const markup = await markupOf('@mxmx_owner');
     expect(markup).toContain('Open Doc');
-    // Flat: a public doc inside a folder still lists on the public profile…
-    expect(markup).toContain('Foldered Doc');
-    // …and its link is the canonical path, which carries no folder segment.
-    expect(markup).toContain(`/@mxmx_owner/${foldered.id}-foldered-doc`);
+    expect(markup).not.toContain('Foldered Doc');
+    expect(markup).not.toContain(`/@mxmx_owner/${foldered.id}-foldered-doc`);
     expect(markup).not.toContain('Secret Doc');
     // Unlisted reads like public but never lists — that's its whole meaning.
     expect(markup).not.toContain('Quiet Doc');
@@ -236,7 +234,7 @@ describe('public profile listing', () => {
     // Each card carries the version-busted og-card export as its thumbnail,
     // over a quiet spinner (a steady spin, never a blink) that shows while
     // the shot renders server-side.
-    expect(markup).toContain(`/a/${foldered.id}/export?format=jpg&amp;mode=card&amp;v=1&amp;r=2`);
+    expect(markup).toContain(`/a/${open.id}/export?format=jpg&amp;mode=card&amp;v=1&amp;r=2`);
     expect(markup).toContain('animate-spin');
     expect(markup).not.toContain('animate-pulse');
   });
@@ -244,7 +242,9 @@ describe('public profile listing', () => {
   it('lists public folders for visitors and owners without revealing private placement', async () => {
     const { ownedToken, owner } = await fixtures();
     const privateFolder = await create(ownedToken, { format: 'folder', title: 'Private Parent' });
-    const publicFolder = await create(ownedToken, { format: 'folder', title: 'Public Collection', visibility: 'public', parent_id: privateFolder.id });
+    const publicFolder = await create(ownedToken, { format: 'folder', title: 'Public Collection', visibility: 'public' });
+    await create(ownedToken, { format: 'folder', title: 'Nested Collection', visibility: 'public', parent_id: publicFolder.id });
+    await create(ownedToken, { format: 'folder', title: 'Privately Filed Collection', visibility: 'public', parent_id: privateFolder.id });
     await create(ownedToken, { format: 'folder', title: 'Unlisted Collection', visibility: 'unlisted' });
 
     for (const signedIn of [false, true]) {
@@ -256,6 +256,8 @@ describe('public profile listing', () => {
       expect(markup).not.toContain('Private Parent');
       expect(markup).not.toContain(privateFolder.id);
       expect(markup).not.toContain('Unlisted Collection');
+      expect(markup).not.toContain('Nested Collection');
+      expect(markup).not.toContain('Privately Filed Collection');
     }
   });
 

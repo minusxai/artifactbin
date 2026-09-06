@@ -41,10 +41,30 @@ and shares do not, and the original is never touched. The copy's footer says whe
 source only when that source is `public`, since `unlisted` exists to be listed
 nowhere.
 
-Pages run behind a strict CSP: inline script/style allowed, **all external
-network blocked**, and a `sandbox` directive gives each artifact an opaque
-origin so it can't touch the app's storage. Documents are always
-self-contained — but you don't have to make them so by hand.
+Author Helmet scripts run only in an opaque `sandbox="allow-scripts"` child.
+They cannot access the visible document's DOM or storage, or call account APIs.
+A private, bounded MessageChannel exposes declared signals, query refreshes and
+mutations. Restricted reactive JSX, Dialog primitives and SQL local state compose
+document UI without DOM scripts. Inline table writes are page-local; scalar
+Values retain their existing URL-backed state. Persistent dataset writes retain
+their existing permissions.
+
+By default, served documents also retain the opaque document sandbox. To keep
+owner/editor documents top-level with trusted app controls in a child iframe,
+optionally set `APP__CONTROLS_ORIGIN=https://i.<your-public-host>` in both app and
+proxy processes. Provision HTTPS and route that hostname to the same proxy first;
+preserve public Host/protocol forwarding headers. The controls host serves trusted
+app code. Existing host-only HttpOnly cookies stay on the main/API host, reached
+through exact-origin credentialed CORS. Do not add parent-domain cookies or
+wildcard credentialed CORS. Login stays on the main host. Account sign-out and
+disconnecting separately held agent capabilities remain distinct actions.
+
+In this opt-in topology the top-level document is not opaque; author code still
+is. CSS may hide controls, and this is not a clickjacking guarantee or a hard CPU
+quota. Raw/export documents retain their old sandbox. Unset the option to restore
+the previous serving topology. Run `node scripts/gate-trusted-controls.mjs` after
+a build for local HTTPS, login, editing, private-data and hostile-script checks.
+No production DNS or session migration is performed by enabling this code.
 
 **Import from the web.** Point at an image, a PDF, a font or a CSV and the
 server fetches it once, stores a copy, and serves it from this origin:

@@ -17,7 +17,7 @@ import {appUrl, appNavigate} from '@/web/api-origin';
 import {reportControlsInset} from '@/web/controls-shell';
 import {isDocumentPeerEvent, type DocumentPeer} from '@/lib/story/document-peer';
 import dynamic from '@/lib/dynamic';
-import { Crop, FolderPlus, MessageSquare, Pencil } from 'lucide-react';
+import { FolderPlus, MessageSquare, Pencil } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useArtifactOwner, useCanAnnotateArtifact, useCanEditArtifact } from '@/components/ArtifactShell';
 import AnnotationLayer from '@/components/AnnotationLayer';
@@ -1203,18 +1203,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
               <Pencil size={14} strokeWidth={1.75} />
               edit artifact
             </button>
-            {/* The social frame is a crop of a DOCUMENT's own picture; a
-                folder's card is a picture of its listing, which nobody frames. */}
-            {shownSource !== null && format === 'markup' && (
-              <button
-                type="button"
-                aria-label="Edit social preview"
-                onClick={() => { close(); setSocialPreviewOpen(true); }}
-                className={CONTROL_ROW}
-              >
-                <Crop size={14} strokeWidth={1.75} />
-                social preview
-              </button>
+            {!owner && shownSource !== null && format === 'markup' && (
+              <ShareLink artifactId={id} title={shownTitle} format={format} variant="menu" className="" onSocialPreview={() => { close(); setSocialPreviewOpen(true); }} />
             )}
           </>
         )}
@@ -1256,7 +1246,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
               {copiedRef ? 'copied dataset reference' : `copy ref:${id}`}
             </button>
           )}
-          <ShareLink artifactId={id} title={shownTitle} owner format={format} variant="menu" className="" />
+          <ShareLink artifactId={id} title={shownTitle} owner format={format} variant="menu" className="" onSocialPreview={canEdit && shownSource !== null && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />
         </section>
       )}
     </div>

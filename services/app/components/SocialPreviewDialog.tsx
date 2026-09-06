@@ -1,6 +1,6 @@
 'use client';
 
-import {appFetch as fetch} from '@/web/api-origin';
+import {appFetch as fetch,appUrl} from '@/web/api-origin';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RotateCcw, X } from 'lucide-react';
 import {
@@ -10,6 +10,13 @@ import {
   SOCIAL_PREVIEW_OVERVIEW_GENERATION,
   SOCIAL_PREVIEW_WIDTH,
   savedSocialPreviewCrop,
+  savedSocialPreviewImageCrop,
+  writeSocialPreviewImageCrop,
+  clampImageCrop,
+  defaultImageCrop,
+  imageCropMaxWidth,
+  socialPreviewImage,
+  writeSocialPreviewImage,
   socialPreviewCropHeight,
   writeSocialPreviewCrop,
   type SocialPreviewCrop,
@@ -58,8 +65,16 @@ export default function SocialPreviewDialog({ id, source, editId, version, onClo
   version: number;
   onClose: () => void;
 }) {
+  const initialImage = useMemo(() => socialPreviewImage(source), [source]);
+  const [imageId, setImageId] = useState<string | null>(initialImage);
+  const [uploading, setUploading] = useState(false);
+  const [cropDirty, setCropDirty] = useState(false);
+  const uploadRef = useRef<HTMLInputElement | null>(null);
   const initialSaved = useMemo(() => savedSocialPreviewCrop(source), [source]);
-  const [crop, setCrop] = useState<SocialPreviewCrop>(initialSaved ?? DEFAULT_SOCIAL_PREVIEW_CROP);
+  const initialImageCrop = useMemo(() => savedSocialPreviewImageCrop(source), [source]);
+  const documentDraft = useRef({ crop: initialSaved ?? DEFAULT_SOCIAL_PREVIEW_CROP, reset: false, dirty: false });
+  const imageDraft = useRef<SocialPreviewCrop | null>(initialImageCrop);
+  const [crop, setCrop] = useState<SocialPreviewCrop>((initialImage ? initialImageCrop : initialSaved) ?? DEFAULT_SOCIAL_PREVIEW_CROP);
   const [camera, setCamera] = useState<SocialPreviewCrop>(initialSaved ?? DEFAULT_SOCIAL_PREVIEW_CROP);
   const [interacting, setInteracting] = useState(false);
   const [loadedFocusedUrl, setLoadedFocusedUrl] = useState('');
@@ -76,7 +91,14 @@ export default function SocialPreviewDialog({ id, source, editId, version, onClo
   const frameRef = useRef<HTMLDivElement | null>(null);
   const interaction = useRef<Interaction | null>(null);
 
-  const previewUrl = `/a/${id}/export?mode=preview&format=jpg&v=${version}&pv=${SOCIAL_PREVIEW_OVERVIEW_GENERATION}${previewAttempt ? `&attempt=${previewAttempt}` : ''}`;
+  const documentPreviewUrl = `/a/${id}/export?mode=preview&format=jpg&v=${version}&pv=${SOCIAL_PREVIEW_OVERVIEW_GENERATION}${previewAttempt ? `&attempt=${previewAttempt}` : ''}`;
+  const previewUrl = imageId
+    ? imageId === initialImage
+      ? `/a/${id}/export?mode=preview&image=1&v=${version}&attempt=${previewAttempt}`
+      : `/a/${imageId}/raw?attempt=${previewAttempt}`
+    : documentPreviewUrl;
+  const boundCrop = useCallback((next: SocialPreviewCrop, height: number) =>
+    imageId ? clampImageCrop(next, height) : clampCrop(next, height), [imageId]);
   const height = socialPreviewCropHeight(crop.width);
   const magnification = Math.round(SOCIAL_PREVIEW_WIDTH / crop.width * 100);
   const focusedCrop = rounded(crop);
@@ -106,19 +128,22 @@ export default function SocialPreviewDialog({ id, source, editId, version, onClo
   }, [onClose]);
 
   const update = useCallback((next: SocialPreviewCrop) => {
+    setCropDirty(true);
     setReset(false);
-    const clamped = clampCrop(next, sourceHeight);
+    const clamped = boundCrop(next, sourceHeight);
+    if (imageId) imageDraft.current = clamped;
     setCrop(clamped);
     setCamera(clamped);
-  }, [sourceHeight]);
+  }, [sourceHeight, boundCrop, imageId]);
 
   const onImageLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
     const image = event.currentTarget;
     const density = image.naturalWidth / SOCIAL_PREVIEW_WIDTH;
     const measuredHeight = density > 0 ? image.naturalHeight / density : SOCIAL_PREVIEW_HEIGHT;
-    setSourceHeight(Math.max(SOCIAL_PREVIEW_HEIGHT, measuredHeight));
+    const height = imageId ? measuredHeight : Math.max(SOCIAL_PREVIEW_HEIGHT, measuredHeight);
+    setSourceHeight(height);
     setCrop((current) => {
-      const clamped = clampCrop(current, Math.max(SOCIAL_PREVIEW_HEIGHT, measuredHeight));
+      const clamped = imageId ? clampImageCrop(imageDraft.current ?? defaultImageCrop(height), height) : clampCrop(current, height);
       setCamera(clamped);
       return clamped;
     });
@@ -155,11 +180,13 @@ export default function SocialPreviewDialog({ id, source, editId, version, onClo
     const resizeDelta = rawResizeDelta > 0
       ? rawResizeDelta * RESIZE_OUTWARD_SENSITIVITY
       : rawResizeDelta;
-    const next = clampCrop(held.kind === 'move'
+    const next = boundCrop(held.kind === 'move'
       // Once focused, dragging pans the document beneath the output frame.
       ? { ...held.crop, x: held.crop.x - dx, y: held.crop.y - dy }
       : { ...held.crop, width: held.crop.width + resizeDelta }, sourceHeight);
     held.latest = next;
+    if (imageId) imageDraft.current = next;
+    setCropDirty(true);
     setReset(false);
     setCrop(next);
     // Keep inward resizing spatially stable, then focus it on release. When
@@ -194,16 +221,43 @@ export default function SocialPreviewDialog({ id, source, editId, version, onClo
     update({ ...crop, width: crop.width + (event.key === 'ArrowRight' ? step : -step) });
   };
 
+  const upload = async (file: File) => {
+    setUploading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/my/artifacts', {
+        method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file,
+      });
+      const body = await res.json();
+      if (!res.ok || typeof body.id !== 'string') throw new Error(body.details?.find((item: { message?: string }) => item.message)?.message ?? body.error ?? 'Could not upload image.');
+      if (!imageId) documentDraft.current = { crop, reset, dirty: cropDirty };
+      imageDraft.current = null;
+      setCropDirty(false);
+      setReset(false);
+      setImageReady(false);
+      setImageFailed(false);
+      setImageId(body.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not upload image. Try again.');
+    } finally {
+      setUploading(false);
+      if (uploadRef.current) uploadRef.current.value = '';
+    }
+  };
+
   const save = async () => {
-    if (saving) return;
+    if (saving || uploading) return;
     setSaving(true);
     setError('');
-    const persisted = reset ? null : rounded(clampCrop(crop, sourceHeight));
+    const persisted = reset ? null : rounded(boundCrop(crop, sourceHeight));
+    let nextSource = writeSocialPreviewImage(base.source, imageId);
+    if (imageId) nextSource = writeSocialPreviewImageCrop(nextSource, persisted);
+    else if (cropDirty || !initialImage) nextSource = writeSocialPreviewCrop(nextSource, persisted);
     try {
       const res = await fetch(`/api/my/artifacts/${id}/edits`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ edit_id: base.editId, source: writeSocialPreviewCrop(base.source, persisted) }),
+        body: JSON.stringify({ edit_id: base.editId, source: nextSource }),
       });
       const body = (await res.json().catch(() => ({}))) as SaveResponse;
       if (res.ok) { onClose(); return; }
@@ -234,13 +288,18 @@ export default function SocialPreviewDialog({ id, source, editId, version, onClo
           <button ref={closeRef} type="button" aria-label="Cancel social preview" onClick={onClose} className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-edge bg-transparent text-muted hover:bg-raised hover:text-fg"><X size={15} /></button>
         </header>
 
+        <div className="flex items-center gap-3 border-b border-edge px-4 py-3">
+          <input ref={uploadRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" aria-label="Upload social preview image" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); }} />
+          <button type="button" disabled={uploading || saving} onClick={() => uploadRef.current?.click()} className="cursor-pointer rounded-[5px] border border-edge px-3 py-2 font-mono text-xs text-fg disabled:opacity-60">{uploading ? 'uploading…' : imageId ? 'replace image' : 'upload image'}</button>
+          {imageId && <button type="button" disabled={uploading || saving} onClick={() => { setImageId(null); setImageReady(false); setImageFailed(false); setCrop(documentDraft.current.crop); setCamera(documentDraft.current.crop); setReset(documentDraft.current.reset); setCropDirty(documentDraft.current.dirty); }} className="cursor-pointer rounded-[5px] border border-edge px-3 py-2 font-mono text-xs text-muted">use document framing</button>}
+        </div>
         <div className="min-h-0 flex-1 bg-ground p-3 sm:p-5">
           <div className="relative mx-auto aspect-[40/21] max-h-full overflow-hidden border border-edge bg-surface" aria-label="Social preview canvas">
             {/* eslint-disable-next-line @next/next/no-img-element -- this is an authenticated generated export. */}
             <img
-              key={previewAttempt}
-              src={previewUrl}
-              alt="Artifact preview"
+              key={previewUrl}
+              src={appUrl(previewUrl)}
+              alt={imageId ? "Uploaded social preview" : "Artifact preview"}
               draggable={false}
               onLoad={onImageLoad}
               onError={() => { setImageFailed(true); setImageReady(false); }}
@@ -254,13 +313,13 @@ export default function SocialPreviewDialog({ id, source, editId, version, onClo
             {!imageReady && !imageFailed && (
               <div role="status" aria-live="polite" className="absolute inset-0 flex min-h-48 flex-col items-center justify-center gap-3 bg-surface px-4 text-center font-mono text-xs text-muted">
                 <span aria-hidden="true" className="h-5 w-5 animate-spin rounded-full border-2 border-edge-bright border-t-accent motion-reduce:animate-none" />
-                <span>rendering full-page overview…</span>
-                <span className="text-[10px] text-faint">Complex artifacts can take a few seconds.</span>
+                <span>{imageId ? 'loading image…' : 'rendering full-page overview…'}</span>
+                {!imageId && <span className="text-[10px] text-faint">Complex artifacts can take a few seconds.</span>}
               </div>
             )}
             {imageFailed && (
               <div role="status" className="absolute inset-0 flex min-h-48 flex-col items-center justify-center gap-3 bg-surface px-4 text-center font-mono text-xs text-muted">
-                <span>The overview could not be rendered.</span>
+                <span>The preview could not be loaded.</span>
                 <button type="button" onClick={() => { setImageFailed(false); setPreviewAttempt((attempt) => attempt + 1); }} className="cursor-pointer rounded-[5px] border border-edge-bright bg-raised px-3 py-2 text-fg hover:border-accent">retry</button>
               </div>
             )}
@@ -285,13 +344,13 @@ export default function SocialPreviewDialog({ id, source, editId, version, onClo
                   touchAction: 'none',
                 }}
               >
-                {!interacting && (
+                {!imageId && !interacting && (
                   <>
                     {/* A crop-sized render replaces the overview after each gesture, so magnification never enlarges overview pixels. */}
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       key={focusedUrl}
-                      src={focusedUrl}
+                      src={appUrl(focusedUrl)}
                       alt=""
                       aria-hidden="true"
                       draggable={false}
@@ -311,8 +370,8 @@ export default function SocialPreviewDialog({ id, source, editId, version, onClo
                   role="slider"
                   tabIndex={0}
                   aria-label="Resize social preview crop"
-                  aria-valuemin={SOCIAL_PREVIEW_MIN_CROP_WIDTH}
-                  aria-valuemax={SOCIAL_PREVIEW_WIDTH}
+                  aria-valuemin={imageId ? Math.min(SOCIAL_PREVIEW_MIN_CROP_WIDTH, imageCropMaxWidth(sourceHeight)) : SOCIAL_PREVIEW_MIN_CROP_WIDTH}
+                  aria-valuemax={imageId ? imageCropMaxWidth(sourceHeight) : SOCIAL_PREVIEW_WIDTH}
                   aria-valuenow={Math.round(crop.width)}
                   onKeyDown={resizeByKey}
                   onPointerDown={begin('resize')}
@@ -333,14 +392,15 @@ export default function SocialPreviewDialog({ id, source, editId, version, onClo
             <button
               type="button"
               aria-label="Reset social preview"
-              onClick={() => { setCrop(DEFAULT_SOCIAL_PREVIEW_CROP); setCamera(DEFAULT_SOCIAL_PREVIEW_CROP); setReset(true); setError(''); }}
+              disabled={!imageReady || uploading || saving}
+              onClick={() => { setCropDirty(true); imageDraft.current = null; const next = imageId ? defaultImageCrop(sourceHeight) : DEFAULT_SOCIAL_PREVIEW_CROP; setCrop(next); setCamera(next); setReset(true); setError(''); }}
               className="inline-flex cursor-pointer items-center gap-1.5 rounded-[5px] border-0 bg-transparent px-2 py-2 font-mono text-xs text-muted hover:bg-raised hover:text-fg"
             >
               <RotateCcw size={13} /> reset
             </button>
             <div className="flex gap-2">
               <button type="button" onClick={onClose} className="cursor-pointer rounded-[5px] border border-edge bg-transparent px-3 py-2 font-mono text-xs text-muted hover:border-edge-bright hover:text-fg">cancel</button>
-              <button type="button" disabled={saving || !imageReady} onClick={() => void save()} className="cursor-pointer rounded-[5px] border border-accent bg-accent px-3 py-2 font-mono text-xs font-semibold text-white disabled:cursor-default disabled:opacity-60">{saving ? 'saving…' : 'save preview'}</button>
+              <button type="button" disabled={saving || uploading || !imageReady} onClick={() => void save()} className="cursor-pointer rounded-[5px] border border-accent bg-accent px-3 py-2 font-mono text-xs font-semibold text-white disabled:cursor-default disabled:opacity-60">{saving ? 'saving…' : 'save preview'}</button>
             </div>
           </div>
         </footer>

@@ -19,7 +19,7 @@
 import {appFetch as fetch,appUrl} from '@/web/api-origin';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, EyeOff, Globe, Link as LinkIcon, Lock, PenLine, X } from 'lucide-react';
+import { Crop, Check, EyeOff, Globe, Link as LinkIcon, Lock, PenLine, X } from 'lucide-react';
 import { SelectMenu } from '@/components/SelectMenu';
 import { Tooltip } from '@/components/Tooltip';
 import type { DatasetAccess, SharingPatch, Visibility } from '@/lib/artifacts';
@@ -57,13 +57,14 @@ export default function ShareLink({
   variant = 'chip',
   url,
   onClose,
+  onSocialPreview,
 }: {
   className: string;
   /** Enables the ACL dialog; without it this is just the copy button. */
   artifactId?: string;
   /** The displayed name of the artifact being shared. */
   title?: string | null;
-  /** This viewer OWNS the artifact — only an owner manages its ACL (an editor never sees this popover). */
+  /** This viewer OWNS the artifact — only an owner manages its ACL; editors may still configure the social preview. */
   owner?: boolean;
   /** The artifact's format — the writes row exists for a dataset and nothing else. */
   format?: string;
@@ -73,6 +74,8 @@ export default function ShareLink({
   url?: string;
   /** Dialog-only callers unmount the sharing surface when dismissed. */
   onClose?: () => void;
+  /** Editors may configure the card without managing access. */
+  onSocialPreview?: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [open, setOpen] = useState(variant === 'dialog');
@@ -118,7 +121,7 @@ export default function ShareLink({
     setCopied(true);
   };
 
-  if (!canManage) {
+  if (!canManage && !onSocialPreview) {
     if (variant === 'menu') {
       return (
         <button
@@ -201,7 +204,12 @@ export default function ShareLink({
           >
             {copied ? <Check size={11} /> : <LinkIcon size={11} />} {copied ? 'copied' : 'copy link'}
           </button>
-          {!state && !error && <p className="text-muted">loading…</p>}
+          {onSocialPreview && (
+            <button type="button" aria-label="Edit social preview" onClick={() => { setOpen(false); onSocialPreview(); }} className="mb-4 flex w-full cursor-pointer items-center gap-2 rounded-[5px] border border-edge px-3 py-2.5 text-muted hover:border-edge-bright hover:text-fg">
+              <Crop size={14} /> social preview <span className="ml-auto text-[11px] text-faint">upload image or frame document</span>
+            </button>
+          )}
+          {canManage && !state && !error && <p className="text-muted">loading…</p>}
           {error && <p className="text-red-400">{error}</p>}
           {state && (
             <>

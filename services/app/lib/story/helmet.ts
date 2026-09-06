@@ -177,6 +177,9 @@ export function validateHelmet(nodes: JsxNode[]): ValidationError[] {
         errors.push({ message: `<Helmet> already carries a <meta name="${nameValue}">`, tag, start: child.start, end: child.end });
         continue;
       }
+      if (nameValue === 'artifactbin:og-image' && !/^ref:[A-Za-z0-9_-]+$/.test(contentValue)) {
+        errors.push({ message: 'artifactbin:og-image needs an uploaded image reference: ref:<imageId>', tag, start: child.start, end: child.end });
+      }
       seenMetaNames.add(nameValue);
       continue;
     }

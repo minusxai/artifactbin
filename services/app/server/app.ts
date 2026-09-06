@@ -235,7 +235,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     if (c.req.method === 'GET' && candidateDocument(url.pathname)) {
       const shell = (await index(c.req.url)).replace('</head>', () => `<script type="application/json" id="mx-controls-config">${safeJson({apiOrigin:new URL(PUBLIC_BASE_URL).origin})}</script><base target="_top" /><style>html,body,#root{background:transparent!important}</style></head>`);
       const main = new URL(PUBLIC_BASE_URL).origin;
-      const csp = APP_CSP.replace("connect-src 'self'", `connect-src 'self' ${main}`).replace("frame-src 'self'", `frame-src 'self' ${main}`).replace("frame-ancestors 'self'", `frame-ancestors ${main}`);
+      const csp = APP_CSP.replace("connect-src 'self'", `connect-src 'self' ${main}`).replace("img-src 'self'", `img-src 'self' ${main}`).replace("frame-src 'self'", `frame-src 'self' ${main}`).replace("frame-ancestors 'self'", `frame-ancestors ${main}`);
       return new Response(shell,{headers:{...APP_SECURITY_HEADERS,'content-security-policy':csp,'content-type':'text/html; charset=utf-8','cache-control':'no-store'}});
     }
     if (c.req.method === 'GET' && /^\/(?:assets\/|story\/|favicon\.|icon\.|logo-[\w.-]+\.png$)/.test(url.pathname)) return next();

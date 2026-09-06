@@ -151,7 +151,17 @@ try {
   await chrome.locator('[aria-label="Like artifact"][aria-pressed="true"]').waitFor();
   await page.reload();
   await chrome.locator('[aria-label="Like artifact"][aria-pressed="true"]').waitFor();
-  const datasetResponse=await fetch(backend+'/api/artifacts',{method:'POST',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({dataset:[{secret:41}]})});
+  await chrome.getByLabel('Open artifact controls',{exact:true}).click();
+  await chrome.getByLabel('Share',{exact:true}).click();
+  await chrome.getByLabel('Edit social preview',{exact:true}).click();
+  await chrome.getByAltText('Artifact preview',{exact:true}).evaluate(el=>new Promise((resolve,reject)=>{
+    if(el.complete && el.naturalWidth>0) return resolve(true);
+    el.addEventListener('load',()=>resolve(true),{once:true});
+    el.addEventListener('error',()=>reject(new Error('Protected preview failed to load from API origin')),{once:true});
+    setTimeout(()=>reject(new Error('Protected preview timed out')),30000);
+  }));
+  await chrome.getByLabel('Cancel social preview',{exact:true}).click();
+  const datasetResponse=await fetch(backend+'/api/artifacts',{method:'POST',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({dataset:[{secret:41}],visibility:'private'})});
   assert.equal(datasetResponse.status,201);
   const dataset=await datasetResponse.json();
   const privateResponse=await fetch(backend+'/api/artifacts',{method:'POST',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({markup:`<Helmet><Value name="delta" type="number" default={0}/><Query name="answers">{\`select secret + $delta as answer from ref_${dataset.id}\`}</Query><Mutation name="inc">{\`update _signals set delta=delta+1\`}</Mutation></Helmet><h1>Private data</h1><Number data="$answers" col="answer" agg="sum"/><Button run="$inc">Change private query</Button>`})});

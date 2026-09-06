@@ -5,9 +5,8 @@ description: >-
 ---
 ## Read first
 
-`markup` is **static JSX treated as data** — parsed, validated, interpreted
-over a fixed component registry, never executed. A fault is a
-`400 {"error":"invalid_jsx","details":[…]}` with exact spans: guess and correct.
+`markup` is **static JSX data**, interpreted over a fixed component registry.
+Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with exact spans.
 
 - Literal props, plus [restricted reactive JSX and dialogs](markup-state.md).
   No spreads, callbacks, or inline handlers; every tag closes (`<br />`),
@@ -108,6 +107,8 @@ writing a script. `</script` cannot appear in its text (split the string).
   call, not Helmet content. No genre named → **default to `scrolly`**; torn →
   ask the user. `colorMode`
   (`light | dark`) is the AUTHOR'S DEFAULT — readers flip it, so design in theme tokens.
+
+Social preview: [upload and crop](publishing-versions.md).
 
 ## Images and icons
 
