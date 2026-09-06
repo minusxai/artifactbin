@@ -36,7 +36,24 @@ try {
     const result = await response;
     assert.equal(result.status(), expectedStatus, await result.text());
   };
+  // Hold the authoritative refresh so a fast local query cannot hide a
+  // disruptive overlay. Other cells must stay usable throughout the save.
+  let releaseRefresh;
+  const refreshHeld = new Promise(resolve => { releaseRefresh = resolve; });
+  const queryRoute = `**/a/${fixture.id}/query?*`;
+  await a.route(queryRoute, async route => { await refreshHeld; await route.continue(); });
   await select(a, 'Status 1', 'active');
+  const refreshingTable = a.getByLabel('DataTable embed', {exact:true});
+  await a.waitForFunction(() => document.querySelector('[aria-label="DataTable embed"]')?.getAttribute('aria-busy') === 'true');
+  assert.equal(await refreshingTable.evaluate(el => el.classList.contains('mx-busy')), false);
+  assert.equal(await refreshingTable.locator(':scope > *').first().evaluate(el => getComputedStyle(el).opacity), '1');
+  await a.getByLabel('Item 2', {exact:true}).fill('draft during refresh');
+  releaseRefresh();
+  await a.waitForFunction(() => document.querySelector('[aria-label="DataTable embed"]')?.getAttribute('aria-busy') === 'false');
+  await a.unroute(queryRoute);
+  assert.equal(await a.getByLabel('Item 2', {exact:true}).inputValue(), 'draft during refresh');
+  await a.getByLabel('Item 2', {exact:true}).press('Escape');
+  check('cell refresh has no table overlay and preserves another cell draft');
   await waitText(b, 'Status 1', 'active');
   check('status commit propagates to a second reader without reload');
 

@@ -637,8 +637,11 @@ function DataTableAdapter(props: Record<string, unknown>) {
   // rows on screen are exactly the engine's order for that sort.
   const shown = paged.sort && paged.rows.length ? paged.rows : [...table.rows, ...paged.rows];
   const busy = name !== null && ctx.pending.has(name);
+  // Cell sessions already indicate saving and retain drafts during refresh.
+  // Keep the rest of an editable table visually stable and available to edit.
+  const dimRefresh = busy && templates.length === 0;
   return (
-    <div {...runtimeTargetIdentity(props)} aria-label="DataTable embed" aria-busy={busy} className={busy ? 'mx-busy' : undefined} style={wrapper}>
+    <div {...runtimeTargetIdentity(props)} aria-label="DataTable embed" aria-busy={busy} className={dimRefresh ? 'mx-busy' : undefined} style={wrapper}>
       <CellSessionsContext.Provider value={sessions}><DataTable
         rows={shown}
         columns={table.columns}
