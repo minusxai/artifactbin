@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "license": "Apache-2.0",
-  "description": "Run a local terminal with Artifact Bin remote access",
+  "description": "Run a local terminal with artifactbin remote access",
   "bin": {
     "afbin": "dist/afbin.mjs"
   },

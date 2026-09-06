@@ -23,11 +23,11 @@ afbin remote --server http://localhost:6401 claude --chrome
 
 Put afbin options **before** the command; everything after the command goes to the harness unchanged. Your working directory, environment, installed skills, MCP configuration, and local input/output remain available. The CLI starts the executable directly, without constructing a shell command string. You can explicitly run a shell too: `afbin remote bash`.
 
-Open the printed session link, or `/chat` on the selected server, and sign into the same Artifact Bin account. Select a session and choose **Take control**. Use the terminal directly, the message box, or the mobile Enter/Escape/arrow buttons. Local typing takes control back. **Disconnect** removes remote access and leaves the local command running; Ctrl+C goes to the command as usual.
+Open the printed session link, or `/chat` on the selected server, and sign into the same artifactbin account. Select a session and choose **Take control**. Use the terminal directly, the message box, or the mobile Enter/Escape/arrow buttons. Local typing takes control back. **Disconnect** removes remote access and leaves the local command running; Ctrl+C goes to the command as usual.
 
 ## Auth
 
-`afbin auth` asks you to open the server's `/tokens/new` page while signed in and paste its token (hidden input). It validates that the token belongs to an account and saves it with owner-only permissions in the same file used by Artifact Bin skills:
+`afbin auth` asks you to open the server's `/tokens/new` page while signed in and paste its token (hidden input). It validates that the token belongs to an account and saves it with owner-only permissions in the same file used by artifactbin skills:
 
 ```dotenv
 ARTIFACTBIN_URL=https://artifactbin.dev
@@ -42,7 +42,7 @@ Location: `~/.artifactbin.env`. `afbin remote` reuses a valid saved token withou
 
 Type `@` in an artifact comment or reply and select one of your online sessions. The comment stores a readable link to that exact session. After saving the comment, the server queues a single-line JSON notification containing the artifact, annotation and comment IDs, author, and body, followed by Enter. It does not wait for the harness to become idle. The harness handles the input according to its current screen, just as if you typed locally.
 
-The agent can use its existing Artifact Bin plugin/MCP/API to read the artifact and respond. The relay does not parse replies or post comments itself. Agent-authored replies do not generate more notifications. V0 only allows you to invoke **your own account's sessions**. Offline, disconnected, or full sessions receive no notification; the comment is still saved. There is no historical comment replay. Mention links identify a session, so restarting a command creates a new mention target.
+The agent can use its existing artifactbin plugin/MCP/API to read the artifact and respond. The relay does not parse replies or post comments itself. Agent-authored replies do not generate more notifications. V0 only allows you to invoke **your own account's sessions**. Offline, disconnected, or full sessions receive no notification; the comment is still saved. There is no historical comment replay. Mention links identify a session, so restarting a command creates a new mention target.
 
 ## Embedded use
 

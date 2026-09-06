@@ -17,7 +17,7 @@ export async function remoteRoute(
       return json({ error: "Authentication required. Run afbin auth." }, 401);
     if (!actor.viewer?.userId)
       return json(
-        { error: "Use a token claimed by your Artifact Bin account." },
+        { error: "Use a token claimed by your artifactbin account." },
         403,
       );
     if (refusesCrossSite(request, actor))
