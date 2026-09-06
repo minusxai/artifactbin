@@ -294,6 +294,12 @@ export function ChatPage() {
             </button>
           ))}
           <p className="mt-3 text-xs text-muted">
+            Install the CLI:
+            <code className="my-2 block break-words rounded border border-edge bg-surface p-2">curl -fsSL https://artifactbin.dev/chat/install.sh | sh</code>
+            <a href="/chat/install.sh" className="underline">View install script</a>
+            <br />
+            Connect your account: <code>afbin auth</code>
+            <br />
             Start a session:
             <br />
             <code>afbin remote claude</code>

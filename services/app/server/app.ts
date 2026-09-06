@@ -304,6 +304,12 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // registering a static root that can only warn; production builds it first.
   if (existsSync(webDir)) app.use('/assets/*', serveStatic({ root: path.relative(process.cwd(), webDir) || '.' }));
   app.use('/install.sh', async (c, next) => { await next(); c.header('content-type', 'text/x-shellscript; charset=utf-8'); });
+  app.use('/chat/install.sh', async (c, next) => {
+    await next();
+    c.header('content-type', 'text/x-shellscript; charset=utf-8');
+    c.header('cache-control', 'public, max-age=300');
+    c.header('x-content-type-options', 'nosniff');
+  });
   app.use('/*', serveStatic({ root: path.relative(process.cwd(), publicDir) || '.', onFound: () => {}, onNotFound: () => {} }));
 
   // The tour for people, registered AHEAD of the API mount: `/docs/*` is one

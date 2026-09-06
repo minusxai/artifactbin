@@ -2,6 +2,30 @@
 
 Run a regular local agent terminal and access the same terminal from a desktop or mobile browser. Claude Code, Codex, Pi, OpenCode, or another interactive command can run inside the PTY; no harness protocol or plugin is required for terminal access.
 
+## Install
+
+Once the `afbin-v0.1.0` GitHub Release is published and the app is deployed:
+
+```sh
+curl -fsSL https://artifactbin.dev/chat/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+afbin auth
+afbin remote claude --chrome
+# Or: afbin remote codex
+```
+
+Sign into artifactbin.dev, follow the auth prompt to generate and paste an account token, then open
+https://artifactbin.dev/chat. The harness must already be installed. The installer needs curl and
+sha256sum or shasum, but no Node runtime or sudo. It supports macOS and Linux on arm64 and x64;
+Windows users can use WSL. It checks SHA-256 before replacing an existing installation. Re-run it to
+reinstall, or select a published version/location:
+
+```sh
+curl -fsSL https://artifactbin.dev/chat/install.sh | sh -s -- --version 0.1.0 --dir "$HOME/.local/bin"
+```
+
+The existing `/install.sh` installs the self-hosted server; `/chat/install.sh` installs only this CLI.
+
 From the repository root (Node 22+, plus Python/make/C++ on Linux for node-pty):
 
 ```sh
@@ -76,3 +100,19 @@ The relay uses authenticated HTTP polling (~200 ms runner / 250 ms viewer), so i
 Run **one app process**: sessions and bounded terminal scrollback live in memory. An app restart or multi-replica routing loses the connection. Brief network errors retry exchanges without duplicating input/output; auth failure or a missing session disables remote access and leaves the local command running. A long outage or excessive output disables the relay to keep local work available. Sessions become offline after 30 seconds without a heartbeat and expire after one hour without activity. Limits: 10 sessions per account, 200 total, 1 MiB replay per session plus 1,000 terminal scrollback lines, 128 KiB pending input. Closing the local terminal ends the process; this does not implement persistent background sessions.
 
 The account and the app server can access the terminal content and input. Keep this server within the trust boundary of the machine you are controlling. V0 does not provide end-to-end encryption, public session sharing, readiness detection, or guaranteed delivery after a server restart.
+
+## Publishing a CLI release
+
+CI builds and smoke-tests macOS/Linux on arm64/x64 and uploads the executables as workflow artifacts.
+`Publish afbin CLI` rebuilds and tests an exact source commit, then publishes a versioned GitHub Release
+with `SHA256SUMS`. The release stays a draft until all assets are attached. Existing releases are not overwritten.
+
+1. Update `services/cli/package.json` and the default `version` in `services/app/public/chat/install.sh`.
+2. Merge and wait for CI to pass on the exact main commit to release.
+3. Tag that commit `afbin-v0.1.0` (matching the package version) and push the tag. The workflow also supports
+   manual retries with an existing tag. It refuses commits outside main or without passing CI.
+4. Verify the release assets, then deploy the app serving the corresponding installer. For a rollback,
+   deploy an installer pinned to the previous release; users can also pass `--version` explicitly.
+
+Publish the first release before advertising the install command. A missing release produces a clear
+download error and leaves any existing installation untouched.
