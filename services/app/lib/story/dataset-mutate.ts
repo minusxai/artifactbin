@@ -29,7 +29,7 @@ import { trackEvent } from '@/lib/analytics';
 import { MAX_QUERY_ROWS } from '@/lib/config';
 import { getDb } from '@/lib/db';
 import { isQueryFailure, runMutation, type MutationInput } from '@/lib/sql/engine';
-import { LIVE_ARTIFACT_SQL, type ArtifactRow } from '@/lib/artifacts';
+import { LIVE_ARTIFACT_SQL, canWriteDataset, editorScope, type ArtifactRow, type RoleActor } from '@/lib/artifacts';
 import type { DatasetColumn } from './dataset-shape';
 import { loadDatasetRows, storeDatasetRows } from './dataset-store';
 import type { Scalar } from './dataflow';
@@ -56,7 +56,7 @@ export interface MutationRefused {
    * the honest answer is "try again". (Unreachable on PGLite, which serializes
    * every operation; reachable on Postgres.)
    */
-  reason: 'invalid_sql' | 'dataset_full' | 'contended' | 'row_changed' | 'row_not_unique';
+  reason: 'invalid_sql' | 'dataset_full' | 'contended' | 'row_changed' | 'row_not_unique' | 'dataset_read_only';
   detail: string;
 }
 
@@ -71,22 +71,23 @@ export interface MutationApplied {
 export const isMutationRefused = (r: MutationApplied | MutationRefused): r is MutationRefused => 'reason' in r;
 
 /**
- * Apply one DML statement to a dataset artifact. The caller has already
- * decided the write is ALLOWED (lib/artifacts canWriteDataset: the row is a
- * dataset, `access` is readwrite, and it belongs to whoever the document's
- * mutation speaks for) — this only performs it.
+ * Apply one DML statement as its actual actor. Recheck dataset edit access
+ * on every retry and in the final UPDATE itself, so revoking a share while
+ * SQL is executing prevents that write from landing.
  *
  * `sql` names the dataset as `ref_<id>`, exactly as it is written in the
  * document; `params` are bound by name and never interpolated.
  */
 export async function mutateDataset(
   dataset: ArtifactRow,
+  actor: RoleActor,
   sql: string,
   params: Record<string, Scalar> = {},
   guard: Pick<MutationInput, 'row' | 'expectedAffected'> = {},
 ): Promise<MutationApplied | MutationRefused> {
   const db = await getDb();
   const table = `ref_${dataset.id}`;
+  const scope = editorScope({userId:actor.userId,tokenId:actor.tokenId ?? ''});
 
   for (let attempt = 0; ; attempt++) {
     // Re-read on every attempt: attempt 0 uses the row we were handed, and a
@@ -97,6 +98,7 @@ export async function mutateDataset(
     // Deleted under us — the write has nothing to apply to. Reported as a
     // refusal rather than thrown: the caller answers the uniform 404 anyway.
     if (!current) return { reason: 'invalid_sql', detail: 'the dataset no longer exists' };
+    if (await canWriteDataset(current, actor)) return {reason:'dataset_read_only',detail:'You no longer have edit access to a writable dataset.'};
 
     const columns = ((current.meta as { columns?: DatasetColumn[] }).columns) ?? [];
     const rows = await loadDatasetRows(current);
@@ -129,8 +131,8 @@ export async function mutateDataset(
     const updated = await db.query<ArtifactRow>(
       `WITH updated AS (
          UPDATE artifacts
-            SET content = '', meta = $3::jsonb, version = version + 1, edit_id = $4, updated_at = now()
-          WHERE id = $1 AND edit_id = $2
+            SET content = '', meta = $3::jsonb, version = version + 1, edit_id = $4, updated_at = now(), actor_user_id = $13, actor_token_id = $14
+          WHERE id = $1 AND edit_id = $2 AND access = 'readwrite' AND ${scope.where('$15')}
           RETURNING *
        ), archived AS (
          INSERT INTO artifact_versions (artifact_id, version, title, description, format, content, source, meta)
@@ -147,6 +149,7 @@ export async function mutateDataset(
         dataset.id, current.edit_id, JSON.stringify(meta), newEditId(),
         current.version, current.title, current.description, current.format, current.content, current.source,
         JSON.stringify(current.meta), WRITE_SNAPSHOT_WINDOW_MS,
+        actor.userId, actor.tokenId, scope.val,
       ],
     );
 

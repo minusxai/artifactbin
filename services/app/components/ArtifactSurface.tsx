@@ -525,8 +525,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           body: JSON.stringify({ values: data.values ?? {}, only: data.only ?? [], ...(data.page ? { page: data.page } : {}) }),
         });
         if (!res.ok) { reply({ type: STORY_QUERY_RESULT_MESSAGE, id: data.id!, error: `query failed (${res.status})` }); return; }
-        const body = (await res.json()) as { tables: DataflowState['tables']; errors: DataflowState['errors'] };
-        reply({ type: STORY_QUERY_RESULT_MESSAGE, id: data.id!, tables: body.tables, errors: body.errors });
+        const body = (await res.json()) as Pick<DataflowState,'tables'|'errors'|'mutationAccess'>;
+        reply({ type: STORY_QUERY_RESULT_MESSAGE, id: data.id!, ...body });
       } catch (err) {
         reply({ type: STORY_QUERY_RESULT_MESSAGE, id: data.id!, error: err instanceof Error ? err.message : 'query failed' });
       }

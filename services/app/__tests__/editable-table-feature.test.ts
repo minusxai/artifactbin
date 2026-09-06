@@ -17,7 +17,7 @@ describe('editable DataTable feature',()=>{
     const t=await mintToken('editable');
     const ds=await create(t.token,{dataset:[{id:1,status:'backlog'},{id:2,status:'backlog'}],access:'readwrite'});
     const doc=await create(t.token,{markup:markup(ds.id)});
-    const update=(value:string)=>mutateDoc(request(`/a/${doc.id}/mutate`,{method:'POST',json:{mutation:'set_status',values:{_value:value},row:{id:1,status:'backlog'}}}),{params:Promise.resolve({id:doc.id})});
+    const update=(value:string)=>mutateDoc(request(`/a/${doc.id}/mutate`,{method:'POST',token:t.token,json:{mutation:'set_status',values:{_value:value},row:{id:1,status:'backlog'}}}),{params:Promise.resolve({id:doc.id})});
     const first=await update('active'); expect(first.status,await first.clone().text()).toBe(200);
     const before=(await getArtifactById(ds.id))!;
     expect(await loadDatasetRows(before)).toEqual([{id:1,status:'active'},{id:2,status:'backlog'}]);
@@ -30,7 +30,7 @@ describe('editable DataTable feature',()=>{
     const ds=await create(t.token,{dataset:[{id:1,status:'backlog'},{id:1,status:'backlog'}],access:'readwrite'});
     const doc=await create(t.token,{markup:markup(ds.id)});
     const before=(await getArtifactById(ds.id))!;
-    const res=await mutateDoc(request(`/a/${doc.id}/mutate`,{method:'POST',json:{mutation:'set_status',values:{_value:'active'},row:{id:1,status:'backlog'}}}),{params:Promise.resolve({id:doc.id})});
+    const res=await mutateDoc(request(`/a/${doc.id}/mutate`,{method:'POST',token:t.token,json:{mutation:'set_status',values:{_value:'active'},row:{id:1,status:'backlog'}}}),{params:Promise.resolve({id:doc.id})});
     expect(res.status,await res.clone().text()).toBe(409);
     expect(await res.json()).toMatchObject({error:'row_not_unique'});
     expect((await getArtifactById(ds.id))!.version).toBe(before.version);
@@ -40,7 +40,7 @@ describe('editable DataTable feature',()=>{
     const ds=await create(t.token,{dataset:[{id:1,status:'backlog'}],access:'readwrite'});
     const doc=await create(t.token,{markup:markup(ds.id)});
     for (const row of [undefined, {id:1,status:'backlog',admin:true}, {id:'1',status:'backlog'}]) {
-      const res=await mutateDoc(request(`/a/${doc.id}/mutate`,{method:'POST',json:{mutation:'set_status',values:{_value:'active'},row}}),{params:Promise.resolve({id:doc.id})});
+      const res=await mutateDoc(request(`/a/${doc.id}/mutate`,{method:'POST',token:t.token,json:{mutation:'set_status',values:{_value:'active'},row}}),{params:Promise.resolve({id:doc.id})});
       expect(res.status,await res.clone().text()).toBe(400);
       expect(await res.json()).toMatchObject({error:'invalid_row'});
     }
@@ -59,7 +59,7 @@ describe('editable DataTable feature',()=>{
     const ds=await create(t.token,{dataset:[{id:1,status:'backlog',owner:'TBD'}],access:'readwrite'});
     const source=markup(ds.id).replace('</Helmet>',`<Mutation name="set_owner" expectedAffected={1}>{\`update ref_${ds.id} set owner=$_value where id=$_row.id and owner is not distinct from $_row.owner\`}</Mutation></Helmet>`).replace('</DataTable>','<Column col="owner"><Select value="$_row.owner" options={["TBD","alice"]} run="$set_owner"/></Column></DataTable>');
     const doc=await create(t.token,{markup:source});
-    const update=(mutation:string,value:string,row:Record<string,unknown>)=>mutateDoc(request(`/a/${doc.id}/mutate`,{method:'POST',json:{mutation,values:{_value:value},row}}),{params:Promise.resolve({id:doc.id})});
+    const update=(mutation:string,value:string,row:Record<string,unknown>)=>mutateDoc(request(`/a/${doc.id}/mutate`,{method:'POST',token:t.token,json:{mutation,values:{_value:value},row}}),{params:Promise.resolve({id:doc.id})});
     const original={id:1,status:'backlog',owner:'TBD'};
     const first=await Promise.all([update('set_status','active',original),update('set_owner','alice',original)]);
     expect(first.map(r=>r.status)).toEqual([200,200]);

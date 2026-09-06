@@ -131,6 +131,8 @@ export interface TableResult {
  * store, which re-runs the queries a changed value feeds.
  */
 export interface DataflowState {
+  /** Per-viewer mutation availability: null permits, a message explains refusal. Missing means not yet checked. */
+  mutationAccess?: Record<string, string | null>;
   values: Record<string, Scalar>;
   tables: Record<string, TableResult>;
   /** Queries that did not run, by name → the engine's message (shown in place of the embed). */

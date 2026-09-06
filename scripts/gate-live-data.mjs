@@ -95,7 +95,7 @@ const browser = await chromium.launch();
 const voterCtx = await browser.newContext();
 const watcherCtx = await browser.newContext();
 const dashCtx = await browser.newContext();
-const voter = await voterCtx.newPage();
+const voterPage = await voterCtx.newPage();
 const watcher = await watcherCtx.newPage();
 const dash = await dashCtx.newPage();
 
@@ -109,7 +109,10 @@ const totalRows = async (page) => page.evaluate(() => {
   return m ? Number(m[1].replace(/,/g, '')) : null;
 });
 
-await voter.goto(`${BASE}/a/${seed.id}`, { waitUntil: 'load' });
+await becomeOwner(voterPage,BASE,seed.token);
+await voterPage.goto(`${BASE}/a/${seed.id}`, {waitUntil:'load'});
+await voterPage.locator('iframe[title="artifact"]').waitFor();
+const voter = await (await voterPage.locator('iframe[title="artifact"]').elementHandle()).contentFrame();
 await watcher.goto(`${BASE}/a/${seed.id}`, { waitUntil: 'load' });
 await dash.goto(`${BASE}/a/${second.id}`, { waitUntil: 'load' });
 

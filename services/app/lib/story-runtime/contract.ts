@@ -348,7 +348,7 @@ export interface StoryQueryRequest {
 }
 
 export type StoryQueryResult =
-  | { type: typeof STORY_QUERY_RESULT_MESSAGE; id: number; tables: DataflowState['tables']; errors: DataflowState['errors'] }
+  | { type: typeof STORY_QUERY_RESULT_MESSAGE; id: number; tables: DataflowState['tables']; errors: DataflowState['errors']; mutationAccess?: DataflowState['mutationAccess'] }
   | { type: typeof STORY_QUERY_RESULT_MESSAGE; id: number; error: string };
 
 /**

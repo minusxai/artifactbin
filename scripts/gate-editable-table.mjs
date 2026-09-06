@@ -10,10 +10,14 @@ const browser = await chromium.launch();
 const errors = [];
 const check = (name) => console.log(`  ok ${name}`);
 try {
-  const a = await browser.newPage({ viewport: { width: 1500, height: 900 } });
-  const b = await browser.newPage({ viewport: { width: 1500, height: 900 } });
-  for (const page of [a, b]) page.on('pageerror', error => errors.push(error.message));
-  await Promise.all([a.goto(fixture.url), b.goto(fixture.url)]);
+  const aPage = await browser.newPage({ viewport: { width: 1500, height: 900 } });
+  const bPage = await browser.newPage({ viewport: { width: 1500, height: 900 } });
+  for (const page of [aPage, bPage]) page.on('pageerror', error => errors.push(error.message));
+  await Promise.all([becomeOwner(aPage,base,fixture.token),becomeOwner(bPage,base,fixture.token)]);
+  await Promise.all([aPage.goto(fixture.url), bPage.goto(fixture.url)]);
+  await Promise.all([aPage.locator('iframe[title="artifact"]').waitFor(),bPage.locator('iframe[title="artifact"]').waitFor()]);
+  const a = await (await aPage.locator('iframe[title="artifact"]').elementHandle()).contentFrame();
+  const b = await (await bPage.locator('iframe[title="artifact"]').elementHandle()).contentFrame();
   await Promise.all([a.getByLabel('Item 1', { exact: true }).waitFor(), b.getByLabel('Item 1', { exact: true }).waitFor()]);
   const select = async (page, label, option) => {
     const trigger = page.getByRole('button', { name: label, exact: true });
@@ -31,7 +35,7 @@ try {
   const inputValue = async (page, label, expected) => page.waitForFunction(({ label, expected }) => document.querySelector(`[aria-label="${label}"]`)?.value === expected, {label, expected});
   const waitText = async (page, label, expected) => page.waitForFunction(({label,expected}) => document.querySelector(`[aria-label="${label}"]`)?.textContent?.includes(expected), {label,expected});
   const commit = async (page, action, expectedStatus = 200) => {
-    const response = page.waitForResponse(r => r.url().endsWith(`/a/${fixture.id}/mutate`) && r.request().method() === 'POST');
+    const response = (page.page?.() ?? page).waitForResponse(r => r.url().endsWith(`/a/${fixture.id}/mutate`) && r.request().method() === 'POST');
     await action();
     const result = await response;
     assert.equal(result.status(), expectedStatus, await result.text());
@@ -40,8 +44,8 @@ try {
   // disruptive overlay. Other cells must stay usable throughout the save.
   let releaseRefresh;
   const refreshHeld = new Promise(resolve => { releaseRefresh = resolve; });
-  const queryRoute = `**/a/${fixture.id}/query?*`;
-  await a.route(queryRoute, async route => { await refreshHeld; await route.continue(); });
+  const queryRoute = `**/a/${fixture.id}/query*`;
+  await aPage.route(queryRoute, async route => { await refreshHeld; await route.continue(); });
   await select(a, 'Status 1', 'active');
   const refreshingTable = a.getByLabel('DataTable embed', {exact:true});
   await a.waitForFunction(() => document.querySelector('[aria-label="DataTable embed"]')?.getAttribute('aria-busy') === 'true');
@@ -50,7 +54,7 @@ try {
   await a.getByLabel('Item 2', {exact:true}).fill('draft during refresh');
   releaseRefresh();
   await a.waitForFunction(() => document.querySelector('[aria-label="DataTable embed"]')?.getAttribute('aria-busy') === 'false');
-  await a.unroute(queryRoute);
+  await aPage.unroute(queryRoute);
   assert.equal(await a.getByLabel('Item 2', {exact:true}).inputValue(), 'draft during refresh');
   await a.getByLabel('Item 2', {exact:true}).press('Escape');
   check('cell refresh has no table overlay and preserves another cell draft');
@@ -82,7 +86,7 @@ try {
   const watchInvalid = request => {
     if (request.url().endsWith(`/a/${fixture.id}/mutate`) && request.method() === 'POST') invalidWrites.push(request.postDataJSON());
   };
-  a.on('request', watchInvalid);
+  aPage.on('request', watchInvalid);
   await a.getByLabel('Hours 1', { exact: true }).fill('-1');
   await a.getByLabel('Hours 1', { exact: true }).press('Enter');
   await a.getByLabel('Hours 1', { exact: true }).fill('');
@@ -90,7 +94,7 @@ try {
   assert.equal(await a.getByLabel('Hours 1', { exact: true }).evaluate(el => el.validity.badInput), true);
   await a.getByLabel('Hours 1', { exact: true }).press('Tab');
   await select(a, 'Owner 2', '@vivek');
-  a.off('request', watchInvalid);
+  aPage.off('request', watchInvalid);
   assert.equal(invalidWrites.filter(write => write.mutation === 'set_hours').length, 0);
   await a.getByLabel('Hours 1', { exact: true }).press('Escape');
   await a.getByLabel('Hours 1', { exact: true }).fill('');
@@ -117,7 +121,7 @@ try {
   await a.getByRole('alert').filter({ hasText: /changed|conflict/i }).waitFor();
   assert.equal((await fixture.api(`/api/artifacts/${fixture.datasetId}`, undefined, 'GET')).version, beforeSelf);
   await a.getByLabel('Depends on 1', { exact: true }).click();
-  await a.keyboard.press('Escape');
+  await aPage.keyboard.press('Escape');
   await select(a, 'Sprint 1', 'Unscheduled');
   await waitText(b, 'Sprint 1', 'Unscheduled');
   check('self-dependency predicate rejects without a version bump; sprint clearing persists');
@@ -146,7 +150,7 @@ try {
   // A menu near the scroll edge must portal out of the table's overflow container.
   await a.getByLabel('Status 500',{exact:true}).click();
   assert.equal(await a.getByRole('listbox').evaluate(el=>!!el.closest('[data-slot="data-table"]')),false);
-  await a.keyboard.press('Escape');
+  await aPage.keyboard.press('Escape');
   await a.getByLabel('Filter status', { exact: true }).click();
   await a.getByRole('option', { name: 'done', exact: true }).click();
   await a.getByLabel('Item 500', { exact: true }).waitFor();

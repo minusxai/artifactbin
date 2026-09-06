@@ -66,7 +66,7 @@ describe('contention', () => {
     const ds = (await create(t.token, { dataset: ROWS, columns: [{ name: 'choice', type: 'string' }], access: 'readwrite' })).id;
     const doc = (await create(t.token, { markup: DOC(ds) })).id;
     await alwaysContended(ds);
-    const res = await mutateDocRoute(request(`/a/${doc}/mutate`, { method: 'POST', json: { mutation: 'vote' } }), params({ id: doc }));
+    const res = await mutateDocRoute(request(`/a/${doc}/mutate`, { method: 'POST', token:t.token, json: { mutation: 'vote' } }), params({ id: doc }));
     expect(res.status).toBe(503);
     expect(res.headers.get('Retry-After')).toBe('1');
     const body = (await res.json()) as { error: string; detail: string };

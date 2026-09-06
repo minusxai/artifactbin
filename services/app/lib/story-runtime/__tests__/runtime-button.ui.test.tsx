@@ -28,7 +28,7 @@ const HELMET =
   + '<Query name="tally">{`select choice, count(*) votes from ref_abc123 group by 1`}</Query>'
   + '<Mutation name="vote">{`insert into ref_abc123 (choice) values ($choice)`}</Mutation></Helmet>';
 const BODY = '<div><Button run="$vote">Vote</Button></div>';
-const STATE: DataflowState = { values: { choice: 'ramen' }, tables: { tally: { rows: [], columns: [] } }, errors: {} };
+const STATE: DataflowState = { values: { choice: 'ramen' }, tables: { tally: { rows: [], columns: [] } }, errors: {}, mutationAccess:{vote:null} };
 
 function build(body = BODY) {
   const parsed = parseJsx(HELMET + body);
@@ -41,7 +41,7 @@ function build(body = BODY) {
 function storeWith(mutate?: QueryTransport['mutate']) {
   const { dataflow } = build();
   const transport: QueryTransport = {
-    run: () => Promise.resolve({ tables: {}, errors: {} }),
+    run: () => Promise.resolve({ tables: {}, errors: {}, mutationAccess:{vote:null} }),
     page: () => Promise.reject(new Error('unused')),
     ...(mutate ? { mutate } : {}),
   };
@@ -73,7 +73,7 @@ describe('the LIVE face (runtime registry)', () => {
     const writes: Array<{ name: string; values: Record<string, unknown> }> = [];
     const store = storeWith(async (values, name) => { writes.push({ name, values }); return { dataset: 'abc123' }; });
     const { nodes, dataflow } = build();
-    const { getByRole } = render(<StoryRuntimeApp nodes={nodes} refData={{}} dataflow={dataflow} colorMode="light" chrome={false} store={store} />);
+    const { getByRole } = render(<StoryRuntimeApp nodes={nodes} refData={{}} dataflow={dataflow} colorMode="light" chrome={true} store={store} />);
     fireEvent.click(getByRole('button', { name: 'Vote' }));
     await waitFor(() => expect(writes).toEqual([{ name: 'vote', values: { choice: 'ramen' } }]));
   });
@@ -82,7 +82,7 @@ describe('the LIVE face (runtime registry)', () => {
     let settle: (r: { dataset: string }) => void = () => {};
     const store = storeWith(() => new Promise((resolve) => { settle = resolve; }));
     const { nodes, dataflow } = build();
-    const { getByRole } = render(<StoryRuntimeApp nodes={nodes} refData={{}} dataflow={dataflow} colorMode="light" chrome={false} store={store} />);
+    const { getByRole } = render(<StoryRuntimeApp nodes={nodes} refData={{}} dataflow={dataflow} colorMode="light" chrome={true} store={store} />);
     const button = getByRole('button', { name: 'Vote' }) as HTMLButtonElement;
     fireEvent.click(button);
     await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('true'));
@@ -100,7 +100,7 @@ describe('the LIVE face (runtime registry)', () => {
     });
     const { nodes, dataflow } = build();
     const { getByRole, findByRole, queryByRole } = render(
-      <StoryRuntimeApp nodes={nodes} refData={{}} dataflow={dataflow} colorMode="light" chrome={false} store={store} />,
+      <StoryRuntimeApp nodes={nodes} refData={{}} dataflow={dataflow} colorMode="light" chrome={true} store={store} />,
     );
     fireEvent.click(getByRole('button', { name: 'Vote' }));
     expect((await findByRole('alert')).textContent).toMatch(/not open for writes/);

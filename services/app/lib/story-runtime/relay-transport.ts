@@ -125,7 +125,7 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
     }),
     run: async (values, only) => {
       const r = await send({ values, only });
-      return { tables: r.tables, errors: r.errors };
+      return { tables: r.tables, errors: r.errors, ...(r.mutationAccess ? {mutationAccess:r.mutationAccess} : {}) };
     },
     mutate: (values, mutation, row) => new Promise<{ dataset: string }>((resolve, reject) => {
       const id = ++writeSeq;

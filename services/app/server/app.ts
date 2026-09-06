@@ -25,7 +25,7 @@ import { verifyExportKey } from '@/lib/export-key';
 import { ID_RE } from '@/lib/ids';
 import { readIntent } from '@/lib/intent';
 import { runWithRequest } from '@/lib/request-context';
-import { declaresLiveData } from '@/lib/story/helmet';
+import { declaresLiveData, declaresMutations } from '@/lib/story/helmet';
 import { SHOWCASE_ORIGIN } from '@/lib/showcase';
 import { canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
 import { ownerUsername } from '@/lib/users';
@@ -146,6 +146,9 @@ export async function servesDocumentDirectly(request: Request): Promise<string |
   if (!artifact || artifact.format !== 'markup') return null;
   const needsSessionForData = declaresLiveData(artifact.source) && !(await canReadArtifact(artifact, null));
   if (needsSessionForData) return null;
+  // A dataset editor may only VIEW this document. Its mutations still need
+  // the parent session relay; opaque top-level documents have no credentials.
+  if (!anonymous && declaresMutations(artifact.source)) return null;
   // The shell is for anyone who may do more than READ it — today owner,
   // editor and commenter; tomorrow whoever a `comment`-granting link lets in,
   // with no change here. A plain viewer is served the document itself.

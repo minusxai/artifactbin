@@ -40,7 +40,7 @@ export interface QueryTransport {
    * with the resulting tables + errors for those queries. A rejection is
    * reported as an error on every requested query — never thrown into UI.
    */
-  run(values: Record<string, Scalar>, only: string[]): Promise<Pick<DataflowState, 'tables' | 'errors'>>;
+  run(values: Record<string, Scalar>, only: string[]): Promise<Pick<DataflowState, 'tables' | 'errors' | 'mutationAccess'>>;
   /** Read a window of one query with these values; resolves with that query's rows for the window. */
   page(values: Record<string, Scalar>, name: string, page: TablePage): Promise<TableResult>;
   /**
@@ -89,7 +89,8 @@ export interface DataflowStore {
   /** Mutations currently in flight (a bound <Button> shows itself busy). */
   mutating(): ReadonlySet<string>;
   /** Whether the attached document transport can perform writes. */
-  canMutate(): boolean;
+  canMutate(name?: string): boolean;
+  mutationUnavailable(name: string): string | null;
   /**
    * A dataset changed elsewhere (the live stream's `data` frame): mark every
    * query that reads it — and everything downstream — dirty, and re-run.
@@ -157,8 +158,10 @@ export function createDataflowStore(
     // with no server round trip at all.
     tables: { ...initialTables(flow), ...(input.state?.tables ?? {}) },
     errors: { ...(input.state?.errors ?? {}) },
+    mutationAccess: input.state?.mutationAccess ?? {},
   };
   const dirty = new Set<string>();
+  let permissionsDirty = !!flow.mutations?.length && !input.state?.mutationAccess;
   const inFlight = new Set<string>();
   const writing = new Set<string>();
   const writingCounts = new Map<string, number>();
@@ -198,7 +201,8 @@ export function createDataflowStore(
 
   const flush = () => {
     if (timer) { clearTimeout(timer); timer = null; }
-    if (!transport || dirty.size === 0) return;
+    if (!transport || (dirty.size === 0 && !permissionsDirty)) return;
+    permissionsDirty = false;
     const only = [...dirty];
     dirty.clear();
     pendingChanged();
@@ -219,7 +223,7 @@ export function createDataflowStore(
         for (const n of only) { delete tables[n]; delete errors[n]; }
         Object.assign(tables, result.tables);
         Object.assign(errors, result.errors);
-        commit({ ...state, tables, errors });
+        commit({ ...state, tables, errors, mutationAccess: result.mutationAccess ?? {} });
       },
       (e: unknown) => {
         if (seq !== runSeq) return;
@@ -228,12 +232,12 @@ export function createDataflowStore(
         const errors = { ...state.errors };
         const message = e instanceof Error ? e.message : String(e);
         for (const n of only) errors[n] = message;
-        commit({ ...state, errors });
+        commit({ ...state, errors, mutationAccess: {} });
       },
     );
   };
   const schedule = () => {
-    if (!transport || dirty.size === 0) return;
+    if (!transport || (dirty.size === 0 && !permissionsDirty)) return;
     if (timer) clearTimeout(timer);
     timer = setTimeout(flush, debounceMs);
   };
@@ -278,6 +282,7 @@ export function createDataflowStore(
     const kept: Record<string, Scalar> = {};
     const previousValues = state.values;
     flow = next.flow;
+    permissionsDirty = !!flow.mutations?.length && !next.state?.mutationAccess;
     scalarNames = new Set(flow.values.filter((v) => v.kind === 'scalar').map((v) => v.name));
     const after = scalarTypes();
     for (const name of scalarNames) {
@@ -307,6 +312,7 @@ export function createDataflowStore(
     state = next.state
       ? { values, tables: { ...initialTables(flow), ...keepRows(next.state.tables ?? {}) }, errors: keepRows(next.state.errors ?? {}) }
       : { values, tables: { ...keepRows(state.tables), ...initialTables(flow) }, errors: keepRows(state.errors) };
+    state.mutationAccess = next.state?.mutationAccess ?? {};
     // The server ran these queries with the DEFAULTS. Where the reader's own
     // value disagrees, its dependents describe a document nobody is looking at.
     if (next.state) {
@@ -323,8 +329,10 @@ export function createDataflowStore(
 
   /** Queries that read these datasets (and their dependents) go dirty. */
   const invalidateDatasets: DataflowStore['invalidateDatasets'] = (datasetIds) => {
-    const affected = queriesReadingDatasets(flow, datasetIds);
-    if (!affected.length) return;
+    const ids = [...datasetIds];
+    const affected = queriesReadingDatasets(flow, ids);
+    if (flow.mutations?.some(m => ids.includes(m.target))) permissionsDirty = true;
+    if (!affected.length && !permissionsDirty) return;
     for (const q of affected) dirty.add(q);
     pendingChanged();
     // Immediately, not on the debounce: this is news from outside, and the
@@ -332,10 +340,18 @@ export function createDataflowStore(
     flush();
   };
 
+  const mutationUnavailable = (name: string): string | null => {
+    if (!transport?.mutate) return 'This view cannot save changes.';
+    return Object.hasOwn(state.mutationAccess ?? {}, name)
+      ? state.mutationAccess![name] : 'Checking edit access…';
+  };
+
   const mutate: DataflowStore['mutate'] = async (name, overrides, row) => {
     const decl = mutationsOf(flow).find((m) => m.name === name);
     if (!decl) throw new Error(`this document declares no <Mutation name="${name}">`);
     if (!transport?.mutate) throw new Error('this document cannot write from here');
+    const unavailable = mutationUnavailable(name);
+    if (unavailable !== null) throw new Error(unavailable);
     if (!row && writing.has(name)) return; // generic Button double click is one write; row cells dedupe locally
     writingCounts.set(name, (writingCounts.get(name) ?? 0) + 1);
     writing.add(name);
@@ -346,6 +362,11 @@ export function createDataflowStore(
       // The click that writes is the click that redraws: the reader must not
       // wait for the live stream to tell this document about its own write.
       invalidateDatasets([dataset || decl.target]);
+    } catch (error) {
+      // A permission can disappear between checking it and saving. Refresh
+      // capabilities while the control keeps the failed draft and error.
+      invalidateDatasets([decl.target]);
+      throw error;
     } finally {
       const left = (writingCounts.get(name) ?? 1) - 1;
       if (left > 0) writingCounts.set(name, left); else { writingCounts.delete(name); writing.delete(name); }
@@ -358,7 +379,8 @@ export function createDataflowStore(
     replaceFlow,
     mutate,
     mutating: () => writing,
-    canMutate: () => !!transport?.mutate,
+    canMutate: (name) => name ? mutationUnavailable(name) === null : !!transport?.mutate,
+    mutationUnavailable,
     invalidateDatasets,
     getState: () => state,
     getValue: (name) => state.values[name] ?? null,
@@ -384,6 +406,7 @@ export function createDataflowStore(
     subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     setTransport: (t) => { transport = t; commit({ ...state }); flush(); },
     refresh: (only) => {
+      permissionsDirty = !!flow.mutations?.length;
       const names = only ? [...only] : flow.queries.map((q) => q.name);
       for (const n of names) dirty.add(n);
       pendingChanged();

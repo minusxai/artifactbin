@@ -120,14 +120,14 @@ value-based conflict detection: an A→B→A history is not detected.
 
 ## References and authorization
 
-Options queries use value/label columns, including references outside filters.
+Options queries use value/label columns beyond the current filter.
 Integer dependency IDs cast through BIGINT before VARCHAR to match JSON strings.
 `exclude="$_row.id"` hides self-options; the server predicate rejects self-writes.
 Unscheduled writes the existing `''` sprint sentinel.
 
 A query filter is **not authorization**: client-supplied row values do not
 prove query membership. Put any permitted-subset restriction in the stored
-mutation SQL. Dataset access is checked when the mutation runs. Cycle checks
+mutation SQL. Writes require dataset edit permission; denied controls disable. Cycle checks
 and cross-dataset foreign-key enforcement are deferred; the mutation engine
 registers only its target dataset, so the dropdown alone does not enforce
 sprint membership or dependency existence.

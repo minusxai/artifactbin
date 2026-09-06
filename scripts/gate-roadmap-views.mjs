@@ -1,16 +1,19 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { createEditableTableFixture } from './lib/editable-table-fixture.mjs';
-import { startDocument } from './lib/start-doc.mjs';
+import { startDocument, becomeOwner } from './lib/start-doc.mjs';
 const base = process.argv[2] ?? 'http://localhost:3030';
 const rows = Array.from({length:15}, (_,i) => ({id:i+1,item:`Task ${i+1}`,owner:'TBD',hours:2,depends_on:i===1 || i===2 ? '["1"]' : '[]',tags:'[]',status:'backlog',sprint:''}));
 const fixture = await createEditableTableFixture(base, 15, {workspace:true,rows,seed:await startDocument(base)});
 console.log(`roadmap workspace: ${fixture.url}`);
 const browser = await chromium.launch();
 try {
-  const page = await browser.newPage({viewport:{width:1450,height:950}});
-  page.on('pageerror', error => console.error(error.message));
-  await page.goto(fixture.url);
+  const ownerPage = await browser.newPage({viewport:{width:1450,height:950}});
+  ownerPage.on('pageerror', error => console.error(error.message));
+  await becomeOwner(ownerPage,base,fixture.token);
+  await ownerPage.goto(fixture.url);
+  await ownerPage.locator('iframe[title="artifact"]').waitFor();
+  let page = await (await ownerPage.locator('iframe[title="artifact"]').elementHandle()).contentFrame();
   const switchView = async name => {
     await page.getByLabel('View', {exact:true}).click();
     await page.getByRole('option',{name,exact:true}).click();
@@ -24,7 +27,7 @@ try {
   assert.equal(await page.getByLabel('Item 1',{exact:true}).isVisible(),false);
   await switchView('Sprint');
   await page.locator('#view-sprint').getByLabel('Add Sprint',{exact:true}).click();
-  const dialog=page.getByRole('dialog',{name:'Add sprint'});
+  const dialog=ownerPage.frameLocator('iframe[title="artifact"]').getByRole('dialog',{name:'Add sprint'});
   await dialog.waitFor();
   await page.getByLabel('Sprint name',{exact:true}).fill('Planning week');
   await page.getByLabel('Sprint deadline',{exact:true}).fill('2026-09-14');
@@ -48,9 +51,11 @@ try {
   await page.getByLabel('Sprint 1',{exact:true}).click();
   await page.getByRole('option',{name:'Quick sprint',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('button[aria-label="Sprint 1"]')?.textContent.includes('Quick sprint'));
-  await page.reload();
+  await ownerPage.reload();
+  await ownerPage.locator('iframe[title="artifact"]').waitFor();
+  page = await (await ownerPage.locator('iframe[title="artifact"]').elementHandle()).contentFrame();
   await page.getByRole('button',{name:'Sprint 1',exact:true}).filter({hasText:'Quick sprint'}).waitFor();
-  await page.setViewportSize({width:390,height:844});
+  await ownerPage.setViewportSize({width:390,height:844});
   await page.getByLabel('View',{exact:true}).click();
   const popup=page.getByRole('listbox').locator('..');
   const box=await popup.boundingBox();
@@ -60,7 +65,7 @@ try {
   await page.locator('#view-sprint').getByLabel('Add Sprint',{exact:true}).click();
   const modalBox=await dialog.boundingBox();
   assert.ok(modalBox && modalBox.x>=0 && modalBox.x+modalBox.width<=390);
-  await page.keyboard.press('Escape');
+  await ownerPage.keyboard.press('Escape');
   await dialog.waitFor({state:'hidden'});
   console.log('all good: views, Vega DAG, shared sprint modal, dropdown action, compact rows and narrow layout');
 } finally { await browser.close(); }

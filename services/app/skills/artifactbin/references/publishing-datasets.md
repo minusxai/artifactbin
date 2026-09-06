@@ -6,7 +6,7 @@ order: 2
 ---
 ## Read first
 
-Every request carries exactly ONE content field: `markup | dataset | viz | image | pdf`.
+Send ONE content field: `markup | dataset | viz | image | pdf`.
 `markup` is the document; the other four are ASSETS a document reaches by id.
 Create them first — a dataset's create response echoes the inferred columns AND
 a ready-to-paste `<Query>` + `<Question>`, so the read path arrives written.
@@ -108,20 +108,17 @@ A dataset carries a write ACL beside its visibility: `"access": "read"` (the
 default — documents may only read it) or `"access": "readwrite"`. Set it on
 create or PUT with your bearer token, or your user flips it from the
 document's share menu in the browser (`/api/my/*` is a browser-session
-surface and answers a bearer token 401). Writable datasets are supported on
-the normal API and browser surfaces; no preview parameter is needed. A
-document that writes a writable dataset works for every reader.
+surface and answers a bearer token 401). A mutation requires the reader to hold dataset edit permission. Share the dataset
+with an editor, as you would any artifact; document editing grants no dataset access.
 
 A document writes it by declaring a `<Mutation>` in `<Helmet>` — a `<Query>`
 that writes — and running it with `<Button run="$name">` or
 `mx.mutate(name)`; the grammar (one INSERT/UPDATE/DELETE, one `ref_<id>`,
-`$name` bound never interpolated) is in [markup-data.md](markup-data.md). The target must be a dataset YOU own with `access: readwrite` —
-reading a public dataset you do not own is fine, writing one is not.
-Everything is checked at publish, so a button that would fail is a 400
-naming the fix.
+`$name` bound never interpolated) is in [markup-data.md](markup-data.md). Publish mutations over datasets in your edit scope with `access: readwrite`.
+SQL is checked at publish; each execution rechecks the viewer’s dataset permission.
 
-**A write is live.** Anyone who can read the document can run the mutations
-it declares (with values only — the SQL is the one you stored), every write
+**A write is live.** Dataset owners and editors can run declared mutations
+(with values only — the SQL is the one you stored); every write
 is a new dataset VERSION you can revert, and every open copy of every
 document reading that dataset re-runs its queries within about a second.
 Capped at 10,000 rows (`409 dataset_full`) and rate-limited per visitor.
@@ -130,7 +127,7 @@ An agent writes rows without a document through
 `POST [[ base ]]/api/artifacts/<id>/mutate { "sql": "insert into ref_<id> …", "values": {…} }`
 — the same rules, and cheaper than re-PUTting a whole table. Refusals:
 `400 not_a_dataset` (the id is another tier), `403 dataset_read_only` (set
-`access: readwrite` first), `400 invalid_sql` (the detail says why), and
+`access: readwrite` and dataset edit permission are required), `400 invalid_sql` (the detail says why), and
 `503 dataset_busy` (concurrent writes contended — retry after a moment).
 
 ## Viz recipes

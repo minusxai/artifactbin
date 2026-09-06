@@ -63,12 +63,11 @@ Declarations · Bindings: embeds · Bindings: controls.
 - `<Mutation name>{`insert into ref_<datasetId> (a) values ($a)`}</Mutation>`
   — a `<Query>` that WRITES (the dataset needs `access: readwrite`,
   [datasets](publishing-datasets.md)). Exactly one INSERT | UPDATE | DELETE
-  naming exactly ONE dataset, which must be YOUR OWN (reading a public one
-  you do not own is fine; writing it is not). It runs on demand, never at render:
+  naming one dataset in your edit scope. Runs on demand, never at render:
   `<Button run="$name">` in the body, or `mx.mutate("name")` from your
   `<script>`; dry-run at publish, so a button that could not work is a `400`
-  naming the fix. Anyone who can read the document can run it — a poll, a
-  sign-up sheet — supplying VALUES only. DuckDB's `uuid()` and `now()` give a
+  naming the fix. Only viewers with dataset edit permission can run it, supplying VALUES only.
+  Bound write controls disable automatically; filters and live reads still work. DuckDB's `uuid()` and `now()` give a
   row its own id and timestamp.
 
 ## Bindings: embeds (body)
