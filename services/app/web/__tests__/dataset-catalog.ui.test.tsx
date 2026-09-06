@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { DatasetEditorPage } from '../pages/DatasetEditor';
@@ -20,14 +20,15 @@ let failSave = false;
 let failPreview = false;
 let loadedCatalog = catalog;
 let discoveryTables = tables;
+let discoveryReply: (() => Promise<Response>) | undefined;
 let previewColumns = [{ name: 'id', type: 'number' }];
 beforeEach(() => {
-  calls = []; discoveryTables = tables; failSave = false; failPreview = false; loadedCatalog = catalog; previewColumns = [{ name: 'id', type: 'number' }]; viewerSession = { user: { id: 'editor-1' } };
+  calls = []; discoveryTables = tables; discoveryReply = undefined; failSave = false; failPreview = false; loadedCatalog = catalog; previewColumns = [{ name: 'id', type: 'number' }]; viewerSession = { user: { id: 'editor-1' } };
   vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     const method = init?.method ?? 'GET'; calls.push({ url, body, method });
     if (url === '/api/my/secrets') return reply({ secret: { id: 'secret-new' } }, 201);
-    if (url === '/api/my/datasets/discover') return reply({ tables: discoveryTables });
+    if (url === '/api/my/datasets/discover') return discoveryReply ? discoveryReply() : reply({ tables: discoveryTables });
     if (url.endsWith('/preview') || url.endsWith('/tables')) return failPreview ? reply({ error: 'Query refused' }, 400) : reply({ rows: [{ id: 42 }], columns: previewColumns, refreshedAt: '2026-09-06T10:00:00Z', truncated: true });
     if (method === 'GET') return reply({ id: 'data-1', title: 'Orders', version: 7, meta: { catalog: loadedCatalog } });
     return failSave ? reply({ error: 'Version conflict' }, 409) : reply({ id: 'data-1', version: 8 });
@@ -57,6 +58,42 @@ function savedDefinition() {
   return write ? parseDatasetDefinition(write.body.dataset) : undefined;
 }
 describe('dataset editor', () => {
+  it.each(['metaKey', 'ctrlKey'])('runs the focused notebook cell with %s+Enter while plain Enter stays editable', async modifier => {
+    editor(); await discover(); click('Add notebook cell');
+    change('Cell name 1', 'orders_preview'); change('Cell SQL 1', 'select id from sales.orders');
+    const sql = screen.getByLabelText('Cell SQL 1');
+    fireEvent.keyDown(sql, { key: 'Enter' });
+    expect(calls.filter(c => c.url.endsWith('/notebook/preview'))).toHaveLength(0);
+    fireEvent.keyDown(sql, { key: 'Enter', [modifier]: true });
+    await screen.findByLabelText('Cell preview 1');
+    const requests = calls.filter(c => c.url.endsWith('/notebook/preview'));
+    expect(requests).toHaveLength(1);
+    expect(requests[0].body.notebook.cells[0].sql).toBe('select id from sales.orders');
+    expect(sql).toHaveValue('select id from sales.orders');
+  });
+  it('shows discovery progress and success beside the connection action, clearing stale success when edited', async () => {
+    let finish!: (response: Response) => void;
+    discoveryReply = () => new Promise(resolve => { finish = resolve; });
+    editor(true); await screen.findByLabelText('Password status'); click('Test and discover');
+    const panel = within(screen.getByLabelText('Dataset connection'));
+    expect(panel.getByRole('status')).toHaveTextContent(/connecting/i);
+    expect(panel.getByLabelText('Test and discover')).toBeDisabled();
+    finish(new Response(JSON.stringify({ tables })));
+    await waitFor(() => expect(panel.getByRole('status')).toHaveTextContent(/connected.*2 tables/i));
+    expect(panel.getByLabelText('Test and discover').compareDocumentPosition(panel.getByRole('status')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    change('Host', 'another.example.com');
+    expect(panel.queryByRole('status')).not.toBeInTheDocument();
+  });
+  it('shows discovery failure beside the connection action and replaces it on retry', async () => {
+    discoveryReply = () => reply({ error: 'Could not connect to PostgreSQL.' }, 400);
+    editor(true); await screen.findByLabelText('Password status'); click('Test and discover');
+    const panel = within(screen.getByLabelText('Dataset connection'));
+    await waitFor(() => expect(panel.getByRole('alert')).toHaveTextContent('Could not connect'));
+    expect(panel.getByLabelText('Test and discover')).toBeEnabled();
+    discoveryReply = undefined; click('Test and discover');
+    await waitFor(() => expect(panel.getByRole('status')).toHaveTextContent('Connected'));
+    expect(panel.queryByRole('alert')).not.toBeInTheDocument();
+  });
   it('uses a neutral create label while the session is loading and never fetches connections', async () => {
     viewerSession = null; editor();
     expect(await screen.findByLabelText('Save dataset')).toHaveTextContent(/^Create dataset$/);
