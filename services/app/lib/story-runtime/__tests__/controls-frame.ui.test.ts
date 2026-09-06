@@ -1,6 +1,6 @@
 import {afterEach,expect,it,vi} from 'vitest';
 import {createControlsFrame} from '../controls-frame';
-import {STORY_READER_MODE_MESSAGE,STORY_SCROLL_MESSAGE} from '../contract';
+import {STORY_ROOT_ID,STORY_READER_MODE_MESSAGE,STORY_SCROLL_MESSAGE} from '../contract';
 
 let controls: ReturnType<typeof createControlsFrame> | undefined;
 afterEach(()=>{controls?.dispose();controls=undefined;vi.restoreAllMocks();document.documentElement.className='';});
@@ -32,4 +32,26 @@ it('addresses scroll samples to the controls child and removes listeners on disp
   window.dispatchEvent(new Event('scroll'));
   expect(post).not.toHaveBeenCalled();
   controls=undefined;
+});
+it('only the trusted child can make the artifact inert and disposal restores it',()=>{
+  const root=document.createElement('main');root.id=STORY_ROOT_ID;root.inert=false;document.body.append(root);
+  controls=createControlsFrame(origin+'/a/example');
+  const data={type:'mx:controls:regions',rects:[],modal:true};
+  dispatchMessage(window,origin,data);expect(root.inert).toBe(false);
+  dispatchMessage(controls.frame.contentWindow!,origin,data);expect(root.inert).toBe(true);
+  dispatchMessage(controls.frame.contentWindow!,origin,{...data,modal:false});expect(root.inert).toBe(false);
+  root.inert=true;
+  dispatchMessage(controls.frame.contentWindow!,origin,data);
+  controls.dispose();controls=undefined;expect(root.inert).toBe(true);root.remove();
+});
+it('relays unhandled Escape only and removes the relay on disposal',()=>{
+  controls=createControlsFrame(origin+'/a/example');
+  const post=vi.spyOn(controls.frame.contentWindow!,'postMessage');
+  document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));
+  expect(post).toHaveBeenCalledWith({type:'mx:controls:escape'},origin);
+  post.mockClear();
+  const handled=new KeyboardEvent('keydown',{key:'Escape',cancelable:true});handled.preventDefault();document.dispatchEvent(handled);
+  document.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter'}));expect(post).not.toHaveBeenCalled();
+  controls.dispose();controls=undefined;
+  document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));expect(post).not.toHaveBeenCalled();
 });

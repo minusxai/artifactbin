@@ -77,7 +77,7 @@ export default function MobileSheet({ label, onClose, size = 'tall', header, chi
       )}
       <div
         role="dialog"
-        aria-modal="true"
+        aria-modal={size === 'half' ? undefined : true}
         aria-label={label}
         className={`fixed inset-x-0 bottom-0 z-50 ${size === 'half' ? 'max-h-[50vh]' : 'max-h-[80vh]'} flex animate-[sheet-in_.2s_ease-out] flex-col rounded-t-[10px] border-t border-edge bg-surface p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] font-mono text-xs shadow-lg`}
       >

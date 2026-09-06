@@ -35,10 +35,12 @@ describe('MobileSheet', () => {
   it('size="half" caps the sheet at half the screen and puts NO scrim over the subject — it stays readable and scrollable', () => {
     render(<MobileSheet label="Comments" onClose={() => {}} size="half">hi</MobileSheet>);
     expect(screen.getByLabelText('Comments').className).toContain('max-h-[50vh]');
+    expect(screen.getByLabelText('Comments').hasAttribute('aria-modal')).toBe(false);
     expect(screen.queryByLabelText('Close sheet')).toBeNull();
     cleanup();
     render(<MobileSheet label="Sharing" onClose={() => {}}>hi</MobileSheet>);
     expect(screen.getByLabelText('Sharing').className).toContain('max-h-[80vh]');
+    expect(screen.getByLabelText('Sharing').getAttribute('aria-modal')).toBe('true');
     expect(screen.getByLabelText('Close sheet')).toBeTruthy();
   });
 

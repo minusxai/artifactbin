@@ -129,9 +129,23 @@ try {
   await page.setViewportSize({width:390,height:844});
   await chrome.getByLabel('Toggle comments',{exact:true}).click();
   await chrome.getByLabel('Annotation sidebar',{exact:true}).waitFor();
-  await chrome.getByLabel('Close comments',{exact:true}).click();
+  assert.equal(await chrome.getByLabel('Annotation sidebar',{exact:true}).getAttribute('aria-modal'),null,'half sheet is nonmodal');
+  assert.equal(await chrome.getByLabel('Annotation sidebar',{exact:true}).evaluate(el=>getComputedStyle(el).animationName),'none','controls geometry does not animate ahead of its clip');
   await page.getByRole('button',{name:'Increment',exact:true}).click();
   await page.waitForFunction(()=>window.mx?.params.get('count')===2);
+  await page.keyboard.press('Escape');
+  await chrome.getByLabel('Annotation sidebar',{exact:true}).waitFor({state:'detached'});
+  await chrome.getByRole('button',{name:'Open artifact controls',exact:true}).click();
+  await chrome.getByRole('button',{name:'Share',exact:true}).click();
+  await chrome.getByRole('dialog',{name:'Sharing',exact:true}).waitFor();
+  await page.waitForFunction(()=>document.querySelector('#editable')?.closest('[inert]'));
+  for(let i=0;i<20;i++) {
+    await page.keyboard.press('Tab');
+    assert.equal(await chrome.getByRole('dialog',{name:'Sharing',exact:true}).evaluate(el=>el.contains(document.activeElement)),true,'Tab stays within the actual modal');
+  }
+  await page.keyboard.press('Escape');
+  await chrome.getByRole('dialog',{name:'Sharing',exact:true}).waitFor({state:'detached'});
+  await page.waitForFunction(()=>!document.querySelector('#editable')?.closest('[inert]'));
   const scriptElement=await page.locator('iframe[title="Isolated artifact script"]').elementHandle();
   const isolated=await scriptElement.contentFrame();
   const beforeNavigation=privilegedRequests.length;
