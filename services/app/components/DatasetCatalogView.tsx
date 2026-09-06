@@ -13,7 +13,7 @@ export interface CatalogPreview {
 
 /** Shared preview rendering keeps model previews and saved tables consistent. */
 export function CatalogRows({ result, label = 'Table preview' }: { result: CatalogPreview; label?: string }) {
-  return <div aria-label={label} className="max-h-[32rem] overflow-auto rounded border border-edge">
+  return <div aria-label={label} className="max-h-[32rem] overflow-auto rounded border border-edge bg-surface">
     <table className="w-full border-collapse text-left font-mono text-xs">
       <thead className="sticky top-0 bg-surface"><tr>{result.columns.map(column => <th key={column.name} className="border-b border-edge px-3 py-2 font-medium whitespace-nowrap">{column.name} <span className="font-normal text-faint">{column.type}</span></th>)}</tr></thead>
       <tbody>{result.rows.map((row, index) => <tr key={index} className="odd:bg-raised/40">{result.columns.map(column => <td key={column.name} className="border-b border-edge px-3 py-2 text-muted whitespace-nowrap">{row[column.name] == null ? '—' : typeof row[column.name] === 'object' ? JSON.stringify(row[column.name]) : String(row[column.name])}</td>)}</tr>)}</tbody>
