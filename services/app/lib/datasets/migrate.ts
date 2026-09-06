@@ -51,12 +51,13 @@ function legacyTokens(sql: string): { tokens: SqlToken[]; diagnostic?: string } 
   return { tokens };
 }
 
-function rewriteSql(sql: string, names: Map<string, string>, single: boolean): { sql: string; ids: string[]; diagnostic?: string } {
+function rewriteSql(sql: string, names: Map<string, string>, single: boolean, excluded=new Set<string>()): { sql: string; ids: string[]; diagnostic?: string } {
   const scanned = legacyTokens(sql);
   if (scanned.diagnostic) return { sql, ids: [], diagnostic: scanned.diagnostic };
-  const ids = [...new Set(scanned.tokens.map((token) => token.id))];
+  const tokens=scanned.tokens.filter(token=>!excluded.has(token.id));
+  const ids = [...new Set(tokens.map((token) => token.id))];
   let out = sql;
-  for (const token of scanned.tokens.toReversed()) {
+  for (const token of tokens.toReversed()) {
     const plain = single ? (token.qualified ? 'rows' : 'public.rows') : names.get(token.id)!;
     const replacement = token.quoted ? plain.split('.').map((part)=>`"${part}"`).join('.') : plain;
     out = out.slice(0, token.start) + replacement + out.slice(token.end);
@@ -69,7 +70,8 @@ const attr = (el: JsxElement, name: string): string | null => {
   return value?.static && typeof value.json === 'string' ? value.json : null;
 };
 
-export function migrateMarkupSource(source: string): SourceMigration {
+export interface MarkupMigrationOptions { folderIds?: Set<string>; knownTargetIds?: Set<string> }
+export function migrateMarkupSource(source: string,options:MarkupMigrationOptions={}): SourceMigration {
   const parsed = parseJsx(source);
   if (!parsed.ok) return { source, changed: false, diagnostics: [{ reason: `invalid JSX: ${parsed.error}` }] };
   const declarations: JsxElement[] = [];
@@ -101,13 +103,17 @@ export function migrateMarkupSource(source: string): SourceMigration {
     const rawSql = segment.slice(first + 1, last);
     const scanned = legacyTokens(rawSql);
     if (scanned.diagnostic) { diagnostics.push({ reason: `${el.tag} ${attr(el, 'name') ?? '?'}: ${scanned.diagnostic}` }); continue; }
-    const ids = [...new Set(scanned.tokens.map((token) => token.id))];
+    const allIds=[...new Set(scanned.tokens.map((token)=>token.id))];
+    const unknown=options.knownTargetIds&&allIds.find(id=>!options.knownTargetIds!.has(id));
+    if(unknown){diagnostics.push({reason:`${el.tag} ${attr(el,'name')??'?'} references unavailable source ${unknown}`});continue;}
+    const folderIds=options.folderIds??new Set<string>();
+    const ids = allIds.filter(id=>!folderIds.has(id));
     if (!ids.length) continue;
     if (el.tag === 'Mutation' && ids.length !== 1) { diagnostics.push({ reason: `Mutation ${attr(el, 'name') ?? '?'} has ${ids.length} legacy sources` }); continue; }
     const localDeps = el.tag === 'Query' ? queryDeps(expression.value.json, names).filter((name)=>name!==attr(el,'name')) : [];
-    const direct = ids.length === 1 && (el.tag === 'Mutation' || localDeps.length === 0);
+    const direct = ids.length === 1 && !allIds.some(id=>folderIds.has(id)) && (el.tag === 'Mutation' || localDeps.length === 0);
     if (!direct) for (const id of ids) if (!upstream.has(id)) upstreamName(id);
-    const rewritten = rewriteSql(rawSql, upstream, direct).sql;
+    const rewritten = rewriteSql(rawSql, upstream, direct,folderIds).sql;
     edits.push({ start: expression.start + first + 1, end: expression.start + last, text: rewritten });
     if (direct) {
       const openEnd = source.indexOf('>', el.start);
@@ -133,6 +139,10 @@ export async function runDatasetCatalogMigrationBatch(db: Db, options: DatasetMi
   if (!Number.isInteger(options.batchSize) || options.batchSize < 1 || options.batchSize > 100) throw new Error('dataset-catalog-migration: batchSize must be an integer from 1 through 100');
   const historyLimit = options.maxHistoricalVersionsPerArtifact ?? 1000;
   const dryRun=options.dryRun ?? true;
+  const targets=await db.query<{id:string;format:string}>('SELECT id,format FROM artifacts WHERE deleted_at IS NULL');
+  const knownTargetIds=new Set(targets.rows.filter(row=>row.format==='dataset'||row.format==='folder').map(row=>row.id));
+  const folderIds=new Set(targets.rows.filter(row=>row.format==='folder').map(row=>row.id));
+  const markupOptions={knownTargetIds,folderIds};
   const candidates = await db.query<Record<string, unknown>>(`SELECT * FROM artifacts a WHERE deleted_at IS NULL AND (
     (format='dataset' AND NOT (meta ? 'catalog')) OR (format='markup' AND source LIKE '%ref\_%') OR EXISTS (
       SELECT 1 FROM artifact_versions v WHERE v.artifact_id=a.id AND ((v.format='dataset' AND NOT (v.meta ? 'catalog')) OR (v.format='markup' AND v.source LIKE '%ref\_%'))
@@ -143,12 +153,12 @@ export async function runDatasetCatalogMigrationBatch(db: Db, options: DatasetMi
     if(processed>=options.batchSize)break;
     const artifactId = String(row.id); const format = String(row.format); const editId = String(row.edit_id ?? '');
     const plannedMeta = format === 'dataset' ? catalogMetadata((row.meta ?? {}) as LegacyMeta) : row.meta;
-    const plannedSource = format === 'markup' ? migrateMarkupSource(String(row.source ?? '')) : { source: row.source as string | null, changed: false, diagnostics: [] };
+    const plannedSource = format === 'markup' ? migrateMarkupSource(String(row.source ?? ''),markupOptions) : { source: row.source as string | null, changed: false, diagnostics: [] };
     if (plannedSource.diagnostics.length) { conflicts.push(...plannedSource.diagnostics.map((d) => ({ ...d, artifactId }))); continue; }
     const history = await db.query<Record<string, unknown>>('SELECT * FROM artifact_versions WHERE artifact_id=$1 ORDER BY version', [artifactId]);
     if (history.rows.length > historyLimit) { conflicts.push({ artifactId, reason: 'history_limit' }); continue; }
     const plannedHistory = history.rows.map((version) => ({ version, meta: version.format === 'dataset' ? catalogMetadata((version.meta ?? {}) as LegacyMeta) : version.meta,
-      source: version.format === 'markup' ? migrateMarkupSource(String(version.source ?? '')) : { source: version.source as string | null, changed: false, diagnostics: [] } }));
+      source: version.format === 'markup' ? migrateMarkupSource(String(version.source ?? ''),markupOptions) : { source: version.source as string | null, changed: false, diagnostics: [] } }));
     const bad = plannedHistory.find((entry) => 'diagnostics' in entry.source && entry.source.diagnostics.length);
     if (bad) { conflicts.push({ artifactId, version: Number(bad.version.version), reason: bad.source.diagnostics[0].reason }); continue; }
     const headChanged = plannedSource.changed || plannedMeta !== row.meta;
@@ -180,9 +190,10 @@ export async function runDatasetCatalogMigrationBatch(db: Db, options: DatasetMi
     ))`);
   let hasRemaining=false;
   for(const row of remaining.rows){
-    const head=row.format==='dataset'?catalogMetadata((row.meta??{}) as LegacyMeta)!==row.meta:migrateMarkupSource(String(row.source??'')).changed;
+    const headPlan=row.format==='dataset'?null:migrateMarkupSource(String(row.source??''),markupOptions);
+    const head=row.format==='dataset'?catalogMetadata((row.meta??{}) as LegacyMeta)!==row.meta:headPlan!.changed||headPlan!.diagnostics.length>0;
     const history=await db.query<Record<string,unknown>>('SELECT format,meta,source FROM artifact_versions WHERE artifact_id=$1',[row.id]);
-    const oldHistory=history.rows.some((version)=>version.format==='dataset'?catalogMetadata((version.meta??{}) as LegacyMeta)!==version.meta:migrateMarkupSource(String(version.source??'')).changed);
+    const oldHistory=history.rows.some((version)=>{if(version.format==='dataset')return catalogMetadata((version.meta??{}) as LegacyMeta)!==version.meta;const plan=migrateMarkupSource(String(version.source??''),markupOptions);return plan.changed||plan.diagnostics.length>0;});
     if(head||oldHistory){hasRemaining=true;break;}
   }
   return { processed, changed, datasets, documents, versions, conflicts, done: !hasRemaining, dryRun };

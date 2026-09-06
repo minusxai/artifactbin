@@ -50,4 +50,18 @@ describe('dataset catalog migration planning', () => {
     expect(out.source).toContain("E'ref_abc123\\'x', $body$ref_abc123$body$");
     expect(out.source).toContain('"rows".id from "public"."rows"');
   });
+
+  it('keeps known folder refs local while federating a dataset in the same query',()=>{
+    const source='<Helmet><Query name="q">{`select d.id,f.title from ref_abc123 d join ref_folder1 f on true`}</Query></Helmet>';
+    const out=migrateMarkupSource(source,{folderIds:new Set(['folder1']),knownTargetIds:new Set(['abc123','folder1'])});
+    expect(out.diagnostics).toEqual([]);
+    expect(out.source).toContain('<Query name="source_abc123" source="abc123">');
+    expect(out.source).toContain('from source_abc123 d join ref_folder1 f');
+    expect(out.source).not.toContain('<Query name="q" source=');
+  });
+
+  it('refuses an unknown legacy target when target knowledge is supplied',()=>{
+    const source='<Helmet><Query name="q">{`select * from ref_missing`}</Query></Helmet>';
+    expect(migrateMarkupSource(source,{folderIds:new Set(),knownTargetIds:new Set()})).toMatchObject({changed:false,diagnostics:[{reason:'Query q references unavailable source missing'}]});
+  });
 });
