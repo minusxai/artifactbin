@@ -132,23 +132,29 @@ export interface DatasetMigrationReport { processed: number; changed: number; da
 export async function runDatasetCatalogMigrationBatch(db: Db, options: DatasetMigrationOptions): Promise<DatasetMigrationReport> {
   if (!Number.isInteger(options.batchSize) || options.batchSize < 1 || options.batchSize > 100) throw new Error('dataset-catalog-migration: batchSize must be an integer from 1 through 100');
   const historyLimit = options.maxHistoricalVersionsPerArtifact ?? 1000;
-  const candidates = await db.query<Record<string, unknown>>(`SELECT * FROM artifacts WHERE deleted_at IS NULL AND ((format='dataset' AND NOT (meta ? 'catalog')) OR (format='markup' AND source LIKE '%ref\_%')) ORDER BY id LIMIT $1`, [options.batchSize]);
-  let changed = 0, datasets = 0, documents = 0, versions = 0;
+  const dryRun=options.dryRun ?? true;
+  const candidates = await db.query<Record<string, unknown>>(`SELECT * FROM artifacts a WHERE deleted_at IS NULL AND (
+    (format='dataset' AND NOT (meta ? 'catalog')) OR (format='markup' AND source LIKE '%ref\_%') OR EXISTS (
+      SELECT 1 FROM artifact_versions v WHERE v.artifact_id=a.id AND ((v.format='dataset' AND NOT (v.meta ? 'catalog')) OR (v.format='markup' AND v.source LIKE '%ref\_%'))
+    )) ORDER BY id`);
+  let processed=0, changed = 0, datasets = 0, documents = 0, versions = 0;
   const conflicts: MigrationDiagnostic[] = [];
   for (const row of candidates.rows) {
+    if(processed>=options.batchSize)break;
     const artifactId = String(row.id); const format = String(row.format); const editId = String(row.edit_id ?? '');
     const plannedMeta = format === 'dataset' ? catalogMetadata((row.meta ?? {}) as LegacyMeta) : row.meta;
     const plannedSource = format === 'markup' ? migrateMarkupSource(String(row.source ?? '')) : { source: row.source as string | null, changed: false, diagnostics: [] };
     if (plannedSource.diagnostics.length) { conflicts.push(...plannedSource.diagnostics.map((d) => ({ ...d, artifactId }))); continue; }
     const history = await db.query<Record<string, unknown>>('SELECT * FROM artifact_versions WHERE artifact_id=$1 ORDER BY version', [artifactId]);
     if (history.rows.length > historyLimit) { conflicts.push({ artifactId, reason: 'history_limit' }); continue; }
-    const plannedHistory = history.rows.map((version) => ({ version, meta: format === 'dataset' ? catalogMetadata((version.meta ?? {}) as LegacyMeta) : version.meta,
-      source: format === 'markup' ? migrateMarkupSource(String(version.source ?? '')) : { source: version.source as string | null, changed: false, diagnostics: [] } }));
+    const plannedHistory = history.rows.map((version) => ({ version, meta: version.format === 'dataset' ? catalogMetadata((version.meta ?? {}) as LegacyMeta) : version.meta,
+      source: version.format === 'markup' ? migrateMarkupSource(String(version.source ?? '')) : { source: version.source as string | null, changed: false, diagnostics: [] } }));
     const bad = plannedHistory.find((entry) => 'diagnostics' in entry.source && entry.source.diagnostics.length);
     if (bad) { conflicts.push({ artifactId, version: Number(bad.version.version), reason: bad.source.diagnostics[0].reason }); continue; }
     const headChanged = plannedSource.changed || plannedMeta !== row.meta;
     const historyChanged = plannedHistory.filter((entry) => entry.meta !== entry.version.meta || ('changed' in entry.source && entry.source.changed));
     if (!headChanged && !historyChanged.length) continue;
+    processed++;
     if (format === 'markup' && options.validate) {
       const headErrors = await options.validate(String(plannedSource.source ?? ''), row);
       if (headErrors.length) { conflicts.push({artifactId,reason:headErrors.join('; ')}); continue; }
@@ -157,7 +163,7 @@ export async function runDatasetCatalogMigrationBatch(db: Db, options: DatasetMi
       if(rejected)continue;
     }
     changed++; if (format === 'dataset') datasets++; else documents++; versions += historyChanged.length;
-    if (options.dryRun) continue;
+    if (dryRun) continue;
     await options.beforeCommit?.(artifactId);
     const committed = await db.transaction(async (tx) => {
       const locked = (await tx.query<Record<string, unknown>>('SELECT edit_id,source,meta FROM artifacts WHERE id=$1 FOR UPDATE', [artifactId])).rows[0];
@@ -168,9 +174,16 @@ export async function runDatasetCatalogMigrationBatch(db: Db, options: DatasetMi
     });
     if (!committed) { changed--; if (format === 'dataset') datasets--; else documents--; versions -= historyChanged.length; conflicts.push({ artifactId, reason: 'concurrent_change' }); }
   }
-  const remaining = await db.query<Record<string, unknown>>(`SELECT format,meta,source FROM artifacts WHERE deleted_at IS NULL AND ((format='dataset' AND NOT (meta ? 'catalog')) OR (format='markup' AND source LIKE '%ref\_%'))`);
-  const hasRemaining = remaining.rows.some((row) => row.format === 'dataset'
-    ? catalogMetadata((row.meta ?? {}) as LegacyMeta) !== row.meta
-    : migrateMarkupSource(String(row.source ?? '')).changed || migrateMarkupSource(String(row.source ?? '')).diagnostics.length > 0);
-  return { processed: candidates.rows.length, changed, datasets, documents, versions, conflicts, done: !hasRemaining, dryRun: !!options.dryRun };
+  const remaining = await db.query<Record<string, unknown>>(`SELECT * FROM artifacts a WHERE deleted_at IS NULL AND (
+    (format='dataset' AND NOT (meta ? 'catalog')) OR (format='markup' AND source LIKE '%ref\_%') OR EXISTS (
+      SELECT 1 FROM artifact_versions v WHERE v.artifact_id=a.id AND ((v.format='dataset' AND NOT (v.meta ? 'catalog')) OR (v.format='markup' AND v.source LIKE '%ref\_%'))
+    ))`);
+  let hasRemaining=false;
+  for(const row of remaining.rows){
+    const head=row.format==='dataset'?catalogMetadata((row.meta??{}) as LegacyMeta)!==row.meta:migrateMarkupSource(String(row.source??'')).changed;
+    const history=await db.query<Record<string,unknown>>('SELECT format,meta,source FROM artifact_versions WHERE artifact_id=$1',[row.id]);
+    const oldHistory=history.rows.some((version)=>version.format==='dataset'?catalogMetadata((version.meta??{}) as LegacyMeta)!==version.meta:migrateMarkupSource(String(version.source??'')).changed);
+    if(head||oldHistory){hasRemaining=true;break;}
+  }
+  return { processed, changed, datasets, documents, versions, conflicts, done: !hasRemaining, dryRun };
 }
