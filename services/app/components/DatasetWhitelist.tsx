@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import type { DiscoveredTable } from '@/lib/datasets/types';
 
-export type SourceDraft = { discovery: DiscoveredTable; included: boolean; schema: string; name: string; columns: string[] };
+export type SourceDraft = { discovery: DiscoveredTable; included: boolean; schema: string; name: string; columns: string[]; modelCellId?: string; stale?: boolean };
 
 function Selection({ label, selected, total, disabled, onChange }: { label: string; selected: number; total: number; disabled: boolean; onChange: (checked: boolean) => void }) {
   const mixed = selected > 0 && selected < total;
@@ -21,8 +21,9 @@ export function DatasetWhitelist({ sources, onChange, disabled = false }: { sour
   const disclosure = (label: string, open: boolean, onClick: () => void) => <button type="button" aria-label={label} aria-expanded={open} onClick={onClick} className="flex size-7 shrink-0 items-center justify-center rounded text-muted hover:bg-raised hover:text-fg focus-visible:outline-2 focus-visible:outline-accent"><ChevronRight size={14} className={open ? 'rotate-90' : ''} /></button>;
 
   return <section aria-label="Source exposure" className="overflow-hidden rounded border border-edge bg-surface">
-    <header className="border-b border-edge px-4 py-3"><h2 className="text-sm font-medium text-fg">Whitelist</h2><p className="mt-1 text-xs text-muted">Select a schema, table, or individual columns to make them available.</p></header>
+    <header className="border-b border-edge px-4 py-3"><h2 className="text-sm font-medium text-fg">3. Whitelist</h2><p className="mt-1 text-xs text-muted">Select a schema, table, or individual columns to make them available.</p></header>
     <div className="p-2">
+      {!sources.length && <p className="px-2 py-4 text-xs text-muted">Discover database tables or run a notebook cell to choose exposed columns.</p>}
       {schemas.map(schema => {
         const entries = sources.filter(s => s.discovery.schema === schema);
         const total = entries.reduce((sum, s) => sum + s.discovery.columns.length, 0);
@@ -32,7 +33,7 @@ export function DatasetWhitelist({ sources, onChange, disabled = false }: { sour
           <div className="flex min-h-9 items-center gap-2 rounded px-1 hover:bg-raised/50">
             {disclosure(`Toggle schema ${schema}`, open, () => setCollapsedSchemas(value => toggle(value, schema)))}
             <Selection label={`Expose schema ${schema}`} selected={selected} total={total} disabled={disabled} onChange={checked => onChange(sources.map(s => s.discovery.schema === schema ? select(s, checked ? allColumns(s) : []) : s))} />
-            <span className="min-w-0 truncate font-mono text-sm text-fg" title={schema}>{schema}</span><span className="ml-auto shrink-0 pr-2 text-xs text-faint">{entries.filter(s => selectedColumns(s).length > 0).length}/{entries.length} tables</span>
+            <span className="min-w-0 truncate font-mono text-sm text-fg">{schema}</span><span className="ml-auto shrink-0 pr-2 text-xs text-faint">{entries.filter(s => selectedColumns(s).length > 0).length}/{entries.length} tables</span>
           </div>
           {open && <div className="ml-4 border-l border-edge pl-2">
             {sources.map((source, index) => {
@@ -46,13 +47,13 @@ export function DatasetWhitelist({ sources, onChange, disabled = false }: { sour
               return <div key={key}>
                 <div className="flex min-h-9 items-center gap-2 rounded px-1 hover:bg-raised/50">
                   {disclosure(`Toggle table ${name}`, expanded, () => setExpandedTables(value => toggle(value, key)))}
-                  <Selection label={`Expose table ${name}`} selected={count} total={source.discovery.columns.length} disabled={disabled} onChange={checked => update(checked ? allColumns(source) : [])} />
-                  <span className="min-w-0 truncate font-mono text-xs text-fg" title={name}>{source.discovery.name}</span><span className="ml-auto shrink-0 pr-2 text-xs text-faint">{count}/{source.discovery.columns.length} columns</span>
+                  <Selection label={`Expose table ${name}`} selected={count} total={source.discovery.columns.length} disabled={disabled || Boolean(source.stale)} onChange={checked => update(checked ? allColumns(source) : [])} />
+                  <span className="min-w-0 truncate font-mono text-xs text-fg">{source.discovery.name}</span><span className="ml-auto shrink-0 pr-2 text-xs text-faint">{source.stale ? 'Run cell to update' : `${count}/${source.discovery.columns.length} columns`}</span>
                 </div>
                 {expanded && <div className="ml-4 border-l border-edge pl-2">
                   {source.discovery.columns.map(column => <label key={column.name} className="flex min-h-8 cursor-pointer items-center gap-2 rounded pl-9 pr-3 hover:bg-raised/50">
-                    <input type="checkbox" aria-label={`Expose column ${name}.${column.name}`} className="size-3.5 shrink-0 accent-accent" disabled={disabled} checked={columns.includes(column.name)} onChange={e => update(e.target.checked ? [...columns, column.name] : columns.filter(c => c !== column.name))} />
-                    <span className="min-w-0 truncate font-mono text-xs text-muted" title={column.name}>{column.name}</span><span className="ml-auto shrink-0 font-mono text-xs text-faint">{column.type}</span>
+                    <input type="checkbox" aria-label={`Expose column ${name}.${column.name}`} className="size-3.5 shrink-0 accent-accent" disabled={disabled || Boolean(source.stale)} checked={columns.includes(column.name)} onChange={e => update(e.target.checked ? [...columns, column.name] : columns.filter(c => c !== column.name))} />
+                    <span className="min-w-0 truncate font-mono text-xs text-muted">{column.name}</span><span className="ml-auto shrink-0 font-mono text-xs text-faint">{column.type}</span>
                   </label>)}
                 </div>}
               </div>;

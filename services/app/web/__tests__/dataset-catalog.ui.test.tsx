@@ -3,205 +3,237 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { DatasetEditorPage } from '../pages/DatasetEditor';
 import { DatasetCatalogView } from '@/components/DatasetCatalogView';
-import type { DatasetCatalog } from '@/lib/datasets/types';
+import { parseDatasetDefinition, serializeDatasetDefinition } from '@/lib/datasets/definition';
+import type { CatalogInput, DatasetCatalog } from '@/lib/datasets/types';
 
 let viewerSession: { user: { id: string } | null } | null = { user: { id: 'editor-1' } };
 vi.mock('@/web/session', () => ({ useSession: () => ({ session: viewerSession }) }));
-
-const connection = { id: 'conn-1', name: 'Warehouse', host: 'db.example.com', port: 5432, database: 'analytics', username: 'reader', ssl: true };
+const connection = { host: 'db.example.com', port: 5432, database: 'analytics', username: 'reader', ssl: true, passwordSecretId: 'secret-1' };
 const tables = [
-  { schema: 'sales', name: 'orders', columns: [{ name: 'id', type: 'number' }, { name: 'secret', type: 'string' }] },
-  { schema: 'crm', name: 'people', columns: [{ name: 'name', type: 'string' }] },
+  { schema: 'sales', name: 'orders', columns: [{ name: 'id', type: 'number' as const }, { name: 'secret', type: 'string' as const }] },
+  { schema: 'crm', name: 'people', columns: [{ name: 'name', type: 'string' as const }] },
 ];
-const catalog: DatasetCatalog = { kind: 'postgres', connectionId: connection.id, defaultSchema: 'sales', refreshSeconds: 60, tables: [{ ...tables[0], columns: [{ name: 'id', type: 'number' }], source: { schema: 'sales', table: 'orders' } }] };
+const catalog: DatasetCatalog = { kind: 'postgres', connection, defaultSchema: 'sales', refreshSeconds: 60, notebook: { cells: [] }, tables: [{ ...tables[0], columns: [tables[0].columns[0]], source: { schema: 'sales', table: 'orders' } }] };
 const reply = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status }));
 let calls: Array<{ url: string; body: any; method: string }>;
 let failSave = false;
 let failPreview = false;
-let ownsConnection = true;
 let loadedCatalog = catalog;
+let discoveryTables = tables;
+let previewColumns = [{ name: 'id', type: 'number' }];
 beforeEach(() => {
-  calls = []; failSave = false; failPreview = false; ownsConnection = true; loadedCatalog = catalog; viewerSession = { user: { id: 'editor-1' } };
+  calls = []; discoveryTables = tables; failSave = false; failPreview = false; loadedCatalog = catalog; previewColumns = [{ name: 'id', type: 'number' }]; viewerSession = { user: { id: 'editor-1' } };
   vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     const method = init?.method ?? 'GET'; calls.push({ url, body, method });
-    if (url.endsWith('/test')) return reply({ tables });
-    if (url === '/api/my/connections') return reply(method === 'POST' ? { connection } : { connections: ownsConnection ? [connection] : [] });
-    if (url.endsWith('/preview') || url.endsWith('/tables')) return failPreview ? reply({ error: 'Query refused' }, 400) : reply({ rows: [{ id: 42 }], columns: [{ name: 'id', type: 'number' }], refreshedAt: '2026-09-06T10:00:00Z', truncated: true });
+    if (url === '/api/my/secrets') return reply({ secret: { id: 'secret-new' } }, 201);
+    if (url === '/api/my/datasets/discover') return reply({ tables: discoveryTables });
+    if (url.endsWith('/preview') || url.endsWith('/tables')) return failPreview ? reply({ error: 'Query refused' }, 400) : reply({ rows: [{ id: 42 }], columns: previewColumns, refreshedAt: '2026-09-06T10:00:00Z', truncated: true });
     if (method === 'GET') return reply({ id: 'data-1', title: 'Orders', version: 7, meta: { catalog: loadedCatalog } });
     return failSave ? reply({ error: 'Version conflict' }, 409) : reply({ id: 'data-1', version: 8 });
   }));
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 function editor(edit = false) {
-  render(<MemoryRouter initialEntries={[edit ? '/datasets/data-1/edit' : '/datasets/new']}><Routes><Route path="/login" element={<p aria-label="Dataset login">Log in to create a dataset</p>} /><Route path="/datasets/new" element={<DatasetEditorPage />} /><Route path="/datasets/:id/edit" element={<DatasetEditorPage />} /></Routes></MemoryRouter>);
+  render(<MemoryRouter initialEntries={[edit ? '/datasets/data-1/edit' : '/datasets/new']}><Routes><Route path="/login" element={<p aria-label="Dataset login">Log in</p>} /><Route path="/datasets/new" element={<DatasetEditorPage />} /><Route path="/datasets/:id/edit" element={<DatasetEditorPage />} /><Route path="/a/:id" element={<p aria-label="Saved dataset">Saved</p>} /></Routes></MemoryRouter>);
 }
 const change = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
+const click = (label: string) => fireEvent.click(screen.getByLabelText(label));
 async function discover() {
-  fireEvent.click(await screen.findByLabelText('PostgreSQL'));
-  await screen.findByLabelText('Connection');
-  change('Connection', 'conn-1');
-  fireEvent.click(screen.getByLabelText('Test and discover'));
+  click('PostgreSQL');
+  for (const [label, value] of [['Host', connection.host], ['Database', 'analytics'], ['Username', 'reader'], ['Password', 'private-password']]) change(label, value);
+  click('Test and discover');
   await screen.findByLabelText('Expose table sales.orders');
 }
 async function selectOrders() {
-  await discover();
-  fireEvent.click(screen.getByLabelText('Toggle table sales.orders'));
-  fireEvent.click(screen.getByLabelText('Expose column sales.orders.id'));
-  change('Default schema', 'sales');
+  await discover(); click('Toggle table sales.orders'); click('Expose column sales.orders.id'); change('Default schema', 'sales');
+}
+async function addCell(name: string, sql: string, index = 1) {
+  click('Add notebook cell'); change(`Cell name ${index}`, name); change(`Cell SQL ${index}`, sql); click(`Run cell ${index}`);
+  await screen.findByLabelText(`Cell preview ${index}`);
+}
+function savedDefinition() {
+  const write = calls.find(c => c.url.startsWith('/api/my/artifacts') && c.method !== 'GET');
+  return write ? parseDatasetDefinition(write.body.dataset) : undefined;
 }
 describe('dataset editor', () => {
-  it('uses a neutral create label while the session is loading', async () => {
-    viewerSession = null;
-    editor();
+  it('uses a neutral create label while the session is loading and never fetches connections', async () => {
+    viewerSession = null; editor();
     expect(await screen.findByLabelText('Save dataset')).toHaveTextContent(/^Create dataset$/);
+    expect(calls.some(c => c.url.includes('/connections'))).toBe(false);
   });
-  it('sends a signed-out user to login before offering dataset creation', async () => {
-    viewerSession = { user: null };
-    editor();
-    await screen.findByLabelText('Dataset login');
-    expect(screen.queryByLabelText('Save dataset')).not.toBeInTheDocument();
+  it('sends signed-out creators to login', async () => {
+    viewerSession = { user: null }; editor(); await screen.findByLabelText('Dataset login');
   });
-
-  it('creates a connection with TLS by default and clears its write-only password', async () => {
-    editor();
-    fireEvent.click(await screen.findByLabelText('PostgreSQL'));
-    fireEvent.click(screen.getByLabelText('New connection'));
-    for (const [label, value] of [['Connection name', 'Warehouse'], ['Host', connection.host], ['Database', 'analytics'], ['Username', 'reader'], ['Password', 'private-password']]) change(label, value);
-    expect(screen.getByLabelText('Use SSL')).toBeChecked();
-    fireEvent.click(screen.getByLabelText('Save connection'));
-    await waitFor(() => expect(calls.find(c => c.method === 'POST' && c.url === '/api/my/connections')?.body).toEqual({ name: 'Warehouse', host: connection.host, port: 5432, database: 'analytics', username: 'reader', password: 'private-password', ssl: true }));
-    fireEvent.click(screen.getByLabelText('New connection'));
-    expect(screen.getByLabelText('Password')).toHaveValue('');
+  it('sends passwords only to the write-only secrets endpoint and discovers using the reference', async () => {
+    editor(); await discover();
+    const { passwordSecretId: _, ...destination } = connection;
+    expect(calls.find(c => c.url === '/api/my/secrets')?.body).toEqual({ value: 'private-password', connection: destination });
+    expect(calls.find(c => c.url.endsWith('/discover'))?.body).toEqual({ connection: { ...destination, passwordSecretId: 'secret-new' } });
+    expect(calls.filter(c => c.url !== '/api/my/secrets').every(c => !JSON.stringify(c).includes('private-password'))).toBe(true);
+    expect(screen.getByLabelText('Password status')).toHaveTextContent('Configured');
+    expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
+    click('Replace password'); expect(screen.getByLabelText('Password')).toHaveValue('');
+    expect(screen.queryByLabelText('Connection name')).not.toBeInTheDocument();
+  });
+  it('requires a replacement credential when the connection destination changes', async () => {
+    editor(true); await screen.findByLabelText('Password status'); change('Host', 'other.example.com');
+    expect(screen.getByLabelText('Password')).toHaveValue(''); click('Test and discover');
+    await waitFor(() => expect(screen.getByLabelText('Dataset error')).toHaveTextContent(/password/i));
+    expect(calls.some(c => c.url.endsWith('/discover'))).toBe(false);
+  });
+  it('keeps notebook before whitelist, synchronizes Expose with column selections and saves markup', async () => {
+    editor(); await discover();
+    expect(screen.getByLabelText('Data models notebook').compareDocumentPosition(screen.getByLabelText('Source exposure')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    previewColumns = [{ name: 'id', type: 'number' }, { name: 'total', type: 'number' }];
+    await addCell('totals', 'select id, sum(amount) total from sales.orders group by id');
+    expect(screen.getByLabelText('Expose cell 1')).not.toBeChecked(); click('Expose cell 1');
+    expect(screen.getByLabelText('Expose table models.totals')).toBeChecked(); click('Toggle table models.totals'); click('Expose column models.totals.total');
+    expect(screen.getByLabelText('Expose cell 1')).toBePartiallyChecked(); click('Expose table models.totals');
+    expect(screen.getByLabelText('Expose cell 1')).toBeChecked(); change('Default schema', 'models'); click('Save dataset');
+    await waitFor(() => expect(savedDefinition()?.tables).toEqual([{ schema: 'models', name: 'totals', modelCellId: expect.any(String), columns: ['id', 'total'] }]));
+    expect(typeof calls.find(c => c.url === '/api/my/artifacts')?.body.dataset).toBe('string');
+    expect(savedDefinition()?.connection?.passwordSecretId).toBe('secret-new');
+  });
+  it('runs chained cells independently of the whitelist and retains stable IDs through insertion', async () => {
+    editor(); await discover(); await addCell('raw_orders', 'select id from sales.orders');
+    await addCell('totals', 'select count(*) id from raw_orders', 2);
+    const payload = calls.filter(c => c.url.endsWith('/notebook/preview')).at(-1)?.body;
+    expect(payload.notebook.cells.map((cell: any) => cell.name)).toEqual(['raw_orders', 'totals']);
+    expect(payload.cellId).toBe(payload.notebook.cells[1].id); expect(payload.dataset).toBeUndefined();
+    click('Insert cell after 1'); change('Cell name 2', 'helper'); change('Cell SQL 2', 'select * from raw_orders'); click('Run cell 3');
+    await waitFor(() => expect(calls.filter(c => c.url.endsWith('/notebook/preview')).at(-1)?.body.notebook.cells.map((c: any) => c.id)).toEqual([payload.notebook.cells[0].id, expect.any(String), payload.cellId]));
+    click('Collapse cell 1'); expect(screen.queryByLabelText('Cell SQL 1')).not.toBeInTheDocument(); click('Collapse cell 1');
+    expect(screen.getByLabelText('Cell SQL 1')).toHaveValue('select id from sales.orders');
+  });
+  it('invalidates edited and downstream outputs, restores selected columns by name on rerun', async () => {
+    editor(); await discover(); previewColumns = [{name:'id',type:'number'},{name:'old',type:'string'}];
+    await addCell('base', 'select id from sales.orders'); await addCell('totals', 'select * from base', 2); click('Expose cell 2');
+    change('Cell SQL 1', 'select id, 1 as added from sales.orders');
+    expect(screen.queryByLabelText('Cell preview 2')).not.toBeInTheDocument(); expect(screen.getByLabelText('Expose cell 2')).toBeDisabled();
+    click('Save dataset'); await waitFor(() => expect(screen.getByLabelText('Dataset error')).toHaveTextContent(/run.*totals/i));
+    previewColumns = [{name:'id',type:'number'},{name:'added',type:'number'}]; click('Run cell 2'); await screen.findByLabelText('Cell preview 2');
+    click('Toggle table models.totals'); expect(screen.getByLabelText('Expose column models.totals.id')).toBeChecked(); expect(screen.getByLabelText('Expose column models.totals.added')).not.toBeChecked();
+  });
+  it('allows every authorized editor to configure the connection, notebook and source whitelist', async () => {
+    editor(true); await screen.findByLabelText('Password status');
+    expect(screen.getByLabelText('Host')).toBeEnabled(); expect(screen.getByLabelText('Test and discover')).toBeEnabled(); expect(screen.getByLabelText('Expose table sales.orders')).toBeEnabled();
+    expect(screen.queryByLabelText('Shared dataset connection')).not.toBeInTheDocument();
+    await addCell('helper', 'select id from sales.orders');
+    expect(calls.find(c => c.url.endsWith('/notebook/preview'))?.body.datasetId).toBe('data-1');
+    click('Test and discover'); await screen.findByLabelText('Expose table crm.people');
+    expect(calls.find(c => c.url.endsWith('/discover'))?.body.datasetId).toBe('data-1');
+  });
+  it('preserves branch selection, physical mappings and excludes newly discovered columns', async () => {
+    editor(true); await screen.findByLabelText('Password status'); click('Test and discover'); await screen.findByLabelText('Expose schema crm');
+    expect(screen.getByLabelText('Expose schema sales')).toBePartiallyChecked(); click('Toggle table sales.orders');
+    expect(screen.getByLabelText('Expose column sales.orders.secret')).not.toBeChecked();
+    expect(screen.queryByLabelText(/Logical schema/)).not.toBeInTheDocument(); click('Toggle schema sales'); click('Save dataset');
+    await waitFor(() => expect(savedDefinition()?.tables).toEqual([{ schema:'sales', name:'orders', source:{schema:'sales',table:'orders'}, columns:['id'] }]));
   });
   it('exposes only selected columns and keeps the explicit default schema stable as tables are added', async () => {
-    editor(); await selectOrders();
-    expect(screen.getByLabelText('Expose column sales.orders.secret')).not.toBeChecked();
-    fireEvent.click(screen.getByLabelText('Expose table crm.people'));
-    fireEvent.click(screen.getByLabelText('Toggle table crm.people'));
-    expect(screen.getByLabelText('Default schema')).toHaveValue('sales');
-    change('Dataset title', 'Orders');
-    fireEvent.click(screen.getByLabelText('Save dataset'));
-    await waitFor(() => expect(calls.find(c => c.url === '/api/my/artifacts')?.body.dataset.tables).toEqual([
-      { schema: 'sales', name: 'orders', source: { schema: 'sales', table: 'orders' }, columns: ['id'] },
-      { schema: 'crm', name: 'people', source: { schema: 'crm', table: 'people' }, columns: ['name'] },
-    ]));
-    const body = calls.find(c => c.url === '/api/my/artifacts')!.body;
-    expect(body.visibility).toBe('private');
-    expect(JSON.stringify(body)).not.toMatch(/password|username|db.example/);
+    editor(); await selectOrders(); click('Expose table crm.people'); expect(screen.getByLabelText('Default schema')).toHaveValue('sales');
+    click('Save dataset'); await waitFor(() => expect(savedDefinition()?.tables).toHaveLength(2));
+    expect(calls.find(c => c.url === '/api/my/artifacts')?.body.visibility).toBe('private');
   });
-  it('selects whole branches, shows partial selections and collapses without changing exposure', async () => {
-    editor(); await discover();
-    expect(screen.queryByLabelText('Logical schema sales.orders')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Expose column sales.orders.id')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByLabelText('Expose schema sales'));
-    expect(screen.getByLabelText('Expose table sales.orders')).toBeChecked();
-    fireEvent.click(screen.getByLabelText('Toggle table sales.orders'));
-    expect(screen.getByLabelText('Expose column sales.orders.id')).toBeChecked();
-    expect(screen.getByLabelText('Expose column sales.orders.secret')).toBeChecked();
-    fireEvent.click(screen.getByLabelText('Expose column sales.orders.secret'));
-    expect(screen.getByLabelText('Expose table sales.orders')).toBePartiallyChecked();
-    expect(screen.getByLabelText('Expose schema sales')).toBePartiallyChecked();
-    fireEvent.click(screen.getByLabelText('Toggle schema sales'));
-    expect(screen.queryByLabelText('Expose table sales.orders')).not.toBeInTheDocument();
-    change('Default schema', 'sales');
-    fireEvent.click(screen.getByLabelText('Save dataset'));
-    await waitFor(() => expect(calls.find(c => c.url === '/api/my/artifacts')?.body.dataset.tables).toEqual([
-      {schema:'sales',name:'orders',source:{schema:'sales',table:'orders'},columns:['id']},
-    ]));
+  it('applies source through the shared codec and saves the resulting visual definition', async () => {
+    editor(true); await screen.findByLabelText('Password status'); click('Edit dataset source');
+    const input: CatalogInput = { kind:'postgres', connection, notebook:{cells:[{id:'stable-cell',name:'source_model',sql:'select id from sales.orders'}]},defaultSchema:'sales',refreshSeconds:30,tables:[{schema:'sales',name:'source_model',modelCellId:'stable-cell',columns:['id']}] };
+    change('Dataset source', serializeDatasetDefinition(input)); click('Apply dataset source');
+    expect(screen.getByLabelText('Cell name 1')).toHaveValue('source_model'); expect(screen.getByLabelText('Refresh interval')).toHaveValue(30);
+    click('Run cell 1'); await screen.findByLabelText('Cell preview 1');
+    click('Edit dataset source'); expect(parseDatasetDefinition((screen.getByLabelText('Dataset source') as HTMLTextAreaElement).value)).toEqual(input);
+    click('Apply dataset source'); click('Save dataset'); await waitFor(() => expect(savedDefinition()).toEqual(input));
   });
-  it('clears branch selections and leaves newly discovered columns excluded', async () => {
-    editor(true);
-    await waitFor(() => expect(screen.getByLabelText('Dataset title')).toHaveValue('Orders'));
-    fireEvent.click(screen.getByLabelText('Test and discover'));
-    await screen.findByLabelText('Expose schema crm');
-    expect(screen.getByLabelText('Expose schema sales')).toBePartiallyChecked();
-    fireEvent.click(screen.getByLabelText('Toggle table sales.orders'));
-    expect(screen.getByLabelText('Expose column sales.orders.secret')).not.toBeChecked();
-    fireEvent.click(screen.getByLabelText('Expose table sales.orders'));
-    expect(screen.getByLabelText('Expose column sales.orders.secret')).toBeChecked();
-    fireEvent.click(screen.getByLabelText('Expose schema sales'));
-    expect(screen.getByLabelText('Expose table sales.orders')).not.toBeChecked();
-    expect(screen.getByLabelText('Expose column sales.orders.id')).not.toBeChecked();
-    expect(screen.getByLabelText('Expose column sales.orders.secret')).not.toBeChecked();
+  it('keeps an existing dataset default schema immutable', async () => {
+    editor(true); await screen.findByLabelText('Password status'); expect(screen.getByLabelText('Default schema')).toBeDisabled();
   });
-  it('preserves previously saved source mappings without offering renaming controls', async () => {
-    loadedCatalog = {...catalog, defaultSchema:'analytics',tables:[{...catalog.tables[0],schema:'analytics',name:'purchases'}]};
-    editor(true);
-    await waitFor(() => expect(screen.getByLabelText('Dataset title')).toHaveValue('Orders'));
-    expect(screen.queryByLabelText(/Logical schema/)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/Logical table/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByLabelText('Save dataset'));
-    await waitFor(() => expect(calls.find(c => c.method === 'PUT')?.body.dataset.tables).toEqual(loadedCatalog.tables.map(({schema,name,source,columns})=>({schema,name,source,columns:columns.map(c=>c.name)}))));
+  it('retains selected tables and columns that disappear on rediscovery', async () => {
+    loadedCatalog={...catalog,notebookSources:tables,tables:[catalog.tables[0],{...tables[1],source:{schema:'crm',table:'people'}}]};
+    discoveryTables=[{...tables[0],columns:[tables[0].columns[1]]}];
+    editor(true); await screen.findByLabelText('Password status'); click('Test and discover'); await waitFor(() => expect(screen.getByLabelText('Dataset notice')).toHaveTextContent('Connected'));
+    expect(screen.getByLabelText('Expose table crm.people')).toBeChecked(); click('Toggle table sales.orders'); expect(screen.getByLabelText('Expose column sales.orders.id')).toBeChecked();
+    click('Save dataset'); await waitFor(() => expect(savedDefinition()?.tables).toHaveLength(2));
+    expect(savedDefinition()?.tables[0].columns).toEqual(['id']);
   });
-  it('authors SQL models through named fields, previews them, and preserves SQL after errors', async () => {
-    editor(); await selectOrders();
-    fireEvent.click(screen.getByLabelText('Add SQL model'));
-    change('Model schema 1', 'reporting'); change('Model name 1', 'totals'); change('Model SQL 1', 'select count(*) as id from sales.orders');
-    fireEvent.click(screen.getByLabelText('Preview model 1'));
-    await screen.findByLabelText('Model preview 1');
-    expect(calls.find(c => c.url.endsWith('/preview'))?.body.sql).toBe('select count(*) as id from sales.orders');
-    failPreview = true;
-    fireEvent.click(screen.getByLabelText('Preview model 1'));
-    await waitFor(() => expect(screen.getByLabelText('Dataset error')).toHaveTextContent('Query refused'));
-    expect(screen.getByLabelText('Model SQL 1')).toHaveValue('select count(*) as id from sales.orders');
+  it('auto-names inserted cells and runs the requested prefix despite an unfinished later cell', async () => {
+    editor(); await discover(); await addCell('base', 'select id from sales.orders'); click('Add notebook cell');
+    expect(screen.getByLabelText('Cell name 2')).toHaveValue('query_1'); click('Run cell 1');
+    await waitFor(() => expect(calls.filter(c => c.url.endsWith('/notebook/preview'))).toHaveLength(2));
+    expect(calls.filter(c => c.url.endsWith('/notebook/preview')).at(-1)?.body.notebook.cells).toHaveLength(1);
   });
-  it('loads the catalog for editing and preserves changes on a version conflict', async () => {
-    editor(true);
-    await waitFor(() => expect(screen.getByLabelText('Dataset title')).toHaveValue('Orders'));
-    fireEvent.click(screen.getByLabelText('Toggle table sales.orders'));
-    expect(screen.getByLabelText('Expose column sales.orders.id')).toBeChecked();
-    change('Dataset title', 'New title'); failSave = true;
-    fireEvent.click(screen.getByLabelText('Save dataset'));
-    await waitFor(() => expect(screen.getByLabelText('Dataset error')).toHaveTextContent('Version conflict'));
-    expect(screen.getByLabelText('Dataset title')).toHaveValue('New title');
+  it('invalidates changed source notebook output and preserves real types for unchanged source', async () => {
+    loadedCatalog={...catalog,notebook:{cells:[{id:'cell-1',name:'totals',sql:'select id from sales.orders'}]},tables:[{schema:'sales',name:'totals',modelCellId:'cell-1',columns:[{name:'id',type:'number'}]}]};
+    editor(true); await screen.findByLabelText('Password status'); click('Edit dataset source'); click('Apply dataset source');
+    click('Toggle table sales.totals'); expect(screen.getByLabelText('Source exposure')).toHaveTextContent('number'); expect(screen.getByLabelText('Expose cell 1')).toBeChecked();
+    click('Edit dataset source'); const source=(screen.getByLabelText('Dataset source') as HTMLTextAreaElement).value;
+    change('Dataset source',source.replace('select id from sales.orders','select id + 1 as id from sales.orders')); click('Apply dataset source');
+    expect(screen.getByLabelText('Expose cell 1')).toBeDisabled(); expect(screen.getByLabelText('Source exposure')).not.toHaveTextContent('string'); click('Save dataset');
+    await waitFor(() => expect(screen.getByLabelText('Dataset error')).toHaveTextContent(/run.*totals/i));
+  });
+  it('retains invalid source edits and visual draft until source is valid', async () => {
+    editor(true); await screen.findByLabelText('Password status'); click('Edit dataset source'); change('Dataset source','broken'); click('Apply dataset source');
+    await screen.findByLabelText('Dataset error'); expect(screen.getByLabelText('Dataset source')).toHaveValue('broken'); expect(screen.getByLabelText('Host')).toHaveValue(connection.host);
+    expect(screen.getByLabelText('Save dataset')).toBeDisabled();
+  });
+  it('keeps final SQL explicit and retains the authored input after errors', async () => {
+    editor(); await selectOrders(); click('SQL view'); const before = calls.filter(c => c.url === '/api/my/datasets/preview').length;
+    change('Dataset SQL', 'select count(*) id from orders'); expect(calls.filter(c => c.url === '/api/my/datasets/preview')).toHaveLength(before);
+    await waitFor(() => expect(screen.getByLabelText('Run dataset SQL')).toBeEnabled()); click('Run dataset SQL'); await waitFor(() => expect(calls.filter(c => c.url === '/api/my/datasets/preview').at(-1)?.body.sql).toBe('select count(*) id from orders'));
+    change('Dataset SQL','select forbidden from orders'); await waitFor(() => expect(screen.getByLabelText('Refresh dataset')).toBeEnabled()); click('Refresh dataset');
+    await waitFor(() => expect(calls.filter(c => c.url === '/api/my/datasets/preview').at(-1)?.body.sql).toBe('select count(*) id from orders'));
+    await waitFor(() => expect(screen.getByLabelText('Run dataset SQL')).toBeEnabled()); failPreview = true; click('Run dataset SQL'); await screen.findByLabelText('Dataset preview error'); expect(screen.getByLabelText('Dataset SQL')).toHaveValue('select forbidden from orders');
+    expect(screen.queryByLabelText('Next page')).not.toBeInTheDocument();
+  });
+  it('does not rerun final SQL when notebook presentation or an unexposed draft changes', async () => {
+    editor(); await selectOrders(); await addCell('helper', 'select id from sales.orders');
+    click('SQL view'); change('Dataset SQL','select id from orders'); await waitFor(() => expect(screen.getByLabelText('Run dataset SQL')).toBeEnabled()); click('Run dataset SQL');
+    await waitFor(() => expect(screen.getByLabelText('Refresh dataset')).toBeEnabled());
+    const before=calls.filter(c => c.url === '/api/my/datasets/preview').length;
+    click('Collapse cell 1'); click('Collapse cell 1'); change('Cell SQL 1','select id + 1 from sales.orders');
+    expect(calls.filter(c => c.url === '/api/my/datasets/preview')).toHaveLength(before);
+  });
+  it('preserves discovered raw columns when source is applied unchanged', async () => {
+    loadedCatalog={...catalog,notebookSources:tables}; editor(true); await screen.findByLabelText('Password status');
+    click('Edit dataset source'); click('Apply dataset source'); expect(screen.getByLabelText('Expose table crm.people')).not.toBeChecked();
+    click('Toggle table sales.orders'); expect(screen.getByLabelText('Expose column sales.orders.secret')).not.toBeChecked();
+    expect(screen.getByLabelText('Source exposure')).toHaveTextContent('number');
+  });
+  it('preserves edited title after a version conflict', async () => {
+    editor(true); await screen.findByLabelText('Password status'); change('Dataset title','New title'); failSave=true; click('Save dataset');
+    await waitFor(() => expect(screen.getByLabelText('Dataset error')).toHaveTextContent('Version conflict')); expect(screen.getByLabelText('Dataset title')).toHaveValue('New title');
     expect(calls.find(c => c.method === 'PUT')?.body.expectedVersion).toBe(7);
   });
-  it('lets a shared editor preview and save models while preserving the owner connection and source exposure', async () => {
-    ownsConnection = false;
-    loadedCatalog = { ...catalog, tables: [...catalog.tables, { schema: 'sales', name: 'summary', sql: 'select id from sales.orders', columns: [{ name: 'id', type: 'number' }] }] };
-    editor(true);
-    await waitFor(() => expect(screen.getByLabelText('Dataset title')).toHaveValue('Orders'));
-    expect(screen.getByLabelText('Shared dataset connection')).toHaveTextContent(/owner/);
-    expect(screen.getByLabelText('Connection')).toBeDisabled();
-    expect(screen.getByLabelText('Test and discover')).toBeDisabled();
-    expect(screen.getByLabelText('Expose table sales.orders')).toBeDisabled();
-    fireEvent.click(screen.getByLabelText('Toggle table sales.orders'));
-    expect(screen.getByLabelText('Expose column sales.orders.id')).toBeChecked();
-    expect(screen.getByLabelText('Expose column sales.orders.id')).toBeDisabled();
-    expect(screen.queryByLabelText('New connection')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Model SQL 1')).toHaveValue('select id from sales.orders');
-    change('Model SQL 1', 'select id from sales.orders where id > 0');
-    fireEvent.click(screen.getByLabelText('Preview model 1'));
-    await screen.findByLabelText('Model preview 1');
-    fireEvent.click(screen.getByLabelText('Save dataset'));
-    await waitFor(() => expect(calls.find(c => c.method === 'PUT')?.body.dataset.tables).toEqual([
-      { schema: 'sales', name: 'orders', source: { schema: 'sales', table: 'orders' }, columns: ['id'] },
-      { schema: 'sales', name: 'summary', sql: 'select id from sales.orders where id > 0' },
-    ]));
-    expect(calls.find(c => c.url.endsWith('/preview'))?.body.datasetId).toBe('data-1');
-    expect(calls.find(c => c.method === 'PUT')?.body.dataset.connectionId).toBe('conn-1');
-    expect(screen.getByLabelText('Default schema')).toHaveValue('sales');
-    expect(screen.getByLabelText('Default schema')).toBeDisabled();
-    expect(calls.some(c => c.url.endsWith('/test'))).toBe(false);
-  });
-
-  it('includes the existing dataset id when previewing an edited model', async () => {
-    editor(true);
-    await waitFor(() => expect(screen.getByLabelText('Dataset title')).toHaveValue('Orders'));
-    fireEvent.click(screen.getByLabelText('Add SQL model'));
-    change('Model name 1', 'summary'); change('Model SQL 1', 'select id from sales.orders');
-    fireEvent.click(screen.getByLabelText('Preview model 1'));
-    await waitFor(() => expect(calls.find(c => c.url.endsWith('/preview'))?.body.datasetId).toBe('data-1'));
+  it('preserves and edits legacy SQL model definitions without changing their resolution semantics', async () => {
+    loadedCatalog={...catalog,tables:[...catalog.tables,{schema:'sales',name:'summary',sql:'select id from orders',columns:[{name:'id',type:'number'}]}]};
+    editor(true); await screen.findByLabelText('Password status');
+    expect(screen.getByLabelText('Cell SQL 1')).toHaveValue('select id from orders');
+    change('Cell SQL 1','select id from orders where id > 0'); click('Run cell 1'); await screen.findByLabelText('Cell preview 1'); click('Save dataset');
+    await waitFor(() => expect(savedDefinition()?.tables).toContainEqual({schema:'sales',name:'summary',sql:'select id from orders where id > 0'}));
+    expect(calls.find(c => c.url === '/api/my/datasets/preview')?.body.datasetId).toBe('data-1');
+    expect(savedDefinition()?.notebook?.cells).toEqual([]);
   });
   it('adds stored JSON rows in a named table', async () => {
-    editor(); fireEvent.click(await screen.findByLabelText('Add stored table'));
-    change('Stored schema 1', 'main'); change('Stored table name 1', 'rows'); change('Stored rows 1', '[{"id":1}]'); change('Default schema', 'main');
-    fireEvent.click(screen.getByLabelText('Save dataset'));
-    await waitFor(() => expect(calls.find(c => c.url === '/api/my/artifacts')?.body.dataset).toMatchObject({ kind: 'stored', defaultSchema: 'main', tables: [{ schema: 'main', name: 'rows', rows: [{ id: 1 }] }] }));
+    editor(); click('Add stored table'); change('Stored schema 1','main'); change('Stored table name 1','rows'); change('Stored rows 1','[{"id":1}]'); change('Default schema','main'); click('Save dataset');
+    await waitFor(() => expect(savedDefinition()).toMatchObject({kind:'stored',defaultSchema:'main',tables:[{schema:'main',name:'rows',rows:[{id:1}]}]}));
+  });
+  it('retains stored object data when editing metadata without new rows', async () => {
+    loadedCatalog={kind:'stored',defaultSchema:'public',refreshSeconds:0,tables:[{schema:'public',name:'rows',columns:[{name:'id',type:'number'}],objectKey:'private/object'}]};
+    editor(true); await waitFor(() => expect(screen.getByLabelText('Dataset title')).toHaveValue('Orders')); click('Save dataset');
+    await waitFor(() => expect(savedDefinition()?.tables).toEqual([{schema:'public',name:'rows'}]));
   });
 });
 describe('dataset catalog viewer', () => {
+  it('runs SQL explicitly, pages the executed query, retains drafts on refresh and resets table mode', async () => {
+    render(<DatasetCatalogView id="data-1" catalog={catalog} canEdit={false} />); await screen.findByLabelText('Table preview');
+    click('SQL view'); const count=calls.length; change('Dataset SQL','select id from orders where id > 10'); expect(calls).toHaveLength(count);
+    click('Run dataset SQL'); await waitFor(() => expect(calls.at(-1)?.body).toMatchObject({sql:'select id from orders where id > 10',offset:0}));
+    await waitFor(() => expect(screen.getByLabelText('Next page')).toBeEnabled()); click('Next page'); await waitFor(() => expect(calls.at(-1)?.body).toMatchObject({sql:'select id from orders where id > 10',offset:50}));
+    change('Dataset SQL','select secret from orders'); click('Refresh dataset'); await waitFor(() => expect(calls.at(-1)?.body).toMatchObject({sql:'select id from orders where id > 10',offset:50,refresh:true}));
+    await waitFor(() => expect(screen.getByLabelText('Run dataset SQL')).toBeEnabled()); failPreview=true; click('Run dataset SQL'); await screen.findByLabelText('Dataset preview error');
+    expect(screen.getByLabelText('Dataset SQL')).toHaveValue('select secret from orders'); expect(calls.at(-1)?.body.offset).toBe(0);
+    failPreview=false; click('Table view'); await waitFor(() => expect(calls.at(-1)?.body).toMatchObject({sql:'SELECT * FROM "sales"."orders"',offset:0}));
+  });
   it.each([
     ['stored', false, '3 rows · 4 columns'],
     ['stored', true, '3 rows shown · 4 columns'],

@@ -1,4 +1,4 @@
-/** Real PostgreSQL → connection wizard → restricted dataset → filtered document.
+/** Real PostgreSQL → dataset connection → restricted dataset → filtered document.
  * Requires a running feature build with DATASET__ALLOW_PRIVATE_NETWORKS=true,
  * the normal gate development outbox, Docker, and postgres:17-alpine.
  * Usage: node scripts/gate-postgres-datasets.mjs [base]
@@ -78,14 +78,16 @@ try {
   await owner.goto(`${base}/datasets/new`, { waitUntil: 'load' });
   await owner.getByLabel('Dataset title', { exact: true }).fill('Postgres gate warehouse');
   await owner.getByLabel('PostgreSQL', { exact: true }).click();
-  await owner.getByLabel('New connection', { exact: true }).click();
-  for (const [label, value] of Object.entries({ 'Connection name': 'Gate Postgres', Host: '127.0.0.1', Port: String(port), Database: 'postgres', Username: 'dataset_reader', Password: readerPassword })) {
+  for (const [label, value] of Object.entries({ Host: '127.0.0.1', Port: String(port), Database: 'postgres', Username: 'dataset_reader', Password: readerPassword })) {
     await owner.getByLabel(label, { exact: true }).fill(value);
   }
   await owner.getByLabel('Use SSL', { exact: true }).uncheck();
-  const connection = (await uiResponse(owner, '/api/my/connections', () => owner.getByLabel('Save connection', { exact: true }).click(), 'POST', 201)).connection;
-  assert.ok(connection.id); assert.ok(!Object.hasOwn(connection, 'password'));
-  const discovery = await uiResponse(owner, `/api/my/connections/${connection.id}/test`, () => owner.getByLabel('Test and discover', { exact: true }).click());
+  const secretResponse = owner.waitForResponse(response => new URL(response.url()).pathname === '/api/my/secrets' && response.request().method() === 'POST');
+  const discovery = await uiResponse(owner, '/api/my/datasets/discover', () => owner.getByLabel('Test and discover', { exact: true }).click());
+  const credential = await secretResponse;
+  assert.equal(credential.status(), 201); secretFree(await credential.json());
+  await owner.getByLabel('Password status', { exact: true }).waitFor();
+  assert.equal(await owner.getByLabel('Password', { exact: true }).count(), 0);
   assert.deepEqual(discovery.tables.map(table => `${table.schema}.${table.name}`).sort(), ['sales.orders', 'support.tickets']);
   assert.equal(await owner.getByLabel('Expose table sales.orders', { exact: true }).isChecked(), false);
   await owner.getByLabel('Toggle table sales.orders', { exact: true }).click();
@@ -107,14 +109,14 @@ try {
   assert.equal(await owner.getByLabel('Dataset table', { exact: true }).inputValue(), 'tickets');
   await owner.getByLabel('Dataset schema', { exact: true }).selectOption('sales');
   await previewContains(owner, '120');
-  log('connection wizard discovers schemas; selected columns and stable default schema persist into table picker');
+  log('dataset connection discovers schemas; selected columns and stable default schema persist into table picker');
 
   const metadata = await ownerApi(owner, `/api/my/artifacts/${datasetId}`);
   assert.equal(metadata.status, 200); secretFree(metadata.body);
   const exposed = metadata.body.meta.catalog.tables.find(table => table.schema === 'sales' && table.name === 'orders');
   assert.deepEqual(exposed.columns.map(column => column.name), ['id', 'region', 'amount']);
-  const connections = await ownerApi(owner, '/api/my/connections');
-  secretFree(connections.body); assert.ok(connections.body.connections.every(item => !Object.hasOwn(item, 'password')));
+  assert.ok(metadata.body.meta.catalog.connection.passwordSecretId);
+  assert.ok(!Object.hasOwn(metadata.body.meta.catalog.connection, 'password'));
   assert.equal((await guestApi(`/a/${datasetId}/tables`, { sql: 'select * from orders' })).status, 404, 'private dataset must reject an anonymous reader');
   assert.equal((await ownerApi(owner, `/api/my/artifacts/${datasetId}/sharing`, 'PUT', { visibility: 'unlisted' })).status, 200);
 
@@ -142,25 +144,65 @@ try {
   assert.equal((await admin.query('select sum(amount)::int as n from sales.orders')).rows[0].n, 240);
   log('forged reader queries cannot reach hidden columns, undeclared tables, catalogs or writes; database remains unchanged');
 
-  await owner.getByLabel('Edit dataset', { exact: true }).click();
-  await owner.getByLabel('Add SQL model', { exact: true }).click();
-  await owner.getByLabel('Model schema 1', { exact: true }).fill('sales');
-  await owner.getByLabel('Model name 1', { exact: true }).fill('region_totals');
-  await owner.getByLabel('Model SQL 1', { exact: true }).fill('select region, sum(amount)::int as total from orders group by region order by region');
-  await uiResponse(owner, '/api/my/datasets/preview', () => owner.getByLabel('Preview model 1', { exact: true }).click());
-  await previewContains(owner, '150', 'Model preview 1');
-  await uiResponse(owner, `/api/my/artifacts/${datasetId}`, () => owner.getByLabel('Save dataset', { exact: true }).click(), 'PUT');
-  await owner.waitForURL(url => url.pathname === `/a/${datasetId}`);
-  await owner.getByLabel('Dataset table', { exact: true }).selectOption('region_totals');
+  // A fresh model-only dataset chooses its stable default schema at creation.
+  await owner.goto(`${base}/datasets/new`, { waitUntil: 'load' });
+  await owner.getByLabel('Dataset title', { exact: true }).fill('Postgres model-only notebook');
+  await owner.getByLabel('PostgreSQL', { exact: true }).click();
+  for (const [label, value] of Object.entries({ Host: '127.0.0.1', Port: String(port), Database: 'postgres', Username: 'dataset_reader', Password: readerPassword })) await owner.getByLabel(label, { exact: true }).fill(value);
+  await owner.getByLabel('Use SSL', { exact: true }).uncheck();
+  await uiResponse(owner, '/api/my/datasets/discover', () => owner.getByLabel('Test and discover', { exact: true }).click());
+  await owner.getByLabel('Add notebook cell', { exact: true }).click();
+  await owner.getByLabel('Cell name 1', { exact: true }).fill('raw_orders');
+  await owner.getByLabel('Cell SQL 1', { exact: true }).fill('select region, amount from sales.orders');
+  await uiResponse(owner, '/api/my/datasets/notebook/preview', () => owner.getByLabel('Run cell 1', { exact: true }).click());
+  await previewContains(owner, '120', 'Cell preview 1');
+  assert.equal(await owner.getByLabel('Expose cell 1', { exact: true }).isChecked(), false);
+  await owner.getByLabel('Add notebook cell', { exact: true }).click();
+  await owner.getByLabel('Cell name 2', { exact: true }).fill('region_totals');
+  await owner.getByLabel('Cell SQL 2', { exact: true }).fill('select region, sum(amount)::int as total from raw_orders group by region order by region');
+  await uiResponse(owner, '/api/my/datasets/notebook/preview', () => owner.getByLabel('Run cell 2', { exact: true }).click());
+  await previewContains(owner, '150', 'Cell preview 2');
+  await owner.getByLabel('Expose cell 2', { exact: true }).check();
+  assert.equal(await owner.getByLabel('Expose table models.region_totals', { exact: true }).isChecked(), true);
+  // Publish only the final model. The intermediate cell and physical tables stay internal.
+  await owner.getByLabel('Expose schema sales', { exact: true }).uncheck();
+  await owner.getByLabel('Expose schema support', { exact: true }).uncheck();
+  await owner.getByLabel('Default schema', { exact: true }).selectOption('models');
+  await owner.getByLabel('SQL view', { exact: true }).click();
+  await owner.getByLabel('Dataset SQL', { exact: true }).fill('select * from models.region_totals');
+  await uiResponse(owner, '/api/my/datasets/preview', () => owner.getByLabel('Run dataset SQL', { exact: true }).click());
   await previewContains(owner, '150');
-  log('owner previews and saves a SQL model; the model becomes a queryable catalog table');
+  await owner.getByLabel('Dataset SQL', { exact: true }).fill('select * from sales.orders');
+  const deniedDraft = await uiResponse(owner, '/api/my/datasets/preview', () => owner.getByLabel('Run dataset SQL', { exact: true }).click(), 'POST', 400);
+  assert.ok(deniedDraft.error);
+  assert.equal(await owner.getByLabel('Dataset SQL', { exact: true }).inputValue(), 'select * from sales.orders');
+  await owner.getByLabel('Edit dataset source', { exact: true }).click();
+  const source = await owner.getByLabel('Dataset source', { exact: true }).inputValue();
+  assert.match(source, /<Dataset/); assert.match(source, /raw_orders/); secretFree(source);
+  await owner.getByLabel('Apply dataset source', { exact: true }).click();
+  const modelCreated = await uiResponse(owner, '/api/my/artifacts', () => owner.getByLabel('Save dataset', { exact: true }).click(), 'POST', 201);
+  const modelDatasetId = modelCreated.id;
+  await owner.waitForURL(url => url.pathname === `/a/${modelDatasetId}`);
+  assert.equal((await ownerApi(owner, `/api/my/artifacts/${modelDatasetId}/sharing`, 'PUT', { visibility: 'unlisted' })).status, 200);
+  assert.equal(await owner.getByLabel('Dataset schema', { exact: true }).inputValue(), 'models');
+  assert.equal(await owner.getByLabel('Dataset table', { exact: true }).inputValue(), 'region_totals');
+  await previewContains(owner, '150');
+  const publicPage = await fetch(`${base}/api/page/artifact/${modelDatasetId}`).then(response => response.json());
+  secretFree(publicPage);
+  const publicCatalog = publicPage.surface.catalog;
+  assert.equal(publicCatalog.tables.length, 1);
+  assert.ok(!Object.hasOwn(publicCatalog, 'notebook'));
+  assert.ok(!Object.hasOwn(publicCatalog, 'notebookSources'));
+  assert.ok(!JSON.stringify(publicPage).includes('raw_orders'));
+  for (const sql of ['select * from sales.orders', 'select * from raw_orders']) assert.equal((await guestApi(`/a/${modelDatasetId}/tables`, {sql})).status, 400);
+  log('chained notebook cells roundtrip through markup; only the exposed final model reaches readers');
 
   await admin.query('update sales.orders set amount=125 where id=1');
-  const refreshed = await uiResponse(owner, `/a/${datasetId}/tables`, () => owner.getByLabel('Refresh dataset', { exact: true }).click());
+  const refreshed = await uiResponse(owner, `/a/${modelDatasetId}/tables`, () => owner.getByLabel('Refresh dataset', { exact: true }).click());
   assert.equal(refreshed.rows.find(row => row.region === 'west').total, 155);
   await previewContains(owner, '155');
   assert.match(await owner.getByLabel('Refresh status', { exact: true }).innerText(), /Last refreshed.*Manual refresh/);
-  const finalMetadata = await ownerApi(owner, `/api/my/artifacts/${datasetId}`); secretFree(finalMetadata.body);
+  const finalMetadata = await ownerApi(owner, `/api/my/artifacts/${modelDatasetId}`); secretFree(finalMetadata.body);
   assert.ok(finalMetadata.body.meta.catalog.tables.some(table => table.name === 'region_totals'));
   log('manual refresh reads an external database update; model metadata stays credential-free');
   console.log('\nall good');
