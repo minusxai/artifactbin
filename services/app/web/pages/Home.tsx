@@ -96,6 +96,7 @@ export function HomePage() {
       {/* Kept outside the empty/full branch so a successful claim can report
         * its result while the page refreshes into the dashboard. */}
       <ClaimBanner />
+      <div className="mb-4 flex justify-end"><a href="/datasets/new" aria-label="Create dataset" className="rounded border border-edge-bright px-3 py-1.5 font-mono text-xs text-accent hover:border-accent">Create dataset</a></div>
       {empty ? (
         /* Inspiration, not decoration: an empty library has no examples of its
          * own, so these are the real published documents from the landing —
