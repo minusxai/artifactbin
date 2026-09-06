@@ -170,11 +170,11 @@ export function DatasetEditorPage() {
     }));
   };
   const exposedTables = useMemo(() => [
-    ...(kind === 'postgres' ? sources.filter(s => s.included && s.columns.length).map(s => ({ schema: s.schema, name: s.name })) : stored.filter(s => s.schema && s.name).map(s => ({ schema: s.schema, name: s.name }))),
-    ...models.filter(m => !m.stale && (m.selected.length || m.legacy)).map(m => ({ schema: m.schema, name: m.cell.name })),
+    ...(kind === 'postgres' ? sources.filter(s => s.included && s.columns.length).map(s => ({ schema: s.schema, name: s.name, columns: s.columns })) : stored.filter(s => s.schema && s.name).map(s => ({ schema: s.schema, name: s.name }))),
+    ...models.filter(m => !m.stale && (m.selected.length || m.legacy)).map(m => ({ schema: m.schema, name: m.cell.name, columns: m.selected })),
   ], [kind, sources, stored, models]);
   const exposedTableKey = JSON.stringify(exposedTables);
-  // Notebook presentation and hidden SQL drafts do not change the explorer's table catalog.
+  // Requery for exposed column changes; notebook presentation and hidden drafts leave this catalog stable.
   const explorerCatalog = useMemo(() => ({ kind, defaultSchema, refreshSeconds, tables: exposedTables }), [kind, defaultSchema, refreshSeconds, exposedTableKey]);
   // Use the latest draft at execution time; typing source/cell SQL does not itself execute final SQL.
   const queryDraft = useRef<(sql: string) => Promise<CatalogPreview>>(null!);

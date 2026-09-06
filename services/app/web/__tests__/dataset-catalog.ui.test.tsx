@@ -185,6 +185,22 @@ describe('dataset editor', () => {
     await waitFor(() => expect(screen.getByLabelText('Run dataset SQL')).toBeEnabled()); failPreview = true; click('Run dataset SQL'); await screen.findByLabelText('Dataset preview error'); expect(screen.getByLabelText('Dataset SQL')).toHaveValue('select forbidden from orders');
     expect(screen.queryByLabelText('Next page')).not.toBeInTheDocument();
   });
+  it.each(['physical', 'model'] as const)('refreshes the final preview when a %s column is removed from exposure', async tableKind => {
+    const columns = [{name:'id',type:'number' as const},{name:'secret',type:'string' as const}];
+    const schema = tableKind === 'physical' ? 'sales' : 'models';
+    const name = tableKind === 'physical' ? 'orders' : 'totals';
+    loadedCatalog={...catalog,defaultSchema:schema,
+      notebook:{cells:tableKind === 'model' ? [{id:'model-1',name,sql:'select id, secret from sales.orders'}] : []},
+      tables:[{schema,name,columns,...(tableKind === 'physical' ? {source:{schema:'sales',table:'orders'}} : {modelCellId:'model-1'})}],
+    };
+    previewColumns=columns;
+    editor(true); await waitFor(() => expect(screen.getByLabelText('Table preview')).toHaveTextContent('secret'));
+    const before=calls.filter(c => c.url === '/api/my/datasets/preview').length;
+    click(`Toggle table ${schema}.${name}`); previewColumns=[columns[0]]; click(`Expose column ${schema}.${name}.secret`);
+    await waitFor(() => expect(screen.getByLabelText('Table preview')).not.toHaveTextContent('secret'));
+    expect(calls.filter(c => c.url === '/api/my/datasets/preview')).toHaveLength(before + 1);
+    expect(calls.filter(c => c.url === '/api/my/datasets/preview').at(-1)?.body.dataset.tables[0].columns).toEqual(['id']);
+  });
   it('does not rerun final SQL when notebook presentation or an unexposed draft changes', async () => {
     editor(); await selectOrders(); await addCell('helper', 'select id from sales.orders');
     click('SQL view'); change('Dataset SQL','select id from orders'); await waitFor(() => expect(screen.getByLabelText('Run dataset SQL')).toBeEnabled()); click('Run dataset SQL');
