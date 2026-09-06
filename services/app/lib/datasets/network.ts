@@ -81,7 +81,7 @@ function socketHost(host: string): string {
  * original name again), and retain the original hostname for TLS identity.
  * An operator may explicitly allow loopback/RFC1918/ULA for self-hosted DBs.
  */
-export async function resolvePostgresHost(host: string, allowPrivate = false): Promise<string> {
+export async function resolvePostgresHost(host: string, allowPrivate = false, dnsServers: readonly string[] = []): Promise<string> {
   const name = socketHost(host);
   const permitted = (address: string) => permittedAddress(address, allowPrivate === true);
   const forbidden = () => new Error('PostgreSQL host resolves to an address that is not permitted.');
