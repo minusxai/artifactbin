@@ -88,12 +88,13 @@ try {
   const discovery = await uiResponse(owner, `/api/my/connections/${connection.id}/test`, () => owner.getByLabel('Test and discover', { exact: true }).click());
   assert.deepEqual(discovery.tables.map(table => `${table.schema}.${table.name}`).sort(), ['sales.orders', 'support.tickets']);
   assert.equal(await owner.getByLabel('Expose table sales.orders', { exact: true }).isChecked(), false);
-  await owner.getByLabel('Expose table sales.orders', { exact: true }).check();
+  await owner.getByLabel('Toggle table sales.orders', { exact: true }).click();
   for (const column of ['id', 'region', 'amount']) await owner.getByLabel(`Expose column sales.orders.${column}`, { exact: true }).check();
   assert.equal(await owner.getByLabel('Expose column sales.orders.customer_secret', { exact: true }).isChecked(), false);
   await owner.getByLabel('Default schema', { exact: true }).selectOption('sales');
   await owner.getByLabel('Expose table support.tickets', { exact: true }).check();
-  for (const column of ['id', 'subject']) await owner.getByLabel(`Expose column support.tickets.${column}`, { exact: true }).check();
+  await owner.getByLabel('Toggle table support.tickets', { exact: true }).click();
+  for (const column of ['id', 'subject']) assert.equal(await owner.getByLabel(`Expose column support.tickets.${column}`, { exact: true }).isChecked(), true);
   assert.equal(await owner.getByLabel('Default schema', { exact: true }).inputValue(), 'sales');
   await owner.getByLabel('Refresh interval', { exact: true }).fill('0');
   const created = await uiResponse(owner, '/api/my/artifacts', () => owner.getByLabel('Save dataset', { exact: true }).click(), 'POST', 201);

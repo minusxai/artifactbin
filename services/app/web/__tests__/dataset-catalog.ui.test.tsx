@@ -46,7 +46,7 @@ async function discover() {
 }
 async function selectOrders() {
   await discover();
-  fireEvent.click(screen.getByLabelText('Expose table sales.orders'));
+  fireEvent.click(screen.getByLabelText('Toggle table sales.orders'));
   fireEvent.click(screen.getByLabelText('Expose column sales.orders.id'));
   change('Default schema', 'sales');
 }
@@ -78,7 +78,7 @@ describe('dataset editor', () => {
     editor(); await selectOrders();
     expect(screen.getByLabelText('Expose column sales.orders.secret')).not.toBeChecked();
     fireEvent.click(screen.getByLabelText('Expose table crm.people'));
-    fireEvent.click(screen.getByLabelText('Expose column crm.people.name'));
+    fireEvent.click(screen.getByLabelText('Toggle table crm.people'));
     expect(screen.getByLabelText('Default schema')).toHaveValue('sales');
     change('Dataset title', 'Orders');
     fireEvent.click(screen.getByLabelText('Save dataset'));
@@ -89,6 +89,50 @@ describe('dataset editor', () => {
     const body = calls.find(c => c.url === '/api/my/artifacts')!.body;
     expect(body.visibility).toBe('private');
     expect(JSON.stringify(body)).not.toMatch(/password|username|db.example/);
+  });
+  it('selects whole branches, shows partial selections and collapses without changing exposure', async () => {
+    editor(); await discover();
+    expect(screen.queryByLabelText('Logical schema sales.orders')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Expose column sales.orders.id')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Expose schema sales'));
+    expect(screen.getByLabelText('Expose table sales.orders')).toBeChecked();
+    fireEvent.click(screen.getByLabelText('Toggle table sales.orders'));
+    expect(screen.getByLabelText('Expose column sales.orders.id')).toBeChecked();
+    expect(screen.getByLabelText('Expose column sales.orders.secret')).toBeChecked();
+    fireEvent.click(screen.getByLabelText('Expose column sales.orders.secret'));
+    expect(screen.getByLabelText('Expose table sales.orders')).toBePartiallyChecked();
+    expect(screen.getByLabelText('Expose schema sales')).toBePartiallyChecked();
+    fireEvent.click(screen.getByLabelText('Toggle schema sales'));
+    expect(screen.queryByLabelText('Expose table sales.orders')).not.toBeInTheDocument();
+    change('Default schema', 'sales');
+    fireEvent.click(screen.getByLabelText('Save dataset'));
+    await waitFor(() => expect(calls.find(c => c.url === '/api/my/artifacts')?.body.dataset.tables).toEqual([
+      {schema:'sales',name:'orders',source:{schema:'sales',table:'orders'},columns:['id']},
+    ]));
+  });
+  it('clears branch selections and leaves newly discovered columns excluded', async () => {
+    editor(true);
+    await waitFor(() => expect(screen.getByLabelText('Dataset title')).toHaveValue('Orders'));
+    fireEvent.click(screen.getByLabelText('Test and discover'));
+    await screen.findByLabelText('Expose schema crm');
+    expect(screen.getByLabelText('Expose schema sales')).toBePartiallyChecked();
+    fireEvent.click(screen.getByLabelText('Toggle table sales.orders'));
+    expect(screen.getByLabelText('Expose column sales.orders.secret')).not.toBeChecked();
+    fireEvent.click(screen.getByLabelText('Expose table sales.orders'));
+    expect(screen.getByLabelText('Expose column sales.orders.secret')).toBeChecked();
+    fireEvent.click(screen.getByLabelText('Expose schema sales'));
+    expect(screen.getByLabelText('Expose table sales.orders')).not.toBeChecked();
+    expect(screen.getByLabelText('Expose column sales.orders.id')).not.toBeChecked();
+    expect(screen.getByLabelText('Expose column sales.orders.secret')).not.toBeChecked();
+  });
+  it('preserves previously saved source mappings without offering renaming controls', async () => {
+    loadedCatalog = {...catalog, defaultSchema:'analytics',tables:[{...catalog.tables[0],schema:'analytics',name:'purchases'}]};
+    editor(true);
+    await waitFor(() => expect(screen.getByLabelText('Dataset title')).toHaveValue('Orders'));
+    expect(screen.queryByLabelText(/Logical schema/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Logical table/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Save dataset'));
+    await waitFor(() => expect(calls.find(c => c.method === 'PUT')?.body.dataset.tables).toEqual(loadedCatalog.tables.map(({schema,name,source,columns})=>({schema,name,source,columns:columns.map(c=>c.name)}))));
   });
   it('authors SQL models through named fields, previews them, and preserves SQL after errors', async () => {
     editor(); await selectOrders();
@@ -105,6 +149,7 @@ describe('dataset editor', () => {
   it('loads the catalog for editing and preserves changes on a version conflict', async () => {
     editor(true);
     await waitFor(() => expect(screen.getByLabelText('Dataset title')).toHaveValue('Orders'));
+    fireEvent.click(screen.getByLabelText('Toggle table sales.orders'));
     expect(screen.getByLabelText('Expose column sales.orders.id')).toBeChecked();
     change('Dataset title', 'New title'); failSave = true;
     fireEvent.click(screen.getByLabelText('Save dataset'));
@@ -121,6 +166,7 @@ describe('dataset editor', () => {
     expect(screen.getByLabelText('Connection')).toBeDisabled();
     expect(screen.getByLabelText('Test and discover')).toBeDisabled();
     expect(screen.getByLabelText('Expose table sales.orders')).toBeDisabled();
+    fireEvent.click(screen.getByLabelText('Toggle table sales.orders'));
     expect(screen.getByLabelText('Expose column sales.orders.id')).toBeChecked();
     expect(screen.getByLabelText('Expose column sales.orders.id')).toBeDisabled();
     expect(screen.queryByLabelText('New connection')).not.toBeInTheDocument();

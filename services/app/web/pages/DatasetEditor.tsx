@@ -2,13 +2,13 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Navigate, useParams } from 'react-router';
 import { Button, Input, PANEL } from '@/components/ui';
 import { CatalogRows, type CatalogPreview } from '@/components/DatasetCatalogView';
+import { DatasetWhitelist, type SourceDraft } from '@/components/DatasetWhitelist';
 import type { CatalogInput, ConnectionSummary, DatasetCatalog, DiscoveredTable, PostgresConfig } from '@/lib/datasets/types';
 import type { Row } from '@/lib/story/dataflow';
 import { useRouter } from '@/lib/navigation';
 import { useSession } from '@/web/session';
 
 type InputTable = CatalogInput['tables'][number];
-type SourceDraft = { discovery: DiscoveredTable; included: boolean; schema: string; name: string; columns: string[] };
 type ModelDraft = { key: number; schema: string; name: string; sql: string; preview?: CatalogPreview };
 type StoredDraft = { key: number; schema: string; name: string; rows: string; retained: boolean };
 const initialConnection = (): PostgresConfig & { name: string } => ({ name: '', host: '', port: 5432, database: '', username: '', password: '', ssl: true });
@@ -65,7 +65,6 @@ export function DatasetEditorPage() {
     setBusy(operation); setError(''); setNotice('');
     try { await action(); } catch (err) { setError(err instanceof Error ? err.message : 'Could not reach the server.'); } finally { setBusy(''); }
   };
-  const updateSource = (index: number, patch: Partial<SourceDraft>) => setSources(items => items.map((item, i) => i === index ? { ...item, ...patch } : item));
   const updateModel = (key: number, patch: Partial<ModelDraft>) => setModels(items => items.map(item => item.key === key ? { ...item, ...patch, ...(patch.sql !== undefined ? { preview: undefined } : {}) } : item));
   const updateStored = (key: number, patch: Partial<StoredDraft>) => setStored(items => items.map(item => item.key === key ? { ...item, ...patch } : item));
 
@@ -110,7 +109,6 @@ export function DatasetEditorPage() {
   });
   const selectedSchemas = [...new Set([...(kind === 'postgres' ? sources.filter(s => s.included).map(s => s.schema) : stored.map(s => s.schema)), ...models.map(m => m.schema)])].filter(Boolean);
   const sharedConnection = Boolean(id && kind === 'postgres' && connectionId && !connections.some(c => c.id === connectionId));
-  const discoverySchemas = [...new Set(sources.map(s => s.discovery.schema))];
 
   if (session && !session.user) return <Navigate to={`/login?callbackUrl=${encodeURIComponent(id ? `/datasets/${id}/edit` : '/datasets/new')}`} replace />;
   return <main className="mx-auto mt-8 max-w-4xl space-y-5 px-4 pb-24 sm:px-6">
@@ -139,18 +137,7 @@ export function DatasetEditorPage() {
           </div>}
           <Button aria-label="Test and discover" variant="ghost" disabled={!connectionId || sharedConnection} onClick={() => void discover()}>Test and discover</Button>
         </section>}
-        {kind === 'postgres' && sources.length > 0 && <fieldset disabled={sharedConnection} className={`${PANEL} min-w-0 space-y-4 p-4`} aria-label="Source exposure">
-          <div><h2 className="font-medium text-fg">Choose what to expose</h2><p className="mt-1 text-sm text-muted">Tables and columns start excluded. Documents can query only the columns you select.</p></div>
-          {discoverySchemas.map(schema => <div key={schema} className="space-y-2 border-t border-edge pt-3">
-            <label className="flex items-center gap-2 font-mono text-sm text-fg"><input type="checkbox" aria-label={`Expose schema ${schema}`} checked={sources.filter(s => s.discovery.schema === schema).every(s => s.included)} onChange={e => setSources(items => items.map(s => s.discovery.schema === schema ? { ...s, included: e.target.checked } : s))} />{schema}</label>
-            {sources.map((source, index) => source.discovery.schema !== schema ? null : <div key={sourceKey(source.discovery)} className="ml-3 rounded border border-edge p-3">
-              <label className="flex items-center gap-2 font-mono text-xs text-fg"><input type="checkbox" aria-label={`Expose table ${schema}.${source.discovery.name}`} checked={source.included} onChange={e => updateSource(index, { included: e.target.checked })} />{source.discovery.name}<span className="text-faint">{source.discovery.columns.length} columns</span></label>
-              {source.included && <div className="mt-3 space-y-3"><div className="grid gap-3 sm:grid-cols-2"><Field name="Logical schema"><Input aria-label={`Logical schema ${schema}.${source.discovery.name}`} value={source.schema} onChange={e => updateSource(index, { schema: e.target.value })} /></Field><Field name="Logical table name"><Input aria-label={`Logical table ${schema}.${source.discovery.name}`} value={source.name} onChange={e => updateSource(index, { name: e.target.value })} /></Field></div>
-                <div className="flex flex-wrap gap-x-5 gap-y-2">{source.discovery.columns.map(column => <label key={column.name} className="flex items-center gap-2 font-mono text-xs text-muted"><input type="checkbox" aria-label={`Expose column ${schema}.${source.discovery.name}.${column.name}`} checked={source.columns.includes(column.name)} onChange={e => updateSource(index, { columns: e.target.checked ? [...source.columns, column.name] : source.columns.filter(c => c !== column.name) })} />{column.name}<span className="text-faint">{column.type}</span></label>)}</div>
-              </div>}
-            </div>)}
-          </div>)}
-        </fieldset>}
+        {kind === 'postgres' && sources.length > 0 && <DatasetWhitelist sources={sources} onChange={setSources} disabled={sharedConnection} />}
         {kind === 'stored' && <section className={`${PANEL} space-y-4 p-4`} aria-label="Stored tables">
           <h2 className="font-medium text-fg">Stored tables</h2>
           {stored.map((table, index) => <div key={table.key} className="space-y-3 border-t border-edge pt-3"><div className="grid gap-3 sm:grid-cols-2"><Field name="Schema"><Input aria-label={`Stored schema ${index + 1}`} value={table.schema} onChange={e => updateStored(table.key, { schema: e.target.value })} disabled={table.retained} /></Field><Field name="Table name"><Input aria-label={`Stored table name ${index + 1}`} value={table.name} onChange={e => updateStored(table.key, { name: e.target.value })} disabled={table.retained} /></Field></div><Field name={table.retained ? 'Rows (leave blank to keep stored rows)' : 'Rows as JSON'}><textarea aria-label={`Stored rows ${index + 1}`} className={`${control} min-h-28`} value={table.rows} onChange={e => updateStored(table.key, { rows: e.target.value })} placeholder='[{"id": 1}]' /></Field><Button aria-label={`Remove stored table ${index + 1}`} variant="ghost" onClick={() => setStored(items => items.filter(s => s.key !== table.key))}>Remove table</Button></div>)}
