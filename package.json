@@ -15,7 +15,7 @@
     "build": "npm run build -w services/app && node scripts/build-server.mjs dist/proxy-server.mjs",
     "start": "NODE_ENV=production node dist/proxy-server.mjs",
     "validate": "npm run check:residual-names && npm run validate -w services/app",
-    "test": "npm test -w services/app",
+    "test": "npm test -w services/app && npm test -w services/cli",
     "test:watch": "vitest",
     "mint": "node scripts/mint.mjs",
     "build:runtime": "npm run build:runtime -w services/app",
@@ -84,6 +84,7 @@
     "services/sql",
     "services/browser",
     "services/events",
-    "services/proxy"
+    "services/proxy",
+    "services/cli"
   ]
 }

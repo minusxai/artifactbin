@@ -1,3 +1,4 @@
+import RemoteMentionPicker from './RemoteMentionPicker';
 'use client';
 
 /**
@@ -21,7 +22,7 @@
  *     restore and an effect puts it back after the commit; without that, every
  *     press sends the cursor to the bottom of the draft.
  */
-import { useCallback, useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Bold, Code, Italic, Link2, List } from 'lucide-react';
 import MarkdownLite from '@/components/MarkdownLite';
 import { Tooltip } from '@/components/Tooltip';
@@ -69,6 +70,7 @@ export default function MarkdownField({
   label, previewLabel, previewToggleLabel, value, onChange, onSubmit,
   previewing, onPreviewingChange, rows = 3, placeholder, autoFocus, className = '', children,
 }: MarkdownFieldProps) {
+  const [mention, setMention] = useState<{start:number;end:number;query:string}|null>(null);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
   const restore = useRef<{ start: number; end: number } | null>(null);
 
@@ -148,7 +150,13 @@ export default function MarkdownField({
           ref={fieldRef}
           aria-label={label}
           value={value}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) => {
+            const text=event.target.value, end=event.target.selectionStart;
+            const match=text.slice(0,end).match(/(?:^|\s)@([^\s@\[\]]*)$/);
+            setMention(match?{start:end-match[1].length-1,end,query:match[1]}:null);
+            onChange(text);
+          }}
+          onClick={() => setMention(null)}
           onKeyDown={onKeyDown}
           rows={rows}
           autoFocus={autoFocus}
@@ -156,6 +164,10 @@ export default function MarkdownField({
           className="mb-2 w-full resize-y rounded-[4px] border border-edge bg-surface p-2 leading-snug focus:border-accent focus:outline-none"
         />
       )}
+      {!previewing && mention && <RemoteMentionPicker query={mention.query} onSelect={text=>{
+        const caret=mention.start+text.length;restore.current={start:caret,end:caret};
+        onChange(value.slice(0,mention.start)+text+value.slice(mention.end));setMention(null);
+      }}/>}
     </div>
   );
 }

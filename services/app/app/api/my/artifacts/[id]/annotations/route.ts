@@ -1,3 +1,4 @@
+import { notifyRemoteComment } from '@/lib/remote/mentions';
 /**
  * The BROWSER's annotation door — the only place annotations are CREATED.
  * POST { path, edit_id, body }: `path` is the BODY path the frame reported
@@ -81,5 +82,6 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
     if (made.refused === 'stale') return json({ error: 'stale', edit_id: made.head.editId, version: made.head.version }, 409);
     return json({ error: made.refused }, 400);
   }
+  notifyRemoteComment(scoped.userId, id, made.id, made.thread[0]);
   return json(made, 201);
 }

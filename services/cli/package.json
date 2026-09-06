@@ -1,0 +1,39 @@
+{
+  "name": "@artifactbin/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "description": "Run a local terminal with Artifact Bin remote access",
+  "bin": {
+    "afbin": "dist/afbin.mjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/types/cli/src/index.d.ts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "files": [
+    "dist/afbin.mjs",
+    "dist/index.mjs",
+    "dist/types",
+    "scripts/prepare-pty.mjs"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --import tsx --test test/*.test.ts",
+    "build:binary": "node scripts/binary.mjs",
+    "postinstall": "node scripts/prepare-pty.mjs",
+    "test:binary": "node scripts/test-binary.mjs"
+  },
+  "dependencies": {
+    "node-pty": "1.1.0"
+  },
+  "devDependencies": {
+    "postject": "1.0.0-alpha.6"
+  },
+  "types": "./dist/types/cli/src/index.d.ts"
+}

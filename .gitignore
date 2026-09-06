@@ -40,3 +40,4 @@ tmp/
 services/app/dist/
 services/app/data/
 video/
+services/cli/dist/

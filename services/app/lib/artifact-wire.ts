@@ -1,3 +1,4 @@
+import { notifyRemoteComment } from './remote/mentions';
 import {prepareCatalog,catalogOf} from '@/lib/datasets/catalog';
 import {DatasetError} from '@/lib/datasets/errors';
 /**
@@ -723,6 +724,7 @@ export async function respondToAnnotationAction(
   if (!action) return json({ error: 'invalid_annotation_action' }, 400);
   const wire = await actOnAnnotationFor(actor, id, annId, action, author);
   if (!wire) return json({ error: 'not_found' }, 404);
+  if (action.reply && author.kind === 'human') notifyRemoteComment(actor.userId, id, annId, wire.thread[wire.thread.length - 1]);
   return json(wire);
 }
 
