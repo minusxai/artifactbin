@@ -1,6 +1,7 @@
 import {DATASET_ALLOW_PRIVATE_NETWORKS} from '@/lib/config';
 import {resolvePostgresHost} from './network';
 import {isIP} from 'node:net';
+import {checkServerIdentity} from 'node:tls';
 import pg from 'pg';
 import Cursor from 'pg-cursor';
 import type { DatasetColumn } from '@/lib/story/dataset-shape';
@@ -73,9 +74,16 @@ function bounded(value: number | undefined, fallback: number, min: number, max: 
 async function transaction<T>(config: PostgresConfig, timeoutMs: number, work: (client: pg.Client) => Promise<T>): Promise<T> {
   return withConnectionSlot(async () => {
     const address = await resolvePostgresHost(config.host, DATASET_ALLOW_PRIVATE_NETWORKS);
+    const identityHost = config.host.startsWith('[') ? config.host.slice(1, -1) : config.host;
     const client = new pg.Client({
       host: address, port: config.port, database: config.database, user: config.username, password: config.password,
-      ssl: config.ssl ? { rejectUnauthorized: true, ...(!isIP(config.host) ? { servername: config.host } : {}) } : false,
+      ssl: config.ssl ? {
+        rejectUnauthorized: true,
+        ...(!isIP(identityHost) ? { servername: identityHost } : {}),
+        // The socket is pinned to an IP. Verify the configured DNS name (or
+        // literal IP SAN), never the pinned socket's/default TLS hostname.
+        checkServerIdentity: (_host, certificate) => checkServerIdentity(identityHost, certificate),
+      } : false,
       connectionTimeoutMillis: 5_000,
       statement_timeout: timeoutMs, application_name: 'artifactbin-dataset',
       types: { getTypeParser(oid, format) {

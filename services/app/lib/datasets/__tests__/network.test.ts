@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { resolvePostgresHost } from '../network';
@@ -8,8 +8,37 @@ const lookupMock = vi.mocked(lookup);
 const answers = (...addresses: string[]) => lookupMock.mockResolvedValue(addresses.map(address => ({ address, family: isIP(address) })) as never);
 
 beforeEach(() => { vi.resetAllMocks(); answers('8.8.8.8'); });
+afterEach(() => { vi.useRealTimers(); });
 
 describe('PostgreSQL host resolution', () => {
+  it('times out DNS without leaking diagnostics and caps uncancellable native work', async () => {
+    vi.useFakeTimers();
+    let complete!: (value: unknown) => void;
+    lookupMock.mockImplementation(() => new Promise(resolve => { complete = resolve; }) as never);
+    const pending = new Map<number, (value: unknown) => void>();
+    const outcomes: Array<Promise<string>> = [];
+    try {
+      for (let index = 0; index < 8; index++) {
+        outcomes.push(resolvePostgresHost(`slow-${index}.example.com`).then(() => 'accepted', error => error.message));
+        pending.set(index, complete);
+      }
+      let message: string | undefined;
+      const observed = outcomes[0].then(value => { message = value; });
+      await vi.advanceTimersByTimeAsync(3001);
+      expect(message).toBe('PostgreSQL host resolution timed out.');
+      await observed;
+      const refused = resolvePostgresHost('ninth.example.com').then(() => 'accepted', error => error.message);
+      await vi.advanceTimersByTimeAsync(3001);
+      expect(lookupMock).toHaveBeenCalledTimes(8);
+      expect(await refused).toMatch(/busy/);
+      if (lookupMock.mock.calls.length > 8) complete([{ address: '8.8.8.8', family: 4 }]);
+    } finally {
+      for (const resolve of pending.values()) resolve([{ address: '8.8.8.8', family: 4 }]);
+      await Promise.all(outcomes);
+    }
+    answers('8.8.8.8');
+    expect(await resolvePostgresHost('recovered.example.com')).toBe('8.8.8.8');
+  });
   it('resolves all answers once and returns the first vetted address for socket pinning', async () => {
     answers('2606:4700:4700::1111', '8.8.8.8');
     expect(await resolvePostgresHost('warehouse.example.com')).toBe('2606:4700:4700::1111');

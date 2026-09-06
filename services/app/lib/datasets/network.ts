@@ -2,6 +2,28 @@ import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { isForbiddenIp } from '@/lib/web-ingest/guard';
 
+const DNS_TIMEOUT_MS = 3000;
+let pendingLookups = 0;
+
+/** dns.lookup cannot cancel its native getaddrinfo job. Keep its reservation
+ * until that job settles, even after the caller's deadline, so repeated slow
+ * requests cannot fill libuv's queue without bound. Literal IPs bypass DNS. */
+async function boundedLookup(name: string) {
+  if (pendingLookups >= 8) throw new Error('PostgreSQL host resolver is busy.');
+  pendingLookups++;
+  const operation = lookup(name, { all: true, verbatim: true }).finally(() => { pendingLookups--; });
+  const timeout = new Error('PostgreSQL host resolution timed out.');
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(timeout), DNS_TIMEOUT_MS); }),
+    ]);
+  } catch (error) {
+    throw error === timeout ? timeout : new Error('PostgreSQL host could not be resolved.');
+  } finally { clearTimeout(timer); }
+}
+
 /** The operator override admits database networks, never metadata or multicast. */
 function privateV4(address: string): boolean {
   const [a, b] = address.split('.').map(Number);
@@ -67,12 +89,7 @@ export async function resolvePostgresHost(host: string, allowPrivate = false): P
     if (!permitted(name)) throw forbidden();
     return name;
   }
-  let addresses;
-  try {
-    addresses = await lookup(name, { all: true, verbatim: true });
-  } catch {
-    throw new Error('PostgreSQL host could not be resolved.');
-  }
+  const addresses = await boundedLookup(name);
   if (!Array.isArray(addresses) || !addresses.length) throw new Error('PostgreSQL host could not be resolved.');
   if (addresses.some(({ address, family }) => !permitted(address) || isIP(address) !== family)) throw forbidden();
   return addresses[0].address;

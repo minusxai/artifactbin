@@ -9,6 +9,7 @@ vi.mock('pg', () => ({ default: {
     async end() { fixture.active--; }
   },
 } }));
+vi.mock('../network', () => ({ resolvePostgresHost: vi.fn(async () => '8.8.8.8') }));
 import { discoverPostgres } from '../postgres';
 const config = { host: 'fixture', port: 5432, database: 'fixture', username: 'fixture', password: 'secret', ssl: false };
 afterEach(() => { fixture.release?.(); fixture.active = 0; fixture.maximum = 0; fixture.blocked = undefined; vi.useRealTimers(); });
@@ -16,9 +17,10 @@ it('limits connections to eight and rejects requests beyond its bounded queue', 
   fixture.blocked = new Promise(resolve => { fixture.release = resolve; });
   const requests = Array.from({ length: 41 }, () => discoverPostgres(config));
   const results = Promise.allSettled(requests);
-  await Promise.resolve();
-  expect(fixture.maximum).toBe(8);
-  fixture.release!();
+  try {
+    await Promise.resolve(); await Promise.resolve();
+    expect(fixture.maximum).toBe(8);
+  } finally { fixture.release!(); await results; }
   const settled = await results;
   expect(settled.filter(result => result.status === 'fulfilled')).toHaveLength(40);
   expect(settled.filter(result => result.status === 'rejected')).toHaveLength(1);
@@ -29,9 +31,12 @@ it('expires queued work and removes it before a slot becomes free', async () => 
   fixture.blocked = new Promise(resolve => { fixture.release = resolve; });
   const holders = Array.from({ length: 8 }, () => discoverPostgres(config));
   const queued = discoverPostgres(config);
-  const expectation = expect(queued).rejects.toThrow(/queue timed out/);
-  await vi.advanceTimersByTimeAsync(1001);
-  fixture.release!();
-  await expectation; await Promise.all(holders);
+  const observed = queued.then(() => 'accepted', error => error.message);
+  const completed = Promise.allSettled(holders);
+  try {
+    await vi.advanceTimersByTimeAsync(1001);
+    expect(await observed).toMatch(/queue timed out/);
+  } finally { fixture.release!(); await completed; }
+  expect((await completed).every(result => result.status === 'fulfilled')).toBe(true);
   expect(fixture.active).toBe(0); expect(fixture.maximum).toBe(8);
 });
