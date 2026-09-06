@@ -5,6 +5,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { compileDatasetSql } from '../sql';
 import { discoverPostgres, queryPostgres } from '../postgres';
 import type { DatasetCatalog, PostgresConfig } from '../types';
+import type { Scalar } from '@/lib/story/dataflow';
+import type { DatasetColumn } from '@/lib/story/dataset-shape';
 
 const catalog: DatasetCatalog = { kind: 'postgres', defaultSchema: 'analytics', refreshSeconds: 60, tables: [
   { schema: 'analytics', name: 'people', source: { schema: 'private_data', table: 'people' }, columns: [{ name: 'id', type: 'number' }, { name: 'name', type: 'string' }] },
@@ -50,6 +52,30 @@ describe.skipIf(!dockerAvailable)('Postgres catalog isolation and bounded execut
     const c = compileDatasetSql(catalog, "select $name::text as name, $nil::text as nil, $name::text as again, '$untouched' as literal, $$dollar $untouched$$ as dollars /* $ignored /* $nested */ */ -- $line\n", { name: "O'Reilly", nil: null });
     expect(c.values).toEqual(["O'Reilly", null]);
     expect((await queryPostgres(config, c.sql, c.values)).rows[0]).toEqual({ name: "O'Reilly", nil: null, again: "O'Reilly", literal: '$untouched', dollars: 'dollar $untouched' });
+  });
+  it.each([null, 'Ada'])('types a nullable string filter with value %s before PostgreSQL inference', async name => {
+    const compiled = compileDatasetSql(catalog, 'select name from people where $name is null or name=$name order by id', { name }, { name: 'string' });
+    expect(compiled.values).toEqual([name]);
+    expect((await queryPostgres(config, compiled.sql, compiled.values)).rows).toEqual(name === null ? [{ name: 'Ada' }, { name: 'Grace' }, { name: 'Linus' }] : [{ name: 'Ada' }]);
+  });
+  it.each([
+    ['number', 2, 'id=$value', [{ name: 'Grace' }]],
+    ['date', '2026-09-06', "date '2026-09-06'=$value", [{ name: 'Ada' }, { name: 'Grace' }, { name: 'Linus' }]],
+    ['boolean', true, '$value=true', [{ name: 'Ada' }, { name: 'Grace' }, { name: 'Linus' }]],
+  ] as const)('types %s nullable filters and native values', async (kind, value, predicate, expected) => {
+    for (const bound of [value, null]) {
+      const compiled = compileDatasetSql(catalog, `select name from people where $value is null or ${predicate} order by id`, { value: bound }, { value: kind });
+      expect((await queryPostgres(config, compiled.sql, compiled.values)).rows).toEqual(bound === null ? [{ name: 'Ada' }, { name: 'Grace' }, { name: 'Linus' }] : expected);
+    }
+  });
+  it('types projected parameters including nulls using result-field metadata', async () => {
+    const types = { text: 'string', n: 'number', flag: 'boolean', day: 'date' } as const;
+    const compiled = compileDatasetSql(catalog, 'select $text as text, $n as n, $flag as flag, $day as day', { text: 'hello', n: 1.25, flag: false, day: '2026-09-06' }, types);
+    const result = await queryPostgres(config, compiled.sql, compiled.values);
+    expect(result.rows).toEqual([{ text: 'hello', n: 1.25, flag: false, day: '2026-09-06' }]);
+    expect(result.columns).toEqual(Object.entries(types).map(([name, type]) => ({ name, type })));
+    const nulls = compileDatasetSql(catalog, 'select $text as text, $n as n, $flag as flag, $day as day', { text: null, n: null, flag: null, day: null }, types);
+    expect((await queryPostgres(config, nulls.sql, nulls.values)).columns).toEqual(result.columns);
   });
   it('expands models and projects their declared columns', async () => {
     expect((await run('select * from names', { minimum: 1 })).rows).toEqual([{ name: 'Grace' }, { name: 'Linus' }]);
@@ -113,6 +139,14 @@ describe('SQL compiler rejects unsafe or unsupported operations', () => {
     "select set_config('search_path','public',false)", 'select pg_catalog.count(*) from people', "select 'pg_authid'::regclass", "select 'x'::public.secret_type",
     'select 1 OPERATOR(public.+) 2', 'select (select pg_sleep(1))', 'select * from people p cross join lateral pg_sleep(1)', 'select current_user', 'select $missing', 'select $1',
   ])('refuses %s', sql => { expect(() => compileDatasetSql(catalog, sql)).toThrow(/Dataset SQL/); });
+  it.each([
+    ['regclass', null], ['number', '2'], ['boolean', 1], ['date', true], ['string', 2],
+  ])('rejects invalid parameter type/value pairs %s and %s', (kind, value) => {
+    expect(() => compileDatasetSql(catalog, 'select $value', { value: value as Scalar }, { value: kind as DatasetColumn['type'] })).toThrow(/Dataset SQL:.*parameter/);
+  });
+  it('requires metadata for each used parameter when a type map is supplied', () => {
+    expect(() => compileDatasetSql(catalog, 'select $value', { value: null }, {})).toThrow(/parameter/);
+  });
   it('detects model cycles', () => {
     const cyclic = { ...catalog, tables: [{ schema: 'analytics', name: 'a', sql: 'select * from b', columns: [{ name: 'id', type: 'number' as const }] }, { schema: 'analytics', name: 'b', sql: 'select * from a', columns: [{ name: 'id', type: 'number' as const }] }] };
     expect(() => compileDatasetSql(cyclic, 'select * from a')).toThrow(/cycl/i);

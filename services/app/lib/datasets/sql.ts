@@ -1,6 +1,7 @@
 import { parse, toSql, type SelectStatement } from 'pgsql-ast-parser';
 import type { DatasetCatalog } from './types';
 import type { Scalar } from '@/lib/story/dataflow';
+import type { DatasetColumn } from '@/lib/story/dataset-shape';
 
 const FUNCTIONS = new Set(`exists count sum avg min max bool_and bool_or every array_agg string_agg json_agg jsonb_agg json_object_agg jsonb_object_agg
   abs ceil ceiling floor round trunc mod power sqrt exp ln log sign greatest least coalesce nullif
@@ -82,8 +83,12 @@ function bindParameters(sql: string, bind: (name: string) => string): string {
 /** Compile one read query against the public catalog. Every physical relation is
  * hidden behind a projection, so PostgreSQL itself enforces column visibility in
  * SELECT, predicates, joins, stars and correlated subqueries alike. */
-export function compileDatasetSql(catalog: DatasetCatalog, sql: string, params: Record<string, Scalar> = {}): { sql: string; values: Scalar[] } {
+export function compileDatasetSql(catalog: DatasetCatalog, sql: string, params: Record<string, Scalar> = {}, paramTypes?: Record<string, DatasetColumn['type']>): { sql: string; values: Scalar[] } {
   const values: Scalar[] = []; const bindings = new Map<string, string>();
+  const bindingTypes = new Map<string, string>();
+  // Schema-qualified names must be the catalog names, not SQL aliases:
+  // pg_catalog.float8 is DOUBLE PRECISION; pg_catalog.bool is BOOLEAN.
+  const parameterCasts: Record<DatasetColumn['type'], string> = { string: 'text', number: 'float8', boolean: 'bool', date: 'date' };
   let expanded = 0;
   function read(text: string): Node {
     if (typeof text !== 'string' || text.length > 100_000) fail('query is too large');
@@ -91,7 +96,17 @@ export function compileDatasetSql(catalog: DatasetCatalog, sql: string, params: 
       if (!Object.hasOwn(params, name)) fail(`undeclared parameter $${name}`);
       const value = params[name];
       if (!(value === null || typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)))) fail('invalid parameter');
-      if (!bindings.has(name)) { values.push(value); bindings.set(name, `$${values.length}`); }
+      if (paramTypes !== undefined) {
+        if (!Object.hasOwn(paramTypes, name)) fail(`missing parameter type for $${name}`);
+        const kind = paramTypes[name];
+        if (!Object.hasOwn(parameterCasts, kind)) fail('invalid parameter type');
+        const expectedKind = kind === 'date' ? 'string' : kind;
+        if (value !== null && typeof value !== expectedKind) fail(`parameter $${name} does not match its declared type`);
+      }
+      if (!bindings.has(name)) {
+        values.push(value); const position = `$${values.length}`; bindings.set(name, position);
+        if (paramTypes !== undefined) bindingTypes.set(position, parameterCasts[paramTypes[name]]);
+      }
       return bindings.get(name)!;
     });
     let statements;
@@ -110,6 +125,12 @@ export function compileDatasetSql(catalog: DatasetCatalog, sql: string, params: 
     if (Array.isArray(value)) return value.map(child => walk(child, scope, stack, depth + 1));
     if (!value || typeof value !== 'object') return value;
     const node = value as Node;
+    if (node.type === 'parameter') {
+      const name = bindingTypes.get(String(node.name));
+      // Construct trusted casts after parsing. Authored schema-qualified casts
+      // still pass through dataType's rejection path; parameters are never SQL.
+      return name ? { type: 'cast', operand: node, to: { schema: 'pg_catalog', name } } : node;
+    }
     if (node.type === 'with') {
       const local = new Set(scope);
       const bind = (node.bind as Array<{ alias: { name: string }; statement: Node }>).map(binding => {
