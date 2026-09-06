@@ -34,12 +34,15 @@ const guestApi = async (path, data) => {
   const response = await fetch(`${base}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
   return { status: response.status, body: await response.json().catch(() => ({})) };
 };
-async function uiResponse(page, path, action, method = 'POST', expected = 200) {
-  const pending = page.waitForResponse(response => new URL(response.url()).pathname === path && response.request().method() === method);
+async function uiResponse(page, path, action, method = 'POST', expected = 200, requestFields = {}) {
+  const pending = page.waitForResponse(response => new URL(response.url()).pathname === path && response.request().method() === method
+    && Object.entries(requestFields).every(([key, value]) => response.request().postDataJSON()?.[key] === value));
   await action();
   const response = await pending;
-  assert.equal(response.status(), expected, `${method} ${path} must succeed`);
-  const body = await response.json(); secretFree(body); return body;
+  const body = await response.json();
+  secretFree(body);
+  assert.equal(response.status(), expected, `${method} ${path}: ${JSON.stringify(body)}`);
+  return body;
 }
 async function previewContains(page, text, label = 'Table preview') {
   const preview = page.getByLabel(label, { exact: true });
@@ -170,10 +173,10 @@ try {
   await owner.getByLabel('Default schema', { exact: true }).selectOption('models');
   await owner.getByLabel('SQL view', { exact: true }).click();
   await owner.getByLabel('Dataset SQL', { exact: true }).fill('select * from models.region_totals');
-  await uiResponse(owner, '/api/my/datasets/preview', () => owner.getByLabel('Run dataset SQL', { exact: true }).click());
+  await uiResponse(owner, '/api/my/datasets/preview', () => owner.getByLabel('Run dataset SQL', { exact: true }).click(), 'POST', 200, { sql: 'select * from models.region_totals' });
   await previewContains(owner, '150');
   await owner.getByLabel('Dataset SQL', { exact: true }).fill('select * from sales.orders');
-  const deniedDraft = await uiResponse(owner, '/api/my/datasets/preview', () => owner.getByLabel('Run dataset SQL', { exact: true }).click(), 'POST', 400);
+  const deniedDraft = await uiResponse(owner, '/api/my/datasets/preview', () => owner.getByLabel('Run dataset SQL', { exact: true }).click(), 'POST', 400, { sql: 'select * from sales.orders' });
   assert.ok(deniedDraft.error);
   assert.equal(await owner.getByLabel('Dataset SQL', { exact: true }).inputValue(), 'select * from sales.orders');
   await owner.getByLabel('Edit dataset source', { exact: true }).click();
@@ -198,7 +201,7 @@ try {
   log('chained notebook cells roundtrip through markup; only the exposed final model reaches readers');
 
   await admin.query('update sales.orders set amount=125 where id=1');
-  const refreshed = await uiResponse(owner, `/a/${modelDatasetId}/tables`, () => owner.getByLabel('Refresh dataset', { exact: true }).click());
+  const refreshed = await uiResponse(owner, `/a/${modelDatasetId}/tables`, () => owner.getByLabel('Refresh dataset', { exact: true }).click(), 'POST', 200, { refresh: true });
   assert.equal(refreshed.rows.find(row => row.region === 'west').total, 155);
   await previewContains(owner, '155');
   assert.match(await owner.getByLabel('Refresh status', { exact: true }).innerText(), /Last refreshed.*Manual refresh/);
