@@ -1,5 +1,5 @@
 import { parse, toSql, type SelectStatement } from 'pgsql-ast-parser';
-import type { DatasetCatalog } from './types';
+import type { DatasetCatalog, DatasetNotebook } from './types';
 import type { Scalar } from '@/lib/story/dataflow';
 import type { DatasetColumn } from '@/lib/story/dataset-shape';
 
@@ -21,6 +21,9 @@ const JOINS = new Set(['INNER JOIN', 'LEFT JOIN', 'RIGHT JOIN', 'FULL JOIN', 'CR
 const systemSchema = (schema: string) => schema === 'information_schema' || schema.startsWith('pg_');
 const fail = (reason: string): never => { throw new Error(`Dataset SQL: ${reason}`); };
 type Node = Record<string, unknown>;
+// The parser/renderer retain escaped double quotes inside identifier AST names.
+const astName = (name: string): string => name.replaceAll('"', '""');
+const catalogName = (name: string): string => name.replaceAll('""', '"');
 
 /** Only lexical work happens here: comments/quoted tokens never become parameters.
  * Dollar strings are normalized because the parser supports them only in function bodies. */
@@ -80,19 +83,117 @@ function bindParameters(sql: string, bind: (name: string) => string): string {
   return result;
 }
 
+type Budget = { expanded: number; input: number; columns: number };
+const newBudget = (): Budget => ({ expanded: 0, input: 0, columns: 0 });
+
+function readSql(text: string, bind: (name: string) => string, budget: Budget): Node {
+  if (typeof text !== 'string' || text.length > 100_000) fail('query is too large');
+  if ((budget.input += text.length) > 2_000_000) fail('expanded query is too large');
+  const bound = bindParameters(text, bind);
+  let statements;
+  try { statements = parse(bound); } catch { return fail('unsupported or invalid syntax'); }
+  if (statements.length !== 1) fail('exactly one read statement is required');
+  return statements[0] as unknown as Node;
+}
+
+function render(statement: Node, values: Scalar[]): { sql: string; values: Scalar[] } {
+  let sql: string;
+  try { sql = toSql.statement(statement as unknown as SelectStatement); }
+  catch { return fail('unsupported syntax'); }
+  if (sql.length > 2_000_000) fail('expanded query is too large');
+  return { sql, values };
+}
+
+/** Validate and compose only the target's dependency closure. Unused draft SQL
+ * is not parsed; all cell identities and notebook resource limits still apply. */
+function notebookStatement(sources: DatasetCatalog, notebook: DatasetNotebook, cellId: string, budget: Budget): Node {
+  if (!notebook || !Array.isArray(notebook.cells)) fail('invalid notebook');
+  const cells = notebook.cells;
+  if (cells.length > 100) fail('too many notebook cells');
+  const names = new Map<string, number>(); const ids = new Set<string>();
+  let total = 0;
+  for (const [index, cell] of cells.entries()) {
+    if (!cell || typeof cell.id !== 'string' || !cell.id.length || cell.id.length > 200) fail('invalid notebook cell id');
+    // PostgreSQL truncates identifiers at 63 bytes. Refuse names that could
+    // silently collide after parsing, while allowing quoted SQL identifiers.
+    if (typeof cell.name !== 'string' || !cell.name || cell.name.includes('\0') || new TextEncoder().encode(cell.name).length > 63) fail('invalid notebook cell name');
+    if (ids.has(cell.id) || names.has(astName(cell.name))) fail('duplicate notebook cell id or name');
+    ids.add(cell.id); names.set(astName(cell.name), index);
+    if (typeof cell.sql !== 'string' || cell.sql.length > 100_000) fail('query is too large');
+    if ((total += cell.sql.length) > 1_000_000) fail('notebook is too large');
+  }
+  const target = cells.findIndex(cell => cell.id === cellId);
+  if (target < 0) fail('unknown notebook cell');
+  const statements = new Map<number, Node>();
+  const heights = new Map<number, number>();
+  function visit(index: number, depth: number): number {
+    if (depth > 32) fail('notebook dependency depth is too large');
+    if (heights.has(index)) return heights.get(index)!;
+    const statement = readSql(cells[index].sql, () => fail('notebook parameters are not supported'), budget);
+    const dependencies = new Set<number>();
+    function discover(value: unknown, scope: Set<string>, nesting = 0): void {
+      if (nesting > 100) fail('query nesting is too deep');
+      if (Array.isArray(value)) { for (const child of value) discover(child, scope, nesting + 1); return; }
+      if (!value || typeof value !== 'object') return;
+      const node = value as Node;
+      if (node.type === 'with') {
+        const local = new Set(scope);
+        for (const binding of node.bind as Array<{ alias: { name: string }; statement: Node }>) {
+          discover(binding.statement, local, nesting + 1);
+          local.add(binding.alias.name);
+        }
+        discover(node.in, local, nesting + 1); return;
+      }
+      if (node.type === 'table') {
+        const name = node.name as { name: string; schema?: string };
+        if (!name.schema && !scope.has(name.name) && names.has(name.name)) {
+          const dependency = names.get(name.name)!;
+          if (dependency >= index) fail('notebook cells may reference earlier cells only, never themselves or later cells');
+          dependencies.add(dependency);
+        }
+      }
+      for (const child of Object.values(node)) discover(child, scope, nesting + 1);
+    }
+    discover(statement, new Set());
+    let height = 1;
+    for (const dependency of dependencies) height = Math.max(height, 1 + visit(dependency, depth + 1));
+    if (height > 32) fail('notebook dependency depth is too large');
+    statements.set(index, statement); heights.set(index, height);
+    return height;
+  }
+  visit(target, 1);
+  // CTEs retain authored names and are emitted once in notebook order. The
+  // existing validator understands CTE scopes, including nested WITH shadowing.
+  const composed: Node = {
+    type: 'with',
+    bind: [...statements.keys()].sort((a, b) => a - b).map(index => ({ alias: { name: astName(cells[index].name) }, statement: statements.get(index)! })),
+    in: { type: 'select', columns: [{ expr: { type: 'ref', name: '*' } }], from: [{ type: 'table', name: { name: astName(cells[target].name) } }] },
+  };
+  return compileStatement(sources, composed, {}, undefined, budget).statement;
+}
+
+/** Kept in this module so notebook composition shares the same AST validator;
+ * generated ASTs never pass back through the authored SQL parameter lexer. */
+export function compileNotebookSql(sources: DatasetCatalog, notebook: DatasetNotebook, cellId: string): { sql: string; values: Scalar[] } {
+  return render(notebookStatement(sources, notebook, cellId, newBudget()), []);
+}
+
 /** Compile one read query against the public catalog. Every physical relation is
  * hidden behind a projection, so PostgreSQL itself enforces column visibility in
  * SELECT, predicates, joins, stars and correlated subqueries alike. */
 export function compileDatasetSql(catalog: DatasetCatalog, sql: string, params: Record<string, Scalar> = {}, paramTypes?: Record<string, DatasetColumn['type']>): { sql: string; values: Scalar[] } {
+  const { statement, values } = compileStatement(catalog, sql, params, paramTypes, newBudget());
+  return render(statement, values);
+}
+
+function compileStatement(catalog: DatasetCatalog, input: string | Node, params: Record<string, Scalar>, paramTypes: Record<string, DatasetColumn['type']> | undefined, budget: Budget): { statement: Node; values: Scalar[] } {
   const values: Scalar[] = []; const bindings = new Map<string, string>();
   const bindingTypes = new Map<string, string>();
   // Schema-qualified names must be the catalog names, not SQL aliases:
   // pg_catalog.float8 is DOUBLE PRECISION; pg_catalog.bool is BOOLEAN.
   const parameterCasts: Record<DatasetColumn['type'], string> = { string: 'text', number: 'float8', boolean: 'bool', date: 'date' };
-  let expanded = 0;
   function read(text: string): Node {
-    if (typeof text !== 'string' || text.length > 100_000) fail('query is too large');
-    const bound = bindParameters(text, name => {
+    return readSql(text, name => {
       if (!Object.hasOwn(params, name)) fail(`undeclared parameter $${name}`);
       const value = params[name];
       if (!(value === null || typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)))) fail('invalid parameter');
@@ -108,11 +209,7 @@ export function compileDatasetSql(catalog: DatasetCatalog, sql: string, params: 
         if (paramTypes !== undefined) bindingTypes.set(position, parameterCasts[paramTypes[name]]);
       }
       return bindings.get(name)!;
-    });
-    let statements;
-    try { statements = parse(bound); } catch { return fail('unsupported or invalid syntax'); }
-    if (statements.length !== 1) fail('exactly one read statement is required');
-    return statements[0] as unknown as Node;
+    }, budget);
   }
   function dataType(value: unknown): void {
     if (!value || typeof value !== 'object') fail('unsupported cast');
@@ -144,23 +241,32 @@ export function compileDatasetSql(catalog: DatasetCatalog, sql: string, params: 
       const name = node.name as { name: string; schema?: string; alias?: string; columnNames?: unknown };
       if (name.columnNames || node.lateral) fail('unsupported relation alias');
       if (!name.schema && scope.has(name.name)) return { ...node, join: walk(node.join, scope, stack, depth + 1) };
-      const schema = name.schema ?? catalog.defaultSchema;
+      const schema = name.schema === undefined ? catalog.defaultSchema : catalogName(name.schema);
       if (systemSchema(schema)) fail('system schemas are not allowed');
-      const matches = catalog.tables.filter(t => t.schema === schema && t.name === name.name);
+      const matches = catalog.tables.filter(t => t.schema === schema && t.name === catalogName(name.name));
       if (matches.length !== 1) fail('relation is not in the catalog');
       const table = matches[0]; const key = JSON.stringify([schema, name.name]);
       if (stack.includes(key)) fail('model cycle detected');
-      if (++expanded > 200) fail('too many model expansions');
+      if (++budget.expanded > 200) fail('too many model expansions');
       if (!table.columns.length || table.columns.some(c => c.name === '*')) fail('invalid exposed columns');
+      if ((budget.columns += table.columns.length) > 20_000) fail('too many projected columns');
+      if ([table.sql, table.source, table.modelCellId].filter(value => value !== undefined).length !== 1) fail('table requires exactly one source');
       let from: Node;
-      if (table.sql && !table.source) {
+      if (table.modelCellId) {
+        if (!catalog.notebook || !catalog.notebookSources) return fail('missing notebook source metadata');
+        const sources: DatasetCatalog = {
+          kind: catalog.kind, defaultSchema: 'public', refreshSeconds: 0,
+          tables: catalog.notebookSources.map(source => ({ schema: source.schema, name: source.name, columns: source.columns, source: { schema: source.schema, table: source.name } })),
+        };
+        from = { type: 'statement', alias: '_dataset_model', statement: notebookStatement(sources, catalog.notebook, table.modelCellId, budget) };
+      } else if (table.sql && !table.source) {
         from = { type: 'statement', alias: '_dataset_model', statement: query(read(table.sql), new Set(), [...stack, key], depth + 1) };
       } else if (table.source && !table.sql) {
         if (systemSchema(table.source.schema)) fail('system sources are not allowed');
-        from = { type: 'table', name: { schema: table.source.schema, name: table.source.table } };
+        from = { type: 'table', name: { schema: astName(table.source.schema), name: astName(table.source.table) } };
       } else return fail('table requires exactly one source');
       return { type: 'statement', alias: name.alias ?? name.name, join: walk(node.join, scope, stack, depth + 1), statement: {
-        type: 'select', columns: table.columns.map(column => ({ expr: { type: 'ref', name: column.name } })), from: [from],
+        type: 'select', columns: table.columns.map(column => ({ expr: { type: 'ref', name: astName(column.name) } })), from: [from],
       } };
     }
     if (node.type === 'statement') {
@@ -185,7 +291,5 @@ export function compileDatasetSql(catalog: DatasetCatalog, sql: string, params: 
     if (!['select', 'union', 'union all', 'with'].includes(String(node.type))) fail('only read statements are allowed');
     return walk(node, scope, stack, depth) as Node;
   }
-  const statement = query(read(sql), new Set(), []);
-  try { return { sql: toSql.statement(statement as unknown as SelectStatement), values }; }
-  catch { return fail('unsupported syntax'); }
+  return { statement: query(typeof input === 'string' ? read(input) : input, new Set(), []), values };
 }
