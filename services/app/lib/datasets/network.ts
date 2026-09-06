@@ -24,27 +24,55 @@ async function boundedLookup(name: string) {
   } finally { clearTimeout(timer); }
 }
 
-type DnsFailure = Error & {code?:string};
-const absentFamily=(error:unknown)=>error instanceof Error&&['ENODATA','ENOTFOUND'].includes((error as DnsFailure).code??'');
+type DnsFailure = Error & { code?: string };
+const absentFamily = (error: unknown) => error instanceof Error
+  && ['ENODATA', 'ENOTFOUND'].includes((error as DnsFailure).code ?? '');
 
 /** A Resolver is per operation so one request cannot alter another request's
  * nameservers. The slot remains held until both cancel-aware DNS jobs settle. */
-async function boundedCustomLookup(name:string,servers:readonly string[]) {
+async function boundedCustomLookup(name: string, servers: readonly string[]) {
   if (pendingLookups >= 8) throw new Error('PostgreSQL host resolver is busy.');
   pendingLookups++;
-  const resolver=new Resolver();resolver.setServers([...servers]);
-  const operation=Promise.allSettled([resolver.resolve4(name),resolver.resolve6(name)]).finally(()=>{pendingLookups--;});
-  const timeout=new Error('PostgreSQL host resolution timed out.');let timer:ReturnType<typeof setTimeout>|undefined;
-  let settled:PromiseSettledResult<string[]>[];
-  try{settled=await Promise.race([operation,new Promise<never>((_,reject)=>{timer=setTimeout(()=>{resolver.cancel();reject(timeout);},DNS_TIMEOUT_MS);})]);}
-  catch(error){throw error===timeout?timeout:new Error('PostgreSQL host could not be resolved.');}
-  finally{clearTimeout(timer);}
-  const addresses:string[]=[];
-  for(const result of settled){
-    if(result.status==='fulfilled')addresses.push(...result.value);
-    else if(!absentFamily(result.reason))throw new Error('PostgreSQL host could not be resolved.');
+  let resolver: Resolver;
+  try {
+    resolver = new Resolver();
+    resolver.setServers([...servers]);
+  } catch {
+    pendingLookups--;
+    throw new Error('PostgreSQL host could not be resolved.');
   }
-  return addresses.map(address=>({address,family:isIP(address)}));
+  const operation = Promise.allSettled([
+    resolver.resolve4(name),
+    resolver.resolve6(name),
+  ]).finally(() => { pendingLookups--; });
+  const timeout = new Error('PostgreSQL host resolution timed out.');
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let settled:PromiseSettledResult<string[]>[];
+  try {
+    settled = await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          resolver.cancel();
+          reject(timeout);
+        }, DNS_TIMEOUT_MS);
+      }),
+    ]);
+  } catch (error) {
+    throw error === timeout ? timeout : new Error('PostgreSQL host could not be resolved.');
+  } finally {
+    clearTimeout(timer);
+  }
+  const addresses: Array<{ address: string; family: 4 | 6 }> = [];
+  for (const [index, result] of settled.entries()) {
+    if (result.status === 'fulfilled') {
+      const family = index === 0 ? 4 : 6;
+      addresses.push(...result.value.map(address => ({ address, family } as const)));
+    } else if (!absentFamily(result.reason)) {
+      throw new Error('PostgreSQL host could not be resolved.');
+    }
+  }
+  return addresses;
 }
 
 /** The operator override admits database networks, never metadata or multicast. */
@@ -104,7 +132,11 @@ function socketHost(host: string): string {
  * original name again), and retain the original hostname for TLS identity.
  * An operator may explicitly allow loopback/RFC1918/ULA for self-hosted DBs.
  */
-export async function resolvePostgresHost(host: string, allowPrivate = false, dnsServers: readonly string[] = []): Promise<string> {
+export async function resolvePostgresHost(
+  host: string,
+  allowPrivate = false,
+  dnsServers: readonly string[] = [],
+): Promise<string> {
   const name = socketHost(host);
   const permitted = (address: string) => permittedAddress(address, allowPrivate === true);
   const forbidden = () => new Error('PostgreSQL host resolves to an address that is not permitted.');
@@ -112,7 +144,9 @@ export async function resolvePostgresHost(host: string, allowPrivate = false, dn
     if (!permitted(name)) throw forbidden();
     return name;
   }
-  const addresses = dnsServers.length ? await boundedCustomLookup(name,dnsServers) : await boundedLookup(name);
+  const addresses = dnsServers.length
+    ? await boundedCustomLookup(name, dnsServers)
+    : await boundedLookup(name);
   if (!Array.isArray(addresses) || !addresses.length) throw new Error('PostgreSQL host could not be resolved.');
   if (addresses.some(({ address, family }) => !permitted(address) || isIP(address) !== family)) throw forbidden();
   return addresses[0].address;

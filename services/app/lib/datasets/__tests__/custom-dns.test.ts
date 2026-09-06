@@ -14,6 +14,10 @@ describe('dataset-specific operator DNS',()=>{
  it('rejects a private answer in the other family instead of picking only the public A record',async()=>{
   dns.resolve6.mockResolvedValue(['::ffff:a00:1']);await expect(resolvePostgresHost('db.example.com',false,['1.1.1.1'])).rejects.toThrow(/not permitted/);expect(dns.resolve6).toHaveBeenCalledOnce();expect(dns.lookup).not.toHaveBeenCalled();
  });
+ it('rejects an address whose bytes do not match the DNS record family',async()=>{
+  dns.resolve4.mockResolvedValue(['2606:4700:4700::1111']);dns.resolve6.mockRejectedValue(Object.assign(new Error('absent'),{code:'ENODATA'}));
+  await expect(resolvePostgresHost('db.example.com',false,['1.1.1.1'])).rejects.toThrow(/not permitted/);
+ });
  it('accepts an absent address family, but never falls back after resolver failure',async()=>{
   dns.resolve6.mockRejectedValue(Object.assign(new Error('internal detail'),{code:'ENODATA'}));expect(await resolvePostgresHost('db.example.com',false,['1.1.1.1'])).toBe('8.8.4.4');
   dns.resolve6.mockRejectedValue(Object.assign(new Error('resolver secret detail'),{code:'ETIMEOUT'}));await expect(resolvePostgresHost('db.example.com',false,['1.1.1.1'])).rejects.toThrow('PostgreSQL host could not be resolved.');expect(dns.lookup).not.toHaveBeenCalled();
@@ -39,5 +43,11 @@ describe('dataset-specific operator DNS',()=>{
   await vi.advanceTimersByTimeAsync(3000);await Promise.all(pending);expect(dns.cancel).toHaveBeenCalled();
   dns.resolve4.mockResolvedValue(['8.8.4.4']);dns.resolve6.mockRejectedValue(Object.assign(new Error('absent'),{code:'ENODATA'}));
   await expect(resolvePostgresHost('recovered.example.com',false,['1.1.1.1'])).resolves.toBe('8.8.4.4');vi.useRealTimers();
+ });
+ it('releases the slot when custom resolver setup throws synchronously',async()=>{
+  dns.setServers.mockImplementation(()=>{throw new Error('resolver setup detail');});
+  for(let attempt=0;attempt<8;attempt++)await expect(resolvePostgresHost('db.example.com',false,['1.1.1.1'])).rejects.toThrow('PostgreSQL host could not be resolved.');
+  dns.setServers.mockImplementation(()=>undefined);
+  await expect(resolvePostgresHost('db.example.com',false,['1.1.1.1'])).resolves.toBe('8.8.4.4');
  });
 });
