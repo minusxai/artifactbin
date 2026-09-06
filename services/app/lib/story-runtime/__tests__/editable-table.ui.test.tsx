@@ -22,6 +22,29 @@ function setup(body = '<Column col="id"/><Column col="item"><input aria-label="I
   return {...view,store,mutate,transport,nodes,dataflow};
 }
 describe('editable table runtime',()=>{
+  it('refreshes quietly after a cell save while another cell remains editable',async()=>{
+    const v=setup();let resolveRun!:(value:any)=>void;
+    v.transport.run=vi.fn().mockImplementation(()=>new Promise(r=>{resolveRun=r;}));
+    const first=v.getByLabelText('Hours 1') as HTMLInputElement;
+    const second=v.getByLabelText('Hours 2') as HTMLInputElement;
+    fireEvent.focus(first);fireEvent.change(first,{target:{value:'5'}});
+    fireEvent.keyDown(first,{key:'Enter'});
+    await act(async()=>{});
+    const table=v.getByLabelText('DataTable embed');
+    expect(table.getAttribute('aria-busy')).toBe('true');
+    expect(table.classList.contains('mx-busy')).toBe(false);
+    expect(first.disabled).toBe(true);
+    expect(second.disabled).toBe(false);
+    fireEvent.focus(second);fireEvent.change(second,{target:{value:'7'}});
+    await act(async()=>resolveRun({tables:{tasks:{columns,rows:[{id:1,item:'one',hours:5},{id:2,item:'two',hours:3}]}},errors:{}}));
+    expect(first.value).toBe('5');
+    expect(first.disabled).toBe(false);
+    expect(second.value).toBe('7');
+    expect(table.getAttribute('aria-busy')).toBe('false');
+    fireEvent.keyDown(second,{key:'Enter'});await act(async()=>{});
+    expect(v.mutate).toHaveBeenLastCalledWith({_value:7},'set_hours',{id:2,item:'two',hours:3});
+    await act(async()=>resolveRun({tables:{tasks:{columns,rows:[{id:1,item:'one',hours:5},{id:2,item:'two',hours:7}]}},errors:{}}));
+  });
   it('keeps different row drafts isolated even when their labels are identical',()=>{
     const v=setup(); const inputs=v.getAllByLabelText('Item') as HTMLInputElement[];
     expect(inputs.map(i=>i.value)).toEqual(['one','two']);
