@@ -1,7 +1,7 @@
 ---
 name: markup-scripts
 description: >-
-  Isolated Helmet scripts, asynchronous signals, query subscriptions, mutation permissions, and DOM compatibility.
+  Isolated scripts and their data bridge.
 ---
 ## Read first
 

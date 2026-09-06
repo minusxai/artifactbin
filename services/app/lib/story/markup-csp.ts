@@ -15,7 +15,7 @@
  * (lib/http baseUrl: the public origin behind the proxy).
  *
  * Everything else is content-independent: opaque origin
- * (`sandbox` without allow-same-origin), no forms, no base, no third-party
+ * (`sandbox` without allow-same-origin), no form navigation, no base, no third-party
  * destinations of any kind. Guarded by __tests__/raw-document.test.ts.
  */
 /** Where each kind of subresource may come from — content-independent. */
@@ -54,7 +54,9 @@ const BEHAVIOUR_DIRECTIVES = [
    * The owner's shell and the exporter are both same-origin.
    */
   "frame-ancestors 'self'",
-  'sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation',
+  // Trusted Dialog forms need submit events and validation. form-action none
+  // still forbids navigation; author scripts have their own no-forms sandbox.
+  'sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation',
 ] as const;
 
 /** The path the document may fetch: its own query endpoint. */

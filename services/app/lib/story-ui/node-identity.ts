@@ -119,7 +119,7 @@ function contentOf(node: JsxNode): string {
     .map((a) => `${a.name}=${JSON.stringify(a.value)}`)
     .sort()
     .join(',');
-  return `${signatureOf(node)}[${attrs}](${node.children.map(contentOf).join('')})`;
+  return `${signatureOf(node)}[${attrs}]${node.control ? JSON.stringify(node.control) : ''}(${node.children.map(contentOf).join('')})`;
 }
 
 /**

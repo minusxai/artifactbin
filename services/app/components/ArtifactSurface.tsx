@@ -1368,7 +1368,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             // directive — both apply (intersection), so they must stay the
             // same set. The extra flags let outbound links and popups leave
             // the frame; `allow` is what lets a deck present from inside it.
-            sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
+            sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
             allow="fullscreen"
             className={`absolute inset-0 block h-full w-full border-0 transition-opacity ${
               frameLoaded ? 'opacity-100' : 'opacity-0'

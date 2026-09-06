@@ -109,6 +109,11 @@ export function kitchenSinkMarkup(refs: KitchenSinkRefs): string {
       <CollapsibleTrigger className="text-sm font-semibold underline underline-offset-2">Toggle details</CollapsibleTrigger>
       <CollapsibleContent><p className="mt-2 text-sm text-muted-foreground">Collapsible content, open by default for the capture.</p></CollapsibleContent>
     </Collapsible>
+    <Dialog><DialogTrigger className="underline">Open dialog</DialogTrigger>
+      <DialogContent aria-label="Example dialog" className="m-auto rounded-xl bg-card p-6">
+        <p>Native modal focus and Escape handling.</p><DialogClose>Close</DialogClose>
+      </DialogContent>
+    </Dialog>
     <div className="flex items-start gap-8">
       <TooltipProvider>
         <Tooltip defaultOpen>

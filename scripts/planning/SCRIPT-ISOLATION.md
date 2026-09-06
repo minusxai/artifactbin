@@ -16,6 +16,28 @@
 
 ## Current checkpoint — not ready to release
 
+### Reactive markup and dialog milestone
+
+- Restricted scalar expressions and structural conditional JSX now parse,
+  validate, serialize, and render. Both branches retain real node IDs and
+  reference checks; text edits/deletion preserve the hidden branch.
+- Native Dialog root/trigger/content/close primitives bind scalar state.
+  Content can use existing `run=` for validated submit-and-close, with pending
+  deduplication, refusal feedback, Escape, and focus return.
+- Migrated the roadmap fixture off its DOM script. Its original browser
+  acceptance passes: views, DAG, sprint creation/conflicts, cell dropdowns,
+  reload persistence, mobile layout. No gate removed or weakened.
+- Browser validation found native submit events blocked by the old sandbox.
+  The trusted renderer now permits forms, while form-action none forbids
+  navigation; the author child still has no forms permission. The security
+  gate continues to prove forged forms/account actions fail.
+- Full suite: **5,641 passed, one skipped** (1,228 API + 3,401 Node + 1,012 UI).
+  Focused built-server gates: roadmap-views, author-script-isolation,
+  secure-arch **3/3 passed**. Full browser sweep is next.
+- Top-level owner/editor rendering and the cross-origin trusted-control
+  session handoff remain unfinished. Existing host-only account and agent
+  cookies must not silently become parent-domain cookies.
+
 ### SQL local-state milestone
 
 - 19 execution cases initially produced 17 RED failures against the skeleton;

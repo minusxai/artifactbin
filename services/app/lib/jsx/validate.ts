@@ -6,6 +6,7 @@
  * give the "static" guarantee for free — this pass enforces it.
  */
 import { parseRowRef } from '@/lib/story/row-scope';
+import { isReactiveExpression, reactiveNames, REACTIVE_BOOLEAN_PROPS } from './reactive';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 // Shared with the render-time gate in lib/story-ui/interpreter.tsx — see
 // lib/jsx/url-attrs.ts for why these must not be maintained separately.
@@ -80,13 +81,31 @@ function walk(
   parent?: string,
 ): void {
   if (node.type === 'expression') {
+    if (!node.value.static && isReactiveExpression(node.value.reactive)) {
+      if (!inColumn && reactiveNames(node.value.reactive).fields.length) errors.push({message: 'Row expressions belong inside a DataTable Column', start: node.start, end: node.end});
+      return;
+    }
     if (!node.value.static && !(inColumn && parseRowRef(node.source.trim()))) {
       errors.push({ message: `Expression child must be a JSON literal, got ${node.value.exprType}`, start: node.start, end: node.end });
     }
     return;
   }
   if (node.type === 'text') return;
+  if (node.control) {
+    const fragment = node.control.kind === 'fragment';
+    if (node.tag !== (fragment ? '__mx_fragment' : '__mx_condition') || node.attributes.length
+      || (node.control.kind !== 'fragment' && (node.children.length !== 2 || !isReactiveExpression(node.control.test)))) {
+      errors.push({message: 'Invalid conditional structure', start: node.start, end: node.end});
+      return;
+    }
+    if (node.control.kind !== 'fragment' && !inColumn && reactiveNames(node.control.test).fields.length) errors.push({message: 'Row conditions belong inside a DataTable Column', start: node.start, end: node.end});
+    for (const child of node.children) walk(child, components, allowedHtml, stylePolicy, errors, inSvg, inColumn, parent);
+    return;
+  }
   validateElement(node, components, allowedHtml, stylePolicy, errors, inSvg);
+  for (const attr of node.attributes) if (!inColumn && !attr.value.static && isReactiveExpression(attr.value.reactive) && reactiveNames(attr.value.reactive).fields.length) {
+    errors.push({message: 'Row expressions belong inside a DataTable Column', start: attr.start, end: attr.end});
+  }
   const childrenInSvg = inSvg || (!node.isComponent && node.tag.toLowerCase() === 'svg');
   for (const child of node.children) walk(child, components, allowedHtml, stylePolicy, errors, childrenInSvg, node.tag === 'Column' ? parent === 'DataTable' : node.tag === 'DataTable' ? false : inColumn, node.tag);
 }
@@ -190,6 +209,7 @@ function validateElement(
   for (const a of el.attributes) {
     // Spread / non-static attribute values.
     if (!a.value.static) {
+      if (REACTIVE_BOOLEAN_PROPS.has(a.name) && isReactiveExpression(a.value.reactive)) continue;
       errors.push({
         message: `Attribute "${a.name}" must be a JSON literal, got ${a.value.exprType}`,
         attr: a.name, tag: el.tag, start: a.start, end: a.end,

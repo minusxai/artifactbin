@@ -34,6 +34,7 @@
 import type { JsonValue, JsxAttribute, JsxElement, JsxNode, ValidationError } from '@/lib/jsx';
 import { inferColumns, type ColumnType, type DatasetColumn } from './dataset-shape';
 import { localWriteTarget, SIGNALS_TABLE } from './local-target';
+import { reactiveNames, type ReactiveExpression } from '@/lib/jsx/reactive';
 
 // ── declarations ────────────────────────────────────────────────────────────
 
@@ -256,6 +257,8 @@ export const REF_ATTRS: {
     // <Mutation> with the document's current values (components/kit/button
     // static face; lib/story-runtime/StoryRuntimeApp live face).
     Button: { run: 'mutation' },
+    Dialog: {open: 'scalar'},
+    DialogContent: {run: 'mutation'},
   },
   html: {
     input: { value: 'scalar', checked: 'scalar', run: 'mutation' },
@@ -504,9 +507,15 @@ export function parseMutationDecl(el: JsxElement): ParseDeclResult<MutationDecl>
 /** Every `$name` reference in the BODY, from the REF_ATTRS positions only. */
 export function collectRefNameUses(body: JsxNode[]): RefNameUse[] {
   const out: RefNameUse[] = [];
+  const expressionUses = (expression: ReactiveExpression | undefined, span: Span, tag: string, attr: string) => {
+    if (expression) for (const name of reactiveNames(expression).signals) out.push({name, tag, attr, expects: 'scalar', start: span.start, end: span.end});
+  };
   const visit = (nodes: JsxNode[]) => {
     for (const n of nodes) {
+      if (n.type === 'expression' && !n.value.static) expressionUses(n.value.reactive, n, 'expression', 'value');
       if (n.type !== 'element') continue;
+      if (n.control && n.control.kind !== 'fragment') expressionUses(n.control.test, n, 'condition', 'test');
+      for (const a of n.attributes) if (!a.value.static) expressionUses(a.value.reactive, a, n.tag, a.name);
       const table = n.isComponent ? REF_ATTRS.components[n.tag] : REF_ATTRS.html[n.tag.toLowerCase()];
       if (table) {
         for (const a of n.attributes) {

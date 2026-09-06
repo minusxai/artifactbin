@@ -9,13 +9,11 @@ description: >-
 over a fixed component registry, never executed. A fault is a
 `400 {"error":"invalid_jsx","details":[…]}` with exact spans: guess and correct.
 
-- **Static JSX only**: literal props (strings, numbers, booleans, arrays,
-  `{{…}}` objects); no expressions, spreads or inline handlers (`onClick=` is
-  rejected). It is JSX and not HTML, so every tag closes (`<br />`), comments
-  are `{/* … */}`, and there is no `<html>`/`<head>`/`<body>`. **But the
-  document DOES run your JavaScript**: one `<script>` in `<Helmet>` runs after
-  hydration in an isolated script iframe. It has no access to the rendered
-  document's DOM; use the `mx` data API and declarative controls.
+- Literal props, plus [restricted reactive JSX and dialogs](markup-state.md).
+  No spreads, callbacks, or inline handlers; every tag closes (`<br />`),
+  comments are `{/* … */}`, and there is no `<html>`/`<head>`/`<body>`.
+  One Helmet script runs in an isolated iframe, without visible DOM access.
+  Use the `mx` data API and declarative controls.
 - **Style with Tailwind classes via `className`**, starting from a
   `<div data-design="tw" className="@container …">` wrapper with `@2xl:`
   container variants for responsive layout.
