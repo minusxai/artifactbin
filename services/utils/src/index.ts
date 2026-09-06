@@ -14,3 +14,4 @@ export { PROTECTED_RESOURCE_PATH, wwwAuthenticate } from './http-helpers';
 export { sqlClient, browserClient, eventsClient, queryBounds, type QueryCaps, type EventsClientOptions } from './clients';
 export { serviceSecretForServer } from './service-auth';
 export { envelope, type EventSubject, type EventObject } from './events';
+export {parseControlsOrigin, controlsCorsHeaders} from './controls-origin';

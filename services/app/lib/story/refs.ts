@@ -94,7 +94,7 @@ export function collectRefUses(source: string): RefUse[] | null {
     // meta.refs) with the stricter admission below.
     if (el.isComponent && tag === MUTATION_TAG) {
       const m = parseMutationDecl(el);
-      if (m.ok) uses.push({ id: m.decl.target, kind: 'dataset', via: 'sql', write: true });
+      if (m.ok && m.decl.scope !== 'local') uses.push({ id: m.decl.target, kind: 'dataset', via: 'sql', write: true });
       return;
     }
     if (!el.isComponent && tag.toLowerCase() === 'meta' && attrValue(el, 'name') === 'artifactbin:og-image') {

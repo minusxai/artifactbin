@@ -85,7 +85,7 @@ const PROBE = `<Helmet><title>Sec Probe</title><script>{\`
   var id = location.pathname.split('/')[2] || 'unknown';
   fetch('/a/' + id + '/query?q=%7B%7D').then(function(r){ out.ownQuery = 'OK ' + r.status; render(); }, function(){ out.ownQuery = 'blocked'; render(); });
   fetch('/a/' + id + '/start', { method: 'POST' }).then(function(r){ out.start = 'OK ' + r.status; render(); }, function(){ out.start = 'blocked'; render(); });
-  function render(){ var el = document.getElementById('sec-probe'); if (el) el.textContent = JSON.stringify(out); }
+  function render(){ var el = document.getElementById('sec-probe'); if (!el) { el = document.createElement('pre'); el.id = 'sec-probe'; document.body.append(el); } el.textContent = JSON.stringify(out); }
   render();
 })();
 \`}</script></Helmet>
@@ -100,16 +100,17 @@ const readerCsp = readerResp.headers()['content-security-policy'] ?? '';
 check(readerCsp.includes('sandbox') && readerCsp.includes("default-src 'none'"), `reader /a/<id> carries the sandbox CSP (${readerCsp.slice(0, 40)}…)`);
 check(reader.url() === `${BASE}/a/${doc.id}`, `reader URL unchanged, no redirect (${new URL(reader.url()).pathname})`);
 check((await reader.locator('iframe[title="artifact"]').count()) === 0, 'reader page has NO artifact iframe');
-await reader.waitForFunction(() => { const t = document.getElementById('sec-probe')?.textContent ?? ''; return /"fetch"/.test(t) && /"ownQuery"/.test(t) && /"start"/.test(t); }, null, { timeout: 15000 }).catch(() => {});
-const probe = JSON.parse(await reader.locator('#sec-probe').textContent().catch(() => '{}') || '{}');
+const probeFrame = await (await reader.waitForSelector('iframe[title="Isolated artifact script"]', { state: 'attached' })).contentFrame();
+await probeFrame.waitForFunction(() => { const t = document.getElementById('sec-probe')?.textContent ?? ''; return /"fetch"/.test(t) && /"ownQuery"/.test(t) && /"start"/.test(t); }, null, { timeout: 15000 }).catch(() => {});
+const probe = JSON.parse(await probeFrame.locator('#sec-probe').textContent().catch(() => '{}') || '{}');
 check(probe.origin === 'null', `document origin is opaque (${probe.origin})`);
-check(probe.isTop === 'true', 'document is the top-level browsing context');
+check(probe.isTop === 'false' && await reader.evaluate(() => top === window), 'artifact stays top-level; author code is isolated in a child');
 check(/THROW/.test(probe.cookie ?? ''), `document.cookie throws (${probe.cookie})`);
 check(/THROW/.test(probe.storage ?? ''), `localStorage throws (${probe.storage})`);
 check(probe.fetch === 'blocked', `fetch to /api is blocked (${probe.fetch})`);
-check(probe.ownQuery === 'OK 200', `fetch to the document's OWN query url is admitted (${probe.ownQuery}) — the one connect-src`);
+check(probe.ownQuery === 'blocked', `even own-query fetch is blocked for author code (${probe.ownQuery}); queries use the data bridge`);
 check(probe.start === 'blocked', `fetch to /a/<id>/start is blocked (${probe.start}) — path-exact, not a prefix`);
-check(probe.replaceState === 'held', `history prelude holds — replaceState cannot spoof the URL (${probe.replaceState})`);
+check(/THROW/.test(probe.replaceState ?? '') && reader.url() === `${BASE}/a/${doc.id}`, `author cannot spoof the artifact URL (${probe.replaceState})`);
 
 // signed-in NON-owner: same document, same URL, no hop
 const otherResp = await other.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
@@ -275,7 +276,7 @@ await splitCtx.close();
 const HOSTILE = `<Helmet><title>Hostile</title><script>{\`
 (function(){
   var out = {};
-  function render(){ var el = document.getElementById('h'); if (el) el.textContent = JSON.stringify(out); }
+  function render(){ var el = document.getElementById('h'); if (!el) { el = document.createElement('pre'); el.id = 'h'; document.body.append(el); } el.textContent = JSON.stringify(out); }
   out.cookie = (function(){ try { return document.cookie === '' ? 'empty' : 'READABLE:' + document.cookie; } catch (e) { return 'throw:' + e.name; } })();
   out.storage = (function(){ try { return String(localStorage.length); } catch (e) { return 'throw:' + e.name; } })();
   function probe(k, p){ p.then(function(r){ out[k] = 'HTTP ' + r.status; render(); }, function(e){ out[k] = 'blocked:' + e.name; render(); }); }
@@ -303,8 +304,9 @@ const listBefore = await owner.evaluate(async () => (await (await fetch('/api/my
 
 // Victim opens the hostile document. Its script runs; give it a moment.
 await owner.goto(`${BASE}/a/${hostile.id}`, { waitUntil: 'load' });
-await owner.waitForFunction(() => /"steal"/.test(document.getElementById('h')?.textContent ?? ''), null, { timeout: 15000 }).catch(() => {});
-const attack = JSON.parse(await owner.locator('#h').textContent().catch(() => '{}') || '{}');
+const attackFrame = await (await owner.waitForSelector('iframe[title="Isolated artifact script"]', { state: 'attached' })).contentFrame();
+await attackFrame.waitForFunction(() => /"steal"/.test(document.getElementById('h')?.textContent ?? ''), null, { timeout: 15000 }).catch(() => {});
+const attack = JSON.parse(await attackFrame.locator('#h').textContent().catch(() => '{}') || '{}');
 check(attack.cookie === 'empty' || /throw/.test(attack.cookie ?? ''), `hostile script cannot read the victim's session cookie (${attack.cookie})`);
 check(/throw/.test(attack.storage ?? ''), `nor their localStorage (${attack.storage})`);
 check(/^blocked/.test(attack.list ?? ''), `it cannot LIST the victim's artifacts (${attack.list})`);

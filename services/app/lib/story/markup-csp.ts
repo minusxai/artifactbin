@@ -15,7 +15,7 @@
  * (lib/http baseUrl: the public origin behind the proxy).
  *
  * Everything else is content-independent: opaque origin
- * (`sandbox` without allow-same-origin), no forms, no base, no third-party
+ * (`sandbox` without allow-same-origin), no form navigation, no base, no third-party
  * destinations of any kind. Guarded by __tests__/raw-document.test.ts.
  */
 /** Where each kind of subresource may come from — content-independent. */
@@ -26,9 +26,10 @@ const SOURCE_DIRECTIVES = [
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
   "media-src 'self' data: blob:",
-  // No frame-src: nothing renders a nested frame — raw <iframe> is banned in
-  // markup and <Video> is a click-to-open card (a player iframe would inherit
-  // this sandbox's opaque origin and refuse to run anyway).
+  // No network frame destinations: raw <iframe> is banned in markup. The
+  // trusted runtime creates only an inline srcdoc author-script sandbox.
+  // Keep default-src 'none' as the navigation boundary until trusted-control
+  // destinations have their own explicit, tested policy.
 ] as const;
 
 /** What the document may DO — content-independent. */
@@ -53,7 +54,9 @@ const BEHAVIOUR_DIRECTIVES = [
    * The owner's shell and the exporter are both same-origin.
    */
   "frame-ancestors 'self'",
-  'sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation',
+  // Trusted Dialog forms need submit events and validation. form-action none
+  // still forbids navigation; author scripts have their own no-forms sandbox.
+  'sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation',
 ] as const;
 
 /** The path the document may fetch: its own query endpoint. */
@@ -99,12 +102,13 @@ export const assetsPath = (id: string): string => `/a/${id}/assets`;
  */
 const GEOJSON_DIR_PATH = '/geojson/';
 
-export function markupCsp(origin: string, id: string): string {
+export function markupCsp(origin: string, id: string, controlsOrigin?: string): string {
   // connect-src sits with the other source directives, before the behaviour
   // ones — the one per-document line in an otherwise fixed policy.
   const self = origin.replace(/\/+$/, '');
   // The frame endpoint is a separate, path-exact entry: CSP matches a path
   // without a trailing slash exactly, so `/events` does not cover `/events/frame`.
   const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${GEOJSON_DIR_PATH}`;
-  return [...SOURCE_DIRECTIVES, connect, ...BEHAVIOUR_DIRECTIVES].join('; ');
+  const behavior = controlsOrigin ? BEHAVIOUR_DIRECTIVES.filter(d => !d.startsWith('sandbox ')) : BEHAVIOUR_DIRECTIVES;
+  return [...SOURCE_DIRECTIVES, ...(controlsOrigin ? [`frame-src ${controlsOrigin}`] : []), connect, ...behavior].join('; ');
 }

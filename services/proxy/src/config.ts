@@ -28,7 +28,7 @@
  * than silently exempted by a prefix.
  */
 import { randomBytes } from 'node:crypto';
-import { createEnv } from '@artifactbin/utils';
+import { createEnv, parseControlsOrigin } from '@artifactbin/utils';
 import type { OidcProvider } from './auth/human';
 import { readEnv } from './env';
 
@@ -76,6 +76,7 @@ export interface ProxyConfig {
   appSchema: string;
   /** APP__PUBLIC_BASE_URL — the URL humans reach this proxy on; login's baseURL. */
   publicBaseUrl?: string;
+  controlsOrigin?: string;
   /** EMAIL__*. */
   mail: ProxyMailConfig;
   /** Cookies carry Secure. */
@@ -167,6 +168,8 @@ export function loadConfig(source: Record<string, string | undefined>, opts: Loa
     : 3000;
   const host = env('APP', 'HOST') || undefined;
   const publicBaseUrl = env('APP', 'PUBLIC_BASE_URL') || undefined;
+  const controlsSetting = env('APP', 'CONTROLS_ORIGIN');
+  const controlsOrigin = controlsSetting ? parseControlsOrigin(publicBaseUrl ?? '', controlsSetting) : undefined;
   const authSchema = env('AUTH', 'SCHEMA') || 'auth';
   const appSchema = env('APP', 'SCHEMA') || 'app';
   const mail = {
@@ -209,6 +212,7 @@ export function loadConfig(source: Record<string, string | undefined>, opts: Loa
     authSchema,
     appSchema,
     ...(publicBaseUrl ? { publicBaseUrl } : {}),
+    ...(controlsOrigin ? {controlsOrigin} : {}),
     mail,
     secure,
     env: source,

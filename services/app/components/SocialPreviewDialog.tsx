@@ -1,5 +1,6 @@
 'use client';
 
+import {appFetch as fetch,appUrl} from '@/web/api-origin';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RotateCcw, X } from 'lucide-react';
 import {
@@ -297,7 +298,7 @@ export default function SocialPreviewDialog({ id, source, editId, version, onClo
             {/* eslint-disable-next-line @next/next/no-img-element -- this is an authenticated generated export. */}
             <img
               key={previewUrl}
-              src={previewUrl}
+              src={appUrl(previewUrl)}
               alt={imageId ? "Uploaded social preview" : "Artifact preview"}
               draggable={false}
               onLoad={onImageLoad}
@@ -349,7 +350,7 @@ export default function SocialPreviewDialog({ id, source, editId, version, onClo
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       key={focusedUrl}
-                      src={focusedUrl}
+                      src={appUrl(focusedUrl)}
                       alt=""
                       aria-hidden="true"
                       draggable={false}

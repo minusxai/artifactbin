@@ -1,5 +1,6 @@
 'use client';
 
+import {appFetch as fetch} from '@/web/api-origin';
 import { Ban } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button, MicroLabel, PANEL, TABLE_ROW } from '@/components/ui';

@@ -16,6 +16,7 @@
  * address explicitly. The ACL
  * surface is session-only (/api/my/artifacts/<id>/sharing).
  */
+import {appFetch as fetch,appUrl} from '@/web/api-origin';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Crop, Check, EyeOff, Globe, Link as LinkIcon, Lock, PenLine, X } from 'lucide-react';
@@ -116,7 +117,7 @@ export default function ShareLink({
   };
 
   const copyLink = () => {
-    void navigator.clipboard?.writeText(url ? new URL(url, location.origin).href : `${location.origin}${location.pathname}`);
+    void navigator.clipboard?.writeText(new URL(appUrl(url ?? location.pathname),location.origin).href);
     setCopied(true);
   };
 

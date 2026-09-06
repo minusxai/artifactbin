@@ -1,3 +1,4 @@
+import {appFetch as fetch} from '@/web/api-origin';
 /**
  * The browser's side of the token exchange: hand the token to the server
  * once, and from then on the httpOnly cookie authorizes every request

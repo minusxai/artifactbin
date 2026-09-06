@@ -55,7 +55,7 @@ function elements(nodes: JsxNode[]): Walked[] {
       const node = list[index];
       if (node.type !== 'element' || node.tag === 'Helmet') continue;
       const path = prefix ? `${prefix}.${index}` : String(index);
-      out.push({ node, path });
+      if (!node.control) out.push({ node, path });
       visit(node.children, path);
     }
   };

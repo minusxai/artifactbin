@@ -1,3 +1,4 @@
+import {appFetch as fetch} from '@/web/api-origin';
 import { ChevronLeft, ChevronRight, RotateCcw, Search } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Navigate } from 'react-router';

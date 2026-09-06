@@ -8,6 +8,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ShareLink from '@/components/ShareLink';
+import * as apiOrigin from '@/web/api-origin';
 
 const sharingState = { visibility: 'private', shares: [] as Array<{ email: string; role: string }> };
 
@@ -30,10 +31,17 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe('ShareLink', () => {
+  it('copies the main artifact address from trusted controls, not the iframe address', () => {
+    vi.spyOn(apiOrigin,'appUrl').mockImplementation(path => new URL(path,'https://artifactbin.test').href);
+    render(<ShareLink className="x" url="/a/Ab3xK9" />);
+    fireEvent.click(screen.getByLabelText('Share'));
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('https://artifactbin.test/a/Ab3xK9');
+  });
   it('keeps the plain one-click copy button for non-owners (no dialog)', async () => {
     render(<ShareLink className="x" />);
     fireEvent.click(screen.getByLabelText('Share'));

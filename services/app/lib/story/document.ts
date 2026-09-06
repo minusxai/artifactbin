@@ -61,6 +61,7 @@ export interface StoryDocumentInput {
   assetUrls?: ReadonlySet<string> | ReadonlyMap<string, WebAssetBox>;
   /** The document's `<Value>`/`<Query>`/`<Mutation>` declarations + render-time state (lib/artifacts dataflowForRow); null when it declares nothing. */
   dataflow?: StoryIslandDataflow | null;
+  controlsUrl?: string;
   /** Stored title (Helmet's own <title> wins over it in the head). */
   title: string | null;
   /** src of the hydration runtime; null omits the tag (unit tests, scriptless contexts). */
@@ -389,7 +390,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    * the omission is structural: /export photographs this frame, and neither the
    * rail nor the attribution belongs in an unfurl card.
    */
-  const readerChrome = chrome
+  const readerChrome = chrome && !input.controlsUrl
     ? renderReaderChrome({
       // The document knows its own id only when it is live enough to hear its
       // author; a capture and a unit render have none, and the like/comment
@@ -479,7 +480,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    * must degrade to the old, heavy, WORKING delivery rather than to silence.
    */
   const commentFallback = !!input.commenting && !commentSrc;
-  const hydrates = !!split && !!runtimeSrc && (needsRuntime(split.body) || !!dataflow || !!input.editable || commentFallback);
+  const hydrates = !!split && !!runtimeSrc && (needsRuntime(split.body) || !!helmet.script || !!dataflow || !!input.editable || !!input.controlsUrl || commentFallback);
   /*
    * The THIRD delivery: comments without hydration. A commenter's frame used
    * to ask for `?edit=1` — which made this `hydrates` — so a page of prose
@@ -518,6 +519,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
 
   const island: StoryIslandData = { nodes: split?.body ?? [], refData, ...(Object.keys(glyphs).length ? { glyphs } : {}), ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, ...(input.queryUrl ? { queryUrl: input.queryUrl } : {}), ...(input.mutateUrl ? { mutateUrl: input.mutateUrl } : {}), ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}) };
   // `<` escaped so no row value can close the script element from inside JSON.
+  if (input.controlsUrl) island.controlsUrl = input.controlsUrl;
   const islandJson = JSON.stringify(island).replace(/</g, '\\u003c');
 
   /**
@@ -531,7 +533,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    */
   const safeScript = helmet.script && !/<\/script/i.test(helmet.script) ? helmet.script : null;
   const authorScript = safeScript
-    ? (hydrates ? `<script type="${AUTHOR_SCRIPT_TYPE}">${safeScript}</script>` : `<script>${safeScript}</script>`)
+    ? `<script type="${AUTHOR_SCRIPT_TYPE}">${safeScript}</script>`
     : '';
 
   return (
@@ -573,7 +575,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
     `${fontPreloads}${modulePreloads}${styles}</head>` +
     // The live attributes are what the reading-position module reads to open
     // this document's own stream (lib/story-runtime/anchor-entry).
-    `<body ${STORY_ROOT_ATTR}${live ? ` data-mx-live-id="${escapeHtml(live.id)}" data-mx-live-edit="${escapeHtml(live.editId)}"` : ''}>` +
+    `<body ${STORY_ROOT_ATTR}${input.controlsUrl ? ' data-mx-controls="true"' : ''}${live ? ` data-mx-live-id="${escapeHtml(live.id)}" data-mx-live-edit="${escapeHtml(live.editId)}"` : ''}>` +
     `<div id="${STORY_ROOT_ID}">${bodyHtml}</div>` +
     readerChrome +
     /*

@@ -1,8 +1,8 @@
 /**
  * THE CHANNEL THE AUTHOR'S SCRIPT CANNOT REACH.
  *
- * A served document runs the author's own `<script>` in the same realm as the
- * runtime. Once the runtime can also send EDITS to the page — which is what
+ * Historically, a served document ran the author's own `<script>` in the same
+ * realm as the runtime. Once the runtime could also send EDITS to the page — which is what
  * in-place editing means — "the frame said so" stops being good enough: a
  * hostile script is one `top.postMessage(...)` away from writing to someone
  * else's document.
@@ -24,11 +24,10 @@
  * posts (`mx:painted`, `mx:anchor`, `mx:query`). Nothing privileged crossed,
  * but a channel that works only sometimes is not a channel.
  *
- * What this does NOT stop, deliberately: a script can still puppet the editor
- * through trusted UA APIs (`focus()` + `execCommand`). That writes what the
- * editor itself can write — visible text, through the door's sanitizer — and
- * cannot inject a script, touch the Helmet, or persist itself. See
- * seamless-editing-v2.md §5.
+ * Author scripts now run in a separate opaque child (author-script.ts), so
+ * they cannot reach the renderer's globals or puppet its editable DOM. Keep
+ * this channel as defense in depth and as the existing editor protocol;
+ * isolated execution does not make source/origin/nonce validation optional.
  */
 
 /** 128 bits of nonce, hex — long enough that guessing is not a strategy. */
@@ -64,8 +63,8 @@ export interface PristineChannel {
  * MUST be called before the author's script is injected — that ordering is the
  * whole security property, and `entry.tsx` is the only correct caller.
  */
-export function capturePristine(win: Window, appOrigin: string): PristineChannel | null {
-  const parentWin = win.parent;
+export function capturePristine(win: Window, appOrigin: string, trustedPeer?: Window): PristineChannel | null {
+  const parentWin = trustedPeer ?? win.parent;
   if (!parentWin || parentWin === win) return null;
 
   const post = parentWin.postMessage.bind(parentWin) as (message: unknown, targetOrigin: string) => void;

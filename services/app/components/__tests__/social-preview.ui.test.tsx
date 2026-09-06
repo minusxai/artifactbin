@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import SocialPreviewDialog from '../SocialPreviewDialog';
+import * as apiOrigin from '@/web/api-origin';
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 const loadOverview = () => {
@@ -21,6 +23,13 @@ const response = (status: number, body: unknown) => ({
 });
 
 describe('social preview dialog', () => {
+  it('loads protected preview images from the API origin inside trusted controls', () => {
+    vi.spyOn(apiOrigin,'appUrl').mockImplementation(path=>new URL(path,'https://artifactbin.test').href);
+    render(<SocialPreviewDialog id="story1" source="<p>x</p>" editId="e1" version={4} onClose={()=>{}} />);
+    expect(screen.getByAltText('Artifact preview')).toHaveAttribute('src',expect.stringMatching(/^https:\/\/artifactbin\.test\/a\/story1\/export/));
+    loadOverview();
+    expect(document.querySelector('img[aria-hidden="true"]')).toHaveAttribute('src',expect.stringMatching(/^https:\/\/artifactbin\.test\/a\/story1\/export/));
+  });
   it('loads the versioned, editor-only overview and resets by removing the directive', async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => response(200, { edit_id: 'e2' }));
     vi.stubGlobal('fetch', fetchMock);

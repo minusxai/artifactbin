@@ -1,4 +1,5 @@
 /** The pretty URLs: an id-anchored artifact or the owner's public index. */
+import {appFetch as fetch} from '@/web/api-origin';
 import { useEffect, useRef, useState } from 'react';
 import { takeBootstrap } from '../bootstrap';
 import { Navigate, useLocation, useParams } from 'react-router';

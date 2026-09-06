@@ -8,9 +8,11 @@
  * drift.
  */
 import { json } from '@/lib/http';
-import { DECL_NAME_RE, type Scalar } from './dataflow';
+import { DECL_NAME_RE, type Scalar, type Row } from './dataflow';
+import { parseLocalTables } from './local-tables';
 
 export interface MutationRequest {
+  localTables?: Record<string, Row[]>;
   mutation: string;
   values?: Record<string, Scalar>;
   row?: Record<string, Scalar>;
@@ -25,6 +27,10 @@ export function parseMutationRequest(body: Record<string, unknown>): MutationReq
     return json({ error: 'invalid_mutation', details: ['mutation must be the name of a <Mutation> the document declares'] }, 400, { 'Access-Control-Allow-Origin': '*' });
   }
   const out: MutationRequest = { mutation: name };
+  if (body.localTables !== undefined) {
+    try { out.localTables = parseLocalTables(body.localTables); }
+    catch { return json({error: 'invalid_local_state'}, 400, {'Access-Control-Allow-Origin': '*'}); }
+  }
   if (body.values !== undefined) {
     if (!body.values || typeof body.values !== 'object' || Array.isArray(body.values)) {
       return json({ error: 'invalid_values', details: ['values must be an object of scalars'] }, 400, { 'Access-Control-Allow-Origin': '*' });

@@ -10,6 +10,7 @@ const browser = await chromium.launch();
 try {
   const ownerPage = await browser.newPage({viewport:{width:1450,height:950}});
   ownerPage.on('pageerror', error => console.error(error.message));
+  ownerPage.on('console', message => {if (message.type() === 'error') console.error(message.text());});
   await becomeOwner(ownerPage,base,fixture.token);
   await ownerPage.goto(fixture.url);
   await ownerPage.locator('iframe[title="artifact"]').waitFor();
@@ -32,7 +33,11 @@ try {
   await page.getByLabel('Sprint name',{exact:true}).fill('Planning week');
   await page.getByLabel('Sprint deadline',{exact:true}).fill('2026-09-14');
   await page.getByLabel('Create sprint',{exact:true}).click();
-  await dialog.waitFor({state:'hidden'});
+  await dialog.waitFor({state:'hidden',timeout:10000}).catch(async error => {
+    console.error('Dialog did not save:', await dialog.innerText());
+    console.error('Dialog controls:', await dialog.evaluate(el => [...el.querySelectorAll('input,button,form,fieldset')].map(node => ({tag:node.tagName,type:node.type,disabled:node.disabled,valid:node.validity?.valid,value:node.value}))));
+    throw error;
+  });
   await page.locator('#view-sprint').getByText('Planning week',{exact:true}).waitFor();
   await page.locator('#view-sprint').getByLabel('Add Sprint',{exact:true}).click();
   await page.getByLabel('Sprint name',{exact:true}).fill(' planning WEEK ');

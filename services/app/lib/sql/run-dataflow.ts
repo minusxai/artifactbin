@@ -14,11 +14,15 @@ import {
   initialValues, queryDeps, queryOrder, type Dataflow, type DataflowState, type Row, type Scalar,
 } from '@/lib/story/dataflow';
 import type { DatasetColumn } from '@/lib/story/dataset-shape';
+import { localTableOverrides } from '@/lib/story/local-tables';
+import { SIGNALS_TABLE } from '@/lib/story/local-target';
 
 /** Dataset rows by artifact id (the `ref_<id>` tables). */
 export type DatasetTables = Record<string, { rows: Row[]; columns: DatasetColumn[] }>;
 
 export interface RunDataflowOptions {
+  /** Reader-local inline table rows; schemas always come from declarations. */
+  localTables?: Record<string, Row[]>;
   /** Override the declared defaults (a reader's current selections). Unknown names are ignored. */
   values?: Record<string, Scalar>;
   /** Run only these queries (and register the rest as empty) — a re-run after a value change. */
@@ -42,11 +46,14 @@ export async function runDataflow(flow: Dataflow, datasets: DatasetTables, opts:
   const tables: DataflowState['tables'] = {};
   const errors: DataflowState['errors'] = {};
   const inputs: Record<string, { rows: Row[]; columns: DatasetColumn[] }> = {};
+  const local = localTableOverrides(flow, opts.localTables);
   for (const v of flow.values) {
     if (v.kind !== 'table') continue;
-    inputs[v.name] = { rows: v.rows, columns: v.columns };
-    tables[v.name] = { rows: v.rows, columns: v.columns };
+    inputs[v.name] = local[v.name] ?? { rows: v.rows, columns: v.columns };
+    tables[v.name] = inputs[v.name];
   }
+  const signalColumns = flow.values.filter(v => v.kind === 'scalar').map(v => ({name: v.name, type: v.type}));
+  if (signalColumns.length) inputs[SIGNALS_TABLE] = {columns: signalColumns, rows: [values]};
   for (const [id, t] of Object.entries(datasets)) inputs[`ref_${id}`] = t;
 
   const order = queryOrder(flow);

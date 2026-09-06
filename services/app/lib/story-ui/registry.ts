@@ -78,10 +78,12 @@ import { SlideDeck, Slide } from '@/components/kit/slides';
 import { Video } from '@/components/kit/video';
 import { File } from '@/components/kit/file';
 import { DataTable } from '@/components/kit/data-table';
+import {Dialog, DialogTrigger, DialogContent, DialogClose} from '@/components/kit/dialog';
 import { Files } from '@/components/kit/files';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const STORY_UI_COMPONENTS: Record<string, React.ComponentType<any>> = {
+  Dialog, DialogTrigger, DialogContent, DialogClose,
   Card,
   CardHeader,
   CardTitle,

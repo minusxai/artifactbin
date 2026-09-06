@@ -18,6 +18,7 @@
  * lesson: `setBusy(true)` lands at the next render, so two clicks in one tick
  * both read `false` and both fetch.
  */
+import {appFetch as fetch} from '@/web/api-origin';
 import { RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 

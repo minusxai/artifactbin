@@ -11,7 +11,8 @@ import type { AnnotationRange } from '@/lib/story/annotation-range';
 import type { JsxNode } from '@/lib/jsx';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 import type { RefDataMap } from '@/lib/story/ref-data';
-import type { Dataflow, DataflowState, Scalar } from '@/lib/story/dataflow';
+import type { Dataflow, DataflowState, Scalar, Row } from '@/lib/story/dataflow';
+import type { LocalMutationResult } from '@/lib/story/local-state';
 import type { ScrollAnchor } from '@/lib/story/scroll-anchor';
 
 /** The document's data as the island carries it: what is declared, and its state at render. */
@@ -48,6 +49,8 @@ export interface RanDataflow extends StoryIslandDataflow {
 
 /** What the document's JSON island carries — everything the entry needs to hydrate. */
 export interface StoryIslandData {
+  /** Server-owned trusted controls URL, never an authored prop. */
+  controlsUrl?: string;
   nodes: JsxNode[];
   refData: RefDataMap;
   /**
@@ -202,6 +205,8 @@ export interface StoryDocumentUpdate {
   compiledCss?: string | null;
   /** The author's own <Helmet> <style> (data-mx-author). */
   authorCss?: string | null;
+  /** Executed only by the isolated author-script host. Null revokes; absent preserves. */
+  authorScript?: string | null;
   theme?: string | null;
   colorMode?: 'light' | 'dark';
 }
@@ -339,6 +344,7 @@ export const STORY_QUERY_MESSAGE = 'mx:query';
 export const STORY_QUERY_RESULT_MESSAGE = 'mx:query-result';
 
 export interface StoryQueryRequest {
+  localTables?: Record<string, Row[]>;
   type: typeof STORY_QUERY_MESSAGE;
   id: number;
   values: Record<string, Scalar>;
@@ -396,6 +402,7 @@ export const STORY_MUTATE_MESSAGE = 'mx:mutate';
 export const STORY_MUTATE_RESULT_MESSAGE = 'mx:mutate-result';
 
 export interface StoryMutateRequest {
+  localTables?: Record<string, Row[]>;
   type: typeof STORY_MUTATE_MESSAGE;
   id: number;
   mutation: string;
@@ -404,7 +411,7 @@ export interface StoryMutateRequest {
 }
 
 export type StoryMutateResult =
-  | { type: typeof STORY_MUTATE_RESULT_MESSAGE; id: number; ok: true; dataset: string; version: number; affected: number }
+  | { type: typeof STORY_MUTATE_RESULT_MESSAGE; id: number; ok: true; dataset: string; version: number; affected: number; local?: LocalMutationResult }
   | { type: typeof STORY_MUTATE_RESULT_MESSAGE; id: number; ok: false; error: string };
 
 /**
