@@ -17,7 +17,7 @@ Bearer API (browser equivalents use `/api/my/connections`):
 
 MCP equivalents: `list_connections`, `create_connection`, `update_connection`, `test_connection`. A connection is owner-managed. Sharing a dataset never reveals credentials or grants access to the rest of the connection.
 
-Forking a Postgres dataset requires ownership of its connection; read or edit access to the dataset alone is insufficient. This prevents a copy from retaining connection access after the original dataset share is revoked. Stored datasets remain forkable by readers.
+Forking a Postgres dataset requires ownership of its connection; read or edit access to the dataset alone is insufficient and returns `403 connection_owner_only`. This prevents a copy from retaining connection access after the original dataset share is revoked. Stored datasets remain forkable by readers.
 
 Use a dedicated read-only Postgres login. Query execution also uses a read-only transaction, server timeout, result limits and a catalog-restricted SQL compiler. Unsupported syntax/functions fail closed. Errors use `dataset_error` with details; inaccessible connections return 404. Connection credentials are encrypted using a key derived from AUTH__SECRET; preserve that secret across deployments or re-enter credentials after rotation.
 
