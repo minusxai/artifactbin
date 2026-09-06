@@ -1,6 +1,6 @@
 /**
  * Editable social preview, end to end against a running server:
- * owner chrome → focused cropper → keyboard position/resize → source edit →
+ * owner chrome → sharing → focused cropper → keyboard position/resize → source edit →
  * exact 1600×840 card → reset back to the top-left default.
  */
 import { chromium } from 'playwright';
@@ -46,7 +46,8 @@ try {
   await becomeOwner(page, BASE, start.token);
   await page.goto(`${BASE}/a/${start.id}`, { waitUntil: 'load' });
   await openArtifactControls(page);
-  await page.getByLabel('Edit social preview').click();
+  await page.getByLabel('Share', { exact: true }).click();
+  await page.getByRole('dialog', { name: 'Sharing', exact: true }).getByLabel('Edit social preview').click();
   const dialog = page.getByRole('dialog', { name: 'Social preview' });
   await dialog.waitFor();
   await dialog.getByAltText('Artifact preview').waitFor({ state: 'visible', timeout: 30_000 });
@@ -88,7 +89,8 @@ try {
   // Reload to prove the frame is restored from persisted source, not dialog state.
   await page.reload({ waitUntil: 'load' });
   await openArtifactControls(page);
-  await page.getByLabel('Edit social preview').click();
+  await page.getByLabel('Share', { exact: true }).click();
+  await page.getByRole('dialog', { name: 'Sharing', exact: true }).getByLabel('Edit social preview').click();
   const resetDialog = page.getByRole('dialog', { name: 'Social preview' });
   await resetDialog.getByLabel('Move social preview crop').waitFor({ timeout: 30_000 });
   await resetDialog.getByLabel('Reset social preview').click();

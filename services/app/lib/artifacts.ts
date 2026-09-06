@@ -2105,6 +2105,15 @@ export function datasetsForDocument(source: string | null | undefined): string[]
 }
 
 
+/** Resolve an admitted asset using the document owner's normal reference scope. */
+export async function referencedArtifactForRow(row: ArtifactRow, id: string): Promise<ArtifactRow | null> {
+  const refs = (row.meta as { refs?: Array<{ id: string }> }).refs ?? [];
+  if (!refs.some((ref) => ref.id === id)) return null;
+  return (await getArtifact(row.token_id, id))
+    ?? (row.user_id ? await getArtifactByUser(row.user_id, id) : null)
+    ?? (await getLinkReadableArtifact(id));
+}
+
 /** Build the render-time RefDataMap for a jsx artifact: recipes → parsed
  * template, images → their /a URL. (Datasets: see dataflowForRow.) */
 export async function refDataForRow(
@@ -2124,9 +2133,7 @@ export async function refDataForRow(
     // a claimed agent token, the image on the account's 'web' token), and the
     // widened publish door admits any public/unlisted asset besides — whatever
     // it admitted, this must resolve, or the accepted image renders broken.
-    const r = (await getArtifact(row.token_id, ref.id))
-      ?? (row.user_id ? await getArtifactByUser(row.user_id, ref.id) : null)
-      ?? (await getLinkReadableArtifact(ref.id));
+    const r = await referencedArtifactForRow(row, ref.id);
     if (!r) continue; // deleted ref → the embed degrades to its fallback
     if (r.format === 'viz') {
       try { out[r.id] = { kind: 'viz', recipe: JSON.parse(r.content) }; } catch { /* skip */ }

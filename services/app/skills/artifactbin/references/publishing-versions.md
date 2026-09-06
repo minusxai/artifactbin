@@ -108,6 +108,42 @@ user a static image:
 curl -sS -o report.png "[[ base ]]/a/<id>/export"
 ```
 
+### Set a social preview image
+
+Upload an image asset first (`POST /api/artifacts` with raw image bytes and
+`Content-Type: image/png`, or JSON `{ "image": "data:image/png;base64,…" }`).
+Use its returned id in the document source:
+
+```jsx
+<Helmet>
+  <meta name="artifactbin:og-image" content="ref:IMAGE_ID" />
+</Helmet>
+```
+
+This reference must resolve to an image you can use, just like `<img src="ref:…" />`.
+The card export uses the uploaded image, centered and cropped to fill 1600×840
+by default. In the social preview editor, drag to pan and resize the frame to
+select a different area of the uploaded image. Its bounds are saved separately:
+
+```jsx
+<meta name="artifactbin:og-image-crop" content="x=400;y=200;width=800" />
+```
+
+Image coordinates refer to the full image scaled to 1600px wide (after image
+orientation); height follows the locked 40:21 ratio. Reset removes these image
+bounds and restores the centered image crop. Replacing the image starts with a
+fresh centered crop. The document's `artifactbin:og-crop` is preserved.
+Remove the `artifactbin:og-image` meta to restore the saved document framing.
+The browser's **sharing → social preview → upload image → save preview** uses the same
+asset upload and Helmet reference.
+
+Document framing is also stored in Helmet:
+`<meta name="artifactbin:og-crop" content="x=0;y=400;width=1200" />`.
+Coordinates use a 1600px-wide document layout; height follows the 40:21 ratio.
+An uploaded image takes precedence without removing these bounds. Without
+either setting, the card captures the top 1600×840 of the document. Full-page
+and editor overview exports continue to render the document itself.
+
 Share pages also carry `og:image` pointing at this URL, so links pasted into
 Slack and the like unfurl with a live preview. A `503 render_unavailable`
 means this deployment has no headless browser installed — the HTML link still
