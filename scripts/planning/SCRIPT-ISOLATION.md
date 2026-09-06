@@ -38,15 +38,20 @@
 - Merged current main `275957e` (folder UX and uploaded social previews), preserving
   those changes. Protected preview images use the main/API origin in controls.
 - Current suites: **5,670 passed, one skipped** (1,233 API + 3,410 Node + 1,027 UI).
-  Full browser sweep: **50/50 passed**, one isolated retry under contention.
-  The expanded two-origin gate passed again after the final fixes. Typecheck
+  Earlier browser sweep: **50/50 passed**, one isolated retry under contention.
+  Integrated-main CI passed 49 gates and every assertion in the expanded
+  two-origin gate, then found a teardown hang after its PASS message. The
+  disposable export server now has bounded SIGTERM/SIGKILL cleanup; the same
+  gate exits successfully locally. Final full CI verifies the exit, not PASS text.
+  Typecheck
   and production build passed. Neo desktop/mobile inspection found and verified
   the transparent-menu fix; its regression test was observed red then green.
 - Production requires provisioned HTTPS/DNS routing for the controls host and
   the same setting in proxy/app processes. Neither deployment nor DNS has been
-  changed. PR creation follows full review and acceptance, with an empty body.
+  changed. [PR #46](https://github.com/minusxai/artifactbin/pull/46) has an empty
+  body; merge readiness requires all checks green on its final commit.
 
-### Reactive markup and dialog milestone
+### Reactive markup and dialog milestone (historical checkpoint)
 
 - Restricted scalar expressions and structural conditional JSX now parse,
   validate, serialize, and render. Both branches retain real node IDs and
@@ -67,7 +72,7 @@
 - Top-level owner/editor rendering is integrated in the next milestone above.
   Existing host-only account and agent cookies never become parent-domain cookies.
 
-### SQL local-state milestone
+### SQL local-state milestone (historical checkpoint)
 
 - 19 execution cases initially produced 17 RED failures against the skeleton;
   implemented using the existing stateless SQL service, tested in-process and
@@ -87,12 +92,14 @@
   row edits, refresh, reload reset, and unchanged artifact versions. It failed
   against the previous built server at local-mutation admission first.
 - Existing scalar Values are URL-backed. Asked whether SQL updates should
-  preserve that behavior; currently preserved for compatibility. This differs
-  from inline tables' unconditional reload reset and must be resolved/documented.
+  preserve that behavior; preserved for compatibility and documented in the
+  markup reference. Inline tables instead reset on reload.
 - Conditional JSX, dialog composition, roadmap migration, and trusted-control
   topology remain required work. No PR or deployment yet.
 
-- Working branch `feat/isolated-author-scripts`, based on latest fetched main `921d578`.
+### Initial isolation milestone (historical checkpoint)
+
+- Working branch `feat/isolated-author-scripts`, then based on main `921d578`.
 - Isolated execution, bounded signals/query/mutation bridge, and live script
   replacement/removal are implemented locally. No production changes.
 - Focused built-server gates passed: author-script-isolation, dataflow,

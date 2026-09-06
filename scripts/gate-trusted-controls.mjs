@@ -204,7 +204,15 @@ try {
   }
 } finally {
   await browser?.close();
-  if (server.exitCode === null) {server.kill('SIGTERM');await new Promise(resolve=>server.once('exit',resolve));}
+  if (server.exitCode === null && server.signalCode === null) {
+    // Export starts Playwright inside this disposable server. Its signal
+    // handler can keep Node alive after SIGTERM, even after every assertion
+    // passed. Bound cleanup of this exact child, not the gate's assertions.
+    const exited = new Promise(resolve=>server.once('exit',resolve));
+    const force = setTimeout(()=>server.kill('SIGKILL'),2000);
+    server.kill('SIGTERM');
+    try {await exited;} finally {clearTimeout(force);}
+  }
   tls.closeAllConnections();
   await new Promise(resolve=>tls.close(resolve));
   rmSync(scratch,{recursive:true,force:true});
