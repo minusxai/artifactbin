@@ -50,7 +50,7 @@ export function DatasetEditorPage() {
   const loadDefinition = (input: CatalogInput, metadata?: DatasetCatalog, preserveDraft = false) => {
     setKind(input.kind); setConnection(input.connection ?? initialConnection()); setPassword('');
     setDefaultSchema(input.defaultSchema ?? 'public'); setRefreshSeconds(input.refreshSeconds ?? 0);
-    const sameConnection = JSON.stringify(input.connection) === JSON.stringify(connection);
+    const sameConnection = Boolean(input.connection && Object.entries(connection).every(([key, value]) => input.connection![key as keyof DatasetConnection] === value));
     const discoveries = metadata?.notebookSources ?? (preserveDraft && sameConnection ? sources.map(s => s.discovery) : []);
     const physical = input.tables.filter(t => t.source).map(t => {
       const discovery = discoveries.find(d => d.schema === t.source!.schema && d.name === t.source!.table);

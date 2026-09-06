@@ -171,6 +171,20 @@ describe('dataset editor', () => {
     expect(screen.getByLabelText('Expose cell 1')).toBeDisabled(); expect(screen.getByLabelText('Source exposure')).not.toHaveTextContent('string'); click('Save dataset');
     await waitFor(() => expect(screen.getByLabelText('Dataset error')).toHaveTextContent(/run.*totals/i));
   });
+  it('saves a fresh model-only notebook after an unchanged source roundtrip', async () => {
+    editor(); await discover();
+    await addCell('raw_orders','select id from sales.orders');
+    await addCell('region_totals','select count(*) id from raw_orders',2);
+    click('Expose cell 2'); change('Default schema','models');
+    click('Edit dataset source'); click('Apply dataset source');
+    expect(screen.getByLabelText('Expose cell 2')).toBeEnabled();
+    expect(screen.getByLabelText('Expose cell 2')).toBeChecked();
+    expect(screen.getByLabelText('Expose cell 1')).not.toBeChecked();
+    expect(screen.getByLabelText('Expose table sales.orders')).not.toBeChecked();
+    click('Save dataset');
+    await waitFor(() => expect(savedDefinition()?.notebook?.cells.map(cell => cell.name)).toEqual(['raw_orders','region_totals']));
+    expect(savedDefinition()?.tables).toEqual([{schema:'models',name:'region_totals',modelCellId:expect.any(String),columns:['id']}]);
+  });
   it('retains invalid source edits and visual draft until source is valid', async () => {
     editor(true); await screen.findByLabelText('Password status'); click('Edit dataset source'); change('Dataset source','broken'); click('Apply dataset source');
     await screen.findByLabelText('Dataset error'); expect(screen.getByLabelText('Dataset source')).toHaveValue('broken'); expect(screen.getByLabelText('Host')).toHaveValue(connection.host);
