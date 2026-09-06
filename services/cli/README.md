@@ -109,8 +109,8 @@ with `SHA256SUMS`. The release stays a draft until all assets are attached. Exis
 
 1. Update `services/cli/package.json` and the default `version` in `services/app/public/chat/install.sh`.
 2. Merge and wait for CI to pass on the exact main commit to release.
-3. Tag that commit `afbin-v0.1.0` (matching the package version) and push the tag. The workflow also supports
-   manual retries with an existing tag. It refuses commits outside main or without passing CI.
+3. Tag that commit `afbin-v0.1.0` (matching the package version) and push the tag. Failed workflow runs can
+   be retried from GitHub Actions. It refuses commits outside main or without passing CI.
 4. Verify the release assets, then deploy the app serving the corresponding installer. For a rollback,
    deploy an installer pinned to the previous release; users can also pass `--version` explicitly.
 
