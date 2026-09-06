@@ -6,6 +6,9 @@ import { POST as createSecret } from '@/app/api/my/secrets/route';
 import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { PUT as replaceArtifact } from '@/app/api/artifacts/[id]/route';
 import { POST as discover } from '@/app/api/my/datasets/discover/route';
+import { GET as rawDataset } from '@/app/a/[id]/raw/route';
+import { GET as artifactPage } from '@/app/api/page/artifact/[id]/route';
+import { GET as readArtifact } from '@/app/api/artifacts/[id]/route';
 import { mintToken } from '@/lib/tokens';
 import { createUser, claimToken } from '@/lib/users';
 import { request, useAppHarness } from './harness';
@@ -48,4 +51,20 @@ it('gives dataset editors exposure control but rejects credential redirection an
   await db.query('DELETE FROM artifact_shares WHERE artifact_id=$1 AND email=$2',[id,friend.user.email]);
   const denied = await discover(request('/api/my/datasets/discover',{method:'POST',token:friend.token.token,json:{datasetId:id,connection:dataset.connection}}));
   expect(denied.status).toBe(404);
+});
+it('keeps the editable definition available to editors while public readers receive only the exposed catalog', async () => {
+  const {owner,dataset} = await fixture();
+  const published = await createArtifact(request('/api/artifacts',{method:'POST',token:owner.token.token,json:{dataset,visibility:'public'}}));
+  expect(published.status).toBe(201); const {id} = await published.json();
+  const editable = await readArtifact(request(`/api/artifacts/${id}`,{token:owner.token.token}),ctx(id));
+  expect(editable.status).toBe(200); const definition = await editable.json();
+  expect(definition.markup).toContain('<Dataset');
+  expect(definition.markup).toContain(dataset.connection.passwordSecretId);
+  expect(JSON.stringify(definition)).not.toContain('private-review-password');
+  for (const response of [await rawDataset(request(`/a/${id}/raw`),ctx(id)),await artifactPage(request(`/api/page/artifact/${id}`),ctx(id))]) {
+    expect(response.status).toBe(200); const wire = await response.text();
+    for (const internal of ['private-review-password','passwordSecretId','db.example.com','notebookSources','private_note']) expect(wire).not.toContain(internal);
+  }
+  const anonymous = await discover(request('/api/my/datasets/discover',{method:'POST',json:{datasetId:id,connection:dataset.connection}}));
+  expect(anonymous.status).toBe(401);
 });
