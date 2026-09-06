@@ -453,8 +453,9 @@ export async function dryRunMutations(input: DryRunMutationsInput): Promise<DryR
     const instance = await createInstance();
     const conn = await instance.connect();
     try {
-      const target = input.tables[`ref_${m.target}`];
-      if (target) await registerTable(conn, `ref_${m.target}`, { rows: [], columns: target.columns });
+      const tableName = m.tableName ?? `ref_${m.target}`;
+      const target = input.tables[tableName];
+      if (target) await registerTable(conn, tableName, { rows: [], columns: target.columns });
       const guarded = await prepareGuarded(conn, m.sql, 'write');
       if (guarded.error !== undefined) { errors.push({ name: m.name, error: guarded.error }); continue; }
       await bindMutationParams(conn, guarded.prepared, params, m.row);

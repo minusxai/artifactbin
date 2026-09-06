@@ -202,6 +202,7 @@ export default function InPlaceEditor({
       type: 'mx:document',
       nodes: parts.nodes,
       ...(parts.authorCss !== null ? { authorCss: parts.authorCss } : {}),
+      authorScript: parts.authorScript,
       /*
        * Absent means "unchanged"; NULL means "this document has no stylesheet".
        * Sending null because we happen not to hold one yet strips the sheet

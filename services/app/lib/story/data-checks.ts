@@ -12,6 +12,7 @@ import { analyzeRowScopes, mutationUsesRow } from './row-scope';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { dryRunMutations, dryRunQueries } from '@/lib/sql/engine';
 import { mutationsOf, queryOrder, refName, type Dataflow } from './dataflow';
+import { SIGNALS_TABLE } from './local-target';
 import type { DatasetColumn } from './dataset-shape';
 import { splitHelmet } from './helmet';
 import { refId, validateRecipeUse, validateRefs, validateVizAgainstColumns, type RefLoader } from './refs';
@@ -45,8 +46,10 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
 > {
   const tables: Record<string, { columns: DatasetColumn[] }> = {};
   for (const v of flow.values) if (v.kind === 'table') tables[v.name] = { columns: v.columns };
+  const signalColumns = flow.values.filter(v => v.kind === 'scalar').map(v => ({name: v.name, type: v.type}));
+  if (signalColumns.length) tables[SIGNALS_TABLE] = {columns: signalColumns};
   const mutations = mutationsOf(flow);
-  for (const id of new Set([...flow.queries.flatMap((q) => q.refs), ...mutations.map((m) => m.target)])) {
+  for (const id of new Set([...flow.queries.flatMap((q) => q.refs), ...mutations.filter(m => m.scope !== 'local').map((m) => m.target)])) {
     const r = await load(id);
     // A folder registers the FIXED shape of its children table (lib/folders
     // CHILDREN_COLUMNS), which `rowToResolvedRef` already put on the ref — so
@@ -79,7 +82,7 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
   // a non-DML statement or an unknown column is a publish error, never a
   // button that fails on its first click.
   if (mutations.length) {
-    const wet = await dryRunMutations({ tables, mutations: mutations.map((m) => ({ ...m, ...(rowSchemas[m.name] ? { row: { columns: rowSchemas[m.name] } } : {}) })), paramNames: [...paramNames, '_value'] });
+    const wet = await dryRunMutations({ tables, mutations: mutations.map((m) => ({ ...m, ...(m.scope === 'local' ? {tableName: m.target} : {}), ...(rowSchemas[m.name] ? { row: { columns: rowSchemas[m.name] } } : {}) })), paramNames: [...paramNames, '_value'] });
     details.push(...wet.errors.map((e) => `<Mutation name="${e.name}">: ${e.error}`));
   }
   if (details.length) return { kind: 'sql', details };

@@ -24,6 +24,8 @@
 
 /** @type {readonly GateSpec[]} */
 export const GATE_SPECS = Object.freeze([
+  { name: 'author-script-isolation', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 120_000 },
+  { name: 'local-sql-state', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 120_000 },
   { name: 'mutation-permissions', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 120_000 },
   // measured: implementer 9s; orchestrator 7s
   { name: 'annotations', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },

@@ -40,6 +40,7 @@ interface LiveFrame {
   declarations?: string | null;
   compiledCss?: string | null;
   authorCss?: string | null;
+  authorScript?: string | null;
   theme?: string | null;
   colorMode?: 'light' | 'dark' | null;
 }
@@ -131,6 +132,7 @@ export function startDocumentLive(win: Window, id: string, initialEditId: string
           ...(rebind && frame.dataflow ? { dataflow: frame.dataflow } : {}),
           ...(frame.compiledCss !== undefined ? { compiledCss: frame.compiledCss } : {}),
           ...(frame.authorCss !== undefined ? { authorCss: frame.authorCss } : {}),
+          ...(frame.authorScript !== undefined ? { authorScript: frame.authorScript } : {}),
           theme: frame.theme ?? null,
           ...(frame.colorMode ? { colorMode: frame.colorMode } : {}),
         });

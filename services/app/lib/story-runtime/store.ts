@@ -22,9 +22,15 @@
  * cascading through every embed on every keystroke.
  */
 import {
-  initialTables, initialValues, mutationsOf, queriesDependingOn, queriesReadingDatasets,
+  initialTables, initialValues, mutationsOf, queryDeps, queryOrder, queriesDependingOn, queriesReadingDatasets,
   type Dataflow, type DataflowState, type Scalar, type TableResult,
 } from '@/lib/story/dataflow';
+import type { LocalMutationResult } from '@/lib/story/local-state';
+import type { Row } from '@/lib/story/dataflow';
+import { SIGNALS_TABLE } from '@/lib/story/local-target';
+import { checkedLocalRows } from '@/lib/story/local-tables';
+
+export interface MutationAnswer { dataset: string; local?: LocalMutationResult }
 
 /** A window of one query's rows — what a table reads past the cap. */
 export interface TablePage {
@@ -40,16 +46,16 @@ export interface QueryTransport {
    * with the resulting tables + errors for those queries. A rejection is
    * reported as an error on every requested query — never thrown into UI.
    */
-  run(values: Record<string, Scalar>, only: string[]): Promise<Pick<DataflowState, 'tables' | 'errors' | 'mutationAccess'>>;
+  run(values: Record<string, Scalar>, only: string[], localTables?: Record<string, Row[]>): Promise<Pick<DataflowState, 'tables' | 'errors' | 'mutationAccess'>>;
   /** Read a window of one query with these values; resolves with that query's rows for the window. */
-  page(values: Record<string, Scalar>, name: string, page: TablePage): Promise<TableResult>;
+  page(values: Record<string, Scalar>, name: string, page: TablePage, localTables?: Record<string, Row[]>): Promise<TableResult>;
   /**
    * Perform a declared `<Mutation>` with these values. Resolves with the
    * dataset that changed (so the store knows what to re-run), rejects with the
    * server's message. Absent on a transport that cannot write (the editor's
    * draft path, a capture) — the store then reports that plainly.
    */
-  mutate?(values: Record<string, Scalar>, name: string, row?: Record<string, Scalar>): Promise<{ dataset: string }>;
+  mutate?(values: Record<string, Scalar>, name: string, row?: Record<string, Scalar>, localTables?: Record<string, Row[]>): Promise<MutationAnswer>;
   /**
    * Import one web URL the document ended up with (a bound `<img src="$pick">`,
    * a column of logos) and resolve with the ADDRESS of our copy.
@@ -160,6 +166,12 @@ export function createDataflowStore(
     errors: { ...(input.state?.errors ?? {}) },
     mutationAccess: input.state?.mutationAccess ?? {},
   };
+  let localRevision = 0;
+  let generation = 0;
+  let localQueue = Promise.resolve();
+  let localOverrides: Record<string, TableResult> = {};
+  const localRows = (): Record<string, Row[]> | undefined => Object.keys(localOverrides).length
+    ? Object.fromEntries(Object.entries(localOverrides).map(([name, table]) => [name, table.rows])) : undefined;
   const dirty = new Set<string>();
   let permissionsDirty = !!flow.mutations?.length && !input.state?.mutationAccess;
   const inFlight = new Set<string>();
@@ -213,7 +225,8 @@ export function createDataflowStore(
     // compares snapshots (useSyncExternalStore) must see that as a change.
     commit({ ...state });
     const values = { ...state.values };
-    transport.run(values, only).then(
+    const rows = localRows();
+    (rows ? transport.run(values, only, rows) : transport.run(values, only)).then(
       (result) => {
         if (seq !== runSeq) return; // superseded — the newer run will report
         for (const n of only) inFlight.delete(n);
@@ -222,6 +235,7 @@ export function createDataflowStore(
         const errors = { ...state.errors };
         for (const n of only) { delete tables[n]; delete errors[n]; }
         Object.assign(tables, result.tables);
+        Object.assign(tables, localOverrides);
         Object.assign(errors, result.errors);
         commit({ ...state, tables, errors, mutationAccess: result.mutationAccess ?? {} });
       },
@@ -269,6 +283,7 @@ export function createDataflowStore(
       changed.push(k);
     }
     if (!changed.length) return;
+    localRevision++;
     const nextValues = { ...state.values };
     for (const k of changed) nextValues[k] = values[k];
     for (const q of queriesDependingOn(flow, changed)) dirty.add(q);
@@ -278,6 +293,16 @@ export function createDataflowStore(
   };
 
   const replaceFlow: DataflowStore['replaceFlow'] = (next) => {
+    generation++;
+    localRevision++;
+    // Preserve local drafts only when both schema and authored initial rows are
+    // unchanged. A changed declaration explicitly replaces that local table.
+    localOverrides = Object.fromEntries(Object.entries(localOverrides).filter(([name]) => {
+      const old = flow.values.find(v => v.kind === 'table' && v.name === name);
+      const incoming = next.flow.values.find(v => v.kind === 'table' && v.name === name);
+      return old?.kind === 'table' && incoming?.kind === 'table'
+        && JSON.stringify([old.columns, old.rows]) === JSON.stringify([incoming.columns, incoming.rows]);
+    }));
     const before = scalarTypes();
     const kept: Record<string, Scalar> = {};
     const previousValues = state.values;
@@ -313,6 +338,7 @@ export function createDataflowStore(
       ? { values, tables: { ...initialTables(flow), ...keepRows(next.state.tables ?? {}) }, errors: keepRows(next.state.errors ?? {}) }
       : { values, tables: { ...keepRows(state.tables), ...initialTables(flow) }, errors: keepRows(state.errors) };
     state.mutationAccess = next.state?.mutationAccess ?? {};
+    Object.assign(state.tables, localOverrides);
     // The server ran these queries with the DEFAULTS. Where the reader's own
     // value disagrees, its dependents describe a document nobody is looking at.
     if (next.state) {
@@ -342,6 +368,7 @@ export function createDataflowStore(
 
   const mutationUnavailable = (name: string): string | null => {
     if (!transport?.mutate) return 'This view cannot save changes.';
+    if (flow.mutations?.some(m => m.name === name && m.scope === 'local')) return null;
     return Object.hasOwn(state.mutationAccess ?? {}, name)
       ? state.mutationAccess![name] : 'Checking edit access…';
   };
@@ -357,6 +384,40 @@ export function createDataflowStore(
     writing.add(name);
     commit({ ...state }); // `mutating()` changed — a bound Button shows itself busy
     try {
+      if (decl.scope === 'local') {
+        const invokedGeneration = generation;
+        const task = localQueue.then(async () => {
+          if (generation !== invokedGeneration) throw new Error('Document changed before local mutation ran');
+          const revision = localRevision;
+          const reply = await transport!.mutate!({...state.values, ...overrides}, name, row, localRows() ?? {});
+          if (generation !== invokedGeneration || localRevision !== revision) throw new Error('Local state changed while mutation ran; retry');
+          const result = reply.local;
+          if (!result || result.target !== decl.target) throw new Error('Invalid local mutation result');
+          if (decl.target === SIGNALS_TABLE) {
+            const columns = flow.values.filter(v => v.kind === 'scalar').map(v => ({name: v.name, type: v.type}));
+            if (result.table.rows.length !== 1) throw new Error('_signals must remain a single row');
+            const rows = checkedLocalRows(result.table.rows, columns);
+            setValues(rows[0] as Record<string, Scalar>);
+          } else {
+            const table = flow.values.find(v => v.kind === 'table' && v.name === decl.target);
+            if (!table || table.kind !== 'table') throw new Error('Local table declaration changed');
+            const resultTable = {columns: table.columns, rows: checkedLocalRows(result.table.rows, table.columns)};
+            localOverrides = {...localOverrides, [decl.target]: resultTable};
+            const affected = new Set([decl.target]);
+            for (const query of queryOrder(flow) ?? []) {
+              const declaration = flow.queries.find(q => q.name === query)!;
+              if (queryDeps(declaration.sql, [...affected]).length) {affected.add(query); dirty.add(query);}
+            }
+            pendingChanged();
+            commit({...state, tables: {...state.tables, [decl.target]: resultTable}});
+            schedule();
+          }
+          localRevision++;
+        });
+        localQueue = task.catch(() => {});
+        await task;
+        return;
+      }
       const values = { ...state.values, ...overrides };
       const { dataset } = await (row === undefined ? transport.mutate(values, name) : transport.mutate(values, name, row));
       // The click that writes is the click that redraws: the reader must not
@@ -365,7 +426,7 @@ export function createDataflowStore(
     } catch (error) {
       // A permission can disappear between checking it and saving. Refresh
       // capabilities while the control keeps the failed draft and error.
-      invalidateDatasets([decl.target]);
+      if (decl.scope !== 'local') invalidateDatasets([decl.target]);
       throw error;
     } finally {
       const left = (writingCounts.get(name) ?? 1) - 1;
@@ -414,7 +475,8 @@ export function createDataflowStore(
     },
     fetchPage: (name, page) => {
       if (!transport) return Promise.reject(new Error('no query transport'));
-      return transport.page({ ...state.values }, name, page);
+      const rows = localRows();
+      return rows ? transport.page({ ...state.values }, name, page, rows) : transport.page({ ...state.values }, name, page);
     },
   };
 }

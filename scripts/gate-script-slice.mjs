@@ -70,17 +70,19 @@ const frameEl = await page.waitForSelector('iframe[title="artifact"]', { timeout
 const frame = await frameEl.contentFrame();
 await frame.waitForSelector('h1', { timeout: 15000 });
 
-// 1. script executed
-await frame.waitForFunction("document.body.dataset.scriptRan === '1'", { timeout: 10000 }).catch(() => {});
-check(await frame.evaluate("document.body.dataset.scriptRan === '1'"), 'Helmet script executed in view mode');
-check(await frame.evaluate("!!document.getElementById('script-made')"), 'script-created element present');
+// 1. Script executes only in its own opaque child, never in the rendered document.
+const authorFrame = await (await frame.waitForSelector('iframe[title="Isolated artifact script"]', { state: 'attached' })).contentFrame();
+await authorFrame.waitForFunction("document.body.dataset.scriptRan === '1'", { timeout: 10000 }).catch(() => {});
+check(await authorFrame.evaluate("document.body.dataset.scriptRan === '1'"), 'Helmet script executed in its isolated realm');
+check(await authorFrame.evaluate("!!document.getElementById('script-made')"), 'script can only create elements in its own hidden realm');
+check(await frame.evaluate("!document.getElementById('script-made') && !document.body.dataset.scriptRan"), 'author script did not mutate the visible document');
 
 // 2. isolation
-await frame.waitForFunction("window.__exfil !== 'pending'", { timeout: 10000 }).catch(() => {});
-check((await frame.evaluate('window.__exfil')) === 'blocked', 'CSP blocked fetch exfiltration');
-check((await frame.evaluate('window.__img')) === 'blocked', 'CSP blocked img beacon');
-check((await frame.evaluate('window.__parent')) === 'blocked', 'parent document unreachable (opaque origin)');
-check((await frame.evaluate('window.__storage')) === 'blocked', 'localStorage unreachable (opaque origin)');
+await authorFrame.waitForFunction("window.__exfil !== 'pending'", { timeout: 10000 }).catch(() => {});
+check((await authorFrame.evaluate('window.__exfil')) === 'blocked', 'CSP blocked fetch exfiltration');
+check((await authorFrame.evaluate('window.__img')) === 'blocked', 'CSP blocked img beacon');
+check((await authorFrame.evaluate('window.__parent')) === 'blocked', 'visible document unreachable from author script');
+check((await authorFrame.evaluate('window.__storage')) === 'blocked', 'localStorage unreachable (opaque origin)');
 
 // 3. author style painted
 const color = await frame.evaluate("getComputedStyle(document.querySelector('h1')).color");
@@ -165,7 +167,7 @@ const interactive = await api('/api/artifacts', {
   await f2.click('#tick');
   await f2.click('#tick');
   await p2.waitForTimeout(400);
-  check((await f2.textContent('#count')) === '2', 'an author script drives a real <button>');
+  check((await f2.textContent('#count')) === '0', 'a legacy author DOM listener cannot observe or mutate visible controls');
   // An authored value is the STARTING value, not a binding: React would
   // otherwise make the field controlled with no onChange and refuse input.
   await f2.fill('#field', 'edited by the reader');

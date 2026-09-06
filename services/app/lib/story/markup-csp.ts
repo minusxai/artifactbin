@@ -26,9 +26,10 @@ const SOURCE_DIRECTIVES = [
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
   "media-src 'self' data: blob:",
-  // No frame-src: nothing renders a nested frame — raw <iframe> is banned in
-  // markup and <Video> is a click-to-open card (a player iframe would inherit
-  // this sandbox's opaque origin and refuse to run anyway).
+  // No network frame destinations: raw <iframe> is banned in markup. The
+  // trusted runtime creates only an inline srcdoc author-script sandbox.
+  // Keep default-src 'none' as the navigation boundary until trusted-control
+  // destinations have their own explicit, tested policy.
 ] as const;
 
 /** What the document may DO — content-independent. */

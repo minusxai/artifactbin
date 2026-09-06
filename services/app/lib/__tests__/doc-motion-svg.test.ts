@@ -122,7 +122,9 @@ describe('markup doc teaches that a document runs its own JavaScript', () => {
   });
 
   it('connects the ban on inline handlers to the way that DOES work', () => {
-    expect(doc).toMatch(/addEventListener/);
+    expect(doc).toMatch(/declarative controls/);
+    expect(doc).toContain('mx.params.subscribe');
+    expect(doc).toMatch(/no visible DOM access/);
   });
 
   it('sends custom CSS to the Helmet, not a body <style> block', () => {

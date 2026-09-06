@@ -33,6 +33,7 @@
  */
 import type { JsonValue, JsxAttribute, JsxElement, JsxNode, ValidationError } from '@/lib/jsx';
 import { inferColumns, type ColumnType, type DatasetColumn } from './dataset-shape';
+import { localWriteTarget, SIGNALS_TABLE } from './local-target';
 
 // ── declarations ────────────────────────────────────────────────────────────
 
@@ -87,6 +88,8 @@ export interface QueryDecl extends Span {
 }
 
 export interface MutationDecl extends Span {
+  /** Absent = persistent dataset (existing documents); local targets never enter the ref graph. */
+  scope?: 'local';
   name: string;
   sql: string;
   /** `$name` parameters the SQL mentions, in first-appearance order (deduped). */
@@ -478,14 +481,22 @@ export function parseMutationDecl(el: JsxElement): ParseDeclResult<MutationDecl>
   }
   if (sql.trim() === '') return { ok: false, errors: [err(`<Mutation name="${name}"> has empty SQL`, el, tag)] };
   const refs = datasetRefsInSql(sql);
-  if (refs.length !== 1) {
+  const direct = localWriteTarget(sql);
+  const local = direct && !direct.name.startsWith('ref_');
+  if (local && refs.length) {
+    return { ok: false, errors: [err('A local mutation cannot mix local and persistent dataset tables', el, tag)] };
+  }
+  if (local && direct.name === SIGNALS_TABLE && direct.operation !== 'update') {
+    return { ok: false, errors: [err('_signals allows only UPDATE; it must remain a single row', el, tag)] };
+  }
+  if (!local && refs.length !== 1) {
     return { ok: false, errors: [err(`<Mutation name="${name}"> must write exactly one dataset table (ref_<id>) — found ${refs.length === 0 ? 'none' : refs.map((r) => `ref_${r}`).join(', ')}`, el, tag)] };
   }
   const expected = staticAttr(el, 'expectedAffected');
   if (expected && (typeof expected.json !== 'number' || !Number.isInteger(expected.json) || expected.json < 0)) {
     return { ok: false, errors: [err(`<Mutation expectedAffected> must be a non-negative integer`, expected.attr, tag, 'expectedAffected')] };
   }
-  return { ok: true, decl: { name, sql, params: sqlParams(sql), target: refs[0], refs, ...(expected ? { expectedAffected: expected.json as number } : {}), start: el.start, end: el.end } };
+  return { ok: true, decl: { name, sql, params: sqlParams(sql), target: local ? direct.name : refs[0], refs, ...(local ? {scope: 'local' as const} : {}), ...(expected ? { expectedAffected: expected.json as number } : {}), start: el.start, end: el.end } };
 }
 
 // ── the reference graph ─────────────────────────────────────────────────────
@@ -639,7 +650,12 @@ export function validateDataflow(flow: Dataflow, uses: RefNameUse[]): Validation
     }
   };
   for (const q of flow.queries) checkParams(q, QUERY_TAG);
-  for (const m of mutationsOf(flow)) checkParams(m, MUTATION_TAG);
+  for (const m of mutationsOf(flow)) {
+    checkParams(m, MUTATION_TAG);
+    if (m.scope === 'local' && m.target !== SIGNALS_TABLE && !flow.values.some(v => v.kind === 'table' && v.name === m.target)) {
+      errors.push(err(`Local mutation "${m.name}" must target a declared table Value or _signals`, m, MUTATION_TAG));
+    }
+  }
 
   const { cyclic } = topo(flow);
   if (cyclic.length) {
@@ -699,7 +715,9 @@ export function queriesDependingOn(flow: Dataflow, valueNames: Iterable<string>)
   const dirty = new Set<string>();
   for (const name of order) {
     const q = flow.queries.find((x) => x.name === name)!;
-    if (q.params.some((p) => changed.has(p)) || (graph.get(name) ?? []).some((d) => dirty.has(d))) dirty.add(name);
+    if (q.params.some((p) => changed.has(p))
+      || (changed.size > 0 && queryDeps(q.sql, [SIGNALS_TABLE]).length > 0)
+      || (graph.get(name) ?? []).some((d) => dirty.has(d))) dirty.add(name);
   }
   return order.filter((n) => dirty.has(n));
 }
@@ -725,7 +743,7 @@ export function queriesReadingDatasets(flow: Dataflow, datasetIds: Iterable<stri
 
 /** Every dataset id any mutation writes, deduped — the refs a write needs resolved and owned. */
 export function mutationTargets(flow: Dataflow): string[] {
-  return dedupe(mutationsOf(flow).map((m) => m.target));
+  return dedupe(mutationsOf(flow).filter(m => m.scope !== 'local').map((m) => m.target));
 }
 
 /** True when the document declares nothing (no Values, no Queries, no Mutations). */

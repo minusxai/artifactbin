@@ -35,6 +35,9 @@ import { dryRunDataflow } from '@/lib/story/data-checks';
 import { mutationUsesRow } from '@/lib/story/row-scope';
 import { isMutationRefused, mutateDataset } from '@/lib/story/dataset-mutate';
 import { runDataflow, type DatasetTables } from '@/lib/sql/run-dataflow';
+import { runMutation } from '@/lib/sql/engine';
+import { runLocalStateMutation, type LocalMutationResult } from '@/lib/story/local-state';
+import { localTableOverrides } from '@/lib/story/local-tables';
 import { ancestorsForMove, childrenTableFor, CHILDREN_COLUMNS, notifyParent, parentOf } from '@/lib/folders';
 import type { RanDataflow, StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { RefLoader, ResolvedRef } from '@/lib/story/refs';
@@ -1804,6 +1807,7 @@ export const writerFor = (doc: ArtifactRow): TokenActor => ({ tokenId: doc.token
  */
 export type DocumentMutationOutcome =
   | { ok: true; dataset: ArtifactRow; affected: number; rowCount: number }
+  | { ok: true; local: LocalMutationResult }
   | { ok: false; reason: 'unknown_mutation' | WriteRefusal | 'dataset_full' | 'invalid_sql' | 'contended' | 'row_changed' | 'row_not_unique' | 'invalid_row'; detail?: string };
 
 export async function runDocumentMutation(
@@ -1812,6 +1816,7 @@ export async function runDocumentMutation(
   values: Record<string, Scalar>,
   row?: Record<string, Scalar>,
   actor: RoleActor = {userId:null,tokenId:null},
+  localTables?: Record<string, Row[]>,
 ): Promise<DocumentMutationOutcome> {
   if (doc.format !== 'markup' || !doc.source) return { ok: false, reason: 'unknown_mutation' };
   const parsed = parseJsx(doc.source);
@@ -1824,10 +1829,13 @@ export async function runDocumentMutation(
   // which exists for reads. An unresolvable target reads as read-only, which
   // is what it is from here.
   const writer = writerFor(doc);
-  const dataset = await getArtifactFor(writer, decl.target);
-  if (!dataset) return { ok: false, reason: 'dataset_read_only' };
-  const refusal = await canWriteDataset(dataset, actor);
-  if (refusal) return { ok: false, reason: refusal };
+  const dataset = decl.scope === 'local' ? null : await getArtifactFor(writer, decl.target);
+  if (decl.scope !== 'local') {
+    if (!dataset) return { ok: false, reason: 'dataset_read_only' };
+    const refusal = await canWriteDataset(dataset, actor);
+    if (refusal) return { ok: false, reason: refusal };
+    if (localTables !== undefined) return {ok: false, reason: 'invalid_sql', detail: 'Persistent mutations do not accept local table overrides'};
+  }
 
   // Declared defaults ⊕ what the caller sent, restricted to declared scalars:
   // the same rule a query run follows, so a value the document never declared
@@ -1853,7 +1861,16 @@ export async function runDocumentMutation(
   } else if (row !== undefined || Object.hasOwn(values, '_value')) {
     return { ok: false, reason: 'invalid_row', detail: 'this mutation does not accept a row or _value' };
   }
-  const result = await mutateDataset(dataset, actor, decl.sql, bound, { row: rowBinding, expectedAffected: decl.expectedAffected });
+  if (decl.scope === 'local') {
+    try {
+      const tables = localTableOverrides(flow, localTables);
+      const local = await runLocalStateMutation(flow, decl, {values: bound, tables}, {mutate: runMutation}, rowBinding);
+      return {ok: true, local};
+    } catch (error) {
+      return {ok: false, reason: 'invalid_sql', detail: error instanceof Error ? error.message : 'Local mutation failed'};
+    }
+  }
+  const result = await mutateDataset(dataset!, actor, decl.sql, bound, { row: rowBinding, expectedAffected: decl.expectedAffected });
   if (isMutationRefused(result)) return { ok: false, reason: result.reason, detail: result.detail };
   return { ok: true, dataset: result.row, affected: result.affected, rowCount: result.rowCount };
 }
@@ -1943,14 +1960,14 @@ export async function dataflowForRow(
 
 /** Viewer capabilities use the same dataset ACL as execution; no authored permission expressions. */
 async function mutationAccessFor(doc: ArtifactRow, flow: Dataflow, viewer: RoleActor | null): Promise<Record<string,string|null>> {
-  const targets = [...new Set((flow.mutations ?? []).map(m=>m.target))];
+  const targets = [...new Set((flow.mutations ?? []).filter(m=>m.scope !== 'local').map(m=>m.target))];
   const access = new Map(await Promise.all(targets.map(async target => {
     const dataset = await getArtifactFor(writerFor(doc), target);
     const reason = dataset && !await canWriteDataset(dataset, viewer ?? {userId:null,tokenId:null})
       ? null : 'You need edit access to a writable dataset to make this change.';
     return [target,reason] as const;
   })));
-  return Object.fromEntries((flow.mutations ?? []).map(m=>[m.name,access.get(m.target)!]));
+  return Object.fromEntries((flow.mutations ?? []).map(m=>[m.name,m.scope === 'local' ? null : access.get(m.target)!]));
 }
 
 /**
@@ -1969,6 +1986,7 @@ export function declarationsForRow(row: ArtifactRow): StoryIslandDataflow | null
 }
 
 export interface DataflowRunOptions {
+  localTables?: Record<string, Row[]>;
   /**
    * WHO IS READING. Only a folder's children table varies with it today, and
    * that is exactly the point: reach is the document owner's, the rows are the
@@ -2061,7 +2079,7 @@ export async function runDocumentDataflow(
     const table = await resolve(id);
     if (table) datasets[id] = table;
   }
-  const state = await runDataflow(flow, datasets, { values: opts.values, only: opts.only, page: opts.page });
+  const state = await runDataflow(flow, datasets, { values: opts.values, only: opts.only, page: opts.page, localTables: opts.localTables });
   return { flow, state };
 }
 

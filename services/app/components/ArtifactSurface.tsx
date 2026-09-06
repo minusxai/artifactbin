@@ -522,7 +522,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
         const res = await fetch(`/a/${id}/query`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ values: data.values ?? {}, only: data.only ?? [], ...(data.page ? { page: data.page } : {}) }),
+          body: JSON.stringify({ values: data.values ?? {}, only: data.only ?? [], ...(data.page ? { page: data.page } : {}), ...(data.localTables ? {localTables: data.localTables} : {}) }),
         });
         if (!res.ok) { reply({ type: STORY_QUERY_RESULT_MESSAGE, id: data.id!, error: `query failed (${res.status})` }); return; }
         const body = (await res.json()) as Pick<DataflowState,'tables'|'errors'|'mutationAccess'>;
@@ -590,14 +590,14 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
         const res = await fetch(`/a/${id}/mutate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mutation: data.mutation, values: data.values ?? {}, ...(data.row ? { row: data.row } : {}) }),
+          body: JSON.stringify({ mutation: data.mutation, values: data.values ?? {}, ...(data.row ? { row: data.row } : {}), ...(data.localTables ? {localTables: data.localTables} : {}) }),
         });
-        const body = (await res.json().catch(() => ({}))) as { ok?: boolean; dataset?: string; version?: number; affected?: number; error?: string; detail?: string };
+        const body = (await res.json().catch(() => ({}))) as { ok?: boolean; dataset?: string; version?: number; affected?: number; error?: string; detail?: string; local?: import('@/lib/story/local-state').LocalMutationResult };
         if (!res.ok || !body.ok) {
           reply({ type: STORY_MUTATE_RESULT_MESSAGE, id: data.id!, ok: false, error: body.detail ?? body.error ?? `write failed (${res.status})` });
           return;
         }
-        reply({ type: STORY_MUTATE_RESULT_MESSAGE, id: data.id!, ok: true, dataset: body.dataset ?? '', version: body.version ?? 0, affected: body.affected ?? 0 });
+        reply({ type: STORY_MUTATE_RESULT_MESSAGE, id: data.id!, ok: true, dataset: body.dataset ?? '', version: body.version ?? 0, affected: body.affected ?? 0, ...(body.local ? {local: body.local} : {}) });
       } catch (err) {
         reply({ type: STORY_MUTATE_RESULT_MESSAGE, id: data.id!, ok: false, error: err instanceof Error ? err.message : 'write failed' });
       }
@@ -738,6 +738,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       ...(live.dataflow ? { dataflow: live.dataflow } : {}),
       ...(live.compiledCss !== undefined ? { compiledCss: live.compiledCss } : {}),
       ...(live.authorCss !== undefined ? { authorCss: live.authorCss } : {}),
+      ...(live.authorScript !== undefined ? { authorScript: live.authorScript } : {}),
       theme: live.theme,
       ...(live.colorMode ? { colorMode: live.colorMode } : {}),
     };

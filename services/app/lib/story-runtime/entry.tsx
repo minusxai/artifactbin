@@ -3,8 +3,8 @@
  * owner's iframe) — bundled to public/story/entry-<hash>.js by
  * scripts/build-story-runtime.mjs and loaded as a crossorigin ES module at the
  * end of the document body. The author's Helmet <script> is parked inert
- * (AUTHOR_SCRIPT_TYPE) and re-injected by runAuthorScript after hydration, so
- * author code never runs against an unhydrated tree.
+ * (AUTHOR_SCRIPT_TYPE) and transferred to an opaque child after hydration.
+ * Author code never executes in the visible document's realm.
  *
  * Reads the JSON island the builder embedded and hydrates the SSR'd tree with
  * the SAME StoryRuntimeApp the server rendered — the island carries parsed
@@ -29,25 +29,28 @@ import { applyDocumentChrome, isStoryDocumentUpdate } from './document-update';
 import { readerMode } from './reader-mode';
 import { createDataflowStore, type DataflowStore } from './store';
 import { installMx } from './mx';
+import { createAuthorScriptSession } from './author-script';
 import { createDocumentTransport } from './document-transport';
 import { syncValuesToUrl } from './url-values-sync';
 import { EMPTY_DATAFLOW } from '@/lib/story/dataflow';
 
 /**
  * Run the author's Helmet <script>, which the builder parked in an inert
- * <script type="text/mx-author"> block. Re-injecting it as a real classic
- * script gives it exactly the semantics an author expects — global scope,
- * `var`, no module wrapper — but only once the document is hydrated.
+ * <script type="text/mx-author"> block. The code runs as a classic script in
+ * an opaque child after hydration, never in this renderer's realm.
  */
 let authorScriptRan = false;
+let authorSession: ReturnType<typeof createAuthorScriptSession> | null = null;
 function runAuthorScript(): void {
   if (authorScriptRan) return; // the commit signal and the failure path may both arrive
   authorScriptRan = true;
   document.dispatchEvent(new Event(STORY_READY_EVENT));
   for (const parked of document.querySelectorAll<HTMLScriptElement>(`script[type="${AUTHOR_SCRIPT_TYPE}"]`)) {
-    const real = document.createElement('script');
-    real.textContent = parked.textContent;
-    parked.replaceWith(real);
+    // Failure is closed: author code never executes in the renderer's realm,
+    // even when hydration or data-store initialization failed.
+    if (!authorSession) continue;
+    authorSession.replace(parked.textContent ?? '');
+    parked.remove();
   }
 }
 
@@ -72,14 +75,19 @@ if (island?.textContent && root) {
   try {
     const data = JSON.parse(island.textContent) as StoryIslandData;
     // The document's data store, created HERE — before hydration and before
-    // `mx:ready` — so `window.mx` is defined from the author script's first
-    // line, and the runtime tree and the script share one store.
+    // `mx:ready` — so the isolated script receives an initialized snapshot
+    // and its bounded bridge operates on the runtime tree's own store.
     // Re-runs: inside a parent (the owner's shell) the relay posts to the
     // page, which calls /a/<id>/query with its session; top-level (the
     // reader's document) the document GETs its own `queryUrl` — its CSP
     // admits exactly that. Neither: values still change, tables stay.
     const transport = createDocumentTransport(window, data.queryUrl, appOrigin, undefined, data.mutateUrl);
     const store: DataflowStore = createDataflowStore(data.dataflow ?? { flow: EMPTY_DATAFLOW }, { transport });
+    authorSession = createAuthorScriptSession(store);
+    window.addEventListener('pagehide', event => {
+      // A bfcache entry freezes its child and resumes it on restoration.
+      if (!event.persisted) authorSession?.dispose();
+    });
     /*
      * The asset verb, threaded to the view for the ONE consumer that needs it:
      * a bound `<img src="$pick">`, which cannot load the import endpoint for
@@ -272,6 +280,7 @@ if (island?.textContent && root) {
       // Absent declarations mean the data did not change — replacing the flow
       // with an empty one would drop every table the reader is looking at.
       if (update.dataflow) store.replaceFlow(update.dataflow);
+      if (update.authorScript !== undefined) authorSession?.replace(update.authorScript);
       current = {
         ...current,
         nodes: update.nodes,
@@ -283,8 +292,8 @@ if (island?.textContent && root) {
         ...(update.dataflow ? { dataflow: { flow: update.dataflow.flow, state: update.dataflow.state ?? current.dataflow?.state ?? { values: {}, tables: {}, errors: {} } } } : {}),
         ...(update.colorMode && !readerOverride ? { colorMode: update.colorMode } : {}),
       };
-      // No onMounted: the author's script belongs to the document, not to the
-      // version — running it again would double every listener it installed.
+      // No onMounted: the script session above replaces only changed code;
+      // unchanged code must not acquire duplicate subscriptions on prose edits.
       renderApp();
     };
     (window as unknown as Record<string, unknown>)[STORY_ADOPT_HOOK] = adopt;

@@ -19,7 +19,7 @@ import {
   type StoryAssetRequest, type StoryAssetResult,
   type StoryMutateRequest, type StoryMutateResult, type StoryQueryRequest, type StoryQueryResult,
 } from './contract';
-import type { QueryTransport } from './store';
+import type { QueryTransport, MutationAnswer } from './store';
 
 export function createRelayTransport(target: Window, appOrigin: string, source: Window = window, timeoutMs = 20_000): QueryTransport {
   let seq = 0;
@@ -66,7 +66,7 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
    * reply, and vice versa.
    */
   let writeSeq = 0;
-  const writers = new Map<number, { resolve: (r: { dataset: string }) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
+  const writers = new Map<number, { resolve: (r: MutationAnswer) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   source.addEventListener('message', (e: MessageEvent) => {
     if (e.source !== target || e.origin !== appOrigin) return;
     const data = e.data as StoryMutateResult | undefined;
@@ -75,7 +75,7 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
     if (!w) return;
     writers.delete(data.id);
     clearTimeout(w.timer);
-    if (data.ok) w.resolve({ dataset: data.dataset });
+    if (data.ok) w.resolve({ dataset: data.dataset, ...(data.local ? {local: data.local} : {}) });
     else w.reject(new Error(data.error));
   });
 
@@ -123,18 +123,18 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
       importers.set(id, { settle, clear: () => { for (const t of timers) clearTimeout(t); } });
       post();
     }),
-    run: async (values, only) => {
-      const r = await send({ values, only });
+    run: async (values, only, localTables) => {
+      const r = await send({ values, only, ...(localTables ? {localTables} : {}) });
       return { tables: r.tables, errors: r.errors, ...(r.mutationAccess ? {mutationAccess:r.mutationAccess} : {}) };
     },
-    mutate: (values, mutation, row) => new Promise<{ dataset: string }>((resolve, reject) => {
+    mutate: (values, mutation, row, localTables) => new Promise<MutationAnswer>((resolve, reject) => {
       const id = ++writeSeq;
       const timer = setTimeout(() => { writers.delete(id); reject(new Error('the page did not answer the write')); }, timeoutMs);
       writers.set(id, { resolve, reject, timer });
-      target.postMessage({ type: STORY_MUTATE_MESSAGE, id, mutation, values, ...(row ? { row } : {}) } satisfies StoryMutateRequest, appOrigin);
+      target.postMessage({ type: STORY_MUTATE_MESSAGE, id, mutation, values, ...(row ? { row } : {}), ...(localTables ? {localTables} : {}) } satisfies StoryMutateRequest, appOrigin);
     }),
-    page: async (values, name, page) => {
-      const r = await send({ values, only: [name], page: { name, ...page } });
+    page: async (values, name, page, localTables) => {
+      const r = await send({ values, only: [name], page: { name, ...page }, ...(localTables ? {localTables} : {}) });
       const table = r.tables[name];
       if (!table) throw new Error(r.errors[name] ?? `no rows for "${name}"`);
       return table;

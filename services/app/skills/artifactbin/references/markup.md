@@ -14,7 +14,8 @@ over a fixed component registry, never executed. A fault is a
   rejected). It is JSX and not HTML, so every tag closes (`<br />`), comments
   are `{/* … */}`, and there is no `<html>`/`<head>`/`<body>`. **But the
   document DOES run your JavaScript**: one `<script>` in `<Helmet>` runs after
-  hydration — `addEventListener` on your own ids.
+  hydration in an isolated script iframe. It has no access to the rendered
+  document's DOM; use the `mx` data API and declarative controls.
 - **Style with Tailwind classes via `className`**, starting from a
   `<div data-design="tw" className="@container …">` wrapper with `@2xl:`
   container variants for responsive layout.
@@ -71,19 +72,20 @@ place for custom CSS, JS or data — any of those in the body is refused.
 <Helmet>
   <title>Quarterly review</title>
   <style>{`.rise { animation: rise .9s both } @keyframes rise { from { opacity: 0 } }`}</style>
-  <script>{`document.getElementById('tab-2').addEventListener('click', () => { document.getElementById('panel-2').hidden = false });`}</script>
+  <Value name="quantity" type="number" default={1} />
+  <Value name="total" type="number" default={10} />
+  <script>{`mx.params.subscribe(values => {
+    const total = values.quantity * 10;
+    if (values.total !== total) mx.params.set('total', total);
+  });`}</script>
 </Helmet>
 ```
 
-Your script runs sandboxed with an opaque origin: no cookies, no access to
-the surrounding page, and no network beyond its CSP's four paths.
-`</script` cannot appear in the text (split it: `'</scr' + 'ipt'`).
-`window.mx` is defined before it runs: `mx.params.get/set/subscribe` (a set
-re-runs dependent queries and re-renders bound embeds);
-`mx.data.get('sales')` (`{rows, columns}`) `/.pending()/.subscribe()`;
-`mx.mutate(name)`; `mx.refresh()`. **Rows arrive AFTER your script runs** (the
-document paints first, then fetches): read them in `mx.data.subscribe(fn)`,
-never on line one.
+Scripts have no visible DOM access: use declarative controls and
+`mx.params.subscribe` for signal changes. Fetch is blocked. **Rows arrive after
+the script starts**; use `mx.data.subscribe`, not a line-one read. Signal writes
+are asynchronous. See [script API and migration](markup-scripts.md) before
+writing a script. `</script` cannot appear in its text (split the string).
 
 - **Custom CSS lives in that `<style>` block, never inline** (`style=` is rejected).
   Scope rules to your own class names (bare element selectors leak into chart
