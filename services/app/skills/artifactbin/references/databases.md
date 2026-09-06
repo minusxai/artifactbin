@@ -19,6 +19,8 @@ For a new dataset, omit `datasetId`: the secret remains pending and belongs to i
 
 MCP equivalents are `create_dataset_secret`, `discover_dataset_source`, and `preview_dataset_notebook`. Dataset editors control its connection, notebook and whitelist. A new secret is required to redirect the destination or replace the password.
 
+Dataset secret, discovery and notebook operation failures return `error: "dataset_error"` with a `details` array. HTTP status `400` means invalid or refused input/query; `403` means credentials or access are outside the permitted scope; `404` means the dataset is unavailable to the actor; `503` means stored credentials cannot be decrypted, for example after key rotation. Earlier HTTP authentication, body validation and not-found checks can return other error codes; inspect the status and details together.
+
 Postgres datasets cannot carry their bound password into a fork. Stored datasets remain forkable by readers.
 
 Use a dedicated read-only Postgres login. Query execution uses a read-only transaction, server timeout, result limits and a catalog-restricted SQL compiler. Unsupported syntax/functions fail closed. Preserve AUTH__SECRET across deployments or create replacement password secrets after rotation.
