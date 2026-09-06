@@ -146,7 +146,7 @@ const FOLDER_RETIRED: OperationError = { status: 400, code: 'folder_retired', fi
  */
 const OWNER_ONLY: OperationError = { status: 403, code: 'owner_only', fix: "visibility and access belong to the artifact's owner — you hold an editor share on it, so send the update without them" };
 
-const NOT_FORKABLE: OperationError = { status: 400, code: 'not_forkable', fix: "a folder cannot be forked — create your own with {\"format\":\"folder\"} and file documents under it with parent_id" };
+const NOT_FORKABLE: OperationError = { status: 400, code: 'not_forkable', fix: "a folder cannot be forked — create your own with {\"format\":\"folder\"} and file documents under it with parent_id. A Postgres dataset must have a usable connection" };
 
 const INVALID_JSX: OperationError = { status: 400, code: 'invalid_jsx', fix: 'details names each problem with its span; a refused tag answer carries allowed_html_tags — pick from it' };
 const INVALID_REFS: OperationError = { status: 400, code: 'invalid_refs', fix: 'details names each ref: an id that does not resolve for YOU, a wrong kind, or a <Mutation> target that is not your own readwrite dataset — publish your own copy of it' };
@@ -495,7 +495,7 @@ const forkArtifactOp: Operation = {
   name: 'fork_artifact',
   title: 'Fork an artifact',
   http: { method: 'POST', path: '/api/artifacts/{id}/fork' },
-  description: 'Copy an artifact you can READ — your own, one shared with your account, or any public/unlisted one — into a new artifact of your own at a new id and url. Use it instead of create_artifact when you are adapting a document that already exists: fork it, then edit the copy with edit_artifact. Content, title, theme, template and settings travel; version history, comments and shares do not (the copy is version 1, with its own edit_id). Every ref: image, dataset and recipe is re-validated AS YOU, so a document whose <Mutation> writes someone else\'s dataset, or that reads a private one, is refused by name instead of copied broken. Optional title, visibility and parent_id land on the copy only — the original is never touched. A FOLDER cannot be forked (not_forkable): its source names its own children table, so a copy would list the children of the original. Answers the create reply plus forked_from.',
+  description: 'Copy an artifact you can READ — your own, one shared with your account, or any public/unlisted one — into a new artifact of your own at a new id and url. Use it instead of create_artifact when you are adapting a document that already exists: fork it, then edit the copy with edit_artifact. Content, title, theme, template and settings travel; version history, comments and shares do not (the copy is version 1, with its own edit_id). Every ref: image, dataset and recipe is re-validated AS YOU, so a document whose <Mutation> writes someone else\'s dataset, or that reads a private one, is refused by name instead of copied broken. Optional title, visibility and parent_id land on the copy only — the original is never touched. A FOLDER cannot be forked (not_forkable): its source names its own children table, so a copy would list the children of the original. Forking a Postgres dataset requires ownership of its connection; dataset read or edit access alone is insufficient (403 not_forkable). Answers the create reply plus forked_from.',
   input: {
     id: z.string(),
     title: z.string().optional().describe('title for the COPY; omit to keep the original\'s'),
@@ -516,6 +516,7 @@ const forkArtifactOp: Operation = {
     NOT_FOUND,
     { status: 403, code: 'quota_exceeded', fix: 'a cap was reached — either the artifact COUNT for this token, or the stored BYTES for its account (an upload or an imported url); the message names which. Delete what you no longer need' },
     NOT_FORKABLE,
+    { status: 403, code: 'not_forkable', fix: 'forking a Postgres dataset requires ownership of its connection; dataset read or edit access alone is insufficient' },
     ...CONTENT_ERRORS,
   ],
   async run(ctx, input) {
