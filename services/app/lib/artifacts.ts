@@ -1,5 +1,6 @@
 import {catalogOf} from '@/lib/datasets/catalog';
 import {executeCatalog} from '@/lib/datasets/execute';
+import {connectionConfig} from '@/lib/datasets/connections';
 /**
  * All artifact SQL. Every read/write is scoped by ownership — an id the caller
  * cannot reach is indistinguishable from a nonexistent one (callers answer a
@@ -448,8 +449,8 @@ export interface ForkOverrides {
  * (`writerFor` resolves as the document's owner, which the copy no longer is),
  * and one reading the owner's PRIVATE image or dataset is refused rather than
  * rendering broken for its new owner. The refusal Response passes through
- * verbatim. The data tiers have nothing to re-validate — their content is bytes
- * behind a key — so they are copied straight across.
+ * verbatim. Stored data-tier content is immutable bytes behind a key and copies
+ * directly; a Postgres catalog copies only when the forker owns its live connection.
  *
  * `overrides` are the three things a forker changes FIRST (the browser door
  * passes none; the agent operation passes what its caller sent, already
@@ -498,6 +499,8 @@ async function forkInput(actor: TokenActor, source: ArtifactRow, overrides: Fork
     ...(overrides.ancestor_ids !== undefined ? { ancestor_ids: overrides.ancestor_ids } : {}),
   };
   if (source.format !== 'markup') {
+    const refusal=await postgresForkRefusal(actor,source);
+    if(refusal)return refusal;
     return { ...carried, format: source.format, content: source.content, source: source.source, meta: source.meta };
   }
   const meta = source.meta as { theme?: string; template?: string; colorMode?: 'light' | 'dark' | null };
@@ -519,6 +522,16 @@ async function forkInput(actor: TokenActor, source: ArtifactRow, overrides: Fork
   if (parsed instanceof Response) return parsed;
   const { derivedTitle: _derived, ...stored } = parsed;
   return { ...carried, ...stored };
+}
+
+/** A live remote catalog only travels with an actor who owns its credentials. */
+async function postgresForkRefusal(actor:TokenActor,source:ArtifactRow):Promise<Response|null> {
+  if(source.format!=='dataset')return null;
+  const catalog=catalogOf(source);
+  if(catalog?.kind!=='postgres')return null;
+  if(!catalog.connectionId)return json({error:'not_forkable',hint:'this Postgres dataset has no usable connection'},400);
+  try{await connectionConfig(catalog.connectionId,actor);return null;}
+  catch{return json({error:'not_forkable',hint:'forking this Postgres dataset requires ownership of its connection'},403);}
 }
 
 async function getArtifact(tokenId: string, id: string): Promise<ArtifactRow | null> {
