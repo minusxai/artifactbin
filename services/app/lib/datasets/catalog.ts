@@ -7,6 +7,8 @@ import {publishDataset} from '@/lib/story/data-tiers';
 import {loadDatasetRows} from '@/lib/story/dataset-store';
 import type {DatasetCatalog,DatasetTable} from './types';
 import {connectionConfig,DatasetError} from './connections';
+import {discoverPostgres} from './postgres';
+import {executeCatalog} from './execute';
 const identifier=z.string().min(1).max(63).refine(v=>!v.includes('\0'),'Identifier contains a null byte');
 const shape=z.object({kind:z.enum(['stored','postgres']),connectionId:z.string().optional(),defaultSchema:identifier.default('public'),refreshSeconds:z.number().int().min(0).max(86400).default(60),tables:z.array(z.object({schema:identifier,name:identifier,source:z.object({schema:identifier,table:identifier}).strict().optional(),columns:z.array(identifier).min(1).optional(),sql:z.string().min(1).max(100000).optional(),rows:z.array(z.record(z.string(),z.unknown())).optional()}).strict()).min(1).max(200)}).strict();
 
@@ -29,12 +31,11 @@ export async function prepareCatalog(input:unknown,actor:TokenActor,previous?:Ar
   let discovered:import('./types').DiscoveredTable[]=[];
   if(data.kind==='postgres'){
    if(!data.connectionId)throw new DatasetError('Select a Postgres connection');
-   const exposure=(ts:typeof data.tables)=>ts.filter(t=>!t.sql).map(t=>({schema:t.schema,name:t.name,source:t.source,columns:t.columns}));
-   const priorExposure=old?.tables.filter(t=>!t.sql).map(t=>({schema:t.schema,name:t.name,source:t.source,columns:t.columns.map(c=>c.name)}));
-   const sameExposure=old?.connectionId===data.connectionId&&JSON.stringify(exposure(data.tables))===JSON.stringify(priorExposure);
+   const exposure=(ts:Array<{schema:string;name:string;source?:{schema:string;table:string};sql?:string;columns?:Array<string|{name:string}>}>)=>ts.filter(t=>!t.sql).map(t=>({schema:t.schema,name:t.name,source:t.source?{schema:t.source.schema,table:t.source.table}:undefined,columns:t.columns?.map(c=>typeof c==='string'?c:c.name)}));
+   const sameExposure=old?.connectionId===data.connectionId&&JSON.stringify(exposure(data.tables))===JSON.stringify(exposure(old?.tables??[]));
    if(!sameExposure&&previous&&!ownsArtifact(previous,{...actor,tokenId:actor.tokenId}))throw new DatasetError('Only the dataset owner can change source exposure',403);
    const config=await connectionConfig(data.connectionId,sameExposure?undefined:actor);
-   const {discoverPostgres}=await import('./postgres');discovered=await discoverPostgres(config);
+   discovered=await discoverPostgres(config);
   }
   const tables:DatasetTable[]=[];
   for(const t of data.tables){
@@ -57,7 +58,7 @@ export async function prepareCatalog(input:unknown,actor:TokenActor,previous?:Ar
   // Dependencies are probed in topological order by retrying only unknown model shapes.
   const pending=tables.filter(t=>t.sql);let lastError:unknown;
   while(pending.length){let progress=false;
-   for(let i=pending.length-1;i>=0;i--){const t=pending[i];try{const {executeCatalog}=await import('./execute');const result=await executeCatalog(catalog,t.sql!,{}, {limit:1,refresh:true});t.columns=result.columns;pending.splice(i,1);progress=true;}catch(error){lastError=error;}}
+   for(let i=pending.length-1;i>=0;i--){const t=pending[i];try{const result=await executeCatalog(catalog,t.sql!,{}, {limit:1,refresh:true});t.columns=result.columns;pending.splice(i,1);progress=true;}catch(error){lastError=error;}}
    if(!progress)throw new DatasetError(lastError instanceof Error?lastError.message:'Model dependencies are invalid or cyclic');
   }
   // Keep the original single-table alias pinned to public.rows; adding tables never rebinds it.
