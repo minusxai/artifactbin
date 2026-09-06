@@ -531,7 +531,7 @@ async function postgresForkRefusal(actor:TokenActor,source:ArtifactRow):Promise<
   if(catalog?.kind!=='postgres')return null;
   if(!catalog.connectionId)return json({error:'not_forkable',hint:'this Postgres dataset has no usable connection'},400);
   try{await connectionConfig(catalog.connectionId,actor);return null;}
-  catch{return json({error:'not_forkable',hint:'forking this Postgres dataset requires ownership of its connection'},403);}
+  catch{return json({error:'connection_owner_only',hint:'forking this Postgres dataset requires ownership of its connection'},403);}
 }
 
 async function getArtifact(tokenId: string, id: string): Promise<ArtifactRow | null> {

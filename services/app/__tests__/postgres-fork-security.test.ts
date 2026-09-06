@@ -19,10 +19,10 @@ async function postgresDataset(datasetOwner:Awaited<ReturnType<typeof user>>,con
 }
 it('refuses a reader fork after a live Postgres read while allowing the connection owner',async()=>{
  const owner=await user('owner'),reader=await user('reader'),id=await postgresDataset(owner);const warm=await tables(request(`/a/${id}/tables`,{method:'POST',actor:{credential:'session',userId:reader.account.id,email:reader.account.email??'',emailVerified:true},json:{sql:'select * from rows'}}),ctx(id));expect(warm.status).toBe(200);
- const db=await harness.db();const before=Number((await db.query<{n:string}>('SELECT count(*) n FROM artifacts')).rows[0].n);current.id=reader.account.id;current.email=reader.account.email??'';const denied=await forkRoute(request(`/api/my/artifacts/${id}/fork`,{method:'POST'}),ctx(id));expect(denied.status).toBe(403);expect(await denied.json()).toMatchObject({error:'not_forkable',hint:expect.stringContaining('ownership')});expect(Number((await db.query<{n:string}>('SELECT count(*) n FROM artifacts')).rows[0].n)).toBe(before);
+ const db=await harness.db();const before=Number((await db.query<{n:string}>('SELECT count(*) n FROM artifacts')).rows[0].n);current.id=reader.account.id;current.email=reader.account.email??'';const denied=await forkRoute(request(`/api/my/artifacts/${id}/fork`,{method:'POST'}),ctx(id));expect(denied.status).toBe(403);expect(await denied.json()).toMatchObject({error:'connection_owner_only',hint:expect.stringContaining('ownership')});expect(Number((await db.query<{n:string}>('SELECT count(*) n FROM artifacts')).rows[0].n)).toBe(before);
  current.id=owner.account.id;current.email=owner.account.email??'';expect((await forkRoute(request(`/api/my/artifacts/${id}/fork`,{method:'POST'}),ctx(id))).status).toBe(201);
 });
 it('refuses even the dataset owner when the catalog names another account connection',async()=>{
  const connectionOwner=await user('connection_owner'),datasetOwner=await user('dataset_owner'),id=await postgresDataset(datasetOwner,connectionOwner);current.id=datasetOwner.account.id;current.email=datasetOwner.account.email??'';
- const response=await forkRoute(request(`/api/my/artifacts/${id}/fork`,{method:'POST'}),ctx(id));expect(response.status).toBe(403);expect(await response.json()).toMatchObject({error:'not_forkable'});
+ const response=await forkRoute(request(`/api/my/artifacts/${id}/fork`,{method:'POST'}),ctx(id));expect(response.status).toBe(403);expect(await response.json()).toMatchObject({error:'connection_owner_only'});
 });
