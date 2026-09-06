@@ -27,6 +27,10 @@ describe('canonical dataset authoring hints', () => {
     expect(result.usage).toContain('<Mutation name="add" source="abc123">{`insert into "sales"."orders"');
     expect(result.usage).not.toContain('ref_abc123');
   });
+  it('names the supported metadata-only PATCH method for opening stored writes', () => {
+    const result = datasetCreateFields('abc123', [], 0);
+    expect(result.writes).toContain('PATCH /api/my/artifacts/abc123');
+  });
   it('never advertises writes for PostgreSQL even if legacy metadata says readwrite', () => {
     const result = datasetCreateFields('abc123', [], 2, { catalog }, 'readwrite');
     expect(result.access).toBe('read');

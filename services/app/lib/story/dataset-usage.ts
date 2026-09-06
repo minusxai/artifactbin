@@ -88,7 +88,7 @@ export function datasetCreateFields(id: string, columns: unknown, rowCount: unkn
     usage: datasetUsageExample(id, cols, meta?.catalog)
       + (effectiveAccess === 'readwrite' ? `\n\n${datasetMutationExample(id, cols, meta?.catalog)}` : ''),
     ...(postgres ? { writes: 'PostgreSQL datasets are read-only. Editors may edit SQL models within the existing source exposure.' } : effectiveAccess === 'read'
-      ? { writes: `read-only — a <Mutation source="${id}"> is refused at publish. To open it: PUT /api/my/artifacts/${id} { "access": "readwrite" }, or set access on create/PUT.` }
+      ? { writes: `read-only — a <Mutation source="${id}"> is refused at publish. To open it: PATCH /api/my/artifacts/${id} { "access": "readwrite" }, or set access on create/PUT.` }
       : { writes: 'readwrite — viewers with edit access may insert/update/delete rows through a <Mutation>.' }),
   };
 }
