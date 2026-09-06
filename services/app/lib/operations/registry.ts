@@ -495,7 +495,7 @@ const forkArtifactOp: Operation = {
   name: 'fork_artifact',
   title: 'Fork an artifact',
   http: { method: 'POST', path: '/api/artifacts/{id}/fork' },
-  description: 'Copy an artifact you can READ — your own, one shared with your account, or any public/unlisted one — into a new artifact of your own at a new id and url. Use it instead of create_artifact when you are adapting a document that already exists: fork it, then edit the copy with edit_artifact. Content, title, theme, template and settings travel; version history, comments and shares do not (the copy is version 1, with its own edit_id). Every ref: image, dataset and recipe is re-validated AS YOU, so a document whose <Mutation> writes someone else\'s dataset, or that reads a private one, is refused by name instead of copied broken. Optional title, visibility and parent_id land on the copy only — the original is never touched. A FOLDER cannot be forked (not_forkable): its source names its own children table, so a copy would list the children of the original. Forking a Postgres dataset requires ownership of its connection; dataset read or edit access alone is insufficient (403 connection_owner_only). Answers the create reply plus forked_from.',
+  description: 'Copy an artifact you can READ — your own, one shared with your account, or any public/unlisted one — into a new artifact of your own at a new id and url. Use it instead of create_artifact when you are adapting a document that already exists: fork it, then edit the copy with edit_artifact. Content, title, theme, template and settings travel; version history, comments and shares do not (the copy is version 1, with its own edit_id). Every ref: image, dataset and recipe is re-validated AS YOU, so a document whose <Mutation> writes someone else\'s dataset, or that reads a private one, is refused by name instead of copied broken. Optional title, visibility and parent_id land on the copy only — the original is never touched. Folders and live Postgres datasets are not forkable: a folder source names the original children, while a Postgres secret remains bound to the original dataset. Answers the create reply plus forked_from.',
   input: {
     id: z.string(),
     title: z.string().optional().describe('title for the COPY; omit to keep the original\'s'),
@@ -516,7 +516,6 @@ const forkArtifactOp: Operation = {
     NOT_FOUND,
     { status: 403, code: 'quota_exceeded', fix: 'a cap was reached — either the artifact COUNT for this token, or the stored BYTES for its account (an upload or an imported url); the message names which. Delete what you no longer need' },
     NOT_FORKABLE,
-    { status: 403, code: 'connection_owner_only', fix: 'forking a Postgres dataset requires ownership of its connection; dataset read or edit access alone is insufficient' },
     ...CONTENT_ERRORS,
   ],
   async run(ctx, input) {

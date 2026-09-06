@@ -504,7 +504,7 @@ async function forkInput(actor: TokenActor, source: ArtifactRow, overrides: Fork
     ...(overrides.ancestor_ids !== undefined ? { ancestor_ids: overrides.ancestor_ids } : {}),
   };
   if (source.format !== 'markup') {
-    const refusal=await postgresForkRefusal(actor,source);
+    const refusal=postgresForkRefusal(source);
     if(refusal)return refusal;
     return { ...carried, format: source.format, content: source.content, source: source.source, meta: source.meta };
   }
@@ -529,12 +529,11 @@ async function forkInput(actor: TokenActor, source: ArtifactRow, overrides: Fork
   return { ...carried, ...stored };
 }
 
-/** A live remote catalog only travels with an actor who owns its credentials. */
-async function postgresForkRefusal(actor:TokenActor,source:ArtifactRow):Promise<Response|null> {
+/** A live remote catalog cannot copy its dataset-bound secret to a new id. */
+function postgresForkRefusal(source:ArtifactRow):Response|null {
   if(source.format!=='dataset')return null;
   const catalog=catalogOf(source);
   if(catalog?.kind!=='postgres')return null;
-  if(catalog.connection)return json({error:'not_forkable',hint:'Postgres credentials remain bound to the original dataset'},403);
   return json({error:'not_forkable',hint:'Postgres credentials remain bound to the original dataset'},403);
 }
 
