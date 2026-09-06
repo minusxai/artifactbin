@@ -409,14 +409,17 @@ describe('stale bases — E-anchored matching and log fidelity', () => {
 describe('bounded staleness', () => {
   it('a base too far behind head is refused rather than reconstructed indefinitely', async () => {
     const t = await mint();
-    const doc = await createMarkup(t.token);
+    // Generated node ids can contain tiny text anchors such as n0. Keep a
+    // deterministic collision and match paragraph text with its tag context.
+    const doc = await createMarkup(t.token, MARKUP.replace('<section', '<section id="n0ab"'));
     let editId = doc.edit_id;
     // Walk head well past the reconstruction bound.
     for (let i = 0; i < MAX_STALE_EDITS + 2; i++) {
       resetRateLimit(); // the per-token backstop is not what this test is about
-      const res = await edit(t.token, doc.id, { edit_id: editId, old_string: i === 0 ? 'alpha text' : `n${i - 1}`, new_string: `n${i}` });
-      expect(res.status).toBe(200);
-      editId = ((await res.json()) as Wire).edit_id;
+      const res = await edit(t.token, doc.id, { edit_id: editId, old_string: `>${i === 0 ? 'alpha text' : `n${i - 1}`}</p>`, new_string: `>n${i}</p>` });
+      const body = await res.json();
+      expect(res.status, `edit ${i}: ${JSON.stringify(body)}`).toBe(200);
+      editId = (body as Wire).edit_id;
     }
     // The original base is still IN the log, but replaying that far is work we
     // refuse to do — answer with head so the caller simply re-reads.
