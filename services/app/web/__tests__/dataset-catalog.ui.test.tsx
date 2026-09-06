@@ -156,6 +156,22 @@ describe('dataset editor', () => {
   });
 });
 describe('dataset catalog viewer', () => {
+  it.each([
+    ['stored', false, '3 rows · 4 columns'],
+    ['stored', true, '3 rows shown · 4 columns'],
+    ['postgres', false, '3 rows shown · 4 columns'],
+  ] as const)('summarizes %s tables truthfully when truncated=%s', async (kind, truncated, summary) => {
+    vi.stubGlobal('fetch', vi.fn(() => reply({ rows: [{ a: 1, b: null, c: 3, d: 4 }, { a: 2 }, { a: 3 }], columns: ['a', 'b', 'c', 'd'].map(name => ({ name, type: 'number' })), refreshedAt: '2026-09-06T10:00:00Z', truncated })));
+    render(<DatasetCatalogView id="data-1" catalog={{ ...catalog, kind }} canEdit={false} />);
+    expect(await screen.findByLabelText('Dataset summary')).toHaveTextContent(summary);
+    expect(screen.getByLabelText('Table preview')).toHaveTextContent('—');
+    expect(screen.getByLabelText('Table preview')).toHaveClass('overflow-auto');
+    if (truncated) {
+      fireEvent.click(screen.getByLabelText('Next page'));
+      await waitFor(() => expect(screen.getByLabelText('Dataset summary')).toHaveTextContent('Rows 51–53 shown · 4 columns'));
+    }
+  });
+
   it('renders typed rows, refreshes and paginates through the public dataset endpoint', async () => {
     render(<DatasetCatalogView id="data-1" catalog={catalog} canEdit />);
     await waitFor(() => expect(screen.getByLabelText('Table preview')).toHaveTextContent('42'));
@@ -166,6 +182,15 @@ describe('dataset catalog viewer', () => {
     fireEvent.click(screen.getByLabelText('Refresh dataset'));
     await waitFor(() => expect(calls.at(-1)?.body.refresh).toBe(true));
     expect(calls[0]).toMatchObject({ url: '/a/data-1/tables', body: { sql: 'SELECT * FROM "sales"."orders"', limit: 50, offset: 0 } });
+  });
+  it('requeries when the selected table definition changes without changing its name', async () => {
+    const view = render(<DatasetCatalogView id="data-1" catalog={catalog} canEdit={false} />);
+    await screen.findByLabelText('Table preview');
+    const before = calls.length;
+    view.rerender(<DatasetCatalogView id="data-1" catalog={{ ...catalog, tables: catalog.tables.map(table => ({ ...table, columns: [...table.columns, { name: 'updated', type: 'string' }] })) }} canEdit={false} />);
+    await waitFor(() => expect(calls.length).toBe(before + 1));
+    expect(screen.getByLabelText('Dataset schema')).toHaveValue('sales');
+    expect(screen.getByLabelText('Dataset table')).toHaveValue('orders');
   });
   it('keeps a selected table when the catalog grows and recovers when that table is removed', async () => {
     const view = render(<DatasetCatalogView id="data-1" catalog={catalog} canEdit={false} />);

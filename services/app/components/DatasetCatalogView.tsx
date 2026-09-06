@@ -64,7 +64,7 @@ export function DatasetCatalogView({ id, catalog, canEdit }: { id: string; catal
     }).catch(err => { if (alive) setError(err instanceof Error ? err.message : 'Could not load this table.'); })
       .finally(() => { if (alive) setBusy(false); });
     return () => { alive = false; };
-  }, [id, table?.schema, table?.name, selection.offset, refresh]);
+  }, [id, catalog, table?.schema, table?.name, selection.offset, refresh]);
 
   useEffect(() => {
     if (!catalog.refreshSeconds) return;
@@ -73,6 +73,8 @@ export function DatasetCatalogView({ id, catalog, canEdit }: { id: string; catal
   }, [catalog.refreshSeconds]);
 
   const stale = Boolean(error || (result && catalog.refreshSeconds > 0 && now - Date.parse(result.refreshedAt) >= catalog.refreshSeconds * 1000));
+  const completeStoredTable = result && catalog.kind === 'stored' && selection.offset === 0
+    && (result.truncated === false || (result.truncated === undefined && result.rows.length < PAGE_SIZE));
   const choose = (schema: string, name: string, offset = 0) => { setResult(null); setError(''); setSelection({ schema, name, offset }); };
   return <section aria-label="Dataset catalog" className="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6">
     <div className="flex flex-wrap items-end gap-3">
@@ -83,7 +85,15 @@ export function DatasetCatalogView({ id, catalog, canEdit }: { id: string; catal
     </div>
     <p aria-label="Refresh status" aria-live="polite" className="font-mono text-xs text-faint">{result ? `Last refreshed ${new Date(result.refreshedAt).toLocaleString()}${stale ? ' · stale' : ''}` : busy ? 'Loading preview…' : 'No preview yet'} · {catalog.refreshSeconds ? `Refresh interval ${catalog.refreshSeconds}s` : 'Manual refresh'}</p>
     {error && <p role="alert" aria-label="Dataset preview error" className="text-sm text-danger">{error}</p>}
-    {result && <CatalogRows result={result} />}
+    {result && <>
+      <p aria-label="Dataset summary" className="font-mono text-xs text-muted">
+        {selection.offset > 0 && result.rows.length > 0
+          ? `Rows ${selection.offset + 1}–${selection.offset + result.rows.length} shown`
+          : `${result.rows.length} row${result.rows.length === 1 ? '' : 's'}${completeStoredTable ? '' : ' shown'}`}
+        {` · ${result.columns.length} column${result.columns.length === 1 ? '' : 's'}`}
+      </p>
+      <CatalogRows result={result} />
+    </>}
     {!table && <p className="text-sm text-muted">This dataset has no exposed tables.</p>}
     {result && <div className="flex items-center gap-3">
       <Button aria-label="Previous page" variant="ghost" disabled={busy || selection.offset === 0} onClick={() => choose(selection.schema, selection.name, Math.max(0, selection.offset - PAGE_SIZE))}>Previous</Button>
