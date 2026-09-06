@@ -1,7 +1,8 @@
 import {DATASET_ALLOW_PRIVATE_NETWORKS} from '@/lib/config';
 import {resolvePostgresHost} from './network';
 import {isIP} from 'node:net';
-import {checkServerIdentity} from 'node:tls';
+import {checkServerIdentity, type PeerCertificate} from 'node:tls';
+import {X509Certificate} from 'node:crypto';
 import pg from 'pg';
 import Cursor from 'pg-cursor';
 import type { DatasetColumn } from '@/lib/story/dataset-shape';
@@ -69,6 +70,17 @@ function bounded(value: number | undefined, fallback: number, min: number, max: 
   if (!Number.isSafeInteger(value) || value < min) throw new Error('Invalid Postgres query bounds');
   return Math.min(value, max);
 }
+/** IP SAN matching uses the certificate's DER directly. Node 22.23's TLS
+ * hostname checker applies domainToASCII to IPv6 and loses the address.
+ * TLS still verifies the chain and validity with rejectUnauthorized:true. */
+function checkPostgresIdentity(host: string, certificate: PeerCertificate): Error | undefined {
+  if (!isIP(host)) return checkServerIdentity(host, certificate);
+  try {
+    if (certificate.raw && new X509Certificate(certificate.raw).checkIP(host)) return undefined;
+  } catch { /* A malformed or missing peer certificate must fail closed. */ }
+  return Object.assign(new Error('Postgres server certificate does not match the configured IP address'), { code: 'ERR_TLS_CERT_ALTNAME_INVALID' });
+}
+
 /** One short-lived connection per operation. Server statement_timeout performs
  * actual cancellation; the client timeout additionally bounds a broken network. */
 async function transaction<T>(config: PostgresConfig, timeoutMs: number, work: (client: pg.Client) => Promise<T>): Promise<T> {
@@ -82,7 +94,7 @@ async function transaction<T>(config: PostgresConfig, timeoutMs: number, work: (
         ...(!isIP(identityHost) ? { servername: identityHost } : {}),
         // The socket is pinned to an IP. Verify the configured DNS name (or
         // literal IP SAN), never the pinned socket's/default TLS hostname.
-        checkServerIdentity: (_host, certificate) => checkServerIdentity(identityHost, certificate),
+        checkServerIdentity: (_host, certificate) => checkPostgresIdentity(identityHost, certificate),
       } : false,
       connectionTimeoutMillis: 5_000,
       statement_timeout: timeoutMs, application_name: 'artifactbin-dataset',
