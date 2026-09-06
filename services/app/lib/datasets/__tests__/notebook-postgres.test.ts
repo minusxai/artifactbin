@@ -19,12 +19,14 @@ const catalog: DatasetCatalog = {...sources,defaultSchema:'models',notebook,note
 const dockerAvailable = spawnSync('docker',['image','inspect','postgres:17-alpine'],{stdio:'ignore'}).status === 0;
 describe.skipIf(!dockerAvailable)('notebook PostgreSQL isolation (disposable server)', () => {
   let container: string;
+  let port: number;
   let admin: pg.Client | undefined;
   let reader: pg.Client | undefined;
   beforeAll(async () => {
-    container = execFileSync('docker',['run','--rm','-d','-e','POSTGRES_PASSWORD=notebook-test','-p','127.0.0.1:7432:5432','postgres:17-alpine'],{encoding:'utf8'}).trim();
+    container = execFileSync('docker',['run','--rm','-d','-e','POSTGRES_PASSWORD=notebook-test','-p','127.0.0.1::5432','postgres:17-alpine'],{encoding:'utf8'}).trim();
+    port = Number(execFileSync('docker',['port',container,'5432/tcp'],{encoding:'utf8'}).trim().split(':').at(-1));
     for (let attempt = 0; attempt < 100; attempt++) {
-      admin = new pg.Client({host:'127.0.0.1',port:7432,user:'postgres',password:'notebook-test',database:'postgres'});
+      admin = new pg.Client({host:'127.0.0.1',port,user:'postgres',password:'notebook-test',database:'postgres'});
       try { await admin.connect(); break; } catch { await admin.end(); await delay(100); }
     }
     await admin!.query(`CREATE SCHEMA sales;
@@ -36,7 +38,7 @@ describe.skipIf(!dockerAvailable)('notebook PostgreSQL isolation (disposable ser
       ALTER ROLE notebook_reader SET default_transaction_read_only = on;
       GRANT USAGE ON SCHEMA sales, public TO notebook_reader;
       GRANT SELECT ON ALL TABLES IN SCHEMA sales, public TO notebook_reader;`);
-    reader = new pg.Client({host:'127.0.0.1',port:7432,user:'notebook_reader',password:'reader',database:'postgres'});
+    reader = new pg.Client({host:'127.0.0.1',port,user:'notebook_reader',password:'reader',database:'postgres'});
     await reader.connect();
   }, 20_000);
   afterAll(async () => {
