@@ -1,6 +1,6 @@
 import { AGENT_HEADER, declaredAgentSlug } from '@artifactbin/contracts';
 import { currentHeaders } from './request-context';
-import { PUBLIC_BASE_URL } from '@/lib/config';
+import { PUBLIC_BASE_URL, CONTROLS_ORIGIN } from '@/lib/config';
 
 /** Absolute origin as the client sees it — honors reverse-proxy forwarding headers. Accepts a plain Request too (the MCP handler), falling back to its url. */
 export function baseUrl(request: Request): string {
@@ -118,6 +118,10 @@ export function parseCookie(header: string | null, name: string): string | undef
  */
 export function isCrossSiteRequest(request: Request): boolean {
   const site = request.headers.get('sec-fetch-site');
+  if (CONTROLS_ORIGIN) {
+    const origin = request.headers.get('origin');
+    return origin ? origin !== new URL(PUBLIC_BASE_URL).origin && origin !== CONTROLS_ORIGIN : site !== 'same-origin';
+  }
   if (site) return site === 'cross-site';
   const origin = request.headers.get('origin');
   if (!origin) return false;

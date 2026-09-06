@@ -63,8 +63,8 @@ export interface PristineChannel {
  * MUST be called before the author's script is injected — that ordering is the
  * whole security property, and `entry.tsx` is the only correct caller.
  */
-export function capturePristine(win: Window, appOrigin: string): PristineChannel | null {
-  const parentWin = win.parent;
+export function capturePristine(win: Window, appOrigin: string, trustedPeer?: Window): PristineChannel | null {
+  const parentWin = trustedPeer ?? win.parent;
   if (!parentWin || parentWin === win) return null;
 
   const post = parentWin.postMessage.bind(parentWin) as (message: unknown, targetOrigin: string) => void;

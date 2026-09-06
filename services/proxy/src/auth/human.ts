@@ -57,6 +57,7 @@ export interface HumanAuthOptions {
   schema?: string;
   secret: string;
   baseURL: string;
+  controlsOrigin?: string;
   mail: Mailer;
   /** One PGLite (co-hosted dev/self-host) OR a pg pool (production). */
   pglite?: unknown;
@@ -117,6 +118,7 @@ export function humanAuthOptions(opts: HumanAuthOptions, db: Kysely<Record<strin
   const trusted = ['email-otp', ...(opts.google ? ['google'] : []), ...(opts.oidc ? [opts.oidc.providerId] : [])];
   return {
     baseURL: opts.baseURL,
+    ...(opts.controlsOrigin ? {trustedOrigins:[new URL(opts.baseURL).origin, opts.controlsOrigin]} : {}),
     secret: opts.secret,
     database: { db, type: 'postgres' },
     emailAndPassword: { enabled: false },

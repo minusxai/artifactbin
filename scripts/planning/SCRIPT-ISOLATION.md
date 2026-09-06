@@ -14,7 +14,35 @@
   typed row reflecting scalar Values); persistent writes retain `ref_<id>` ACLs.
   No mixed local/persistent mutation, general action language, or arbitrary JS expressions.
 
-## Current checkpoint — not ready to release
+## Current checkpoint — implementation complete, PR/CI review next
+
+### Trusted controls integration
+
+- Opt-in `APP__CONTROLS_ORIGIN` keeps the document top-level and serves app
+  controls in a cross-origin child. Default deployment behavior is unchanged.
+- **No session migration or cookie handoff.** Existing host-only HttpOnly cookies
+  stay on the main/API host. The trusted child calls that API with credentials
+  and exact-origin CORS. `controls-cookie-probe.mjs` measured this over real HTTPS
+  sibling hosts: authenticated JSON POST/preflight, no cookie on the controls
+  host, parent DOM denied, wrong-origin write refused. Localhost versus
+  i.localhost is not a valid same-site cookie test.
+- Built-server acceptance now measures top-level save/reload, local SQL relay,
+  light/dark switching, comments without markup/version edits, mobile hit-testing,
+  isolated-author DOM/storage/network refusal and child-navigation revocation,
+  real OTP login, persistent likes/follows, private dataset queries/requeries,
+  private-document revocation, account sign-out and independent agent disconnect.
+- Measured/fixed: fully clipped Chromium iframes suspend animation callbacks,
+  so region reporting boots on a task; comment rails account for the fixed
+  top bar; share links use the main origin; the top-level runtime answers
+  addressed liveness checks instead of relying on the old parent-frame script.
+- Current suites: **5,652 passed, one skipped** (1,228 API + 3,408 Node + 1,016 UI).
+  Full browser sweep: **50/50 passed**, one isolated retry under contention.
+  The expanded two-origin gate passed again after the final fixes. Typecheck
+  and production build passed. Neo desktop/mobile inspection found and verified
+  the transparent-menu fix; its regression test was observed red then green.
+- Production requires provisioned HTTPS/DNS routing for the controls host and
+  the same setting in proxy/app processes. Neither deployment nor DNS has been
+  changed. PR creation follows full review and acceptance, with an empty body.
 
 ### Reactive markup and dialog milestone
 
@@ -33,10 +61,9 @@
   gate continues to prove forged forms/account actions fail.
 - Full suite: **5,641 passed, one skipped** (1,228 API + 3,401 Node + 1,012 UI).
   Focused built-server gates: roadmap-views, author-script-isolation,
-  secure-arch **3/3 passed**. Full browser sweep is next.
-- Top-level owner/editor rendering and the cross-origin trusted-control
-  session handoff remain unfinished. Existing host-only account and agent
-  cookies must not silently become parent-domain cookies.
+  secure-arch **3/3 passed**. Subsequent full sweep passed **49/49**.
+- Top-level owner/editor rendering is integrated in the next milestone above.
+  Existing host-only account and agent cookies never become parent-domain cookies.
 
 ### SQL local-state milestone
 
@@ -103,17 +130,18 @@
 | Script child network remains blocked | MEASURED (prototype) | Child CSP default-src none; fetch rejected |
 | MessageChannel works across opaque boundary | MEASURED (prototype) | Received signal=working |
 | Non-opaque trusted sibling can authenticate | MEASURED (local prototype only) | Separate 127.0.0.1 port, cookie round trip true |
-| Real deployment subdomain cookie/login behavior | OPEN | Needs domain-specific acceptance; local port test is not host-only cookie proof |
+| HTTPS subdomain cookie/login behavior | MEASURED | Real HTTPS siblings, host-only cookies, OTP login, JSON CORS, sign-out; production hostname provisioning remains a deployment prerequisite |
 | Forged account/edit/query messages | PASS (current topology) | Real-browser gate checks forged like/follow/edit denial; unit tests reject undeclared operations. Must repeat after topology changes |
 | Raw/static/export paths executing author script | IMPLEMENTED / TESTED | Builder always parks source inert, including no-runtime paths; runtime alone launches the child |
 | Script lifecycle after live update/reload | PASS | Browser replacement/removal/reload plus unit unchanged-source/disposal tests |
-| Private document and dataset permission preservation | OPEN | Latest main #42 tightened mutation permissions; preserve those semantics |
+| Private document and dataset permission preservation | PASS | Private dataset query/requery in top-level document; nonmember/private revocation 404; existing mutation-permissions gate green |
 | Existing DOM-based script compatibility | CONFIRMED MIGRATION | User approved minimal reactive primitives and SQL state; roadmap gate must pass without its DOM script |
 | Local SQL state execution and types | PASS | Same real SqlService locally/HTTP; API and browser gate prove no persistence and declaration-owned types |
 | Local snapshots and asynchronous races | PASS (store tests) | Queued writes, double-click dedupe, stale signal/source responses rejected; browser gate covers transport and refresh |
-| Conditional identity and SSR/hydration | OPEN | Hidden branches retain canonical source IDs; test edit/comment targeting, initial values, and branch switching |
-| Working-tree regression suites | PASS | 5,552 passed, one skipped across API/Node/UI; type validation passed. This is not an untouched-main baseline |
-| Child navigation / resource exhaustion after CSP changes | OPEN | Fetch rejection is measured, not proof of all possible network channels or CPU isolation. Revalidate ancestor frame-src and navigation before admitting auth destinations |
+| Conditional identity and SSR/hydration | PASS | Both branches retain IDs; parser/renderer/source-edit tests and script-free roadmap browser gate |
+| Working-tree regression suites | PASS | 5,652 passed, one skipped; typecheck, build, 50 browser gates. This is not an untouched-main baseline |
+| Child navigation after CSP changes | PASS | Navigating the opaque author child to the controls host cannot gain authority; second load revokes/removes its realm |
+| Resource exhaustion | BOUNDED BRIDGE, NOT CPU QUOTAS | Rate/payload/pending limits and teardown tested. Browser script execution has no hard CPU quota; origin isolation is not a resource scheduler |
 
 ## Prototype notes
 

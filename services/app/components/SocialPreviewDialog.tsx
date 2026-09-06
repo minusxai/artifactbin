@@ -1,5 +1,6 @@
 'use client';
 
+import {appFetch as fetch} from '@/web/api-origin';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RotateCcw, X } from 'lucide-react';
 import {

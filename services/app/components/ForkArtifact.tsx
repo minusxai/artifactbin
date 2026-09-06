@@ -19,6 +19,8 @@
  *    account; go to /login and come back to THIS address still asking to fork
  *    (lib/intent), so the person does the work once.
  */
+import {appFetch as fetch} from '@/web/api-origin';
+import {appNavigate} from '@/web/api-origin';
 import { GitFork } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { withIntent } from '@/lib/intent';
@@ -77,12 +79,12 @@ export function useForkArtifact(id: string): ForkState {
         const body = (await res.json().catch(() => ({}))) as { url?: string; error?: string; details?: string[] };
         if (res.status === 201 && body.url) {
           leaving = true;
-          window.location.href = body.url;
+          appNavigate(body.url);
           return;
         }
         if (res.status === 409 && body.error === 'sign_in_required') {
           leaving = true;
-          window.location.href = loginBack();
+          appNavigate(loginBack());
           return;
         }
         if (!alive.current) return;

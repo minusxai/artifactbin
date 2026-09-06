@@ -27,6 +27,8 @@
  * reader's document is top-level with no parent window, so nothing here can
  * even reach them.
  */
+import {isDocumentPeerEvent, type DocumentPeer} from '@/lib/story/document-peer';
+import {appFetch as fetch} from '@/web/api-origin';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, EllipsisVertical, MessageSquare, Trash2, X } from 'lucide-react';
 import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations';
@@ -48,7 +50,7 @@ export interface AnnotationLayerProps {
   /** Every change to the list this layer holds — creates, replies, resolves — so the page's count can follow it. */
   onAnnotationsChange?: (annotations: AnnotationWire[]) => void;
   id: string;
-  frameRef: { current: HTMLIFrameElement | null };
+  frameRef: { current: DocumentPeer | null };
   sessionNonce: string | null;
   /** The thread rail is open — a panel, not a mode, and true in either mode. */
   railOpen: boolean;
@@ -913,7 +915,7 @@ export default function AnnotationLayer({
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       const frameWindow = frameRef.current?.contentWindow;
-      if (!frameWindow || event.source !== frameWindow) return;
+      if (!isDocumentPeerEvent(frameRef.current, event)) return;
       const nonce = nonceRef.current;
       if (!nonce || !isEditFrameMessage(event.data, nonce)) return;
       if (event.data.type === STORY_ANNOTATION_LAYOUT_MESSAGE) {

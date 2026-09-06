@@ -6,6 +6,7 @@
  *
  * The answer is the state, and a refusal leaves the current state intact.
  */
+import {appFetch as fetch} from '@/web/api-origin';
 import { useCallback, useRef, useState } from 'react';
 
 const PILL = 'inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-edge bg-surface px-3 py-1 font-mono text-xs text-muted no-underline transition-colors hover:border-accent hover:text-fg disabled:cursor-default disabled:opacity-60';

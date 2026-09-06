@@ -26,6 +26,8 @@
  * size in the same place, so nothing moves when it opens. It writes through the
  * metadata door (`PATCH {title}`): a rename should not archive a version.
  */
+import {appFetch as fetch} from '@/web/api-origin';
+import {appEventSource} from '@/web/api-origin';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import Shelf from '@/components/Shelf';
@@ -176,7 +178,7 @@ export function FolderPage({ folder: given, role, workspace: givenWorkspace, own
   }, [id]);
 
   useEffect(() => {
-    const source = new EventSource(`/a/${id}/events`);
+    const source = appEventSource(`/a/${id}/events`);
     source.addEventListener(STORY_DATA_EVENT, reread);
     return () => { source.removeEventListener(STORY_DATA_EVENT, reread); source.close(); };
   }, [id, reread]);

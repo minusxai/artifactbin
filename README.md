@@ -49,6 +49,17 @@ docker run -d --name artifactbin --restart unless-stopped -p 127.0.0.1:3030:3000
 
 Data lives in `data/` (PGLite + objects). Email login needs `EMAIL__RESEND_API_KEY`; anonymous tokens work without it. Put a reverse proxy in front for TLS and set `APP__PUBLIC_BASE_URL` to the public URL.
 
+To keep owner/editor documents top-level with trusted controls in a child iframe,
+optionally set `APP__CONTROLS_ORIGIN=https://i.<your-public-host>` in both the app
+and proxy. Provision its HTTPS certificate and route that hostname to the same
+proxy first; preserve the public Host/protocol forwarding headers. Existing
+host-only login cookies stay on the main host: do not add a parent-domain cookie
+or wildcard credentialed CORS. Unset the option to retain the existing serving
+topology. Author Helmet scripts always run in an isolated opaque child, without
+visible-document DOM access; use reactive JSX, Dialog primitives and SQL-backed
+local state for document UI. Run `node scripts/gate-trusted-controls.mjs` after a
+build to verify the two-origin setup locally (isolated HTTPS hosts and test mail).
+
 For the bundled Postgres instead, use `docker compose up -d`; see [operations](docs/operations.md).
 
 ## Develop

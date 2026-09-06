@@ -17,6 +17,7 @@
  * Partitioning and recency order live in `lib/shelf` (pure). This file owns
  * the grid/list presentation and hands list mode to `ArtifactTable`.
  */
+import {appFetch as fetch} from '@/web/api-origin';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Folder, FolderInput, FolderPlus, LayoutGrid, List as ListIcon, Pencil, Search, Share2, Trash2 } from 'lucide-react';
 import ShareLink from '@/components/ShareLink';

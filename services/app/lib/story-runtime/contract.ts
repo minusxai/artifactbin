@@ -49,6 +49,8 @@ export interface RanDataflow extends StoryIslandDataflow {
 
 /** What the document's JSON island carries — everything the entry needs to hydrate. */
 export interface StoryIslandData {
+  /** Server-owned trusted controls URL, never an authored prop. */
+  controlsUrl?: string;
   nodes: JsxNode[];
   refData: RefDataMap;
   /**

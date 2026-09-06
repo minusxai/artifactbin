@@ -28,6 +28,7 @@ vi.mock('@/components/ArtifactEditor', () => ({
 }));
 
 import ArtifactShell from '../ArtifactShell';
+import * as apiOrigin from '@/web/api-origin';
 import ArtifactSurface, { type ArtifactSurfaceProps } from '../ArtifactSurface';
 import {
   STORY_PAINTED_MESSAGE, STORY_READER_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, STORY_SELECTION_ACTION_MESSAGE, STORY_SESSION_MESSAGE,
@@ -96,6 +97,15 @@ const openDocumentControls = () => {
 };
 
 describe('the surface header buttons are owner chrome', () => {
+  it('keeps the controls-only viewport transparent when its menu covers the frame', () => {
+    const url=vi.spyOn(apiOrigin,'appUrl').mockReturnValue('http://localhost:3000/');
+    try {
+      render(<ArtifactSurface {...surfaceProps({controlsOnly:true})} />);
+      openDocumentControls();
+      expect(screen.getByLabelText('Artifact viewport').style.background).toBe('transparent');
+      expect(document.querySelector('iframe[title="artifact"]')).toBeNull();
+    } finally {url.mockRestore();}
+  });
   it('a reader gets the document without edit or share buttons', () => {
     render(<ArtifactSurface {...surfaceProps({})} />);
     expect(screen.queryByLabelText('Edit artifact')).not.toBeInTheDocument();

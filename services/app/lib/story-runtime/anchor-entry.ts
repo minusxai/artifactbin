@@ -111,7 +111,7 @@ if (typeof window !== 'undefined') wireOutline(document);
 if (typeof window !== 'undefined' && window.parent === window) {
   const id = document.body.getAttribute('data-mx-live-id');
   const editId = document.body.getAttribute('data-mx-live-edit');
-  if (id && editId) startDocumentLive(window, id, editId);
+  if (id && editId && !document.body.hasAttribute('data-mx-controls')) startDocumentLive(window, id, editId);
 
   const kept = anchorAfterReload(window);
   // Held against a settling layout — fonts, images and embeds each move

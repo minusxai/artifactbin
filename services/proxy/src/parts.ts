@@ -23,7 +23,7 @@ import {
 } from '@artifactbin/contracts';
 import type { RateLimiter } from '@artifactbin/contracts/rate-limits';
 import { Hono, type Context } from 'hono';
-import { assemble, cookieName, decodeAgentSession, readCookie } from '@artifactbin/utils';
+import { assemble, cookieName, decodeAgentSession, readCookie, parseControlsOrigin, controlsCorsHeaders } from '@artifactbin/utils';
 import { createRateLimiter, memoryBackend } from '@artifactbin/utils/rate-limits';
 import { loadPolicyFile, resolvePolicyFilePath } from './rate-limits';
 import { baseUrlOf, mountOAuthRoutes } from './routes/oauth';
@@ -328,7 +328,24 @@ export function proxyParts(o: ProxyOptions): Part<ProxyEnv>[] {
   // The limiter is built HERE, at composition — a policy file that does not exist or does not parse is a
   // refusal to boot, never a request quietly metered by numbers nobody chose.
   limiterFor(o);
-  return [session(o), rateLimit(o), loginRoutes(o), oauthRoutes(o), forwardedHeaders({ trustedHops: trustedHopsOf(o.env), ...(o.secure ? { secure: true } : {}) }), forward(o.upstream, o)];
+  const setting = readEnv(o.env, 'APP__CONTROLS_ORIGIN');
+  const main = readEnv(o.env, 'APP__PUBLIC_BASE_URL');
+  const controls = setting ? parseControlsOrigin(main ?? '', setting) : null;
+  const boundary: Part<ProxyEnv>[] = controls ? [{name:'controls-origin', mount: app => app.use('*', async (c,next) => {
+    const origin = c.req.header('origin') ?? null;
+    const headers = controlsCorsHeaders(controls,origin);
+    if (c.req.method === 'OPTIONS' && headers) return new Response(null,{status:204,headers});
+    const actor = c.get('actor');
+    if (!['GET','HEAD','OPTIONS'].includes(c.req.method) && ['session','agent-cookie'].includes(actor.credential)) {
+      const allowed = origin ? origin === new URL(main!).origin || origin === controls : c.req.header('sec-fetch-site') === 'same-origin';
+      if (!allowed) return c.json({error:'cross_origin_write'},403);
+    }
+    await next();
+    if (headers) for (const [key,value] of Object.entries(headers)) {
+      c.header(key, key === 'Vary' ? [...new Set((c.res.headers.get('vary') ?? '').split(',').map(s => s.trim()).filter(Boolean).concat('Origin'))].join(', ') : value);
+    }
+  })}] : [];
+  return [session(o), ...boundary, rateLimit(o), loginRoutes(o), oauthRoutes(o), forwardedHeaders({ trustedHops: trustedHopsOf(o.env), ...(o.secure ? { secure: true } : {}) }), forward(o.upstream, o)];
 }
 
 /** The proxy, assembled from its parts. */

@@ -29,9 +29,10 @@ import { declaresLiveData, declaresMutations } from '@/lib/story/helmet';
 import { SHOWCASE_ORIGIN } from '@/lib/showcase';
 import { canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
 import { ownerUsername } from '@/lib/users';
-import { roleFor, sessionActor } from '@/lib/viewer';
+import { roleFor, sessionActor, NO_ACTOR } from '@/lib/viewer';
 import { canAnnotate } from '@/lib/share-roles';
 import { baseUrl, json } from '@/lib/http';
+import {CONTROLS_ORIGIN, PUBLIC_BASE_URL} from '@/lib/config';
 import { mountRoutes } from './api';
 import { ROUTES } from './routes.generated';
 
@@ -136,7 +137,7 @@ export async function servesDocumentDirectly(request: Request): Promise<string |
    * Above the row read, beside the `key` bypass, so a credential-less reader
    * still reaches the document without touching the database.
    */
-  if (!anonymous && readIntent(url.search) !== null) return null;
+  if (!CONTROLS_ORIGIN && !anonymous && readIntent(url.search) !== null) return null;
   const artifact = await getArtifactById(found.id);
   // A FOLDER IS NEVER SERVED TOP-LEVEL. It has no document — its listing is app
   // data the page endpoint answers and `withBootstrap` inlines — so `raw` is a
@@ -144,6 +145,7 @@ export async function servesDocumentDirectly(request: Request): Promise<string |
   // page, and the ACL is unchanged: a folder this viewer may not read is the
   // same uniform 404 the page already answers for an unknown id.
   if (!artifact || artifact.format !== 'markup') return null;
+  if (CONTROLS_ORIGIN && baseUrl(request) === new URL(PUBLIC_BASE_URL).origin) return await roleFor(artifact,actor ?? NO_ACTOR) !== 'none' ? found.id : null;
   const needsSessionForData = declaresLiveData(artifact.source) && !(await canReadArtifact(artifact, null));
   if (needsSessionForData) return null;
   // A dataset editor may only VIEW this document. Its mutations still need
@@ -224,6 +226,21 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   };
 
   const pageData = (dir: string) => ROUTES.find((r) => r.dir === dir)?.module.GET as ((request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>) | undefined;
+  // This origin serves trusted UI code, never an artifact document or API.
+  // Its SPA fetches permission-checked data from the main origin with the
+  // browser's existing host-only cookies; no private bootstrap is embedded.
+  if (CONTROLS_ORIGIN) app.use('*', async (c,next) => {
+    if (baseUrl(c.req.raw) !== CONTROLS_ORIGIN) return next();
+    const url = new URL(c.req.url);
+    if (c.req.method === 'GET' && candidateDocument(url.pathname)) {
+      const shell = (await index(c.req.url)).replace('</head>', () => `<script type="application/json" id="mx-controls-config">${safeJson({apiOrigin:new URL(PUBLIC_BASE_URL).origin})}</script><base target="_top" /><style>html,body,#root{background:transparent!important}</style></head>`);
+      const main = new URL(PUBLIC_BASE_URL).origin;
+      const csp = APP_CSP.replace("connect-src 'self'", `connect-src 'self' ${main}`).replace("frame-src 'self'", `frame-src 'self' ${main}`).replace("frame-ancestors 'self'", `frame-ancestors ${main}`);
+      return new Response(shell,{headers:{...APP_SECURITY_HEADERS,'content-security-policy':csp,'content-type':'text/html; charset=utf-8','cache-control':'no-store'}});
+    }
+    if (c.req.method === 'GET' && /^\/(?:assets\/|story\/|favicon\.|icon\.|logo-[\w.-]+\.png$)/.test(url.pathname)) return next();
+    return new Response('Not found',{status:404});
+  });
   const artifactData = pageData('/api/page/artifact/[id]');
   const profileData = pageData('/api/page/profile/[user]/[[...path]]');
 

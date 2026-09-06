@@ -27,7 +27,9 @@ export function createDocumentTransport(
   appOrigin: string,
   fetchFn?: FetchLike,
   mutateUrl?: string,
+  trustedPeer?: Window,
 ): QueryTransport | null {
+  if (trustedPeer) return createRelayTransport(trustedPeer, appOrigin, win as unknown as Window);
   const parent = win.parent;
   if (parent && parent !== win && parent !== win.self) return createRelayTransport(parent as Window, appOrigin, win as unknown as Window);
   if (queryUrl) return createFetchTransport(queryUrl, fetchFn, mutateUrl);

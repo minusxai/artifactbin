@@ -102,12 +102,13 @@ export const assetsPath = (id: string): string => `/a/${id}/assets`;
  */
 const GEOJSON_DIR_PATH = '/geojson/';
 
-export function markupCsp(origin: string, id: string): string {
+export function markupCsp(origin: string, id: string, controlsOrigin?: string): string {
   // connect-src sits with the other source directives, before the behaviour
   // ones — the one per-document line in an otherwise fixed policy.
   const self = origin.replace(/\/+$/, '');
   // The frame endpoint is a separate, path-exact entry: CSP matches a path
   // without a trailing slash exactly, so `/events` does not cover `/events/frame`.
   const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${GEOJSON_DIR_PATH}`;
-  return [...SOURCE_DIRECTIVES, connect, ...BEHAVIOUR_DIRECTIVES].join('; ');
+  const behavior = controlsOrigin ? BEHAVIOUR_DIRECTIVES.filter(d => !d.startsWith('sandbox ')) : BEHAVIOUR_DIRECTIVES;
+  return [...SOURCE_DIRECTIVES, ...(controlsOrigin ? [`frame-src ${controlsOrigin}`] : []), connect, ...behavior].join('; ');
 }

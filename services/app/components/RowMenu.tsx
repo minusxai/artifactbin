@@ -13,6 +13,7 @@
  * what lets the assets band offer a strict subset without a flag threaded
  * through for each one.
  */
+import {appFetch as fetch} from '@/web/api-origin';
 import { Ellipsis } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Tooltip } from '@/components/Tooltip';

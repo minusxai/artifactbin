@@ -3,6 +3,8 @@
  * document, from /api/page/artifact/:id. A reader never reaches this — the
  * server hands them the document itself at the same URL.
  */
+import {appFetch as fetch} from '@/web/api-origin';
+import {isControlsClient} from '@/web/api-origin';
 import { useEffect, useState } from 'react';
 import { takeBootstrap } from '../bootstrap';
 import { useLocation, useParams } from 'react-router';
@@ -65,7 +67,7 @@ export function ArtifactPage({ id: given }: { id?: string } = {}) {
           props are what the DOCUMENT is, and this is what the viewer is to
           it — one fetch either way, and the export capture (which has no
           viewer) never carries it. */}
-      <ArtifactSurface {...page.surface} search={search} {...(page.like ? { like: page.like } : {})} {...(page.follow !== undefined ? { follow: page.follow } : {})} />
+      <ArtifactSurface {...page.surface} controlsOnly={isControlsClient()} search={search} {...(page.like ? { like: page.like } : {})} {...(page.follow !== undefined ? { follow: page.follow } : {})} />
     </ArtifactShell>
   );
 }

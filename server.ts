@@ -39,7 +39,7 @@ import http from 'node:http';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { getRequestListener } from '@hono/node-server';
-import { assemble, createTokenReader, inProcess } from '@artifactbin/utils';
+import { assemble, createTokenReader, inProcess, parseControlsOrigin } from '@artifactbin/utils';
 import { ensureProxySchema, proxyEnvNamesRead, proxyParts, readEnv, resolvePolicyFilePath, mailerForRuntime, createHumanAuth, loginProvidersOf, sessionStoreOf } from '@artifactbin/proxy';
 
 async function main(): Promise<void> {
@@ -176,9 +176,11 @@ async function main(): Promise<void> {
       devOutboxPath: readEnv(env, 'EMAIL__DEV_OUTBOX_PATH'),
     });
     const loginProviders = loginProvidersOf(env);
+    const controlsSetting = readEnv(env,'APP__CONTROLS_ORIGIN');
     human = await createHumanAuth({
       secret: authSecret,
       baseURL,
+      ...(controlsSetting ? {controlsOrigin:parseControlsOrigin(baseURL,controlsSetting)} : {}),
       mail: mailer,
       events,
       ...(raw.kind === 'pglite' ? { pglite: raw.instance } : { pool: raw.pool as import('pg').Pool }),

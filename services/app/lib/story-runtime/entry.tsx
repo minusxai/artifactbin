@@ -15,7 +15,7 @@ import { hydrateRoot } from 'react-dom/client';
 import { StoryRuntimeApp } from './StoryRuntimeApp';
 import {
   AUTHOR_SCRIPT_TYPE, STORY_ADOPTS_MESSAGE, STORY_ADOPT_HOOK, STORY_DATA_HOOK, STORY_DATA_MESSAGE, STORY_DOCUMENT_ACK_MESSAGE,
-  STORY_HELLO_MESSAGE, STORY_ISLAND_ID, STORY_MODE_HOOK, STORY_READY_EVENT, STORY_ROOT_ID, STORY_SESSION_MESSAGE,
+  STORY_HELLO_MESSAGE, STORY_ISLAND_ID, STORY_MODE_HOOK, STORY_READY_EVENT, STORY_ROOT_ID, STORY_SESSION_MESSAGE, STORY_PAINTED_MESSAGE,
   STORY_EDIT_MODE_MESSAGE, isEditParentMessage, STORY_ANNOTATIONS_MESSAGE, STORY_SELECT_MESSAGE,
   STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, type StoryAnnotationsMessage, type StorySelectionActionsMessage,
   STORY_VALUES_HOOK, STORY_VALUES_MESSAGE, type StoryValuesMessage,
@@ -33,6 +33,7 @@ import { createAuthorScriptSession } from './author-script';
 import { createDocumentTransport } from './document-transport';
 import { syncValuesToUrl } from './url-values-sync';
 import { EMPTY_DATAFLOW } from '@/lib/story/dataflow';
+import {createControlsFrame} from './controls-frame';
 
 /**
  * Run the author's Helmet <script>, which the builder parked in an inert
@@ -74,6 +75,9 @@ const appOrigin = new URL(import.meta.url).origin;
 if (island?.textContent && root) {
   try {
     const data = JSON.parse(island.textContent) as StoryIslandData;
+    const controls = data.controlsUrl && window.parent === window ? createControlsFrame(data.controlsUrl) : null;
+    const peer = controls?.frame.contentWindow ?? undefined;
+    const peerOrigin = controls?.origin ?? appOrigin;
     // The document's data store, created HERE — before hydration and before
     // `mx:ready` — so the isolated script receives an initialized snapshot
     // and its bounded bridge operates on the runtime tree's own store.
@@ -81,7 +85,7 @@ if (island?.textContent && root) {
     // page, which calls /a/<id>/query with its session; top-level (the
     // reader's document) the document GETs its own `queryUrl` — its CSP
     // admits exactly that. Neither: values still change, tables stay.
-    const transport = createDocumentTransport(window, data.queryUrl, appOrigin, undefined, data.mutateUrl);
+    const transport = createDocumentTransport(window, data.queryUrl, peerOrigin, undefined, data.mutateUrl, peer);
     const store: DataflowStore = createDataflowStore(data.dataflow ?? { flow: EMPTY_DATAFLOW }, { transport });
     authorSession = createAuthorScriptSession(store);
     window.addEventListener('pagehide', event => {
@@ -113,7 +117,7 @@ if (island?.textContent && root) {
      * so that is the signal — with a fallback, because a document whose parent
      * never greets it must still fill in rather than stay blank forever.
      */
-    const framed = window.parent && window.parent !== window;
+    const framed = !!peer || (window.parent && window.parent !== window);
     if (!framed) store.start();
     else setTimeout(() => store.start(), 2000);
     // The author script runs from the runtime's first-commit signal — the
@@ -132,7 +136,7 @@ if (island?.textContent && root) {
      * `window.parent` was measured swallowing 45 of the runtime's own posts.
      */
     let warnedOrigin = false;
-    const channel: PristineChannel | null = capturePristine(window, appOrigin);
+    const channel: PristineChannel | null = capturePristine(window, peerOrigin, peer);
     /*
      * ANNOUNCED IN A BURST, AND ON REQUEST.
      *
@@ -147,7 +151,10 @@ if (island?.textContent && root) {
      * before any author code exists to imitate it.
      */
     if (channel) {
-      const announceSession = () => channel.post({ type: STORY_SESSION_MESSAGE, nonce: channel.nonce });
+      const announceSession = () => {
+        channel.post({ type: STORY_SESSION_MESSAGE, nonce: channel.nonce });
+        if (controls) channel.post(STORY_PAINTED_MESSAGE);
+      };
       announceSession();
       /*
        * The first run goes out HERE, with the announcement — the moment this
@@ -165,7 +172,11 @@ if (island?.textContent && root) {
       window.addEventListener('message', (event: MessageEvent) => {
         // A late greeting means the page missed us; answer, and make sure the
         // rows are on their way (start() is a no-op once they are).
-        if (event.isTrusted && event.data === STORY_HELLO_MESSAGE) { announceSession(); store.start(); }
+        if (event.isTrusted && channel.isFromParent(event) && event.data === STORY_HELLO_MESSAGE) {
+          announceSession();
+          channel.post(STORY_ADOPTS_MESSAGE);
+          store.start();
+        }
       });
     }
 
@@ -244,7 +255,7 @@ if (island?.textContent && root) {
       syncValuesToUrl(
         store,
         () => current.dataflow?.flow ?? EMPTY_DATAFLOW,
-        channel
+        channel && !controls
           ? { post: (v) => channel.post({ type: STORY_VALUES_MESSAGE, nonce: channel.nonce, values: v } satisfies StoryValuesMessage) }
           : { hook: values ?? null },
       );
