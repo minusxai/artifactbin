@@ -1,0 +1,91 @@
+name: Publish afbin CLI
+
+on:
+  push:
+    tags: ['afbin-v*']
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: publish-cli-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+      tag: ${{ steps.source.outputs.tag }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify a versioned, CI-tested commit from main
+        id: source
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^afbin-v[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+          sha=$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")
+          git merge-base --is-ancestor "$sha" origin/main
+          version=$(git show "$sha:services/cli/package.json" | jq -r .version)
+          test "$RELEASE_TAG" = "afbin-v$version"
+          passed=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --commit "$sha" --status success --json headSha --jq length)
+          test "$passed" -gt 0 || { echo 'CI must pass on this exact commit before release.' >&2; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-14, macos-15-intel]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm test -w services/cli
+      - run: npm run build:binary -w services/cli
+      - run: npm run test:binary -w services/cli
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: afbin-${{ matrix.os }}
+          path: services/cli/dist/afbin-*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+    steps:
+      - name: Publish all tested executables and checksums together
+        run: |
+          set -euo pipefail
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'afbin-*' --dir downloads
+          mkdir bundle
+          for directory in downloads/afbin-*; do cp "$directory"/afbin-* bundle/; done
+          for platform in darwin linux; do
+            for arch in arm64 x64; do test -s "bundle/afbin-$platform-$arch"; done
+          done
+          (cd bundle && sha256sum afbin-* > SHA256SUMS)
+          # Draft until every asset is attached; do not overwrite an existing release.
+          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --latest=false --title "$RELEASE_TAG" --notes '' bundle/*
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false

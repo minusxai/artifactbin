@@ -199,6 +199,8 @@ async function main(): Promise<void> {
 
   const app = createAppServer({
     webDir: path.resolve('dist/web'),
+    // The separate proxy transports identity in a signed header, rather than on the Request object.
+    ...(appOnly ? { actorSecret: readEnv(env, 'CONTRACT__ACTOR_SECRET') || readEnv(env, 'AUTH__SECRET') } : {}),
     ...(reader ? { onTokenRevoked: (id) => reader.invalidate(id) } : {}),
     ...(vite ? { indexHtml: async (url: string) => vite!.transformIndexHtml(url, (await import('node:fs')).readFileSync(path.resolve('web/index.html'), 'utf8')) } : {}),
   });
@@ -231,16 +233,14 @@ async function main(): Promise<void> {
    */
   const { retiredEnvNamesInUse, unknownEnvNames, envNamesRead } = await import('@/lib/config');
   for (const { retired, replacement } of retiredEnvNamesInUse(env)) {
-    // setup.mjs also prepares the checkout for the split compose shape, whose
-    // proxy consumes this shared secret. It is expected but unused here.
-    if (!appOnly && retired === 'CONTRACT__ACTOR_SECRET') continue;
+    // Split mode verifies the proxy's header with this secret; in-process mode does not need it.
+    if (retired === 'CONTRACT__ACTOR_SECRET') continue;
     console.warn(`[env] ${retired} is not read any more — it was renamed to ${replacement}`);
   }
-  // The proxy's names are read only where the proxy is composed; in the
-  // app-only shape a set AUTH__SECRET is genuinely unread, and saying so is
-  // the audit working, not noise.
+  // Split mode reads only the identity transport settings, not the proxy's full configuration.
   const known = new Set([...envNamesRead(), ...(!appOnly ? proxyEnvNamesRead() : [])]);
-  if (!appOnly) known.add('CONTRACT__ACTOR_SECRET');
+  known.add('CONTRACT__ACTOR_SECRET');
+  if (appOnly) known.add('AUTH__SECRET');
   for (const name of unknownEnvNames(env, known)) {
     console.warn(`[env] ${name} is set but nothing reads it`);
   }

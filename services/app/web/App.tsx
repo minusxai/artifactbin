@@ -1,3 +1,4 @@
+import { ChatPage } from './pages/Chat';
 import { Navigate, Route, Routes } from 'react-router';
 import MixpanelClient from '@/components/MixpanelClient';
 import { SessionProvider, useSession } from './session';
@@ -32,6 +33,7 @@ export function App() {
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/chat" element={<ChatPage />} />
           <Route path="/account" element={<AccountPage />} />
           <Route path="/assets" element={<AssetsPage />} />
           <Route path="/datasets/new" element={<DatasetEditorPage />} />
