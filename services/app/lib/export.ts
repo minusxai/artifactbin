@@ -18,16 +18,18 @@
  * the one retry, and the verdict → HTTP mapping. The service renders a URL;
  * the product decides what to render and what a failure means.
  */
+import sharp from 'sharp';
+import { loadImage } from './story/image-store';
 import { createHash } from 'node:crypto';
 import { EXPORT_INTERNAL_ORIGIN } from '@/lib/config';
 import { services } from '@/lib/services';
-import { ArtifactRow, declarationsOf } from './artifacts';
+import { ArtifactRow, declarationsOf, getArtifactById, referencedArtifactForRow } from './artifacts';
 import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from './export-card';
 import { mintExportKey } from './export-key';
 import { json } from './http';
 import { objectStore } from './object-store';
 import { urlSelection } from './story/url-values';
-import { SOCIAL_PREVIEW_OVERVIEW_GENERATION, parseSocialPreviewCrop, socialPreviewCrop, type SocialPreviewCrop } from './story/social-preview';
+import { SOCIAL_PREVIEW_OVERVIEW_GENERATION, clampImageCrop, savedSocialPreviewImageCrop, parseSocialPreviewCrop, socialPreviewCrop, socialPreviewImage, type SocialPreviewCrop } from './story/social-preview';
 
 export const EXPORT_MIME = { png: 'image/png', jpg: 'image/jpeg' } as const;
 export type ExportFormat = keyof typeof EXPORT_MIME;
@@ -365,7 +367,7 @@ export async function exportImageResponse(
   // `source` is here so the SELECTION can be read the way the document itself
   // reads it — through its own declarations. See `selection` below.
   artifact: Pick<ArtifactRow, 'id' | 'version' | 'format' | 'source'>,
-  q: { format?: string | null; mode?: string | null; slide?: string | null; crop?: string | null; search?: string | null },
+  q: { format?: string | null; mode?: string | null; slide?: string | null; crop?: string | null; image?: string | null; search?: string | null },
   base: string,
 ): Promise<Response> {
   // Default png; anything unrecognized is a client error rather than a
@@ -424,6 +426,47 @@ export async function exportImageResponse(
    */
   const isDocument = artifact.format === 'markup';
   const flow = isDocument && artifact.source ? declarationsOf(artifact.source) : null;
+  const imageOverview = capture === 'preview' && q.image === '1';
+  const imageId = isDocument && (capture === 'card' || imageOverview) ? socialPreviewImage(artifact.source ?? '') : null;
+  if (imageId) {
+    // The caller has authorized the document; resolve its admitted reference
+    // in the owner's scope, never by an unrestricted image-id lookup.
+    const document = await getArtifactById(artifact.id);
+    const image = document ? await referencedArtifactForRow(document, imageId) : null;
+    if (image?.format === 'image') {
+      try {
+        const stored = await loadImage(image);
+        if (stored) {
+          // Normalize EXIF orientation before measuring/extracting so browser
+          // coordinates and exported pixels refer to the same image.
+          const oriented = await sharp(stored.body).rotate().toBuffer({ resolveWithObject: true });
+          let pipeline = sharp(oriented.data);
+          const crop = savedSocialPreviewImageCrop(artifact.source ?? '');
+          if (!imageOverview && crop) {
+            const { width, height } = oriented.info;
+            const density = width / CARD_WIDTH;
+            const bounded = clampImageCrop(crop, height / density);
+            const left = Math.min(width - 1, Math.round(bounded.x * density));
+            const top = Math.min(height - 1, Math.round(bounded.y * density));
+            pipeline = pipeline.extract({ left, top,
+              width: Math.max(1, Math.min(width - left, Math.round(bounded.width * density))),
+              height: Math.max(1, Math.min(height - top, Math.round(bounded.width * CARD_HEIGHT / CARD_WIDTH * density))),
+            });
+          }
+          if (!imageOverview) pipeline = pipeline.resize(CARD_WIDTH, CARD_HEIGHT, { fit: 'cover', position: 'centre' });
+          const bytes = await (format === 'jpg' ? pipeline.flatten({ background: '#ffffff' }).jpeg({ quality: 90 }) : pipeline.png()).toBuffer();
+          return new Response(new Uint8Array(bytes), { headers: {
+            'Content-Type': EXPORT_MIME[format],
+            'X-Content-Type-Options': 'nosniff',
+            'Cache-Control': imageOverview ? 'private, no-store' : 'public, max-age=86400',
+          } });
+        }
+      } catch {
+        // A removed or unreadable asset falls back to the saved document crop.
+      }
+    }
+  }
+  if (imageOverview) return json({ error: 'image_unavailable' }, 404);
   const selection = capture === 'card' || capture === 'preview' ? { search: '', token: '' } : urlSelection(q.search ?? '', flow);
 
   const rendered = await renderArtifactImage(artifact, format, {

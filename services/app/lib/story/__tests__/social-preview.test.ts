@@ -6,6 +6,12 @@ import {
   socialPreviewCrop,
   socialPreviewCropHeight,
   writeSocialPreviewCrop,
+  socialPreviewImage,
+  writeSocialPreviewImage,
+  defaultImageCrop,
+  clampImageCrop,
+  savedSocialPreviewImageCrop,
+  writeSocialPreviewImageCrop,
 } from '../social-preview';
 
 describe('social preview crop', () => {
@@ -46,4 +52,28 @@ describe('social preview crop', () => {
     expect(socialPreviewCrop('<Helmet><meta name="artifactbin:og-crop" content="oops" /></Helmet>'))
       .toEqual(DEFAULT_SOCIAL_PREVIEW_CROP);
   });
+});
+
+describe('uploaded social preview', () => {
+  it('adds, replaces and removes the image without disturbing saved framing', () => {
+    const original = writeSocialPreviewCrop('<Helmet /><p>x</p>', { x: 20, y: 30, width: 600 });
+    const image = writeSocialPreviewImage(original, 'image1');
+    expect(socialPreviewImage(image)).toBe('image1');
+    expect(savedSocialPreviewCrop(image)).toEqual({ x: 20, y: 30, width: 600 });
+    expect(socialPreviewImage(writeSocialPreviewImage(image, 'image2'))).toBe('image2');
+    expect(writeSocialPreviewImage(image, null)).toBe(original);
+    expect(socialPreviewImage(writeSocialPreviewImage('<p>x</p>', 'image3'))).toBe('image3');
+  });
+});
+
+it('bounds image framing for portrait and very wide images independently of document framing', () => {
+  expect(defaultImageCrop(1600)).toEqual({ x: 0, y: 380, width: 1600 });
+  const wide = defaultImageCrop(105);
+  expect(wide).toEqual({ x: 700, y: 0, width: 200 });
+  expect(clampImageCrop({ x: 9999, y: 9999, width: 1600 }, 105)).toEqual({ x: 1400, y: 0, width: 200 });
+  const source = writeSocialPreviewCrop('<p>x</p>', { x: 0, y: 900, width: 800 });
+  const withImage = writeSocialPreviewImageCrop(source, wide);
+  expect(savedSocialPreviewImageCrop(withImage)).toEqual(wide);
+  expect(savedSocialPreviewCrop(withImage)).toEqual({ x: 0, y: 900, width: 800 });
+  expect(writeSocialPreviewImageCrop(withImage, null)).toBe(source);
 });

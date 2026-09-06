@@ -51,6 +51,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     mode: q.get('mode'),
     slide: q.get('slide'),
     crop: q.get('crop'),
+    image: q.get('image'),
     search: new URL(request.url).search,
   }, baseUrl(request));
 }

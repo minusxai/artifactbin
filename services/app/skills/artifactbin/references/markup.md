@@ -5,16 +5,14 @@ description: >-
 ---
 ## Read first
 
-`markup` is **static JSX treated as data** — parsed, validated, interpreted
-over a fixed component registry, never executed. A fault is a
-`400 {"error":"invalid_jsx","details":[…]}` with exact spans: guess and correct.
+`markup` is **static JSX data**, interpreted over a fixed component registry.
+Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with exact spans.
 
 - **Static JSX only**: literal props (strings, numbers, booleans, arrays,
   `{{…}}` objects); no expressions, spreads or inline handlers (`onClick=` is
-  rejected). It is JSX and not HTML, so every tag closes (`<br />`), comments
-  are `{/* … */}`, and there is no `<html>`/`<head>`/`<body>`. **But the
-  document DOES run your JavaScript**: one `<script>` in `<Helmet>` runs after
-  hydration — `addEventListener` on your own ids.
+  rejected). In JSX, every tag closes (`<br />`); use `{/* … */}` comments; omit
+  `<html>`/`<head>`/`<body>`. One `<script>` in `<Helmet>` runs after hydration:
+  use `addEventListener` on your own ids.
 - **Style with Tailwind classes via `className`**, starting from a
   `<div data-design="tw" className="@container …">` wrapper with `@2xl:`
   container variants for responsive layout.
@@ -108,6 +106,8 @@ never on line one.
   call, not Helmet content. No genre named → **default to `scrolly`**; torn →
   ask the user. `colorMode`
   (`light | dark`) is the AUTHOR'S DEFAULT — readers flip it, so design in theme tokens.
+
+Social preview: [upload and crop](publishing-versions.md).
 
 ## Images and icons
 
