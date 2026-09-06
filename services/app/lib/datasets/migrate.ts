@@ -3,6 +3,7 @@ import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import type { DatasetCatalog } from './types';
 import type { DatasetColumn } from '@/lib/story/dataset-shape';
 import type { Db } from '@/lib/db';
+import { queryDeps } from '@/lib/story/dataflow';
 
 export interface MigrationDiagnostic { artifactId?: string; version?: number; reason: string }
 export interface SourceMigration { source: string; changed: boolean; diagnostics: MigrationDiagnostic[] }
@@ -17,7 +18,7 @@ export function catalogMetadata(meta: LegacyMeta): LegacyMeta {
   return { ...meta, catalog };
 }
 
-interface SqlToken { start: number; end: number; id: string; qualified: boolean }
+interface SqlToken { start: number; end: number; id: string; qualified: boolean; quoted?: boolean }
 
 function legacyTokens(sql: string): { tokens: SqlToken[]; diagnostic?: string } {
   const tokens: SqlToken[] = [];
@@ -25,7 +26,14 @@ function legacyTokens(sql: string): { tokens: SqlToken[]; diagnostic?: string } 
   while (i < sql.length) {
     const c = sql[i];
     if (c === "'") { i++; while (i < sql.length) { if (sql[i] === '\\') i += 2; else if (sql[i] === "'" && sql[i + 1] === "'") i += 2; else if (sql[i++] === "'") break; } if (i > sql.length) return { tokens, diagnostic: 'unterminated SQL string' }; continue; }
-    if (c === '"') { i++; while (i < sql.length) { if (sql[i] === '"' && sql[i + 1] === '"') i += 2; else if (sql[i++] === '"') break; } continue; }
+    if (c === '"') {
+      const start=i++; let value=''; let closed=false;
+      while(i<sql.length){if(sql[i]==='"'&&sql[i+1]==='"'){value+='"';i+=2;}else if(sql[i]==='"'){i++;closed=true;break;}else value+=sql[i++];}
+      if(!closed)return {tokens,diagnostic:'unterminated quoted SQL identifier'};
+      const match=/^ref_([A-Za-z0-9]{6,12})$/.exec(value);
+      if(match)tokens.push({start,end:i,id:match[1],qualified:sql[i]==='.',quoted:true});
+      continue;
+    }
     if (c === '-' && sql[i + 1] === '-') { i = sql.indexOf('\n', i + 2); if (i < 0) break; continue; }
     if (c === '/' && sql[i + 1] === '*') {
       let depth = 1; i += 2;
@@ -33,7 +41,7 @@ function legacyTokens(sql: string): { tokens: SqlToken[]; diagnostic?: string } 
       if (depth) return { tokens, diagnostic: 'unterminated SQL comment' };
       continue;
     }
-    if (c === '$' && sql[i + 1] === '$') { const end = sql.indexOf('$$', i + 2); if (end < 0) return { tokens, diagnostic: 'unterminated dollar-quoted SQL string' }; i = end + 2; continue; }
+    if (c === '$') { const opening=/^\$([A-Za-z_]\w*)?\$/.exec(sql.slice(i)); if(opening){const end=sql.indexOf(opening[0],i+opening[0].length);if(end<0)return {tokens,diagnostic:'unterminated dollar-quoted SQL string'};i=end+opening[0].length;continue;} }
     if ((i === 0 || !/[\w$]/.test(sql[i - 1])) && sql.startsWith('ref_', i)) {
       const match = /^ref_([A-Za-z0-9]{6,12})\b/.exec(sql.slice(i));
       if (match) { const end = i + match[0].length; tokens.push({ start: i, end, id: match[1], qualified: sql[end] === '.' }); i = end; continue; }
@@ -49,7 +57,8 @@ function rewriteSql(sql: string, names: Map<string, string>, single: boolean): {
   const ids = [...new Set(scanned.tokens.map((token) => token.id))];
   let out = sql;
   for (const token of scanned.tokens.toReversed()) {
-    const replacement = single ? (token.qualified ? 'rows' : 'public.rows') : names.get(token.id)!;
+    const plain = single ? (token.qualified ? 'rows' : 'public.rows') : names.get(token.id)!;
+    const replacement = token.quoted ? plain.split('.').map((part)=>`"${part}"`).join('.') : plain;
     out = out.slice(0, token.start) + replacement + out.slice(token.end);
   }
   return { sql: out, ids };
@@ -69,7 +78,8 @@ export function migrateMarkupSource(source: string): SourceMigration {
   const visit = (nodes: JsxNode[]) => nodes.forEach((node) => {
     if (node.type !== 'element') return;
     if (node.tag === 'Helmet') helmetStart = node.start;
-    if (node.tag === 'Query' || node.tag === 'Mutation') { declarations.push(node); const name = attr(node, 'name'); if (name) names.add(name); }
+    if (node.tag === 'Value' || node.tag === 'Query' || node.tag === 'Mutation') { const name = attr(node, 'name'); if (name) names.add(name); }
+    if (node.tag === 'Query' || node.tag === 'Mutation') declarations.push(node);
     visit(node.children);
   });
   visit(parsed.nodes);
@@ -94,11 +104,12 @@ export function migrateMarkupSource(source: string): SourceMigration {
     const ids = [...new Set(scanned.tokens.map((token) => token.id))];
     if (!ids.length) continue;
     if (el.tag === 'Mutation' && ids.length !== 1) { diagnostics.push({ reason: `Mutation ${attr(el, 'name') ?? '?'} has ${ids.length} legacy sources` }); continue; }
-    const single = ids.length === 1;
-    if (!single) for (const id of ids) if (!upstream.has(id)) upstreamName(id);
-    const rewritten = rewriteSql(rawSql, upstream, single).sql;
+    const localDeps = el.tag === 'Query' ? queryDeps(expression.value.json, names).filter((name)=>name!==attr(el,'name')) : [];
+    const direct = ids.length === 1 && (el.tag === 'Mutation' || localDeps.length === 0);
+    if (!direct) for (const id of ids) if (!upstream.has(id)) upstreamName(id);
+    const rewritten = rewriteSql(rawSql, upstream, direct).sql;
     edits.push({ start: expression.start + first + 1, end: expression.start + last, text: rewritten });
-    if (single) {
+    if (direct) {
       const openEnd = source.indexOf('>', el.start);
       edits.push({ start: openEnd, end: openEnd, text: ` source="${ids[0]}"` });
     }
@@ -115,7 +126,7 @@ export function migrateMarkupSource(source: string): SourceMigration {
   return { source: migrated, changed: migrated !== source, diagnostics: [] };
 }
 
-export interface DatasetMigrationOptions { batchSize: number; dryRun?: boolean; maxHistoricalVersionsPerArtifact?: number; beforeCommit?: (artifactId: string) => void | Promise<void>; failBeforeCommit?: () => void }
+export interface DatasetMigrationOptions { batchSize: number; dryRun?: boolean; maxHistoricalVersionsPerArtifact?: number; validate?: (source: string, artifact: Record<string, unknown>, version?: number) => Promise<string[]>; beforeCommit?: (artifactId: string) => void | Promise<void>; failBeforeCommit?: () => void }
 export interface DatasetMigrationReport { processed: number; changed: number; datasets: number; documents: number; versions: number; conflicts: MigrationDiagnostic[]; done: boolean; dryRun: boolean }
 
 export async function runDatasetCatalogMigrationBatch(db: Db, options: DatasetMigrationOptions): Promise<DatasetMigrationReport> {
@@ -138,6 +149,13 @@ export async function runDatasetCatalogMigrationBatch(db: Db, options: DatasetMi
     const headChanged = plannedSource.changed || plannedMeta !== row.meta;
     const historyChanged = plannedHistory.filter((entry) => entry.meta !== entry.version.meta || ('changed' in entry.source && entry.source.changed));
     if (!headChanged && !historyChanged.length) continue;
+    if (format === 'markup' && options.validate) {
+      const headErrors = await options.validate(String(plannedSource.source ?? ''), row);
+      if (headErrors.length) { conflicts.push({artifactId,reason:headErrors.join('; ')}); continue; }
+      let rejected=false;
+      for(const entry of historyChanged){const source='source' in entry.source?entry.source.source:entry.source;if(typeof source!=='string')continue;const errors=await options.validate(source,row,Number(entry.version.version));if(errors.length){conflicts.push({artifactId,version:Number(entry.version.version),reason:errors.join('; ')});rejected=true;break;}}
+      if(rejected)continue;
+    }
     changed++; if (format === 'dataset') datasets++; else documents++; versions += historyChanged.length;
     if (options.dryRun) continue;
     await options.beforeCommit?.(artifactId);

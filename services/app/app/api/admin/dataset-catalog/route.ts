@@ -2,6 +2,8 @@ import { hasAdminCredential } from '@/lib/admin-auth';
 import { getDb } from '@/lib/db';
 import { json } from '@/lib/http';
 import { runDatasetCatalogMigrationBatch } from '@/lib/datasets/migrate';
+import { refLoaderForActor, writerFor, type ArtifactRow } from '@/lib/artifacts';
+import { checkDocumentData } from '@/lib/story/data-checks';
 
 const KEYS = new Set(['batchSize','dryRun','maxHistoricalVersionsPerArtifact']);
 export async function POST(request: Request): Promise<Response> {
@@ -14,6 +16,10 @@ export async function POST(request: Request): Promise<Response> {
   if (input.dryRun!==undefined && typeof input.dryRun!=='boolean') return json({error:'invalid_dry_run'},400);
   const cap=input.maxHistoricalVersionsPerArtifact;
   if (cap!==undefined && (!Number.isInteger(cap)||(cap as number)<0||(cap as number)>10_000)) return json({error:'invalid_history_limit'},400);
-  const report=await runDatasetCatalogMigrationBatch(await getDb(),{batchSize:input.batchSize as number,dryRun:input.dryRun === false ? false : true,...(cap===undefined?{}:{maxHistoricalVersionsPerArtifact:cap as number})});
+  const report=await runDatasetCatalogMigrationBatch(await getDb(),{
+    batchSize:input.batchSize as number,dryRun:input.dryRun === false ? false : true,
+    ...(cap===undefined?{}:{maxHistoricalVersionsPerArtifact:cap as number}),
+    validate: async(source,row)=>{const checked=await checkDocumentData(source,refLoaderForActor(writerFor(row as unknown as ArtifactRow)));return checked.ok?[]:checked.details;},
+  });
   return report.conflicts.length ? json({error:'migration_conflict',incomplete:true,...report},409) : json(report);
 }

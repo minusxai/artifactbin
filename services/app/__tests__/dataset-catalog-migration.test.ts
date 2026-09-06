@@ -45,4 +45,15 @@ describe('dataset catalog migration transaction', () => {
     expect(report.conflicts).toEqual([{artifactId:'aaaaaa',reason:'concurrent_change'}]);
     expect((await db.query<{meta:{objectKey:string}}>('SELECT meta FROM artifacts WHERE id=$1',['aaaaaa'])).rows[0].meta.objectKey).toBe('new');
   });
+
+  it('preflights transformed head and history before writing either',async()=>{
+    const source='<Helmet><Query name="q">{`select * from ref_abc123`}</Query></Helmet>';
+    await seed('aaaaaa','markup',source,{}); const db=await harness.db();
+    await db.query(`INSERT INTO artifact_versions (artifact_id,version,content,source,format,meta) VALUES ('aaaaaa',1,'',$1,'markup','{}')`,[source]);
+    const seen:number[]=[];
+    const report=await runDatasetCatalogMigrationBatch(db,{batchSize:1,validate:async(_source,_row,version)=>{seen.push(version ?? 2);return version===1?['historical shape mismatch']:[];}});
+    expect(report.conflicts).toEqual([{artifactId:'aaaaaa',version:1,reason:'historical shape mismatch'}]);
+    expect(seen).toContain(1);
+    expect((await db.query<{source:string}>('SELECT source FROM artifacts WHERE id=$1',['aaaaaa'])).rows[0].source).toBe(source);
+  });
 });

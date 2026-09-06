@@ -34,4 +34,20 @@ describe('dataset catalog migration planning', () => {
       expect(migrateMarkupSource(source)).toMatchObject({ source, changed: false, diagnostics: [] });
     }
   });
+
+  it('federates one legacy source when the query also reads a local table and avoids Value name collisions',()=>{
+    const source='<Helmet><Value name="source_abc123" type="table" value={[]} /><Value name="local" type="table" value={[]} /><Query name="q">{`select * from ref_abc123 join local on true`}</Query></Helmet>';
+    const out=migrateMarkupSource(source).source;
+    expect(out).toContain('<Query name="source_abc123_2" source="abc123">');
+    expect(out).toContain('from source_abc123_2 join local');
+    expect(out).not.toContain('<Query name="q" source=');
+  });
+
+  it('preserves escaped and tagged string literals while rewriting quoted relation identifiers',()=>{
+    const source='<Helmet><Query name="q">{`select E\'ref_abc123\\\'x\', $body$ref_abc123$body$, "ref_abc123".id from "ref_abc123"`}</Query></Helmet>';
+    const out=migrateMarkupSource(source);
+    expect(out.diagnostics).toEqual([]);
+    expect(out.source).toContain("E'ref_abc123\\'x', $body$ref_abc123$body$");
+    expect(out.source).toContain('"rows".id from "public"."rows"');
+  });
 });
