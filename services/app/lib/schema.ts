@@ -486,6 +486,20 @@ const RELATIONS: Table = {
   ],
 };
 
+const DATASET_CONNECTIONS: Table = {
+  name: 'dataset_connections',
+  columns: [
+    { name: 'id', type: 'TEXT', notNull: true },
+    { name: 'token_id', type: 'TEXT', notNull: true },
+    { name: 'user_id', type: 'TEXT' },
+    { name: 'name', type: 'TEXT', notNull: true },
+    { name: 'config', type: 'TEXT', notNull: true },
+    { name: 'updated_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
+  ],
+  primaryKey: ['id'],
+  indexes: [{ name: 'idx_dataset_connections_owner', columns: ['user_id', 'token_id'] }],
+};
+
 /**
  * The app's tables, in the order boot applies them — and the shape
  * scripts/render-schema.mjs prefers, so `SCHEMA.sql` is rendered by the SAME
@@ -494,7 +508,7 @@ const RELATIONS: Table = {
  * re-qualify (a rename's DO block names its own schema twice) is exactly what
  * that indirection could not survive.
  */
-export const TABLES: Table[] = [USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS];
+export const TABLES: Table[] = [USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_CONNECTIONS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);
