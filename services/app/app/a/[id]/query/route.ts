@@ -90,5 +90,5 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
 async function answer(artifact: ArtifactRow, parsed: QueryRequest, viewer: RoleActor | null, extra: Record<string, string> = {}): Promise<Response> {
   if (artifact.format !== 'markup' && artifact.format !== 'folder') return json({ tables: {}, errors: {} }, 200, extra);
   const flow = await dataflowForRow(artifact, { ...parsed, viewer });
-  return json({ tables: flow?.state.tables ?? {}, errors: flow?.state.errors ?? {} }, 200, extra);
+  return json({ tables: flow?.state.tables ?? {}, errors: flow?.state.errors ?? {}, ...(flow?.flow.mutations?.length ? {mutationAccess:flow.state.mutationAccess ?? {}} : {}) }, 200, {...extra,'Cache-Control':'no-store'});
 }

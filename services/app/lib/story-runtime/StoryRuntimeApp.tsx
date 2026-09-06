@@ -49,6 +49,15 @@ import { GridItemContext } from '@/components/kit/grid';
 import { DateControl, SegmentedControl, SelectControl, SliderControl, SwitchControl, normalizeControlOptions, num, shellRest, str } from '@/components/kit/controls';
 import { parseColumnSpecs, parseSortSpec, parseTableHeight, type SortSpec } from '@/lib/story/data-table';
 import { createPreviewIdentityAllocator } from './preview-identity';
+import { Tooltip } from '@/components/Tooltip';
+
+/** The disabled input cannot receive focus; its stable wrapper explains why. */
+function MutationCellHint({reason,children}:{reason:string|null;children:ReactNode}) {
+  const [open,setOpen]=useState(false);
+  return <Tooltip content={reason} open={!!reason && open} onOpenChange={setOpen}>
+    <span className="inline-flex w-full" tabIndex={reason ? 0 : undefined} aria-description={reason ?? undefined}>{children}</span>
+  </Tooltip>;
+}
 
 const CellSessionsContext = createContext<CellSessions | null>(null);
 const scalarRow = (row: Row): Record<string, Scalar> => Object.fromEntries(Object.entries(row).filter((entry): entry is [string, Scalar] => {
@@ -59,7 +68,8 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
   const ctx = useContext(RuntimeEmbedContext);
   const sessions = useContext(CellSessionsContext);
   const name = typeof props.run === 'string' ? refName(props.run) : null;
-  const writable = useSyncExternalStore(ctx.store?.subscribe ?? NO_SUBSCRIBE, () => ctx.store?.canMutate() ?? false, () => false);
+  const unavailable = useSyncExternalStore(ctx.store?.subscribe ?? NO_SUBSCRIBE, () => name ? ctx.store ? ctx.store.mutationUnavailable(name) : 'Checking edit access…' : 'This cell has no mutation.', () => 'Checking edit access…');
+  const writable = unavailable === null;
   const initial = (props.value ?? null) as Scalar;
   const session = useSyncExternalStore(sessions?.subscribe ?? NO_SUBSCRIBE, () => sessions?.get(identity), () => undefined);
   useEffect(() => { sessions?.reconcile(identity, initial); }, [sessions, identity, initial, session?.phase]);
@@ -81,7 +91,7 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
     const optsName = refName(props.options);
     const options = normalizeControlOptions(props.options, optsName ? ctx.state.tables[optsName] : undefined)
       .filter((option) => props.exclude === undefined || option.value !== String(props.exclude));
-    return <><SelectControl
+    return <MutationCellHint reason={unavailable}><SelectControl
       appearance="cell" label={label} placeholder={str(props.placeholder) ?? 'None'} className={str(props.className)} options={options}
       value={value === null ? null : String(value)} nullable={props.nullable === true}
       onOpenChange={(open) => { if (open) begin(); }} onChange={(next) => change(selectValue(next))}
@@ -89,8 +99,8 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
       draftValue={session ? session.draft === null ? null : String(session.draft) : undefined}
       onDraftChange={(next) => change(next)} multiple={props.multiple === true} allowCreate={props.allowCreate === true}
       valueFormat={props.valueFormat === 'json' ? 'json' : undefined} disabled={!ctx.chrome || !writable || busy || props.disabled === true}
-      rest={{ ...shellRest(rest), 'aria-busy': busy || undefined }}
-    >{children}</SelectControl>{error}</>;
+      rest={{ ...shellRest(rest), 'aria-busy': busy || undefined, 'aria-description': unavailable ?? undefined }}
+    >{children}</SelectControl>{error}</MutationCellHint>;
   }
   if (tag === 'input' || tag === 'textarea' || tag === 'select') {
     const Html = tag as 'input' | 'textarea' | 'select';
@@ -105,11 +115,11 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
       }
       commit();
     };
-    return <><Html {...(rest as Record<string, unknown>)} aria-label={label} value={value === null ? '' : String(value)} disabled={!ctx.chrome || !writable || busy || props.disabled === true}
+    return <MutationCellHint reason={unavailable}><Html {...(rest as Record<string, unknown>)} aria-label={label} aria-description={unavailable ?? undefined} value={value === null ? '' : String(value)} disabled={!ctx.chrome || !writable || busy || props.disabled === true}
       className={cn('w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 py-1 text-sm outline-none transition-colors hover:border-border focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-50', tag === 'textarea' ? 'min-h-8 resize-y' : 'h-8', props.type === 'number' && 'text-right tabular-nums', str(props.className))}
       onFocus={begin} onChange={(e) => { change(tag === 'select' ? selectValue(e.currentTarget.value) : e.currentTarget.value); if (tag === 'select') commitDraft(e.currentTarget); }} onBlur={(e) => commitDraft(e.currentTarget)}
       onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); cancel(); e.currentTarget.blur(); } else if (e.key === 'Enter' && !(tag === 'textarea' && e.shiftKey)) { e.preventDefault(); commitDraft(e.currentTarget); } }}
-    >{tag === 'input' ? undefined : children}</Html>{error}</>;
+    >{tag === 'input' ? undefined : children}</Html>{error}</MutationCellHint>;
   }
   return Component ? <Component {...rest}>{children}</Component> : null;
 }
@@ -466,9 +476,10 @@ function SwitchAdapter(props: Record<string, unknown>) {
  * and the message clears on the next attempt.
  */
 function ButtonAdapter(props: Record<string, unknown>) {
-  const { store } = useContext(RuntimeEmbedContext);
+  const { store, chrome } = useContext(RuntimeEmbedContext);
   const name = typeof props.run === 'string' ? refName(props.run) : null;
   const [error, setError] = useState<string | null>(null);
+  const unavailable = useSyncExternalStore(store?.subscribe ?? NO_SUBSCRIBE, () => name ? store ? store.mutationUnavailable(name) : 'Checking edit access…' : null, () => name ? 'Checking edit access…' : null);
   // Hooks run unconditionally (an unbound Button renders through the same
   // component); the subscription is a no-op when there is no store.
   const busy = useSyncExternalStore(
@@ -483,7 +494,8 @@ function ButtonAdapter(props: Record<string, unknown>) {
       <Button
         {...(rest as Record<string, unknown>)}
         aria-busy={busy || undefined}
-        disabled={busy || undefined}
+        disabled={!chrome || busy || unavailable !== null || rest.disabled === true}
+        aria-description={unavailable ?? undefined}
         onClick={() => {
           setError(null);
           store.mutate(name).catch((e: unknown) => setError(e instanceof Error ? e.message : 'that did not save'));
@@ -491,6 +503,7 @@ function ButtonAdapter(props: Record<string, unknown>) {
       >
         {children as ReactNode}
       </Button>
+      {unavailable ? <span className="text-xs text-muted-foreground">{unavailable}</span> : null}
       {error ? <span role="alert" className="mx-write-error">{error}</span> : null}
     </>
   );

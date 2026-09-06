@@ -13,7 +13,7 @@ function setup(body = '<Column col="id"/><Column col="item"><input aria-label="I
   const parsed=parseJsx('<Helmet><Query name="tasks">{`select * from ref_abc123`}</Query><Mutation name="set_item">{`update ref_abc123 set item=$_value where id=$_row.id`}</Mutation><Mutation name="set_hours">{`update ref_abc123 set hours=$_value where id=$_row.id`}</Mutation></Helmet><DataTable data="$tasks" rowKey="id">'+body+'</DataTable>');
   if (!parsed.ok) throw Error(parsed.error);
   const {content,body:nodes}=splitHelmet(parsed.nodes);
-  const state:DataflowState={values:{},tables:{tasks:{columns,rows}},errors:{}};
+  const state:DataflowState={values:{},tables:{tasks:{columns,rows}},errors:{},mutationAccess:{set_item:null,set_hours:null}};
   const dataflow={flow:{values:content.values,queries:content.queries,mutations:content.mutations},state};
   const mutate=vi.fn().mockResolvedValue({dataset:'abc123'});
   const transport:QueryTransport={mutate,run:vi.fn().mockResolvedValue({tables:state.tables,errors:{}}),page:vi.fn()};
@@ -22,6 +22,17 @@ function setup(body = '<Column col="id"/><Column col="item"><input aria-label="I
   return {...view,store,mutate,transport,nodes,dataflow};
 }
 describe('editable table runtime',()=>{
+  it('disables only denied mutation controls and retains a draft when permission is revoked',async()=>{
+    const v=setup();const input=v.getByLabelText('Hours 1') as HTMLInputElement;
+    fireEvent.focus(input);fireEvent.change(input,{target:{value:'7'}});
+    await act(async()=>v.store.replaceFlow({...v.dataflow,state:{...v.dataflow.state,mutationAccess:{set_item:null,set_hours:'Edit access was revoked.'}}}));
+    expect(input.disabled).toBe(true);
+    expect(input.getAttribute('aria-description')).toBe('Edit access was revoked.');
+    expect(input.value).toBe('7');
+    expect((v.getAllByLabelText('Item')[0] as HTMLInputElement).disabled).toBe(false);
+    await expect(v.store.mutate('set_hours',{_value:7},{id:1,item:'one',hours:2})).rejects.toThrow('Edit access was revoked.');
+    expect(v.mutate).not.toHaveBeenCalled();
+  });
   it('refreshes quietly after a cell save while another cell remains editable',async()=>{
     const v=setup();let resolveRun!:(value:any)=>void;
     v.transport.run=vi.fn().mockImplementation(()=>new Promise(r=>{resolveRun=r;}));
@@ -36,14 +47,14 @@ describe('editable table runtime',()=>{
     expect(first.disabled).toBe(true);
     expect(second.disabled).toBe(false);
     fireEvent.focus(second);fireEvent.change(second,{target:{value:'7'}});
-    await act(async()=>resolveRun({tables:{tasks:{columns,rows:[{id:1,item:'one',hours:5},{id:2,item:'two',hours:3}]}},errors:{}}));
+    await act(async()=>resolveRun({tables:{tasks:{columns,rows:[{id:1,item:'one',hours:5},{id:2,item:'two',hours:3}]}},errors:{},mutationAccess:{set_item:null,set_hours:null}}));
     expect(first.value).toBe('5');
     expect(first.disabled).toBe(false);
     expect(second.value).toBe('7');
     expect(table.getAttribute('aria-busy')).toBe('false');
     fireEvent.keyDown(second,{key:'Enter'});await act(async()=>{});
     expect(v.mutate).toHaveBeenLastCalledWith({_value:7},'set_hours',{id:2,item:'two',hours:3});
-    await act(async()=>resolveRun({tables:{tasks:{columns,rows:[{id:1,item:'one',hours:5},{id:2,item:'two',hours:7}]}},errors:{}}));
+    await act(async()=>resolveRun({tables:{tasks:{columns,rows:[{id:1,item:'one',hours:5},{id:2,item:'two',hours:7}]}},errors:{},mutationAccess:{set_item:null,set_hours:null}}));
   });
   it('keeps different row drafts isolated even when their labels are identical',()=>{
     const v=setup(); const inputs=v.getAllByLabelText('Item') as HTMLInputElement[];
@@ -68,7 +79,7 @@ describe('editable table runtime',()=>{
     expect(v.mutate).toHaveBeenCalledTimes(1);
     expect(v.mutate).toHaveBeenCalledWith({_value:null},'set_hours',{id:1,item:'one',hours:2});
     expect(input.value).toBe('');
-    await act(async()=>resolveRun({tables:{tasks:{columns,rows:[{id:1,item:'one',hours:null},{id:2,item:'two',hours:3}]}},errors:{}}));
+    await act(async()=>resolveRun({tables:{tasks:{columns,rows:[{id:1,item:'one',hours:null},{id:2,item:'two',hours:3}]}},errors:{},mutationAccess:{set_item:null,set_hours:null}}));
     expect(input.value).toBe('');
   });
   it('shows an error and disables editing for duplicate or null keys',()=>{

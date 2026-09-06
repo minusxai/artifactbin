@@ -45,13 +45,15 @@ const POLL = (ds: string) =>
   + `<Mutation name="vote">{\`insert into ref_${ds} (choice, who) values ($choice, $who)\`}</Mutation>`
   + `<Mutation name="clear">{\`delete from ref_${ds} where who = $who\`}</Mutation></Helmet>`
   + '<div><input value="$who" /><Button run="$vote">Vote</Button><Question data="$tally" viz={{"kind":"table"}} /></div>';
+const credentials = new Map<string,string>();
 const mutate = (doc: string, body: unknown, init: RequestOptions = {}) =>
-  mutateDocRoute(request(`/a/${doc}/mutate`, { method: 'POST', json: body, ...init }), params({ id: doc }));
+  mutateDocRoute(request(`/a/${doc}/mutate`, { method: 'POST', token:credentials.get(doc), json: body, ...init }), params({ id: doc }));
 
 async function poll(access = 'readwrite', visibility?: string) {
   const t = await mintToken('t');
   const ds = (await create(t.token, { dataset: ROWS, access })).id;
   const doc = (await create(t.token, { markup: POLL(ds), ...(visibility ? { visibility } : {}) })).id;
+  credentials.set(doc,t.token);
   return { t, ds, doc };
 }
 
@@ -60,7 +62,7 @@ beforeEach(async () => {
 });
 
 describe('POST /a/<id>/mutate — the document\'s door', () => {
-  it('an anonymous reader of a public document runs a declared mutation; the dataset gains a version and its queries see the row', async () => {
+  it('an authenticated owner of a public document runs a declared mutation; the dataset gains a version and its queries see the row', async () => {
     const { ds, doc } = await poll();
     const before = (await getArtifactById(ds))!;
     const res = await mutate(doc, { mutation: 'vote', values: { choice: 'ramen', who: 'jun' } });

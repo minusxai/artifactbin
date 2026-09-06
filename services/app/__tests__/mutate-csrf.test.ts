@@ -15,9 +15,8 @@
  * written against `tokenId` alone therefore protects the anonymous browser and
  * waves the LOGGED-IN one straight through — which is exactly backwards.
  *
- * A bearer agent and the served document itself send no cookie and are never
- * blocked: the document's own POST is cross-site by construction (it has an
- * opaque origin), and refusing it would break every public poll.
+ * Bearer credentials do not need the cookie CSRF check. Credentialless
+ * requests, including opaque-origin documents, cannot authorize mutations.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST as mutateDocRoute } from '@/app/a/[id]/mutate/route';
@@ -127,13 +126,13 @@ describe('cross-site writes', () => {
     expect((await at({})).credential).toBe('none');
   });
 
-  it('never blocks the SERVED DOCUMENT, whose own POST is cross-site by construction (opaque origin, no cookie)', async () => {
+  it('refuses writes from the anonymous served document, including its opaque origin', async () => {
     const t = await mintToken('t');
     const ds = (await create(t.token, { dataset: ROWS, columns: [{ name: 'choice', type: 'string' }], access: 'readwrite' })).id;
     const doc = (await create(t.token, { markup: DOC(ds) })).id; // public
     // What a sandboxed document sends: Origin "null", no cookie at all.
     const res = await write(doc, { origin: 'null' });
-    expect(res.status, await res.clone().text()).toBe(200);
-    expect((await getArtifactById(ds))!.version).toBe(2);
+    expect(res.status, await res.clone().text()).toBe(403);
+    expect((await getArtifactById(ds))!.version).toBe(1);
   });
 });

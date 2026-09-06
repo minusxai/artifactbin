@@ -41,7 +41,7 @@ import type { RefLoader, ResolvedRef } from '@/lib/story/refs';
 import type { DatasetColumn } from '@/lib/story/data-tiers';
 import { checkDocumentData } from '@/lib/story/data-checks';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
-import { ANONYMOUS_CEILING, canRead, capRole, maxRole, shareRolesAtLeast, type ArtifactRole, type ShareEntry, type ShareRole } from './share-roles';
+import { ANONYMOUS_CEILING, canEdit, canRead, capRole, maxRole, shareRolesAtLeast, type ArtifactRole, type ShareEntry, type ShareRole } from './share-roles';
 
 /**
  * The read ACL. 'public' = anyone with the link may read, and owned docs list
@@ -679,7 +679,7 @@ const scopeAtLeast = (actor: TokenActor, min: ArtifactRole): Scope =>
     ? live({ where: (p) => `(user_id = ${p} OR ${SHARE_PREDICATE(shareRolesAtLeast(min), p)} OR ${LINK_PREDICATE(min)})`, val: actor.userId })
     : ownerScope(actor);
 
-const editorScope = (actor: TokenActor): Scope => scopeAtLeast(actor, 'editor');
+export const editorScope = (actor: TokenActor): Scope => scopeAtLeast(actor, 'editor');
 
 /**
  * The scope the annotation sidecar reaches a document through: the owner, an
@@ -1352,7 +1352,7 @@ export function setAccessFor(actor: TokenActor, id: string, access: DatasetAcces
 async function setAccessScoped(scope: Scope, id: string, access: DatasetAccess): Promise<ArtifactRow | null> {
   const db = await getDb();
   const r = await db.query<ArtifactRow>(
-    `UPDATE artifacts SET access = $3 WHERE id = $1 AND ${scope.where('$2')} AND format = 'dataset' RETURNING *`,
+    `UPDATE artifacts SET access = $3 WHERE id = $1 AND ${scope.where('$2')} AND format = 'dataset' RETURNING *, pg_notify('artifact_' || lower(id), edit_id)`,
     [id, scope.val, access],
   );
   return r.rows[0] ?? null;
@@ -1499,6 +1499,9 @@ export async function updateSharingFor(actor: TokenActor, id: string, patch: Sha
         await tx.query('INSERT INTO artifact_shares (artifact_id, email, role) VALUES ($1, $2, $3)', [id, email, role]);
       }
     }
+    // Dataset subscribers must re-read capabilities even when rows/version
+    // have not changed. The existing data wakeup already refreshes queries.
+    await tx.query(`SELECT pg_notify('artifact_' || lower(id), edit_id) FROM artifacts WHERE id = $1`, [id]);
     return true;
   });
   if (!done) return null;
@@ -1551,7 +1554,7 @@ function refLoaderFor(tokenId: string): RefLoader {
 /** Same, scoped by account (the session-authed /api/my routes) before the link-readable fallback. */
 function refLoaderForUser(userId: string): RefLoader {
   return async (id: string): Promise<ResolvedRef | null> => {
-    const own = await getArtifactByUser(userId, id);
+    const own = await getArtifactFor({userId,tokenId:''}, id);
     const row = own ?? (await getLinkReadableArtifact(id));
     if (!row) return null;
     return rowToResolvedRef(row, !!own);
@@ -1781,37 +1784,17 @@ function rowToResolvedRef(row: ArtifactRow, owned = false): ResolvedRef {
 /** Why a write may not happen. Each names the fix; none is an existence oracle. */
 export type WriteRefusal = 'not_a_dataset' | 'dataset_read_only';
 
-/**
- * MAY this dataset be written on behalf of this owner? The one definition,
- * used by the publish door's ref check, the document's mutate route and the
- * owner's own mutate route — so "who may write" cannot drift between the
- * moment a document is published and the moment someone clicks its button.
- *
- * Two conditions, both re-checked on EVERY call rather than trusted from
- * publish time: the row is a dataset whose owner opened it for writes, and
- * the writer OWNS it. Ownership is the artifact scope, not the read ACL — a
- * public dataset is readable by anyone's document and writable by none of
- * theirs, because "anyone may read this" has never meant "anyone may append
- * to it".
- */
-export function canWriteDataset(dataset: ArtifactRow, owner: { tokenId: string; userId: string | null }): WriteRefusal | null {
+/** The dataset must allow writes AND the current actor must hold its editor role. */
+export async function canWriteDataset(dataset: ArtifactRow, actor: RoleActor): Promise<WriteRefusal | null> {
   if (dataset.format !== 'dataset') return 'not_a_dataset';
-  const owns = owner.userId ? dataset.user_id === owner.userId : dataset.token_id === owner.tokenId;
   // An unreachable dataset is reported as read-only, never as "not yours":
   // the caller answers a uniform 404 for anything it could not resolve, and
   // this one it could — the document names it, so its existence is not news.
-  if (!owns) return 'dataset_read_only';
+  if (!canEdit(await effectiveRole(dataset, actor))) return 'dataset_read_only';
   return dataset.access === 'readwrite' ? null : 'dataset_read_only';
 }
 
-/**
- * The document's own writer identity — who its mutations act as. A document
- * publishes under a token and (once claimed) an account, and its mutations
- * write that owner's datasets, for whoever may read the document. This is
- * what makes a reader's click safe: it never carries the READER's identity,
- * only the document's, and the document may only name datasets its own
- * publisher owns (validateRefs).
- */
+/** The document author's identity resolves its declared data references, never a viewer's write authority. */
 export const writerFor = (doc: ArtifactRow): TokenActor => ({ tokenId: doc.token_id, userId: doc.user_id });
 
 /**
@@ -1828,6 +1811,7 @@ export async function runDocumentMutation(
   name: string,
   values: Record<string, Scalar>,
   row?: Record<string, Scalar>,
+  actor: RoleActor = {userId:null,tokenId:null},
 ): Promise<DocumentMutationOutcome> {
   if (doc.format !== 'markup' || !doc.source) return { ok: false, reason: 'unknown_mutation' };
   const parsed = parseJsx(doc.source);
@@ -1842,7 +1826,7 @@ export async function runDocumentMutation(
   const writer = writerFor(doc);
   const dataset = await getArtifactFor(writer, decl.target);
   if (!dataset) return { ok: false, reason: 'dataset_read_only' };
-  const refusal = canWriteDataset(dataset, writer);
+  const refusal = await canWriteDataset(dataset, actor);
   if (refusal) return { ok: false, reason: refusal };
 
   // Declared defaults ⊕ what the caller sent, restricted to declared scalars:
@@ -1869,7 +1853,7 @@ export async function runDocumentMutation(
   } else if (row !== undefined || Object.hasOwn(values, '_value')) {
     return { ok: false, reason: 'invalid_row', detail: 'this mutation does not accept a row or _value' };
   }
-  const result = await mutateDataset(dataset, decl.sql, bound, { row: rowBinding, expectedAffected: decl.expectedAffected });
+  const result = await mutateDataset(dataset, actor, decl.sql, bound, { row: rowBinding, expectedAffected: decl.expectedAffected });
   if (isMutationRefused(result)) return { ok: false, reason: result.reason, detail: result.detail };
   return { ok: true, dataset: result.row, affected: result.affected, rowCount: result.rowCount };
 }
@@ -1952,7 +1936,21 @@ export async function dataflowForRow(
   // `viewer` absent is ANONYMOUS, deliberately — that is what the document's own
   // GET transport is, and it is the safe default for every caller that has no
   // session to hand over.
-  return runDocumentDataflow(row.source, datasetResolverForRow(row, opts.viewer ?? null), opts);
+  const result = await runDocumentDataflow(row.source, datasetResolverForRow(row, opts.viewer ?? null), opts);
+  if (result?.flow.mutations?.length) result.state.mutationAccess = await mutationAccessFor(row, result.flow, opts.viewer ?? null);
+  return result;
+}
+
+/** Viewer capabilities use the same dataset ACL as execution; no authored permission expressions. */
+async function mutationAccessFor(doc: ArtifactRow, flow: Dataflow, viewer: RoleActor | null): Promise<Record<string,string|null>> {
+  const targets = [...new Set((flow.mutations ?? []).map(m=>m.target))];
+  const access = new Map(await Promise.all(targets.map(async target => {
+    const dataset = await getArtifactFor(writerFor(doc), target);
+    const reason = dataset && !await canWriteDataset(dataset, viewer ?? {userId:null,tokenId:null})
+      ? null : 'You need edit access to a writable dataset to make this change.';
+    return [target,reason] as const;
+  })));
+  return Object.fromEntries((flow.mutations ?? []).map(m=>[m.name,access.get(m.target)!]));
 }
 
 /**
@@ -2018,8 +2016,7 @@ async function tableForRef(r: ArtifactRow | null, viewer: RoleActor | null): Pro
  * VIEWER is separate and rides through: reach is the document's, rows are theirs. */
 const datasetResolverForRow = (row: ArtifactRow, viewer: RoleActor | null): DatasetResolver => async (id) =>
   tableForRef(
-    (await getArtifact(row.token_id, id))
-    ?? (row.user_id ? await getArtifactByUser(row.user_id, id) : null)
+    (await getArtifactFor(writerFor(row), id))
     ?? (await getLinkReadableArtifact(id)),
     viewer,
   );

@@ -28,6 +28,7 @@ const FLOW = flowOf(
   + '<Mutation name="vote">{`insert into ref_abc123 (choice) values ($choice)`}</Mutation>',
 );
 const STATE: DataflowState = {
+  mutationAccess: {vote:null},
   values: { choice: 'ramen' },
   tables: { tally: { rows: [{ choice: 'ramen', votes: 1 }], columns: [] }, top: { rows: [], columns: [] }, elsewhere: { rows: [], columns: [] } },
   errors: {},
@@ -91,14 +92,14 @@ describe('store.mutate', () => {
     await Promise.all([a, b]);
   });
 
-  it('rejects with the server\'s message, clears busy, and re-runs nothing', async () => {
+  it('rejects with the server\'s message, clears busy, and refreshes capabilities', async () => {
     const { store, runs, fail } = harness();
     const done = store.mutate('vote');
     runs.length = 0;
     fail('this dataset is not open for writes');
     await expect(done).rejects.toThrow(/not open for writes/);
     expect([...store.mutating()]).toEqual([]);
-    expect(runs).toEqual([]);
+    expect(runs.map(r=>r.only)).toEqual([['tally','top']]);
   });
 
   it('refuses an undeclared name, and a document with no write transport says so plainly', async () => {

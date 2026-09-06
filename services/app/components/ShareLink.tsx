@@ -260,7 +260,7 @@ export default function ShareLink({
                   <div className="flex gap-1">
                     {([
                       ['read', 'read-only', 'documents may only read this data'],
-                      ['readwrite', 'read & write', 'documents you publish may add, change and remove rows'],
+                      ['readwrite', 'read & write', 'you and dataset editors may add, change and remove rows'],
                     ] as const).map(([value, label, tip]) => (
                       <Tooltip key={value} content={tip}>
                         <button

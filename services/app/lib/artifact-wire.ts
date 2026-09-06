@@ -738,7 +738,7 @@ export async function respondToMutate(
   const dataset = await getArtifactFor(actor, id);
   if (!dataset) return json({ error: 'not_found' }, 404);
 
-  const refusal = canWriteDataset(dataset, actor);
+  const refusal = await canWriteDataset(dataset, actor);
   if (refusal === 'not_a_dataset') {
     return json({ error: 'not_a_dataset', details: [`${id} is a ${dataset.format} artifact — only datasets hold rows to write`] }, 400);
   }
@@ -764,8 +764,9 @@ export async function respondToMutate(
     }
   }
 
-  const result = await mutateDataset(dataset, body.sql, values);
+  const result = await mutateDataset(dataset, actor, body.sql, values);
   if (isMutationRefused(result)) {
+    if (result.reason === 'dataset_read_only') return json({error:result.reason,details:[result.detail]},403);
     if (result.reason === 'dataset_full') return json({ error: 'dataset_full', details: [result.detail] }, 409);
     // Contention is retryable, not an author error — never a 400.
     if (result.reason === 'contended') return json({ error: 'dataset_busy', details: [result.detail] }, 503, { 'Retry-After': '1' });
