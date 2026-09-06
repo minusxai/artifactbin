@@ -1430,6 +1430,7 @@ export interface SharingState {
   shares: ShareEntry[];
   /** Datasets: the write ACL, and the documents that would stop working if it were closed. */
   access?: DatasetAccess;
+  datasetKind?: 'stored' | 'postgres';
   writtenBy?: Array<{ id: string; title: string | null; mutations: string[] }>;
   /** False for an anonymous owner: `private` has no ACL to anchor without an account. */
   canPrivate?: boolean;
@@ -1457,7 +1458,7 @@ export async function getSharingFor(actor: TokenActor, id: string): Promise<Shar
     shares: shares.rows,
     canPrivate: !!actor.userId,
     ...(row.format === 'dataset'
-      ? { access: row.access, writtenBy: await findWritersFor(actor, id) }
+      ? { access: row.access, datasetKind: catalogOf(row)?.kind ?? 'stored', writtenBy: await findWritersFor(actor, id) }
       : {}),
   };
 }
