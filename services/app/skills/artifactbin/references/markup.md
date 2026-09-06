@@ -10,7 +10,7 @@ Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with exact spa
 
 - **Static JSX only**: literal props (strings, numbers, booleans, arrays,
   `{{…}}` objects); no expressions, spreads or inline handlers (`onClick=` is
-  rejected). Close every tag (`<br />`); use `{/* … */}` comments; omit
+  rejected). In JSX, every tag closes (`<br />`); use `{/* … */}` comments; omit
   `<html>`/`<head>`/`<body>`. One `<script>` in `<Helmet>` runs after hydration:
   use `addEventListener` on your own ids.
 - **Style with Tailwind classes via `className`**, starting from a
