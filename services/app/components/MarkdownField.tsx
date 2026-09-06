@@ -1,5 +1,5 @@
-import RemoteMentionPicker from './RemoteMentionPicker';
 'use client';
+import RemoteMentionPicker, { type MentionPickerHandle } from './RemoteMentionPicker';
 
 /**
  * THE WRITING HALF of markdown-lite: a textarea, a light toolbar over it, and
@@ -27,6 +27,7 @@ import { Bold, Code, Italic, Link2, List } from 'lucide-react';
 import MarkdownLite from '@/components/MarkdownLite';
 import { Tooltip } from '@/components/Tooltip';
 import { wrapSelection, type MdMarker } from '@/lib/markdown-lite';
+import { mentionDraft } from '@/lib/mention-draft';
 
 export interface MarkdownFieldProps {
   /** The textarea's own accessible name — the one the page already used. */
@@ -72,7 +73,9 @@ export default function MarkdownField({
 }: MarkdownFieldProps) {
   const [mention, setMention] = useState<{start:number;end:number;query:string}|null>(null);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
+  const pickerRef = useRef<MentionPickerHandle>(null);
   const restore = useRef<{ start: number; end: number } | null>(null);
+  const draft = mentionDraft(value);
 
   // After the commit, never during it: the value has to be on the element
   // before a range into it means anything.
@@ -82,19 +85,28 @@ export default function MarkdownField({
     if (!staged || !field) return;
     restore.current = null;
     field.focus();
-    field.setSelectionRange(staged.start, staged.end);
+    field.setSelectionRange(draft.toDisplay(staged.start), draft.toDisplay(staged.end));
   });
 
   const apply = useCallback((marker: MdMarker) => {
     const field = fieldRef.current;
     if (!field) return;
-    const next = wrapSelection(value, field.selectionStart, field.selectionEnd, marker);
+    const projected = mentionDraft(value);
+    const next = wrapSelection(value, projected.toRaw(field.selectionStart), projected.toRaw(field.selectionEnd, 'end'), marker);
     restore.current = { start: next.start, end: next.end };
     onChange(next.text);
   }, [value, onChange]);
 
   const onKeyDown = useCallback((event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.nativeEvent.isComposing) return;
+    if (mention && !event.metaKey && !event.ctrlKey) {
+      if (event.key === 'Escape') {
+        event.preventDefault(); event.stopPropagation(); setMention(null); return;
+      }
+      if (pickerRef.current?.keyDown(event.key)) {
+        event.preventDefault(); event.stopPropagation(); return;
+      }
+    }
     if (!event.metaKey && !event.ctrlKey) return;
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -106,7 +118,7 @@ export default function MarkdownField({
     // Prevented so the browser's own bold/italic never reaches the field.
     event.preventDefault();
     apply(marker);
-  }, [apply, onSubmit]);
+  }, [apply, onSubmit, mention]);
 
   return (
     <div className={`min-w-0 ${className}`}>
@@ -132,10 +144,10 @@ export default function MarkdownField({
             aria-label={previewToggleLabel}
             aria-pressed={previewing}
             onMouseDown={(event) => event.preventDefault()}
-            onClick={() => onPreviewingChange(!previewing)}
+            onClick={() => { setMention(null); onPreviewingChange(!previewing); }}
             className={`ml-auto cursor-pointer rounded-[3px] px-1.5 py-0.5 font-mono text-[10px] ${previewing ? 'bg-accent-soft text-accent' : 'text-faint hover:bg-surface hover:text-fg'}`}
           >
-            preview
+            {previewing ? 'edit' : 'preview'}
           </button>
         </Tooltip>
       </div>
@@ -149,25 +161,28 @@ export default function MarkdownField({
         <textarea
           ref={fieldRef}
           aria-label={label}
-          value={value}
+          value={draft.text}
           onChange={(event) => {
             const text=event.target.value, end=event.target.selectionStart;
+            const raw = draft.edit(text, end);
+            const next = mentionDraft(raw);
             const match=text.slice(0,end).match(/(?:^|\s)@([^\s@\[\]]*)$/);
-            setMention(match?{start:end-match[1].length-1,end,query:match[1]}:null);
-            onChange(text);
+            setMention(match?{start:next.toRaw(end-match[1].length-1),end:next.toRaw(end, 'end'),query:match[1]}:null);
+            onChange(raw);
           }}
           onClick={() => setMention(null)}
           onKeyDown={onKeyDown}
           rows={rows}
           autoFocus={autoFocus}
           placeholder={placeholder}
-          className="mb-2 w-full resize-y rounded-[4px] border border-edge bg-surface p-2 leading-snug focus:border-accent focus:outline-none"
+          className="mb-2 min-h-24 w-full resize-y rounded-md border border-edge bg-surface p-3 font-sans text-sm leading-relaxed placeholder:text-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/10"
         />
       )}
-      {!previewing && mention && <RemoteMentionPicker query={mention.query} onSelect={text=>{
+      {!previewing && mention && <RemoteMentionPicker ref={pickerRef} query={mention.query} onSelect={text=>{
         const caret=mention.start+text.length;restore.current={start:caret,end:caret};
         onChange(value.slice(0,mention.start)+text+value.slice(mention.end));setMention(null);
       }}/>}
+      {!previewing && !mention && <p className="mb-2 text-[10px] text-muted">Type @ to mention an agent · Ctrl/⌘ + Enter to send</p>}
     </div>
   );
 }

@@ -147,7 +147,15 @@ export async function runRemote(options: RunOptions): Promise<number> {
                 cols = item.cols!;
                 rows = item.rows!;
                 child.resize(cols, rows);
-              } else if (item.kind === "input") child.write(item.data!);
+              } else if (item.kind === "input") {
+                const data = item.data!;
+                if (data.length > 1 && data.endsWith("\r")) {
+                  // TUIs can interpret text plus Enter in one burst as a multiline paste.
+                  child.write(data.slice(0, -1));
+                  await delay(200);
+                  if (exitCode === undefined) child.write("\r");
+                } else child.write(data);
+              }
             }
             ack = item.id;
           }

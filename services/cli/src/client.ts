@@ -26,11 +26,13 @@ export async function api<T>(
       ...(body ? { body: JSON.stringify(body) } : {}),
     },
   );
-  const result = (await response.json()) as { error?: string };
+  const result = (await response.json().catch(() => null)) as { error?: string } | null;
   if (!response.ok)
     throw new ApiError(
-      result.error ?? `Server returned ${response.status}`,
+      typeof result?.error === 'string' ? result.error : `Server returned HTTP ${response.status} ${response.statusText}. Check the server logs.`,
       response.status,
     );
+  if (result === null)
+    throw new ApiError('Server returned an invalid JSON response. Check the server URL and logs.', response.status);
   return result as T;
 }

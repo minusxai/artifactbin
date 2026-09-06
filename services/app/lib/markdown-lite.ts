@@ -77,6 +77,8 @@ const URL_NOISE_RE = /[\u0000-\u0020\u007f]/g;
  * check against the raw string would pass it straight through.
  */
 export function safeHref(url: string): string | null {
+  // Session mentions are the one supported relative link; never admit protocol-relative URLs.
+  if (/^\/chat\?session=[a-f0-9-]{36}$/.test(url)) return url;
   const cleaned = url.replace(URL_NOISE_RE, '');
   const lower = cleaned.toLowerCase();
   return SCHEMES.some((scheme) => lower.startsWith(scheme)) ? cleaned : null;

@@ -44,6 +44,13 @@ function renderInline(nodes: MdInline[]): ReactNode[] {
       case 'code':
         return <code key={i} className={CODE_CLASS}>{node.text}</code>;
       case 'link':
+        if (/^\/chat\?session=[a-f0-9-]{36}$/.test(node.href)) return (
+          <a key={i} href={node.href} target="_blank" rel="noopener noreferrer"
+            title="Open agent session" data-agent-mention
+            className="inline-flex max-w-full items-center rounded-md border border-accent/20 bg-accent-soft px-1.5 py-0.5 align-baseline text-[0.9em] font-medium text-accent no-underline hover:bg-accent/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
+            {renderInline(node.children)}
+          </a>
+        );
         // A new tab, and never a handle on this window: the body is text
         // somebody else wrote, so `noopener` is not optional here.
         return (
