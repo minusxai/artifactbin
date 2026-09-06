@@ -5,16 +5,14 @@ description: >-
 ---
 ## Read first
 
-`markup` is **static JSX treated as data** — parsed, validated, interpreted
-over a fixed component registry, never executed. A fault is a
-`400 {"error":"invalid_jsx","details":[…]}` with exact spans: guess and correct.
+`markup` is **static JSX data**, interpreted over a fixed component registry.
+Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with exact spans.
 
 - **Static JSX only**: literal props (strings, numbers, booleans, arrays,
   `{{…}}` objects); no expressions, spreads or inline handlers (`onClick=` is
-  rejected). It is JSX and not HTML, so every tag closes (`<br />`), comments
-  are `{/* … */}`, and there is no `<html>`/`<head>`/`<body>`. **But the
-  document DOES run your JavaScript**: one `<script>` in `<Helmet>` runs after
-  hydration — `addEventListener` on your own ids.
+  rejected). Close every tag (`<br />`); use `{/* … */}` comments; omit
+  `<html>`/`<head>`/`<body>`. One `<script>` in `<Helmet>` runs after hydration:
+  use `addEventListener` on your own ids.
 - **Style with Tailwind classes via `className`**, starting from a
   `<div data-design="tw" className="@container …">` wrapper with `@2xl:`
   container variants for responsive layout.
@@ -109,10 +107,7 @@ never on line one.
   ask the user. `colorMode`
   (`light | dark`) is the AUTHOR'S DEFAULT — readers flip it, so design in theme tokens.
 
-For an uploaded social preview, put
-`<meta name="artifactbin:og-image" content="ref:IMAGE_ID" />` in Helmet after
-uploading the image asset. This overrides the document's saved crop; remove
-it to restore framing. See [publishing-versions.md](publishing-versions.md#set-a-social-preview-image).
+Social preview: [upload and crop](publishing-versions.md).
 
 ## Images and icons
 
