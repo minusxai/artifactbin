@@ -6,6 +6,10 @@ const csp="default-src 'none';script-src 'unsafe-inline';style-src 'unsafe-inlin
 const grid=process.argv.includes('--grid'),header=process.argv.includes('--header');
 const server=createServer((req,res)=>{
  const u=new URL(req.url,'http://localhost'),size=Number(u.searchParams.get('size')??0),depth=Number(u.searchParams.get('depth')??2),policy=u.searchParams.get('policy')!=='off';
+ if(!Number.isFinite(size)||!Number.isInteger(size)||size<0||size>262144
+   ||!Number.isFinite(depth)||!Number.isInteger(depth)||depth<0||depth>4){
+  res.statusCode=400;res.end('size must be an integer from 0 to 262144; depth must be an integer from 0 to 4');return;
+ }
  const meta=policy?`<meta http-equiv="Content-Security-Policy" content="${csp}">`:'';
  let doc=`<!doctype html>${meta}<body><p>Author ready</p><script>/*${'x'.repeat(size)}*/top.postMessage('author-ready','*');</script>`;
  for(let n=0;n<depth;n++)doc=`<!doctype html>${meta}<style>${grid?'html,body{margin:0;width:100%;height:100%}body{display:grid;grid-template-columns:repeat(1,1fr);grid-template-rows:repeat(1,1fr)}iframe{min-width:0;min-height:0;border:0;width:100%;height:100%}':'iframe{width:500px;height:300px}'}</style><body><script>${n===depth-1?"window.ready=false;addEventListener('message',e=>{if(e.data==='author-ready')ready=true;});":''}const f=document.createElement('iframe');f.sandbox='allow-scripts';f.srcdoc=${literal(doc)};document.body.append(f);</script>`;
