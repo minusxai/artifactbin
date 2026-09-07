@@ -20,6 +20,7 @@ const trusted = { origin: controls, 'x-artifactbin-csrf': '1', 'sec-fetch-site':
 describe('the composed proxy browser boundary', () => {
   it('resolves only read authority on main artifact reads, never ambient account authority', async () => {
     expect(await (await call(main, '/a/abc123')).json()).toEqual({ credential: 'read-session', userId: 'reader' });
+    expect(await (await call(main, '/a/abc123/assets?kind=script&u=https://cdn.example/bundle.js')).json()).toEqual({ credential: 'read-session', userId: 'reader' });
     expect(await (await call(main, '/')).json()).toEqual({ credential: 'none' });
     expect(await (await call(main, '/api/artifacts')).json()).toEqual({ credential: 'none' });
     expect(await (await call(main, '/api/page/session')).json()).toEqual({ credential: 'none' });

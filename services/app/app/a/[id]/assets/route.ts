@@ -29,7 +29,8 @@
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { verifyExportKey } from '@/lib/export-key';
 import { sessionActor } from '@/lib/viewer';
-import { importForDocument, WebAssetRefused } from '@/lib/web-assets';
+import { importForDocument, WebAssetRefused, WEB_ASSET_KINDS, type WebAssetKind } from '@/lib/web-assets';
+import { ASSETS_ORIGIN } from '@/lib/config';
 import { json } from '@/lib/http';
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -51,8 +52,14 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const admitted = (await canReadArtifact(artifact, viewer)) || verifyExportKey(artifact.id, key ?? undefined);
   if (!admitted) return notFound();
 
+  const managed = params.has('kind');
+  const kind = params.get('kind') ?? 'image';
+  const wantsJson = (request.headers.get('accept') ?? '').includes('application/json');
+  if (managed && (!wantsJson || params.getAll('kind').length !== 1 || !WEB_ASSET_KINDS.includes(kind as WebAssetKind))) return json({error:'invalid_asset_kind'},400);
+  if (managed && !ASSETS_ORIGIN) return json({error:'assets_origin_required'},503);
+
   try {
-    const location = await importForDocument(artifact, url);
+    const location = await importForDocument(artifact, url,kind as WebAssetKind);
     /*
      * TWO ANSWERS, ONE IMPORT. An `<img>` gets a 302 and the browser follows
      * it — one request, and the bytes are never this response's. The PAGE,
@@ -64,7 +71,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
      * send it — it asks for `image/*` — so the two answers cannot be confused
      * for one another, and the endpoint grows no second URL shape.
      */
-    if ((request.headers.get('accept') ?? '').includes('application/json')) return json({ url: location }, 200);
+    if (wantsJson) return json({ url: managed ? new URL(location,ASSETS_ORIGIN!).href : location }, 200,{'Cache-Control':'no-store'});
     // Never the bytes: this cannot be used to read a response the caller could
     // not have fetched for themselves.
     return new Response(null, { status: 302, headers: { Location: location } });
