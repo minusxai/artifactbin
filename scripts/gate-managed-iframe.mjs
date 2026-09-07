@@ -25,7 +25,9 @@ const [port,backendPort,cdnPort]=leases.map(socket=>socket.address().port);
 await Promise.all(leases.map(socket=>new Promise(resolve=>socket.close(resolve))));
 const scratch=mkdtempSync(join(tmpdir(),'afbin-managed-gate-'));
 const backend=`http://127.0.0.1:${backendPort}`,cdn=`http://127.0.0.1:${cdnPort}`;
-const hostname='127.0.0.1.nip.io',base=`https://${hostname}:${port}`,controls=`https://i.${hostname}:${port}`,assets=`https://assets.${hostname}:${port}`;
+// Default CI Chromium has no third-party DNS dependency. The explicit optional
+// cross-engine probes use the same nip.io mechanism as trusted-controls.
+const hostname=engineName==='chromium'?'artifactbin.test':'127.0.0.1.nip.io',base=`https://${hostname}:${port}`,controls=`https://i.${hostname}:${port}`,assets=`https://assets.${hostname}:${port}`;
 const hits=new Map(),wire=[];
 const fixture=createServer((req,res)=>{
   hits.set(req.url,(hits.get(req.url)??0)+1);
@@ -62,7 +64,8 @@ try {
   let ready=false;for(let i=0;i<300;i++){if(server.exitCode!==null)throw Error('server exited');if(await mainFetch(backend+'/health').then(r=>r.ok).catch(()=>false)){ready=true;break;}await new Promise(resolve=>setTimeout(resolve,100));}assert(ready);
   const seed=await startDocument(backend,{},mainFetch);
   const uploaded=await mainFetch(backend+'/api/artifacts',{method:'POST',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({file:{filename:'ref.png',contentType:'image/png',base64:readFileSync(resolve('services/app/public/logo-256.png')).toString('base64')}})});assert(uploaded.ok,await uploaded.clone().text());const refId=(await uploaded.json()).id;
-  const author=`document.querySelector('button').style.cssText='display:block;width:120px;height:40px';document.querySelector('button').onclick=()=>mx.mutate('inc');mx.params.subscribe(['count'],values=>document.querySelector('button').textContent='Count '+values.count);
+  const author=`for(const name of ['RTCPeerConnection','webkitRTCPeerConnection','mozRTCPeerConnection']){const d=Object.getOwnPropertyDescriptor(globalThis,name);if(globalThis[name]!==undefined||!d||d.configurable||d.writable)throw Error('WebRTC not locked down');}
+  document.querySelector('button').style.cssText='display:block;width:120px;height:40px';document.querySelector('button').onclick=()=>mx.mutate('inc');mx.params.subscribe(['count'],values=>document.querySelector('button').textContent='Count '+values.count);
   const imageReady=image=>new Promise((resolve,reject)=>{if(image.complete&&image.naturalWidth)resolve();else{image.onload=resolve;image.onerror=reject;}});
   const image=new Image();const dynamicImage=imageReady(image);image.src='${cdn}/image.png';document.body.append(image);
   const refImage=new Image();const publicRef=imageReady(refImage);refImage.src='ref:${refId}';document.body.append(refImage);
@@ -71,7 +74,7 @@ try {
   const markup='<Helmet><Value name="result" type="string" default="waiting"/><Value name="count" type="number" default={0}/><Mutation name="inc">{`update _signals set count=count+1`}</Mutation></Helmet><p aria-label="Result">{$result}</p><p aria-label="Count">{$count}</p><Iframe title="Managed demo" height={200}><button>Increment</button><canvas width="30" height="30"/><img src="'+cdn+'/image.png"/><script src="'+cdn+'/one.js"/><script type="module" src="'+cdn+'/two.js"/><script>{`'+author+'`}</script></Iframe><Iframe title="Second" height={100}><p>Second isolated region</p></Iframe>';
   const hostile='<Iframe title="Navigation refusal" height={100}><script>{`location.href="'+controls+'/managed-denied"`}</script></Iframe>';
   const published=await mainFetch(`${backend}/api/artifacts/${seed.id}`,{method:'PUT',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({markup:markup+hostile,expectedVersion:1})});assert(published.ok,await published.text());
-  browser=await engine.launch({headless:true});
+  browser=await engine.launch({headless:true,...(engineName==='chromium'?{args:['--host-resolver-rules=MAP artifactbin.test 127.0.0.1, MAP i.artifactbin.test 127.0.0.1, MAP assets.artifactbin.test 127.0.0.1','--proxy-bypass-list=*']}:{})});
   const staticContext=await browser.newContext({ignoreHTTPSErrors:true,javaScriptEnabled:false}),staticPage=await staticContext.newPage();
   await staticPage.goto(base+'/a/'+seed.id);
   assert(Math.abs((await staticPage.getByLabel('Managed demo',{exact:true}).boundingBox()).height-200)<0.1,'SSR reserves frame height');await staticContext.close();
@@ -100,7 +103,7 @@ try {
   for(const path of ['/one.js','/two.js','/dynamic.js','/data.json','/image.png'])assert.equal(hits.get(path),1,path+' imported once');
   assert(wire.some(row=>row.host===new URL(assets).host&&row.url.startsWith('/assets/')),'cached assets served on dedicated origin');
   assert(wire.filter(row=>row.host===new URL(assets).host&&row.url==='/assets/ref/'+refId).length>=3,'public refs re-read without immutable caching');
-  console.log(JSON.stringify({engine:engineName,version:browser.version(),loads:3,signals:true,localMutation:true,bundledClassicAndModule:true,dynamicImageAndScript:true,rawCompatibility:true,ssrHeightStable:true,nestedNavigationBlocked:true,singleNavigationControl:true,cdnHits:Object.fromEntries(hits),assetRequests:wire.filter(row=>row.host===new URL(assets).host).length}));
+  console.log(JSON.stringify({engine:engineName,version:browser.version(),loads:3,signals:true,localMutation:true,bundledClassicAndModule:true,dynamicImageAndScript:true,rawCompatibility:true,immutableWebRtcDenial:true,ssrHeightStable:true,nestedNavigationBlocked:true,singleNavigationControl:true,cdnHits:Object.fromEntries(hits),assetRequests:wire.filter(row=>row.host===new URL(assets).host).length}));
 } finally {
   await browser?.close();if(server&&server.exitCode===null){const exited=once(server,'exit');server.kill('SIGTERM');await exited;}await new Promise(resolve=>tls.close(resolve));await new Promise(resolve=>fixture.close(resolve));rmSync(scratch,{recursive:true,force:true});
 }
