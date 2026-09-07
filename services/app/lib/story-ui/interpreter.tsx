@@ -12,6 +12,7 @@
  * stamped DOM is render output only; new-format stories persist JSX source, never DOM.
  */
 import React from 'react';
+import {compileManagedIframe} from '@/lib/story/managed-iframe';
 import { evaluateReactive, isReactiveExpression, REACTIVE_BOOLEAN_PROPS } from '@/lib/jsx/reactive';
 import type { JsxNode, JsxElement } from '@/lib/jsx';
 import { immutableSet } from '@/lib/utils/immutable-collections';
@@ -194,6 +195,15 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
   const isComponent = node.isComponent;
   const Component = isComponent ? options.components[node.tag] : null;
   if (isComponent && !Component) return null; // validator rejects these; render stays safe regardless
+
+  if(node.tag==='Iframe' && Component) {
+    try {
+      const compiled=compileManagedIframe(node);
+      const props=buildProps(node.attributes,true,node.tag,path,options.row,options.values);
+      const element=React.createElement(Component,{...props,compiled,key:options.keyFor?.(path)??path});
+      return options.decorateElement?options.decorateElement(element,node,path):element;
+    } catch {return null;} // stored/unvalidated content fails closed, independently of save validation
+  }
 
   if (node.tag === 'DataTable' && Component) {
     const props = buildProps(node.attributes, true, node.tag, path, options.row, options.values);

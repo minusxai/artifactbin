@@ -6,6 +6,7 @@
  * give the "static" guarantee for free — this pass enforces it.
  */
 import { parseRowRef } from '@/lib/story/row-scope';
+import {compileManagedIframe} from '@/lib/story/managed-iframe';
 import { isReactiveExpression, reactiveNames, REACTIVE_BOOLEAN_PROPS } from './reactive';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 // Shared with the render-time gate in lib/story-ui/interpreter.tsx — see
@@ -103,6 +104,10 @@ function walk(
     return;
   }
   validateElement(node, components, allowedHtml, stylePolicy, errors, inSvg);
+  if(node.tag==='Iframe') {
+    try {compileManagedIframe(node);} catch(error) {errors.push({message:error instanceof Error?error.message:String(error),tag:node.tag,start:node.start,end:node.end});}
+    return;
+  }
   for (const attr of node.attributes) if (!inColumn && !attr.value.static && isReactiveExpression(attr.value.reactive) && reactiveNames(attr.value.reactive).fields.length) {
     errors.push({message: 'Row expressions belong inside a DataTable Column', start: attr.start, end: attr.end});
   }

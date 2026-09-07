@@ -548,7 +548,7 @@ export function collectRefNameUses(body: JsxNode[]): RefNameUse[] {
           }
         }
       }
-      visit(n.children);
+      if(n.tag!=='Iframe')visit(n.children);
     }
   };
   visit(body);

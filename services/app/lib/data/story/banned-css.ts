@@ -20,6 +20,7 @@
  */
 
 import { parseJsx, serializeJsx } from '@/lib/jsx';
+import {transformOutsideManagedIframes} from '@/lib/story/managed-iframe';
 
 /** Tailwind utilities that compile to a banned position (variant/important forms handled). */
 const BANNED_POSITION_UTILITIES = ['fixed', 'sticky'] as const;
@@ -192,6 +193,9 @@ const STYLE_ATTR_RE = /(\bstyle\s*=\s*)("([^"]*)"|'([^']*)')/gi;
  * reaches `content.story`, whichever door the write came through.
  */
 export function sanitizeStoryMarkupCss(markup: string): string {
+  return transformOutsideManagedIframes(markup, sanitizeParentMarkupCss);
+}
+function sanitizeParentMarkupCss(markup: string): string {
   return markup
     .replace(STYLE_BLOCK_RE, (_, open: string, css: string, close: string) => {
       // JSX string expressions are a container, not CSS syntax. Sanitizing

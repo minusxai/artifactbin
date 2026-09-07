@@ -86,6 +86,8 @@ import { Files } from '@/components/kit/files';
 export const STORY_UI_COMPONENTS: Record<string, React.ComponentType<any>> = {
   // The document runtime supplies the trusted store/API configuration.
   Sandbox: props => createElement('div', {id:props.id,className:props.className,'data-mx-ast':props['data-mx-ast']}),
+  // Inert SSR boundary. The runtime replaces this adapter; never spread compiled HTML into DOM.
+  Iframe: props => createElement('div', {id:props.id,className:props.className,'data-mx-ast':props['data-mx-ast']}),
   Dialog, DialogTrigger, DialogContent, DialogClose,
   Card,
   CardHeader,

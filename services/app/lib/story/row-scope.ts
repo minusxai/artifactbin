@@ -89,6 +89,7 @@ export function analyzeRowScopes(nodes: JsxNode[], columns?: Record<string, impo
       }
       return;
     }
+    if(node.tag==='Iframe')return;
     if (node.tag === 'DataTable') {
       const templates = node.children.filter((c) => c.type === 'element' && c.tag === 'Column');
       const table = ref(attr(node, 'data'));

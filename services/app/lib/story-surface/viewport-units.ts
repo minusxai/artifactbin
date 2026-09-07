@@ -40,6 +40,8 @@
  * the remap is idempotent, so the canonical-fixpoint contract holds.
  */
 
+import {transformOutsideManagedIframes} from '@/lib/story/managed-iframe';
+
 /** The custom property carrying the host viewport height into the surface. */
 export const STORY_VH_VAR = '--mx-vh';
 
@@ -118,8 +120,8 @@ const MARKUP_STYLE_BLOCK_RE = /(<style\b[^>]*>)([\s\S]*?)(<\/style>)/gi;
  * and everything around it survives byte-for-byte.
  */
 export function remapMarkupStyleViewportUnits(markup: string): string {
-  return markup.replace(MARKUP_STYLE_BLOCK_RE, (_m, open: string, css: string, close: string) =>
-    `${open}${remapViewportHeightUnits(css)}${close}`);
+  return transformOutsideManagedIframes(markup, source => source.replace(MARKUP_STYLE_BLOCK_RE, (_m, open: string, css: string, close: string) =>
+    `${open}${remapViewportHeightUnits(css)}${close}`));
 }
 
 /**
