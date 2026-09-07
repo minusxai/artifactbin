@@ -15,3 +15,4 @@ export { sqlClient, browserClient, eventsClient, queryBounds, type QueryCaps, ty
 export { serviceSecretForServer } from './service-auth';
 export { envelope, type EventSubject, type EventObject } from './events';
 export {parseControlsOrigin, controlsCorsHeaders} from './controls-origin';
+export {parseAssetsOrigin, isPublicAssetRequest, publicAssetResponse} from './assets-origin';

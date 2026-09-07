@@ -19,7 +19,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { actorOf, actorReceiver } from '@artifactbin/utils';
+import { actorOf, actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { verifyExportKey } from '@/lib/export-key';
 import { ID_RE } from '@/lib/ids';
@@ -32,7 +32,8 @@ import { ownerUsername } from '@/lib/users';
 import { roleFor, sessionActor, NO_ACTOR } from '@/lib/viewer';
 import { canAnnotate } from '@/lib/share-roles';
 import { baseUrl, json } from '@/lib/http';
-import {CONTROLS_ORIGIN, PUBLIC_BASE_URL} from '@/lib/config';
+import {CONTROLS_ORIGIN, PUBLIC_BASE_URL, ASSETS_ORIGIN} from '@/lib/config';
+import {GET as publicAssetBytes} from '@/app/assets/[hash]/route';
 import { mountRoutes } from './api';
 import { ROUTES } from './routes.generated';
 
@@ -185,6 +186,15 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // Transport identity must be attached before any app middleware or route
   // asks viewer.ts who is calling.
   if (opts.actorSecret) actorReceiver(opts.actorSecret).mount(app);
+  if (ASSETS_ORIGIN) app.use('*',async(c,next)=>{
+    const incoming=new URL(c.req.url);
+    if(incoming.host !== new URL(ASSETS_ORIGIN!).host && baseUrl(c.req.raw) !== ASSETS_ORIGIN)return next();
+    const request=new Request(ASSETS_ORIGIN+incoming.pathname+incoming.search,{method:c.req.method});
+    if(!isPublicAssetRequest(request,ASSETS_ORIGIN!))return new Response('not found',{status:404});
+    const response=await publicAssetBytes(request,{params:Promise.resolve({hash:incoming.pathname.slice('/assets/'.length)})});
+    const safe=publicAssetResponse(response);
+    return c.req.method==='HEAD'?new Response(null,{status:safe.status,headers:safe.headers}):safe;
+  });
   // Split-host authentication is enforced by the proxy, never by legacy
   // cookie fallbacks in app routes. Even anonymous requests must carry its
   // verdict. A directly exposed backend or app-only boot must fail closed.
