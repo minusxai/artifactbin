@@ -5,7 +5,7 @@ description: >-
 ---
 ## Read first
 
-`markup` is **static JSX data**, interpreted over a fixed component registry.
+`markup` is **static JSX data** over a fixed component registry.
 Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with exact spans.
 
 - Literal props, plus [restricted reactive JSX and dialogs](markup-state.md).
