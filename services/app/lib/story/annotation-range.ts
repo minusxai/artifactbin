@@ -127,22 +127,50 @@ export function rectFromBox(anchor: AnnotationRect, box: AnnotationBox): Annotat
  * intersecting ones (a container that intersects only because its child does
  * is not what was drawn over), and the answer is their lowest common ancestor
  * by path — the section for two of its paragraphs, the paragraph for part of
- * one. Null when the band touches nothing, or the hits share no ancestor.
+ * one. Hits with NO common ancestor (a document with several top-level nodes)
+ * resolve to the block the band covers most: a drag must never be a dead end
+ * that draws nothing and says nothing. Null only when the band touches nothing.
  */
 export function areaTarget(candidates: Array<{ path: string; rect: AnnotationRect }>, band: AnnotationRect): string | null {
   const hit = candidates.filter((candidate) => intersects(candidate.rect, band));
   // The deepest hits: a container that intersects only because a child does is not what was drawn over.
   const leaves = hit.filter((candidate) => !hit.some((other) => other.path.startsWith(`${candidate.path}.`)));
   if (leaves.length === 0) return null;
-  let common = leaves[0].path.split('.');
-  for (const leaf of leaves.slice(1)) {
-    const segments = leaf.path.split('.');
+  const whole = commonAncestor(leaves.map((leaf) => leaf.path));
+  if (whole) return whole;
+  // No common ancestor: the TOP-LEVEL node the band covers most, then the
+  // common ancestor of the hits inside it — never a stray leaf of it.
+  const groups = new Map<string, string[]>();
+  for (const leaf of leaves) {
+    const root = leaf.path.split('.')[0];
+    groups.set(root, [...(groups.get(root) ?? []), leaf.path]);
+  }
+  let best: { root: string; covered: number } | null = null;
+  for (const root of groups.keys()) {
+    const rect = candidates.find((candidate) => candidate.path === root)?.rect;
+    const covered = rect
+      ? overlap(rect, band)
+      : leaves.filter((leaf) => groups.get(root)!.includes(leaf.path)).reduce((sum, leaf) => sum + overlap(leaf.rect, band), 0);
+    if (!best || covered > best.covered) best = { root, covered };
+  }
+  return commonAncestor(groups.get(best!.root)!);
+}
+
+/** The longest shared path prefix, or null when there is none (several top-level nodes). */
+function commonAncestor(paths: string[]): string | null {
+  let common = paths[0].split('.');
+  for (const path of paths.slice(1)) {
+    const segments = path.split('.');
     let shared = 0;
     while (shared < common.length && shared < segments.length && common[shared] === segments[shared]) shared++;
     common = common.slice(0, shared);
   }
   return common.length > 0 ? common.join('.') : null;
 }
+
+const overlap = (a: AnnotationRect, b: AnnotationRect): number =>
+  Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x))
+  * Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
 
 const intersects = (a: AnnotationRect, b: AnnotationRect): boolean =>
   a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;

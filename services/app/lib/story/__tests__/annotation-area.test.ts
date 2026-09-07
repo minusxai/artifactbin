@@ -76,12 +76,30 @@ describe('which node a drawn area is about', () => {
     expect(areaTarget(nodes, { x: 100, y: 30, width: 100, height: 100 })).toBe('0');      // h1 + first p
   });
 
-  it('is nothing when the band touches nothing, and when the hits share no ancestor', () => {
+  it('is nothing when the band touches nothing', () => {
     expect(areaTarget(nodes, { x: 700, y: 700, width: 10, height: 10 })).toBeNull();
+  });
+
+  it('when the hits share no ancestor, is the block the band covers most — a drag is never a dead end', () => {
     const twoRoots = [
       { path: '0', rect: { x: 0, y: 0, width: 100, height: 100 } },
       { path: '1', rect: { x: 0, y: 200, width: 100, height: 100 } },
     ];
-    expect(areaTarget(twoRoots, { x: 10, y: 50, width: 20, height: 200 })).toBeNull();
+    // 50px of the first root, 100px of the second.
+    expect(areaTarget(twoRoots, { x: 10, y: 50, width: 20, height: 250 })).toBe('1');
+    // …and the other way round.
+    expect(areaTarget(twoRoots, { x: 10, y: 0, width: 20, height: 220 })).toBe('0');
+  });
+
+  it('across two top-level sections, is the SECTION the band covers most — not a stray heading inside it', () => {
+    const twoSections = [
+      { path: '0', rect: { x: 0, y: 0, width: 600, height: 150 } },
+      { path: '0.1', rect: { x: 20, y: 60, width: 400, height: 40 } },
+      { path: '1', rect: { x: 0, y: 200, width: 600, height: 300 } },
+      { path: '1.0', rect: { x: 20, y: 220, width: 500, height: 60 } },   // a wide h2
+      { path: '1.1', rect: { x: 20, y: 300, width: 400, height: 40 } },
+      { path: '1.2', rect: { x: 20, y: 360, width: 400, height: 40 } },
+    ];
+    expect(areaTarget(twoSections, { x: 30, y: 70, width: 200, height: 328 })).toBe('1');
   });
 });
