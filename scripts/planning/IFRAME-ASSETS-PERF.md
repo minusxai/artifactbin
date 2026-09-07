@@ -10,11 +10,12 @@ outer-wrapper/inner-author layout. The browser composites that canvas directly:
 no pixel-copy transport, per-frame MessageChannel, or parent DOM access is needed.
 Button and pointer interaction worked in Chromium, Firefox and WebKit.
 
-First-render cost stayed small in this tiny scene. **WebKit has a measured
-pre-interaction animation limitation:**17ms top-level versus50ms in both framed
-layouts; a real in-frame button click restored17ms in all3 samples per shape,
-even with cycled test order. Passive/autoplay animation remains slower in the
-tested opaque frames. Physical Safari/iPhone remains unverified. Chromium/Firefox
+First-render cost stayed small in this tiny scene. **WebKit showed a scheduling
+difference:**17ms top-level versus50ms in both framed layouts, followed by17ms
+after the interaction phase in all3 samples per shape. However, this fixture
+also used Playwright child-frame evaluation, which can emulate user activation;
+it does not isolate the real click as the cause. See the autonomous-phase
+methodology in `OCEAN-WORKLOAD-PERF.md`. Physical Safari/iPhone remains unverified. Chromium/Firefox
 cadence was unchanged by framing. This
 does **not** prove arbitrary library compatibility, production performance, or
 complete sandbox security.
@@ -60,11 +61,11 @@ before the separate pointer-drag test. Three samples per shape:
 | Strict wrapper + inner |23|50|17|
 
 Each sample had exactly the same before/after median for its shape. This is
-direct evidence of an interaction-dependent scheduling difference, not proof
-that a particular historical WebKit bug is its cause. It mitigates the concern
-for the tested actively used viewer, **not for autoplay/passive animation**.
-Product must accept this idle limitation or explicitly design around it. No
-synthetic author-dispatched click was used. The Chromium/Firefox rows above are
+an observed scheduling difference, not an isolated causal test: Playwright's
+child evaluation can emulate user activation before the actual click. No
+synthetic author-dispatched click was used, but that alone does not remove the
+automation confound. Neither active nor passive performance should be signed
+off from this follow-up alone. The Chromium/Firefox rows above are
 the earlier fixed-order runs; their after-click variants were not rerun.
 
 ## What was actually run
