@@ -64,6 +64,14 @@ export interface AnnotationLayerProps {
   onRailOpenChange: (open: boolean) => void;
   /** A text selection — from the view-mode bubble or the editor — that seeds the composer. */
   initialSelection?: StoryEditSelection | null;
+  /**
+   * May opening the rail open a PICK? The page's call, because only it knows
+   * whether the editor holds the document's clicks: a pick takes them, so it
+   * is never started under the editor, and one already on ends when the
+   * editor opens. Default true. The tool in the header ignores this — an
+   * explicit pick is always allowed.
+   */
+  pickOnOpen?: boolean;
   /** Where the document's viewport starts: the top bar, plus the edit bar when one is up. */
   topOffset: number;
 }
@@ -746,7 +754,7 @@ function Thread({
 
 export default function AnnotationLayer({
   id, frameRef, sessionNonce, railOpen, liveAnnotations, showViewComments,
-  onRailOpenChange, initialSelection = null, topOffset, onAnnotationsChange,
+  onRailOpenChange, initialSelection = null, topOffset, onAnnotationsChange, pickOnOpen = true,
 }: AnnotationLayerProps) {
   const [annotations, setAnnotations] = useState<AnnotationWire[]>([]);
   // The page's own count (the badge on the comment glyph) follows THIS list:
@@ -774,6 +782,9 @@ export default function AnnotationLayer({
    * fact about what someone is doing right now, like a fold or the theme.
    */
   const [picking, setPicking] = useState(false);
+  /** On a phone the rail is a bottom sheet — a 320px rail over a 390px screen
+      is the whole document covered, with a strip too narrow to read. */
+  const phoneRail = useIsPhoneViewport();
   const [draft, setDraft] = useState('');
   /** Reading the draft as it will be read — a view of the same text, not a mode. */
   const [previewing, setPreviewing] = useState(false);
@@ -799,6 +810,12 @@ export default function AnnotationLayer({
   // Same shape, same reason: a pick's answer arrives on that listener too.
   const pickingRef = useRef(false);
   pickingRef.current = picking;
+  const railOpenRef = useRef(railOpen);
+  railOpenRef.current = railOpen;
+  /** The rail is about to open FOR A THREAD (a pin, a marker): that opening must not start a pick. */
+  const openedForThreadRef = useRef(false);
+  /** The sheet is being put away BY a pick (phone): that closing must not end it. */
+  const sheetAwayForPickRef = useRef(false);
 
   const postToFrame = useCallback((message: unknown) => {
     frameRef.current?.contentWindow?.postMessage(message, '*');
@@ -817,6 +834,9 @@ export default function AnnotationLayer({
     const thread = annotationsRef.current.find((a) => a.id === annId)?.thread;
     const newest = thread?.at(-1)?.id;
     setFolds(unfold(id, { threads: [annId], comments: newest ? [newest] : [] }));
+    // Only an opening carries the mark: a rail already open sees no change,
+    // and a stale mark would misread the next real opening.
+    if (!railOpenRef.current) openedForThreadRef.current = true;
     onRailOpenChangeRef.current(true);
   }, [id]);
 
@@ -877,6 +897,32 @@ export default function AnnotationLayer({
     return () => { gone = true; };
   }, [id, railOpen, annotations]);
 
+  /*
+   * OPENING THE RAIL OPENS A PICK. Someone who presses "comments" is about to
+   * leave one, so the document is ready for the click at once; the tool in
+   * the header stays as the explicit way back in (and the place other
+   * selection modes will sit beside it). Not for a rail opened FOR A THREAD —
+   * a pin click came for an answer — not while a composer is already open
+   * (the subject is chosen), not under the editor (`pickOnOpen`), and not on
+   * a phone, whose sheet covers the document. Closing the rail ends the pick
+   * it opened, unless a pick is what put the sheet away.
+   *
+   * DECLARED BEFORE the seeded-selection effect below on purpose: a rail that
+   * opens in the same commit as a handed-in selection must end with the
+   * composer, not the pick, and effects run in declaration order.
+   */
+  useEffect(() => {
+    if (railOpen) {
+      const forThread = openedForThreadRef.current;
+      openedForThreadRef.current = false;
+      if (!forThread && !composingRef.current && pickOnOpen && !phoneRail) setPicking(true);
+      return;
+    }
+    if (sheetAwayForPickRef.current) { sheetAwayForPickRef.current = false; return; }
+    setPicking(false);
+  }, [railOpen, pickOnOpen, phoneRail]);
+  useEffect(() => { if (!pickOnOpen) setPicking(false); }, [pickOnOpen]);
+
   // A selection handed down by the page — the view-mode bubble's Comment, or
   // the editor toolbar's — opens the composer on those exact words, so nobody
   // has to click the same text twice.
@@ -885,6 +931,7 @@ export default function AnnotationLayer({
     setSelection(initialSelection);
     setOpenId(null);
     setFailure(null);
+    setPicking(false);   // the subject was chosen another way
   }, [initialSelection]);
 
   // The pin set, re-posted whole on every change — the frame holds no
@@ -1117,9 +1164,6 @@ export default function AnnotationLayer({
    * the composer follows a selection whatever else is open, and the rail is a
    * panel someone asked for.
    */
-  /** On a phone the rail is a bottom sheet — a 320px rail over a 390px screen
-      is the whole document covered, with a strip too narrow to read. */
-  const phoneRail = useIsPhoneViewport();
 
   /*
    * Starting a pick clears the open thread (the composer is about to move to
@@ -1131,7 +1175,10 @@ export default function AnnotationLayer({
   const beginPick = () => {
     setPicking(true);
     setOpenId(null);
-    if (phoneRail) onRailOpenChangeRef.current(false);
+    if (phoneRail && railOpenRef.current) {
+      sheetAwayForPickRef.current = true;
+      onRailOpenChangeRef.current(false);
+    }
   };
   const endPick = () => setPicking(false);
 
@@ -1183,7 +1230,7 @@ export default function AnnotationLayer({
           style={{ left: frameRect.left + frameRect.width / 2, top: frameRect.top + VIEW_COMMENT_INSET, transform: 'translateX(-50%)' }}
         >
           <MousePointerClick size={12} strokeWidth={1.8} className="shrink-0 text-accent" />
-          <span className="whitespace-nowrap">click a block to comment on it</span>
+          <span className="whitespace-nowrap">click a block or select text to comment</span>
           <button
             type="button"
             aria-label="Cancel picking"

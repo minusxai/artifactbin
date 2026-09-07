@@ -1403,6 +1403,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             showViewComments={showViewComments}
             onRailOpenChange={setRailOpen}
             initialSelection={initialAnnotationSelection}
+            pickOnOpen={!editing}
             topOffset={0}
             onAnnotationsChange={setLayerAnnotations}
           />

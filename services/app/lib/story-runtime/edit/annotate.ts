@@ -436,18 +436,26 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
   };
 
   /**
-   * Cancelling the press is what keeps the pick from becoming an edit: focus
-   * moves and a text selection starts on mousedown, not on click, so an
-   * editable host under the pointer would otherwise take the caret first.
+   * WHILE EDITING, cancelling the press is what keeps the pick from becoming
+   * an edit: focus moves on mousedown, not on click, so an editable host under
+   * the pointer would otherwise take the caret first. In view mode the press
+   * is left alone — a pick is on whenever the rail is, and the reader must
+   * still be able to DRAG across words for the selection bubble.
    */
   const onPickMouseDown = (event: MouseEvent) => {
-    if (!picking || !selectableAt(event.target)) return;
+    if (!picking || !isEditing() || !selectableAt(event.target)) return;
     event.preventDefault();
+  };
+
+  /** A drag ended here with words selected: the words are the subject (the bubble's), not the block. */
+  const draggedWords = (): boolean => {
+    const selection = win.getSelection();
+    return !!selection && !selection.isCollapsed && selection.toString().length > 0;
   };
 
   /** The pick itself. On `win` in the capture phase: it runs BEFORE the edit session's document listener. */
   const onPickClick = (event: MouseEvent) => {
-    if (!picking) return;
+    if (!picking || draggedWords()) return;
     const el = selectableAt(event.target);
     if (!el) return;
     event.preventDefault();

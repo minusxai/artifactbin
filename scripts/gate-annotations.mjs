@@ -761,10 +761,10 @@ async function pickLeg(browser) {
   await page.locator('[aria-label="Annotation sidebar"]').waitFor({ timeout: 8000 });
   await page.keyboard.press('Escape');
 
+  // Opening the rail opened the pick: nothing to press before the first click.
   const tool = page.locator('[aria-label="Pick a block to comment on"]');
   ok(await tool.count() === 1, 'the rail header offers the pick tool');
-  await tool.click();
-  ok(await tool.getAttribute('aria-pressed') === 'true', 'the tool reads as pressed');
+  ok(await tool.getAttribute('aria-pressed') === 'true', 'opening the rail put the pick on: the tool reads as pressed');
   ok(await page.locator('[aria-label="Picking a block"]').isVisible(), 'a pill over the document says what to do next');
 
   const intro = frame.locator('#intro');
@@ -795,8 +795,10 @@ async function pickLeg(browser) {
   ok(wire?.annotations?.[0]?.snippet === 'An intro paragraph of ordinary prose.' && !wire?.annotations?.[0]?.quote,
     'the wire carries the whole block and no quote — a pick has no words');
 
-  // A second pick, stood down by escape: the outline goes with it.
+  // A second pick — explicit this time, the tool is still the way in — stood
+  // down by escape: the outline goes with it.
   await tool.click();
+  ok(await tool.getAttribute('aria-pressed') === 'true', 'the tool starts a pick again after the first ended');
   await frame.locator('#figure').hover();
   await until(() => frame.locator('#figure[data-mx-annotate-pick-hover]').count(), (n) => n === 1, 5000);
   await page.keyboard.press('Escape');

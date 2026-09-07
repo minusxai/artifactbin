@@ -386,6 +386,26 @@ describe('picking a block to comment on', () => {
     expect(posted.some((message) => message.type === STORY_ANNOTATION_PIN_MESSAGE)).toBe(false);
   });
 
+  it('in view mode the press is left alone, and a drag that selected words is NOT a pick', () => {
+    session.setNodes(PICK_NODES);
+    picking(true);
+    const press = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    anchor().dispatchEvent(press);
+    expect(press.defaultPrevented).toBe(false);
+    // The drag ended on this node with words selected: the words are the
+    // subject (the selection bubble's), not the block.
+    const range = document.createRange();
+    range.selectNodeContents(anchor());
+    window.getSelection()!.removeAllRanges();
+    window.getSelection()!.addRange(range);
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    anchor().dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(false);
+    expect(selections()).toEqual([]);
+    expect(document.documentElement).toHaveAttribute('data-mx-annotate-picking');
+    window.getSelection()!.removeAllRanges();
+  });
+
   it('a click on an already-commented node while picking is a NEW selection, never a thread focus', () => {
     session.setNodes(PICK_NODES);
     session.update({ ...state('on'), picking: true }); // PIN sits on this very node

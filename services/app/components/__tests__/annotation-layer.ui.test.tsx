@@ -757,19 +757,24 @@ describe('picking a block from the rail', () => {
     postMessage.mock.calls.map((call) => call[0]).filter((message) => message?.type === STORY_ANNOTATIONS_MESSAGE);
   const pill = () => screen.queryByRole('status', { name: 'Picking a block' });
 
-  it('the rail offers a pick tool; pressing it tells the frame and shows how to cancel', async () => {
+  it('the rail opens WITH a pick on; the tool is still there to turn it off and on again', async () => {
     const { frame, postMessage } = makeFrame();
     render(layer(frame, { railOpen: true }));
     await flush();
-    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ mode: 'on', picking: false });
-    expect(pill()).toBeNull();
-
+    // Opening the rail is opening the pick: the next click in the document is a comment.
+    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ mode: 'on', picking: true });
+    expect(pill()).toHaveTextContent(/click a block/i);
     const tool = within(screen.getByLabelText('Annotation sidebar')).getByLabelText('Pick a block to comment on');
+    expect(tool).toHaveAttribute('aria-pressed', 'true');
+
+    // The tool stays an explicit choice (other selection modes will sit beside it).
+    fireEvent.click(tool);
     expect(tool).toHaveAttribute('aria-pressed', 'false');
+    expect(pill()).toBeNull();
+    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ mode: 'on', picking: false });
     fireEvent.click(tool);
     expect(tool).toHaveAttribute('aria-pressed', 'true');
     expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ mode: 'on', picking: true });
-    expect(pill()).toHaveTextContent(/click a block/i);
 
     fireEvent.click(screen.getByLabelText('Cancel picking'));
     expect(pill()).toBeNull();
@@ -781,7 +786,7 @@ describe('picking a block from the rail', () => {
     const { frame, postMessage, contentWindow } = makeFrame();
     render(layer(frame, { railOpen: true }));
     await flush();
-    fireEvent.click(screen.getByLabelText('Pick a block to comment on'));
+    expect(pill()).not.toBeNull(); // opened picking
     await fromFrame(contentWindow, { type: STORY_SELECTION_MESSAGE, nonce: NONCE, selection: PICKED });
 
     expect(screen.getByRole('dialog', { name: 'Annotation composer' })).toBeTruthy();
@@ -803,7 +808,7 @@ describe('picking a block from the rail', () => {
     const { frame, postMessage, contentWindow } = makeFrame();
     render(layer(frame, { railOpen: true }));
     await flush();
-    fireEvent.click(screen.getByLabelText('Pick a block to comment on'));
+    expect(pill()).not.toBeNull(); // opened picking
     await fromFrame(contentWindow, { type: STORY_SELECTION_MESSAGE, nonce: NONCE, selection: null });
     expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
     expect(pill()).toBeNull();
@@ -814,8 +819,7 @@ describe('picking a block from the rail', () => {
     const { frame, postMessage } = makeFrame();
     render(layer(frame, { railOpen: true }));
     await flush();
-    fireEvent.click(screen.getByLabelText('Pick a block to comment on'));
-    expect(pill()).not.toBeNull();
+    expect(pill()).not.toBeNull(); // opened picking
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(pill()).toBeNull();
     expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ picking: false });
@@ -825,6 +829,7 @@ describe('picking a block from the rail', () => {
     const { frame, contentWindow } = makeFrame();
     render(layer(frame, { railOpen: true }));
     await flush();
+    fireEvent.click(screen.getByLabelText('Cancel picking'));
     await fromFrame(contentWindow, { type: STORY_SELECTION_MESSAGE, nonce: NONCE, selection: PICKED });
     expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
   });
@@ -836,6 +841,8 @@ describe('picking a block from the rail', () => {
       const onRailOpenChange = vi.fn();
       render(layer(frame, { railOpen: true, onRailOpenChange }));
       await flush();
+      expect(pill()).toBeNull(); // a phone's sheet covers the document: no pick starts by itself
+      expect(onRailOpenChange).not.toHaveBeenCalled();
       fireEvent.click(screen.getByLabelText('Pick a block to comment on'));
       expect(onRailOpenChange).toHaveBeenCalledWith(false);
       expect(pill()).not.toBeNull();
@@ -843,5 +850,84 @@ describe('picking a block from the rail', () => {
     } finally {
       Object.defineProperty(window, 'innerWidth', { value: 1024, configurable: true });
     }
+  });
+});
+
+/*
+ * ADDED: OPENING THE RAIL OPENS A PICK. Someone who presses "comments" is
+ * about to leave one, so the document is ready for the click at once — the
+ * tool in the header stays, as the explicit way back in and the place other
+ * selection modes will sit beside it. Three openings are NOT that person:
+ * a rail opened FOR A THREAD (a pin click came for an answer), the editor
+ * (a pick takes the editor's clicks, so it is never started under it), and a
+ * phone (the sheet covers the document, so a pick there is a tap on nothing).
+ * Closing the rail ends the pick it opened; a composer arriving by another
+ * route (the selection bubble, the editor toolbar) ends it too.
+ */
+describe('opening the rail opens a pick', () => {
+  const pill = () => screen.queryByRole('status', { name: 'Picking a block' });
+  const picks = (postMessage: ReturnType<typeof vi.fn>) =>
+    postMessage.mock.calls.map((call) => call[0]).filter((message) => message?.type === STORY_ANNOTATIONS_MESSAGE).map((message) => message.picking);
+
+  it('starts when the rail opens, and ends when it closes', async () => {
+    const { frame, postMessage } = makeFrame();
+    const { rerender } = render(layer(frame, { railOpen: false }));
+    await flush();
+    expect(pill()).toBeNull();
+    expect(picks(postMessage).at(-1)).toBe(false);
+
+    rerender(layer(frame, { railOpen: true }));
+    await flush();
+    expect(pill()).not.toBeNull();
+    expect(picks(postMessage).at(-1)).toBe(true);
+
+    rerender(layer(frame, { railOpen: false }));
+    await flush();
+    expect(pill()).toBeNull();
+    expect(picks(postMessage).at(-1)).toBe(false);
+  });
+
+  it('does not start when the rail was opened for a thread', async () => {
+    const { frame, contentWindow } = makeFrame();
+    const onRailOpenChange = vi.fn();
+    const { rerender } = render(layer(frame, { railOpen: false, onRailOpenChange }));
+    await flush();
+    await fromFrame(contentWindow, { type: STORY_ANNOTATION_PIN_MESSAGE, nonce: NONCE, id: ANN.id, rect: { x: 0, y: 0, width: 10, height: 10 } });
+    expect(onRailOpenChange).toHaveBeenCalledWith(true);
+    rerender(layer(frame, { railOpen: true, onRailOpenChange }));
+    await flush();
+    expect(pill()).toBeNull();
+    expect(screen.getByLabelText('Pick a block to comment on')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('never starts under the editor, and a pick already on ends when the editor opens', async () => {
+    const { frame } = makeFrame();
+    const { rerender } = render(layer(frame, { railOpen: true, pickOnOpen: false }));
+    await flush();
+    expect(pill()).toBeNull();
+    // …but the tool still works there, explicitly.
+    fireEvent.click(screen.getByLabelText('Pick a block to comment on'));
+    expect(pill()).not.toBeNull();
+
+    rerender(layer(frame, { railOpen: true, pickOnOpen: true }));
+    await flush();
+    expect(pill()).not.toBeNull();
+    rerender(layer(frame, { railOpen: true, pickOnOpen: false }));
+    await flush();
+    expect(pill()).toBeNull();
+  });
+
+  it('a composer arriving by another route ends the pick', async () => {
+    const { frame } = makeFrame();
+    const { rerender } = render(layer(frame, { railOpen: true }));
+    await flush();
+    expect(pill()).not.toBeNull();
+    rerender(layer(frame, {
+      railOpen: true,
+      initialSelection: { kind: 'text' as const, path: '0', tag: 'p', rect: { x: 0, y: 0, width: 100, height: 20 }, className: '', style: '', ancestors: [] },
+    }));
+    await flush();
+    expect(screen.getByRole('dialog', { name: 'Annotation composer' })).toBeTruthy();
+    expect(pill()).toBeNull();
   });
 });
