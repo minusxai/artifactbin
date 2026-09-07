@@ -36,7 +36,7 @@ export function createBrowserBoundary(main: string, configured: string): Browser
         return null;
       }
       const documentApi = /^\/a\/[A-Za-z0-9]+\/(?:query|mutate|events(?:\/frame)?)$/.test(pathname);
-      if ((!documentApi && /^\/(?:a(?:\/|$)|@)/.test(pathname)) || /^\/assets\/[a-f0-9]{64}(?:[./]|$)/i.test(pathname)) return deny('not_found', 404);
+      if ((!documentApi && /^\/(?:a(?:\/|$)|@)/.test(pathname)) || /^\/assets\/(?:[a-f0-9]{64}(?:[./]|$)|ref(?:\/|$))/i.test(pathname)) return deny('not_found', 404);
       // Only provider callbacks bypass the browser-fetch header. Better Auth
       // validates their one-time state/PKCE, not an Origin-less blanket carveout.
       const callback = request.method === 'GET' && /^\/api\/auth\/(?:callback|oauth2\/callback)\/[^/]+$/.test(pathname);

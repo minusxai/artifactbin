@@ -31,18 +31,23 @@ import { verifyExportKey } from '@/lib/export-key';
 import { sessionActor } from '@/lib/viewer';
 import { importForDocument, WebAssetRefused, WEB_ASSET_KINDS, type WebAssetKind } from '@/lib/web-assets';
 import { ASSETS_ORIGIN } from '@/lib/config';
+import {publicRefAsset} from '@/lib/public-ref-assets';
 import { json } from '@/lib/http';
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const params = new URL(request.url).searchParams;
+  const managed = params.has('kind');
+  const headers:Record<string,string>={'Cache-Control':'no-store',...(managed?{'Access-Control-Allow-Origin':'*'}:{})};
+  const reply=(body:unknown,status:number)=>json(body,status,headers);
+  const missing=()=>new Response('not found',{status:404,headers});
   const url = params.get('u');
-  if (!url) return json({ error: 'missing_url' }, 400);
+  if (!url) return reply({ error: 'missing_url' }, 400);
 
   // The uniform 404 — an unreachable id and an unreadable one are the same
   // answer, before any fetch, exactly as every other read of a document is.
   const artifact = await getArtifactById(id);
-  if (!artifact) return notFound();
+  if (!artifact) return missing();
   const { viewer } = await sessionActor(request);
   // …and the exporter's own credential, on exactly the terms `raw` admits it:
   // a signed, seconds-long key scoped to THIS artifact. The capture runs in a
@@ -50,13 +55,16 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // export photographs alt text where its picture should be.
   const key = params.get('key');
   const admitted = (await canReadArtifact(artifact, viewer)) || verifyExportKey(artifact.id, key ?? undefined);
-  if (!admitted) return notFound();
+  if (!admitted) return missing();
 
-  const managed = params.has('kind');
   const kind = params.get('kind') ?? 'image';
   const wantsJson = (request.headers.get('accept') ?? '').includes('application/json');
-  if (managed && (!wantsJson || params.getAll('kind').length !== 1 || !WEB_ASSET_KINDS.includes(kind as WebAssetKind))) return json({error:'invalid_asset_kind'},400);
-  if (managed && !ASSETS_ORIGIN) return json({error:'assets_origin_required'},503);
+  if (managed && (!wantsJson || params.getAll('kind').length !== 1 || !WEB_ASSET_KINDS.includes(kind as WebAssetKind))) return reply({error:'invalid_asset_kind'},400);
+  if (managed && !ASSETS_ORIGIN) return reply({error:'assets_origin_required'},503);
+  if(managed && url.startsWith('ref:')) {
+    const row=await publicRefAsset(url.slice(4),kind as WebAssetKind);
+    return row ? reply({url:ASSETS_ORIGIN+'/assets/ref/'+row.id},200) : missing();
+  }
 
   try {
     const location = await importForDocument(artifact, url,kind as WebAssetKind);
@@ -71,7 +79,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
      * send it — it asks for `image/*` — so the two answers cannot be confused
      * for one another, and the endpoint grows no second URL shape.
      */
-    if (wantsJson) return json({ url: managed ? new URL(location,ASSETS_ORIGIN!).href : location }, 200,{'Cache-Control':'no-store'});
+    if (wantsJson) return reply({ url: managed ? new URL(location,ASSETS_ORIGIN!).href : location }, 200);
     // Never the bytes: this cannot be used to read a response the caller could
     // not have fetched for themselves.
     return new Response(null, { status: 302, headers: { Location: location } });
@@ -81,10 +89,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // RUNTIME that has to say something: the image goes to its alt text with
       // `data-mx-asset="refused"` (lib/story-runtime/StoryRuntimeApp).
       const status = error.code === 'rate_limited' ? 429 : 400;
-      return json({ error: status === 429 ? 'rate_limited' : 'asset_fetch_failed', code: error.code, details: [error.message] }, status);
+      return reply({ error: status === 429 ? 'rate_limited' : 'asset_fetch_failed', code: error.code, details: [error.message] }, status);
     }
     throw error;
   }
 }
-
-const notFound = () => new Response('not found', { status: 404 });

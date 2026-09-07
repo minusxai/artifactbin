@@ -2,22 +2,22 @@ import {beforeAll,afterAll,afterEach,it,expect,vi} from 'vitest';
 import {withHttpServer,type RunningServer} from './net';
 vi.mock('@/lib/config',async original=>({...await original<typeof import('@/lib/config')>(),ASSETS_ORIGIN:'https://assets.example.test'}));
 import {useAppHarness,request} from './harness';
-import {importWebAsset,importForDocument} from '@/lib/web-assets';
+import {importWebAsset,importForDocument,refreshWebAsset,webAssetByHash} from '@/lib/web-assets';
 import {setWebIngestPolicyForTests} from '@/lib/web-ingest/fetch';
 import {mintToken} from '@/lib/tokens';
 import {POST as create} from '@/app/api/artifacts/route';
 import {GET as resolve} from '@/app/a/[id]/assets/route';
 import {GET as bytes} from '@/app/assets/[hash]/route';
-import {urlHash} from '@/lib/story/asset-url';
+import {urlHash,assetUrlFor} from '@/lib/story/asset-url';
 import {setDocAssetImportCapForTests} from '@/lib/auth';
 import {setAssetByteQuotaForTests} from '@/lib/asset-quota';
 import {createUser} from '@/lib/users';
 const PNG=Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a,9,9,9,9]);
 useAppHarness();
-let web:string,server:RunningServer;const hits:string[]=[];
-beforeAll(async()=>{server=await withHttpServer((req,res)=>{hits.push(req.url??'');if(req.url==='/redirect'){res.writeHead(302,{location:'http://169.254.169.254/private'});res.end();return;}res.setHeader('content-type',req.url?.endsWith('.js')?'text/javascript':req.url==='/bad'?'text/html':'application/octet-stream');res.end(req.url?.endsWith('.png')?PNG:req.url==='/big.js'?Buffer.alloc(11000,65):req.url==='/bad'?'<html>bad</html>':'globalThis.bundle = 1;');});web=server.base;setWebIngestPolicyForTests({allowPrivate:true,allowHttp:true});});
+let web:string,server:RunningServer;const hits:string[]=[];let version=1;
+beforeAll(async()=>{server=await withHttpServer((req,res)=>{hits.push(req.url??'');if(req.url==='/redirect'){res.writeHead(302,{location:'http://169.254.169.254/private'});res.end();return;}res.setHeader('content-type',req.url?.endsWith('.js')?'text/javascript':req.url==='/bad'?'text/html':'application/octet-stream');res.end(req.url?.endsWith('.png')?PNG:req.url==='/big.js'?Buffer.alloc(11000,65):req.url==='/bad'?'<html>bad</html>':`globalThis.bundle = ${version};`);});web=server.base;setWebIngestPolicyForTests({allowPrivate:true,allowHttp:true});});
 afterAll(async()=>{setWebIngestPolicyForTests(null);await server.close();});
-afterEach(()=>{setDocAssetImportCapForTests(null);setAssetByteQuotaForTests(null);});
+afterEach(()=>{version=1;setDocAssetImportCapForTests(null);setAssetByteQuotaForTests(null);});
 it('imports bundled scripts without executing them, serves safe bytes and rejects cached kind confusion',async()=>{
  const token=await mintToken('assets');const by={tokenId:token.id,userId:null};
  const row=await importWebAsset(web+'/bundle.js',by,'script');expect(row.content_type).toBe('text/javascript');
@@ -49,7 +49,8 @@ it('keeps MIME, size and redirect SSRF enforcement for scripts',async()=>{
 it('resolves explicit kind as an absolute asset-host JSON address, never an upstream redirect',async()=>{
  const token=await mintToken('assets');const made=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Asset</p>'}}));const id=(await made.json()).id;
  const url=web+'/route.js';const res=await resolve(request(`/a/${id}/assets?kind=script&u=${encodeURIComponent(url)}`,{headers:{accept:'application/json'}}),{params:Promise.resolve({id})});
- expect(res.status).toBe(200);expect(await res.json()).toEqual({url:'https://assets.example.test/assets/'+urlHash(url)});
+ expect(res.status).toBe(200);expect(await res.json()).toEqual({url:'https://assets.example.test'+assetUrlFor(url,(await webAssetByHash(urlHash(url)))!)});
+ expect(res.headers.get('access-control-allow-origin')).toBe('*');expect(res.headers.get('access-control-allow-credentials')).toBeNull();
  hits.length=0;
  const missing=await resolve(request(`/a/missing/assets?kind=script&u=${encodeURIComponent(web+'/never.js')}`,{headers:{accept:'application/json'}}),{params:Promise.resolve({id:'missing'})});expect(missing.status).toBe(404);expect(hits).toEqual([]);
 });
@@ -78,4 +79,11 @@ it('bounds account-only document imports without requiring a token',async()=>{
  await importForDocument(doc,web+'/account.js','script');expect(hits).toEqual([]);
  await expect(importForDocument(doc,web+'/account.bin','binary')).rejects.toMatchObject({code:'quota_exceeded'});
  expect(hits).toEqual([]);
+});
+it('versions managed URLs after refresh so immutable script caches do not stay stale',async()=>{
+ const token=await mintToken('versioned');const doc={id:'versions',token_id:token.id,user_id:null},url=web+'/version.js';
+ const first=await importForDocument(doc,url,'script');version=2;
+ await refreshWebAsset(url,{tokenId:token.id,userId:null},'script');
+ const second=await importForDocument(doc,url,'script');
+ expect(second).not.toBe(first);expect(first).toMatch(/\?v=[a-f0-9]{8}$/);expect(second).toMatch(/\?v=[a-f0-9]{8}$/);
 });

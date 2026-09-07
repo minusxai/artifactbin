@@ -29,7 +29,9 @@ import { mintToken } from '@/lib/tokens';
 import { createUser } from '@/lib/users';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { setDocAssetImportCapForTests } from '@/lib/auth';
-import { assetUrlFor, urlHash } from '@/lib/story/asset-url';
+import { assetUrlFor as makeAssetUrl, urlHash } from '@/lib/story/asset-url';
+import {webAssetByHash} from '@/lib/web-assets';
+const assetUrlFor=async(url:string)=>makeAssetUrl(url,await webAssetByHash(urlHash(url)) ?? undefined);
 import { getDb } from '@/lib/db';
 import { mintExportKey } from '@/lib/export-key';
 
@@ -124,8 +126,8 @@ describe('the happy path', () => {
     hits.length = 0;
     const res = await ask(doc.id, url);
     expect(res.status).toBe(302);
-    expect(res.headers.get('location')).toBe(assetUrlFor(url));
-    expect(res.headers.get('location')).toBe(`/assets/${urlHash(url)}`);
+    expect(res.headers.get('location')).toBe(await assetUrlFor(url));
+    expect(res.headers.get('location')).toMatch(new RegExp(`^/assets/${urlHash(url)}\\?v=[a-f0-9]{8}$`));
     expect(await res.text()).toBe('');
     expect(hits).toEqual(['/first.png']);
   });
@@ -137,7 +139,7 @@ describe('the happy path', () => {
     hits.length = 0;
     const again = await ask(doc.id, url);
     expect(again.status).toBe(302);
-    expect(again.headers.get('location')).toBe(assetUrlFor(url));
+    expect(again.headers.get('location')).toBe(await assetUrlFor(url));
     expect(hits).toEqual([]);
   });
 
@@ -271,7 +273,7 @@ describe('the JSON answer', () => {
     const res = await asJson(doc.id, url);
     expect(res.status).toBe(200);
     expect(res.headers.get('location')).toBeNull();
-    expect(await res.json()).toEqual({ url: assetUrlFor(url) });
+    expect(await res.json()).toEqual({ url: await assetUrlFor(url) });
   });
 
   it('keeps a refusal exactly as the redirect path reports it', async () => {
@@ -292,7 +294,7 @@ describe('the JSON answer', () => {
     const doc = await privateDoc();
     const res = await asJson(doc.id, `${web}/json3.png`, { cookie: await agentCookie([doc.token.id]) });
     expect(res.status).toBe(200);
-    expect((await res.json()).url).toBe(assetUrlFor(`${web}/json3.png`));
+    expect((await res.json()).url).toBe(await assetUrlFor(`${web}/json3.png`));
     const stored = await rows();
     expect(stored).toHaveLength(1);
     expect(stored[0].fetched_by_user_id).toBe(doc.user.id);
@@ -311,7 +313,7 @@ describe('the export key', () => {
     const key = mintExportKey(doc.id);
     const res = await docAssets(request(`/a/${doc.id}/assets?u=${encodeURIComponent(`${web}/key1.png`)}&key=${encodeURIComponent(key)}`, { headers: { accept: 'application/json' } }), params(doc.id));
     expect(res.status).toBe(200);
-    expect((await res.json()).url).toBe(assetUrlFor(`${web}/key1.png`));
+    expect((await res.json()).url).toBe(await assetUrlFor(`${web}/key1.png`));
   });
 
   it('refuses a key minted for a DIFFERENT document, and an expired one', async () => {

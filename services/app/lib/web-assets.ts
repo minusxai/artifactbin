@@ -263,12 +263,12 @@ export interface DocumentAssetTarget {
  */
 export async function importForDocument(doc: DocumentAssetTarget, url: string, kind: WebAssetKind = 'image'): Promise<string> {
   const held = await webAssetByHash(urlHash(url));
-  if (held) {requireKind(held,kind);return assetUrlFor(url);}
+  if (held) {requireKind(held,kind);return assetUrlFor(url,held);}
   if (docAssetImportRateLimited(doc.id)) {
     throw new WebAssetRefused('rate_limited', 'too many asset imports for this document this hour', url);
   }
-  await importWebAsset(url, { tokenId: doc.token_id, userId: doc.user_id },kind);
-  return assetUrlFor(url);
+  const row=await importWebAsset(url, { tokenId: doc.token_id, userId: doc.user_id },kind);
+  return assetUrlFor(url,row);
 }
 
 /**
