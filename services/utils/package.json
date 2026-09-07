@@ -9,7 +9,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./shape": "./src/shape.ts",
-    "./rate-limits": "./src/rate-limits.ts"
+    "./rate-limits": "./src/rate-limits.ts",
+    "./platform-pages": "./src/platform-pages.ts"
   },
   "files": [
     "src"

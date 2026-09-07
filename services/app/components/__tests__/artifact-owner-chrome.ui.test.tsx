@@ -585,7 +585,7 @@ describe('the fork row', () => {
     const original = window.location;
     Object.defineProperty(window, 'location', {
       configurable: true,
-      value: { ...original, pathname: '/a/story1', search, hash: '', origin: 'http://localhost:3000', set href(v: string) { assign(v); } },
+      value: { ...original, pathname: '/a/story1', search, hash: '', origin: 'http://localhost:3000', get href(){return 'http://localhost:3000/a/story1'+search;}, set href(v: string) { assign(v); } },
     });
     try {
       await run(assign);

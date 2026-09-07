@@ -1,7 +1,7 @@
 import { getArtifactFor } from '@/lib/artifacts';
 import { browserActor } from '@/lib/auth';
 import { actorForArtifacts } from '@/lib/viewer';
-import { baseUrl, json, unauthorized } from '@/lib/http';
+import { publicLinkBase, json, unauthorized } from '@/lib/http';
 import { existingPaste } from '@/lib/agent-copy';
 
 /**
@@ -21,6 +21,6 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   if (!row) return json({ error: 'not_found' }, 404);
   // Anonymous browser sessions have no account token for an agent to reuse.
   if (!actor.viewer?.userId) return json({ error: 'sign_in_required' }, 409);
-  const base = baseUrl(request);
+  const base = publicLinkBase(request);
   return json({ id: row.id, url: `${base}/a/${row.id}`, prompt: existingPaste(base, row.id) }, 201);
 }

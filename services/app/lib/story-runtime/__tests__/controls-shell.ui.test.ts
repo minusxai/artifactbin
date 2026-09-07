@@ -1,5 +1,6 @@
 import {afterEach,expect,it,vi} from 'vitest';
 import {installControlsShell} from '../../../web/controls-shell';
+import {configureAppApi} from '@/web/api-origin';
 
 let dispose: (()=>void)|undefined;
 afterEach(()=>{dispose?.();dispose=undefined;document.body.replaceChildren();vi.restoreAllMocks();vi.useRealTimers();});
@@ -10,6 +11,13 @@ function setup() {
   dispose=installControlsShell(location.origin);
   return post;
 }
+it('rewrites native toolbar links for modifier clicks without changing external destinations',()=>{
+  configureAppApi('https://i.example.test','https://example.test','controls');
+  setup();document.body.innerHTML='<a href="/@owner/abc123" target="_blank">Document</a><a href="https://elsewhere.test/">External</a>';
+  vi.advanceTimersByTime(300);
+  expect(document.querySelector('a')?.getAttribute('href')).toBe('https://example.test/@owner/abc123');
+  expect(document.querySelectorAll('a')[1].getAttribute('href')).toBe('https://elsewhere.test/');
+});
 it('reports nonmodal half sheets without blocking the viewport and installs isolated no-motion policy',()=>{
   const post=setup();document.body.innerHTML='<div role="dialog"><button>Close</button></div>';
   vi.advanceTimersByTime(300);

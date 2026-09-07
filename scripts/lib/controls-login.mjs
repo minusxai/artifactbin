@@ -28,17 +28,18 @@ export async function verifyControlsLogin({browser,owner,base,controls,sink}) {
       await chrome.getByLabel('Open artifact controls',{exact:true}).click();
       await chrome.getByLabel('Fork artifact',{exact:true}).click();
     } else await chrome.getByLabel({comment:'Toggle comments',like:'Like artifact',follow:'Follow author'}[intent],{exact:true}).click();
-    await page.waitForURL(url=>url.origin===controls && url.pathname==='/login');
+    await page.waitForURL(url=>url.origin===base && url.pathname==='/login');
     const callback=new URL(page.url()).searchParams.get('callbackUrl');
     const returned=new URL(callback,base);
     assert.equal(returned.pathname,original.pathname,'returns to the real main artifact, never /controls/a');
     assert.equal(returned.searchParams.get('$region'),'east');assert.equal(returned.hash,'#section');assert.equal(returned.searchParams.get('intent'),intent);
     const email=`mxmx_test_controls_${intent}_${Date.now()}@example.com`;
-    await page.getByLabel('Email',{exact:true}).fill(email);
-    await page.getByLabel('Log in with email',{exact:true}).click();
-    await page.getByLabel('Login code',{exact:true}).waitFor();
-    await page.getByLabel('Login code',{exact:true}).fill(sink.lastCode(email));
-    await page.getByLabel('Verify code',{exact:true}).click();
+    const login=page.frameLocator('iframe[title="Artifactbin app"]');
+    await login.getByLabel('Email',{exact:true}).fill(email);
+    await login.getByLabel('Log in with email',{exact:true}).click();
+    await login.getByLabel('Login code',{exact:true}).waitFor();
+    await login.getByLabel('Login code',{exact:true}).fill(sink.lastCode(email));
+    await login.getByLabel('Verify code',{exact:true}).click();
     await page.waitForURL(url=>url.origin===base && url.pathname===original.pathname);
     await chrome.getByLabel('Like artifact',{exact:true}).waitFor();
     await page.waitForFunction(()=>!new URL(location.href).searchParams.has('intent'));
@@ -62,5 +63,5 @@ export async function verifyControlsLogin({browser,owner,base,controls,sink}) {
     } else await chrome.locator(`[aria-label="${intent==='like'?'Like artifact':'Follow author'}"][aria-pressed="true"]`).waitFor();
     await page.close();
   }
-  console.log('PASS: desktop/mobile signed-out fork/comment/heart/follow → top-level login → original artifact, current values/hash, one-shot intent and unchanged viewer ACL');
+  console.log('PASS: desktop/mobile signed-out fork/comment/heart/follow → main-address framed login → original artifact, current values/hash, one-shot intent and unchanged viewer ACL');
 }

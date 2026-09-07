@@ -8,7 +8,7 @@ export function createControlsFrame(url: string) {
   const frame = document.createElement('iframe');
   frame.title = 'Artifact controls';
   frame.src = url;
-  frame.setAttribute('allow','fullscreen');
+  frame.setAttribute('allow','fullscreen; clipboard-write');
   Object.assign(frame.style,{position:'fixed',inset:'0',width:'100%',height:'100%',border:'0',zIndex:'2147483000',clipPath:'inset(100%)',background:'transparent'});
   document.body.append(frame);
   const postAddress = () => frame.contentWindow?.postMessage({type:'mx:controls:address',url:location.href},origin);

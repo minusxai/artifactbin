@@ -20,6 +20,7 @@ import path from 'node:path';
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { actorOf, actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
+import {isPlatformPage, platformFramePage, platformPageResponse} from '@artifactbin/utils/platform-pages';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { verifyExportKey } from '@/lib/export-key';
 import { ID_RE } from '@/lib/ids';
@@ -229,6 +230,11 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
    * The endpoints stay the truth; this is the same data, arriving earlier.
    */
   const page = async (c: { req: { raw: Request; url: string } }, status?: 200 | 404) => {
+    if(CONTROLS_ORIGIN && baseUrl(c.req.raw)!==CONTROLS_ORIGIN && status!==404){
+      const url=new URL(c.req.url),found=candidateDocument(url.pathname);
+      const row=found?await getArtifactById(found.id):null;
+      if(row?.format==='folder')return platformPageResponse(new URL(PUBLIC_BASE_URL).origin,CONTROLS_ORIGIN,url.pathname,url.search,row.id);
+    }
     const source = await index(c.req.url);
     const html = CONTROLS_ORIGIN && baseUrl(c.req.raw) === CONTROLS_ORIGIN
       ? source.replace('</head>', () => `<script type="application/json" id="mx-app-config">${safeJson({apiOrigin:new URL(PUBLIC_BASE_URL).origin})}</script></head>`)
@@ -249,15 +255,30 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   };
 
   const pageData = (dir: string) => ROUTES.find((r) => r.dir === dir)?.module.GET as ((request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>) | undefined;
-  // Full trusted pages and same-origin APIs live on i. Only this dedicated
-  // controls shell is frameable. Author documents always remain on main.
+  // Main holds the public address; dedicated i shells hold trusted UI/APIs.
+  // Author documents never enter the trusted page frame.
   if (CONTROLS_ORIGIN) app.use('*', async (c,next) => {
     const url = new URL(c.req.url);
     if (baseUrl(c.req.raw) !== CONTROLS_ORIGIN) {
-      if (baseUrl(c.req.raw) === new URL(PUBLIC_BASE_URL).origin && c.req.method === 'GET'
-        && /^\/(?:login|account|tokens|trash|chat|datasets)(?:\/|$)/.test(url.pathname)) return c.redirect(`${CONTROLS_ORIGIN}${url.pathname}${url.search}`,302);
+      if (baseUrl(c.req.raw) === new URL(PUBLIC_BASE_URL).origin && c.req.method === 'GET' && isPlatformPage(url.pathname)) {
+        if(url.pathname.startsWith('/@') && !(await bootstrapFor(c.req.raw)))return next();
+        return platformPageResponse(new URL(PUBLIC_BASE_URL).origin,CONTROLS_ORIGIN!,url.pathname,url.search);
+      }
       return next();
     }
+    if(c.req.method==='GET' && isPlatformPage(url.pathname))return Response.redirect(new URL(PUBLIC_BASE_URL).origin+url.pathname+url.search,302);
+    const folderId=url.pathname.match(/^\/controls\/folder\/([A-Za-z0-9]+)$/)?.[1];
+    if(folderId){
+      const row=await getArtifactById(folderId),actor=await sessionActor(c.req.raw).catch(()=>null);
+      if(!row || row.format!=='folder' || await roleFor(row,actor??NO_ACTOR)==='none')return new Response('Not found',{status:404});
+    }
+    const platformPath=folderId?'/a/'+folderId:platformFramePage(url.pathname);
+    if(c.req.method==='GET' && platformPath!==null){
+      const main=new URL(PUBLIC_BASE_URL).origin;
+      const shell=(await index(c.req.url)).replace('</head>',()=>`<script type="application/json" id="mx-page-frame-config">${safeJson({apiOrigin:main,path:platformPath,...(folderId?{folderOnly:true}:{})})}</script><base target="_top" /></head>`);
+      return new Response(shell,{headers:{...APP_SECURITY_HEADERS,'content-security-policy':APP_CSP.replace("img-src 'self'",`img-src 'self' ${main}`).replace("frame-ancestors 'self'",`frame-ancestors ${main}`),'content-type':'text/html; charset=utf-8','cache-control':'no-store'}});
+    }
+    if(url.pathname.startsWith('/controls/page') || url.pathname.startsWith('/controls/folder'))return new Response('Not found',{status:404});
     if (c.req.method === 'GET' && /^\/controls\/a\/[A-Za-z0-9]+$/.test(url.pathname)) {
       const shell = (await index(c.req.url)).replace('</head>', () => `<script type="application/json" id="mx-controls-config">${safeJson({apiOrigin:new URL(PUBLIC_BASE_URL).origin})}</script><base target="_top" /><style>html,body,#root{background:transparent!important}</style></head>`);
       const main = new URL(PUBLIC_BASE_URL).origin;

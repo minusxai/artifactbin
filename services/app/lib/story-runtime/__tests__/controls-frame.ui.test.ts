@@ -5,6 +5,10 @@ import {STORY_ROOT_ID,STORY_READER_MODE_MESSAGE,STORY_SCROLL_MESSAGE} from '../c
 let controls: ReturnType<typeof createControlsFrame> | undefined;
 afterEach(()=>{controls?.dispose();controls=undefined;vi.restoreAllMocks();document.documentElement.className='';});
 const origin='https://i.artifactbin.test';
+it('delegates native clipboard writes to the trusted controls frame',()=>{
+  controls=createControlsFrame(origin+'/controls/a/example');
+  expect(controls.frame.getAttribute('allow')).toBe('fullscreen; clipboard-write');
+});
 function dispatchMessage(source: MessageEventSource | null, from: string, data: unknown) {
   window.dispatchEvent(new MessageEvent('message',{source,origin:from,data}));
 }

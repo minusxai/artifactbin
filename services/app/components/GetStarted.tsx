@@ -10,13 +10,14 @@
  * (components/brand-icons); selection is carried by the row background and
  * label, not the mark.
  *
- * The connector URL is built from window.location, never hardcoded: the same
+ * The connector URL uses the configured public origin, never the frame host: the same
  * page serves localhost, staging, and production, and a copied URL that names
  * the wrong host fails in the reader's client where nothing guards it. The
  * install commands come from lib/plugin-id, same reason.
  */
 import { BookOpen, Bot, Cable, ChevronDown, Zap } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import {appUrl} from '@/web/api-origin';
 import AgentLink from '@/components/AgentLink';
 import {
   AnthropicIcon,
@@ -500,7 +501,7 @@ export default function GetStarted({
         : 'grid-cols-1';
 
   useEffect(() => {
-    setOrigin(window.location.origin);
+    setOrigin(new URL(appUrl('/'),window.location.origin).origin);
     // A named surface is this second's answer; the store is last month's. The fresher one wins, and
     // replaces the stale one so the next visit opens in the same place.
     if (initialSurface) {

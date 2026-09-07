@@ -1,7 +1,7 @@
 /** Deployment-owned, never inferred from an author prop, query parameter, or message. */
 export function parseControlsOrigin(main: string, configured: string): string {
   const root = new URL(main), child = new URL(configured);
-  const local = ['localhost','127.0.0.1','[::1]'].includes(root.hostname);
+  const local = ['localhost','127.0.0.1','[::1]'].includes(root.hostname) || root.hostname.endsWith('.localhost');
   if (child.username || child.password || child.pathname !== '/' || child.search || child.hash
     || child.origin === root.origin || child.protocol !== root.protocol
     || (!local && child.protocol !== 'https:')

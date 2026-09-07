@@ -14,6 +14,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import GetStarted, { AGENT_FAMILIES, SURFACES } from '@/components/GetStarted';
+import * as apiOrigin from '@/web/api-origin';
 import { AnthropicIcon, ClaudeAIIcon } from '@/components/brand-icons';
 import {
   CODEX_APP_PLUGIN_REF,
@@ -43,9 +44,15 @@ beforeEach(() => {
   localStorage.clear();
   vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText: vi.fn() } });
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {vi.unstubAllGlobals();vi.restoreAllMocks();});
 
 describe('<GetStarted>', () => {
+  it('copies the public connector origin inside a trusted page frame',()=>{
+    vi.spyOn(apiOrigin,'appUrl').mockImplementation(path=>new URL(path,'https://public.example').href);
+    renderInstalling();chooseFamily('Others');
+    fireEvent.click(screen.getByLabelText('Copy the connector URL'));
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('https://public.example/mcp');
+  });
   it('groups every surface by agent family and leads with Claude Code CLI', () => {
     renderInstalling();
     for (const family of AGENT_FAMILIES) {

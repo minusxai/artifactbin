@@ -1,4 +1,5 @@
 import {appUrl,receiveArtifactAddress} from './api-origin';
+import {rewritePublicLinks} from './public-links';
 
 let rightInset = 0;
 export function reportControlsInset(value: number): void {
@@ -33,6 +34,7 @@ export function installControlsShell(mainOrigin: string): () => void {
   let previous = '';
   const report = () => {
     pending = false;
+    rewritePublicLinks();
     const regions: Array<{x:number;y:number;width:number;height:number}> = [];
     const modal = currentModal();
     if (modal !== activeModal) {

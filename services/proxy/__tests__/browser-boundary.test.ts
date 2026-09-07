@@ -18,6 +18,13 @@ const call = (host: string, path: string, method = 'GET', headers: Record<string
   createProxy(options).request(`${host}${path}`, { method, headers });
 const trusted = { origin: controls, 'x-artifactbin-csrf': '1', 'sec-fetch-site': 'same-origin' };
 describe('the composed proxy browser boundary', () => {
+  it('resolves read-only authority for untitled and legacy nested pretty document addresses',async()=>{
+    for(const path of ['/@owner/abc123','/@owner/abc123-title','/@old/folder/abc123']){
+      expect(await (await call(main,path)).json()).toEqual({credential:'read-session',userId:'reader'});
+      expect(await (await call(main,path,'POST')).json()).toEqual({credential:'none'});
+    }
+    for(const path of ['/@owner','/@owner/not_an_id','/@owner/abc123/_mutate'])expect(await (await call(main,path)).json()).toEqual({credential:'none'});
+  });
   it('resolves only read authority on main artifact reads, never ambient account authority', async () => {
     expect(await (await call(main, '/a/abc123')).json()).toEqual({ credential: 'read-session', userId: 'reader' });
     expect(await (await call(main, '/a/abc123/assets?kind=script&u=https://cdn.example/bundle.js')).json()).toEqual({ credential: 'read-session', userId: 'reader' });
@@ -85,5 +92,7 @@ describe('the composed proxy browser boundary', () => {
       expect((await call(controls, path)).headers.get('content-security-policy')).toContain("frame-ancestors 'none'");
     }
     expect((await call(controls, '/controls/a/abc123')).headers.get('content-security-policy')).toContain(`frame-ancestors ${main}`);
+    expect((await call(controls, '/controls/page/login')).headers.get('content-security-policy')).toContain(`frame-ancestors ${main}`);
+    expect((await call(controls, '/controls/page/a/abc123')).headers.get('content-security-policy')).toContain("frame-ancestors 'none'");
   });
 });

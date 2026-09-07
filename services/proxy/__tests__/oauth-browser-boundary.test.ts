@@ -51,10 +51,10 @@ async function authorize(cookie: string) {
     code_challenge: s256(verifier), code_challenge_method: 'S256', resource: main + '/mcp', scope: 'artifacts', state: 'client-state' });
   const path = '/oauth/authorize?' + query;
   const moved = await proxy.request(main + path, { headers: { cookie } });
-  expect(moved.status).toBe(302); expect(moved.headers.get('location')).toBe(controls + path);
-  const page = await proxy.request(controls + path, { headers: { cookie } });
+  expect(moved.status).toBe(200); expect(moved.headers.get('location')).toBeNull();
+  const page = await proxy.request(controls + '/controls/consent?' + query, { headers: { cookie } });
   expect(page.status).toBe(200);
-  expect(page.headers.get('content-security-policy')).toContain("frame-ancestors 'none'");
+  expect(page.headers.get('content-security-policy')).toContain(`frame-ancestors ${main}`);
   expect(page.headers.get('content-security-policy')).toContain(`form-action 'self' ${new URL(redirect).origin}`);
   const approval = /name="approval" value="([A-Za-z0-9_-]+)"/.exec(await page.text())?.[1];
   expect(approval).toBeTruthy();
@@ -66,7 +66,7 @@ const approve = (cookie: string, approval: string, origin: string | null = contr
 describe('real OTP → trusted OAuth consent → main-host MCP bearer', () => {
   it('advertises trusted authorization without changing issuer, resource or token-exchange host', async () => {
     const metadata = await (await proxy.request(main + '/.well-known/oauth-authorization-server')).json();
-    expect(metadata).toMatchObject({ issuer: main, authorization_endpoint: controls + '/oauth/authorize', token_endpoint: main + '/oauth/token' });
+    expect(metadata).toMatchObject({ issuer: main, authorization_endpoint: main + '/oauth/authorize', token_endpoint: main + '/oauth/token' });
   });
   it('binds approval to the live session and rejects cross-origin posts and replay', async () => {
     const cookie = await login();

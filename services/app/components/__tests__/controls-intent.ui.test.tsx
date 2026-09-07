@@ -12,7 +12,7 @@ const address=(url:string,source:MessageEventSource|null=window.parent,from=orig
 function setup() {
   vi.stubGlobal('EventSource',class {addEventListener(){} removeEventListener(){} close(){}});
   window.history.replaceState(null,'','/controls/a/abc123');
-  api.configureAppApi(window.location.origin,origin,true);
+  api.configureAppApi(window.location.origin,origin,'controls');
   return vi.spyOn(api,'appNavigate').mockImplementation(()=>{});
 }
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();layers.length=0;});

@@ -231,9 +231,9 @@ export const createAuthCode = (store: OAuthStore, grant: AuthorizationGrant, cod
 export const consumeAuthCode = (store: OAuthStore, input: { code: string; clientId: string; redirectUri: string; resource: string; codeVerifier: string }, now = Date.now()): Promise<AuthorizationGrant | null> =>
   store.consumeAuthorizationCode(input, now);
 
-export const authServerMetadata = (base: string, controlsOrigin?: string): Record<string, unknown> => ({
+export const authServerMetadata = (base: string): Record<string, unknown> => ({
   issuer: base,
-  authorization_endpoint: `${controlsOrigin ?? base}/oauth/authorize`,
+  authorization_endpoint: `${base}/oauth/authorize`,
   token_endpoint: `${base}/oauth/token`,
   registration_endpoint: `${base}/oauth/register`,
   response_types_supported: ['code'],

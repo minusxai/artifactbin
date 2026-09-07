@@ -6,7 +6,10 @@ vi.mock('@/lib/config', async importOriginal => ({
 import { createAppServer } from '../app';
 import { attachActor, signActor } from '@artifactbin/utils';
 import { ACTOR_HEADER } from '@artifactbin/contracts';
-import { useAppHarness } from '@/__tests__/harness';
+import { useAppHarness,request } from '@/__tests__/harness';
+import {createUser,ensureUsername,claimToken} from '@/lib/users';
+import {mintToken} from '@/lib/tokens';
+import {POST as createArtifact} from '@/app/api/artifacts/route';
 useAppHarness();
 const main = 'http://localhost:3000', controls = 'http://i.localhost:3000';
 const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head></head><body>Trusted SPA</body></html>' });
@@ -21,16 +24,13 @@ it('refuses direct app access when the controls boundary is enabled', async () =
   }
   const split = createAppServer({ actorSecret: 'transport-secret', indexHtml: async () => '<head></head>' });
   expect((await split.request(controls + '/login', { headers: { [ACTOR_HEADER]: 'forged' } })).status).toBe(403);
-  expect((await split.request(controls + '/login', { headers: { [ACTOR_HEADER]: signActor({ credential: 'none' }, 'transport-secret') } })).status).toBe(200);
+  expect((await split.request(controls + '/controls/page/login', { headers: { [ACTOR_HEADER]: signActor({ credential: 'none' }, 'transport-secret') } })).status).toBe(200);
 });
-it('serves full trusted account pages, and APIs, on the controls host', async () => {
+it('returns old controls-host page bookmarks to main, keeping APIs on controls', async () => {
   for (const path of ['/login', '/account', '/tokens/new', '/']) {
-    const res = await throughProxy(controls + path);
-    expect(res.status, path).toBe(200);
-    const html = await res.text();
-    expect(html).toContain('Trusted SPA');
-    expect(html).toContain('mx-app-config');
-    expect(html).not.toContain('mx-controls-config');
+    const res = await throughProxy(controls + path+'?selection=kept');
+    expect(res.status, path).toBe(302);
+    expect(res.headers.get('location')).toBe(main+path+'?selection=kept');
   }
   expect((await throughProxy(controls + '/api/page/session')).status).toBe(200);
 });
@@ -65,4 +65,26 @@ it('frames only platform app pages, never author documents or arbitrary proxy de
     const res = await throughProxy(controls + '/controls/page' + path);
     expect(res.status, path).toBe(404);
   }
+});
+it('frames public profile roots without admitting pretty author addresses',async()=>{
+  const owner=await ensureUsername(await createUser({email:'mxmx_test_frame_profile@example.com'}));
+  const path='/@'+owner.username;
+  const root=await throughProxy(main+path);expect(root.status).toBe(200);expect(await root.text()).toContain('<iframe');
+  const frame=await throughProxy(controls+'/controls/page'+path);expect(frame.status).toBe(200);expect(await frame.text()).toContain('Trusted SPA');
+  expect((await throughProxy(controls+'/controls/page'+path+'/Ab3xK9-title')).status).toBe(404);
+});
+it('admits folders through a folder-only frame but never markup or private data in the parent',async()=>{
+  const owner=await ensureUsername(await createUser({email:'mxmx_test_frame_folder@example.com'}));
+  const {token}=await mintToken('folder');await claimToken(owner.id,token);
+  const actor={credential:'session' as const,userId:owner.id};
+  const created=await createArtifact(request('/api/artifacts',{method:'POST',token,json:{format:'folder',title:'Private folder title',visibility:'private'}}));
+  expect(created.status).toBe(201);const folder=await created.json();
+  const fetch=(url:string)=>app.fetch(attachActor(new Request(url,{headers:{accept:'text/html'}}),actor));
+  const response=await fetch(main+'/a/'+folder.id);const target=response.headers.get('location');
+  const parent=target?await fetch(new URL(target,main).href):response;
+  const html=await parent.text();expect(html).toContain('/controls/folder/'+folder.id);expect(html).not.toContain('Private folder title');expect(html).not.toContain('mx-page-data');
+  const frame=await fetch(controls+'/controls/folder/'+folder.id);expect(frame.status).toBe(200);expect(await frame.text()).toContain('folderOnly');
+  const doc=await createArtifact(request('/api/artifacts',{method:'POST',token,json:{markup:'<h1>Never trusted</h1>'}}));
+  const {id}=await doc.json();expect((await fetch(controls+'/controls/folder/'+id)).status).toBe(404);
+  expect((await throughProxy(controls+'/controls/folder/'+folder.id)).status).toBe(404);
 });
