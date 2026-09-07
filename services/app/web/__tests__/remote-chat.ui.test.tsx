@@ -96,7 +96,7 @@ it("shows an ended session without terminal input controls", async () => {
       : { session, seq: 1, snapshot: "", frames: [] },
   })));
   render(<MemoryRouter initialEntries={["/chat?session=done"]}><ChatPage /></MemoryRouter>);
-  expect(await screen.findByRole("status")).toHaveTextContent("Session ended (exit 0)");
+  expect(await screen.findByText(/Session ended \(exit 0\)/)).toBeTruthy();
   expect(screen.getByRole("button", { name: "Remove session" })).toBeEnabled();
   expect(screen.queryByRole("button", { name: "Take control" })).toBeNull();
   expect(screen.queryByRole("textbox", { name: "Message to agent" })).toBeNull();

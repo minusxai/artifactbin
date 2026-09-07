@@ -167,10 +167,11 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
           {error}
         </p>
       )}
+      <div style={{ maxWidth: mobile ? 420 : undefined }}>
       {ended && <p role="status" className="mb-3 rounded border border-edge bg-surface p-4 text-sm">
         Session ended (exit {info?.exitCode}). Start a new session with afbin remote to reconnect.
       </p>}
-      <div className="overflow-x-auto rounded border border-edge bg-[#111214] p-2" style={{ maxWidth: mobile ? 420 : undefined }} hidden={ended}>
+      <div className="overflow-x-auto rounded border border-edge bg-[#111214] p-2" hidden={ended}>
         <div
           ref={container}
           aria-label="Remote terminal"
@@ -236,6 +237,7 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
         your local terminal dimensions. Disconnect removes
         remote access; your local process keeps running.
       </p>
+      </div>
     </section>
   );
 }

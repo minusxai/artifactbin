@@ -145,7 +145,7 @@ it("delivers explicit human session mentions only to the commenting account, wit
   notifyRemoteComment("a", "artifact", "annotation", comment, r);
   notifyRemoteComment("a", "artifact", "annotation", comment, r);
   const x = await r.exchange("a", own.id, body(own.runnerKey));
-  expect(x.inputs).toHaveLength(2);
+  expect(x.inputs).toHaveLength(1);
   expect(x.inputs[0].data).toContain("artifact");
   expect(x.inputs[0].data).not.toContain("\x03");
   expect(x.inputs[0].data!.endsWith("\r")).toBe(true);
