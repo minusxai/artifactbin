@@ -390,7 +390,7 @@ export async function createArtifact(
           // it. Routes validate an explicit ask upstream.
           input.visibility ??
             (!userId ? (ALLOW_PUBLIC_VISIBILITY ? 'public' : 'unlisted')
-              : input.format === 'image' || input.format === 'dataset' || input.format === 'pdf' ? 'unlisted' : 'private'),
+              : input.format === 'image' || input.format === 'dataset' || input.format === 'pdf' || input.format === 'file' ? 'unlisted' : 'private'),
           // NULL is the pre-column shape and reads as 'viewer' (linkRoleOf), so
           // every ordinary creation stays exactly as it was.
           atCreation.linkRole ?? null,

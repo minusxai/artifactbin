@@ -35,6 +35,7 @@ import { loadDatasetRows } from '@/lib/story/dataset-store';
 import { ObjectUnavailable } from '@/lib/object-store';
 import { Readable } from 'node:stream';
 import { loadImage } from '@/lib/story/image-store';
+import { serveStoredFile } from '@/lib/story/file-store';
 import { loadPdfStream, pdfFilename, pdfMetaOf } from '@/lib/story/pdf-store';
 import { webAssetsForSource } from '@/lib/web-assets';
 import { buildStoryDocument } from '@/lib/story/document';
@@ -126,6 +127,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   if (!admitted) return notFound();
 
   switch (artifact.format) {
+    case 'file': return serveStoredFile(request, artifact);
     case 'dataset':
     {
       const catalog=catalogOf(artifact);

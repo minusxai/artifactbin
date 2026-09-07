@@ -42,6 +42,7 @@ export default defineConfig({
       // Same trick for the PDF tier: 20 KB rather than the real 25 MB, so the
       // cap test trips on a payload a test can build rather than on a real one.
       PDF__MAX_BYTES: '20000',
+      FILES__MAX_BYTES: '10000',
     },
     projects: [
       {

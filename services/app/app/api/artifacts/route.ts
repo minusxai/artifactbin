@@ -6,13 +6,15 @@ import { runOperation } from '@/lib/operations/http';
 import { baseUrl, json, readJson } from '@/lib/http';
 import { storeImageContent } from '@/lib/story/data-tiers';
 import { imageRawUrl } from '@/lib/story/ref-data';
+import { readFileUpload, storeFileContent } from '@/lib/story/file-store';
 
 /**
  * The one create path both auth modes share (bearer here, session in
  * app/api/my/artifacts). A `Content-Type: image/*` body is raw image bytes — a
  * clipboard paste or a `--data-binary` upload — with title/visibility riding
  * the query string, since there is no JSON envelope to carry them; that branch
- * is transport-only and stays here. Any other content type is the JSON content
+ * is transport-only and stays here. `?format=file&filename=...` opts any MIME
+ * type into the generic byte-preserving file tier. Other requests use the JSON content
  * body (markup | dataset | …), which is the `create_artifact` OPERATION
  * (lib/operations — the same pipeline the MCP tool runs).
  */
@@ -21,7 +23,11 @@ export async function createArtifactFromRequest(
   { tokenId, userId }: { tokenId: string; userId: string | null },
 ): Promise<Response> {
   const contentType = (request.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
-  if (contentType.startsWith('image/')) {
+  const q = new URL(request.url).searchParams;
+  const fileUpload = q.get('format') === 'file';
+  if (fileUpload || contentType.startsWith('image/')) {
+    const v = parseVisibilityValue(q.get('visibility'), !!userId);
+    if (v instanceof Response) return v;
     // Two caps, two questions: how many artifacts this token holds, and how
     // many BYTES its owner has caused to be stored (lib/asset-quota, R9 — the
     // account's when the token has one). The JSON body asks the second through
@@ -31,15 +37,16 @@ export async function createArtifactFromRequest(
     if (await assetByteQuotaExceeded(tokenId)) {
       return json({ error: 'quota_exceeded', details: ['this account is over its stored-byte quota — delete assets you no longer need'] }, 403);
     }
-    const stored = await storeImageContent(Buffer.from(await request.arrayBuffer()), contentType);
+    const bytes = fileUpload ? await readFileUpload(request) : Buffer.from(await request.arrayBuffer());
+    if (bytes instanceof Response) return bytes;
+    const stored = fileUpload
+      ? await storeFileContent(bytes, contentType || 'application/octet-stream', q.get('filename') ?? '')
+      : await storeImageContent(bytes, contentType);
     if (stored instanceof Response) return stored;
-    const q = new URL(request.url).searchParams;
-    const v = parseVisibilityValue(q.get('visibility'), !!userId);
-    if (v instanceof Response) return v;
     const visibility: Visibility | undefined = v;
     const row = await createArtifact(tokenId, userId, {
       ...stored,
-      title: q.get('title'),
+      title: q.get('title') ?? stored.derivedTitle,
       description: null,
       ...(visibility ? { visibility } : {}),
     });
@@ -49,6 +56,7 @@ export async function createArtifactFromRequest(
       format: row.format, title: row.title,
       markup: row.source,
       rawUrl: imageRawUrl(row.id, row.version),
+      ...(fileUpload ? { filename: row.meta.filename, contentType: row.meta.contentType, bytes: row.meta.bytes } : {}),
     }, 201);
   }
   const body = await readJson(request);

@@ -115,6 +115,7 @@ const CONTENT_FIELDS = {
   imageUrl: z.string().optional().describe(IMAGE_URL_FIELD_GUIDANCE),
   pdf: z.string().optional().describe(PDF_FIELD_GUIDANCE),
   pdfUrl: z.string().optional().describe(PDF_URL_FIELD_GUIDANCE),
+  file: z.object({ filename: z.string(), contentType: z.string(), base64: z.string() }).optional().describe('Allowlisted file uploads (GLB, images, audio/video, documents, fonts, ZIP). Unsupported extensions return unsupported_file_type. Returns a ref:<id> address. For large files POST raw bytes to /api/artifacts?format=file&filename=<name>.'),
   csvUrl: z.string().optional().describe(CSV_URL_FIELD_GUIDANCE),
   title: z.string().optional(),
   description: z.string().optional().describe('shown on the owner dashboard, never on the document'),
@@ -173,7 +174,7 @@ const createArtifactOp: Operation = {
   name: 'create_artifact',
   title: 'Create an artifact',
   http: { method: 'POST', path: '/api/artifacts' },
-  description: 'Create an artifact (exactly one of markup | dataset | viz | image | pdf). Returns the public URL. markup is THE document format: story JSX over the component kit, HTML tags for everything else (prose is ordinary <p>/<h1>/<ul> — there is no markdown), and one top-level <Helmet> for <title>/<style>/<script> and the document\'s DATA: <Value name type default /> scalars and <Query name source="<datasetId>">{`select … from public.rows`}</Query> (SQL over named tables in one dataset; PostgreSQL datasets are read-only), bound in the body by name — <Question data="$q">, <DataTable data="$q">, <select value="$x" options="$q">. Recipes/images bind as ref:<id>, and a pdf as <File src="ref:<id>" />. No upload is needed for something already on the web: write <img src="https://…"> (or <Video poster>, <File src>) and publish stores a copy while your URL stays in the document. Dataset creation echoes the inferred columns and a ready-to-paste Query+Question. To ORGANISE: {"format":"folder","title":"Reports"} makes a folder — a folder HAS no content, its page is the listing we render for whoever opens it — and parent_id: "<folderId>" on any create files it there.',
+  description: 'Create an artifact (exactly one of markup | dataset | viz | image | pdf | file). Returns the public URL. markup is THE document format: story JSX over the component kit, HTML tags for everything else (prose is ordinary <p>/<h1>/<ul> — there is no markdown), and one top-level <Helmet> for <title>/<style>/<script> and the document\'s DATA: <Value name type default /> scalars and <Query name source="<datasetId>">{`select … from public.rows`}</Query> (SQL over named tables in one dataset; PostgreSQL datasets are read-only), bound in the body by name — <Question data="$q">, <DataTable data="$q">, <select value="$x" options="$q">. Recipes/images bind as ref:<id>, and a pdf as <File src="ref:<id>" />. No upload is needed for something already on the web: write <img src="https://…"> (or <Video poster>, <File src>) and publish stores a copy while your URL stays in the document. Dataset creation echoes the inferred columns and a ready-to-paste Query+Question. To ORGANISE: {"format":"folder","title":"Reports"} makes a folder — a folder HAS no content, its page is the listing we render for whoever opens it — and parent_id: "<folderId>" on any create files it there.',
   input: CONTENT_FIELDS,
   annotations: {},
   example: {
