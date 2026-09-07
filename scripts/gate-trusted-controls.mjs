@@ -7,7 +7,7 @@ import {request as httpRequest} from 'node:http';
 import net from 'node:net';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
-import {randomBytes} from 'node:crypto';
+import {createHash,randomBytes} from 'node:crypto';
 import {chromium,firefox,webkit} from 'playwright';
 import {startDocument,becomeOwner} from './lib/start-doc.mjs';
 import {loginViaEmail} from './lib/mail-login.mjs';
@@ -35,6 +35,15 @@ await new Promise(resolve=>tls.listen(0,'127.0.0.1',resolve));
 const tlsPort = tls.address().port;
 const hostname=interactive || engineName!=='chromium' ? '127.0.0.1.nip.io' : 'artifactbin.test';
 const base = `https://${hostname}:${tlsPort}`, controls = `https://i.${hostname}:${tlsPort}`;
+// Node's fetch ignores an explicit Host header (measured on Node 22). Use
+// the HTTP client for fixture setup against the actual configured hostname.
+const mainFetch = (url, init = {}) => new Promise((resolve,reject) => {
+  const req=httpRequest(url,{method:init.method ?? 'GET',headers:{...init.headers,host:new URL(base).host}},res=>{
+    const chunks=[];res.on('data',chunk=>chunks.push(chunk));res.on('error',reject);
+    res.on('end',()=>resolve(new Response([204,304].includes(res.statusCode) ? null : Buffer.concat(chunks),{status:res.statusCode,headers:res.headers})));
+  });
+  req.on('error',reject);req.end(init.body);
+});
 const server = spawn(process.execPath,['--import',resolve('scripts/lib/controls-mail-stub.mjs'),resolve('dist/proxy-server.mjs')],{
   cwd:resolve('services/app'),stdio:['ignore','ignore','inherit'],env:{...process.env,
     NODE_ENV:'production',APP__PORT:String(port),APP__PUBLIC_BASE_URL:base,APP__CONTROLS_ORIGIN:controls,
@@ -49,11 +58,11 @@ try {
   let ready = false;
   for (let i=0;i<300;i++) {
     if (server.exitCode !== null) throw new Error(`Server exited ${server.exitCode}`);
-    if (await fetch(backend+'/health').then(r=>r.ok).catch(()=>false)) {ready=true;break;}
+    if (await mainFetch(backend+'/health').then(r=>r.ok).catch(()=>false)) {ready=true;break;}
     await new Promise(resolve=>setTimeout(resolve,100));
   }
   assert(ready,'server ready');
-  const seed = await startDocument(backend);
+  const seed = await startDocument(backend,{},mainFetch);
   const authorScript=`
     try {parent.document.body.innerHTML='ESCAPED';mx.params.set('dom','escaped');}
     catch(error) {mx.params.set('dom',error.name);}
@@ -68,10 +77,10 @@ try {
     parent.frames[0].postMessage({type:'mx:text-edit',path:'0',nonce:'guessed',innerHtml:'FORGED'},'${controls}');
   `;
   const markup='<Helmet><Value name="count" type="number" default={0}/><Value name="dom" type="string" default="waiting"/><Value name="storage" type="string" default="waiting"/><Value name="network" type="string" default="waiting"/><Mutation name="inc">{`update _signals set count=count+1`}</Mutation><script>{`'+authorScript+'`}</script></Helmet><main className="p-20"><h1>Top-level controls</h1><p id="editable">Original paragraph</p><Button run="$inc">Increment</Button><p>{$count}</p></main>';
-  const response = await fetch(`${backend}/api/artifacts/${seed.id}`,{method:'PUT',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({markup,expectedVersion:1})});
+  const response = await mainFetch(`${backend}/api/artifacts/${seed.id}`,{method:'PUT',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({markup,expectedVersion:1})});
   assert(response.ok,await response.text());
   if (interactive) {
-    console.log(`Interactive local fixture: ${base}/a/${seed.id}\nControls host: ${controls}/a/${seed.id}`);
+    console.log(`Interactive local fixture: ${base}/a/${seed.id}\nControls host: ${controls}/controls/a/${seed.id}`);
     await new Promise(resolve=>{process.once('SIGINT',resolve);process.once('SIGTERM',resolve);});
   } else {
   browser = await engine.launch(engineName==='chromium' ? {args:['--host-resolver-rules=MAP artifactbin.test 127.0.0.1, MAP i.artifactbin.test 127.0.0.1','--proxy-bypass-list=*']} : {});
@@ -80,7 +89,12 @@ try {
   page.on('response',response=>{if(response.status()>=400) console.error('HTTP',response.status(),response.url());});
   page.on('pageerror',error=>console.error(error.message));
   page.on('console',message=>{if(message.type()==='error') console.error(message.text());});
-  await becomeOwner(page,base,seed.token);
+  await becomeOwner(page,controls,seed.token);
+  const anonymousPrivate=await mainFetch(`${backend}/api/artifacts`,{method:'POST',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({markup:'<h1>Anonymous private fixture</h1>',visibility:'private'})});
+  assert.equal(anonymousPrivate.status,400);
+  assert.equal((await anonymousPrivate.json()).error,'private_requires_account','the auth split does not change who may create private documents');
+  const peer=await browser.newPage({ignoreHTTPSErrors:true});
+  await becomeOwner(peer,controls,seed.token);
   const privilegedRequests=[];
   page.on('request',r=>{if(r.method()!=='GET' && /\/(like|follow|edits|annotations)(?:\?|$)/.test(new URL(r.url()).pathname)) privilegedRequests.push(r.url());});
   await page.goto(`${base}/a/${seed.id}`);
@@ -113,18 +127,18 @@ try {
   await paragraph.fill('Saved from the top-level document');
   await paragraph.press('Tab');
   await page.waitForTimeout(1500);
-  const saved = await fetch(`${backend}/api/artifacts/${seed.id}`,{headers:{Authorization:`Bearer ${seed.token}`}}).then(r=>r.json());
+  const saved = await mainFetch(`${backend}/api/artifacts/${seed.id}`,{headers:{Authorization:`Bearer ${seed.token}`}}).then(r=>r.json());
   assert.match(saved.markup,/Saved from the top-level document/);
   await page.reload();
   await page.getByText('Saved from the top-level document',{exact:true}).waitFor();
   assert.equal(await page.locator('iframe[title="artifact"]').count(),0);
-  const beforeComment=await fetch(`${backend}/api/artifacts/${seed.id}`,{headers:{Authorization:`Bearer ${seed.token}`}}).then(r=>r.json());
+  const beforeComment=await mainFetch(`${backend}/api/artifacts/${seed.id}`,{headers:{Authorization:`Bearer ${seed.token}`}}).then(r=>r.json());
   await page.locator('#editable').click({clickCount:3});
   await page.getByLabel('Comment on selected text',{exact:true}).click();
   await chrome.getByLabel('Annotation comment',{exact:true}).fill('Two-origin comment');
   await chrome.getByLabel('Save annotation',{exact:true}).click();
   await page.locator('#editable[data-mx-annotated]').waitFor();
-  const afterComment=await fetch(`${backend}/api/artifacts/${seed.id}`,{headers:{Authorization:`Bearer ${seed.token}`}}).then(r=>r.json());
+  const afterComment=await mainFetch(`${backend}/api/artifacts/${seed.id}`,{headers:{Authorization:`Bearer ${seed.token}`}}).then(r=>r.json());
   assert.equal(afterComment.version,beforeComment.version,'comments do not create document edits');
   assert.equal(afterComment.markup,beforeComment.markup,'comments leave markup unchanged');
   await chrome.getByLabel('Toggle comments',{exact:true}).click();
@@ -153,7 +167,7 @@ try {
   const scriptElement=await page.locator('iframe[title="Isolated artifact script"]').elementHandle();
   const isolated=await scriptElement.contentFrame();
   const beforeNavigation=privilegedRequests.length;
-  await isolated.evaluate(url=>{location.href=url;},`${controls}/a/${seed.id}`);
+  await isolated.evaluate(url=>{location.href=url;},`${controls}/controls/a/${seed.id}`);
   await page.locator('iframe[title="Isolated artifact script"]').waitFor({state:'detached'});
   assert.equal(privilegedRequests.length,beforeNavigation,'navigating the opaque author frame cannot acquire trusted controls authority');
   const sink={lastCode(email) {
@@ -179,12 +193,74 @@ try {
     setTimeout(()=>reject(new Error('Protected preview timed out')),30000);
   }));
   await chrome.getByLabel('Cancel social preview',{exact:true}).click();
-  const datasetResponse=await fetch(backend+'/api/artifacts',{method:'POST',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({dataset:[{secret:41}],visibility:'private'})});
+  const oauthRedirect=base+'/oauth-browser-callback',verifier=randomBytes(32).toString('base64url');
+  const registered=await mainFetch(backend+'/oauth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_name:'Security gate client',redirect_uris:[oauthRedirect]})});
+  assert.equal(registered.status,201);
+  const client=(await registered.json()).client_id;
+  const authorizeQuery=new URLSearchParams({client_id:client,redirect_uri:oauthRedirect,response_type:'code',code_challenge:createHash('sha256').update(verifier).digest('base64url'),code_challenge_method:'S256',resource:base+'/mcp',scope:'artifacts',state:'browser-gate'});
+  await page.goto(controls+'/oauth/authorize?'+authorizeQuery);
+  await page.getByLabel('Approve connection',{exact:true}).click();
+  await page.waitForURL(url=>url.origin===base && url.pathname==='/oauth-browser-callback');
+  const oauthCallback=new URL(page.url());
+  assert.equal(oauthCallback.searchParams.get('state'),'browser-gate');
+  const exchange=await mainFetch(backend+'/oauth/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'authorization_code',client_id:client,redirect_uri:oauthRedirect,code:oauthCallback.searchParams.get('code'),code_verifier:verifier,resource:base+'/mcp'}).toString()});
+  assert.equal(exchange.status,200);
+  const mcpToken=(await exchange.json()).access_token;
+  assert.equal(typeof mcpToken,'string','native trusted approval produces a real MCP credential');
+  assert.equal((await mainFetch(backend+`/api/artifacts/${seed.id}`,{headers:{Authorization:`Bearer ${mcpToken}`}})).status,401,'MCP credentials cannot regain authority through a legacy app bearer resolver');
+  await page.goto(`${base}/a/${seed.id}`);
+  const datasetResponse=await mainFetch(backend+'/api/artifacts',{method:'POST',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({dataset:[{secret:41}],visibility:'private'})});
   assert.equal(datasetResponse.status,201);
   const dataset=await datasetResponse.json();
-  const privateResponse=await fetch(backend+'/api/artifacts',{method:'POST',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({markup:`<Helmet><Value name="delta" type="number" default={0}/><Query name="answers">{\`select secret + $delta as answer from ref_${dataset.id}\`}</Query><Mutation name="inc">{\`update _signals set delta=delta+1\`}</Mutation></Helmet><h1>Private data</h1><Number data="$answers" col="answer" agg="sum"/><Button run="$inc">Change private query</Button>`})});
+  const privateResponse=await mainFetch(backend+'/api/artifacts',{method:'POST',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({markup:`<Helmet><Value name="delta" type="number" default={0}/><Query name="answers">{\`select secret + $delta as answer from ref_${dataset.id}\`}</Query><Mutation name="inc">{\`update _signals set delta=delta+1\`}</Mutation></Helmet><h1>Private data</h1><Number data="$answers" col="answer" agg="sum"/><Button run="$inc">Change private query</Button>`})});
   assert.equal(privateResponse.status,201,privateResponse.status===201 ? undefined : await privateResponse.text());
   const privateDoc=await privateResponse.json();
+  const invitedEmail=`mxmx_test_controls_invited_${Date.now()}@example.com`;
+  assert.equal(await chrome.locator('body').evaluate(async (_,args)=>(await fetch(`/api/my/artifacts/${args.id}/sharing`,{method:'PUT',headers:{'Content-Type':'application/json','x-artifactbin-csrf':'1'},body:JSON.stringify({shares:[{email:args.email,role:'viewer'}]})})).status,{id:privateDoc.id,email:invitedEmail}),200);
+  const invited=await browser.newPage({ignoreHTTPSErrors:true});
+  await invited.goto(`${controls}/login?callbackUrl=${encodeURIComponent('/a/'+privateDoc.id)}`);
+  await invited.getByLabel('Email',{exact:true}).fill(invitedEmail);
+  await invited.getByLabel('Log in with email',{exact:true}).click();
+  await invited.getByLabel('Login code',{exact:true}).waitFor();
+  await invited.getByLabel('Login code',{exact:true}).fill(sink.lastCode(invitedEmail));
+  const invitedLanding=invited.waitForResponse(r=>r.url()===`${base}/a/${privateDoc.id}` && r.request().isNavigationRequest());
+  await invited.getByLabel('Verify code',{exact:true}).click();
+  const invitedResponse=await invitedLanding;
+  assert.equal(invitedResponse.status(),200,'first login can open an email-shared private artifact directly, without visiting the workspace first');
+  assert.equal((await invitedResponse.text()).includes(invitedEmail),false,'verified invitation email is a server-only ACL claim, not parent-page state');
+  await invited.getByRole('heading',{name:'Private data'}).waitFor();
+  const publishConsent=async body=>{
+    const response=await mainFetch(backend+'/api/artifacts',{method:'POST',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    assert.equal(response.status,201,await response.clone().text());return response.json();
+  };
+  const consentDataset=await publishConsent({dataset:[{n:1}],access:'readwrite'});
+  const consentDoc=await publishConsent({markup:`<Helmet><Query name="rows">{\`select * from ref_${consentDataset.id}\`}</Query><Mutation name="add">{\`insert into ref_${consentDataset.id} values (2)\`}</Mutation></Helmet><h1>Shared mutation</h1><Number data="$rows" col="n" agg="sum"/><Button run="$add">Add shared row</Button>`});
+  for(const [id,role] of [[consentDataset.id,'editor'],[consentDoc.id,'viewer']]){
+    assert.equal(await chrome.locator('body').evaluate(async(_,args)=>(await fetch(`/api/my/artifacts/${args.id}/sharing`,{method:'PUT',headers:{'Content-Type':'application/json','x-artifactbin-csrf':'1'},body:JSON.stringify({shares:[{email:args.email,role:args.role}]})})).status,{id,role,email:invitedEmail}),200);
+  }
+  await invited.goto(`${base}/a/${consentDoc.id}`);
+  await invited.getByText('1',{exact:true}).waitFor();
+  await invited.getByRole('button',{name:'Add shared row',exact:true}).click();
+  const reviewLink=invited.frameLocator('iframe[title="Artifact controls"]').getByRole('link',{name:'Review dataset change',exact:true});
+  await reviewLink.waitFor();
+  const reviewUrl=await reviewLink.getAttribute('href');
+  assert(reviewUrl.startsWith(controls+'/mutation-consent/'));
+  await Promise.all([invited.waitForURL(reviewUrl),reviewLink.click()]);
+  assert.equal(await invited.locator('iframe').count(),0,'consent is a top-level trusted page');
+  await invited.getByRole('heading',{name:'Review dataset change',exact:true}).waitFor();
+  const approvalErrors=[];
+  invited.on('console',m=>{if(m.type()==='error')approvalErrors.push(m.text());});
+  const approvalResponse=invited.waitForResponse(r=>r.url()===reviewUrl && r.request().method()==='POST',{timeout:10000}).catch(error=>{throw new Error(`${error.message}\n${approvalErrors.join('\n')}`);});
+  await invited.getByRole('button',{name:'Approve this change',exact:true}).click();
+  const approval=await approvalResponse;
+  assert.equal((await approval.request().allHeaders()).origin,controls,'native approval must carry the trusted Origin');
+  assert.equal(approval.status(),303,await approval.text().catch(()=>'(redirect body unavailable)'));
+  await invited.waitForURL(`${base}/a/${consentDoc.id}`);
+  await invited.getByText('3',{exact:true}).waitFor();
+  assert.equal((await invited.goto(reviewUrl)).status(),404,'an approved operation cannot be replayed');
+  await invited.close();
+  assert.equal((await peer.goto(`${base}/a/${privateDoc.id}`)).status(),200,'a browser holding the claimed token can render private content without an account session');
+  await peer.getByRole('heading',{name:'Private data'}).waitFor();
   await page.goto(`${base}/a/${privateDoc.id}`);
   await page.getByText('41',{exact:true}).waitFor();
   await page.getByRole('button',{name:'Change private query',exact:true}).click();
@@ -201,7 +277,7 @@ try {
   await reader.goto(`${base}/a/${seed.id}`);
   await reader.reload();
   await readerChrome.locator('[aria-label="Follow author"][aria-pressed="true"]').waitFor();
-  const privateStatus=await chrome.locator('body').evaluate(async (_,args)=>(await fetch(args.base+`/api/my/artifacts/${args.id}/sharing`,{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({visibility:'private'})})).status,{base,id:seed.id});
+  const privateStatus=await chrome.locator('body').evaluate(async (_,args)=>(await fetch(`/api/my/artifacts/${args.id}/sharing`,{method:'PUT',headers:{'Content-Type':'application/json','x-artifactbin-csrf':'1'},body:JSON.stringify({visibility:'private'})})).status,{id:seed.id});
   assert.equal(privateStatus,200);
   assert.equal((await reader.reload()).status(),404,'a nonmember loses private document access');
   assert.equal(await reader.getByRole('heading',{name:'Top-level controls'}).count(),0);
@@ -209,21 +285,31 @@ try {
   await page.getByRole('heading',{name:'Top-level controls'}).waitFor();
   await chrome.getByLabel('Open menu',{exact:true}).click();
   await chrome.getByLabel('Sign out',{exact:true}).click();
-  await page.waitForURL(base+'/');
-  assert.notEqual(await page.evaluate(async ()=>(await fetch('/api/page/session').then(r=>r.json())).kind),'account','cross-origin sign-out clears the account session');
+  await page.waitForURL(controls+'/');
+  const sessionKind=()=>page.evaluate(async ()=>{
+    const response=await fetch('/api/page/session',{headers:{'x-artifactbin-csrf':'1'}});
+    if (!response.ok) throw new Error(`Session read failed: ${response.status}`);
+    return (await response.json()).kind;
+  });
+  assert.equal(await sessionKind(),'anon','sign-out clears the account session but preserves independent agent capabilities');
   // Account logout deliberately does not revoke independently held agent
   // capabilities. Disconnect that browser capability through its own UI.
   await page.getByLabel('Open menu',{exact:true}).click();
+  const retainedCookies=await page.context().cookies();
   // Disconnect performs a same-URL full navigation. Polling fetch during that
   // transition fails in WebKit's outgoing context; await the navigation itself.
   await Promise.all([
     page.waitForNavigation({waitUntil:'domcontentloaded'}),
     page.getByLabel('Disconnect this browser',{exact:true}).click(),
   ]);
-  assert.notEqual(await page.evaluate(async ()=>(await fetch('/api/page/session').then(r=>r.json())).kind),'anon');
+  assert.equal(await sessionKind(),'none');
   assert.equal((await page.goto(`${base}/a/${seed.id}`)).status(),404,'disconnected browser loses private document access');
+  await page.context().addCookies(retainedCookies);
+  assert.equal((await page.goto(`${base}/a/${privateDoc.id}`)).status(),404,'retaining old cookies does not undo browser disconnect');
+  assert.equal((await peer.reload()).status(),200,'disconnecting one browser does not revoke another holding the same token');
+  await peer.close();
   await reader.close();
-  console.log('PASS: two-origin top-level editing/reload, local SQL, appearance, relation-only comments, mobile hit-testing, author isolation/navigation revocation, OTP login, like/follow persistence, private ACLs, logout and browser disconnect');
+  console.log('PASS: two-origin top-level editing/reload, local SQL, appearance, relation-only comments, mobile hit-testing, author isolation/navigation revocation, OTP login, like/follow persistence, human/anonymous private ACLs, trusted single-use mutation consent, logout, retained-cookie revocation and independent browser disconnect');
   }
 } finally {
   await browser?.close();

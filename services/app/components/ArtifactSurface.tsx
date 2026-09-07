@@ -226,6 +226,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const [copiedRef, setCopiedRef] = useState(false);
   const { id, editId, format, title, source, content, columns, bytes: fileBytes = 0, pages: filePages = null, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', accountSession = false, anonSession = false, version, captureKey = null, openAnnotations = 0, like = { liked: false, count: 0 }, follow = null } = props;
   const [editing, setEditing] = useState(false);
+  const [consentUrl,setConsentUrl]=useState<string|null>(null);
+  useEffect(()=>setConsentUrl(null),[id,editId,accountSession,anonSession]);
   /** A view-mode text selection asks edit mode to open on its containing node. */
   const [initialEditSelectionPath, setInitialEditSelectionPath] = useState<string | null>(null);
   /**
@@ -483,7 +485,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const frameRef = useRef<DocumentPeer | null>(null);
   if (controlsOnly && !frameRef.current) frameRef.current = {
     contentWindow: window.parent,
-    origin: new URL(appUrl('/')).origin,
+    origin: new URL(appUrl(`/a/${id}`)).origin,
     getBoundingClientRect: () => new DOMRect(0,0,innerWidth,innerHeight),
   };
   /**
@@ -629,7 +631,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ mutation: data.mutation, values: data.values ?? {}, ...(data.row ? { row: data.row } : {}), ...(data.localTables ? {localTables: data.localTables} : {}) }),
         });
-        const body = (await res.json().catch(() => ({}))) as { ok?: boolean; dataset?: string; version?: number; affected?: number; error?: string; detail?: string; local?: import('@/lib/story/local-state').LocalMutationResult };
+        const body = (await res.json().catch(() => ({}))) as { ok?: boolean; dataset?: string; version?: number; affected?: number; error?: string; detail?: string; consentUrl?: string; local?: import('@/lib/story/local-state').LocalMutationResult };
+        if(res.status===202 && body.error==='consent_required' && typeof body.consentUrl==='string'){
+          const url=new URL(body.consentUrl,location.origin);
+          if(url.origin===location.origin && /^\/mutation-consent\/[A-Za-z0-9_-]{43}$/.test(url.pathname) && !url.search && !url.hash) setConsentUrl(url.href);
+        }
         if (!res.ok || !body.ok) {
           reply({ type: STORY_MUTATE_RESULT_MESSAGE, id: data.id!, ok: false, error: body.detail ?? body.error ?? `write failed (${res.status})` });
           return;
@@ -1287,6 +1293,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   if (isDocumentFormat) {
     return (
       <>
+        {consentUrl && <div data-controls-region role="status" className="fixed bottom-20 right-4 z-50 max-w-sm rounded-xl border border-edge bg-surface p-4 shadow-lg">
+          <p className="text-sm">This document wants to change a dataset using your access.</p>
+          <a className="mt-2 inline-block underline" href={consentUrl} target="_top">Review dataset change</a>
+          <button className="ml-3" aria-label="Dismiss dataset approval" onClick={()=>setConsentUrl(null)}>Dismiss</button>
+        </div>}
         {controlsOnly && <><AppBar fixed title={shownTitle} label="Artifact controls" />
           <div data-controls-region className="fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-xl border border-edge bg-surface p-2 shadow-lg">
             <button aria-label="Like artifact" aria-pressed={likeRef.current.liked} onClick={() => void toggleLike(null)} className="rounded px-3 py-2">{likeRef.current.liked ? 'Liked' : 'Like'} · {likeRef.current.count}</button>

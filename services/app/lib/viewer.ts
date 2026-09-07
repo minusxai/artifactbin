@@ -38,6 +38,8 @@ export async function sessionViewer(request?: Request): Promise<Viewer> {
  */
 export interface RequestActor {
   viewer: Viewer;
+  /** Verified proxy session identity; never supplied by artifact markup. */
+  sessionId?: string;
   /** The presented token's id, for token-scope ownership checks. Null without a valid bearer. */
   tokenId: string | null;
   /**
@@ -70,6 +72,7 @@ function attachedActor(request: Request | undefined): RequestActor | null {
     viewer: actor.userId ? { userId: actor.userId, email: actor.email ?? null } : null,
     tokenId: actor.tokenId ?? null,
     credential: actor.credential,
+    ...(actor.sessionId ? {sessionId: actor.sessionId} : {}),
     ...(actor.heldTokenIds ? { heldTokenIds: actor.heldTokenIds } : {}),
   };
 }

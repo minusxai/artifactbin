@@ -89,7 +89,7 @@ export interface AppHarness {
  * SAME database instance; no row written by one test survives into the next; a table added to the schema later is wiped
  * without anyone editing a list.
  */
-export function useAppHarness(): AppHarness {
+export function useAppHarness(options: {afterClose?: () => void | Promise<void>} = {}): AppHarness {
   let database: ReturnType<typeof getDb> | undefined;
 
   beforeAll(() => {
@@ -116,6 +116,9 @@ export function useAppHarness(): AppHarness {
   afterAll(async () => {
     database = undefined;
     await resetDb();
+    // External fixtures (for example disposable PostgreSQL) outlive their
+    // clients. Keep database ownership here and make teardown order explicit.
+    await options.afterClose?.();
   });
 
   return {

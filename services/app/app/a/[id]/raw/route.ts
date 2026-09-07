@@ -288,7 +288,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       const chrome = new URL(request.url).searchParams.get('chrome') !== '0';
       const base = baseUrl(request);
       const controlsUrl = CONTROLS_ORIGIN && chrome && !key && base === new URL(PUBLIC_BASE_URL).origin && !new URL(request.url).pathname.endsWith('/raw')
-        ? `${CONTROLS_ORIGIN}/a/${artifact.id}${new URL(request.url).search}` : undefined;
+        ? `${CONTROLS_ORIGIN}/controls/a/${artifact.id}${new URL(request.url).search}` : undefined;
       /*
        * ?edit=1 — the OWNER's copy. In-place editing is the runtime, and a
        * document of pure prose ships none; asking for it here means pressing

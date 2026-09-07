@@ -46,7 +46,7 @@ export function ArtifactPage({ id: given }: { id?: string } = {}) {
   }, [id, search, page]);
   useEffect(() => {
     // The address heals to the canonical one — after the ACL, which the fetch already passed.
-    if (page && page !== 'missing' && !page.surface?.captureKey && page.canonical !== window.location.pathname) window.history.replaceState(null, '', page.canonical + search + window.location.hash);
+    if (!isControlsClient() && page && page !== 'missing' && !page.surface?.captureKey && page.canonical !== window.location.pathname) window.history.replaceState(null, '', page.canonical + search + window.location.hash);
   }, [page, search]);
   if (page === null) return <div aria-label="Loading page" />;
   if (page === 'missing') return <NotFoundPage />;

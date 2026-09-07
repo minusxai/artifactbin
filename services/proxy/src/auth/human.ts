@@ -29,6 +29,9 @@ import { randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
 import { say } from '../events';
 import { pgliteDialect } from './pglite';
+import { parseControlsOrigin } from '@artifactbin/utils';
+import { ensureProxySchema } from '../schema';
+import { createReadSessions } from './read-session';
 
 export interface OutgoingMail { to: string; kind: 'otp' | 'verify-email' | 'change-email' | 'other'; subject: string; text: string; otp?: string; url?: string }
 export interface Mailer { send(mail: OutgoingMail): Promise<void> }
@@ -95,7 +98,11 @@ const emailOf = async (db: Kysely<Record<string, unknown>>, userId: string): Pro
 export interface HumanAuth {
   /** Better Auth's HTTP handler: mount at /api/auth/*. */
   handler: (request: Request) => Promise<Response>;
-  sessions: { resolve(request: Request): Promise<{ userId: string; email: string; emailVerified: boolean } | null> };
+  sessions: {
+    resolve(request: Request): Promise<{ userId: string; sessionId?: string; email: string; emailVerified: boolean } | null>;
+    /** Only the main-host artifact read boundary may use this identity. */
+    resolveRead?(request: Request): Promise<{ userId: string; email?: string } | null>;
+  };
   /** The instance, for the proxy's own routes (sign-out on revoke, …). */
   api: ReturnType<typeof betterAuth>['api'];
 }
@@ -116,9 +123,13 @@ export type BetterAuthOptions = Parameters<typeof betterAuth>[0];
  */
 export function humanAuthOptions(opts: HumanAuthOptions, db: Kysely<Record<string, unknown>>): BetterAuthOptions {
   const trusted = ['email-otp', ...(opts.google ? ['google'] : []), ...(opts.oidc ? [opts.oidc.providerId] : [])];
+  const controls = opts.controlsOrigin ? parseControlsOrigin(opts.baseURL, opts.controlsOrigin) : null;
+  if (controls && new URL(controls).hostname === new URL(opts.baseURL).hostname) {
+    throw new Error('Controls authentication requires a distinct hostname; ports do not isolate cookies');
+  }
   return {
-    baseURL: opts.baseURL,
-    ...(opts.controlsOrigin ? {trustedOrigins:[new URL(opts.baseURL).origin, opts.controlsOrigin]} : {}),
+    baseURL: controls ?? opts.baseURL,
+    ...(controls ? { trustedOrigins: [controls] } : {}),
     secret: opts.secret,
     database: { db, type: 'postgres' },
     emailAndPassword: { enabled: false },
@@ -191,7 +202,14 @@ export function humanAuthOptions(opts: HumanAuthOptions, db: Kysely<Record<strin
       // The client's address as the proxy in front of us reports it.
       ipAddress: { ipAddressHeaders: ['x-forwarded-for'] },
       database: { generateId: ({ model }) => (model === 'user' ? usrId() : anyId(model)) },
-      useSecureCookies: opts.secure ?? false,
+      // Better Auth prepends __Secure- when useSecureCookies is true. Supply
+      // our complete __Host- prefix and Secure attribute together instead:
+      // browsers then forbid a parent domain from tossing a full-session cookie.
+      ...(controls ? {
+        useSecureCookies: false,
+        cookiePrefix: opts.secure ? '__Host-mx' : 'mx-full',
+        defaultCookieAttributes: { secure: opts.secure ?? false, httpOnly: true, path: '/', sameSite: 'lax' as const },
+      } : { useSecureCookies: opts.secure ?? false }),
     },
     account: { accountLinking: { enabled: true, trustedProviders: trusted } },
     user: {
@@ -302,15 +320,50 @@ export async function createHumanAuth(opts: HumanAuthOptions): Promise<HumanAuth
     await runMigrations();
   }
 
+  const controls = opts.controlsOrigin ? new URL(opts.controlsOrigin) : null;
+  const main = new URL(opts.baseURL);
+  const fullName = `${opts.secure ? '__Host-mx' : 'mx-full'}.session_token`;
+  const readName = `${opts.secure ? '__Secure-' : ''}mx-read`;
+  // Never pick the first of duplicate cookie names: Path/Domain collisions
+  // must fail closed, regardless of the browser's ordering.
+  const cookieValues = (headers: Headers, name: string): string[] => (headers.get('cookie') ?? '')
+    .split(';').map(c => c.trim()).filter(c => c.startsWith(`${name}=`)).map(c => c.slice(name.length + 1));
+  if (controls) await ensureProxySchema(queryable, schema);
+  const reads = controls ? createReadSessions(queryable, schema) : null;
+  const readCookie = (value: string, expires: Date) => `${readName}=${value}; Path=/; Domain=${main.hostname}; HttpOnly; SameSite=Lax; Expires=${expires.toUTCString()}${opts.secure ? '; Secure' : ''}`;
+
   return {
-    handler: (request) => auth.handler(request),
+    handler: async request => {
+      if (!controls) return auth.handler(request);
+      if (new URL(request.url).host !== controls.host || cookieValues(request.headers, fullName).length > 1) {
+        return Response.json({ error: 'auth_boundary' }, { status: 403 });
+      }
+      const original = await auth.handler(request);
+      const response = new Response(original.body,original);
+      const issued = response.headers.getSetCookie().find(c => c.startsWith(`${fullName}=`));
+      if (issued) {
+        const cookie = issued.split(';')[0];
+        const headers = new Headers({ cookie });
+        const session = await auth.api.getSession({ headers }).catch(() => null);
+        const handle = session?.session?.id ? await reads!.issue(session.session.id) : null;
+        response.headers.append('set-cookie', readCookie(handle?.token ?? '', handle?.expiresAt ?? new Date(0)));
+      }
+      response.headers.set('cache-control', 'no-store');
+      return response;
+    },
     api: auth.api,
     sessions: {
       async resolve(request) {
+        if (controls && (new URL(request.url).host !== controls.host || cookieValues(request.headers, fullName).length !== 1)) return null;
         const s = await auth.api.getSession({ headers: request.headers }).catch(() => null);
         if (!s?.user?.id) return null;
-        return { userId: s.user.id, email: s.user.email, emailVerified: !!s.user.emailVerified };
+        return { userId: s.user.id, sessionId: s.session.id, email: s.user.email, emailVerified: !!s.user.emailVerified };
       },
+      ...(reads ? { async resolveRead(request: Request) {
+        if (new URL(request.url).host !== main.host) return null;
+        const values = cookieValues(request.headers, readName);
+        return values.length === 1 ? reads.resolve(values[0]) : null;
+      } } : {}),
     },
   };
 }

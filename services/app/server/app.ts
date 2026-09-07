@@ -19,7 +19,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { actorReceiver } from '@artifactbin/utils';
+import { actorOf, actorReceiver } from '@artifactbin/utils';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { verifyExportKey } from '@/lib/export-key';
 import { ID_RE } from '@/lib/ids';
@@ -185,6 +185,13 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // Transport identity must be attached before any app middleware or route
   // asks viewer.ts who is calling.
   if (opts.actorSecret) actorReceiver(opts.actorSecret).mount(app);
+  // Split-host authentication is enforced by the proxy, never by legacy
+  // cookie fallbacks in app routes. Even anonymous requests must carry its
+  // verdict. A directly exposed backend or app-only boot must fail closed.
+  if (CONTROLS_ORIGIN) app.use('*', async (c, next) => {
+    if (!actorOf(c.req.raw)) return json({ error: 'proxy_required' }, 403, { 'Cache-Control': 'no-store' });
+    return next();
+  });
   if (opts.onTokenRevoked) {
     app.use('/api/*', async (c, next) => {
       await next();
@@ -209,7 +216,10 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
    * The endpoints stay the truth; this is the same data, arriving earlier.
    */
   const page = async (c: { req: { raw: Request; url: string } }, status?: 200 | 404) => {
-    const html = await index(c.req.url);
+    const source = await index(c.req.url);
+    const html = CONTROLS_ORIGIN && baseUrl(c.req.raw) === CONTROLS_ORIGIN
+      ? source.replace('</head>', () => `<script type="application/json" id="mx-app-config">${safeJson({apiOrigin:new URL(PUBLIC_BASE_URL).origin})}</script></head>`)
+      : source;
     const data = await bootstrapFor(c.req.raw);
     // An @-address whose profile resolves to NOTHING is a miss, and a miss is
     // 404 as a STATUS (the rule documents already live by) — the SPA is still
@@ -226,20 +236,26 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   };
 
   const pageData = (dir: string) => ROUTES.find((r) => r.dir === dir)?.module.GET as ((request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>) | undefined;
-  // This origin serves trusted UI code, never an artifact document or API.
-  // Its SPA fetches permission-checked data from the main origin with the
-  // browser's existing host-only cookies; no private bootstrap is embedded.
+  // Full trusted pages and same-origin APIs live on i. Only this dedicated
+  // controls shell is frameable. Author documents always remain on main.
   if (CONTROLS_ORIGIN) app.use('*', async (c,next) => {
-    if (baseUrl(c.req.raw) !== CONTROLS_ORIGIN) return next();
     const url = new URL(c.req.url);
-    if (c.req.method === 'GET' && candidateDocument(url.pathname)) {
+    if (baseUrl(c.req.raw) !== CONTROLS_ORIGIN) {
+      if (baseUrl(c.req.raw) === new URL(PUBLIC_BASE_URL).origin && c.req.method === 'GET'
+        && /^\/(?:login|account|tokens|trash|chat|datasets)(?:\/|$)/.test(url.pathname)) return c.redirect(`${CONTROLS_ORIGIN}${url.pathname}${url.search}`,302);
+      return next();
+    }
+    if (c.req.method === 'GET' && /^\/controls\/a\/[A-Za-z0-9]+$/.test(url.pathname)) {
       const shell = (await index(c.req.url)).replace('</head>', () => `<script type="application/json" id="mx-controls-config">${safeJson({apiOrigin:new URL(PUBLIC_BASE_URL).origin})}</script><base target="_top" /><style>html,body,#root{background:transparent!important}</style></head>`);
       const main = new URL(PUBLIC_BASE_URL).origin;
       const csp = APP_CSP.replace("connect-src 'self'", `connect-src 'self' ${main}`).replace("img-src 'self'", `img-src 'self' ${main}`).replace("frame-src 'self'", `frame-src 'self' ${main}`).replace("frame-ancestors 'self'", `frame-ancestors ${main}`);
       return new Response(shell,{headers:{...APP_SECURITY_HEADERS,'content-security-policy':csp,'content-type':'text/html; charset=utf-8','cache-control':'no-store'}});
     }
-    if (c.req.method === 'GET' && /^\/(?:assets\/|story\/|favicon\.|icon\.|logo-[\w.-]+\.png$)/.test(url.pathname)) return next();
-    return new Response('Not found',{status:404});
+    const documentApi = /^\/a\/[A-Za-z0-9]+\/(?:query|mutate|events(?:\/frame)?)$/.test(url.pathname);
+    if ((!documentApi && /^\/(?:a(?:\/|$)|@)/.test(url.pathname)) || /^\/assets\/[a-f0-9]{64}(?:[./]|$)/i.test(url.pathname)) return new Response('Not found',{status:404});
+    await next();
+    c.header('content-security-policy', (c.res.headers.get('content-security-policy') ?? APP_CSP).replace(/frame-ancestors[^;]*/, "frame-ancestors 'none'"));
+    c.header('cache-control','no-store');
   });
   const artifactData = pageData('/api/page/artifact/[id]');
   const profileData = pageData('/api/page/profile/[user]/[[...path]]');

@@ -163,7 +163,7 @@ describe('folders in list view', () => {
     fireEvent.click(screen.getByLabelText('List view'));
     fireEvent.click(screen.getByLabelText('Expand folder Reports'));
     await waitFor(() => expect(screen.getByLabelText('Open Board update')).toBeTruthy());
-    expect(fetch).toHaveBeenCalledWith('/api/page/artifact/rep001', { credentials: 'same-origin' });
+    expect(fetch).toHaveBeenCalledWith('/api/page/artifact/rep001', { credentials: 'same-origin', headers: new Headers({'x-artifactbin-csrf': '1'}) });
   });
 
   it('keeps expanded children with their parent when paginating root rows', () => {

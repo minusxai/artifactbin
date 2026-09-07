@@ -311,7 +311,7 @@ describe('sharing from the overflow menu', () => {
     expect(screen.getByRole('dialog', { name: 'Sharing' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Share “Doc share-target”' })).toBeInTheDocument();
     await screen.findByLabelText('Make public');
-    expect(fetchMock).toHaveBeenCalledWith('/api/my/artifacts/share-target/sharing');
+    expect(fetchMock).toHaveBeenCalledWith('/api/my/artifacts/share-target/sharing', {headers: new Headers({'x-artifactbin-csrf': '1'})});
     fireEvent.click(screen.getByLabelText('Copy link'));
     expect(copy).toHaveBeenCalledWith(`${location.origin}/a/share-target`);
     fireEvent.click(screen.getByLabelText('Close sharing'));

@@ -1,7 +1,140 @@
 # Auth boundary validation — 7 September 2026
 
-Base: `9138270`, `feat/isolated-author-scripts`, plus the local patch in this working tree.
+Current base: main `546325f`, integrated with the feature work at `7bd1c9f`,
+on `work/security-stage-one`. The newer implementation below is still local.
 No production deployment, session migration, or PR push was performed.
+
+## Stage 1 verdict: incomplete
+
+The real human-session split and browser topology work in the measured flows.
+This is not a sign-off for the entire architecture. The combined-head matrix
+on the 546325f base passed: validate, 6,127 tests (one optional S3 skip), build,
+51/51 browser gates in 142 seconds without retry, and the complete Firefox
+and WebKit controls/consent flows. Main subsequently advanced to 323fa5d
+(libraries and comment selection); its integration must be tested separately.
+Boundary-preserving rollback, staging and real-device evidence remain open.
+Do not advance to Stage 2 on the old prototype results.
+
+### New integrated evidence
+
+- The first real mutation-consent slice works end-to-end in Chromium:
+  non-owner artifact button → trusted review link → unframeable top-level
+  approval page → single dataset commit → return to updated document. It uses
+  existing app-owned hashed/expiring codes and a verified session identity.
+  Six real-route checks cover expiry, read-only identity, wrong session/origin,
+  changed document, revoked dataset access and concurrent/replayed approval.
+  The original write-before-approval tests were red before implementation.
+  This approves ONE exact operation, not reusable manifest grants; failures
+  and uncertain outcomes never retry automatically. Resolved defaults are
+  shown in the review. Owner-document and explicit bearer writes retain their
+  existing authorization; local-state operations do not need approval.
+- Browser-only consent failures were fixed without weakening origin checks:
+  `no-referrer` made the native POST carry `Origin: null`; `same-origin`
+  preserves the trusted Origin without cross-origin referrer disclosure.
+  Chromium also enforced `form-action` on the return redirect. Only the
+  server-owned document return is now admitted. Native OAuth approval had
+  omitted its registered callback origin; a red regression caught it, and
+  the Chromium gate now completes actual native approval + PKCE token mint.
+- A private-document ACL revocation between SQL and commit initially returned
+  200. The commit now locks document/target in stable order, rechecks roles in
+  a fresh statement inside the transaction, and sharing changes take the same
+  row lock. Real PostgreSQL tests prove both document and dataset revocations
+  block the pending mutation and leave data unchanged. The full run exposed
+  a fixture teardown race; its app pool now closes before Docker is stopped.
+- The actual OAuth-issued MCP token initially returned 200 from the general
+  artifact API despite the proxy's audience rejection: a legacy app resolver
+  re-read the unchanged bearer header. The session boundary now removes
+  audience-rejected known bearer tokens before downstream handlers. A full
+  regression then caught stripping the operator's separate admin secret too;
+  unknown/non-token credentials remain available to its verifier, without
+  granting an app actor. Accepted tokens and OAuth client-auth schemes remain
+  intact. The real browser-issued MCP token gets 401 outside its resource;
+  all 18 focused proxy/OAuth/operator-revocation checks pass after this fix.
+
+- Real Better Auth OTP issues distinct host-only `__Host-mx.session_token`
+  and domain-scoped `__Secure-mx-read` cookies. Read handles store only hashes,
+  join the live session on each request, and stop resolving after logout,
+  expiry or revocation. Duplicate cookies fail closed.
+- Real Better Auth OIDC with a disposable provider uses the trusted callback
+  hostname, rejects main-host callbacks and forged/replayed state, and issues
+  the same cookie split. This does not test a production provider registration.
+- Real OTP → native trusted OAuth approval → main-host MCP PKCE exchange
+  passes. Wrong origins/sessions, expired/revoked approvals and replay are
+  rejected; two concurrent approvals yield exactly one success.
+- A legacy-cookie cutover rehearsal preserves user identity on fresh login
+  and refuses legacy cookies in the new topology. The old policy still accepts
+  its old cookies: disabling the controls boundary is NOT a safe rollback.
+- Main no longer accepts ambient account cookies. Only document reads resolve
+  read authority. The proxy strips cookies before forwarding main requests,
+  preventing legacy app handlers from decoding and widening that verdict.
+  The regression was red before the fix. Main token adoption is also denied.
+- Token-held browser sessions now have a per-browser nonce and separate hashed
+  read handle. Actual claimed-token private reads work without a human session.
+  Disconnect revokes copied full/read cookies from that browser, not another
+  browser holding the same token. A red regression exposed the token reader's
+  positive cache; browser resolution now invalidates it before checking liveness.
+- A first-time invitee initially received 404 after successful OTP login: an
+  unresolved email invitation needed the verified email before an app profile
+  existed. The read identity now includes that server-only ACL claim. All three
+  engines pass the first-login flow and assert the email is absent from HTML.
+- Controls-enabled app servers reject requests lacking the proxy's attached or
+  signed actor verdict. The direct-backend regression was red (302 instead of
+  403), then green; a forged transport header is rejected and valid anonymous
+  proxy requests still work. Legacy app-only mode is unchanged when disabled.
+- Trusted APIs require an exact origin and custom header, not credentialed
+  main-host CORS. Native SSE has a narrow same-origin Fetch Metadata exception.
+  Native OAuth consent uses a one-time session-bound token. These are distinct
+  mechanisms; there is no universal synchronizer-token implementation.
+- Only `/controls/a/<id>` is frameable by main. Trusted login/workspace/token
+  pages are top-level, and author routes/imported active assets are denied.
+  Hono response replacement restored old CSP headers; using its header API
+  fixed the actual OAuth framing regression, including immutable redirects.
+- The new real two-host application gate passed Chromium, Firefox and WebKit:
+  editing/reload, local SQL, comments, mobile controls, author attacks, OTP,
+  social actions, private ACLs, logout and browser disconnect. The latest
+  direct-backend guard still requires the rebuilt combined-head gate rerun.
+- The login helper itself had a false positive: a polling API treated its async
+  predicate as truthy. BrowserOS independently measured the missing-header
+  session request as 403, protected request as 200. The helper now awaits and
+  checks the actual account response; its negative regression and all three
+  engine flows pass after that correction.
+- Actual PostgreSQL concurrency: a second transaction edits the document while
+  a real dataset mutation is pending. The final commit locks/checks the document,
+  waits, and returns 409 without changing the dataset. The test asserts that the
+  app uses its PostgreSQL adapter, not the embedded adapter. This does not prove
+  production mutation consent or every concurrent ACL-change case.
+- Last complete pre-consent suite: **6,117 tests**, one skip
+  (1,289 API + 3,728 Node + 1,094 UI + 6 CLI); all 51 browser gates and
+  Firefox/WebKit controls passed with disposable local object storage.
+  The final merged-head suite, including consent and MCP fallback protection,
+  is running. A later API run's passing assertions did NOT count as green:
+  PostgreSQL teardown emitted unhandled errors. Cleanup now runs through the
+  harness-owned `afterClose` hook, preserving its database-ownership contract.
+  Latest main `546325f` is merged and lockfile install/dry-run checks pass.
+- The earlier 51-gate run failed the new PostgreSQL-source fixture because its
+  runner disallowed its own loopback database. Only disposable runner-owned
+  servers selecting that gate now enable private-network dataset access; the
+  isolated gate passed. Production and externally supplied servers are unchanged.
+
+### Reproduce the new auth checks
+
+```sh
+npx vitest run --config vitest.config.ts --project=node services/proxy/__tests__/read-session.test.ts services/proxy/__tests__/human-auth-boundary.test.ts services/proxy/__tests__/oidc-browser-boundary.test.ts services/proxy/__tests__/browser-boundary.test.ts services/proxy/__tests__/oauth-browser-boundary.test.ts
+npm run validate
+npm test
+npm run build
+node scripts/gate-trusted-controls.mjs --browser=chromium
+node scripts/gate-trusted-controls.mjs --browser=firefox
+node scripts/gate-trusted-controls.mjs --browser=webkit
+```
+
+Run suite/build/browser phases sequentially: the unit-test setup rebuilds the
+runtime manifest. The browser gate uses `node:http` for its explicit Host
+header; Node 22 global fetch did not preserve that header in a measured echo
+probe. Do not count a gate that failed to reach the configured host as an auth
+result.
+
+## Earlier evidence (before the integrated human-auth split)
 
 ## Decisions supported by execution
 

@@ -75,8 +75,9 @@ import * as r71 from '@/app/docs/[[...path]]/route';
 import * as r72 from '@/app/health/route';
 import * as r73 from '@/app/llms.txt/route';
 import * as r74 from '@/app/mcp/route';
-import * as r75 from '@/app/tiles/[...tile]/route';
-import * as r76 from '@/app/webfonts/[file]/route';
+import * as r75 from '@/app/mutation-consent/[code]/route';
+import * as r76 from '@/app/tiles/[...tile]/route';
+import * as r77 from '@/app/webfonts/[file]/route';
 
 export interface RouteEntry { path: string; dir: string; methods: string[]; module: Record<string, unknown> }
 export const ROUTES: RouteEntry[] = [
@@ -155,6 +156,7 @@ export const ROUTES: RouteEntry[] = [
   { path: "/health", dir: "/health", methods: ["GET"], module: r72 },
   { path: "/llms.txt", dir: "/llms.txt", methods: ["GET"], module: r73 },
   { path: "/mcp", dir: "/mcp", methods: ["GET","POST","DELETE"], module: r74 },
-  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r75 },
-  { path: "/webfonts/:file", dir: "/webfonts/[file]", methods: ["GET"], module: r76 },
+  { path: "/mutation-consent/:code", dir: "/mutation-consent/[code]", methods: ["GET","POST"], module: r75 },
+  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r76 },
+  { path: "/webfonts/:file", dir: "/webfonts/[file]", methods: ["GET"], module: r77 },
 ];

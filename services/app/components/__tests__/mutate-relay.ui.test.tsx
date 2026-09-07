@@ -75,6 +75,15 @@ const ask = (source: Window | null, message: Record<string, unknown>) =>
   window.dispatchEvent(new MessageEvent('message', { data: message, source: source as unknown as MessageEventSource }));
 
 describe('the write relay (page side)', () => {
+  it('offers trusted top-level review rather than treating pending consent as a completed write',async()=>{
+    const consentUrl=location.origin+'/mutation-consent/'+'a'.repeat(43);
+    vi.stubGlobal('fetch',vi.fn(async()=>Response.json({error:'consent_required',consentUrl},{status:202})));
+    const {container,findByRole}=surface();const win=frameWindow(container);
+    ask(win,{type:STORY_MUTATE_MESSAGE,id:12,mutation:'vote',values:{}});
+    const link=await findByRole('link',{name:'Review dataset change'});
+    expect(link).toHaveAttribute('href',consentUrl);expect(link).toHaveAttribute('target','_top');
+    expect(posted.find(m=>m.type===STORY_MUTATE_RESULT_MESSAGE)).toMatchObject({id:12,ok:false});
+  });
   it('calls the document\'s mutate endpoint with the name and values, and answers the frame', async () => {
     const { container } = surface();
     const win = frameWindow(container);

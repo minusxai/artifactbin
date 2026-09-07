@@ -68,6 +68,7 @@ export interface OAuthRoutesOptions {
   upstream: Upstream;
   trustedHops: number;
   publicBaseUrl?: string;
+  controlsOrigin?: string;
 }
 
 async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId: string; resource: string; scope: string }): Promise<{ id: string; token: string; expiresAt?: string }> {
@@ -87,7 +88,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
   const base = (request: Request) => baseUrlOf(request, o.trustedHops, o.publicBaseUrl);
   const resource = (request: Request) => `${base(request)}/mcp`;
   const meta = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600', 'Access-Control-Allow-Origin': '*' } });
-  app.get('/.well-known/oauth-authorization-server', (c) => meta(authServerMetadata(base(c.req.raw))));
+  app.get('/.well-known/oauth-authorization-server', (c) => meta(authServerMetadata(base(c.req.raw), o.controlsOrigin)));
   app.get('/.well-known/oauth-protected-resource', (c) => meta(protectedResourceMetadata(base(c.req.raw))));
   app.get('/.well-known/oauth-protected-resource/mcp', (c) => meta(protectedResourceMetadata(base(c.req.raw))));
 
@@ -125,6 +126,14 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     const actor = c.get('actor') ?? ANONYMOUS;
     const fields = `<input type="hidden" name="client_id" value="${esc(clientId)}"><input type="hidden" name="redirect_uri" value="${esc(redirectUri)}"><input type="hidden" name="code_challenge" value="${esc(codeChallenge)}"><input type="hidden" name="resource" value="${esc(requestedResource)}"><input type="hidden" name="scope" value="${esc(scope)}"><input type="hidden" name="state" value="${esc(state)}">`;
     if (actor.credential === 'session' && actor.userId) {
+      if (o.controlsOrigin) {
+        if (!actor.sessionId) return page('artifactbin — sign in again', '<h1>Please sign in again</h1>',401);
+        const approval = await o.oauth.issueConsent({ userId: actor.userId, clientId, redirectUri,
+          resource: requestedResource, scope, codeChallenge, state }, actor.sessionId);
+        return page('artifactbin — connect', `<h1>Connect to artifactbin</h1>
+        <p>Allow <strong>${esc(client!.clientName)}</strong> to publish artifacts for your account?</p>
+        <form method="POST" action="/oauth/authorize/approve"><input type="hidden" name="approval" value="${approval}"><button type="submit" aria-label="Approve connection">Approve</button></form>`,200,redirectUri);
+      }
       return page('artifactbin — connect', `<h1>Connect to artifactbin</h1>
       <p>Your coding agent wants to publish artifacts. New artifacts will belong to <strong>${esc(actor.email ?? 'your account')}</strong>.</p>
       <form method="POST" action="/oauth/authorize/approve">${fields}<input type="hidden" name="grant" value="user"><button type="submit" aria-label="Approve connection">Approve</button></form>`, 200, redirectUri);
@@ -138,6 +147,18 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
 
   app.post('/oauth/authorize/approve', async (c) => {
     const form = await c.req.formData();
+    if (o.controlsOrigin) {
+      const actor = c.get('actor') ?? ANONYMOUS;
+      if (actor.credential !== 'session' || !actor.userId || !actor.sessionId) return c.json({ error: 'unauthorized' },401);
+      const grant = await o.oauth.consumeConsent(String(form.get('approval') ?? ''), actor.userId, actor.sessionId);
+      if (!grant) return c.json({ error: 'invalid_request' },400);
+      const client = await o.oauth.client(grant.clientId);
+      if (!client || !client.redirectUris.some(uri => sameRedirectTarget(uri,grant.redirectUri))) return c.json({ error: 'invalid_request' },400);
+      const url = new URL(grant.redirectUri);
+      url.searchParams.set('code',await createAuthCode(o.oauth,grant,grant.codeChallenge));
+      if (grant.state) url.searchParams.set('state',grant.state);
+      return Response.redirect(url,303);
+    }
     const clientId = String(form.get('client_id') ?? '');
     const redirectUri = String(form.get('redirect_uri') ?? '');
     const codeChallenge = String(form.get('code_challenge') ?? '');
