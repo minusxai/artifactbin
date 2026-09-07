@@ -47,24 +47,33 @@ A private, bounded MessageChannel exposes declared signals, query refreshes and
 mutations. Restricted reactive JSX, Dialog primitives and SQL local state compose
 document UI without DOM scripts. Inline table writes are page-local; scalar
 Values retain their existing URL-backed state. Persistent dataset writes retain
-their existing permissions.
+their existing permissions. Authorized mutations commit immediately, including
+from non-owner documents: there is no extra dataset-consent prompt. Scripts can
+invoke these declared mutations automatically; a relay message is not proof of
+a human gesture.
 
 By default, served documents also retain the opaque document sandbox. To keep
 owner/editor documents top-level with trusted app controls in a child iframe,
 optionally set `APP__CONTROLS_ORIGIN=https://i.<your-public-host>` in both app and
 proxy processes. Provision HTTPS and route that hostname to the same proxy first;
 preserve public Host/protocol forwarding headers. The controls host serves trusted
-app code. Existing host-only HttpOnly cookies stay on the main/API host, reached
-through exact-origin credentialed CORS. Do not add parent-domain cookies or
-wildcard credentialed CORS. Login stays on the main host. Account sign-out and
+app code and full authenticated browser APIs. The main host receives only
+read-scoped identity; it cannot use that credential for mutations. Dataset
+mutations and edit operations relay through the trusted controls, which call
+their own host with the exact-origin/CSRF checks and current server ACLs.
+Do not add parent-domain full-authority cookies or wildcard credentialed CORS.
+Login stays on the trusted controls host. Account sign-out and
 disconnecting separately held agent capabilities remain distinct actions.
 
 In this opt-in topology the top-level document is not opaque; author code still
 is. CSS may hide controls, and this is not a clickjacking guarantee or a hard CPU
 quota. Raw/export documents retain their old sandbox. Unset the option to restore
-the previous serving topology. Run `node scripts/gate-trusted-controls.mjs` after
+the previous serving topology (not a boundary-preserving rollback).
+Run `node scripts/gate-trusted-controls.mjs` after
 a build for local HTTPS, login, editing, private-data and hostile-script checks.
 No production DNS or session migration is performed by enabling this code.
+Repeat with `--anonymous-live=false` to verify the optional anonymous-live
+off-switch; authenticated streams and local UI remain available.
 
 **Import from the web.** Point at an image, a PDF, a font or a CSV and the
 server fetches it once, stores a copy, and serves it from this origin:

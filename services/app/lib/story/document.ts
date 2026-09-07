@@ -86,7 +86,7 @@ export interface StoryDocumentInput {
    * screenshot has no reader to keep up to date, and an exporter that adopted
    * an edit mid-shot would photograph two documents at once.
    */
-  live?: { id: string; editId: string } | null;
+  live?: { id: string; editId: string; enabled?: boolean } | null;
   /**
    * The runtime's lazy chunks (lib/story/runtime-asset) — preloaded, but only
    * by a document that will actually reach for one. See {@link drawsChart}.
@@ -396,9 +396,8 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    */
   const readerChrome = chrome && !input.controlsUrl
     ? renderReaderChrome({
-      // The document knows its own id only when it is live enough to hear its
-      // author; a capture and a unit render have none, and the like/comment
-      // log then names nothing rather than guessing.
+      // Snapshot-only readers still need document identity for their chrome;
+      // live eligibility controls subscription attributes, not attribution.
       artifactId: live?.id ?? null,
       // The STORED title, never the Helmet's: the Helmet is head content and
       // nothing of it may reach the body (a rule this file already lives by),
@@ -581,7 +580,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
     `${fontPreloads}${modulePreloads}${styles}</head>` +
     // The live attributes are what the reading-position module reads to open
     // this document's own stream (lib/story-runtime/anchor-entry).
-    `<body ${STORY_ROOT_ATTR}${input.controlsUrl ? ' data-mx-controls="true"' : ''}${live ? ` data-mx-live-id="${escapeHtml(live.id)}" data-mx-live-edit="${escapeHtml(live.editId)}"` : ''}>` +
+    `<body ${STORY_ROOT_ATTR}${input.controlsUrl ? ' data-mx-controls="true"' : ''}${live && live.enabled !== false ? ` data-mx-live-id="${escapeHtml(live.id)}" data-mx-live-edit="${escapeHtml(live.editId)}"` : ''}>` +
     `<div id="${STORY_ROOT_ID}">${bodyHtml}</div>` +
     readerChrome +
     /*

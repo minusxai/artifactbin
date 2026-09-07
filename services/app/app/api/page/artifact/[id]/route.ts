@@ -19,7 +19,7 @@ import { loadDatasetRows } from '@/lib/story/dataset-store';
 import { ARTIFACT_FORMATS, type ArtifactFormat } from '@/lib/story/input';
 import { canonicalArtifactPath } from '@/lib/urls';
 import { ownerUsername } from '@/lib/users';
-import { browserSessionKind, roleFor, sessionActor } from '@/lib/viewer';
+import { browserSessionKind, canReceiveLiveUpdates, roleFor, sessionActor } from '@/lib/viewer';
 import { accountWorkspaceFor } from '@/lib/workspace';
 import { canAnnotate } from '@/lib/share-roles';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
@@ -73,6 +73,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // asked: an unclaimed folder is owned by the token that made it, and the
       // account viewer alone would answer its own owner a stranger's shelf.
       folder,
+      liveEnabled: canReceiveLiveUpdates(actor),
       ...(workspace ? { workspace } : {}),
     }, 200, { 'Cache-Control': 'no-store' });
   }
@@ -100,6 +101,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       ? { userId: artifact.user_id, following: viewerId ? await has(viewerId, 'follow', artifact.user_id) : false, count: await count('follow', artifact.user_id) }
       : null,
     surface: {
+      liveEnabled: !exporting && canReceiveLiveUpdates(actor),
       captureKey: exporting ? key : null,
       id: artifact.id,
       editId: artifact.edit_id,

@@ -80,6 +80,12 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('the head', () => {
+  it('does not subscribe snapshot-only folders',()=>{
+    const connected=vi.fn();
+    vi.stubGlobal('EventSource',class {constructor(){connected();} addEventListener(){} removeEventListener(){} close(){}});
+    render(<MemoryRouter><FolderPage folder={folder()} role="viewer" liveEnabled={false}/></MemoryRouter>);
+    expect(connected).not.toHaveBeenCalled();
+  });
   it('gives the NAME the only weight on the page, and the count as a sentence', () => {
     draw({ folder: folder(), role: 'owner' });
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Reports');

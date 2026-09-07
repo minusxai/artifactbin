@@ -14,12 +14,16 @@ import {loginViaEmail} from './lib/mail-login.mjs';
 
 const scratch = mkdtempSync(join(tmpdir(),'afbin-controls-gate-'));
 const interactive=process.argv.includes('--interactive');
+const anonymousLive=process.argv.find(arg=>arg.startsWith('--anonymous-live='))?.split('=')[1] !== 'false';
+// A delegated worktree may reserve its own port block; default gates remain ephemeral.
+const portBase=Number(process.argv.find(arg=>arg.startsWith('--port-base='))?.split('=')[1] ?? 0);
+assert(Number.isInteger(portBase) && portBase>=0 && portBase<=65400,'valid port block');
 // Planning validation can run the exact product gate in other engines.
 const engineName=process.argv.find(arg=>arg.startsWith('--browser='))?.split('=')[1] ?? 'chromium';
 const engine={chromium,firefox,webkit}[engineName];
 assert(engine,`Unknown browser engine: ${engineName}`);
 const socket = net.createServer();
-await new Promise(resolve => socket.listen(0,'127.0.0.1',resolve));
+await new Promise(resolve => socket.listen(portBase ? portBase+1 : 0,'127.0.0.1',resolve));
 const port = socket.address().port;
 await new Promise(resolve => socket.close(resolve));
 const backend = `http://localhost:${port}`;
@@ -31,7 +35,7 @@ const tls = httpsServer({key:readFileSync(join(scratch,'key.pem')),cert:readFile
   upstream.on('error',()=>{res.writeHead(502);res.end();});
   req.pipe(upstream);
 });
-await new Promise(resolve=>tls.listen(0,'127.0.0.1',resolve));
+await new Promise(resolve=>tls.listen(portBase,'127.0.0.1',resolve));
 const tlsPort = tls.address().port;
 const hostname=interactive || engineName!=='chromium' ? '127.0.0.1.nip.io' : 'artifactbin.test';
 const base = `https://${hostname}:${tlsPort}`, controls = `https://i.${hostname}:${tlsPort}`;
@@ -47,6 +51,7 @@ const mainFetch = (url, init = {}) => new Promise((resolve,reject) => {
 const server = spawn(process.execPath,['--import',resolve('scripts/lib/controls-mail-stub.mjs'),resolve('dist/proxy-server.mjs')],{
   cwd:resolve('services/app'),stdio:['ignore','ignore','inherit'],env:{...process.env,
     NODE_ENV:'production',APP__PORT:String(port),APP__PUBLIC_BASE_URL:base,APP__CONTROLS_ORIGIN:controls,
+    FEATURE_FLAG__LIVE_UPDATES_ANON_ENABLED:String(anonymousLive),
     EMAIL__RESEND_API_KEY:'mxmx_test_controls_mail',EMAIL__DEV_OUTBOX_PATH:join(scratch,'mail.jsonl'),
     AUTH__SECRET:randomBytes(32).toString('hex'),DATABASE_URL:'pglite://memory',SQL__SERVICE_URL:'',BROWSER__SERVICE_URL:'',EVENTS__SERVICE_URL:'',
     OBJECT_STORE__LOCAL_DIR:join(scratch,'objects'),EXPORT__INTERNAL_ORIGIN:backend,ARTIFACTS__ALLOW_PUBLIC:'1',
@@ -101,6 +106,31 @@ try {
     await new Promise(resolve=>{process.once('SIGINT',resolve);process.once('SIGTERM',resolve);});
   } else {
   browser = await engine.launch(engineName==='chromium' ? {args:['--host-resolver-rules=MAP artifactbin.test 127.0.0.1, MAP i.artifactbin.test 127.0.0.1','--proxy-bypass-list=*']} : {});
+  // Actual production configuration, no client mocks: an anonymous reader
+  // either subscribes normally or never opens a connection, including reload.
+  const snapshot=await browser.newPage({ignoreHTTPSErrors:true});
+  const anonStreams=[];
+  snapshot.on('request',request=>{if(new URL(request.url()).pathname.endsWith('/events')) anonStreams.push(request.url());});
+  for(let load=0;load<2;load++){
+    await snapshot.goto(`${base}/a/${seed.id}`);
+    await snapshot.frameLocator('iframe[title="Artifact controls"]').getByRole('button',{name:'Open artifact controls',exact:true}).waitFor();
+    await snapshot.waitForFunction(()=>!!window.mx);
+    await snapshot.getByRole('button',{name:'Increment',exact:true}).click();
+    await snapshot.waitForFunction(()=>window.mx.params.get('count')===1);
+    if(anonymousLive) await snapshot.waitForTimeout(300);
+    assert.equal(anonStreams.length>0,anonymousLive,'anonymous live configuration governs the actual controls stream, not local UI');
+  }
+  if(!anonymousLive){
+    assert.equal(anonStreams.length,0);
+    // A stale pre-flag client receives EventSource's terminal response, not a
+    // retrying error. The stream endpoint also refuses frame-poll bypasses.
+    await snapshot.evaluate(()=>{window.__probeStream=new EventSource(location.pathname+'/events');});
+    await snapshot.waitForTimeout(3500);
+    assert.equal(anonStreams.length,1,'204 prevents stale clients from reconnecting');
+    const status=await Promise.all(['events/frame','events/authorize'].map(path=>mainFetch(`${backend}/a/${seed.id}/${path}`).then(r=>r.status)));
+    assert.deepEqual(status,[204,204]);
+  }
+  await snapshot.close();
   const page = await browser.newPage({ignoreHTTPSErrors:true,viewport:{width:1280,height:900}});
   page.setDefaultTimeout(10000);
   page.on('response',response=>{if(response.status()>=400) console.error('HTTP',response.status(),response.url());});
@@ -113,6 +143,8 @@ try {
   const peer=await browser.newPage({ignoreHTTPSErrors:true});
   await becomeOwner(peer,controls,seed.token);
   const privilegedRequests=[];
+  const authenticatedStreams=[];
+  page.on('request',request=>{if(new URL(request.url()).pathname.endsWith('/events')) authenticatedStreams.push(request.url());});
   page.on('request',r=>{if(r.method()!=='GET' && /\/(like|follow|edits|annotations)(?:\?|$)/.test(new URL(r.url()).pathname)) privilegedRequests.push(r.url());});
   await page.goto(`${base}/a/${seed.id}`);
   assert.equal(await page.locator('iframe[title="artifact"]').count(),0);
@@ -125,6 +157,7 @@ try {
     for (const frame of page.frames()) console.error('Frame:',frame.url(),(await frame.locator('body').innerText()).slice(0,700));
     throw error;
   });
+  assert(authenticatedStreams.length>0,'a token-holding authenticated browser stays live under either flag');
   assert.equal(await chrome.locator('body').evaluate((_,main)=>new Promise(resolve=>{
     const listener=e=>{if(e.source===parent && e.origin===main && e.data==='mx:painted') {clearTimeout(timer);removeEventListener('message',listener);resolve(true);}};
     const timer=setTimeout(()=>{removeEventListener('message',listener);resolve(false);},1500);
@@ -246,35 +279,22 @@ try {
   assert.equal(invitedResponse.status(),200,'first login can open an email-shared private artifact directly, without visiting the workspace first');
   assert.equal((await invitedResponse.text()).includes(invitedEmail),false,'verified invitation email is a server-only ACL claim, not parent-page state');
   await invited.getByRole('heading',{name:'Private data'}).waitFor();
-  const publishConsent=async body=>{
+  const publishShared=async body=>{
     const response=await mainFetch(backend+'/api/artifacts',{method:'POST',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify(body)});
     assert.equal(response.status,201,await response.clone().text());return response.json();
   };
-  const consentDataset=await publishConsent({dataset:[{n:1}],access:'readwrite'});
-  const consentDoc=await publishConsent({markup:`<Helmet><Query name="rows">{\`select * from ref_${consentDataset.id}\`}</Query><Mutation name="add">{\`insert into ref_${consentDataset.id} values (2)\`}</Mutation></Helmet><h1>Shared mutation</h1><Number data="$rows" col="n" agg="sum"/><Button run="$add">Add shared row</Button>`});
-  for(const [id,role] of [[consentDataset.id,'editor'],[consentDoc.id,'viewer']]){
+  const sharedDataset=await publishShared({dataset:[{n:1}],access:'readwrite'});
+  const sharedDoc=await publishShared({markup:`<Helmet><Query name="rows">{\`select * from ref_${sharedDataset.id}\`}</Query><Mutation name="add">{\`insert into ref_${sharedDataset.id} values (2)\`}</Mutation></Helmet><h1>Shared mutation</h1><Number data="$rows" col="n" agg="sum"/><Button run="$add">Add shared row</Button>`});
+  for(const [id,role] of [[sharedDataset.id,'editor'],[sharedDoc.id,'viewer']]){
     assert.equal(await chrome.locator('body').evaluate(async(_,args)=>(await fetch(`/api/my/artifacts/${args.id}/sharing`,{method:'PUT',headers:{'Content-Type':'application/json','x-artifactbin-csrf':'1'},body:JSON.stringify({shares:[{email:args.email,role:args.role}]})})).status,{id,role,email:invitedEmail}),200);
   }
-  await invited.goto(`${base}/a/${consentDoc.id}`);
+  await invited.goto(`${base}/a/${sharedDoc.id}`);
   await invited.getByText('1',{exact:true}).waitFor();
   await invited.getByRole('button',{name:'Add shared row',exact:true}).click();
-  const reviewLink=invited.frameLocator('iframe[title="Artifact controls"]').getByRole('link',{name:'Review dataset change',exact:true});
-  await reviewLink.waitFor();
-  const reviewUrl=await reviewLink.getAttribute('href');
-  assert(reviewUrl.startsWith(controls+'/mutation-consent/'));
-  await Promise.all([invited.waitForURL(reviewUrl),reviewLink.click()]);
-  assert.equal(await invited.locator('iframe').count(),0,'consent is a top-level trusted page');
-  await invited.getByRole('heading',{name:'Review dataset change',exact:true}).waitFor();
-  const approvalErrors=[];
-  invited.on('console',m=>{if(m.type()==='error')approvalErrors.push(m.text());});
-  const approvalResponse=invited.waitForResponse(r=>r.url()===reviewUrl && r.request().method()==='POST',{timeout:10000}).catch(error=>{throw new Error(`${error.message}\n${approvalErrors.join('\n')}`);});
-  await invited.getByRole('button',{name:'Approve this change',exact:true}).click();
-  const approval=await approvalResponse;
-  assert.equal((await approval.request().allHeaders()).origin,controls,'native approval must carry the trusted Origin');
-  assert.equal(approval.status(),303,await approval.text().catch(()=>'(redirect body unavailable)'));
-  await invited.waitForURL(`${base}/a/${consentDoc.id}`);
   await invited.getByText('3',{exact:true}).waitFor();
-  assert.equal((await invited.goto(reviewUrl)).status(),404,'an approved operation cannot be replayed');
+  assert.equal(new URL(invited.url()).origin,base,'a permitted shared mutation needs no approval navigation');
+  await invited.reload();
+  await invited.getByText('3',{exact:true}).waitFor();
   await invited.close();
   assert.equal((await peer.goto(`${base}/a/${privateDoc.id}`)).status(),200,'a browser holding the claimed token can render private content without an account session');
   await peer.getByRole('heading',{name:'Private data'}).waitFor();
@@ -372,7 +392,7 @@ try {
   console.log('PASS: visible sandbox pinned library, canvas, pointer/keyboard input, responsive resize, local SQL, parent DOM/storage/API refusal and reload reset');
   await peer.close();
   await reader.close();
-  console.log('PASS: two-origin top-level editing/reload, local SQL, appearance, relation-only comments, mobile hit-testing, author isolation/navigation revocation, OTP login, like/follow persistence, human/anonymous private ACLs, trusted single-use mutation consent, logout, retained-cookie revocation and independent browser disconnect');
+  console.log('PASS: two-origin top-level editing/reload, local SQL, appearance, relation-only comments, mobile hit-testing, author isolation/navigation revocation, OTP login, like/follow persistence, human/anonymous private ACLs, immediate authorized shared mutations, logout, retained-cookie revocation and independent browser disconnect');
   }
 } finally {
   await browser?.close();

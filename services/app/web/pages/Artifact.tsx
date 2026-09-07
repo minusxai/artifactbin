@@ -26,7 +26,7 @@ import { NotFoundPage } from './NotFound';
  * second meaning for the word is how a payload starts lying about itself.
  */
 type Page =
-  | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; folder: Parameters<typeof FolderPage>[0]['folder']; workspace?: AccountWorkspace; ownerUsername?: string | null; surface?: undefined }
+  | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; folder: Parameters<typeof FolderPage>[0]['folder']; workspace?: AccountWorkspace; ownerUsername?: string | null; liveEnabled?: boolean; surface?: undefined }
   | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; like?: { liked: boolean; count: number }; follow?: { userId: string; following: boolean; count: number } | null; surface: Parameters<typeof ArtifactSurface>[0]; folder?: undefined };
 
 export function ArtifactPage({ id: given }: { id?: string } = {}) {
@@ -54,7 +54,7 @@ export function ArtifactPage({ id: given }: { id?: string } = {}) {
   // (there is nothing to frame). Every folder gets the normal PAGE frame;
   // account-wide dashboard data is still supplied only to its owner.
   if (page.folder) {
-    const folder = <FolderPage folder={page.folder} role={page.role} workspace={page.workspace} ownerUsername={page.ownerUsername} />;
+    const folder = <FolderPage folder={page.folder} role={page.role} workspace={page.workspace} ownerUsername={page.ownerUsername} liveEnabled={page.liveEnabled} />;
     return <ShellFrame hideBreadcrumb>{folder}</ShellFrame>;
   }
   return (

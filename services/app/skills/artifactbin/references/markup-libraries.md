@@ -8,7 +8,7 @@ Use a generic `<Sandbox>` with internal HTML/canvas and a script string. `artifa
 loads the hosted library; `artifact.resolve('ref:<id>')` resolves readable file
 bytes. Private assets never resolve. No Three.js-specific scene components.
 The child can edit its own DOM, not the surrounding artifact. It also has the
-bounded `mx` signals/query/mutation bridge; normal ACL/consent rules still apply.
+bounded `mx` signals/query/mutation bridge; normal ACL rules still apply.
 
 ## Contents
 

@@ -1843,7 +1843,7 @@ export const writerFor = (doc: ArtifactRow): TokenActor => ({ tokenId: doc.token
 export type DocumentMutationOutcome =
   | { ok: true; dataset: ArtifactRow; affected: number; rowCount: number }
   | { ok: true; local: LocalMutationResult }
-  | { ok: false; reason: 'unknown_mutation' | WriteRefusal | 'dataset_full' | 'invalid_sql' | 'contended' | 'row_changed' | 'row_not_unique' | 'invalid_row' | 'document_changed' | 'consent_required'; detail?: string };
+  | { ok: false; reason: 'unknown_mutation' | WriteRefusal | 'dataset_full' | 'invalid_sql' | 'contended' | 'row_changed' | 'row_not_unique' | 'invalid_row' | 'document_changed'; detail?: string };
 
 export async function runDocumentMutation(
   doc: ArtifactRow,
@@ -1852,7 +1852,6 @@ export async function runDocumentMutation(
   row?: Record<string, Scalar>,
   actor: RoleActor = {userId:null,tokenId:null},
   localTables?: Record<string, Row[]>,
-  authorizePersistent?: (target: ArtifactRow, values: Record<string, Scalar>) => Promise<boolean>,
 ): Promise<DocumentMutationOutcome> {
   if (doc.format !== 'markup' || !doc.source) return { ok: false, reason: 'unknown_mutation' };
   const parsed = parseJsx(doc.source);
@@ -1906,7 +1905,6 @@ export async function runDocumentMutation(
       return {ok: false, reason: 'invalid_sql', detail: error instanceof Error ? error.message : 'Local mutation failed'};
     }
   }
-  if (authorizePersistent && !await authorizePersistent(dataset!, bound)) return {ok: false, reason: 'consent_required'};
   const result = await mutateDataset(dataset!, actor, decl.sql, bound, { row: rowBinding, expectedAffected: decl.expectedAffected, source:!!decl.source, document: {id: doc.id, editId: doc.edit_id} });
   if (isMutationRefused(result)) return { ok: false, reason: result.reason, detail: result.detail };
   return { ok: true, dataset: result.row, affected: result.affected, rowCount: result.rowCount };

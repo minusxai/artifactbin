@@ -1,11 +1,9 @@
-import { canReadArtifact, getArtifactById, ownsArtifact, runDocumentMutation } from '@/lib/artifacts';
-import {CONTROLS_ORIGIN} from '@/lib/config';
-import {issueMutationConsent} from '@/lib/mutation-consent';
+import { canReadArtifact, getArtifactById, runDocumentMutation } from '@/lib/artifacts';
 import { refusesCrossSite } from '@/lib/auth';
 import { json, readJson } from '@/lib/http';
 import { ID_RE } from '@/lib/ids';
 import { parseMutationRequest } from '@/lib/story/mutation-request';
-import { isCookieCredential, requestOrSessionActor } from '@/lib/viewer';
+import { requestOrSessionActor } from '@/lib/viewer';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -26,7 +24,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   if (!artifact) return json({ error: 'not_found' }, 404, CORS);
 
   const actor = await requestOrSessionActor(request);
-  if (refusesCrossSite(request, actor)) {
+  if (actor.credential === 'read-session' || refusesCrossSite(request, actor)) {
     return json({ error: 'forbidden' }, 403, CORS);
   }
   if (!(await canReadArtifact(artifact, actor.viewer))) return json({ error: 'not_found' }, 404, CORS);
@@ -37,18 +35,9 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   if (parsed instanceof Response) return parsed;
 
   const roleActor={userId:actor.viewer?.userId ?? null,tokenId:actor.tokenId,email:actor.viewer?.email};
-  const consent=!!CONTROLS_ORIGIN && isCookieCredential(actor) && !ownsArtifact(artifact,roleActor);
-  let consentUrl:string|undefined;
-  const result = await runDocumentMutation(artifact, parsed.mutation, parsed.values ?? {}, parsed.row, roleActor, parsed.localTables,
-    consent ? async(_target,values)=>{
-      if(actor.sessionId) consentUrl=await issueMutationConsent(artifact,{...parsed,values},actor);
-      return false;
-    } : undefined);
+  const result = await runDocumentMutation(artifact, parsed.mutation, parsed.values ?? {}, parsed.row, roleActor, parsed.localTables);
   if (!result.ok) {
     switch (result.reason) {
-      case 'consent_required':
-        return consentUrl ? json({error:'consent_required',consentUrl},202,{'Cache-Control':'no-store'})
-          : json({error:'trusted_session_required'},403,{'Cache-Control':'no-store'});
       case 'unknown_mutation':
         return json({ error: 'unknown_mutation', detail: `this document declares no <Mutation name="${parsed.mutation}">` }, 400, CORS);
       case 'invalid_row':

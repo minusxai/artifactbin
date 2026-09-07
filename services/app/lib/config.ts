@@ -109,6 +109,9 @@ export function unknownEnvNames(
 const APP_PORT = env('APP', 'PORT');
 const THIS_PROCESS = `http://127.0.0.1:${APP_PORT ?? '3000'}`;
 
+/** Operational off-switch for credential-less live subscriptions; reads still work. */
+export const LIVE_UPDATES_ANON_ENABLED = env('FEATURE_FLAG', 'LIVE_UPDATES_ANON_ENABLED') !== 'false';
+
 /**
  * Vite's HMR websocket port in dev. Vite defaults to 24678 for EVERY project,
  * so two checkouts running side by side collide there while their app ports

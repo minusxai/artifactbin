@@ -12,6 +12,7 @@ import { effectiveRole as artifactRole, ownsArtifact, type ArtifactRole, type Ar
 import { AGENT_COOKIE, decodeAgentSession } from './agent-session';
 import { parseCookie } from './http';
 import { resolveToken, resolveTokenById, touchToken } from './tokens';
+import { LIVE_UPDATES_ANON_ENABLED } from './config';
 
 /**
  * The account behind the request, if any. Behind the proxy that is the signed
@@ -38,8 +39,6 @@ export async function sessionViewer(request?: Request): Promise<Viewer> {
  */
 export interface RequestActor {
   viewer: Viewer;
-  /** Verified proxy session identity; never supplied by artifact markup. */
-  sessionId?: string;
   /** The presented token's id, for token-scope ownership checks. Null without a valid bearer. */
   tokenId: string | null;
   /**
@@ -55,6 +54,11 @@ export interface RequestActor {
 }
 
 export const NO_ACTOR: RequestActor = { viewer: null, tokenId: null, credential: 'none' };
+
+/** Server-decided live eligibility, independently of the document's read ACL.
+ * A resolved read-session or token-holding browser is not anonymous. */
+export const canReceiveLiveUpdates = (actor: RequestActor): boolean =>
+  LIVE_UPDATES_ANON_ENABLED || (actor.credential !== 'none' && !!(actor.viewer?.userId || actor.tokenId));
 
 /** A cookie authorized this request — the only case a same-site guard applies to. */
 export const isCookieCredential = (actor: Pick<RequestActor, 'credential'>): boolean =>
@@ -72,7 +76,6 @@ function attachedActor(request: Request | undefined): RequestActor | null {
     viewer: actor.userId ? { userId: actor.userId, email: actor.email ?? null } : null,
     tokenId: actor.tokenId ?? null,
     credential: actor.credential,
-    ...(actor.sessionId ? {sessionId: actor.sessionId} : {}),
     ...(actor.heldTokenIds ? { heldTokenIds: actor.heldTokenIds } : {}),
   };
 }

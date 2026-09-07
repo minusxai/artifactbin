@@ -28,7 +28,6 @@ export function createBrowserBoundary(main: string, configured: string): Browser
       const { host, pathname } = new URL(request.url);
       if (host !== root.host && host !== controls.host) return deny('unknown_host', 421);
       if (host === root.host) {
-        if (pathname.startsWith('/mutation-consent/')) return deny('trusted_host_required');
         if (pathname === '/oauth/authorize' && request.method === 'GET') return Response.redirect(`${controls.origin}${pathname}${new URL(request.url).search}`,302);
         if (pathname === '/oauth/authorize/approve') return deny('trusted_host_required');
         const publicPage = ['GET', 'HEAD'].includes(request.method) && /^\/api\/page\/(?:session|home|profile(?:\/.*)?)$/.test(pathname);
@@ -44,7 +43,7 @@ export function createBrowserBoundary(main: string, configured: string): Browser
       if (pathname === '/oauth/authorize' && request.method === 'GET') return null;
       // A native, unframeable approval form carries a one-time, session-bound
       // token checked by the OAuth route instead of the fetch-only header.
-      if ((pathname === '/oauth/authorize/approve' || /^\/mutation-consent\/[A-Za-z0-9_-]{43}$/.test(pathname)) && request.method === 'POST') {
+      if (pathname === '/oauth/authorize/approve' && request.method === 'POST') {
         return request.headers.get('origin') === controls.origin ? null : deny('browser_origin_required');
       }
       if (!callback && (/^\/(?:api|oauth)(?:\/|$)/.test(pathname) || documentApi)) {

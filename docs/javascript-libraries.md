@@ -52,7 +52,7 @@ may exceed that window; there is no new scene-readiness protocol in this version
 
 The sandbox also receives the existing bounded `mx` data bridge: declared
 signals, refreshes and named mutations. Persistent writes still pass current
-ACL/consent checks; a sandbox is not a write grant. No account/edit verbs or
+ACL checks; a sandbox is not a write grant. No account/edit verbs or
 arbitrary network destination are added. Replacing HTML/script replaces its
 realm; removing it revokes the port. Local state resets on document reload.
 Focus and pointer/touch input stay inside its visible bounds. Physical-device

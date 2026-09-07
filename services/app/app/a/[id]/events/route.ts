@@ -15,7 +15,7 @@
 import { trackEvent } from '@/lib/analytics';
 import { canReadArtifact, datasetsForDocument, getArtifactById } from '@/lib/artifacts';
 import { isDocumentFormat } from '@/lib/story/input';
-import { isOwner, roleFor, sessionActor } from '@/lib/viewer';
+import { canReceiveLiveUpdates, isOwner, roleFor, sessionActor } from '@/lib/viewer';
 import { canAnnotate } from '@/lib/share-roles';
 import { authorHandle } from '@/lib/users';
 import { ID_RE } from '@/lib/ids';
@@ -36,6 +36,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const actor = await sessionActor(request);
   const viewer = actor.viewer;
   if (!(await canReadArtifact(initial, viewer))) return new Response('not found', { status: 404 });
+  // EventSource treats 204 as terminal: no stream allocation or reconnect loop.
+  if (!canReceiveLiveUpdates(actor)) return new Response(null, {status: 204, headers: {'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*'}});
   // Annotations are OWNER-state (either browser credential — the account
   // owner, or the anonymous agent-cookie owner), decided once here and
   // re-checked on every wakeup like the ACL.

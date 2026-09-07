@@ -27,7 +27,7 @@ import { canAnnotate } from '@/lib/share-roles';
 import { canonicalArtifactPath } from '@/lib/urls';
 import { roleBehindLogin } from '@/lib/share-roles';
 import { trackEvent } from '@/lib/analytics';
-import { sessionActor } from '@/lib/viewer';
+import { canReceiveLiveUpdates, sessionActor } from '@/lib/viewer';
 import { verifyExportKey } from '@/lib/export-key';
 import { baseUrl, parseByteRange } from '@/lib/http';
 import { ID_RE } from '@/lib/ids';
@@ -489,7 +489,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         ...(declaresMutations(artifact.source) ? { mutateUrl: mutatePath(artifact.id) } : {}),
         // A capture gets none: it has no reader, and a document that adopted an
         // edit mid-shot would be photographed halfway between two versions.
-        live: chrome ? { id: artifact.id, editId: artifact.edit_id } : null,
+        live: chrome ? { id: artifact.id, editId: artifact.edit_id, enabled: canReceiveLiveUpdates(actor) } : null,
       });
       return new Response(html, {
         status: 200,

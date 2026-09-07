@@ -85,12 +85,4 @@ describe('the composed proxy browser boundary', () => {
     }
     expect((await call(controls, '/controls/a/abc123')).headers.get('content-security-policy')).toContain(`frame-ancestors ${main}`);
   });
-  it('admits native mutation approval only on the trusted host with its exact POST origin',async()=>{
-    const path='/mutation-consent/'+'a'.repeat(43);
-    expect((await call(main,path,'POST',{origin:main})).status).toBe(403);
-    for(const origin of [main,'null','https://evil.example.test']) expect((await call(controls,path,'POST',{origin})).status).toBe(403);
-    expect((await call(controls,path,'POST')).status).toBe(403);
-    expect((await call(controls,path,'POST',{origin:controls})).status).toBe(200);
-    expect((await call(controls,path)).headers.get('content-security-policy')).toContain("frame-ancestors 'none'");
-  });
 });
