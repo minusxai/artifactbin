@@ -157,7 +157,9 @@ This proves positive module+CORS loading, not package dependency resolution.
 
 This prototype deliberately is **not** a drop-in fetch/XHR replacement:
 
-- Request objects require explicit `credentials:'omit'`; custom headers refused.
+- Request objects' default `same-origin` mode is normalized to `omit`; explicit
+  `include` and custom headers are refused. Exactly declared cached URLs are
+  accepted as aliases as well as original URLs; no origin-wide proxy is opened.
 - Native response `url`/XHR `responseURL` name the cached URL, not the original.
 - XHR open/readyState timing changes while asynchronous resolution occurs; headers,
   sync requests and credentialed modes are refused. Native timeout starts later.

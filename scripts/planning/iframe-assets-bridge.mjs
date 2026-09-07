@@ -35,7 +35,7 @@ function install(){
       const request=input instanceof Request?input:null;
       const method=String(options.method??request?.method??'GET').toUpperCase();
       const credentials=options.credentials??request?.credentials??'omit';
-      if(method!=='GET'||credentials!=='omit'||options.body||request?.body||[...new Headers(options.headers??request?.headers)].length)throw bad();
+      if(method!=='GET'||!['omit','same-origin'].includes(credentials)||options.body||request?.body||[...new Headers(options.headers??request?.headers)].length)throw bad();
       const url=await resolve(request?request.url:String(input));
       return nativeFetch(url,{method:'GET',credentials:'omit',redirect:'error',signal:options.signal??request?.signal});
     };
@@ -56,6 +56,8 @@ let replayPorts=0;addEventListener('message',event=>{replayPorts+=event.ports.le
 const check=async(fn)=>{try{return {ok:true,value:await fn()};}catch(error){return {ok:false,error:error.name};}};
 result.fetch=await check(async()=>{const r=await fetch(original);return {status:r.status,url:r.url,bytes:(await r.text()).length};});
 result.request=await check(async()=>{const r=await fetch(new Request(original,{credentials:'omit'}));return (await r.text()).length;});
+result.defaultRequest=await check(async()=>{const r=await fetch(new Request(original));return (await r.text()).length;});
+result.cachedRequest=await check(async()=>{const r=await fetch(${literal(cached)});return (await r.text()).length;});
 const xhr=(url,credentials=false)=>new Promise((resolve,reject)=>{const x=new XMLHttpRequest();try{x.open('GET',url);x.withCredentials=credentials;x.onload=()=>resolve({status:x.status,bytes:x.responseText.length,responseURL:x.responseURL});x.onerror=()=>reject(new Error('xhr rejected'));x.send();}catch(error){reject(error);}});
 result.xhr=await check(()=>xhr(original));
 result.post=await check(()=>fetch(original,{method:'POST'}));
@@ -75,7 +77,7 @@ const host=createServer((req,res)=>{
   res.setHeader('Content-Type','text/html');res.setHeader('Content-Security-Policy',`default-src 'none';script-src 'unsafe-inline' ${asset};connect-src ${asset};frame-src 'none'`);
   res.end(`<!doctype html><script>
   const frame=document.createElement('iframe');frame.sandbox='allow-scripts';frame.srcdoc=${literal(child)};
-  const manifest=new Map([[${literal(CDN)},${literal(cached)}]]);window.requests=[];window.result=null;let initialized=false;
+  const manifest=new Map([[${literal(CDN)},${literal(cached)}],[${literal(cached)},${literal(cached)}]]);window.requests=[];window.result=null;let initialized=false;
   const resolve=message=>message?.type==='resolve'&&message.method==='GET'&&message.credentials==='omit'&&typeof message.id==='number'&&manifest.has(message.url)?{id:message.id,ok:true,url:manifest.get(message.url)}:{id:message?.id,ok:false};
   window.resolverTests=[resolve({id:1,type:'resolve',url:${literal(CDN)},method:'POST',credentials:'omit'}),resolve({id:2,type:'resolve',url:'https://example.com/account',method:'GET',credentials:'omit'}),resolve({id:3,type:'resolve',url:${literal(CDN)},method:'GET',credentials:'include'})];
   addEventListener('message',event=>{if(event.source!==frame.contentWindow)return;if(event.data==='asset-bootstrap-ready'&&!initialized){initialized=true;const channel=new MessageChannel();channel.port1.onmessage=e=>{window.requests.push(e.data);channel.port1.postMessage(resolve(e.data));};frame.contentWindow.postMessage('initialize-assets','*',[channel.port2]);}else if(event.data?.type==='author-result')window.result=event.data.result;});
@@ -87,11 +89,11 @@ const browser=await {chromium,firefox,webkit}[selected].launch();
 try{
   const page=await browser.newPage();await page.goto(main);await page.waitForFunction(()=>window.result,null,{timeout:20000});
   const state=await page.evaluate(()=>({result:window.result,requests:window.requests,resolverTests:window.resolverTests}));
-  for(const name of ['fetch','request','xhr','module','bootstrapReplay'])assert(state.result[name].ok,JSON.stringify(state));
+  for(const name of ['fetch','request','defaultRequest','cachedRequest','xhr','module','bootstrapReplay'])assert(state.result[name].ok,JSON.stringify(state));
   assert.equal(state.result.module.value,42);
   for(const name of ['post','credentials','headers','unknown','xhrUnknown','xhrCredentials','xhrPost','xhrSync'])assert(!state.result[name].ok,name);
   assert(state.resolverTests.every(result=>!result.ok));
   assert(hits.every(hit=>hit.method==='GET'&&[new URL(cached).pathname,'/assets/module.js'].includes(hit.url)));
   assert(state.requests.some(request=>request.url==='https://example.com/account'),'unknown URL reaches manifest resolver and is refused, never fetched');
-  console.log(JSON.stringify({engine:selected,browserVersion:browser.version(),bundle:{url:CDN,hash,bytes:bundle.length},state,hits,limits:['Prototype supports async anonymous GET assets only, not full fetch/XHR semantics.','XHR open/readyState/header/timeout behavior differs while async resolution happens; synchronous requests deliberately refused.','Request objects require credentials:omit; response.url/responseURL name cached URL, not original.','CSP and public/read-only asset hosting are the security boundary; JavaScript wrappers alone are not tamper-proof isolation.','The MessagePort resolves a fixed manifest only; it is not a general URL importer or arbitrary API proxy.','Positive self-contained ESM42 test is local; CDN Three fixture is classic0.160.1 and not a version recommendation.']},null,2));
+  console.log(JSON.stringify({engine:selected,browserVersion:browser.version(),bundle:{url:CDN,hash,bytes:bundle.length},state,hits,limits:['Prototype supports async anonymous GET assets only, not full fetch/XHR semantics.','XHR open/readyState/header/timeout behavior differs while async resolution happens; synchronous requests deliberately refused.','Default same-origin requests are normalized to credentials:omit; include is rejected. response.url/responseURL name cached URL, not original.','CSP and public/read-only asset hosting are the security boundary; JavaScript wrappers alone are not tamper-proof isolation.','The MessagePort resolves a fixed manifest only; it is not a general URL importer or arbitrary API proxy.','Positive self-contained ESM42 test is local; CDN Three fixture is classic0.160.1 and not a version recommendation.']},null,2));
 }finally{await browser.close();await Promise.all([new Promise(resolve=>host.close(resolve)),new Promise(resolve=>server.close(resolve))]);}
