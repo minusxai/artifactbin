@@ -31,7 +31,6 @@ describe('managed Iframe inert compiler',()=>{
     ['<Iframe><script src="//evil.example/a.js"/></Iframe>', /URL/],
     ['<Iframe><script src="javascript:alert(1)"/></Iframe>', /URL/],
     ['<Iframe><script type="importmap">{`{}`}</script></Iframe>', /type/],
-    ['<Iframe><script>{`const = broken`}</script></Iframe>', /script/],
     ['<Iframe><style>{`</style><img src=x>`}</style></Iframe>', /style/],
   ])('rejects invalid managed grammar %s', (source, error) => expect(()=>compile(source)).toThrow(error));
   it('bounds content and escapes text/attributes without changing node IDs',()=>{

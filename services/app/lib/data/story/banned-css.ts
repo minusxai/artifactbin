@@ -20,7 +20,7 @@
  */
 
 import { parseJsx, serializeJsx } from '@/lib/jsx';
-import {transformOutsideManagedIframes} from '@/lib/story/managed-iframe';
+import {transformOutsideManagedIframes} from '@/lib/story/managed-iframe-source';
 
 /** Tailwind utilities that compile to a banned position (variant/important forms handled). */
 const BANNED_POSITION_UTILITIES = ['fixed', 'sticky'] as const;

@@ -6,12 +6,14 @@
  * give the "static" guarantee for free — this pass enforces it.
  */
 import { parseRowRef } from '@/lib/story/row-scope';
-import {compileManagedIframe} from '@/lib/story/managed-iframe';
+import {validateManagedIframeSource} from '@/lib/story/managed-iframe-source';
 import { isReactiveExpression, reactiveNames, REACTIVE_BOOLEAN_PROPS } from './reactive';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 // Shared with the render-time gate in lib/story-ui/interpreter.tsx — see
 // lib/jsx/url-attrs.ts for why these must not be maintained separately.
 import { URL_ATTRS, URL_LIST_ATTRS, SVG_PAINT_ATTRS, paintHasExternalUrl } from './url-attrs';
+import {hasDangerousScheme, listHasDangerousScheme} from './url-attrs';
+export {hasDangerousScheme, listHasDangerousScheme} from './url-attrs';
 import { DANGEROUS_TAGS } from './dangerous-tags';
 import { STORY_COMPONENT_NAMES } from '@/lib/data/story/story-components';
 import type { JsxNode, JsxElement, ValidationError, ValidateOptions } from './types';
@@ -36,29 +38,6 @@ const DENIED_ATTRS = immutableSet(['dangerouslysetinnerhtml', 'ref', 'key', 'src
 // Agent-authored styling escape hatches. `labelStyle` is the one historical component-specific
 // alias (<Param>); keep this list explicit so unrelated data props are never rejected by suffix.
 const INLINE_STYLE_ATTRS = immutableSet(['style', 'labelstyle']);
-
-// `data:image/...` is allowed (inline images); other `data:` (e.g. text/html) is not.
-const DANGEROUS_URL = /^(javascript|vbscript|data):/i;
-const SAFE_DATA_URL = /^data:image\//i;
-
-/**
- * True when a URL value carries a dangerous scheme. Browsers strip ASCII control chars and
- * spaces INSIDE the scheme before resolving (`java\tscript:` runs as `javascript:`), so the
- * check normalizes the same way instead of trusting the raw string.
- */
-export function hasDangerousScheme(url: string): boolean {
-  // eslint-disable-next-line no-control-regex -- deliberately mirrors browser scheme normalization
-  const normalized = url.replace(/[\x00-\x20]/g, '');
-  return DANGEROUS_URL.test(normalized) && !SAFE_DATA_URL.test(normalized);
-}
-
-/** Scheme-check every URL in a srcset/ping-style list ("url descriptor, url descriptor"). */
-export function listHasDangerousScheme(value: string): boolean {
-  return value.split(',').some(entry => {
-    const url = entry.trim().split(/\s+/)[0];
-    return !!url && hasDangerousScheme(url);
-  });
-}
 
 export function validateJsx(nodes: JsxNode[], options: ValidateOptions): ValidationError[] {
   const components = new Set(options.components);
@@ -105,7 +84,7 @@ function walk(
   }
   validateElement(node, components, allowedHtml, stylePolicy, errors, inSvg);
   if(node.tag==='Iframe') {
-    try {compileManagedIframe(node);} catch(error) {errors.push({message:error instanceof Error?error.message:String(error),tag:node.tag,start:node.start,end:node.end});}
+    try {validateManagedIframeSource(node);} catch(error) {errors.push({message:error instanceof Error?error.message:String(error),tag:node.tag,start:node.start,end:node.end});}
     return;
   }
   for (const attr of node.attributes) if (!inColumn && !attr.value.static && isReactiveExpression(attr.value.reactive) && reactiveNames(attr.value.reactive).fields.length) {
