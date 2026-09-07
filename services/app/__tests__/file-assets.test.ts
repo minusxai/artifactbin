@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { POST } from '@/app/api/artifacts/route';
 import { GET as raw } from '@/app/a/[id]/raw/route';
+import { GET as resolve, HEAD } from '@/app/a/[id]/resolve/route';
 import { mintToken } from '@/lib/tokens';
 import { getArtifactById } from '@/lib/artifacts';
 import { assetBytesForToken } from '@/lib/asset-quota';
+import { getDb } from '@/lib/db';
 import { useAppHarness } from './harness';
 
 useAppHarness();
@@ -66,6 +68,32 @@ describe('generic file artifacts', () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: 'unsupported_file_type' });
     expect(await assetBytesForToken(token.id)).toBe(0);
+  });
+
+  it('resolves public bytes with CORS and supports a cheap HEAD', async () => {
+    const { response } = await upload();
+    const file = await response.json();
+    const url = `${base}/a/Doc123/resolve?ref=ref:${file.id}`;
+    const head = await HEAD(new Request(url, { method: 'HEAD' }), ctx('Doc123'));
+    expect(head.status).toBe(200);
+    expect(await head.text()).toBe('');
+    const res = await resolve(new Request(url), ctx('Doc123'));
+    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(bytes);
+  });
+
+  it('answers missing and private refs identically, even with the owner bearer token', async () => {
+    const { response: publicResponse, token } = await upload();
+    const publicFile = await publicResponse.json();
+    const url = `${base}/a/Doc123/resolve?ref=ref:${publicFile.id}`;
+    expect((await HEAD(new Request(url, { method: 'HEAD' }), ctx('Doc123'))).status).toBe(200);
+    await (await getDb()).query("UPDATE artifacts SET visibility = 'private' WHERE id = $1", [publicFile.id]);
+    for (const ref of [`ref:${publicFile.id}`, 'ref:Miss12', 'https://example.com/a.glb', 'ref:../raw']) {
+      const res = await resolve(new Request(`${base}/a/Doc123/resolve?ref=${encodeURIComponent(ref)}`, { headers: { Authorization: `Bearer ${token.token}` } }), ctx('Doc123'));
+      expect(res.status).toBe(404);
+      expect(await res.text()).toBe('not found');
+    }
   });
 
   it('accepts the JSON file envelope used by agent tools', async () => {

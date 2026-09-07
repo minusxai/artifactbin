@@ -1,0 +1,7 @@
+{
+  "three": {
+    "package": "three",
+    "version": "0.185.1",
+    "entry": "three.js"
+  }
+}

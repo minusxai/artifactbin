@@ -79,6 +79,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the development flow.
 - [Editing and concurrent changes](docs/editing.md)
 - [The document format](docs/document-format.md)
 - [File uploads and accepted types](docs/file-uploads.md)
+- [Adding JavaScript libraries and using file references](docs/javascript-libraries.md)
 - [Serving and security](docs/serving-and-security.md)
 - [Ownership and accounts](docs/ownership.md)
 - [Operations and deployment](docs/operations.md)

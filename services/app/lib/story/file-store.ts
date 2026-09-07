@@ -65,11 +65,12 @@ export async function storeFileContent(bytes: Buffer, contentType: string, filen
 }
 
 /** Serves stored file/image/PDF objects without ever interpreting their content. ACL belongs to the caller. */
-export async function serveStoredFile(request: Request, row: { id: string; meta: unknown }): Promise<Response> {
+export async function serveStoredFile(request: Request, row: { id: string; meta: unknown }, cors = false): Promise<Response> {
   const meta = row.meta as Partial<FileMeta>;
   const common: Record<string, string> = {
     'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
     'Content-Security-Policy': "default-src 'none'; sandbox", 'Referrer-Policy': 'no-referrer',
+    ...(cors ? { 'Access-Control-Allow-Origin': '*' } : {}),
   };
   if (typeof meta?.objectKey !== 'string' || typeof meta.bytes !== 'number') {
     return new Response('not found', { status: 404, headers: common });

@@ -4,7 +4,7 @@
  * per document: `connect-src` admits that document's own query endpoint
  * (`<origin>/a/<id>/query`), its own live stream (`<origin>/a/<id>/events`),
  * its own write endpoint (`<origin>/a/<id>/mutate`), the static `/geojson/`
- * boundary files — and nothing else on the origin.
+ * boundary files, and its anonymous asset resolver — and nothing else on the origin.
  *
  * Why a path, not 'self': 'self' would open every `/api/*` route to the
  * author's script (minting tokens from a viewer's IP, for one). A CSP source
@@ -58,6 +58,7 @@ const BEHAVIOUR_DIRECTIVES = [
 
 /** The path the document may fetch: its own query endpoint. */
 export const queryPath = (id: string): string => `/a/${id}/query`;
+export const resolvePath = (id: string): string => `/a/${id}/resolve`;
 
 /**
  * …and the one it may LISTEN on: its own live stream, so a reader sees their
@@ -105,6 +106,8 @@ export function markupCsp(origin: string, id: string): string {
   const self = origin.replace(/\/+$/, '');
   // The frame endpoint is a separate, path-exact entry: CSP matches a path
   // without a trailing slash exactly, so `/events` does not cover `/events/frame`.
-  const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${GEOJSON_DIR_PATH}`;
+  // GLB loaders fetch embedded textures/buffers through local blob/data URLs;
+  // these add no network destination or access to the application's APIs.
+  const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)} ${self}${GEOJSON_DIR_PATH} blob: data:`;
   return [...SOURCE_DIRECTIVES, connect, ...BEHAVIOUR_DIRECTIVES].join('; ');
 }

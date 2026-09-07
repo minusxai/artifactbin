@@ -36,7 +36,7 @@ const markupCspFor = (id: string) => [
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
   "media-src 'self' data: blob:",
-  `connect-src ${BASE}/a/${id}/query ${BASE}/a/${id}/events ${BASE}/a/${id}/events/frame ${BASE}/a/${id}/mutate ${BASE}/geojson/`,
+  `connect-src ${BASE}/a/${id}/query ${BASE}/a/${id}/events ${BASE}/a/${id}/events/frame ${BASE}/a/${id}/mutate ${BASE}/a/${id}/resolve ${BASE}/geojson/ blob: data:`,
   "form-action 'none'",
   "base-uri 'none'",
   // Only this origin's own pages may FRAME a document. A third-party framer
@@ -86,7 +86,7 @@ describe('/a/<id>/raw for markup rows', () => {
     // what the runtime reaches: its own data, its own live stream, and the
     // public /geojson/ files the geo charts draw their basemaps from.
     const csp = res.headers.get('Content-Security-Policy')!;
-    expect(csp.match(/connect-src [^;]*/g)).toEqual([`connect-src ${BASE}/a/${id}/query ${BASE}/a/${id}/events ${BASE}/a/${id}/events/frame ${BASE}/a/${id}/mutate ${BASE}/geojson/`]);
+    expect(csp.match(/connect-src [^;]*/g)).toEqual([`connect-src ${BASE}/a/${id}/query ${BASE}/a/${id}/events ${BASE}/a/${id}/events/frame ${BASE}/a/${id}/mutate ${BASE}/a/${id}/resolve ${BASE}/geojson/ blob: data:`]);
     expect(csp).not.toMatch(/connect-src[^;]*'self'/);
     // Behind the proxy the origin is the PUBLIC one (forwarding headers), so
     // the policy names the host the browser actually fetches from.
