@@ -82,7 +82,7 @@ describe("remote session relay", () => {
       ).status,
     ).toBe(403);
   });
-  it("replays output, deduplicates exchanged batches and comment input, and enforces controller and runner key", async () => {
+  it("replays output, deduplicates exchanged batches and comment input, and accepts direct input and enforces runner key", async () => {
     const r = new RemoteRegistry();
     const s = r.create("a", registration);
     await expect(r.exchange("a", s.id, body("wrong"))).rejects.toThrow();
@@ -90,16 +90,16 @@ describe("remote session relay", () => {
     await r.exchange("a", s.id, body(s.runnerKey));
     expect((await r.view("a", s.id, 0)).frames).toHaveLength(1);
     expect((await r.view("a", s.id, -1)).snapshot).toContain("hello");
-    expect(() => r.input("a", s.id, "keyboard")).toThrow();
+    expect(() => r.input("a", s.id, "keyboard")).not.toThrow();
     r.input("a", s.id, "comment\r", "comment", "comment-1");
     r.input("a", s.id, "comment\r", "comment", "comment-1");
     const x = await r.exchange("a", s.id, body(s.runnerKey));
-    expect(x.inputs).toHaveLength(1);
+    expect(x.inputs).toHaveLength(2);
     expect(
       (
         await r.exchange("a", s.id, {
           ...body(s.runnerKey),
-          ack: x.inputs[0].id,
+          ack: x.inputs.at(-1)!.id,
         })
       ).inputs,
     ).toHaveLength(0);

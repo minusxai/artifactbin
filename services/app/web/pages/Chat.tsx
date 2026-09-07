@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { CopyIcon } from "@/components/CopyIcon";
+import { Button } from "@/components/ui";
 import { useSearchParams } from "react-router";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -31,6 +33,7 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
   const [error, setError] = useState("");
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [mobile, setMobile] = useState(false);
   const queue = useRef(Promise.resolve());
   const send = (body: unknown) => {
     const task = queue.current
@@ -83,7 +86,7 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
       if (!stopped) timer = setTimeout(() => void poll(), 250);
     };
     const data = t.onData((data) => {
-      if (current.current?.controller === "web" && current.current.online)
+      if (current.current?.online)
         void send({ type: "input", data }).catch(() => {});
     });
     const observer = new ResizeObserver(() => {
@@ -112,22 +115,21 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
     // A session owns its terminal and ordered input queue for its whole mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
-  const control = async (controller: "web" | "local") => {
-    const size = fit.current?.proposeDimensions();
-    await send({
-      type: "control",
-      controller,
-      ...(controller === "web" && size
-        ? {
-            cols: Math.max(2, Math.min(300, size.cols)),
-            rows: Math.max(2, Math.min(120, size.rows)),
-          }
-        : {}),
+  const switchView = () => {
+    setMobile((value) => !value);
+    requestAnimationFrame(() => {
+      const size = fit.current?.proposeDimensions();
+      if (!size) return;
+      void send({
+        type: "control", controller: "web",
+        cols: Math.max(2, Math.min(300, size.cols)),
+        rows: Math.max(2, Math.min(120, size.rows)),
+      }).catch(() => {});
     });
-    if (controller === "web") terminal.current?.focus();
   };
   const online = info?.online ?? false;
-  const canType = online && info?.controller === "web";
+  const canType = online;
+  const ended = info?.exitCode !== null && info?.exitCode !== undefined;
   return (
     <section className="min-w-0 flex-1">
       <div className="mb-3 flex flex-wrap items-center gap-3">
@@ -136,24 +138,22 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
           <p className="text-xs text-muted">
             {info?.harness} · {info?.machine} ·{" "}
             {online
-              ? `${info?.controller} control`
+              ? "Online"
               : info?.exitCode !== null && info?.exitCode !== undefined
                 ? `Exited (${info.exitCode})`
                 : "Offline"}
           </p>
         </div>
-        <button
-          aria-label={canType ? "Release control" : "Take control"}
+        {!ended && <button
+          aria-label={mobile ? "Switch to desktop" : "Switch to mobile"}
           disabled={!online}
           className="rounded border border-edge px-3 py-2 disabled:opacity-40"
-          onClick={() =>
-            void control(canType ? "local" : "web").catch(() => {})
-          }
+          onClick={switchView}
         >
-          {canType ? "Release control" : "Take control"}
-        </button>
+          {mobile ? "Switch to desktop" : "Switch to mobile"}
+        </button>}
         <button
-          aria-label="Disconnect remote session"
+          aria-label={ended ? "Remove session" : "Disconnect remote session"}
           className="rounded border border-edge px-3 py-2"
           onClick={() =>
             void request(`/${id}`, undefined, "DELETE")
@@ -161,7 +161,7 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
               .catch((e) => setError(e.message))
           }
         >
-          Disconnect
+          {ended ? "Remove session" : "Disconnect"}
         </button>
       </div>
       {error && (
@@ -169,14 +169,18 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
           {error}
         </p>
       )}
-      <div className="overflow-x-auto rounded border border-edge bg-[#111214] p-2">
+      <div style={{ maxWidth: mobile ? 420 : undefined }}>
+      {ended && <p role="status" className="mb-3 rounded border border-edge bg-surface p-4 text-sm">
+        Session ended (exit {info?.exitCode}). Start a new session with afbin remote to reconnect.
+      </p>}
+      <div className="overflow-x-auto rounded border border-edge bg-[#111214] p-2" hidden={ended}>
         <div
           ref={container}
           aria-label="Remote terminal"
           style={{ height: "min(58dvh, 650px)", minHeight: 240 }}
         />
       </div>
-      <form
+      {!ended && <form
         className="mt-3 flex gap-2"
         onSubmit={(e) => {
           e.preventDefault();
@@ -198,7 +202,7 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
           onChange={(e) => setDraft(e.target.value)}
           className="min-w-0 flex-1 rounded border border-edge bg-surface p-3"
           placeholder={
-            canType ? "Message your agent…" : "Take control to send a message"
+            canType ? "Message your agent…" : "Session offline"
           }
           maxLength={16000}
         />
@@ -209,8 +213,8 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
         >
           Send
         </button>
-      </form>
-      <div className="mt-2 flex flex-wrap gap-2">
+      </form>}
+      {!ended && <div className="mt-2 flex flex-wrap gap-2">
         {[
           ["Enter", "\r"],
           ["Escape", "\x1b"],
@@ -229,15 +233,75 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
             {name}
           </button>
         ))}
-      </div>
-      <p className="mt-3 text-xs text-muted">
-        Typing in your local terminal takes control back. Disconnect removes
+      </div>}
+      <p className="mt-3 text-xs text-muted" hidden={ended}>
+        Type directly in the terminal or use the message box. Typing locally restores
+        your local terminal dimensions. Disconnect removes
         remote access; your local process keeps running.
       </p>
+      </div>
     </section>
   );
 }
+function CopyCommand({ label, command }: { label: string; command: string }) {
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
+  return (
+    <div>
+      <p className="mb-2 text-sm font-medium">{label}</p>
+      <div className="flex items-start gap-2 rounded border border-edge bg-surface p-3">
+        <code className="min-w-0 flex-1 whitespace-pre-wrap break-words text-xs">{command}</code>
+        <Button
+          type="button"
+          aria-label={`Copy ${label.toLowerCase()}`}
+          title={copied ? "Copied" : `Copy ${label.toLowerCase()}`}
+          className="shrink-0"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(command);
+              setCopied(true);
+              setError("");
+            } catch {
+              setError("Could not copy. Select and copy the command above.");
+            }
+          }}
+        >
+          <CopyIcon copied={copied} />
+        </Button>
+      </div>
+      <span className="sr-only" role="status">{copied ? "Copied to clipboard" : ""}</span>
+      {error && <p role="alert" className="mt-1 text-xs text-muted">{error}</p>}
+    </div>
+  );
+}
+function InstallInstructions() {
+  const [harness, setHarness] = useState("claude");
+  return (
+    <div className="mt-4 space-y-4">
+      <CopyCommand label="Install CLI" command={'curl -fsSL https://artifactbin.dev/chat/install.sh | sh\nexport PATH="$HOME/.local/bin:$PATH"'} />
+      <p className="text-xs text-muted">macOS and Linux · Intel and ARM. Windows: use WSL.</p>
+      <CopyCommand label="Connect your account" command="afbin auth" />
+      <div>
+        <label htmlFor="remote-harness" className="mb-2 block text-sm">Choose your agent</label>
+        <select id="remote-harness" value={harness} onChange={(event) => setHarness(event.target.value)} className="w-full rounded border border-edge bg-surface p-2 text-sm">
+          <option value="claude">Claude Code</option>
+          <option value="codex">Codex</option>
+          <option value="pi">Pi</option>
+          <option value="opencode">OpenCode</option>
+        </select>
+      </div>
+      <CopyCommand key={harness} label="Start a session" command={`afbin remote ${harness}`} />
+      <p className="text-xs text-muted">Your agent must already be installed. Type @ in an artifact comment to mention an online session.</p>
+    </div>
+  );
+}
 export function ChatPage() {
+  const [setupExpanded, setSetupExpanded] = useState(false);
   const [params, setParams] = useSearchParams();
   const id = params.get("session");
   const [sessions, setSessions] = useState<RemoteSessionInfo[]>([]);
@@ -278,7 +342,7 @@ export function ChatPage() {
         </p>
       )}
       <div className="flex flex-col gap-6 md:flex-row">
-        <aside className="shrink-0 md:w-56">
+        <aside className="shrink-0 md:w-80">
           {sessions.map((s) => (
             <button
               key={s.id}
@@ -289,23 +353,22 @@ export function ChatPage() {
             >
               <span className="block truncate">{s.name}</span>
               <span className="text-xs text-muted">
-                {s.harness} · {s.online ? "Online" : "Offline"}
+                {s.harness} · {s.exitCode !== null && s.exitCode !== undefined ? "Ended" : s.online ? "Online" : "Offline"}
               </span>
             </button>
           ))}
-          <p className="mt-3 text-xs text-muted">
-            Install the CLI:
-            <code className="my-2 block break-words rounded border border-edge bg-surface p-2">curl -fsSL https://artifactbin.dev/chat/install.sh | sh</code>
-            <a href="/chat/install.sh" className="underline">View install script</a>
-            <br />
-            Connect your account: <code>afbin auth</code>
-            <br />
-            Start a session:
-            <br />
-            <code>afbin remote claude</code>
-            <br />
-            Type @ in an artifact comment to mention an online session.
-          </p>
+          {id && <button
+            type="button"
+            aria-expanded={setupExpanded}
+            aria-controls="cli-setup"
+            className="mt-2 flex w-full items-center justify-between rounded border border-edge px-3 py-2 text-sm md:hidden"
+            onClick={() => setSetupExpanded((value) => !value)}
+          >
+            CLI setup <span aria-hidden="true">{setupExpanded ? "−" : "+"}</span>
+          </button>}
+          <div id="cli-setup" className={id && !setupExpanded ? "hidden md:block" : ""}>
+            <InstallInstructions />
+          </div>
         </aside>
         {id ? (
           <SessionTerminal

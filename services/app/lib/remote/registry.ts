@@ -162,7 +162,7 @@ export class RemoteRegistry {
     s.seen = this.now();
     if (body.localControl) {
       s.info.controller = "local";
-      s.inputs = s.inputs.filter((i) => i.source === "comment");
+      s.inputs = s.inputs.filter((i) => i.kind !== "resize");
     }
     s.inputs = s.inputs.filter((i) => i.id > body.ack);
     if (body.outputSeq > s.seq) {
@@ -229,8 +229,6 @@ export class RemoteRegistry {
     this.live(s);
     if (typeof data !== "string" || !data || data.length > 32768)
       throw new RemoteError("Invalid input");
-    if (source === "keyboard" && s.info.controller !== "web")
-      throw new RemoteError("Take control before typing", 409);
     if (eventId && s.events.has(eventId)) return;
     this.queue(s, { kind: "input", data, source });
     if (eventId) {
@@ -257,7 +255,7 @@ export class RemoteRegistry {
     }
     s.info.controller = controller;
     if (controller === "local")
-      s.inputs = s.inputs.filter((i) => i.source === "comment");
+      s.inputs = s.inputs.filter((i) => i.kind !== "resize");
   }
   remove(userId: string, id: string): void {
     const s = this.get(userId, id);

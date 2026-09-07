@@ -6,6 +6,7 @@
  * mints; nothing is stored; a fresh render shows the confirm step.
  */
 import { useState } from 'react';
+import { CopyIcon } from '@/components/CopyIcon';
 import { Button, PANEL } from '@/components/ui';
 import { useSession } from '../session';
 
@@ -66,24 +67,32 @@ export function TokensNewPage() {
 
   const copy = async () => {
     if (!minted) return;
-    await navigator.clipboard.writeText(minted.token);
-    setCopied(true);
+    try {
+      await navigator.clipboard.writeText(minted.token);
+      setCopied(true);
+      setError(null);
+    } catch {
+      setError('Could not copy. Select and copy the token above.');
+    }
   };
 
   return (
-    <main className="mx-auto mt-16 max-w-xl px-6 pb-24">
-      <div className="mx-auto max-w-md">
+    <main className="mx-auto mt-16 max-w-3xl px-6 pb-24">
+      <div className="w-full">
         <h1 className="text-base font-semibold"><span className="text-accent">&gt;</span> new token</h1>
 
         <div className={`${PANEL} mt-5 p-5`}>
           {minted ? (
             <>
               <p className="font-mono text-xs text-muted">Shown once</p>
-              <code className="mt-3 block break-all rounded-[4px] border border-edge bg-bg p-3 font-mono text-sm text-fg">{minted.token}</code>
+              <div className="mt-3 flex items-start gap-3 rounded-[4px] border border-edge bg-bg p-3">
+                <code className="min-w-0 flex-1 select-all break-all font-mono text-sm text-fg">{minted.token}</code>
+                <Button className="shrink-0" type="button" title={copied ? "Copied" : "Copy token"} aria-label="Copy token" onClick={() => void copy()}>
+                  <CopyIcon copied={copied} />
+                </Button>
+              </div>
+              <span className="sr-only" role="status">{copied ? 'Token copied to clipboard' : ''}</span>
               <p className="mt-3 font-mono text-xs text-muted">Expires {new Date(minted.expiresAt).toLocaleString()}</p>
-              <Button className="mt-4" type="button" aria-label="Copy token" onClick={() => void copy()}>
-                {copied ? 'copied' : 'copy token'}
-              </Button>
               <p className="mt-4 font-sans text-sm text-muted">
                 Use it with your agent. <a className="text-accent underline underline-offset-2" href="/docs-human">Instructions</a>
               </p>
