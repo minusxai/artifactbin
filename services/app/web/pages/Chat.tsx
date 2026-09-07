@@ -301,6 +301,7 @@ function InstallInstructions() {
   );
 }
 export function ChatPage() {
+  const [setupExpanded, setSetupExpanded] = useState(false);
   const [params, setParams] = useSearchParams();
   const id = params.get("session");
   const [sessions, setSessions] = useState<RemoteSessionInfo[]>([]);
@@ -356,7 +357,18 @@ export function ChatPage() {
               </span>
             </button>
           ))}
-          <InstallInstructions />
+          {id && <button
+            type="button"
+            aria-expanded={setupExpanded}
+            aria-controls="cli-setup"
+            className="mt-2 flex w-full items-center justify-between rounded border border-edge px-3 py-2 text-sm md:hidden"
+            onClick={() => setSetupExpanded((value) => !value)}
+          >
+            CLI setup <span aria-hidden="true">{setupExpanded ? "−" : "+"}</span>
+          </button>}
+          <div id="cli-setup" className={id && !setupExpanded ? "hidden md:block" : ""}>
+            <InstallInstructions />
+          </div>
         </aside>
         {id ? (
           <SessionTerminal
