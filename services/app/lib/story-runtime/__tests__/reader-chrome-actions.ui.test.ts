@@ -192,3 +192,42 @@ describe('wireReaderChrome — the rail', () => {
     expect(document.documentElement.classList.contains('dark')).toBe(false);
   });
 });
+
+/*
+ * ADDED: THE PAGE'S COMMENT RAIL. The page no longer narrows the frame when
+ * the rail opens — the bar inside it would narrow too, and its controls
+ * would shift. The frame stays full-width, the rail sits UNDER the bar, and
+ * the document leaves the rail its width the way it leaves the pinned bars
+ * their height: a variable the page sets through the same message.
+ */
+describe('wireReaderChrome — the page\'s rail', () => {
+  // Only a FRAMED document listens to the page; the fake parent is the page.
+  const framed = () => {
+    const parent = { postMessage: () => {} };
+    set(window, 'parent', parent);
+    mount();
+    return (data: Record<string, unknown>) => window.dispatchEvent(new MessageEvent('message', { data, source: parent as unknown as MessageEventSource }));
+  };
+  afterEach(() => { set(window, 'parent', window); document.documentElement.style.cssText = ''; });
+  const railInset = () => document.documentElement.style.getPropertyValue('--mx-rail-inset');
+
+  it('leaves the rail its width on the right, and takes it back', () => {
+    const fromPage = framed();
+    fromPage({ type: 'mx:reader-chrome', mode: 'on', railInset: 320 });
+    expect(railInset()).toBe('320px');
+    fromPage({ type: 'mx:reader-chrome', mode: 'on', railInset: 0 });
+    expect(railInset()).toBe('0px');
+    // Absent means none — a page that says nothing about the rail leaves the document full-width.
+    fromPage({ type: 'mx:reader-chrome', mode: 'on', railInset: 320 });
+    fromPage({ type: 'mx:reader-chrome', mode: 'on' });
+    expect(railInset()).toBe('0px');
+  });
+
+  it('keeps the rail inset while pinned for editing, beside the bars\' own inset', () => {
+    const fromPage = framed();
+    set(window, 'innerWidth', 1280);
+    fromPage({ type: 'mx:reader-chrome', mode: 'pinned', inset: 48, railInset: 320 });
+    expect(document.documentElement.style.getPropertyValue('--mx-chrome-inset')).toBe('92px');
+    expect(railInset()).toBe('320px');
+  });
+});

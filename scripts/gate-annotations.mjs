@@ -110,8 +110,14 @@ const run = async () => {
     await page.keyboard.press('Escape');
     const thread = page.locator('[aria-label="Annotation thread"]');
     ok((await thread.textContent())?.includes('Q3 sheet'), 'the saved comment appears as a rail thread');
-    ok(await page.locator('[aria-label="Artifact viewport"]').evaluate((el) => el.style.right !== '0px'),
-      'the open rail narrows the document rather than covering it');
+    // The frame stays FULL-WIDTH — the bar drawn inside it must not narrow —
+    // and the document leaves the rail its width instead.
+    ok(await page.locator('[aria-label="Artifact viewport"]').evaluate((el) => el.style.right === '0px'),
+      'the open rail leaves the frame full-width, so the bar inside it does not move');
+    const railInset = await until(() => frame.locator('html').evaluate((el) => getComputedStyle(el).getPropertyValue('--mx-rail-inset').trim()), (v) => v === '320px', 5000);
+    ok(railInset === '320px', `the document leaves the rail its width (got ${railInset})`);
+    ok(await page.locator('[aria-label="Annotation sidebar"]').evaluate((el) => el.style.top === '44px'),
+      'the rail sits under the document\'s bar');
 
     await page.locator('[aria-label="Close comments"]').click();
     const railGone = await until(() => page.locator('[aria-label="Annotation sidebar"]').count(), (n) => n === 0, 5000);
@@ -130,6 +136,8 @@ const run = async () => {
     const compactBox = await viewComment.boundingBox();
     ok(!!compactBox && compactBox.width <= 40 && compactBox.height <= 40,
       'the ambient annotation is a compact identity marker');
+    const railGone2 = await until(() => frame.locator('html').evaluate((el) => getComputedStyle(el).getPropertyValue('--mx-rail-inset').trim()), (v) => v === '0px', 5000);
+    ok(railGone2 === '0px', 'closing the rail gives the document its width back');
     ok(await page.locator('[aria-label="Artifact viewport"]').evaluate((el) => (el).style.right === '0px'),
       'the floating marker leaves the document full-width');
     await viewComment.hover();

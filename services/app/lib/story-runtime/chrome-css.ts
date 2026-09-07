@@ -210,15 +210,18 @@ html.dark .mx-reader-chrome {
   --mx-reader-scheme: dark;
 }
 .mx-reader-chrome--off { display: none !important; }
-.mx-reader-chrome--pinned { opacity: 1 !important; visibility: visible !important; transform: none !important; pointer-events: auto !important; }
+.mx-reader-chrome--pinned { opacity: 1 !important; visibility: visible !important; top: 0 !important; pointer-events: auto !important; }
 .mx-reader-chrome--pinned [data-mx-reader-action="edit"] { color: var(--mx-reader-accent) !important; }
-body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; }
+/* The room the page's bars and rail take, both set by the page through
+   mx:reader-chrome: the pinned bars above, the comment rail on the right. The
+   frame itself never narrows, so the bar drawn inside it never moves. */
+body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; padding-right: var(--mx-rail-inset, 0px) !important; }
 .mx-reader-chrome {
   position: fixed !important; z-index: 2147483003 !important;
   color-scheme: var(--mx-reader-scheme) !important;
   color: var(--mx-reader-fg) !important;
   font-family: var(--font-mono, ui-monospace, monospace) !important;
-  transition: opacity 200ms ease-out, transform 200ms ease-out, visibility 200ms !important;
+  transition: opacity 200ms ease-out, top 200ms ease-out, visibility 200ms !important;
 }
 .mx-reader-chrome [hidden] { display: none !important; }
 .mx-reader-chrome--hidden { opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }
@@ -392,8 +395,10 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
 
 /* DESKTOP — one bar across the top. */
 @media (min-width: 640px) {
+  /* Clear of the page's comment rail too: the frame stays full-width under
+     it, so a corner at the frame's edge is a corner under the rail. */
   .mx-reader-github {
-    position: fixed !important; right: max(20px, env(safe-area-inset-right)) !important;
+    position: fixed !important; right: calc(max(20px, env(safe-area-inset-right)) + var(--mx-rail-inset, 0px)) !important;
     bottom: max(20px, env(safe-area-inset-bottom)) !important;
   }
   .mx-reader-github { height: 28px !important; padding: 0 10px !important;
@@ -414,7 +419,11 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
     -webkit-backdrop-filter: blur(16px) saturate(1.5) !important; backdrop-filter: blur(16px) saturate(1.5) !important;
     box-shadow: 0 1px 0 color-mix(in srgb, var(--mx-reader-fg) 12%, transparent), 0 10px 28px -18px rgba(0,0,0,.45) !important;
   }
-  .mx-reader-chrome--hidden { transform: translateY(-100%) !important; }
+  /* Slid away by TOP, never by a transform: a transformed ancestor is the
+     containing block for fixed descendants, and the star below is one — under
+     a transform it sat at the bar's bottom-right (the top of the screen) for
+     the length of every slide, then jumped to the viewport's. */
+  .mx-reader-chrome--hidden { top: -44px !important; }
   .mx-reader-panel--menu .mx-reader-signin { margin-bottom: 8px !important; }
   .mx-reader-home { order: 0 !important; width: 34px !important; height: 34px !important; }
   /* Byline before rail on the screen, after it in the DOM: the reading order

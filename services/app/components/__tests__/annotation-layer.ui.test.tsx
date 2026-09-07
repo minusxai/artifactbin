@@ -436,7 +436,11 @@ describe('AnnotationLayer', () => {
     const composer = await screen.findByLabelText('Annotation comment');
     const popover = screen.getByRole('dialog', { name: 'Annotation composer' });
     expect(popover).toHaveClass('fixed');
-    expect(popover.style.left).toBe('217px'); // frame left + selection right + 12px gap
+    // The frame is full-width under an open rail, so the composer is kept
+    // clear of the rail's 320px: 800 - 320 - 12 - 384 = 84, not the 217 the
+    // selection alone would ask for.
+    expect(popover.style.left).toBe('84px');
+    expect(Number.parseInt(popover.style.left, 10) + Number.parseInt(popover.style.width, 10)).toBeLessThanOrEqual(800 - 320);
     expect(popover.style.top).toBe('158px'); // frame top + selection y + selection height + 12px
     expect(within(screen.getByLabelText('Annotation sidebar')).queryByLabelText('Annotation comment')).toBeNull();
     // The breadcrumb: the ancestor is clickable and asks the FRAME to re-select.
@@ -1000,5 +1004,22 @@ describe('drawing an area from the rail', () => {
       .filter((message) => message?.type === STORY_ANNOTATIONS_MESSAGE)
       .flatMap((message) => message.pins as Array<{ id: string; range: unknown }>);
     expect(pins).toContainEqual(expect.objectContaining({ id: 'ann_area', range: AREA }));
+  });
+});
+
+/*
+ * ADDED: THE RAIL SITS UNDER THE DOCUMENT'S BAR. The page says where the
+ * bars end (`topOffset`) and how wide the frame's own scrollbar is
+ * (`rightInset`), so the rail starts below the bar and stops short of the
+ * scrollbar the frame keeps at the window's edge.
+ */
+describe('the rail under the bar', () => {
+  it('starts at the offset the page gives it and leaves the frame\'s scrollbar visible', async () => {
+    const { frame } = makeFrame();
+    render(layer(frame, { railOpen: true, topOffset: 44, rightInset: 15 }));
+    await flush();
+    const rail = screen.getByLabelText('Annotation sidebar');
+    expect(rail.style.top).toBe('44px');
+    expect(rail.style.right).toBe('15px');
   });
 });

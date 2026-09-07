@@ -6,7 +6,7 @@
  * not-logged-in readers holding a token that owns other artifacts.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 /*
  * The layer renders nothing here — this file is about the PAGE's chrome and
@@ -189,8 +189,10 @@ describe('the surface header buttons are owner chrome', () => {
     // title says nothing — there is no second mode for it to announce.
     expect(window.location.hash).toBe('');
     expect(document.title).toBe('doc');
-    // Opening the rail narrows the document so comments never cover it.
-    expect(screen.getByLabelText('Artifact viewport').style.right).not.toBe('0px');
+    // The rail sits UNDER the document's bar and the frame stays full-width:
+    // the bar drawn inside it must not narrow, and its controls must not move.
+    expect(screen.getByLabelText('Artifact viewport').style.right).toBe('0px');
+    expect(layerProps.at(-1)).toMatchObject({ railOpen: true, topOffset: 44 });
   });
 
   it('keeps the document full-width while view-mode annotations overlap it', () => {
@@ -360,6 +362,38 @@ describe('the view-mode selection bubble is granted, and re-checked, by the page
     openDocumentControls();
     fireEvent.click(screen.getByLabelText('Toggle comments'));
     expect(granted(win).at(-1)).toMatchObject({ edit: true, annotate: true });
+  });
+
+  it('opening the rail tells the document to leave the rail its width, and the frame never narrows', async () => {
+    render(
+      <ArtifactShell role="owner">
+        <ArtifactSurface {...surfaceProps({})} />
+      </ArtifactShell>,
+    );
+    const win = frameWindow();
+    announce(win);
+    const chrome = () => win.postMessage.mock.calls
+      .map((call) => call[0] as { type?: string; mode?: string; railInset?: number })
+      .filter((message) => message?.type === 'mx:reader-chrome');
+    expect(chrome().at(-1)).toMatchObject({ mode: 'on', railInset: 0 });
+
+    openDocumentControls();
+    fireEvent.click(screen.getByLabelText('Toggle comments'));
+    expect(chrome().at(-1)).toMatchObject({ mode: 'on', railInset: 320 });
+    expect(screen.getByLabelText('Artifact viewport').style.right).toBe('0px');
+    expect(layerProps.at(-1)).toMatchObject({ railOpen: true, topOffset: 44 });
+
+    // Under the editor the rail drops below BOTH bars, and the editor toolbar
+    // stays full-width above it like the document's own bar (its inset is
+    // the frame's scrollbar alone — none here).
+    openDocumentControls();
+    fireEvent.click(screen.getByLabelText('Edit artifact'));
+    await waitFor(() => expect(screen.getByLabelText('Exit edit mode')).toBeInTheDocument());
+    expect(chrome().at(-1)).toMatchObject({ mode: 'pinned', inset: 48, railInset: 320 });
+    expect(layerProps.at(-1)).toMatchObject({ railOpen: true, topOffset: 92, rightInset: 0 });
+
+    fireEvent.click(within(screen.getByLabelText('Editor toolbar')).getByLabelText('Toggle comments'));
+    expect(chrome().at(-1)).toMatchObject({ mode: 'pinned', railInset: 0 });
   });
 
   it('grants a named editor BOTH actions, and a reader nothing at all', () => {

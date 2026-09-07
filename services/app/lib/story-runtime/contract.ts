@@ -304,6 +304,13 @@ export interface StoryReaderChromeMessage {
   type: typeof STORY_READER_CHROME_MESSAGE;
   mode: 'on' | 'off' | 'pinned';
   inset?: number;
+  /**
+   * The width of the page's comment rail, which the document leaves free on
+   * its right — the frame itself stays full-width, so the bar drawn inside
+   * it does not narrow and its controls do not move when the rail opens.
+   * Absent or 0: no rail.
+   */
+  railInset?: number;
 }
 
 /** A framed document's scroll port lives across an opaque-origin boundary

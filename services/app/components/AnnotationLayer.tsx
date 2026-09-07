@@ -72,8 +72,10 @@ export interface AnnotationLayerProps {
    * explicit pick is always allowed.
    */
   pickOnOpen?: boolean;
-  /** Where the document's viewport starts: the top bar, plus the edit bar when one is up. */
+  /** Where the rail starts: under the document's bar, plus the editor toolbar when one is up. */
   topOffset: number;
+  /** What the rail leaves free on the right: the frame's own scrollbar, which stays at the window's edge. */
+  rightInset?: number;
 }
 
 const cardClass = 'rounded-[6px] border border-edge bg-raised text-sm';
@@ -754,7 +756,7 @@ function Thread({
 
 export default function AnnotationLayer({
   id, frameRef, sessionNonce, railOpen, liveAnnotations, showViewComments,
-  onRailOpenChange, initialSelection = null, topOffset, onAnnotationsChange, pickOnOpen = true,
+  onRailOpenChange, initialSelection = null, topOffset, onAnnotationsChange, pickOnOpen = true, rightInset = 0,
 }: AnnotationLayerProps) {
   const [annotations, setAnnotations] = useState<AnnotationWire[]>([]);
   // The page's own count (the badge on the comment glyph) follows THIS list:
@@ -1200,11 +1202,14 @@ export default function AnnotationLayer({
 
   // The breadcrumb the edit toolbar taught: nearest ancestors, outermost first.
   const crumbs = selection ? [...selection.ancestors.slice(-2), { path: selection.path, tag: selection.tag, hint: '' }] : [];
-  const frameRect = frameRef.current?.getBoundingClientRect() ?? {
-    left: 0,
-    top: topOffset,
-    width: window.innerWidth - (railOpen ? RIGHT_RAIL_W : 0),
-  };
+  // The frame is full-width under an open rail (the rail overlays its right
+  // edge below the bar), so what the composer and the pill may use is the
+  // frame LESS the rail — never the frame's own width.
+  const railWidth = railOpen && !phoneRail ? RIGHT_RAIL_W : 0;
+  const measured = frameRef.current?.getBoundingClientRect();
+  const frameRect = measured
+    ? { left: measured.left, top: measured.top, width: Math.max(0, measured.width - railWidth) }
+    : { left: 0, top: topOffset, width: window.innerWidth - railWidth };
   const composerPosition = selection
     ? positionedComposer(selection, frameRect, window.innerWidth, window.innerHeight)
     : null;
@@ -1349,6 +1354,7 @@ export default function AnnotationLayer({
       <RailChrome
         phone={phoneRail}
         topOffset={topOffset}
+        rightInset={rightInset}
         onClose={() => onRailOpenChange(false)}
         header={
           <div className="flex items-center gap-2 px-1">
@@ -1459,9 +1465,10 @@ export default function AnnotationLayer({
  * on a phone. The content between them is identical; this wrapper is the only
  * thing that knows the difference.
  */
-function RailChrome({ phone, topOffset, onClose, header, children }: {
+function RailChrome({ phone, topOffset, rightInset, onClose, header, children }: {
   phone: boolean;
   topOffset: number;
+  rightInset: number;
   onClose: () => void;
   /** The title row + close control — pinned above the scroll in BOTH homes:
       the way out must stay reachable however long the list gets. */
@@ -1478,8 +1485,8 @@ function RailChrome({ phone, topOffset, onClose, header, children }: {
   return (
     <aside
       aria-label="Annotation sidebar"
-      className="fixed bottom-0 right-0 z-20 flex flex-col gap-2.5 border-l border-edge bg-bg p-2.5"
-      style={{ top: topOffset, width: RIGHT_RAIL_W }}
+      className="fixed bottom-0 z-20 flex flex-col gap-2.5 border-l border-edge bg-bg p-2.5"
+      style={{ top: topOffset, right: rightInset, width: RIGHT_RAIL_W }}
     >
       <div className="shrink-0">{header}</div>
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto">{children}</div>
