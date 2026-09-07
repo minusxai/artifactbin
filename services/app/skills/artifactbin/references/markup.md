@@ -1,18 +1,18 @@
 ---
 name: markup
 description: >-
-  JSX and component vocabulary.
+  JSX vocabulary.
 ---
 ## Read first
 
 `markup` is **static JSX data** over a fixed component registry.
-Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with exact spans.
+Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with spans.
 
 - Literal props, plus [restricted reactive JSX and dialogs](markup-state.md).
   No spreads, callbacks, or inline handlers; every tag closes (`<br />`),
   comments are `{/* … */}`, and there is no `<html>`/`<head>`/`<body>`.
   One Helmet script runs in an isolated iframe, without visible DOM access.
-  DOM-based libraries use a visible `<Sandbox>`; see [libraries](markup-libraries.md).
+  DOM libraries use [Iframe](markup-iframe.md); Sandbox stays supported.
   Use the `mx` data API and declarative controls.
 - **Style with Tailwind classes via `className`**, starting from a
   `<div data-design="tw" className="@container …">` wrapper with `@2xl:`
@@ -64,7 +64,7 @@ At most ONE per document, holding at most one each of `<title>`, `<style>`
 and `<script>`, plus `<meta name content />` pairs, plus any number of the
 DATA declarations `<Value>`, `<Query>`, `<Mutation>` ([data](markup-data.md)).
 Write it anywhere; it is hoisted to the top when stored. It is the ONLY
-place for custom CSS, JS or data — any of those in the body is refused.
+place for parent CSS, JS or data; [Iframe](markup-iframe.md) owns isolated child CSS/JS.
 
 ```jsx
 <Helmet>
@@ -79,7 +79,7 @@ place for custom CSS, JS or data — any of those in the body is refused.
 </Helmet>
 ```
 
-Scripts have no visible DOM access: use declarative controls and
+Helmet scripts have no visible DOM access: use declarative controls and
 `mx.params.subscribe` for signal changes. Fetch is blocked. **Rows arrive after
 the script starts**; use `mx.data.subscribe`, not a line-one read. Signal writes
 are asynchronous. See [script API and migration](markup-scripts.md) before

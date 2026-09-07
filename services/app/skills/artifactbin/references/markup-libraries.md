@@ -1,10 +1,13 @@
 ---
 name: markup-libraries
-description: "Sandbox libraries and files."
+description: "Libraries/files."
 ---
 ## Read first
 
-Use a generic `<Sandbox>` with internal HTML/canvas and a script string. `artifact.library('three')`
+For new scenes, use [managed Iframe](markup-iframe.md): inline DOM/canvas and
+script children, with bundled CDN libraries through the asset cache. No
+Three.js-specific component is needed. The following `<Sandbox>` interface is
+retained for compatibility. `artifact.library('three')`
 loads the hosted library; `artifact.resolve('ref:<id>')` resolves readable file
 bytes. Private assets never resolve. No Three.js-specific scene components.
 The child can edit its own DOM, not the surrounding artifact. It also has the
@@ -19,8 +22,9 @@ Libraries · File uploads.
 
 Use the platform's optional library registry from `Sandbox.script`:
 `await artifact.library('three')` returns Three.js core plus `OrbitControls`
-and `GLTFLoader` (currently pinned to 0.185.1). No custom scene components or
-CDN imports. A library downloads only when requested; repeated calls reuse it.
+and `GLTFLoader` (currently pinned to 0.185.1). This legacy registry is not a CDN
+import API; use managed Iframe for bundled CDN sources. A registry library
+downloads only when requested; repeated calls reuse it.
 
 ```jsx
 <Sandbox title="3D model" height={450}

@@ -1,7 +1,7 @@
 ---
 name: markup-scripts
 description: >-
-  Isolated scripts and their data bridge.
+  Script APIs.
 ---
 ## Read first
 
@@ -14,22 +14,28 @@ logic. Existing scripts that attach listeners to visible elements or manipulate
 them must be migrated; there is no legacy same-realm execution fallback. Not
 every DOM interaction currently has a declarative equivalent.
 
-For canvas/library interfaces, `<Sandbox html="…" script="…" title="…" />`
+For new canvas/library interfaces, use [managed Iframe](markup-iframe.md), with
+static DOM, style and script children. The compatible legacy
+`<Sandbox html="…" script="…" title="…" />`
 owns a visible opaque child. Its script may manipulate **its own internal HTML**,
 never this parent document. It receives the same `mx` bridge plus the pinned
 library/anonymous-asset API. Move DOM-based code out of Helmet and its target
 HTML into the sandbox; see [libraries](markup-libraries.md).
 
+## Data API
+
 `window.mx` is defined before the script runs:
 
-- `mx.params.get(name)`, `.set(name, value)`, `.subscribe(fn)`: declared scalar
+- `mx.params.get(name)`, `.set(name, value)`, `.subscribe(names, fn)`: declared scalar
   signals. Writes re-run dependent queries and update bound embeds. A set crosses
   an asynchronous channel; an immediate get can return the preceding snapshot.
   Subscribe to observe the accepted value. The subscription returns an unsubscribe
-  function.
+  function. Pass explicit names, e.g. `mx.params.subscribe(['count'], fn)`;
+  callbacks receive only selected values when relevant state changes.
 - `mx.data.get(name)`: a detached `{rows, columns}` result, or undefined before it
-  arrives. **Rows arrive after the script starts**; use `mx.data.subscribe(fn)`.
-  Subscribers receive `(state, pendingNames)`. `.pending()` returns pending names.
+  arrives. **Rows arrive after the script starts**; use `mx.data.subscribe(['results'], fn)`.
+  Subscribers receive `(selectedState, pendingNames)`. `.pending()` returns pending names.
+  Both subscription APIs retain broad `.subscribe(fn)` compatibility.
 - `mx.refresh(names?)`: refresh all queries or the named declared queries.
 - `await mx.mutate(name, values?)`: run a declared mutation with optional scalar
   signal overrides. Store and server permissions still apply; failures reject.
@@ -43,5 +49,5 @@ updates; unchanged scripts survive prose edits. Revocation does not undo a write
 already accepted by the server. Origin isolation is not a guarantee of CPU or
 memory isolation.
 
-`</script` cannot appear in script text; split it as `'</scr' + 'ipt'`.
+In Helmet script text, split `</script` as `'</scr' + 'ipt'`.
 See [markup](markup.md) for a signal-subscription example and the Helmet syntax.
