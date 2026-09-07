@@ -681,8 +681,8 @@ describe('the fork row', () => {
     });
   });
 
-  it('sends a browser with no account to login, and back here still asking to fork', async () => {
-    vi.stubGlobal('fetch', forkResponse(409, { error: 'sign_in_required' }));
+  it.each([[409, 'sign_in_required'], [401, 'unauthorized']] as const)('sends a browser with no account to login after %s, and back here still asking to fork', async (status, error) => {
+    vi.stubGlobal('fetch', forkResponse(status, { error }));
     await withLocation(async (assign) => {
       render(
         <ArtifactShell role="owner">
