@@ -7,6 +7,7 @@ node scripts/planning/ocean-workload-perf.mjs /path/to/capture.txt webkit 2 1
 node scripts/planning/ocean-workload-perf.mjs /path/to/capture.txt webkit 1 1,4,8 --cube
 node scripts/planning/ocean-workload-perf.mjs /path/to/capture.txt chromium 1 1 --headed
 node scripts/planning/ocean-workload-perf.mjs /path/to/capture.txt chromium 1 1 --headed --shapes=wrapper
+node scripts/planning/ocean-workload-perf.mjs /path/to/capture.txt chromium 3 1 --headed --shapes=wrapper --defer-inner
 node scripts/planning/ocean-workload-perf.mjs /path/to/capture.txt chromium 1 1 --interactive
 ```
 
@@ -31,6 +32,8 @@ The scene has approximately 256k triangles, 1,200 particles and 56 draw calls pe
 ## Results
 
 **Open reproducibility issue:** headed Chromium's repeated-navigation strict-wrapper case did not publish its passive sample within 60 seconds, with no page/console error. The other five cold/warm cases passed on ANGLE Metal (Apple M5 Pro). This is not a clean Chromium matrix; a targeted rerun with failure diagnostics is required before claiming reliable repeated startup. The probe now accepts `--shapes=wrapper` and captures frame state after a timeout; those diagnostics were not present in the initial failing run.
+
+The independent default rerun reproduced the stall: the wrapper's script executed and created an inner iframe with nonempty srcdoc and a contentWindow, but no author context was reported. The optional `--defer-inner` experiment creates that same inner iframe after the outer window's load event plus one task. It changes neither content nor CSP and is **not the default or an established fix**; compare repeated default/deferred cases before attributing the cause. Natural-removal readiness now fails explicitly if no author bootstrap appears rather than evaluating an undefined `metrics` global in the wrapper.
 
 In the five completed headed Chromium cases, passive and post-control render-call cadence was 8.2–8.4ms. The cold top-level first render paid substantial initial warmup (687ms versus 222–225ms for later framed shapes), so this single fixed-order run is not a valid numeric iframe-overhead comparison. Large resource requests also differed: top-level had four network hits then zero on its second pass (and zero on warm navigation); opaque frames re-requested all four resources on both passes. This strengthens the requirement to measure/cache at the trusted asset layer rather than assume browser cache reuse across opaque contexts.
 

@@ -13,6 +13,7 @@ const capture=JSON.parse(raw.slice(raw.indexOf('\n{')+1,raw.lastIndexOf('\n}')+2
 const capturedAuthor=capture.scripts.at(-1).text;
 assert(capturedAuthor.includes("artifact.library('three')")&&capturedAuthor.includes('pond'));
 const cube=process.argv.includes('--cube');
+const deferInner=process.argv.includes('--defer-inner');
 const author=cube?`(async()=>{const T=await artifact.library('three'),canvas=document.getElementById('pond'),renderer=new T.WebGLRenderer({canvas,antialias:true});const scene=new T.Scene(),camera=new T.PerspectiveCamera(45,1,.1,100);camera.position.z=4;const mesh=new T.Mesh(new T.BoxGeometry(1,1,1),new T.MeshNormalMaterial());scene.add(mesh);let paused=false,id;const observer=new ResizeObserver(()=>{renderer.setSize(canvas.clientWidth,canvas.clientHeight,false);camera.aspect=canvas.clientWidth/canvas.clientHeight;camera.updateProjectionMatrix();});observer.observe(canvas);function render(){id=requestAnimationFrame(render);if(!paused)mesh.rotation.y+=.01;renderer.render(scene,camera);}render();document.getElementById('scene-status').hidden=true;document.getElementById('pause').onclick=()=>paused=!paused;document.getElementById('ripple').onclick=()=>mesh.rotation.x+=.4;document.getElementById('breeze').oninput=()=>document.getElementById('wind-label').textContent='Whitecaps';addEventListener('pagehide',()=>{cancelAnimationFrame(id);observer.disconnect();mesh.geometry.dispose();mesh.material.dispose();renderer.dispose();},{once:true});})();`:capturedAuthor;
 const bundle=readFileSync(new URL('../../services/app/public/libraries/three-0.185.1/index.js',import.meta.url));
 const samples=Number(sampleArg),counts=countArg.split(',').map(Number);
@@ -62,7 +63,12 @@ const scene=()=>`<!doctype html><meta http-equiv="Content-Security-Policy" conte
 // Compile fixture strings before starting any server/browser; never evaluate the captured author in Node.
 new Function(bootstrap);new Function(author);
 const frame=(content)=>`const f=document.createElement('iframe');f.sandbox='allow-scripts';f.style='border:0;width:100%;height:100%';f.srcdoc=${literal(content)};document.body.append(f);`;
-const wrapper=()=>`<!doctype html><meta http-equiv="Content-Security-Policy" content="${policy}"><style>html,body{margin:0;width:100%;height:100%}</style><body><script>${frame(scene())}</script>`;
+const wrapper=()=>{
+ const mount=frame(scene());
+ // Optional diagnostic only: identical content/policy, but create the inner realm after outer load + one task.
+ const script=deferInner?`addEventListener('load',()=>setTimeout(()=>{${mount}},0),{once:true});`:mount;
+ return `<!doctype html><meta http-equiv="Content-Security-Policy" content="${policy}"><style>html,body{margin:0;width:100%;height:100%}</style><body><script>${script}</script>`;
+};
 const server=createServer((req,res)=>{
  const u=new URL(req.url,host),shape=u.pathname.slice(1),n=Number(u.searchParams.get('n')||1);
  res.setHeader('Content-Type','text/html');res.setHeader('Cache-Control','no-store');
@@ -110,12 +116,22 @@ try{
   }
   if(shape!=='top'){
    phase='natural-removal';const natural=[];
-   for(let cycle=0;cycle<3;cycle++){await page.goto(host+'/'+shape+'?n=1');let child;for(let attempt=0;attempt<100;attempt++){child=page.frames().at(-1);if(await child.evaluate(()=>!!window.snapshot).catch(()=>false))break;await page.waitForTimeout(50);}await child.waitForFunction(()=>metrics.renders.length>=3,null,{timeout:60000});const before=await child.evaluate(()=>snapshot());await page.evaluate(()=>document.querySelector('iframe').remove());await page.waitForTimeout(100);natural.push({cycle,before:{knownResources:before.knownResources,info:before.info},disposals:await page.evaluate(()=>disposals),remainingFrames:page.frames().length});}
+   for(let cycle=0;cycle<3;cycle++){
+    await page.goto(host+'/'+shape+'?n=1');let child,ready=false;
+    for(let attempt=0;attempt<100;attempt++){
+     child=page.frames().at(-1);ready=await child.evaluate(()=>!!window.snapshot).catch(()=>false);
+     if(ready)break;await page.waitForTimeout(50);
+    }
+    assert(ready,'natural-removal author frame did not bootstrap within5seconds');
+    await child.waitForFunction(()=>window.metrics?.renders.length>=3,null,{timeout:60000});
+    const before=await child.evaluate(()=>snapshot());await page.evaluate(()=>document.querySelector('iframe').remove());await page.waitForTimeout(100);
+    natural.push({cycle,before:{knownResources:before.knownResources,info:before.info},disposals:await page.evaluate(()=>disposals),remainingFrames:page.frames().length});
+   }
    rows.push({sample,count,shape,naturalRemoval:natural});
   }
   }catch(error){console.error(String(error));const diagnostics=[];for(const frame of page.frames())diagnostics.push(await frame.evaluate(()=>({url:location.href,hidden:document.hidden,visibility:document.visibilityState,ready:document.readyState,body:document.body?.getBoundingClientRect().toJSON(),children:[...document.body?.children??[]].map(e=>({tag:e.tagName,chars:e.textContent.length,srcdoc:e.getAttribute('srcdoc')?.length,window:e.tagName==='IFRAME'?!!e.contentWindow:undefined})),snapshot:window.snapshot?.()})).catch(e=>({error:String(e)})));failures.push({sample,count,shape,phase,error:String(error),errors,diagnostics});}finally{await context.close();}
  }
- console.log(JSON.stringify({engine,headed,workload:cube?'cube':'captured-ocean',browser:browser.version(),hardware:{cpu:cpus()[0]?.model,cores:cpus().length},authorSha256:createHash('sha256').update(author).digest('hex'),bundleSha256:createHash('sha256').update(bundle).digest('hex'),rows,failures,caveats:[
+ console.log(JSON.stringify({engine,headed,deferInner,workload:cube?'cube':'captured-ocean',browser:browser.version(),hardware:{cpu:cpus()[0]?.model,cores:cpus().length},authorSha256:createHash('sha256').update(author).digest('hex'),bundleSha256:createHash('sha256').update(bundle).digest('hex'),rows,failures,caveats:[
   'Ocean mode executes exact captured source; cube mode is a separate lightweight scaling workload. artifact.library aliases generated Three0.185.1 ESM.',
   'Local synthetic layout, DPR1, no network/CPU throttle, not physical mobile. Headed setting and exposed GPU renderer are reported.',
   'CPU render call timings exclude asynchronous GPU completion; no input-to-photon claim.',
