@@ -1,7 +1,7 @@
 ---
 name: markup
 description: >-
-  JSX vocabulary, component allowlist, Helmet, CSS, scripts, fonts and layout.
+  JSX, components, Helmet, CSS, scripts, fonts and layout.
 ---
 ## Read first
 
@@ -135,3 +135,5 @@ h={3}>…</GridItem></Grid>` — the 12-column canvas (`dashboard`).
   already its own scroll box — never widen one with negative margins.
 - Three or more `<h2>` sections get a table of contents made from the
   headings — write `<h2>`s as short claims. Decks and `<Grid>` dashboards get none.
+
+[Three.js, libraries and file references](markup-libraries.md).

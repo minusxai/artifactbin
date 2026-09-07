@@ -1157,11 +1157,16 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   }, [canAnnotate, canEdit, editing, enterEdit, finishEdit, format, id, shownTitle, toggleFollow, toggleLike]);
 
   // EDIT MODE pins the document's bar at the top and sits the editor toolbar
-  // under it; the document insets itself by both, so nothing is covered.
+  // under it; the document insets itself by both, so nothing is covered. The
+  // COMMENT RAIL is the same story on the other axis: the frame stays
+  // full-width (so the bar drawn inside it never narrows and its controls
+  // never move), the rail sits under the bar, and the document leaves the
+  // rail its width.
+  const railInset = railOpen && !phone ? RIGHT_RAIL_W : 0;
   useEffect(() => {
     if (!isDocumentFormat || !sessionNonce) return;
-    frameRef.current?.contentWindow?.postMessage({ type: STORY_READER_CHROME_MESSAGE, mode: editing ? 'pinned' : 'on', inset: EDIT_BAR_H }, '*');
-  }, [editing, format, frameNonce, sessionNonce]);
+    frameRef.current?.contentWindow?.postMessage({ type: STORY_READER_CHROME_MESSAGE, mode: editing ? 'pinned' : 'on', inset: EDIT_BAR_H, railInset }, '*');
+  }, [editing, format, frameNonce, railInset, sessionNonce]);
 
   /*
    * WHAT THE EDITOR IS GIVEN. Ownership is decided once, on the server, for
@@ -1349,16 +1354,16 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
            * the entire thing this rewrite exists to stop.
            */
           style={{
-            // Two INDEPENDENT reservations, which is what having two axes
-            // instead of one mode buys: the editing bar adds height, an open
-            // rail takes width, and either can be true without the other.
-            // With the rail closed the document stays full-width and its
-            // comments float over it. Style-only: the frame must never
+            // The frame is ALWAYS full-size. The bars overlay it and the
+            // document insets itself under them; the comment rail overlays
+            // its right edge below the bar and the document leaves it that
+            // width (mx:reader-chrome `railInset`). Narrowing the frame for
+            // the rail was tried first, and it narrowed the bar drawn inside
+            // the frame with it — every control shifting left the moment the
+            // rail opened. Style-only either way: the frame must never
             // re-parent.
             top: 0,
-            // On a phone the rail is a bottom SHEET (AnnotationLayer), so the
-            // document keeps its full width.
-            right: railOpen && !phone ? RIGHT_RAIL_W : 0,
+            right: 0,
             background: controlsOnly ? 'transparent' : readerMode === 'dark' ? DOCUMENT_GROUND.dark : DOCUMENT_GROUND.light,
           }}
         >
@@ -1436,7 +1441,12 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             showViewComments={showViewComments}
             onRailOpenChange={setRailOpen}
             initialSelection={initialAnnotationSelection}
-            topOffset={controlsOnly ? APP_BAR_H + (editing ? EDIT_BAR_H : 0) : 0}
+            pickOnOpen={!editing}
+            // Under the document's bar (44px on desktop; a phone draws no bar
+            // and gets a sheet anyway), and under the editor toolbar too.
+            topOffset={(controlsOnly || !phone ? APP_BAR_H : 0) + (editing ? EDIT_BAR_H : 0)}
+            // Short of the frame's own scrollbar, which stays at the window's edge.
+            rightInset={frameGutter}
             onAnnotationsChange={setLayerAnnotations}
           />
         )}
@@ -1454,7 +1464,9 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             onToggleComments={canAnnotate ? () => setRailOpen((open) => !open) : undefined}
             commentsOpen={railOpen}
             commentCount={openAnnotationCount}
-            rightInset={(railOpen && !phone ? RIGHT_RAIL_W : 0) + frameGutter}
+            // The rail sits UNDER the toolbar, so the toolbar keeps the width
+            // the document's own bar has: short of the frame's scrollbar only.
+            rightInset={frameGutter}
           />
         )}
         {forkAsked && <ForkConfirm id={id} title={shownTitle} onClose={() => setForkAsked(false)} />}
@@ -1487,23 +1499,23 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
         <img key={rawKey} src={`/a/${id}/raw`} alt={shownTitle} className="mt-4 max-w-full rounded-[6px] border border-edge" />
       )}
 
-      {format === 'pdf' && (
+      {(format === 'pdf' || format === 'file') && (
         // A PDF is a FILE, not something the app renders: the browser's own
         // viewer does that, at /raw, which is served inline and sandboxed. So
         // this view is the two facts a person picks a file by and the link that
         // opens it — the same card <File> draws inside a document.
         <div className="mt-4 rounded-[6px] border border-edge bg-surface p-4">
-          <p className="font-sans text-xs text-muted" aria-label="PDF summary">
-            PDF{fileBytes ? ` · ${formatFileSize(fileBytes)}` : ''}{filePages ? ` · ${filePages} page${filePages === 1 ? '' : 's'}` : ''}
+          <p className="font-sans text-xs text-muted" aria-label={format === 'pdf' ? 'PDF summary' : 'File summary'}>
+            {format === 'pdf' ? 'PDF' : 'File'}{fileBytes ? ` · ${formatFileSize(fileBytes)}` : ''}{filePages ? ` · ${filePages} page${filePages === 1 ? '' : 's'}` : ''}
           </p>
           <a
-            aria-label="Open the PDF"
+            aria-label={format === 'pdf' ? 'Open the PDF' : 'Download file'}
             href={`/a/${id}/raw`}
             target="_blank"
             rel="noopener noreferrer"
             className="mt-2 inline-block font-sans text-sm underline underline-offset-2"
           >
-            Open {shownTitle}
+            {format === 'pdf' ? 'Open' : 'Download'} {shownTitle}
           </a>
         </div>
       )}

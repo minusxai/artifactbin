@@ -55,7 +55,7 @@ one column and widen: `grid-cols-1 @2xl:grid-cols-3`, and so does display
 type — `text-4xl @2xl:text-6xl`, never a bare `text-6xl` (60px type breaks a
 phone). Never a fixed pixel width.
 
-Rules a document lives by: one self-contained document — no CDN `<script src>`,
+Rules: one self-contained document — no CDN `<script src>`,
 no external stylesheet (hard 400s at publish); a runtime `fetch()` is
 blocked by the sandbox; images are a `data:` URI or
 any `https://` URL (publish copies it, your URL stays); web fonts: a Google family via
@@ -123,8 +123,9 @@ picked — without the frame, a deck ships text flush to the viewport edge.
 | isolated scripts and data bridge | `markup-scripts.md` |
 | reactive JSX, dialogs, local SQL | `markup-state.md` |
 | scroll reveals and ambient motion classes | `markup-motion.md` |
-| video embeds — the click-to-open card | `markup-video.md` |
-| inline SVG motifs and the allowed subset | `markup-svg.md` |
+| Video embeds | `markup-video.md` |
+| SVG motifs and allowed tags | `markup-svg.md` |
+| Libraries, GLBs, files | `markup-libraries.md` |
 | genre structure and full skeleton | `templates-<name>.md` (index: `templates.md`) |
 | theme tokens, accents, chart palette | `themes-<name>.md` (index: `themes.md`) |
 [[ docsMoreLine ]]

@@ -37,6 +37,14 @@ describe('the image guard names what each lean image must NOT carry', () => {
 });
 
 describe('the app declares as runtime only what it imports at runtime', () => {
+  it('hosted browser libraries are pinned build dependencies, excluded from runtime installs', () => {
+    const { dependencies = {}, devDependencies = {} } = pkg('services/app/package.json');
+    const registry = JSON.parse(read('services/app/lib/libraries/registry.json')) as Record<string, { package: string; version: string }>;
+    for (const spec of Object.values(registry)) {
+      expect(dependencies).not.toHaveProperty(spec.package);
+      expect(devDependencies[spec.package]).toBe(spec.version);
+    }
+  });
   it('the CSS toolchain is a dev dependency', () => {
     const { dependencies = {}, devDependencies = {} } = pkg('services/app/package.json');
     for (const dep of ['@tailwindcss/postcss', 'tailwindcss']) {

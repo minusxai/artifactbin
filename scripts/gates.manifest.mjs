@@ -27,6 +27,7 @@ export const GATE_SPECS = Object.freeze([
   {name:'trusted-controls',start:'shared',needsMail:true,needsClipboard:false,timeoutMs:120_000},
   { name: 'author-script-isolation', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 120_000 },
   { name: 'local-sql-state', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 120_000 },
+  { name: 'libraries', start: 'custom', why: 'Uploads a textured GLB and publishes scripts that load it through the optional library registry.', needsMail: false, needsClipboard: false, timeoutMs: 90_000 },
   { name: 'postgres-datasets', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 180_000 },
   { name: 'mutation-permissions', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 120_000 },
   // measured: implementer 9s; orchestrator 7s

@@ -330,6 +330,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
 
   // Static: content-addressed trees are immutable; everything else is served plainly.
   app.use('/story/*', async (c, next) => { await next(); c.header('cache-control', IMMUTABLE); c.header('access-control-allow-origin', '*'); });
+  app.use('/libraries/*', async (c, next) => { await next(); c.header('cache-control', 'public, max-age=3600'); c.header('access-control-allow-origin', '*'); });
   app.use('/fonts/*', async (c, next) => { await next(); c.header('cache-control', IMMUTABLE); c.header('access-control-allow-origin', '*'); });
   app.use('/geojson/*', async (c, next) => { await next(); c.header('cache-control', 'public, max-age=86400'); c.header('access-control-allow-origin', '*'); });
   app.use('/assets/*', async (c, next) => { await next(); c.header('cache-control', IMMUTABLE); });

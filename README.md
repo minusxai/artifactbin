@@ -27,8 +27,7 @@ Requires Docker, `curl`, and Bash. Defaults: `./artifactbin`, port `3030`.
 curl -fsSL https://artifactbin.dev/install.sh | bash
 ```
 
-Choose the directory and port explicitly (add `--no-interview` for automation;
-run with `--help` for every option):
+Choose the directory and port explicitly (add `--no-interview` for automation; run with `--help` for every option):
 
 ```bash
 curl -fsSL https://artifactbin.dev/install.sh | bash -s -- --dir="$HOME/artifactbin" --port=3030
@@ -71,13 +70,14 @@ npm test
 npm run validate
 ```
 
-Run these sequentially; both start resource-intensive workers.
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the development flow.
+Run these sequentially; both start resource-intensive workers. See [CONTRIBUTING.md](CONTRIBUTING.md) for the development flow.
 
 ## Docs
 
 - [Editing and concurrent changes](docs/editing.md)
 - [The document format](docs/document-format.md)
+- [File uploads and accepted types](docs/file-uploads.md)
+- [Adding JavaScript libraries and using file references](docs/javascript-libraries.md)
 - [Serving and security](docs/serving-and-security.md)
 - [Ownership and accounts](docs/ownership.md)
 - [Operations and deployment](docs/operations.md)

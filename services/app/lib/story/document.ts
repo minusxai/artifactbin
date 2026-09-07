@@ -23,6 +23,8 @@
  * somehow carries `</script` is DROPPED — emitting it would let text escape the
  * script element, and mutating code silently is worse than omitting it.
  */
+import { artifactApiScript } from './script-api';
+import { libraryUrls } from '@/lib/libraries';
 import path from 'path';
 import { pathToFileURL } from 'url';
 import { createRequire } from 'module';
@@ -116,6 +118,9 @@ export interface StoryDocumentInput {
    * them (the canvas, unit tests), where a bound image renders static.
    */
   assetsUrl?: string | null;
+  /** Absolute scoped asset transport, usable from opaque-origin scripts. */
+  resolveUrl?: string | null;
+  libraryOrigin?: string;
   /**
    * Render the document's own navigation chrome (deck rail, present bar, outline).
    * False for capture renders — /export screenshots this frame, so chrome
@@ -532,6 +537,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    * time, which is also when the document is complete.
    */
   const safeScript = helmet.script && !/<\/script/i.test(helmet.script) ? helmet.script : null;
+  const authorApi = safeScript ? `<script>${artifactApiScript({ resolveUrl: input.resolveUrl ?? null, libraries: libraryUrls(input.libraryOrigin) })}</script>` : '';
   const authorScript = safeScript
     ? `<script type="${AUTHOR_SCRIPT_TYPE}">${safeScript}</script>`
     : '';
@@ -566,7 +572,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
       : '') +
     // First script in the document: the author's runs at the end of <body>,
     // and anything that could hand the URL bar away must already be closed.
-    `<script>${HISTORY_PRELUDE}</script>` +
+    `<script>${HISTORY_PRELUDE}</script>` + authorApi +
     // Before any paint: a persisted reader mode override replaces the class
     // the server stamped, so a live reload never flashes the author's mode.
     // Chrome-gated with the toggle itself — a capture must render the stored

@@ -68,7 +68,7 @@ const KINDS = {
     containerPort: 3000,
     mustResolve: ['react'],
     mustCarry: ['node_modules/@artifactbin/utils', 'node_modules/@artifactbin/contracts'],
-    mustThrow: ['playwright', '@duckdb/node-api', '@tailwindcss/postcss', 'tailwindcss', 'lightningcss', 'vite'],
+    mustThrow: ['playwright', '@duckdb/node-api', '@tailwindcss/postcss', 'tailwindcss', 'lightningcss', 'vite', 'three'],
     probe: { path: '/health', check: (status, body) => status === 200 && body?.ok === true },
     /** The lean entry's own rule, proved the refusing way too (below). */
     env: { DATABASE_URL: 'pglite://memory', SQL__SERVICE_URL: 'http://127.0.0.1:9', BROWSER__SERVICE_URL: 'http://127.0.0.1:9' },
