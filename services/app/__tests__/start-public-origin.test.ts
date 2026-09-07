@@ -8,7 +8,8 @@ import {POST} from '@/app/api/start/route';
 import {POST as mint} from '@/app/api/tokens/anonymous/route';
 import {baseUrl,unauthorized} from '@/lib/http';
 import {createUser} from '@/lib/users';
-import {ownedPaste} from '@/lib/agent-copy';
+import {anonymousPaste,ownedPaste} from '@/lib/agent-copy';
+import {agentContract} from '@/lib/agent-contract';
 import {useAppHarness} from './harness';
 useAppHarness();
 
@@ -20,8 +21,7 @@ it('creates through the trusted host but gives the user and agent public documen
   expect(response.status).toBe(201);
   const body=await response.json();
   expect(new URL(body.url).origin).toBe('https://example.test');
-  expect(body.prompt.includes('https://example.test/a/')).toBe(true);
-  expect(body.prompt.includes('https://i.example.test/')).toBe(false);
+  expect(body.prompt).toBe(anonymousPaste('https://example.test',body.id,body.token));
 });
 it('uses the resolved account for owned prompts even outside ambient request scope',async()=>{
   const user=await createUser({email:'mxmx_test_start_owned@example.com'});
@@ -38,6 +38,5 @@ it('keeps recovery links and minted agent instructions public without rewriting 
   expect(refused.docs).toBe('https://example.test/docs');
   expect(refused.tokens).toBe('https://example.test/tokens/new');
   const minted=await (await mint(request)).json();
-  expect(JSON.stringify(minted.note)).toContain('https://example.test');
-  expect(JSON.stringify(minted.note)).not.toContain('https://i.example.test');
+  expect(minted.note).toBe(agentContract('https://example.test','http'));
 });

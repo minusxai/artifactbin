@@ -92,9 +92,13 @@ try {
     parent.frames[0].postMessage({type:'mx:text-edit',path:'0',nonce:'guessed',innerHtml:'FORGED'},'${controls}');
   `;
   const markup='<Helmet><Value name="count" type="number" default={0}/><Value name="dom" type="string" default="waiting"/><Value name="storage" type="string" default="waiting"/><Value name="network" type="string" default="waiting"/><Mutation name="inc">{`update _signals set count=count+1`}</Mutation><script>{`'+authorScript+'`}</script></Helmet><main className="p-20"><h1>Top-level controls</h1><p id="editable">Original paragraph</p><Button run="$inc">Increment</Button><p>{$count}</p></main>';
-  const fixtureMarkup=process.argv.includes('--main-page-login-only') ? markup.replace('<Helmet>','<Helmet><Value name="region" type="string" default="east"/>') : markup;
+  const fixtureMarkup=markup.replace('<Helmet>','<Helmet><Value name="region" type="string" default="east"/>');
   const response = await mainFetch(`${backend}/api/artifacts/${seed.id}`,{method:'PUT',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({markup:fixtureMarkup,expectedVersion:1})});
   assert(response.ok,await response.text());
+  const sink={lastCode(email) {
+    const messages=readFileSync(join(scratch,'mail.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+    return /\b(\d{6})\b/.exec(messages.filter(m=>m.to===email).at(-1)?.text ?? '')?.[1];
+  }};
   if (interactive) {
     const demoHtml='<canvas id="scene" style="width:100%;height:100%"></canvas><span style="position:absolute;bottom:12px;left:16px;color:#cbd5e1;font:14px system-ui">Drag to rotate · scroll to zoom · Increment changes the cube</span>';
     const demoScript=`(async()=>{
@@ -117,10 +121,10 @@ try {
     await new Promise(resolve=>{process.once('SIGINT',resolve);process.once('SIGTERM',resolve);});
   } else if(process.argv.includes('--main-page-login-only')) {
     browser=await engine.launch(engineName==='chromium'?{args:['--host-resolver-rules=MAP artifactbin.test 127.0.0.1, MAP i.artifactbin.test 127.0.0.1, MAP assets.artifactbin.test 127.0.0.1','--proxy-bypass-list=*']}:{});
-    const sink={lastCode(email){const messages=readFileSync(join(scratch,'mail.jsonl'),'utf8').trim().split('\n').map(JSON.parse);return /\b(\d{6})\b/.exec(messages.filter(m=>m.to===email).at(-1)?.text??'')?.[1];}};
     await verifyMainPageLogin({browser,base,controls,sink,id:seed.id,mainFetch,backend});
   } else {
   browser = await engine.launch(engineName==='chromium' ? {args:['--host-resolver-rules=MAP artifactbin.test 127.0.0.1, MAP i.artifactbin.test 127.0.0.1, MAP assets.artifactbin.test 127.0.0.1','--proxy-bypass-list=*']} : {});
+  await verifyMainPageLogin({browser,base,controls,sink,id:seed.id,mainFetch,backend});
   // Actual production configuration, no client mocks: an anonymous reader
   // either subscribes normally or never opens a connection, including reload.
   const snapshot=await browser.newPage({ignoreHTTPSErrors:true});
@@ -241,10 +245,6 @@ try {
   await isolated.evaluate(url=>{location.href=url;},`${controls}/controls/a/${seed.id}`);
   await page.locator('iframe[title="Isolated artifact script"]').waitFor({state:'detached'});
   assert.equal(privilegedRequests.length,beforeNavigation,'navigating the opaque author frame cannot acquire trusted controls authority');
-  const sink={lastCode(email) {
-    const messages=readFileSync(join(scratch,'mail.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
-    return /\b(\d{6})\b/.exec(messages.filter(m=>m.to===email).at(-1)?.text ?? '')?.[1];
-  }};
   await loginViaEmail(page,base,sink,`mxmx_test_controls_${Date.now()}@example.com`);
   await page.goto(base+'/account');
   const appFrame=page.frameLocator('iframe[title="Artifactbin app"]');
