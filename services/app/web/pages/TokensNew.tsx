@@ -6,6 +6,7 @@
  * mints; nothing is stored; a fresh render shows the confirm step.
  */
 import { useState } from 'react';
+import { CopyIcon } from '@/components/CopyIcon';
 import { Button, PANEL } from '@/components/ui';
 import { useSession } from '../session';
 
@@ -87,9 +88,7 @@ export function TokensNewPage() {
               <div className="mt-3 flex items-start gap-3 rounded-[4px] border border-edge bg-bg p-3">
                 <code className="min-w-0 flex-1 select-all break-all font-mono text-sm text-fg">{minted.token}</code>
                 <Button className="shrink-0" type="button" title={copied ? "Copied" : "Copy token"} aria-label="Copy token" onClick={() => void copy()}>
-                  <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    {copied ? <path d="m5 12 4 4L19 6" /> : <><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h4" /></>}
-                  </svg>
+                  <CopyIcon copied={copied} />
                 </Button>
               </div>
               <span className="sr-only" role="status">{copied ? 'Token copied to clipboard' : ''}</span>

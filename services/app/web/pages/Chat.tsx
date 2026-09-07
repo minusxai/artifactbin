@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { CopyIcon } from "@/components/CopyIcon";
+import { Button } from "@/components/ui";
 import { useSearchParams } from "react-router";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -254,10 +256,11 @@ function CopyCommand({ label, command }: { label: string; command: string }) {
       <p className="mb-2 text-sm font-medium">{label}</p>
       <div className="flex items-start gap-2 rounded border border-edge bg-surface p-3">
         <code className="min-w-0 flex-1 whitespace-pre-wrap break-words text-xs">{command}</code>
-        <button
+        <Button
           type="button"
           aria-label={`Copy ${label.toLowerCase()}`}
-          className="shrink-0 rounded border border-edge px-2 py-1 text-xs hover:border-accent"
+          title={copied ? "Copied" : `Copy ${label.toLowerCase()}`}
+          className="shrink-0"
           onClick={async () => {
             try {
               await navigator.clipboard.writeText(command);
@@ -268,8 +271,8 @@ function CopyCommand({ label, command }: { label: string; command: string }) {
             }
           }}
         >
-          {copied ? "Copied" : "Copy"}
-        </button>
+          <CopyIcon copied={copied} />
+        </Button>
       </div>
       <span className="sr-only" role="status">{copied ? "Copied to clipboard" : ""}</span>
       {error && <p role="alert" className="mt-1 text-xs text-muted">{error}</p>}
