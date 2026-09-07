@@ -5,7 +5,12 @@ import {createServer} from 'node:http';
 import {createHash} from 'node:crypto';
 import {cpus} from 'node:os';
 import assert from 'node:assert/strict';
-import {chromium,firefox,webkit} from 'playwright';
+import * as installedPlaywright from 'playwright';
+// Diagnostic version comparison without changing repository dependencies.
+const alternateModule=process.argv.find(x=>x.startsWith('--playwright-module='))?.slice(20);
+const {chromium,firefox,webkit}=alternateModule?await import(alternateModule):installedPlaywright;
+const phaseTimeout=Number(process.argv.find(x=>x.startsWith('--phase-timeout-ms='))?.slice(19)??60000);
+assert(phaseTimeout>=1000&&phaseTimeout<=60000);
 const [source,engine='chromium',sampleArg='2',countArg='1,4,8']=process.argv.slice(2);
 assert(source,'capture path required');
 const raw=readFileSync(source,'utf8');
@@ -15,7 +20,7 @@ assert(capturedAuthor.includes("artifact.library('three')")&&capturedAuthor.incl
 const cube=process.argv.includes('--cube');
 const deferInner=process.argv.includes('--defer-inner');
 const handshakeInner=process.argv.includes('--handshake-inner');
-const author=cube?`(async()=>{const T=await artifact.library('three'),canvas=document.getElementById('pond'),renderer=new T.WebGLRenderer({canvas,antialias:true});const scene=new T.Scene(),camera=new T.PerspectiveCamera(45,1,.1,100);camera.position.z=4;const mesh=new T.Mesh(new T.BoxGeometry(1,1,1),new T.MeshNormalMaterial());scene.add(mesh);let paused=false,id;const observer=new ResizeObserver(()=>{renderer.setSize(canvas.clientWidth,canvas.clientHeight,false);camera.aspect=canvas.clientWidth/canvas.clientHeight;camera.updateProjectionMatrix();});observer.observe(canvas);function render(){id=requestAnimationFrame(render);if(!paused)mesh.rotation.y+=.01;renderer.render(scene,camera);}render();document.getElementById('scene-status').hidden=true;document.getElementById('pause').onclick=()=>paused=!paused;document.getElementById('ripple').onclick=()=>mesh.rotation.x+=.4;document.getElementById('breeze').oninput=()=>document.getElementById('wind-label').textContent='Whitecaps';addEventListener('pagehide',()=>{cancelAnimationFrame(id);observer.disconnect();mesh.geometry.dispose();mesh.material.dispose();renderer.dispose();},{once:true});})();`:capturedAuthor;
+const author=process.argv.includes('--static-author')?"document.getElementById('scene-status').textContent='Static ready';":cube?`(async()=>{const T=await artifact.library('three'),canvas=document.getElementById('pond'),renderer=new T.WebGLRenderer({canvas,antialias:true});const scene=new T.Scene(),camera=new T.PerspectiveCamera(45,1,.1,100);camera.position.z=4;const mesh=new T.Mesh(new T.BoxGeometry(1,1,1),new T.MeshNormalMaterial());scene.add(mesh);let paused=false,id;const observer=new ResizeObserver(()=>{renderer.setSize(canvas.clientWidth,canvas.clientHeight,false);camera.aspect=canvas.clientWidth/canvas.clientHeight;camera.updateProjectionMatrix();});observer.observe(canvas);function render(){id=requestAnimationFrame(render);if(!paused)mesh.rotation.y+=.01;renderer.render(scene,camera);}render();document.getElementById('scene-status').hidden=true;document.getElementById('pause').onclick=()=>paused=!paused;document.getElementById('ripple').onclick=()=>mesh.rotation.x+=.4;document.getElementById('breeze').oninput=()=>document.getElementById('wind-label').textContent='Whitecaps';addEventListener('pagehide',()=>{cancelAnimationFrame(id);observer.disconnect();mesh.geometry.dispose();mesh.material.dispose();renderer.dispose();},{once:true});})();`:capturedAuthor;
 const bundle=readFileSync(new URL('../../services/app/public/libraries/three-0.185.1/index.js',import.meta.url));
 const samples=Number(sampleArg),counts=countArg.split(',').map(Number);
 assert(samples>=1&&samples<=5&&counts.every(n=>[1,4,8].includes(n)));
@@ -33,6 +38,7 @@ const assets=createServer((req,res)=>{
 const policy=`default-src 'none'; script-src 'unsafe-inline' ${asset}; connect-src ${asset}; style-src 'unsafe-inline'; img-src data: blob:; frame-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'`;
 const literal=v=>JSON.stringify(v).replaceAll('<','\\u003c');
 const bootstrap=`
+console.info('AFBIN_BOOT');
 if(window===top){window.phase1=[];addEventListener('message',e=>{if(e.data?.type==='phase1')phase1.push(e.data.snapshot);});}
 window.publishPhase1=()=>{const snapshot=window.snapshot();console.info('AFBIN_PHASE1 '+JSON.stringify(snapshot));top.postMessage({type:'phase1',snapshot},'*');};
 window.metrics={renders:[],cadence:[],longTasks:[],renderers:[],pagehide:0,disposed:{geometry:[],material:[],texture:[],renderer:0},activeRAF:0,observers:0};
@@ -88,18 +94,18 @@ try{
  for(let sample=0;sample<samples;sample++)for(const count of counts)for(const shape of shapes.slice(sample%shapes.length).concat(shapes.slice(0,sample%shapes.length))){
   if(shape==='top'&&count!==1)continue;
   const context=await browser.newContext({viewport:{width:960,height:720},deviceScaleFactor:1});const page=await context.newPage();
-  const errors=[];let phaseSamples=[],phase2Samples=[];page.on('pageerror',e=>errors.push(String(e)));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());if(m.text().startsWith('AFBIN_PHASE1 '))phaseSamples.push(JSON.parse(m.text().slice(13)));if(m.text().startsWith('AFBIN_PHASE2 '))phase2Samples.push(JSON.parse(m.text().slice(13)));});let phase='start';
+  const errors=[];let bootReports=0,phaseSamples=[],phase2Samples=[];page.on('pageerror',e=>errors.push(String(e)));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());if(m.text()==='AFBIN_BOOT')bootReports++;if(m.text().startsWith('AFBIN_PHASE1 '))phaseSamples.push(JSON.parse(m.text().slice(13)));if(m.text().startsWith('AFBIN_PHASE2 '))phase2Samples.push(JSON.parse(m.text().slice(13)));});let phase='start';
   try{for(const cache of ['cold','warm']){
-   phase=cache;phaseSamples=[];phase2Samples=[];const errorStart=errors.length;console.error(JSON.stringify({sample,count,shape,cache}));const requestStart=requests.length,started=performance.now();await page.goto(host+'/'+shape+'?n='+count);
+   phase=cache;bootReports=0;phaseSamples=[];phase2Samples=[];const errorStart=errors.length;console.error(JSON.stringify({sample,count,shape,cache}));const requestStart=requests.length,started=performance.now();await page.goto(host+'/'+shape+'?n='+count);
    // Never evaluate in an author frame before passive samples: Playwright evaluation can emulate activation.
-   for(let attempt=0;attempt<1200&&phaseSamples.length<count;attempt++)await new Promise(r=>setTimeout(r,50));
+   for(let attempt=0;attempt<phaseTimeout/50&&phaseSamples.length<count;attempt++)await new Promise(r=>setTimeout(r,50));
    assert.equal(phaseSamples.length,count,'autonomous passive sample count');
    const children=shape==='top'?[page.mainFrame()]:page.frames().filter(f=>f!==page.mainFrame()&&f.childFrames().length===0);
    assert.equal(children.length,count);
    const before=phaseSamples;
    const readyMs=performance.now()-started;
    for(const child of children){await child.locator('#pause').click();await child.locator('#ripple').click();await child.locator('#breeze').focus();await child.locator('#breeze').press('End');}
-   for(let attempt=0;attempt<1200&&phase2Samples.length<count;attempt++)await new Promise(r=>setTimeout(r,50));
+   for(let attempt=0;attempt<phaseTimeout/50&&phase2Samples.length<count;attempt++)await new Promise(r=>setTimeout(r,50));
    assert.equal(phase2Samples.length,count,'autonomous after-click sample count');
    const origin=await page.evaluate(()=>performance.timeOrigin);
    for(const child of children)assert.equal(await child.locator('#wind-label').textContent(),'Whitecaps');
@@ -131,7 +137,7 @@ try{
    }
    rows.push({sample,count,shape,naturalRemoval:natural});
   }
-  }catch(error){console.error(String(error));const diagnostics=[];for(const frame of page.frames())diagnostics.push(await frame.evaluate(()=>({url:location.href,hidden:document.hidden,visibility:document.visibilityState,ready:document.readyState,body:document.body?.getBoundingClientRect().toJSON(),children:[...document.body?.children??[]].map(e=>({tag:e.tagName,chars:e.textContent.length,srcdoc:e.getAttribute('srcdoc')?.length,window:e.tagName==='IFRAME'?!!e.contentWindow:undefined})),snapshot:window.snapshot?.()})).catch(e=>({error:String(e)})));failures.push({sample,count,shape,phase,error:String(error),errors,diagnostics});}finally{await context.close();}
+  }catch(error){console.error(String(error));const diagnostics=[];for(const frame of page.frames())diagnostics.push(await frame.evaluate(()=>({url:location.href,hidden:document.hidden,visibility:document.visibilityState,ready:document.readyState,body:document.body?.getBoundingClientRect().toJSON(),children:[...document.body?.children??[]].map(e=>({tag:e.tagName,chars:e.textContent.length,srcdoc:e.getAttribute('srcdoc')?.length,window:e.tagName==='IFRAME'?!!e.contentWindow:undefined})),snapshot:window.snapshot?.()})).catch(e=>({error:String(e)})));failures.push({sample,count,shape,phase,bootReports,error:String(error),errors,diagnostics});}finally{await context.close();}
  }
  console.log(JSON.stringify({engine,headed,deferInner,handshakeInner,workload:cube?'cube':'captured-ocean',browser:browser.version(),hardware:{cpu:cpus()[0]?.model,cores:cpus().length},authorSha256:createHash('sha256').update(author).digest('hex'),bundleSha256:createHash('sha256').update(bundle).digest('hex'),rows,failures,caveats:[
   'Ocean mode executes exact captured source; cube mode is a separate lightweight scaling workload. artifact.library aliases generated Three0.185.1 ESM.',
