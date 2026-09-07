@@ -1,5 +1,5 @@
 import {it,expect,vi} from 'vitest';
-vi.mock('@/lib/config',async original=>({...await original<typeof import('@/lib/config')>(),PUBLIC_BASE_URL:'https://example.test',CONTROLS_ORIGIN:'https://i.example.test',ASSETS_ORIGIN:'https://assets.example.test'}));
+vi.mock('@/lib/config',async original=>({...await original<typeof import('@/lib/config')>(),get PUBLIC_BASE_URL(){return 'https://example.test';},CONTROLS_ORIGIN:'https://i.example.test',ASSETS_ORIGIN:'https://assets.example.test'}));
 import {useAppHarness} from '@/__tests__/harness';
 import {getDb} from '@/lib/db';
 import {objectStore,objectKey} from '@/lib/object-store';

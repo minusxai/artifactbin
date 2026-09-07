@@ -34,6 +34,7 @@ import { canAnnotate } from '@/lib/share-roles';
 import { baseUrl, json } from '@/lib/http';
 import {CONTROLS_ORIGIN, PUBLIC_BASE_URL, ASSETS_ORIGIN} from '@/lib/config';
 import {GET as publicAssetBytes} from '@/app/assets/[hash]/route';
+import {GET as publicRefBytes} from '@/app/assets/ref/[id]/route';
 import { mountRoutes } from './api';
 import { ROUTES } from './routes.generated';
 
@@ -191,7 +192,9 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     if(incoming.host !== new URL(ASSETS_ORIGIN!).host && baseUrl(c.req.raw) !== ASSETS_ORIGIN)return next();
     const request=new Request(ASSETS_ORIGIN+incoming.pathname+incoming.search,{method:c.req.method});
     if(!isPublicAssetRequest(request,ASSETS_ORIGIN!))return new Response('not found',{status:404});
-    const response=await publicAssetBytes(request,{params:Promise.resolve({hash:incoming.pathname.slice('/assets/'.length)})});
+    const response=incoming.pathname.startsWith('/assets/ref/')
+      ? await publicRefBytes(request,{params:Promise.resolve({id:incoming.pathname.slice('/assets/ref/'.length)})})
+      : await publicAssetBytes(request,{params:Promise.resolve({hash:incoming.pathname.slice('/assets/'.length)})});
     const safe=publicAssetResponse(response);
     return c.req.method==='HEAD'?new Response(null,{status:safe.status,headers:safe.headers}):safe;
   });
@@ -262,7 +265,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
       return new Response(shell,{headers:{...APP_SECURITY_HEADERS,'content-security-policy':csp,'content-type':'text/html; charset=utf-8','cache-control':'no-store'}});
     }
     const documentApi = /^\/a\/[A-Za-z0-9]+\/(?:query|mutate|events(?:\/frame)?)$/.test(url.pathname);
-    if ((!documentApi && /^\/(?:a(?:\/|$)|@)/.test(url.pathname)) || /^\/assets\/[a-f0-9]{64}(?:[./]|$)/i.test(url.pathname)) return new Response('Not found',{status:404});
+    if ((!documentApi && /^\/(?:a(?:\/|$)|@)/.test(url.pathname)) || /^\/assets\/(?:[a-f0-9]{64}(?:[./]|$)|ref(?:\/|$))/i.test(url.pathname)) return new Response('Not found',{status:404});
     await next();
     c.header('content-security-policy', (c.res.headers.get('content-security-policy') ?? APP_CSP).replace(/frame-ancestors[^;]*/, "frame-ancestors 'none'"));
     c.header('cache-control','no-store');

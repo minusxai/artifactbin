@@ -40,8 +40,9 @@ export type WebAssetKind = 'image' | 'font' | 'pdf' | 'script' | 'binary';
 export const WEB_ASSET_KINDS: readonly WebAssetKind[] = ['image','font','pdf','script','binary'];
 const SCRIPT_TYPES = new Set(['text/javascript','application/javascript','application/ecmascript','text/ecmascript']);
 function requireKind(row: WebAssetRow, kind: WebAssetKind): WebAssetRow {
-  const valid = kind === 'script' ? SCRIPT_TYPES.has(row.content_type) : kind === 'binary'
-    ? row.content_type === 'application/octet-stream' : kindOfRow(row) === kind;
+  // Generic fetch reads bytes of any already-approved cache entry. A typed
+  // load cannot promote arbitrary octets to executable JavaScript.
+  const valid = kind === 'binary' || (kind === 'script' ? SCRIPT_TYPES.has(row.content_type) : kindOfRow(row) === kind);
   if (!valid) throw new WebAssetRefused('unsupported_type','cached URL does not match the requested asset kind',row.url);
   return row;
 }
@@ -124,9 +125,13 @@ async function fetchAsset(url: string, kind: WebAssetKind): Promise<Omit<WebAsse
       try { new TextDecoder('utf-8',{fatal:true}).decode(bytes); }
       catch { throw new WebAssetRefused('unsupported_type','script bundle must be valid UTF-8',url); }
     }
-    // Generic bytes are never interpreted as their upstream MIME type. Scripts
-    // are not evaluated or bundled here; authors supply self-contained bundles.
-    const type = kind === 'script' ? 'text/javascript' : 'application/octet-stream';
+    // Preserve only recognised safe types for a generic-first import, so a
+    // later typed declaration of the same URL is order-independent. HTML and
+    // unknown upstream types remain inert octets. No code is evaluated.
+    let type = kind === 'script' ? 'text/javascript' : sniffAssetType(bytes) ?? sniffFontType(bytes) ?? 'application/octet-stream';
+    if (kind === 'binary' && SCRIPT_TYPES.has(contentType.toLowerCase())) {
+      try {new TextDecoder('utf-8',{fatal:true}).decode(bytes);type='text/javascript';} catch { /* binary remains binary */ }
+    }
     const key = objectKey('webasset',bytes);
     await objectStore().put(key,bytes,type);
     return {object_key:key,content_type:type,bytes:bytes.length,width:null,height:null,placeholder:null,small_object_key:null,small_width:null};
@@ -201,7 +206,7 @@ export async function importWebAsset(url: string, by: WebAssetImporter, kind: We
   const existing = await webAssetByHash(hash);
   if (existing) return requireKind(existing,kind);
 
-  if (by.tokenId && await assetByteQuotaExceeded(by.tokenId)) {
+  if (await assetByteQuotaExceeded(by.tokenId,by.userId)) {
     throw new WebAssetRefused('quota_exceeded', 'this account is over its stored-byte quota — delete assets you no longer need', url);
   }
 
@@ -258,12 +263,12 @@ export interface DocumentAssetTarget {
  */
 export async function importForDocument(doc: DocumentAssetTarget, url: string, kind: WebAssetKind = 'image'): Promise<string> {
   const held = await webAssetByHash(urlHash(url));
-  if (held) {requireKind(held,kind);return assetUrlFor(url);}
+  if (held) {requireKind(held,kind);return assetUrlFor(url,held);}
   if (docAssetImportRateLimited(doc.id)) {
     throw new WebAssetRefused('rate_limited', 'too many asset imports for this document this hour', url);
   }
-  await importWebAsset(url, { tokenId: doc.token_id, userId: doc.user_id },kind);
-  return assetUrlFor(url);
+  const row=await importWebAsset(url, { tokenId: doc.token_id, userId: doc.user_id },kind);
+  return assetUrlFor(url,row);
 }
 
 /**
@@ -306,7 +311,7 @@ export async function refreshWebAsset(url: string, by: WebAssetImporter, kind: W
   const existing = await webAssetByHash(hash);
   if (!existing) return importWebAsset(url, by, kind);
 
-  if (by.tokenId && await assetByteQuotaExceeded(by.tokenId)) {
+  if (await assetByteQuotaExceeded(by.tokenId,by.userId)) {
     throw new WebAssetRefused('quota_exceeded', 'this account is over its stored-byte quota — delete assets you no longer need', url);
   }
 

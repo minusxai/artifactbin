@@ -76,7 +76,7 @@ describe('the composed proxy browser boundary', () => {
   });
   it('rejects unknown hosts and never serves author content on the trusted host', async () => {
     expect((await call('https://evil.example.test', '/')).status).toBe(421);
-    for (const path of ['/a/abc123/raw', '/@user/abc123-title', '/assets/' + 'a'.repeat(64)]) {
+    for (const path of ['/a/abc123/raw', '/@user/abc123-title', '/assets/ref/Abc123', '/assets/' + 'a'.repeat(64)]) {
       expect((await call(controls, path)).status).toBe(404);
     }
   });

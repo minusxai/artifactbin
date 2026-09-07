@@ -1,6 +1,4 @@
 import type {JsxElement, JsxNode} from '@/lib/jsx/types';
-import {parseJsx} from '@/lib/jsx/parse';
-import {parse} from 'acorn';
 import {STORY_HTML_TAGS} from '@/lib/story-ui/component-names';
 import {URL_ATTRS, URL_LIST_ATTRS} from '@/lib/jsx/url-attrs';
 
@@ -73,9 +71,6 @@ export function compileManagedIframe(node: JsxElement): ManagedIframeContent {
       const source=bounded(textPayload(child));
       if(src!==undefined && (typeof src!=='string' || !safeUrl(src,true)))fail('script src requires an absolute HTTP(S) URL');
       if(src!==undefined && source.trim())fail('script cannot combine inline and external source');
-      if(src===undefined) {
-        try{parse(source,{ecmaVersion:'latest',sourceType:type==='module'?'module':'script'});}catch(error){fail(`invalid script: ${error instanceof Error?error.message:String(error)}`);}
-      }
       scripts.push({type:type==='module'?'module':'classic',...(typeof src==='string'?{src}:{source})});
       return '';
     }
@@ -91,17 +86,4 @@ export function compileManagedIframe(node: JsxElement): ManagedIframeContent {
     return bounded(`<${tag}${attributes}>`)+child.children.map(n=>render(n,depth+1)).join('')+bounded(`</${tag}>`);
   };
   return {html:node.children.map(child=>render(child)).join(''),scripts};
-}
-
-/** Apply parent-only source transforms without changing bytes inside managed frames. */
-export function transformOutsideManagedIframes(source:string, transform:(source:string)=>string):string {
-  const parsed=parseJsx(source);
-  if(!parsed.ok)return transform(source);
-  const frames:JsxElement[]=[];
-  const walk=(nodes:JsxNode[])=>{for(const node of nodes)if(node.type==='element'){if(node.tag==='Iframe')frames.push(node);else walk(node.children);}};
-  walk(parsed.nodes);
-  let cursor=0;
-  let result='';
-  for(const frame of frames){result+=transform(source.slice(cursor,frame.start))+source.slice(frame.start,frame.end);cursor=frame.end;}
-  return result+transform(source.slice(cursor));
 }

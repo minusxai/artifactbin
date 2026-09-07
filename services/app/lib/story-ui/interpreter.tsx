@@ -16,7 +16,7 @@ import {compileManagedIframe} from '@/lib/story/managed-iframe';
 import { evaluateReactive, isReactiveExpression, REACTIVE_BOOLEAN_PROPS } from '@/lib/jsx/reactive';
 import type { JsxNode, JsxElement } from '@/lib/jsx';
 import { immutableSet } from '@/lib/utils/immutable-collections';
-import { hasDangerousScheme, listHasDangerousScheme } from '@/lib/jsx/validate';
+import { hasDangerousScheme, listHasDangerousScheme } from '@/lib/jsx/url-attrs';
 // Shared with the save-time gate in lib/jsx/validate.ts — see lib/jsx/url-attrs.ts
 // for why these must not be maintained separately.
 import { URL_ATTRS as URL_PROPS, URL_LIST_ATTRS as URL_LIST_PROPS, SVG_PAINT_ATTRS, paintHasExternalUrl } from '@/lib/jsx/url-attrs';

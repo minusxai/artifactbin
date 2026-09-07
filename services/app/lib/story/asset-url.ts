@@ -223,7 +223,8 @@ const walk = (nodes: JsxNode[], visit: (el: JsxElement) => void): void => {
   for (const n of nodes) {
     if (n.type !== 'element') continue;
     visit(n);
-    walk(n.children, visit);
+    // Managed contents have their own asset resolver and isolated URL policy.
+    if(n.tag!=='Iframe')walk(n.children, visit);
   }
 };
 
