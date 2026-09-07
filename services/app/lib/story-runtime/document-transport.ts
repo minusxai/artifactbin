@@ -27,7 +27,14 @@ export function createDocumentTransport(
   appOrigin: string,
   fetchFn?: FetchLike,
   mutateUrl?: string,
+  trustedPeer?: Window,
 ): QueryTransport | null {
+  if (trustedPeer) {
+    // Controls own authenticated queries/writes, not the main-origin asset
+    // resolver. Only a framed editor needs its parent's scoped asset relay.
+    const {importAsset: _asset, ...transport}=createRelayTransport(trustedPeer, appOrigin, win as unknown as Window);
+    return transport;
+  }
   const parent = win.parent;
   if (parent && parent !== win && parent !== win.self) return createRelayTransport(parent as Window, appOrigin, win as unknown as Window);
   if (queryUrl) return createFetchTransport(queryUrl, fetchFn, mutateUrl);

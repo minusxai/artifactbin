@@ -7,9 +7,11 @@
  */
 import { json } from '@/lib/http';
 import { MAX_QUERY_ROWS } from '@/lib/config';
-import type { Scalar } from './dataflow';
+import type { Scalar, Row } from './dataflow';
+import { parseLocalTables } from './local-tables';
 
 export interface QueryRequest {
+  localTables?: Record<string, Row[]>;
   values?: Record<string, Scalar>;
   only?: string[];
   /** A window of one query's result (lib/sql/engine QueryPage). */
@@ -21,6 +23,10 @@ const isScalar = (v: unknown): v is Scalar =>
 
 export function parseQueryRequest(body: Record<string, unknown>): QueryRequest | Response {
   const out: QueryRequest = {};
+  if (body.localTables !== undefined) {
+    try { out.localTables = parseLocalTables(body.localTables); }
+    catch { return json({error: 'invalid_local_state'}, 400); }
+  }
   if (body.values !== undefined) {
     if (!body.values || typeof body.values !== 'object' || Array.isArray(body.values)) {
       return json({ error: 'invalid_values', details: ['values must be an object of scalars'] }, 400);

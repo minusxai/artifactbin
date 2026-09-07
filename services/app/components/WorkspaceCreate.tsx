@@ -1,5 +1,6 @@
 'use client';
 
+import {appFetch as fetch} from '@/web/api-origin';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Database, FilePlus2, FolderPlus, Plus, Trash2, X } from 'lucide-react';

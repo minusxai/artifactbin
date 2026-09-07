@@ -16,6 +16,10 @@ import { DatasetCatalogView } from '@/components/DatasetCatalogView';
  * The editor is loaded ON DEMAND: it pulls in the WYSIWYG, the AST write-back
  * and Monaco, and a reader of a shared document must never pay for that.
  */
+import {appFetch as fetch} from '@/web/api-origin';
+import {appUrl, appNavigate} from '@/web/api-origin';
+import {reportControlsInset} from '@/web/controls-shell';
+import {isDocumentPeerEvent, type DocumentPeer} from '@/lib/story/document-peer';
 import dynamic from '@/lib/dynamic';
 import { FolderPlus, MessageSquare, Pencil } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -27,7 +31,7 @@ import ForkArtifact, { ForkConfirm } from '@/components/ForkArtifact';
 import ShareLink from '@/components/ShareLink';
 import type { AnnotationWire } from '@/lib/annotations';
 import { readIntent, stripIntent, withIntent } from '@/lib/intent';
-import PageChrome, { PageControls, PageMenu, requestPageChrome, type AppearanceMode } from '@/components/PageChrome';
+import PageChrome, { AppBar, PageControls, PageMenu, requestPageChrome, type AppearanceMode } from '@/components/PageChrome';
 import { useIsPhoneViewport } from '@/components/MobileSheet';
 /* The editing bar's height is RESERVED by this page, never measured — and it
  * comes from a leaf module, because importing it from the editor would put the
@@ -44,6 +48,7 @@ import { formatFileSize } from '@/lib/file-display';
 import { resolveStoryMode } from '@/lib/data/story/story-themes';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import type { StoryIslandDataflow } from '@/lib/story-runtime/contract';
+import {isStoryAssetRequest} from '@/lib/story-runtime/contract';
 
 const ArtifactEditor = dynamic(() => import('@/components/ArtifactEditor'), {
   ssr: false,
@@ -56,6 +61,9 @@ const SocialPreviewDialog = dynamic(() => import('@/components/SocialPreviewDial
 });
 
 export interface ArtifactSurfaceProps {
+  /** Resolved server policy: false means snapshot-only, without reconnect attempts. */
+  liveEnabled?: boolean;
+  controlsOnly?: boolean;
   /**
    * The exporter's signed key, when this render IS a capture (server-parsed
    * from `?key=`). Null for every human render.
@@ -217,6 +225,7 @@ const selectionActionCapabilities = (canEdit: boolean, canAnnotate: boolean, inV
 });
 
 export default function ArtifactSurface(props: ArtifactSurfaceProps) {
+  const controlsOnly = props.controlsOnly === true;
   const [copiedRef, setCopiedRef] = useState(false);
   const { id, editId, format, title, source, content, columns, bytes: fileBytes = 0, pages: filePages = null, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', accountSession = false, anonSession = false, version, captureKey = null, openAnnotations = 0, like = { liked: false, count: 0 }, follow = null } = props;
   const [editing, setEditing] = useState(false);
@@ -235,7 +244,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     const onScroll = (event: MessageEvent) => {
       const data = event.data as Partial<StoryScrollMessage> | undefined;
       if (!data || data.type !== STORY_SCROLL_MESSAGE || typeof data.gutter !== 'number') return;
-      if (frameRef.current && event.source !== frameRef.current.contentWindow) return;
+      if (!isDocumentPeerEvent(frameRef.current, event)) return;
       setFrameGutter(data.gutter);
     };
     window.addEventListener('message', onScroll);
@@ -248,6 +257,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const [socialPreviewOpen, setSocialPreviewOpen] = useState(false);
   /** Desktop comments reserve a rail; on a phone the same surface is a sheet. */
   const phone = useIsPhoneViewport();
+  useEffect(() => {if (controlsOnly) reportControlsInset(railOpen && !phone ? RIGHT_RAIL_W : 0);},[controlsOnly,railOpen,phone]);
   /** A reading preference, separate from the author's stored default. */
   const [readerModeOverride, setReaderModeOverride] = useState<AppearanceMode | null>(null);
   /** Same handoff for the annotation composer. */
@@ -280,7 +290,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   useEffect(() => {
     const onSession = (e: MessageEvent) => {
       if (!e.isTrusted) return;
-      if (frameRef.current && e.source !== frameRef.current.contentWindow) return;
+      if (!isDocumentPeerEvent(frameRef.current, e)) return;
       if (!isSessionMessage(e.data)) return;
       const announced = e.data.nonce;
       setSessionNonce((held) => held ?? announced);
@@ -384,7 +394,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       '*',
     );
   }, []);
-  const live = useLiveArtifact(id, editId, version, !editing, undefined, onLiveData, setLiveAnnotations);
+  const live = useLiveArtifact(id, editId, version, props.liveEnabled !== false && !editing, undefined, onLiveData, setLiveAnnotations);
   const [liveCatalog, setLiveCatalog] = useState<{ id: string; version: number; catalog: DatasetCatalog } | null>(null);
   // Dataset version frames carry rows, not catalog definitions. Re-read the
   // authorized page metadata on this existing stream's wakeup; the viewer
@@ -473,7 +483,12 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * and an owner can watch a loader.
    */
   const [frameLoaded, setFrameLoaded] = useState(false);
-  const frameRef = useRef<HTMLIFrameElement | null>(null);
+  const frameRef = useRef<DocumentPeer | null>(null);
+  if (controlsOnly && !frameRef.current) frameRef.current = {
+    contentWindow: window.parent,
+    origin: new URL(appUrl(`/a/${id}`)).origin,
+    getBoundingClientRect: () => new DOMRect(0,0,innerWidth,innerHeight),
+  };
   /**
    * Bumped to throw away a frame whose document is gone (see the liveness
    * check below). It rides in the iframe's `key` beside `rawKey`, so the only
@@ -520,7 +535,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (e.data !== STORY_PAINTED_MESSAGE) return;
-      if (frameRef.current && e.source !== frameRef.current.contentWindow) return;
+      if (!isDocumentPeerEvent(frameRef.current, e)) return;
       // The same answer serves twice: it reveals the frame the first time, and
       // afterwards it is the proof of life the check below is waiting for.
       frameAliveRef.current = true;
@@ -541,13 +556,13 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     const onQuery = async (e: MessageEvent) => {
       const data = e.data as Partial<StoryQueryRequest> | undefined;
       if (!data || typeof data !== 'object' || data.type !== STORY_QUERY_MESSAGE) return;
-      if (frameRef.current && e.source !== frameRef.current.contentWindow) return;
+      if (!isDocumentPeerEvent(frameRef.current, e)) return;
       const reply = (msg: StoryQueryResult) => (e.source as Window | null)?.postMessage(msg, '*');
       try {
         const res = await fetch(`/a/${id}/query`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ values: data.values ?? {}, only: data.only ?? [], ...(data.page ? { page: data.page } : {}) }),
+          body: JSON.stringify({ values: data.values ?? {}, only: data.only ?? [], ...(data.page ? { page: data.page } : {}), ...(data.localTables ? {localTables: data.localTables} : {}) }),
         });
         if (!res.ok) { reply({ type: STORY_QUERY_RESULT_MESSAGE, id: data.id!, error: `query failed (${res.status})` }); return; }
         const body = (await res.json()) as Pick<DataflowState,'tables'|'errors'|'mutationAccess'>;
@@ -580,11 +595,13 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     const onAsset = async (e: MessageEvent) => {
       const data = e.data as Partial<StoryAssetRequest> | undefined;
       if (!data || typeof data !== 'object' || data.type !== STORY_ASSET_MESSAGE || typeof data.url !== 'string') return;
-      if (frameRef.current && e.source !== frameRef.current.contentWindow) return;
+      if (!isDocumentPeerEvent(frameRef.current, e)) return;
+      if(!isStoryAssetRequest(data))return;
       const reply = (msg: StoryAssetResult) => (e.source as Window | null)?.postMessage(msg, '*');
       try {
         const key = captureKey ? `&key=${encodeURIComponent(captureKey)}` : '';
-        const res = await fetch(`/a/${id}/assets?u=${encodeURIComponent(data.url)}${key}`, { headers: { Accept: 'application/json' } });
+        const kind=data.kind?`&kind=${encodeURIComponent(data.kind)}`:'';
+        const res = await fetch(`/a/${id}/assets?u=${encodeURIComponent(data.url)}${key}${kind}`, { headers: { Accept: 'application/json' } });
         const body = (await res.json().catch(() => ({}))) as { url?: string; code?: string };
         if (res.ok && body.url) reply({ type: STORY_ASSET_RESULT_MESSAGE, id: data.id!, url: body.url });
         else reply({ type: STORY_ASSET_RESULT_MESSAGE, id: data.id!, refused: body.code ?? `http_${res.status}` });
@@ -609,20 +626,20 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     const onMutate = async (e: MessageEvent) => {
       const data = e.data as Partial<StoryMutateRequest> | undefined;
       if (!data || typeof data !== 'object' || data.type !== STORY_MUTATE_MESSAGE) return;
-      if (frameRef.current && e.source !== frameRef.current.contentWindow) return;
+      if (!isDocumentPeerEvent(frameRef.current, e)) return;
       const reply = (msg: StoryMutateResult) => (e.source as Window | null)?.postMessage(msg, '*');
       try {
         const res = await fetch(`/a/${id}/mutate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mutation: data.mutation, values: data.values ?? {}, ...(data.row ? { row: data.row } : {}) }),
+          body: JSON.stringify({ mutation: data.mutation, values: data.values ?? {}, ...(data.row ? { row: data.row } : {}), ...(data.localTables ? {localTables: data.localTables} : {}) }),
         });
-        const body = (await res.json().catch(() => ({}))) as { ok?: boolean; dataset?: string; version?: number; affected?: number; error?: string; detail?: string };
+        const body = (await res.json().catch(() => ({}))) as { ok?: boolean; dataset?: string; version?: number; affected?: number; error?: string; detail?: string; local?: import('@/lib/story/local-state').LocalMutationResult };
         if (!res.ok || !body.ok) {
           reply({ type: STORY_MUTATE_RESULT_MESSAGE, id: data.id!, ok: false, error: body.detail ?? body.error ?? `write failed (${res.status})` });
           return;
         }
-        reply({ type: STORY_MUTATE_RESULT_MESSAGE, id: data.id!, ok: true, dataset: body.dataset ?? '', version: body.version ?? 0, affected: body.affected ?? 0 });
+        reply({ type: STORY_MUTATE_RESULT_MESSAGE, id: data.id!, ok: true, dataset: body.dataset ?? '', version: body.version ?? 0, affected: body.affected ?? 0, ...(body.local ? {local: body.local} : {}) });
       } catch (err) {
         reply({ type: STORY_MUTATE_RESULT_MESSAGE, id: data.id!, ok: false, error: err instanceof Error ? err.message : 'write failed' });
       }
@@ -643,7 +660,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    */
   useEffect(() => {
     const onValues = (e: MessageEvent) => {
-      if (frameRef.current && e.source !== frameRef.current.contentWindow) return;
+      if (!isDocumentPeerEvent(frameRef.current, e)) return;
       if (!sessionNonce || !isValuesMessage(e.data, sessionNonce)) return;
       // The flow the PAGE holds — the served one, or the live version if an
       // agent has since changed the declarations.
@@ -718,7 +735,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   useEffect(() => {
     const onAdopts = (e: MessageEvent) => {
       if (e.data !== STORY_ADOPTS_MESSAGE) return;
-      if (frameRef.current && e.source !== frameRef.current.contentWindow) return;
+      if (!isDocumentPeerEvent(frameRef.current, e)) return;
       frameAdoptsRef.current = true;
     };
     window.addEventListener('message', onAdopts);
@@ -763,6 +780,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       ...(live.dataflow ? { dataflow: live.dataflow } : {}),
       ...(live.compiledCss !== undefined ? { compiledCss: live.compiledCss } : {}),
       ...(live.authorCss !== undefined ? { authorCss: live.authorCss } : {}),
+      ...(live.authorScript !== undefined ? { authorScript: live.authorScript } : {}),
       theme: live.theme,
       ...(live.colorMode ? { colorMode: live.colorMode } : {}),
     };
@@ -954,13 +972,14 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * with the ask, the way a stranger's document does.
    */
   const likeRef = useRef(like);
+  const [, updateSocial] = useState(0);
   const followRef = useRef(follow);
   const answer = useCallback((frame: Window | null, reply: Omit<StoryReaderActionResultMessage, 'type'>) => {
     frame?.postMessage({ type: STORY_READER_ACTION_RESULT_MESSAGE, ...reply } satisfies StoryReaderActionResultMessage, '*');
   }, []);
   const toggleLike = useCallback(async (frame: Window | null, want?: boolean) => {
     if (!accountSession) {
-      window.location.assign(`/login?callbackUrl=${encodeURIComponent(`${window.location.pathname}${withIntent('', 'like')}`)}`);
+      appNavigate(`/login?callbackUrl=${encodeURIComponent(`${window.location.pathname}${withIntent('', 'like')}`)}`);
       return;
     }
     const next = want ?? !likeRef.current.liked;
@@ -968,13 +987,14 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     const res = await fetch(`/api/my/artifacts/${id}/like`, { method: next ? 'POST' : 'DELETE', credentials: 'same-origin' }).catch(() => null);
     if (!res?.ok) return;
     likeRef.current = (await res.json()) as { liked: boolean; count: number };
+    updateSocial(n => n+1);
     answer(frame, { kind: 'like', ok: true, ...likeRef.current });
   }, [accountSession, answer, id]);
   const toggleFollow = useCallback(async (frame: Window | null, want?: boolean) => {
     const target = followRef.current;
     if (!target) return;
     if (!accountSession) {
-      window.location.assign(`/login?callbackUrl=${encodeURIComponent(`${window.location.pathname}${withIntent('', 'follow')}`)}`);
+      appNavigate(`/login?callbackUrl=${encodeURIComponent(`${window.location.pathname}${withIntent('', 'follow')}`)}`);
       return;
     }
     const next = want ?? !target.following;
@@ -983,6 +1003,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     if (!res?.ok) return;
     const state = (await res.json()) as { following: boolean; count: number };
     followRef.current = { ...target, ...state };
+    updateSocial(n => n+1);
     answer(frame, { kind: 'follow', ok: true, ...state });
   }, [accountSession, answer]);
   // A frame that (re)announces itself is told what is true now — it may have
@@ -1093,7 +1114,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     const onAction = (event: MessageEvent) => {
       const data = event.data as Partial<StoryReaderActionMessage> | undefined;
       if (!data || data.type !== STORY_READER_ACTION_MESSAGE || typeof data.kind !== 'string') return;
-      if (frameRef.current && event.source !== frameRef.current.contentWindow) return;
+      if (!isDocumentPeerEvent(frameRef.current, event)) return;
       const frame = event.source as Window | null;
       switch (data.kind) {
         case 'like':
@@ -1276,6 +1297,12 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   if (isDocumentFormat) {
     return (
       <>
+        {controlsOnly && <><AppBar fixed title={shownTitle} label="Artifact controls" />
+          <div data-controls-region className="fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-xl border border-edge bg-surface p-2 shadow-lg">
+            <button aria-label="Like artifact" aria-pressed={likeRef.current.liked} onClick={() => void toggleLike(null)} className="rounded px-3 py-2">{likeRef.current.liked ? 'Liked' : 'Like'} · {likeRef.current.count}</button>
+            {canAnnotate && <button aria-label="Toggle comments" onClick={() => setRailOpen(open => !open)} className="rounded px-3 py-2">Comments · {openAnnotationCount}</button>}
+            {followRef.current && <button aria-label="Follow author" aria-pressed={followRef.current.following} onClick={() => void toggleFollow(null)} className="rounded px-3 py-2">{followRef.current.following ? 'Following' : 'Follow'}</button>}
+          </div></>}
         {editing ? (
           /* EDIT MODE: the document's own bar stays, PINNED at the top, and the
              editor's toolbar sits under it. The panels drop below both. */
@@ -1331,7 +1358,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             // re-parent.
             top: 0,
             right: 0,
-            background: readerMode === 'dark' ? DOCUMENT_GROUND.dark : DOCUMENT_GROUND.light,
+            background: controlsOnly ? 'transparent' : readerMode === 'dark' ? DOCUMENT_GROUND.dark : DOCUMENT_GROUND.light,
           }}
         >
           {/* On the document's ground, in a colour that reads on either mode:
@@ -1346,7 +1373,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
               loading…
             </div>
           )}
-          <iframe
+          {!controlsOnly && <iframe
             /*
              * NOT keyed on the document: a live edit is posted INTO this frame
              * (above), and re-keying here is what made every agent write a full
@@ -1354,7 +1381,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
              * process was reclaimed, or one that could not adopt an update.
              */
             key={`${id}:${frameNonce}`}
-            ref={frameRef}
+            ref={frame => {frameRef.current = frame;}}
             title="artifact"
             // The frame's request is its OWN, and carries neither the page's
             // session nor its query — so a capture has to hand the key down
@@ -1387,12 +1414,12 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             // directive — both apply (intersection), so they must stay the
             // same set. The extra flags let outbound links and popups leave
             // the frame; `allow` is what lets a deck present from inside it.
-            sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
+            sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
             allow="fullscreen"
             className={`absolute inset-0 block h-full w-full border-0 transition-opacity ${
               frameLoaded ? 'opacity-100' : 'opacity-0'
             }`}
-          />
+          />}
         </div>
         {/* Annotations are chrome too: pins live IN the frame, markers and
             threads on the page (which holds the content and the session).
@@ -1411,7 +1438,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             pickOnOpen={!editing}
             // Under the document's bar (44px on desktop; a phone draws no bar
             // and gets a sheet anyway), and under the editor toolbar too.
-            topOffset={(phone ? 0 : APP_BAR_H) + (editing ? EDIT_BAR_H : 0)}
+            topOffset={(controlsOnly || !phone ? APP_BAR_H : 0) + (editing ? EDIT_BAR_H : 0)}
             // Short of the frame's own scrollbar, which stays at the window's edge.
             rightInset={frameGutter}
             onAnnotationsChange={setLayerAnnotations}

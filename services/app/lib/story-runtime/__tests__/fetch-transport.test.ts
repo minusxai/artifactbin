@@ -16,6 +16,24 @@ const requestOf = (f: ReturnType<typeof vi.fn>) => {
 };
 
 describe('createFetchTransport', () => {
+  it('carries local query rows in a credential-free POST, not a URL', async () => {
+    const f = vi.fn(async () => ok({tables: {}, errors: {}}));
+    const localTables = {drafts: [{id: 1}]};
+    await createFetchTransport('/a/abc123/query', f).run({}, ['q'], localTables);
+    const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/a/abc123/query');
+    expect(init).toMatchObject({method: 'POST', credentials: 'omit', headers: {'Content-Type': 'text/plain'}});
+    expect(JSON.parse(String(init.body))).toEqual({values: {}, only: ['q'], localTables});
+  });
+  it('carries local mutation rows and returns the full local result', async () => {
+    const local = {target: 'drafts', affected: 1, table: {columns: [{name: 'id', type: 'number'}], rows: [{id: 2}]}};
+    const f = vi.fn(async () => ok({ok: true, dataset: '', local}));
+    const t = createFetchTransport('/a/abc123/query', f, '/a/abc123/mutate');
+    expect(await t.mutate!({}, 'add', undefined, {drafts: []})).toEqual({dataset: '', local});
+    const [, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({mutation: 'add', values: {}, localTables: {drafts: []}});
+    expect(init.credentials).toBe('omit');
+  });
   it('run(): GETs <queryUrl>?q=<{values, only}> and resolves with tables + errors', async () => {
     const f = vi.fn(async () => ok({ tables: { sales: { rows: [{ a: 1 }], columns: [] } }, errors: {} }));
     const t = createFetchTransport('/a/abc123/query', f);

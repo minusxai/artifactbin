@@ -7,7 +7,7 @@
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { ID_RE } from '@/lib/ids';
 import { liveFrameFor } from '@/lib/story/frame';
-import { sessionActor } from '@/lib/viewer';
+import { canReceiveLiveUpdates, sessionActor } from '@/lib/viewer';
 
 /**
  * A FRESH object per response, never this one. The Node server writes the
@@ -26,6 +26,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   if (!row) return new Response('not found', { status: 404 });
   const actor = await sessionActor(request);
   if (!(await canReadArtifact(row, actor.viewer))) return new Response('not found', { status: 404 });
+  if (!canReceiveLiveUpdates(actor)) return new Response(null, {status: 204, headers: headers()});
   /*
    * A FOLDER HAS NO FRAME, and this route is its OWN door — it never goes
    * through `raw`'s switch, so the rule has to be said again here.

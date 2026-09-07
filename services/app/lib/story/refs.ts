@@ -67,7 +67,7 @@ function walk(nodes: JsxNode[], visit: (el: JsxElement) => void): void {
   for (const n of nodes) {
     if (n.type !== 'element') continue;
     visit(n);
-    walk(n.children, visit);
+    if(n.tag!=='Iframe')walk(n.children, visit);
   }
 }
 
@@ -96,7 +96,7 @@ export function collectRefUses(source: string): RefUse[] | null {
     // meta.refs) with the stricter admission below.
     if (el.isComponent && tag === MUTATION_TAG) {
       const m = parseMutationDecl(el);
-      if (m.ok) uses.push({ id: m.decl.target, kind: 'dataset', via: 'sql', write: true });
+      if (m.ok && m.decl.scope !== 'local') uses.push({ id: m.decl.target, kind: 'dataset', via: 'sql', write: true });
       return;
     }
     if (!el.isComponent && tag.toLowerCase() === 'meta' && attrValue(el, 'name') === 'artifactbin:og-image') {

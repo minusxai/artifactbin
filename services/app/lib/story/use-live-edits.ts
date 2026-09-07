@@ -16,6 +16,7 @@
  * is at most one flush interval old, and silently keeping it would mean
  * showing the user a document nobody else has.
  */
+import {appFetch as fetch} from '@/web/api-origin';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /** How long a burst of typing coalesces before it is persisted. */

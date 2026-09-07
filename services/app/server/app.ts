@@ -19,7 +19,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { actorReceiver } from '@artifactbin/utils';
+import { actorOf, actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { verifyExportKey } from '@/lib/export-key';
 import { ID_RE } from '@/lib/ids';
@@ -29,9 +29,12 @@ import { declaresLiveData, declaresMutations } from '@/lib/story/helmet';
 import { SHOWCASE_ORIGIN } from '@/lib/showcase';
 import { canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
 import { ownerUsername } from '@/lib/users';
-import { roleFor, sessionActor } from '@/lib/viewer';
+import { roleFor, sessionActor, NO_ACTOR } from '@/lib/viewer';
 import { canAnnotate } from '@/lib/share-roles';
 import { baseUrl, json } from '@/lib/http';
+import {CONTROLS_ORIGIN, PUBLIC_BASE_URL, ASSETS_ORIGIN} from '@/lib/config';
+import {GET as publicAssetBytes} from '@/app/assets/[hash]/route';
+import {GET as publicRefBytes} from '@/app/assets/ref/[id]/route';
 import { mountRoutes } from './api';
 import { ROUTES } from './routes.generated';
 
@@ -136,7 +139,7 @@ export async function servesDocumentDirectly(request: Request): Promise<string |
    * Above the row read, beside the `key` bypass, so a credential-less reader
    * still reaches the document without touching the database.
    */
-  if (!anonymous && readIntent(url.search) !== null) return null;
+  if (!CONTROLS_ORIGIN && !anonymous && readIntent(url.search) !== null) return null;
   const artifact = await getArtifactById(found.id);
   // A FOLDER IS NEVER SERVED TOP-LEVEL. It has no document — its listing is app
   // data the page endpoint answers and `withBootstrap` inlines — so `raw` is a
@@ -144,6 +147,7 @@ export async function servesDocumentDirectly(request: Request): Promise<string |
   // page, and the ACL is unchanged: a folder this viewer may not read is the
   // same uniform 404 the page already answers for an unknown id.
   if (!artifact || artifact.format !== 'markup') return null;
+  if (CONTROLS_ORIGIN && baseUrl(request) === new URL(PUBLIC_BASE_URL).origin) return await roleFor(artifact,actor ?? NO_ACTOR) !== 'none' ? found.id : null;
   const needsSessionForData = declaresLiveData(artifact.source) && !(await canReadArtifact(artifact, null));
   if (needsSessionForData) return null;
   // A dataset editor may only VIEW this document. Its mutations still need
@@ -183,6 +187,24 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // Transport identity must be attached before any app middleware or route
   // asks viewer.ts who is calling.
   if (opts.actorSecret) actorReceiver(opts.actorSecret).mount(app);
+  if (ASSETS_ORIGIN) app.use('*',async(c,next)=>{
+    const incoming=new URL(c.req.url);
+    if(incoming.host !== new URL(ASSETS_ORIGIN!).host && baseUrl(c.req.raw) !== ASSETS_ORIGIN)return next();
+    const request=new Request(ASSETS_ORIGIN+incoming.pathname+incoming.search,{method:c.req.method});
+    if(!isPublicAssetRequest(request,ASSETS_ORIGIN!))return new Response('not found',{status:404});
+    const response=incoming.pathname.startsWith('/assets/ref/')
+      ? await publicRefBytes(request,{params:Promise.resolve({id:incoming.pathname.slice('/assets/ref/'.length)})})
+      : await publicAssetBytes(request,{params:Promise.resolve({hash:incoming.pathname.slice('/assets/'.length)})});
+    const safe=publicAssetResponse(response);
+    return c.req.method==='HEAD'?new Response(null,{status:safe.status,headers:safe.headers}):safe;
+  });
+  // Split-host authentication is enforced by the proxy, never by legacy
+  // cookie fallbacks in app routes. Even anonymous requests must carry its
+  // verdict. A directly exposed backend or app-only boot must fail closed.
+  if (CONTROLS_ORIGIN) app.use('*', async (c, next) => {
+    if (!actorOf(c.req.raw)) return json({ error: 'proxy_required' }, 403, { 'Cache-Control': 'no-store' });
+    return next();
+  });
   if (opts.onTokenRevoked) {
     app.use('/api/*', async (c, next) => {
       await next();
@@ -207,7 +229,10 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
    * The endpoints stay the truth; this is the same data, arriving earlier.
    */
   const page = async (c: { req: { raw: Request; url: string } }, status?: 200 | 404) => {
-    const html = await index(c.req.url);
+    const source = await index(c.req.url);
+    const html = CONTROLS_ORIGIN && baseUrl(c.req.raw) === CONTROLS_ORIGIN
+      ? source.replace('</head>', () => `<script type="application/json" id="mx-app-config">${safeJson({apiOrigin:new URL(PUBLIC_BASE_URL).origin})}</script></head>`)
+      : source;
     const data = await bootstrapFor(c.req.raw);
     // An @-address whose profile resolves to NOTHING is a miss, and a miss is
     // 404 as a STATUS (the rule documents already live by) — the SPA is still
@@ -224,6 +249,27 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   };
 
   const pageData = (dir: string) => ROUTES.find((r) => r.dir === dir)?.module.GET as ((request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>) | undefined;
+  // Full trusted pages and same-origin APIs live on i. Only this dedicated
+  // controls shell is frameable. Author documents always remain on main.
+  if (CONTROLS_ORIGIN) app.use('*', async (c,next) => {
+    const url = new URL(c.req.url);
+    if (baseUrl(c.req.raw) !== CONTROLS_ORIGIN) {
+      if (baseUrl(c.req.raw) === new URL(PUBLIC_BASE_URL).origin && c.req.method === 'GET'
+        && /^\/(?:login|account|tokens|trash|chat|datasets)(?:\/|$)/.test(url.pathname)) return c.redirect(`${CONTROLS_ORIGIN}${url.pathname}${url.search}`,302);
+      return next();
+    }
+    if (c.req.method === 'GET' && /^\/controls\/a\/[A-Za-z0-9]+$/.test(url.pathname)) {
+      const shell = (await index(c.req.url)).replace('</head>', () => `<script type="application/json" id="mx-controls-config">${safeJson({apiOrigin:new URL(PUBLIC_BASE_URL).origin})}</script><base target="_top" /><style>html,body,#root{background:transparent!important}</style></head>`);
+      const main = new URL(PUBLIC_BASE_URL).origin;
+      const csp = APP_CSP.replace("connect-src 'self'", `connect-src 'self' ${main}`).replace("img-src 'self'", `img-src 'self' ${main}`).replace("frame-src 'self'", `frame-src 'self' ${main}`).replace("frame-ancestors 'self'", `frame-ancestors ${main}`);
+      return new Response(shell,{headers:{...APP_SECURITY_HEADERS,'content-security-policy':csp,'content-type':'text/html; charset=utf-8','cache-control':'no-store'}});
+    }
+    const documentApi = /^\/a\/[A-Za-z0-9]+\/(?:query|mutate|events(?:\/frame)?)$/.test(url.pathname);
+    if ((!documentApi && /^\/(?:a(?:\/|$)|@)/.test(url.pathname)) || /^\/assets\/(?:[a-f0-9]{64}(?:[./]|$)|ref(?:\/|$))/i.test(url.pathname)) return new Response('Not found',{status:404});
+    await next();
+    c.header('content-security-policy', (c.res.headers.get('content-security-policy') ?? APP_CSP).replace(/frame-ancestors[^;]*/, "frame-ancestors 'none'"));
+    c.header('cache-control','no-store');
+  });
   const artifactData = pageData('/api/page/artifact/[id]');
   const profileData = pageData('/api/page/profile/[user]/[[...path]]');
 

@@ -1,0 +1,145 @@
+{
+  "engine": "firefox",
+  "browser": "153.0",
+  "authorSha256": "95e7973b8ca829465b557119a3e925d19875e0513e46d9935655540c9007d295",
+  "bundleSha256": "e7bf1d4fe9e822afa839f581c59027bd5a959e38f50497c7c8d3947403d5dea0",
+  "failures": [],
+  "rows": [
+    {
+      "shape": "top",
+      "cache": "cold",
+      "firstRenderMs": [
+        336
+      ],
+      "cadence": [
+        {
+          "n": 34,
+          "median": 8,
+          "p95": 9
+        }
+      ],
+      "renderer": "Apple M1, or similar",
+      "errors": []
+    },
+    {
+      "shape": "top",
+      "cache": "warm",
+      "firstRenderMs": [
+        229
+      ],
+      "cadence": [
+        {
+          "n": 34,
+          "median": 8,
+          "p95": 9
+        }
+      ],
+      "renderer": "Apple M1, or similar",
+      "errors": []
+    },
+    {
+      "shape": "iframe",
+      "cache": "cold",
+      "firstRenderMs": [
+        250
+      ],
+      "cadence": [
+        {
+          "n": 34,
+          "median": 8,
+          "p95": 9
+        }
+      ],
+      "renderer": "Apple M1, or similar",
+      "errors": []
+    },
+    {
+      "shape": "iframe",
+      "cache": "warm",
+      "firstRenderMs": [
+        234
+      ],
+      "cadence": [
+        {
+          "n": 34,
+          "median": 8,
+          "p95": 10
+        }
+      ],
+      "renderer": "Apple M1, or similar",
+      "errors": []
+    },
+    {
+      "shape": "iframe",
+      "naturalRemoval": [
+        {
+          "cycle": 0,
+          "remainingFrames": 1,
+          "disposals": 0
+        },
+        {
+          "cycle": 1,
+          "remainingFrames": 1,
+          "disposals": 0
+        },
+        {
+          "cycle": 2,
+          "remainingFrames": 1,
+          "disposals": 0
+        }
+      ]
+    },
+    {
+      "shape": "wrapper",
+      "cache": "cold",
+      "firstRenderMs": [
+        256
+      ],
+      "cadence": [
+        {
+          "n": 34,
+          "median": 8,
+          "p95": 9
+        }
+      ],
+      "renderer": "Apple M1, or similar",
+      "errors": []
+    },
+    {
+      "shape": "wrapper",
+      "cache": "warm",
+      "firstRenderMs": [
+        237
+      ],
+      "cadence": [
+        {
+          "n": 34,
+          "median": 8,
+          "p95": 9
+        }
+      ],
+      "renderer": "Apple M1, or similar",
+      "errors": []
+    },
+    {
+      "shape": "wrapper",
+      "naturalRemoval": [
+        {
+          "cycle": 0,
+          "remainingFrames": 1,
+          "disposals": 0
+        },
+        {
+          "cycle": 1,
+          "remainingFrames": 1,
+          "disposals": 0
+        },
+        {
+          "cycle": 2,
+          "remainingFrames": 1,
+          "disposals": 0
+        }
+      ]
+    }
+  ]
+}

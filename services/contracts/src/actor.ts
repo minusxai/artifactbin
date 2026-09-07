@@ -4,12 +4,14 @@
  * across a network hop as a signed header (utils signActor). The app reads it with actorOf().
  */
 export const ACTOR_HEADER = 'x-mx-actor';
-export const CREDENTIALS = ['bearer', 'session', 'agent-cookie', 'none'] as const;
+export const CREDENTIALS = ['bearer', 'session', 'read-session', 'agent-cookie', 'none'] as const;
 export type Credential = (typeof CREDENTIALS)[number];
 
 export interface Actor {
   credential: Credential;
   userId?: string;
+  /** Live human session identity for server-side consent binding, never a token. */
+  sessionId?: string;
   tokenId?: string;
   email?: string;
   emailVerified?: boolean;

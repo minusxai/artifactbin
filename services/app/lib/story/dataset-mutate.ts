@@ -17,9 +17,9 @@ import {compileStoredMutation} from '@/lib/datasets/stored-mutation';
  * never meant; DML is not. `insert … values (…)` replayed against the new rows
  * appends after the other writer's row; `update … where …` re-applied to the
  * current rows is exactly what its author asked for; `delete … where …`
- * likewise. So the rebase is free, no write is ever lost, and there is no lock
- * anywhere: writes to one dataset serialize on its own edit_id, writes to
- * different datasets never meet.
+ * likewise. The computation stays outside transactions. A short, ordered
+ * document/target lock at commit serializes permission changes; edit_id still
+ * detects a changed data snapshot and drives the bounded rebase.
  *
  * Everything else is deliberately the paths that already exist: the blob is
  * content-addressed (an idempotent write costs no object), the previous state
@@ -31,7 +31,8 @@ import { trackEvent } from '@/lib/analytics';
 import { MAX_QUERY_ROWS } from '@/lib/config';
 import { getDb } from '@/lib/db';
 import { isQueryFailure, runMutation, type MutationInput } from '@/lib/sql/engine';
-import { LIVE_ARTIFACT_SQL, canWriteDataset, editorScope, type ArtifactRow, type RoleActor } from '@/lib/artifacts';
+import { LIVE_ARTIFACT_SQL, canWriteDataset, editorScope, effectiveRole, type ArtifactRow, type RoleActor } from '@/lib/artifacts';
+import { canRead } from '@/lib/share-roles';
 import type { DatasetColumn } from './dataset-shape';
 import { loadDatasetRows, storeDatasetRows } from './dataset-store';
 import type { Scalar } from './dataflow';
@@ -58,7 +59,7 @@ export interface MutationRefused {
    * the honest answer is "try again". (Unreachable on PGLite, which serializes
    * every operation; reachable on Postgres.)
    */
-  reason: 'invalid_sql' | 'dataset_full' | 'contended' | 'row_changed' | 'row_not_unique' | 'dataset_read_only';
+  reason: 'invalid_sql' | 'dataset_full' | 'contended' | 'row_changed' | 'row_not_unique' | 'dataset_read_only' | 'document_changed';
   detail: string;
 }
 
@@ -85,7 +86,7 @@ export async function mutateDataset(
   actor: RoleActor,
   sql: string,
   params: Record<string, Scalar> = {},
-  guard: Pick<MutationInput, 'row' | 'expectedAffected'> & {source?:boolean} = {},
+  guard: Pick<MutationInput, 'row' | 'expectedAffected'> & {source?:boolean; document?: {id: string; editId: string}} = {},
 ): Promise<MutationApplied | MutationRefused> {
   const db = await getDb();
   const table = `ref_${dataset.id}`;
@@ -111,7 +112,7 @@ export async function mutateDataset(
     }
     const columns = selected?.columns ?? ((current.meta as { columns?: DatasetColumn[] }).columns) ?? [];
     const rows = await loadDatasetRows(selected?{content:'',meta:{objectKey:selected.objectKey}}:current);
-    const {source:_,...mutationGuard}=guard;
+    const {source:_,document,...mutationGuard}=guard;
     const out = await runMutation({ table: { name: table, rows, columns }, sql:executedSql, params, ...mutationGuard, limit: datasetRowCap() });
     if (isQueryFailure(out)) {
       return { reason: out.code ?? (out.full ? 'dataset_full' : 'invalid_sql'), detail: out.error };
@@ -143,11 +144,40 @@ export async function mutateDataset(
     // ONE guarded statement: swap the pointer if and only if the rows we read
     // are still the rows on disk, archive the previous state (coalesced, like
     // the edit protocol), and wake every document reading this dataset.
-    const updated = await db.query<ArtifactRow>(
+    const updated = await db.transaction(async tx => {
+      // Lock only for the commit, never while DuckDB runs or blobs upload.
+      // Stable ordering avoids opposite document/target pairs deadlocking.
+      // Sharing changes take the same parent-row lock. A separate role read
+      // AFTER waiting sees the committed ACL, not the lock statement's old
+      // PostgreSQL MVCC snapshot.
+      const locked = await tx.query<ArtifactRow>(
+        'SELECT * FROM artifacts approved_document WHERE id=ANY($1::text[]) ORDER BY id FOR UPDATE',
+        [[current.id, ...(document ? [document.id] : [])]],
+      );
+      if (document) {
+        const source = locked.rows.find(r => r.id === document.id);
+        if (!source || source.deleted_at || source.edit_id !== document.editId) return {
+          reason: 'document_changed', detail: 'The document changed while this mutation was running. Reload and review the current operation.',
+        } satisfies MutationRefused;
+        if (!canRead(await effectiveRole(source, actor, tx))) return {
+          reason: 'dataset_read_only', detail: 'You no longer have access to this document.',
+        } satisfies MutationRefused;
+      }
+      const target = locked.rows.find(r => r.id === current.id);
+      if (!target || target.deleted_at || await canWriteDataset(target, actor, tx)) return {
+        reason: 'dataset_read_only', detail: 'You no longer have edit access to a writable dataset.',
+      } satisfies MutationRefused;
+      return tx.query<ArtifactRow>(
       `WITH updated AS (
          UPDATE artifacts
             SET content = '', meta = $3::jsonb, version = version + 1, edit_id = $4, updated_at = now(), actor_user_id = $13, actor_token_id = $14
           WHERE id = $1 AND edit_id = $2 AND access = 'readwrite' AND ${scope.where('$15')}
+            AND ($16::text IS NULL OR EXISTS (
+              SELECT 1 FROM artifacts approved_document
+              WHERE approved_document.id=$16 AND approved_document.edit_id=$17
+                AND approved_document.deleted_at IS NULL
+              FOR SHARE
+            ))
           RETURNING *
        ), archived AS (
          INSERT INTO artifact_versions (artifact_id, version, title, description, format, content, source, meta)
@@ -164,14 +194,20 @@ export async function mutateDataset(
         dataset.id, current.edit_id, JSON.stringify(meta), newEditId(),
         current.version, current.title, current.description, current.format, current.content, current.source,
         JSON.stringify(current.meta), WRITE_SNAPSHOT_WINDOW_MS,
-        actor.userId, actor.tokenId, scope.val,
+        actor.userId, actor.tokenId, scope.val, document?.id ?? null, document?.editId ?? null,
       ],
-    );
+      );
+    });
+    if ('reason' in updated) return updated;
 
     const row = updated.rows[0];
     if (row) {
       void trackEvent('mutate', row.id, { userId: row.user_id });
       return { row, affected: out.affected, rowCount: out.rows.length };
+    }
+    if (document) {
+      const unchanged = await db.query('SELECT 1 FROM artifacts WHERE id=$1 AND edit_id=$2 AND deleted_at IS NULL', [document.id, document.editId]);
+      if (!unchanged.rows.length) return {reason: 'document_changed', detail: 'The document changed while this mutation was running. Reload and review the current operation.'};
     }
     // Lost the CAS. Re-run against what landed — see the module doc: for DML
     // that is the same statement, not a merge.

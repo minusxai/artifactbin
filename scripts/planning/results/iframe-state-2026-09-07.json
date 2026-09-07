@@ -1,0 +1,2069 @@
+[
+  {
+    "engine": "chromium",
+    "browserVersion": "151.0.7922.34",
+    "headed": true,
+    "results": [
+      {
+        "shape": "top",
+        "rows": 0,
+        "mode": "current-full-state",
+        "startupMs": 0.6000001430511475,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0.099853515625
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0.099853515625
+        },
+        "burst": {
+          "elapsed": 5.400146484375,
+          "received": 100,
+          "last": 199,
+          "firstLag": 0,
+          "lastLag": 0.199951171875
+        },
+        "coalesced": {
+          "ms": 6.200000047683716,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "top",
+        "rows": 1000,
+        "mode": "current-full-state",
+        "startupMs": 0.5999999046325684,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "burst": {
+          "elapsed": 6.199951171875,
+          "received": 100,
+          "last": 199,
+          "firstLag": 0,
+          "lastLag": 0.39990234375
+        },
+        "coalesced": {
+          "ms": 6.1000001430511475,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "top",
+        "rows": 10000,
+        "mode": "current-full-state",
+        "startupMs": 0.5,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0.10009765625
+        },
+        "burst": {
+          "elapsed": 6.10009765625,
+          "received": 100,
+          "last": 199,
+          "firstLag": 0,
+          "lastLag": 0.2001953125
+        },
+        "coalesced": {
+          "ms": 5.300000190734863,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "single",
+        "rows": 0,
+        "mode": "current-full-state",
+        "startupMs": 12.200000047683716,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0.000244140625,
+          "p95": 0.199951171875,
+          "max": 3.5
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0.10009765625,
+          "max": 0.10009765625
+        },
+        "burst": {
+          "elapsed": 6.800048828125,
+          "received": 100,
+          "last": 199,
+          "firstLag": 0,
+          "lastLag": 1
+        },
+        "coalesced": {
+          "ms": 6,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "single",
+        "rows": 0,
+        "mode": "experimental-values-only",
+        "startupMs": 11.599999904632568,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0.099853515625,
+          "max": 0.099853515625
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0.10009765625
+        },
+        "burst": {
+          "elapsed": 6.699951171875,
+          "received": 100,
+          "last": 199,
+          "firstLag": -0.000244140625,
+          "lastLag": 0.89990234375
+        },
+        "coalesced": {
+          "ms": 5.799999952316284,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "single",
+        "rows": 1000,
+        "mode": "current-full-state",
+        "startupMs": 12.099999904632568,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0.39990234375,
+          "p95": 0.699951171875,
+          "max": 0.800048828125
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0.10009765625,
+          "p95": 0.199951171875,
+          "max": 0.199951171875
+        },
+        "burst": {
+          "elapsed": 48,
+          "received": 100,
+          "last": 199,
+          "firstLag": 0.2998046875,
+          "lastLag": 42
+        },
+        "coalesced": {
+          "ms": 6.5,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "single",
+        "rows": 1000,
+        "mode": "experimental-values-only",
+        "startupMs": 12.200000047683716,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0.099853515625,
+          "max": 0.19970703125
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0.10009765625,
+          "max": 0.10009765625
+        },
+        "burst": {
+          "elapsed": 6.800048828125,
+          "received": 100,
+          "last": 199,
+          "firstLag": 0.099853515625,
+          "lastLag": 0.89990234375
+        },
+        "coalesced": {
+          "ms": 6,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "single",
+        "rows": 10000,
+        "mode": "current-full-state",
+        "startupMs": 11.799999952316284,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 2.39990234375,
+          "p95": 2.89990234375,
+          "max": 3.099853515625
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 1,
+          "p95": 1.199951171875,
+          "max": 1.300048828125
+        },
+        "burst": {
+          "elapsed": 385.2998046875,
+          "received": 100,
+          "last": 199,
+          "firstLag": 2.199951171875,
+          "lastLag": 382.7998046875
+        },
+        "coalesced": {
+          "ms": 6,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "single",
+        "rows": 10000,
+        "mode": "experimental-values-only",
+        "startupMs": 32,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0.000244140625,
+          "p95": 0.10009765625,
+          "max": 0.5
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "burst": {
+          "elapsed": 5.5,
+          "received": 100,
+          "last": 199,
+          "firstLag": 0,
+          "lastLag": 0.800048828125
+        },
+        "coalesced": {
+          "ms": 5.900000095367432,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "nested",
+        "rows": 0,
+        "mode": "current-full-state",
+        "startupMs": 27.200000047683716,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0.099853515625,
+          "p95": 0.099853515625,
+          "max": 3.39990234375
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0.10009765625,
+          "max": 0.10009765625
+        },
+        "burst": {
+          "elapsed": 5.800048828125,
+          "received": 100,
+          "last": 199,
+          "firstLag": 0.099853515625,
+          "lastLag": 0.999755859375
+        },
+        "coalesced": {
+          "ms": 5.8999998569488525,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "nested",
+        "rows": 0,
+        "mode": "experimental-values-only",
+        "startupMs": 26.299999952316284,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0.000244140625,
+          "p95": 0.2001953125,
+          "max": 5.900146484375
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0.10009765625,
+          "max": 0.10009765625
+        },
+        "burst": {
+          "elapsed": 6.60009765625,
+          "received": 100,
+          "last": 199,
+          "firstLag": 0.000244140625,
+          "lastLag": 0.900146484375
+        },
+        "coalesced": {
+          "ms": 5.8999998569488525,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "nested",
+        "rows": 1000,
+        "mode": "current-full-state",
+        "startupMs": 31.700000047683716,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0.300048828125,
+          "p95": 0.400146484375,
+          "max": 1.60009765625
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0.10009765625,
+          "p95": 0.199951171875,
+          "max": 0.2001953125
+        },
+        "burst": {
+          "elapsed": 48,
+          "received": 100,
+          "last": 199,
+          "firstLag": 0.300048828125,
+          "lastLag": 43.199951171875
+        },
+        "coalesced": {
+          "ms": 6.300000190734863,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "nested",
+        "rows": 1000,
+        "mode": "experimental-values-only",
+        "startupMs": 26.799999952316284,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0.000244140625,
+          "p95": 0.100341796875,
+          "max": 0.500244140625
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "burst": {
+          "elapsed": 5.800048828125,
+          "received": 100,
+          "last": 199,
+          "firstLag": 0.100341796875,
+          "lastLag": 0.900146484375
+        },
+        "coalesced": {
+          "ms": 5.799999952316284,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "nested",
+        "rows": 10000,
+        "mode": "current-full-state",
+        "startupMs": 32.200000047683716,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 2.2998046875,
+          "p95": 3.099853515625,
+          "max": 4.39990234375
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 1.099853515625,
+          "p95": 1.300048828125,
+          "max": 1.300048828125
+        },
+        "burst": {
+          "elapsed": 386.5,
+          "received": 100,
+          "last": 199,
+          "firstLag": 2.300048828125,
+          "lastLag": 379.89990234375
+        },
+        "coalesced": {
+          "ms": 5.900000095367432,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "nested",
+        "rows": 10000,
+        "mode": "experimental-values-only",
+        "startupMs": 32,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0.10009765625,
+          "p95": 0.2001953125,
+          "max": 0.2001953125
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0.099853515625,
+          "max": 0.10009765625
+        },
+        "burst": {
+          "elapsed": 6,
+          "received": 100,
+          "last": 199,
+          "firstLag": 0.5,
+          "lastLag": 1.400146484375
+        },
+        "coalesced": {
+          "ms": 5.8999998569488525,
+          "observedStates": 1,
+          "last": 1099
+        }
+      }
+    ],
+    "scheduling": [
+      {
+        "shape": "top",
+        "visibility": "visible",
+        "sampleResult": 1,
+        "elapsed": 500.30000019073486,
+        "timers": 25,
+        "messages": 100,
+        "frames": 59,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "top",
+        "visibility": "offscreen",
+        "sampleResult": 2,
+        "elapsed": 500.40000009536743,
+        "timers": 25,
+        "messages": 100,
+        "frames": 61,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "top",
+        "visibility": "hidden",
+        "sampleResult": 3,
+        "elapsed": 501.10000014305115,
+        "timers": 25,
+        "messages": 100,
+        "frames": 60,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "top",
+        "visibility": "after-click",
+        "sampleResult": 4,
+        "elapsed": 501,
+        "timers": 25,
+        "messages": 100,
+        "frames": 60,
+        "documentHidden": false,
+        "inputDelay": 2.8000001907348633
+      },
+      {
+        "shape": "top",
+        "visibility": "other-page-front",
+        "sampleResult": 5,
+        "elapsed": 506.89999985694885,
+        "timers": 26,
+        "messages": 100,
+        "frames": 61,
+        "documentHidden": false,
+        "inputDelay": 2.8000001907348633
+      },
+      {
+        "shape": "single",
+        "visibility": "visible",
+        "sampleResult": 1,
+        "elapsed": 501.7999999523163,
+        "timers": 25,
+        "messages": 100,
+        "frames": 61,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "single",
+        "visibility": "offscreen",
+        "sampleResult": 2,
+        "elapsed": 502,
+        "timers": 25,
+        "messages": 100,
+        "frames": 0,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "single",
+        "visibility": "hidden",
+        "sampleResult": 3,
+        "elapsed": 501.40000009536743,
+        "timers": 25,
+        "messages": 100,
+        "frames": 0,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "single",
+        "visibility": "after-click",
+        "sampleResult": 4,
+        "elapsed": 501,
+        "timers": 25,
+        "messages": 100,
+        "frames": 60,
+        "documentHidden": false,
+        "inputDelay": 0.6000001430511475
+      },
+      {
+        "shape": "single",
+        "visibility": "other-page-front",
+        "sampleResult": 5,
+        "elapsed": 501.2000000476837,
+        "timers": 25,
+        "messages": 100,
+        "frames": 60,
+        "documentHidden": false,
+        "inputDelay": 0.6000001430511475
+      },
+      {
+        "shape": "nested",
+        "visibility": "visible",
+        "sampleResult": 1,
+        "elapsed": 502,
+        "timers": 25,
+        "messages": 100,
+        "frames": 59,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "nested",
+        "visibility": "offscreen",
+        "sampleResult": 2,
+        "elapsed": 501.7999999523163,
+        "timers": 25,
+        "messages": 100,
+        "frames": 0,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "nested",
+        "visibility": "hidden",
+        "sampleResult": 3,
+        "elapsed": 502,
+        "timers": 25,
+        "messages": 100,
+        "frames": 0,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "nested",
+        "visibility": "after-click",
+        "sampleResult": 4,
+        "elapsed": 484,
+        "timers": 25,
+        "messages": 100,
+        "frames": 58,
+        "documentHidden": false,
+        "inputDelay": 1.0999999046325684
+      },
+      {
+        "shape": "nested",
+        "visibility": "other-page-front",
+        "sampleResult": 5,
+        "elapsed": 501.2000000476837,
+        "timers": 25,
+        "messages": 100,
+        "frames": 61,
+        "documentHidden": false,
+        "inputDelay": 1.0999999046325684
+      }
+    ],
+    "scale": [
+      {
+        "count": 1,
+        "ms": 6.599999904632568,
+        "acks": 100,
+        "ports": 1,
+        "domFrames": 1
+      },
+      {
+        "count": 4,
+        "ms": 6.700000047683716,
+        "acks": 400,
+        "ports": 4,
+        "domFrames": 4
+      },
+      {
+        "count": 8,
+        "ms": 18.300000190734863,
+        "acks": 800,
+        "ports": 8,
+        "domFrames": 8
+      }
+    ],
+    "backpressure": [
+      {
+        "shape": "single",
+        "elapsed": 7.400000095367432,
+        "success": 120,
+        "failed": 80,
+        "wireRequests": 128
+      },
+      {
+        "shape": "nested",
+        "elapsed": 1.5,
+        "success": 120,
+        "failed": 80,
+        "wireRequests": 128
+      }
+    ],
+    "lifecycle": {
+      "remainingFrames": 0,
+      "remainingPorts": 0,
+      "before": {
+        "documents": 1,
+        "nodes": 11,
+        "jsEventListeners": 1
+      },
+      "after": {
+        "documents": 1,
+        "nodes": 11,
+        "jsEventListeners": 1
+      },
+      "productLifecycle": {
+        "cycles": 30,
+        "peakSubscriptions": 1,
+        "remainingSubscriptions": 0,
+        "remainingFrames": 0
+      },
+      "afterProduct": {
+        "documents": 1,
+        "nodes": 11,
+        "jsEventListeners": 1
+      }
+    },
+    "notes": [
+      "Actual AUTHOR_SCRIPT_BOOTSTRAP plus experimental values-only branch; state producer and ack protocol are benchmark fixtures. No server mutation latency is included.",
+      "Top baseline writes DOM directly; single/nested use actual full-state cloning/bootstrap or the explicitly experimental delta branch, including one data subscriber.",
+      "Signal latency means handler DOM assignment, not screen paint. Cross-realm timer precision can yield small negative near-zero readings; do not interpret those as negative real latency.",
+      "Unpaced burst delivers100 snapshots; explicit coalescing experiment delivers the final state once. Mutation commands are never coalesced.",
+      "Scheduling is measured by author-installed message samplers, with no child evaluate that could simulate user activation. Background result is meaningful only if documentHidden is true. CSS hidden/offscreen is distinct.",
+      "Product lifecycle bundles the actual startAuthorScript factory against a counted fixture store; this is not a guarantee of no GPU/process-memory leaks.",
+      "Backpressure uses actual bootstrap128-inflight and bridge120/sec limits; the underlying mutation executor is a zero-cost fixture, not a server."
+    ]
+  },
+  {
+    "engine": "firefox",
+    "browserVersion": "153.0",
+    "headed": true,
+    "results": [
+      {
+        "shape": "top",
+        "rows": 0,
+        "mode": "current-full-state",
+        "startupMs": 1,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "burst": {
+          "elapsed": 7,
+          "received": 100,
+          "last": 199,
+          "firstLag": 0,
+          "lastLag": 0
+        },
+        "coalesced": {
+          "ms": 6,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "top",
+        "rows": 1000,
+        "mode": "current-full-state",
+        "startupMs": 1,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 1
+        },
+        "burst": {
+          "elapsed": 6,
+          "received": 100,
+          "last": 199,
+          "firstLag": 0,
+          "lastLag": 0
+        },
+        "coalesced": {
+          "ms": 7,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "top",
+        "rows": 10000,
+        "mode": "current-full-state",
+        "startupMs": 0,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "burst": {
+          "elapsed": 9,
+          "received": 100,
+          "last": 199,
+          "firstLag": 0,
+          "lastLag": 1
+        },
+        "coalesced": {
+          "ms": 6,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "single",
+        "rows": 0,
+        "mode": "current-full-state",
+        "startupMs": 9,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 1,
+          "p95": 1,
+          "max": 1
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "burst": {
+          "elapsed": 7,
+          "received": 100,
+          "last": 199,
+          "firstLag": 1,
+          "lastLag": 2
+        },
+        "coalesced": {
+          "ms": 5,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "single",
+        "rows": 0,
+        "mode": "experimental-values-only",
+        "startupMs": 9,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 1,
+          "p95": 2,
+          "max": 2
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "burst": {
+          "elapsed": 6,
+          "received": 100,
+          "last": 199,
+          "firstLag": 0,
+          "lastLag": 1
+        },
+        "coalesced": {
+          "ms": 5,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "single",
+        "rows": 1000,
+        "mode": "current-full-state",
+        "startupMs": 10,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 1,
+          "p95": 1,
+          "max": 2
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 1,
+          "max": 1
+        },
+        "burst": {
+          "elapsed": 99,
+          "received": 100,
+          "last": 199,
+          "firstLag": 24,
+          "lastLag": 96
+        },
+        "coalesced": {
+          "ms": 7,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "single",
+        "rows": 1000,
+        "mode": "experimental-values-only",
+        "startupMs": 9,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 1,
+          "max": 1
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 1
+        },
+        "burst": {
+          "elapsed": 7,
+          "received": 100,
+          "last": 199,
+          "firstLag": 0,
+          "lastLag": 1
+        },
+        "coalesced": {
+          "ms": 5,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "single",
+        "rows": 10000,
+        "mode": "current-full-state",
+        "startupMs": 19,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 5,
+          "p95": 7,
+          "max": 8
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 2,
+          "p95": 3,
+          "max": 3
+        },
+        "burst": {
+          "elapsed": 910,
+          "received": 100,
+          "last": 199,
+          "firstLag": 226,
+          "lastLag": 900
+        },
+        "coalesced": {
+          "ms": 9,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "single",
+        "rows": 10000,
+        "mode": "experimental-values-only",
+        "startupMs": 18,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "burst": {
+          "elapsed": 5,
+          "received": 100,
+          "last": 199,
+          "firstLag": 0,
+          "lastLag": 1
+        },
+        "coalesced": {
+          "ms": 7,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "nested",
+        "rows": 0,
+        "mode": "current-full-state",
+        "startupMs": 13,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 1,
+          "max": 1
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 1
+        },
+        "burst": {
+          "elapsed": 7,
+          "received": 100,
+          "last": 199,
+          "firstLag": 1,
+          "lastLag": 1
+        },
+        "coalesced": {
+          "ms": 6,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "nested",
+        "rows": 0,
+        "mode": "experimental-values-only",
+        "startupMs": 17,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 1,
+          "max": 1
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "burst": {
+          "elapsed": 7,
+          "received": 100,
+          "last": 199,
+          "firstLag": 1,
+          "lastLag": 2
+        },
+        "coalesced": {
+          "ms": 5,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "nested",
+        "rows": 1000,
+        "mode": "current-full-state",
+        "startupMs": 18,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 1,
+          "p95": 1,
+          "max": 2
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 1
+        },
+        "burst": {
+          "elapsed": 96,
+          "received": 100,
+          "last": 199,
+          "firstLag": 24,
+          "lastLag": 93
+        },
+        "coalesced": {
+          "ms": 6,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "nested",
+        "rows": 1000,
+        "mode": "experimental-values-only",
+        "startupMs": 13,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 1,
+          "p95": 1,
+          "max": 1
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "burst": {
+          "elapsed": 7,
+          "received": 100,
+          "last": 199,
+          "firstLag": 1,
+          "lastLag": 2
+        },
+        "coalesced": {
+          "ms": 6,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "nested",
+        "rows": 10000,
+        "mode": "current-full-state",
+        "startupMs": 18,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 5,
+          "p95": 8,
+          "max": 8
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 2,
+          "p95": 2,
+          "max": 3
+        },
+        "burst": {
+          "elapsed": 910,
+          "received": 100,
+          "last": 199,
+          "firstLag": 230,
+          "lastLag": 906
+        },
+        "coalesced": {
+          "ms": 8,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "nested",
+        "rows": 10000,
+        "mode": "experimental-values-only",
+        "startupMs": 18,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 1,
+          "p95": 2,
+          "max": 2
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 1
+        },
+        "burst": {
+          "elapsed": 8,
+          "received": 100,
+          "last": 199,
+          "firstLag": 2,
+          "lastLag": 3
+        },
+        "coalesced": {
+          "ms": 6,
+          "observedStates": 1,
+          "last": 1099
+        }
+      }
+    ],
+    "scheduling": [
+      {
+        "shape": "top",
+        "visibility": "visible",
+        "sampleResult": 1,
+        "elapsed": 501,
+        "timers": 20,
+        "messages": 100,
+        "frames": 60,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "top",
+        "visibility": "offscreen",
+        "sampleResult": 2,
+        "elapsed": 502,
+        "timers": 22,
+        "messages": 100,
+        "frames": 60,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "top",
+        "visibility": "hidden",
+        "sampleResult": 3,
+        "elapsed": 503,
+        "timers": 21,
+        "messages": 100,
+        "frames": 60,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "top",
+        "visibility": "after-click",
+        "sampleResult": 4,
+        "elapsed": 501,
+        "timers": 22,
+        "messages": 100,
+        "frames": 60,
+        "documentHidden": false,
+        "inputDelay": 1
+      },
+      {
+        "shape": "top",
+        "visibility": "other-page-front",
+        "sampleResult": 5,
+        "elapsed": 504,
+        "timers": 20,
+        "messages": 100,
+        "frames": 61,
+        "documentHidden": false,
+        "inputDelay": 1
+      },
+      {
+        "shape": "single",
+        "visibility": "visible",
+        "sampleResult": 1,
+        "elapsed": 500,
+        "timers": 21,
+        "messages": 100,
+        "frames": 61,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "single",
+        "visibility": "offscreen",
+        "sampleResult": 2,
+        "elapsed": 506,
+        "timers": 22,
+        "messages": 100,
+        "frames": 2,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "single",
+        "visibility": "hidden",
+        "sampleResult": 3,
+        "elapsed": 500,
+        "timers": 21,
+        "messages": 100,
+        "frames": 0,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "single",
+        "visibility": "after-click",
+        "sampleResult": 4,
+        "elapsed": 501,
+        "timers": 22,
+        "messages": 100,
+        "frames": 60,
+        "documentHidden": false,
+        "inputDelay": 1
+      },
+      {
+        "shape": "single",
+        "visibility": "other-page-front",
+        "sampleResult": 5,
+        "elapsed": 512,
+        "timers": 23,
+        "messages": 100,
+        "frames": 62,
+        "documentHidden": false,
+        "inputDelay": 1
+      },
+      {
+        "shape": "nested",
+        "visibility": "visible",
+        "sampleResult": 1,
+        "elapsed": 501,
+        "timers": 22,
+        "messages": 100,
+        "frames": 60,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "nested",
+        "visibility": "offscreen",
+        "sampleResult": 2,
+        "elapsed": 515,
+        "timers": 22,
+        "messages": 100,
+        "frames": 2,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "nested",
+        "visibility": "hidden",
+        "sampleResult": 3,
+        "elapsed": 504,
+        "timers": 22,
+        "messages": 100,
+        "frames": 0,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "nested",
+        "visibility": "after-click",
+        "sampleResult": 4,
+        "elapsed": 501,
+        "timers": 22,
+        "messages": 100,
+        "frames": 60,
+        "documentHidden": false,
+        "inputDelay": 0
+      },
+      {
+        "shape": "nested",
+        "visibility": "other-page-front",
+        "sampleResult": 5,
+        "elapsed": 503,
+        "timers": 22,
+        "messages": 100,
+        "frames": 61,
+        "documentHidden": false,
+        "inputDelay": 0
+      }
+    ],
+    "scale": [
+      {
+        "count": 1,
+        "ms": 7,
+        "acks": 100,
+        "ports": 1,
+        "domFrames": 1
+      },
+      {
+        "count": 4,
+        "ms": 15,
+        "acks": 400,
+        "ports": 4,
+        "domFrames": 4
+      },
+      {
+        "count": 8,
+        "ms": 16,
+        "acks": 800,
+        "ports": 8,
+        "domFrames": 8
+      }
+    ],
+    "backpressure": [
+      {
+        "shape": "single",
+        "elapsed": 17,
+        "success": 120,
+        "failed": 80,
+        "wireRequests": 128
+      },
+      {
+        "shape": "nested",
+        "elapsed": 12,
+        "success": 120,
+        "failed": 80,
+        "wireRequests": 128
+      }
+    ],
+    "lifecycle": {
+      "remainingFrames": 0,
+      "remainingPorts": 0,
+      "before": null,
+      "after": null,
+      "productLifecycle": {
+        "cycles": 30,
+        "peakSubscriptions": 1,
+        "remainingSubscriptions": 0,
+        "remainingFrames": 0
+      },
+      "afterProduct": null
+    },
+    "notes": [
+      "Actual AUTHOR_SCRIPT_BOOTSTRAP plus experimental values-only branch; state producer and ack protocol are benchmark fixtures. No server mutation latency is included.",
+      "Top baseline writes DOM directly; single/nested use actual full-state cloning/bootstrap or the explicitly experimental delta branch, including one data subscriber.",
+      "Signal latency means handler DOM assignment, not screen paint. Cross-realm timer precision can yield small negative near-zero readings; do not interpret those as negative real latency.",
+      "Unpaced burst delivers100 snapshots; explicit coalescing experiment delivers the final state once. Mutation commands are never coalesced.",
+      "Scheduling is measured by author-installed message samplers, with no child evaluate that could simulate user activation. Background result is meaningful only if documentHidden is true. CSS hidden/offscreen is distinct.",
+      "Product lifecycle bundles the actual startAuthorScript factory against a counted fixture store; this is not a guarantee of no GPU/process-memory leaks.",
+      "Backpressure uses actual bootstrap128-inflight and bridge120/sec limits; the underlying mutation executor is a zero-cost fixture, not a server."
+    ]
+  },
+  {
+    "engine": "webkit",
+    "browserVersion": "26.5",
+    "headed": true,
+    "results": [
+      {
+        "shape": "top",
+        "rows": 0,
+        "mode": "current-full-state",
+        "startupMs": 4,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 1
+        },
+        "burst": {
+          "elapsed": 5,
+          "received": 100,
+          "last": 199,
+          "firstLag": 0,
+          "lastLag": 0
+        },
+        "coalesced": {
+          "ms": 6,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "top",
+        "rows": 1000,
+        "mode": "current-full-state",
+        "startupMs": 1,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "burst": {
+          "elapsed": 5,
+          "received": 100,
+          "last": 199,
+          "firstLag": 0,
+          "lastLag": 0
+        },
+        "coalesced": {
+          "ms": 5,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "top",
+        "rows": 10000,
+        "mode": "current-full-state",
+        "startupMs": 0,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "burst": {
+          "elapsed": 6,
+          "received": 100,
+          "last": 199,
+          "firstLag": 0,
+          "lastLag": 0
+        },
+        "coalesced": {
+          "ms": 5,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "single",
+        "rows": 0,
+        "mode": "current-full-state",
+        "startupMs": 7,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 1,
+          "p95": 1,
+          "max": 1
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "burst": {
+          "elapsed": 5,
+          "received": 100,
+          "last": 199,
+          "firstLag": 1,
+          "lastLag": 2
+        },
+        "coalesced": {
+          "ms": 5,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "single",
+        "rows": 0,
+        "mode": "experimental-values-only",
+        "startupMs": 7,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 1,
+          "max": 1
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "burst": {
+          "elapsed": 6,
+          "received": 100,
+          "last": 199,
+          "firstLag": 1,
+          "lastLag": 1
+        },
+        "coalesced": {
+          "ms": 5,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "single",
+        "rows": 1000,
+        "mode": "current-full-state",
+        "startupMs": 6,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "burst": {
+          "elapsed": 84,
+          "received": 100,
+          "last": 199,
+          "firstLag": 39,
+          "lastLag": 82
+        },
+        "coalesced": {
+          "ms": 6,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "single",
+        "rows": 1000,
+        "mode": "experimental-values-only",
+        "startupMs": 6,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "burst": {
+          "elapsed": 5,
+          "received": 100,
+          "last": 199,
+          "firstLag": 0,
+          "lastLag": 0
+        },
+        "coalesced": {
+          "ms": 5,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "single",
+        "rows": 10000,
+        "mode": "current-full-state",
+        "startupMs": 12,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 3,
+          "p95": 6,
+          "max": 8
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 3,
+          "p95": 3,
+          "max": 3
+        },
+        "burst": {
+          "elapsed": 828,
+          "received": 100,
+          "last": 199,
+          "firstLag": 385,
+          "lastLag": 823
+        },
+        "coalesced": {
+          "ms": 19,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "single",
+        "rows": 10000,
+        "mode": "experimental-values-only",
+        "startupMs": 12,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "burst": {
+          "elapsed": 6,
+          "received": 100,
+          "last": 199,
+          "firstLag": 0,
+          "lastLag": 1
+        },
+        "coalesced": {
+          "ms": 5,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "nested",
+        "rows": 0,
+        "mode": "current-full-state",
+        "startupMs": 6,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "burst": {
+          "elapsed": 6,
+          "received": 100,
+          "last": 199,
+          "firstLag": 1,
+          "lastLag": 1
+        },
+        "coalesced": {
+          "ms": 5,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "nested",
+        "rows": 0,
+        "mode": "experimental-values-only",
+        "startupMs": 7,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 1
+        },
+        "burst": {
+          "elapsed": 6,
+          "received": 100,
+          "last": 199,
+          "firstLag": 0,
+          "lastLag": 1
+        },
+        "coalesced": {
+          "ms": 6,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "nested",
+        "rows": 1000,
+        "mode": "current-full-state",
+        "startupMs": 7,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 1,
+          "max": 1
+        },
+        "burst": {
+          "elapsed": 83,
+          "received": 100,
+          "last": 199,
+          "firstLag": 38,
+          "lastLag": 82
+        },
+        "coalesced": {
+          "ms": 6,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "nested",
+        "rows": 1000,
+        "mode": "experimental-values-only",
+        "startupMs": 11,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "burst": {
+          "elapsed": 6,
+          "received": 100,
+          "last": 199,
+          "firstLag": 1,
+          "lastLag": 1
+        },
+        "coalesced": {
+          "ms": 6,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "nested",
+        "rows": 10000,
+        "mode": "current-full-state",
+        "startupMs": 13,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 4,
+          "p95": 5,
+          "max": 7
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 3,
+          "p95": 3,
+          "max": 3
+        },
+        "burst": {
+          "elapsed": 838,
+          "received": 100,
+          "last": 199,
+          "firstLag": 386,
+          "lastLag": 834
+        },
+        "coalesced": {
+          "ms": 9,
+          "observedStates": 1,
+          "last": 1099
+        }
+      },
+      {
+        "shape": "nested",
+        "rows": 10000,
+        "mode": "experimental-values-only",
+        "startupMs": 13,
+        "signalDomMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 1,
+          "max": 1
+        },
+        "producerSubmitMs": {
+          "n": 30,
+          "p50": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "burst": {
+          "elapsed": 5,
+          "received": 100,
+          "last": 199,
+          "firstLag": 0,
+          "lastLag": 1
+        },
+        "coalesced": {
+          "ms": 5,
+          "observedStates": 1,
+          "last": 1099
+        }
+      }
+    ],
+    "scheduling": [
+      {
+        "shape": "top",
+        "visibility": "visible",
+        "sampleResult": 1,
+        "elapsed": 500,
+        "timers": 21,
+        "messages": 100,
+        "frames": 30,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "top",
+        "visibility": "offscreen",
+        "sampleResult": 2,
+        "elapsed": 501,
+        "timers": 21,
+        "messages": 100,
+        "frames": 30,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "top",
+        "visibility": "hidden",
+        "sampleResult": 3,
+        "elapsed": 500,
+        "timers": 21,
+        "messages": 100,
+        "frames": 31,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "top",
+        "visibility": "after-click",
+        "sampleResult": 4,
+        "elapsed": 503,
+        "timers": 20,
+        "messages": 100,
+        "frames": 30,
+        "documentHidden": false,
+        "inputDelay": 1
+      },
+      {
+        "shape": "top",
+        "visibility": "other-page-front",
+        "sampleResult": 5,
+        "elapsed": 501,
+        "timers": 21,
+        "messages": 100,
+        "frames": 30,
+        "documentHidden": false,
+        "inputDelay": 1
+      },
+      {
+        "shape": "single",
+        "visibility": "visible",
+        "sampleResult": 1,
+        "elapsed": 500,
+        "timers": 18,
+        "messages": 100,
+        "frames": 10,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "single",
+        "visibility": "offscreen",
+        "sampleResult": 2,
+        "elapsed": 501,
+        "timers": 0,
+        "messages": 100,
+        "frames": 0,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "single",
+        "visibility": "hidden",
+        "sampleResult": 3,
+        "elapsed": 502,
+        "timers": 16,
+        "messages": 100,
+        "frames": 12,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "single",
+        "visibility": "after-click",
+        "sampleResult": 4,
+        "elapsed": 500,
+        "timers": 21,
+        "messages": 100,
+        "frames": 30,
+        "documentHidden": false,
+        "inputDelay": 1
+      },
+      {
+        "shape": "single",
+        "visibility": "other-page-front",
+        "sampleResult": 5,
+        "elapsed": 501,
+        "timers": 21,
+        "messages": 100,
+        "frames": 30,
+        "documentHidden": false,
+        "inputDelay": 1
+      },
+      {
+        "shape": "nested",
+        "visibility": "visible",
+        "sampleResult": 1,
+        "elapsed": 500,
+        "timers": 18,
+        "messages": 100,
+        "frames": 10,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "nested",
+        "visibility": "offscreen",
+        "sampleResult": 2,
+        "elapsed": 501,
+        "timers": 1,
+        "messages": 100,
+        "frames": 0,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "nested",
+        "visibility": "hidden",
+        "sampleResult": 3,
+        "elapsed": 500,
+        "timers": 16,
+        "messages": 100,
+        "frames": 11,
+        "documentHidden": false,
+        "inputDelay": null
+      },
+      {
+        "shape": "nested",
+        "visibility": "after-click",
+        "sampleResult": 4,
+        "elapsed": 501,
+        "timers": 20,
+        "messages": 100,
+        "frames": 30,
+        "documentHidden": false,
+        "inputDelay": 0
+      },
+      {
+        "shape": "nested",
+        "visibility": "other-page-front",
+        "sampleResult": 5,
+        "elapsed": 501,
+        "timers": 21,
+        "messages": 100,
+        "frames": 31,
+        "documentHidden": false,
+        "inputDelay": 0
+      }
+    ],
+    "scale": [
+      {
+        "count": 1,
+        "ms": 6,
+        "acks": 100,
+        "ports": 1,
+        "domFrames": 1
+      },
+      {
+        "count": 4,
+        "ms": 6,
+        "acks": 400,
+        "ports": 4,
+        "domFrames": 4
+      },
+      {
+        "count": 8,
+        "ms": 8,
+        "acks": 800,
+        "ports": 8,
+        "domFrames": 8
+      }
+    ],
+    "backpressure": [
+      {
+        "shape": "single",
+        "elapsed": 2,
+        "success": 120,
+        "failed": 80,
+        "wireRequests": 128
+      },
+      {
+        "shape": "nested",
+        "elapsed": 2,
+        "success": 120,
+        "failed": 80,
+        "wireRequests": 128
+      }
+    ],
+    "lifecycle": {
+      "remainingFrames": 0,
+      "remainingPorts": 0,
+      "before": null,
+      "after": null,
+      "productLifecycle": {
+        "cycles": 30,
+        "peakSubscriptions": 1,
+        "remainingSubscriptions": 0,
+        "remainingFrames": 0
+      },
+      "afterProduct": null
+    },
+    "notes": [
+      "Actual AUTHOR_SCRIPT_BOOTSTRAP plus experimental values-only branch; state producer and ack protocol are benchmark fixtures. No server mutation latency is included.",
+      "Top baseline writes DOM directly; single/nested use actual full-state cloning/bootstrap or the explicitly experimental delta branch, including one data subscriber.",
+      "Signal latency means handler DOM assignment, not screen paint. Cross-realm timer precision can yield small negative near-zero readings; do not interpret those as negative real latency.",
+      "Unpaced burst delivers100 snapshots; explicit coalescing experiment delivers the final state once. Mutation commands are never coalesced.",
+      "Scheduling is measured by author-installed message samplers, with no child evaluate that could simulate user activation. Background result is meaningful only if documentHidden is true. CSS hidden/offscreen is distinct.",
+      "Product lifecycle bundles the actual startAuthorScript factory against a counted fixture store; this is not a guarantee of no GPU/process-memory leaks.",
+      "Backpressure uses actual bootstrap128-inflight and bridge120/sec limits; the underlying mutation executor is a zero-cost fixture, not a server."
+    ]
+  }
+]

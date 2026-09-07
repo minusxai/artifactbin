@@ -24,6 +24,7 @@
  * visitor would burn the anonymous-mint rate limit on people who are only
  * reading. Until then this is just a button.
  */
+import {appFetch as fetch} from '@/web/api-origin';
 import { Check, Copy, Loader2 } from 'lucide-react';
 import { useRouter } from '@/lib/navigation';
 import { useEffect, useRef, useState } from 'react';

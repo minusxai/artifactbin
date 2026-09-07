@@ -14,6 +14,7 @@
  * box is added. That composes exactly, including while the document scrolls
  * itself — which it does, unlike the fixed-height canvas this replaces.
  */
+import type {DocumentPeer} from '@/lib/story/document-peer';
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -45,7 +46,7 @@ const SELECTION_GAP = 8;
 
 export interface StoryFormatToolbarProps {
   selection: StoryEditSelection | null;
-  frameRef: { current: HTMLIFrameElement | null };
+  frameRef: { current: DocumentPeer | null };
   compiledCss?: string | null;
   onApply: (path: string, edit: ComposableFormatEdit) => void;
   onApplyLink: (path: string, href: string | null) => void;

@@ -217,6 +217,9 @@ jobs:
         run: npx playwright install --with-deps chromium
       - if: steps.playwright.outputs.cache-hit == 'true'
         run: npx playwright install chromium
+      # The document/dataset ACL races exercise the real PostgreSQL adapter.
+      # Provision its disposable fixture instead of silently skipping in CI.
+      - run: docker pull postgres:17-alpine
       - run: npx vitest run --project=api --shard=${{ matrix.shard }}/5
 
   # A real coding agent, end to end: mints a start document, reads /docs,

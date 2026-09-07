@@ -9,6 +9,15 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { capturePristine } from '../pristine';
 
+it('uses the trusted child current postMessage after its initial navigation', () => {
+  const messages: string[] = [];
+  const peer = {postMessage: () => messages.push('initial about:blank')} as unknown as Window;
+  const channel = capturePristine(window, 'https://controls.example', peer)!;
+  peer.postMessage = (() => messages.push('navigated controls')) as Window['postMessage'];
+  channel.post('mx:painted');
+  expect(messages).toEqual(['navigated controls']);
+});
+
 /**
  * The origin the document was served from — where its page, and only its page,
  * lives. It has to BE this window's origin: `post` now addresses its target,

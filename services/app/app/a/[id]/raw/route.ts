@@ -27,7 +27,7 @@ import { canAnnotate } from '@/lib/share-roles';
 import { canonicalArtifactPath } from '@/lib/urls';
 import { roleBehindLogin } from '@/lib/share-roles';
 import { trackEvent } from '@/lib/analytics';
-import { sessionActor } from '@/lib/viewer';
+import { canReceiveLiveUpdates, sessionActor } from '@/lib/viewer';
 import { verifyExportKey } from '@/lib/export-key';
 import { baseUrl, parseByteRange } from '@/lib/http';
 import { ID_RE } from '@/lib/ids';
@@ -43,6 +43,7 @@ import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { declaresMutations } from '@/lib/story/helmet';
 import { assetsPath, resolvePath, markupCsp, mutatePath, queryPath } from '@/lib/story/markup-csp';
+import {CONTROLS_ORIGIN, PUBLIC_BASE_URL, ASSETS_ORIGIN} from '@/lib/config';
 import { readUrlValues } from '@/lib/story/url-values';
 import { storyRuntimeAssets } from '@/lib/story/runtime-asset';
 import { ownerUsername } from '@/lib/users';
@@ -161,8 +162,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // immutable — the version changes when the bytes do. A bare URL might be
       // replaced under the same id, so it only gets a short freshness window.
       const versioned = new URL(request.url).searchParams.has('v');
-      const scope = artifact.visibility === 'public' ? 'public' : 'private';
-      const cache = versioned ? `${scope}, max-age=31536000, immutable` : `${scope}, max-age=300`;
+      // A browser-private cache still survives logout and ACL revocation.
+      // Only genuinely public bytes may bypass the next request's read ACL.
+      const cache = artifact.visibility !== 'public' ? 'no-store'
+        : versioned ? 'public, max-age=31536000, immutable' : 'public, max-age=300';
       // SVG is inert inside an <img>, but a DIRECT hit on /raw renders it as a
       // document where its scripts WOULD run — so lock it down like the html
       // tier's sandbox. Raster types need no CSP (they are not documents).
@@ -208,7 +211,6 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // Content-Length back INTO this object, so a shared constant would
       // announce the first body's length for every later one.
       const versioned = new URL(request.url).searchParams.has('v');
-      const scope = artifact.visibility === 'public' ? 'public' : 'private';
       const headers: Record<string, string> = {
         ...COMMON,
         'Content-Type': meta.contentType,
@@ -217,7 +219,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         'Accept-Ranges': 'bytes',
         // Same rule as an image: a versioned address is genuinely immutable,
         // a bare one only gets a short freshness window.
-        'Cache-Control': versioned ? `${scope}, max-age=31536000, immutable` : `${scope}, max-age=300`,
+        'Cache-Control': artifact.visibility !== 'public' ? 'no-store'
+          : versioned ? 'public, max-age=31536000, immutable' : 'public, max-age=300',
       };
       if (range === 'unsatisfiable') {
         return new Response(null, { status: 416, headers: { ...headers, 'Content-Range': `bytes */${meta.bytes}` } });
@@ -286,6 +289,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // every OG card).
       const chrome = new URL(request.url).searchParams.get('chrome') !== '0';
       const base = baseUrl(request);
+      const controlsUrl = CONTROLS_ORIGIN && chrome && !key && base === new URL(PUBLIC_BASE_URL).origin && !new URL(request.url).pathname.endsWith('/raw')
+        ? `${CONTROLS_ORIGIN}/controls/a/${artifact.id}${new URL(request.url).search}` : undefined;
       /*
        * ?edit=1 — the OWNER's copy. In-place editing is the runtime, and a
        * document of pure prose ships none; asking for it here means pressing
@@ -386,6 +391,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         }
         : null;
       const html = await buildStoryDocument({
+        controlsUrl,
         reactions,
         ownerBreadcrumb,
         assetUrls,
@@ -461,6 +467,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         queryUrl: queryPath(artifact.id),
         resolveUrl: `${baseUrl(request)}${resolvePath(artifact.id)}`,
         libraryOrigin: baseUrl(request),
+        ...(ASSETS_ORIGIN?{managedAssets:{origin:ASSETS_ORIGIN,resolveUrl:baseUrl(request)+assetsPath(artifact.id)+(byExportKey?`?key=${encodeURIComponent(key!)}`:'')}}:{}),
         /*
          * …and where it imports an image URL only its reader can compute (a
          * bound <img src="$pick">). Unconditional, unlike mutateUrl: a source
@@ -483,13 +490,13 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         ...(declaresMutations(artifact.source) ? { mutateUrl: mutatePath(artifact.id) } : {}),
         // A capture gets none: it has no reader, and a document that adopted an
         // edit mid-shot would be photographed halfway between two versions.
-        live: chrome ? { id: artifact.id, editId: artifact.edit_id } : null,
+        live: chrome ? { id: artifact.id, editId: artifact.edit_id, enabled: canReceiveLiveUpdates(actor) } : null,
       });
       return new Response(html, {
         status: 200,
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
-          'Content-Security-Policy': markupCsp(base, artifact.id),
+          'Content-Security-Policy': markupCsp(base, artifact.id, controlsUrl ? CONTROLS_ORIGIN! : undefined, ASSETS_ORIGIN??undefined),
       ...(chrome ? { Link: `<${base}/docs>; rel="help"` } : {}),
           ...COMMON,
         },

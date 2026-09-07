@@ -12,6 +12,7 @@
  * and a revert creates a NEW version server-side, so restoring is itself
  * undoable and nothing is ever lost by trying one.
  */
+import {appFetch as fetch} from '@/web/api-origin';
 import { useCallback, useEffect, useState } from 'react';
 
 /** A row of history: what changed and when, without the content. */

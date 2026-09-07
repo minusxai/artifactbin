@@ -61,25 +61,22 @@ export async function loginViaEmail(page, base, sink, email) {
   }
   await page.fill('[aria-label="Login code"]', code);
   await page.click('[aria-label="Verify code"]');
-  await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 20_000 }).catch(() => {});
+  await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 20_000 });
   // Verify the cookie-backed identity through the same endpoint the app uses.
   // The dashboard no longer prints an email or a profile link in its chrome.
-  await page.waitForFunction(async (expectedEmail) => {
-    try {
-      const response = await fetch('/api/page/session', { credentials: 'same-origin' });
-      if (!response.ok) return false;
-      const session = await response.json();
-      return session.kind === 'account' && session.user?.email === expectedEmail;
-    } catch { return false; }
-  }, email, { timeout: 20_000 }).catch(() => {
-    throw new Error(`login did not establish the session for ${email} within 20s (url ${page.url()})`);
+  // Await the actual response. A polling predicate that returns a Promise
+  // can finish on its truthiness even when that Promise resolves to false.
+  const session = await page.evaluate(async () => {
+    const response = await fetch('/api/page/session', { credentials: 'same-origin', headers: {'x-artifactbin-csrf':'1'} });
+    return response.ok ? response.json() : null;
   });
+  if (session?.kind !== 'account' || session.user?.email !== email) throw new Error(`login did not establish the session for ${email} (url ${page.url()})`);
   return email;
 }
 
 /** Read the browser's authenticated identity without depending on page chrome. */
 export async function isSignedInAs(page, email) {
-  const response = await page.request.get(new URL('/api/page/session', page.url()).href);
+  const response = await page.request.get(new URL('/api/page/session', page.url()).href, {headers:{'x-artifactbin-csrf':'1',origin:new URL(page.url()).origin}});
   if (!response.ok()) return false;
   const session = await response.json();
   return session.kind === 'account' && session.user?.email === email;

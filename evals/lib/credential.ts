@@ -21,11 +21,9 @@
  *      read off the form rather than guessed), the code taken off the 303's `Location` — no listener
  *      is ever opened — and exchanged at `/oauth/token`.
  *
- * MEASURED against https://artifactbin.dev before this module was written (`scripts/spike-inbox-oauth.ts`):
- * the granted token is ACCOUNT-owned (a document it creates with no visibility is born `private`, and
- * `GET /api/artifacts` lists the account's other documents), it opens an MCP session, AND it is accepted
- * as a bearer on `/api/artifacts` — one credential serves both action transports. Login mail took 3 s
- * on one run and 50 s on another, hence the two-minute cap below.
+ * OAuth grants are scoped to MCP, not REST. The same human session separately mints
+ * an account API token for driver setup/scoring and API-mode agents. MCP-mode
+ * agents receive only their OAuth grant. Never rely on cross-audience fallback.
  *
  * ONE login per leg: every task and every second attempt reuses what this returns.
  */
@@ -51,6 +49,8 @@ export function parseCredentialSource(raw: string): CredentialSource {
 
 export interface Credential {
   token: string;
+  /** Separate account API token; never exposed to MCP-mode agents. */
+  apiToken?: string;
   /** `anonymous` is a token the product minted with no account behind it — what `/api/start` hands out. */
   owner: 'anonymous' | 'account';
   /** The account the token belongs to, when the driver logged in to get it. */
@@ -276,7 +276,13 @@ export async function acquireCredential(source: CredentialSource, opts: AcquireO
   const origin = opts.origin ?? opts.base;
   const cookie = await logIn({ base: opts.base, origin, email, read, fetch: call, sleep });
   const token = await grantAsMcpClient({ base: opts.base, origin, cookie, fetch: call });
-  return { token, owner: 'account', email, cookie };
+  const minted = await call(`${opts.base}/api/tokens/anonymous`, {
+    // Reproduce the human token-page request, including its browser-context gate.
+    method: 'POST', headers: { 'content-type': 'application/json', cookie, origin, 'sec-fetch-site': 'same-origin' }, body: '{}',
+  });
+  const apiToken = ((await minted.json().catch(() => ({}))) as {token?: string}).token;
+  if (!minted.ok || !apiToken) throw new Error(`account API token mint → ${minted.status}`);
+  return { token, apiToken, owner: 'account', email, cookie };
 }
 
 /** What `shareForScoring` needs: the product, the session, and the documents to hand out links to. */

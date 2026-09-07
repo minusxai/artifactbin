@@ -7,6 +7,7 @@
  * to the new handle. Saying so on the card is the point — otherwise a rename
  * feels like it might break things, and nobody touches it.
  */
+import {appFetch as fetch} from '@/web/api-origin';
 import { useState } from 'react';
 import { Button, Input, MicroLabel, PANEL } from '@/components/ui';
 

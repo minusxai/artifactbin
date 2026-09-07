@@ -131,6 +131,13 @@ describe('acquireCredential', () => {
           hidden('resource', `${BASE}/mcp`)}${hidden('scope', 'artifacts')}${hidden('state', q.get('state') ?? '')}<input type="hidden" name="grant" value="user"></form>`, { status: 200 });
       }
       if (url.startsWith(`${BASE}/oauth/token`)) return new Response(JSON.stringify({ access_token: 'mx_granted', scope: 'artifacts' }), { status: 200 });
+      if (url === `${BASE}/api/tokens/anonymous`) {
+        expect(headers.cookie).toBe('__Secure-better-auth.session_token=sess_1');
+        expect(headers.origin).toBeTruthy();
+        expect(headers.authorization).toBeUndefined();
+        expect(headers['sec-fetch-site']).toBe('same-origin');
+        return new Response(JSON.stringify({ token: 'mx_api' }), { status: 201 });
+      }
       throw new Error(`unstubbed ${method} ${url}`);
     };
   }
@@ -138,7 +145,7 @@ describe('acquireCredential', () => {
   it('logs in with the emailed code and comes back with an ACCOUNT token', async () => {
     const seen: Seen[] = [];
     const got = await acquireCredential('inbox-oauth', { base: BASE, env, fetch: stubFetch(seen), sleep: async () => {} });
-    expect(got).toEqual({ token: 'mx_granted', owner: 'account', email: env.EVAL_LOGIN_EMAIL, cookie: '__Secure-better-auth.session_token=sess_1' });
+    expect(got).toEqual({ token: 'mx_granted', apiToken: 'mx_api', owner: 'account', email: env.EVAL_LOGIN_EMAIL, cookie: '__Secure-better-auth.session_token=sess_1' });
 
     const send = seen.find((s) => s.url.includes('send-verification-otp'))!;
     expect(JSON.parse(send.body)).toEqual({ email: env.EVAL_LOGIN_EMAIL, type: 'sign-in' });
@@ -253,7 +260,7 @@ describe('acquireCredential', () => {
     const got = await acquireCredential('outbox-oauth', {
       base: BASE, env: {}, localOutbox: outbox, email: address, fetch: stubFetch(seen), sleep: async () => {},
     });
-    expect(got).toEqual({ token: 'mx_granted', owner: 'account', email: address, cookie: '__Secure-better-auth.session_token=sess_1' });
+    expect(got).toEqual({ token: 'mx_granted', apiToken: 'mx_api', owner: 'account', email: address, cookie: '__Secure-better-auth.session_token=sess_1' });
 
     const send = seen.find((s) => s.url.includes('send-verification-otp'))!;
     expect(JSON.parse(send.body)).toEqual({ email: address, type: 'sign-in' });

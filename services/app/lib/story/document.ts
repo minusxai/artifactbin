@@ -23,7 +23,6 @@
  * somehow carries `</script` is DROPPED — emitting it would let text escape the
  * script element, and mutating code silently is worse than omitting it.
  */
-import { artifactApiScript } from './script-api';
 import { libraryUrls } from '@/lib/libraries';
 import path from 'path';
 import { pathToFileURL } from 'url';
@@ -63,6 +62,7 @@ export interface StoryDocumentInput {
   assetUrls?: ReadonlySet<string> | ReadonlyMap<string, WebAssetBox>;
   /** The document's `<Value>`/`<Query>`/`<Mutation>` declarations + render-time state (lib/artifacts dataflowForRow); null when it declares nothing. */
   dataflow?: StoryIslandDataflow | null;
+  controlsUrl?: string;
   /** Stored title (Helmet's own <title> wins over it in the head). */
   title: string | null;
   /** src of the hydration runtime; null omits the tag (unit tests, scriptless contexts). */
@@ -86,7 +86,7 @@ export interface StoryDocumentInput {
    * screenshot has no reader to keep up to date, and an exporter that adopted
    * an edit mid-shot would photograph two documents at once.
    */
-  live?: { id: string; editId: string } | null;
+  live?: { id: string; editId: string; enabled?: boolean } | null;
   /**
    * The runtime's lazy chunks (lib/story/runtime-asset) — preloaded, but only
    * by a document that will actually reach for one. See {@link drawsChart}.
@@ -117,6 +117,7 @@ export interface StoryDocumentInput {
    * them (the canvas, unit tests), where a bound image renders static.
    */
   assetsUrl?: string | null;
+  managedAssets?: StoryIslandData['managedAssets'];
   /** Absolute scoped asset transport, usable from opaque-origin scripts. */
   resolveUrl?: string | null;
   libraryOrigin?: string;
@@ -394,11 +395,10 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    * the omission is structural: /export photographs this frame, and neither the
    * rail nor the attribution belongs in an unfurl card.
    */
-  const readerChrome = chrome
+  const readerChrome = chrome && !input.controlsUrl
     ? renderReaderChrome({
-      // The document knows its own id only when it is live enough to hear its
-      // author; a capture and a unit render have none, and the like/comment
-      // log then names nothing rather than guessing.
+      // Snapshot-only readers still need document identity for their chrome;
+      // live eligibility controls subscription attributes, not attribution.
       artifactId: live?.id ?? null,
       // The STORED title, never the Helmet's: the Helmet is head content and
       // nothing of it may reach the body (a rule this file already lives by),
@@ -431,8 +431,9 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    * absence here is correct, while a bound `<img src="$pick">` has nowhere to
    * import from without this and rendered as a bare alt until hydration.
    */
+  const sandboxApi = {resolveUrl:input.resolveUrl ?? null,libraries:input.libraryOrigin ? libraryUrls(input.libraryOrigin) : {}};
   const bodyHtml = split
-    ? loadSsrBundle().renderStoryBody({ nodes: split.body, refData, glyphs, ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}) })
+    ? loadSsrBundle().renderStoryBody({ nodes: split.body, refData, glyphs, ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, sandboxApi, managedAssets:input.managedAssets, ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}) })
     : `<pre>${escapeHtml(source)}</pre>`;
 
   // Style order mirrors the engine's injection order (compiled Tailwind → bare
@@ -484,7 +485,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    * must degrade to the old, heavy, WORKING delivery rather than to silence.
    */
   const commentFallback = !!input.commenting && !commentSrc;
-  const hydrates = !!split && !!runtimeSrc && (needsRuntime(split.body) || !!dataflow || !!input.editable || commentFallback);
+  const hydrates = !!split && !!runtimeSrc && (needsRuntime(split.body) || !!helmet.script || !!dataflow || !!input.editable || !!input.controlsUrl || commentFallback);
   /*
    * The THIRD delivery: comments without hydration. A commenter's frame used
    * to ask for `?edit=1` — which made this `hydrates` — so a page of prose
@@ -523,6 +524,9 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
 
   const island: StoryIslandData = { nodes: split?.body ?? [], refData, ...(Object.keys(glyphs).length ? { glyphs } : {}), ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, ...(input.queryUrl ? { queryUrl: input.queryUrl } : {}), ...(input.mutateUrl ? { mutateUrl: input.mutateUrl } : {}), ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}) };
   // `<` escaped so no row value can close the script element from inside JSON.
+  if (input.controlsUrl) island.controlsUrl = input.controlsUrl;
+  island.sandboxApi = sandboxApi;
+  if(input.managedAssets)island.managedAssets=input.managedAssets;
   const islandJson = JSON.stringify(island).replace(/</g, '\\u003c');
 
   /**
@@ -535,9 +539,8 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    * time, which is also when the document is complete.
    */
   const safeScript = helmet.script && !/<\/script/i.test(helmet.script) ? helmet.script : null;
-  const authorApi = safeScript ? `<script>${artifactApiScript({ resolveUrl: input.resolveUrl ?? null, libraries: libraryUrls(input.libraryOrigin) })}</script>` : '';
   const authorScript = safeScript
-    ? (hydrates ? `<script type="${AUTHOR_SCRIPT_TYPE}">${safeScript}</script>` : `<script>${safeScript}</script>`)
+    ? `<script type="${AUTHOR_SCRIPT_TYPE}">${safeScript}</script>`
     : '';
 
   return (
@@ -570,7 +573,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
       : '') +
     // First script in the document: the author's runs at the end of <body>,
     // and anything that could hand the URL bar away must already be closed.
-    `<script>${HISTORY_PRELUDE}</script>` + authorApi +
+    `<script>${HISTORY_PRELUDE}</script>` +
     // Before any paint: a persisted reader mode override replaces the class
     // the server stamped, so a live reload never flashes the author's mode.
     // Chrome-gated with the toggle itself — a capture must render the stored
@@ -579,7 +582,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
     `${fontPreloads}${modulePreloads}${styles}</head>` +
     // The live attributes are what the reading-position module reads to open
     // this document's own stream (lib/story-runtime/anchor-entry).
-    `<body ${STORY_ROOT_ATTR}${live ? ` data-mx-live-id="${escapeHtml(live.id)}" data-mx-live-edit="${escapeHtml(live.editId)}"` : ''}>` +
+    `<body ${STORY_ROOT_ATTR}${input.controlsUrl ? ' data-mx-controls="true"' : ''}${live && live.enabled !== false ? ` data-mx-live-id="${escapeHtml(live.id)}" data-mx-live-edit="${escapeHtml(live.editId)}"` : ''}>` +
     `<div id="${STORY_ROOT_ID}">${bodyHtml}</div>` +
     readerChrome +
     /*

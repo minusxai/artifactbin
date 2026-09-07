@@ -14,6 +14,7 @@
  * author's script exists (lib/story-runtime/pristine). Everything without it
  * is dropped — including a forgery posted through the unforgeable `top`.
  */
+import {isDocumentPeerEvent, type DocumentPeer} from '@/lib/story/document-peer';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { isEditFrameMessage, STORY_APPLY_FORMAT_MESSAGE, STORY_APPLY_LINK_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_SELECT_MESSAGE, STORY_COMMIT_MESSAGE, STORY_DOCUMENT_MESSAGE, type StoryEditSelection, type StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { JsxNode } from '@/lib/jsx';
@@ -21,7 +22,7 @@ import { composeSource, type ComposableFormatEdit } from '@/lib/story/edit-compo
 
 export interface InPlaceEditOptions {
   /** The live document's iframe. Never remounted — that is the whole point. */
-  frameRef: { current: HTMLIFrameElement | null };
+  frameRef: { current: DocumentPeer | null };
   /** True while the owner is in edit mode. */
   editing: boolean;
   /**
@@ -109,7 +110,7 @@ export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditControll
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       const frameWindow = frameRef.current?.contentWindow;
-      if (!frameWindow || event.source !== frameWindow) return;
+      if (!isDocumentPeerEvent(frameRef.current, event)) return;
 
       const nonce = nonceRef.current;
       if (!nonce || !isEditFrameMessage(event.data, nonce)) return;

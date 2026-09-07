@@ -5,6 +5,7 @@
  * validate against an allowlist, and render via our own component map. It is data,
  * never executed.
  */
+import type { ReactiveExpression } from './reactive';
 
 /** Any value expressible as JSON (what a static attribute / expression may hold). */
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
@@ -16,7 +17,7 @@ export type JsonValue = string | number | boolean | null | JsonValue[] | { [key:
  */
 export type StaticValue =
   | { static: true; json: JsonValue }
-  | { static: false; exprType: string; source: string };
+  | { static: false; exprType: string; source: string; reactive?: ReactiveExpression };
 
 export interface JsxAttribute {
   name: string;
@@ -27,6 +28,8 @@ export interface JsxAttribute {
 
 /** An element: `<div …>`, `<Question …>`. `isComponent` ⇔ tag starts uppercase. */
 export interface JsxElement {
+  /** Parser-owned structural nodes. Never emitted as tags or given source IDs. */
+  control?: {kind: 'fragment'} | {kind: 'and' | 'conditional'; test: ReactiveExpression};
   type: 'element';
   tag: string;
   isComponent: boolean;

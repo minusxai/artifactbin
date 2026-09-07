@@ -41,6 +41,18 @@ const setup = () => {
 };
 
 describe('relay transport — mutate', () => {
+  it('carries local rows and returns the local SQL result without losing it', async () => {
+    const {transport, posted, answer} = setup();
+    const local = {target: 'drafts', affected: 1, table: {columns: [{name: 'id', type: 'number'}], rows: [{id: 2}]}};
+    const done = transport.mutate!({}, 'add', undefined, {drafts: []});
+    answer({type: STORY_MUTATE_RESULT_MESSAGE, id: posted[0].message.id, ok: true, dataset: '', local});
+    expect(await done).toEqual({dataset: '', local});
+    expect(posted[0].message).toMatchObject({localTables: {drafts: []}});
+    const query = transport.run({}, ['q'], {drafts: [{id: 2}]});
+    answer({type: STORY_QUERY_RESULT_MESSAGE, id: posted.at(-1)!.message.id, tables: {}, errors: {}});
+    await query;
+    expect(posted.at(-1)!.message).toMatchObject({localTables: {drafts: [{id: 2}]}});
+  });
   it('posts the name and values to the parent, at the app origin, and resolves with the dataset written', async () => {
     const { transport, posted, answer } = setup();
     const done = transport.mutate!({ choice: 'tacos' }, 'vote');

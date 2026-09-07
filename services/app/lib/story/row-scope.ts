@@ -1,5 +1,6 @@
 /** Pure grammar and substitution for DataTable's invocation-local row scope. */
 import type { JsxNode } from '@/lib/jsx';
+import {reactiveNames} from '@/lib/jsx/reactive';
 
 const ROW_REF = /^\$_row\.([A-Za-z_]\w*)$/;
 const ROW_TEMPLATE = /\{\s*\$_row\.([A-Za-z_]\w*)\s*\}/g;
@@ -21,6 +22,7 @@ export function rowRefsIn(nodes: JsxNode[]): string[] {
   const add = (name: string) => { if (!found.includes(name)) found.push(name); };
   const visit = (node: JsxNode) => {
     if (node.type === 'expression') {
+      if (!node.value.static && node.value.reactive) reactiveNames(node.value.reactive).fields.forEach(add);
       const match = /^\s*\$_row\.([A-Za-z_]\w*)\s*$/.exec(node.source);
       if (match) add(match[1]);
       return;
@@ -29,11 +31,12 @@ export function rowRefsIn(nodes: JsxNode[]): string[] {
       for (const m of node.value.matchAll(ROW_TEMPLATE)) add(m[1]);
       return;
     }
+    if (node.control && node.control.kind !== 'fragment') reactiveNames(node.control.test).fields.forEach(add);
     for (const attr of node.attributes) if (attr.value.static) {
       const exact = parseRowRef(attr.value.json);
       if (exact) add(exact);
       if (typeof attr.value.json === 'string') for (const m of attr.value.json.matchAll(ROW_TEMPLATE)) add(m[1]);
-    }
+    } else if (attr.value.reactive) reactiveNames(attr.value.reactive).fields.forEach(add);
     node.children.forEach(visit);
   };
   nodes.forEach(visit);
@@ -86,6 +89,7 @@ export function analyzeRowScopes(nodes: JsxNode[], columns?: Record<string, impo
       }
       return;
     }
+    if(node.tag==='Iframe')return;
     if (node.tag === 'DataTable') {
       const templates = node.children.filter((c) => c.type === 'element' && c.tag === 'Column');
       const table = ref(attr(node, 'data'));

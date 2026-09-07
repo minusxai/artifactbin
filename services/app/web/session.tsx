@@ -2,6 +2,7 @@
  * The session the pages share: one fetch of /api/page/session per mount,
  * exposed by context. Pages that need more fetch their own /api/page/*.
  */
+import {appFetch as fetch} from '@/web/api-origin';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useRefreshable } from '@/lib/navigation';
 

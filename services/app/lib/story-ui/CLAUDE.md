@@ -214,23 +214,22 @@ construction. Hence the global denials: `on*` handlers, `ref`, `key`, `dangerous
 attribute. This matters because `content.story` is editable by any org user and rendered to other
 viewers including anonymous guests — it is a real XSS boundary, not a lint.
 
-**Author JavaScript runs in the served document — and does not run while it is being edited.**
+**Author JavaScript runs only in an opaque child, never in the document renderer.**
 
-Author JS is only safe under an opaque-origin sandbox, which costs the parent's `contentDocument`
-access and forces the interpreter and the embeds into an in-iframe bundle — an entire second
-architecture in service of one feature. That architecture is `lib/story-runtime`, SSR'd by
-`lib/story/document.ts` and served at `/a/<id>/raw`; it is what lets one document tier carry
-everything a separate raw-HTML tier would have.
+`lib/story-runtime/author-script.ts` owns that hidden `sandbox="allow-scripts"` realm.
+Helmet source stays inert until the runtime transfers it over a private MessageChannel.
+Its bounded bridge exposes declared signals, query refreshes and mutations, not visible DOM,
+account APIs, credentials or source editing. Changed/removed source replaces/revokes the realm.
 
-There is ONE render path, and that is the thing to hold on to: the served document — opaque origin,
-strict CSP, an author `<script>` that runs after hydration. Never `eval`, never a sandboxed realm:
-the browser's own isolation is the mechanism.
+There is ONE document renderer: `lib/story-runtime`, SSR'd by `lib/story/document.ts`.
+With `APP__CONTROLS_ORIGIN` enabled it is top-level and the trusted app controls are a
+cross-origin child. The default/raw/export path retains the existing opaque document sandbox.
+Never evaluate general JSX expressions: restricted signal expressions remain an inert AST.
 
-Editing is a MODE of that same document, not a second rendering of it. The runtime re-renders its
-own tree with text hosts `contentEditable` and reports each edit to the page, which owns the source
-and writes it back. The author's script does not run while editing: the page serializes the tree
-back to source on every write, so script-generated DOM would be written into the document as if the
-author had typed it.
+Editing is a MODE of that document. Its runtime owns `contentEditable` hosts and sends
+authenticated, addressed edits to trusted controls. Author code cannot access those hosts.
+Compose visibility with restricted JSX and dialogs with the kit primitives; local SQL updates
+declared inline tables or the reserved `_signals` scalar projection through Mutation/run.
 
 The interpreter's guarantees below are unchanged and apply to both: the AST stays inert data, and
 nothing in it is ever executed.

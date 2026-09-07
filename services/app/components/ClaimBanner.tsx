@@ -17,6 +17,7 @@
  * CLAIM_OFFER_WINDOW_HOURS), so ignoring it is already the way to decline, and
  * no invisible state accumulates.
  */
+import {appFetch as fetch} from '@/web/api-origin';
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from '@/lib/navigation';
 import { Button, PANEL } from '@/components/ui';

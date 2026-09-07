@@ -71,7 +71,9 @@ describe('the reference teaches what a document CAN do', () => {
   });
 
   it('connects the inline-handler ban to the mechanism that works', () => {
-    expect(markup).toMatch(/addEventListener/);
+    expect(markup).toMatch(/declarative controls/);
+    expect(markup).toContain('mx.params.subscribe');
+    expect(markup).toMatch(/no visible DOM access/);
   });
 
   it('teaches CSS overrides in the Helmet block', () => {

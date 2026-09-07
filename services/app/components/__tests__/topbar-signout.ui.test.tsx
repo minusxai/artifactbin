@@ -15,7 +15,7 @@ const original = window.location;
 
 beforeEach(() => {
   posted = []; assigned = [];
-  vi.stubGlobal('fetch', (async (url: string, init?: RequestInit) => { posted.push({ url: String(url), method: init?.method, contentType: (init?.headers as Record<string, string> | undefined)?.['Content-Type'] }); return new Response('{}'); }) as unknown as typeof fetch);
+  vi.stubGlobal('fetch', (async (url: string, init?: RequestInit) => { const headers = new Headers(init?.headers); expect(headers.get('x-artifactbin-csrf')).toBe('1'); posted.push({ url: String(url), method: init?.method, contentType: headers.get('Content-Type') ?? undefined }); return new Response('{}'); }) as unknown as typeof fetch);
   Object.defineProperty(window, 'location', { configurable: true, value: { ...original, set href(v: string) { assigned.push(v); } } });
 });
 afterEach(() => { vi.unstubAllGlobals(); Object.defineProperty(window, 'location', { configurable: true, value: original }); });

@@ -74,6 +74,7 @@ async function build(row: ArtifactRow): Promise<LiveFrame> {
       : null,
     compiledCss: css,
     authorCss: parts?.authorCss ?? null,
+    authorScript: parts?.authorScript ?? null,
     ...(parts ? { nodes: parts.nodes } : {}),
     declarations: parts?.declarations ?? null,
     ...(parts && parts.flow.queries.length + parts.flow.values.length > 0 ? { dataflow: { flow: parts.flow } } : {}),

@@ -103,6 +103,7 @@ export function humanAuthOptionsFor(config: ProxyConfig, mail: Mailer): Omit<Hum
   return {
     secret: config.authSecret,
     baseURL: config.publicBaseUrl ?? `http://localhost:${config.port}`,
+    ...(config.controlsOrigin ? {controlsOrigin:config.controlsOrigin} : {}),
     schema: config.authSchema,
     ...(config.secure ? { secure: true } : {}),
     ...(config.google ? { google: config.google } : {}),

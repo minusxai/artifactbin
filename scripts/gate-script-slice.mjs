@@ -37,21 +37,27 @@ const api = async (path, body, method = 'POST') => {
 const ds = await api('/api/artifacts', { dataset: [{ region: 'NA', revenue: 10 }, { region: 'EU', revenue: 20 }], title: 'rev' });
 
 const SCRIPT = [
+  "const result = { instance: String(Math.random()), exfil: 'pending', img: 'pending' };",
+  "function report() { mx.params.set('script_report', JSON.stringify(result)); }",
   "document.body.dataset.scriptRan = '1';",
   "const el = document.createElement('div'); el.id = 'script-made'; el.textContent = 'made by script'; document.body.appendChild(el);",
-  "window.__exfil = 'pending';",
-  "fetch('https://example.com/x').then(() => { window.__exfil = 'allowed'; }, () => { window.__exfil = 'blocked'; });",
-  "const img = new Image(); img.onload = () => { window.__img = 'allowed'; }; img.onerror = () => { window.__img = 'blocked'; }; img.src = 'https://example.com/pixel.png';",
-  "try { void parent.document.title; window.__parent = 'reachable'; } catch { window.__parent = 'blocked'; }",
-  "try { localStorage.getItem('x'); window.__storage = 'reachable'; } catch { window.__storage = 'blocked'; }",
+  "result.scriptRan = document.body.dataset.scriptRan === '1'; result.made = !!document.getElementById('script-made');",
+  "fetch('https://example.com/x').then(() => { result.exfil = 'allowed'; report(); }, () => { result.exfil = 'blocked'; report(); });",
+  "const img = new Image(); img.onload = () => { result.img = 'allowed'; report(); }; img.onerror = () => { result.img = 'blocked'; report(); }; img.src = 'https://example.com/pixel.png';",
+  "try { void parent.document.title; result.parent = 'reachable'; } catch { result.parent = 'blocked'; }",
+  "try { void top.document.title; result.top = 'reachable'; } catch { result.top = 'blocked'; }",
+  "try { localStorage.getItem('x'); result.storage = 'reachable'; } catch { result.storage = 'blocked'; }",
+  "report();",
 ].join('\n');
 
 const markup = [
   '<Helmet><title>slice gate</title>',
+  '<Value name="script_report" type="string" default="pending" />',
   `<Query name="rows">{\`select * from ref_${ds.id}\`}</Query>`,
   '<style>{`h1 { color: rgb(200, 10, 10); }`}</style>',
   '<script>{`' + SCRIPT + '`}</script></Helmet>',
   '<h1 className="text-4xl font-bold">Slice doc</h1>',
+  '<span aria-label="script report" hidden>{$script_report}</span>',
   `<p>total: <Number data="$rows" col="revenue" agg="sum" /></p>`,
   '<Tabs defaultValue="one"><TabsList><TabsTrigger value="one">Tab one</TabsTrigger><TabsTrigger value="two">Tab two</TabsTrigger></TabsList>',
   '<TabsContent value="one"><p>first pane</p></TabsContent><TabsContent value="two"><p>second pane</p></TabsContent></Tabs>',
@@ -70,17 +76,26 @@ const frameEl = await page.waitForSelector('iframe[title="artifact"]', { timeout
 const frame = await frameEl.contentFrame();
 await frame.waitForSelector('h1', { timeout: 15000 });
 
-// 1. script executed
-await frame.waitForFunction("document.body.dataset.scriptRan === '1'", { timeout: 10000 }).catch(() => {});
-check(await frame.evaluate("document.body.dataset.scriptRan === '1'"), 'Helmet script executed in view mode');
-check(await frame.evaluate("!!document.getElementById('script-made')"), 'script-created element present');
+// 1. Script executes only in its own opaque child, never in the rendered document.
+// Observe the declared data bridge from the DOCUMENT, not the nested author
+// execution context (which Chromium DevTools may omit from its frame list).
+const readReport = async documentFrame => {
+  await documentFrame.waitForFunction(() => {
+    try { const result = JSON.parse(document.querySelector('[aria-label="script report"]').textContent); return result.exfil !== 'pending' && result.img !== 'pending'; }
+    catch { return false; }
+  }, null, { timeout: 15000 });
+  return JSON.parse(await documentFrame.getByLabel('script report').textContent());
+};
+const result = await readReport(frame);
+check(result.scriptRan, 'Helmet script executed in its isolated realm');
+check(result.made, 'script can only create elements in its own hidden realm');
+check(await frame.evaluate("!document.getElementById('script-made') && !document.body.dataset.scriptRan"), 'author script did not mutate the visible document');
 
 // 2. isolation
-await frame.waitForFunction("window.__exfil !== 'pending'", { timeout: 10000 }).catch(() => {});
-check((await frame.evaluate('window.__exfil')) === 'blocked', 'CSP blocked fetch exfiltration');
-check((await frame.evaluate('window.__img')) === 'blocked', 'CSP blocked img beacon');
-check((await frame.evaluate('window.__parent')) === 'blocked', 'parent document unreachable (opaque origin)');
-check((await frame.evaluate('window.__storage')) === 'blocked', 'localStorage unreachable (opaque origin)');
+check(result.exfil === 'blocked', 'CSP blocked fetch exfiltration');
+check(result.img === 'blocked', 'CSP blocked img beacon');
+check(result.parent === 'blocked' && result.top === 'blocked', 'visible document unreachable from author script');
+check(result.storage === 'blocked', 'localStorage unreachable (opaque origin)');
 
 // 3. author style painted
 const color = await frame.evaluate("getComputedStyle(document.querySelector('h1')).color");
@@ -165,7 +180,7 @@ const interactive = await api('/api/artifacts', {
   await f2.click('#tick');
   await f2.click('#tick');
   await p2.waitForTimeout(400);
-  check((await f2.textContent('#count')) === '2', 'an author script drives a real <button>');
+  check((await f2.textContent('#count')) === '0', 'a legacy author DOM listener cannot observe or mutate visible controls');
   // An authored value is the STARTING value, not a binding: React would
   // otherwise make the field controlled with no onChange and refuse input.
   await f2.fill('#field', 'edited by the reader');
@@ -219,6 +234,7 @@ await page.waitForTimeout(4000);
 const documentFrame = () => page.frames().find((f) => /\/raw/.test(f.url()));
 await page.evaluate(() => { document.querySelector('iframe[title="artifact"]').__probe = 'same-frame'; });
 const runsBefore = await documentFrame().evaluate("document.querySelectorAll('#script-made').length").catch(() => 0);
+const instanceBefore = (await readReport(documentFrame())).instance;
 
 await openArtifactControls(page);
 await page.click('[aria-label="Edit artifact"]');
@@ -231,6 +247,7 @@ check(await documentFrame().evaluate("!!document.querySelector('h1')?.isContentE
   'and it becomes editable');
 check(await documentFrame().evaluate("document.querySelectorAll('#script-made').length").catch(() => -1) === runsBefore,
   'entering edit did not re-run the author script');
+check((await readReport(documentFrame())).instance === instanceBefore, 'the actual isolated script instance survives entering edit mode');
 
 await browser.close();
 if (failures.length) { console.error(`\n${failures.length} failure(s)`); process.exit(1); }

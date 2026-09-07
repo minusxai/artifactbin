@@ -26,6 +26,8 @@
  * size in the same place, so nothing moves when it opens. It writes through the
  * metadata door (`PATCH {title}`): a rename should not archive a version.
  */
+import {appFetch as fetch} from '@/web/api-origin';
+import {appEventSource} from '@/web/api-origin';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import Shelf from '@/components/Shelf';
@@ -38,6 +40,7 @@ import { STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
 import type { AccountWorkspace } from '@/lib/workspace';
 
 export interface FolderPageProps {
+  liveEnabled?: boolean;
   folder: FolderPageData;
   role: ArtifactRole;
   /** Present only for an account owner; totals and activity remain account-wide. */
@@ -139,7 +142,7 @@ function Empty({ id, mayWrite }: { id: string; mayWrite: boolean }) {
   );
 }
 
-export function FolderPage({ folder: given, role, workspace: givenWorkspace, ownerUsername }: FolderPageProps) {
+export function FolderPage({ folder: given, role, workspace: givenWorkspace, ownerUsername, liveEnabled = true }: FolderPageProps) {
   const [folder, setFolder] = useState(given);
   const [workspace, setWorkspace] = useState(givenWorkspace);
   // The prop is the server's answer for THIS address; a client navigation to
@@ -176,10 +179,11 @@ export function FolderPage({ folder: given, role, workspace: givenWorkspace, own
   }, [id]);
 
   useEffect(() => {
-    const source = new EventSource(`/a/${id}/events`);
+    if (!liveEnabled) return;
+    const source = appEventSource(`/a/${id}/events`);
     source.addEventListener(STORY_DATA_EVENT, reread);
     return () => { source.removeEventListener(STORY_DATA_EVENT, reread); source.close(); };
-  }, [id, reread]);
+  }, [id, reread, liveEnabled]);
 
   const summary = summarise(folder.count);
   const contents = (

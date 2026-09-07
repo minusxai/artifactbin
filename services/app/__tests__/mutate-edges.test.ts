@@ -10,7 +10,8 @@
  *  - A stream that ends must release its DATASET channels as well as its own,
  *    or a process slowly pins channels for documents nobody is reading.
  */
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as sqlEngine from '@/lib/sql/engine';
 import { POST as mutateDocRoute } from '@/app/a/[id]/mutate/route';
 import { POST as mutateDatasetRoute } from '@/app/api/artifacts/[id]/mutate/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
@@ -40,7 +41,7 @@ const DOC = (ds: string) =>
 beforeEach(async () => {
   await resetLiveSubscriptions();
 });
-afterAll(async () => { vi.restoreAllMocks(); });
+afterEach(() => { vi.restoreAllMocks(); });
 
 /**
  * Make every compare-and-swap lose: the row's `edit_id` moves between the read
@@ -49,14 +50,13 @@ afterAll(async () => { vi.restoreAllMocks(); });
  */
 async function alwaysContended(datasetId: string) {
   const db = await harness.db();
-  const original = db.query.bind(db);
-  vi.spyOn(db, 'query').mockImplementation(async (sql: string, values?: unknown[]) => {
-    if (sql.includes('UPDATE artifacts') && sql.includes('edit_id = $2')) {
-      // Someone else landed first — rotate the head pointer, then let the
-      // guarded update run and find nothing to update.
-      await original(`UPDATE artifacts SET edit_id = md5(random()::text) WHERE id = $1`, [datasetId]);
-    }
-    return original(sql, values) as ReturnType<typeof original>;
+  const original = sqlEngine.runMutation;
+  vi.spyOn(sqlEngine, 'runMutation').mockImplementation(async input => {
+    const result = await original(input);
+    // Another writer lands after computation and before the short commit
+    // transaction. Intercepting db.query misses statements on its tx handle.
+    await db.query(`UPDATE artifacts SET edit_id = md5(random()::text) WHERE id = $1`, [datasetId]);
+    return result;
   });
 }
 
