@@ -342,7 +342,7 @@ export async function createHumanAuth(opts: HumanAuthOptions): Promise<HumanAuth
       const response = new Response(original.body,original);
       const issued = response.headers.getSetCookie().find(c => c.startsWith(`${fullName}=`));
       if (issued) {
-        const cookie = issued.split(';')[0];
+        const [cookie = ''] = issued.split(';');
         const headers = new Headers({ cookie });
         const session = await auth.api.getSession({ headers }).catch(() => null);
         const handle = session?.session?.id ? await reads!.issue(session.session.id) : null;
@@ -362,7 +362,8 @@ export async function createHumanAuth(opts: HumanAuthOptions): Promise<HumanAuth
       ...(reads ? { async resolveRead(request: Request) {
         if (new URL(request.url).host !== main.host) return null;
         const values = cookieValues(request.headers, readName);
-        return values.length === 1 ? reads.resolve(values[0]) : null;
+        const [value] = values;
+        return values.length === 1 && value !== undefined ? reads.resolve(value) : null;
       } } : {}),
     },
   };

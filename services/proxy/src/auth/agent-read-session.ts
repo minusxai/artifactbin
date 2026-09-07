@@ -18,7 +18,8 @@ export function createAgentReadSessions(db: Queryable, schema = 'auth') {
         VALUES ('agent-browser',$1,$2,now()+interval '30 days') RETURNING expires_at
       ) INSERT INTO ${table}(kind,credential_hash,subject_id,group_id,expires_at)
         SELECT 'read-agent',$3,$2,$1,expires_at FROM browser RETURNING expires_at`, [hash(sessionId), tokenId, hash(token)]);
-      return {token, expiresAt: new Date(result.rows[0].expires_at)};
+      // Both inserts return exactly one row on success; a failed insert rejects the query.
+      return {token, expiresAt: new Date(result.rows[0]!.expires_at)};
     },
     async resolve(token: string): Promise<string | null> {
       if (!valid(token)) return null;
