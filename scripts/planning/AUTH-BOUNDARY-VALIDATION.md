@@ -26,7 +26,11 @@ OAuth token was used for REST setup and scoring, now correctly rejected with
 401. Red→green credential/access-plan tests prove separate account API token
 selection for driver/API work while MCP agents receive only the OAuth token.
 The harness mints that separate token through the real human-session endpoint;
-product audience checks are unchanged. Hosted agent reruns remain required.
+product audience checks are unchanged. A further real-flow check caught the
+missing browser-context header on the human token mint. Reproduce without a
+paid model: `node --import tsx scripts/planning/eval-account-audience.mjs`.
+It passed real OTP/OAuth, MCP-token REST refusal, API-token publishing and
+same-human-account ownership. Hosted agent reruns remain required.
 
 ### New main compatibility — generic Sandbox, not a Three.js component
 

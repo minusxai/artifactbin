@@ -135,6 +135,7 @@ describe('acquireCredential', () => {
         expect(headers.cookie).toBe('__Secure-better-auth.session_token=sess_1');
         expect(headers.origin).toBeTruthy();
         expect(headers.authorization).toBeUndefined();
+        expect(headers['sec-fetch-site']).toBe('same-origin');
         return new Response(JSON.stringify({ token: 'mx_api' }), { status: 201 });
       }
       throw new Error(`unstubbed ${method} ${url}`);

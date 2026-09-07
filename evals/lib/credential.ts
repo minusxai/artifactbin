@@ -277,7 +277,8 @@ export async function acquireCredential(source: CredentialSource, opts: AcquireO
   const cookie = await logIn({ base: opts.base, origin, email, read, fetch: call, sleep });
   const token = await grantAsMcpClient({ base: opts.base, origin, cookie, fetch: call });
   const minted = await call(`${opts.base}/api/tokens/anonymous`, {
-    method: 'POST', headers: { 'content-type': 'application/json', cookie, origin }, body: '{}',
+    // Reproduce the human token-page request, including its browser-context gate.
+    method: 'POST', headers: { 'content-type': 'application/json', cookie, origin, 'sec-fetch-site': 'same-origin' }, body: '{}',
   });
   const apiToken = ((await minted.json().catch(() => ({}))) as {token?: string}).token;
   if (!minted.ok || !apiToken) throw new Error(`account API token mint → ${minted.status}`);
