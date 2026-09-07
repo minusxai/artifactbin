@@ -146,6 +146,8 @@ try {
   assert.equal(anonymousPrivate.status,400);
   assert.equal((await anonymousPrivate.json()).error,'private_requires_account','the auth split does not change who may create private documents');
   const peer=await browser.newPage({ignoreHTTPSErrors:true});
+  peer.on('console',message=>{if(message.type()==='error')console.error('PEER',message.text());});
+  peer.on('requestfailed',request=>console.error('PEER REQUEST FAILED',new URL(request.url()).pathname,request.failure()?.errorText));
   await becomeOwner(peer,controls,seed.token);
   const privilegedRequests=[];
   const authenticatedStreams=[];
