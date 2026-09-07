@@ -11,6 +11,18 @@ describe('author state delivery contract',()=>{
   it('sends no packet for unchanged state',()=>{
     expect(authorStateDelta(base,base)).toBeNull();
   });
+  it('preserves large table identity and encodes removals as undefined',()=>{
+    const table={columns:[],rows:Array.from({length:10000},()=>({a:1}))};
+    const next={...base,tables:{big:table}};
+    expect(authorStateDelta(base,next)?.tables?.big).toBe(table);
+    expect(authorStateDelta(next,base)).toEqual({tables:{big:undefined}});
+  });
+  it('compares own properties including dangerous names and filters errors',()=>{
+    const next={...base,values:JSON.parse('{"__proto__":1,"constructor":2}'),errors:{selected:'bad',other:'secret'}};
+    const delta=authorStateDelta(null,next,{values:['__proto__','constructor'],tables:['selected']});
+    expect(Object.keys(delta!.values!)).toEqual(['__proto__','constructor']);
+    expect(delta!.errors).toEqual({selected:'bad'});
+  });
   it('filters named subscriptions without leaking other values',()=>{
     expect(authorStateDelta(null,base,{values:['open'],tables:[]})).toMatchObject({values:{open:false}});
     expect(authorStateDelta(null,base,{values:['open'],tables:[]})?.values).not.toHaveProperty('view');

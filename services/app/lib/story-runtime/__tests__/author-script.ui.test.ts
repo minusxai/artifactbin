@@ -3,8 +3,30 @@ import { createAuthorScriptSession, startAuthorScript } from '../author-script';
 import { createDataflowStore } from '../store';
 import { AUTHOR_SCRIPT_FRAME_TITLE } from '../author-script-contract';
 
-afterEach(() => { document.body.replaceChildren(); vi.unstubAllGlobals(); });
+afterEach(() => { document.body.replaceChildren(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 describe('isolated author script host', () => {
+  it('coalesces state only, keeps the initial snapshot, and cancels disposed delivery',()=>{
+    vi.useFakeTimers();
+    const port={postMessage:vi.fn(),start:vi.fn(),close:vi.fn(),onmessage:null as null | ((event:{data:unknown})=>void)};
+    vi.stubGlobal('MessageChannel',class {port1=port;port2={};});
+    const store=createDataflowStore({flow:{values:[{kind:'scalar',name:'n',type:'number',default:0,start:0,end:0}],queries:[]}});
+    const dispose=startAuthorScript('void 0',store);
+    document.querySelector('iframe')!.dispatchEvent(new Event('load'));
+    expect(port.postMessage.mock.calls[0][0]).toMatchObject({type:'state',reset:true,state:{values:{n:0}}});
+    port.onmessage!({data:{type:'state-ack'}});
+    port.postMessage.mockClear();
+    for(let n=1;n<=100;n++)store.setValue('n',n);
+    expect(port.postMessage).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(16);
+    expect(port.postMessage).toHaveBeenCalledExactlyOnceWith({type:'state',state:{values:{n:100}}});
+    store.setValue('n',101); vi.advanceTimersByTime(16);
+    expect(port.postMessage).toHaveBeenCalledTimes(1);
+    port.onmessage!({data:{type:'state-ack'}});vi.advanceTimersByTime(16);
+    expect(port.postMessage).toHaveBeenLastCalledWith({type:'state',state:{values:{n:101}}});
+    port.onmessage!({data:{type:'state-ack'}});
+    store.setValue('n',102); dispose();vi.advanceTimersByTime(16);
+    expect(port.postMessage).toHaveBeenCalledTimes(2);expect(port.close).toHaveBeenCalledOnce();
+  });
   it('preserves unchanged code, replaces changed code, and revokes removed code', () => {
     const store = createDataflowStore({ flow: { values: [], queries: [] } });
     const session = createAuthorScriptSession(store);

@@ -23,10 +23,16 @@ export const AUTHOR_SCRIPT_BOOTSTRAP = `
       send({ id, ...payload });
     });
     const report = error => console.error('[artifact script]', error.message);
-    const subscribe = listeners => listener => {
+    const subscribe = listeners => (names, listener) => {
+      if (typeof names === 'function' && listener === undefined) { listener = names; names = null; }
       if (typeof listener !== 'function') throw new TypeError('Expected a listener');
-      listeners.add(listener); return () => listeners.delete(listener);
+      if (names !== null && (!Array.isArray(names) || names.length > 128 || names.some(name => typeof name !== 'string' || !name.length || name.length > 128 || ['__proto__','prototype','constructor'].includes(name)))) throw new TypeError('Expected at most 128 valid names');
+      if (listeners.size >= 128) throw new Error('Too many script subscriptions');
+      const entry = { names: names === null ? null : [...new Set(names)], listener };
+      listeners.add(entry); return () => listeners.delete(entry);
     };
+    const select = (object, names) => names === null ? object : Object.fromEntries(names.filter(name => Object.prototype.hasOwnProperty.call(object, name)).map(name => [name, object[name]]));
+    const relevant = (names, changed) => names === null ? changed.length > 0 : names.some(name => changed.includes(name));
     const mx = {
       params: {
         get: name => own(state.values, name) ?? null,
@@ -45,14 +51,34 @@ export const AUTHOR_SCRIPT_BOOTSTRAP = `
     port.onmessage = event => {
       const message = event.data;
       if (message.type === 'state') {
-        const previous = JSON.stringify(state.values);
-        state = message.state; pending = message.pending;
-        if (previous !== JSON.stringify(state.values)) for (const listener of valuesListeners) {
-          try { listener(copy(state.values)); } catch (error) { report(error); }
+        if (message.reset) state = { values: {}, tables: {}, errors: {} };
+        const changed = { values: [], tables: [], errors: [] };
+        for (const field of ['values', 'tables', 'errors']) {
+          for (const [name, value] of Object.entries(message.state[field] || {})) {
+            if (value === undefined) {
+              if (Object.prototype.hasOwnProperty.call(state[field], name)) { delete state[field][name]; changed[field].push(name); }
+            } else if (!Object.is(own(state[field], name), value)) {
+              Object.defineProperty(state[field], name, { value, enumerable: true, configurable: true, writable: true });
+              changed[field].push(name);
+            }
+          }
         }
-        for (const listener of dataListeners) {
-          try { listener(copy(state), [...pending]); } catch (error) { report(error); }
+        const nextPending = message.pending === undefined ? pending : message.pending;
+        const pendingChanges = [...pending.filter(name => !nextPending.includes(name)), ...nextPending.filter(name => !pending.includes(name))];
+        pending = nextPending;
+        for (const {names, listener} of valuesListeners) {
+          if (!relevant(names, changed.values)) continue;
+          try { listener(copy(select(state.values, names))); } catch (error) { report(error); }
         }
+        for (const {names, listener} of dataListeners) {
+          const dataChanges = [...changed.tables, ...changed.errors, ...pendingChanges];
+          if (!relevant(names, names === null ? [...dataChanges, ...changed.values] : dataChanges)) continue;
+          const selected = names === null ? state : { values: {}, tables: select(state.tables, names), errors: select(state.errors, names) };
+          try { listener(copy(selected), names === null ? [...pending] : pending.filter(name => names.includes(name))); } catch (error) { report(error); }
+        }
+        // Backpressure: the host keeps at most one unacknowledged state packet.
+        // A slow child cannot accumulate snapshots; mutation commands stay FIFO.
+        send({ type: 'state-ack' });
       } else if (message.type === 'run' && !started) {
         started = true;
         // Only the isolated realm receives author HTML. No parent DOM write.
