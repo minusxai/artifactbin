@@ -115,7 +115,14 @@ export function markupCsp(origin: string, id: string, controlsOrigin?: string, a
   const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)} ${self}${GEOJSON_DIR_PATH} blob: data:`;
   const behavior = controlsOrigin ? BEHAVIOUR_DIRECTIVES.filter(d => !d.startsWith('sandbox ')) : BEHAVIOUR_DIRECTIVES;
   if(assetOrigin && (new URL(assetOrigin).origin!==assetOrigin||!/^https?:\/\//.test(assetOrigin)))throw Error('Invalid asset origin');
-  const sources=SOURCE_DIRECTIVES.map(d=>assetOrigin && /^(script|img|font|media)-src /.test(d)?d+' '+assetOrigin:d);
+  const sources=SOURCE_DIRECTIVES.map(d=>{
+    // Firefox evaluates inherited 'self' against the opaque srcdoc realm for
+    // dynamic imports. Keep the compatibility library directory explicit;
+    // the inner Sandbox still restricts scripts to exact pinned bundle URLs.
+    // This grants neither API fetches nor navigation to the main origin.
+    const source=d.startsWith('script-src ')?d+` ${self}/libraries/`:d;
+    return assetOrigin && /^(script|img|font|media)-src /.test(source)?source+' '+assetOrigin:source;
+  });
   const assetConnect=assetOrigin?` ${assetOrigin} ${self}${assetsPath(id)}`:'';
   return [...sources, ...(controlsOrigin ? [`frame-src ${controlsOrigin}`] : []), connect+assetConnect, ...behavior].join('; ');
 }

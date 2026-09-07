@@ -31,7 +31,7 @@ const HELMET =
  */
 const markupCspFor = (id: string) => [
   "default-src 'none'",
-  "script-src 'unsafe-inline' 'self'",
+  `script-src 'unsafe-inline' 'self' ${BASE}/libraries/`,
   "style-src 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
