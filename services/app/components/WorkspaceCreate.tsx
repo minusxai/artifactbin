@@ -208,6 +208,16 @@ export default function WorkspaceCreate({ onCreated, parentId = null }: { onCrea
               <FilePlus2 aria-hidden="true" size={14} />
               New artifact
             </button>
+            <a
+              href="/datasets/new"
+              role="menuitem"
+              aria-label="Create dataset"
+              onClick={() => setOpen(false)}
+              className="flex w-full cursor-pointer items-center gap-2 rounded-[4px] px-2.5 py-2 text-left font-mono text-[11px] text-fg no-underline transition-colors hover:bg-accent-soft hover:text-accent"
+            >
+              <Database aria-hidden="true" size={14} />
+              New dataset
+            </a>
             <button
               type="button"
               role="menuitem"

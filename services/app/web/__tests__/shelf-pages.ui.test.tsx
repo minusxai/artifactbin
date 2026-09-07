@@ -50,10 +50,13 @@ const mainWidth = (el: HTMLElement): string | undefined =>
   el.querySelector('main')?.className.match(/max-w-\S+/)?.[0];
 
 describe('the homepage workspace and profile column', () => {
-  it('links from the signed-in home to dataset creation', async () => {
+  it('links to dataset creation inside the Create menu', async () => {
     home = { signedIn: true, artifacts: [doc('a')], viewsOverTime: [], shared: [] };
     render(<MemoryRouter><HomePage /></MemoryRouter>);
-    expect(await screen.findByLabelText('Create dataset')).toHaveAttribute('href', '/datasets/new');
+    const create = await screen.findByLabelText('Create');
+    expect(screen.queryByLabelText('Create dataset')).toBeNull();
+    fireEvent.click(create);
+    expect(within(screen.getByRole('menu', { name: 'Create menu' })).getByRole('menuitem', { name: 'Create dataset' })).toHaveAttribute('href', '/datasets/new');
   });
 
   it('widens a populated home for the dashboard rail while keeping profiles focused', async () => {
