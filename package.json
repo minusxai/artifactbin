@@ -8,6 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "release:cli": "node scripts/bump-cli-version.mjs",
     "setup": "node scripts/setup.mjs",
     "dev": "node scripts/dev.mjs",
     "dev:otp": "node scripts/dev-otp.mjs",

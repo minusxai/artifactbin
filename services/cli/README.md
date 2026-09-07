@@ -104,15 +104,18 @@ The account and the app server can access the terminal content and input. Keep t
 ## Publishing a CLI release
 
 CI builds and smoke-tests macOS/Linux on arm64/x64 and uploads the executables as workflow artifacts.
-`Publish afbin CLI` rebuilds and tests an exact source commit, then publishes a versioned GitHub Release
-with `SHA256SUMS`. The release stays a draft until all assets are attached. Existing releases are not overwritten.
+After a successful push build on main, `Release tested afbin CLI` automatically tags and publishes
+those exact binaries with `SHA256SUMS`. It does not execute downloaded artifacts. Existing published
+versions are skipped; partial drafts can be recovered by rerunning the workflow.
 
-1. Update `services/cli/package.json` and the default `version` in `services/app/public/chat/install.sh`.
-2. Merge and wait for CI to pass on the exact main commit to release.
-3. Tag that commit `afbin-v0.1.1` (matching the package version) and push the tag. Failed workflow runs can
-   be retried from GitHub Actions. It refuses commits outside main or without passing CI.
-4. Verify the release assets, then deploy the app serving the corresponding installer. For a rollback,
-   deploy an installer pinned to the previous release; users can also pass `--version` explicitly.
+1. Run `npm run release:cli` from the repository root. This defaults to a patch bump
+   (for example, 0.1.1 → 0.1.2) and updates the package, lockfile, and installer together.
+2. Commit and merge the release PR. Once main CI passes, the tag and release are created automatically.
+3. Verify the release workflow succeeds before deploying the app serving the corresponding installer.
+   For a rollback, deploy an installer pinned to a previous release; users can also pass `--version` explicitly.
 
-Publish the first release before advertising the install command. A missing release produces a clear
-download error and leaves any existing installation untouched.
+Unrelated merges do not create additional releases. Stale main CI completions are skipped in favor of
+the newer main build. The tag-triggered `Publish afbin CLI` workflow remains available for manual
+recovery; tags created with the automatic workflow's GitHub token do not trigger a duplicate build.
+
+A missing release produces a clear download error and leaves any existing installation untouched.
