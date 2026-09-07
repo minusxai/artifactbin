@@ -41,10 +41,28 @@ it('dedicates a frameable controls path without serving author document routes t
   expect(res.headers.get('content-security-policy')).toContain(`frame-ancestors ${main}`);
   expect((await throughProxy(controls + '/a/abc123')).status).toBe(404);
 });
-it('redirects old main-host account pages to top-level trusted pages', async () => {
-  for (const path of ['/login?callbackUrl=%2Fa%2Fabc123', '/account', '/tokens/new']) {
+it('keeps first-party app addresses on main with a credential-free trusted page frame', async () => {
+  for (const path of ['/', '/login?callbackUrl=%2Fa%2Fabc123', '/account', '/tokens/new', '/trash', '/chat', '/datasets/new']) {
     const res = await throughProxy(main + path);
-    expect(res.status).toBe(302);
-    expect(res.headers.get('location')).toBe(controls + path);
+    expect(res.status, path).toBe(200);
+    expect(res.headers.get('location'), path).toBeNull();
+    const html = await res.text();
+    expect(html, path).toContain('<iframe');
+    expect(html, path).toContain(`${controls}/controls/page`);
+    expect(html, path).not.toContain('Trusted SPA');
+    expect(res.headers.get('cache-control')).toContain('no-store');
+  }
+});
+it('frames only platform app pages, never author documents or arbitrary proxy destinations', async () => {
+  for (const path of ['/', '/login', '/account', '/tokens/new']) {
+    const res = await throughProxy(controls + '/controls/page' + path);
+    expect(res.status, path).toBe(200);
+    expect(await res.text()).toContain('Trusted SPA');
+    expect(res.headers.get('content-security-policy')).toContain(`frame-ancestors ${main}`);
+    expect(res.headers.get('cache-control')).toContain('no-store');
+  }
+  for (const path of ['/a/abc123', '/@someone/abc123-title', '/api/my/tokens', '//example.com', '/assets/ref/abc']) {
+    const res = await throughProxy(controls + '/controls/page' + path);
+    expect(res.status, path).toBe(404);
   }
 });
