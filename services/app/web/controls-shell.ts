@@ -1,4 +1,4 @@
-import {appUrl} from './api-origin';
+import {appUrl,receiveArtifactAddress} from './api-origin';
 
 let rightInset = 0;
 export function reportControlsInset(value: number): void {
@@ -8,6 +8,8 @@ export function reportControlsInset(value: number): void {
 
 /** UI runs here; only geometry and addressed navigation cross to the document. */
 export function installControlsShell(mainOrigin: string): () => void {
+  window.addEventListener('message',receiveArtifactAddress);
+  window.parent.postMessage({type:'mx:controls:address-request'},mainOrigin);
   // Geometry crosses an asynchronous origin boundary. Compositor-driven CSS
   // motion cannot be kept in lockstep with the parent's hit-test clip.
   // Keep controls stationary; this stylesheet never reaches author content.
@@ -90,5 +92,5 @@ export function installControlsShell(mainOrigin: string): () => void {
   };
   document.addEventListener('click',navigate,true);
   schedule();
-  return () => {observer.disconnect();clearInterval(timer);motion.remove();document.removeEventListener('keydown',keys);window.removeEventListener('message',escape);window.visualViewport?.removeEventListener('resize',schedule);window.visualViewport?.removeEventListener('scroll',schedule);window.removeEventListener('resize',schedule);window.removeEventListener('scroll',schedule,true);window.removeEventListener('mx:controls:layout',schedule);document.removeEventListener('click',navigate,true);};
+  return () => {window.removeEventListener('message',receiveArtifactAddress);observer.disconnect();clearInterval(timer);motion.remove();document.removeEventListener('keydown',keys);window.removeEventListener('message',escape);window.visualViewport?.removeEventListener('resize',schedule);window.visualViewport?.removeEventListener('scroll',schedule);window.removeEventListener('resize',schedule);window.removeEventListener('scroll',schedule,true);window.removeEventListener('mx:controls:layout',schedule);document.removeEventListener('click',navigate,true);};
 }

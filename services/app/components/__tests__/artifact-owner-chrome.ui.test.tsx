@@ -99,6 +99,18 @@ const openDocumentControls = () => {
 };
 
 describe('the surface header buttons are owner chrome', () => {
+  it('keeps recognizable heart and comment controls for a signed-out reader and sends comments through login', () => {
+    const navigate = vi.spyOn(apiOrigin, 'appNavigate').mockImplementation(() => {});
+    const url = vi.spyOn(apiOrigin, 'appUrl').mockReturnValue('http://localhost:3000/');
+    window.history.replaceState(null, '', '/a/story1?$region=west#section');
+    try {
+      render(<ArtifactShell role="viewer"><ArtifactSurface {...surfaceProps({ controlsOnly: true, accountSession: false })} /></ArtifactShell>);
+      expect(screen.getByLabelText('Like artifact').querySelector('.lucide-heart')).toBeTruthy();
+      expect(screen.getByLabelText('Toggle comments').querySelector('.lucide-message-square')).toBeTruthy();
+      fireEvent.click(screen.getByLabelText('Toggle comments'));
+      expect(navigate).toHaveBeenCalledWith(`/login?callbackUrl=${encodeURIComponent('/a/story1?$region=west&intent=comment#section')}`);
+    } finally { navigate.mockRestore(); url.mockRestore(); }
+  });
   it('keeps the controls-only viewport transparent when its menu covers the frame', () => {
     const url=vi.spyOn(apiOrigin,'appUrl').mockReturnValue('http://localhost:3000/');
     try {
@@ -678,6 +690,15 @@ describe('the fork row', () => {
       expect(assign).not.toHaveBeenCalled();
       fireEvent.click(screen.getByLabelText('Dismiss fork refusal'));
       await waitFor(() => expect(screen.queryByLabelText('Fork refused')).toBeNull());
+    });
+  });
+  it('does not treat permission refusal as an expired login', async () => {
+    vi.stubGlobal('fetch', forkResponse(403, {error:'forbidden'}));
+    await withLocation(async(assign)=>{
+      render(<ArtifactSurface {...surfaceProps({})}/>);
+      openDocumentControls();fireEvent.click(screen.getByLabelText('Fork artifact'));
+      expect(await screen.findByLabelText('Fork refused')).toHaveTextContent('forbidden');
+      expect(assign).not.toHaveBeenCalled();
     });
   });
 

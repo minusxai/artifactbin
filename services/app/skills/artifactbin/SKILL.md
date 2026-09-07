@@ -37,12 +37,10 @@ component kit (`Card`, `Tabs`, `Badge`, `Grid`/`GridItem`,
 `DataTable`, `Number`), styled ONLY with Tailwind utilities via
 `className` — inline `style=` is rejected. There is no markdown.
 
-**Guess rather than look up.** An unknown HTML tag is refused with a 400
-carrying the allowed set (`allowed_html_tags`), an unknown component the
-registry: a wrong guess costs one round trip. One exception:
+**Guess rather than look up.** A 400 for an unknown HTML tag lists
+`allowed_html_tags`; an unknown component lists the registry. Exception:
 `[[ refusedTags | join(' ') ]]` are refused with NO list — never guess them
-(`<form>` and raw `<iframe>` most often). Parent CSS and JS live in ONE `<Helmet>`,
-which also holds `<title>`:
+(`<form>` and raw `<iframe>` most often). CSS lives in ONE `<Helmet>`, also holding `<title>`:
 
 ```jsx
 <Helmet><title>What the tab shows</title><style>{`:root { --primary: #ff6a1f }`}</style></Helmet>
@@ -55,9 +53,9 @@ one column and widen: `grid-cols-1 @2xl:grid-cols-3`, and so does display
 type — `text-4xl @2xl:text-6xl`, never a bare `text-6xl` (60px type breaks a
 phone). Never a fixed pixel width.
 
-Parent rules: one self-contained document — no CDN `<script src>`,
-no external stylesheet (hard 400s at publish); a runtime `fetch()` is
-blocked by the sandbox; images are a `data:` URI or
+Parent rules: self-contained. ONE isolated Helmet script, no parent DOM/network. Use signals/run= for UI;
+managed `<Iframe>` for DOM/canvas/CDN bundles (see `markup-iframe.md`). No CDN
+scripts or external stylesheets in parent. Images are a `data:` URI or
 any `https://` URL (publish copies it, your URL stays); web fonts: a Google family via
 `<meta name="font-display" content="Lobster" />`.
 

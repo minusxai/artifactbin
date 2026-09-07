@@ -1,5 +1,16 @@
 import {expect,it,vi} from 'vitest';
 import {createAppApi} from '@/web/api-origin';
+import {artifactReturnAddress} from '@/lib/intent';
+
+it('accepts only this artifact on main as a return address, preserving selection and fragment', () => {
+  const own = 'https://artifactbin.test';
+  expect(artifactReturnAddress(`${own}/@me/abc123-report?$x=a+b#section`, own, 'abc123')).toBe(`${own}/@me/abc123-report?$x=a+b#section`);
+  expect(artifactReturnAddress(`${own}/a/abc123?intent=fork`, own, 'abc123')).toBe(`${own}/a/abc123?intent=fork`);
+  expect(artifactReturnAddress(`${own}/@me/folder/abc123-report`, own, 'abc123')).toBe(`${own}/@me/folder/abc123-report`);
+  for (const value of [null, '//evil.test/a/abc123', `${own}/a/other`, `${own}/controls/a/abc123`, 'https://i.artifactbin.test/a/abc123', `${own}/login`, `${own}/@me/abc123wrong`, `https://u:p@artifactbin.test/a/abc123`]) {
+    expect(artifactReturnAddress(value, own, 'abc123')).toBeNull();
+  }
+});
 
 it('uses host-only API cookies from the configured controls origin without widening unrelated requests', async () => {
   const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response());

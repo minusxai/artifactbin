@@ -17,12 +17,12 @@ import { DatasetCatalogView } from '@/components/DatasetCatalogView';
  * and Monaco, and a reader of a shared document must never pay for that.
  */
 import {appFetch as fetch} from '@/web/api-origin';
-import {appUrl, appNavigate} from '@/web/api-origin';
+import {appUrl, appNavigate, artifactLoginUrl, getArtifactAddress, subscribeArtifactAddress, consumeArtifactIntent} from '@/web/api-origin';
 import {reportControlsInset} from '@/web/controls-shell';
 import {isDocumentPeerEvent, type DocumentPeer} from '@/lib/story/document-peer';
 import dynamic from '@/lib/dynamic';
-import { FolderPlus, MessageSquare, Pencil } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { FolderPlus, Heart, MessageSquare, Pencil } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useArtifactOwner, useCanAnnotateArtifact, useCanEditArtifact } from '@/components/ArtifactShell';
 import AnnotationLayer from '@/components/AnnotationLayer';
 import CopyAgentPrompt from '@/components/CopyAgentPrompt';
@@ -30,7 +30,7 @@ import RefreshAssets from '@/components/RefreshAssets';
 import ForkArtifact, { ForkConfirm } from '@/components/ForkArtifact';
 import ShareLink from '@/components/ShareLink';
 import type { AnnotationWire } from '@/lib/annotations';
-import { readIntent, stripIntent, withIntent } from '@/lib/intent';
+import { readIntent } from '@/lib/intent';
 import PageChrome, { AppBar, PageControls, PageMenu, requestPageChrome, type AppearanceMode } from '@/components/PageChrome';
 import { useIsPhoneViewport } from '@/components/MobileSheet';
 /* The editing bar's height is RESERVED by this page, never measured — and it
@@ -343,14 +343,15 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const isFolder = format === 'folder';
 
   const intentDone = useRef(false);
+  const artifactAddress = useSyncExternalStore(subscribeArtifactAddress, getArtifactAddress, () => null);
   useEffect(() => {
-    if (intentDone.current) return;
+    if (intentDone.current || (controlsOnly && !artifactAddress)) return;
     intentDone.current = true;
-    const intent = readIntent(search || window.location.search);
+    const intent = readIntent(controlsOnly && artifactAddress ? new URL(artifactAddress).search : search || window.location.search);
     if (intent === 'fork') setForkAsked(true);
     // Exactly the comments row's effect, and gated by exactly its capability:
     // opening a rail for someone who may not comment is an empty panel.
-    else if (intent === 'comment' && canAnnotate) setRailOpen(true);
+    else if (intent === 'comment' && (canAnnotate || (controlsOnly && accountSession))) setRailOpen(true);
     // The document's own control can only ASK (opaque origin, no session); the
     // shell holds the credential, so this is where the field opens. Gated by
     // the same capability the bar's row is, for the same reason.
@@ -359,11 +360,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     // arrives here (via login, or straight back) and the shell performs it.
     else if (intent === 'like') void toggleLike(frameRef.current?.contentWindow ?? null, true);
     else if (intent === 'follow') void toggleFollow(frameRef.current?.contentWindow ?? null, true);
-    const next = stripIntent(window.location.search);
-    if (next !== window.location.search) {
-      window.history.replaceState(null, '', window.location.pathname + next + window.location.hash);
-    }
-  }, [search, canAnnotate, canEdit, isFolder]);
+    consumeArtifactIntent();
+  }, [search, canAnnotate, canEdit, isFolder, controlsOnly, artifactAddress, accountSession]);
 
   // The authorized page — never the sandbox — decides which selection actions
   // exist. Whoever may edit gets Edit; whoever may annotate — owner, editor
@@ -979,12 +977,13 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   }, []);
   const toggleLike = useCallback(async (frame: Window | null, want?: boolean) => {
     if (!accountSession) {
-      appNavigate(`/login?callbackUrl=${encodeURIComponent(`${window.location.pathname}${withIntent('', 'like')}`)}`);
+      appNavigate(artifactLoginUrl(id, 'like'));
       return;
     }
     const next = want ?? !likeRef.current.liked;
     if (next === likeRef.current.liked) { answer(frame, { kind: 'like', ok: true, ...likeRef.current }); return; }
     const res = await fetch(`/api/my/artifacts/${id}/like`, { method: next ? 'POST' : 'DELETE', credentials: 'same-origin' }).catch(() => null);
+    if (res?.status === 401) {appNavigate(artifactLoginUrl(id, 'like'));return;}
     if (!res?.ok) return;
     likeRef.current = (await res.json()) as { liked: boolean; count: number };
     updateSocial(n => n+1);
@@ -994,18 +993,19 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     const target = followRef.current;
     if (!target) return;
     if (!accountSession) {
-      appNavigate(`/login?callbackUrl=${encodeURIComponent(`${window.location.pathname}${withIntent('', 'follow')}`)}`);
+      appNavigate(artifactLoginUrl(id, 'follow'));
       return;
     }
     const next = want ?? !target.following;
     if (next === target.following) { answer(frame, { kind: 'follow', ok: true, following: target.following, count: target.count }); return; }
     const res = await fetch(`/api/users/${target.userId}/follow`, { method: next ? 'POST' : 'DELETE', credentials: 'same-origin' }).catch(() => null);
+    if (res?.status === 401) {appNavigate(artifactLoginUrl(id, 'follow'));return;}
     if (!res?.ok) return;
     const state = (await res.json()) as { following: boolean; count: number };
     followRef.current = { ...target, ...state };
     updateSocial(n => n+1);
     answer(frame, { kind: 'follow', ok: true, ...state });
-  }, [accountSession, answer]);
+  }, [accountSession, answer, id]);
   // A frame that (re)announces itself is told what is true now — it may have
   // been served before an intent-driven like landed, or been replaced since.
   useEffect(() => {
@@ -1299,8 +1299,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       <>
         {controlsOnly && <><AppBar fixed title={shownTitle} label="Artifact controls" />
           <div data-controls-region className="fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-xl border border-edge bg-surface p-2 shadow-lg">
-            <button aria-label="Like artifact" aria-pressed={likeRef.current.liked} onClick={() => void toggleLike(null)} className="rounded px-3 py-2">{likeRef.current.liked ? 'Liked' : 'Like'} · {likeRef.current.count}</button>
-            {canAnnotate && <button aria-label="Toggle comments" onClick={() => setRailOpen(open => !open)} className="rounded px-3 py-2">Comments · {openAnnotationCount}</button>}
+            <button aria-label="Like artifact" aria-pressed={likeRef.current.liked} onClick={() => void toggleLike(null)} className="flex items-center gap-2 rounded px-3 py-2"><Heart size={18} fill={likeRef.current.liked ? 'currentColor' : 'none'} />{likeRef.current.count}</button>
+            <button aria-label="Toggle comments" onClick={() => {if (canAnnotate || accountSession) setRailOpen(open => !open);else appNavigate(artifactLoginUrl(id, 'comment'));}} className="flex items-center gap-2 rounded px-3 py-2"><MessageSquare size={18} />{openAnnotationCount}</button>
             {followRef.current && <button aria-label="Follow author" aria-pressed={followRef.current.following} onClick={() => void toggleFollow(null)} className="rounded px-3 py-2">{followRef.current.following ? 'Following' : 'Follow'}</button>}
           </div></>}
         {editing ? (
@@ -1425,6 +1425,10 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             threads on the page (which holds the content and the session).
             Mounted in EVERY mode — the `!editing` gate that used to be here is
             exactly what made commenting mid-edit a four-navigation detour. */}
+        {controlsOnly && accountSession && !canAnnotate && railOpen && <aside aria-label="Annotation sidebar" className="fixed right-0 top-11 bottom-0 z-50 w-80 max-w-full border-l border-edge bg-surface p-4">
+          <div className="flex items-center justify-between"><h2 className="font-semibold">Comments</h2><button aria-label="Close comments" onClick={() => setRailOpen(false)} className="rounded px-2 py-1">Close</button></div>
+          <p role="status" className="mt-4 text-sm text-muted">Commenting is not enabled for your access. Ask the owner for comment access.</p>
+        </aside>}
         {canAnnotate && (
           <AnnotationLayer
             id={id}

@@ -12,6 +12,7 @@ import {chromium,firefox,webkit} from 'playwright';
 import {startDocument,becomeOwner} from './lib/start-doc.mjs';
 import {loginViaEmail} from './lib/mail-login.mjs';
 import {measureInteraction} from './planning/interaction-perf.mjs';
+import {verifyControlsLogin} from './lib/controls-login.mjs';
 
 const scratch = mkdtempSync(join(tmpdir(),'afbin-controls-gate-'));
 const interactive=process.argv.includes('--interactive');
@@ -240,6 +241,7 @@ try {
   await page.getByLabel('Token to claim',{exact:true}).fill(seed.token);
   await Promise.all([page.waitForNavigation({waitUntil:'load'}),page.getByLabel('Claim token',{exact:true}).click()]);
   await page.goto(`${base}/a/${seed.id}`);
+  await verifyControlsLogin({browser,owner:chrome,base,controls,sink});
   await chrome.getByLabel('Like artifact',{exact:true}).click();
   await chrome.locator('[aria-label="Like artifact"][aria-pressed="true"]').waitFor();
   await page.reload();

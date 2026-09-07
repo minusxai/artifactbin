@@ -8,6 +8,23 @@ const origin='https://i.artifactbin.test';
 function dispatchMessage(source: MessageEventSource | null, from: string, data: unknown) {
   window.dispatchEvent(new MessageEvent('message',{source,origin:from,data}));
 }
+it('shares the current address only with its trusted controls, including live query/hash',()=>{
+  window.history.replaceState(null,'','/a/example?$x=west#section');
+  controls=createControlsFrame(origin+'/controls/a/example');
+  const post=vi.spyOn(controls.frame.contentWindow!,'postMessage');
+  dispatchMessage(window,origin,{type:'mx:controls:address-request'});
+  dispatchMessage(controls.frame.contentWindow!,'null',{type:'mx:controls:address-request'});
+  expect(post).not.toHaveBeenCalled();
+  dispatchMessage(controls.frame.contentWindow!,origin,{type:'mx:controls:address-request'});
+  expect(post).toHaveBeenCalledWith({type:'mx:controls:address',url:window.location.href},origin);
+  post.mockClear();
+  window.history.replaceState(null,'','/a/example?$x=east#second');
+  window.dispatchEvent(new Event('mx:address-changed'));
+  expect(post).toHaveBeenLastCalledWith({type:'mx:controls:address',url:window.location.href},origin);
+  post.mockClear();
+  controls.frame.dispatchEvent(new Event('load'));
+  expect(post).toHaveBeenCalledWith({type:'mx:controls:address',url:window.location.href},origin);
+});
 it('requires both the exact child window and origin for geometry and appearance',()=>{
   controls=createControlsFrame(origin+'/a/example');
   const child=controls.frame.contentWindow!;
