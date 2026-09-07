@@ -56,7 +56,7 @@ one column and widen: `grid-cols-1 @2xl:grid-cols-3`, and so does display
 type — `text-4xl @2xl:text-6xl`, never a bare `text-6xl` (60px type breaks a
 phone). Never a fixed pixel width.
 
-Rules a document lives by: one self-contained document — no CDN `<script src>`,
+Rules: one self-contained document — no CDN `<script src>`,
 no external stylesheet (hard 400s at publish); a runtime `fetch()` is
 blocked by the sandbox; images are a `data:` URI or
 any `https://` URL (publish copies it, your URL stays); web fonts: a Google family via

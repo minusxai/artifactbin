@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const registry = JSON.parse(readFileSync(path.join(root, 'lib/libraries/registry.json'), 'utf8'));
-const dependencies = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).dependencies;
+// These packages are bundled here; production serves only the emitted modules.
+const dependencies = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).devDependencies;
 for (const [name, spec] of Object.entries(registry)) {
   if (dependencies[spec.package] !== spec.version) throw new Error(`${name}: registry and dependency versions must match`);
   // The wrapper and its complete dependency graph ship as one browser module.

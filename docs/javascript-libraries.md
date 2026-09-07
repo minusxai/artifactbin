@@ -17,7 +17,10 @@ asset is not retroactively erased from a reader's memory.
 
 ## Adding a library
 
-1. Install an exact npm dependency in `services/app/package.json`.
+1. Install an exact npm **dev dependency** in `services/app/package.json`
+   (`npm install --save-dev --save-exact <package>@<version> -w services/app`).
+   The build bundles it into a static browser module; production does not need
+   the original npm package.
 2. Add an ESM wrapper under `services/app/lib/libraries/`. Export the public
    surface authors should receive, including any supported addons.
 3. Add its name, npm package, exact version, and wrapper filename to
