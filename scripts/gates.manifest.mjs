@@ -26,6 +26,7 @@
 export const GATE_SPECS = Object.freeze([
   {name:'managed-iframe',start:'shared',needsMail:false,needsClipboard:false,timeoutMs:120_000},
   {name:'trusted-controls',start:'shared',needsMail:true,needsClipboard:false,timeoutMs:120_000},
+  {name:'late-controls-query',start:'shared',needsMail:false,needsClipboard:false,timeoutMs:60_000},
   { name: 'author-script-isolation', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 120_000 },
   { name: 'local-sql-state', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 120_000 },
   { name: 'libraries', start: 'custom', why: 'Uploads a textured GLB and publishes scripts that load it through the optional library registry.', needsMail: false, needsClipboard: false, timeoutMs: 90_000 },
