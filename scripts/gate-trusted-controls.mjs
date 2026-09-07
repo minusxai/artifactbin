@@ -11,6 +11,7 @@ import {createHash,randomBytes} from 'node:crypto';
 import {chromium,firefox,webkit} from 'playwright';
 import {startDocument,becomeOwner} from './lib/start-doc.mjs';
 import {loginViaEmail} from './lib/mail-login.mjs';
+import {measureInteraction} from './planning/interaction-perf.mjs';
 
 const scratch = mkdtempSync(join(tmpdir(),'afbin-controls-gate-'));
 const interactive=process.argv.includes('--interactive');
@@ -164,6 +165,10 @@ try {
     addEventListener('message',listener);parent.postMessage('mx:hello',main);
   }),base),true,'top-level runtime answers controls liveness checks');
   await page.getByRole('button',{name:'Increment',exact:true}).click();
+  if(process.argv.includes('--measure-perf')) await measureInteraction({page,base,controls,engineName,publish:async body=>{
+    const response=await mainFetch(`${backend}/api/artifacts`,{method:'POST',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    assert.equal(response.status,201);return response.json();
+  }});
   await page.waitForFunction(()=>window.mx?.params.get('count')===1);
   await chrome.getByRole('button',{name:'Open artifact controls',exact:true}).click();
   assert.equal(await chrome.getByLabel('Artifact viewport',{exact:true}).evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(0, 0, 0, 0)','expanded controls must not paint over the top-level artifact');

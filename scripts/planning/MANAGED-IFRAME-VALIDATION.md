@@ -56,19 +56,29 @@ See `iframe-assets-perf.mjs`, `iframe-assets-bridge.mjs` and
 positive WebGL pixels, real interactions, CORS checks and GET-wrapper tests.
 No animation pixels cross the bridge: the browser composites the inner canvas.
 
-WebKit's pre-interaction animation penalty is MEASURED, not resolved by nesting.
-A controlled cycled-order rerun (three samples per shape) measured median frame
-intervals of 17ms top-level and 50ms in both opaque layouts. After an actual
-in-frame button click, all three layouts measured 17ms. This is consistent with
-WebKit's documented cross-origin animation throttling, not proof that every
-Safari/device behaves identically: https://bugs.webkit.org/show_bug.cgi?id=170534 .
-The passive/autoplay performance limit must be disclosed; do not claim top-level
-frame-rate parity or weaken isolation to evade browser power-saving policies.
+The broader audit is in `IFRAME-STATE-PERF.md` and `OCEAN-WORKLOAD-PERF.md`.
+It covers actual author-bootstrap state traffic, 10,000-row bursts, 1/4/8 regions,
+bounded mutation requests, timers/messages/input, lifecycle, real controls writes,
+the captured ocean scene, cold/warm resources and multiple WebGL canvases.
 
-Independent reviewer rerun reproduced 17ms top-level versus 50ms in either frame
-before interaction and 17ms in all shapes afterward, each across three samples.
-First-render medians were 19/22/26ms (top/single/nested), a small synthetic scene
-with already-imported assets, not production loading or a complex ocean benchmark.
+An important methodology correction: Playwright child evaluation can emulate
+activation. Earlier 50ms-before / 17ms-after results did not isolate the real
+click as the cause. Autonomous sampling now avoids child evaluation before passive
+measurements. The corrected headed state probe again finds WebKit 10 animation
+callbacks per 500ms in opaque frames versus 30 top-level, and 30 after an actual
+click. Offscreen WebKit timers also fall to 0–1 per sample, while all 100 local
+messages arrive. This is **not only requestAnimationFrame**. Actual background
+tab behavior remains unverified: the harness's foreground change did not make
+document.hidden true. Physical-device behavior is still a separate gate.
+
+The audit found a required design change: 100 scalar updates with 10,000 unchanged
+rows take 386.5/910/838ms in nested Chromium/Firefox/WebKit with current snapshots;
+values-only experimental delivery takes 6/8/5ms with all updates delivered.
+Single frames have the same expensive full-snapshot behavior. Require filtered
+subscriptions/deltas and bounded latest-state coalescing before shipping; do not
+drop or coalesce mutation commands. The prototype proves a mitigation, not its
+production implementation. No top-level animation parity or hard resource quota
+is promised, and isolation must not be weakened to improve a benchmark.
 
 Reviewer-added default Request and already-cached URL cases initially failed the
 asset adapter. Normalizing same-origin to omit and accepting exact cached aliases
