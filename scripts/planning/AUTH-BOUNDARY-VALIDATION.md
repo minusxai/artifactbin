@@ -20,6 +20,14 @@ Firefox and WebKit controls/consent/Sandbox flows.
 Boundary-preserving rollback, staging and real-device evidence remain open.
 Do not advance to Stage 2 on the old prototype results.
 
+Hosted checks on `958708a` passed CodeQL and all deterministic CI jobs. Three
+account-mode agent smoke jobs exposed a stale eval assumption: an MCP-scoped
+OAuth token was used for REST setup and scoring, now correctly rejected with
+401. Red→green credential/access-plan tests prove separate account API token
+selection for driver/API work while MCP agents receive only the OAuth token.
+The harness mints that separate token through the real human-session endpoint;
+product audience checks are unchanged. Hosted agent reruns remain required.
+
 ### New main compatibility — generic Sandbox, not a Three.js component
 
 Main `323fa5d` includes libraries (`e4df36d`, PR #55) and comment selection

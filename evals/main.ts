@@ -156,6 +156,7 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
   const credential = await run.credentialFor(productUrl, productOrigin);
   if (credential) {
     registerSecret(credential.token);
+    if (credential.apiToken) registerSecret(credential.apiToken);
     log(`${leg.label}: publishing as ${credential.email ?? 'the eval account'} (${credential.owner})`);
   }
 
@@ -284,7 +285,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // one. The TASK decides — there is no leg-level knob that could disagree with its rubric.
   const start = needsStartDocument(task)
     ? r.credential
-      ? await mintStartDocumentAs(r.agentBase, DRIVER_HEADER, r.credential.token)
+      ? await mintStartDocumentAs(r.agentBase, DRIVER_HEADER, r.credential.apiToken ?? r.credential.token)
       : await mintStartDocument(r.agentBase, DRIVER_HEADER)
     : null;
   // The paste must name the base the agent will be given, or the agent's traffic misses the ledger.
@@ -305,7 +306,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // and `kind: 'none'` for the token-less task, which is the whole point of that task. A task KIND
   // spends it — `comment`'s setup posts the comment and its checks read the thread back
   // (`lib/score/kinds`) — so deriving it here keeps one decision rather than two that can disagree.
-  const driverToken = plan.access.kind === 'token' ? plan.access.token : null;
+  const driverToken = plan.access.kind === 'token' ? r.credential?.apiToken ?? plan.access.token : null;
   // The skills are built for the base THIS TASK will be reached on: each task has its own
   // recording proxy on its own port, and a skill naming another one sends the traffic past
   // this task's ledger. `lib/plugin-package` is the same generator that ships the public
