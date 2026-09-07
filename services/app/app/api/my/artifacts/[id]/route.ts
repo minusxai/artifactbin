@@ -14,7 +14,7 @@ import { isParentRefusal, parentOf, resolveParent } from '@/lib/folders';
 import { browserActor } from '@/lib/auth';
 import { trashArtifactFor } from '@/lib/trash';
 import { actorForArtifacts } from '@/lib/viewer';
-import { baseUrl, json, readJson, unauthorized } from '@/lib/http';
+import { publicLinkBase, json, readJson, unauthorized } from '@/lib/http';
 
 /** The caller as an artifact scope, or the Response that refuses them. */
 async function scopeFor(request: Request) {
@@ -30,7 +30,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const { id } = await ctx.params;
   const row = await getArtifactFor(scoped, id);
   if (!row) return json({ error: 'not_found' }, 404);
-  return json(await artifactToWireWithAnnotations(row, baseUrl(request)));
+  return json(await artifactToWireWithAnnotations(row, publicLinkBase(request)));
 }
 
 /**
@@ -42,7 +42,7 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   const scoped = await scopeFor(request);
   if (scoped instanceof Response) return scoped;
   const { id } = await ctx.params;
-  return replaceArtifactFromRequest(request, scoped, id, baseUrl(request));
+  return replaceArtifactFromRequest(request, scoped, id, publicLinkBase(request));
 }
 
 /**

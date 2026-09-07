@@ -2,9 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DEV_OUTBOX_DEFAULT_PATH, MailNotConfigured, MailSendFailed, devOutboxMailer, mailerForRuntime, resendMailer, resolveDevOutboxPath } from '../src/mail';
+import { DEV_OUTBOX_DEFAULT_PATH, MailNotConfigured, MailSendFailed, devOutboxMailer, mailerForRuntime, resendMailer, resolveDevOutboxPath,usesDevOutbox } from '../src/mail';
 
 describe('resendMailer', () => {
+  it('keeps localhost-subdomain login codes local, never the Resend transport',()=>{
+    expect(usesDevOutbox('http://artifactbin.localhost:5400')).toBe(true);
+    expect(usesDevOutbox('https://i.artifactbin.localhost:5400')).toBe(true);
+    expect(usesDevOutbox('https://artifactbin.localhost.evil.test')).toBe(false);
+  });
   it('posts the Resend shape — the login code in the subject and the text, never logged', async () => {
     const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
     const f = vi.fn(async (url: string, init: RequestInit) => { calls.push({ url, body: JSON.parse(String(init.body)) }); return new Response('{}'); }) as unknown as typeof fetch;

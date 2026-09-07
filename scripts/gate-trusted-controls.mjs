@@ -12,9 +12,12 @@ import {chromium,firefox,webkit} from 'playwright';
 import {startDocument,becomeOwner} from './lib/start-doc.mjs';
 import {loginViaEmail} from './lib/mail-login.mjs';
 import {measureInteraction} from './planning/interaction-perf.mjs';
+import {verifyControlsLogin} from './lib/controls-login.mjs';
+import {verifyMainPageLogin} from './lib/main-page-login.mjs';
 
 const scratch = mkdtempSync(join(tmpdir(),'afbin-controls-gate-'));
 const interactive=process.argv.includes('--interactive');
+const localDev=process.argv.includes('--local-dev');
 const anonymousLive=process.argv.find(arg=>arg.startsWith('--anonymous-live='))?.split('=')[1] !== 'false';
 // A delegated worktree may reserve its own port block; default gates remain ephemeral.
 const portBase=Number(process.argv.find(arg=>arg.startsWith('--port-base='))?.split('=')[1] ?? 0);
@@ -29,18 +32,20 @@ const port = socket.address().port;
 await new Promise(resolve => socket.close(resolve));
 const backend = `http://localhost:${port}`;
 execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=artifactbin.test','-keyout',join(scratch,'key.pem'),'-out',join(scratch,'cert.pem')],{stdio:'ignore'});
-const tls = httpsServer({key:readFileSync(join(scratch,'key.pem')),cert:readFileSync(join(scratch,'cert.pem'))},(req,res) => {
-  const upstream = httpRequest(backend+req.url,{method:req.method,headers:{...req.headers,'x-forwarded-host':req.headers.host,'x-forwarded-proto':'https'}},answer => {
+const forward=(req,res) => {
+  const upstream = httpRequest(backend+req.url,{method:req.method,headers:{...req.headers,'x-forwarded-host':req.headers.host,'x-forwarded-proto':localDev?'http':'https'}},answer => {
     res.writeHead(answer.statusCode,answer.headers);answer.pipe(res);
   });
   upstream.on('error',()=>{res.writeHead(502);res.end();});
   req.pipe(upstream);
-});
+};
+const tls = localDev?httpServer(forward):httpsServer({key:readFileSync(join(scratch,'key.pem')),cert:readFileSync(join(scratch,'cert.pem'))},forward);
 await new Promise(resolve=>tls.listen(portBase,'127.0.0.1',resolve));
 const tlsPort = tls.address().port;
-const hostname=interactive || engineName!=='chromium' ? '127.0.0.1.nip.io' : 'artifactbin.test';
-const base = `https://${hostname}:${tlsPort}`, controls = `https://i.${hostname}:${tlsPort}`;
-const assets=`https://assets.${hostname}:${tlsPort}`,authSecret=randomBytes(32).toString('hex');
+const hostname=localDev?'artifactbin.localhost':interactive || engineName!=='chromium' ? '127.0.0.1.nip.io' : 'artifactbin.test';
+const scheme=localDev?'http':'https';
+const base = `${scheme}://${hostname}:${tlsPort}`, controls = `${scheme}://i.${hostname}:${tlsPort}`;
+const assets=`${scheme}://assets.${hostname}:${tlsPort}`,authSecret=randomBytes(32).toString('hex');
 const assetFixture=httpServer((req,res)=>{if(req.url!=='/preview.js'){res.writeHead(404);res.end();return;}res.writeHead(200,{'Content-Type':'text/javascript'});res.end('mx.params.set("privateAsset","loaded")');});
 await new Promise(resolve=>assetFixture.listen(portBase?portBase+2:0,'127.0.0.1',resolve));
 const previewBundle=`http://127.0.0.1:${assetFixture.address().port}/preview.js`;
@@ -87,8 +92,13 @@ try {
     parent.frames[0].postMessage({type:'mx:text-edit',path:'0',nonce:'guessed',innerHtml:'FORGED'},'${controls}');
   `;
   const markup='<Helmet><Value name="count" type="number" default={0}/><Value name="dom" type="string" default="waiting"/><Value name="storage" type="string" default="waiting"/><Value name="network" type="string" default="waiting"/><Mutation name="inc">{`update _signals set count=count+1`}</Mutation><script>{`'+authorScript+'`}</script></Helmet><main className="p-20"><h1>Top-level controls</h1><p id="editable">Original paragraph</p><Button run="$inc">Increment</Button><p>{$count}</p></main>';
-  const response = await mainFetch(`${backend}/api/artifacts/${seed.id}`,{method:'PUT',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({markup,expectedVersion:1})});
+  const fixtureMarkup=markup.replace('<Helmet>','<Helmet><Value name="region" type="string" default="east"/>');
+  const response = await mainFetch(`${backend}/api/artifacts/${seed.id}`,{method:'PUT',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({markup:fixtureMarkup,expectedVersion:1})});
   assert(response.ok,await response.text());
+  const sink={lastCode(email) {
+    const messages=readFileSync(join(scratch,'mail.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+    return /\b(\d{6})\b/.exec(messages.filter(m=>m.to===email).at(-1)?.text ?? '')?.[1];
+  }};
   if (interactive) {
     const demoHtml='<canvas id="scene" style="width:100%;height:100%"></canvas><span style="position:absolute;bottom:12px;left:16px;color:#cbd5e1;font:14px system-ui">Drag to rotate · scroll to zoom · Increment changes the cube</span>';
     const demoScript=`(async()=>{
@@ -109,8 +119,12 @@ try {
     assert(saved.ok,await saved.text());
     console.log(`Interactive local fixture: ${base}/a/${seed.id}\nControls host: ${controls}/controls/a/${seed.id}`);
     await new Promise(resolve=>{process.once('SIGINT',resolve);process.once('SIGTERM',resolve);});
+  } else if(process.argv.includes('--main-page-login-only')) {
+    browser=await engine.launch(engineName==='chromium'?{args:['--host-resolver-rules=MAP artifactbin.test 127.0.0.1, MAP i.artifactbin.test 127.0.0.1, MAP assets.artifactbin.test 127.0.0.1','--proxy-bypass-list=*']}:{});
+    await verifyMainPageLogin({browser,base,controls,sink,id:seed.id,mainFetch,backend});
   } else {
   browser = await engine.launch(engineName==='chromium' ? {args:['--host-resolver-rules=MAP artifactbin.test 127.0.0.1, MAP i.artifactbin.test 127.0.0.1, MAP assets.artifactbin.test 127.0.0.1','--proxy-bypass-list=*']} : {});
+  await verifyMainPageLogin({browser,base,controls,sink,id:seed.id,mainFetch,backend});
   // Actual production configuration, no client mocks: an anonymous reader
   // either subscribes normally or never opens a connection, including reload.
   const snapshot=await browser.newPage({ignoreHTTPSErrors:true});
@@ -231,15 +245,15 @@ try {
   await isolated.evaluate(url=>{location.href=url;},`${controls}/controls/a/${seed.id}`);
   await page.locator('iframe[title="Isolated artifact script"]').waitFor({state:'detached'});
   assert.equal(privilegedRequests.length,beforeNavigation,'navigating the opaque author frame cannot acquire trusted controls authority');
-  const sink={lastCode(email) {
-    const messages=readFileSync(join(scratch,'mail.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
-    return /\b(\d{6})\b/.exec(messages.filter(m=>m.to===email).at(-1)?.text ?? '')?.[1];
-  }};
   await loginViaEmail(page,base,sink,`mxmx_test_controls_${Date.now()}@example.com`);
   await page.goto(base+'/account');
-  await page.getByLabel('Token to claim',{exact:true}).fill(seed.token);
-  await Promise.all([page.waitForNavigation({waitUntil:'load'}),page.getByLabel('Claim token',{exact:true}).click()]);
+  const appFrame=page.frameLocator('iframe[title="Artifactbin app"]');
+  await appFrame.getByLabel('Token to claim',{exact:true}).fill(seed.token);
+  const accountFrame=page.frames().find(frame=>frame.url().startsWith(controls+'/controls/page/account'));
+  assert.ok(accountFrame,'account claim UI belongs to the trusted app frame');
+  await Promise.all([accountFrame.waitForNavigation({waitUntil:'load'}),appFrame.getByLabel('Claim token',{exact:true}).click()]);
   await page.goto(`${base}/a/${seed.id}`);
+  await verifyControlsLogin({browser,owner:chrome,base,controls,sink});
   await chrome.getByLabel('Like artifact',{exact:true}).click();
   await chrome.locator('[aria-label="Like artifact"][aria-pressed="true"]').waitFor();
   await page.reload();
@@ -259,8 +273,8 @@ try {
   assert.equal(registered.status,201);
   const client=(await registered.json()).client_id;
   const authorizeQuery=new URLSearchParams({client_id:client,redirect_uri:oauthRedirect,response_type:'code',code_challenge:createHash('sha256').update(verifier).digest('base64url'),code_challenge_method:'S256',resource:base+'/mcp',scope:'artifacts',state:'browser-gate'});
-  await page.goto(controls+'/oauth/authorize?'+authorizeQuery);
-  await page.getByLabel('Approve connection',{exact:true}).click();
+  await page.goto(base+'/oauth/authorize?'+authorizeQuery);
+  await appFrame.getByLabel('Approve connection',{exact:true}).click();
   await page.waitForURL(url=>url.origin===base && url.pathname==='/oauth-browser-callback');
   const oauthCallback=new URL(page.url());
   assert.equal(oauthCallback.searchParams.get('state'),'browser-gate');
@@ -299,13 +313,14 @@ try {
   const invitedEmail=`mxmx_test_controls_invited_${Date.now()}@example.com`;
   assert.equal(await chrome.locator('body').evaluate(async (_,args)=>(await fetch(`/api/my/artifacts/${args.id}/sharing`,{method:'PUT',headers:{'Content-Type':'application/json','x-artifactbin-csrf':'1'},body:JSON.stringify({shares:[{email:args.email,role:'viewer'}]})})).status,{id:privateDoc.id,email:invitedEmail}),200);
   const invited=await browser.newPage({ignoreHTTPSErrors:true});
-  await invited.goto(`${controls}/login?callbackUrl=${encodeURIComponent('/a/'+privateDoc.id)}`);
-  await invited.getByLabel('Email',{exact:true}).fill(invitedEmail);
-  await invited.getByLabel('Log in with email',{exact:true}).click();
-  await invited.getByLabel('Login code',{exact:true}).waitFor();
-  await invited.getByLabel('Login code',{exact:true}).fill(sink.lastCode(invitedEmail));
+  await invited.goto(`${base}/login?callbackUrl=${encodeURIComponent('/a/'+privateDoc.id)}`);
+  const invitedLogin=invited.frameLocator('iframe[title="Artifactbin app"]');
+  await invitedLogin.getByLabel('Email',{exact:true}).fill(invitedEmail);
+  await invitedLogin.getByLabel('Log in with email',{exact:true}).click();
+  await invitedLogin.getByLabel('Login code',{exact:true}).waitFor();
+  await invitedLogin.getByLabel('Login code',{exact:true}).fill(sink.lastCode(invitedEmail));
   const invitedLanding=invited.waitForResponse(r=>r.url()===`${base}/a/${privateDoc.id}` && r.request().isNavigationRequest());
-  await invited.getByLabel('Verify code',{exact:true}).click();
+  await invitedLogin.getByLabel('Verify code',{exact:true}).click();
   const invitedResponse=await invitedLanding;
   assert.equal(invitedResponse.status(),200,'first login can open an email-shared private artifact directly, without visiting the workspace first');
   assert.equal((await invitedResponse.text()).includes(invitedEmail),false,'verified invitation email is a server-only ACL claim, not parent-page state');
@@ -353,8 +368,8 @@ try {
   await page.getByRole('heading',{name:'Top-level controls'}).waitFor();
   await chrome.getByLabel('Open menu',{exact:true}).click();
   await chrome.getByLabel('Sign out',{exact:true}).click();
-  await page.waitForURL(controls+'/');
-  const sessionKind=()=>page.evaluate(async ()=>{
+  await page.waitForURL(base+'/');
+  const sessionKind=()=>appFrame.locator('body').evaluate(async ()=>{
     const response=await fetch('/api/page/session',{headers:{'x-artifactbin-csrf':'1'}});
     if (!response.ok) throw new Error(`Session read failed: ${response.status}`);
     return (await response.json()).kind;
@@ -362,13 +377,13 @@ try {
   assert.equal(await sessionKind(),'anon','sign-out clears the account session but preserves independent agent capabilities');
   // Account logout deliberately does not revoke independently held agent
   // capabilities. Disconnect that browser capability through its own UI.
-  await page.getByLabel('Open menu',{exact:true}).click();
+  await appFrame.getByLabel('Open menu',{exact:true}).click();
   const retainedCookies=await page.context().cookies();
   // Disconnect performs a same-URL full navigation. Polling fetch during that
   // transition fails in WebKit's outgoing context; await the navigation itself.
   await Promise.all([
     page.waitForNavigation({waitUntil:'domcontentloaded'}),
-    page.getByLabel('Disconnect this browser',{exact:true}).click(),
+    appFrame.getByLabel('Disconnect this browser',{exact:true}).click(),
   ]);
   assert.equal(await sessionKind(),'none');
   assert.equal((await page.goto(`${base}/a/${seed.id}`)).status(),404,'disconnected browser loses private document access');

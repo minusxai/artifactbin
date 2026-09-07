@@ -5,7 +5,7 @@ import { roleFor } from '@/lib/viewer';
 import { ensureUserToken } from '@/lib/tokens';
 import { ownerUsername } from '@/lib/users';
 import { canonicalArtifactPath } from '@/lib/urls';
-import { baseUrl, json } from '@/lib/http';
+import { publicLinkBase, json } from '@/lib/http';
 
 /**
  * POST /api/my/artifacts/:id/fork — "make this mine", from the PAGE.
@@ -43,5 +43,5 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   // A publish refusal (an unownable <Mutation> target, an unreadable ref) is
   // passed through by name — it tells the forker exactly what stopped it.
   if (copy instanceof Response) return copy;
-  return json({ id: copy.id, url: `${baseUrl(request)}${canonicalArtifactPath(copy, await ownerUsername(userId))}` }, 201);
+  return json({ id: copy.id, url: `${publicLinkBase(request)}${canonicalArtifactPath(copy, await ownerUsername(userId))}` }, 201);
 }

@@ -11,6 +11,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { act, render, screen, fireEvent, within } from '@testing-library/react';
 import AnnotationLayer from '../AnnotationLayer';
+import * as apiOrigin from '@/web/api-origin';
 import {
   STORY_ANNOTATIONS_MESSAGE, STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE,
   STORY_SELECTION_MESSAGE, STORY_SELECT_MESSAGE,
@@ -18,6 +19,17 @@ import {
 import type { AnnotationWire } from '@/lib/annotations';
 
 const NONCE = 'n'.repeat(32);
+
+it.each([401,403])('opening comments with status %s logs in only for an expired session', async(status)=>{
+  const navigate=vi.spyOn(apiOrigin,'appNavigate').mockImplementation(()=>{});
+  const {frame}=makeFrame();refusalStatus=status;
+  window.history.replaceState(null,'','/a/doc?$region=west#section');
+  try {
+    render(layer(frame,{railOpen:true}));await flush();
+    if(status===401) expect(navigate).toHaveBeenCalledWith(`/login?callbackUrl=${encodeURIComponent('/a/doc?$region=west&intent=comment#section')}`);
+    else expect(navigate).not.toHaveBeenCalled();
+  } finally {navigate.mockRestore();}
+});
 
 const ANN: AnnotationWire = {
   id: 'ann_1',
@@ -85,15 +97,19 @@ const fromFrame = (contentWindow: Window, data: Record<string, unknown>) =>
 const fetchCalls: Array<{ url: string; init?: RequestInit }> = [];
 let refuseCreate = false;
 let resolvedVisible = true;
+let refusalStatus: number | null = null;
 
 beforeEach(() => {
+  window.history.replaceState(null,'','/a/doc1');
   fetchCalls.length = 0;
   refuseCreate = false;
   resolvedVisible = true;
+  refusalStatus = null;
   vi.stubGlobal('fetch', (async (url: string, init?: RequestInit) => {
     fetchCalls.push({ url: String(url), init });
     const u = String(url);
     if (u.includes('status=resolved')) {
+      if (refusalStatus) return new Response('{}',{status:refusalStatus});
       return new Response(JSON.stringify({ annotations: resolvedVisible ? [RESOLVED] : [] }), { status: 200 });
     }
     if (u.endsWith('/annotations') && (!init || init.method === undefined || init.method === 'GET')) {

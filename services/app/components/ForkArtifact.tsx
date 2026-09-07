@@ -20,10 +20,9 @@
  *    (lib/intent), so the person does the work once.
  */
 import {appFetch as fetch} from '@/web/api-origin';
-import {appNavigate} from '@/web/api-origin';
+import {appNavigate,artifactLoginUrl} from '@/web/api-origin';
 import { GitFork } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { withIntent } from '@/lib/intent';
 
 /** What the last attempt produced: the refusal lines, or nothing. */
 export interface ForkState {
@@ -44,8 +43,6 @@ const CONTROL_ROW = 'flex w-full cursor-pointer items-center gap-2 rounded-[5px]
  * point is the address bar the person would otherwise have to find again —
  * including the `$` values of whatever they had narrowed the document to.
  */
-const loginBack = (): string =>
-  `/login?callbackUrl=${encodeURIComponent(window.location.pathname + withIntent(window.location.search, 'fork') + window.location.hash)}`;
 
 /**
  * The request, its outcomes and the two navigations, as a hook so both
@@ -82,9 +79,9 @@ export function useForkArtifact(id: string): ForkState {
           appNavigate(body.url);
           return;
         }
-        if (res.status === 409 && body.error === 'sign_in_required') {
+        if (res.status === 401 || (res.status === 409 && body.error === 'sign_in_required')) {
           leaving = true;
-          appNavigate(loginBack());
+          appNavigate(artifactLoginUrl(id, 'fork'));
           return;
         }
         if (!alive.current) return;

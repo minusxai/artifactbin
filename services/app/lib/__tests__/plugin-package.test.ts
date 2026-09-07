@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { buildMirrorFiles, buildPluginFiles, MARKETPLACE_NAME, PLUGIN_BASE_URL, PLUGIN_NAME, PLUGIN_REPO } from '../plugin-package';
-import { renderTree, skillFileWithFrontmatter, skillTree } from '../skills';
+import { renderDoc, renderTree, skillFileWithFrontmatter, skillTree } from '../skills';
 import { STORY_THEMES } from '../data/story/story-themes';
 import { STORY_TEMPLATES } from '../data/story/story-templates';
 
@@ -18,6 +18,13 @@ const BASE = 'https://example.test';
 
 describe('buildPluginFiles', () => {
   const files = buildPluginFiles();
+  it('teaches the same script isolation boundary in served and installed entry skills', () => {
+    for (const text of [files['skills/artifactbin/SKILL.md'], renderDoc('artifactbin/SKILL.md',BASE)]) {
+      expect(text).toContain('no parent DOM/network');
+      expect(text).toContain('managed `<Iframe>`');
+      expect(text).not.toContain('Parent CSS and JS live');
+    }
+  });
 
   it('produces both manifests, the MCP config, README, and ONE skill with its SKILL.md over references/', () => {
     const paths = Object.keys(files);

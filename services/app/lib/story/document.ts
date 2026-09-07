@@ -337,10 +337,13 @@ export const HISTORY_PRELUDE =
   + 'x=v[m];if(x==null)p.delete("$"+m);else p.set("$"+m,""+x)}'
   + 'var o=[];p.forEach(function(val,key){o.push(c(key)+"="+c(val))});'
   + 'var q=o.join("&");'
-  + 'n(null,"",location.pathname+(q?"?"+q:"")+location.hash)'
+  + 'n(null,"",location.pathname+(q?"?"+q:"")+location.hash);window.dispatchEvent(new Event("mx:address-changed"))'
   + '}catch(g){}};'
   + 'Object.freeze(f);'
   + `Object.defineProperty(window,"${STORY_VALUES_HOOK}",{value:f,writable:false,configurable:false,enumerable:false});`
+  // No arguments: trusted controls may consume an instruction, never replace an address.
+  + 'var t=function(){try{var q=location.search.slice(1).split("&").filter(function(p){if(!p)return false;try{return decodeURIComponent(p.split("=")[0].replace(/\\+/g," "))!=="intent"}catch(e){return true}}).join("&");n(null,"",location.pathname+(q?"?"+q:"")+location.hash)}catch(e){}};'
+  + 'Object.freeze(t);Object.defineProperty(window,"__mxConsumeIntent",{value:t,writable:false,configurable:false,enumerable:false});'
   + '}catch(z){}})()';
 
 /**

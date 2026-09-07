@@ -14,6 +14,11 @@ export function baseUrl(request: Request): string {
   return `${proto}://${host}`;
 }
 
+/** Shareable document/docs URLs use main; request-host security checks still use baseUrl. */
+export function publicLinkBase(request: Request): string {
+  return CONTROLS_ORIGIN ? new URL(PUBLIC_BASE_URL).origin : baseUrl(request);
+}
+
 /**
  * The public origin, read from the incoming request's own headers — for the
  * places that have no Request to hand (Next's `generateMetadata`).
@@ -50,7 +55,7 @@ export function json(body: unknown, status = 200, headers: Record<string, string
  * agent sent them. The declaration is self-reported and only ever decides copy — never access.
  */
 export function unauthorized(request: Request): Response {
-  const base = baseUrl(request);
+  const base = publicLinkBase(request);
   const source = declaredAgentSlug(request.headers.get(AGENT_HEADER));
   return json(
     {

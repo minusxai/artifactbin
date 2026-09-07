@@ -131,11 +131,11 @@ function validateElement(
    */
   /** What an author should reach for instead of a denied tag. */
   const DENIED_ALTERNATIVES: Record<string, string> = {
-    form: 'the controls work without a <form> (<input>, <select>, <button>); drive them from the <Helmet> script',
-    iframe: 'use the <Video> component for the sanctioned embed hosts',
+    form: 'use <input>/<select> signal bindings and <Button run="$mutation"> without a <form>; use managed <Iframe> for custom DOM',
+    iframe: 'use managed <Iframe> for isolated DOM/canvas, or <Video> for supported video hosts',
     object: 'use the <Video> component, or <img>/<video> with a ref: source',
     embed: 'use the <Video> component, or <img>/<video> with a ref: source',
-    script: 'a document carries ONE script, in <Helmet><script>{`…`}</script></Helmet>',
+    script: 'ONE isolated <Helmet><script>{`…`}</script></Helmet> has no parent DOM/network; use managed <Iframe> for DOM/canvas/CDN bundles',
     link: 'no external stylesheets or fonts — style with className, or <Helmet><style>',
     meta: '<meta name content /> belongs in <Helmet>; http-equiv is the document\'s own to set',
     base: 'the document sets its own base target; relative links already resolve',

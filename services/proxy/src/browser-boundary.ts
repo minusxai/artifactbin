@@ -1,5 +1,6 @@
 import type { Actor } from '@artifactbin/contracts';
 import { parseControlsOrigin } from '@artifactbin/utils';
+import {platformFramePage} from '@artifactbin/utils/platform-pages';
 
 /** Deployment-owned route and browser-authority policy. The proxy asks before
  * resolving cookies and before dispatch; no UI component can relax it. */
@@ -16,7 +17,9 @@ export function createBrowserBoundary(main: string, configured: string): Browser
     if (request.method === 'POST') return /^\/a\/[A-Za-z0-9]+\/query$/.test(path);
     if (!['GET', 'HEAD'].includes(request.method)) return false;
     return /^\/a\/[A-Za-z0-9]+(?:\/(?:raw|export|thumbnail|query|assets|events(?:\/frame)?))?$/.test(path)
-      || /^\/@[^/]+\/[A-Za-z0-9]+-[^/]+$/.test(path);
+      // Pretty paths resolve by their last ID-bearing segment, even without
+      // a title or with obsolete folder decoration. This is read authority only.
+      || /^\/@[^/]+\/(?:[^/]+\/)*[A-Za-z0-9]{6,12}(?:-[^/]*)?\/?$/.test(path);
   };
   const deny = (error: string, status = 403) => Response.json({ error }, { status, headers: { 'cache-control': 'no-store' } });
   return {
@@ -28,7 +31,6 @@ export function createBrowserBoundary(main: string, configured: string): Browser
       const { host, pathname } = new URL(request.url);
       if (host !== root.host && host !== controls.host) return deny('unknown_host', 421);
       if (host === root.host) {
-        if (pathname === '/oauth/authorize' && request.method === 'GET') return Response.redirect(`${controls.origin}${pathname}${new URL(request.url).search}`,302);
         if (pathname === '/oauth/authorize/approve') return deny('trusted_host_required');
         const publicPage = ['GET', 'HEAD'].includes(request.method) && /^\/api\/page\/(?:session|home|profile(?:\/.*)?)$/.test(pathname);
         if ((!publicPage && /^\/api\/(?:auth|my|page|browser|session)(?:\/|$)/.test(pathname))
@@ -44,6 +46,7 @@ export function createBrowserBoundary(main: string, configured: string): Browser
       // A native, unframeable approval form carries a one-time, session-bound
       // token checked by the OAuth route instead of the fetch-only header.
       if (pathname === '/oauth/authorize/approve' && request.method === 'POST') {
+        if(request.headers.get('accept')==='application/json' && request.headers.get('x-artifactbin-csrf')!=='1')return deny('browser_origin_required');
         return request.headers.get('origin') === controls.origin ? null : deny('browser_origin_required');
       }
       if (!callback && (/^\/(?:api|oauth)(?:\/|$)/.test(pathname) || documentApi)) {
@@ -62,7 +65,7 @@ export function createBrowserBoundary(main: string, configured: string): Browser
     },
     responseHeaders(request, headers): Record<string, string> {
       if (new URL(request.url).host !== controls.host) return {};
-      const frameable = /^\/controls\/a\/[A-Za-z0-9]+$/.test(new URL(request.url).pathname);
+      const frameable = new URL(request.url).pathname==='/controls/consent' || /^\/controls\/(?:a|folder)\/[A-Za-z0-9]+$/.test(new URL(request.url).pathname) || platformFramePage(new URL(request.url).pathname)!==null;
       const policy = (headers.get('content-security-policy') ?? '').split(';')
         .map(p => p.trim()).filter(p => p && !p.startsWith('frame-ancestors '));
       policy.push(`frame-ancestors ${frameable ? root.origin : "'none'"}`);

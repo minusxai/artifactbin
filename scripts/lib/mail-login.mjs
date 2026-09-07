@@ -45,12 +45,13 @@ export async function startMailSink() {
  */
 export async function loginViaEmail(page, base, sink, email) {
   await page.goto(`${base}/login`, { waitUntil: 'load' });
+  const form=await page.locator('iframe[title="Artifactbin app"]').count()?page.frameLocator('iframe[title="Artifactbin app"]'):page;
   // The pages render in the browser now: wait for the form rather than assuming
   // it is in the HTML the server sent.
-  await page.waitForSelector('[aria-label="Email"]', { timeout: 20_000 });
-  await page.fill('[aria-label="Email"]', email);
-  await page.click('[aria-label="Log in with email"]');
-  await page.waitForSelector('[aria-label="Login code"]', { timeout: 15_000 });
+  await form.getByLabel('Email',{exact:true}).waitFor({timeout:20_000});
+  await form.getByLabel('Email',{exact:true}).fill(email);
+  await form.getByLabel('Log in with email',{exact:true}).click();
+  await form.getByLabel('Login code',{exact:true}).waitFor({timeout:15_000});
 
   const code = sink.lastCode(email);
   if (!code) {
@@ -59,14 +60,14 @@ export async function loginViaEmail(page, base, sink, email) {
       `Request a new code, then run: npm run dev:otp -- ${email}`,
     );
   }
-  await page.fill('[aria-label="Login code"]', code);
-  await page.click('[aria-label="Verify code"]');
+  await form.getByLabel('Login code',{exact:true}).fill(code);
+  await form.getByLabel('Verify code',{exact:true}).click();
   await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 20_000 });
   // Verify the cookie-backed identity through the same endpoint the app uses.
   // The dashboard no longer prints an email or a profile link in its chrome.
   // Await the actual response. A polling predicate that returns a Promise
   // can finish on its truthiness even when that Promise resolves to false.
-  const session = await page.evaluate(async () => {
+  const session = await form.locator('body').evaluate(async () => {
     const response = await fetch('/api/page/session', { credentials: 'same-origin', headers: {'x-artifactbin-csrf':'1'} });
     return response.ok ? response.json() : null;
   });

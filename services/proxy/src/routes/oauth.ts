@@ -18,6 +18,8 @@ import {
   sameRedirectTarget,
 } from '../identity/oauth';
 import type { ProxyApp } from '../parts';
+import {platformPageResponse} from '@artifactbin/utils/platform-pages';
+import {frameConsent} from './consent-frame';
 
 type App = ProxyApp;
 
@@ -88,7 +90,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
   const base = (request: Request) => baseUrlOf(request, o.trustedHops, o.publicBaseUrl);
   const resource = (request: Request) => `${base(request)}/mcp`;
   const meta = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600', 'Access-Control-Allow-Origin': '*' } });
-  app.get('/.well-known/oauth-authorization-server', (c) => meta(authServerMetadata(base(c.req.raw), o.controlsOrigin)));
+  app.get('/.well-known/oauth-authorization-server', (c) => meta(authServerMetadata(base(c.req.raw))));
   app.get('/.well-known/oauth-protected-resource', (c) => meta(protectedResourceMetadata(base(c.req.raw))));
   app.get('/.well-known/oauth-protected-resource/mcp', (c) => meta(protectedResourceMetadata(base(c.req.raw))));
 
@@ -103,7 +105,18 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     }
   });
 
-  app.get('/oauth/authorize', async (c) => {
+  app.on('GET',['/oauth/authorize','/controls/consent'], async (c) => {
+    const url=new URL(c.req.url),main=base(c.req.raw);
+    const framed=url.pathname==='/controls/consent';
+    const trustedHost=o.controlsOrigin && url.host===new URL(o.controlsOrigin).host;
+    if(framed && !trustedHost)return c.notFound();
+    if(o.controlsOrigin && !framed){
+      if(trustedHost)return Response.redirect(main+url.pathname+url.search,302);
+      return platformPageResponse(main,o.controlsOrigin,url.pathname,url.search);
+    }
+    const render=(title:string,body:string,status=200,redirect='')=>{
+      const response=page(title,body,status,redirect);return framed?frameConsent(response,main):response;
+    };
     const q = new URL(c.req.url).searchParams;
     const clientId = q.get('client_id') ?? '';
     const redirectUri = q.get('redirect_uri') ?? '';
@@ -122,24 +135,24 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       : requestedResource !== expectedResource ? 'Invalid MCP resource.'
       : scope !== MCP_SCOPE ? 'Unsupported scope.'
       : null;
-    if (problem) return page('artifactbin — error', `<h1>Can’t connect</h1><p class="err">${esc(problem)}</p>`, 400);
+    if (problem) return render('artifactbin — error', `<h1>Can’t connect</h1><p class="err">${esc(problem)}</p>`, 400);
     const actor = c.get('actor') ?? ANONYMOUS;
     const fields = `<input type="hidden" name="client_id" value="${esc(clientId)}"><input type="hidden" name="redirect_uri" value="${esc(redirectUri)}"><input type="hidden" name="code_challenge" value="${esc(codeChallenge)}"><input type="hidden" name="resource" value="${esc(requestedResource)}"><input type="hidden" name="scope" value="${esc(scope)}"><input type="hidden" name="state" value="${esc(state)}">`;
     if (actor.credential === 'session' && actor.userId) {
       if (o.controlsOrigin) {
-        if (!actor.sessionId) return page('artifactbin — sign in again', '<h1>Please sign in again</h1>',401);
+        if (!actor.sessionId) return render('artifactbin — sign in again', '<h1>Please sign in again</h1>',401);
         const approval = await o.oauth.issueConsent({ userId: actor.userId, clientId, redirectUri,
           resource: requestedResource, scope, codeChallenge, state }, actor.sessionId);
-        return page('artifactbin — connect', `<h1>Connect to artifactbin</h1>
+        return render('artifactbin — connect', `<h1>Connect to artifactbin</h1>
         <p>Allow <strong>${esc(client!.clientName)}</strong> to publish artifacts for your account?</p>
         <form method="POST" action="/oauth/authorize/approve"><input type="hidden" name="approval" value="${approval}"><button type="submit" aria-label="Approve connection">Approve</button></form>`,200,redirectUri);
       }
-      return page('artifactbin — connect', `<h1>Connect to artifactbin</h1>
+      return render('artifactbin — connect', `<h1>Connect to artifactbin</h1>
       <p>Your coding agent wants to publish artifacts. New artifacts will belong to <strong>${esc(actor.email ?? 'your account')}</strong>.</p>
       <form method="POST" action="/oauth/authorize/approve">${fields}<input type="hidden" name="grant" value="user"><button type="submit" aria-label="Approve connection">Approve</button></form>`, 200, redirectUri);
     }
     const retryPath = `/oauth/authorize?${q.toString()}`;
-    return page('artifactbin — connect', `<h1>Connect to artifactbin</h1>
+    return render('artifactbin — connect', `<h1>Connect to artifactbin</h1>
     <p>Your coding agent wants to publish artifacts — shareable pages it creates and updates. Log in with your email to connect it; artifacts will belong to your account.</p>
     <form method="GET" action="/login"><input type="hidden" name="callbackUrl" value="${esc(retryPath)}"><button type="submit" aria-label="Log in to connect">Log in with email</button></form>
     <p class="alt">No password needed — we email you a code.</p>`, 200, redirectUri);
@@ -157,7 +170,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       const url = new URL(grant.redirectUri);
       url.searchParams.set('code',await createAuthCode(o.oauth,grant,grant.codeChallenge));
       if (grant.state) url.searchParams.set('state',grant.state);
-      return Response.redirect(url,303);
+      return c.req.header('accept')==='application/json'?c.json({redirect:url.href}):Response.redirect(url,303);
     }
     const clientId = String(form.get('client_id') ?? '');
     const redirectUri = String(form.get('redirect_uri') ?? '');

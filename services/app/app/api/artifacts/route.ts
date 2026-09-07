@@ -3,7 +3,7 @@ import { artifactQuotaExceeded, createArtifact, type Visibility } from '@/lib/ar
 import { assetByteQuotaExceeded } from '@/lib/asset-quota';
 import { withTokenAuth } from '@/lib/auth';
 import { runOperation } from '@/lib/operations/http';
-import { baseUrl, json, readJson } from '@/lib/http';
+import { publicLinkBase, json, readJson } from '@/lib/http';
 import { storeImageContent } from '@/lib/story/data-tiers';
 import { imageRawUrl } from '@/lib/story/ref-data';
 import { readFileUpload, storeFileContent } from '@/lib/story/file-store';
@@ -51,7 +51,7 @@ export async function createArtifactFromRequest(
       ...(visibility ? { visibility } : {}),
     });
     return json({
-      id: row.id, url: `${baseUrl(request)}/a/${row.id}`, version: row.version, visibility: row.visibility,
+      id: row.id, url: `${publicLinkBase(request)}/a/${row.id}`, version: row.version, visibility: row.visibility,
       edit_id: row.edit_id,
       format: row.format, title: row.title,
       markup: row.source,

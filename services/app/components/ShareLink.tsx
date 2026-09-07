@@ -16,7 +16,7 @@
  * address explicitly. The ACL
  * surface is session-only (/api/my/artifacts/<id>/sharing).
  */
-import {appFetch as fetch,appUrl} from '@/web/api-origin';
+import {appFetch as fetch,appUrl,getArtifactAddress} from '@/web/api-origin';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Crop, Check, EyeOff, Globe, Link as LinkIcon, Lock, PenLine, X } from 'lucide-react';
@@ -83,6 +83,7 @@ export default function ShareLink({
   onSocialPreview?: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
   const [open, setOpen] = useState(variant === 'dialog');
   const [state, setState] = useState<SharingState | null>(null);
   const [email, setEmail] = useState('');
@@ -121,9 +122,19 @@ export default function ShareLink({
     else setError('could not update sharing');
   };
 
-  const copyLink = () => {
-    void navigator.clipboard?.writeText(new URL(appUrl(url ?? location.pathname),location.origin).href);
-    setCopied(true);
+  const copyLink = async () => {
+    const source=url??getArtifactAddress()??(artifactId?'/a/'+artifactId:null);
+    if(!source)return;
+    const address=new URL(appUrl(source),location.origin);
+    if(url===undefined)address.hash='';
+    setCopyFailed(false);
+    try {
+      await navigator.clipboard.writeText(address.href);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+      setCopyFailed(true);
+    }
   };
 
   if (!canManage && !onSocialPreview) {
@@ -136,14 +147,14 @@ export default function ShareLink({
           className="flex w-full cursor-pointer items-center gap-2 rounded-[5px] border-0 bg-transparent px-2 py-2 text-left font-mono text-xs text-muted transition-colors hover:bg-raised hover:text-fg"
         >
           {copied ? <Check size={14} /> : <LinkIcon size={14} />}
-          {copied ? 'copied link' : 'share'}
+          {copied ? 'copied link' : copyFailed ? 'copy failed — retry' : 'share'}
         </button>
       );
     }
     return (
       <Tooltip content={copied ? 'copied!' : 'copy link'}>
         <button type="button" aria-label="Share" onClick={copyLink} className={className}>
-          {copied ? <Check size={12} /> : <LinkIcon size={12} />} <span className="hidden sm:inline">{copied ? 'copied' : 'share'}</span>
+          {copied ? <Check size={12} /> : <LinkIcon size={12} />} <span className={copyFailed?'':'hidden sm:inline'}>{copied ? 'copied' : copyFailed ? 'copy failed — retry' : 'share'}</span>
         </button>
       </Tooltip>
     );
@@ -208,7 +219,7 @@ export default function ShareLink({
             onClick={copyLink}
             className="mb-4 flex w-full cursor-pointer items-center justify-center gap-2 rounded-[5px] border border-edge bg-raised px-3 py-2.5 text-muted hover:border-edge-bright hover:text-fg"
           >
-            {copied ? <Check size={11} /> : <LinkIcon size={11} />} {copied ? 'copied' : 'copy link'}
+            {copied ? <Check size={11} /> : <LinkIcon size={11} />} {copied ? 'copied' : copyFailed ? 'copy failed — retry' : 'copy link'}
           </button>
           {onSocialPreview && (
             <button type="button" aria-label="Edit social preview" onClick={() => { setOpen(false); onSocialPreview(); }} className="mb-4 flex w-full cursor-pointer items-center gap-2 rounded-[5px] border border-edge px-3 py-2.5 text-muted hover:border-edge-bright hover:text-fg">

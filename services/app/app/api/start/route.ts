@@ -16,7 +16,7 @@
 import { auth } from '@/auth';
 import { createArtifact } from '@/lib/artifacts';
 import { anonymousPaste, ownedPaste } from '@/lib/agent-copy';
-import { baseUrl, json } from '@/lib/http';
+import { publicLinkBase, json } from '@/lib/http';
 import { START_PLACEHOLDER_MARKUP } from '@/lib/start-links';
 import { mintToken, resolveToken } from '@/lib/tokens';
 import { withAgentSession } from '@/lib/agent-session';
@@ -69,9 +69,9 @@ export async function POST(request: Request) {
     description: null,
   });
 
-  const base = baseUrl(request);
+  const base = publicLinkBase(request);
   const url = `${base}/a/${row.id}`;
-  const signedIn = userId !== null;
+  const signedIn = userId !== null || (held?.credential === 'session' && !!held.viewer?.userId);
   const prompt = signedIn
     ? ownedPaste(base, row.id)
     : anonymousPaste(base, row.id, minted.token!);

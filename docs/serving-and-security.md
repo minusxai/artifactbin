@@ -62,8 +62,29 @@ read-scoped identity; it cannot use that credential for mutations. Dataset
 mutations and edit operations relay through the trusted controls, which call
 their own host with the exact-origin/CSRF checks and current server ACLs.
 Do not add parent-domain full-authority cookies or wildcard credentialed CORS.
-Login stays on the trusted controls host. Account sign-out and
-disconnecting separately held agent capabilities remain distinct actions.
+First-party addresses (home, login, account/tokens, chat, assets, dataset editors,
+profiles and folders) stay on the public host. A credential-free public wrapper
+embeds only trusted platform UI from dedicated controls routes; account forms and
+API calls remain on the controls origin. OAuth consent follows the same pattern:
+its one-use session-bound approval stays inside the trusted frame, and only the
+server-validated callback leaves it. Author documents never enter these page
+frames. Account sign-out and disconnecting separately held agent capabilities
+remain distinct actions. Anonymous readers retain heart/comment/fork controls;
+sign-in returns to their current document, query and fragment without granting
+additional edit or comment permissions.
+
+For one-server local development, use a shared `.localhost` site, for example:
+
+```dotenv
+APP__PUBLIC_BASE_URL=http://artifactbin.localhost:3030
+APP__CONTROLS_ORIGIN=http://i.artifactbin.localhost:3030
+APP__ASSETS_ORIGIN=http://a.artifactbin.localhost:3030
+```
+
+These names resolve locally in supported browsers and are secure contexts without
+test certificates. Login mail stays in the development outbox. Bare `localhost`
+plus `i.localhost` is not the same-site cookie topology: use the shared
+`artifactbin.localhost` suffix instead. Production HTTPS/SameSite rules are unchanged.
 
 In this opt-in topology the top-level document is not opaque; author code still
 is. CSS may hide controls, and this is not a clickjacking guarantee or a hard CPU

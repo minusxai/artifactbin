@@ -136,6 +136,11 @@ describe('the door never advises a shape the door rejects', () => {
     expect(msg).toMatch(/className/);
     expect(msg).toMatch(/Helmet/);
   });
+  it('does not advise forbidden parent DOM access when a form or script is refused', () => {
+    expect(messagesFor('<form><input /></form>').join(' ')).toContain('run=');
+    expect(messagesFor('<script>{`hello()`}</script>').join(' ')).toContain('no parent DOM/network');
+    expect(messagesFor('<iframe />').join(' ')).toContain('<Iframe>');
+  });
 });
 
 /**

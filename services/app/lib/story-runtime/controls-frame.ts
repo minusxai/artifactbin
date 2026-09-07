@@ -8,9 +8,10 @@ export function createControlsFrame(url: string) {
   const frame = document.createElement('iframe');
   frame.title = 'Artifact controls';
   frame.src = url;
-  frame.setAttribute('allow','fullscreen');
+  frame.setAttribute('allow','fullscreen; clipboard-write');
   Object.assign(frame.style,{position:'fixed',inset:'0',width:'100%',height:'100%',border:'0',zIndex:'2147483000',clipPath:'inset(100%)',background:'transparent'});
   document.body.append(frame);
+  const postAddress = () => frame.contentWindow?.postMessage({type:'mx:controls:address',url:location.href},origin);
   let releaseModal: (() => void) | undefined;
   const setModal = (modal: boolean) => {
     if (!modal) {releaseModal?.();releaseModal=undefined;return;}
@@ -24,6 +25,11 @@ export function createControlsFrame(url: string) {
   };
   const receive = (event: MessageEvent) => {
     if (event.source !== frame.contentWindow || event.origin !== origin) return;
+    if (event.data?.type === 'mx:controls:address-request') {postAddress();return;}
+    if (event.data?.type === 'mx:controls:consume-intent') {
+      (window as Window & {__mxConsumeIntent?: () => void}).__mxConsumeIntent?.();
+      postAddress();return;
+    }
     if (event.data?.type === STORY_READER_MODE_MESSAGE && (event.data.mode === 'light' || event.data.mode === 'dark')) {
       applyReaderChoice(window,document,event.data.mode);
       return;
@@ -55,6 +61,9 @@ export function createControlsFrame(url: string) {
   window.addEventListener('scroll',postScroll,{passive:true});
   window.addEventListener('resize',postScroll);
   frame.addEventListener('load',postScroll);
+  frame.addEventListener('load',postAddress);
+  window.addEventListener('hashchange',postAddress);
+  window.addEventListener('mx:address-changed',postAddress);
   return {frame, origin, dispose() {
     window.removeEventListener('message',receive);
     document.removeEventListener('keydown',escape);
@@ -62,6 +71,9 @@ export function createControlsFrame(url: string) {
     window.removeEventListener('scroll',postScroll);
     window.removeEventListener('resize',postScroll);
     frame.removeEventListener('load',postScroll);
+    frame.removeEventListener('load',postAddress);
+    window.removeEventListener('hashchange',postAddress);
+    window.removeEventListener('mx:address-changed',postAddress);
     frame.remove();
   }};
 }
