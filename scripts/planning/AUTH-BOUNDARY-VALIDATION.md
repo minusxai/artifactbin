@@ -1,43 +1,68 @@
 # Auth boundary validation — 7 September 2026
 
-Validated implementation: `ecfdcbb` on `work/security-stage-one`, based on main
-`546325f` integrated at `7bd1c9f`. Delivery stays in draft PR #46. No production
-deployment or session migration was performed.
+Current integration: main `323fa5d` merged at `6205327` on
+`work/security-stage-one`. Delivery stays in draft PR #46. No production
+deployment or session migration was performed. The sandbox work below passed
+final combined-head regression and is being delivered through the same PR.
 
-## Stage 1 verdict: blocked on a newly conflicting product requirement
+## Stage 1 verdict: sandbox direction proved locally; rollout gates remain open
 
 The real human-session split and browser topology work in the measured flows.
 This is not a sign-off for the entire architecture. The combined-head matrix
 on the 546325f base passed: validate, 6,127 tests (one optional S3 skip), build,
 51/51 browser gates in 142 seconds without retry, and the complete Firefox
 and WebKit controls/consent flows. Main subsequently advanced to 323fa5d
-(libraries and comment selection); its integration must be tested separately.
+(libraries and comment selection). The user approved a visible sandbox rather
+than restoring parent-DOM author scripts; that direction is implemented and
+the final integrated checks pass: validate, production build, 6,205 tests
+(one optional S3 skip), all 52 browser gates in 143 seconds, and complete
+Firefox and WebKit controls/consent/Sandbox flows.
 Boundary-preserving rollback, staging and real-device evidence remain open.
 Do not advance to Stage 2 on the old prototype results.
 
-### New main incompatibility — decision needed before integration
+### New main compatibility — generic Sandbox, not a Three.js component
 
 Main `323fa5d` includes libraries (`e4df36d`, PR #55) and comment selection
-(PR #53). Its actual `gate-libraries.mjs` requires an author Helmet script to
+(PR #53). Its original `gate-libraries.mjs` required an author Helmet script to
 use `document.getElementById('scene')`, create a Three.js renderer on that
 visible canvas, and export its rendered pixels. This feature branch's tested
 contract deliberately runs that script in a hidden opaque iframe without
 visible-DOM access or arbitrary network. Merely merging imports or relaxing
 the library URL list cannot satisfy both contracts.
 
-The current browser isolation gate passed: parent DOM access yields
-`SecurityError`, author scripts run in `sandbox="allow-scripts"`, and script
-replacement/removal revokes that realm. Main's documented library contract
-requires the very visible-DOM capability that this plan removes. This is a
-source/contract incompatibility; the new libraries browser gate has NOT been
-run on an integrated build. Do not claim it was measured failing.
+`<Sandbox title="Model" height={320} html="…" script="…" />` owns a visible
+`sandbox="allow-scripts"` iframe. Its HTML/code are static strings (not JSX
+children), each capped at 262144 characters. It has its own DOM/canvas and the
+existing bounded data bridge; it cannot access parent DOM, account/edit verbs
+or arbitrary network. Only platform-pinned library URLs and the anonymous
+document-scoped asset resolver are admitted, plus blob/data buffers/textures.
+The hidden Helmet script remains data-only. Height reserves 100–4096 pixels;
+width follows the container. Internal IDs belong to the child, not parent node IDs.
 
-Recommended direction: keep the no-visible-DOM boundary and design a bounded
-declarative canvas/viewer primitive for library rendering. That is new product
-scope and requires a decision. The alternative is retaining visible-DOM
-author scripts and revisiting the architecture. Do not silently disable
-libraries or restore visible-DOM scripts. The attempted merge was aborted
-cleanly after checkpointing; latest main is NOT integrated. PR #46 stays draft.
+Measured on the integrated implementation:
+- Red tests preceded implementation of the realm, actual renderer integration
+  and authoring validation; replacement/unmount revokes the old realm/port.
+- The migrated library gate loads a textured GLB, verifies WebGL pixels and
+  real PNG export, lazy/cached imports, missing refs and isolation. It passed.
+- Complete controls gates in Chromium, Firefox and WebKit pass with a visible
+  sandbox: pinned library, canvas, mouse/keyboard/touch input, mobile resize,
+  local SQL updates, parent DOM/storage/API refusal, forged-edit refusal and
+  reload reset. These are browser-engine tests, not physical-device certification.
+- BrowserOS neo independently displayed a live Three.js cube on the two-host
+  fixture; the parent Increment control changed the shared signal. The parent
+  had no canvas node, and the visible child retained only allow-scripts.
+- Full regression caught documentation size/listing caps, generated class
+  freshness, the component gallery and false-positive fixture names. These
+  were fixed without relaxing guard thresholds; all 122 focused guard tests pass.
+- The first full browser run found one obsolete gallery assertion forbidding
+  every nested frame. It now requires exactly the declared Sandbox children,
+  each opaque with only allow-scripts; unexpected frames remain forbidden.
+  The isolated rerun and subsequent complete 52-gate run both passed.
+
+Migration is explicit: DOM-based Helmet scripts and their target HTML move
+into Sandbox. There is no automatic or insecure same-realm fallback. Existing
+library artifacts need that source migration. No reusable consent grants,
+hard GPU/CPU quota or export readiness protocol are added by this primitive.
 
 ### New integrated evidence
 

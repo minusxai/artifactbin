@@ -1,7 +1,7 @@
 ---
 name: markup
 description: >-
-  JSX, components, Helmet, CSS, scripts, fonts and layout.
+  JSX and component vocabulary.
 ---
 ## Read first
 
@@ -12,6 +12,7 @@ Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with exact spa
   No spreads, callbacks, or inline handlers; every tag closes (`<br />`),
   comments are `{/* … */}`, and there is no `<html>`/`<head>`/`<body>`.
   One Helmet script runs in an isolated iframe, without visible DOM access.
+  DOM-based libraries use a visible `<Sandbox>`; see [libraries](markup-libraries.md).
   Use the `mx` data API and declarative controls.
 - **Style with Tailwind classes via `className`**, starting from a
   `<div data-design="tw" className="@container …">` wrapper with `@2xl:`

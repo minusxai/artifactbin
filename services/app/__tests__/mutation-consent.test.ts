@@ -1,5 +1,5 @@
 import {expect,it,vi} from 'vitest';
-vi.mock('@/lib/config',async original=>({...await original<object>(),CONTROLS_ORIGIN:'http://i.localhost:3000',PUBLIC_BASE_URL:'http://localhost:3000'}));
+vi.mock('@/lib/config',async original=>({...await original<object>(),CONTROLS_ORIGIN:'http://i.localhost:3000',get PUBLIC_BASE_URL(){return 'http://localhost:3000';}}));
 import {attachActor} from '@artifactbin/utils';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as mutate} from '@/app/a/[id]/mutate/route';

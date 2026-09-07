@@ -14,6 +14,7 @@ import type { RefDataMap } from '@/lib/story/ref-data';
 import type { Dataflow, DataflowState, Scalar, Row } from '@/lib/story/dataflow';
 import type { LocalMutationResult } from '@/lib/story/local-state';
 import type { ScrollAnchor } from '@/lib/story/scroll-anchor';
+import type {ArtifactApiConfig} from '@/lib/story/script-api';
 
 /** The document's data as the island carries it: what is declared, and its state at render. */
 export interface StoryIslandDataflow {
@@ -108,6 +109,7 @@ export interface StoryIslandData {
    * render that is not a served document, where a bound image renders static.
    */
   assetsUrl?: string | null;
+  sandboxApi?: ArtifactApiConfig;
 }
 
 /** The GET query endpoint's one parameter: the JSON of a QueryRequest (lib/story/query-request). */

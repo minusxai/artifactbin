@@ -23,14 +23,16 @@ export function createAuthorScriptSession(store: DataflowStore, doc: Document = 
 }
 
 /** Own one sandbox + port. Disposing revokes its capability and removes its frame. */
-export function startAuthorScript(source: string, store: DataflowStore, doc: Document = document): () => void {
+export interface AuthorScriptMount {host: HTMLElement; title: string; html: string; document: string}
+export function startAuthorScript(source: string, store: DataflowStore, doc: Document = document, visible?: AuthorScriptMount): () => void {
   const frame = doc.createElement('iframe');
-  frame.title = AUTHOR_SCRIPT_FRAME_TITLE;
-  frame.hidden = true;
-  frame.setAttribute('aria-hidden', 'true');
+  frame.title = visible?.title ?? AUTHOR_SCRIPT_FRAME_TITLE;
+  frame.hidden = !visible;
+  if (!visible) frame.setAttribute('aria-hidden', 'true');
+  else { frame.style.width='100%'; frame.style.height='100%'; frame.style.border='0'; frame.style.display='block'; }
   frame.setAttribute('sandbox', 'allow-scripts');
   frame.setAttribute('referrerpolicy', 'no-referrer');
-  frame.srcdoc = AUTHOR_SCRIPT_DOCUMENT;
+  frame.srcdoc = visible?.document ?? AUTHOR_SCRIPT_DOCUMENT;
   const bridge = createAuthorScriptBridge(store);
   let disposed = false;
   let port: MessagePort | null = null;
@@ -64,8 +66,8 @@ export function startAuthorScript(source: string, store: DataflowStore, doc: Doc
     frame.contentWindow.postMessage(AUTHOR_SCRIPT_INIT, '*', [channel.port2]);
     snapshot();
     unsubscribe = store.subscribe(snapshot);
-    port.postMessage({ type: 'run', source });
+    port.postMessage({ type: 'run', source, ...(visible ? {html:visible.html} : {}) });
   };
-  doc.body.append(frame);
+  (visible?.host ?? doc.body).append(frame);
   return dispose;
 }

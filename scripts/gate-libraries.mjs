@@ -50,12 +50,15 @@ const script = `
     scene.add(new THREE.HemisphereLight(0xffffff, 0xffffff, 3));
     const model = await new THREE.GLTFLoader().loadAsync(await artifact.resolve('ref:${file.id}'));
     scene.add(model.scene); renderer.render(scene, camera);
+    window.__camera=camera.position.toArray();
+    controls.addEventListener('change',()=>{renderer.render(scene,camera);window.__camera=camera.position.toArray();});
     const pixel = new Uint8Array(4); renderer.getContext().readPixels(200, 150, 1, 1, renderer.getContext().RGBA, renderer.getContext().UNSIGNED_BYTE, pixel);
     window.__pixel = Array.from(pixel); window.__painted = true;
     addEventListener('pagehide', () => { controls.dispose(); renderer.dispose(); });
   })().catch(error => { window.__sceneError = String(error); });
 `;
-const doc = await create({ title: 'Three.js library gate', markup: '<Helmet><script>{`' + script + '`}</script></Helmet><canvas id="scene" width="400" height="300" />' });
+const sandbox = `<Sandbox title="Three.js scene" height={300} html={${JSON.stringify('<canvas id="scene" width="400" height="300"></canvas>')}} script={${JSON.stringify(script)}} />`;
+const doc = await create({ title: 'Three.js library gate', markup: sandbox });
 const prose = await create({ markup: '<h1>Ordinary prose</h1>' });
 const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader'] });
 try {
@@ -65,24 +68,34 @@ try {
   await page.goto(`${base}/a/${prose.id}/raw`);
   assert.equal(libraries.length, 0, 'prose loads no optional library');
   await page.goto(`${base}/a/${doc.id}/raw`);
-  await page.waitForFunction(() => window.__painted || window.__sceneError, { timeout: 15000 });
-  const state = await page.evaluate(() => ({ error: window.__sceneError, pixel: window.__pixel, same: window.__sameLibrary }));
+  const child = await (await page.waitForSelector('iframe[title="Three.js scene"]')).contentFrame();
+  assert.equal(await page.locator('#scene').count(), 0, 'the canvas belongs only to the child');
+  await child.waitForFunction(() => window.__painted || window.__sceneError, { timeout: 15000 });
+  const state = await child.evaluate(() => ({ error: window.__sceneError, pixel: window.__pixel, same: window.__sameLibrary }));
   assert.equal(state.error, undefined, state.error);
   assert.equal(state.same, true);
   assert.ok(state.pixel[0] > state.pixel[1] * 2, `red model painted: ${state.pixel}`);
   assert.equal(libraries.length, 1, 'one on-demand library request');
-  const blocked = await page.evaluate(async () => {
+  const beforeCamera=await child.evaluate(()=>JSON.stringify(window.__camera));
+  const box=await child.locator('#scene').boundingBox();
+  await page.mouse.move(box.x+200,box.y+150);await page.mouse.down();
+  await page.mouse.move(box.x+245,box.y+160,{steps:5});await page.mouse.up();
+  await child.waitForFunction(before=>JSON.stringify(window.__camera)!==before,beforeCamera);
+  const blocked = await child.evaluate(async base => {
     const missing = await artifact.resolve('ref:Miss12').then(() => false, e => e.message === 'not found');
     const network = await fetch('https://example.com/exfil').then(() => false, () => true);
     let storage = false; try { localStorage.getItem('x'); } catch { storage = true; }
-    return { missing, network, storage };
-  });
-  assert.deepEqual(blocked, { missing: true, network: true, storage: true });
-  const hydrated = await create({ markup: '<Helmet><script>{`' + script + '`}</script></Helmet><Card><CardContent><canvas id="scene" width="400" height="300" /></CardContent></Card>' });
+    let parentDom=false; try { parent.document.body.textContent; } catch { parentDom=true; }
+    const account=await fetch(new URL('/api/my/artifacts',base).href).then(()=>false,()=>true);
+    return { missing, network, storage, parentDom, account };
+  },base);
+  assert.deepEqual(blocked, { missing: true, network: true, storage: true, parentDom:true, account:true });
+  const hydrated = await create({ markup: '<Card><CardContent>'+sandbox+'</CardContent></Card>' });
   await page.goto(`${base}/a/${hydrated.id}/raw`);
-  await page.waitForFunction(() => window.__painted || window.__sceneError, { timeout: 15000 });
-  assert.equal(await page.evaluate(() => window.__sceneError), undefined, 'API also works after hydration');
-  assert.equal(await page.evaluate(() => window.__painted), true);
+  const nested = await (await page.waitForSelector('iframe[title="Three.js scene"]')).contentFrame();
+  await nested.waitForFunction(() => window.__painted || window.__sceneError, { timeout: 15000 });
+  assert.equal(await nested.evaluate(() => window.__sceneError), undefined, 'API also works after hydration');
+  assert.equal(await nested.evaluate(() => window.__painted), true);
   // Exercise the actual export service, not a screenshot after our own readiness wait.
   const exported = await fetch(`${base}/a/${doc.id}/export?format=png`);
   assert.equal(exported.status, 200, await exported.clone().text().then(t => t.slice(0, 100)));

@@ -1,4 +1,5 @@
 import type * as React from 'react';
+import {createElement} from 'react';
 
 import {
   Card,
@@ -83,6 +84,8 @@ import { Files } from '@/components/kit/files';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const STORY_UI_COMPONENTS: Record<string, React.ComponentType<any>> = {
+  // The document runtime supplies the trusted store/API configuration.
+  Sandbox: props => createElement('div', {id:props.id,className:props.className,'data-mx-ast':props['data-mx-ast']}),
   Dialog, DialogTrigger, DialogContent, DialogClose,
   Card,
   CardHeader,

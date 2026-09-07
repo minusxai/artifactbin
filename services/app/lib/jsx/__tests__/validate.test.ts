@@ -9,6 +9,17 @@ import type { ValidateOptions } from '../types';
 
 const OPTS: ValidateOptions = { components: ['Question'] };
 
+describe('Sandbox authored contract',()=>{
+  it('accepts inert HTML/code strings and rejects ambiguous or privileged props',()=>{
+    const options={components:JSX_STORY_COMPONENT_NAMES};
+    expect(errors('<Sandbox html="&lt;canvas /&gt;" script="void 0" height={300}/>',options)).toEqual([]);
+    for(const source of ['<Sandbox />','<Sandbox html={{x:1}} script="void 0"/>','<Sandbox html="" script="" height="large"/>',
+      '<Sandbox html="" script=""><p>Lost content</p></Sandbox>','<Sandbox html="" script="" api={{resolveUrl:"https://evil.test"}}/>']) {
+      expect(errors(source,options).length,source).toBeGreaterThan(0);
+    }
+  });
+});
+
 function errors(src: string, opts: ValidateOptions = OPTS) {
   const r = parseJsx(src);
   if (!r.ok) throw new Error(`parse failed: ${r.error}`);

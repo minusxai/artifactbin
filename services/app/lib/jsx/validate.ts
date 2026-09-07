@@ -119,6 +119,19 @@ function validateElement(
   inSvg: boolean,
 ): void {
   const lower = el.isComponent ? '' : el.tag.toLowerCase();
+  if(el.tag==='Sandbox') {
+    const attr=(name:string)=>el.attributes.find(a=>a.name===name);
+    const value=(name:string)=>{const a=attr(name);return a?.value.static?a.value.json:undefined;};
+    const reject=(message:string)=>errors.push({message:`Sandbox: ${message}`,tag:el.tag,start:el.start,end:el.end});
+    for(const name of ['html','script']) {
+      const text=value(name);
+      if(typeof text!=='string' || text.length>262144) reject(`${name} must be a static string of at most 262144 characters`);
+    }
+    const height=value('height');
+    if(attr('height') && (typeof height!=='number' || !Number.isFinite(height) || height<100 || height>4096)) reject('height must be a number from 100 to 4096');
+    if(el.children.some(n=>n.type!=='text' || n.value.trim())) reject('put internal HTML in html=, not JSX children');
+    if(attr('api') || attr('store')) reject('API and store configuration are platform-owned');
+  }
   /*
    * Document-level tags have ONE home: `<Helmet>` (lib/story/helmet.ts). In the
    * body they are not a second opinion, they are a second door —

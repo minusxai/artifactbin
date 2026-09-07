@@ -14,6 +14,12 @@ logic. Existing scripts that attach listeners to visible elements or manipulate
 them must be migrated; there is no legacy same-realm execution fallback. Not
 every DOM interaction currently has a declarative equivalent.
 
+For canvas/library interfaces, `<Sandbox html="…" script="…" title="…" />`
+owns a visible opaque child. Its script may manipulate **its own internal HTML**,
+never this parent document. It receives the same `mx` bridge plus the pinned
+library/anonymous-asset API. Move DOM-based code out of Helmet and its target
+HTML into the sandbox; see [libraries](markup-libraries.md).
+
 `window.mx` is defined before the script runs:
 
 - `mx.params.get(name)`, `.set(name, value)`, `.subscribe(fn)`: declared scalar

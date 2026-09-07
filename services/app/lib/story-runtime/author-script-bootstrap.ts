@@ -55,6 +55,8 @@ export const AUTHOR_SCRIPT_BOOTSTRAP = `
         }
       } else if (message.type === 'run' && !started) {
         started = true;
+        // Only the isolated realm receives author HTML. No parent DOM write.
+        if (typeof message.html === 'string') document.body.insertAdjacentHTML('afterbegin', message.html);
         const script = document.createElement('script');
         script.textContent = message.source;
         document.body.append(script);

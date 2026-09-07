@@ -1,12 +1,14 @@
 ---
 name: markup-libraries
-description: "Libraries (Three.js), file uploads and script refs."
+description: "Sandbox libraries and files."
 ---
 ## Read first
 
-Use an ordinary canvas and your Helmet script. `artifact.library('three')`
+Use a generic `<Sandbox>` with internal HTML/canvas and a script string. `artifact.library('three')`
 loads the hosted library; `artifact.resolve('ref:<id>')` resolves readable file
-bytes. Private assets never resolve. No custom scene components.
+bytes. Private assets never resolve. No Three.js-specific scene components.
+The child can edit its own DOM, not the surrounding artifact. It also has the
+bounded `mx` signals/query/mutation bridge; normal ACL/consent rules still apply.
 
 ## Contents
 
@@ -15,13 +17,15 @@ Libraries · File uploads.
 ## Libraries
 
 
-Use the platform's optional library registry from your existing Helmet script:
+Use the platform's optional library registry from `Sandbox.script`:
 `await artifact.library('three')` returns Three.js core plus `OrbitControls`
 and `GLTFLoader` (currently pinned to 0.185.1). No custom scene components or
 CDN imports. A library downloads only when requested; repeated calls reuse it.
 
 ```jsx
-<Helmet><script>{`
+<Sandbox title="3D model" height={450}
+html={'<canvas id="scene" width="800" height="450" style="width:100%;height:100%"></canvas><p id="scene-status" role="status"></p>'}
+script={`
 (async () => {
   const THREE = await artifact.library('three');
   const canvas = document.getElementById('scene');
@@ -62,9 +66,7 @@ CDN imports. A library downloads only when requested; repeated calls reuse it.
     renderer.dispose();
   });
 })().catch(error => { document.getElementById('scene-status').textContent = error.message; });
-`}</script></Helmet>
-<canvas id="scene" width="800" height="450" className="w-full aspect-video" />
-<p id="scene-status" role="status" />
+`} />
 ```
 
 Replace `Abc123` with the uploaded file ID. `artifact.resolve('ref:<id>')`
@@ -72,6 +74,14 @@ returns a URL any library can load. It supports uploaded files, images and
 PDFs; private, deleted and missing assets reject with `not found`. A document's
 visibility never grants access to its assets. Resolution is available after
 publishing. An already-loaded asset remains in memory until the page releases it.
+
+`html` is a static **HTML string**, not JSX children; `script` is a static code
+string (each up to 262144 characters). Height is a number from 100 to 4096;
+width follows the parent container. Give the frame a useful `title`. Parent
+CSS/Tailwind does not enter the child; style its internal HTML directly.
+Changing either string replaces the realm. Resize handlers and animation/GPU
+cleanup belong to the script. Keep data declarations in the parent Helmet.
+The hidden Helmet script remains data-only: it cannot obtain this canvas.
 
 Start with self-contained GLBs, with textures embedded. Separate GLTF buffers,
 relative file trees, external assets, Draco/KTX decoders and workers are not

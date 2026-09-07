@@ -109,6 +109,7 @@ export function kitchenSinkMarkup(refs: KitchenSinkRefs): string {
       <CollapsibleTrigger className="text-sm font-semibold underline underline-offset-2">Toggle details</CollapsibleTrigger>
       <CollapsibleContent><p className="mt-2 text-sm text-muted-foreground">Collapsible content, open by default for the capture.</p></CollapsibleContent>
     </Collapsible>
+    <Sandbox title="Isolated content" html="&lt;p&gt;Sandbox content&lt;/p&gt;" script="" height={100} />
     <Dialog><DialogTrigger className="underline">Open dialog</DialogTrigger>
       <DialogContent aria-label="Example dialog" className="m-auto rounded-xl bg-card p-6">
         <p>Native modal focus and Escape handling.</p><DialogClose>Close</DialogClose>

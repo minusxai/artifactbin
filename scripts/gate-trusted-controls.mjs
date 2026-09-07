@@ -80,6 +80,23 @@ try {
   const response = await mainFetch(`${backend}/api/artifacts/${seed.id}`,{method:'PUT',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({markup,expectedVersion:1})});
   assert(response.ok,await response.text());
   if (interactive) {
+    const demoHtml='<canvas id="scene" style="width:100%;height:100%"></canvas><span style="position:absolute;bottom:12px;left:16px;color:#cbd5e1;font:14px system-ui">Drag to rotate · scroll to zoom · Increment changes the cube</span>';
+    const demoScript=`(async()=>{
+      const T=await artifact.library('three'),canvas=document.getElementById('scene');
+      const renderer=new T.WebGLRenderer({canvas,antialias:true,preserveDrawingBuffer:true});
+      const scene=new T.Scene();scene.background=new T.Color('#0f172a');
+      const camera=new T.PerspectiveCamera(45,1,.1,100);camera.position.set(3,2,4);
+      const cube=new T.Mesh(new T.BoxGeometry(1.3,1.3,1.3),new T.MeshNormalMaterial());scene.add(cube);
+      const controls=new T.OrbitControls(camera,canvas);
+      const render=()=>renderer.render(scene,camera);
+      const resize=()=>{renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();render();};
+      controls.addEventListener('change',render);addEventListener('resize',resize);
+      const unsubscribe=mx.params.subscribe(v=>{cube.rotation.y=v.count*.35;render();});resize();
+      addEventListener('pagehide',()=>{unsubscribe();controls.dispose();cube.geometry.dispose();cube.material.dispose();renderer.dispose();});
+    })().catch(e=>{document.body.textContent=e.message;});`;
+    const demo=markup+`<Sandbox title="Interactive cube" height={360} html={${JSON.stringify(demoHtml)}} script={${JSON.stringify(demoScript)}}/>`;
+    const saved=await mainFetch(`${backend}/api/artifacts/${seed.id}`,{method:'PUT',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({markup:demo,expectedVersion:2})});
+    assert(saved.ok,await saved.text());
     console.log(`Interactive local fixture: ${base}/a/${seed.id}\nControls host: ${controls}/controls/a/${seed.id}`);
     await new Promise(resolve=>{process.once('SIGINT',resolve);process.once('SIGTERM',resolve);});
   } else {
@@ -307,6 +324,52 @@ try {
   await page.context().addCookies(retainedCookies);
   assert.equal((await page.goto(`${base}/a/${privateDoc.id}`)).status(),404,'retaining old cookies does not undo browser disconnect');
   assert.equal((await peer.reload()).status(),200,'disconnecting one browser does not revoke another holding the same token');
+  // The visible author realm uses the same bridge as the hidden script, with
+  // its own DOM and pinned libraries but no access to parent/control authority.
+  const sandboxScript=`(async()=>{
+    const THREE=await artifact.library('three');
+    window.__vector=new THREE.Vector3(3,4,0).length();
+    const canvas=document.getElementById('scene');
+    const draw=()=>{canvas.width=innerWidth;canvas.height=100;const ctx=canvas.getContext('2d');ctx.fillStyle='#ef3340';ctx.fillRect(0,0,canvas.width,100);window.__width=innerWidth;};
+    addEventListener('resize',draw);draw();
+    document.getElementById('increment').addEventListener('click',()=>mx.mutate('inc'));
+    try{parent.document.body.textContent='ESCAPED';window.__parent='escaped'}catch(e){window.__parent=e.name}
+    try{localStorage.setItem('leak','1');window.__storage='escaped'}catch(e){window.__storage=e.name}
+    window.__network=await fetch('${controls}/api/my/artifacts',{credentials:'include'}).then(()=>false,()=>true);
+    parent.postMessage({type:'mx:text-edit',path:'0',nonce:'guessed',innerHtml:'FORGED'},'*');
+    window.__ready=true;
+  })().catch(e=>window.__error=String(e));`;
+  const sandboxMarkup='<Helmet><Value name="n" type="number" default={0}/><Mutation name="inc">{`update _signals set n=n+1`}</Mutation></Helmet><h1>Visible sandbox boundary</h1><p>{$n}</p>'
+    +`<Sandbox title="Interactive model" height={180} html={${JSON.stringify('<canvas id="scene"></canvas><button id="increment" aria-label="Increment inside sandbox">Increment</button>')}} script={${JSON.stringify(sandboxScript)}}/>`;
+  const sandboxResponse=await mainFetch(`${backend}/api/artifacts`,{method:'POST',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({markup:sandboxMarkup,visibility:'unlisted'})});
+  assert.equal(sandboxResponse.status,201,await sandboxResponse.clone().text());
+  const sandboxDoc=await sandboxResponse.json();
+  await peer.goto(`${base}/a/${sandboxDoc.id}`);
+  const visual=await (await peer.waitForSelector('iframe[title="Interactive model"]')).contentFrame();
+  await visual.waitForFunction(()=>window.__ready || window.__error);
+  assert.deepEqual(await visual.evaluate(()=>({error:window.__error,vector:window.__vector,parent:window.__parent,storage:window.__storage,network:window.__network})),
+    {error:undefined,vector:5,parent:'SecurityError',storage:'SecurityError',network:true});
+  assert.equal(await peer.locator('#scene').count(),0);
+  await visual.getByRole('button',{name:'Increment inside sandbox'}).click();
+  await peer.waitForFunction(()=>window.mx.params.get('n')===1);
+  await visual.getByRole('button',{name:'Increment inside sandbox'}).press('Enter');
+  await peer.waitForFunction(()=>window.mx.params.get('n')===2);
+  const wide=await visual.evaluate(()=>window.__width);
+  await peer.setViewportSize({width:390,height:844});
+  await visual.waitForFunction(w=>window.__width<w,wide);
+  assert((await visual.evaluate(()=>window.__width))<=390,'sandbox resizes within mobile page');
+  const storedSandbox=await (await mainFetch(`${backend}/api/artifacts/${sandboxDoc.id}`,{headers:{Authorization:`Bearer ${seed.token}`}})).json();
+  assert.equal(storedSandbox.version,1,'forged edits and local state never change source');
+  await peer.reload();
+  await peer.waitForFunction(()=>window.mx.params.get('n')===0);
+  const touch=await browser.newPage({ignoreHTTPSErrors:true,hasTouch:true,viewport:{width:390,height:844}});
+  await touch.goto(`${base}/a/${sandboxDoc.id}`);
+  const touchFrame=await (await touch.waitForSelector('iframe[title="Interactive model"]')).contentFrame();
+  await touchFrame.waitForFunction(()=>window.__ready || window.__error);
+  await touchFrame.getByRole('button',{name:'Increment inside sandbox'}).tap();
+  await touch.waitForFunction(()=>window.mx.params.get('n')===1);
+  await touch.close();
+  console.log('PASS: visible sandbox pinned library, canvas, pointer/keyboard input, responsive resize, local SQL, parent DOM/storage/API refusal and reload reset');
   await peer.close();
   await reader.close();
   console.log('PASS: two-origin top-level editing/reload, local SQL, appearance, relation-only comments, mobile hit-testing, author isolation/navigation revocation, OTP login, like/follow persistence, human/anonymous private ACLs, trusted single-use mutation consent, logout, retained-cookie revocation and independent browser disconnect');

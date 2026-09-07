@@ -163,7 +163,11 @@ check(await frame.evaluate("!!document.querySelector('[aria-label=\"Question emb
 // the watch page — and NEVER a nested frame (the sandbox would kill a player).
 check(await frame.evaluate("!!document.querySelector('[data-slot=\"video\"] a[href^=\"https://www.youtube.com/watch\"]')"), 'Video card links to the watch page');
 check(await frame.evaluate("(document.querySelector('[data-slot=\"video-thumb\"]')?.getAttribute('src') ?? '').startsWith('/a/')"), 'Video poster resolved to the hosted image ref');
-check(await frame.evaluate("document.querySelectorAll('iframe').length === 0"), 'the document contains no nested frames');
+check(await frame.evaluate(()=>{
+  const children=[...document.querySelectorAll('iframe')];
+  return children.length===document.querySelectorAll('[data-mx-sandbox]').length
+    && children.every(child=>child.parentElement?.hasAttribute('data-mx-sandbox') && child.getAttribute('sandbox')==='allow-scripts');
+}), 'only declared, opaque Sandbox children are nested; no unexpected frames');
 
 // 3. isolation
 const csp = await frame.evaluate('window.__csp || []');
