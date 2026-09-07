@@ -15,6 +15,7 @@ import { buildStoryDocument } from '@/lib/story/document';
 import { storyUpdateParts } from '@/lib/story/update-parts';
 import { assetLookupFrom, assetUrlFor, mapExternalImageSources, type WebAssetBox } from '@/lib/story/asset-url';
 import { parseJsx } from '@/lib/jsx';
+import {compileManagedIframe} from '../managed-iframe';
 
 const URL_A = 'https://picsum.photos/id/237/300/200';
 // A component in the body so the document carries an island at all.
@@ -42,6 +43,15 @@ describe('assetUrlFor', () => {
 });
 
 describe('mapExternalImageSources', () => {
+  it('maps only the parent when parent and isolated images share a cached URL',()=>{
+    const parsed=parseJsx(`<img src="${URL_A}"/><Iframe><img src="${URL_A}"/></Iframe>`);
+    if(!parsed.ok)throw Error(parsed.error);
+    const mapped=mapExternalImageSources(parsed.nodes,held);
+    expect(JSON.stringify(mapped[0])).toContain(assetUrlFor(URL_A,ROW));
+    expect(JSON.stringify(mapped[1])).toContain(URL_A);
+    const frame=mapped[1];if(frame.type!=='element')throw Error('missing frame');
+    expect(compileManagedIframe(frame).html).toContain(URL_A);
+  });
   it('rewrites a known url and leaves an unknown one', () => {
     const nodes = parseJsx(`<div><img src="${URL_A}" /><img src="https://other.example/x.png" /></div>`);
     if (!nodes.ok) throw new Error('parse');
