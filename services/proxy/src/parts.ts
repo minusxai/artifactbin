@@ -23,7 +23,7 @@ import {
 } from '@artifactbin/contracts';
 import type { RateLimiter } from '@artifactbin/contracts/rate-limits';
 import { Hono, type Context } from 'hono';
-import { assemble, cookieName, decodeAgentSession, readCookie } from '@artifactbin/utils';
+import { assemble, cookieName, decodeAgentSession, readCookie, parseAssetsOrigin, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
 import { createRateLimiter, memoryBackend } from '@artifactbin/utils/rate-limits';
 import { loadPolicyFile, resolvePolicyFilePath } from './rate-limits';
 import { baseUrlOf, mountOAuthRoutes } from './routes/oauth';
@@ -339,6 +339,20 @@ export function proxyParts(o: ProxyOptions): Part<ProxyEnv>[] {
   // The limiter is built HERE, at composition — a policy file that does not exist or does not parse is a
   // refusal to boot, never a request quietly metered by numbers nobody chose.
   limiterFor(o);
+  const assetSetting = readEnv(o.env,'APP__ASSETS_ORIGIN');
+  const assetOrigin = assetSetting ? parseAssetsOrigin(readEnv(o.env,'APP__PUBLIC_BASE_URL') ?? '',readEnv(o.env,'APP__CONTROLS_ORIGIN') ?? null,assetSetting) : null;
+  const assetBoundary: Part<ProxyEnv>[] = assetOrigin ? [{name:'public-assets',mount:app=>app.use('*',async(c,next)=>{
+    if(new URL(c.req.url).host !== new URL(assetOrigin).host)return next();
+    const incoming=new URL(c.req.url);
+    const publicRequest=new Request(assetOrigin+incoming.pathname+incoming.search,{method:c.req.method});
+    if(!isPublicAssetRequest(publicRequest,assetOrigin))return new Response('not found',{status:404});
+    // A new narrow request: no ambient cookie, bearer, forged actor or forwarding headers.
+    const headers = new Headers();
+    headers.set(FORWARDED_HOST,new URL(assetOrigin).host);headers.set(FORWARDED_PROTO,new URL(assetOrigin).protocol.slice(0,-1));
+    const request=new Request(c.req.url,{method:c.req.method,headers,signal:c.req.raw.signal});
+    try{return publicAssetResponse(await o.upstream(request,ANONYMOUS));}
+    catch{return new Response('asset upstream unavailable',{status:502});}
+  })}] : [];
   const policy = browserBoundaryOf(o);
   const boundary: Part<ProxyEnv>[] = policy ? [{name:'controls-origin', mount: app => app.use('*', async (c,next) => {
     const refused = policy.check(c.req.raw,c.get('actor'));
@@ -363,7 +377,7 @@ export function proxyParts(o: ProxyOptions): Part<ProxyEnv>[] {
     // would merge the old CSP back over the new framing restriction.
     for (const [name,value] of Object.entries(policy.responseHeaders(c.req.raw,c.res.headers))) c.header(name,value);
   })}] : [];
-  return [session(o), ...boundary, rateLimit(o), loginRoutes(o), oauthRoutes(o), forwardedHeaders({ trustedHops: trustedHopsOf(o.env), ...(o.secure ? { secure: true } : {}) }), forward(o.upstream, o)];
+  return [...assetBoundary, session(o), ...boundary, rateLimit(o), loginRoutes(o), oauthRoutes(o), forwardedHeaders({ trustedHops: trustedHopsOf(o.env), ...(o.secure ? { secure: true } : {}) }), forward(o.upstream, o)];
 }
 
 /** The proxy, assembled from its parts. */

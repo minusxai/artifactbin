@@ -15,7 +15,7 @@ export function createBrowserBoundary(main: string, configured: string): Browser
     const path = new URL(request.url).pathname;
     if (request.method === 'POST') return /^\/a\/[A-Za-z0-9]+\/query$/.test(path);
     if (!['GET', 'HEAD'].includes(request.method)) return false;
-    return /^\/a\/[A-Za-z0-9]+(?:\/(?:raw|export|thumbnail|query|events(?:\/frame)?))?$/.test(path)
+    return /^\/a\/[A-Za-z0-9]+(?:\/(?:raw|export|thumbnail|query|assets|events(?:\/frame)?))?$/.test(path)
       || /^\/@[^/]+\/[A-Za-z0-9]+-[^/]+$/.test(path);
   };
   const deny = (error: string, status = 403) => Response.json({ error }, { status, headers: { 'cache-control': 'no-store' } });
