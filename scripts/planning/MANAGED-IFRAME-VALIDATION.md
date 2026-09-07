@@ -2,6 +2,22 @@
 
 September 7, 2026. Planning probes, not a product implementation or release sign-off.
 
+## Current verdict: no unconditional go-ahead
+
+The expanded audit found a **reproducible Chromium 151 nested-startup blocker**:
+the wrapper runs and creates its inner element, but the automated browser sometimes
+never attaches/runs the author context. Independent reruns reproduce it. Neither
+outer-load deferral (three warm failures) nor a parent-to-wrapper startup handshake
+fixes it. BrowserOS Chrome 148 showed the nested markup across four loads, but
+that is neither the same browser version nor proof the failure is only automation.
+Do not call startup reliable or turn the draft PR into a release based on this.
+
+The audit is broader than animation and its evidence is committed. Navigation
+assertions and real edit/mutation flows pass; the state-copy cost has a measured
+prototype mitigation. Managed compilation, this startup failure, cache/cleanup
+integration, and staging/device verification remain explicit gates. A successful
+subset does not erase failed cases. See the two performance reports below.
+
 ## Decision under test
 
 Keep the artifact top-level. Compile a managed `Iframe`'s HTML/CSS/scripts into

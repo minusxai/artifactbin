@@ -35,6 +35,32 @@ The scene has approximately 256k triangles, 1,200 particles and 56 draw calls pe
 
 The independent default rerun reproduced the stall: the wrapper's script executed and created an inner iframe with nonempty srcdoc and a contentWindow, but no author context was reported. The optional `--defer-inner` experiment creates that same inner iframe after the outer window's load event plus one task. It changes neither content nor CSP and is **not the default or an established fix**; compare repeated default/deferred cases before attributing the cause. Natural-removal readiness now fails explicitly if no author bootstrap appears rather than evaluating an undefined `metrics` global in the wrapper.
 
+**Independent review outcome:** default nested startup failed again, including
+a cold case. `--defer-inner` then passed cold but failed warm in all three samples.
+`--handshake-inner` (a once-only parent message after outer load, same content/CSP)
+also passed cold and failed warm. Neither experiment fixes the issue. Diagnostics
+show a visible, fully loaded wrapper containing a script and an inner iframe with
+24,747 characters of srcdoc and a contentWindow, but only two reported frames and
+no author snapshot. Chromium version: 151.0.7922.34, ANGLE Metal. Keep this as an
+**open startup/automation-or-browser blocker**, not a frame-rate or security limit.
+No evidence yet isolates the browser's internal cause.
+
+BrowserOS Chrome148.0.7988.97 independently exposed the expected two nested frames,
+canvas and controls in four loads. Its tab was actually backgrounded and had not
+published a 35-frame animation sample; do not count it as foreground performance
+or a same-version reproduction that clears the Chromium151 issue.
+
+Firefox153 rendered all six top/single/nested cold/warm ocean cases, controls and
+resize in the first headed review. That run still exited nonzero solely because
+Firefox's implicit favicon request violated the deliberately strict CSP. The
+fixture now declares a data favicon rather than relaxing CSP or ignoring errors.
+Source-free review evidence: `results/ocean-review-2026-09-07.json`.
+
+The final Firefox rerun with the declared data favicon **passes all six measured
+cases with zero failures/errors and exit0**, including both framed layouts' natural
+removal checks. The Chromium handshake failure is preserved separately in
+`results/ocean-handshake-2026-09-07.json`; default/deferred failures are not erased.
+
 In the five completed headed Chromium cases, passive and post-control render-call cadence was 8.2–8.4ms. The cold top-level first render paid substantial initial warmup (687ms versus 222–225ms for later framed shapes), so this single fixed-order run is not a valid numeric iframe-overhead comparison. Large resource requests also differed: top-level had four network hits then zero on its second pass (and zero on warm navigation); opaque frames re-requested all four resources on both passes. This strengthens the requirement to measure/cache at the trusted asset layer rather than assume browser cache reuse across opaque contexts.
 
 WebKit 26.5, Apple GPU, Apple M5 Pro/18 cores, two cycled samples per shape, cold and repeated navigation each. Every passive sample recorded `userActivation.isActive=false` and `hasBeenActive=false`; subsequent real controls samples recorded both true. No page errors or measured-case failures. Timings below are observed ranges, not a production percentile promise.

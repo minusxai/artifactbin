@@ -14,6 +14,7 @@ const capturedAuthor=capture.scripts.at(-1).text;
 assert(capturedAuthor.includes("artifact.library('three')")&&capturedAuthor.includes('pond'));
 const cube=process.argv.includes('--cube');
 const deferInner=process.argv.includes('--defer-inner');
+const handshakeInner=process.argv.includes('--handshake-inner');
 const author=cube?`(async()=>{const T=await artifact.library('three'),canvas=document.getElementById('pond'),renderer=new T.WebGLRenderer({canvas,antialias:true});const scene=new T.Scene(),camera=new T.PerspectiveCamera(45,1,.1,100);camera.position.z=4;const mesh=new T.Mesh(new T.BoxGeometry(1,1,1),new T.MeshNormalMaterial());scene.add(mesh);let paused=false,id;const observer=new ResizeObserver(()=>{renderer.setSize(canvas.clientWidth,canvas.clientHeight,false);camera.aspect=canvas.clientWidth/canvas.clientHeight;camera.updateProjectionMatrix();});observer.observe(canvas);function render(){id=requestAnimationFrame(render);if(!paused)mesh.rotation.y+=.01;renderer.render(scene,camera);}render();document.getElementById('scene-status').hidden=true;document.getElementById('pause').onclick=()=>paused=!paused;document.getElementById('ripple').onclick=()=>mesh.rotation.x+=.4;document.getElementById('breeze').oninput=()=>document.getElementById('wind-label').textContent='Whitecaps';addEventListener('pagehide',()=>{cancelAnimationFrame(id);observer.disconnect();mesh.geometry.dispose();mesh.material.dispose();renderer.dispose();},{once:true});})();`:capturedAuthor;
 const bundle=readFileSync(new URL('../../services/app/public/libraries/three-0.185.1/index.js',import.meta.url));
 const samples=Number(sampleArg),counts=countArg.split(',').map(Number);
@@ -63,11 +64,11 @@ const favicon='<link rel="icon" href="data:,">';
 const scene=()=>`<!doctype html><meta http-equiv="Content-Security-Policy" content="${policy}">${favicon}<style>html,body{margin:0;width:100%;height:100%;overflow:hidden}canvas{display:block;width:100%;height:calc(100% - 36px)}button,input{height:30px}</style><canvas id="pond"></canvas><button id="pause">Pause</button><button id="ripple">Ripple</button><input id="breeze" type="range" min="0.2" max="2" step="0.1" value="1"><span id="wind-label"></span><span id="scene-status">Starting</span><script>${bootstrap}</script><script>${author}</script>`;
 // Compile fixture strings before starting any server/browser; never evaluate the captured author in Node.
 new Function(bootstrap);new Function(author);
-const frame=(content)=>`const f=document.createElement('iframe');f.sandbox='allow-scripts';f.style='border:0;width:100%;height:100%';f.srcdoc=${literal(content)};document.body.append(f);`;
+const frame=(content,initiate=false)=>`const f=document.createElement('iframe');f.sandbox='allow-scripts';f.style='border:0;width:100%;height:100%';f.srcdoc=${literal(content)};${initiate?"f.onload=()=>f.contentWindow.postMessage('bench-start','*');":''}document.body.append(f);`;
 const wrapper=()=>{
  const mount=frame(scene());
  // Optional diagnostic only: identical content/policy, but create the inner realm after outer load + one task.
- const script=deferInner?`addEventListener('load',()=>setTimeout(()=>{${mount}},0),{once:true});`:mount;
+ const script=handshakeInner?`let started=false;addEventListener('message',e=>{if(started||e.source!==parent||e.data!=='bench-start')return;started=true;${mount}});`:deferInner?`addEventListener('load',()=>setTimeout(()=>{${mount}},0),{once:true});`:mount;
  return `<!doctype html><meta http-equiv="Content-Security-Policy" content="${policy}">${favicon}<style>html,body{margin:0;width:100%;height:100%}</style><body><script>${script}</script>`;
 };
 const server=createServer((req,res)=>{
@@ -75,7 +76,7 @@ const server=createServer((req,res)=>{
  res.setHeader('Content-Type','text/html');res.setHeader('Cache-Control','no-store');
  if(shape==='top'){res.end(scene());return;}
  res.setHeader('Content-Security-Policy',policy.replace("frame-src 'none'",`frame-src ${asset}`));
- res.end(`<!doctype html>${favicon}<style>html,body{margin:0;height:100%;width:100%}body{display:grid;grid-template-columns:repeat(${n>1?2:1},1fr);grid-template-rows:repeat(${Math.ceil(n/2)},1fr)}iframe{min-width:0;min-height:0}</style><body><script>window.disposals=[];window.phase1=[];addEventListener('message',e=>{if(e.data?.type==='disposed')disposals.push(e.data.snapshot);if(e.data?.type==='phase1')phase1.push(e.data.snapshot)});for(let i=0;i<${n};i++){${frame(shape==='wrapper'?wrapper():scene())}}</script>`);
+ res.end(`<!doctype html>${favicon}<style>html,body{margin:0;height:100%;width:100%}body{display:grid;grid-template-columns:repeat(${n>1?2:1},1fr);grid-template-rows:repeat(${Math.ceil(n/2)},1fr)}iframe{min-width:0;min-height:0}</style><body><script>window.disposals=[];window.phase1=[];addEventListener('message',e=>{if(e.data?.type==='disposed')disposals.push(e.data.snapshot);if(e.data?.type==='phase1')phase1.push(e.data.snapshot)});for(let i=0;i<${n};i++){${frame(shape==='wrapper'?wrapper():scene(),shape==='wrapper'&&handshakeInner)}}</script>`);
 });
 await Promise.all([new Promise(r=>assets.listen(7025,'127.0.0.1',r)),new Promise(r=>server.listen(7024,'127.0.0.1',r))]);
 if(process.argv.includes('--interactive')){console.log(JSON.stringify({host,paths:['/top','/iframe?n=1','/wrapper?n=1'],workload:cube?'cube':'ocean'}));await new Promise(resolve=>{process.once('SIGINT',resolve);process.once('SIGTERM',resolve);});await Promise.all([new Promise(r=>server.close(r)),new Promise(r=>assets.close(r))]);process.exit(0);}
@@ -132,7 +133,7 @@ try{
   }
   }catch(error){console.error(String(error));const diagnostics=[];for(const frame of page.frames())diagnostics.push(await frame.evaluate(()=>({url:location.href,hidden:document.hidden,visibility:document.visibilityState,ready:document.readyState,body:document.body?.getBoundingClientRect().toJSON(),children:[...document.body?.children??[]].map(e=>({tag:e.tagName,chars:e.textContent.length,srcdoc:e.getAttribute('srcdoc')?.length,window:e.tagName==='IFRAME'?!!e.contentWindow:undefined})),snapshot:window.snapshot?.()})).catch(e=>({error:String(e)})));failures.push({sample,count,shape,phase,error:String(error),errors,diagnostics});}finally{await context.close();}
  }
- console.log(JSON.stringify({engine,headed,deferInner,workload:cube?'cube':'captured-ocean',browser:browser.version(),hardware:{cpu:cpus()[0]?.model,cores:cpus().length},authorSha256:createHash('sha256').update(author).digest('hex'),bundleSha256:createHash('sha256').update(bundle).digest('hex'),rows,failures,caveats:[
+ console.log(JSON.stringify({engine,headed,deferInner,handshakeInner,workload:cube?'cube':'captured-ocean',browser:browser.version(),hardware:{cpu:cpus()[0]?.model,cores:cpus().length},authorSha256:createHash('sha256').update(author).digest('hex'),bundleSha256:createHash('sha256').update(bundle).digest('hex'),rows,failures,caveats:[
   'Ocean mode executes exact captured source; cube mode is a separate lightweight scaling workload. artifact.library aliases generated Three0.185.1 ESM.',
   'Local synthetic layout, DPR1, no network/CPU throttle, not physical mobile. Headed setting and exposed GPU renderer are reported.',
   'CPU render call timings exclude asynchronous GPU completion; no input-to-photon claim.',
