@@ -4,7 +4,8 @@ import {createAgentReadSessions} from './agent-read-session';
 
 const oneCookie = (header: string | null, name: string): string | null => {
   const matches = (header ?? '').split(';').map(p => p.trim()).filter(p => p.startsWith(name + '='));
-  return matches.length === 1 ? matches[0].slice(name.length + 1) : null;
+  const [match] = matches;
+  return matches.length === 1 && match !== undefined ? match.slice(name.length + 1) : null;
 };
 
 /** Cookie lifecycle at the proxy boundary; the app still owns token adoption.
@@ -35,12 +36,14 @@ export function createAgentBrowser(opts: {db: Queryable; tokens: TokenReader; se
     },
     async responseCookies(previous: string | null, response: Headers): Promise<string[]> {
       const changes = response.getSetCookie().filter(c => c.startsWith(fullName + '='));
-      if (!changes.length) return [];
+      const [change] = changes;
+      if (change === undefined) return [];
       if (changes.length !== 1) throw new Error('Ambiguous agent session response');
-      const pair = changes[0].split(';')[0], value = pair.slice(fullName.length + 1);
+      const [pair = ''] = change.split(';');
+      const value = pair.slice(fullName.length + 1);
       const old = signed(previous);
       if (old?.sessionId) await sessions.revoke(old.sessionId);
-      if (!value || /;\s*Max-Age=0(?:;|$)/i.test(changes[0])) return [`${readName}=${attributes}; Max-Age=0`];
+      if (!value || /;\s*Max-Age=0(?:;|$)/i.test(change)) return [`${readName}=${attributes}; Max-Age=0`];
       const next = decodeAgentSession(value, opts.secret), primary = next?.tokenIds.at(-1);
       if (!next?.sessionId || !primary || !await liveToken(primary)) throw new Error('Invalid new browser session');
       const read = await sessions.issue(next.sessionId, primary);
