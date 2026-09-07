@@ -2,7 +2,7 @@
 
 September 7, 2026. Planning and implementation evidence; rollout verification remains separate.
 
-## Current verdict: approved direction implemented; final gates remain
+## Current verdict: approved direction implemented and locally verified
 
 The claimed Chromium startup blocker was an **automation-observation false red**.
 Parent-visible ocean messages proved 35 real renders on 30/30 reloads and 30/30
@@ -13,8 +13,9 @@ Use validated parent bridge messages as the integrated startup oracle. This does
 not replace the remaining production integration and rollout checks.
 
 The compiler, asset host, protected runtime, state deltas and editor asset relay
-are implemented. The actual publish/render gate passes all three engines; final
-merged regression/CI verification is tracked in MANAGED-IFRAME-IMPLEMENTATION.md.
+are implemented. The actual publish/render and authenticated controls gates pass
+all three engines; the full local browser suite passes53/53 without retries.
+Merged regression and live PR CI evidence is tracked in MANAGED-IFRAME-IMPLEMENTATION.md.
 Actual product state measurements now pass1/4/8regions with10,000unchanged rows,
 with16–19ms median delivery and bounded latest-state bursts. Staging/device
 verification remains distinct from these local results.
