@@ -485,6 +485,8 @@ describe('drawing an area to comment on', () => {
     expect(press.defaultPrevented).toBe(true);        // no text selection starts under a drawn area
     mouse('pointermove', pb, 300, 190);
     expect(band()).not.toBeNull();                    // the band is drawn while dragging
+    // …in BLUE, apart from the amber outline of the anchor it will sit inside.
+    expect((band() as HTMLElement).style.outline).toContain('59, 130, 246');
     mouse('pointerup', pb, 300, 190);
     const picked = selections().at(-1)!.selection as { path: string; tag: string; quote?: string; range?: unknown };
     expect(picked).toMatchObject({ path: '0', tag: 'section', range: { v: 1, kind: 'area', box: { x: 0.2, y: 0.05, w: 0.5, h: 0.4 } } });
@@ -539,6 +541,25 @@ describe('drawing an area to comment on', () => {
 
     session.update({ ...state('off'), pins: [] });
     expect(document.querySelector('[data-mx-annotation-area]')).toBeNull();
+  });
+
+  it('still picks on a document carrying an inline <svg> sketch, whose children are not blocks', () => {
+    document.body.innerHTML = '<main><section data-mx-ast="0" id="sec"><p data-mx-ast="0.0" id="pa">Alpha</p>'
+      + '<svg data-mx-ast="0.1" id="pic" class="w-6" viewBox="0 0 10 10"><circle data-mx-ast="0.1.0" id="dot" cx="5" cy="5" r="4"></circle></svg></section></main>';
+    const src = '<section className="max-w-2xl"><p id="pa">Alpha</p><svg id="pic" className="w-6" viewBox="0 0 10 10"><circle id="dot" cx="5" cy="5" r="4" /></svg></section>';
+    const parsed = parseJsx(src); if (!parsed.ok) throw new Error('fixture does not parse');
+    session.setNodes(parsed.nodes);
+    rectOf(document.getElementById('sec')!, { x: 20, y: 100, width: 400, height: 200 });
+    rectOf(document.getElementById('pa')!, { x: 20, y: 100, width: 400, height: 40 });
+    rectOf(document.getElementById('pic')!, { x: 20, y: 160, width: 100, height: 100 });
+    rectOf(document.getElementById('dot')!, { x: 40, y: 180, width: 60, height: 60 });
+    drawing();
+    mouse('pointerdown', document.getElementById('pa')!, 100, 110);
+    mouse('pointermove', document.getElementById('dot')!, 300, 250);
+    mouse('pointerup', document.getElementById('dot')!, 300, 250);
+    // The paragraph and the picture: their section. The circle inside the
+    // picture is drawing, not a block, and must neither crash nor anchor.
+    expect(selections().at(-1)!.selection).toMatchObject({ path: '0', tag: 'section', range: { kind: 'area' } });
   });
 
   it('escape while drawing stands down like a block pick', () => {

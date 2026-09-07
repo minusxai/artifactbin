@@ -119,7 +119,13 @@ const HIGHLIGHT_FILL = {
   hover: 'rgba(245, 158, 11, 0.42)',
   open: 'rgba(245, 158, 11, 0.52)',
 };
-/** An area box is an OUTLINE first: it may cover a chart, and a fill as strong as the words' would hide it. */
+/**
+ * The band being DRAWN, and the drawn area while its comment is composed:
+ * blue, so it reads apart from the amber outline of the anchor node around
+ * it — two rectangles in one colour were one rectangle to the eye.
+ */
+const BAND_STYLE = { background: 'rgba(59, 130, 246, 0.10)', outline: 'rgba(59, 130, 246, 0.9)' };
+/** A SAVED area box is amber like every other mark of a comment, an OUTLINE first: it may cover a chart, and a fill as strong as the words' would hide it. */
 const AREA_FILL = {
   base: { background: 'rgba(245, 158, 11, 0.12)', outline: '2px solid rgba(245, 158, 11, 0.6)' },
   hover: { background: 'rgba(245, 158, 11, 0.2)', outline: '2px solid rgba(245, 158, 11, 0.9)' },
@@ -318,8 +324,8 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
     if (!band) {
       band = doc.createElement('div');
       band.setAttribute(ANNOTATE_BAND_ATTR, '');
-      band.style.background = 'rgba(245, 158, 11, 0.10)';
-      band.style.outline = '2px dashed rgba(245, 158, 11, 0.9)';
+      band.style.background = BAND_STYLE.background;
+      band.style.outline = `2px dashed ${BAND_STYLE.outline}`;
       doc.body.appendChild(band);
     }
     return band;
@@ -590,10 +596,15 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
     height: Math.abs(to.clientY - from.startY),
   });
 
-  /** Every selectable node with its rect and BODY path — what a band is measured against. */
+  /**
+   * Every selectable node with its rect and BODY path — what a band is
+   * measured against. An authored `<svg>` counts as a block; the paths and
+   * circles INSIDE it are drawing, not blocks, and a band that grazes one
+   * must anchor to the picture, not to a stroke of it.
+   */
   const areaCandidates = (): Array<{ path: string; rect: AnnotationRect }> =>
     [...doc.querySelectorAll<HTMLElement>(`[${AST_PATH_ATTR}]`)]
-      .filter((el) => !el.closest('.mx-rail, .mx-present') && describeSelection(el, nodes))
+      .filter((el) => !el.closest('.mx-rail, .mx-present') && !el.parentElement?.closest('svg') && describeSelection(el, nodes))
       .map((el) => ({ path: el.getAttribute(AST_PATH_ATTR)!, rect: el.getBoundingClientRect() }));
 
   const onAreaPointerDown = (event: PointerEvent) => {

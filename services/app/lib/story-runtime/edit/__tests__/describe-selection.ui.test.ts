@@ -97,3 +97,26 @@ describe('ancestorCrumbs', () => {
     expect(ancestorCrumbs(at('0'), nodes)).toEqual([]);
   });
 });
+
+/*
+ * ADDED: AN AUTHORED <svg>. Its `className` is an SVGAnimatedString, not a
+ * string, and reading it as one threw `split is not a function` out of the
+ * breadcrumb — which killed a drawn-area release on any document carrying an
+ * inline sketch (measured on a real document: five svgs, 241 stamped
+ * children, nothing posted). The class attribute is the same on both.
+ */
+describe('describeSelection inside an authored <svg>', () => {
+  const SVG_SRC = '<div className="p-8"><svg className="w-6 h-6" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" /></svg></div>';
+  const svgNodes = (() => { const p = parseJsx(SVG_SRC); if (!p.ok) throw new Error('fixture does not parse'); return p.nodes; })();
+
+  it('never throws, and reads the svg ancestor\'s class through the attribute', () => {
+    document.body.innerHTML = '<div data-mx-ast="0" class="p-8"><svg data-mx-ast="0.0" class="w-6 h-6 max-w-xs" viewBox="0 0 10 10"><circle data-mx-ast="0.0.0" cx="5" cy="5" r="4"></circle></svg></div>';
+    const circle = document.querySelector('[data-mx-ast="0.0.0"]')!;
+    expect(typeof (circle.parentElement as Element & { className: unknown }).className).not.toBe('string');
+    expect(() => describeSelection(circle, svgNodes)).not.toThrow();
+    expect(() => ancestorCrumbs(circle, svgNodes)).not.toThrow();
+    const crumbs = ancestorCrumbs(circle, svgNodes);
+    expect(crumbs.find((crumb) => crumb.path === '0.0')).toMatchObject({ tag: 'svg', hint: 'max-w-xs' });
+    expect(describeSelection(circle, svgNodes)).toMatchObject({ path: '0.0.0', tag: 'circle' });
+  });
+});
