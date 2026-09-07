@@ -47,7 +47,7 @@ afbin remote --server http://localhost:6401 claude --chrome
 
 Put afbin options **before** the command; everything after the command goes to the harness unchanged. Your working directory, environment, installed skills, MCP configuration, and local input/output remain available. The CLI starts the executable directly, without constructing a shell command string. You can explicitly run a shell too: `afbin remote bash`.
 
-Open the printed session link, or `/chat` on the selected server, and sign into the same artifactbin account. Select a session and choose **Take control**. Use the terminal directly, the message box, or the mobile Enter/Escape/arrow buttons. Local typing takes control back. **Disconnect** removes remote access and leaves the local command running; Ctrl+C goes to the command as usual.
+Open the printed session link, or `/chat` on the selected server, and sign into the same artifactbin account. Select a session and use the terminal directly, the message box, or the Enter/Escape/arrow buttons. **Switch to mobile** and **Switch to desktop** resize the shared terminal. The selected size stays in effect even when the local terminal sends input or automatic replies. **Disconnect** removes remote access and leaves the local command running; Ctrl+C goes to the command as usual.
 
 ## Auth
 

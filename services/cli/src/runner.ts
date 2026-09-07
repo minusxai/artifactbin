@@ -58,7 +58,6 @@ export async function runRemote(options: RunOptions): Promise<number> {
     ack = 0,
     seq = 0,
     exitCode: number | undefined,
-    localControl = false,
     remote = true,
     paused = false;
   let controller: "local" | "web" = "local";
@@ -101,9 +100,8 @@ export async function runRemote(options: RunOptions): Promise<number> {
   };
   const input = (data: Buffer) => {
     if (exitCode !== undefined) return;
-    localControl = true;
-    controller = "local";
-    resize();
+    // stdin includes automatic terminal replies, not just human typing.
+    // Only explicit layout controls may change browser-selected dimensions.
     child.write(data.toString("utf8"));
   };
   const onResize = () => {
@@ -146,13 +144,11 @@ export async function runRemote(options: RunOptions): Promise<number> {
             ack,
             cols,
             rows,
-            localControl,
             ...(exitCode !== undefined && length === buffer.length
               ? { exitCode }
               : {}),
           };
           buffer = buffer.slice(length);
-          localControl = false;
         }
         try {
           const result = await api<RemoteExchangeResult>(
@@ -162,7 +158,7 @@ export async function runRemote(options: RunOptions): Promise<number> {
             batch,
             shutdown.signal,
           );
-          controller = localControl ? "local" : result.controller;
+          controller = result.controller;
           if (controller === "local" && interactive) resize();
           for (const item of result.inputs) {
             if (item.id <= ack) continue;

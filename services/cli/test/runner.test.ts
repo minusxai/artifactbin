@@ -133,3 +133,45 @@ test("interactive exit detaches late input and resize while flushing the final e
   assert.match(messages, /Session closed/);
   assert.doesNotMatch(messages, /remote access interrupted/);
 });
+
+test("mobile dimensions survive local terminal replies and typing", async (t) => {
+  const tty = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
+  const raw = Object.getOwnPropertyDescriptor(process.stdin, "setRawMode");
+  Object.defineProperty(process.stdin, "isTTY", { value: true, configurable: true });
+  Object.defineProperty(process.stdin, "setRawMode", { value: () => process.stdin, configurable: true });
+  t.after(() => {
+    if (tty) Object.defineProperty(process.stdin, "isTTY", tty);
+    else delete (process.stdin as { isTTY?: boolean }).isTTY;
+    if (raw) Object.defineProperty(process.stdin, "setRawMode", raw);
+    else delete (process.stdin as { setRawMode?: unknown }).setRawMode;
+  });
+  t.mock.method(process.stdin, "resume", () => process.stdin);
+  t.mock.method(process.stdin, "pause", () => process.stdin);
+  t.mock.method(process.stderr, "write", () => true);
+  const exchanges: Array<{ cols: number; rows: number; localControl?: boolean }> = [];
+  t.mock.method(globalThis, "fetch", async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    if (!body.runnerKey) return Response.json({ id: "mobile", runnerKey: "runner" });
+    exchanges.push(body);
+    if (exchanges.length === 2) {
+      // A terminal replies to the harness's cursor-position query after its redraw.
+      process.stdin.emit("data", Buffer.from("\x1b[12;5R"));
+      process.stdin.emit("data", Buffer.from("hello"));
+    }
+    return Response.json({ controller: "web", inputs: exchanges.length === 1
+      ? [{ id: 1, kind: "resize", source: "keyboard", cols: 41, rows: 32 }]
+      : [] });
+  });
+  const code = await runRemote({
+    connection: { server: "https://example.com", token: "test" },
+    command: "/bin/sh", args: ["-c", "sleep 1; exit 0"], interactive: true,
+    onOutput: () => {},
+  });
+  assert.equal(code, 0);
+  assert.ok(exchanges.length >= 3);
+  for (const frame of exchanges.slice(1)) {
+    assert.equal(frame.cols, 41);
+    assert.equal(frame.rows, 32);
+    assert.ok(!frame.localControl, "terminal replies must not reclaim dimensions");
+  }
+});
