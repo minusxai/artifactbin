@@ -1,12 +1,15 @@
 ---
 name: markup-state
 description: >-
-  Reactive JSX, dialogs, SQL local state.
+  Reactive state.
 ---
 ## Read first
 
 Visible interactions need no author script. Scalar Values bind to controls;
 restricted JSX reads their current snapshot. This is interpreted data, not JavaScript execution.
+For scripted canvas/DOM islands, [managed Iframe](markup-iframe.md) shares these
+parent signals through `mx.params.subscribe(['name'], fn)` and declared mutations
+through `mx.mutate`; it does not bypass authentication or dataset permissions.
 
 ```jsx
 <Helmet>

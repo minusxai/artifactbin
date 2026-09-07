@@ -17,7 +17,7 @@ as one targeted `edit_artifact`.
 
 Every write answers `markup_changed`: true = storage rewrote it; edit against
 the returned canonical `markup`.
-A 400 names exactly what to fix.
+A 400 names the fix.
 **`title` is what a browser tab and link previews show** — always set it; the
 on-page heading is not it.
 
@@ -41,7 +41,7 @@ component kit (`Card`, `Tabs`, `Badge`, `Grid`/`GridItem`,
 carrying the allowed set (`allowed_html_tags`), an unknown component the
 registry: a wrong guess costs one round trip. One exception:
 `[[ refusedTags | join(' ') ]]` are refused with NO list — never guess them
-(`<form>` and `<iframe>` most often). Custom CSS and JS live in ONE `<Helmet>`,
+(`<form>` and raw `<iframe>` most often). Parent CSS and JS live in ONE `<Helmet>`,
 which also holds `<title>`:
 
 ```jsx
@@ -55,7 +55,7 @@ one column and widen: `grid-cols-1 @2xl:grid-cols-3`, and so does display
 type — `text-4xl @2xl:text-6xl`, never a bare `text-6xl` (60px type breaks a
 phone). Never a fixed pixel width.
 
-Rules: one self-contained document — no CDN `<script src>`,
+Parent rules: one self-contained document — no CDN `<script src>`,
 no external stylesheet (hard 400s at publish); a runtime `fetch()` is
 blocked by the sandbox; images are a `data:` URI or
 any `https://` URL (publish copies it, your URL stays); web fonts: a Google family via
@@ -105,7 +105,7 @@ picked — without the frame, a deck ships text flush to the viewport edge.
 
 [[ checkWork ]]
 
-**Prose and a one-dataset chart are fully covered above**. Each ask has ONE file under
+**Prose and a one-dataset chart are covered above**. Each ask has ONE file under
 `references/` ([[ docsIndexHint ]]):
 | when the ask involves | read |
 |---|---|
@@ -121,6 +121,7 @@ picked — without the frame, a deck ships text flush to the viewport edge.
 | charts (vega specs), controls, `<Mutation>`, data formats | `markup-data.md` |
 | editable cells, tags and reference pickers | `markup-editing.md` |
 | isolated scripts and data bridge | `markup-scripts.md` |
+| managed DOM/canvas, CDN bundles | `markup-iframe.md` |
 | reactive JSX, dialogs, local SQL | `markup-state.md` |
 | scroll reveals and ambient motion classes | `markup-motion.md` |
 | Video embeds | `markup-video.md` |
