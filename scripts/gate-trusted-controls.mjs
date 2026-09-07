@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import {spawn,execFileSync} from 'node:child_process';
 import {mkdtempSync,rmSync,readFileSync} from 'node:fs';
 import {createServer as httpsServer} from 'node:https';
-import {request as httpRequest} from 'node:http';
+import {request as httpRequest,createServer as httpServer} from 'node:http';
 import net from 'node:net';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
-import {createHash,randomBytes} from 'node:crypto';
+import {createHash,createHmac,randomBytes} from 'node:crypto';
 import {chromium,firefox,webkit} from 'playwright';
 import {startDocument,becomeOwner} from './lib/start-doc.mjs';
 import {loginViaEmail} from './lib/mail-login.mjs';
@@ -40,6 +40,10 @@ await new Promise(resolve=>tls.listen(portBase,'127.0.0.1',resolve));
 const tlsPort = tls.address().port;
 const hostname=interactive || engineName!=='chromium' ? '127.0.0.1.nip.io' : 'artifactbin.test';
 const base = `https://${hostname}:${tlsPort}`, controls = `https://i.${hostname}:${tlsPort}`;
+const assets=`https://assets.${hostname}:${tlsPort}`,authSecret=randomBytes(32).toString('hex');
+const assetFixture=httpServer((req,res)=>{if(req.url!=='/preview.js'){res.writeHead(404);res.end();return;}res.writeHead(200,{'Content-Type':'text/javascript'});res.end('mx.params.set("privateAsset","loaded")');});
+await new Promise(resolve=>assetFixture.listen(portBase?portBase+2:0,'127.0.0.1',resolve));
+const previewBundle=`http://127.0.0.1:${assetFixture.address().port}/preview.js`;
 // Node's fetch ignores an explicit Host header (measured on Node 22). Use
 // the HTTP client for fixture setup against the actual configured hostname.
 const mainFetch = (url, init = {}) => new Promise((resolve,reject) => {
@@ -51,10 +55,10 @@ const mainFetch = (url, init = {}) => new Promise((resolve,reject) => {
 });
 const server = spawn(process.execPath,['--import',resolve('scripts/lib/controls-mail-stub.mjs'),resolve('dist/proxy-server.mjs')],{
   cwd:resolve('services/app'),stdio:['ignore','ignore','inherit'],env:{...process.env,
-    NODE_ENV:'production',APP__PORT:String(port),APP__PUBLIC_BASE_URL:base,APP__CONTROLS_ORIGIN:controls,
+    NODE_ENV:'production',APP__PORT:String(port),APP__PUBLIC_BASE_URL:base,APP__CONTROLS_ORIGIN:controls,APP__ASSETS_ORIGIN:assets,
     FEATURE_FLAG__LIVE_UPDATES_ANON_ENABLED:String(anonymousLive),
     EMAIL__RESEND_API_KEY:'mxmx_test_controls_mail',EMAIL__DEV_OUTBOX_PATH:join(scratch,'mail.jsonl'),
-    AUTH__SECRET:randomBytes(32).toString('hex'),DATABASE_URL:'pglite://memory',SQL__SERVICE_URL:'',BROWSER__SERVICE_URL:'',EVENTS__SERVICE_URL:'',
+    AUTH__SECRET:authSecret,DATABASE_URL:'pglite://memory',SQL__SERVICE_URL:'',BROWSER__SERVICE_URL:'',EVENTS__SERVICE_URL:'',
     OBJECT_STORE__LOCAL_DIR:join(scratch,'objects'),EXPORT__INTERNAL_ORIGIN:backend,ARTIFACTS__ALLOW_PUBLIC:'1',
     PROXY__RATE_LIMIT_CONFIG_FILE:resolve('services/proxy/dev_rate_limits.yml'),WEB_INGEST__ALLOW_PRIVATE:'1',
   },
@@ -106,7 +110,7 @@ try {
     console.log(`Interactive local fixture: ${base}/a/${seed.id}\nControls host: ${controls}/controls/a/${seed.id}`);
     await new Promise(resolve=>{process.once('SIGINT',resolve);process.once('SIGTERM',resolve);});
   } else {
-  browser = await engine.launch(engineName==='chromium' ? {args:['--host-resolver-rules=MAP artifactbin.test 127.0.0.1, MAP i.artifactbin.test 127.0.0.1','--proxy-bypass-list=*']} : {});
+  browser = await engine.launch(engineName==='chromium' ? {args:['--host-resolver-rules=MAP artifactbin.test 127.0.0.1, MAP i.artifactbin.test 127.0.0.1, MAP assets.artifactbin.test 127.0.0.1','--proxy-bypass-list=*']} : {});
   // Actual production configuration, no client mocks: an anonymous reader
   // either subscribes normally or never opens a connection, including reload.
   const snapshot=await browser.newPage({ignoreHTTPSErrors:true});
@@ -270,6 +274,26 @@ try {
   const privateResponse=await mainFetch(backend+'/api/artifacts',{method:'POST',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({markup:`<Helmet><Value name="delta" type="number" default={0}/><Query name="answers">{\`select secret + $delta as answer from ref_${dataset.id}\`}</Query><Mutation name="inc">{\`update _signals set delta=delta+1\`}</Mutation></Helmet><h1>Private data</h1><Number data="$answers" col="answer" agg="sum"/><Button run="$inc">Change private query</Button>`})});
   assert.equal(privateResponse.status,201,privateResponse.status===201 ? undefined : await privateResponse.text());
   const privateDoc=await privateResponse.json();
+  // The capture shell is the remaining real framed ArtifactSurface path.
+  // Exercise its scoped parent relay, not just the top-level reader resolver.
+  const previewMarkup='<Helmet><Value name="privateAsset" type="string" default="waiting"/></Helmet><p aria-label="Private asset">{$privateAsset}</p><Iframe title="Private managed preview"><script src="'+previewBundle+'"/></Iframe>';
+  const previewResponse=await mainFetch(backend+'/api/artifacts',{method:'POST',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({markup:previewMarkup,visibility:'private'})});
+  assert.equal(previewResponse.status,201,await previewResponse.clone().text());const previewDoc=await previewResponse.json();
+  const capture=await browser.newPage({ignoreHTTPSErrors:true});
+  capture.on('console',message=>{if(message.type()==='error')console.error('CAPTURE',message.text());});
+  capture.on('pageerror',error=>console.error('CAPTURE PAGE',error.message));
+  assert.equal((await capture.goto(base+'/a/'+previewDoc.id)).status(),404);
+  const expiry=Date.now()+60_000,key=expiry+'.'+createHmac('sha256',authSecret).update(previewDoc.id+'.'+expiry).digest('hex');
+  const resolverRequests=[];capture.on('request',request=>{if(request.url().includes('/assets?'))resolverRequests.push(request.url());});
+  await capture.addInitScript(()=>{window.__typedAssets=[];addEventListener('message',event=>{if(event.data?.type==='mx:asset')window.__typedAssets.push(event.data.kind);});});
+  await capture.goto(base+'/a/'+previewDoc.id+'?key='+key);
+  const previewFrame=await (await capture.waitForSelector('iframe[title="artifact"]')).contentFrame();
+  try{await previewFrame.getByLabel('Private asset',{exact:true}).filter({hasText:'loaded'}).waitFor({timeout:20000});}
+  catch(error){console.error('CAPTURE STATE',await previewFrame.locator('body').innerText(),await capture.evaluate(()=>window.__typedAssets),resolverRequests.map(url=>new URL(url).pathname));throw error;}
+  assert((await capture.evaluate(()=>window.__typedAssets)).includes('script'),'private capture imports script through typed parent relay');
+  assert(resolverRequests.some(url=>new URL(url).searchParams.get('key')===key),'platform parent supplies source-scoped capture key');
+  await capture.close();
+  console.log('PASS: private framed capture preview resolves bundled script via typed asset relay and parent-owned scoped key');
   const invitedEmail=`mxmx_test_controls_invited_${Date.now()}@example.com`;
   assert.equal(await chrome.locator('body').evaluate(async (_,args)=>(await fetch(`/api/my/artifacts/${args.id}/sharing`,{method:'PUT',headers:{'Content-Type':'application/json','x-artifactbin-csrf':'1'},body:JSON.stringify({shares:[{email:args.email,role:'viewer'}]})})).status,{id:privateDoc.id,email:invitedEmail}),200);
   const invited=await browser.newPage({ignoreHTTPSErrors:true});
@@ -353,45 +377,48 @@ try {
   // its own DOM and pinned libraries but no access to parent/control authority.
   const sandboxScript=`(async()=>{
     const THREE=await artifact.library('three');
-    window.__vector=new THREE.Vector3(3,4,0).length();
+    const report={vector:new THREE.Vector3(3,4,0).length()};
     const canvas=document.getElementById('scene');
-    const draw=()=>{canvas.width=innerWidth;canvas.height=100;const ctx=canvas.getContext('2d');ctx.fillStyle='#ef3340';ctx.fillRect(0,0,canvas.width,100);window.__width=innerWidth;};
+    const draw=()=>{canvas.width=innerWidth;canvas.height=100;const ctx=canvas.getContext('2d');ctx.fillStyle='#ef3340';ctx.fillRect(0,0,canvas.width,100);mx.params.set('sandboxWidth',innerWidth);};
     addEventListener('resize',draw);draw();
     document.getElementById('increment').addEventListener('click',()=>mx.mutate('inc'));
-    try{parent.document.body.textContent='ESCAPED';window.__parent='escaped'}catch(e){window.__parent=e.name}
-    try{localStorage.setItem('leak','1');window.__storage='escaped'}catch(e){window.__storage=e.name}
-    window.__network=await fetch('${controls}/api/my/artifacts',{credentials:'include'}).then(()=>false,()=>true);
+    try{parent.document.body.textContent='ESCAPED';report.parent='escaped'}catch(e){report.parent=e.name}
+    try{localStorage.setItem('leak','1');report.storage='escaped'}catch(e){report.storage=e.name}
+    report.network=await fetch('${controls}/api/my/artifacts',{credentials:'include'}).then(()=>false,()=>true);
     parent.postMessage({type:'mx:text-edit',path:'0',nonce:'guessed',innerHtml:'FORGED'},'*');
-    window.__ready=true;
-  })().catch(e=>window.__error=String(e));`;
-  const sandboxMarkup='<Helmet><Value name="n" type="number" default={0}/><Mutation name="inc">{`update _signals set n=n+1`}</Mutation></Helmet><h1>Visible sandbox boundary</h1><p>{$n}</p>'
-    +`<Sandbox title="Interactive model" height={180} html={${JSON.stringify('<canvas id="scene"></canvas><button id="increment" aria-label="Increment inside sandbox">Increment</button>')}} script={${JSON.stringify(sandboxScript)}}/>`;
+    mx.params.set('sandboxReport',JSON.stringify(report));
+  })().catch(e=>mx.params.set('sandboxReport',JSON.stringify({error:String(e)})));`;
+  const sandboxMarkup='<Helmet><Value name="sandboxReport" type="string" default=""/><Value name="sandboxWidth" type="number" default={0}/><Value name="n" type="number" default={0}/><Mutation name="inc">{`update _signals set n=n+1`}</Mutation></Helmet><h1>Visible sandbox boundary</h1><p>{$n}</p>'
+    +`<Sandbox title="Interactive model" height={180} html={${JSON.stringify('<canvas id="scene" style="display:block;height:100px"></canvas><button id="increment" style="display:block;width:150px;height:40px" aria-label="Increment inside sandbox">Increment</button>')}} script={${JSON.stringify(sandboxScript)}}/>`;
   const sandboxResponse=await mainFetch(`${backend}/api/artifacts`,{method:'POST',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({markup:sandboxMarkup,visibility:'unlisted'})});
   assert.equal(sandboxResponse.status,201,await sandboxResponse.clone().text());
   const sandboxDoc=await sandboxResponse.json();
   await peer.goto(`${base}/a/${sandboxDoc.id}`);
-  const visual=await (await peer.waitForSelector('iframe[title="Interactive model"]')).contentFrame();
-  await visual.waitForFunction(()=>window.__ready || window.__error);
-  assert.deepEqual(await visual.evaluate(()=>({error:window.__error,vector:window.__vector,parent:window.__parent,storage:window.__storage,network:window.__network})),
-    {error:undefined,vector:5,parent:'SecurityError',storage:'SecurityError',network:true});
+  const visual=peer.locator('iframe[title="Interactive model"]');
+  await peer.waitForFunction(()=>window.mx?.params.get('sandboxReport'));
+  assert.deepEqual(await peer.evaluate(()=>JSON.parse(window.mx.params.get('sandboxReport'))),
+    {vector:5,parent:'SecurityError',storage:'SecurityError',network:true});
   assert.equal(await peer.locator('#scene').count(),0);
-  await visual.getByRole('button',{name:'Increment inside sandbox'}).click();
+  await visual.scrollIntoViewIfNeeded();
+  const box=await visual.boundingBox();
+  await peer.mouse.click(box.x+30,box.y+120);
   await peer.waitForFunction(()=>window.mx.params.get('n')===1);
-  await visual.getByRole('button',{name:'Increment inside sandbox'}).press('Enter');
+  await peer.keyboard.press('Enter');
   await peer.waitForFunction(()=>window.mx.params.get('n')===2);
-  const wide=await visual.evaluate(()=>window.__width);
+  const wide=await peer.evaluate(()=>window.mx.params.get('sandboxWidth'));
   await peer.setViewportSize({width:390,height:844});
-  await visual.waitForFunction(w=>window.__width<w,wide);
-  assert((await visual.evaluate(()=>window.__width))<=390,'sandbox resizes within mobile page');
+  await peer.waitForFunction(w=>window.mx.params.get('sandboxWidth')<w,wide);
+  assert((await peer.evaluate(()=>window.mx.params.get('sandboxWidth')))<=390,'sandbox resizes within mobile page');
   const storedSandbox=await (await mainFetch(`${backend}/api/artifacts/${sandboxDoc.id}`,{headers:{Authorization:`Bearer ${seed.token}`}})).json();
   assert.equal(storedSandbox.version,1,'forged edits and local state never change source');
   await peer.reload();
   await peer.waitForFunction(()=>window.mx.params.get('n')===0);
   const touch=await browser.newPage({ignoreHTTPSErrors:true,hasTouch:true,viewport:{width:390,height:844}});
   await touch.goto(`${base}/a/${sandboxDoc.id}`);
-  const touchFrame=await (await touch.waitForSelector('iframe[title="Interactive model"]')).contentFrame();
-  await touchFrame.waitForFunction(()=>window.__ready || window.__error);
-  await touchFrame.getByRole('button',{name:'Increment inside sandbox'}).tap();
+  const touchFrame=touch.locator('iframe[title="Interactive model"]');
+  await touch.waitForFunction(()=>window.mx?.params.get('sandboxReport'));
+  await touchFrame.scrollIntoViewIfNeeded();const touchBox=await touchFrame.boundingBox();
+  await touch.touchscreen.tap(touchBox.x+30,touchBox.y+120);
   await touch.waitForFunction(()=>window.mx.params.get('n')===1);
   await touch.close();
   console.log('PASS: visible sandbox pinned library, canvas, pointer/keyboard input, responsive resize, local SQL, parent DOM/storage/API refusal and reload reset');
@@ -401,6 +428,7 @@ try {
   }
 } finally {
   await browser?.close();
+  await new Promise(resolve=>assetFixture.close(resolve));
   if (server.exitCode === null && server.signalCode === null) {
     // Export starts Playwright inside this disposable server. Its signal
     // handler can keep Node alive after SIGTERM, even after every assertion
