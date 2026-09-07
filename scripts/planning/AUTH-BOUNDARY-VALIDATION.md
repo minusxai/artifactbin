@@ -1,10 +1,10 @@
 # Auth boundary validation — 7 September 2026
 
-Current base: main `546325f`, integrated with the feature work at `7bd1c9f`,
-on `work/security-stage-one`. The newer implementation below is still local.
-No production deployment, session migration, or PR push was performed.
+Validated implementation: `ecfdcbb` on `work/security-stage-one`, based on main
+`546325f` integrated at `7bd1c9f`. Delivery stays in draft PR #46. No production
+deployment or session migration was performed.
 
-## Stage 1 verdict: incomplete
+## Stage 1 verdict: blocked on a newly conflicting product requirement
 
 The real human-session split and browser topology work in the measured flows.
 This is not a sign-off for the entire architecture. The combined-head matrix
@@ -15,9 +15,33 @@ and WebKit controls/consent flows. Main subsequently advanced to 323fa5d
 Boundary-preserving rollback, staging and real-device evidence remain open.
 Do not advance to Stage 2 on the old prototype results.
 
+### New main incompatibility — decision needed before integration
+
+Main `323fa5d` includes libraries (`e4df36d`, PR #55) and comment selection
+(PR #53). Its actual `gate-libraries.mjs` requires an author Helmet script to
+use `document.getElementById('scene')`, create a Three.js renderer on that
+visible canvas, and export its rendered pixels. This feature branch's tested
+contract deliberately runs that script in a hidden opaque iframe without
+visible-DOM access or arbitrary network. Merely merging imports or relaxing
+the library URL list cannot satisfy both contracts.
+
+The current browser isolation gate passed: parent DOM access yields
+`SecurityError`, author scripts run in `sandbox="allow-scripts"`, and script
+replacement/removal revokes that realm. Main's documented library contract
+requires the very visible-DOM capability that this plan removes. This is a
+source/contract incompatibility; the new libraries browser gate has NOT been
+run on an integrated build. Do not claim it was measured failing.
+
+Recommended direction: keep the no-visible-DOM boundary and design a bounded
+declarative canvas/viewer primitive for library rendering. That is new product
+scope and requires a decision. The alternative is retaining visible-DOM
+author scripts and revisiting the architecture. Do not silently disable
+libraries or restore visible-DOM scripts. The attempted merge was aborted
+cleanly after checkpointing; latest main is NOT integrated. PR #46 stays draft.
+
 ### New integrated evidence
 
-- The first real mutation-consent slice works end-to-end in Chromium:
+- The first real mutation-consent slice works end-to-end in Chromium, Firefox and WebKit:
   non-owner artifact button → trusted review link → unframeable top-level
   approval page → single dataset commit → return to updated document. It uses
   existing app-owned hashed/expiring codes and a verified session identity.
@@ -91,8 +115,8 @@ Do not advance to Stage 2 on the old prototype results.
   fixed the actual OAuth framing regression, including immutable redirects.
 - The new real two-host application gate passed Chromium, Firefox and WebKit:
   editing/reload, local SQL, comments, mobile controls, author attacks, OTP,
-  social actions, private ACLs, logout and browser disconnect. The latest
-  direct-backend guard still requires the rebuilt combined-head gate rerun.
+  social actions, private ACLs, logout and browser disconnect. The final
+  ecfdcbb build includes the direct-backend guard and complete consent flow.
 - The login helper itself had a false positive: a polling API treated its async
   predicate as truthy. BrowserOS independently measured the missing-header
   session request as 403, protected request as 200. The helper now awaits and
@@ -101,13 +125,18 @@ Do not advance to Stage 2 on the old prototype results.
 - Actual PostgreSQL concurrency: a second transaction edits the document while
   a real dataset mutation is pending. The final commit locks/checks the document,
   waits, and returns 409 without changing the dataset. The test asserts that the
-  app uses its PostgreSQL adapter, not the embedded adapter. This does not prove
-  production mutation consent or every concurrent ACL-change case.
+  app uses its PostgreSQL adapter, not the embedded adapter. Separate real
+  PostgreSQL cases cover document-share and dataset-share revocation. These
+  are local fixtures, not production deployment evidence.
 - Last complete pre-consent suite: **6,117 tests**, one skip
   (1,289 API + 3,728 Node + 1,094 UI + 6 CLI); all 51 browser gates and
   Firefox/WebKit controls passed with disposable local object storage.
-  The final merged-head suite, including consent and MCP fallback protection,
-  is running. A later API run's passing assertions did NOT count as green:
+  The final ecfdcbb suite, including consent and MCP fallback protection,
+  passed **6,127 tests** (1,295 API + 3,730 Node + 1,095 UI + 7 CLI), with
+  one optional `TEST_S3_URL` integration skip. All 51 browser gates passed in
+  142 seconds across six disposable servers without retry; complete Firefox
+  and WebKit controls flows passed too. The 26 standalone policy checks also
+  passed. An earlier API run's passing assertions did NOT count as green:
   PostgreSQL teardown emitted unhandled errors. Cleanup now runs through the
   harness-owned `afterClose` hook, preserving its database-ownership contract.
   Latest main `546325f` is merged and lockfile install/dry-run checks pass.
