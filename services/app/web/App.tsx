@@ -1,3 +1,4 @@
+import { ChatPage } from './pages/Chat';
 import { Navigate, Route, Routes } from 'react-router';
 import MixpanelClient from '@/components/MixpanelClient';
 import { SessionProvider, useSession } from './session';
@@ -5,6 +6,7 @@ import { Shell } from './Shell';
 import { AccountPage } from './pages/Account';
 import { AssetsPage } from './pages/Assets';
 import { ArtifactPage } from './pages/Artifact';
+import { DatasetEditorPage } from './pages/DatasetEditor';
 import { DocsPage } from './pages/Docs';
 import { HomePage } from './pages/Home';
 import { PrivacyPage, TermsPage } from './pages/Legal';
@@ -31,8 +33,11 @@ export function App() {
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/chat" element={<ChatPage />} />
           <Route path="/account" element={<AccountPage />} />
           <Route path="/assets" element={<AssetsPage />} />
+          <Route path="/datasets/new" element={<DatasetEditorPage />} />
+          <Route path="/datasets/:id/edit" element={<DatasetEditorPage />} />
           <Route path="/tokens" element={<Navigate to="/account" replace />} />
           <Route path="/tokens/new" element={<TokensNewPage />} />
           <Route path="/trash" element={<TrashPage />} />

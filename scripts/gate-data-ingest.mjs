@@ -53,7 +53,9 @@ check(/zip:string/.test(columns), 'zip kept its leading zero as text');
 // id is not usable, and omitting the ref: prefix is exactly the mistake that
 // shipped a blank chart.
 check(made.body.ref === `ref:${made.body.id}`, `the create response carries the ref form (${made.body.ref})`);
-check(/<Query name="rows">/.test(made.body.usage ?? '') && /data="\$rows"/.test(made.body.usage ?? ''), 'and a ready-to-paste Query + embed bound as data="$rows"');
+check((made.body.usage ?? '').includes(`<Query name="rows" source="${datasetId}">`)
+  && /from\s+"public"\."rows"/i.test(made.body.usage ?? '')
+  && /data="\$rows"/.test(made.body.usage ?? ''), 'and a canonical source query over public.rows + embed bound as data="$rows"');
 check(/vega-lite/.test(made.body.usage ?? ''), 'with a viz spec bound to the real columns');
 
 // ── 2. EDIT a story to reference the uploaded dataset ───────────────────────
@@ -61,7 +63,7 @@ check(/vega-lite/.test(made.body.usage ?? ''), 'with a viz spec bound to the rea
 // driving it by API here exercises the identical write path the UI uses.
 const head = await api(`/api/artifacts/${start.id}`, {}, token);
 const markup =
-  `<Helmet><Query name="rows">{\`select * from ref_${datasetId}\`}</Query></Helmet>` +
+  `<Helmet><Query name="rows" source="${datasetId}">{\`select * from public.rows\`}</Query></Helmet>` +
   `<div data-design="tw" className="@container p-10">` +
   `<h1 className="text-4xl font-bold">Sales</h1>` +
   `<Question title="Revenue by month" data="$rows" ` +

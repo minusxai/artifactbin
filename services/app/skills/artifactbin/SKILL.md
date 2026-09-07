@@ -1,7 +1,7 @@
 ---
 name: artifactbin
 description: >-
-  Publish or edit documents over HTTP. Read first: publishing, layout, themes, datasets and the reference index.
+  Publish/edit documents. Read first: API, design, data, references.
 read_first_max: 8192
 ---
 ## Read first — everything a straightforward document needs
@@ -15,8 +15,8 @@ as one targeted `edit_artifact`.
 
 [[ publishExample ]]
 
-Every write answers `markup_changed`: true = storing rewrote it (formatting, a
-hoisted `<Helmet>`) and the canonical `markup` rides back — edit against that.
+Every write answers `markup_changed`: true = storage rewrote it; edit against
+the returned canonical `markup`.
 A 400 names exactly what to fix.
 **`title` is what a browser tab and link previews show** — always set it; the
 on-page heading is not it.
@@ -28,8 +28,7 @@ on-page heading is not it.
 
 [[ editExample ]]
 
-`old_string` must appear EXACTLY ONCE. Prefer it to replacing the whole
-document: smaller, and a human may be reading live.
+`old_string` must appear EXACTLY ONCE. Prefer targeted edits; readers may be live.
 
 **markup** is JSX treated as data: ordinary HTML tags for everything including
 prose (`h1 h2 p ul li blockquote table figure img`, inline `svg`) plus the
@@ -64,10 +63,10 @@ any `https://` URL (publish copies it, your URL stays); web fonts: a Google fami
 
 **Data in a document** — three moves: upload the rows, declare a `<Query>` over
 them in the `<Helmet>`, bind an embed by `$name`. The rows are their own
-artifact (`{"dataset":"month,revenue\n2026-01,120"}`); its response echoes a ready-to-paste Query+Question.
+artifact (`{"dataset":"month,revenue\n2026-01,120"}`); `source` selects its ID; SQL names a table (`public.rows` for flat uploads).
 
 ```jsx
-<Helmet><Query name="sales">{`select region, sum(revenue) revenue from ref_<datasetId> group by 1`}</Query></Helmet>
+<Helmet><Query name="sales" source="<datasetId>">{`select region, sum(revenue) revenue from public.rows group by 1`}</Query></Helmet>
 <Question data="$sales" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"region","type":"nominal"},"y":{"field":"revenue","type":"quantitative"}}}}} />
 ```
 
@@ -102,8 +101,7 @@ first-class:
 **The reading path — the skeleton is published; before writing its content, read
 in order:** `references/design.md` (craft), `references/markup.md` (vocabulary),
 then the `references/templates-<name>.md` and `references/themes-<name>.md` you
-picked — their frame is what makes it come out right (a deck without it ships
-text flush to the viewport edge).
+picked — without the frame, a deck ships text flush to the viewport edge.
 
 [[ checkWork ]]
 
@@ -113,6 +111,7 @@ text flush to the viewport edge).
 |---|---|
 | API — replace, `expectedVersion`, visibility, folders, trash/restore, errors | `publishing.md` |
 | tokens — expiry, saved config, claiming, a 401 | `publishing-auth.md` |
+| Postgres connections, multi-table datasets, SQL models | `databases.md` |
 | upload CSV/sheets, images, PDFs (`<File>`), viz recipes | `publishing-datasets.md` |
 | pinned human feedback — reply, resolve, the anchor attribute | `publishing-annotations.md` |
 | connecting an MCP client — OAuth or bearer, the tool list | `publishing-mcp.md` |

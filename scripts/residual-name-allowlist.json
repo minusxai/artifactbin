@@ -40,5 +40,17 @@
     "value": "artifact-bin",
     "count": 1,
     "reason": "Persisted local authentication configuration path"
+  },
+  {
+    "path": "services/cli/src/config.ts",
+    "value": "artifact-bin",
+    "count": 1,
+    "reason": "Read the existing legacy credential file for backwards compatibility."
+  },
+  {
+    "path": "services/cli/README.md",
+    "value": "artifact-bin",
+    "count": 1,
+    "reason": "Document the existing legacy credential file, not a product name."
   }
 ]

@@ -26,6 +26,11 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('assets page', () => {
+  it('links to dataset creation', async () => {
+    render(<MemoryRouter><AssetsPage /></MemoryRouter>);
+    expect(await screen.findByLabelText('Create dataset')).toHaveAttribute('href', '/datasets/new');
+  });
+
   it('renders the existing management table with asset-specific search', async () => {
     render(<MemoryRouter><AssetsPage /></MemoryRouter>);
 

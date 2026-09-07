@@ -96,6 +96,7 @@ export async function publishDataset(body: Record<string, unknown>, rows: unknow
       columns,
       rowCount: flat.length,
       objectKey: located.objectKey,
+      catalog:{kind:'stored',defaultSchema:'public',refreshSeconds:0,tables:[{schema:'public',name:'rows',columns,objectKey:located.objectKey}]},
       // Present only when the source had more rows than we kept.
       ...(body.__truncated ? { totalRows: body.__totalRows, truncated: true } : {}),
     },

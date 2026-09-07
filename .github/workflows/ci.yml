@@ -102,6 +102,7 @@ jobs:
         run: npx playwright install --with-deps chromium
       - if: steps.playwright.outputs.cache-hit == 'true'
         run: npx playwright install chromium
+      - run: docker pull postgres:17-alpine
       - run: npx vitest run --project=node --shard=${{ matrix.shard }}/3
 
   # jsdom setup dominates the ui project (~110s serial on a 4-vCPU runner —
@@ -375,10 +376,12 @@ jobs:
       # within-machine fan-out bottomed out at 192s on four vCPUs; the shard is
       # balanced by each gate's measured weight, not by count, so neither half
       # ends up holding every slow gate (scripts/gates.shard.mjs).
+      - run: docker pull postgres:17-alpine
       - name: every gate, four servers
         run: node scripts/gates.mjs --servers=4 --shard=${{ matrix.shard }}/2
         env:
           AUTH__SECRET: gates-ci-${{ github.run_id }}
+          DATASET__ALLOW_PRIVATE_NETWORKS: 'true'
 
   # THE IMAGE IS THE ARTIFACT THAT DEPLOYS, and nothing else here proves it
   # builds or runs. `npm run build` produces the bundle from the FULL
@@ -586,3 +589,28 @@ jobs:
           [ "${{ needs.image.result }}" = "success" ] && \
           [ "${{ needs.lean.result }}" = "success" ] && \
           [ "${{ needs.compose.result }}" = "success" ]
+
+  cli:
+    name: CLI (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-14, macos-15-intel]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test -w services/cli
+      - run: npm run build -w services/cli
+      - run: npm run build:binary -w services/cli
+      - run: npm run test:binary -w services/cli
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: afbin-${{ matrix.os }}
+          path: services/cli/dist/afbin-*
+          if-no-files-found: error

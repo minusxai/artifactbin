@@ -35,7 +35,7 @@ const DECLARED_SET = [
   'app.artifact_versions',
   'app.artifacts',
   'app.analytics_events',
-  'app.codes',
+  'app.codes', 'app.dataset_secrets',
   'app.node_identity_migration_jobs',
   'app.relations',
   'app.tokens',

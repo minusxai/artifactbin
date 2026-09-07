@@ -6,17 +6,17 @@ order: 1
 ---
 ## Read first
 
-Declare data in `<Helmet>`; bind by name. One namespace: a TABLE (a `<Query>` or a table
-`<Value>`) or a SCALAR (a `<Value>`), checked at publish — typos return `400` naming the token.
+Declare data in `<Helmet>`; bind by name. TABLEs are Queries/table Values; SCALARs are Values.
+Typos return `400` at publish.
 
 ```jsx
 <Helmet>
   <Value name="region" type="string" />
   <Value name="min_rev" type="number" default={1000} />
-  <Query name="regions">{`select distinct region from ref_<datasetId> order by 1`}</Query>
-  <Query name="sales">{`
+  <Query name="regions" source="<datasetId>">{`select distinct region from public.rows order by 1`}</Query>
+  <Query name="sales" source="<datasetId>">{`
     select region, sum(revenue) as revenue
-    from ref_<datasetId>
+    from public.rows
     where ($region is null or region = $region) and revenue >= $min_rev
     group by 1 order by 2 desc
   `}</Query>
@@ -28,6 +28,8 @@ Declare data in `<Helmet>`; bind by name. One namespace: a TABLE (a `<Query>` or
 
 `ref:<id>` survives ONLY for images and recipes; `data="ref:<id>"`, inline
 `data={[…]}` and the old Param control are retired and refused by name.
+
+Legacy `ref_<datasetId>` remains compatible. [Catalogs](databases.md).
 
 Editable cells: [editing](markup-editing.md).
 
@@ -46,9 +48,9 @@ Declarations · Bindings: embeds · Bindings: controls.
 - `<Value name="tiny" type="table" value={[{…}, …]} />` — an inline table (flat
   objects; `columns={[{name,type}]}` optional). Read it in SQL by its bare
   name (`from tiny`) or bind it directly (`data="$tiny"`).
-- `<Query name>{`select …`}</Query>` — SQL (DuckDB dialect) as a
-  template-literal child, exactly one SELECT. A dataset artifact is the table
-  `ref_<datasetId>` (one you own, or any public/unlisted one); another query
+- `<Query name source="<datasetId>">{`select …`}</Query>` — SQL as a
+  template-literal child, exactly one SELECT over that dataset’s exposed tables.
+  Without `source`, SQL runs locally in DuckDB; another query
   or table Value is a table by its bare name (any order; cycles refused); a
   scalar Value is the bound parameter `$name`, never interpolated. Dry-run
   at publish against the real columns: a bad column is a

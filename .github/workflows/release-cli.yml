@@ -1,0 +1,93 @@
+name: Release tested afbin CLI
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: release-tested-afbin
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+      SOURCE_RUN: ${{ github.event.workflow_run.id }}
+    steps:
+      # No checkout or execution of downloaded code in this privileged workflow.
+      - name: Identify the tested release
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$SOURCE_RUN" =~ ^[0-9]+$ ]]
+          # A newer main build will publish instead if this completion is stale.
+          head=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          if [ "$head" != "$SOURCE_SHA" ]; then exit 0; fi
+          version=$(gh api "repos/$GITHUB_REPOSITORY/contents/services/cli/package.json?ref=$SOURCE_SHA" --jq .content | base64 --decode | jq -r .version)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          tag="afbin-v$version"
+          installer=$(gh api "repos/$GITHUB_REPOSITORY/contents/services/app/public/chat/install.sh?ref=$SOURCE_SHA" --jq .content | base64 --decode)
+          grep -Fxq "  version=$version" <<< "$installer"
+          # Existing published versions are immutable; unrelated merges are no-ops.
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft > draft.txt 2> release-error.txt; then
+            if [ "$(cat draft.txt)" = false ]; then exit 0; fi
+          elif ! grep -qi 'not found\|HTTP 404' release-error.txt; then
+            cat release-error.txt >&2; exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Download the binaries tested by this CI run
+        if: steps.release.outputs.tag != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir bundle
+          for mapping in macos-14:darwin-arm64 macos-15-intel:darwin-x64 ubuntu-24.04:linux-x64 ubuntu-24.04-arm:linux-arm64; do
+            runner=${mapping%%:*}
+            binary=afbin-${mapping#*:}
+            gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name "afbin-$runner" --dir "downloads/$runner"
+            test -f "downloads/$runner/$binary"
+            test ! -L "downloads/$runner/$binary"
+            test -s "downloads/$runner/$binary"
+            cp "downloads/$runner/$binary" "bundle/$binary"
+          done
+          (cd bundle && sha256sum afbin-* > SHA256SUMS)
+
+      - name: Tag and publish together
+        if: steps.release.outputs.tag != ''
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" > tag.json 2> tag-error.txt; then
+            test "$(jq -r .object.type tag.json)" = commit
+            test "$(jq -r .object.sha tag.json)" = "$SOURCE_SHA"
+          else
+            grep -q 'HTTP 404' tag-error.txt || { cat tag-error.txt >&2; exit 1; }
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$RELEASE_TAG" -f "sha=$SOURCE_SHA"
+          fi
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft > draft.txt 2> release-error.txt; then
+            test "$(cat draft.txt)" = true
+            # Recover a partial draft from an earlier attempt, never a published release.
+            gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber bundle/*
+          else
+            grep -qi 'not found\|HTTP 404' release-error.txt || { cat release-error.txt >&2; exit 1; }
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --latest=false --title "$RELEASE_TAG" --notes '' bundle/*
+          fi
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false

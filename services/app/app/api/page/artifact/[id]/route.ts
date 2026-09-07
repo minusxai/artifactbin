@@ -1,3 +1,4 @@
+import {catalogOf,publicCatalogOf} from '@/lib/datasets/catalog';
 /**
  * The owner/editor SHELL's props for one document — everything ArtifactDocument
  * used to compute on the server: the ACL (uniform 404), the exporter's signed
@@ -104,9 +105,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       editId: artifact.edit_id,
       format: artifact.format,
       title: artifact.title,
-      source: artifact.source,
+      source: artifact.format==='dataset'&&role!=='owner'&&role!=='editor'?null:artifact.source,
       content: isDoc ? '' : artifact.format === 'dataset' ? JSON.stringify(await loadDatasetRows(artifact)) : artifact.content,
       columns: meta.columns ?? [],
+      ...(artifact.format==='dataset' && (artifact.meta as Record<string,unknown>).catalog ? {catalog:publicCatalogOf(artifact)!}:{}),
       // A stored FILE is not a document the app can render, so its view is the
       // two facts a person picks a file by plus the link that opens it.
       ...(artifact.format === 'pdf' ? { bytes: (meta as { bytes?: number }).bytes ?? 0, pages: (meta as { pages?: number }).pages ?? null } : {}),

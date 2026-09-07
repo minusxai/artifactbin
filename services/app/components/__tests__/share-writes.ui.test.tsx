@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ShareLink from '@/components/ShareLink';
 
 const state = {
+  datasetKind: undefined as 'postgres' | 'stored' | undefined,
   visibility: 'unlisted' as string,
   shares: [] as string[],
   access: 'read' as string,
@@ -18,7 +19,7 @@ const state = {
 let lastPut: Record<string, unknown> | null = null;
 
 beforeEach(() => {
-  Object.assign(state, { visibility: 'unlisted', shares: [], access: 'read', canPrivate: true, writtenBy: [] });
+  Object.assign(state, { datasetKind: undefined, visibility: 'unlisted', shares: [], access: 'read', canPrivate: true, writtenBy: [] });
   lastPut = null;
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     if (typeof url === 'string' && url.includes('/sharing')) {
@@ -37,6 +38,29 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 const open = () => fireEvent.click(screen.getByLabelText('Share'));
 
 describe('ShareLink — writes', () => {
+  it('explains PostgreSQL read-only access from authoritative sharing metadata without offering writes', async () => {
+    state.datasetKind = 'postgres';
+    state.access = 'readwrite'; // Never advertise an unsupported legacy flag.
+    render(<ShareLink className="x" artifactId="k3Pq9z" owner format="dataset" />);
+    open();
+    await waitFor(() => expect(screen.getByLabelText('PostgreSQL read-only access')).toHaveTextContent('Editors can manage the connection, notebook and whitelist. Viewers can query exposed data. Database rows cannot be changed here.'));
+    expect(screen.queryByLabelText('Make read & write')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Make read-only')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Share')).not.toHaveTextContent('writable');
+    expect(screen.getByLabelText('Invite email')).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Make private'));
+    await waitFor(() => expect(lastPut).toEqual({ visibility: 'private' }));
+    expect(screen.queryByLabelText('Make read & write')).not.toBeInTheDocument();
+  });
+
+  it('retains the mutable controls for stored catalogs', async () => {
+    state.datasetKind = 'stored';
+    render(<ShareLink className="x" artifactId="k3Pq9z" owner format="dataset" />);
+    open();
+    fireEvent.click(await screen.findByLabelText('Make read & write'));
+    await waitFor(() => expect(lastPut).toEqual({ access: 'readwrite' }));
+  });
+
   it('offers the row for a DATASET only, and flips it with one PATCH-shaped PUT', async () => {
     render(<ShareLink className="x" artifactId="k3Pq9z" owner format="dataset" />);
     open();
