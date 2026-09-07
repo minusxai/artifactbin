@@ -166,10 +166,7 @@ export async function runRemote(options: RunOptions): Promise<number> {
           if (controller === "local" && interactive) resize();
           for (const item of result.inputs) {
             if (item.id <= ack) continue;
-            if (
-              exitCode === undefined &&
-              !(localControl && item.source !== "comment")
-            ) {
+            if (exitCode === undefined) {
               if (item.kind === "resize" && controller === "web") {
                 cols = item.cols!;
                 rows = item.rows!;

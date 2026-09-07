@@ -31,6 +31,7 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
   const [error, setError] = useState("");
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [mobile, setMobile] = useState(false);
   const queue = useRef(Promise.resolve());
   const send = (body: unknown) => {
     const task = queue.current
@@ -83,7 +84,7 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
       if (!stopped) timer = setTimeout(() => void poll(), 250);
     };
     const data = t.onData((data) => {
-      if (current.current?.controller === "web" && current.current.online)
+      if (current.current?.online)
         void send({ type: "input", data }).catch(() => {});
     });
     const observer = new ResizeObserver(() => {
@@ -112,22 +113,20 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
     // A session owns its terminal and ordered input queue for its whole mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
-  const control = async (controller: "web" | "local") => {
-    const size = fit.current?.proposeDimensions();
-    await send({
-      type: "control",
-      controller,
-      ...(controller === "web" && size
-        ? {
-            cols: Math.max(2, Math.min(300, size.cols)),
-            rows: Math.max(2, Math.min(120, size.rows)),
-          }
-        : {}),
+  const switchView = () => {
+    setMobile((value) => !value);
+    requestAnimationFrame(() => {
+      const size = fit.current?.proposeDimensions();
+      if (!size) return;
+      void send({
+        type: "control", controller: "web",
+        cols: Math.max(2, Math.min(300, size.cols)),
+        rows: Math.max(2, Math.min(120, size.rows)),
+      }).catch(() => {});
     });
-    if (controller === "web") terminal.current?.focus();
   };
   const online = info?.online ?? false;
-  const canType = online && info?.controller === "web";
+  const canType = online;
   const ended = info?.exitCode !== null && info?.exitCode !== undefined;
   return (
     <section className="min-w-0 flex-1">
@@ -137,21 +136,19 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
           <p className="text-xs text-muted">
             {info?.harness} · {info?.machine} ·{" "}
             {online
-              ? `${info?.controller} control`
+              ? "Online"
               : info?.exitCode !== null && info?.exitCode !== undefined
                 ? `Exited (${info.exitCode})`
                 : "Offline"}
           </p>
         </div>
         {!ended && <button
-          aria-label={canType ? "Release control" : "Take control"}
+          aria-label={mobile ? "Switch to desktop" : "Switch to mobile"}
           disabled={!online}
           className="rounded border border-edge px-3 py-2 disabled:opacity-40"
-          onClick={() =>
-            void control(canType ? "local" : "web").catch(() => {})
-          }
+          onClick={switchView}
         >
-          {canType ? "Release control" : "Take control"}
+          {mobile ? "Switch to desktop" : "Switch to mobile"}
         </button>}
         <button
           aria-label={ended ? "Remove session" : "Disconnect remote session"}
@@ -173,7 +170,7 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
       {ended && <p role="status" className="mb-3 rounded border border-edge bg-surface p-4 text-sm">
         Session ended (exit {info?.exitCode}). Start a new session with afbin remote to reconnect.
       </p>}
-      <div className="overflow-x-auto rounded border border-edge bg-[#111214] p-2" hidden={ended}>
+      <div className="overflow-x-auto rounded border border-edge bg-[#111214] p-2" style={{ maxWidth: mobile ? 420 : undefined }} hidden={ended}>
         <div
           ref={container}
           aria-label="Remote terminal"
@@ -202,7 +199,7 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
           onChange={(e) => setDraft(e.target.value)}
           className="min-w-0 flex-1 rounded border border-edge bg-surface p-3"
           placeholder={
-            canType ? "Message your agent…" : "Take control to send a message"
+            canType ? "Message your agent…" : "Session offline"
           }
           maxLength={16000}
         />
@@ -235,7 +232,8 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
         ))}
       </div>}
       <p className="mt-3 text-xs text-muted" hidden={ended}>
-        Typing in your local terminal takes control back. Disconnect removes
+        Type directly in the terminal or use the message box. Typing locally restores
+        your local terminal dimensions. Disconnect removes
         remote access; your local process keeps running.
       </p>
     </section>
