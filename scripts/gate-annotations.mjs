@@ -757,9 +757,10 @@ async function pickLeg(browser) {
   await frame.locator('#figure').waitFor({ timeout: 15000 });
 
   await openArtifactControls(page);
+  // The comments control closes the panel itself — no Escape here, which
+  // would now stand the pick down that opening the rail just started.
   await page.locator('[aria-label="Toggle comments"]').click();
   await page.locator('[aria-label="Annotation sidebar"]').waitFor({ timeout: 8000 });
-  await page.keyboard.press('Escape');
 
   // Opening the rail opened the pick: nothing to press before the first click.
   const tool = page.locator('[aria-label="Pick a block to comment on"]');
