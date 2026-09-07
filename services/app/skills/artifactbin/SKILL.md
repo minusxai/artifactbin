@@ -8,8 +8,8 @@ read_first_max: 8192
 
 **Publish before you polish** — make the FIRST call a SKELETON: the real title,
 the theme and template you picked, the document's section headings, stubbed.
-Its response carries the `id` and the url `[[ base ]]/a/<id>`: hand it over at
-once and say it is live and still filling in. It is: an edit reaches an open reader in seconds.
+The response carries `id` and `[[ base ]]/a/<id>`: share it immediately as live,
+still filling in. Edits reach open readers in seconds.
 **The reading path never precedes the first publish**; each section then lands
 as one targeted `edit_artifact`.
 
@@ -105,7 +105,7 @@ picked — without the frame, a deck ships text flush to the viewport edge.
 
 [[ checkWork ]]
 
-**Prose and a one-dataset chart are covered above**. Each ask has ONE file under
+**Prose and a one-dataset chart are fully covered above**. Each ask has ONE file under
 `references/` ([[ docsIndexHint ]]):
 | when the ask involves | read |
 |---|---|
