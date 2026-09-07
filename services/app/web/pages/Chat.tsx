@@ -237,6 +237,62 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
     </section>
   );
 }
+function CopyCommand({ label, command }: { label: string; command: string }) {
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
+  return (
+    <div>
+      <p className="mb-2 text-sm font-medium">{label}</p>
+      <div className="flex items-start gap-2 rounded border border-edge bg-surface p-3">
+        <code className="min-w-0 flex-1 whitespace-pre-wrap break-words text-xs">{command}</code>
+        <button
+          type="button"
+          aria-label={`Copy ${label.toLowerCase()}`}
+          className="shrink-0 rounded border border-edge px-2 py-1 text-xs hover:border-accent"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(command);
+              setCopied(true);
+              setError("");
+            } catch {
+              setError("Could not copy. Select and copy the command above.");
+            }
+          }}
+        >
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+      <span className="sr-only" role="status">{copied ? "Copied to clipboard" : ""}</span>
+      {error && <p role="alert" className="mt-1 text-xs text-muted">{error}</p>}
+    </div>
+  );
+}
+function InstallInstructions() {
+  const [harness, setHarness] = useState("claude");
+  return (
+    <div className="mt-4 space-y-4">
+      <CopyCommand label="Copy this to install" command={'curl -fsSL https://artifactbin.dev/chat/install.sh | sh\nexport PATH="$HOME/.local/bin:$PATH"'} />
+      <p className="text-xs text-muted">macOS and Linux · Intel and ARM. Windows: use WSL.</p>
+      <CopyCommand label="Connect your account" command="afbin auth" />
+      <div>
+        <label htmlFor="remote-harness" className="mb-2 block text-sm">Choose your agent</label>
+        <select id="remote-harness" value={harness} onChange={(event) => setHarness(event.target.value)} className="w-full rounded border border-edge bg-surface p-2 text-sm">
+          <option value="claude">Claude Code</option>
+          <option value="codex">Codex</option>
+          <option value="pi">Pi</option>
+          <option value="opencode">OpenCode</option>
+        </select>
+      </div>
+      <CopyCommand key={harness} label="Start a session" command={`afbin remote ${harness}`} />
+      <p className="text-xs text-muted">Your agent must already be installed. Type @ in an artifact comment to mention an online session.</p>
+    </div>
+  );
+}
 export function ChatPage() {
   const [params, setParams] = useSearchParams();
   const id = params.get("session");
@@ -278,7 +334,7 @@ export function ChatPage() {
         </p>
       )}
       <div className="flex flex-col gap-6 md:flex-row">
-        <aside className="shrink-0 md:w-56">
+        <aside className="shrink-0 md:w-80">
           {sessions.map((s) => (
             <button
               key={s.id}
@@ -293,19 +349,7 @@ export function ChatPage() {
               </span>
             </button>
           ))}
-          <p className="mt-3 text-xs text-muted">
-            Install the CLI:
-            <code className="my-2 block break-words rounded border border-edge bg-surface p-2">curl -fsSL https://artifactbin.dev/chat/install.sh | sh</code>
-            <a href="/chat/install.sh" className="underline">View install script</a>
-            <br />
-            Connect your account: <code>afbin auth</code>
-            <br />
-            Start a session:
-            <br />
-            <code>afbin remote claude</code>
-            <br />
-            Type @ in an artifact comment to mention an online session.
-          </p>
+          <InstallInstructions />
         </aside>
         {id ? (
           <SessionTerminal
