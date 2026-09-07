@@ -1,5 +1,12 @@
 # Visible-frame workload validation (planning only)
 
+**September 7 correction:** the alleged Chromium startup failure below is a
+child-console/CDP observation false red. The same ocean rendered successfully
+through parent-message observation on 30/30 cold and 30/30 repeated loads, plus
+30/30 independent root-review reloads. Use `ocean-parent-readiness.mjs` for that
+oracle; historical missing child-frame observations below do not prove missing
+execution. This does not retroactively pass other interaction/resource checks.
+
 No product code changes. This probe executes the captured ocean author script unchanged, with its existing `artifact.library('three')` mapped to the generated Three 0.185.1 ESM bundle. The captured third-party script is a local input, not committed.
 
 ```sh
@@ -29,9 +36,9 @@ The initial Chromium headless run used SwiftShader and consumed substantial CPU;
 
 The scene has approximately 256k triangles, 1,200 particles and 56 draw calls per frame in this capture. Browser render-call durations exclude asynchronous GPU completion and are not input-to-photon latency. Laptop DPR1/mobile-sized viewport is not physical mobile validation. Browser GPU/heap reclamation cannot be proved by `dispose()` call counts, missing child frames, or zero scheduled callbacks; natural teardown reporting can itself be dropped during document destruction. No unbounded canvas/frame count or memory safety claim.
 
-## Results
+## Historical results (startup interpretation superseded above)
 
-**Open reproducibility issue:** headed Chromium's repeated-navigation strict-wrapper case did not publish its passive sample within 60 seconds, with no page/console error. The other five cold/warm cases passed on ANGLE Metal (Apple M5 Pro). This is not a clean Chromium matrix; a targeted rerun with failure diagnostics is required before claiming reliable repeated startup. The probe now accepts `--shapes=wrapper` and captures frame state after a timeout; those diagnostics were not present in the initial failing run.
+**Original observation, subsequently diagnosed as a false red:** headed Chromium's repeated-navigation strict-wrapper case did not publish its child-console sample within 60 seconds, with no page/console error. The other five cold/warm cases passed on ANGLE Metal (Apple M5 Pro). Parent-message measurement subsequently established successful rendering despite missing child-console/frame observations. The record below is retained as methodology history, not a current startup blocker.
 
 The independent default rerun reproduced the stall: the wrapper's script executed and created an inner iframe with nonempty srcdoc and a contentWindow, but no author context was reported. The optional `--defer-inner` experiment creates that same inner iframe after the outer window's load event plus one task. It changes neither content nor CSP and is **not the default or an established fix**; compare repeated default/deferred cases before attributing the cause. Natural-removal readiness now fails explicitly if no author bootstrap appears rather than evaluating an undefined `metrics` global in the wrapper.
 
@@ -42,8 +49,8 @@ also passed cold and failed warm. Neither experiment fixes the issue. Diagnostic
 show a visible, fully loaded wrapper containing a script and an inner iframe with
 24,747 characters of srcdoc and a contentWindow, but only two reported frames and
 no author snapshot. Chromium version: 151.0.7922.34, ANGLE Metal. Keep this as an
-**open startup/automation-or-browser blocker**, not a frame-rate or security limit.
-No evidence yet isolates the browser's internal cause.
+**historical automation-observation failure**, not a frame-rate or security limit.
+The later parent-message probe isolates this as missing automation observation, not missing execution.
 
 BrowserOS Chrome148.0.7988.97 independently exposed the expected two nested frames,
 canvas and controls in four loads. Its tab was actually backgrounded and had not

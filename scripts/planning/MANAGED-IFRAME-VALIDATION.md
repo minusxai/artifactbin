@@ -1,22 +1,33 @@
 # Managed iframe planning validation
 
-September 7, 2026. Planning probes, not a product implementation or release sign-off.
+September 7, 2026. Planning and implementation evidence; rollout verification remains separate.
 
-## Current verdict: no unconditional go-ahead
+## Current verdict: approved direction implemented; final gates remain
 
-The expanded audit found a **reproducible Chromium 151 nested-startup blocker**:
-the wrapper runs and creates its inner element, but the automated browser sometimes
-never attaches/runs the author context. Independent reruns reproduce it. Neither
-outer-load deferral (three warm failures) nor a parent-to-wrapper startup handshake
-fixes it. BrowserOS Chrome 148 showed the nested markup across four loads, but
-that is neither the same browser version nor proof the failure is only automation.
-Do not call startup reliable or turn the draft PR into a release based on this.
+The claimed Chromium startup blocker was an **automation-observation false red**.
+Parent-visible ocean messages proved 35 real renders on 30/30 reloads and 30/30
+fresh contexts; root independently repeated 30/30 reloads. Many successful loads
+still lacked child-console events and Playwright frame entries. Sandbox/CSP were
+unchanged, with no author evaluation or activation. See SRCDOC-STARTUP-INVESTIGATION.md.
+Use validated parent bridge messages as the integrated startup oracle. This does
+not replace the remaining production integration and rollout checks.
 
-The audit is broader than animation and its evidence is committed. Navigation
-assertions and real edit/mutation flows pass; the state-copy cost has a measured
-prototype mitigation. Managed compilation, this startup failure, cache/cleanup
-integration, and staging/device verification remain explicit gates. A successful
-subset does not erase failed cases. See the two performance reports below.
+The compiler, asset host, protected runtime, state deltas and editor asset relay
+are implemented. The actual publish/render gate passes all three engines; final
+merged regression/CI verification is tracked in MANAGED-IFRAME-IMPLEMENTATION.md.
+Actual product state measurements now pass1/4/8regions with10,000unchanged rows,
+with16–19ms median delivery and bounded latest-state bursts. Staging/device
+verification remains distinct from these local results.
+
+Security review found and mitigated a non-HTTP gap: WebRTC/STUN bypasses
+`connect-src`. The runtime now immutably removes standard/prefixed peer-connection
+constructors before author code. `opaque-webrtc.mjs --product` independently
+measures0nested packets versus4positive-control packets in Chromium/WebKit,
+including constructor-restoration/prototype/fresh-realm attempts. Firefox's UDP
+control is inconclusive, but its constructor refusal is verified. The proposed
+[CSP WebRTC directive](https://www.w3.org/TR/CSP/#directive-webrtc) alone did not
+block packets in our tested engines. Do not describe CSP alone as total network
+enforcement or promise absence of every browser/covert channel.
 
 ## Decision under test
 
@@ -34,8 +45,9 @@ routes and redirects. Importing upstream must never forward viewer credentials.
 Private assets require a separate ACL-preserving delivery path, not this cache.
 
 Asset fetch/XHR wrappers are convenience adapters for anonymous asynchronous GET,
-not arbitrary API virtualization or a security boundary. CSP must still block
-bypasses; asset-serving endpoints must be harmless even if a request reaches them.
+not arbitrary API virtualization or a security boundary. CSP blocks direct HTTP
+bypasses; immutable WebRTC denial covers the measured non-HTTP escape.
+Asset-serving endpoints must be harmless even if a request reaches them.
 Signal reads/writes, named subscriptions and declared mutations use the existing
 bounded capability bridge; asset resolution must inherit its lifecycle, payload,
 in-flight and rate limits rather than copying an unbounded prototype handler.
@@ -110,7 +122,7 @@ after a completed build, the full rerun passed. No parallel builds during rerun.
 
 ## What this does not prove
 
-- Integration of the proposed nested markup compiler/asset bridge with the app.
+- Production deployment of the integrated nested markup compiler/asset bridge.
 - Arbitrary library compatibility, full fetch/XHR semantics or module graphs.
 - Physical Safari/iPhone performance, mobile keyboard or assistive technology.
 - A hard CPU/GPU/memory quota, zero covert channels, or protection against all
