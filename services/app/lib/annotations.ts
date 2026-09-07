@@ -35,7 +35,7 @@ import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import {
   canonicalQuote, canonicalText, parseAnnotationRange, parseRel,
   type AnnotationRange,
-} from '@/lib/story/annotation-range';
+ isAreaRange } from '@/lib/story/annotation-range';
 import { bodyPathToSourcePath, sourcePathToBodyPath } from '@/lib/story/edit-compose';
 import { channelForAnnotations } from '@/lib/story/live';
 import { resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
@@ -292,7 +292,9 @@ function storedRange(raw: string | null): AnnotationRange | null {
 function quoteFound(entry: AnchorEntry | undefined, quote: string | null, range: AnnotationRange | null): boolean | null {
   if (quote === null) return null;
   if (!entry) return false;
-  if (!range) return true;
+  // An area names no words — the door refuses a quote beside one — so with
+  // the anchor still here there is nothing more to look for.
+  if (!range || isAreaRange(range)) return true;
   return range.parts.every((part) => {
     const node = nodeForRel(entry, part.rel);
     return !!node && canonicalTextOf(node).includes(part.text);

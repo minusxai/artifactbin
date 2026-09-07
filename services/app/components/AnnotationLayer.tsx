@@ -12,7 +12,11 @@
  *                       click, so annotations stay ambient without becoming a
  *                       second reading column.
  *   · the COMPOSER    — a draft beside the words it is about, opened from a
- *                       view-mode selection bubble or the editor's toolbar.
+ *                       view-mode selection bubble, the editor's toolbar, or
+ *                       the rail's PICK tool (`picking`): the edit-mode
+ *                       hover-and-click, for a comment — the only way to
+ *                       comment on a chart, an image or a whole list, which
+ *                       have no words to select. One-shot, never in the URL.
  *   · the RAIL        — the full conversation, resolved history and replies.
  *                       A panel someone OPENS (`railOpen`), never a mode; the
  *                       page narrows the document's viewport by RIGHT_RAIL_W
@@ -28,7 +32,7 @@
  * even reach them.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, ChevronRight, EllipsisVertical, MessageSquare, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, EllipsisVertical, MessageSquare, MousePointerClick, SquareDashed, SquareDashedMousePointer, Trash2, X } from 'lucide-react';
 import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations';
 import { ChatGPTIcon, ClaudeAIIcon, ClaudeCodeIcon, CodexIcon } from '@/components/brand-icons';
 import { foldFromMeasure, isFolded, readFolds, toggleFold, unfold, type FoldKind, type Folds } from '@/lib/comment-folds';
@@ -60,8 +64,18 @@ export interface AnnotationLayerProps {
   onRailOpenChange: (open: boolean) => void;
   /** A text selection — from the view-mode bubble or the editor — that seeds the composer. */
   initialSelection?: StoryEditSelection | null;
-  /** Where the document's viewport starts: the top bar, plus the edit bar when one is up. */
+  /**
+   * May opening the rail open a PICK? The page's call, because only it knows
+   * whether the editor holds the document's clicks: a pick takes them, so it
+   * is never started under the editor, and one already on ends when the
+   * editor opens. Default true. The tool in the header ignores this — an
+   * explicit pick is always allowed.
+   */
+  pickOnOpen?: boolean;
+  /** Where the rail starts: under the document's bar, plus the editor toolbar when one is up. */
   topOffset: number;
+  /** What the rail leaves free on the right: the frame's own scrollbar, which stays at the window's edge. */
+  rightInset?: number;
 }
 
 const cardClass = 'rounded-[6px] border border-edge bg-raised text-sm';
@@ -742,7 +756,7 @@ function Thread({
 
 export default function AnnotationLayer({
   id, frameRef, sessionNonce, railOpen, liveAnnotations, showViewComments,
-  onRailOpenChange, initialSelection = null, topOffset, onAnnotationsChange,
+  onRailOpenChange, initialSelection = null, topOffset, onAnnotationsChange, pickOnOpen = true, rightInset = 0,
 }: AnnotationLayerProps) {
   const [annotations, setAnnotations] = useState<AnnotationWire[]>([]);
   // The page's own count (the badge on the comment glyph) follows THIS list:
@@ -764,6 +778,17 @@ export default function AnnotationLayer({
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [anchorRects, setAnchorRects] = useState<Record<string, StoryEditRect>>({});
   const [selection, setSelection] = useState<StoryEditSelection | null>(null);
+  /**
+   * A PICK is on, and how: `block` (the frame outlines blocks under the
+   * pointer, a click takes one) or `area` (a dragged rectangle, anchored to
+   * the blocks' common ancestor). Its next `mx:selection` is the composer's
+   * subject. Page state, never the URL — a fact about what someone is doing
+   * right now, like a fold or the theme.
+   */
+  const [pick, setPick] = useState<'block' | 'area' | null>(null);
+  /** On a phone the rail is a bottom sheet — a 320px rail over a 390px screen
+      is the whole document covered, with a strip too narrow to read. */
+  const phoneRail = useIsPhoneViewport();
   const [draft, setDraft] = useState('');
   /** Reading the draft as it will be read — a view of the same text, not a mode. */
   const [previewing, setPreviewing] = useState(false);
@@ -786,6 +811,15 @@ export default function AnnotationLayer({
    */
   const composingRef = useRef(false);
   composingRef.current = selection !== null;
+  // Same shape, same reason: a pick's answer arrives on that listener too.
+  const pickingRef = useRef(false);
+  pickingRef.current = pick !== null;
+  const railOpenRef = useRef(railOpen);
+  railOpenRef.current = railOpen;
+  /** The rail is about to open FOR A THREAD (a pin, a marker): that opening must not start a pick. */
+  const openedForThreadRef = useRef(false);
+  /** The sheet is being put away BY a pick (phone): that closing must not end it. */
+  const sheetAwayForPickRef = useRef(false);
 
   const postToFrame = useCallback((message: unknown) => {
     frameRef.current?.contentWindow?.postMessage(message, '*');
@@ -804,6 +838,9 @@ export default function AnnotationLayer({
     const thread = annotationsRef.current.find((a) => a.id === annId)?.thread;
     const newest = thread?.at(-1)?.id;
     setFolds(unfold(id, { threads: [annId], comments: newest ? [newest] : [] }));
+    // Only an opening carries the mark: a rail already open sees no change,
+    // and a stale mark would misread the next real opening.
+    if (!railOpenRef.current) openedForThreadRef.current = true;
     onRailOpenChangeRef.current(true);
   }, [id]);
 
@@ -864,6 +901,32 @@ export default function AnnotationLayer({
     return () => { gone = true; };
   }, [id, railOpen, annotations]);
 
+  /*
+   * OPENING THE RAIL OPENS A PICK. Someone who presses "comments" is about to
+   * leave one, so the document is ready for the click at once; the tool in
+   * the header stays as the explicit way back in (and the place other
+   * selection modes will sit beside it). Not for a rail opened FOR A THREAD —
+   * a pin click came for an answer — not while a composer is already open
+   * (the subject is chosen), not under the editor (`pickOnOpen`), and not on
+   * a phone, whose sheet covers the document. Closing the rail ends the pick
+   * it opened, unless a pick is what put the sheet away.
+   *
+   * DECLARED BEFORE the seeded-selection effect below on purpose: a rail that
+   * opens in the same commit as a handed-in selection must end with the
+   * composer, not the pick, and effects run in declaration order.
+   */
+  useEffect(() => {
+    if (railOpen) {
+      const forThread = openedForThreadRef.current;
+      openedForThreadRef.current = false;
+      if (!forThread && !composingRef.current && pickOnOpen && !phoneRail) setPick('block');
+      return;
+    }
+    if (sheetAwayForPickRef.current) { sheetAwayForPickRef.current = false; return; }
+    setPick(null);
+  }, [railOpen, pickOnOpen, phoneRail]);
+  useEffect(() => { if (!pickOnOpen) setPick(null); }, [pickOnOpen]);
+
   // A selection handed down by the page — the view-mode bubble's Comment, or
   // the editor toolbar's — opens the composer on those exact words, so nobody
   // has to click the same text twice.
@@ -872,6 +935,7 @@ export default function AnnotationLayer({
     setSelection(initialSelection);
     setOpenId(null);
     setFailure(null);
+    setPick(null);   // the subject was chosen another way
   }, [initialSelection]);
 
   // The pin set, re-posted whole on every change — the frame holds no
@@ -896,9 +960,10 @@ export default function AnnotationLayer({
       openId,
       hoverId,
       selectedPath: selection?.path ?? null,
+      pick,
     };
     postToFrame(message);
-  }, [annotations, hoverId, openId, selection?.path, sessionNonce, postToFrame]);
+  }, [annotations, hoverId, openId, pick, selection?.path, sessionNonce, postToFrame]);
   // Closing the rail drops what only the rail was showing; the pins stay.
   useEffect(() => {
     if (!railOpen) { setOpenResolvedId(null); setOpenId(null); }
@@ -930,6 +995,23 @@ export default function AnnotationLayer({
         setHoverId(event.data.id);
         return;
       }
+      if (event.data.type === STORY_SELECTION_MESSAGE && pickingRef.current) {
+        /*
+         * THE PICK'S ANSWER, and the pick is over either way. A block: the
+         * composer opens on it (a draft already typed stays, exactly as the
+         * breadcrumb re-target keeps it). Null: escape in the document —
+         * stand down, and leave whatever composer was open alone. Never fall
+         * through to the composing branch, which would read a null as "close".
+         */
+        const picked = event.data.selection;
+        setPick(null);
+        if (picked) {
+          setSelection(picked);
+          setOpenId(null);
+          setFailure(null);
+        }
+        return;
+      }
       if (event.data.type === STORY_SELECTION_MESSAGE && composingRef.current) {
         const reported = event.data.selection;
         /*
@@ -945,7 +1027,12 @@ export default function AnnotationLayer({
         setSelection((previous) => {
           const sameIdentity = reported?.nodeId && previous?.nodeId && reported.nodeId === previous.nodeId;
           if (!sameIdentity) return reported;
-          return previous.quote ? { ...reported, quote: previous.quote, range: previous.range } : reported;
+          // The words, or the drawn area — whichever this comment is about.
+          return {
+            ...reported,
+            ...(previous.quote ? { quote: previous.quote } : {}),
+            ...(previous.range ? { range: previous.range } : {}),
+          };
         });
         setFailure(null);
         if (reported) setOpenId(null);
@@ -1057,6 +1144,8 @@ export default function AnnotationLayer({
     if (!selection) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
+      // A pick in progress is what escape cancels first; the draft stays.
+      if (pickingRef.current) return;
       event.stopPropagation();
       cancelCompose();
     };
@@ -1064,15 +1153,45 @@ export default function AnnotationLayer({
     return () => window.removeEventListener('keydown', onKey);
   }, [selection, cancelCompose]);
 
+  // Escape ON THE PAGE stands a pick down; escape in the document arrives as
+  // the frame's null selection above. Bound only while picking, like the
+  // composer's, so the key keeps its other meanings everywhere else.
+  useEffect(() => {
+    if (!pick) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.stopPropagation();
+      setPick(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pick]);
+
   /*
    * THREE INDEPENDENT SURFACES. None of them is a mode, so none of them is an
    * `else` of another: markers float unless the rail is showing the same threads,
    * the composer follows a selection whatever else is open, and the rail is a
    * panel someone asked for.
    */
-  /** On a phone the rail is a bottom sheet — a 320px rail over a 390px screen
-      is the whole document covered, with a strip too narrow to read. */
-  const phoneRail = useIsPhoneViewport();
+
+  /*
+   * Starting a pick clears the open thread (the composer is about to move to
+   * a new subject). ON A PHONE the rail is a sheet whose backdrop covers the
+   * document, so nothing could be tapped until it goes — the pill below is
+   * then the only chrome, and carries the way out. On desktop the rail stays;
+   * closing it does not cancel a pick for the same reason.
+   */
+  const beginPick = (mode: 'block' | 'area') => {
+    setPick(mode);
+    setOpenId(null);
+    if (phoneRail && railOpenRef.current) {
+      sheetAwayForPickRef.current = true;
+      onRailOpenChangeRef.current(false);
+    }
+  };
+  const endPick = () => setPick(null);
+  /** The header tools: pressing the active one is the way out; pressing the other switches. */
+  const toggleTool = (mode: 'block' | 'area') => (pick === mode ? endPick() : beginPick(mode));
 
   // The collapsed 36px identity mark is small enough for phones too; clicking
   // it opens the same rail as a bottom sheet, with no hover dependency.
@@ -1083,11 +1202,14 @@ export default function AnnotationLayer({
 
   // The breadcrumb the edit toolbar taught: nearest ancestors, outermost first.
   const crumbs = selection ? [...selection.ancestors.slice(-2), { path: selection.path, tag: selection.tag, hint: '' }] : [];
-  const frameRect = frameRef.current?.getBoundingClientRect() ?? {
-    left: 0,
-    top: topOffset,
-    width: window.innerWidth - (railOpen ? RIGHT_RAIL_W : 0),
-  };
+  // The frame is full-width under an open rail (the rail overlays its right
+  // edge below the bar), so what the composer and the pill may use is the
+  // frame LESS the rail — never the frame's own width.
+  const railWidth = railOpen && !phoneRail ? RIGHT_RAIL_W : 0;
+  const measured = frameRef.current?.getBoundingClientRect();
+  const frameRect = measured
+    ? { left: measured.left, top: measured.top, width: Math.max(0, measured.width - railWidth) }
+    : { left: 0, top: topOffset, width: window.innerWidth - railWidth };
   const composerPosition = selection
     ? positionedComposer(selection, frameRect, window.innerWidth, window.innerHeight)
     : null;
@@ -1109,6 +1231,32 @@ export default function AnnotationLayer({
               onHover={setHoverId}
             />
           ))}
+        </div>
+      )}
+
+      {/* The pick's only indicator once the rail is away, and the phone's only
+          way out of it. Over the document, never in it: the frame is opaque. */}
+      {pick && (
+        <div
+          role="status"
+          aria-label="Picking a block"
+          className={`${cardClass} fixed z-30 flex items-center gap-2 border-edge-bright px-3 py-1.5 font-mono text-[11px] text-muted shadow-xl`}
+          style={{ left: frameRect.left + frameRect.width / 2, top: frameRect.top + VIEW_COMMENT_INSET, transform: 'translateX(-50%)' }}
+        >
+          {pick === 'area'
+            ? <SquareDashed size={12} strokeWidth={1.8} className="shrink-0 text-accent" />
+            : <MousePointerClick size={12} strokeWidth={1.8} className="shrink-0 text-accent" />}
+          <span className="whitespace-nowrap">
+            {pick === 'area' ? 'drag a rectangle to comment on it' : 'click a block or select text to comment'}
+          </span>
+          <button
+            type="button"
+            aria-label="Cancel picking"
+            onClick={endPick}
+            className="inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-[3px] text-muted hover:bg-surface hover:text-fg"
+          >
+            <X size={12} strokeWidth={1.8} />
+          </button>
         </div>
       )}
 
@@ -1206,15 +1354,38 @@ export default function AnnotationLayer({
       <RailChrome
         phone={phoneRail}
         topOffset={topOffset}
+        rightInset={rightInset}
         onClose={() => onRailOpenChange(false)}
         header={
           <div className="flex items-center gap-2 px-1">
             <h2 className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-faint">comments</h2>
+            <Tooltip content="Pick a block to comment on">
+              <button
+                type="button"
+                aria-label="Pick a block to comment on"
+                aria-pressed={pick === 'block'}
+                onClick={() => toggleTool('block')}
+                className={`ml-auto inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[3px] hover:bg-surface hover:text-fg ${pick === 'block' ? 'bg-accent-soft text-accent' : 'text-muted'}`}
+              >
+                <SquareDashedMousePointer size={14} strokeWidth={1.8} />
+              </button>
+            </Tooltip>
+            <Tooltip content="Draw an area to comment on">
+              <button
+                type="button"
+                aria-label="Draw an area to comment on"
+                aria-pressed={pick === 'area'}
+                onClick={() => toggleTool('area')}
+                className={`inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[3px] hover:bg-surface hover:text-fg ${pick === 'area' ? 'bg-accent-soft text-accent' : 'text-muted'}`}
+              >
+                <SquareDashed size={14} strokeWidth={1.8} />
+              </button>
+            </Tooltip>
             <button
               type="button"
               aria-label="Close comments"
               onClick={() => onRailOpenChange(false)}
-              className="ml-auto inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[3px] text-muted hover:bg-surface hover:text-fg"
+              className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[3px] text-muted hover:bg-surface hover:text-fg"
             >
               <X size={14} strokeWidth={1.8} />
             </button>
@@ -1222,7 +1393,7 @@ export default function AnnotationLayer({
         }
       >
         {annotations.length === 0 && !selection && (
-          <p className="p-2 font-mono text-xs text-muted">no open comments — select text in the document to leave one</p>
+          <p className="p-2 font-mono text-xs text-muted">no open comments — select text in the document, or pick a block, to leave one</p>
         )}
         {annotations.map((a) => (
           <Thread
@@ -1294,9 +1465,10 @@ export default function AnnotationLayer({
  * on a phone. The content between them is identical; this wrapper is the only
  * thing that knows the difference.
  */
-function RailChrome({ phone, topOffset, onClose, header, children }: {
+function RailChrome({ phone, topOffset, rightInset, onClose, header, children }: {
   phone: boolean;
   topOffset: number;
+  rightInset: number;
   onClose: () => void;
   /** The title row + close control — pinned above the scroll in BOTH homes:
       the way out must stay reachable however long the list gets. */
@@ -1313,8 +1485,8 @@ function RailChrome({ phone, topOffset, onClose, header, children }: {
   return (
     <aside
       aria-label="Annotation sidebar"
-      className="fixed bottom-0 right-0 z-20 flex flex-col gap-2.5 border-l border-edge bg-bg p-2.5"
-      style={{ top: topOffset, width: RIGHT_RAIL_W }}
+      className="fixed bottom-0 z-20 flex flex-col gap-2.5 border-l border-edge bg-bg p-2.5"
+      style={{ top: topOffset, right: rightInset, width: RIGHT_RAIL_W }}
     >
       <div className="shrink-0">{header}</div>
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto">{children}</div>

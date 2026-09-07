@@ -48,7 +48,10 @@ export function ancestorCrumbs(el: Element, nodes: JsxNode[]): StoryEditCrumb[] 
     const path = p.getAttribute(AST_PATH_ATTR);
     if (!path) continue;
     const node = resolveJsxNodeAtPath(nodes, path);
-    if (isSelectableAncestor(path, node)) out.push({ path, tag: node.tag, hint: crumbHint(p.className || '') });
+    // The ATTRIBUTE, never `className`: on an SVG ancestor that property is an
+    // SVGAnimatedString, and reading it as a string threw out of every drawn
+    // area on a document carrying an inline sketch.
+    if (isSelectableAncestor(path, node)) out.push({ path, tag: node.tag, hint: crumbHint(p.getAttribute('class') ?? '') });
   }
   return out.reverse();
 }

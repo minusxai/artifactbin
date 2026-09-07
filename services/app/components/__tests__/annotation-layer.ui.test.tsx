@@ -436,7 +436,11 @@ describe('AnnotationLayer', () => {
     const composer = await screen.findByLabelText('Annotation comment');
     const popover = screen.getByRole('dialog', { name: 'Annotation composer' });
     expect(popover).toHaveClass('fixed');
-    expect(popover.style.left).toBe('217px'); // frame left + selection right + 12px gap
+    // The frame is full-width under an open rail, so the composer is kept
+    // clear of the rail's 320px: 800 - 320 - 12 - 384 = 84, not the 217 the
+    // selection alone would ask for.
+    expect(popover.style.left).toBe('84px');
+    expect(Number.parseInt(popover.style.left, 10) + Number.parseInt(popover.style.width, 10)).toBeLessThanOrEqual(800 - 320);
     expect(popover.style.top).toBe('158px'); // frame top + selection y + selection height + 12px
     expect(within(screen.getByLabelText('Annotation sidebar')).queryByLabelText('Annotation comment')).toBeNull();
     // The breadcrumb: the ancestor is clickable and asks the FRAME to re-select.
@@ -735,5 +739,287 @@ describe('AnnotationLayer', () => {
     await flush();
     const posted = postMessage.mock.calls.map((c) => c[0]).filter((m) => m?.type === STORY_ANNOTATIONS_MESSAGE);
     expect(posted.at(-1)).toMatchObject({ pins: [] });
+  });
+});
+
+/*
+ * ADDED: PICKING A BLOCK FROM THE RAIL. A comment made by selecting words
+ * cannot reach a chart, an image or a whole list. The rail's header offers a
+ * pick tool: pressing it tells the frame (`picking` on the idempotent
+ * `mx:annotations` message), a pill over the document says what to do next
+ * and carries the way out, and the frame's answer — the same `mx:selection`
+ * the breadcrumb widening uses — opens the composer on the picked block and
+ * ends the pick. One-shot, never in the URL, never a mode the page is in.
+ */
+describe('picking a block from the rail', () => {
+  const PICKED = {
+    kind: 'text' as const, path: '2.1', nodeId: 'node-2-1', tag: 'p',
+    rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '',
+    ancestors: [{ path: '2', tag: 'section', hint: 'max-w-2xl' }],
+  };
+  const annotationsMessages = (postMessage: ReturnType<typeof vi.fn>) =>
+    postMessage.mock.calls.map((call) => call[0]).filter((message) => message?.type === STORY_ANNOTATIONS_MESSAGE);
+  const pill = () => screen.queryByRole('status', { name: 'Picking a block' });
+
+  it('the rail opens WITH a pick on; the tool is still there to turn it off and on again', async () => {
+    const { frame, postMessage } = makeFrame();
+    render(layer(frame, { railOpen: true }));
+    await flush();
+    // Opening the rail is opening the pick: the next click in the document is a comment.
+    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ mode: 'on', pick: 'block' });
+    expect(pill()).toHaveTextContent(/click a block/i);
+    const tool = within(screen.getByLabelText('Annotation sidebar')).getByLabelText('Pick a block to comment on');
+    expect(tool).toHaveAttribute('aria-pressed', 'true');
+
+    // The tool stays an explicit choice (other selection modes will sit beside it).
+    fireEvent.click(tool);
+    expect(tool).toHaveAttribute('aria-pressed', 'false');
+    expect(pill()).toBeNull();
+    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ mode: 'on', pick: null });
+    fireEvent.click(tool);
+    expect(tool).toHaveAttribute('aria-pressed', 'true');
+    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ mode: 'on', pick: 'block' });
+
+    fireEvent.click(screen.getByLabelText('Cancel picking'));
+    expect(pill()).toBeNull();
+    expect(tool).toHaveAttribute('aria-pressed', 'false');
+    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ pick: null });
+  });
+
+  it('the frame\'s pick opens the composer on that block and ends the pick; save goes to the picked block', async () => {
+    const { frame, postMessage, contentWindow } = makeFrame();
+    render(layer(frame, { railOpen: true }));
+    await flush();
+    expect(pill()).not.toBeNull(); // opened picking
+    await fromFrame(contentWindow, { type: STORY_SELECTION_MESSAGE, nonce: NONCE, selection: PICKED });
+
+    expect(screen.getByRole('dialog', { name: 'Annotation composer' })).toBeTruthy();
+    expect(screen.getByLabelText('Select section')).toBeTruthy(); // the breadcrumb, so it can still widen
+    expect(pill()).toBeNull();
+    expect(screen.getByLabelText('Pick a block to comment on')).toHaveAttribute('aria-pressed', 'false');
+    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ pick: null, selectedPath: '2.1' });
+
+    fireEvent.change(screen.getByLabelText('Annotation comment'), { target: { value: 'picked note' } });
+    fireEvent.click(screen.getByLabelText('Save annotation'));
+    await flush();
+    const create = fetchCalls.find((call) => call.url.endsWith('/api/my/artifacts/doc1/annotations') && call.init?.method === 'POST');
+    const body = JSON.parse(String(create!.init!.body)) as Record<string, unknown>;
+    expect(body).toMatchObject({ path: '2.1', node_id: 'node-2-1', body: 'picked note' });
+    expect(body).not.toHaveProperty('quote');
+  });
+
+  it('a null selection from the frame (escape in the document) just stands the pick down', async () => {
+    const { frame, postMessage, contentWindow } = makeFrame();
+    render(layer(frame, { railOpen: true }));
+    await flush();
+    expect(pill()).not.toBeNull(); // opened picking
+    await fromFrame(contentWindow, { type: STORY_SELECTION_MESSAGE, nonce: NONCE, selection: null });
+    expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
+    expect(pill()).toBeNull();
+    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ pick: null });
+  });
+
+  it('escape on the page cancels the pick too', async () => {
+    const { frame, postMessage } = makeFrame();
+    render(layer(frame, { railOpen: true }));
+    await flush();
+    expect(pill()).not.toBeNull(); // opened picking
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(pill()).toBeNull();
+    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ pick: null });
+  });
+
+  it('outside a pick, a frame selection with no composer open is the editor\'s caret and opens nothing', async () => {
+    const { frame, contentWindow } = makeFrame();
+    render(layer(frame, { railOpen: true }));
+    await flush();
+    fireEvent.click(screen.getByLabelText('Cancel picking'));
+    await fromFrame(contentWindow, { type: STORY_SELECTION_MESSAGE, nonce: NONCE, selection: PICKED });
+    expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
+  });
+
+  it('on a phone, starting a pick puts the sheet away so the document can be tapped', async () => {
+    Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true });
+    try {
+      const { frame, postMessage } = makeFrame();
+      const onRailOpenChange = vi.fn();
+      render(layer(frame, { railOpen: true, onRailOpenChange }));
+      await flush();
+      expect(pill()).toBeNull(); // a phone's sheet covers the document: no pick starts by itself
+      expect(onRailOpenChange).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByLabelText('Pick a block to comment on'));
+      expect(onRailOpenChange).toHaveBeenCalledWith(false);
+      expect(pill()).not.toBeNull();
+      expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ pick: 'block' });
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { value: 1024, configurable: true });
+    }
+  });
+});
+
+/*
+ * ADDED: OPENING THE RAIL OPENS A PICK. Someone who presses "comments" is
+ * about to leave one, so the document is ready for the click at once — the
+ * tool in the header stays, as the explicit way back in and the place other
+ * selection modes will sit beside it. Three openings are NOT that person:
+ * a rail opened FOR A THREAD (a pin click came for an answer), the editor
+ * (a pick takes the editor's clicks, so it is never started under it), and a
+ * phone (the sheet covers the document, so a pick there is a tap on nothing).
+ * Closing the rail ends the pick it opened; a composer arriving by another
+ * route (the selection bubble, the editor toolbar) ends it too.
+ */
+describe('opening the rail opens a pick', () => {
+  const pill = () => screen.queryByRole('status', { name: 'Picking a block' });
+  const picks = (postMessage: ReturnType<typeof vi.fn>) =>
+    postMessage.mock.calls.map((call) => call[0]).filter((message) => message?.type === STORY_ANNOTATIONS_MESSAGE).map((message) => message.pick);
+
+  it('starts when the rail opens, and ends when it closes', async () => {
+    const { frame, postMessage } = makeFrame();
+    const { rerender } = render(layer(frame, { railOpen: false }));
+    await flush();
+    expect(pill()).toBeNull();
+    expect(picks(postMessage).at(-1)).toBe(null);
+
+    rerender(layer(frame, { railOpen: true }));
+    await flush();
+    expect(pill()).not.toBeNull();
+    expect(picks(postMessage).at(-1)).toBe('block');
+
+    rerender(layer(frame, { railOpen: false }));
+    await flush();
+    expect(pill()).toBeNull();
+    expect(picks(postMessage).at(-1)).toBe(null);
+  });
+
+  it('does not start when the rail was opened for a thread', async () => {
+    const { frame, contentWindow } = makeFrame();
+    const onRailOpenChange = vi.fn();
+    const { rerender } = render(layer(frame, { railOpen: false, onRailOpenChange }));
+    await flush();
+    await fromFrame(contentWindow, { type: STORY_ANNOTATION_PIN_MESSAGE, nonce: NONCE, id: ANN.id, rect: { x: 0, y: 0, width: 10, height: 10 } });
+    expect(onRailOpenChange).toHaveBeenCalledWith(true);
+    rerender(layer(frame, { railOpen: true, onRailOpenChange }));
+    await flush();
+    expect(pill()).toBeNull();
+    expect(screen.getByLabelText('Pick a block to comment on')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('never starts under the editor, and a pick already on ends when the editor opens', async () => {
+    const { frame } = makeFrame();
+    const { rerender } = render(layer(frame, { railOpen: true, pickOnOpen: false }));
+    await flush();
+    expect(pill()).toBeNull();
+    // …but the tool still works there, explicitly.
+    fireEvent.click(screen.getByLabelText('Pick a block to comment on'));
+    expect(pill()).not.toBeNull();
+
+    rerender(layer(frame, { railOpen: true, pickOnOpen: true }));
+    await flush();
+    expect(pill()).not.toBeNull();
+    rerender(layer(frame, { railOpen: true, pickOnOpen: false }));
+    await flush();
+    expect(pill()).toBeNull();
+  });
+
+  it('a composer arriving by another route ends the pick', async () => {
+    const { frame } = makeFrame();
+    const { rerender } = render(layer(frame, { railOpen: true }));
+    await flush();
+    expect(pill()).not.toBeNull();
+    rerender(layer(frame, {
+      railOpen: true,
+      initialSelection: { kind: 'text' as const, path: '0', tag: 'p', rect: { x: 0, y: 0, width: 100, height: 20 }, className: '', style: '', ancestors: [] },
+    }));
+    await flush();
+    expect(screen.getByRole('dialog', { name: 'Annotation composer' })).toBeTruthy();
+    expect(pill()).toBeNull();
+  });
+});
+
+/*
+ * ADDED: THE AREA TOOL. Beside the block tool in the rail header: `area` on
+ * the wire, a pill that says to drag, and the frame's answer — a selection
+ * carrying an area range and no quote — posted to the create door exactly as
+ * a text range is. Same column, same field, tagged by kind.
+ */
+describe('drawing an area from the rail', () => {
+  const pill = () => screen.queryByRole('status', { name: 'Picking a block' });
+  const last = (postMessage: ReturnType<typeof vi.fn>) =>
+    postMessage.mock.calls.map((call) => call[0]).filter((message) => message?.type === STORY_ANNOTATIONS_MESSAGE).at(-1);
+  const AREA = { v: 1 as const, kind: 'area' as const, box: { x: 0.2, y: 0.05, w: 0.5, h: 0.4 } };
+  const PICKED_AREA = {
+    kind: 'element' as const, path: '2', nodeId: 'node-2', tag: 'section', rect: { x: 5, y: 6, width: 400, height: 200 },
+    className: 'max-w-2xl', style: '', ancestors: [], range: AREA,
+  };
+
+  it('the area tool switches the pick to area; the block tool switches it back', async () => {
+    const { frame, postMessage } = makeFrame();
+    render(layer(frame, { railOpen: true }));
+    await flush();
+    const block = screen.getByLabelText('Pick a block to comment on');
+    const area = screen.getByLabelText('Draw an area to comment on');
+    expect(area).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(area);
+    expect(area).toHaveAttribute('aria-pressed', 'true');
+    expect(block).toHaveAttribute('aria-pressed', 'false');
+    expect(last(postMessage)).toMatchObject({ mode: 'on', pick: 'area' });
+    expect(pill()).toHaveTextContent(/drag a rectangle/i);
+    fireEvent.click(block);
+    expect(block).toHaveAttribute('aria-pressed', 'true');
+    expect(area).toHaveAttribute('aria-pressed', 'false');
+    expect(last(postMessage)).toMatchObject({ pick: 'block' });
+    // Pressing the active tool again is the way out of both.
+    fireEvent.click(area);
+    fireEvent.click(area);
+    expect(last(postMessage)).toMatchObject({ pick: null });
+    expect(pill()).toBeNull();
+  });
+
+  it('an area pick opens the composer on its anchor and saves the area as the range, with no quote', async () => {
+    const { frame, postMessage, contentWindow } = makeFrame();
+    render(layer(frame, { railOpen: true }));
+    await flush();
+    fireEvent.click(screen.getByLabelText('Draw an area to comment on'));
+    await fromFrame(contentWindow, { type: STORY_SELECTION_MESSAGE, nonce: NONCE, selection: PICKED_AREA });
+    expect(screen.getByRole('dialog', { name: 'Annotation composer' })).toBeTruthy();
+    expect(last(postMessage)).toMatchObject({ pick: null, selectedPath: '2' });
+    // The frame re-reports the SAME node's geometry on scroll, without the range; the area must survive it.
+    await fromFrame(contentWindow, { type: STORY_SELECTION_MESSAGE, nonce: NONCE, selection: { ...PICKED_AREA, range: undefined, rect: { x: 5, y: 60, width: 400, height: 200 } } });
+    fireEvent.change(screen.getByLabelText('Annotation comment'), { target: { value: 'this whole region' } });
+    fireEvent.click(screen.getByLabelText('Save annotation'));
+    await flush();
+    const create = fetchCalls.find((call) => call.url.endsWith('/api/my/artifacts/doc1/annotations') && call.init?.method === 'POST');
+    const body = JSON.parse(String(create!.init!.body)) as Record<string, unknown>;
+    expect(body).toMatchObject({ path: '2', node_id: 'node-2', body: 'this whole region', range: AREA });
+    expect(body).not.toHaveProperty('quote');
+  });
+
+  it('hands an area thread\'s range to the frame with its pin', async () => {
+    const { frame, postMessage } = makeFrame();
+    render(layer(frame, { railOpen: false, liveAnnotations: [{ ...ANN, id: 'ann_area', range: AREA }] }));
+    await flush();
+    // The live list posts its pins the moment it lands (the seed fetch, resolving
+    // after it in this harness, then posts its own — the next live frame wins).
+    const pins = postMessage.mock.calls.map((call) => call[0])
+      .filter((message) => message?.type === STORY_ANNOTATIONS_MESSAGE)
+      .flatMap((message) => message.pins as Array<{ id: string; range: unknown }>);
+    expect(pins).toContainEqual(expect.objectContaining({ id: 'ann_area', range: AREA }));
+  });
+});
+
+/*
+ * ADDED: THE RAIL SITS UNDER THE DOCUMENT'S BAR. The page says where the
+ * bars end (`topOffset`) and how wide the frame's own scrollbar is
+ * (`rightInset`), so the rail starts below the bar and stops short of the
+ * scrollbar the frame keeps at the window's edge.
+ */
+describe('the rail under the bar', () => {
+  it('starts at the offset the page gives it and leaves the frame\'s scrollbar visible', async () => {
+    const { frame } = makeFrame();
+    render(layer(frame, { railOpen: true, topOffset: 44, rightInset: 15 }));
+    await flush();
+    const rail = screen.getByLabelText('Annotation sidebar');
+    expect(rail.style.top).toBe('44px');
+    expect(rail.style.right).toBe('15px');
   });
 });

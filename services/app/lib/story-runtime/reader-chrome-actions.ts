@@ -312,6 +312,9 @@ export function wireReaderChrome(win: Window, doc: Document): ReaderChromeHandle
         const html = doc.documentElement;
         html.style.overflowAnchor = 'none';
         html.style.setProperty('--mx-chrome-inset', pinned ? `${bar + (data.inset ?? 0)}px` : '0px');
+        // The page's comment rail: its width, left free on the right, so the
+        // frame can stay full-width and the bar in it never narrows.
+        html.style.setProperty('--mx-rail-inset', `${data.railInset ?? 0}px`);
         win.requestAnimationFrame(() => { html.style.overflowAnchor = ''; });
         if (pinned) paint(true);
         else sample();

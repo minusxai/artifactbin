@@ -44,7 +44,7 @@ const DOC =
   + '<p id="intro">An intro paragraph of ordinary prose.</p>'
   // Nested on purpose: a breadcrumb only offers non-root ancestors, so the
   // section is what proves the crumb renders and re-targets.
-  + '<section className="max-w-2xl"><p id="figure">Revenue grew 40% in Q3.</p></section>'
+  + '<section className="max-w-2xl"><p id="figure">Revenue grew 40% in Q3.</p><ul id="list"><li>one</li><li>two</li></ul></section>'
   + '</div>';
 
 const run = async () => {
@@ -110,8 +110,14 @@ const run = async () => {
     await page.keyboard.press('Escape');
     const thread = page.locator('[aria-label="Annotation thread"]');
     ok((await thread.textContent())?.includes('Q3 sheet'), 'the saved comment appears as a rail thread');
-    ok(await page.locator('[aria-label="Artifact viewport"]').evaluate((el) => el.style.right !== '0px'),
-      'the open rail narrows the document rather than covering it');
+    // The frame stays FULL-WIDTH — the bar drawn inside it must not narrow —
+    // and the document leaves the rail its width instead.
+    ok(await page.locator('[aria-label="Artifact viewport"]').evaluate((el) => el.style.right === '0px'),
+      'the open rail leaves the frame full-width, so the bar inside it does not move');
+    const railInset = await until(() => frame.locator('html').evaluate((el) => getComputedStyle(el).getPropertyValue('--mx-rail-inset').trim()), (v) => v === '320px', 5000);
+    ok(railInset === '320px', `the document leaves the rail its width (got ${railInset})`);
+    ok(await page.locator('[aria-label="Annotation sidebar"]').evaluate((el) => el.style.top === '44px'),
+      'the rail sits under the document\'s bar');
 
     await page.locator('[aria-label="Close comments"]').click();
     const railGone = await until(() => page.locator('[aria-label="Annotation sidebar"]').count(), (n) => n === 0, 5000);
@@ -130,6 +136,8 @@ const run = async () => {
     const compactBox = await viewComment.boundingBox();
     ok(!!compactBox && compactBox.width <= 40 && compactBox.height <= 40,
       'the ambient annotation is a compact identity marker');
+    const railGone2 = await until(() => frame.locator('html').evaluate((el) => getComputedStyle(el).getPropertyValue('--mx-rail-inset').trim()), (v) => v === '0px', 5000);
+    ok(railGone2 === '0px', 'closing the rail gives the document its width back');
     ok(await page.locator('[aria-label="Artifact viewport"]').evaluate((el) => (el).style.right === '0px'),
       'the floating marker leaves the document full-width');
     await viewComment.hover();
@@ -305,6 +313,8 @@ const run = async () => {
     await markdownLeg(browser);
     // ── a long reply folds; a resolved card reads as resolved ─────────────
     await foldLeg(browser);
+    // ── a block is PICKED, not selected ───────────────────────────────────
+    await pickLeg(browser);
   } finally {
     await browser.close();
   }
@@ -730,6 +740,114 @@ async function foldLeg(browser) {
   ok(muted?.open === null || muted.open === 1, `an open card beside it stays at full opacity (${muted?.open})`);
   ok(await page.locator('[aria-label="Show resolved conversation"]').first().isVisible(),
     'muted is not disabled: the resolved card still offers its conversation');
+  await ctx.close();
+}
+
+/**
+ * PICKING A BLOCK, NOT WORDS. The rail's pick tool is the edit-mode move —
+ * hover outlines the block, a click takes it — for a comment, which is the
+ * only way to comment on a chart, an image or a whole list. Browser fact
+ * throughout: a pointer moving over the sandboxed document, an outline the
+ * frame PAINTS (computed style, not just a stamp), a click the frame takes
+ * for itself, and the page's composer opening on what was picked.
+ */
+async function pickLeg(browser) {
+  const { id, token } = await startDocument(BASE);
+  const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const published = await fetch(`${BASE}/api/artifacts/${id}`, { method: 'PUT', headers: auth, body: JSON.stringify({ markup: DOC }) });
+  if (!published.ok) throw new Error(`pick leg publish failed (${published.status}): ${await published.text()}`);
+
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  await becomeOwner(page, BASE, token);
+  await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
+  const frame = page.frameLocator('iframe[title="artifact"]');
+  await frame.locator('#figure').waitFor({ timeout: 15000 });
+
+  await openArtifactControls(page);
+  // The comments control closes the panel itself — no Escape here, which
+  // would now stand the pick down that opening the rail just started.
+  await page.locator('[aria-label="Toggle comments"]').click();
+  await page.locator('[aria-label="Annotation sidebar"]').waitFor({ timeout: 8000 });
+
+  // Opening the rail opened the pick: nothing to press before the first click.
+  const tool = page.locator('[aria-label="Pick a block to comment on"]');
+  ok(await tool.count() === 1, 'the rail header offers the pick tool');
+  ok(await tool.getAttribute('aria-pressed') === 'true', 'opening the rail put the pick on: the tool reads as pressed');
+  ok(await page.locator('[aria-label="Picking a block"]').isVisible(), 'a pill over the document says what to do next');
+
+  const intro = frame.locator('#intro');
+  await intro.hover();
+  const stamped = await until(() => intro.getAttribute('data-mx-annotate-pick-hover'), (v) => typeof v === 'string', 5000);
+  ok(typeof stamped === 'string', 'hovering a block while picking stamps it');
+  const painted = await intro.evaluate((el) => getComputedStyle(el).outlineStyle);
+  ok(painted !== 'none', `…and the outline is PAINTED, not only stamped (outline-style ${painted})`);
+  const cursor = await frame.locator('html').evaluate((el) => getComputedStyle(el).cursor);
+  ok(cursor === 'crosshair', `the document cursor says pick (${cursor})`);
+
+  await intro.click();
+  const composer = await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
+  ok(composer === 1, 'clicking the block opens the composer on it');
+  ok(await page.locator('[aria-label="Picking a block"]').count() === 0, 'the pick is one-shot: the pill is gone');
+  ok(await tool.getAttribute('aria-pressed') === 'false', '…and the tool is released');
+  ok(await frame.locator('#intro[data-mx-annotate-selected]').count() === 1, 'the picked block is marked as the subject');
+  ok(await frame.locator('[data-mx-annotate-pick-hover]').count() === 0, 'and the hover outline went with the pick');
+
+  await page.locator('[aria-label="Annotation comment"]').fill('picked, not selected');
+  await page.locator('[aria-label="Save annotation"]').click();
+  const thread = await until(() => page.locator('[aria-label="Annotation thread"]').count(), (n) => n === 1, 10000);
+  ok(thread === 1, 'the comment lands as a rail thread');
+  const tinted = await until(() => frame.locator('#intro[data-mx-annotated]').count(), (n) => n === 1, 8000);
+  ok(tinted === 1, 'the picked block is tinted like any commented node');
+  const read = async () => (await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: { Authorization: `Bearer ${token}` } })).json());
+  const wire = await until(read, (w) => (w?.annotations?.length ?? 0) === 1, 15000);
+  ok(wire?.annotations?.[0]?.snippet === 'An intro paragraph of ordinary prose.' && !wire?.annotations?.[0]?.quote,
+    'the wire carries the whole block and no quote — a pick has no words');
+
+  // A second pick — explicit this time, the tool is still the way in — stood
+  // down by escape: the outline goes with it.
+  await tool.click();
+  ok(await tool.getAttribute('aria-pressed') === 'true', 'the tool starts a pick again after the first ended');
+  await frame.locator('#figure').hover();
+  await until(() => frame.locator('#figure[data-mx-annotate-pick-hover]').count(), (n) => n === 1, 5000);
+  await page.keyboard.press('Escape');
+  const stoodDown = await until(() => page.locator('[aria-label="Picking a block"]').count(), (n) => n === 0, 5000);
+  ok(stoodDown === 0, 'escape cancels a pick');
+  const cleared = await until(() => frame.locator('[data-mx-annotate-pick-hover]').count(), (n) => n === 0, 5000);
+  ok(cleared === 0, '…and clears the outline');
+
+  // ── a DRAWN AREA ──────────────────────────────────────────────────────
+  // The second tool: a real drag from inside the figure paragraph into the
+  // list below it. Neither is what was drawn — their SECTION is — and the
+  // rectangle rides the comment as its range, painted back as an overlay.
+  await page.locator('[aria-label="Draw an area to comment on"]').click();
+  ok(await page.locator('[aria-label="Picking a block"]').textContent().then((t) => /drag/i.test(t ?? '')), 'the pill says to drag');
+  const frameBox = await page.locator('iframe[title="artifact"]').boundingBox();
+  const from = await frame.locator('#figure').boundingBox();
+  const to = await frame.locator('#list li').last().boundingBox();
+  await page.mouse.move(frameBox.x + from.x + 8, frameBox.y + from.y + 4);
+  await page.mouse.down();
+  await page.mouse.move(frameBox.x + from.x + 20, frameBox.y + from.y + 10, { steps: 3 });
+  await page.mouse.move(frameBox.x + to.x + to.width / 2, frameBox.y + to.y + to.height - 2, { steps: 15 });
+  ok(await frame.locator('[data-mx-annotate-band]').count() === 1, 'the band is drawn while dragging');
+  await page.mouse.up();
+  const areaComposer = await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
+  ok(areaComposer === 1, 'releasing the drag opens the composer');
+  // The breadcrumb's TARGET crumb (the composer's icon badge carries the accent colour too).
+  const crumb = await page.locator('[role="dialog"][aria-label="Annotation composer"] span.truncate.text-accent').first().textContent();
+  ok(crumb === 'section', `the anchor is the lowest common ancestor of what was drawn over (got ${crumb})`);
+  ok(await frame.locator('[data-mx-annotate-band]').count() === 1, 'the drawn area stays visible while composing');
+  await page.locator('[aria-label="Annotation comment"]').fill('this whole region');
+  await page.locator('[aria-label="Save annotation"]').click();
+  const areaWire = await until(read, (w) => (w?.annotations?.length ?? 0) === 2, 15000);
+  const areaAnn = areaWire?.annotations?.find((a) => a.range?.kind === 'area');
+  const box = areaAnn?.range?.box;
+  ok(!!box && box.x >= 0 && box.y >= 0 && box.x + box.w <= 1 && box.y + box.h <= 1 && box.w > 0 && box.h > 0,
+    `the wire carries the area as fractions of the section (got ${JSON.stringify(box)})`);
+  ok(areaAnn?.quote === null && areaAnn?.quote_found === null, 'an area has no words: no quote, quote_found null');
+  const overlay = await until(() => frame.locator(`[data-mx-annotation-area="${areaAnn?.id}"]`).count(), (n) => n === 1, 8000);
+  ok(overlay === 1, 'the saved area is painted back as an overlay box');
+  ok(await frame.locator('[data-mx-annotate-band]').count() === 0, 'and the composing band is gone');
   await ctx.close();
 }
 
