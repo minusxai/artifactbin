@@ -19,7 +19,7 @@ Examples:
   afbin remote --server http://localhost:6400 pi
 
 Auth reuses ~/.artifactbin.env, shared with artifactbin skills.
-Open /chat on your server to see your sessions. Local typing takes control.
+Open /chat on your server to see your sessions. Type from your local terminal or browser.
 `;
 async function main() {
   const args = parseArgs(process.argv.slice(2));
