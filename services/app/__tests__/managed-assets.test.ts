@@ -1,5 +1,5 @@
 import {beforeAll,afterAll,afterEach,it,expect,vi} from 'vitest';
-import {createServer} from 'node:http';
+import {withHttpServer,type RunningServer} from './net';
 vi.mock('@/lib/config',async original=>({...await original<typeof import('@/lib/config')>(),ASSETS_ORIGIN:'https://assets.example.test'}));
 import {useAppHarness,request} from './harness';
 import {importWebAsset,importForDocument} from '@/lib/web-assets';
@@ -12,11 +12,11 @@ import {urlHash} from '@/lib/story/asset-url';
 import {setDocAssetImportCapForTests} from '@/lib/auth';
 import {setAssetByteQuotaForTests} from '@/lib/asset-quota';
 import {createUser} from '@/lib/users';
+const PNG=Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a,9,9,9,9]);
 useAppHarness();
-const web='http://127.0.0.1:5620',hits:string[]=[];
-const server=createServer((req,res)=>{hits.push(req.url??'');if(req.url==='/redirect'){res.writeHead(302,{location:'http://169.254.169.254/private'});res.end();return;}res.setHeader('content-type',req.url?.endsWith('.js')?'text/javascript':req.url==='/bad'?'text/html':'application/octet-stream');res.end(req.url==='/big.js'?Buffer.alloc(11000,65):req.url==='/bad'?'<html>bad</html>':'globalThis.bundle = 1;');});
-beforeAll(async()=>{await new Promise<void>(r=>server.listen(5620,'127.0.0.1',r));setWebIngestPolicyForTests({allowPrivate:true,allowHttp:true});});
-afterAll(async()=>{setWebIngestPolicyForTests(null);await new Promise<void>(r=>server.close(()=>r()));});
+let web:string,server:RunningServer;const hits:string[]=[];
+beforeAll(async()=>{server=await withHttpServer((req,res)=>{hits.push(req.url??'');if(req.url==='/redirect'){res.writeHead(302,{location:'http://169.254.169.254/private'});res.end();return;}res.setHeader('content-type',req.url?.endsWith('.js')?'text/javascript':req.url==='/bad'?'text/html':'application/octet-stream');res.end(req.url?.endsWith('.png')?PNG:req.url==='/big.js'?Buffer.alloc(11000,65):req.url==='/bad'?'<html>bad</html>':'globalThis.bundle = 1;');});web=server.base;setWebIngestPolicyForTests({allowPrivate:true,allowHttp:true});});
+afterAll(async()=>{setWebIngestPolicyForTests(null);await server.close();});
 afterEach(()=>{setDocAssetImportCapForTests(null);setAssetByteQuotaForTests(null);});
 it('imports bundled scripts without executing them, serves safe bytes and rejects cached kind confusion',async()=>{
  const token=await mintToken('assets');const by={tokenId:token.id,userId:null};
@@ -26,6 +26,21 @@ it('imports bundled scripts without executing them, serves safe bytes and reject
  expect(await res.text()).toBe('globalThis.bundle = 1;');expect(res.headers.get('content-security-policy')).toBe('sandbox');
  await expect(importWebAsset(web+'/bundle.js',by,'image')).rejects.toMatchObject({code:'unsupported_type'});
  await importWebAsset(web+'/binary',by,'binary');await expect(importWebAsset(web+'/binary',by,'script')).rejects.toMatchObject({code:'unsupported_type'});
+});
+it('generic GET can read existing typed cache entries without refetching',async()=>{
+ const token=await mintToken('generic');const by={tokenId:token.id,userId:null};
+ const row=await importWebAsset(web+'/typed.js',by,'script');hits.length=0;
+ expect((await importWebAsset(web+'/typed.js',by,'binary')).object_key).toBe(row.object_key);expect(hits).toEqual([]);
+ const image=await importWebAsset(web+'/typed.png',by,'image');hits.length=0;
+ expect((await importWebAsset(web+'/typed.png',by,'binary')).object_key).toBe(image.object_key);expect(hits).toEqual([]);
+});
+it('generic-first imports preserve only safe typed MIME, never executable HTML',async()=>{
+ const token=await mintToken('generic-first');const by={tokenId:token.id,userId:null};
+ await importWebAsset(web+'/first.js',by,'binary');hits.length=0;
+ expect((await importWebAsset(web+'/first.js',by,'script')).content_type).toBe('text/javascript');expect(hits).toEqual([]);
+ await importWebAsset(web+'/first.png',by,'binary');hits.length=0;
+ expect((await importWebAsset(web+'/first.png',by,'image')).content_type).toBe('image/png');expect(hits).toEqual([]);
+ expect((await importWebAsset(web+'/bad',by,'binary')).content_type).toBe('application/octet-stream');
 });
 it('keeps MIME, size and redirect SSRF enforcement for scripts',async()=>{
  const token=await mintToken('assets');const by={tokenId:token.id,userId:null};
@@ -53,4 +68,14 @@ it('never imports for unreadable private documents or imports private ref addres
  hits.length=0;
  const res=await resolve(request(`/a/${id}/assets?kind=script&u=${encodeURIComponent(web+'/private.js')}`,{headers:{accept:'application/json'}}),{params:Promise.resolve({id})});expect(res.status).toBe(404);expect(hits).toEqual([]);
  await expect(importWebAsset('ref:'+id,{tokenId:token.id,userId:user.id},'binary')).rejects.toMatchObject({code:'forbidden_scheme'});
+});
+it('bounds account-only document imports without requiring a token',async()=>{
+ const user=await createUser({email:'managed-account-only@example.test'});
+ const doc={id:'accountdoc',token_id:null,user_id:user.id};
+ setAssetByteQuotaForTests(1);
+ await importForDocument(doc,web+'/account.js','script');
+ hits.length=0;
+ await importForDocument(doc,web+'/account.js','script');expect(hits).toEqual([]);
+ await expect(importForDocument(doc,web+'/account.bin','binary')).rejects.toMatchObject({code:'quota_exceeded'});
+ expect(hits).toEqual([]);
 });
