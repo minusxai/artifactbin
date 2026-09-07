@@ -1,8 +1,16 @@
 # Nested srcdoc startup investigation — 2026-09-07
 
-Decision: retain sandboxed srcdoc plus protective wrapper. This is not a universal nested-iframe failure, nor an established Three.js failure. The remaining startup issue is reproducible in the ocean fixture shell under automated Chromium. Root cause and production-browser impact remain unproven.
+Decision: retain sandboxed srcdoc plus protective wrapper. **The claimed startup blocker was a false-red observation.** The author renders and sends messages even when Playwright omits its console and frame entry. Do not use those missing observations as proof of missing execution.
 
-## Evidence
+## Corrected evidence
+
+The same ocean fixture, sandbox, CSP and author code passed 30/30 reloads and 30/30 fresh contexts when observed through its existing author-to-parent phase1 message. Each message followed 35 actual renderer calls, with user activation false. The main reviewer independently repeated 30/30 successful reloads; 26 of those still lacked child-console/frame visibility. No security flags changed and no author-frame evaluation occurred.
+
+Raw logs: `/tmp/afbin-ocean-parent-cold.jsonl`, `/tmp/afbin-ocean-parent-reload.jsonl`, `/tmp/afbin-ocean-parent-root-review.jsonl`. Reproduction: `node scripts/planning/ocean-parent-readiness.mjs CAPTURE_JSON [--cold]`.
+
+These findings resolve the claimed execution/startup blocker, not every integration or device gate. Exact attribution of the automation observation defect to Playwright vs CDP remains unassigned. Integrated tests must use source/channel-validated parent-visible readiness and real interaction outcomes.
+
+## Earlier evidence — observation failures, not proven execution failures
 
 | Probe | Result |
 | --- | --- |
@@ -40,6 +48,6 @@ Searches of Chromium reports, Playwright issues and release notes found no confi
 - [Extension injection regression](https://groups.google.com/a/chromium.org/g/chromium-extensions/c/C-zuSDGoJWk/m/hBlNJYPRAQAJ) involves sandboxed srcdoc and process isolation, but extension injection is a different failure path; not evidence that our issue is the same bug.
 - [Playwright cross-frame Promise issue](https://github.com/microsoft/playwright/issues/41826) concerns collected promises, not a proven match for missing startup.
 
-## Exact remaining blocker
+## Remaining work
 
-Isolate why this fixture's inner frame intermittently fails to bootstrap with default Chromium isolation: fixture construction, automation attachment, or browser navigation/process handling. Establish the smallest failing input and reproduce independently of Playwright before assigning browser blame. Verify a fix with default security settings, repeated cold/reload cycles, and the full workload. No architecture switch is justified by the current evidence alone.
+Implement the managed runtime and use parent-visible capability messages for startup and outcome checks. Earlier ocean-workload-perf.mjs child-frame inspection remains unsuitable as a Chromium startup oracle; its failure must not be relabeled as a production execution failure. No architecture switch or security relaxation is justified.
