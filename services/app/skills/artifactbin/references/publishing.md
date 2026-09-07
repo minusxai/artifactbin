@@ -22,10 +22,10 @@ Rules · Endpoints · Errors.
 
 ## Rules every document lives by
 
-Served sandboxed at an opaque origin under a strict per-document CSP: **no
+Sandboxed at an opaque origin with a per-document CSP: **no
 outbound network except the same-origin endpoints it names** — `/a/<id>/query`
 (data), `/a/<id>/events` + `/events/frame` (live), `/a/<id>/mutate` (declared
-writes), `/geojson/` (maps). A CDN `<script src>`, an external stylesheet or any
+writes), `/a/<id>/resolve` (files), `/geojson/`, `blob:` and `data:`. A CDN `<script src>`, an external stylesheet or any
 other `fetch`/XHR is a 400 at publish. CSS and JS live in `<Helmet>` only.
 Max [[ maxContentBytes ]] bytes.
 

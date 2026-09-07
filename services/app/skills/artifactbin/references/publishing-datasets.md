@@ -151,3 +151,5 @@ in `<Question viz={{"kind":"vega-lite","spec":{…}}} />`:
 
 `PUT` replaces content wholesale; `GET` returns the `markup` source plus
 `theme` for round-trip editing.
+
+[Arbitrary file uploads and script refs](markup-libraries.md).

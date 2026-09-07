@@ -123,8 +123,9 @@ text flush to the viewport edge).
 | charts (vega specs), controls, `<Mutation>`, data formats | `markup-data.md` |
 | editable cells, tags and reference pickers | `markup-editing.md` |
 | scroll reveals and ambient motion classes | `markup-motion.md` |
-| video embeds — the click-to-open card | `markup-video.md` |
-| inline SVG motifs and the allowed subset | `markup-svg.md` |
+| Video embeds | `markup-video.md` |
+| SVG motifs and allowed tags | `markup-svg.md` |
+| Libraries, GLBs, files | `markup-libraries.md` |
 | genre structure and full skeleton | `templates-<name>.md` (index: `templates.md`) |
 | theme tokens, accents, chart palette | `themes-<name>.md` (index: `themes.md`) |
 [[ docsMoreLine ]]

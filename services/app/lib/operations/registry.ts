@@ -115,7 +115,7 @@ const CONTENT_FIELDS = {
   imageUrl: z.string().optional().describe(IMAGE_URL_FIELD_GUIDANCE),
   pdf: z.string().optional().describe(PDF_FIELD_GUIDANCE),
   pdfUrl: z.string().optional().describe(PDF_URL_FIELD_GUIDANCE),
-  file: z.object({ filename: z.string(), contentType: z.string(), base64: z.string() }).optional().describe('Allowlisted file uploads (GLB, images, audio/video, documents, fonts, ZIP). Unsupported extensions return unsupported_file_type. Returns a ref:<id> address. For large files POST raw bytes to /api/artifacts?format=file&filename=<name>.'),
+  file: z.object({ filename: z.string(), contentType: z.string(), base64: z.string() }).optional().describe('Allowlisted file uploads (GLB, images, audio/video, documents, fonts, ZIP). Unsupported extensions return unsupported_file_type. Returns a ref:<id> address. Scripts use await artifact.resolve("ref:<id>"); private files never resolve. For large files POST raw bytes to /api/artifacts?format=file&filename=<name>.'),
   csvUrl: z.string().optional().describe(CSV_URL_FIELD_GUIDANCE),
   title: z.string().optional(),
   description: z.string().optional().describe('shown on the owner dashboard, never on the document'),
