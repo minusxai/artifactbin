@@ -51,7 +51,10 @@ while `snippet` is the whole node they sit in, recomputed on every read;
 On a historical thread it may be absent while `anchor.key` names an existing
 legacy `data-annotation-anchor`; preserve that attribute but do not create one.
 `"quote_found": false`
-means those words are already gone from the current version. An
+means those words are already gone from the current version. A comment drawn
+as an AREA over the page has no words: `quote` is null and `range` is
+`{ "kind": "area", "box": {…} }` (fractions of the anchored node's box), so
+read `snippet` for what it covers. An
 `"orphaned": true` annotation's node is not in the current version — the
 snippet still says what it pointed at.
 

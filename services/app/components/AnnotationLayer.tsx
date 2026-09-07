@@ -32,7 +32,7 @@
  * even reach them.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, ChevronRight, EllipsisVertical, MessageSquare, MousePointerClick, SquareDashedMousePointer, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, EllipsisVertical, MessageSquare, MousePointerClick, SquareDashed, SquareDashedMousePointer, Trash2, X } from 'lucide-react';
 import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations';
 import { ChatGPTIcon, ClaudeAIIcon, ClaudeCodeIcon, CodexIcon } from '@/components/brand-icons';
 import { foldFromMeasure, isFolded, readFolds, toggleFold, unfold, type FoldKind, type Folds } from '@/lib/comment-folds';
@@ -777,11 +777,13 @@ export default function AnnotationLayer({
   const [anchorRects, setAnchorRects] = useState<Record<string, StoryEditRect>>({});
   const [selection, setSelection] = useState<StoryEditSelection | null>(null);
   /**
-   * A PICK is on: the frame outlines blocks under the pointer and its next
-   * `mx:selection` is the composer's subject. Page state, never the URL — a
-   * fact about what someone is doing right now, like a fold or the theme.
+   * A PICK is on, and how: `block` (the frame outlines blocks under the
+   * pointer, a click takes one) or `area` (a dragged rectangle, anchored to
+   * the blocks' common ancestor). Its next `mx:selection` is the composer's
+   * subject. Page state, never the URL — a fact about what someone is doing
+   * right now, like a fold or the theme.
    */
-  const [picking, setPicking] = useState(false);
+  const [pick, setPick] = useState<'block' | 'area' | null>(null);
   /** On a phone the rail is a bottom sheet — a 320px rail over a 390px screen
       is the whole document covered, with a strip too narrow to read. */
   const phoneRail = useIsPhoneViewport();
@@ -809,7 +811,7 @@ export default function AnnotationLayer({
   composingRef.current = selection !== null;
   // Same shape, same reason: a pick's answer arrives on that listener too.
   const pickingRef = useRef(false);
-  pickingRef.current = picking;
+  pickingRef.current = pick !== null;
   const railOpenRef = useRef(railOpen);
   railOpenRef.current = railOpen;
   /** The rail is about to open FOR A THREAD (a pin, a marker): that opening must not start a pick. */
@@ -915,13 +917,13 @@ export default function AnnotationLayer({
     if (railOpen) {
       const forThread = openedForThreadRef.current;
       openedForThreadRef.current = false;
-      if (!forThread && !composingRef.current && pickOnOpen && !phoneRail) setPicking(true);
+      if (!forThread && !composingRef.current && pickOnOpen && !phoneRail) setPick('block');
       return;
     }
     if (sheetAwayForPickRef.current) { sheetAwayForPickRef.current = false; return; }
-    setPicking(false);
+    setPick(null);
   }, [railOpen, pickOnOpen, phoneRail]);
-  useEffect(() => { if (!pickOnOpen) setPicking(false); }, [pickOnOpen]);
+  useEffect(() => { if (!pickOnOpen) setPick(null); }, [pickOnOpen]);
 
   // A selection handed down by the page — the view-mode bubble's Comment, or
   // the editor toolbar's — opens the composer on those exact words, so nobody
@@ -931,7 +933,7 @@ export default function AnnotationLayer({
     setSelection(initialSelection);
     setOpenId(null);
     setFailure(null);
-    setPicking(false);   // the subject was chosen another way
+    setPick(null);   // the subject was chosen another way
   }, [initialSelection]);
 
   // The pin set, re-posted whole on every change — the frame holds no
@@ -956,10 +958,10 @@ export default function AnnotationLayer({
       openId,
       hoverId,
       selectedPath: selection?.path ?? null,
-      picking,
+      pick,
     };
     postToFrame(message);
-  }, [annotations, hoverId, openId, picking, selection?.path, sessionNonce, postToFrame]);
+  }, [annotations, hoverId, openId, pick, selection?.path, sessionNonce, postToFrame]);
   // Closing the rail drops what only the rail was showing; the pins stay.
   useEffect(() => {
     if (!railOpen) { setOpenResolvedId(null); setOpenId(null); }
@@ -1000,7 +1002,7 @@ export default function AnnotationLayer({
          * through to the composing branch, which would read a null as "close".
          */
         const picked = event.data.selection;
-        setPicking(false);
+        setPick(null);
         if (picked) {
           setSelection(picked);
           setOpenId(null);
@@ -1023,7 +1025,12 @@ export default function AnnotationLayer({
         setSelection((previous) => {
           const sameIdentity = reported?.nodeId && previous?.nodeId && reported.nodeId === previous.nodeId;
           if (!sameIdentity) return reported;
-          return previous.quote ? { ...reported, quote: previous.quote, range: previous.range } : reported;
+          // The words, or the drawn area — whichever this comment is about.
+          return {
+            ...reported,
+            ...(previous.quote ? { quote: previous.quote } : {}),
+            ...(previous.range ? { range: previous.range } : {}),
+          };
         });
         setFailure(null);
         if (reported) setOpenId(null);
@@ -1148,15 +1155,15 @@ export default function AnnotationLayer({
   // the frame's null selection above. Bound only while picking, like the
   // composer's, so the key keeps its other meanings everywhere else.
   useEffect(() => {
-    if (!picking) return;
+    if (!pick) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.stopPropagation();
-      setPicking(false);
+      setPick(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [picking]);
+  }, [pick]);
 
   /*
    * THREE INDEPENDENT SURFACES. None of them is a mode, so none of them is an
@@ -1172,15 +1179,17 @@ export default function AnnotationLayer({
    * then the only chrome, and carries the way out. On desktop the rail stays;
    * closing it does not cancel a pick for the same reason.
    */
-  const beginPick = () => {
-    setPicking(true);
+  const beginPick = (mode: 'block' | 'area') => {
+    setPick(mode);
     setOpenId(null);
     if (phoneRail && railOpenRef.current) {
       sheetAwayForPickRef.current = true;
       onRailOpenChangeRef.current(false);
     }
   };
-  const endPick = () => setPicking(false);
+  const endPick = () => setPick(null);
+  /** The header tools: pressing the active one is the way out; pressing the other switches. */
+  const toggleTool = (mode: 'block' | 'area') => (pick === mode ? endPick() : beginPick(mode));
 
   // The collapsed 36px identity mark is small enough for phones too; clicking
   // it opens the same rail as a bottom sheet, with no hover dependency.
@@ -1222,15 +1231,19 @@ export default function AnnotationLayer({
 
       {/* The pick's only indicator once the rail is away, and the phone's only
           way out of it. Over the document, never in it: the frame is opaque. */}
-      {picking && (
+      {pick && (
         <div
           role="status"
           aria-label="Picking a block"
           className={`${cardClass} fixed z-30 flex items-center gap-2 border-edge-bright px-3 py-1.5 font-mono text-[11px] text-muted shadow-xl`}
           style={{ left: frameRect.left + frameRect.width / 2, top: frameRect.top + VIEW_COMMENT_INSET, transform: 'translateX(-50%)' }}
         >
-          <MousePointerClick size={12} strokeWidth={1.8} className="shrink-0 text-accent" />
-          <span className="whitespace-nowrap">click a block or select text to comment</span>
+          {pick === 'area'
+            ? <SquareDashed size={12} strokeWidth={1.8} className="shrink-0 text-accent" />
+            : <MousePointerClick size={12} strokeWidth={1.8} className="shrink-0 text-accent" />}
+          <span className="whitespace-nowrap">
+            {pick === 'area' ? 'drag a rectangle to comment on it' : 'click a block or select text to comment'}
+          </span>
           <button
             type="button"
             aria-label="Cancel picking"
@@ -1344,11 +1357,22 @@ export default function AnnotationLayer({
               <button
                 type="button"
                 aria-label="Pick a block to comment on"
-                aria-pressed={picking}
-                onClick={() => (picking ? endPick() : beginPick())}
-                className={`ml-auto inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[3px] hover:bg-surface hover:text-fg ${picking ? 'bg-accent-soft text-accent' : 'text-muted'}`}
+                aria-pressed={pick === 'block'}
+                onClick={() => toggleTool('block')}
+                className={`ml-auto inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[3px] hover:bg-surface hover:text-fg ${pick === 'block' ? 'bg-accent-soft text-accent' : 'text-muted'}`}
               >
                 <SquareDashedMousePointer size={14} strokeWidth={1.8} />
+              </button>
+            </Tooltip>
+            <Tooltip content="Draw an area to comment on">
+              <button
+                type="button"
+                aria-label="Draw an area to comment on"
+                aria-pressed={pick === 'area'}
+                onClick={() => toggleTool('area')}
+                className={`inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[3px] hover:bg-surface hover:text-fg ${pick === 'area' ? 'bg-accent-soft text-accent' : 'text-muted'}`}
+              >
+                <SquareDashed size={14} strokeWidth={1.8} />
               </button>
             </Tooltip>
             <button

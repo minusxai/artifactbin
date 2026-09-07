@@ -714,13 +714,16 @@ export interface StoryAnnotationsMessage {
   /** The node the owner is composing on; replayed so lazy annotation startup cannot lose it. */
   selectedPath?: string | null;
   /**
-   * The person is PICKING a block to comment on (the rail's pick tool): the
-   * frame outlines the selectable node under the pointer and answers a click
-   * with `mx:selection` — the same report the breadcrumb widening uses — and
-   * a null selection on escape. Absent is false. One-shot: the page clears it
-   * the moment a selection arrives.
+   * The person is choosing WHAT to comment on (the rail's tools), and how:
+   * `block` — the selectable node under the pointer carries an outline and a
+   * click takes it; `area` — a dragged rectangle, whose anchor is the lowest
+   * common ancestor of the blocks it touched and whose box rides the
+   * selection as an area range (lib/story/annotation-range). Either answers
+   * with `mx:selection` — the same report the breadcrumb widening uses — or a
+   * null selection on escape. Null/absent is off. One-shot: the page clears
+   * it the moment a selection arrives.
    */
-  picking?: boolean;
+  pick?: 'block' | 'area' | null;
 }
 
 /** Frame → parent: the owner clicked an annotated node to open its thread. */

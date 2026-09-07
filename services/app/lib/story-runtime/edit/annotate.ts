@@ -28,6 +28,15 @@
  * back a null selection so the page can stand down; the page ends the pick
  * the moment either arrives.
  *
+ * THE DRAWN AREA is the pick's second mode (`pick: 'area'`): a rubber band
+ * over the document, whose anchor is the lowest common ancestor of the blocks
+ * it touched (lib/story/annotation-range `areaTarget`) and whose box rides
+ * the same `mx:selection` as an area RANGE — fractions of the anchor, so it
+ * survives a reflow. A saved area thread is painted back as an overlay box
+ * where a text thread has its highlight, and its layout report is the box.
+ * The press is cancelled while drawing (no text selection under a band), and
+ * a release with no drag is an ordinary block pick.
+ *
  * Loaded lazily on the first non-off `mx:annotations` (the edit-chunk
  * pattern): a reader never downloads it, and a shared reader's top-level
  * document has no parent channel so the message cannot even arrive.
@@ -40,7 +49,12 @@ import {
   type StoryAnnotationsMessage,
 } from '../contract';
 import { describeSelection } from './describe-selection';
+type AnnotationRangeOnWire = NonNullable<StoryAnnotationsMessage['pins'][number]['range']>;
 import { resolveParts } from './selection-range';
+import {
+  ANNOTATION_AREA_MIN_PX, areaTarget, boxFromRects, isAreaRange, rectFromBox,
+  type AnnotationBox, type AnnotationRect,
+} from '@/lib/story/annotation-range';
 
 /** Marks every node carrying an open annotation, in every mode the layer is on for. */
 export const ANNOTATED_ATTR = 'data-mx-annotated';
@@ -61,8 +75,12 @@ export const ANNOTATION_RANGED_ATTR = 'data-mx-annotation-ranged';
 export const ANNOTATION_HIGHLIGHT_PREFIX = 'mx-annotation-';
 /** Marks the selectable node under the pointer WHILE PICKING (the rail's pick tool) — the edit-mode hover, for a comment. */
 export const ANNOTATE_PICK_HOVER_ATTR = 'data-mx-annotate-pick-hover';
-/** Stamped on the document element while a pick is on, so a stylesheet can say "crosshair" everywhere. */
+/** Stamped on the document element while a pick is on — its VALUE is the mode (`block` | `area`) — so a stylesheet can say "crosshair" everywhere. */
 export const ANNOTATE_PICKING_ATTR = 'data-mx-annotate-picking';
+/** The rubber band while an area is being drawn, and the drawn area while its comment is being composed. */
+export const ANNOTATE_BAND_ATTR = 'data-mx-annotate-band';
+/** One painted overlay per AREA thread, by thread id — the area's own box, where a text thread has its highlight. */
+export const ANNOTATION_AREA_ATTR = 'data-mx-annotation-area';
 
 // Persistent annotation chrome is a tint, while the transient cross-surface
 // hover gets an outline so the relationship is unmistakable without shifting
@@ -84,6 +102,8 @@ export const ANNOTATE_CSS = [
   // doubled attribute is deliberate — it out-specifies the edit session's own
   // `[data-mx-edit-hover]` when both stamp the same node while editing.
   `[${ANNOTATE_PICKING_ATTR}], [${ANNOTATE_PICKING_ATTR}] * { cursor: crosshair !important; }`,
+  // A finger drawing an area must draw, not scroll; and nothing under a band selects.
+  `[${ANNOTATE_PICKING_ATTR}="area"], [${ANNOTATE_PICKING_ATTR}="area"] * { touch-action: none !important; user-select: none !important; }`,
   `[${ANNOTATE_PICK_HOVER_ATTR}][${ANNOTATE_PICK_HOVER_ATTR}] { outline: 2px solid rgba(245, 158, 11, 0.9); outline-offset: 3px; border-radius: 3px; background: rgba(245, 158, 11, 0.08); }`,
   // A node whose words are painted gives up its own background — the tint is
   // what a comment looks like when we cannot find the words, not as well as.
@@ -98,6 +118,12 @@ const HIGHLIGHT_FILL = {
   base: 'rgba(245, 158, 11, 0.28)',
   hover: 'rgba(245, 158, 11, 0.42)',
   open: 'rgba(245, 158, 11, 0.52)',
+};
+/** An area box is an OUTLINE first: it may cover a chart, and a fill as strong as the words' would hide it. */
+const AREA_FILL = {
+  base: { background: 'rgba(245, 158, 11, 0.12)', outline: '2px solid rgba(245, 158, 11, 0.6)' },
+  hover: { background: 'rgba(245, 158, 11, 0.2)', outline: '2px solid rgba(245, 158, 11, 0.9)' },
+  open: { background: 'rgba(245, 158, 11, 0.26)', outline: '2px solid rgba(245, 158, 11, 0.9)' },
 };
 
 /**
@@ -178,10 +204,16 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
   let scrolledTo: string | null = null;
   /** The ranges currently painted for each thread — the layout rect follows the WORDS when there are any. */
   let painted = new Map<string, Range[]>();
-  /** A pick is on (the rail's tool). Read from the state message; never inferred. */
-  let picking = false;
-  /** The selectable node under the pointer while picking — one at a time. */
+  /** The pick mode (the rail's tools). Read from the state message; never inferred. */
+  let pick: 'block' | 'area' | null = null;
+  /** The selectable node under the pointer while block-picking — one at a time. */
   let pickHovered: Element | null = null;
+  /** An area being drawn: where the press landed. The band element exists once the drag is real. */
+  let drawing: { startX: number; startY: number; target: EventTarget | null } | null = null;
+  /** The drawn area whose comment is being composed — repainted from its anchor on every sync, gone with the selection. */
+  let composingArea: { path: string; box: AnnotationBox } | null = null;
+  /** The rects painted for AREA threads this sync — the layout rect is the box, not the node. */
+  let paintedAreas = new Map<string, AnnotationRect>();
   /** Highlight names this session registered, so it can take back exactly its own. */
   const registeredHighlights = new Set<string>();
   let rafPending = false;
@@ -237,6 +269,75 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
     for (const name of registeredHighlights) api?.registry.delete(name);
     registeredHighlights.clear();
     painted = new Map();
+    paintedAreas = new Map();
+    for (const overlay of doc.querySelectorAll(`[${ANNOTATION_AREA_ATTR}]`)) overlay.remove();
+  };
+
+  // ── area overlays ─────────────────────────────────────────────────────────
+  /** One absolutely-positioned box, page coordinates, transparent to the pointer. */
+  const placeOverlay = (el: HTMLElement, rect: AnnotationRect) => {
+    el.style.position = 'absolute';
+    el.style.left = `${rect.x + win.scrollX}px`;
+    el.style.top = `${rect.y + win.scrollY}px`;
+    el.style.width = `${rect.width}px`;
+    el.style.height = `${rect.height}px`;
+    el.style.pointerEvents = 'none';
+    el.style.borderRadius = '3px';
+    el.style.boxSizing = 'border-box';
+    el.style.zIndex = '2147483000';
+  };
+
+  /**
+   * Paint each AREA thread's box from its anchor's CURRENT rect. Rebuilt from
+   * the stored fractions on every sync like the text highlights: a reflow
+   * moves the anchor, and the box must follow it rather than the viewport.
+   */
+  const paintAreas = () => {
+    if (!state || state.mode === 'off') return;
+    for (const pin of state.pins) {
+      if (!isAreaRange(pin.range)) continue;
+      const el = elementForPin(pin);
+      if (!el) continue;
+      const rect = rectFromBox(el.getBoundingClientRect(), pin.range.box);
+      const overlay = doc.createElement('div');
+      overlay.setAttribute(ANNOTATION_AREA_ATTR, pin.id);
+      placeOverlay(overlay, rect);
+      const emphasis = state.openId === pin.id ? 'open' : state.hoverId === pin.id ? 'hover' : 'base';
+      overlay.style.background = AREA_FILL[emphasis].background;
+      overlay.style.outline = AREA_FILL[emphasis].outline;
+      overlay.style.outlineOffset = '1px';
+      doc.body.appendChild(overlay);
+      paintedAreas.set(pin.id, rect);
+      el.setAttribute(ANNOTATION_RANGED_ATTR, '');
+    }
+  };
+
+  /** The band: while a drag is in progress, and then the drawn area while its comment is composed. */
+  const bandElement = (): HTMLElement => {
+    let band = doc.querySelector<HTMLElement>(`[${ANNOTATE_BAND_ATTR}]`);
+    if (!band) {
+      band = doc.createElement('div');
+      band.setAttribute(ANNOTATE_BAND_ATTR, '');
+      band.style.background = 'rgba(245, 158, 11, 0.10)';
+      band.style.outline = '2px dashed rgba(245, 158, 11, 0.9)';
+      doc.body.appendChild(band);
+    }
+    return band;
+  };
+  const removeBand = () => doc.querySelector(`[${ANNOTATE_BAND_ATTR}]`)?.remove();
+
+  /** The composing area follows its anchor and leaves with the selection. */
+  const paintComposingArea = () => {
+    if (!composingArea || !state || state.mode === 'off' || selectedPath !== composingArea.path) {
+      composingArea = null;
+      if (!drawing) removeBand();
+      return;
+    }
+    const el = elementFor(composingArea.path);
+    if (!el) { composingArea = null; removeBand(); return; }
+    const band = bandElement();
+    band.style.outlineStyle = 'solid';
+    placeOverlay(band, rectFromBox(el.getBoundingClientRect(), composingArea.box));
   };
 
   /**
@@ -252,8 +353,9 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
     if (!api || !state || state.mode === 'off') return [];
     const rules: string[] = [];
     for (const pin of state.pins) {
-      const el = pin.range ? elementForPin(pin) : null;
-      if (!el || !pin.range) continue;
+      if (!pin.range || isAreaRange(pin.range)) continue;   // areas are painted as boxes below
+      const el = elementForPin(pin);
+      if (!el) continue;
       const ranges = resolveParts(el, pin.range.parts);
       // EVERY part or none — the same rule the wire's `quote_found` answers by.
       // Not found is not an error: the words were edited away, and the node
@@ -284,11 +386,11 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
     const positions = state.pins.flatMap((pin) => {
       const el = elementForPin(pin);
       if (!el) return [];
-      // The card belongs beside the WORDS when we found them; the node is what
-      // a comment is about only when we could not.
+      // The card belongs beside the WORDS when we found them, or beside the
+      // drawn AREA; the node is what a comment is about only when we could not.
       const words = painted.get(pin.id);
       const union = words ? unionRect(words) : null;
-      const rect = union ?? el.getBoundingClientRect();
+      const rect = paintedAreas.get(pin.id) ?? union ?? el.getBoundingClientRect();
       return [{ id: pin.id, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } }];
     });
     post({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions });
@@ -318,6 +420,8 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
     if (hovered) elementForPin(hovered)?.setAttribute(ANNOTATION_HOVER_ATTR, '');
     // The words last, so their rules follow the state that was just stamped.
     ensureCss(true, paintRanges());
+    paintAreas();
+    paintComposingArea();
   };
 
   /** Keep the page-level draft popover attached while the document moves. */
@@ -342,8 +446,9 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
   };
 
   /** Report a selection: stamp the node so the owner sees what they picked, tell the page. */
-  const reportSelection = (el: Element | null) => {
+  const reportSelection = (el: Element | null, extra: { range?: AnnotationRangeOnWire } = {}) => {
     const selection = el ? describeSelection(el, nodes) : null;
+    if (selection && extra.range) selection.range = extra.range;
     selectedPath = selection?.path ?? null;
     applyState();
     post({ type: STORY_SELECTION_MESSAGE, selection });
@@ -361,7 +466,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
   const onClick = (event: MouseEvent) => {
     // While picking, a click is the window listener's (below): a selectable
     // target was already taken there, and anything else is nobody's business.
-    if (!state || state.mode === 'off' || picking || isEditing()) return;
+    if (!state || state.mode === 'off' || pick || isEditing()) return;
     const target = event.target as HTMLElement | null;
     if (!target) return;
     // Preview copies (deck rail, present mode) render the same paths; never select through them.
@@ -425,14 +530,13 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
     pickHovered?.setAttribute(ANNOTATE_PICK_HOVER_ATTR, '');
   };
 
-  /** Turn the pick on or off: the crosshair stamp on the root, and the hover with it. Idempotent. */
-  const setPicking = (on: boolean) => {
-    picking = on;
-    if (on) doc.documentElement.setAttribute(ANNOTATE_PICKING_ATTR, '');
-    else {
-      doc.documentElement.removeAttribute(ANNOTATE_PICKING_ATTR);
-      setPickHovered(null);
-    }
+  /** Set the pick mode: the crosshair stamp on the root carries it, and the hover and any drag leave with it. Idempotent. */
+  const setPick = (mode: 'block' | 'area' | null) => {
+    pick = mode;
+    if (mode) doc.documentElement.setAttribute(ANNOTATE_PICKING_ATTR, mode);
+    else doc.documentElement.removeAttribute(ANNOTATE_PICKING_ATTR);
+    if (mode !== 'block') setPickHovered(null);
+    if (mode !== 'area' && drawing) { drawing = null; removeBand(); }
   };
 
   /**
@@ -443,7 +547,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
    * still be able to DRAG across words for the selection bubble.
    */
   const onPickMouseDown = (event: MouseEvent) => {
-    if (!picking || !isEditing() || !selectableAt(event.target)) return;
+    if (pick !== 'block' || !isEditing() || !selectableAt(event.target)) return;
     event.preventDefault();
   };
 
@@ -455,9 +559,14 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
 
   /** The pick itself. On `win` in the capture phase: it runs BEFORE the edit session's document listener. */
   const onPickClick = (event: MouseEvent) => {
-    if (!picking || draggedWords()) return;
+    if (!pick) return;
     const el = selectableAt(event.target);
     if (!el) return;
+    // In area mode the release already decided (a drawn area, or a block for
+    // a bare click); the click that follows is swallowed so it can neither
+    // focus a thread nor follow a link.
+    if (pick === 'area') { event.preventDefault(); event.stopPropagation(); return; }
+    if (draggedWords()) return;
     event.preventDefault();
     event.stopPropagation();
     setPickHovered(null);
@@ -466,19 +575,79 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
 
   /** Escape stands the pick down: a null selection, and NOT `reportSelection(null)` — a composer already open keeps its node. */
   const onPickKeyDown = (event: KeyboardEvent) => {
-    if (!picking || event.key !== 'Escape') return;
+    if (!pick || event.key !== 'Escape') return;
     event.preventDefault();
     event.stopPropagation();
+    if (drawing) { drawing = null; removeBand(); }
     post({ type: STORY_SELECTION_MESSAGE, selection: null });
+  };
+
+  // ── the drawn area ────────────────────────────────────────────────────────
+  const bandRect = (from: { startX: number; startY: number }, to: { clientX: number; clientY: number }): AnnotationRect => ({
+    x: Math.min(from.startX, to.clientX),
+    y: Math.min(from.startY, to.clientY),
+    width: Math.abs(to.clientX - from.startX),
+    height: Math.abs(to.clientY - from.startY),
+  });
+
+  /** Every selectable node with its rect and BODY path — what a band is measured against. */
+  const areaCandidates = (): Array<{ path: string; rect: AnnotationRect }> =>
+    [...doc.querySelectorAll<HTMLElement>(`[${AST_PATH_ATTR}]`)]
+      .filter((el) => !el.closest('.mx-rail, .mx-present') && describeSelection(el, nodes))
+      .map((el) => ({ path: el.getAttribute(AST_PATH_ATTR)!, rect: el.getBoundingClientRect() }));
+
+  const onAreaPointerDown = (event: PointerEvent) => {
+    if (pick !== 'area' || event.button !== 0) return;
+    const target = event.target as Element | null;
+    if (target?.closest?.('.mx-rail, .mx-present')) return;
+    // Nothing selects and no host focuses under a band.
+    event.preventDefault();
+    drawing = { startX: event.clientX, startY: event.clientY, target: event.target };
+  };
+
+  const onAreaPointerMove = (event: PointerEvent) => {
+    if (!drawing) return;
+    const rect = bandRect(drawing, event);
+    const real = rect.width >= ANNOTATION_AREA_MIN_PX || rect.height >= ANNOTATION_AREA_MIN_PX;
+    if (!real && !doc.querySelector(`[${ANNOTATE_BAND_ATTR}]`)) return;
+    const band = bandElement();
+    band.style.outlineStyle = 'dashed';
+    placeOverlay(band, rect);
+  };
+
+  /**
+   * The release decides. No drag: the block under the press, exactly as a
+   * block pick. A drag: the lowest common ancestor of what it touched, with
+   * the band as fractions of that anchor. Nothing touched: nothing, and the
+   * mode stays on.
+   */
+  const onAreaPointerUp = (event: PointerEvent) => {
+    if (!drawing) return;
+    const from = drawing;
+    drawing = null;
+    removeBand();
+    const rect = bandRect(from, event);
+    if (rect.width < ANNOTATION_AREA_MIN_PX && rect.height < ANNOTATION_AREA_MIN_PX) {
+      const el = selectableAt(from.target);
+      if (el) reportSelection(el);
+      return;
+    }
+    const path = areaTarget(areaCandidates(), rect);
+    const el = path ? elementFor(path) : null;
+    if (!el || !path) return;
+    const box = boxFromRects(el.getBoundingClientRect(), rect);
+    if (!box) return;
+    composingArea = { path, box };
+    reportSelection(el, { range: { v: 1, kind: 'area', box } });
   };
 
   const onPointerOver = (event: PointerEvent) => {
     reportHover(event.target);
-    if (picking) setPickHovered(selectableAt(event.target));
+    if (pick === 'block') setPickHovered(selectableAt(event.target));
   };
   const onPointerOut = (event: PointerEvent) => {
     reportHover(event.relatedTarget);
-    if (picking) setPickHovered(selectableAt(event.relatedTarget));
+    if (pick === 'block') setPickHovered(selectableAt(event.relatedTarget));
   };
 
   doc.addEventListener('click', onClick, true);
@@ -487,6 +656,9 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
   win.addEventListener('mousedown', onPickMouseDown, true);
   win.addEventListener('click', onPickClick, true);
   win.addEventListener('keydown', onPickKeyDown, true);
+  win.addEventListener('pointerdown', onAreaPointerDown, true);
+  win.addEventListener('pointermove', onAreaPointerMove, true);
+  win.addEventListener('pointerup', onAreaPointerUp, true);
   win.addEventListener('scroll', scheduleSync, { passive: true });
   win.addEventListener('resize', scheduleSync, { passive: true });
   /*
@@ -501,7 +673,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
   return {
     update(message) {
       state = message;
-      setPicking(message.mode !== 'off' && !!message.picking);
+      setPick(message.mode === 'off' ? null : message.pick ?? null);
       if (message.mode === 'off') selectedPath = null;
       else if (message.selectedPath !== undefined) selectedPath = message.selectedPath;
       if (message.mode === 'off') ensureCss(false);
@@ -537,7 +709,9 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
       state = null;
       selectedPath = null;
       reportedHoverId = null;
-      setPicking(false);
+      setPick(null);
+      composingArea = null;
+      removeBand();
       clearHighlights();
       ensureCss(false);
       applyState();
@@ -547,6 +721,9 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
       win.removeEventListener('mousedown', onPickMouseDown, true);
       win.removeEventListener('click', onPickClick, true);
       win.removeEventListener('keydown', onPickKeyDown, true);
+      win.removeEventListener('pointerdown', onAreaPointerDown, true);
+      win.removeEventListener('pointermove', onAreaPointerMove, true);
+      win.removeEventListener('pointerup', onAreaPointerUp, true);
       doc.removeEventListener('input', scheduleSync, true);
       win.removeEventListener('scroll', scheduleSync);
       win.removeEventListener('resize', scheduleSync);

@@ -44,7 +44,7 @@ const DOC =
   + '<p id="intro">An intro paragraph of ordinary prose.</p>'
   // Nested on purpose: a breadcrumb only offers non-root ancestors, so the
   // section is what proves the crumb renders and re-targets.
-  + '<section className="max-w-2xl"><p id="figure">Revenue grew 40% in Q3.</p></section>'
+  + '<section className="max-w-2xl"><p id="figure">Revenue grew 40% in Q3.</p><ul id="list"><li>one</li><li>two</li></ul></section>'
   + '</div>';
 
 const run = async () => {
@@ -807,6 +807,39 @@ async function pickLeg(browser) {
   ok(stoodDown === 0, 'escape cancels a pick');
   const cleared = await until(() => frame.locator('[data-mx-annotate-pick-hover]').count(), (n) => n === 0, 5000);
   ok(cleared === 0, '…and clears the outline');
+
+  // ── a DRAWN AREA ──────────────────────────────────────────────────────
+  // The second tool: a real drag from inside the figure paragraph into the
+  // list below it. Neither is what was drawn — their SECTION is — and the
+  // rectangle rides the comment as its range, painted back as an overlay.
+  await page.locator('[aria-label="Draw an area to comment on"]').click();
+  ok(await page.locator('[aria-label="Picking a block"]').textContent().then((t) => /drag/i.test(t ?? '')), 'the pill says to drag');
+  const frameBox = await page.locator('iframe[title="artifact"]').boundingBox();
+  const from = await frame.locator('#figure').boundingBox();
+  const to = await frame.locator('#list li').last().boundingBox();
+  await page.mouse.move(frameBox.x + from.x + 8, frameBox.y + from.y + 4);
+  await page.mouse.down();
+  await page.mouse.move(frameBox.x + from.x + 20, frameBox.y + from.y + 10, { steps: 3 });
+  await page.mouse.move(frameBox.x + to.x + to.width / 2, frameBox.y + to.y + to.height - 2, { steps: 15 });
+  ok(await frame.locator('[data-mx-annotate-band]').count() === 1, 'the band is drawn while dragging');
+  await page.mouse.up();
+  const areaComposer = await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
+  ok(areaComposer === 1, 'releasing the drag opens the composer');
+  // The breadcrumb's TARGET crumb (the composer's icon badge carries the accent colour too).
+  const crumb = await page.locator('[role="dialog"][aria-label="Annotation composer"] span.truncate.text-accent').first().textContent();
+  ok(crumb === 'section', `the anchor is the lowest common ancestor of what was drawn over (got ${crumb})`);
+  ok(await frame.locator('[data-mx-annotate-band]').count() === 1, 'the drawn area stays visible while composing');
+  await page.locator('[aria-label="Annotation comment"]').fill('this whole region');
+  await page.locator('[aria-label="Save annotation"]').click();
+  const areaWire = await until(read, (w) => (w?.annotations?.length ?? 0) === 2, 15000);
+  const areaAnn = areaWire?.annotations?.find((a) => a.range?.kind === 'area');
+  const box = areaAnn?.range?.box;
+  ok(!!box && box.x >= 0 && box.y >= 0 && box.x + box.w <= 1 && box.y + box.h <= 1 && box.w > 0 && box.h > 0,
+    `the wire carries the area as fractions of the section (got ${JSON.stringify(box)})`);
+  ok(areaAnn?.quote === null && areaAnn?.quote_found === null, 'an area has no words: no quote, quote_found null');
+  const overlay = await until(() => frame.locator(`[data-mx-annotation-area="${areaAnn?.id}"]`).count(), (n) => n === 1, 8000);
+  ok(overlay === 1, 'the saved area is painted back as an overlay box');
+  ok(await frame.locator('[data-mx-annotate-band]').count() === 0, 'and the composing band is gone');
   await ctx.close();
 }
 

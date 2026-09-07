@@ -24,8 +24,7 @@
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import {
   canonicalQuote, findNearest, formatRel, parseRel,
-  type AnnotationRange, type AnnotationRangePart, type RelAddress,
-} from '@/lib/story/annotation-range';
+  type AnnotationRange, type AnnotationRangePart, type RelAddress, type AnnotationTextRange } from '@/lib/story/annotation-range';
 
 /**
  * The text-holding elements. A selection anchors on one of these and never on
@@ -214,7 +213,7 @@ function resolveAddress(anchor: Element, address: RelAddress): Element | null {
  * same block read on, and a new block adds ONE space — the quote reads the way
  * the person selected it.
  */
-export function describeRange(range: Range, anchor: Element): { quote: string; range: AnnotationRange } {
+export function describeRange(range: Range, anchor: Element): { quote: string; range: AnnotationTextRange } {
   const parts: AnnotationRangePart[] = [];
   let quote = '';
   let previousBlock: Element | null = null;
@@ -280,7 +279,7 @@ export function resolveParts(anchor: Element, parts: AnnotationRangePart[]): Ran
  * when nothing is selected there, which is the common case: this rides every
  * caret move, and a caret has selected nothing.
  */
-export function captureSelection(win: Window, element: Element): { quote: string; range: AnnotationRange } | null {
+export function captureSelection(win: Window, element: Element): { quote: string; range: AnnotationTextRange } | null {
   const selection = win.getSelection();
   if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null;
   const range = selection.getRangeAt(0);
