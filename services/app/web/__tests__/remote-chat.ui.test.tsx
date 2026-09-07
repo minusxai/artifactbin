@@ -1,4 +1,4 @@
-import { render, waitFor, cleanup } from "@testing-library/react";
+import { render, waitFor, cleanup, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { it, expect, vi, afterEach } from "vitest";
 const { write } = vi.hoisted(() => ({
@@ -81,4 +81,24 @@ it("keeps polling through empty terminal frames and renders later output", async
     { timeout: 2000 },
   );
   expect(write).not.toHaveBeenCalledWith("", expect.any(Function));
+});
+
+it("shows an ended session without terminal input controls", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  const session = {
+    id: "done", name: "Claude", harness: "claude", machine: "laptop",
+    online: false, controller: "local", cols: 80, rows: 24, exitCode: 0,
+  };
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => ({
+    ok: true,
+    json: async () => url === "/api/remote/sessions"
+      ? { sessions: [session] }
+      : { session, seq: 1, snapshot: "", frames: [] },
+  })));
+  render(<MemoryRouter initialEntries={["/chat?session=done"]}><ChatPage /></MemoryRouter>);
+  expect(await screen.findByRole("status")).toHaveTextContent("Session ended (exit 0)");
+  expect(screen.getByRole("button", { name: "Remove session" })).toBeEnabled();
+  expect(screen.queryByRole("button", { name: "Take control" })).toBeNull();
+  expect(screen.queryByRole("textbox", { name: "Message to agent" })).toBeNull();
+  expect(screen.getByText("claude · Ended")).toBeTruthy();
 });

@@ -12,13 +12,14 @@ export async function api<T>(
   path: string,
   method = "GET",
   body?: unknown,
+  signal?: AbortSignal,
 ): Promise<T> {
   const response = await fetch(
     `${connection.server}/api/remote/sessions${path}`,
     {
       method,
       redirect: "error",
-      signal: AbortSignal.timeout(10000),
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10000)]) : AbortSignal.timeout(10000),
       headers: {
         Authorization: `Bearer ${connection.token}`,
         ...(body ? { "Content-Type": "application/json" } : {}),

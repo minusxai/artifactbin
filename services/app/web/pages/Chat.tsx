@@ -128,6 +128,7 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
   };
   const online = info?.online ?? false;
   const canType = online && info?.controller === "web";
+  const ended = info?.exitCode !== null && info?.exitCode !== undefined;
   return (
     <section className="min-w-0 flex-1">
       <div className="mb-3 flex flex-wrap items-center gap-3">
@@ -142,7 +143,7 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
                 : "Offline"}
           </p>
         </div>
-        <button
+        {!ended && <button
           aria-label={canType ? "Release control" : "Take control"}
           disabled={!online}
           className="rounded border border-edge px-3 py-2 disabled:opacity-40"
@@ -151,9 +152,9 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
           }
         >
           {canType ? "Release control" : "Take control"}
-        </button>
+        </button>}
         <button
-          aria-label="Disconnect remote session"
+          aria-label={ended ? "Remove session" : "Disconnect remote session"}
           className="rounded border border-edge px-3 py-2"
           onClick={() =>
             void request(`/${id}`, undefined, "DELETE")
@@ -161,7 +162,7 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
               .catch((e) => setError(e.message))
           }
         >
-          Disconnect
+          {ended ? "Remove session" : "Disconnect"}
         </button>
       </div>
       {error && (
@@ -169,14 +170,17 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
           {error}
         </p>
       )}
-      <div className="overflow-x-auto rounded border border-edge bg-[#111214] p-2">
+      {ended && <p role="status" className="mb-3 rounded border border-edge bg-surface p-4 text-sm">
+        Session ended (exit {info?.exitCode}). Start a new session with afbin remote to reconnect.
+      </p>}
+      <div className="overflow-x-auto rounded border border-edge bg-[#111214] p-2" hidden={ended}>
         <div
           ref={container}
           aria-label="Remote terminal"
           style={{ height: "min(58dvh, 650px)", minHeight: 240 }}
         />
       </div>
-      <form
+      {!ended && <form
         className="mt-3 flex gap-2"
         onSubmit={(e) => {
           e.preventDefault();
@@ -209,8 +213,8 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
         >
           Send
         </button>
-      </form>
-      <div className="mt-2 flex flex-wrap gap-2">
+      </form>}
+      {!ended && <div className="mt-2 flex flex-wrap gap-2">
         {[
           ["Enter", "\r"],
           ["Escape", "\x1b"],
@@ -229,8 +233,8 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
             {name}
           </button>
         ))}
-      </div>
-      <p className="mt-3 text-xs text-muted">
+      </div>}
+      <p className="mt-3 text-xs text-muted" hidden={ended}>
         Typing in your local terminal takes control back. Disconnect removes
         remote access; your local process keeps running.
       </p>
@@ -289,7 +293,7 @@ export function ChatPage() {
             >
               <span className="block truncate">{s.name}</span>
               <span className="text-xs text-muted">
-                {s.harness} · {s.online ? "Online" : "Offline"}
+                {s.harness} · {s.exitCode !== null && s.exitCode !== undefined ? "Ended" : s.online ? "Online" : "Offline"}
               </span>
             </button>
           ))}
