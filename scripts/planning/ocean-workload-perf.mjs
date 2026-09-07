@@ -59,7 +59,8 @@ window.artifact={library:async name=>{if(name!=='three')throw Error('undeclared 
 window.snapshot=()=>{const unique={geometry:new Set(),material:new Set(),texture:new Set()};m.scene?.traverse(o=>{if(o.geometry)unique.geometry.add(o.geometry.id);for(const mat of o.material?(Array.isArray(o.material)?o.material:[o.material]):[]){unique.material.add(mat.id);for(const v of Object.values(mat))if(v?.isTexture)unique.texture.add(v.id);}});return {firstRender:m.firstRender,renders:m.renders.slice(),cadence:m.cadence.slice(),longTasks:m.longTasks,info:m.info,retainedMemory:m.renderers.map(r=>({...r.info.memory,programs:r.info.programs?.length})),activation:{active:navigator.userActivation?.isActive,ever:navigator.userActivation?.hasBeenActive},knownResources:Object.fromEntries(Object.entries(unique).map(([k,v])=>[k,v.size])),disposed:m.disposed,activeRAF:m.activeRAF,observers:m.observers,pagehide:m.pagehide,glRenderer:m.glRenderer,canvas:[pond.width,pond.height],status:document.getElementById('scene-status').textContent};};
 addEventListener('pagehide',()=>{m.pagehide++;queueMicrotask(()=>top.postMessage({type:'disposed',snapshot:snapshot()},'*'));});
 `;
-const scene=()=>`<!doctype html><meta http-equiv="Content-Security-Policy" content="${policy}"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}canvas{display:block;width:100%;height:calc(100% - 36px)}button,input{height:30px}</style><canvas id="pond"></canvas><button id="pause">Pause</button><button id="ripple">Ripple</button><input id="breeze" type="range" min="0.2" max="2" step="0.1" value="1"><span id="wind-label"></span><span id="scene-status">Starting</span><script>${bootstrap}</script><script>${author}</script>`;
+const favicon='<link rel="icon" href="data:,">';
+const scene=()=>`<!doctype html><meta http-equiv="Content-Security-Policy" content="${policy}">${favicon}<style>html,body{margin:0;width:100%;height:100%;overflow:hidden}canvas{display:block;width:100%;height:calc(100% - 36px)}button,input{height:30px}</style><canvas id="pond"></canvas><button id="pause">Pause</button><button id="ripple">Ripple</button><input id="breeze" type="range" min="0.2" max="2" step="0.1" value="1"><span id="wind-label"></span><span id="scene-status">Starting</span><script>${bootstrap}</script><script>${author}</script>`;
 // Compile fixture strings before starting any server/browser; never evaluate the captured author in Node.
 new Function(bootstrap);new Function(author);
 const frame=(content)=>`const f=document.createElement('iframe');f.sandbox='allow-scripts';f.style='border:0;width:100%;height:100%';f.srcdoc=${literal(content)};document.body.append(f);`;
@@ -67,14 +68,14 @@ const wrapper=()=>{
  const mount=frame(scene());
  // Optional diagnostic only: identical content/policy, but create the inner realm after outer load + one task.
  const script=deferInner?`addEventListener('load',()=>setTimeout(()=>{${mount}},0),{once:true});`:mount;
- return `<!doctype html><meta http-equiv="Content-Security-Policy" content="${policy}"><style>html,body{margin:0;width:100%;height:100%}</style><body><script>${script}</script>`;
+ return `<!doctype html><meta http-equiv="Content-Security-Policy" content="${policy}">${favicon}<style>html,body{margin:0;width:100%;height:100%}</style><body><script>${script}</script>`;
 };
 const server=createServer((req,res)=>{
  const u=new URL(req.url,host),shape=u.pathname.slice(1),n=Number(u.searchParams.get('n')||1);
  res.setHeader('Content-Type','text/html');res.setHeader('Cache-Control','no-store');
  if(shape==='top'){res.end(scene());return;}
  res.setHeader('Content-Security-Policy',policy.replace("frame-src 'none'",`frame-src ${asset}`));
- res.end(`<!doctype html><style>html,body{margin:0;height:100%;width:100%}body{display:grid;grid-template-columns:repeat(${n>1?2:1},1fr);grid-template-rows:repeat(${Math.ceil(n/2)},1fr)}iframe{min-width:0;min-height:0}</style><body><script>window.disposals=[];window.phase1=[];addEventListener('message',e=>{if(e.data?.type==='disposed')disposals.push(e.data.snapshot);if(e.data?.type==='phase1')phase1.push(e.data.snapshot)});for(let i=0;i<${n};i++){${frame(shape==='wrapper'?wrapper():scene())}}</script>`);
+ res.end(`<!doctype html>${favicon}<style>html,body{margin:0;height:100%;width:100%}body{display:grid;grid-template-columns:repeat(${n>1?2:1},1fr);grid-template-rows:repeat(${Math.ceil(n/2)},1fr)}iframe{min-width:0;min-height:0}</style><body><script>window.disposals=[];window.phase1=[];addEventListener('message',e=>{if(e.data?.type==='disposed')disposals.push(e.data.snapshot);if(e.data?.type==='phase1')phase1.push(e.data.snapshot)});for(let i=0;i<${n};i++){${frame(shape==='wrapper'?wrapper():scene())}}</script>`);
 });
 await Promise.all([new Promise(r=>assets.listen(7025,'127.0.0.1',r)),new Promise(r=>server.listen(7024,'127.0.0.1',r))]);
 if(process.argv.includes('--interactive')){console.log(JSON.stringify({host,paths:['/top','/iframe?n=1','/wrapper?n=1'],workload:cube?'cube':'ocean'}));await new Promise(resolve=>{process.once('SIGINT',resolve);process.once('SIGTERM',resolve);});await Promise.all([new Promise(r=>server.close(r)),new Promise(r=>assets.close(r))]);process.exit(0);}
@@ -88,7 +89,7 @@ try{
   const context=await browser.newContext({viewport:{width:960,height:720},deviceScaleFactor:1});const page=await context.newPage();
   const errors=[];let phaseSamples=[],phase2Samples=[];page.on('pageerror',e=>errors.push(String(e)));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());if(m.text().startsWith('AFBIN_PHASE1 '))phaseSamples.push(JSON.parse(m.text().slice(13)));if(m.text().startsWith('AFBIN_PHASE2 '))phase2Samples.push(JSON.parse(m.text().slice(13)));});let phase='start';
   try{for(const cache of ['cold','warm']){
-   phase=cache;phaseSamples=[];phase2Samples=[];console.error(JSON.stringify({sample,count,shape,cache}));const requestStart=requests.length,started=performance.now();await page.goto(host+'/'+shape+'?n='+count);
+   phase=cache;phaseSamples=[];phase2Samples=[];const errorStart=errors.length;console.error(JSON.stringify({sample,count,shape,cache}));const requestStart=requests.length,started=performance.now();await page.goto(host+'/'+shape+'?n='+count);
    // Never evaluate in an author frame before passive samples: Playwright evaluation can emulate activation.
    for(let attempt=0;attempt<1200&&phaseSamples.length<count;attempt++)await new Promise(r=>setTimeout(r,50));
    assert.equal(phaseSamples.length,count,'autonomous passive sample count');
@@ -111,7 +112,7 @@ try{
    await Promise.all(children.map(f=>f.evaluate(()=>dispatchEvent(new PageTransitionEvent('pagehide')))));
    const disposed=await Promise.all(children.map(f=>f.evaluate(()=>snapshot())));
    for(const d of disposed){assert.equal(d.activeRAF,0);assert.equal(d.observers,0);assert.equal(d.disposed.renderer,1);}
-   rows.push({sample,count,shape,cache,readyMs,firstRenderMs:before.map(x=>x.firstRender-origin),before:before.map(x=>({...x,renders:summary(x.renders),cadence:summary(x.cadence)})),phase2:phase2Samples.map(x=>({...x,renders:summary(x.renders),cadence:summary(x.cadence)})),after:after.map(x=>({...x,renders:summary(x.renders),cadence:summary(x.cadence)})),disposed,resources,resourceRequests,assetRequests:requests.slice(requestStart),errors});
+   rows.push({sample,count,shape,cache,readyMs,firstRenderMs:before.map(x=>x.firstRender-origin),before:before.map(x=>({...x,renders:summary(x.renders),cadence:summary(x.cadence)})),phase2:phase2Samples.map(x=>({...x,renders:summary(x.renders),cadence:summary(x.cadence)})),after:after.map(x=>({...x,renders:summary(x.renders),cadence:summary(x.cadence)})),disposed,resources,resourceRequests,assetRequests:requests.slice(requestStart),errors:errors.slice(errorStart)});
    await page.setViewportSize({width:960,height:720});
   }
   if(shape!=='top'){
