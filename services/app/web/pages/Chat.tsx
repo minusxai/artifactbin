@@ -34,6 +34,7 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [mobile, setMobile] = useState(false);
+  const [resizing, setResizing] = useState(false);
   const queue = useRef(Promise.resolve());
   const send = (body: unknown) => {
     const task = queue.current
@@ -116,15 +117,22 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
   const switchView = () => {
-    setMobile((value) => !value);
+    const previous = mobile;
+    setResizing(true);
+    setMobile(!previous);
     requestAnimationFrame(() => {
       const size = fit.current?.proposeDimensions();
-      if (!size) return;
+      if (!size) {
+        setMobile(previous);
+        setResizing(false);
+        setError("Could not measure the terminal. Try switching views again.");
+        return;
+      }
       void send({
         type: "control", controller: "web",
         cols: Math.max(2, Math.min(300, size.cols)),
         rows: Math.max(2, Math.min(120, size.rows)),
-      }).catch(() => {});
+      }).catch(() => setMobile(previous)).finally(() => setResizing(false));
     });
   };
   const online = info?.online ?? false;
@@ -146,7 +154,7 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
         </div>
         {!ended && <button
           aria-label={mobile ? "Switch to desktop" : "Switch to mobile"}
-          disabled={!online}
+          disabled={!online || resizing}
           className="rounded border border-edge px-3 py-2 disabled:opacity-40"
           onClick={switchView}
         >
@@ -235,8 +243,8 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
         ))}
       </div>}
       <p className="mt-3 text-xs text-muted" hidden={ended}>
-        Type directly in the terminal or use the message box. Typing locally restores
-        your local terminal dimensions. Disconnect removes
+        Type directly in the terminal or use the message box. The selected terminal size stays in effect
+        until you switch views. Disconnect removes
         remote access; your local process keeps running.
       </p>
       </div>
