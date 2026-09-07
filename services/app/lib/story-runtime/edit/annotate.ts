@@ -16,6 +16,18 @@
  * caller owns — the frame already knows whether it is editable, and asking the
  * page to restate it on the wire is what made this a mode to begin with.
  *
+ * THE PICK is the one exception, and it is one-shot. The rail's pick tool
+ * (`picking` on the state message) is the edit-mode move for a comment: the
+ * selectable node under the pointer carries an outline and a click on it IS
+ * the selection — reported as `mx:selection`, the same report the breadcrumb
+ * widening uses, so the page opens its composer there. A comment made by
+ * selecting words cannot reach a chart, an image or a whole list; this can.
+ * The click is taken even while editing, from a WINDOW-capture listener so the
+ * edit session's document-capture listener never sees it, and `mousedown` is
+ * cancelled so no host is focused and no text selection starts. Escape hands
+ * back a null selection so the page can stand down; the page ends the pick
+ * the moment either arrives.
+ *
  * Loaded lazily on the first non-off `mx:annotations` (the edit-chunk
  * pattern): a reader never downloads it, and a shared reader's top-level
  * document has no parent channel so the message cannot even arrive.
@@ -47,6 +59,10 @@ export const ANNOTATE_SELECTED_ATTR = 'data-mx-annotate-selected';
 export const ANNOTATION_RANGED_ATTR = 'data-mx-annotation-ranged';
 /** One CSS highlight per thread: `mx-annotation-<id>`, so a rule can name it. */
 export const ANNOTATION_HIGHLIGHT_PREFIX = 'mx-annotation-';
+/** Marks the selectable node under the pointer WHILE PICKING (the rail's pick tool) — the edit-mode hover, for a comment. */
+export const ANNOTATE_PICK_HOVER_ATTR = 'data-mx-annotate-pick-hover';
+/** Stamped on the document element while a pick is on, so a stylesheet can say "crosshair" everywhere. */
+export const ANNOTATE_PICKING_ATTR = 'data-mx-annotate-picking';
 
 // Persistent annotation chrome is a tint, while the transient cross-surface
 // hover gets an outline so the relationship is unmistakable without shifting
@@ -64,6 +80,11 @@ export const ANNOTATE_CSS = [
   `[${ANNOTATION_OPEN_ATTR}] { background: rgba(245, 158, 11, 0.26); border-radius: 3px; }`,
   `[${ANNOTATION_HOVER_ATTR}] { background: rgba(245, 158, 11, 0.18); outline: 2px solid rgba(245, 158, 11, 0.82); outline-offset: 3px; border-radius: 3px; }`,
   `[${ANNOTATE_SELECTED_ATTR}] { outline: 2px solid rgba(245, 158, 11, 0.85); outline-offset: 3px; border-radius: 3px; }`,
+  // The pick: a crosshair everywhere, and an outline on the block under it. The
+  // doubled attribute is deliberate — it out-specifies the edit session's own
+  // `[data-mx-edit-hover]` when both stamp the same node while editing.
+  `[${ANNOTATE_PICKING_ATTR}], [${ANNOTATE_PICKING_ATTR}] * { cursor: crosshair !important; }`,
+  `[${ANNOTATE_PICK_HOVER_ATTR}][${ANNOTATE_PICK_HOVER_ATTR}] { outline: 2px solid rgba(245, 158, 11, 0.9); outline-offset: 3px; border-radius: 3px; background: rgba(245, 158, 11, 0.08); }`,
   // A node whose words are painted gives up its own background — the tint is
   // what a comment looks like when we cannot find the words, not as well as.
   `[${ANNOTATED_ATTR}][${ANNOTATION_RANGED_ATTR}],`
@@ -157,6 +178,10 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
   let scrolledTo: string | null = null;
   /** The ranges currently painted for each thread — the layout rect follows the WORDS when there are any. */
   let painted = new Map<string, Range[]>();
+  /** A pick is on (the rail's tool). Read from the state message; never inferred. */
+  let picking = false;
+  /** The selectable node under the pointer while picking — one at a time. */
+  let pickHovered: Element | null = null;
   /** Highlight names this session registered, so it can take back exactly its own. */
   const registeredHighlights = new Set<string>();
   let rafPending = false;
@@ -334,7 +359,9 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
    * unselectable in the editor.
    */
   const onClick = (event: MouseEvent) => {
-    if (!state || state.mode === 'off' || isEditing()) return;
+    // While picking, a click is the window listener's (below): a selectable
+    // target was already taken there, and anything else is nobody's business.
+    if (!state || state.mode === 'off' || picking || isEditing()) return;
     const target = event.target as HTMLElement | null;
     if (!target) return;
     // Preview copies (deck rail, present mode) render the same paths; never select through them.
@@ -382,12 +409,76 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
     post({ type: STORY_ANNOTATION_HOVER_MESSAGE, id });
   };
 
-  const onPointerOver = (event: PointerEvent) => reportHover(event.target);
-  const onPointerOut = (event: PointerEvent) => reportHover(event.relatedTarget);
+  // ── the pick ──────────────────────────────────────────────────────────────
+  /** The same selectable node a pick would take: stamped, known to the source, never deck chrome. */
+  const selectableAt = (target: EventTarget | null): Element | null => {
+    const element = target as Element | null;
+    if (!element?.closest || element.closest('.mx-rail, .mx-present')) return null;
+    const stamped = element.closest(`[${AST_PATH_ATTR}]`);
+    return stamped && describeSelection(stamped, nodes) ? stamped : null;
+  };
+
+  const setPickHovered = (next: Element | null) => {
+    if (pickHovered === next) return;
+    pickHovered?.removeAttribute(ANNOTATE_PICK_HOVER_ATTR);
+    pickHovered = next;
+    pickHovered?.setAttribute(ANNOTATE_PICK_HOVER_ATTR, '');
+  };
+
+  /** Turn the pick on or off: the crosshair stamp on the root, and the hover with it. Idempotent. */
+  const setPicking = (on: boolean) => {
+    picking = on;
+    if (on) doc.documentElement.setAttribute(ANNOTATE_PICKING_ATTR, '');
+    else {
+      doc.documentElement.removeAttribute(ANNOTATE_PICKING_ATTR);
+      setPickHovered(null);
+    }
+  };
+
+  /**
+   * Cancelling the press is what keeps the pick from becoming an edit: focus
+   * moves and a text selection starts on mousedown, not on click, so an
+   * editable host under the pointer would otherwise take the caret first.
+   */
+  const onPickMouseDown = (event: MouseEvent) => {
+    if (!picking || !selectableAt(event.target)) return;
+    event.preventDefault();
+  };
+
+  /** The pick itself. On `win` in the capture phase: it runs BEFORE the edit session's document listener. */
+  const onPickClick = (event: MouseEvent) => {
+    if (!picking) return;
+    const el = selectableAt(event.target);
+    if (!el) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setPickHovered(null);
+    reportSelection(el);
+  };
+
+  /** Escape stands the pick down: a null selection, and NOT `reportSelection(null)` — a composer already open keeps its node. */
+  const onPickKeyDown = (event: KeyboardEvent) => {
+    if (!picking || event.key !== 'Escape') return;
+    event.preventDefault();
+    event.stopPropagation();
+    post({ type: STORY_SELECTION_MESSAGE, selection: null });
+  };
+
+  const onPointerOver = (event: PointerEvent) => {
+    reportHover(event.target);
+    if (picking) setPickHovered(selectableAt(event.target));
+  };
+  const onPointerOut = (event: PointerEvent) => {
+    reportHover(event.relatedTarget);
+    if (picking) setPickHovered(selectableAt(event.relatedTarget));
+  };
 
   doc.addEventListener('click', onClick, true);
   doc.addEventListener('pointerover', onPointerOver, true);
   doc.addEventListener('pointerout', onPointerOut, true);
+  win.addEventListener('mousedown', onPickMouseDown, true);
+  win.addEventListener('click', onPickClick, true);
+  win.addEventListener('keydown', onPickKeyDown, true);
   win.addEventListener('scroll', scheduleSync, { passive: true });
   win.addEventListener('resize', scheduleSync, { passive: true });
   /*
@@ -402,6 +493,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
   return {
     update(message) {
       state = message;
+      setPicking(message.mode !== 'off' && !!message.picking);
       if (message.mode === 'off') selectedPath = null;
       else if (message.selectedPath !== undefined) selectedPath = message.selectedPath;
       if (message.mode === 'off') ensureCss(false);
@@ -437,12 +529,16 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
       state = null;
       selectedPath = null;
       reportedHoverId = null;
+      setPicking(false);
       clearHighlights();
       ensureCss(false);
       applyState();
       doc.removeEventListener('click', onClick, true);
       doc.removeEventListener('pointerover', onPointerOver, true);
       doc.removeEventListener('pointerout', onPointerOut, true);
+      win.removeEventListener('mousedown', onPickMouseDown, true);
+      win.removeEventListener('click', onPickClick, true);
+      win.removeEventListener('keydown', onPickKeyDown, true);
       doc.removeEventListener('input', scheduleSync, true);
       win.removeEventListener('scroll', scheduleSync);
       win.removeEventListener('resize', scheduleSync);

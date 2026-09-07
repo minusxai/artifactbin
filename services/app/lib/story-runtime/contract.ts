@@ -713,6 +713,14 @@ export interface StoryAnnotationsMessage {
   hoverId: string | null;
   /** The node the owner is composing on; replayed so lazy annotation startup cannot lose it. */
   selectedPath?: string | null;
+  /**
+   * The person is PICKING a block to comment on (the rail's pick tool): the
+   * frame outlines the selectable node under the pointer and answers a click
+   * with `mx:selection` — the same report the breadcrumb widening uses — and
+   * a null selection on escape. Absent is false. One-shot: the page clears it
+   * the moment a selection arrives.
+   */
+  picking?: boolean;
 }
 
 /** Frame → parent: the owner clicked an annotated node to open its thread. */

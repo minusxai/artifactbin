@@ -12,7 +12,11 @@
  *                       click, so annotations stay ambient without becoming a
  *                       second reading column.
  *   · the COMPOSER    — a draft beside the words it is about, opened from a
- *                       view-mode selection bubble or the editor's toolbar.
+ *                       view-mode selection bubble, the editor's toolbar, or
+ *                       the rail's PICK tool (`picking`): the edit-mode
+ *                       hover-and-click, for a comment — the only way to
+ *                       comment on a chart, an image or a whole list, which
+ *                       have no words to select. One-shot, never in the URL.
  *   · the RAIL        — the full conversation, resolved history and replies.
  *                       A panel someone OPENS (`railOpen`), never a mode; the
  *                       page narrows the document's viewport by RIGHT_RAIL_W
@@ -28,7 +32,7 @@
  * even reach them.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, ChevronRight, EllipsisVertical, MessageSquare, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, EllipsisVertical, MessageSquare, MousePointerClick, SquareDashedMousePointer, Trash2, X } from 'lucide-react';
 import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations';
 import { ChatGPTIcon, ClaudeAIIcon, ClaudeCodeIcon, CodexIcon } from '@/components/brand-icons';
 import { foldFromMeasure, isFolded, readFolds, toggleFold, unfold, type FoldKind, type Folds } from '@/lib/comment-folds';
@@ -764,6 +768,12 @@ export default function AnnotationLayer({
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [anchorRects, setAnchorRects] = useState<Record<string, StoryEditRect>>({});
   const [selection, setSelection] = useState<StoryEditSelection | null>(null);
+  /**
+   * A PICK is on: the frame outlines blocks under the pointer and its next
+   * `mx:selection` is the composer's subject. Page state, never the URL — a
+   * fact about what someone is doing right now, like a fold or the theme.
+   */
+  const [picking, setPicking] = useState(false);
   const [draft, setDraft] = useState('');
   /** Reading the draft as it will be read — a view of the same text, not a mode. */
   const [previewing, setPreviewing] = useState(false);
@@ -786,6 +796,9 @@ export default function AnnotationLayer({
    */
   const composingRef = useRef(false);
   composingRef.current = selection !== null;
+  // Same shape, same reason: a pick's answer arrives on that listener too.
+  const pickingRef = useRef(false);
+  pickingRef.current = picking;
 
   const postToFrame = useCallback((message: unknown) => {
     frameRef.current?.contentWindow?.postMessage(message, '*');
@@ -896,9 +909,10 @@ export default function AnnotationLayer({
       openId,
       hoverId,
       selectedPath: selection?.path ?? null,
+      picking,
     };
     postToFrame(message);
-  }, [annotations, hoverId, openId, selection?.path, sessionNonce, postToFrame]);
+  }, [annotations, hoverId, openId, picking, selection?.path, sessionNonce, postToFrame]);
   // Closing the rail drops what only the rail was showing; the pins stay.
   useEffect(() => {
     if (!railOpen) { setOpenResolvedId(null); setOpenId(null); }
@@ -928,6 +942,23 @@ export default function AnnotationLayer({
       }
       if (event.data.type === STORY_ANNOTATION_HOVER_MESSAGE) {
         setHoverId(event.data.id);
+        return;
+      }
+      if (event.data.type === STORY_SELECTION_MESSAGE && pickingRef.current) {
+        /*
+         * THE PICK'S ANSWER, and the pick is over either way. A block: the
+         * composer opens on it (a draft already typed stays, exactly as the
+         * breadcrumb re-target keeps it). Null: escape in the document —
+         * stand down, and leave whatever composer was open alone. Never fall
+         * through to the composing branch, which would read a null as "close".
+         */
+        const picked = event.data.selection;
+        setPicking(false);
+        if (picked) {
+          setSelection(picked);
+          setOpenId(null);
+          setFailure(null);
+        }
         return;
       }
       if (event.data.type === STORY_SELECTION_MESSAGE && composingRef.current) {
@@ -1057,12 +1088,28 @@ export default function AnnotationLayer({
     if (!selection) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
+      // A pick in progress is what escape cancels first; the draft stays.
+      if (pickingRef.current) return;
       event.stopPropagation();
       cancelCompose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [selection, cancelCompose]);
+
+  // Escape ON THE PAGE stands a pick down; escape in the document arrives as
+  // the frame's null selection above. Bound only while picking, like the
+  // composer's, so the key keeps its other meanings everywhere else.
+  useEffect(() => {
+    if (!picking) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.stopPropagation();
+      setPicking(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [picking]);
 
   /*
    * THREE INDEPENDENT SURFACES. None of them is a mode, so none of them is an
@@ -1073,6 +1120,20 @@ export default function AnnotationLayer({
   /** On a phone the rail is a bottom sheet — a 320px rail over a 390px screen
       is the whole document covered, with a strip too narrow to read. */
   const phoneRail = useIsPhoneViewport();
+
+  /*
+   * Starting a pick clears the open thread (the composer is about to move to
+   * a new subject). ON A PHONE the rail is a sheet whose backdrop covers the
+   * document, so nothing could be tapped until it goes — the pill below is
+   * then the only chrome, and carries the way out. On desktop the rail stays;
+   * closing it does not cancel a pick for the same reason.
+   */
+  const beginPick = () => {
+    setPicking(true);
+    setOpenId(null);
+    if (phoneRail) onRailOpenChangeRef.current(false);
+  };
+  const endPick = () => setPicking(false);
 
   // The collapsed 36px identity mark is small enough for phones too; clicking
   // it opens the same rail as a bottom sheet, with no hover dependency.
@@ -1109,6 +1170,28 @@ export default function AnnotationLayer({
               onHover={setHoverId}
             />
           ))}
+        </div>
+      )}
+
+      {/* The pick's only indicator once the rail is away, and the phone's only
+          way out of it. Over the document, never in it: the frame is opaque. */}
+      {picking && (
+        <div
+          role="status"
+          aria-label="Picking a block"
+          className={`${cardClass} fixed z-30 flex items-center gap-2 border-edge-bright px-3 py-1.5 font-mono text-[11px] text-muted shadow-xl`}
+          style={{ left: frameRect.left + frameRect.width / 2, top: frameRect.top + VIEW_COMMENT_INSET, transform: 'translateX(-50%)' }}
+        >
+          <MousePointerClick size={12} strokeWidth={1.8} className="shrink-0 text-accent" />
+          <span className="whitespace-nowrap">click a block to comment on it</span>
+          <button
+            type="button"
+            aria-label="Cancel picking"
+            onClick={endPick}
+            className="inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-[3px] text-muted hover:bg-surface hover:text-fg"
+          >
+            <X size={12} strokeWidth={1.8} />
+          </button>
         </div>
       )}
 
@@ -1210,11 +1293,22 @@ export default function AnnotationLayer({
         header={
           <div className="flex items-center gap-2 px-1">
             <h2 className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-faint">comments</h2>
+            <Tooltip content="Pick a block to comment on">
+              <button
+                type="button"
+                aria-label="Pick a block to comment on"
+                aria-pressed={picking}
+                onClick={() => (picking ? endPick() : beginPick())}
+                className={`ml-auto inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[3px] hover:bg-surface hover:text-fg ${picking ? 'bg-accent-soft text-accent' : 'text-muted'}`}
+              >
+                <SquareDashedMousePointer size={14} strokeWidth={1.8} />
+              </button>
+            </Tooltip>
             <button
               type="button"
               aria-label="Close comments"
               onClick={() => onRailOpenChange(false)}
-              className="ml-auto inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[3px] text-muted hover:bg-surface hover:text-fg"
+              className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[3px] text-muted hover:bg-surface hover:text-fg"
             >
               <X size={14} strokeWidth={1.8} />
             </button>
@@ -1222,7 +1316,7 @@ export default function AnnotationLayer({
         }
       >
         {annotations.length === 0 && !selection && (
-          <p className="p-2 font-mono text-xs text-muted">no open comments — select text in the document to leave one</p>
+          <p className="p-2 font-mono text-xs text-muted">no open comments — select text in the document, or pick a block, to leave one</p>
         )}
         {annotations.map((a) => (
           <Thread

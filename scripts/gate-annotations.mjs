@@ -305,6 +305,8 @@ const run = async () => {
     await markdownLeg(browser);
     // ── a long reply folds; a resolved card reads as resolved ─────────────
     await foldLeg(browser);
+    // ── a block is PICKED, not selected ───────────────────────────────────
+    await pickLeg(browser);
   } finally {
     await browser.close();
   }
@@ -730,6 +732,78 @@ async function foldLeg(browser) {
   ok(muted?.open === null || muted.open === 1, `an open card beside it stays at full opacity (${muted?.open})`);
   ok(await page.locator('[aria-label="Show resolved conversation"]').first().isVisible(),
     'muted is not disabled: the resolved card still offers its conversation');
+  await ctx.close();
+}
+
+/**
+ * PICKING A BLOCK, NOT WORDS. The rail's pick tool is the edit-mode move —
+ * hover outlines the block, a click takes it — for a comment, which is the
+ * only way to comment on a chart, an image or a whole list. Browser fact
+ * throughout: a pointer moving over the sandboxed document, an outline the
+ * frame PAINTS (computed style, not just a stamp), a click the frame takes
+ * for itself, and the page's composer opening on what was picked.
+ */
+async function pickLeg(browser) {
+  const { id, token } = await startDocument(BASE);
+  const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const published = await fetch(`${BASE}/api/artifacts/${id}`, { method: 'PUT', headers: auth, body: JSON.stringify({ markup: DOC }) });
+  if (!published.ok) throw new Error(`pick leg publish failed (${published.status}): ${await published.text()}`);
+
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  await becomeOwner(page, BASE, token);
+  await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
+  const frame = page.frameLocator('iframe[title="artifact"]');
+  await frame.locator('#figure').waitFor({ timeout: 15000 });
+
+  await openArtifactControls(page);
+  await page.locator('[aria-label="Toggle comments"]').click();
+  await page.locator('[aria-label="Annotation sidebar"]').waitFor({ timeout: 8000 });
+  await page.keyboard.press('Escape');
+
+  const tool = page.locator('[aria-label="Pick a block to comment on"]');
+  ok(await tool.count() === 1, 'the rail header offers the pick tool');
+  await tool.click();
+  ok(await tool.getAttribute('aria-pressed') === 'true', 'the tool reads as pressed');
+  ok(await page.locator('[aria-label="Picking a block"]').isVisible(), 'a pill over the document says what to do next');
+
+  const intro = frame.locator('#intro');
+  await intro.hover();
+  const stamped = await until(() => intro.getAttribute('data-mx-annotate-pick-hover'), (v) => typeof v === 'string', 5000);
+  ok(typeof stamped === 'string', 'hovering a block while picking stamps it');
+  const painted = await intro.evaluate((el) => getComputedStyle(el).outlineStyle);
+  ok(painted !== 'none', `…and the outline is PAINTED, not only stamped (outline-style ${painted})`);
+  const cursor = await frame.locator('html').evaluate((el) => getComputedStyle(el).cursor);
+  ok(cursor === 'crosshair', `the document cursor says pick (${cursor})`);
+
+  await intro.click();
+  const composer = await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
+  ok(composer === 1, 'clicking the block opens the composer on it');
+  ok(await page.locator('[aria-label="Picking a block"]').count() === 0, 'the pick is one-shot: the pill is gone');
+  ok(await tool.getAttribute('aria-pressed') === 'false', '…and the tool is released');
+  ok(await frame.locator('#intro[data-mx-annotate-selected]').count() === 1, 'the picked block is marked as the subject');
+  ok(await frame.locator('[data-mx-annotate-pick-hover]').count() === 0, 'and the hover outline went with the pick');
+
+  await page.locator('[aria-label="Annotation comment"]').fill('picked, not selected');
+  await page.locator('[aria-label="Save annotation"]').click();
+  const thread = await until(() => page.locator('[aria-label="Annotation thread"]').count(), (n) => n === 1, 10000);
+  ok(thread === 1, 'the comment lands as a rail thread');
+  const tinted = await until(() => frame.locator('#intro[data-mx-annotated]').count(), (n) => n === 1, 8000);
+  ok(tinted === 1, 'the picked block is tinted like any commented node');
+  const read = async () => (await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: { Authorization: `Bearer ${token}` } })).json());
+  const wire = await until(read, (w) => (w?.annotations?.length ?? 0) === 1, 15000);
+  ok(wire?.annotations?.[0]?.snippet === 'An intro paragraph of ordinary prose.' && !wire?.annotations?.[0]?.quote,
+    'the wire carries the whole block and no quote — a pick has no words');
+
+  // A second pick, stood down by escape: the outline goes with it.
+  await tool.click();
+  await frame.locator('#figure').hover();
+  await until(() => frame.locator('#figure[data-mx-annotate-pick-hover]').count(), (n) => n === 1, 5000);
+  await page.keyboard.press('Escape');
+  const stoodDown = await until(() => page.locator('[aria-label="Picking a block"]').count(), (n) => n === 0, 5000);
+  ok(stoodDown === 0, 'escape cancels a pick');
+  const cleared = await until(() => frame.locator('[data-mx-annotate-pick-hover]').count(), (n) => n === 0, 5000);
+  ok(cleared === 0, '…and clears the outline');
   await ctx.close();
 }
 

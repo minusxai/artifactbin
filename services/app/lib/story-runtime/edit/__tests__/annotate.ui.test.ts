@@ -5,8 +5,9 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFrameAnnotateSession } from '../annotate';
+import type { JsxNode } from '@/lib/jsx';
 import type { PristineChannel } from '../../pristine';
-import { STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_SELECTION_MESSAGE, type StoryAnnotationsMessage } from '../../contract';
+import { STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE, STORY_SELECTION_MESSAGE, type StoryAnnotationsMessage } from '../../contract';
 
 const NONCE = 'l'.repeat(32);
 const PIN = { id: 'ann_1', path: '0', key: 'anchor_1' };
@@ -311,5 +312,115 @@ describe('rebuilding a highlight after a live adopt', () => {
     expect(after).not.toBe(before);
     expect(after.startContainer).toBe(anchor.firstChild);
     expect(after.toString()).toBe('Revenue');
+  });
+});
+
+/*
+ * ADDED: PICKING A BLOCK TO COMMENT ON. The rail's pick tool puts the layer
+ * into a one-shot pick — the edit-mode move, for a comment: whatever
+ * selectable node is under the pointer carries an outline, and a click on it
+ * IS the selection, reported as `mx:selection` so the page opens its composer
+ * there. A comment made by selecting words cannot reach a chart, an image or
+ * a whole list; this can. The click is TAKEN even while editing (the one
+ * exception to "the click belongs to the caret"), from a WINDOW-capture
+ * listener so the edit session's document-capture listener never sees it.
+ * Escape hands back a null selection so the page can stand down.
+ */
+const PICK_NODES: JsxNode[] = [{
+  type: 'element', tag: 'p', isComponent: false, attributes: [], children: [], selfClosing: false, start: 0, end: 0,
+}];
+
+describe('picking a block to comment on', () => {
+  const anchor = () => document.querySelector('main p')!;
+  const picking = (on: boolean) => session.update({ ...state('on'), pins: [], picking: on });
+  const selections = () => posted.filter((message) => message.type === STORY_SELECTION_MESSAGE);
+
+  it('outlines the selectable node under the pointer only while picking, and paints it', () => {
+    session.setNodes(PICK_NODES);
+    picking(true);
+    expect(document.documentElement).toHaveAttribute('data-mx-annotate-picking');
+    expect(document.head.querySelector('style[data-mx-annotate-css]')!.textContent).toContain('data-mx-annotate-pick-hover');
+    anchor().dispatchEvent(new MouseEvent('pointerover', { bubbles: true }));
+    expect(anchor()).toHaveAttribute('data-mx-annotate-pick-hover');
+    anchor().dispatchEvent(new MouseEvent('pointerout', { bubbles: true }));
+    expect(anchor()).not.toHaveAttribute('data-mx-annotate-pick-hover');
+
+    // The outline leaves with the pick, not with the pointer.
+    anchor().dispatchEvent(new MouseEvent('pointerover', { bubbles: true }));
+    expect(anchor()).toHaveAttribute('data-mx-annotate-pick-hover');
+    picking(false);
+    expect(anchor()).not.toHaveAttribute('data-mx-annotate-pick-hover');
+    expect(document.documentElement).not.toHaveAttribute('data-mx-annotate-picking');
+  });
+
+  it('outlines nothing when the layer is on but nobody is picking', () => {
+    session.setNodes(PICK_NODES);
+    session.update({ ...state('on'), pins: [] });
+    anchor().dispatchEvent(new MouseEvent('pointerover', { bubbles: true }));
+    expect(anchor()).not.toHaveAttribute('data-mx-annotate-pick-hover');
+    expect(document.documentElement).not.toHaveAttribute('data-mx-annotate-picking');
+  });
+
+  it('a click while picking selects the node and reports it — even while editing, before the editor sees the click', () => {
+    session.setNodes(PICK_NODES);
+    editing = true;
+    picking(true);
+    // The edit session listens for clicks on the DOCUMENT in the capture
+    // phase; a pick must be decided before that listener runs.
+    const seenByEditor: string[] = [];
+    const editorListener = () => seenByEditor.push('click');
+    document.addEventListener('click', editorListener, true);
+    try {
+      const press = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+      anchor().dispatchEvent(press);
+      expect(press.defaultPrevented).toBe(true);
+      const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+      anchor().dispatchEvent(click);
+      expect(click.defaultPrevented).toBe(true);
+      expect(seenByEditor).toEqual([]);
+    } finally {
+      document.removeEventListener('click', editorListener, true);
+    }
+    expect(selections().at(-1)).toMatchObject({ nonce: NONCE, selection: { path: '0', tag: 'p' } });
+    expect(anchor()).toHaveAttribute('data-mx-annotate-selected');
+    expect(posted.some((message) => message.type === STORY_ANNOTATION_PIN_MESSAGE)).toBe(false);
+  });
+
+  it('a click on an already-commented node while picking is a NEW selection, never a thread focus', () => {
+    session.setNodes(PICK_NODES);
+    session.update({ ...state('on'), picking: true }); // PIN sits on this very node
+    expect(anchor()).toHaveAttribute('data-mx-annotated');
+    anchor().dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(posted.some((message) => message.type === STORY_ANNOTATION_PIN_MESSAGE)).toBe(false);
+    expect(selections().at(-1)).toMatchObject({ selection: { path: '0' } });
+  });
+
+  it('never picks through deck chrome, and a click on nothing selectable picks nothing', () => {
+    session.setNodes(PICK_NODES);
+    picking(true);
+    document.querySelector('.mx-rail p')!.dispatchEvent(new MouseEvent('pointerover', { bubbles: true }));
+    expect(document.querySelector('.mx-rail p')).not.toHaveAttribute('data-mx-annotate-pick-hover');
+    document.querySelector('.mx-rail p')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(selections()).toEqual([]);
+    // …and the pick is still on: nothing was picked, so nothing ended it.
+    expect(document.documentElement).toHaveAttribute('data-mx-annotate-picking');
+  });
+
+  it('escape while picking reports a null selection so the page can stand down', () => {
+    session.setNodes(PICK_NODES);
+    picking(true);
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    expect(selections().at(-1)).toMatchObject({ nonce: NONCE, selection: null });
+  });
+
+  it('outside picking, neither escape nor a click is the layer\'s business', () => {
+    session.setNodes(PICK_NODES);
+    session.update({ ...state('on'), pins: [] });
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    anchor().dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(false);
+    expect(selections()).toEqual([]);
   });
 });
