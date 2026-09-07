@@ -119,7 +119,7 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
        */
       const timers = [
         ...RETRIES_AT.map((at) => setTimeout(() => { if (importers.has(id)) post(); }, at)),
-        setTimeout(() => { importers.delete(id); settle({ refused: 'no_answer' }); }, timeoutMs),
+        setTimeout(() => { const pending=importers.get(id);importers.delete(id);pending?.clear();settle({ refused: 'no_answer' }); }, timeoutMs),
       ];
       const abort=()=>{const pending=importers.get(id);importers.delete(id);pending?.clear();settle({refused:'aborted'});};
       importers.set(id, { settle, clear: () => { for (const t of timers) clearTimeout(t);signal?.removeEventListener('abort',abort); } });
