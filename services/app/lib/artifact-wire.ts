@@ -52,6 +52,7 @@ const SUMMARY_META_FIELDS = {
   // reader picks between files by. The object key stays out, like every other
   // tier's.
   pdf: ['contentType', 'bytes', 'pages'],
+  file: ['contentType', 'bytes', 'filename'],
   // A folder's meta carries only the sheet its scaffold compiled to, which is
   // an individual read's business. Present so the lookup is total over
   // ArtifactFormat rather than falling through to the `?? []`.
@@ -208,6 +209,7 @@ export async function artifactToWire(row: ArtifactRow, base: string) {
       : {}),
     ...(format === 'viz' ? { slots: (meta as { slots?: unknown }).slots ?? [], recipe: safeJson(content) } : {}),
     ...(format === 'image' ? { contentType: (meta as { contentType?: unknown }).contentType ?? null } : {}),
+    ...(format === 'file' ? { filename: (meta as { filename?: string }).filename, contentType: (meta as { contentType?: string }).contentType, bytes: (meta as { bytes?: number }).bytes } : {}),
     ...(format === 'pdf' ? { contentType: (meta as { contentType?: unknown }).contentType ?? null, bytes: (meta as { bytes?: unknown }).bytes ?? 0, pages: (meta as { pages?: unknown }).pages ?? null } : {}),
   };
 }
@@ -605,7 +607,7 @@ export async function createArtifactFromBody(
  * second thing to learn.
  */
 export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: unknown): Record<string, unknown> {
-  const meta = row.meta as { columns?: unknown; rowCount?: unknown; slots?: unknown; bytes?: number; pages?: number };
+  const meta = row.meta as { columns?: unknown; rowCount?: unknown; slots?: unknown; bytes?: number; pages?: number; filename?: string; contentType?: string };
   return {
     id: row.id, url: `${base}/a/${row.id}`, version: row.version, visibility: row.visibility,
     // The read-proof for the edit protocol: an agent can start editing straight
@@ -625,6 +627,7 @@ export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: 
     ...(row.format === 'image' ? { rawUrl: imageRawUrl(row.id, row.version) } : {}),
     // Same for a PDF, plus the two facts a <File> card shows: an agent that has
     // just uploaded one can write the card without re-reading anything.
+    ...(row.format === 'file' ? { rawUrl: imageRawUrl(row.id, row.version), filename: meta.filename, contentType: meta.contentType, bytes: meta.bytes } : {}),
     ...(row.format === 'pdf' ? { rawUrl: pdfRawUrl(row.id, row.version), bytes: meta.bytes ?? 0, ...(meta.pages ? { pages: meta.pages } : {}) } : {}),
   };
 }

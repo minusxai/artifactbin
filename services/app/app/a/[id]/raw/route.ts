@@ -35,13 +35,14 @@ import { loadDatasetRows } from '@/lib/story/dataset-store';
 import { ObjectUnavailable } from '@/lib/object-store';
 import { Readable } from 'node:stream';
 import { loadImage } from '@/lib/story/image-store';
+import { serveStoredFile } from '@/lib/story/file-store';
 import { loadPdfStream, pdfFilename, pdfMetaOf } from '@/lib/story/pdf-store';
 import { webAssetsForSource } from '@/lib/web-assets';
 import { buildStoryDocument } from '@/lib/story/document';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { declaresMutations } from '@/lib/story/helmet';
-import { assetsPath, markupCsp, mutatePath, queryPath } from '@/lib/story/markup-csp';
+import { assetsPath, resolvePath, markupCsp, mutatePath, queryPath } from '@/lib/story/markup-csp';
 import { readUrlValues } from '@/lib/story/url-values';
 import { storyRuntimeAssets } from '@/lib/story/runtime-asset';
 import { ownerUsername } from '@/lib/users';
@@ -126,6 +127,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   if (!admitted) return notFound();
 
   switch (artifact.format) {
+    case 'file': return serveStoredFile(request, artifact);
     case 'dataset':
     {
       const catalog=catalogOf(artifact);
@@ -457,6 +459,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         // Where this document fetches its re-runs when it IS the page (the
         // reader path); inside a parent the relay is chosen instead.
         queryUrl: queryPath(artifact.id),
+        resolveUrl: `${baseUrl(request)}${resolvePath(artifact.id)}`,
+        libraryOrigin: baseUrl(request),
         /*
          * …and where it imports an image URL only its reader can compute (a
          * bound <img src="$pick">). Unconditional, unlike mutateUrl: a source

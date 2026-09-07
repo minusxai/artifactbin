@@ -1,13 +1,13 @@
 ---
 name: publishing-datasets
 description: >-
-  Assets: dataset rows/CSV, images, PDFs, recipes — uploaded or kept by URL; refresh, byte quotas, writable datasets. Read past the brief's upload.
+  Upload datasets, images, PDFs and recipes; URL imports, byte quotas and refresh.
 order: 2
 ---
 ## Read first
 
-Send ONE content field: `markup | dataset | viz | image | pdf`.
-`markup` is the document; the other four are ASSETS a document reaches by id.
+Send ONE content field: `markup | dataset | viz | image | pdf | file`.
+`markup` is the document; the others are ASSETS a document reaches by id.
 Create them first — a dataset's create response echoes the inferred columns AND
 a ready-to-paste `<Query>` + `<Question>`, so the read path arrives written.
 
@@ -151,3 +151,5 @@ in `<Question viz={{"kind":"vega-lite","spec":{…}}} />`:
 
 `PUT` replaces content wholesale; `GET` returns the `markup` source plus
 `theme` for round-trip editing.
+
+[Arbitrary file uploads and script refs](markup-libraries.md).

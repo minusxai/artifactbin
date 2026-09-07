@@ -280,6 +280,7 @@ export const MAX_IMAGE_BYTES = Number(env('IMAGES', 'MAX_BYTES') ?? '5000000');
  * evict the store's entire read cache.
  */
 export const MAX_PDF_BYTES = Number(env('PDF', 'MAX_BYTES') ?? '25000000');
+export const MAX_FILE_BYTES = Number(env('FILES', 'MAX_BYTES') ?? '50000000');
 
 export const RESEND_API_KEY = env('EMAIL', 'RESEND_API_KEY');
 

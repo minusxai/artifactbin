@@ -1,7 +1,7 @@
 ---
 name: markup
 description: >-
-  JSX vocabulary, component allowlist, Helmet, CSS, scripts, fonts and layout.
+  JSX, components, Helmet, CSS, scripts, fonts and layout.
 ---
 ## Read first
 
@@ -74,7 +74,7 @@ place for custom CSS, JS or data — any of those in the body is refused.
 ```
 
 Your script runs sandboxed with an opaque origin: no cookies, no access to
-the surrounding page, and no network beyond its CSP's four paths.
+the surrounding page, and no network beyond its CSP's document endpoints.
 `</script` cannot appear in the text (split it: `'</scr' + 'ipt'`).
 `window.mx` is defined before it runs: `mx.params.get/set/subscribe` (a set
 re-runs dependent queries and re-renders bound embeds);
@@ -134,3 +134,5 @@ h={3}>…</GridItem></Grid>` — the 12-column canvas (`dashboard`).
   already its own scroll box — never widen one with negative margins.
 - Three or more `<h2>` sections get a table of contents made from the
   headings — write `<h2>`s as short claims. Decks and `<Grid>` dashboards get none.
+
+[Three.js, libraries and file references](markup-libraries.md).

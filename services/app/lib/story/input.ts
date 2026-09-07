@@ -24,6 +24,7 @@ import { ingestImageFromUrl } from '@/lib/web-ingest/image';
 import { ingestPdfFromUrl } from '@/lib/web-ingest/pdf';
 import type { AssetWarning, WebAssetKind } from '@/lib/web-assets';
 import { publishDataset, publishVizRecipe, publishImage, publishPdf } from './data-tiers';
+import { publishFile } from './file-store';
 
 
 export const MAX_CONTENT_BYTES = 2_000_000;
@@ -36,7 +37,7 @@ export const MAX_CONTENT_BYTES = 2_000_000;
  * ask "is this a format we serve?" (the page, the raw route) cannot drift from
  * the type the wire is checked against.
  */
-export const ARTIFACT_FORMATS = ['markup', 'dataset', 'viz', 'image', 'pdf', 'folder'] as const;
+export const ARTIFACT_FORMATS = ['markup', 'dataset', 'viz', 'image', 'pdf', 'file', 'folder'] as const;
 export type ArtifactFormat = (typeof ARTIFACT_FORMATS)[number];
 
 /**
@@ -60,7 +61,7 @@ export const isDocumentFormat = (format: string): boolean => format === 'markup'
  * tier is added and let that tier through the one door that must not take it.
  */
 export const TEXT_CONTENT_FIELDS = ['markup'] as const;
-export const DATA_CONTENT_FIELDS = ['dataset', 'sheetUrl', 'csvUrl', 'imageUrl', 'viz', 'image', 'pdf', 'pdfUrl'] as const;
+export const DATA_CONTENT_FIELDS = ['dataset', 'sheetUrl', 'csvUrl', 'imageUrl', 'viz', 'image', 'pdf', 'pdfUrl', 'file'] as const;
 export const CONTENT_FIELDS = [...TEXT_CONTENT_FIELDS, ...DATA_CONTENT_FIELDS] as const;
 
 import type { SourceRepair } from '@/lib/jsx/repair';
@@ -188,6 +189,11 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
   }
   if (present.length !== 1) return json({ error: 'one_of_markup_dataset_viz_image_pdf' }, 400);
   const kind = present[0];
+  if (kind === 'file') {
+    if (!ctx.overByteQuota) return json({ error: 'file_not_previewable', details: ['Upload the file with POST /api/artifacts.'] }, 400);
+    if (await ctx.overByteQuota()) return json({ error: 'quota_exceeded' }, 403);
+    return publishFile(body.file);
+  }
   // `dataset` accepts a JSON array (what an agent hand-writes) OR raw CSV text
   // (what a file or a sheet actually contains); `sheetUrl` fetches a public
   // Google Sheet. All three converge on the same rows — see lib/data-ingest.

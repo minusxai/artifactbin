@@ -8,6 +8,7 @@
  * matches the source.
  */
 import esbuild from 'esbuild';
+import './build-libraries.mjs';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';

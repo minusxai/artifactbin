@@ -1454,23 +1454,23 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
         <img key={rawKey} src={`/a/${id}/raw`} alt={shownTitle} className="mt-4 max-w-full rounded-[6px] border border-edge" />
       )}
 
-      {format === 'pdf' && (
+      {(format === 'pdf' || format === 'file') && (
         // A PDF is a FILE, not something the app renders: the browser's own
         // viewer does that, at /raw, which is served inline and sandboxed. So
         // this view is the two facts a person picks a file by and the link that
         // opens it — the same card <File> draws inside a document.
         <div className="mt-4 rounded-[6px] border border-edge bg-surface p-4">
-          <p className="font-sans text-xs text-muted" aria-label="PDF summary">
-            PDF{fileBytes ? ` · ${formatFileSize(fileBytes)}` : ''}{filePages ? ` · ${filePages} page${filePages === 1 ? '' : 's'}` : ''}
+          <p className="font-sans text-xs text-muted" aria-label={format === 'pdf' ? 'PDF summary' : 'File summary'}>
+            {format === 'pdf' ? 'PDF' : 'File'}{fileBytes ? ` · ${formatFileSize(fileBytes)}` : ''}{filePages ? ` · ${filePages} page${filePages === 1 ? '' : 's'}` : ''}
           </p>
           <a
-            aria-label="Open the PDF"
+            aria-label={format === 'pdf' ? 'Open the PDF' : 'Download file'}
             href={`/a/${id}/raw`}
             target="_blank"
             rel="noopener noreferrer"
             className="mt-2 inline-block font-sans text-sm underline underline-offset-2"
           >
-            Open {shownTitle}
+            {format === 'pdf' ? 'Open' : 'Download'} {shownTitle}
           </a>
         </div>
       )}

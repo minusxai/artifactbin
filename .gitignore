@@ -41,3 +41,6 @@ services/app/dist/
 services/app/data/
 video/
 services/cli/dist/
+
+# Optional hosted browser libraries (built with story runtime)
+services/app/public/libraries/
