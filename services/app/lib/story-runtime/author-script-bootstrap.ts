@@ -1,3 +1,4 @@
+import {MANAGED_FETCH_BOOTSTRAP} from './managed-fetch-bootstrap';
 /**
  * A deliberately self-contained classic-script bootstrap. It runs ONLY in
  * the opaque child; no bundler closure or parent globals may be referenced.
@@ -21,6 +22,14 @@ export const AUTHOR_SCRIPT_BOOTSTRAP = `
       const timer = setTimeout(() => { waiting.delete(id); reject(new Error('Script request timed out')); }, 15000);
       waiting.set(id, { resolve, reject, timer });
       send({ id, ...payload });
+    });
+    ${MANAGED_FETCH_BOOTSTRAP}
+    addEventListener('error', event => send({type:'author-error',error:event.message || 'Iframe script failed'}));
+    addEventListener('unhandledrejection', event => send({type:'author-error',error:String(event.reason?.message || event.reason || 'Iframe script failed')}));
+    addEventListener('pagehide', () => {
+      assetAbort?.abort(); valuesListeners.clear(); dataListeners.clear();
+      for (const task of waiting.values()) { clearTimeout(task.timer); task.reject(new Error('Iframe disposed')); }
+      waiting.clear(); port.close();
     });
     const report = error => console.error('[artifact script]', error.message);
     const subscribe = listeners => (names, listener) => {
@@ -48,7 +57,7 @@ export const AUTHOR_SCRIPT_BOOTSTRAP = `
       mutate: (name, values) => request({ op: 'mutate', name, ...(values === undefined ? {} : { values }) })
     };
     Object.defineProperty(window, 'mx', { value: mx, writable: false, configurable: false });
-    port.onmessage = event => {
+    port.onmessage = async event => {
       const message = event.data;
       if (message.type === 'state') {
         if (message.reset) state = { values: {}, tables: {}, errors: {} };
@@ -81,14 +90,31 @@ export const AUTHOR_SCRIPT_BOOTSTRAP = `
         send({ type: 'state-ack' });
       } else if (message.type === 'run' && !started) {
         started = true;
-        // Only the isolated realm receives author HTML. No parent DOM write.
-        if (typeof message.html === 'string') document.body.insertAdjacentHTML('afterbegin', message.html);
-        const script = document.createElement('script');
-        script.textContent = message.source;
-        document.body.append(script);
+        try {
+          assetOrigin = message.assetOrigin || null;
+          // Compatibility Sandbox retains its pinned-library/ref API policy.
+          // Managed Iframe uses the generic cached-asset transport instead.
+          if (!message.managed && nativeFetch) window.fetch = nativeFetch;
+          if (!message.managed && nativeXHR) window.XMLHttpRequest = nativeXHR;
+          if (message.managed) installAssetSources();
+          // Only the isolated realm receives prepared author HTML. Scripts are
+          // separate data, inserted with textContent, never HTML interpolation.
+          if (typeof message.html === 'string') document.body.insertAdjacentHTML('afterbegin', message.html);
+          const scripts = message.scripts || [{type:'classic',source:message.source}];
+          for (const item of scripts) {
+            const script = document.createElement('script');
+            if (item.type === 'module') script.type = 'module';
+            if (item.src) script.src = item.src; else script.textContent = item.source;
+            if (item.src || item.type === 'module') await new Promise((resolve,reject) => {
+              script.onload=resolve;script.onerror=()=>reject(new Error('Iframe script failed to load'));document.body.append(script);
+            });
+            else document.body.append(script);
+          }
+          send({type:'author-ready'});
+        } catch (error) { send({type:'author-error',error:String(error.message || error)}); }
       } else if (waiting.has(message.id)) {
         const task = waiting.get(message.id); waiting.delete(message.id); clearTimeout(task.timer);
-        if (message.ok) task.resolve(); else task.reject(new Error(message.error));
+        if (message.ok) task.resolve(message.value); else task.reject(new Error(message.error));
       }
     };
     port.start();

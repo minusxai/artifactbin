@@ -81,13 +81,20 @@ import { File } from '@/components/kit/file';
 import { DataTable } from '@/components/kit/data-table';
 import {Dialog, DialogTrigger, DialogContent, DialogClose} from '@/components/kit/dialog';
 import { Files } from '@/components/kit/files';
+import {managedFrameLayout} from '@/lib/story/managed-frame-layout';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const STORY_UI_COMPONENTS: Record<string, React.ComponentType<any>> = {
   // The document runtime supplies the trusted store/API configuration.
-  Sandbox: props => createElement('div', {id:props.id,className:props.className,'data-mx-ast':props['data-mx-ast']}),
+  Sandbox: props => {
+    const {label,pixels}=managedFrameLayout(props.title,props.height,'Interactive sandbox');
+    return createElement('div',{id:props.id,className:props.className,'data-mx-ast':props['data-mx-ast'],'data-mx-sandbox':'','aria-label':label,style:{height:pixels,width:'100%'}});
+  },
   // Inert SSR boundary. The runtime replaces this adapter; never spread compiled HTML into DOM.
-  Iframe: props => createElement('div', {id:props.id,className:props.className,'data-mx-ast':props['data-mx-ast']}),
+  Iframe: props => {
+    const {label,pixels}=managedFrameLayout(props.title,props.height);
+    return createElement('div',{id:props.id,className:props.className,'data-mx-ast':props['data-mx-ast'],'aria-label':label,style:{height:pixels,width:'100%'}},createElement('div',{style:{height:'100%'}}));
+  },
   Dialog, DialogTrigger, DialogContent, DialogClose,
   Card,
   CardHeader,

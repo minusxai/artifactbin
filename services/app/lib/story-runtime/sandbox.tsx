@@ -4,6 +4,7 @@ import {libraryUrls} from '@/lib/libraries';
 import {AUTHOR_SCRIPT_BOOTSTRAP} from './author-script-bootstrap';
 import {startAuthorScript} from './author-script';
 import type {DataflowStore} from './store';
+import {managedFrameLayout} from '@/lib/story/managed-frame-layout';
 
 /** Author-owned HTML and code stay inside one visible opaque realm. The API
  * config and store are supplied by the document runtime, never by markup. */
@@ -30,8 +31,7 @@ export function sandboxDocument(api: ArtifactApiConfig): string {
 export function SandboxView({html,script,title,height,id,className,store,api,'data-mx-ast':ast}: SandboxProps & SandboxEnvironment) {
   const host=useRef<HTMLDivElement>(null);
   const valid=typeof html==='string' && html.length<=262144 && typeof script==='string' && script.length<=262144;
-  const label=typeof title==='string' && title.trim() ? title.slice(0,200) : 'Interactive sandbox';
-  const pixels=typeof height==='number' && Number.isFinite(height) ? Math.min(4096,Math.max(100,height)) : 320;
+  const {label,pixels}=managedFrameLayout(title,height,'Interactive sandbox');
   const configuration=JSON.stringify(api);
   useEffect(()=>{
     if(!host.current || !valid) return;

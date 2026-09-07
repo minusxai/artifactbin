@@ -4,6 +4,9 @@ import { AUTHOR_SCRIPT_DOCUMENT } from './author-script-bootstrap';
 import { AUTHOR_SCRIPT_FRAME_TITLE, AUTHOR_SCRIPT_INIT, type AuthorScriptSnapshot } from './author-script-contract';
 import { authorStateDelta } from './author-state';
 import type { DataflowState } from '@/lib/story/dataflow';
+import { protectedAuthorDocument } from './author-frame';
+import type {ManagedIframeContent} from '@/lib/story/managed-iframe';
+import {createManagedAssetResolver,type ManagedAssetsConfig} from './managed-assets';
 
 /** Changed code revokes its old realm; unchanged code keeps its subscriptions. */
 export function createAuthorScriptSession(store: DataflowStore, doc: Document = document): {
@@ -25,7 +28,7 @@ export function createAuthorScriptSession(store: DataflowStore, doc: Document = 
 }
 
 /** Own one sandbox + port. Disposing revokes its capability and removes its frame. */
-export interface AuthorScriptMount {host: HTMLElement; title: string; html: string; document: string}
+export interface AuthorScriptMount {host: HTMLElement; title: string; html: string; document: string; scripts?: ManagedIframeContent['scripts']; assets?: ManagedAssetsConfig}
 export function startAuthorScript(source: string, store: DataflowStore, doc: Document = document, visible?: AuthorScriptMount): () => void {
   const frame = doc.createElement('iframe');
   frame.title = visible?.title ?? AUTHOR_SCRIPT_FRAME_TITLE;
@@ -34,8 +37,9 @@ export function startAuthorScript(source: string, store: DataflowStore, doc: Doc
   else { frame.style.width='100%'; frame.style.height='100%'; frame.style.border='0'; frame.style.display='block'; }
   frame.setAttribute('sandbox', 'allow-scripts');
   frame.setAttribute('referrerpolicy', 'no-referrer');
-  frame.srcdoc = visible?.document ?? AUTHOR_SCRIPT_DOCUMENT;
+  frame.srcdoc = protectedAuthorDocument(visible?.document ?? AUTHOR_SCRIPT_DOCUMENT);
   const bridge = createAuthorScriptBridge(store);
+  const assets=createManagedAssetResolver(visible?.assets);
   let disposed = false;
   let port: MessagePort | null = null;
   let unsubscribe = () => {};
@@ -43,6 +47,15 @@ export function startAuthorScript(source: string, store: DataflowStore, doc: Doc
   let deliveredPending: string[] = [];
   let timer: ReturnType<typeof setTimeout> | null = null;
   let awaitingState = false;
+  const fail=(message:string)=>{
+    dispose();
+    if(visible){const error=doc.createElement('p');error.setAttribute('role','alert');error.textContent=message;visible.host.append(error);}
+  };
+  const startup=setTimeout(()=>fail('Interactive content did not start. Reload to retry.'),15000);
+  const navigation=(event:MessageEvent)=>{
+    if(event.source===frame.contentWindow&&event.data==='mx:author:navigated')fail('Interactive content attempted navigation and was stopped.');
+  };
+  doc.defaultView?.addEventListener('message',navigation);
   const snapshot = () => {
     timer = null;
     if (disposed || !port || awaitingState) return;
@@ -62,6 +75,8 @@ export function startAuthorScript(source: string, store: DataflowStore, doc: Doc
     if (disposed) return;
     disposed = true;
     bridge.dispose();
+    assets.dispose();clearTimeout(startup);
+    doc.defaultView?.removeEventListener('message',navigation);
     unsubscribe();
     if(timer!==null) clearTimeout(timer);
     timer=null;
@@ -78,8 +93,16 @@ export function startAuthorScript(source: string, store: DataflowStore, doc: Doc
     port = channel.port1;
     port.onmessage = event => {
       if (disposed) return;
+      if(event.data?.type==='author-ready'){clearTimeout(startup);frame.setAttribute('data-mx-author-ready','');return;}
+      if(event.data?.type==='author-error'){fail(String(event.data.error).slice(0,500));return;}
       if(event.data?.type==='state-ack') {
         if(awaitingState) { awaitingState=false; schedule(); }
+        return;
+      }
+      if(event.data?.op==='asset') {
+        const request=event.data;
+        if(!Number.isSafeInteger(request.id)||request.id<1)return;
+        void assets.resolve(request.url,request.kind).then(value=>{if(!disposed)port?.postMessage({id:request.id,ok:true,value});},error=>{if(!disposed)port?.postMessage({id:request.id,ok:false,error:String(error.message).slice(0,500)});});
         return;
       }
       void bridge.request(event.data).then(reply => { if (!disposed) port?.postMessage(reply); });
@@ -89,7 +112,7 @@ export function startAuthorScript(source: string, store: DataflowStore, doc: Doc
     frame.contentWindow.postMessage(AUTHOR_SCRIPT_INIT, '*', [channel.port2]);
     snapshot();
     unsubscribe = store.subscribe(schedule);
-    port.postMessage({ type: 'run', source, ...(visible ? {html:visible.html} : {}) });
+    port.postMessage({ type: 'run', source, ...(visible ? {html:visible.html,scripts:visible.scripts,assetOrigin:visible.assets?.origin,managed:visible.scripts!==undefined} : {}) });
   };
   (visible?.host ?? doc.body).append(frame);
   return dispose;

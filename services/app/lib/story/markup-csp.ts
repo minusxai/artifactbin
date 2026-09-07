@@ -83,12 +83,13 @@ const eventsPath = (id: string): string => `/a/${id}/events`;
 export const mutatePath = (id: string): string => `/a/${id}/mutate`;
 
 /**
- * …and the one document endpoint deliberately ABSENT from this policy: where a
+ * …and the document-scoped endpoint where a
  * document imports an image URL only its reader can compute
  * (app/a/[id]/assets). It belongs here because this is the registry of a
- * document's own addresses, and it is missing from `connect-src` because it is
- * never fetched — it is the `src` of an `<img>`, which `img-src 'self'` already
- * admits. A policy entry for it would state the opposite of what is true.
+ * document's own addresses. Legacy images use it as their src; configured
+ * managed frames additionally resolve URLs through its JSON GET API from the
+ * trusted parent runtime. Only that configured policy adds it to connect-src;
+ * the author child receives cached asset URLs, never this resolver endpoint.
  */
 export const assetsPath = (id: string): string => `/a/${id}/assets`;
 
@@ -103,7 +104,7 @@ export const assetsPath = (id: string): string => `/a/${id}/assets`;
  */
 const GEOJSON_DIR_PATH = '/geojson/';
 
-export function markupCsp(origin: string, id: string, controlsOrigin?: string): string {
+export function markupCsp(origin: string, id: string, controlsOrigin?: string, assetOrigin?:string): string {
   // connect-src sits with the other source directives, before the behaviour
   // ones — the one per-document line in an otherwise fixed policy.
   const self = origin.replace(/\/+$/, '');
@@ -113,5 +114,8 @@ export function markupCsp(origin: string, id: string, controlsOrigin?: string): 
   // these add no network destination or access to the application's APIs.
   const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)} ${self}${GEOJSON_DIR_PATH} blob: data:`;
   const behavior = controlsOrigin ? BEHAVIOUR_DIRECTIVES.filter(d => !d.startsWith('sandbox ')) : BEHAVIOUR_DIRECTIVES;
-  return [...SOURCE_DIRECTIVES, ...(controlsOrigin ? [`frame-src ${controlsOrigin}`] : []), connect, ...behavior].join('; ');
+  if(assetOrigin && (new URL(assetOrigin).origin!==assetOrigin||!/^https?:\/\//.test(assetOrigin)))throw Error('Invalid asset origin');
+  const sources=SOURCE_DIRECTIVES.map(d=>assetOrigin && /^(script|img|font|media)-src /.test(d)?d+' '+assetOrigin:d);
+  const assetConnect=assetOrigin?` ${assetOrigin} ${self}${assetsPath(id)}`:'';
+  return [...sources, ...(controlsOrigin ? [`frame-src ${controlsOrigin}`] : []), connect+assetConnect, ...behavior].join('; ');
 }
