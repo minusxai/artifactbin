@@ -81,7 +81,15 @@ export function capturePristine(win: Window, appOrigin: string, trustedPeer?: Wi
        * from the author script's.
        */
       // A frame whose parent has gone away must not take the document down.
-      try { post(message, appOrigin); } catch { /* the page is gone; nothing to say */ }
+      // A newly created trusted child starts at about:blank. WebKit binds an
+      // extracted postMessage to that initial Window, even after its WindowProxy
+      // navigates. Resolve the method through the captured peer on each send;
+      // keep the window identity and exact destination origin pinned. Author
+      // code is in a separate opaque frame and cannot replace this method.
+      try {
+        if (trustedPeer) parentWin.postMessage(message, appOrigin);
+        else post(message, appOrigin);
+      } catch { /* the page is gone; nothing to say */ }
     },
     innerHtmlOf(el: Element): string {
       const raw = innerHtmlGetter ? innerHtmlGetter.call(el) : el.innerHTML;

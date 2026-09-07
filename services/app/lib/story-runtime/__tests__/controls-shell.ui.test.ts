@@ -36,3 +36,12 @@ it('rejects forged Escape messages and accepts only the exact parent and origin'
   send(window.parent,location.origin);expect(key).toHaveBeenCalledTimes(1);
   document.removeEventListener('keydown',key);
 });
+it('owns intermediate Tab steps so browser preferences cannot skip buttons and leave the modal',()=>{
+  setup();
+  document.body.innerHTML='<div aria-modal="true"><button id="first">First</button><button id="middle">Middle</button><button id="last">Last</button></div>';
+  vi.advanceTimersByTime(300);
+  const tab=new KeyboardEvent('keydown',{key:'Tab',cancelable:true});
+  document.dispatchEvent(tab);
+  expect(tab.defaultPrevented).toBe(true);
+  expect(document.activeElement?.id).toBe('middle');
+});

@@ -65,11 +65,13 @@ export function installControlsShell(mainOrigin: string): () => void {
     const modal = currentModal();
     if (!modal || event.key !== 'Tab' || event.defaultPrevented) return;
     const stops = focusables(modal);
-    const first = stops[0], last = stops.at(-1);
-    if (!first || !modal.contains(document.activeElement) || (event.shiftKey ? document.activeElement === first : document.activeElement === last)) {
-      event.preventDefault();
-      if (event.shiftKey && last) last.focus();else focusModal(modal);
-    }
+    // Own each step, not just wrapping: WebKit's platform keyboard preference
+    // can skip buttons and leave the frame before our last stop is reached.
+    event.preventDefault();
+    if (!stops.length) {focusModal(modal);return;}
+    const index=stops.indexOf(document.activeElement as HTMLElement);
+    const next=index<0 ? (event.shiftKey ? stops.length-1 : 0) : (index+(event.shiftKey ? -1 : 1)+stops.length)%stops.length;
+    stops[next].focus({preventScroll:true});
   };
   const escape = (event: MessageEvent) => {
     if (event.source !== window.parent || event.origin !== mainOrigin || event.data?.type !== 'mx:controls:escape') return;

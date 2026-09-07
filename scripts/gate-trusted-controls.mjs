@@ -8,12 +8,16 @@ import net from 'node:net';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {randomBytes} from 'node:crypto';
-import {chromium} from 'playwright';
+import {chromium,firefox,webkit} from 'playwright';
 import {startDocument,becomeOwner} from './lib/start-doc.mjs';
 import {loginViaEmail} from './lib/mail-login.mjs';
 
 const scratch = mkdtempSync(join(tmpdir(),'afbin-controls-gate-'));
 const interactive=process.argv.includes('--interactive');
+// Planning validation can run the exact product gate in other engines.
+const engineName=process.argv.find(arg=>arg.startsWith('--browser='))?.split('=')[1] ?? 'chromium';
+const engine={chromium,firefox,webkit}[engineName];
+assert(engine,`Unknown browser engine: ${engineName}`);
 const socket = net.createServer();
 await new Promise(resolve => socket.listen(0,'127.0.0.1',resolve));
 const port = socket.address().port;
@@ -29,7 +33,7 @@ const tls = httpsServer({key:readFileSync(join(scratch,'key.pem')),cert:readFile
 });
 await new Promise(resolve=>tls.listen(0,'127.0.0.1',resolve));
 const tlsPort = tls.address().port;
-const hostname=interactive ? '127.0.0.1.nip.io' : 'artifactbin.test';
+const hostname=interactive || engineName!=='chromium' ? '127.0.0.1.nip.io' : 'artifactbin.test';
 const base = `https://${hostname}:${tlsPort}`, controls = `https://i.${hostname}:${tlsPort}`;
 const server = spawn(process.execPath,['--import',resolve('scripts/lib/controls-mail-stub.mjs'),resolve('dist/proxy-server.mjs')],{
   cwd:resolve('services/app'),stdio:['ignore','ignore','inherit'],env:{...process.env,
@@ -70,7 +74,7 @@ try {
     console.log(`Interactive local fixture: ${base}/a/${seed.id}\nControls host: ${controls}/a/${seed.id}`);
     await new Promise(resolve=>{process.once('SIGINT',resolve);process.once('SIGTERM',resolve);});
   } else {
-  browser = await chromium.launch({args:['--host-resolver-rules=MAP artifactbin.test 127.0.0.1, MAP i.artifactbin.test 127.0.0.1','--proxy-bypass-list=*']});
+  browser = await engine.launch(engineName==='chromium' ? {args:['--host-resolver-rules=MAP artifactbin.test 127.0.0.1, MAP i.artifactbin.test 127.0.0.1','--proxy-bypass-list=*']} : {});
   const page = await browser.newPage({ignoreHTTPSErrors:true,viewport:{width:1280,height:900}});
   page.setDefaultTimeout(10000);
   page.on('response',response=>{if(response.status()>=400) console.error('HTTP',response.status(),response.url());});
@@ -210,8 +214,13 @@ try {
   // Account logout deliberately does not revoke independently held agent
   // capabilities. Disconnect that browser capability through its own UI.
   await page.getByLabel('Open menu',{exact:true}).click();
-  await page.getByLabel('Disconnect this browser',{exact:true}).click();
-  await page.waitForFunction(async ()=>(await fetch('/api/page/session').then(r=>r.json())).kind!=='anon');
+  // Disconnect performs a same-URL full navigation. Polling fetch during that
+  // transition fails in WebKit's outgoing context; await the navigation itself.
+  await Promise.all([
+    page.waitForNavigation({waitUntil:'domcontentloaded'}),
+    page.getByLabel('Disconnect this browser',{exact:true}).click(),
+  ]);
+  assert.notEqual(await page.evaluate(async ()=>(await fetch('/api/page/session').then(r=>r.json())).kind),'anon');
   assert.equal((await page.goto(`${base}/a/${seed.id}`)).status(),404,'disconnected browser loses private document access');
   await reader.close();
   console.log('PASS: two-origin top-level editing/reload, local SQL, appearance, relation-only comments, mobile hit-testing, author isolation/navigation revocation, OTP login, like/follow persistence, private ACLs, logout and browser disconnect');

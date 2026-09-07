@@ -155,8 +155,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // immutable — the version changes when the bytes do. A bare URL might be
       // replaced under the same id, so it only gets a short freshness window.
       const versioned = new URL(request.url).searchParams.has('v');
-      const scope = artifact.visibility === 'public' ? 'public' : 'private';
-      const cache = versioned ? `${scope}, max-age=31536000, immutable` : `${scope}, max-age=300`;
+      // A browser-private cache still survives logout and ACL revocation.
+      // Only genuinely public bytes may bypass the next request's read ACL.
+      const cache = artifact.visibility !== 'public' ? 'no-store'
+        : versioned ? 'public, max-age=31536000, immutable' : 'public, max-age=300';
       // SVG is inert inside an <img>, but a DIRECT hit on /raw renders it as a
       // document where its scripts WOULD run — so lock it down like the html
       // tier's sandbox. Raster types need no CSP (they are not documents).
@@ -202,7 +204,6 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // Content-Length back INTO this object, so a shared constant would
       // announce the first body's length for every later one.
       const versioned = new URL(request.url).searchParams.has('v');
-      const scope = artifact.visibility === 'public' ? 'public' : 'private';
       const headers: Record<string, string> = {
         ...COMMON,
         'Content-Type': meta.contentType,
@@ -211,7 +212,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         'Accept-Ranges': 'bytes',
         // Same rule as an image: a versioned address is genuinely immutable,
         // a bare one only gets a short freshness window.
-        'Cache-Control': versioned ? `${scope}, max-age=31536000, immutable` : `${scope}, max-age=300`,
+        'Cache-Control': artifact.visibility !== 'public' ? 'no-store'
+          : versioned ? 'public, max-age=31536000, immutable' : 'public, max-age=300',
       };
       if (range === 'unsatisfiable') {
         return new Response(null, { status: 416, headers: { ...headers, 'Content-Range': `bytes */${meta.bytes}` } });
