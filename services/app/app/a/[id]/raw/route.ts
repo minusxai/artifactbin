@@ -43,7 +43,7 @@ import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { declaresMutations } from '@/lib/story/helmet';
 import { assetsPath, resolvePath, markupCsp, mutatePath, queryPath } from '@/lib/story/markup-csp';
-import {CONTROLS_ORIGIN, PUBLIC_BASE_URL} from '@/lib/config';
+import {CONTROLS_ORIGIN, PUBLIC_BASE_URL, ASSETS_ORIGIN} from '@/lib/config';
 import { readUrlValues } from '@/lib/story/url-values';
 import { storyRuntimeAssets } from '@/lib/story/runtime-asset';
 import { ownerUsername } from '@/lib/users';
@@ -467,6 +467,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         queryUrl: queryPath(artifact.id),
         resolveUrl: `${baseUrl(request)}${resolvePath(artifact.id)}`,
         libraryOrigin: baseUrl(request),
+        ...(ASSETS_ORIGIN?{managedAssets:{origin:ASSETS_ORIGIN,resolveUrl:baseUrl(request)+assetsPath(artifact.id)+(byExportKey?`?key=${encodeURIComponent(key!)}`:'')}}:{}),
         /*
          * …and where it imports an image URL only its reader can compute (a
          * bound <img src="$pick">). Unconditional, unlike mutateUrl: a source
@@ -495,7 +496,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         status: 200,
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
-          'Content-Security-Policy': markupCsp(base, artifact.id, controlsUrl ? CONTROLS_ORIGIN! : undefined),
+          'Content-Security-Policy': markupCsp(base, artifact.id, controlsUrl ? CONTROLS_ORIGIN! : undefined, ASSETS_ORIGIN??undefined),
       ...(chrome ? { Link: `<${base}/docs>; rel="help"` } : {}),
           ...COMMON,
         },

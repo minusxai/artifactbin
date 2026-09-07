@@ -117,6 +117,7 @@ export interface StoryDocumentInput {
    * them (the canvas, unit tests), where a bound image renders static.
    */
   assetsUrl?: string | null;
+  managedAssets?: StoryIslandData['managedAssets'];
   /** Absolute scoped asset transport, usable from opaque-origin scripts. */
   resolveUrl?: string | null;
   libraryOrigin?: string;
@@ -432,7 +433,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    */
   const sandboxApi = {resolveUrl:input.resolveUrl ?? null,libraries:input.libraryOrigin ? libraryUrls(input.libraryOrigin) : {}};
   const bodyHtml = split
-    ? loadSsrBundle().renderStoryBody({ nodes: split.body, refData, glyphs, ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, sandboxApi, ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}) })
+    ? loadSsrBundle().renderStoryBody({ nodes: split.body, refData, glyphs, ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, sandboxApi, managedAssets:input.managedAssets, ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}) })
     : `<pre>${escapeHtml(source)}</pre>`;
 
   // Style order mirrors the engine's injection order (compiled Tailwind → bare
@@ -525,6 +526,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
   // `<` escaped so no row value can close the script element from inside JSON.
   if (input.controlsUrl) island.controlsUrl = input.controlsUrl;
   island.sandboxApi = sandboxApi;
+  if(input.managedAssets)island.managedAssets=input.managedAssets;
   const islandJson = JSON.stringify(island).replace(/</g, '\\u003c');
 
   /**
