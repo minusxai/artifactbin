@@ -15,7 +15,7 @@ import type { Dataflow, DataflowState, Scalar, Row } from '@/lib/story/dataflow'
 import type { LocalMutationResult } from '@/lib/story/local-state';
 import type { ScrollAnchor } from '@/lib/story/scroll-anchor';
 import type {ArtifactApiConfig} from '@/lib/story/script-api';
-import type {ManagedAssetsConfig} from './managed-assets';
+import type {ManagedAssetsConfig,ManagedAssetKind} from './managed-assets';
 
 /** The document's data as the island carries it: what is declared, and its state at render. */
 export interface StoryIslandDataflow {
@@ -395,6 +395,18 @@ export interface StoryAssetRequest {
   id: number;
   /** The web URL the document ended up with — never a path, never ours. */
   url: string;
+  /** Explicit managed kind; absent preserves the legacy image-only relay. */
+  kind?: ManagedAssetKind;
+}
+/** A narrow asset request, not a caller-chosen endpoint, method or credentials. */
+export function isStoryAssetRequest(input:unknown):input is StoryAssetRequest {
+  if(!input||typeof input!=='object')return false;
+  const data=input as Partial<StoryAssetRequest>;
+  if(data.type!==STORY_ASSET_MESSAGE||!Number.isSafeInteger(data.id)||data.id!<1||typeof data.url!=='string'||data.url.length>4096)return false;
+  if(Object.keys(data).some(key=>!['type','id','url','kind'].includes(key)))return false;
+  if(data.kind!==undefined&&!['image','font','pdf','script','binary'].includes(data.kind))return false;
+  if(/^ref:[A-Za-z0-9]{6}$/.test(data.url))return true;
+  try{const url=new URL(data.url);return /^https?:$/.test(url.protocol)&&!url.username&&!url.password;}catch{return false;}
 }
 
 export type StoryAssetResult =

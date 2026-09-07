@@ -6,7 +6,7 @@ import { authorStateDelta } from './author-state';
 import type { DataflowState } from '@/lib/story/dataflow';
 import { protectedAuthorDocument } from './author-frame';
 import type {ManagedIframeContent} from '@/lib/story/managed-iframe';
-import {createManagedAssetResolver,type ManagedAssetsConfig} from './managed-assets';
+import {createManagedAssetResolver,type ManagedAssetsConfig,type ManagedAssetRelay} from './managed-assets';
 
 /** Changed code revokes its old realm; unchanged code keeps its subscriptions. */
 export function createAuthorScriptSession(store: DataflowStore, doc: Document = document): {
@@ -28,7 +28,7 @@ export function createAuthorScriptSession(store: DataflowStore, doc: Document = 
 }
 
 /** Own one sandbox + port. Disposing revokes its capability and removes its frame. */
-export interface AuthorScriptMount {host: HTMLElement; title: string; html: string; document: string; scripts?: ManagedIframeContent['scripts']; assets?: ManagedAssetsConfig}
+export interface AuthorScriptMount {host: HTMLElement; title: string; html: string; document: string; scripts?: ManagedIframeContent['scripts']; assets?: ManagedAssetsConfig; importAsset?:ManagedAssetRelay}
 export function startAuthorScript(source: string, store: DataflowStore, doc: Document = document, visible?: AuthorScriptMount): () => void {
   const frame = doc.createElement('iframe');
   frame.title = visible?.title ?? AUTHOR_SCRIPT_FRAME_TITLE;
@@ -39,7 +39,7 @@ export function startAuthorScript(source: string, store: DataflowStore, doc: Doc
   frame.setAttribute('referrerpolicy', 'no-referrer');
   frame.srcdoc = protectedAuthorDocument(visible?.document ?? AUTHOR_SCRIPT_DOCUMENT);
   const bridge = createAuthorScriptBridge(store);
-  const assets=createManagedAssetResolver(visible?.assets);
+  const assets=createManagedAssetResolver(visible?.assets,visible?.importAsset);
   let disposed = false;
   let port: MessagePort | null = null;
   let unsubscribe = () => {};

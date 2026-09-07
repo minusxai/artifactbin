@@ -100,7 +100,7 @@ if (island?.textContent && root) {
      * once, above, like everything else about where this document talks.
      */
     const assetImport = transport?.importAsset
-      ? { importAsset: (url: string) => transport.importAsset!(url) }
+      ? { importAsset: transport.importAsset }
       : {};
     installMx(store);
 

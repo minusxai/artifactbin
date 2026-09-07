@@ -103,9 +103,10 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
   });
 
   return {
-    importAsset: (url) => new Promise<{ url: string } | { refused: string }>((settle) => {
+    importAsset: (url,kind,signal) => new Promise<{ url: string } | { refused: string }>((settle) => {
+      if(signal?.aborted){settle({refused:'aborted'});return;}
       const id = ++assetSeq;
-      const post = () => target.postMessage({ type: STORY_ASSET_MESSAGE, id, url } satisfies StoryAssetRequest, appOrigin);
+      const post = () => target.postMessage({ type: STORY_ASSET_MESSAGE, id, url,...(kind?{kind}:{}) } satisfies StoryAssetRequest, appOrigin);
       /*
        * Re-posted on the SAME schedule as a query, and for the same reason: a
        * message nobody is listening for yet is not queued anywhere, it is gone.
@@ -120,7 +121,9 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
         ...RETRIES_AT.map((at) => setTimeout(() => { if (importers.has(id)) post(); }, at)),
         setTimeout(() => { importers.delete(id); settle({ refused: 'no_answer' }); }, timeoutMs),
       ];
-      importers.set(id, { settle, clear: () => { for (const t of timers) clearTimeout(t); } });
+      const abort=()=>{const pending=importers.get(id);importers.delete(id);pending?.clear();settle({refused:'aborted'});};
+      importers.set(id, { settle, clear: () => { for (const t of timers) clearTimeout(t);signal?.removeEventListener('abort',abort); } });
+      signal?.addEventListener('abort',abort,{once:true});
       post();
     }),
     run: async (values, only, localTables) => {

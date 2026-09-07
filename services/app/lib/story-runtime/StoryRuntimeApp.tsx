@@ -50,6 +50,7 @@ import { GridItemContext } from '@/components/kit/grid';
 import {SandboxView} from './sandbox';
 import {ManagedIframeView} from './managed-iframe';
 import type {ManagedIframeContent} from '@/lib/story/managed-iframe';
+import type {ManagedAssetRelay} from './managed-assets';
 import { DateControl, SegmentedControl, SelectControl, SliderControl, SwitchControl, normalizeControlOptions, num, shellRest, str } from '@/components/kit/controls';
 import { parseColumnSpecs, parseSortSpec, parseTableHeight, type SortSpec } from '@/lib/story/data-table';
 import { createPreviewIdentityAllocator } from './preview-identity';
@@ -163,6 +164,7 @@ interface RuntimeEmbedContextValue {
   colorMode: 'light' | 'dark';
   sandboxApi?: StoryIslandData['sandboxApi'];
   managedAssets?: StoryIslandData['managedAssets'];
+  importAsset?: ManagedAssetRelay;
 }
 
 const RuntimeEmbedContext = createContext<RuntimeEmbedContextValue>({
@@ -728,8 +730,8 @@ function SandboxAdapter(props: Record<string, unknown>) {
 const RUNTIME_REGISTRY: Record<string, ComponentType<Record<string, unknown>>> = {
   ...STORY_UI_COMPONENTS,
   Iframe: props => {
-    const {store,managedAssets}=useContext(RuntimeEmbedContext);
-    return store ? <ManagedIframeView {...props} compiled={props.compiled as ManagedIframeContent} store={store} assets={managedAssets}/> : null;
+    const {store,managedAssets,importAsset}=useContext(RuntimeEmbedContext);
+    return store ? <ManagedIframeView {...props} compiled={props.compiled as ManagedIframeContent} store={store} assets={managedAssets} importAsset={importAsset}/> : null;
   },
   Sandbox: SandboxAdapter,
   Dialog: DialogAdapter,
@@ -1042,7 +1044,7 @@ export type StoryRuntimeAppProps = StoryIslandData & {
    * the page the authority over a bound `<img>`'s source; absent, the element
    * loads the endpoint for itself.
    */
-  importAsset?: (url: string) => Promise<{ url: string } | { refused: string }>;
+  importAsset?: ManagedAssetRelay;
 };
 
 const EMPTY_GLYPHS: GlyphMap = {};
@@ -1089,7 +1091,7 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, t
 
   const body = (
     <RuntimeAssetContext.Provider value={assets}>
-      <RuntimeEmbedContext.Provider value={{ store, flow: store.flow, state, pending, setValue, fetchPage: store.fetchPage, refData, chrome, colorMode, sandboxApi, managedAssets }}>
+      <RuntimeEmbedContext.Provider value={{ store, flow: store.flow, state, pending, setValue, fetchPage: store.fetchPage, refData, chrome, colorMode, sandboxApi, managedAssets, importAsset }}>
         {renderStoryNodes(nodes, {
           values: state.values,
           // Identity across an adopted document: a live update re-renders this

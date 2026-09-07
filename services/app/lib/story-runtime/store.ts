@@ -29,6 +29,7 @@ import type { LocalMutationResult } from '@/lib/story/local-state';
 import type { Row } from '@/lib/story/dataflow';
 import { SIGNALS_TABLE } from '@/lib/story/local-target';
 import { checkedLocalRows } from '@/lib/story/local-tables';
+import type {ManagedAssetKind} from './managed-assets';
 
 export interface MutationAnswer { dataset: string; local?: LocalMutationResult }
 
@@ -68,7 +69,7 @@ export interface QueryTransport {
    * Like `mutate`, this is not a query; what it shares with one is the channel.
    * The document has ONE way to reach the outside, and this interface is it.
    */
-  importAsset?(url: string): Promise<{ url: string } | { refused: string }>;
+  importAsset?(url: string,kind?:ManagedAssetKind,signal?:AbortSignal): Promise<{ url: string } | { refused: string }>;
 }
 
 export interface DataflowStore {

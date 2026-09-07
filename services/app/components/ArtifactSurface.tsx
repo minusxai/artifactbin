@@ -48,6 +48,7 @@ import { formatFileSize } from '@/lib/file-display';
 import { resolveStoryMode } from '@/lib/data/story/story-themes';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import type { StoryIslandDataflow } from '@/lib/story-runtime/contract';
+import {isStoryAssetRequest} from '@/lib/story-runtime/contract';
 
 const ArtifactEditor = dynamic(() => import('@/components/ArtifactEditor'), {
   ssr: false,
@@ -595,10 +596,12 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       const data = e.data as Partial<StoryAssetRequest> | undefined;
       if (!data || typeof data !== 'object' || data.type !== STORY_ASSET_MESSAGE || typeof data.url !== 'string') return;
       if (!isDocumentPeerEvent(frameRef.current, e)) return;
+      if(!isStoryAssetRequest(data))return;
       const reply = (msg: StoryAssetResult) => (e.source as Window | null)?.postMessage(msg, '*');
       try {
         const key = captureKey ? `&key=${encodeURIComponent(captureKey)}` : '';
-        const res = await fetch(`/a/${id}/assets?u=${encodeURIComponent(data.url)}${key}`, { headers: { Accept: 'application/json' } });
+        const kind=data.kind?`&kind=${encodeURIComponent(data.kind)}`:'';
+        const res = await fetch(`/a/${id}/assets?u=${encodeURIComponent(data.url)}${key}${kind}`, { headers: { Accept: 'application/json' } });
         const body = (await res.json().catch(() => ({}))) as { url?: string; code?: string };
         if (res.ok && body.url) reply({ type: STORY_ASSET_RESULT_MESSAGE, id: data.id!, url: body.url });
         else reply({ type: STORY_ASSET_RESULT_MESSAGE, id: data.id!, refused: body.code ?? `http_${res.status}` });

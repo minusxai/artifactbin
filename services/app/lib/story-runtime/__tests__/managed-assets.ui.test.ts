@@ -2,6 +2,13 @@ import {afterEach,describe,it,expect,vi} from 'vitest';
 import {createManagedAssetResolver,prepareManagedContent} from '../managed-assets';
 afterEach(()=>vi.unstubAllGlobals());
 describe('managed asset adapter',()=>{
+  it('uses trusted relay for private previews without exposing export key or fetching directly',async()=>{
+    const fetch=vi.fn();vi.stubGlobal('fetch',fetch);
+    const relay=vi.fn(async()=>({url:'https://assets.example/assets/'+'a'.repeat(64)}));
+    const resolver=createManagedAssetResolver({origin:'https://assets.example',resolveUrl:'https://app.example/a/def456/assets?key=scoped'},relay);
+    await resolver.resolve('https://cdn.example/bundle.js','script');
+    expect(relay).toHaveBeenCalledExactlyOnceWith('https://cdn.example/bundle.js','script',expect.any(AbortSignal));expect(fetch).not.toHaveBeenCalled();resolver.dispose();
+  });
   it('resolves public refs without caching aliases and preserves platform export keys',async()=>{
     const fetch=vi.fn(async(_url:string)=>new Response(JSON.stringify({url:'https://assets.example/assets/ref/abc123'})));vi.stubGlobal('fetch',fetch);
     const resolver=createManagedAssetResolver({origin:'https://assets.example',resolveUrl:'https://app.example/a/def456/assets?key=scoped'});

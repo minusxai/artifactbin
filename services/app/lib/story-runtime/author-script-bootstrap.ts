@@ -1,10 +1,12 @@
 import {MANAGED_FETCH_BOOTSTRAP} from './managed-fetch-bootstrap';
+import {AUTHOR_REALM_LOCKDOWN} from './author-realm-lockdown';
 /**
  * A deliberately self-contained classic-script bootstrap. It runs ONLY in
  * the opaque child; no bundler closure or parent globals may be referenced.
  * Author code arrives as data over a transferred port after the frame loads.
  */
 export const AUTHOR_SCRIPT_BOOTSTRAP = `
+${AUTHOR_REALM_LOCKDOWN}
 (() => {
   let initialized = false;
   addEventListener('message', event => {

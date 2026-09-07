@@ -2,6 +2,7 @@ import type {ManagedIframeContent} from '@/lib/story/managed-iframe';
 import {URL_ATTRS,URL_LIST_ATTRS,SVG_PAINT_ATTRS} from '@/lib/jsx/url-attrs';
 export interface ManagedAssetsConfig {origin: string; resolveUrl: string}
 export type ManagedAssetKind='image'|'font'|'pdf'|'script'|'binary';
+export type ManagedAssetRelay=(url:string,kind?:ManagedAssetKind,signal?:AbortSignal)=>Promise<{url:string}|{refused:string}>;
 export interface ManagedAssetResolver {
   resolve(url:string,kind:ManagedAssetKind):Promise<string>;
   dispose():void;
@@ -12,7 +13,7 @@ export function isManagedAssetUrl(url:URL,origin:string):boolean {
     (/^\/assets\/ref\/[A-Za-z0-9]{6}$/.test(url.pathname)&&!url.search)
   );
 }
-export function createManagedAssetResolver(config?:ManagedAssetsConfig):ManagedAssetResolver {
+export function createManagedAssetResolver(config?:ManagedAssetsConfig,relay?:ManagedAssetRelay):ManagedAssetResolver {
   const controller=new AbortController(),cache=new Map<string,Promise<string>>();
   let disposed=false,active=0,count=0,windowStart=Date.now();
   return {
@@ -31,13 +32,21 @@ export function createManagedAssetResolver(config?:ManagedAssetsConfig):ManagedA
       active++;
       endpoint.searchParams.set('u',url.href);endpoint.searchParams.set('kind',kind);
       const result=(async()=>{
+        let answer:{url:string};
+        if(relay) {
+          const reply=await relay(input,kind,controller.signal);
+          if('refused'in reply)throw Error('Asset import refused: '+reply.refused);
+          answer=reply;
+        } else {
         // This is the platform's scoped API, never author-selected credentials or verbs.
         const response=await fetch(endpoint.href,{headers:{Accept:'application/json'},credentials:'same-origin',redirect:'error',signal:controller.signal});
         if(!response.ok)throw Error('Asset import failed: '+response.status);
         const reader=response.body?.getReader(),decoder=new TextDecoder();let text='',bytes=0;
         if(reader)for(;;){const chunk=await reader.read();if(chunk.done)break;bytes+=chunk.value.byteLength;if(bytes>8192){await reader.cancel();throw Error('Invalid asset response');}text+=decoder.decode(chunk.value,{stream:true});}
         text+=decoder.decode();
-        const answer=JSON.parse(text),resolved=new URL(answer.url);
+        answer=JSON.parse(text);
+        }
+        const resolved=new URL(answer.url);
         if(disposed)throw Error('Asset resolver disposed');
         if(!isManagedAssetUrl(resolved,origin.origin))throw Error('Asset response escaped asset origin');
         if(ref&&(resolved.pathname!=='/assets/ref/'+input.slice(4)||resolved.search))throw Error('Invalid ref asset response');
