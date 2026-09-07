@@ -4,7 +4,7 @@ Run a regular local agent terminal and access the same terminal from a desktop o
 
 ## Install
 
-Once the `afbin-v0.1.0` GitHub Release is published and the app is deployed:
+Once the `afbin-v0.1.1` GitHub Release is published and the app is deployed:
 
 ```sh
 curl -fsSL https://artifactbin.dev/chat/install.sh | sh
@@ -21,7 +21,7 @@ Windows users can use WSL. It checks SHA-256 before replacing an existing instal
 reinstall, or select a published version/location:
 
 ```sh
-curl -fsSL https://artifactbin.dev/chat/install.sh | sh -s -- --version 0.1.0 --dir "$HOME/.local/bin"
+curl -fsSL https://artifactbin.dev/chat/install.sh | sh -s -- --version 0.1.1 --dir "$HOME/.local/bin"
 ```
 
 The existing `/install.sh` installs the self-hosted server; `/chat/install.sh` installs only this CLI.
@@ -109,7 +109,7 @@ with `SHA256SUMS`. The release stays a draft until all assets are attached. Exis
 
 1. Update `services/cli/package.json` and the default `version` in `services/app/public/chat/install.sh`.
 2. Merge and wait for CI to pass on the exact main commit to release.
-3. Tag that commit `afbin-v0.1.0` (matching the package version) and push the tag. Failed workflow runs can
+3. Tag that commit `afbin-v0.1.1` (matching the package version) and push the tag. Failed workflow runs can
    be retried from GitHub Actions. It refuses commits outside main or without passing CI.
 4. Verify the release assets, then deploy the app serving the corresponding installer. For a rollback,
    deploy an installer pinned to the previous release; users can also pass `--version` explicitly.
