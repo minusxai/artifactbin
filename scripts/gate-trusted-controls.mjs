@@ -383,7 +383,10 @@ try {
     const canvas=document.getElementById('scene');
     const draw=()=>{canvas.width=innerWidth;canvas.height=100;const ctx=canvas.getContext('2d');ctx.fillStyle='#ef3340';ctx.fillRect(0,0,canvas.width,100);mx.params.set('sandboxWidth',innerWidth);};
     addEventListener('resize',draw);draw();
-    document.getElementById('increment').addEventListener('click',()=>mx.mutate('inc'));
+    const increment=document.getElementById('increment');
+    // WebKit does not focus native buttons on pointer click by default.
+    // This fixture deliberately supports click-then-keyboard interaction.
+    increment.addEventListener('click',()=>{increment.focus();mx.mutate('inc');});
     try{parent.document.body.textContent='ESCAPED';report.parent='escaped'}catch(e){report.parent=e.name}
     try{localStorage.setItem('leak','1');report.storage='escaped'}catch(e){report.storage=e.name}
     report.network=await fetch('${controls}/api/my/artifacts',{credentials:'include'}).then(()=>false,()=>true);
