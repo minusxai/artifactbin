@@ -21,6 +21,10 @@ hostname, with HTTPS/routing configured in app and proxy. Missing configuration
 refuses external asset resolution; it never falls back to contacting the CDN
 from author code. A local canvas with no external assets needs no CDN.
 
+## Contents
+
+Counter and canvas · Libraries and assets · State and compatibility.
+
 ## Counter and canvas
 
 ```jsx
@@ -77,11 +81,12 @@ as do supported dynamic image/script `src` assignments. Requests do not forward
 viewer credentials upstream. Unsupported methods or APIs are not a general HTTP
 proxy. Arbitrary `innerHTML` and CSS URL strings are **not automatically rewritten**.
 
-Rewriting is convenience, **CSP is enforcement**: the author frame can request
+Rewriting is convenience; **CSP enforces HTTP/resource destinations**: the frame can request
 only the configured public cached-asset origin, not arbitrary external hosts or
 the trusted controls origin. Unsupported/unrewritten requests are blocked.
 Sandbox and the protective wrapper restrict navigation; do not remove the wrapper
-or weaken its policies to make a library load.
+or weaken its policies to make a library load. WebRTC peer-connection constructors
+are disabled before author code and cannot be restored by it.
 
 ## State and compatibility
 
