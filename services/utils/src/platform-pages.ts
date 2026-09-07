@@ -18,22 +18,31 @@ export function platformPageResponse(main: string, controls: string, path: strin
   const params=new URLSearchParams(search);
   if(folderId && !/^[A-Za-z0-9]+$/.test(folderId))throw new Error('Invalid folder id');
   const config = JSON.stringify({main,controls,url:controls+(folderId?'/controls/folder/'+folderId:consent?'/controls/consent':PAGE_FRAME_PREFIX+path)+search,...(consent?{callback:params.get('redirect_uri'),state:params.get('state')??''}:{})}).replace(/</g,'\\u003c');
-  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>artifactbin</title><style nonce="${nonce}">html,body{margin:0;height:100%;background:#111113;color:#e7e5e4;font:15px system-ui}iframe{position:fixed;inset:0;width:100%;height:100%;border:0;background:transparent}#loading{position:fixed;inset:0;z-index:2;padding:24px;background:#111113}button{font:inherit;padding:8px 16px}[hidden]{display:none!important}</style></head><body><div id="loading" role="status">Loading artifactbin… <button id="retry" hidden aria-label="Retry loading app">Retry</button></div><iframe id="app-frame" title="Artifactbin app" referrerpolicy="no-referrer" allow="clipboard-write"></iframe><script nonce="${nonce}">(${platformPageRuntime.toString()})(${config},${isPlatformPage.toString()});</script></body></html>`;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>artifactbin</title><style nonce="${nonce}">html,body{margin:0;height:100%;background:#111113;color:#e7e5e4;font:15px system-ui}iframe{position:fixed;inset:0;width:100%;height:100%;border:0;background:transparent}#loading{position:fixed;inset:0;z-index:2;padding:24px;background:#111113}button{font:inherit;padding:8px 16px}[hidden]{display:none!important}</style></head><body><div id="loading" role="status">Loading artifactbin… <button id="retry" hidden aria-label="Retry loading app">Retry</button></div><iframe id="app-frame" title="Artifactbin app" referrerpolicy="no-referrer" allow="clipboard-write"></iframe><script nonce="${nonce}">(${platformPageRuntime.toString()})(${config},${isPlatformPage.toString()},{document,window,location,history});</script></body></html>`;
   return new Response(html,{headers:{'content-type':'text/html; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer','permissions-policy':'camera=(), microphone=(), geolocation=()','content-security-policy':`default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; frame-src ${controls}; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`}});
 }
 
+/** Only the APIs this emitted script uses; never introduces ambient DOM globals. */
+interface PlatformHost {
+  document:{title:string;getElementById(id:string):unknown};
+  window:{addEventListener(type:string,listener:(event:{source:unknown;origin:string;data?:Record<string,unknown>})=>void):void};
+  location:{hash:string;assign(url:string):void;replace(url:string):void};
+  history:{go(delta:number):void};
+}
 /** Serialized into the credential-free wrapper: no imports or private state. */
-function platformPageRuntime(config: {main: string;controls: string;url: string;callback?:string;state?:string},platformPath:(path:string)=>boolean) {
-  const frame=document.getElementById('app-frame') as HTMLIFrameElement;
-  const loading=document.getElementById('loading')!;
-  const retry=document.getElementById('retry') as HTMLButtonElement;
+function platformPageRuntime(config: {main: string;controls: string;url: string;callback?:string;state?:string},platformPath:(path:string)=>boolean,host:PlatformHost) {
+  const {document,window,location,history}=host;
+  // Fixed nodes belong to the static shell above, not author-supplied markup.
+  const frame=document.getElementById('app-frame') as {src:string;contentWindow:{postMessage(message:unknown,target:string):void}|null};
+  const loading=document.getElementById('loading') as {hidden:boolean;firstChild:{textContent:string|null}|null};
+  const retry=document.getElementById('retry') as {hidden:boolean;addEventListener(type:'click',listener:()=>void):void};
   let timer: ReturnType<typeof setTimeout>;
   const load=()=>{clearTimeout(timer);loading.hidden=false;retry.hidden=true;frame.src=config.url+location.hash;timer=setTimeout(()=>{retry.hidden=false;loading.firstChild!.textContent='The app is taking longer to load. ';},15000);};
   retry.addEventListener('click',load);
   const address=()=>frame.contentWindow?.postMessage({type:'mx:page:hash',hash:location.hash},config.controls);
   window.addEventListener('hashchange',address);
   window.addEventListener('popstate',address);
-  window.addEventListener('message',(event: MessageEvent)=>{
+  window.addEventListener('message',event=>{
     if(event.source!==frame.contentWindow || event.origin!==config.controls)return;
     if(event.data?.type==='mx:page:ready'){clearTimeout(timer);loading.hidden=true;address();return;}
     if(event.data?.type==='mx:page:title' && typeof event.data.title==='string'){document.title=event.data.title.slice(0,300);return;}
