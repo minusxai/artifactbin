@@ -13,7 +13,7 @@
  * the override is a var block rather than a new theme — a document keeps its
  * theme's palette, radii and rules and changes only the face.
  */
-import { FAMILY_RE } from '@/lib/webfonts';
+import { FAMILY_RE } from '@/lib/story/font-contract';
 import type { HelmetContent } from './helmet';
 
 /** The three slots a document may override, in the order the head declares them. */

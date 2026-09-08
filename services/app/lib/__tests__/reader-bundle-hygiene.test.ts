@@ -34,6 +34,7 @@ const READER_ENTRIES = [
  * bundles it instead — ~2.5 MB that only an owner who presses `code` may pay.
  */
 const FORBIDDEN = ['vega', 'vega-lite', 'vega-interpreter', 'vega-tooltip', '@monaco-editor/react', 'monaco-editor'];
+const SERVER_ONLY_FILES = ['lib/webfonts/index.ts','lib/db.ts','lib/object-store/index.ts'];
 
 /**
  * The SERVED document's own runtime (scripts/build-story-runtime → /story/),
@@ -163,6 +164,11 @@ describe('reader bundle hygiene', () => {
     expect(
       importer ? `${pkg} is statically imported via:\n    ${chainTo(importer, reach.parent)}` : null,
     ).toBeNull();
+  });
+
+  it.each(SERVER_ONLY_FILES)('never reaches server-only %s', (relative) => {
+    const file=path.join(ROOT,relative);
+    expect(reach.files.has(file)?`${relative} is statically imported via:\n    ${chainTo(file,reach.parent)}`:null).toBeNull();
   });
 });
 
