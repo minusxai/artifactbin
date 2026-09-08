@@ -10,6 +10,7 @@ export function createAuthenticatedTransport(id: string, fetcher: typeof fetch =
     const response = await fetcher(path, { ...init, credentials:'same-origin', signal: init.signal ? AbortSignal.any([controller.signal, init.signal]) : controller.signal });
     controller.signal.throwIfAborted();
     const body = asset ? await response.json().catch(() => ({error:'fetch_failed'})) : await response.json();
+    controller.signal.throwIfAborted();
     if (!response.ok && !asset) throw new Error(body.detail ?? body.error ?? `request failed (${response.status})`);
     return body;
   };

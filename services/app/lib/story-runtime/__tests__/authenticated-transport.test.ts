@@ -6,6 +6,14 @@ it('returns an explicit asset refusal so bound images clear stale content',async
   await expect(transport.importAsset!('https://private.test/a.png','image')).resolves.toEqual({refused:'blocked_address'});
   transport.dispose();
 });
+it('does not return data whose response body settles after document disposal',async()=>{
+  let finish!:(value:unknown)=>void;
+  const body=new Promise(resolve=>{finish=resolve;});
+  const response={ok:true,json:()=>body} as Response;
+  const transport=createAuthenticatedTransport('AbC123',vi.fn(async()=>response));
+  const pending=transport.run({},[]);await Promise.resolve();transport.dispose();finish({tables:{},errors:{}});
+  await expect(pending).rejects.toThrow();
+});
 
 it('uses scoped authenticated doors and cancels requests at document disposal', async () => {
   const fetcher = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({ok:true,dataset:'data',tables:{},errors:{},url:'/assets/cached'})));
