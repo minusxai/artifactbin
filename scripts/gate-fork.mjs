@@ -135,8 +135,9 @@ const copyRow = await forker.evaluate(
 check(copyRow.forked_from === doc.id, `the copy records its source (forked_from = ${copyRow.forked_from})`);
 check(copyRow.id !== doc.id, 'a new id — the original is untouched');
 
-const credit = forker.locator('[data-mx-inline-story]').locator('[data-mx-forked-from]');
-await credit.waitFor({ state: 'attached', timeout: 30000 });
+await openArtifactControls(forker);
+const credit = forker.locator('[data-mx-forked-from]');
+await credit.waitFor({ state: 'visible', timeout: 30000 });
 const creditText = await credit.innerText();
 check(creditText.toLowerCase().includes('forked from'), `the copy's credits name its source ("${creditText.trim()}")`);
 check(creditText.includes(doc.id), 'and the source is named by its address, not vaguely');
