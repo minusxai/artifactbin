@@ -143,6 +143,7 @@ describe('GET /api/page/artifact/:id', () => {
       nodes: [{ type: 'element', tag: 'div' }],
     });
     expect(anon.surface.surfaceCss).toContain('font-size:2.5rem');
+    expect(anon.surface.fontPreloads).toEqual(expect.arrayContaining([expect.stringMatching(/\.woff2$/)]));
     expect(anon.surface.preparedStory).toMatchObject({
       chrome:true,
       assetsUrl:`/a/${w.pub.id}/assets`,

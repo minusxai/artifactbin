@@ -32,7 +32,7 @@ import { assetsPath,resolvePath } from '@/lib/story/markup-csp';
 import {libraryUrls} from '@/lib/libraries';
 import {documentFonts} from '@/lib/story/document-fonts';
 import {webFontAssets} from '@/lib/webfonts';
-import {storyPresentationCss} from '@/lib/story/presentation-css';
+import {storyPresentationCss,storyPresentationFontPreloads} from '@/lib/story/presentation-css';
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -118,6 +118,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         authorCss: split.content.style || null,
         authorScript: split.content.script || null,
         surfaceCss: storyPresentationCss(design.theme,split.content,faces),
+        fontPreloads: storyPresentationFontPreloads(design.theme,faces),
       };
     })
     : null;
@@ -161,7 +162,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // running them here only held the owner's own page behind the SQL, with
       // the results inlined into its HTML (withBootstrap).
       dataflow: isDoc && artifact.source ? declarationsForRow(artifact) : null,
-      ...(prepared ? { preparedStory: prepared.story, authorCss: prepared.authorCss, authorScript: prepared.authorScript, surfaceCss:prepared.surfaceCss } : {}),
+      ...(prepared ? { preparedStory: prepared.story, authorCss: prepared.authorCss, authorScript: prepared.authorScript, surfaceCss:prepared.surfaceCss, fontPreloads:prepared.fontPreloads } : {}),
       accountSession: kind === 'account',
       anonSession: kind === 'anon',
       version: artifact.version,

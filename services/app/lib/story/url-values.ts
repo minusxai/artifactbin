@@ -121,6 +121,12 @@ export function readUrlValues(search: string, flow: Dataflow): Record<string, Sc
   return out;
 }
 
+/** Add a link's typed scalar choices without manufacturing a settled query state. */
+export function seedUrlValues<T extends {flow:Dataflow;values?:Record<string,Scalar>}>(search:string,input:T):T {
+  const selected=readUrlValues(search,input.flow);
+  return Object.keys(selected).length ? {...input,values:{...(input.values??{}),...selected}} : input;
+}
+
 /**
  * WHAT THE LINK SHOULD SAY about each Value, as a `$`-less map of name → the
  * param's text, or `null` for "there should be no param".

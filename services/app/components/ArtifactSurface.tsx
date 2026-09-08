@@ -41,7 +41,7 @@ import { useLiveArtifact } from '@/lib/story/use-live-artifact';
 import { STORY_READER_ACTION_MESSAGE, STORY_READER_ACTION_RESULT_MESSAGE, STORY_READER_CHROME_MESSAGE, type StoryReaderActionMessage, type StoryReaderActionResultMessage } from '@/lib/story-runtime/contract';
 import { STORY_ASSET_MESSAGE, STORY_ASSET_RESULT_MESSAGE, type StoryAssetRequest, type StoryAssetResult, STORY_DATA_MESSAGE, STORY_DOCUMENT_ACK_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_HELLO_MESSAGE, STORY_MUTATE_MESSAGE, STORY_MUTATE_RESULT_MESSAGE, STORY_PAINTED_MESSAGE, STORY_READER_MODE_MESSAGE, STORY_SCROLL_MESSAGE, type StoryDataUpdate, type StoryMutateRequest, type StoryMutateResult, type StoryScrollMessage, STORY_ADOPTS_MESSAGE, STORY_QUERY_MESSAGE, STORY_QUERY_RESULT_MESSAGE, isEditFrameMessage, isSessionMessage, isValuesMessage, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, type StoryDocumentUpdate, type StoryEditSelection, type StoryQueryRequest, type StoryQueryResult, type StorySelectionActionsMessage } from '@/lib/story-runtime/contract';
 import type { DataflowState } from '@/lib/story/dataflow';
-import { urlValuesSearch, writeUrlValues } from '@/lib/story/url-values';
+import { seedUrlValues, urlValuesSearch, writeUrlValues } from '@/lib/story/url-values';
 import { displayTitle } from '@/lib/story/title';
 import { formatFileSize } from '@/lib/file-display';
 import { resolveStoryMode } from '@/lib/data/story/story-themes';
@@ -68,6 +68,8 @@ const SocialPreviewDialog = dynamic(() => import('@/components/SocialPreviewDial
 export interface ArtifactSurfaceProps {
   /** Resolved server policy: false means snapshot-only, without reconnect attempts. */
   liveEnabled?: boolean;
+  /** Server-consumed first-head font preload URLs; the client needs no second discovery pass. */
+  fontPreloads?: string[];
   /**
    * The exporter's signed key, when this render IS a capture (server-parsed
    * from `?key=`). Null for every human render.
@@ -494,13 +496,14 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const frameRef = useRef<DocumentPeer | null>(null);
   const storyHostRef = useRef<HTMLDivElement>(null);
   const mountedStoryRef = useRef<MountedStory | null>(null);
+  const mountedUpdateRef = useRef<MountedStory | null>(null);
   const directMarkup = format === 'markup' && !captureKey;
   const localPresentation = directMarkup && !props.surfaceCss && !props.preparedStory ? storyBodyFor(source ?? '') : null;
   const directInset = APP_BAR_H + (editing ? EDIT_BAR_H : 0);
   useLayoutEffect(() => {
     if (!directMarkup || !storyHostRef.current) return;
     const split = props.preparedStory ? null : storyBodyFor(source ?? '');
-    const prepared = props.preparedStory ?? (split ? {
+    const basePrepared = props.preparedStory ?? (split ? {
       nodes: split.body,
       refData: {},
       colorMode: resolveStoryMode(theme, colorMode),
@@ -508,6 +511,9 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       chrome: true,
       ...(dataflow ? { dataflow } : {}),
     } satisfies StoryIslandData : null);
+    const prepared = basePrepared?.dataflow
+      ? {...basePrepared,dataflow:seedUrlValues(selectionRef.current,basePrepared.dataflow)}
+      : basePrepared;
     if (!prepared) { storyHostRef.current.textContent = source ?? ''; setFrameLoaded(true); return; }
     const host = storyHostRef.current;
     // React StrictMode intentionally tears an effect down and starts it again.
@@ -520,11 +526,13 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     const mounted = mountStory({ root: mountRoot, data: prepared, renderMode: 'render', peer: window, peerOrigin: window.location.origin,
       authorScript: props.authorScript ?? split?.content.script ?? null });
     mountedStoryRef.current = mounted;
+    mountedUpdateRef.current = mounted;
     const initialUpdate: StoryDocumentUpdate = { type: STORY_DOCUMENT_MESSAGE, nodes: prepared.nodes, glyphs: prepared.glyphs, compiledCss, authorCss: props.authorCss ?? split?.content.style ?? null };
     mounted.adopt(initialUpdate);
     setFrameLoaded(true);
     return () => {
       if (mountedStoryRef.current === mounted) mountedStoryRef.current = null;
+      if (mountedUpdateRef.current === mounted) mountedUpdateRef.current = null;
       frameRef.current = null;
       // Runtime resources and globals release now; mountStory defers only its
       // nested React-root unmount until parent reconciliation has completed.
@@ -535,6 +543,9 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   useLayoutEffect(() => {
     const mounted = mountedStoryRef.current;
     if (!directMarkup || !mounted) return;
+    // The mount already received this render's nodes/dataflow. Only later prop
+    // changes need adoption; replaying the initial flow starts its queries twice.
+    if (mountedUpdateRef.current === mounted) { mountedUpdateRef.current = null; return; }
     const split = props.preparedStory ? null : storyBodyFor(source ?? '');
     const nodes = props.preparedStory?.nodes ?? split?.body;
     if (!nodes) return;

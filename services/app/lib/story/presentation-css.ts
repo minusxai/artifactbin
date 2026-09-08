@@ -1,4 +1,4 @@
-import {getStoryFontCss,storyFontFaceCss} from '@/lib/data/story/story-fonts';
+import {criticalStoryFonts,getStoryFontCss,storyFontFaceCss} from '@/lib/data/story/story-fonts';
 import {STORY_COLUMN_CSS,STORY_DOCUMENT_CHROME_CSS,STORY_EMBED_CSS,STORY_TABLE_CSS} from '@/lib/story-runtime/chrome-css';
 import {STORY_BARE_TYPOGRAPHY_CSS} from '@/lib/story-surface/bare-typography';
 import {documentFontCss,documentFonts} from '@/lib/story/document-fonts';
@@ -16,4 +16,9 @@ export function storyPresentationCss(theme:StoryThemeName|null,helmet:HelmetCont
     faces.length?storyFontFaceCss(faces):'',
     documentFontCss(fonts),
   ].filter(Boolean).join('\n');
+}
+
+/** Font URLs the direct page must advertise in its first HTML head. */
+export function storyPresentationFontPreloads(theme:StoryThemeName|null,faces:WebFontAsset[]=[]):string[] {
+  return [...new Set([...criticalStoryFonts(theme??undefined),...faces.filter(face=>face.preload)].map(face=>face.url))];
 }
