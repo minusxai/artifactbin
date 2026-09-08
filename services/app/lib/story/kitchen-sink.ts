@@ -113,6 +113,7 @@ export function kitchenSinkMarkup(refs: KitchenSinkRefs): string {
       <DialogTrigger>Open dialog</DialogTrigger>
       <DialogContent aria-label="Kitchen sink dialog"><p>Dialog content opened from the gallery.</p><DialogClose>Close</DialogClose></DialogContent>
     </Dialog>
+    <Iframe title="Isolated gallery region" height={100}><p>Content isolated from the parent page.</p></Iframe>
     <div className="flex items-start gap-8">
       <TooltipProvider>
         <Tooltip defaultOpen>

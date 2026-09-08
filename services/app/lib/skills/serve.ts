@@ -28,9 +28,9 @@ import { ROOT_SKILL, SKILL_FILE_NAME, type SkillDir, type SkillFile, type SkillT
 const transportQuery = (transport: DocTransport) => transport === 'mcp' ? '?transport=mcp' : '';
 
 const DOCS_LISTING_HEADER = (base: string, tree: SkillTree, transport: DocTransport = 'curl') =>
-  `# artifactbin docs — one skill: the brief + ${tree.files.filter((f) => f.audience === 'agent' && f.ref).length} reference files; every file keeps its critical content at the TOP.
-# Read ${base}/docs/${ROOT_SKILL}/${SKILL_FILE_NAME}${transportQuery(transport)} first; its dispatch table says which reference to open. Lines: URL, when to read.
-# The tree as a folder: curl -s "${base}/docs?download=true${transport === 'mcp' ? '&transport=mcp' : ''}" | tar xz   (then grep -rl <term> skills/)`;
+  `# artifactbin docs — one skill, ${tree.files.filter((f) => f.audience === 'agent' && f.ref).length} references. Critical content at the top.
+# Read ${base}/docs/${ROOT_SKILL}/${SKILL_FILE_NAME}${transportQuery(transport)} first. Lines: URL, when to read.
+# Download: curl -s "${base}/docs?download=true${transport === 'mcp' ? '&transport=mcp' : ''}" | tar xz`;
 
 const line = (base: string, f: SkillFile, transport: DocTransport) => `${base}/docs/${f.path}${transportQuery(transport)}\t${f.description}`;
 

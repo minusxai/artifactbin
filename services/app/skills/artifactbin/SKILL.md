@@ -1,49 +1,42 @@
 ---
 name: artifactbin
 description: >-
-  Publish or edit documents over HTTP. Read first: publishing, layout, themes, datasets and the reference index.
+  Publish and edit artifacts: markup, data and HTTP API.
 read_first_max: 8192
 ---
 ## Read first — everything a straightforward document needs
 
-**Publish before you polish** — make the FIRST call a SKELETON: the real title,
-the theme and template you picked, the document's section headings, stubbed.
-Its response carries the `id` and the url `[[ base ]]/a/<id>`: hand it over at
-once and say it is live and still filling in. It is: an edit reaches an open reader in seconds.
-**The reading path never precedes the first publish**; each section then lands
-as one targeted `edit_artifact`.
+**Publish before you read** — FIRST create a SKELETON: real title, theme,
+template and stubbed section headings. Share its `[[ base ]]/a/<id>` URL immediately,
+labelled as still filling in. Then read the references and fill sections using
+targeted `edit_artifact` calls. Edits reach open readers live.
 
 [[ publishExample ]]
 
-Every write answers `markup_changed`: true = storing rewrote it (formatting, a
-hoisted `<Helmet>`) and the canonical `markup` rides back — edit against that.
-A 400 names exactly what to fix.
-**`title` is what a browser tab and link previews show** — always set it; the
-on-page heading is not it.
+Writes return `markup_changed` and canonical markup when formatting changed;
+edit against that source. A 400 names the fix. Always set `title`: browser tabs
+and link previews use it, not the on-page heading.
 
 [[ authRule ]]
 
-**Editing a published document** — send the CHANGE, not the whole file: [[ readBackCall ]] returns the current `markup` and an
-`edit_id`; pass it back with the exact text to swap:
+**Editing** — [[ readBackCall ]] returns `markup` and `edit_id`. Send the exact
+change, not the whole file:
 
 [[ editExample ]]
 
-`old_string` must appear EXACTLY ONCE. Prefer it to replacing the whole
-document: smaller, and a human may be reading live.
+`old_string` must appear EXACTLY ONCE; preserve concurrent human edits.
 
-**markup** is JSX treated as data: ordinary HTML tags for everything including
-prose (`h1 h2 p ul li blockquote table figure img`, inline `svg`) plus the
-component kit (`Card`, `Tabs`, `Badge`, `Grid`/`GridItem`,
-`SlideDeck`/`Slide`, `Icon`, and the data embeds `Question`,
-`DataTable`, `Number`), styled ONLY with Tailwind utilities via
-`className` — inline `style=` is rejected. There is no markdown.
+**markup** is JSX data, not Markdown: HTML prose and inline SVG, plus kit
+components (`Card`, `Tabs`, `Grid`, `SlideDeck`, `Icon`) and data embeds
+(`Question`, `DataTable`, `Number`). Style parent elements with Tailwind
+`className`; inline `style=` is rejected.
 
 **Guess rather than look up.** An unknown HTML tag is refused with a 400
 carrying the allowed set (`allowed_html_tags`), an unknown component the
 registry: a wrong guess costs one round trip. One exception:
 `[[ refusedTags | join(' ') ]]` are refused with NO list — never guess them
-(`<form>` and `<iframe>` most often). Custom CSS and JS live in ONE `<Helmet>`,
-which also holds `<title>`:
+(`<form>` and raw `<iframe>` most often). Parent CSS and declarations live
+in ONE `<Helmet>`, which also holds `<title>`:
 
 ```jsx
 <Helmet><title>What the tab shows</title><style>{`:root { --primary: #ff6a1f }`}</style></Helmet>
@@ -56,9 +49,11 @@ one column and widen: `grid-cols-1 @2xl:grid-cols-3`, and so does display
 type — `text-4xl @2xl:text-6xl`, never a bare `text-6xl` (60px type breaks a
 phone). Never a fixed pixel width.
 
-Rules: one self-contained document — no CDN `<script src>`,
-no external stylesheet (hard 400s at publish); a runtime `fetch()` is
-blocked by the sandbox; images are a `data:` URI or
+Parent markup is self-contained: no CDN scripts or external stylesheets.
+For custom DOM/canvas/JS, use managed `<Iframe>` ([markup-iframe](references/markup-iframe.md));
+its declared bundled script URLs and runtime fetches use cached assets.
+One legacy Helmet script runs in a hidden isolated realm, not the parent DOM.
+Parent images are a `data:` URI or
 any `https://` URL (publish copies it, your URL stays); web fonts: a Google family via
 `<meta name="font-display" content="Lobster" />`.
 
@@ -121,7 +116,9 @@ text flush to the viewport edge).
 | design craft — hierarchy, type, spacing, color, motifs | `design.md` |
 | tag/component allowlists, `<Helmet>`, layout | `markup.md` |
 | charts (vega specs), controls, `<Mutation>`, data formats | `markup-data.md` |
-| state | `markup-state.md` |
+| conditions, Dialog and local SQL state | `markup-state.md` |
+| isolated DOM/canvas, bundled scripts and cached assets | `markup-iframe.md` |
+| script signal subscriptions and mutation bridge | `markup-scripts.md` |
 | editable cells, tags and reference pickers | `markup-editing.md` |
 | scroll reveals and ambient motion classes | `markup-motion.md` |
 | Video embeds | `markup-video.md` |

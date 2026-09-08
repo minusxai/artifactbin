@@ -1,10 +1,13 @@
-import {render,waitFor} from '@testing-library/react';
+import {act,render,waitFor} from '@testing-library/react';
 import {it,expect} from 'vitest';
 import {StoryRuntimeApp} from '../StoryRuntimeApp';
 import {parseJsx} from '@/lib/jsx';
 import {STORY_UI_COMPONENTS} from '@/lib/story-ui/registry';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {createElement} from 'react';
+import {splitHelmet} from '@/lib/story/helmet';
+import {initialValues,initialTables} from '@/lib/story/dataflow';
+import {createDataflowStore} from '../store';
 it('reserves managed frame dimensions in the inert SSR registry',()=>{
   const html=renderToStaticMarkup(createElement(STORY_UI_COMPONENTS.Iframe,{title:'Demo',height:450,compiled:{html:'<p>secret</p>',scripts:[]}}));
   expect(html).toContain('height:450px');expect(html).toContain('aria-label="Demo"');expect(html).not.toContain('secret');
@@ -16,4 +19,24 @@ it('renders separate managed regions without author DOM in the parent',async()=>
   await waitFor(()=>expect(view.container.querySelectorAll('iframe')).toHaveLength(2));
   expect(view.container.querySelector('canvas,script')).toBeNull();
   expect(view.container.textContent).not.toContain('Inner');view.unmount();
+});
+it('composes reactive branches with isolated frames and disposes the hidden branch',async()=>{
+  const parsed=parseJsx('<Helmet><Value name="visible" type="boolean" default={true}/></Helmet>{$visible ? <Iframe id="view" title="Conditional canvas"><style>{`canvas {position:fixed}`}</style><canvas/><script>{`window.label = "$visible";`}</script></Iframe> : <p>Closed</p>}');
+  if(!parsed.ok)throw Error(parsed.error);
+  const {content,body:nodes}=splitHelmet(parsed.nodes);
+  const flow={values:content.values,queries:content.queries,mutations:content.mutations};
+  const state={values:initialValues(flow),tables:initialTables(flow),errors:{}};
+  const store=createDataflowStore({flow,state});
+  const view=render(<StoryRuntimeApp nodes={nodes} refData={{}} colorMode="light" store={store}/>);
+  await waitFor(()=>expect(view.container.querySelectorAll('iframe')).toHaveLength(1));
+  expect(view.container.querySelector('canvas,style,script')).toBeNull();
+  const oldFrame=view.container.querySelector('iframe')!;
+  act(()=>store.setValue('visible',false));
+  await waitFor(()=>expect(view.container.querySelector('iframe')).toBeNull());
+  expect(oldFrame.isConnected).toBe(false);
+  expect(view.getByText('Closed')).toBeVisible();
+  act(()=>store.setValue('visible',true));
+  await waitFor(()=>expect(view.container.querySelectorAll('iframe')).toHaveLength(1));
+  expect(view.container.querySelector('iframe')).not.toBe(oldFrame);
+  view.unmount();
 });

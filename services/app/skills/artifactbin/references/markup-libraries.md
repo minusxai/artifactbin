@@ -4,9 +4,11 @@ description: "Libraries (Three.js), file uploads and script refs."
 ---
 ## Read first
 
-Use an ordinary canvas and your Helmet script. `artifact.library('three')`
-loads the hosted library; `artifact.resolve('ref:<id>')` resolves readable file
-bytes. Private assets never resolve. No custom scene components.
+Put canvas and scripts inside managed [Iframe](markup-iframe.md). Declare a
+self-contained library bundle URL; it is cached through the asset pipeline.
+Fetch public file bytes with `fetch('ref:<id>')`. Private assets never resolve.
+Legacy Helmet DOM scripts and `artifact.library/resolve` calls must migrate;
+those helpers are not exposed inside the isolated realm.
 
 ## Contents
 
@@ -15,24 +17,30 @@ Libraries · File uploads.
 ## Libraries
 
 
-Use the platform's optional library registry from your existing Helmet script:
-`await artifact.library('three')` returns Three.js core plus `OrbitControls`
-and `GLTFLoader` (currently pinned to 0.185.1). No custom scene components or
-CDN imports. A library downloads only when requested; repeated calls reuse it.
+Any bundled HTTPS library URL can be declared as `<script src>`. The example
+uses a self-contained hosted Three.js bundle with OrbitControls and GLTFLoader;
+it goes through the same cache as a third-party CDN bundle, not a special exception.
+Module dependencies must be bundled; relative imports and worker/decoder trees
+are not packaged automatically. Managed external assets require the deployment's
+asset hostname to be configured.
 
 ```jsx
-<Helmet><script>{`
+<Iframe title="3D model" height={450}>
+<style>{`canvas {width:100%;height:100%;display:block}`}</style>
+<canvas id="scene" width="800" height="450" />
+<p id="scene-status" role="status" />
+<script id="three-bundle" type="module" src="https://artifactbin.dev/libraries/three-0.185.1/index.js" />
+<script>{`
 (async () => {
-  const THREE = await artifact.library('three');
+  const THREE = await import(document.getElementById('three-bundle').src);
   const canvas = document.getElementById('scene');
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(45, 800 / 450, 0.1, 100);
   camera.position.z = 4;
   scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 3));
-  const model = await new THREE.GLTFLoader().loadAsync(
-    await artifact.resolve('ref:Abc123')
-  );
+  const bytes = await (await fetch('ref:Abc123')).arrayBuffer();
+  const model = await new THREE.GLTFLoader().parseAsync(bytes, '');
   scene.add(model.scene);
   const controls = new THREE.OrbitControls(camera, canvas);
   function resize() {
@@ -62,14 +70,13 @@ CDN imports. A library downloads only when requested; repeated calls reuse it.
     renderer.dispose();
   });
 })().catch(error => { document.getElementById('scene-status').textContent = error.message; });
-`}</script></Helmet>
-<canvas id="scene" width="800" height="450" className="w-full aspect-video" />
-<p id="scene-status" role="status" />
+`}</script>
+</Iframe>
 ```
 
-Replace `Abc123` with the uploaded file ID. `artifact.resolve('ref:<id>')`
-returns a URL any library can load. It supports uploaded files, images and
-PDFs; private, deleted and missing assets reject with `not found`. A document's
+Replace `Abc123` with the uploaded file ID. Managed `ref:<id>` loads support
+public uploaded files, images and PDFs; private, deleted and missing assets
+are refused. A document's
 visibility never grants access to its assets. Resolution is available after
 publishing. An already-loaded asset remains in memory until the page releases it.
 
@@ -106,7 +113,7 @@ The reply includes `id`, `rawUrl`, `filename`, `contentType`, and `bytes`.
 The file's page offers a download; arbitrary formats do not get a custom
 preview. Account-owned files default to unlisted, like other byte assets.
 Private files remain private: author scripts always resolve them as not found.
-Use `await artifact.resolve('ref:<id>')` in scripts; see [markup](markup.md).
+Use `fetch('ref:<id>')` inside Iframe; see [managed assets](markup-iframe.md).
 
 Accepted: mp4, webm, mov; mp3, wav, ogg, m4a, flac; glb, gltf, obj, fbx, stl;
 png, jpg, jpeg, webp, gif, svg, avif; pdf, txt, csv, json, xlsx; woff, woff2,
