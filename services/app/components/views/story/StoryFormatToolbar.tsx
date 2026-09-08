@@ -17,6 +17,7 @@
 import type {DocumentPeer} from '@/lib/story/document-peer';
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
+import { useTrustedPortalContainer } from '@/components/TrustedUi';
 import {
   AArrowDown, AArrowUp, AlignCenter, AlignJustify, AlignLeft, AlignRight,
   ArrowDownFromLine, ArrowDownToLine, ArrowLeftFromLine, ArrowLeftToLine,
@@ -69,6 +70,7 @@ export interface StoryFormatToolbarProps {
 export default function StoryFormatToolbar({
   selection, frameRef, onApply, onApplyLink, onSelect, onDelete, onComment,
 }: StoryFormatToolbarProps) {
+  const portalContainer = useTrustedPortalContainer();
   const [linkDraft, setLinkDraft] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const linkInputRef = useRef<HTMLInputElement>(null);
@@ -347,6 +349,6 @@ export default function StoryFormatToolbar({
         </div>
       )}
     </div>,
-    document.body,
+    portalContainer ?? document.body,
   );
 }

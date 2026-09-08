@@ -9,6 +9,7 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 // both survive and stylesheet order decides which one paints.
 import { clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
+import { useTrustedPortalContainer } from './TrustedUi'
 
 const TooltipPortalContext = React.createContext(true)
 
@@ -82,6 +83,7 @@ function TooltipContent({
 }) {
   const inheritedPortalled = React.useContext(TooltipPortalContext)
   const isPortalled = portalled ?? inheritedPortalled
+  const portalContainer = useTrustedPortalContainer()
   const content = (
     <TooltipPrimitive.Content
       data-slot="tooltip-content"
@@ -111,7 +113,7 @@ function TooltipContent({
 
   return isPortalled
     ? (
-        <TooltipPrimitive.Portal>
+        <TooltipPrimitive.Portal container={portalContainer ?? undefined}>
           {/* Theme tokens are scoped to data-mx-theme-host. A body portal is
               outside the app/file host, so it must carry its own token scope. */}
           <div data-mx-theme-host="">{content}</div>

@@ -19,6 +19,7 @@
 import {appFetch as fetch,appUrl,getArtifactAddress} from '@/web/api-origin';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useTrustedPortalContainer } from './TrustedUi';
 import { Crop, Check, EyeOff, Globe, Link as LinkIcon, Lock, PenLine, X } from 'lucide-react';
 import { SelectMenu } from '@/components/SelectMenu';
 import { Tooltip } from '@/components/Tooltip';
@@ -423,6 +424,7 @@ function SharePanel({ onClose, children, title }: {
   onClose: () => void;
   children: React.ReactNode;
 }) {
+  const portalContainer = useTrustedPortalContainer();
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -469,6 +471,6 @@ function SharePanel({ onClose, children, title }: {
         </div>
       </section>
     </div>,
-    document.body,
+    portalContainer ?? document.body,
   );
 }

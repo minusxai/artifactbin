@@ -13,6 +13,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useTrustedPortalContainer } from './TrustedUi';
 import { Activity as ActivityIcon, Maximize2, X } from 'lucide-react';
 import { Tooltip } from '@/components/Tooltip';
 import { dateStamp } from '@/components/ui';
@@ -140,6 +141,7 @@ function ActivitySection({ mine, following, compact, hidden = 0, onExpand, expan
 }
 
 function ActivityDialog({ mine, following, onClose }: { mine: FeedItem[]; following: FeedItem[]; onClose: () => void }) {
+  const portalContainer = useTrustedPortalContainer();
   const panel = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -152,10 +154,11 @@ function ActivityDialog({ mine, following, onClose }: { mine: FeedItem[]; follow
       if (stops.length === 0) return;
       const first = stops[0];
       const last = stops[stops.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
+      const activeElement = (panel.current.getRootNode() as Document | ShadowRoot).activeElement;
+      if (event.shiftKey && activeElement === first) {
         event.preventDefault();
         last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
+      } else if (!event.shiftKey && activeElement === last) {
         event.preventDefault();
         first.focus();
       }
@@ -197,7 +200,7 @@ function ActivityDialog({ mine, following, onClose }: { mine: FeedItem[]; follow
         </div>
       </div>
     </div>,
-    document.body,
+    portalContainer ?? document.body,
   );
 }
 

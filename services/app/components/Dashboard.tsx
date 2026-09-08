@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useTrustedPortalContainer } from './TrustedUi';
 import { Activity, Database, Eye, FileText, GitFork, Heart, LayoutDashboard, Maximize2, Users, X, type LucideIcon } from 'lucide-react';
 import dynamic from '@/lib/dynamic';
 import { Tooltip } from '@/components/Tooltip';
@@ -287,6 +288,7 @@ export function DashboardContent({
 }
 
 function DashboardDialog({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  const portalContainer = useTrustedPortalContainer();
   const panel = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -299,10 +301,11 @@ function DashboardDialog({ children, onClose }: { children: React.ReactNode; onC
       if (stops.length === 0) return;
       const first = stops[0];
       const last = stops[stops.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
+      const activeElement = (panel.current.getRootNode() as Document | ShadowRoot).activeElement;
+      if (event.shiftKey && activeElement === first) {
         event.preventDefault();
         last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
+      } else if (!event.shiftKey && activeElement === last) {
         event.preventDefault();
         first.focus();
       }
@@ -344,7 +347,7 @@ function DashboardDialog({ children, onClose }: { children: React.ReactNode; onC
         </div>
       </div>
     </div>,
-    document.body,
+    portalContainer ?? document.body,
   );
 }
 

@@ -22,6 +22,7 @@
 import {appFetch as fetch} from '@/web/api-origin';
 import * as React from 'react';
 import { createPortal } from 'react-dom';
+import { useTrustedPortalContainer } from './TrustedUi';
 import { Folder, X } from 'lucide-react';
 
 export interface PickerFolder { id: string; title: string | null; ancestor_ids: string[] }
@@ -186,6 +187,7 @@ export function MoveMenu({ row, folders, onMoved, onClose }: {
   onClose: () => void;
 }): React.ReactElement {
   const anchor = React.useRef<HTMLSpanElement>(null);
+  const portalContainer = useTrustedPortalContainer();
   const [floatingStyle, setFloatingStyle] = React.useState<React.CSSProperties | null>(null);
 
   /*
@@ -249,7 +251,7 @@ export function MoveMenu({ row, folders, onMoved, onClose }: {
           onClose={onClose}
           floatingStyle={floatingStyle}
         />,
-        document.body,
+        portalContainer ?? document.body,
       )}
     </>
   );

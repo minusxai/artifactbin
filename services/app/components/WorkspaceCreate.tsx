@@ -3,6 +3,7 @@
 import {appFetch as fetch} from '@/web/api-origin';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useTrustedPortalContainer } from './TrustedUi';
 import { ChevronDown, Database, FilePlus2, FolderPlus, Plus, Trash2, X } from 'lucide-react';
 import GetStarted from '@/components/GetStarted';
 
@@ -20,6 +21,7 @@ function CreateDialog({
   onCreated: () => void;
 }) {
   const [name, setName] = useState('');
+  const portalContainer = useTrustedPortalContainer();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const panel = useRef<HTMLDivElement>(null);
@@ -34,10 +36,11 @@ function CreateDialog({
       if (stops.length === 0) return;
       const first = stops[0];
       const last = stops[stops.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
+      const activeElement = (panel.current.getRootNode() as Document | ShadowRoot).activeElement;
+      if (event.shiftKey && activeElement === first) {
         event.preventDefault();
         last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
+      } else if (!event.shiftKey && activeElement === last) {
         event.preventDefault();
         first.focus();
       }
@@ -151,7 +154,7 @@ function CreateDialog({
         )}
       </div>
     </div>,
-    document.body,
+    portalContainer ?? document.body,
   );
 }
 

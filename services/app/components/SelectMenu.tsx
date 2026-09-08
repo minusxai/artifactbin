@@ -26,6 +26,7 @@
 import { Check, ChevronDown } from 'lucide-react';
 import * as PopoverPrimitive from '@radix-ui/react-popover';
 import { useState } from 'react';
+import { useTrustedPortalContainer } from './TrustedUi';
 
 export interface SelectMenuOption {
   value: string;
@@ -51,6 +52,7 @@ export function SelectMenu({
   placeholder?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const portalContainer = useTrustedPortalContainer();
   /** Keyboard cursor while open; seeded on the current value so arrows start from it. */
   const [active, setActive] = useState(0);
 
@@ -99,7 +101,7 @@ export function SelectMenu({
         </PopoverPrimitive.Trigger>
       </div>
 
-      <PopoverPrimitive.Portal>
+      <PopoverPrimitive.Portal container={portalContainer ?? undefined}>
         <PopoverPrimitive.Content
           role="listbox"
           aria-label={`${ariaLabel} options`}
