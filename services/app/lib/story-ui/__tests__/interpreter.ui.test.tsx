@@ -61,6 +61,13 @@ describe('rendering basics', () => {
     expect(ps[0].getAttribute('data-mx-ast')).toBe('0.0');
     expect(ps[1].getAttribute('data-mx-ast')).toBe('0.1');
   });
+
+  it.each(['data-mx-ast','data-MX-AST'])('does not let authored %s redirect an editor target', (attribute) => {
+    const {container}=mount(`<p id="AAAA" ${attribute}="1">Edit me</p><Card ${attribute}="0">Other</Card>`);
+    expect(container.querySelector('#AAAA')?.getAttribute('data-mx-ast')).toBe('0');
+    expect(screen.getByLabelText('stub-card').getAttribute('data-mx-ast')).toBe('1');
+    expect(propsProbe.at(-1)?.['data-mx-ast']).toBe('1');
+  });
 });
 
 describe('controlled → uncontrolled prop mapping (components only)', () => {
