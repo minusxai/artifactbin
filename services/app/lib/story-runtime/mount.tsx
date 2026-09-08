@@ -14,7 +14,7 @@ import { createDocumentTransport } from './document-transport';
 import { createAuthorScriptSession } from './author-script';
 import { installMx } from './mx';
 import { applyDocumentChrome, isStoryDocumentUpdate, type StoryOwnedStyles } from './document-update';
-import { readerMode } from './reader-mode';
+import { applyReaderMode, readerMode } from './reader-mode';
 import { syncValuesToUrl } from './url-values-sync';
 import { capturePristine } from './pristine';
 import type { FrameEditSession } from './edit/session';
@@ -33,6 +33,7 @@ export interface StoryMountOptions {
 }
 export interface MountedStory {
   adopt(update: StoryDocumentUpdate): void;
+  setMode(mode:'light'|'dark'):void;
   dispose(): void;
 }
 
@@ -60,6 +61,15 @@ export function mountStory(_options: StoryMountOptions): MountedStory {
   };
   globalLeases.set(win, {owner, baseline});
   let disposed = false;
+  const ownsAppearance=()=>!disposed&&globalLeases.get(win)?.owner===owner;
+  const appAppearance=(event:Event)=>{
+    const mode=(event as CustomEvent<unknown>).detail;
+    if(!ownsAppearance()||(mode!=='dark'&&mode!=='light'))return;
+    baseline.theme=mode==='dark'?'dark':null;
+    baseline.dark=mode==='dark';baseline.light=mode==='light';
+    event.preventDefault();
+  };
+  win.addEventListener('mx:app:appearance',appAppearance);
   let current = options.data;
   let readerOverride = readerMode(win);
   if (readerOverride && readerOverride !== current.colorMode) current = { ...current, colorMode: readerOverride };
@@ -126,12 +136,14 @@ export function mountStory(_options: StoryMountOptions): MountedStory {
   const ownHook = (name: string, value: unknown) => { hooks[name] = value; };
   ownHook(STORY_ADOPT_HOOK, adopt);
   ownHook(STORY_DATA_HOOK, (datasets: string[]) => { if (!disposed) store.invalidateDatasets(datasets); });
-  ownHook(STORY_MODE_HOOK, (mode: 'light' | 'dark') => {
-    if (disposed) return;
+  const setMode=(mode:'light'|'dark')=>{
+    if (!ownsAppearance()) return;
     readerOverride = mode;
     current = { ...current, colorMode: mode };
+    applyReaderMode(doc,mode);
     render();
-  });
+  };
+  ownHook(STORY_MODE_HOOK,setMode);
   const stopUrl = current.dataflow
     ? syncValuesToUrl(store, () => current.dataflow?.flow ?? EMPTY_DATAFLOW, {
       ...(channel ? { post: (values) => channel.post({ type: STORY_VALUES_MESSAGE, nonce: channel.nonce, values } satisfies StoryValuesMessage) }
@@ -215,12 +227,14 @@ export function mountStory(_options: StoryMountOptions): MountedStory {
 
   return {
     adopt,
+    setMode,
     dispose() {
       if (disposed) return;
       disposed = true;
       win.clearTimeout(readyTimer);
       stopUrl();
       win.removeEventListener('message', onMessage);
+      win.removeEventListener('mx:app:appearance',appAppearance);
       for (const timer of timers) win.clearTimeout(timer);
       edit?.dispose(); annotate?.dispose(); selection?.dispose();
       ownedStyles.compiled?.remove(); ownedStyles.author?.remove();

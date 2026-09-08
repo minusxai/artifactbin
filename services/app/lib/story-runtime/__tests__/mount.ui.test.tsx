@@ -13,6 +13,24 @@ let mounted: MountedStory | undefined;
 afterEach(async () => { await act(async () => { mounted?.dispose(); }); mounted = undefined; document.body.replaceChildren(); vi.restoreAllMocks(); });
 
 describe('reusable story runtime lifecycle', () => {
+  it('retains the latest app choice across A to B and ignores late A appearance work',async()=>{
+    const aHost=document.createElement('div'), bHost=document.createElement('div');document.body.append(aHost,bHost);
+    const data={nodes:nodes('<p>Page</p>'),refData:{},colorMode:'light' as const,chrome:false};
+    let a!:MountedStory;
+    await act(async()=>{a=mountStory({root:aHost,data,renderMode:'render',peerOrigin:location.origin});
+      a.adopt({type:STORY_DOCUMENT_MESSAGE,nodes:data.nodes,theme:'modernist',colorMode:'light'});
+      window.dispatchEvent(new CustomEvent('mx:app:appearance',{cancelable:true,detail:'dark'}));
+      a.setMode('dark');
+      mounted=mountStory({root:bHost,data,renderMode:'render',peerOrigin:location.origin});
+      mounted.adopt({type:STORY_DOCUMENT_MESSAGE,nodes:data.nodes,theme:'industry',colorMode:'light'});
+    });
+    await act(async()=>{a.dispose();a.setMode('dark');});
+    expect(document.documentElement).toHaveAttribute('data-theme','industry');
+    expect(document.documentElement).toHaveClass('light');
+    await act(async()=>mounted!.dispose());
+    expect(document.documentElement).toHaveAttribute('data-theme','dark');
+    document.documentElement.removeAttribute('data-theme');document.documentElement.className='';
+  });
   it('adopts newly introduced server-resolved icon glyphs without reloading', async () => {
     const host = document.createElement('div'); document.body.append(host);
     await act(async () => { mounted = mountStory({ root: host, peerOrigin: window.location.origin, renderMode: 'render',

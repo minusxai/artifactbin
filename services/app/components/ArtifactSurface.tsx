@@ -564,6 +564,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const readerMode = readerModeOverride ?? resolveStoryMode(shownTheme, shownColorMode);
   const setReaderMode = useCallback((mode: AppearanceMode) => {
     setReaderModeOverride(mode);
+    mountedStoryRef.current?.setMode(mode);
     frameRef.current?.contentWindow?.postMessage({ type: STORY_READER_MODE_MESSAGE, mode }, '*');
   }, []);
 
@@ -571,6 +572,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   // reader's preference when its new runtime announces itself.
   useEffect(() => {
     if (!readerModeOverride || !sessionNonce) return;
+    mountedStoryRef.current?.setMode(readerModeOverride);
     frameRef.current?.contentWindow?.postMessage({ type: STORY_READER_MODE_MESSAGE, mode: readerModeOverride }, '*');
   }, [frameNonce, readerModeOverride, sessionNonce]);
 

@@ -289,10 +289,13 @@ const currentAppAppearance = (): AppearanceMode =>
 function applyAppAppearance(mode: AppearanceMode) {
   // Light is the default and carries NO attribute (app/globals.css puts it on
   // bare `:root`), so dark is the one that gets stamped.
-  if (mode === 'dark') document.documentElement.dataset.theme = 'dark';
-  else delete document.documentElement.dataset.theme;
   try { localStorage.setItem('mx_theme', mode); } catch { /* private mode */ }
-  window.dispatchEvent(new CustomEvent('mx:app:appearance',{detail:mode}));
+  // A mounted document owns its authored theme. Its trusted lease retains
+  // this app preference for departure while Shadow UI updates independently.
+  if(window.dispatchEvent(new CustomEvent('mx:app:appearance',{detail:mode,cancelable:true}))){
+    if (mode === 'dark') document.documentElement.dataset.theme = 'dark';
+    else delete document.documentElement.dataset.theme;
+  }
 }
 
 export function PageControls({
