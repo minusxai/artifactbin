@@ -233,6 +233,8 @@ export function session(o: ProxyOptions): Part<ProxyEnv> {
       if(!value)return;
       const nextSession=decodeAgentSession(value,o.cookieSecret),primary=nextSession?.tokenIds.at(-1);
       if(!nextSession?.sessionId||!primary){c.res.headers.append('set-cookie',`${name}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${o.secure?'; Secure':''}`);return;}
+      o.tokens.invalidate(primary);
+      if(!await o.tokens.byId(primary)){c.res.headers.append('set-cookie',`${name}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${o.secure?'; Secure':''}`);return;}
       await browser.issue(nextSession.sessionId,primary);
     }),
   };
@@ -378,7 +380,9 @@ async function resolveActor(request: Request, o: ProxyOptions): Promise<Actor> {
     return ANONYMOUS;
   }
   const secure = o.secure ?? false;
-  const held = decodeAgentSession(readCookie(request.headers.get('cookie'), cookieName(secure)), o.cookieSecret);
+  let held = decodeAgentSession(readCookie(request.headers.get('cookie'), cookieName(secure)), o.cookieSecret);
+  const browser=agentBrowserOf(o),heldPrimary=held?.tokenIds.at(-1);
+  if(browser&&(!held?.sessionId||!heldPrimary||!await browser.live(held.sessionId,heldPrimary)))held=null;
   const heldIds = held?.tokenIds.length ? { heldTokenIds: held.tokenIds } : {};
   const session = await o.sessions.resolve(request).catch(() => null);
   if (session) {
@@ -392,8 +396,6 @@ async function resolveActor(request: Request, o: ProxyOptions): Promise<Actor> {
   }
   const lastHeld = held?.tokenIds[held.tokenIds.length - 1];
   if (lastHeld !== undefined) {
-    const browser=agentBrowserOf(o);
-    if(browser&&(!held?.sessionId||!await browser.live(held.sessionId,lastHeld)))return ANONYMOUS;
     const token = await o.tokens.byId(lastHeld);
     if (token && tokenFitsRequest(token, request, o)) return { credential: 'agent-cookie', tokenId: token.id, ...(token.userId ? { userId: token.userId } : {}), ...heldIds };
   }

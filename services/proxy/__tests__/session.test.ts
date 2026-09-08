@@ -44,7 +44,9 @@ describe('the session part', () => {
     const app = await proxy({
       sessions: { resolve: async () => ({ userId: 'usr_2', email: 's@example.com', emailVerified: true }) },
     });
-    await app.request('/api/artifacts', { headers: { cookie: `${cookieName(false)}=${await encodeAgentSession({ tokenIds: ['tok_h'] }, 'test-cookie-secret-00000000000000000000')}` } });
+    const sessionId='h'.repeat(43);
+    await testDb().query("INSERT INTO auth.credentials(kind,credential_hash,subject_id,expires_at) VALUES ('agent-browser',$1,'tok_h',now()+interval '30 days')",[createHash('sha256').update(sessionId).digest('hex')]);
+    await app.request('/api/artifacts', { headers: { cookie: `${cookieName(false)}=${await encodeAgentSession({ tokenIds: ['tok_h'],sessionId }, 'test-cookie-secret-00000000000000000000')}` } });
     expect(seenActor).toMatchObject({ credential: 'session', userId: 'usr_2', email: 's@example.com', emailVerified: true, heldTokenIds: ['tok_h'] });
   });
   it('authenticates the agent cookie as agent-cookie by its primary (last) id', async () => {

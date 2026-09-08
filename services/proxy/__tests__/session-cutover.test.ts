@@ -1,14 +1,14 @@
 import {beforeEach,describe,expect,it} from 'vitest';
 import {createHash} from 'node:crypto';
 import {encodeAgentSession,setCookieHeader} from '@artifactbin/utils';
-import {createProxy} from '../src/parts';
+import {createProxy,type ProxyOptions} from '../src/parts';
 import {ensureProxySchema} from '../src/schema';
 import {testDb} from './helpers';
 
 const secret='restore-session-cutover-secret'.padEnd(32,'0');
 const sessionId='s'.repeat(43);
 const token={id:'tok_live',userId:null};
-const options=()=>({
+const options=():ProxyOptions=>({
   env:{PROXY__RATE_LIMIT_CONFIG_FILE:'../proxy/dev_rate_limits.yml'},cookieSecret:secret,identityDb:testDb(),
   sessions:{resolve:async()=>null},
   tokens:{byToken:async()=>null,byId:async(id:string)=>id===token.id?token:null,invalidate:()=>{}},
@@ -29,6 +29,11 @@ describe('agent browser session rollback compatibility',()=>{
     const legacy=setCookieHeader(encodeAgentSession({tokenIds:[token.id]},secret),false).split(';')[0]!;
     expect(await (await createProxy(options()).request('http://app.test/a/x',{headers:{cookie:legacy}})).json()).toEqual({credential:'none'});
   });
+  it('keeps the account session but drops held token authority from a revoked browser cookie',async()=>{
+    await testDb().query("INSERT INTO auth.credentials(kind,credential_hash,subject_id,expires_at,deleted_at) VALUES ('agent-browser',$1,$2,now()+interval '30 days',now())",[createHash('sha256').update(sessionId).digest('hex'),token.id]);
+    const configured=options();configured.sessions={resolve:async()=>({userId:'usr_other',email:'other@example.test'})};
+    expect(await (await createProxy(configured).request('http://app.test/a/x',{headers:{cookie:await cookie()}})).json()).toEqual({credential:'session',userId:'usr_other',email:'other@example.test'});
+  });
   it('registers a new full cookie and revokes it when that browser disconnects',async()=>{
     const issued=await cookie();
     let response:Response|null=new Response(null,{status:204,headers:{'set-cookie':issued+'; Path=/; HttpOnly; SameSite=Lax'}});
@@ -41,5 +46,12 @@ describe('agent browser session rollback compatibility',()=>{
     await proxy.request('http://app.test/api/session/token',{method:'DELETE',headers:{cookie:issued}});
     response=null;
     expect(await (await proxy.request('http://app.test/a/x',{headers:{cookie:issued}})).json()).toEqual({credential:'none'});
+  });
+  it('does not register a cookie whose primary token is no longer live',async()=>{
+    const deadValue=encodeAgentSession({tokenIds:['tok_dead'],sessionId},secret);
+    const configured=options();configured.upstream=async()=>new Response(null,{status:204,headers:{'set-cookie':`mx-agent-session=${deadValue}; Path=/`}});
+    const response=await createProxy(configured).request('http://app.test/api/session/token',{method:'POST'});
+    expect(response.headers.getSetCookie().at(-1)).toContain('Max-Age=0');
+    expect((await testDb().query("SELECT 1 FROM auth.credentials WHERE kind='agent-browser'")).rows).toHaveLength(0);
   });
 });
