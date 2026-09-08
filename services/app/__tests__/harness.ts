@@ -67,19 +67,31 @@ export function request(path: string, opts: RequestOptions = {}): Request {
 export async function agentCookie(tokenIds: string[]): Promise<string> {
   const value = await encodeAgentSession({ tokenIds });
   const cookie = `${AGENT_COOKIE}=${value}`;
-  const session = decodeAgentSessionEnvelope(value, AUTH_SECRET);
-  if (session?.sessionId && tokenIds.length) {
-    const db = await getDb();
-    // The proxy owns this schema in production; route tests model only its
-    // browser-liveness row, without importing the proxy package into app.
-    await db.query('CREATE SCHEMA IF NOT EXISTS auth');
-    await db.query('CREATE TABLE IF NOT EXISTS auth.credentials (kind text NOT NULL, credential_hash text NOT NULL, subject_id text NOT NULL, expires_at timestamptz NOT NULL, consumed_at timestamptz, deleted_at timestamptz)');
-    await db.query(
-      "INSERT INTO auth.credentials(kind,credential_hash,subject_id,expires_at) VALUES ('agent-browser',$1,$2,now()+interval '30 days')",
-      [createHash('sha256').update(session.sessionId).digest('hex'), tokenIds.at(-1)],
-    );
-  }
+  await registerAgentCookieValue(value);
   return cookie;
+}
+
+async function registerAgentCookieValue(value: string, previousValue?: string): Promise<void> {
+  const session = decodeAgentSessionEnvelope(value, AUTH_SECRET);
+  if (!session?.sessionId || !session.tokenIds.length) return;
+  const db = await getDb();
+  // The proxy owns this schema in production; route tests model only its
+  // browser-liveness row, without importing the proxy package into app.
+  await db.query('CREATE SCHEMA IF NOT EXISTS auth');
+  await db.query('CREATE TABLE IF NOT EXISTS auth.credentials (kind text NOT NULL, credential_hash text NOT NULL, subject_id text NOT NULL, expires_at timestamptz NOT NULL, consumed_at timestamptz, deleted_at timestamptz)');
+  const previous = decodeAgentSessionEnvelope(previousValue, AUTH_SECRET);
+  if (previous?.sessionId) await db.query("UPDATE auth.credentials SET deleted_at=now() WHERE kind='agent-browser' AND credential_hash=$1 AND deleted_at IS NULL", [createHash('sha256').update(previous.sessionId).digest('hex')]);
+  await db.query(
+    "INSERT INTO auth.credentials(kind,credential_hash,subject_id,expires_at) VALUES ('agent-browser',$1,$2,now()+interval '30 days')",
+    [createHash('sha256').update(session.sessionId).digest('hex'), session.tokenIds.at(-1)],
+  );
+}
+
+/** Model the proxy's post-response cookie registration around a direct route call. */
+export async function registerAgentCookie(response: Response, previousCookie?: string): Promise<void> {
+  const next = cookieValue(response).value;
+  const previous = previousCookie?.split(';').map(part => part.trim()).find(part => part.startsWith(`${AGENT_COOKIE}=`))?.slice(AGENT_COOKIE.length + 1);
+  if (next) await registerAgentCookieValue(next, previous);
 }
 
 /** Read one Set-Cookie from a response: its value (null when absent) and whether it CLEARS the cookie (Max-Age=0). */
