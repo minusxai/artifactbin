@@ -15,6 +15,7 @@ import { readFileSync } from 'node:fs';
 it('uses the exact main origin for gate export captures',()=>{
  const runner=readFileSync(new URL('../gates.mjs',import.meta.url),'utf8');
  expect(runner).toContain('EXPORT__INTERNAL_ORIGIN: base');
+ expect(readFileSync(new URL('../gate-trusted-controls.mjs',import.meta.url),'utf8')).toContain('EXPORT__INTERNAL_ORIGIN:base');
 });
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

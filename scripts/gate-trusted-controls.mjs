@@ -66,7 +66,7 @@ const server = spawn(process.execPath,['--import',resolve('scripts/lib/controls-
     FEATURE_FLAG__LIVE_UPDATES_ANON_ENABLED:String(anonymousLive),
     EMAIL__RESEND_API_KEY:'mxmx_test_controls_mail',EMAIL__DEV_OUTBOX_PATH:join(scratch,'mail.jsonl'),
     AUTH__SECRET:authSecret,DATABASE_URL:'pglite://memory',SQL__SERVICE_URL:'',BROWSER__SERVICE_URL:'',EVENTS__SERVICE_URL:'',
-    OBJECT_STORE__LOCAL_DIR:join(scratch,'objects'),EXPORT__INTERNAL_ORIGIN:backend,ARTIFACTS__ALLOW_PUBLIC:'1',
+    OBJECT_STORE__LOCAL_DIR:join(scratch,'objects'),EXPORT__INTERNAL_ORIGIN:base,ARTIFACTS__ALLOW_PUBLIC:'1',
     PROXY__RATE_LIMIT_CONFIG_FILE:resolve('services/proxy/dev_rate_limits.yml'),WEB_INGEST__ALLOW_PRIVATE:'1',
   },
 });

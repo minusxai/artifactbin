@@ -48,10 +48,11 @@ check(await page.locator('[aria-label="Email"]').isVisible(), 'the login page as
 check((await page.locator('[aria-label="Password"]').count()) === 0, 'there is no password field anywhere');
 
 await page.fill('[aria-label="Email"]', EMAIL);
+console.log('  step email filled');
 const authTraffic=[];
-page.on('response',r=>{if(new URL(r.url()).pathname.startsWith('/api/auth/'))authTraffic.push({path:new URL(r.url()).pathname,status:r.status()});});
+page.on('response',r=>{if(new URL(r.url()).pathname.startsWith('/api/auth/')){const result={path:new URL(r.url()).pathname,status:r.status()};authTraffic.push(result);console.log('  auth response',JSON.stringify(result));}});
 const codeResponse = page.waitForResponse((r) => new URL(r.url()).pathname==='/api/auth/email-otp/send-verification-otp' && r.request().method()==='POST');
-const [res] = await Promise.all([codeResponse,page.click('[aria-label="Log in with email"]')]).catch(cause=>{throw new Error(`OTP response not observed: ${JSON.stringify(authTraffic)}`,{cause});});
+const [res] = await Promise.all([codeResponse,page.click('[aria-label="Log in with email"]').then(()=>console.log('  step email submitted'))]).catch(cause=>{throw new Error(`OTP response not observed: ${JSON.stringify(authTraffic)}`,{cause});});
 const bodyText = await res.text();
 check(res.status() === 200, `the OTP door answered 200 (${res.status()})`);
 check(!/\d{6}/.test(bodyText), `the response body carries NO code (${bodyText})`);
