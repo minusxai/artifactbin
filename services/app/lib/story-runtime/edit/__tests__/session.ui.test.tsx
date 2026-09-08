@@ -94,6 +94,22 @@ describe('createFrameEditSession — going in', () => {
     expect(event.defaultPrevented).toBe(false);
   });
 
+  it('does not clear selection or consume image transfer from closed trusted controls',()=>{
+    const {at}=mount('<Question id="chart" />');
+    fireEvent.click(at('0'));posted.length=0;
+    const host=document.body.appendChild(document.createElement('div'));
+    const input=document.createElement('input');host.attachShadow({mode:'closed'}).append(input);
+    fireEvent.click(input,{composed:true});
+    const file=new File(['x'],'trusted.png',{type:'image/png'});
+    const paste=new Event('paste',{bubbles:true,composed:true,cancelable:true});
+    Object.defineProperty(paste,'clipboardData',{value:{items:[{kind:'file',type:file.type,getAsFile:()=>file}],files:[file]}});
+    input.dispatchEvent(paste);
+    expect(sent(STORY_SELECTION_MESSAGE)).toEqual([]);
+    expect(sent(STORY_IMAGE_DROP_MESSAGE)).toEqual([]);
+    expect(paste.defaultPrevented).toBe(false);
+    expect(at('0')).toHaveAttribute(EDIT_EMBED_SELECTED_ATTR);
+  });
+
   it('announces that edit mode is live', () => {
     mount();
     expect(last(STORY_EDIT_READY_MESSAGE)).toMatchObject({ nonce: NONCE });

@@ -171,6 +171,18 @@ export function createFrameEditSession({ win, channel, requestRender }: FrameEdi
   };
 
   // ── document listeners ────────────────────────────────────────────────────
+  /** Document listeners share a realm with trusted closed-shadow UI on direct
+   * pages. Only authored/runtime DOM (or the document's blank canvas) belongs
+   * to this editor; a retargeted trusted event stops at its outside host. */
+  const belongsToStory = (event: Event): boolean => {
+    const target=event.target;
+    if (target===doc || target===doc.body || target===doc.documentElement) return true;
+    if (!(target instanceof Element)) return false;
+    if (target.closest(`[${AST_PATH_ATTR}], .mx-rail, .mx-present`)) return true;
+    const root=doc.querySelector('[data-mx-story-root]');
+    return !!root?.contains(target);
+  };
+
   /** Resolve the same selectable node a click would, excluding duplicate document chrome. */
   const selectableAt = (target: EventTarget | null): Element | null => {
     const element = target as Element | null;
@@ -186,10 +198,11 @@ export function createFrameEditSession({ win, channel, requestRender }: FrameEdi
     hovered?.setAttribute(EDIT_HOVER_ATTR, '');
   };
 
-  const onPointerOver = (event: PointerEvent) => setHovered(selectableAt(event.target));
-  const onPointerOut = (event: PointerEvent) => setHovered(selectableAt(event.relatedTarget));
+  const onPointerOver = (event: PointerEvent) => { if (belongsToStory(event)) setHovered(selectableAt(event.target)); };
+  const onPointerOut = (event: PointerEvent) => { if (belongsToStory(event)) setHovered(selectableAt(event.relatedTarget)); };
 
   const onClick = (event: Event) => {
+    if (!belongsToStory(event)) return;
     const target = event.target as Element | null;
     if (!target?.closest) return;
     // Chrome the document draws for itself (the deck rail and its slide
@@ -205,6 +218,7 @@ export function createFrameEditSession({ win, channel, requestRender }: FrameEdi
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
+    if (!belongsToStory(event)) return;
     if (event.key === 'Escape') { post({ type: STORY_EDIT_KEY_MESSAGE, key: 'Escape' }); return; }
     if (event.key !== 'Delete' && event.key !== 'Backspace') return;
     // Inside a text host those keys belong to the text.
@@ -224,6 +238,7 @@ export function createFrameEditSession({ win, channel, requestRender }: FrameEdi
    * than silently eaten.
    */
   const onImageTransfer = (event: ClipboardEvent | DragEvent) => {
+    if (!belongsToStory(event)) return;
     const data = 'clipboardData' in event ? event.clipboardData : event.dataTransfer;
     const file = imageFileFromTransfer(data);
     if (!file) return;
@@ -237,6 +252,7 @@ export function createFrameEditSession({ win, channel, requestRender }: FrameEdi
    * so it is prevented only while a FILE is being dragged.
    */
   const onDragOver = (event: DragEvent) => {
+    if (!belongsToStory(event)) return;
     if (event.dataTransfer?.types?.includes('Files')) event.preventDefault();
   };
 
