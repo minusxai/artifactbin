@@ -10,6 +10,7 @@ import ArtifactShell from '@/components/ArtifactShell';
 import ArtifactSurface from '@/components/ArtifactSurface';
 import type { AccountWorkspace } from '@/lib/workspace';
 import { ShellFrame } from '@/web/Shell';
+import { PageLoading } from '@/web/PageLoading';
 import { FolderPage } from './Folder';
 import { NotFoundPage } from './NotFound';
 
@@ -57,7 +58,7 @@ function ArtifactDocument({ id }: { id: string }) {
       void navigate(page.canonical + search + location.hash, { replace: true, state: location.state });
     }
   }, [page, search, location.pathname, location.hash, location.state, navigate]);
-  if (page === null) return <div aria-label="Loading page" />;
+  if (page === null) return <PageLoading />;
   if (page === 'missing') return <NotFoundPage />;
   // A folder is a listing, not a document: no ArtifactShell and no surface
   // (there is nothing to frame). Every folder gets the normal PAGE frame;

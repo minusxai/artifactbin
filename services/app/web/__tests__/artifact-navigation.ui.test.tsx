@@ -3,13 +3,26 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { ArtifactPage } from '../pages/Artifact';
 import { ProfilePage } from '../pages/Profile';
+import { takeBootstrap } from '../bootstrap';
 
 vi.mock('@/components/ArtifactShell', () => ({ default: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock('@/components/ArtifactSurface', () => ({ default: ({ id, search }: { id: string; search: string }) => <div aria-label="surface">{id}{search}</div> }));
-vi.mock('../bootstrap', () => ({ takeBootstrap: () => null }));
+vi.mock('../bootstrap', () => ({ takeBootstrap: vi.fn(() => null) }));
 vi.mock('../Shell', () => ({ ShellFrame: ({children}: {children: React.ReactNode}) => <><header aria-label="Page bar">artifactbin</header>{children}</> }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 const response = (id: string, canonical = `/a/${id}`) => ({ ok: true, json: async () => ({ canonical, role: 'viewer', kind: 'none', surface: { id } }) });
+
+it('uses bootstrapped document data immediately without a duplicate loading shell or fetch', () => {
+  vi.mocked(takeBootstrap).mockReturnValueOnce({canonical: '/a/abc123', role: 'viewer', kind: 'none', surface: {id: 'abc123'}});
+  const fetchMock = vi.fn();
+  vi.stubGlobal('fetch', fetchMock);
+  const router = createMemoryRouter([{path:'/a/:id',element:<ProfilePage/>}], {initialEntries:['/a/abc123']});
+  render(<RouterProvider router={router}/>);
+  expect(screen.getByLabelText('surface')).toHaveTextContent('abc123');
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(screen.queryByRole('banner', {name: 'Page bar'})).not.toBeInTheDocument();
+  expect(fetchMock).not.toHaveBeenCalled();
+});
 
 it.each(['/a/abc123', '/@owner'])('keeps a page bar and loading state while %s resolves', async path => {
   vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})));

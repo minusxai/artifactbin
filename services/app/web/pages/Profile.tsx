@@ -1,6 +1,7 @@
 /** The pretty URLs: an id-anchored artifact or the owner's public index. */
 import { useEffect, useRef, useState } from 'react';
 import { takeBootstrap } from '../bootstrap';
+import { PageLoading } from '../PageLoading';
 import { Navigate, useLocation, useParams } from 'react-router';
 import { ListingHero, ListingShell, NothingHere } from '@/components/Listing';
 import Shelf from '@/components/Shelf';
@@ -43,7 +44,7 @@ function ResolvedProfile({ user, rest }: { user: string | undefined; rest: strin
     return () => { controller.abort(); };
   }, [user, rest, pathname, typo]);
   if (typo) return <NotFoundPage />;
-  if (page === null) return <div aria-label="Loading page" />;
+  if (page === null) return <PageLoading />;
   if (page === 'missing') return <NotFoundPage />;
   if (page.kind === 'redirect') return <Navigate to={page.to} replace />;
   if (page.kind === 'artifact') return <ArtifactPage id={page.id} />;
