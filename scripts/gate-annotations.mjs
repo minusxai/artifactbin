@@ -17,7 +17,7 @@
  *
  *   usage: node scripts/gate-annotations.mjs [base]
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
@@ -63,7 +63,7 @@ const run = async () => {
     const page = await owner.newPage();
     await becomeOwner(page, BASE, token);
     await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
-    const frame = page.frameLocator('iframe[title="artifact"]');
+    const frame = page.mainFrame();
     await frame.locator('#figure').waitFor({ timeout: 15000 });
 
     // ── the view-mode selection bubble ────────────────────────────────────
@@ -128,7 +128,7 @@ const run = async () => {
     const stillTinted = await until(() => frame.locator('#figure[data-mx-annotated]').count(), (n) => n === 1, 5000);
     ok(stillTinted === 1, 'the tint is ambient: a commented node stays marked with no rail and no mode');
     // The count rides the framed document's comment glyph now, kept live by the page.
-    ok((await frame.locator('[data-mx-reader-count="comment"]').textContent())?.trim() === '1', 'the comment glyph carries the unresolved count');
+    ok((await frame.locator('[aria-label="Toggle comments"]').textContent())?.trim() === '1', 'the comment glyph carries the unresolved count');
     const viewComments = page.locator('[aria-label="Open annotation comments"]');
     await viewComments.waitFor({ timeout: 8000 });
     const viewComment = page.locator('[aria-label^="Open annotation conversation by"]');
@@ -209,8 +209,8 @@ const run = async () => {
     ok(gone === 0, 'the resolve reaches the open tab live: the highlight lifts with no reload');
     const threadGone = await until(() => page.locator('[aria-label="Annotation thread"]').count(), (n) => n === 0, 8000);
     ok(threadGone === 0, 'the open-thread list empties live too');
-    const badgeGone = await until(() => frame.locator('[data-mx-reader-count="comment"]').textContent().then((t) => (t ?? '').trim()), (t) => t === '', 5000);
-    ok(badgeGone === '', 'the count badge drops with the resolve');
+    const badgeGone = await until(() => frame.locator('[aria-label="Toggle comments"]').textContent().then((t) => (t ?? '').trim()), (t) => t === '0', 5000);
+    ok(badgeGone === '0', 'the count badge drops with the resolve');
     const resolvedCard = await until(() => page.locator('[aria-label="Resolved annotation thread"]').count(), (n) => n === 1, 8000);
     ok(resolvedCard === 1, 'resolved history lists the closed thread below the open list');
 
@@ -350,9 +350,9 @@ async function quoteLeg(browser) {
   const page = await ctx.newPage();
   await becomeOwner(page, BASE, token);
   await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
-  const frame = page.frameLocator('iframe[title="artifact"]');
+  const frame = page.mainFrame();
   await frame.locator('#second').waitFor({ timeout: 15000 });
-  const raw = await until(async () => page.frame({ url: (u) => u.pathname.includes('/raw') }), (f) => !!f, 15000);
+  const raw = await until(async () => page.mainFrame(), (f) => !!f, 15000);
 
   /*
    * The drag: from one CHARACTER inside the first paragraph to one inside the
@@ -360,7 +360,7 @@ async function quoteLeg(browser) {
    * of the element's box — a paragraph's box is the whole column, so 45% of it
    * lands past the end of a short sentence and the drag starts on nothing.
    */
-  const frameBox = await page.locator('iframe[title="artifact"]').boundingBox();
+  const frameBox = {x:0,y:0}; // Range rectangles already use the main viewport.
   const pointAt = async (selector, index) => {
     const inFrame = await raw.evaluate(([sel, at]) => {
       const range = document.createRange();
@@ -412,7 +412,7 @@ async function quoteLeg(browser) {
   // (b) THE PAINT, AFTER A RELOAD: nothing about it is stored in the DOM, so a
   // reload is the honest test that the range alone can re-find the words.
   await page.reload({ waitUntil: 'load' });
-  const reloaded = await until(async () => page.frame({ url: (u) => u.pathname.includes('/raw') }), (f) => !!f && f !== raw, 15000);
+  const reloaded = await until(async () => page.mainFrame(), (f) => !!f && f !== raw, 15000);
   const paint = await until(
     () => reloaded.evaluate((name) => {
       const highlight = window.CSS?.highlights?.get(name);
@@ -497,7 +497,7 @@ async function markdownLeg(browser) {
   const page = await ctx.newPage();
   await becomeOwner(page, BASE, token);
   await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
-  const frame = page.frameLocator('iframe[title="artifact"]');
+  const frame = page.mainFrame();
   await frame.locator('#cap').waitFor({ timeout: 15000 });
 
   // The comment itself through the browser door, with the session the page
@@ -598,7 +598,7 @@ async function foldLeg(browser) {
   const page = await ctx.newPage();
   await becomeOwner(page, BASE, token);
   await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
-  const frame = page.frameLocator('iframe[title="artifact"]');
+  const frame = page.mainFrame();
   await frame.locator('#cap').waitFor({ timeout: 15000 });
 
   const head = await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: auth })).json();
@@ -761,7 +761,7 @@ async function pickLeg(browser) {
   const page = await ctx.newPage();
   await becomeOwner(page, BASE, token);
   await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
-  const frame = page.frameLocator('iframe[title="artifact"]');
+  const frame = page.mainFrame();
   await frame.locator('#figure').waitFor({ timeout: 15000 });
 
   await openArtifactControls(page);
@@ -822,7 +822,7 @@ async function pickLeg(browser) {
   // rectangle rides the comment as its range, painted back as an overlay.
   await page.locator('[aria-label="Draw an area to comment on"]').click();
   ok(await page.locator('[aria-label="Picking a block"]').textContent().then((t) => /drag/i.test(t ?? '')), 'the pill says to drag');
-  const frameBox = await page.locator('iframe[title="artifact"]').boundingBox();
+  const frameBox = {x:0,y:0}; // Playwright boxes already use the main viewport.
   const from = await frame.locator('#figure').boundingBox();
   const to = await frame.locator('#list li').last().boundingBox();
   await page.mouse.move(frameBox.x + from.x + 8, frameBox.y + from.y + 4);

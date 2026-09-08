@@ -16,9 +16,9 @@ export async function verifyControlsLogin({browser,owner,base,controls,sink}) {
     page.setDefaultTimeout(20000);
     const writes=[];page.on('request',r=>{if(r.method()==='POST') writes.push(new URL(r.url()).pathname);});
     // Slow initial controls startup must not drop the parent address/intent.
-    await page.route(`${controls}/controls/a/*`,async route=>{await new Promise(resolve=>setTimeout(resolve,1500));await route.continue();});
+    await page.route(`${base}/api/page/artifact/*`,async route=>{await new Promise(resolve=>setTimeout(resolve,1500));await route.continue();});
     await page.goto(`${base}/a/${fixture.id}?$region=west#section`);
-    const chrome=page.frameLocator('iframe[title="Artifact controls"]');
+    const chrome=page.mainFrame();
     await chrome.getByLabel('Like artifact',{exact:true}).waitFor();
     assert.equal(await chrome.getByLabel('Like artifact',{exact:true}).locator('svg.lucide-heart').count(),1);
     assert.equal(await chrome.getByLabel('Toggle comments',{exact:true}).locator('svg.lucide-message-square').count(),1);
@@ -34,7 +34,7 @@ export async function verifyControlsLogin({browser,owner,base,controls,sink}) {
     assert.equal(returned.pathname,original.pathname,'returns to the real main artifact, never /controls/a');
     assert.equal(returned.searchParams.get('$region'),'east');assert.equal(returned.hash,'#section');assert.equal(returned.searchParams.get('intent'),intent);
     const email=`mxmx_test_controls_${intent}_${Date.now()}@example.com`;
-    const login=page.frameLocator('iframe[title="Artifactbin app"]');
+    const login=page.mainFrame();
     await login.getByLabel('Email',{exact:true}).fill(email);
     await login.getByLabel('Log in with email',{exact:true}).click();
     await login.getByLabel('Login code',{exact:true}).waitFor();

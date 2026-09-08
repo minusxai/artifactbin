@@ -28,7 +28,7 @@
  *
  *   usage: node scripts/gate-hydration.mjs [base]
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { startDocument } from './lib/start-doc.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
@@ -121,7 +121,9 @@ async function runNoRepaint() {
    * DOMContentLoaded waits for deferred scripts — so the very hold that makes
    * the pre-hydration DOM observable also stops that event from firing.
    */
-  await page.goto(`${B}/a/${st.id}`, { waitUntil: 'commit' });
+  // Raw/capture SSR keeps a genuine before/after hydration contract. The main
+  // artifact route intentionally starts from a named skeleton (shell-seo gate).
+  await page.goto(`${B}/a/${st.id}/raw`, { waitUntil: 'commit' });
   /*
    * Generous: the FIRST document a fresh server renders pays for loading the
    * SSR bundle (~1.5 MB of CJS, through createRequire), which on a cold
@@ -167,7 +169,7 @@ async function runPreload() {
    * default 30s. What this run measures is what the HEAD asks for and what the
    * browser then fetches, neither of which needs the load event.
    */
-  await page.goto(`${B}/a/${st.id}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await page.goto(`${B}/a/${st.id}/raw`, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await page.waitForTimeout(6000);
 
   const html = await (await fetch(`${B}/a/${st.id}/raw`)).text();

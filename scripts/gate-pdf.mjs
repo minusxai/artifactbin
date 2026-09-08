@@ -23,7 +23,7 @@
  *
  *   usage: node scripts/gate-pdf.mjs [base]
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { samplePdf } from './lib/sample-pdf.mjs';
 import { startDocument } from './lib/start-doc.mjs';
 

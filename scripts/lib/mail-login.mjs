@@ -45,7 +45,7 @@ export async function startMailSink() {
  */
 export async function loginViaEmail(page, base, sink, email) {
   await page.goto(`${base}/login`, { waitUntil: 'load' });
-  const form=await page.locator('iframe[title="Artifactbin app"]').count()?page.frameLocator('iframe[title="Artifactbin app"]'):page;
+  const form=page;
   // The pages render in the browser now: wait for the form rather than assuming
   // it is in the HTML the server sent.
   await form.getByLabel('Email',{exact:true}).waitFor({timeout:20_000});
@@ -67,8 +67,7 @@ export async function loginViaEmail(page, base, sink, email) {
   // The dashboard no longer prints an email or a profile link in its chrome.
   // Await the actual response. A polling predicate that returns a Promise
   // can finish on its truthiness even when that Promise resolves to false.
-  const current=await page.locator('iframe[title="Home workspace"],iframe[title="Artifactbin app"]').count()
-    ?page.frameLocator('iframe[title="Home workspace"],iframe[title="Artifactbin app"]').first():page;
+  const current=page;
   const session = await current.locator('body').evaluate(async () => {
     const response = await fetch('/api/page/session', { credentials: 'same-origin', headers: {'x-artifactbin-csrf':'1'} });
     return response.ok ? response.json() : null;

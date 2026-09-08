@@ -1,3 +1,4 @@
+import {storyFrame} from './lib/gate-browser.mjs';
 /**
  * Gate: a document's own typeface must not arrive after the reader does.
  *
@@ -23,7 +24,7 @@
  *
  *   usage: node scripts/gate-fonts.mjs [base]
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
@@ -106,8 +107,8 @@ ok(docHead.indexOf('rel="preload"') < docHead.indexOf('@font-face'), 'and it com
 const reqs = [];
 p.on('request', (r) => { if (r.url().includes('/fonts/')) reqs.push(r.url()); });
 await p.goto(`${B}/a/${st.id}`, { waitUntil: 'load' });
-const frameEl = await p.waitForSelector('iframe[title="artifact"]', { timeout: 20_000 });
-const docFrame = await frameEl.contentFrame();
+const frameEl = await p.waitForSelector('[data-artifact-story-host]', { timeout: 20_000 });
+const docFrame = p.mainFrame();
 await docFrame.waitForSelector('h1', { timeout: 20_000 });
 await p.waitForTimeout(2500);
 
@@ -141,7 +142,7 @@ ok(inside.start !== null && inside.start <= inside.domInteractive,
 
 // ── 5. a WARM load spends no round trip (the immutable win) ────────────────
 await p.goto(`${B}/a/${st.id}`, { waitUntil: 'load' });
-const warmFrame = await (await p.waitForSelector('iframe[title="artifact"]', { timeout: 20_000 })).contentFrame();
+const warmFrame = await storyFrame(p, { timeout: 20_000 });
 await warmFrame.waitForSelector('h1', { timeout: 20_000 });
 await p.waitForTimeout(2000);
 const warm = await warmFrame.evaluate(() => performance.getEntriesByType('resource')
@@ -195,13 +196,13 @@ const measure = async () => {
    * Verified with a frame-navigation log: the document is still fetched exactly
    * ONCE, so this is the gate's timing, not the page's behaviour.
    */
-  const el = await p.waitForSelector('iframe[title="artifact"]', { timeout: 30_000 });
+  const el = await p.waitForSelector('[data-artifact-story-host]', { timeout: 30_000 });
   for (let i = 0; i < 300; i++) {
-    const f = await el.contentFrame();
-    if (f && f.url().includes('/raw')) return f.evaluate(FONT_ORDER_PROBE);
+    const f = p.mainFrame();
+    if (await f.locator('[data-artifact-story-host] .mx-doc').count()) return f.evaluate(FONT_ORDER_PROBE);
     await p.waitForTimeout(100);
   }
-  throw new Error('the document frame never navigated to /raw');
+  throw new Error('the top-level story did not mount');
 };
 let order = null;
 for (let attempt = 0; attempt < 3 && order === null; attempt++) {

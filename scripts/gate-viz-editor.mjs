@@ -19,7 +19,7 @@
  *
  *   usage: node scripts/gate-viz-editor.mjs [base]
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
@@ -62,7 +62,7 @@ await api(`/api/artifacts/${start.id}`, { method: 'PUT', body: JSON.stringify({ 
 
 const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: 1500, height: 1000 } });
-const frame = () => p.frames().find((x) => /\/raw/.test(x.url()));
+const frame = () => p.mainFrame();
 const frameText = async () => { const f = frame(); return f ? await f.locator('body').innerText().catch(() => '') : ''; };
 const marks = async () => { const f = frame(); return f ? await f.locator('svg.marks, canvas').count().catch(() => 0) : 0; };
 
@@ -74,7 +74,7 @@ const openEditor = async () => {
   // The document IS the frame the reader was already looking at — editing is a
   // mode it enters, not a canvas built beside it.
   await p.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 40000 });
-  await p.waitForFunction(() => !!document.querySelector('iframe[title="artifact"]'), { timeout: 40000 });
+  await p.waitForFunction(() => !!document.querySelector('[data-artifact-story-host]'), { timeout: 40000 });
   /*
    * Wait for edit mode to be LIVE, not merely for the document to have
    * rendered. The runtime loads its edit chunk on demand, so there is a window
@@ -215,8 +215,8 @@ ok((await p.locator('[aria-label="Chart editor"]').count()) === 0, 'close shuts 
   const p2 = await b.newPage({ viewport: { width: 1500, height: 1000 } });
   await becomeOwner(p2, B, token); // a fresh page owns nothing until it holds the cookie
   await p2.goto(`${B}/a/${st.id}#edit`, { waitUntil: 'load' });
-  await p2.waitForFunction(() => !!document.querySelector('iframe[title="artifact"]'), { timeout: 40000 });
-  const frame2 = () => p2.frames().find((x) => /\/raw/.test(x.url()));
+  await p2.waitForFunction(() => !!document.querySelector('[data-artifact-story-host]'), { timeout: 40000 });
+  const frame2 = () => p2.mainFrame();
   for (let i = 0; i < 80 && !(await frame2()?.locator('[data-mx-ast]').count().catch(() => 0)); i++) await p2.waitForTimeout(150);
   /*
    * The document renders its BODY, so what it stamps is body-relative: the div
@@ -287,9 +287,9 @@ try {
   // No stored bearer: the editor must authenticate by session alone.
   await page.goto(`${B}/a/${start.id}`, { waitUntil: 'load' });
   await page.goto(`${B}/a/${start.id}#edit`, { waitUntil: 'load' });
-  await page.waitForFunction(() => !!document.querySelector('iframe[title="artifact"]'), { timeout: 40000 });
+  await page.waitForFunction(() => !!document.querySelector('[data-artifact-story-host]'), { timeout: 40000 });
   await page.waitForTimeout(3000);
-  const sf = page.frames().find((x) => /\/raw/.test(x.url()));
+  const sf = page.mainFrame();
   await sf.locator('[aria-label="Question embed"]').first().click();
   await page.waitForSelector('[aria-label="Chart editor"]', { timeout: 20000 });
   const sessionOptions = await optionsOf(page, 'Table');
@@ -344,8 +344,8 @@ try {
   const pg = await b.newPage({ viewport: { width: 1500, height: 1000 } });
   await becomeOwner(pg, B, token);
   await pg.goto(`${B}/a/${gd.id}#edit`, { waitUntil: 'load' });
-  await pg.waitForFunction(() => !!document.querySelector('iframe[title="artifact"]'), { timeout: 40000 });
-  const gf = () => pg.frames().find((x) => /\/raw/.test(x.url()));
+  await pg.waitForFunction(() => !!document.querySelector('[data-artifact-story-host]'), { timeout: 40000 });
+  const gf = () => pg.mainFrame();
   // Edit is LIVE when RGL's drag layer exists — that layer is the thing under test.
   for (let i = 0; i < 120 && !(await gf()?.locator('.react-grid-item').count().catch(() => 0)); i++) await pg.waitForTimeout(150);
   ok((await gf().locator('.react-grid-item').count()) > 0, 'edit mode wrapped the grid in the drag layer — otherwise this proves nothing');

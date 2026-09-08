@@ -23,7 +23,7 @@
 
  *     node scripts/gate-visibility.mjs [base]
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
@@ -74,7 +74,7 @@ const doc = await api('/api/artifacts', {
 check(doc.visibility === 'private', 'owned doc is born private');
 
 await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-const iframeText = await page.frameLocator('iframe[title="artifact"]').locator('#pf').textContent({ timeout: 20000 }).catch(() => null);
+const iframeText = await page.mainFrame().locator('#pf').textContent({ timeout: 20000 }).catch(() => null);
 check(iframeText === 'IFRAME-COOKIE-OK', 'PRIVATE html renders for the owner — the sandboxed iframe request carried the session cookie');
 
 const strangerCtx = await browser.newContext();

@@ -15,7 +15,7 @@
  *
  *   usage: node scripts/gate-data-ux.mjs [base]
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
@@ -91,12 +91,12 @@ await becomeOwner(p, B, st.token);
   let sawUnavailable = false;
   for (let i = 0; i < 70; i++) {
     await p.waitForTimeout(150);
-    const fr = p.frames().find((x) => x !== p.mainFrame());
+    const fr = p.mainFrame();
     const txt = fr ? await fr.locator('body').innerText().catch(() => '') : '';
     if (/data unavailable/.test(txt)) sawUnavailable = true;
     if (fr && (await fr.locator('svg.marks, canvas').count().catch(() => 0))) break;
   }
-  const ef = p.frames().find((x) => x !== p.mainFrame());
+  const ef = p.mainFrame();
   const marks = ef ? await ef.locator('svg.marks, canvas').count().catch(() => 0) : 0;
   const text = ef ? await ef.locator('body').innerText().catch(() => '') : '';
   ok(marks > 0, `a chart renders in EDIT mode (${marks} marks)`);
@@ -112,7 +112,7 @@ await becomeOwner(p, B, st.token);
 // must then reveal itself. A reader, meanwhile, is not shown chrome — they are
 // served the document itself, which has no app chrome at all.
 const st = await startDocument(B);
-const readerCtx = await p.context().browser().newContext();
+const readerCtx = await b.newContext();
 const readerPage = await readerCtx.newPage();
 await readerPage.goto(`${B}/a/${st.id}`, { waitUntil: 'load' });
 ok((await readerPage.locator('[aria-label="Edit this document"], [aria-label="Edit artifact"]').count()) === 0, 'a reader sees no edit chrome');

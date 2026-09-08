@@ -19,7 +19,7 @@
 
  *   node scripts/gate-collab-edit.mjs [base]
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
@@ -138,7 +138,7 @@ check(sharingAttempt === 404, `the editor cannot change sharing permissions (${s
 await editor.click('[aria-label="Close sharing"]');
 
 // ── 3. both edit, different paragraphs, no reload ─────────────────────────
-const frameOf = (page) => page.frames().find((f) => f !== page.mainFrame());
+const frameOf = (page) => page.mainFrame();
 const openEditor = async (page) => {
   await page.goto(`${BASE}/a/${doc.id}#edit`, { waitUntil: 'load' });
   await page.waitForFunction(() => true, null, { timeout: 1000 }).catch(() => {});

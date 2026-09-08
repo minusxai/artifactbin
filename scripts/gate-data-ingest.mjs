@@ -9,7 +9,7 @@
  *
  *   usage: node scripts/gate-data-ingest.mjs [base]
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
@@ -75,7 +75,7 @@ check(put.status === 200, `the story accepts a Query over the uploaded dataset (
 // ── 3. The chart renders, with the UPLOADED values ─────────────────────────
 await page.goto(`${BASE}/a/${start.id}`, { waitUntil: 'load' });
 await page.waitForTimeout(6000);
-const surface = () => page.frames().find((f) => f !== page.mainFrame());
+const surface = () => page.mainFrame();
 check(!!surface(), 'story surface mounted');
 
 const marks = await surface().locator('svg.marks, canvas').count();

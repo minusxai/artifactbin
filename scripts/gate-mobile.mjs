@@ -1,3 +1,4 @@
+import {storyFrame} from './lib/gate-browser.mjs';
 /**
  * Gate: the document chrome has to fit on a phone.
  *
@@ -24,7 +25,7 @@
  *
  *   usage: node scripts/gate-mobile.mjs [base]
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
@@ -111,20 +112,20 @@ ok(!(await overflows(view)), 'viewer: the page does not scroll sideways');
  * in whichever document actually scrolls: hidden on load, a scroll down keeps
  * it away, a scroll up brings it back.
  */
-ok((await view.locator('[aria-label="Page actions"], [aria-label="Open menu"], [aria-label="Open artifact controls"]').count()) === 0,
-  'viewer: the page draws no dock or corner buttons of its own');
+ok((await view.locator('[data-trusted-ui-root] [aria-label="Open menu"], [data-trusted-ui-root] [aria-label="Open artifact controls"]').count()) === 2,
+  'viewer: the shared closed root owns one menu and one artifact controls trigger');
 // An owner reads through the sandboxed artifact frame; a public reader may be
 // served the document itself. Exercise whichever window actually scrolls.
-const readingFrame = view.frames().find((frame) => frame !== view.mainFrame()) ?? view.mainFrame();
-ok((await readingFrame.locator('[data-mx-reader-chrome]').count()) === 1, 'viewer: the document carries the chrome');
-const hiddenOn = (target) => target.evaluate(() => {
-  const root = document.querySelector('[data-mx-reader-chrome]');
-  return root?.classList.contains('mx-reader-chrome--hidden') === true;
+const readingFrame = view.mainFrame();
+ok((await readingFrame.locator('[data-trusted-ui-root]').count()) === 1, 'viewer: one shared trusted chrome root');
+const hiddenOn = (target) => target.getByLabel('Page bar',{exact:true}).evaluate(root => {
+  const box=root.getBoundingClientRect();
+  return getComputedStyle(root).visibility==='hidden' || box.top < -1 || box.bottom>innerHeight;
 });
 const dockHidden = () => hiddenOn(readingFrame);
 await readingFrame.evaluate(() => window.scrollTo(0, 500));
 await view.waitForTimeout(300);
-ok(await dockHidden(), 'viewer: the chrome stays away on a downward scroll');
+ok(!(await dockHidden()), 'viewer: shared chrome remains visible on downward scroll');
 await readingFrame.evaluate(() => window.scrollBy(0, -80));
 await view.waitForTimeout(300);
 ok(!(await dockHidden()), 'viewer: the chrome returns on a reverse scroll');
@@ -444,6 +445,9 @@ const cdp = await slow.newCDPSession(reader);
 await cdp.send('Network.emulateNetworkConditions', {
   offline: false, latency: 150, downloadThroughput: 1.5 * 1024 * 1024 / 8, uploadThroughput: 750 * 1024 / 8,
 });
+let releaseChart;const chartDelay=new Promise(resolve=>{releaseChart=resolve;});
+let chartRequested=false;
+await reader.route('**/assets/VegaChart-*.js',async route=>{chartRequested=true;await chartDelay;await route.continue();});
 await reader.goto(`${B}/a/${chart.id}`, { waitUntil: 'commit' });
 
 /*
@@ -453,13 +457,7 @@ await reader.goto(`${B}/a/${chart.id}`, { waitUntil: 'commit' });
  * server renders WITHOUT one. `responseEnd` is 0 while a request is in flight,
  * which is how the runtime entry is caught mid-air.
  */
-const loaded = () => reader.evaluate(() => {
-  const entry = performance.getEntriesByType('resource').find((e) => e.name.includes('/story/entry-'));
-  return {
-    ran: !!document.querySelector('[data-mx-mode-choice][aria-pressed]'),
-    entry: !!entry && entry.responseEnd > 0,
-  };
-}).catch(() => ({ ran: false, entry: false }));
+const loaded = async () => ({ran:await reader.getByLabel('Open menu',{exact:true}).isVisible().catch(()=>false),entry:await reader.locator('.vega-embed canvas,.vega-embed svg').count()>0});
 
 let ready = { ran: false, entry: false };
 for (let i = 0; i < 400 && !ready.ran && !ready.entry; i++) {
@@ -467,8 +465,9 @@ for (let i = 0; i < 400 && !ready.ran && !ready.entry; i++) {
   if (ready.ran || ready.entry) break;
   await reader.waitForTimeout(50);
 }
-ok(ready.ran, `slow reader: the reader's own ~8 KB module has RUN (${ready.ran})`);
-ok(!ready.entry, 'slow reader: and the ~1 MB runtime entry is STILL IN FLIGHT — which is what makes the next check mean anything');
+ok(ready.ran, `slow reader: the shared first-party topbar is interactive (${ready.ran})`);
+for(let i=0;i<400&&!chartRequested;i++)await reader.waitForTimeout(50);
+ok(chartRequested && !ready.entry, 'slow reader: real chart module request is held before chart rendering');
 
 /*
  * THE ANSWER MEASURED IS THE REVEAL, not the hide. The chrome is now
@@ -488,9 +487,11 @@ for (let i = 0; i < 20 && shownAfter === null; i++) {
   if (!(await hiddenOn(reader))) shownAfter = Date.now() - scrolledAt;
   else await reader.waitForTimeout(25);
 }
-ok(stillFlying, 'slow reader: the ~1 MB runtime entry is STILL in flight at the moment of the gesture');
+ok(chartRequested && stillFlying, 'slow reader: the chart module is still held at the moment of the gesture');
 ok(shownAfter !== null && shownAfter <= 500,
-  `slow reader: the chrome answers the first scroll UP within 500ms, runtime or no runtime (${shownAfter === null ? 'never' : `${shownAfter}ms`})`);
+  `slow reader: chrome stays visible within 500ms despite delayed chart (${shownAfter === null ? 'never' : `${shownAfter}ms`})`);
+await reader.getByLabel('Open menu',{exact:true}).click();await reader.getByLabel('Menu',{exact:true}).waitFor();await reader.keyboard.press('Escape');
+releaseChart();await reader.locator('.vega-embed canvas,.vega-embed svg').first().waitFor({timeout:30000});
 await slow.close();
 
 /*
@@ -502,10 +503,10 @@ await slow.close();
  */
 const framedView = await open(PHONE, '', chart.id);
 await framedView.waitForTimeout(2500);
-const chartFrame = framedView.frames().find((frame) => frame !== framedView.mainFrame()) ?? framedView.mainFrame();
+const chartFrame = framedView.mainFrame();
 await chartFrame.evaluate(() => window.scrollTo(0, 400));
 await framedView.waitForTimeout(400);
-ok(await hiddenOn(chartFrame), 'framed: the dock leaves on a downward scroll inside the frame');
+ok(!(await hiddenOn(chartFrame)), 'owner: the shared topbar remains visible on downward scroll');
 await chartFrame.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
 await framedView.waitForTimeout(400);
 ok(!(await hiddenOn(chartFrame)), 'framed: and comes back at the END of the document, where the footer is and there is no further scroll');
@@ -532,8 +533,8 @@ await framedView.close();
 const touch = await browser.newPage({ viewport: PHONE, hasTouch: true });
 await becomeOwner(touch, B, st.token);
 await touch.goto(`${B}/a/${st.id}`, { waitUntil: 'load' });
-await touch.waitForSelector('iframe[title="artifact"]', { timeout: 30_000 });
-const docFrame = await (await touch.$('iframe[title="artifact"]')).contentFrame();
+await touch.waitForSelector('[data-artifact-story-host]', { timeout: 30_000 });
+const docFrame = await storyFrame(touch);
 await docFrame.waitForSelector('p', { timeout: 30_000 });
 
 // A coarse pointer is the whole premise: a leg that silently took the mouse
@@ -613,11 +614,9 @@ ok(placed.buttons.length > 0 && placed.buttons.every((h) => h >= 44),
  * because no browser this gate can drive puts one there: the bubble needs a
  * capability, and everyone who has one is served the shell.
  */
-const overDock = await touch.evaluate((box) => {
-  const frameBox = document.querySelector('iframe[title="artifact"]').getBoundingClientRect();
-  const dock = document.querySelector('[data-mx-reader-chrome], [aria-label="Page actions"]');
-  const dockBox = dock?.getBoundingClientRect();
-  return { bubbleBottom: frameBox.top + box.bottom, dockTop: dockBox?.top ?? null };
+const overDock = await touch.locator('[data-controls-region]:has([aria-label="Like artifact"])').evaluate((dock,box) => {
+  const dockBox = dock.getBoundingClientRect();
+  return { bubbleBottom: box.bottom, dockTop: dockBox.top };
 }, { bottom: placed.bottom });
 ok(placed.bottom > placed.top && (overDock.dockTop === null || overDock.bubbleBottom <= overDock.dockTop + 1),
   `touch: and it stays clear of the page's bottom dock (bubble bottom ${Math.round(overDock.bubbleBottom)} vs dock top ${overDock.dockTop === null ? 'none' : Math.round(overDock.dockTop)})`);

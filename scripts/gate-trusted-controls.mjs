@@ -1,4 +1,5 @@
-/** Opt-in two-origin build acceptance. Own server because its origin policy differs from legacy gates. */
+import {storyFrame,assertTrustedChrome} from './lib/gate-browser.mjs';
+/** First-party shadow chrome + opaque author realms + asset-only origin acceptance. */
 import assert from 'node:assert/strict';
 import {spawn,execFileSync} from 'node:child_process';
 import {mkdtempSync,rmSync,readFileSync} from 'node:fs';
@@ -8,10 +9,10 @@ import net from 'node:net';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {createHash,createHmac,randomBytes} from 'node:crypto';
-import {chromium,firefox,webkit} from 'playwright';
+import {chromium,firefox,webkit} from './lib/gate-browser.mjs';
 import {startDocument,becomeOwner} from './lib/start-doc.mjs';
 import {loginViaEmail} from './lib/mail-login.mjs';
-import {measureInteraction} from './planning/interaction-perf.mjs';
+import {measureInteraction} from './lib/interaction-perf.mjs';
 import {verifyControlsLogin} from './lib/controls-login.mjs';
 import {verifyMainPageLogin} from './lib/main-page-login.mjs';
 import {verifyPublicFirstPaint} from './lib/public-first-paint.mjs';
@@ -61,7 +62,7 @@ const mainFetch = (url, init = {}) => new Promise((resolve,reject) => {
 });
 const server = spawn(process.execPath,['--import',resolve('scripts/lib/controls-mail-stub.mjs'),resolve('dist/proxy-server.mjs')],{
   cwd:resolve('services/app'),stdio:['ignore','ignore','inherit'],env:{...process.env,
-    NODE_ENV:'production',APP__PORT:String(port),APP__PUBLIC_BASE_URL:base,APP__CONTROLS_ORIGIN:controls,APP__ASSETS_ORIGIN:assets,
+    NODE_ENV:'production',APP__PORT:String(port),APP__PUBLIC_BASE_URL:base,APP__CONTROLS_ORIGIN:'',APP__ASSETS_ORIGIN:assets,
     FEATURE_FLAG__LIVE_UPDATES_ANON_ENABLED:String(anonymousLive),
     EMAIL__RESEND_API_KEY:'mxmx_test_controls_mail',EMAIL__DEV_OUTBOX_PATH:join(scratch,'mail.jsonl'),
     AUTH__SECRET:authSecret,DATABASE_URL:'pglite://memory',SQL__SERVICE_URL:'',BROWSER__SERVICE_URL:'',EVENTS__SERVICE_URL:'',
@@ -88,9 +89,9 @@ try {
       .then(()=>mx.params.set('network','escaped'),()=>mx.params.set('network','blocked'));
     for (const kind of ['like','follow','edit']) {
       parent.postMessage({type:'mx:reader-action',kind},'*');
-      parent.frames[0].postMessage({type:'mx:reader-action',kind},'${controls}');
+      parent.postMessage({type:'mx:reader-action',kind},'${base}');
     }
-    parent.frames[0].postMessage({type:'mx:text-edit',path:'0',nonce:'guessed',innerHtml:'FORGED'},'${controls}');
+    parent.postMessage({type:'mx:text-edit',path:'0',nonce:'guessed',innerHtml:'FORGED'},'${base}');
   `;
   const markup='<Helmet><Value name="count" type="number" default={0}/><Value name="dom" type="string" default="waiting"/><Value name="storage" type="string" default="waiting"/><Value name="network" type="string" default="waiting"/><Mutation name="inc">{`update _signals set count=count+1`}</Mutation><script>{`'+authorScript+'`}</script></Helmet><main className="p-20"><h1>Top-level controls</h1><p id="editable">Original paragraph</p><Button run="$inc">Increment</Button><p>{$count}</p></main>';
   const fixtureMarkup=markup.replace('<Helmet>','<Helmet><Value name="region" type="string" default="east"/>');
@@ -134,7 +135,7 @@ try {
   snapshot.on('request',request=>{if(new URL(request.url()).pathname.endsWith('/events')) anonStreams.push(request.url());});
   for(let load=0;load<2;load++){
     await snapshot.goto(`${base}/a/${seed.id}`);
-    await snapshot.frameLocator('iframe[title="Artifact controls"]').getByRole('button',{name:'Open artifact controls',exact:true}).waitFor();
+    await snapshot.mainFrame().getByRole('button',{name:'Open artifact controls',exact:true}).waitFor();
     await snapshot.waitForFunction(()=>!!window.mx);
     await snapshot.getByRole('button',{name:'Increment',exact:true}).click();
     await snapshot.waitForFunction(()=>window.mx.params.get('count')===1);
@@ -157,14 +158,14 @@ try {
   page.on('response',response=>{if(response.status()>=400) console.error('HTTP',response.status(),response.url());});
   page.on('pageerror',error=>console.error(error.message));
   page.on('console',message=>{if(message.type()==='error') console.error(message.text());});
-  await becomeOwner(page,controls,seed.token);
+  await becomeOwner(page,base,seed.token);
   const anonymousPrivate=await mainFetch(`${backend}/api/artifacts`,{method:'POST',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({markup:'<h1>Anonymous private fixture</h1>',visibility:'private'})});
   assert.equal(anonymousPrivate.status,400);
   assert.equal((await anonymousPrivate.json()).error,'private_requires_account','the auth split does not change who may create private documents');
   const peer=await browser.newPage({ignoreHTTPSErrors:true});
   peer.on('console',message=>{if(message.type()==='error')console.error('PEER',message.text());});
   peer.on('requestfailed',request=>console.error('PEER REQUEST FAILED',new URL(request.url()).pathname,request.failure()?.errorText));
-  await becomeOwner(peer,controls,seed.token);
+  await becomeOwner(peer,base,seed.token);
   const privilegedRequests=[];
   const authenticatedStreams=[];
   page.on('request',request=>{if(new URL(request.url()).pathname.endsWith('/events')) authenticatedStreams.push(request.url());});
@@ -175,17 +176,19 @@ try {
   await page.waitForFunction(()=>window.mx?.params.get('dom')==='SecurityError' && window.mx.params.get('storage')==='SecurityError' && window.mx.params.get('network')==='blocked');
   assert.deepEqual(privilegedRequests,[],'isolated author code cannot invoke account APIs');
   assert.equal(await page.locator('iframe[title="Isolated artifact script"]').getAttribute('sandbox'),'allow-scripts');
-  const chrome = page.frameLocator('iframe[title="Artifact controls"]');
+  const chrome = page.mainFrame();
   await chrome.getByRole('button',{name:'Open artifact controls',exact:true}).waitFor().catch(async error => {
     for (const frame of page.frames()) console.error('Frame:',frame.url(),(await frame.locator('body').innerText()).slice(0,700));
     throw error;
   });
   assert(authenticatedStreams.length>0,'a token-holding authenticated browser stays live under either flag');
-  assert.equal(await chrome.locator('body').evaluate((_,main)=>new Promise(resolve=>{
-    const listener=e=>{if(e.source===parent && e.origin===main && e.data==='mx:painted') {clearTimeout(timer);removeEventListener('message',listener);resolve(true);}};
-    const timer=setTimeout(()=>{removeEventListener('message',listener);resolve(false);},1500);
-    addEventListener('message',listener);parent.postMessage('mx:hello',main);
-  }),base),true,'top-level runtime answers controls liveness checks');
+  await assertTrustedChrome(page);
+  assert.equal(await page.locator('iframe[title="Artifact controls"],iframe[title="Artifactbin app"]').count(),0,'no whole-page controls transport');
+  assert.equal(await page.evaluate(()=>location.origin),base,'browser and authentication remain first-party');
+  for(const path of ['/login','/api/page/session','/api/my/artifacts','/oauth/authorize']){
+    const denied=await page.request.get(assets+path,{maxRedirects:0});
+    assert.equal(denied.status(),404,'asset-only origin exposes no UI/auth/API: '+path);
+  }
   await page.getByRole('button',{name:'Increment',exact:true}).click();
   if(process.argv.includes('--measure-perf')) await measureInteraction({page,base,controls,engineName,publish:async body=>{
     const response=await mainFetch(`${backend}/api/artifacts`,{method:'POST',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -236,7 +239,7 @@ try {
   await page.waitForFunction(()=>document.querySelector('#editable')?.closest('[inert]'));
   for(let i=0;i<20;i++) {
     await page.keyboard.press('Tab');
-    assert.equal(await chrome.getByRole('dialog',{name:'Sharing',exact:true}).evaluate(el=>el.contains(document.activeElement)),true,'Tab stays within the actual modal');
+    assert.equal(await chrome.getByRole('dialog',{name:'Sharing',exact:true}).evaluate(el=>el.contains(el.getRootNode().activeElement)),true,'Tab stays within the actual closed-root modal');
   }
   await page.keyboard.press('Escape');
   await chrome.getByRole('dialog',{name:'Sharing',exact:true}).waitFor({state:'detached'});
@@ -244,16 +247,16 @@ try {
   const scriptElement=await page.locator('iframe[title="Isolated artifact script"]').elementHandle();
   const isolated=await scriptElement.contentFrame();
   const beforeNavigation=privilegedRequests.length;
-  await isolated.evaluate(url=>{location.href=url;},`${controls}/controls/a/${seed.id}`);
+  await isolated.evaluate(url=>{location.href=url;},`${base}/account`);
   await page.locator('iframe[title="Isolated artifact script"]').waitFor({state:'detached'});
   assert.equal(privilegedRequests.length,beforeNavigation,'navigating the opaque author frame cannot acquire trusted controls authority');
   await loginViaEmail(page,base,sink,`mxmx_test_controls_${Date.now()}@example.com`);
   await page.goto(base+'/account');
-  const appFrame=page.frameLocator('iframe[title="Artifactbin app"]');
+  const appFrame=page.mainFrame();
   await appFrame.getByLabel('Token to claim',{exact:true}).fill(seed.token);
-  const accountFrame=page.frames().find(frame=>frame.url().startsWith(controls+'/controls/page/account'));
-  assert.ok(accountFrame,'account claim UI belongs to the trusted app frame');
-  await Promise.all([accountFrame.waitForNavigation({waitUntil:'load'}),appFrame.getByLabel('Claim token',{exact:true}).click()]);
+  assert.equal(await appFrame.getByLabel('Token to claim',{exact:true}).evaluate(el=>el.ownerDocument===document),true,'account claim UI is first-party');
+  await appFrame.getByLabel('Claim token',{exact:true}).click();
+  await appFrame.getByText(/Claimed —/).waitFor();
   await page.goto(`${base}/a/${seed.id}`);
   await verifyControlsLogin({browser,owner:chrome,base,controls,sink});
   await chrome.getByLabel('Like artifact',{exact:true}).click();
@@ -308,7 +311,7 @@ try {
   const resolverRequests=[];capture.on('request',request=>{if(request.url().includes('/assets?'))resolverRequests.push(request.url());});
   await capture.addInitScript(()=>{window.__typedAssets=[];addEventListener('message',event=>{if(event.data?.type==='mx:asset')window.__typedAssets.push(event.data.kind);});});
   await capture.goto(base+'/a/'+previewDoc.id+'?key='+key);
-  const previewFrame=await (await capture.waitForSelector('iframe[title="artifact"]')).contentFrame();
+  const previewFrame=await storyFrame(capture);
   try{await previewFrame.getByLabel('Private asset',{exact:true}).filter({hasText:'loaded'}).waitFor({timeout:20000});}
   catch(error){console.error('CAPTURE STATE',await previewFrame.locator('body').innerText(),await capture.evaluate(()=>window.__typedAssets),resolverRequests.map(url=>new URL(url).pathname));throw error;}
   assert((await capture.evaluate(()=>window.__typedAssets)).includes('script'),'private capture imports script through typed parent relay');
@@ -324,16 +327,16 @@ try {
   assert.equal(await chrome.locator('body').evaluate(async (_,args)=>(await fetch(`/api/my/artifacts/${args.id}/sharing`,{method:'PUT',headers:{'Content-Type':'application/json','x-artifactbin-csrf':'1'},body:JSON.stringify({shares:[{email:args.email,role:'viewer'}]})})).status,{id:privateDoc.id,email:invitedEmail}),200);
   const invited=await browser.newPage({ignoreHTTPSErrors:true});
   await invited.goto(`${base}/login?callbackUrl=${encodeURIComponent('/a/'+privateDoc.id)}`);
-  const invitedLogin=invited.frameLocator('iframe[title="Artifactbin app"]');
+  const invitedLogin=invited.mainFrame();
   await invitedLogin.getByLabel('Email',{exact:true}).fill(invitedEmail);
   await invitedLogin.getByLabel('Log in with email',{exact:true}).click();
   await invitedLogin.getByLabel('Login code',{exact:true}).waitFor();
   await invitedLogin.getByLabel('Login code',{exact:true}).fill(sink.lastCode(invitedEmail));
-  const invitedLanding=invited.waitForResponse(r=>r.url()===`${base}/a/${privateDoc.id}` && r.request().isNavigationRequest());
+  const invitedLanding=invited.waitForResponse(r=>new URL(r.url()).pathname===`/api/page/artifact/${privateDoc.id}`);
   await invitedLogin.getByLabel('Verify code',{exact:true}).click();
   const invitedResponse=await invitedLanding;
   assert.equal(invitedResponse.status(),200,'first login can open an email-shared private artifact directly, without visiting the workspace first');
-  assert.equal((await invitedResponse.text()).includes(invitedEmail),false,'verified invitation email is a server-only ACL claim, not parent-page state');
+  assert.equal(new URL(invitedResponse.url()).origin,base,'private page data is delivered only by the first-party authenticated endpoint');
   await invited.getByRole('heading',{name:'Private data'}).waitFor();
   const publishShared=async body=>{
     const response=await mainFetch(backend+'/api/artifacts',{method:'POST',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -363,7 +366,7 @@ try {
   const reader=await browser.newPage({ignoreHTTPSErrors:true,viewport:{width:1280,height:900}});
   await loginViaEmail(reader,base,sink,`mxmx_test_controls_reader_${Date.now()}@example.com`);
   await reader.goto(`${base}/a/${seed.id}`);
-  const readerChrome=reader.frameLocator('iframe[title="Artifact controls"]');
+  const readerChrome=reader.mainFrame();
   await readerChrome.getByLabel('Follow author',{exact:true}).click();
   await readerChrome.locator('[aria-label="Follow author"][aria-pressed="true"]').waitFor();
   assert.equal((await reader.goto(`${base}/a/${privateDoc.id}`)).status(),404,'private dataset document is not exposed to another account');
@@ -379,7 +382,7 @@ try {
   await chrome.getByLabel('Open menu',{exact:true}).click();
   await chrome.getByLabel('Sign out',{exact:true}).click();
   await page.waitForURL(base+'/');
-  const homeChrome=page.frameLocator('iframe[title="Page controls"]');
+  const homeChrome=page.mainFrame();
   const sessionKind=()=>homeChrome.locator('body').evaluate(async ()=>{
     const response=await fetch('/api/page/session',{headers:{'x-artifactbin-csrf':'1'}});
     if (!response.ok) throw new Error(`Session read failed: ${response.status}`);
@@ -392,10 +395,8 @@ try {
   const retainedCookies=await page.context().cookies();
   // Disconnect performs a same-URL full navigation. Polling fetch during that
   // transition fails in WebKit's outgoing context; await the navigation itself.
-  await Promise.all([
-    page.waitForNavigation({waitUntil:'domcontentloaded'}),
-    homeChrome.getByLabel('Disconnect this browser',{exact:true}).click(),
-  ]);
+  await homeChrome.getByLabel('Disconnect this browser',{exact:true}).click();
+  await page.waitForFunction(async()=>{const r=await fetch('/api/page/session');return r.ok&&(await r.json()).kind==='none';});
   assert.equal(await sessionKind(),'none');
   assert.equal((await page.goto(`${base}/a/${seed.id}`)).status(),404,'disconnected browser loses private document access');
   await page.context().addCookies(retainedCookies);
@@ -415,7 +416,7 @@ try {
     increment.addEventListener('click',()=>{increment.focus();mx.mutate('inc');});
     try{parent.document.body.textContent='ESCAPED';report.parent='escaped'}catch(e){report.parent=e.name}
     try{localStorage.setItem('leak','1');report.storage='escaped'}catch(e){report.storage=e.name}
-    report.network=await fetch('${controls}/api/my/artifacts',{credentials:'include'}).then(()=>false,()=>true);
+    report.network=await fetch('${base}/api/my/artifacts',{credentials:'include'}).then(()=>false,()=>true);
     parent.postMessage({type:'mx:text-edit',path:'0',nonce:'guessed',innerHtml:'FORGED'},'*');
     mx.params.set('sandboxReport',JSON.stringify(report));
   })().catch(e=>mx.params.set('sandboxReport',JSON.stringify({error:String(e)})));`;
@@ -455,7 +456,8 @@ try {
   console.log('PASS: visible sandbox pinned library, canvas, pointer/keyboard input, responsive resize, local SQL, parent DOM/storage/API refusal and reload reset');
   await peer.close();
   await reader.close();
-  console.log('PASS: two-origin top-level editing/reload, local SQL, appearance, relation-only comments, mobile hit-testing, author isolation/navigation revocation, OTP login, like/follow persistence, human/anonymous private ACLs, immediate authorized shared mutations, logout, retained-cookie revocation and independent browser disconnect');
+  assert(privilegedRequests.length>0 && privilegedRequests.every(url=>new URL(url).origin===base),'all observed authenticated writes stay on the first-party main origin');
+  console.log('PASS: first-party shadow chrome, top-level editing/reload, local SQL, appearance, relation-only comments, mobile hit-testing, author isolation/navigation revocation, OTP login, like/follow persistence, human/anonymous private ACLs, immediate authorized shared mutations, logout, retained-cookie revocation and independent browser disconnect');
   }
 } finally {
   await browser?.close();

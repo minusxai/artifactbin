@@ -16,7 +16,7 @@
  *
  *   usage: node scripts/gate-image-upload.mjs [base]
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
@@ -75,11 +75,6 @@ async function paintedImages(page) {
     return n;
   });
 
-  const docFrameEl = await page.$('iframe[title="artifact"]');
-  if (docFrameEl) {
-    const f = await docFrameEl.contentFrame();
-    if (f) return countIn(f);
-  }
   return countIn(page);
 }
 
@@ -104,8 +99,8 @@ await becomeOwner(page, B, st.token);
  * end-to-end assertion possible here.
  */
 async function documentFrame(page) {
-  const el = await page.$('iframe[title="artifact"]');
-  return el ? el.contentFrame() : null;
+  await page.locator('[data-artifact-story-host]').waitFor({state:'attached'});
+  return page.mainFrame();
 }
 
 async function dispatchFileEvent(page, kind, b64) {

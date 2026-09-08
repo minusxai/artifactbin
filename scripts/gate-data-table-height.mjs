@@ -17,7 +17,7 @@
  *
  *   usage: node scripts/gate-data-table-height.mjs [base]
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { startDocument } from './lib/start-doc.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3000';

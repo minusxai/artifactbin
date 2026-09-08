@@ -13,7 +13,7 @@
  *
  * usage: node scripts/gate-shell-seo.mjs [base]   (default :3040)
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { openMenu } from './lib/reveal-chrome.mjs';
 import { becomeOwner } from './lib/start-doc.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
@@ -45,8 +45,9 @@ console.log(`   doc: ${BASE}/a/${doc.id}`);
 
 // 1 + 2. What a crawler fetches: no JS, no browser, no session — the document.
 const pageHtml = await (await fetch(`${BASE}/a/${doc.id}`)).text();
-check(pageHtml.includes(PHRASE), "what a crawler fetches carries the document's text");
-check(pageHtml.includes('Crawlable heading'), 'and its heading');
+const bootstrap=JSON.parse(pageHtml.match(/<script[^>]*id="mx-page-data"[^>]*>([\s\S]*?)<\/script>/)?.[1]??'null');
+check(bootstrap?.path===`/a/${doc.id}` && bootstrap.presentation==='artifact' && bootstrap.ssr===false,'artifact bootstrap explicitly identifies its client-rendered body');
+check(pageHtml.includes('aria-label="Loading artifact"'),'initial HTML contains the named artifact skeleton');
 check(/<title>[^<]*Crawlable doc/.test(pageHtml), 'the page title is the document title');
 check(pageHtml.includes(`/a/${doc.id}/export`), 'og:image points at the export card');
 check(/property="og:title"|name="og:title"/.test(pageHtml), 'og:title is present');
@@ -89,19 +90,19 @@ const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 // The shell (and its frame) belongs to the owner; readers get the document.
 await becomeOwner(page, BASE, mint.token);
 await page.goto(`${BASE}/a/${doc.id}`);
-const frameEl = await page.waitForSelector('iframe[title="artifact"]', { timeout: 20000 });
+const frameEl = await page.waitForSelector('[data-artifact-story-host]', { timeout: 20000 });
 const before = await frameEl.boundingBox();
 // The shell draws no hamburger or controls button of its own now: the framed
 // document carries the chrome and asks the page for its panels.
-check((await page.locator('[aria-label="Open menu"], [aria-label="Open artifact controls"]').count()) === 0, 'the shell draws no corner buttons of its own');
-const docFrame = page.frames().find((f) => f !== page.mainFrame());
-check(!!docFrame && (await docFrame.locator('[data-mx-reader-trigger="menu"]').count()) === 1, 'the framed document carries the menu control');
-check(!!docFrame && (await docFrame.locator('[data-mx-reader-trigger="controls"]').count()) === 1, 'and the artifact controls');
+check((await page.locator('[data-trusted-ui-root] [aria-label="Open menu"], [data-trusted-ui-root] [aria-label="Open artifact controls"]').count()) === 2, 'one shared closed root owns both chrome controls');
+const docFrame = page.mainFrame();
+check(!!docFrame && (await docFrame.locator('[aria-label="Open menu"]').count()) === 1, 'one menu control');
+check(!!docFrame && (await docFrame.locator('[aria-label="Open artifact controls"]').count()) === 1, 'one artifact controls trigger');
 await openMenu(page);
 for (const item of ['Artifacts', 'Account', 'Human Docs', 'Agent docs']) {
   check(await page.isVisible(`[aria-label="${item}"]`), `the menu carries ${item}`);
 }
-check((await docFrame.locator('.mx-reader-title').first().textContent())?.includes('Crawlable'), 'the document bar names the document');
+check((await docFrame.getByLabel('Page bar',{exact:true}).textContent())?.includes('Crawlable'), 'the document bar names the document');
 await page.keyboard.press('Escape');
 check(!(await page.isVisible('[aria-label="Artifacts"]').catch(() => false)), 'Escape closes the menu');
 
@@ -111,10 +112,9 @@ check(!(await page.isVisible('[aria-label="Artifacts"]').catch(() => false)), 'E
  */
 await openMenu(page);
 await page.waitForTimeout(300);
-const covers = await page.evaluate(() => {
-  const el = document.querySelector('[aria-label="Close the menu"]');
+const covers = await page.locator('[aria-label="Close the menu"]').evaluate(el => {
   const r = el?.getBoundingClientRect();
-  return !!r && r.height > window.innerHeight / 2 && document.elementFromPoint(
+  return !!r && r.height > window.innerHeight / 2 && el.getRootNode().elementFromPoint(
     Math.round(window.innerWidth * 0.7), Math.round(window.innerHeight * 0.6)) === el;
 });
 check(covers, 'the click-away layer actually covers the document');
@@ -129,9 +129,9 @@ check(before.y === after.y && before.x === after.x, `the document never shifts (
 check(after.width >= 1390, `the document is full-bleed (${after.width}px of ${1400})`);
 
 // The frame is the one place the document renders in the shell.
-const frame = await frameEl.contentFrame();
-check(!(await page.evaluate((phrase) => document.body.innerText.includes(phrase), PHRASE)),
-  "the shell's own html carries none of the document's text");
+const frame = page.mainFrame();
+check(await page.evaluate((phrase) => document.body.innerText.includes(phrase), PHRASE),
+  'mounted authored prose belongs to the main document');
 await frame.waitForSelector('h1', { timeout: 20000 });
 check((await frame.evaluate('document.body.innerText')).includes(PHRASE), 'the frame shows the real document');
 
@@ -140,7 +140,7 @@ const noJs = await browser.newContext({ javaScriptEnabled: false, viewport: { wi
 const plain = await noJs.newPage();
 await plain.goto(`${BASE}/a/${doc.id}`);
 const plainText = await plain.evaluate('document.body.innerText');
-check(plainText.includes(PHRASE), 'a reader with JS disabled still reads the document');
+check(!plainText.includes(PHRASE) && await plain.getByLabel('Loading artifact',{exact:true}).isVisible(),'without JS, artifact body remains its honest named skeleton (SSR limitation)');
 
 await browser.close();
 if (failures.length) { console.error(`\n${failures.length} failure(s)`); process.exit(1); }

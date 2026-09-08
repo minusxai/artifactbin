@@ -1,3 +1,4 @@
+import {storyFrame} from './lib/gate-browser.mjs';
 /**
  * Gate: a REAL ⌘V, not a synthetic ClipboardEvent.
  *
@@ -21,7 +22,7 @@
  *
  *   usage: node scripts/gate-real-paste.mjs [base]
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3040';
@@ -64,7 +65,7 @@ await page.goto(`${B}/a/${st.id}#edit`, { waitUntil: 'load' });
 await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 90_000 });
 await page.waitForTimeout(3000);
 
-const frame = await (await page.$('iframe[title="artifact"]')).contentFrame();
+const frame = await storyFrame(page);
 
 // ── 1. a real TEXT paste must land in the paragraph ─────────────────────────
 await page.evaluate(() => navigator.clipboard.writeText('PASTED_TEXT_OK'));

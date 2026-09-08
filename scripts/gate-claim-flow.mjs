@@ -17,7 +17,7 @@
  *
  *   usage: node scripts/gate-claim-flow.mjs [base]
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 import { startMailSink, loginViaEmail, isSignedInAs } from './lib/mail-login.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';

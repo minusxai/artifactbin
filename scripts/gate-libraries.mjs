@@ -1,6 +1,6 @@
 /** Real sandbox: optional library loading, GLB assets, WebGL paint, isolation, export. */
 import assert from 'node:assert/strict';
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import sharp from 'sharp';
 import { mintAnon } from './lib/mint-anon.mjs';
 

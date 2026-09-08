@@ -1,6 +1,7 @@
+import {storyFrame} from './lib/gate-browser.mjs';
 /** Real document acceptance: SQL local state through direct and session-relayed transports. */
 import assert from 'node:assert/strict';
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
 import { becomeOwner } from './lib/start-doc.mjs';
 
@@ -29,7 +30,7 @@ try {
     const page = await context.newPage();
     if (owner) await becomeOwner(page, base, token);
     await page.goto(`${base}/a/${doc.id}`);
-    const surface = owner ? await (await page.waitForSelector('iframe[title="artifact"]')).contentFrame() : page;
+    const surface = owner ? await storyFrame(page) : page;
     await surface.getByLabel('Name 1', {exact: true}).waitFor();
     assert.equal(await surface.evaluate(() => window.mx.params.get('count')), 0);
     await surface.getByRole('button', {name: 'Increment', exact: true}).click();
@@ -42,7 +43,7 @@ try {
     await surface.waitForFunction(() => window.mx.data.get('current')?.rows.some(row => row.id === 2 && row.name === 'Edited locally'));
     assert.equal((await api(`/api/artifacts/${doc.id}`, 'GET')).version, 1);
     await page.reload();
-    const reloaded = owner ? await (await page.waitForSelector('iframe[title="artifact"]')).contentFrame() : page;
+    const reloaded = owner ? await storyFrame(page) : page;
     await reloaded.getByLabel('Name 1', {exact: true}).waitFor();
     assert.equal(await reloaded.getByLabel('Name 2', {exact: true}).count(), 0, 'inline rows reset on reload');
     await context.close();

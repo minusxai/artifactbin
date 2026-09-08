@@ -1,3 +1,4 @@
+import {storyFrame} from './lib/gate-browser.mjs';
 /**
  * Gate: an image URL that only exists in the READER'S BROWSER.
  *
@@ -27,7 +28,7 @@
  */
 import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { startDocument } from './lib/start-doc.mjs';
 import { loginViaEmail, startMailSink } from './lib/mail-login.mjs';
 
@@ -233,7 +234,7 @@ if (mine.status !== 201) {
 
   const beforePriv = hits.filter((h) => h === '/pic3.png').length;
   await holder.goto(`${B}/a/${mine.body.id}`, { waitUntil: 'networkidle' });
-  const own = await (await holder.waitForSelector('iframe[title="artifact"]', { timeout: 30_000 })).contentFrame();
+  const own = await storyFrame(holder, { timeout: 30_000 });
   const owned = await own.evaluate(async () => {
     const deadline = Date.now() + 15_000;
     const read = () => {
@@ -281,7 +282,7 @@ if (mine.status !== 201) {
   await loginViaEmail(guest, B, sink, guestEmail);
   const beforeGuest = hits.filter((h) => h === '/pic3.png').length;
   await guest.goto(`${B}/a/${mine.body.id}`, { waitUntil: 'networkidle' });
-  const guestFrame = await (await guest.waitForSelector('iframe[title="artifact"]', { timeout: 30_000 })).contentFrame();
+  const guestFrame = await storyFrame(guest, { timeout: 30_000 });
   const seenByGuest = await guestFrame.evaluate(async () => {
     const deadline = Date.now() + 15_000;
     const read = () => {

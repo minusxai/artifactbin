@@ -14,7 +14,7 @@
  *
  *   usage: node scripts/gate-live-reader.mjs [base]
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { startDocument } from './lib/start-doc.mjs';
 import { openArtifactControls, revealReaderChrome } from './lib/reveal-chrome.mjs';
 
@@ -62,7 +62,7 @@ const browser = await chromium.launch();
   page.on('framenavigated', (f) => { if (f === page.mainFrame()) reloads++; });
   await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
   await page.waitForFunction(() => /the first version/.test(document.body.textContent ?? ''), null, { timeout: 20000 });
-  ok(!(await page.evaluate(() => !!document.querySelector('iframe[title="artifact"]'))), 'the reader gets the document itself, not the app shell');
+  ok(!(await page.evaluate(() => !!document.querySelector('[data-artifact-story-host]'))), 'the reader gets the document itself, not the app shell');
   await sleep(3000);
 
   // Where they are, and what they are looking at.
@@ -126,7 +126,7 @@ const browser = await chromium.launch();
   // The reader's chrome opens hidden; a scroll up is the gesture that reveals it.
   await revealReaderChrome(page);
   await openArtifactControls(page);
-  await page.click('[data-mx-mode-choice="dark"]');
+  await page.click('[aria-label="Dark mode"]');
   ok(await page.evaluate(() => document.documentElement.classList.contains('dark')), 'the top-right toggle flips the document dark');
 
   await doc.write(withChart('MODE WRITE LANDED'));
@@ -148,7 +148,7 @@ const browser = await chromium.launch();
   await sleep(2000);
   await revealReaderChrome(page);
   await openArtifactControls(page);
-  await page.click('[data-mx-mode-choice="dark"]');
+  await page.click('[aria-label="Dark mode"]');
 
   await doc.write(prose('MODE PROSE REWRITTEN'));
   await page.waitForFunction(() => /MODE PROSE REWRITTEN/.test(document.body.textContent ?? ''), null, { timeout: 25000 })

@@ -1,3 +1,4 @@
+import {storyFrame} from './lib/gate-browser.mjs';
 /**
  * Gate: the tracer slice, in a real browser, end to end.
  *
@@ -14,7 +15,7 @@
  *
  * usage: node scripts/gate-script-slice.mjs [base]   (default :3040)
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { becomeOwner } from './lib/start-doc.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
@@ -72,8 +73,8 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 await becomeOwner(page, BASE, mint.token);
 await page.goto(`${BASE}/a/${doc.id}`);
 
-const frameEl = await page.waitForSelector('iframe[title="artifact"]', { timeout: 15000 });
-const frame = await frameEl.contentFrame();
+const frameEl = await page.waitForSelector('[data-artifact-story-host]', { timeout: 15000 });
+const frame = page.mainFrame();
 await frame.waitForSelector('h1', { timeout: 15000 });
 
 // 1. Script executes only in its own opaque child, never in the rendered document.
@@ -127,7 +128,7 @@ check(!served.includes('total: 30'), 'the served HTML does NOT carry the figure 
 const untilInFrame = async (predicate, timeoutMs = 15000) => {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const live = await (await page.$('iframe[title="artifact"]'))?.contentFrame();
+    const live = await storyFrame(page);
     if (await live?.evaluate(predicate).catch(() => false)) return true;
     await new Promise((r) => setTimeout(r, 250));
   }
@@ -147,7 +148,7 @@ await api(`/api/artifacts/${doc.id}/edits`, { edit_id: doc.edit_id, source: edit
 let remounted = false;
 for (let i = 0; i < 30; i++) {
   await page.waitForTimeout(1000);
-  const f = await (await page.$('iframe[title="artifact"]'))?.contentFrame();
+  const f = await storyFrame(page);
   if (f && (await f.evaluate("document.body.innerText").catch(() => '')).includes('Slice doc v2')) { remounted = true; break; }
 }
 check(remounted, 'remote edit reached the view (iframe remounted)');
@@ -174,7 +175,7 @@ const interactive = await api('/api/artifacts', {
   const p2 = await browser.newPage({ viewport: { width: 1000, height: 700 } });
   await becomeOwner(p2, BASE, mint.token); // a fresh context owns nothing
   await p2.goto(`${BASE}/a/${interactive.id}`);
-  const f2 = await (await p2.waitForSelector('iframe[title="artifact"]', { timeout: 20000 })).contentFrame();
+  const f2 = await storyFrame(p2, { timeout: 20000 });
   await f2.waitForSelector('#tick', { timeout: 20000 });
   await p2.waitForTimeout(1500);
   await f2.click('#tick');
@@ -204,7 +205,7 @@ const broken = await api('/api/artifacts', {
   const p3 = await browser.newPage({ viewport: { width: 1000, height: 700 } });
   await becomeOwner(p3, BASE, mint.token); // a fresh context owns nothing
   await p3.goto(`${BASE}/a/${broken.id}`);
-  const f3 = await (await p3.waitForSelector('iframe[title="artifact"]', { timeout: 20000 })).contentFrame();
+  const f3 = await storyFrame(p3, { timeout: 20000 });
   await f3.waitForSelector('h1', { timeout: 20000 });
   await p3.waitForTimeout(2500);
   check((await f3.evaluate('document.body.innerText')).includes('Still readable'), 'a throwing author script still renders the document');
@@ -229,10 +230,10 @@ const broken = await api('/api/artifacts', {
  */
 await becomeOwner(page, BASE, mint.token);
 await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-await page.waitForSelector('iframe[title="artifact"]', { timeout: 30000 });
+await page.waitForSelector('[data-artifact-story-host]', { timeout: 30000 });
 await page.waitForTimeout(4000);
-const documentFrame = () => page.frames().find((f) => /\/raw/.test(f.url()));
-await page.evaluate(() => { document.querySelector('iframe[title="artifact"]').__probe = 'same-frame'; });
+const documentFrame = () => page.mainFrame();
+await page.evaluate(() => { document.querySelector('[data-artifact-story-host]').__probe = 'same-frame'; });
 const runsBefore = await documentFrame().evaluate("document.querySelectorAll('#script-made').length").catch(() => 0);
 const instanceBefore = (await readReport(documentFrame())).instance;
 
@@ -241,7 +242,7 @@ await page.click('[aria-label="Edit artifact"]');
 await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 30000 });
 await page.waitForTimeout(4000);
 
-check(await page.evaluate(() => document.querySelector('iframe[title="artifact"]')?.__probe) === 'same-frame',
+check(await page.evaluate(() => document.querySelector('[data-artifact-story-host]')?.__probe) === 'same-frame',
   'a scripted document is edited in the frame it was already in');
 check(await documentFrame().evaluate("!!document.querySelector('h1')?.isContentEditable").catch(() => false),
   'and it becomes editable');

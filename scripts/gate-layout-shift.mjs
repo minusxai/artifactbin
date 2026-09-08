@@ -1,3 +1,4 @@
+import {storyFrame} from './lib/gate-browser.mjs';
 /**
  * Gate: a deck must not shove its own document sideways after it opens.
  *
@@ -21,7 +22,7 @@
  *
  *   usage: node scripts/gate-layout-shift.mjs [base]
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
@@ -110,7 +111,7 @@ async function watchCanvas(id, { edit = false, token, width = 1600 } = {}) {
    * exists now — entering edit is a message to the document already on screen
    * — so what is worth asserting is that the document itself does not move.
    */
-  const target = await (await page.waitForSelector('iframe[title="artifact"]', { timeout: 60_000 })).contentFrame();
+  const target = await storyFrame(page, { timeout: 60_000 });
   // `attached`, not `visible`: the rail's previews are scaled to a few pixels,
   // so the first matching element is legitimately not "visible" to Playwright.
   await target.waitForSelector('[data-mx-story-root]', { state: 'attached', timeout: 60_000 });
@@ -194,7 +195,7 @@ async function measureBleed(id, token, width = 1600) {
   const page = await browser.newPage({ viewport: { width, height: 1000 } });
   await becomeOwner(page, B, token);
   await page.goto(`${B}/a/${id}`, { waitUntil: 'commit' });
-  const target = await (await page.waitForSelector('iframe[title="artifact"]', { timeout: 60_000 })).contentFrame();
+  const target = await storyFrame(page, { timeout: 60_000 });
   await target.waitForSelector('.mx-doc', { state: 'attached', timeout: 60_000 });
   // Past every late arrival — a font landing can widen a line after first paint.
   await page.waitForTimeout(2500);

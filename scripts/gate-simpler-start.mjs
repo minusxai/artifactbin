@@ -11,7 +11,7 @@
  *
  *   usage: node scripts/gate-simpler-start.mjs [base]
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
 const out = [];
@@ -97,7 +97,7 @@ const seenInFrame = async (p, text) => {
   for (let i = 0; i < 60; i++) {
     // A no-runtime document RELOADS to show a live update, which destroys the
     // execution context mid-poll: that is the update arriving, not a failure.
-    const f = await (await p.$('iframe[title="artifact"]').catch(() => null))?.contentFrame();
+    const f = p.mainFrame();
     const body = f
       ? await f.evaluate('document.body.innerText').catch(() => '')
       : await p.evaluate('document.body.innerText').catch(() => '');

@@ -1,3 +1,4 @@
+import {storyFrame} from './lib/gate-browser.mjs';
 /**
  * Gate: the DATAFLOW, end to end in a real browser — the durable form of what
  * the feature was verified with while it was built.
@@ -26,7 +27,7 @@
  *   (local dev and gates read the protected development outbox)
 
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
 const B = process.argv[2] ?? 'http://localhost:3030';
@@ -73,7 +74,7 @@ p.on('request', (r) => {
 });
 const resp = await p.goto(`${B}/a/${doc.id}`, { waitUntil: 'load' });
 const csp = resp.headers()['content-security-policy'] ?? '';
-ok(csp.includes('sandbox') && csp.includes(`connect-src ${B}/a/${doc.id}/query`), 'the reader\'s document is served top-level under the sandbox CSP, connect-src = its own query url');
+ok(!/(?:^|;)\s*sandbox(?:\s|;|$)/.test(csp) && csp.includes('connect-src'), 'first-party shell has a bounded connection policy without sandboxing authentication');
 ok((await p.locator('iframe[title="artifact"]').count()) === 0, 'no iframe: the public data document IS the page');
 ok(p.url() === `${B}/a/${doc.id}`, `URL unchanged, no redirect (${new URL(p.url()).pathname})`);
 const frame = p.mainFrame();
@@ -201,8 +202,8 @@ reader.on('request', (r) => {
 });
 const privResp = await reader.goto(`${B}/a/${priv.id}`, { waitUntil: 'load' });
 ok(privResp.status() === 200, `the admitted reader opens the private document (${privResp.status()})`);
-ok((await reader.locator('iframe[title="artifact"]').count()) === 1, 'and gets the SHELL — the private data document stays in the iframe');
-const pf = await (await reader.waitForSelector('iframe[title="artifact"]')).contentFrame();
+ok((await reader.locator('iframe[title="artifact"]').count()) === 0, 'private data also uses the top-level story host, never a document iframe');
+const pf = await storyFrame(reader);
 await pf.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent === '$30', null, { timeout: 20000 }).catch(() => {});
 ok((await pf.textContent('[aria-label="Live number"]').catch(() => '')) === '$30', 'the private document renders its server-run data for the reader');
 await pf.selectOption('select[aria-label="Region"]', 'NA');
@@ -260,9 +261,9 @@ await up.close();
 // PAGE writes the address — and the frame must NOT be re-navigated by that,
 // which would be a full document reload once per pick.
 let frameLoads = 0;
-owner.on('framenavigated', (f) => { if (f !== owner.mainFrame() && f.url().includes(`/a/${udoc.id}/raw`)) frameLoads++; });
+owner.on('request',request=>{if(request.isNavigationRequest() && request.frame()===owner.mainFrame())frameLoads++;});
 await owner.goto(`${B}/a/${udoc.id}?$region=west`, { waitUntil: 'load' });
-const ownerFrame = await (await owner.waitForSelector('iframe[title="artifact"]')).contentFrame();
+const ownerFrame = await storyFrame(owner);
 await ownerFrame.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent?.startsWith('$'), null, { timeout: 20000 }).catch(() => {});
 ok(ownerFrame.url().includes('$region=west'), `the shell seeds its frame with the link's selection (${new URL(ownerFrame.url()).search})`);
 ok((await ownerFrame.$eval('select[aria-label="Region"]', (el) => el.value)) === 'west', 'the framed control shows it');

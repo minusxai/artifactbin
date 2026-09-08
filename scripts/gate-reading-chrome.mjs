@@ -14,7 +14,7 @@
  *
  *   usage: node scripts/gate-reading-chrome.mjs [base]
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { startDocument } from './lib/start-doc.mjs';
 import { openArtifactControls, revealReaderChrome } from './lib/reveal-chrome.mjs';
 
@@ -99,12 +99,15 @@ const browser = await chromium.launch();
   // First-paint geometry: sample the column's left edge from the earliest
   // paint and after settling. A moved sample is a layout shift.
   await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'domcontentloaded' });
+  const bootstrap=await page.locator('head script#mx-page-data').evaluate(el=>JSON.parse(el.textContent));
+  ok(bootstrap.ssr===false && bootstrap.presentation==='artifact','artifact first paint explicitly uses the named client-rendering contract');
+  await page.locator('.mx-outline').waitFor({state:'attached'});
   const early = await page.evaluate(() => document.querySelector('article')?.getBoundingClientRect().left ?? -1);
   const hasOutlineEarly = await page.evaluate(() => !!document.querySelector('.mx-outline'));
   await page.waitForLoadState('networkidle');
   await sleep(800);
   const late = await page.evaluate(() => document.querySelector('article')?.getBoundingClientRect().left ?? -1);
-  ok(hasOutlineEarly, 'the outline is in the document on FIRST paint (server-rendered)');
+  ok(hasOutlineEarly, 'the outline is present with the first mounted authored body');
   ok(Math.abs(early - late) < 2, `the column did not move after paint (${early} → ${late})`);
   ok(await page.evaluate(() => document.querySelectorAll('.mx-outline-row').length) === 4, 'one row per section');
   ok(await page.evaluate(() => getComputedStyle(document.querySelector('.mx-outline')).display !== 'none'), 'the outline is visible at 1440');
@@ -287,7 +290,7 @@ const browser = await chromium.launch();
   // The chrome opens hidden now — a scroll up is what brings it back.
   await revealReaderChrome(page);
   await openArtifactControls(page);
-  await page.click('[data-mx-mode-choice="dark"]');
+  await page.click('[aria-label="Dark mode"]');
   await sleep(400);
   ok(await page.evaluate(() => document.documentElement.classList.contains('dark')
     && getComputedStyle(document.querySelector('.mx-outline')).display !== 'none'),

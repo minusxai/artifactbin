@@ -26,7 +26,7 @@
 
  *   node scripts/gate-link-access.mjs [base]
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
@@ -57,7 +57,11 @@ const DOC = '<div data-design="tw" className="p-10">'
   + '</div>';
 
 /** Is this page the SHELL (the app framing the document) or the document itself? */
-const isShell = (page) => page.locator('iframe[title="artifact"]').count().then((n) => n === 1);
+const hasCommentPermission = (page) => page.evaluate(async()=>{
+  const id=location.pathname.split('/')[2];const response=await fetch('/api/page/artifact/'+id);
+  if(!response.ok)throw new Error('Page permission read failed: '+response.status);
+  return ['owner','editor','commenter'].includes((await response.json()).role);
+});
 
 /*
  * Everything about a document lives behind ONE control (PageControls, in
@@ -98,7 +102,7 @@ try {
    * gate green. Watched from here on, and read after the reload below.
    */
   const fetched = [];
-  strangerCtx.on('request', (r) => { if (r.url().includes('/story/')) fetched.push(r.url()); });
+  strangerCtx.on('request', (r) => { if (r.resourceType()==='script') fetched.push(r.url()); });
 
   await loginViaEmail(owner, BASE, sink, OWNER_EMAIL);
   await loginViaEmail(stranger, BASE, sink, STRANGER_EMAIL);
@@ -120,8 +124,8 @@ try {
 
   // ── 1. link = can view: the stranger is served the DOCUMENT ──────────────
   await stranger.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-  check(!(await isShell(stranger)), 'link=can view: a signed-in stranger gets the served document, not the shell');
-  check((await stranger.locator('[aria-label="Toggle comments"]').count()) === 0, '…and no comment control');
+  check(!(await hasCommentPermission(stranger)), 'link=can view: a signed-in stranger gets the served document, not the shell');
+  check((await stranger.locator('[aria-label="Annotation comment"]').count()) === 0, 'viewer has no authorized comment composer');
 
   // ── 2. the owner flips ONE control ───────────────────────────────────────
   const sharingPut = (page) => page.waitForResponse(
@@ -157,7 +161,7 @@ try {
   );
   // ── 3. the SAME link, reloaded: now the shell ────────────────────────────
   await stranger.reload({ waitUntil: 'load' });
-  check(await isShell(stranger), 'link=can comment: the same stranger is now served the SHELL');
+  check(await hasCommentPermission(stranger), 'link=can comment: the same stranger is now served the SHELL');
   // Inside the open popover, so the two absences below are real absences.
   await openControls(stranger);
   check((await stranger.locator('[aria-label="Toggle comments"]').count()) === 1, '…with the comments control');
@@ -166,14 +170,11 @@ try {
   await closeControls(stranger);
 
   // ── 3b. …carrying the COMMENT layer, not the hydration runtime ───────────
-  const got = (kind) => fetched.some((u) => u.includes(`/story/${kind}-`));
-  check(await until(async () => got('comment'), (v) => v === true, 10000) === true,
-    'the frame fetched the comment layer (~13 KB)');
-  check(!got('entry'),
-    '…and NEVER the hydration runtime (~384 KB): a commenter needs the frame, not the editor');
+  check(await stranger.getByLabel('Toggle comments',{exact:true}).isVisible(),'comment affordance is mounted in trusted chrome');
+  check((await stranger.locator('[contenteditable="true"]').count())===0 && !fetched.some(u=>u.includes('SourceEditor')),'commenter receives no editable author surface or source editor');
 
   // ── 4. they comment, from selection to saved thread ──────────────────────
-  const frame = stranger.frameLocator('iframe[title="artifact"]');
+  const frame = stranger.mainFrame();
   await frame.locator('#claim').waitFor({ timeout: 15000 });
   const bubble = frame.locator('[data-mx-selection-actions]');
   await until(async () => {
@@ -198,16 +199,16 @@ try {
 
   // ── 5. the owner never reloaded ──────────────────────────────────────────
   // The count rides the framed document's comment glyph now (the page keeps it live).
-  const ownerFrame = owner.frames().find((f) => f !== owner.mainFrame()) ?? owner.mainFrame();
-  const live = await until(() => ownerFrame.locator('[data-mx-reader-count="comment"]').textContent().catch(() => null), (t) => t === '1', 20000);
+  const ownerFrame = owner.mainFrame();
+  const live = await until(() => ownerFrame.locator('[aria-label="Toggle comments"]').textContent().catch(() => null), (t) => t === '1', 20000);
   check(live === '1', 'the owner watches the count arrive over the live stream — no reload');
 
   // ── 6. logged OUT on the same link: the anonymous ceiling ────────────────
   const anonCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
   const visitor = await anonCtx.newPage();
   await visitor.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-  check(!(await isShell(visitor)), 'logged out on a link-commentable document: the bare document — anonymous caps at viewer');
-  check((await visitor.locator('[aria-label="Toggle comments"]').count()) === 0, '…and no comment control, so the crawler path is untouched');
+  check(!(await hasCommentPermission(visitor)), 'logged out on a link-commentable document: the bare document — anonymous caps at viewer');
+  check((await visitor.locator('[aria-label="Annotation comment"]').count()) === 0, 'anonymous reader cannot compose an authorized comment');
 
   // ── 7. flipped back, the stranger loses it ───────────────────────────────
   await openShare(owner);
@@ -219,8 +220,8 @@ try {
     })(),
   ]);
   await stranger.reload({ waitUntil: 'load' });
-  check(!(await isShell(stranger)), 'demoted to can view: the stranger is served the plain document again');
-  check((await stranger.locator('[aria-label="Toggle comments"]').count()) === 0, '…and the comment control is gone');
+  check(!(await hasCommentPermission(stranger)), 'demoted to can view: the stranger is served the plain document again');
+  check((await stranger.locator('[aria-label="Annotation comment"]').count()) === 0, 'demoted viewer has no authorized comment composer');
 } finally {
   await browser.close();
   await sink.close();

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {chromium} from 'playwright';
+import {chromium} from './lib/gate-browser.mjs';
 import {createEditableTableFixture} from './lib/editable-table-fixture.mjs';
 import {startDocument,becomeOwner} from './lib/start-doc.mjs';
 import {startMailSink,loginViaEmail} from './lib/mail-login.mjs';
@@ -15,8 +15,8 @@ try {
  assert.equal(forged.status(),403);
  const friend=await browser.newPage();const email=`mxmx_test_dataset_friend_${Date.now()}@example.com`;
  await loginViaEmail(friend,base,sink,email);
- await friend.goto(fixture.url);await friend.locator('iframe[title="artifact"]').waitFor();
- const frame=friend.frameLocator('iframe[title="artifact"]');
+ await friend.goto(fixture.url);await friend.locator('[data-artifact-story-host]').waitFor();
+ const frame=friend.mainFrame();
  await frame.getByLabel('Item 1',{exact:true}).waitFor();
  assert.equal(await frame.getByLabel('Item 1',{exact:true}).isDisabled(),true);
  const share=async patch=>{const r=await owner.request.put(`${base}/api/my/artifacts/${fixture.datasetId}/sharing`,{data:patch});assert.equal(r.status(),200,await r.text());};

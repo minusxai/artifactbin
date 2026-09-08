@@ -3,7 +3,7 @@
  * owner chrome → sharing → focused cropper → keyboard position/resize → source edit →
  * exact 1600×840 card → reset back to the top-left default.
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import sharp from 'sharp';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';

@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import {assertTrustedChrome} from './gate-browser.mjs';
 
-/** Built browser proof: public HTML is useful before any script or trusted child. */
-export async function verifyPublicFirstPaint({browser,base,controls}) {
+/** Public Landing is useful with JS disabled; one shared root replaces static
+ * presentation when the app starts, including deliberately delayed startup. */
+export async function verifyPublicFirstPaint({browser,base}) {
   const noJs=await browser.newContext({ignoreHTTPSErrors:true,javaScriptEnabled:false});
   const document=await noJs.newPage();const response=await document.goto(base+'/');
   assert.equal(response.status(),200);await document.locator('h1').waitFor({state:'visible'});
@@ -10,24 +12,26 @@ export async function verifyPublicFirstPaint({browser,base,controls}) {
   const context=await browser.newContext({ignoreHTTPSErrors:true});const page=await context.newPage();
   const samples=[];
   for(const cache of ['cold','warm']){
-    await page.goto(base+'/');
-    await page.waitForFunction(()=>['chrome','home'].every(kind=>document.querySelector(`[data-trusted-region="${kind}"]`)?.getAttribute('aria-busy')==='false'));
-    const metrics=await page.evaluate(()=>({ready:Math.round(performance.now()),fcp:Math.round(performance.getEntriesByName('first-contentful-paint')[0]?.startTime??0),bytes:performance.getEntriesByType('resource').reduce((sum,r)=>sum+r.transferSize,0)}));
-    samples.push({cache,...metrics});
-    assert.equal(await page.locator('[data-trusted-region="chrome"]').evaluate(el=>Math.round(el.getBoundingClientRect().height)),44);
-    assert.equal(await page.locator('iframe[title="Home workspace"]').evaluate(el=>el.getBoundingClientRect().height>100),true);
+    await page.goto(base+'/');await assertTrustedChrome(page);
+    await page.getByLabel('Install for my agent').waitFor();
+    samples.push({cache,...await page.evaluate(()=>({ready:Math.round(performance.now()),fcp:Math.round(performance.getEntriesByName('first-contentful-paint')[0]?.startTime??0),bytes:performance.getEntriesByType('resource').reduce((sum,r)=>sum+r.transferSize,0)}))});
+    assert.equal(await page.getByLabel('Page bar',{exact:true}).evaluate(el=>Math.round(el.getBoundingClientRect().height)),44);
+    assert.equal(await page.locator('main').first().evaluate(el=>el.getBoundingClientRect().height>100),true);
   }
-  // Force the real SSR race: the region finishes before public hydration.
   let release;const hydration=new Promise(resolve=>{release=resolve;});
-  await page.route('**/assets/public-*.js',async route=>{await hydration;await route.continue();});
-  const blocked=page.waitForRequest(request=>/\/assets\/public-[^/]+\.js$/.test(new URL(request.url()).pathname),{timeout:10000});
+  await page.route('**/assets/app-*.js',async route=>{await hydration;await route.continue();});
+  const blocked=page.waitForRequest(request=>/\/assets\/app-[^/]+\.js$/.test(new URL(request.url()).pathname),{timeout:10000});
   const navigation=page.goto(base+'/',{waitUntil:'domcontentloaded'});
   await blocked;
-  await page.frameLocator('iframe[title="Home workspace"]').getByLabel('Install for my agent').waitFor();
-  await page.locator('h1').waitFor({state:'visible'});release();await navigation;
-  await page.waitForFunction(()=>['chrome','home'].every(kind=>document.querySelector(`[data-trusted-region="${kind}"]`)?.getAttribute('aria-busy')==='false'));
-  await page.unroute('**/assets/public-*.js');
-  assert.equal(new URL(await page.locator('iframe[title="Page controls"]').getAttribute('src')).origin,controls);
-  console.log('PASS no-JS public SSR, stable chrome, bounded late-parent handshake; local first-paint samples',JSON.stringify(samples));
+  try{
+    await page.locator('h1').waitFor({state:'visible'});
+    const bootstrap=await page.locator('head script#mx-page-data').evaluate(el=>JSON.parse(el.textContent));
+    assert.equal(bootstrap.path,'/');assert.equal(bootstrap.ssr,true);assert.equal(bootstrap.session.kind,'none');
+  }finally{release();}
+  await navigation;await assertTrustedChrome(page);
+  await page.getByLabel('Install for my agent').waitFor();
+  await page.unroute('**/assets/app-*.js');
+  assert.equal(await page.locator('iframe[title="Home workspace"],iframe[title="Page controls"]').count(),0);
+  console.log('PASS no-JS public Landing, stable shared chrome, delayed app startup; local first-paint samples',JSON.stringify(samples));
   await context.close();
 }

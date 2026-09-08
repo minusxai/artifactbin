@@ -26,7 +26,7 @@
  *
  *   node scripts/gate-fork.mjs [base]
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
@@ -93,7 +93,7 @@ check(!strangerHtml.includes('id="root"'), '…and never the app shell');
 
 // ── 3. the logged-out reader taps Fork in the document's own controls ─────
 await forker.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-await forker.waitForSelector('[data-mx-reader-chrome]', { state: 'attached', timeout: 20000 });
+await forker.getByLabel('Page bar',{exact:true}).waitFor({timeout:20000});
 check((await forker.locator('iframe[title="artifact"]').count()) === 0, 'a logged-out reader is served the document TOP-LEVEL, not the shell');
 await openArtifactControls(forker);
 const forkAnchor = forker.locator('[aria-label="Fork artifact"]');
@@ -134,7 +134,7 @@ const copyRow = await forker.evaluate(
 check(copyRow.forked_from === doc.id, `the copy records its source (forked_from = ${copyRow.forked_from})`);
 check(copyRow.id !== doc.id, 'a new id — the original is untouched');
 
-const credit = forker.frameLocator('iframe[title="artifact"]').locator('[data-mx-forked-from]');
+const credit = forker.mainFrame().locator('[data-mx-forked-from]');
 await credit.waitFor({ state: 'attached', timeout: 30000 });
 const creditText = await credit.innerText();
 check(creditText.toLowerCase().includes('forked from'), `the copy's credits name its source ("${creditText.trim()}")`);

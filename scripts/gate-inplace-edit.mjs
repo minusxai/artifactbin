@@ -17,7 +17,7 @@
  *
  *   usage: node scripts/gate-inplace-edit.mjs [base]
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
@@ -59,18 +59,18 @@ const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
   await becomeOwner(page, BASE, start.token);
   await page.goto(`${BASE}/a/${start.id}`, { waitUntil: 'load' });
-  await page.waitForSelector('iframe[title="artifact"]', { timeout: 30000 });
+  await page.waitForSelector('[data-artifact-story-host]', { timeout: 30000 });
   await sleep(7000);
 
-  const frame = () => page.frames().find((f) => /\/raw/.test(f.url()));
+  const frame = () => page.mainFrame();
 
   // Stamp what must survive, and start counting frame replacements.
   await page.evaluate(() => {
-    document.querySelector('iframe[title="artifact"]').__probe = 'same-frame';
+    document.querySelector('[data-artifact-story-host]').__probe = 'same-frame';
     window.__swaps = 0;
     new MutationObserver((records) => {
       for (const r of records) for (const n of r.addedNodes) {
-        if (n.nodeType === 1 && n.matches?.('iframe[title="artifact"]')) window.__swaps++;
+        if (n.nodeType === 1 && n.matches?.('[data-artifact-story-host]')) window.__swaps++;
       }
     }).observe(document.body, { childList: true, subtree: true });
   });
@@ -90,7 +90,7 @@ const browser = await chromium.launch();
   await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 20000 });
   await sleep(3000);
   ok(await page.evaluate(() => window.__swaps) === 0
-    && await page.evaluate(() => document.querySelector('iframe[title="artifact"]')?.__probe) === 'same-frame',
+    && await page.evaluate(() => document.querySelector('[data-artifact-story-host]')?.__probe) === 'same-frame',
     'entering edit did not replace the document');
   ok(Math.abs(await frame().evaluate(() => window.scrollY) - readingAt) < 5,
     'and did not move the reader');
@@ -147,7 +147,7 @@ const browser = await chromium.launch();
   await page.click('[aria-label="Exit edit mode"]');
   await sleep(3000);
   ok(await page.evaluate(() => window.__swaps) === 0
-    && await page.evaluate(() => document.querySelector('iframe[title="artifact"]')?.__probe) === 'same-frame',
+    && await page.evaluate(() => document.querySelector('[data-artifact-story-host]')?.__probe) === 'same-frame',
     'leaving edit did not replace it either');
   ok(Math.abs(await frame().evaluate(() => window.scrollY) - leavingAt) < 5, 'nor moved the reader on the way out');
   ok(await frame().evaluate(() => !document.querySelector('#lede')?.isContentEditable), 'and the document is no longer editable');
@@ -181,14 +181,14 @@ const browser = await chromium.launch();
   await becomeOwner(page, BASE, start.token);
   await page.evaluate(() => { window.__swaps = 0; });
   await page.goto(`${BASE}/a/${start.id}`, { waitUntil: 'load' });
-  await page.waitForSelector('iframe[title="artifact"]', { timeout: 30000 });
+  await page.waitForSelector('[data-artifact-story-host]', { timeout: 30000 });
   await sleep(6000);
   await page.evaluate(() => {
-    document.querySelector('iframe[title="artifact"]').__probe = 'same-frame';
+    document.querySelector('[data-artifact-story-host]').__probe = 'same-frame';
     window.__swaps = 0;
     new MutationObserver((records) => {
       for (const r of records) for (const n of r.addedNodes) {
-        if (n.nodeType === 1 && n.matches?.('iframe[title="artifact"]')) window.__swaps++;
+        if (n.nodeType === 1 && n.matches?.('[data-artifact-story-host]')) window.__swaps++;
       }
     }).observe(document.body, { childList: true, subtree: true });
   });
@@ -199,9 +199,9 @@ const browser = await chromium.launch();
   await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 20000 });
   await sleep(5000);
 
-  const frame = () => page.frames().find((f) => /\/raw/.test(f.url()));
+  const frame = () => page.mainFrame();
   ok(await page.evaluate(() => window.__swaps) === 0
-    && await page.evaluate(() => document.querySelector('iframe[title="artifact"]')?.__probe) === 'same-frame',
+    && await page.evaluate(() => document.querySelector('[data-artifact-story-host]')?.__probe) === 'same-frame',
     'a SCRIPTED document is edited in place too — no swap');
   ok(await frame().evaluate(() => !!document.getElementById('lede')?.isContentEditable),
     'and it is editable');

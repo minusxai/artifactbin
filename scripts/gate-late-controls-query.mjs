@@ -8,7 +8,7 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {randomBytes} from 'node:crypto';
 import net from 'node:net';
-import {chromium} from 'playwright';
+import {chromium} from './lib/gate-browser.mjs';
 import {startDocument,becomeOwner} from './lib/start-doc.mjs';
 
 const requested=Number(process.argv.find(a=>a.startsWith('--port-base='))?.split('=')[1]??0);
@@ -29,7 +29,7 @@ const api=(url,init={})=>new Promise((resolve,reject)=>{
 let server,browser;
 try{
  await new Promise(resolve=>tls.listen(port,'127.0.0.1',resolve));
- server=spawn(process.execPath,[resolve('dist/proxy-server.mjs')],{cwd:resolve('services/app'),stdio:['ignore','ignore','inherit'],env:{...process.env,NODE_ENV:'production',APP__PORT:String(backendPort),APP__PUBLIC_BASE_URL:base,APP__CONTROLS_ORIGIN:controls,AUTH__SECRET:randomBytes(32).toString('hex'),DATABASE_URL:'pglite://memory',SQL__SERVICE_URL:'',BROWSER__SERVICE_URL:'',EVENTS__SERVICE_URL:'',OBJECT_STORE__LOCAL_DIR:join(scratch,'objects'),ARTIFACTS__ALLOW_PUBLIC:'1',PROXY__RATE_LIMIT_CONFIG_FILE:resolve('services/proxy/dev_rate_limits.yml')}});
+ server=spawn(process.execPath,[resolve('dist/proxy-server.mjs')],{cwd:resolve('services/app'),stdio:['ignore','ignore','inherit'],env:{...process.env,NODE_ENV:'production',APP__PORT:String(backendPort),APP__PUBLIC_BASE_URL:base,APP__CONTROLS_ORIGIN:'',AUTH__SECRET:randomBytes(32).toString('hex'),DATABASE_URL:'pglite://memory',SQL__SERVICE_URL:'',BROWSER__SERVICE_URL:'',EVENTS__SERVICE_URL:'',OBJECT_STORE__LOCAL_DIR:join(scratch,'objects'),ARTIFACTS__ALLOW_PUBLIC:'1',PROXY__RATE_LIMIT_CONFIG_FILE:resolve('services/proxy/dev_rate_limits.yml')}});
  let ready=false;for(let i=0;i<300;i++){if(server.exitCode!==null)throw Error('server exited');if(await api(backend+'/health').then(r=>r.ok).catch(()=>false)){ready=true;break;}await new Promise(r=>setTimeout(r,100));}assert(ready);
  const seed=await startDocument(backend,{},api),headers={Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'};
  const published=await api(backend+'/api/artifacts',{method:'POST',headers,body:JSON.stringify({dataset:[{n:41}],access:'readwrite'})});assert(published.ok,await published.clone().text());const dataset=await published.json();
@@ -37,18 +37,30 @@ try{
  const saved=await api(`${backend}/api/artifacts/${seed.id}`,{method:'PUT',headers,body:JSON.stringify({markup,expectedVersion:1})});assert(saved.ok,await saved.clone().text());
  browser=await chromium.launch({args:['--host-resolver-rules=MAP artifactbin.test 127.0.0.1, MAP i.artifactbin.test 127.0.0.1','--proxy-bypass-list=*']});
  const context=await browser.newContext({ignoreHTTPSErrors:true});const page=await context.newPage();
- await becomeOwner(page,controls,seed.token);
- let delayed=0;const queries=[],writes=[];
- page.on('request',req=>{if(req.url().includes('/query'))queries.push(req.url());if(req.method()==='POST'&&req.url().includes('/mutate'))writes.push(req.url());});
- await page.route(controls+'/controls/a/**',async route=>{if(route.request().isNavigationRequest()){delayed++;await new Promise(resolve=>setTimeout(resolve,5000));}await route.continue();});
+ await becomeOwner(page,base,seed.token);
+ let delayed=0;const durations=[],queries=[],writes=[];
+ page.on('request',req=>{
+   if(req.url().includes('/query') || (req.method()==='POST'&&req.url().includes('/mutate'))){
+     assert.equal(req.frame(),page.mainFrame(),'query/mutation transport belongs to first-party runtime, never author frame');
+     if(req.url().includes('/query'))queries.push(req.url());else writes.push(req.url());
+   }
+ });
+ await page.route(base+'/api/page/artifact/**',async route=>{
+   delayed++;const started=Date.now();
+   assert.equal(await page.locator('[data-artifact-story-host]').count(),0,'no runtime mounts before delayed page data');
+   await new Promise(resolve=>setTimeout(resolve,5000));durations.push(Date.now()-started);await route.continue();
+ });
  for(let load=0;load<2;load++){
-  const started=Date.now();await page.goto(base+'/a/'+seed.id,{waitUntil:'domcontentloaded'});
+  await page.goto(base+'/');await page.getByLabel('Shelf',{exact:true}).waitFor();
+  const started=Date.now();
+  await page.locator(`[aria-label="Shelf"] a[href="/a/${seed.id}"]`).first().click();
   try{await page.getByText(String(41+load),{exact:true}).waitFor({timeout:13000});await page.getByRole('button',{name:'Increment persistent number',exact:true}).click({timeout:3000});await page.getByText(String(42+load),{exact:true}).waitFor({timeout:5000});}
   catch(error){console.error(JSON.stringify({load,elapsedMs:Date.now()-started,delayed,queries:queries.length,writes:writes.length,body:(await page.locator('body').innerText()).slice(0,1000)}));throw error;}
  }
- assert.equal(delayed,2);assert.equal(writes.length,2,'one persistent mutation per user click');
+ assert.equal(delayed,2);assert(durations.every(ms=>ms>=5000),'both actual page-data requests were delayed at least 5s');assert.equal(writes.length,2,'one persistent mutation per user click');
+ await page.unroute(base+'/api/page/artifact/**');await page.reload();await page.getByText('43',{exact:true}).waitFor();
  assert(queries.length>0,'the initial read reached the authenticated query endpoint');
- assert([...queries,...writes].every(url=>new URL(url).origin===controls),'every browser query and persistent write stays on the trusted controls origin');
+ assert([...queries,...writes].every(url=>new URL(url).origin===base),'every browser query and persistent write stays on the first-party main origin');
  const stored=await api(`${backend}/api/artifacts/${dataset.id}`,{headers});assert(stored.ok);const content=await stored.json();
  assert.equal(content.rows[0].n,43,'the dataset persisted both writes');
  console.log(JSON.stringify({ok:true,delayedLoads:delayed,delayMs:5000,queryRequests:queries.length,persistentWrites:writes.length,trustedOriginOnly:true,finalNumber:43}));

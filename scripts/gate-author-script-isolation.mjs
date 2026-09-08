@@ -1,6 +1,7 @@
+import {storyFrame} from './lib/gate-browser.mjs';
 /** Built-server security acceptance: authored JS has data capabilities, never renderer/account authority. */
 import assert from 'node:assert/strict';
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
 import { becomeOwner } from './lib/start-doc.mjs';
 
@@ -37,7 +38,7 @@ try {
   const accountRequests = [];
   page.on('request',r=>{ if (/\/(like|follow|edits|annotations)(?:\?|$)/.test(new URL(r.url()).pathname) && r.method() !== 'GET') accountRequests.push(r.url()); });
   await page.goto(`${base}/a/${doc.id}`);
-  const frame = await (await page.waitForSelector('iframe[title="artifact"]')).contentFrame();
+  const frame = await storyFrame(page);
   await frame.waitForFunction(()=>{
     const values=window.mx?.params;
     return values?.get('dom')==='SecurityError' && values.get('storage')==='SecurityError'
@@ -56,7 +57,7 @@ try {
   await frame.waitForFunction(()=>document.querySelector('#heading')?.textContent==='Script removed');
   assert.equal(await frame.locator('iframe[title="Isolated artifact script"]').count(),0);
   await page.reload();
-  const reloaded = await (await page.waitForSelector('iframe[title="artifact"]')).contentFrame();
+  const reloaded = await storyFrame(page);
   await reloaded.waitForFunction(()=>document.querySelector('#heading')?.textContent==='Script removed');
   assert.equal(await reloaded.locator('iframe[title="Isolated artifact script"]').count(),0);
   console.log('PASS: opaque script DOM/storage/network isolation, signals, mutation refusal, forged account/edit denial, live replacement/removal, reload');

@@ -17,7 +17,7 @@
  *
  * Exits non-zero on the first failing section's summary.
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 import { startMailSink, loginViaEmail, isSignedInAs } from './lib/mail-login.mjs';
@@ -135,7 +135,7 @@ const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 1500, height: 950 } });
 const p = await ctx.newPage();
 p.on('dialog', (d) => d.accept());
-const surface = () => p.frames().find((f) => f !== p.mainFrame());
+const surface = () => p.mainFrame();
 // Edit is a MODE on the artifact's one url — `#edit` is a fragment, so it
 // never reaches the server and never changes the link you share.
 const unlock = async (id) => {
@@ -198,15 +198,13 @@ await becomeOwner(op, B, T);
 await op.goto(`${B}/a/${made.markup.id}`, { waitUntil: 'load' });
 {
   const probe = await op.evaluate(() => {
-    const f = document.querySelector('iframe[title="artifact"]');
+    const f = document.querySelector('[data-artifact-story-host]');
     if (!f) return { missing: true };
-    let readable = true;
-    try { readable = !!f.contentDocument; } catch { readable = false; }
-    return { sandbox: f.getAttribute('sandbox') || '', readable };
+    const scripts=[...f.querySelectorAll('iframe[title="Isolated artifact script"]')];
+    return {topLevel:f.ownerDocument===document,unsafe:scripts.some(el=>el.getAttribute('sandbox')!=='allow-scripts'),readable:scripts.some(el=>!!el.contentDocument)};
   });
-  ok(!probe.missing && probe.sandbox.includes('allow-scripts') && !probe.sandbox.includes('allow-same-origin'),
-     'the document renders in a frame sandboxed without allow-same-origin');
-  ok(probe.readable === false, 'the artifact frame is opaque to the app page (cannot reach its storage)');
+  ok(!probe.missing && probe.topLevel && !probe.unsafe,'prose is top-level; any author execution remains sandboxed without same-origin');
+  ok(probe.readable === false, 'no author execution frame shares first-party DOM/storage');
 }
 
 // And the reader's copy — same document, no frame, still opaque.

@@ -6,10 +6,9 @@
  *  1. `POST /api/start` returns the anonymous agent token once, both as a
  *     `token` field and inline in the one-line paste. Gates take the field and
  *     assert the paste carries the same credential; no start link is spent.
- *  2. `/a/<id>` serves the DOCUMENT ITSELF to anyone who is not its owner.
- *     There is no `iframe[title="artifact"]` on a reader's page, because there
- *     is no page — so a gate that drives the app shell must first make its
- *     browser the owner, which is what `becomeOwner` does.
+ *  2. `/a/<id>` mounts authored prose in the main document for every role.
+ *     A gate that edits must still establish ownership via `becomeOwner`;
+ *     shared first-party chrome never implies document permissions.
  *
  * Both are the product working as designed, so they belong in one helper
  * rather than in thirteen copies of the old assumptions.
@@ -42,18 +41,15 @@ export async function startDocument(base, headers = {}, fetchImpl = fetch) {
 }
 
 /**
- * Make this browser the document's owner, so `/a/<id>` serves it the app shell
- * (top bar, the document in its sandboxed frame, the editor) instead of the
- * bare document. Exchanges the token for the httpOnly session cookie — the
+ * Make this browser the document's owner, enabling its editing controls.
+ * Exchanges the token for the httpOnly session cookie — the
  * same call the app's own UI makes.
  *
- * The public homepage may be only a credential-free wrapper. Resolve its
- * trusted app frame before exchanging; single-origin deployments use the page.
+ * The exchange happens in the first-party main document, never an i. frame.
  */
 export async function becomeOwner(page, base, token) {
   await page.goto(`${base}/`, { waitUntil: 'load' });
-  const selector='iframe[title="Home workspace"],iframe[title="Artifactbin app"]';
-  const app=await page.locator(selector).count()?page.frameLocator(selector):page;
+  const app=page;
   await app.locator('#root').waitFor({state:'attached'});
   const status = await app.locator('body').evaluate(async (_,t) => (await fetch('/api/session/token', {
     method: 'POST',

@@ -1,5 +1,6 @@
+import {storyFrame} from './lib/gate-browser.mjs';
 import assert from 'node:assert/strict';
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { createEditableTableFixture } from './lib/editable-table-fixture.mjs';
 import { startDocument, becomeOwner } from './lib/start-doc.mjs';
 const base = process.argv[2] ?? 'http://localhost:3030';
@@ -13,8 +14,8 @@ try {
   ownerPage.on('console', message => {if (message.type() === 'error') console.error(message.text());});
   await becomeOwner(ownerPage,base,fixture.token);
   await ownerPage.goto(fixture.url);
-  await ownerPage.locator('iframe[title="artifact"]').waitFor();
-  let page = await (await ownerPage.locator('iframe[title="artifact"]').elementHandle()).contentFrame();
+  await ownerPage.locator('[data-artifact-story-host]').waitFor();
+  let page = await storyFrame(ownerPage);
   const switchView = async name => {
     await page.getByLabel('View', {exact:true}).click();
     await page.getByRole('option',{name,exact:true}).click();
@@ -28,7 +29,7 @@ try {
   assert.equal(await page.getByLabel('Item 1',{exact:true}).isVisible(),false);
   await switchView('Sprint');
   await page.locator('#view-sprint').getByLabel('Add Sprint',{exact:true}).click();
-  const dialog=ownerPage.frameLocator('iframe[title="artifact"]').getByRole('dialog',{name:'Add sprint'});
+  const dialog=ownerPage.mainFrame().getByRole('dialog',{name:'Add sprint'});
   await dialog.waitFor();
   await page.getByLabel('Sprint name',{exact:true}).fill('Planning week');
   await page.getByLabel('Sprint deadline',{exact:true}).fill('2026-09-14');
@@ -57,8 +58,8 @@ try {
   await page.getByRole('option',{name:'Quick sprint',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('button[aria-label="Sprint 1"]')?.textContent.includes('Quick sprint'));
   await ownerPage.reload();
-  await ownerPage.locator('iframe[title="artifact"]').waitFor();
-  page = await (await ownerPage.locator('iframe[title="artifact"]').elementHandle()).contentFrame();
+  await ownerPage.locator('[data-artifact-story-host]').waitFor();
+  page = await storyFrame(ownerPage);
   await page.getByRole('button',{name:'Sprint 1',exact:true}).filter({hasText:'Quick sprint'}).waitFor();
   await ownerPage.setViewportSize({width:390,height:844});
   await page.getByLabel('View',{exact:true}).click();

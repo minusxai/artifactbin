@@ -22,7 +22,7 @@
  */
 import { createServer } from 'http';
 import { createHash, randomBytes } from 'crypto';
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { startMailSink } from './lib/mail-login.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';

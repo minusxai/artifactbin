@@ -10,7 +10,7 @@ import {request as httpRequest} from 'node:http';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {randomBytes} from 'node:crypto';
-import {chromium,firefox,webkit} from 'playwright';
+import {chromium,firefox,webkit} from './lib/gate-browser.mjs';
 import {startDocument} from './lib/start-doc.mjs';
 
 const engineName=process.argv.find(arg=>arg.startsWith('--browser='))?.split('=')[1]??'chromium';
@@ -57,7 +57,7 @@ try {
   await new Promise(resolve=>fixture.listen(cdnPort,'127.0.0.1',resolve));
   await new Promise(resolve=>tls.listen(port,'127.0.0.1',resolve));
   server=spawn(process.execPath,[resolve('dist/proxy-server.mjs')],{cwd:resolve('services/app'),stdio:['ignore','ignore','inherit'],env:{...process.env,
-    NODE_ENV:'production',APP__PORT:String(backendPort),APP__PUBLIC_BASE_URL:base,APP__CONTROLS_ORIGIN:controls,APP__ASSETS_ORIGIN:assets,
+    NODE_ENV:'production',APP__PORT:String(backendPort),APP__PUBLIC_BASE_URL:base,APP__CONTROLS_ORIGIN:'',APP__ASSETS_ORIGIN:assets,
     EMAIL__RESEND_API_KEY:'mxmx_test_managed',AUTH__SECRET:randomBytes(32).toString('hex'),DATABASE_URL:'pglite://memory',SQL__SERVICE_URL:'',BROWSER__SERVICE_URL:'',EVENTS__SERVICE_URL:'',
     OBJECT_STORE__LOCAL_DIR:join(scratch,'objects'),ARTIFACTS__ALLOW_PUBLIC:'1',WEB_INGEST__ALLOW_PRIVATE:'1',PROXY__RATE_LIMIT_CONFIG_FILE:resolve('services/proxy/dev_rate_limits.yml'),
   }});
@@ -72,11 +72,11 @@ try {
   const script=document.createElement('script');const dynamicScript=new Promise((resolve,reject)=>{script.onload=resolve;script.onerror=reject;});script.setAttribute('src','${cdn}/dynamic.js');document.body.append(script);
   Promise.all([fetch('${cdn}/data.json').then(r=>r.json()),imageReady(document.querySelector('img')),dynamicImage,dynamicScript,publicRef]).then(([data])=>mx.params.set('result',window.bundleOrder+':'+data.answer+':'+window.dynamicLoaded));`;
   const markup='<Helmet><Value name="result" type="string" default="waiting"/><Value name="count" type="number" default={0}/><Mutation name="inc">{`update _signals set count=count+1`}</Mutation></Helmet><p aria-label="Result">{$result}</p><p aria-label="Count">{$count}</p><Iframe title="Managed demo" height={200}><button>Increment</button><canvas width="30" height="30"/><img src="'+cdn+'/image.png"/><script src="'+cdn+'/one.js"/><script type="module" src="'+cdn+'/two.js"/><script>{`'+author+'`}</script></Iframe><Iframe title="Second" height={100}><p>Second isolated region</p></Iframe>';
-  const hostile='<Iframe title="Navigation refusal" height={100}><script>{`location.href="'+controls+'/managed-denied"`}</script></Iframe>';
+  const hostile='<Iframe title="Navigation refusal" height={100}><script>{`location.href="'+base+'/managed-denied"`}</script></Iframe>';
   const published=await mainFetch(`${backend}/api/artifacts/${seed.id}`,{method:'PUT',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({markup:markup+hostile,expectedVersion:1})});assert(published.ok,await published.text());
   browser=await engine.launch({headless:true,...(engineName==='chromium'?{args:['--host-resolver-rules=MAP artifactbin.test 127.0.0.1, MAP i.artifactbin.test 127.0.0.1, MAP assets.artifactbin.test 127.0.0.1','--proxy-bypass-list=*']}:{})});
   const staticContext=await browser.newContext({ignoreHTTPSErrors:true,javaScriptEnabled:false}),staticPage=await staticContext.newPage();
-  await staticPage.goto(base+'/a/'+seed.id);
+  await staticPage.goto(base+'/a/'+seed.id+'/raw?chrome=0');
   assert(Math.abs((await staticPage.getByLabel('Managed demo',{exact:true}).boundingBox()).height-200)<0.1,'SSR reserves frame height');await staticContext.close();
   const context=await browser.newContext({ignoreHTTPSErrors:true,viewport:{width:900,height:700}}),page=await context.newPage();
   page.on('pageerror',error=>console.error('PAGE',error.message));
@@ -91,10 +91,10 @@ try {
     await page.mouse.click(box.x+30,box.y+22);
     await page.getByLabel('Count',{exact:true}).filter({hasText:'1'}).waitFor();
   }
-  assert.equal(wire.filter(row=>row.url==='/managed-denied').length,0,'nested author cannot navigate to controls origin');
+  assert.equal(wire.filter(row=>row.url==='/managed-denied').length,0,'nested author cannot navigate to first-party application origin');
   // Positive control: the same top-level policy admits this destination for a
   // single sandbox. Only the protective wrapper supplies the extra refusal.
-  await page.evaluate(url=>{const frame=document.createElement('iframe');frame.sandbox='allow-scripts';frame.srcdoc='<script>location.href='+JSON.stringify(url)+'<\/script>';document.body.append(frame);},controls+'/managed-positive');
+  await page.evaluate(url=>{const frame=document.createElement('iframe');frame.sandbox='allow-scripts';frame.srcdoc='<script>location.href='+JSON.stringify(url)+'<\/script>';document.body.append(frame);},base+'/managed-positive');
   for(let i=0;i<100&&!wire.some(row=>row.url==='/managed-positive');i++)await new Promise(resolve=>setTimeout(resolve,20));
   assert(wire.some(row=>row.url==='/managed-positive'),'single-frame navigation positive control reached server');
   await page.goto(base+'/a/'+seed.id+'/raw');

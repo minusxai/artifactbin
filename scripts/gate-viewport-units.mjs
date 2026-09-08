@@ -19,7 +19,7 @@
  *
  *   usage: node scripts/gate-viewport-units.mjs [base]
  */
-import { chromium } from 'playwright';
+import { chromium } from './lib/gate-browser.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3000';
@@ -64,8 +64,8 @@ await page.waitForTimeout(4000); // let the surface settle (MutationObserver-dri
 // The document is a SERVED page in an opaque-origin frame now, so it is
 // measured through the frame API rather than reached into (contentDocument is
 // null across origins by design — that opacity is the sandbox).
-const frameEl = await page.waitForSelector('iframe[title="artifact"]', { timeout: 20000 });
-const docFrame = await frameEl.contentFrame();
+const frameEl = await page.waitForSelector('[data-artifact-story-host]', { timeout: 20000 });
+const docFrame = page.mainFrame();
 await docFrame.waitForSelector('h1', { timeout: 20000 });
 const frameBox = await frameEl.boundingBox();
 
@@ -100,8 +100,8 @@ console.log(JSON.stringify(measured, null, 1));
  */
 check(frameBox !== null && frameBox.height > 200, `the document frame is viewport-sized (${frameBox?.height}px)`);
 check(
-  Math.abs(measured.viewport - frameBox.height) <= 2,
-  `the document's own viewport IS the frame (${measured.viewport} vs ${frameBox.height})`,
+  Math.abs(measured.viewport - (await page.viewportSize()).height) <= 2,
+  `the document uses the real main viewport (${measured.viewport}), never a content-sized iframe`,
 );
 // A slide fills the READER's viewport — not the whole document's height.
 check(
