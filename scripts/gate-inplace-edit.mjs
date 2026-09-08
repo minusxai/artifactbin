@@ -20,6 +20,7 @@
 import { chromium } from './lib/gate-browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
+import {sameReaderPosition} from './lib/gate-reader-position.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const failures = [];
@@ -83,17 +84,31 @@ const browser = await chromium.launch();
   await sleep(700);
   const readingAt = await frame().evaluate(() => window.scrollY);
   ok(readingAt > 500, `the reader is somewhere specific before editing (scrollY ${readingAt})`);
+  let readerParagraph;
+  const position=async stage=>{
+    const result=await frame().evaluate(id=>{
+      const paragraph=id?document.getElementById(id):[...document.querySelectorAll('[data-artifact-story-host] p[id]')].find(el=>{const r=el.getBoundingClientRect();return r.top>120&&r.bottom<innerHeight-40;});
+      if(!paragraph)throw new Error('gate: the reader paragraph is missing');
+      return {id:paragraph.id,top:paragraph.getBoundingClientRect().top,scrollY};
+    },readerParagraph);
+    readerParagraph=result.id;
+    note(`reader position ${stage}: ${JSON.stringify(result)}`);
+    return result;
+  };
+  const beforeEntering=await position('before-enter');
 
   // ENTER
   await openArtifactControls(page);
   await page.click('[aria-label="Edit artifact"]');
+  const entered=await position('entered');
+  ok(sameReaderPosition(beforeEntering,entered),'entering edit keeps the same reader paragraph at its viewport position');
   await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 20000 });
   await sleep(3000);
+  const editorReady=await position('editor-ready');
   ok(await page.evaluate(() => window.__swaps) === 0
     && await page.evaluate(() => document.querySelector('[data-artifact-story-host]')?.__probe) === 'same-frame',
     'entering edit did not replace the document');
-  ok(Math.abs(await frame().evaluate(() => window.scrollY) - readingAt) < 5,
-    'and did not move the reader');
+  ok(sameReaderPosition(beforeEntering,editorReady),'and editor readiness did not move the reader paragraph');
   ok(await frame().evaluate(() => !!document.querySelector('#lede')?.isContentEditable),
     'the document itself became editable');
 
@@ -126,7 +141,7 @@ const browser = await chromium.launch();
   const after = await (await api(start.id, start.token, '', {})).json();
   ok(after.version > before.version, `typing persists with no save (v${before.version} → v${after.version})`);
   ok(after.markup.includes('EDITED IN PLACE'), 'the typed text reached the stored source');
-  ok(Math.abs(await frame().evaluate(() => window.scrollY) - readingAt) < 5, 'and typing did not move the reader');
+  ok(sameReaderPosition(editorReady,await position('typed')), 'and typing did not move the reader paragraph');
 
   // AN AGENT WRITES, into the paragraph the cursor is parked in
   const head = await (await api(start.id, start.token, '', {})).json();
@@ -143,13 +158,13 @@ const browser = await chromium.launch();
   ok(await page.evaluate(() => window.__swaps) === 0, 'and the document was still never replaced');
 
   // LEAVE
-  const leavingAt = await frame().evaluate(() => window.scrollY);
+  const leavingAt = await position('before-exit');
   await page.click('[aria-label="Exit edit mode"]');
   await sleep(3000);
   ok(await page.evaluate(() => window.__swaps) === 0
     && await page.evaluate(() => document.querySelector('[data-artifact-story-host]')?.__probe) === 'same-frame',
     'leaving edit did not replace it either');
-  ok(Math.abs(await frame().evaluate(() => window.scrollY) - leavingAt) < 5, 'nor moved the reader on the way out');
+  ok(sameReaderPosition(leavingAt,await position('exited')), 'nor moved the reader paragraph on the way out');
   ok(await frame().evaluate(() => !document.querySelector('#lede')?.isContentEditable), 'and the document is no longer editable');
   /*
    * The EMBED is the no-remount promise. Its <svg> is Vega's own: leaving gives
