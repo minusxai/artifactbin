@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {browserGateHeaders} from './lib/gate-request.mjs';
 import {chromium} from './lib/gate-browser.mjs';
 import {createEditableTableFixture} from './lib/editable-table-fixture.mjs';
 import {startDocument,becomeOwner} from './lib/start-doc.mjs';
@@ -19,7 +20,7 @@ try {
  const frame=friend.mainFrame();
  await frame.getByLabel('Item 1',{exact:true}).waitFor();
  assert.equal(await frame.getByLabel('Item 1',{exact:true}).isDisabled(),true);
- const share=async patch=>{const r=await owner.request.put(`${base}/api/my/artifacts/${fixture.datasetId}/sharing`,{data:patch});assert.equal(r.status(),200,await r.text());};
+ const share=async patch=>{const r=await owner.request.put(`${base}/api/my/artifacts/${fixture.datasetId}/sharing`,{headers:browserGateHeaders(base),data:patch});assert.equal(r.status(),200,await r.text());};
  await share({shares:[{email,role:'editor'}]});
  await frame.locator('[aria-label="Item 1"]:enabled').waitFor();
  await frame.getByLabel('Item 1',{exact:true}).fill('Shared edit');await frame.getByLabel('Item 1',{exact:true}).press('Enter');

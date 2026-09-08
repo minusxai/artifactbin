@@ -25,7 +25,7 @@
  */
 import { chromium } from './lib/gate-browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
-import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
+import { startMailSink, loginViaEmail, isSignedInAs } from './lib/mail-login.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
@@ -42,8 +42,7 @@ const page = await owner.newPage();
 await loginViaEmail(page, BASE, sink, EMAIL);
 // Assert the session EXISTS rather than that login returned: a `check(true)`
 // here passed on every run, including the ones where the cookie never landed.
-const sessionCookie = (await owner.cookies(BASE)).find((c) => /better-auth/.test(c.name));
-check(Boolean(sessionCookie), 'email-code login landed a session cookie');
+check(await isSignedInAs(page,EMAIL), 'email-code login established the expected account session');
 
 // A user-owned token: mint anonymously, claim from the session context.
 const anon = await mintAnon(BASE);

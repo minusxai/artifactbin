@@ -23,6 +23,7 @@
  *   node scripts/gate-reader-chrome.mjs [base]
  */
 import { chromium } from './lib/gate-browser.mjs';
+import {readArtifactBootstrapId} from './lib/gate-artifact-identity.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
 import { revealReaderChrome } from './lib/reveal-chrome.mjs';
@@ -88,7 +89,9 @@ const readerContext = async (viewport) => {
   return ctx;
 };
 
-const chromeState = (page) => page.locator('[data-trusted-ui-root]').evaluate(root => {
+const chromeState = async (page) => {
+const artifact=await page.evaluate(readArtifactBootstrapId);
+return page.locator('[data-trusted-ui-root]').evaluate((root,artifact) => {
   if (!root) return null;
   const box = (sel) => {
     const el = root.querySelector(sel);
@@ -99,7 +102,7 @@ const chromeState = (page) => page.locator('[data-trusted-ui-root]').evaluate(ro
   return {
     hidden: getComputedStyle(root.querySelector('[aria-label="Page bar"]')).visibility==='hidden',
     state: getComputedStyle(root.querySelector('[aria-label="Page bar"]')).position,
-    artifact: location.pathname.split('/')[2],
+    artifact,
     visibility: getComputedStyle(root).visibility,
     root: box('[aria-label="Page bar"]'),
     like: box('[aria-label="Like artifact"]'),
@@ -109,7 +112,8 @@ const chromeState = (page) => page.locator('[data-trusted-ui-root]').evaluate(ro
     height: window.innerHeight,
     credits: document.querySelectorAll('.mx-artifact-credits').length,
   };
-});
+},artifact);
+};
 
 const settle = (page) => page.waitForTimeout(350);
 
@@ -127,7 +131,7 @@ for (const [name, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
   check(s?.hidden === false && ['fixed','sticky'].includes(s.state), `${name}: on load shared chrome is visible and pinned (${s?.state})`);
   check(s?.visibility === 'visible', `${name}: …really visible, not merely transparent (visibility ${s?.visibility})`);
   check(await page.locator('[aria-label="Like artifact"]').isVisible(), `${name}: the rail is actionable without a reveal gesture`);
-  check(s?.artifact === long.id, `${name}: the chrome is stamped with the artifact id (${s?.artifact})`);
+  check(s?.artifact === long.id, `${name}: the page bootstrap identifies the displayed artifact (${s?.artifact})`);
 
   // 2. down keeps it away, up brings it back
   await page.evaluate(() => window.scrollTo(0, 600));

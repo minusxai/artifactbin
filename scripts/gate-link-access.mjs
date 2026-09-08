@@ -28,7 +28,8 @@
  */
 import { chromium } from './lib/gate-browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
-import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
+import { startMailSink, loginViaEmail, isSignedInAs } from './lib/mail-login.mjs';
+import {hasCommentPermission} from './lib/gate-artifact-identity.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
@@ -55,13 +56,6 @@ const DOC = '<div data-design="tw" className="p-10">'
   + '<h1 className="text-3xl">General access</h1>'
   + '<p id="claim">Anyone with this link may comment on it.</p>'
   + '</div>';
-
-/** Is this page the SHELL (the app framing the document) or the document itself? */
-const hasCommentPermission = (page) => page.evaluate(async()=>{
-  const id=location.pathname.split('/')[2];const response=await fetch('/api/page/artifact/'+id);
-  if(!response.ok)throw new Error('Page permission read failed: '+response.status);
-  return ['owner','editor','commenter'].includes((await response.json()).role);
-});
 
 /*
  * Everything about a document lives behind ONE control (PageControls, in
@@ -106,7 +100,7 @@ try {
 
   await loginViaEmail(owner, BASE, sink, OWNER_EMAIL);
   await loginViaEmail(stranger, BASE, sink, STRANGER_EMAIL);
-  check(Boolean((await strangerCtx.cookies(BASE)).find((c) => /better-auth/.test(c.name))), 'a second person is signed in — and was never invited to anything');
+  check(await isSignedInAs(stranger,STRANGER_EMAIL), 'a second person is signed in — and was never invited to anything');
 
   // The owner's token, minted anonymously and claimed by their session.
   const anon = await mintAnon(BASE);
@@ -124,7 +118,7 @@ try {
 
   // ── 1. link = can view: the stranger is served the DOCUMENT ──────────────
   await stranger.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-  check(!(await hasCommentPermission(stranger)), 'link=can view: a signed-in stranger gets the served document, not the shell');
+  check(!(await hasCommentPermission(stranger,doc.id)), 'link=can view: a signed-in stranger has viewer permission');
   check((await stranger.locator('[aria-label="Annotation comment"]').count()) === 0, 'viewer has no authorized comment composer');
 
   // ── 2. the owner flips ONE control ───────────────────────────────────────
@@ -161,7 +155,7 @@ try {
   );
   // ── 3. the SAME link, reloaded: now the shell ────────────────────────────
   await stranger.reload({ waitUntil: 'load' });
-  check(await hasCommentPermission(stranger), 'link=can comment: the same stranger is now served the SHELL');
+  check(await hasCommentPermission(stranger,doc.id), 'link=can comment: the same stranger now has comment permission');
   // Inside the open popover, so the two absences below are real absences.
   await openControls(stranger);
   check((await stranger.locator('[aria-label="Toggle comments"]').count()) === 1, '…with the comments control');
@@ -207,7 +201,7 @@ try {
   const anonCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
   const visitor = await anonCtx.newPage();
   await visitor.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-  check(!(await hasCommentPermission(visitor)), 'logged out on a link-commentable document: the bare document — anonymous caps at viewer');
+  check(!(await hasCommentPermission(visitor,doc.id)), 'logged out on a link-commentable document: anonymous caps at viewer');
   check((await visitor.locator('[aria-label="Annotation comment"]').count()) === 0, 'anonymous reader cannot compose an authorized comment');
 
   // ── 7. flipped back, the stranger loses it ───────────────────────────────
@@ -220,7 +214,7 @@ try {
     })(),
   ]);
   await stranger.reload({ waitUntil: 'load' });
-  check(!(await hasCommentPermission(stranger)), 'demoted to can view: the stranger is served the plain document again');
+  check(!(await hasCommentPermission(stranger,doc.id)), 'demoted to can view: the stranger has viewer permission again');
   check((await stranger.locator('[aria-label="Annotation comment"]').count()) === 0, 'demoted viewer has no authorized comment composer');
 } finally {
   await browser.close();
