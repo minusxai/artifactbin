@@ -22,6 +22,7 @@ import { objectStore } from '@/lib/object-store';
 import { setServices } from '@/lib/services';
 import { DEFAULT_SOCIAL_PREVIEW_CROP } from '@/lib/story/social-preview';
 import { CARD_HEIGHT, CARD_WIDTH } from '@/lib/export-card';
+import { mintExportKey } from '@/lib/export-key';
 
 const BASE = 'http://localhost:3000';
 const SECRET = 'test-secret';
@@ -44,6 +45,16 @@ async function create(markup: string, title = 'shot me') {
 const shot = (id: string, format?: string) =>
   exportImage(request(`/a/${id}/export${format ? `?format=${format}` : ''}`), params({ id }));
 const serveRawFor = (id: string) => serveRaw(request(`/a/${id}/raw`), params({ id }));
+
+it('keeps verified capture endpoint and CSP origins on the actual internal request despite public HTTPS forwarding',async()=>{
+ const artifact=await create('<Iframe title="capture"><p>inside</p></Iframe>');
+ const key=mintExportKey(artifact.id);
+ const response=await serveRaw(request(`/a/${artifact.id}/raw?chrome=0&key=${encodeURIComponent(key)}`,{headers:{'x-forwarded-proto':'https','x-forwarded-host':'public.example'}}),params({id:artifact.id}));
+ const html=await response.text();
+ expect(response.status).toBe(200);
+ expect(response.headers.get('content-security-policy')).toContain(`http://localhost:3000/a/${artifact.id}/resolve`);
+ expect(html).not.toContain(`https://public.example/a/${artifact.id}/resolve`);
+});
 
 // The same two documents in markup vocabulary: one that names itself in a
 // Helmet, one bare. (The exporter screenshots the served document either way.)

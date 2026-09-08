@@ -286,7 +286,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // document's own rail/present bar and attribution footer would land in
       // every OG card).
       const chrome = new URL(request.url).searchParams.get('chrome') !== '0';
-      const base = baseUrl(request);
+      // A signed capture is fetched over the exporter's internal transport.
+      // A cohost HTTPS proxy can otherwise stamp https onto an HTTP backend,
+      // breaking scoped asset imports and the capture's CSP before rendering.
+      const base = byExportKey && !chrome ? new URL(request.url).origin : baseUrl(request);
       /*
        * ?edit=1 — the OWNER's copy. In-place editing is the runtime, and a
        * document of pure prose ships none; asking for it here means pressing
@@ -460,9 +463,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         // Where this document fetches its re-runs when it IS the page (the
         // reader path); inside a parent the relay is chosen instead.
         queryUrl: queryPath(artifact.id),
-        resolveUrl: `${baseUrl(request)}${resolvePath(artifact.id)}`,
-        libraryOrigin: baseUrl(request),
-        ...(ASSETS_ORIGIN ? { managedAssets: { origin: ASSETS_ORIGIN, resolveUrl: `${baseUrl(request)}${assetsPath(artifact.id)}${byExportKey ? `?key=${encodeURIComponent(key!)}` : ''}` } } : {}),
+        resolveUrl: `${base}${resolvePath(artifact.id)}`,
+        libraryOrigin: base,
+        ...(ASSETS_ORIGIN ? { managedAssets: { origin: ASSETS_ORIGIN, resolveUrl: `${base}${assetsPath(artifact.id)}${byExportKey ? `?key=${encodeURIComponent(key!)}` : ''}` } } : {}),
         /*
          * …and where it imports an image URL only its reader can compute (a
          * bound <img src="$pick">). Unconditional, unlike mutateUrl: a source

@@ -134,7 +134,8 @@ describe('what the app asks the browser for', () => {
       expect(request.url).toMatch(/\/a\/exprt1\/raw\?chrome=0&key=/);
       expect(request.selector).toBe('body');
       expect(request.sameOriginOnly).toBe(true);
-      expect(request.allowedOrigins).toEqual(ASSETS_ORIGIN ? [ASSETS_ORIGIN] : undefined);
+      expect(request.allowedOrigins).toBeUndefined();
+      expect(request.assetOrigin).toEqual(ASSETS_ORIGIN ?? undefined);
       expect(request.waitForManagedFrames).toBe(true);
     }
     // A FRESH key per attempt: minted at call time, because a key that expired

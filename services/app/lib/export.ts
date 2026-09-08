@@ -235,7 +235,7 @@ async function renderOnce(
     // Same-origin requests are the app itself; anything cross-origin is a
     // stray — abort it, which doubles as the CSP discipline for the surface.
     sameOriginOnly: true,
-    ...(ASSETS_ORIGIN ? {allowedOrigins:[ASSETS_ORIGIN]} : {}),
+    ...(ASSETS_ORIGIN ? { assetOrigin: ASSETS_ORIGIN } : {}),
     waitForManagedFrames: true,
     // The Next dev overlay ("N issues") is fixed to the corner and lands in
     // page-level shots on dev servers; the element doesn't exist in prod.
