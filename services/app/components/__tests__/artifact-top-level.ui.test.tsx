@@ -20,21 +20,23 @@ const props: ArtifactSurfaceProps = {
   template: null, refs: [], version: 1, columns: [], compiledCss: null, theme: null, colorMode: 'light', liveEnabled: false,
 };
 
-it('offers copy-link sharing to a viewer without granting management', async () => {
+it.each(['viewer','commenter','editor','owner'] as const)('offers sharing exactly once to a %s without duplicating management', async (role) => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({})));
-  const ui = mountTrustedViewer();
+  const ui = mountTrustedViewer({},role);
   fireEvent.click(ui.getByLabelText('Open artifact controls'));
   expect(await ui.findByLabelText('Share')).toBeVisible();
+  expect(ui.getAllByLabelText('Share')).toHaveLength(1);
+  expect(ui.queryByLabelText('Owner actions')!==null).toBe(role==='owner');
 });
 
-function mountTrustedViewer(extra: Partial<ArtifactSurfaceProps> = {}) {
+function mountTrustedViewer(extra: Partial<ArtifactSurfaceProps> = {},role:'viewer'|'commenter'|'editor'|'owner'='viewer') {
   const attach = Element.prototype.attachShadow;
   let root: ShadowRoot;
   const spy = vi.spyOn(Element.prototype, 'attachShadow').mockImplementation(function(this: Element, init: ShadowRootInit) {
     return root = attach.call(this, init);
   });
   try {
-    render(<TrustedUiHost styles="" mode="light"><ArtifactShell role="viewer"><ArtifactSurface {...props} {...extra} /></ArtifactShell></TrustedUiHost>);
+    render(<TrustedUiHost styles="" mode="light"><ArtifactShell role={role}><ArtifactSurface {...props} {...extra} /></ArtifactShell></TrustedUiHost>);
     return within(root!.querySelector<HTMLElement>('[data-trusted-ui-root]')!);
   } finally { spy.mockRestore(); }
 }
@@ -46,7 +48,7 @@ it.each([
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({})));
   const ui = mountTrustedViewer({ forkedFrom });
   fireEvent.click(ui.getByLabelText('Open artifact controls'));
-  expect(await ui.findByText(`forked from ${forkedFrom.label}`)).toBeVisible();
+  expect(await ui.findByText((_text,node)=>node?.hasAttribute('data-mx-forked-from')===true&&node.textContent===`forked from ${forkedFrom.label}`)).toBeVisible();
   const link = ui.queryByLabelText('Open the artifact this was forked from');
   if (forkedFrom.href) expect(link).toHaveAttribute('href', forkedFrom.href);
   else expect(link).toBeNull();
@@ -62,13 +64,16 @@ it('routes artifact Home and author links without a native document navigation',
   function Address() { return <p aria-label="Current route">{useLocation().pathname}</p>; }
   try {
     render(<MemoryRouter initialEntries={['/a/story1']}><AppNavigationBinding /><Address />
-      <TrustedUiHost styles="" mode="light"><ArtifactSurface {...props} authorUsername="writer" /></TrustedUiHost>
+      <TrustedUiHost styles="" mode="light"><ArtifactSurface {...props} authorUsername="writer" forkedFrom={{label:'@writer/source-original',href:'/@writer/source-original'}} /></TrustedUiHost>
     </MemoryRouter>);
     await waitFor(() => expect(roots[0]?.querySelector('[aria-label="Home"]')).not.toBeNull());
     fireEvent.click(roots[0].querySelector('[aria-label="Home"]')!);
     await waitFor(() => expect(screen.getByLabelText('Current route')).toHaveTextContent(/^\/$/));
     fireEvent.click(roots[0].querySelector('[aria-label="View @writer\'s profile"]')!);
     await waitFor(() => expect(screen.getByLabelText('Current route')).toHaveTextContent('/@writer'));
+    fireEvent.click(roots[0].querySelector('[aria-label="Open artifact controls"]')!);
+    fireEvent.click(roots[0].querySelector('[aria-label="Open the artifact this was forked from"]')!);
+    await waitFor(()=>expect(screen.getByLabelText('Current route')).toHaveTextContent('/@writer/source-original'));
   } finally { spy.mockRestore(); }
 });
 

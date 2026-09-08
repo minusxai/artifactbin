@@ -1315,6 +1315,10 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
         {/* Everyone the shell is served to — owner, editor, commenter — may
             take a copy of what they can read. */}
         <ForkArtifact id={id} variant="menu" />
+        {!owner && <ShareLink artifactId={id} title={shownTitle} format={format} variant="menu" className="" onSocialPreview={canEdit && shownSource !== null && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />}
+        {props.forkedFrom && <p data-mx-forked-from className="px-2 py-2 text-xs text-muted">forked from {props.forkedFrom.href
+          ? <a href={props.forkedFrom.href} aria-label="Open the artifact this was forked from" className="text-accent underline">{props.forkedFrom.label}</a>
+          : props.forkedFrom.label}</p>}
         {/* EDIT IS ALSO RENAME, which is why a folder is offered it: the
             editor's Title field writes `title` through the edit protocol like
             any other change, so a folder needs no rename door of its own — and
@@ -1332,9 +1336,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
               <Pencil size={14} strokeWidth={1.75} />
               edit artifact
             </button>
-            {!owner && shownSource !== null && format === 'markup' && (
-              <ShareLink artifactId={id} title={shownTitle} format={format} variant="menu" className="" onSocialPreview={() => { close(); setSocialPreviewOpen(true); }} />
-            )}
           </>
         )}
         {/* A FOLDER'S ONE EXTRA VERB. It lives in the chrome rather than in the

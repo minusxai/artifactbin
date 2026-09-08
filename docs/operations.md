@@ -60,11 +60,13 @@
   exit code.
   Highlights: `app-flows` (whole app), `concurrent-edit` (a human typing while
   an agent edits), `full-kit` (every component through the served document:
-  SSR, hydration, isolation, fonts, export), `script-slice` (an author
-  `<script>` runs in view and is inert in the editor), `shell-seo` (a crawler
-  is served the document itself, text and unfurl tags included), `visibility`
-  (the ACL + pretty URLs, incl. a private artifact's sandboxed iframe carrying
-  the session cookie). Gates that log in need a mail sink; the booted servers
+  raw SSR, hydration, isolation, fonts, export), `shell-seo` (initial public
+  landing and document metadata; artifact bodies currently use a named loading
+  shell plus prepared client payload, not artifact SSR), `visibility`
+  (ACLs and pretty URLs through the authenticated same-origin page). Author
+  script isolation is covered separately by `author-script-isolation`;
+  trusted UI lives in Shadow DOM, not an authentication iframe.
+  Gates that log in need a mail sink; the booted servers
   share one per run, and a server of your own must be pointed at its own — see
   each file's header.
 - **Image export needs a headless browser**: run `npx playwright install chromium`

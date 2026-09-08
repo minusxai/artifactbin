@@ -33,6 +33,7 @@ import {libraryUrls} from '@/lib/libraries';
 import {documentFonts} from '@/lib/story/document-fonts';
 import {webFontAssets} from '@/lib/webfonts';
 import {storyPresentationCss,storyPresentationFontPreloads} from '@/lib/story/presentation-css';
+import {forkedFromCredit} from '@/lib/story/fork-credit';
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -138,6 +139,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       ? { userId: artifact.user_id, following: viewerId ? await has(viewerId, 'follow', artifact.user_id) : false, count: await count('follow', artifact.user_id) }
       : null,
     surface: {
+      forkedFrom: await forkedFromCredit(artifact.forked_from),
       authorUsername: await ownerUsername(artifact.user_id),
       liveEnabled: !exporting && canReceiveLiveUpdates(actor),
       captureKey: exporting ? key : null,

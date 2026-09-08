@@ -14,6 +14,7 @@ import { agentCookie, useAppHarness } from './harness';
 import { POST as forkRoute } from '@/app/api/my/artifacts/[id]/fork/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
+import { GET as pageRoute } from '@/app/api/page/artifact/[id]/route';
 import { GET as getMineRoute } from '@/app/api/my/artifacts/[id]/route';
 import { GET as getSharingRoute, PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { GET as versionsMineRoute } from '@/app/api/my/artifacts/[id]/versions/route';
@@ -302,6 +303,24 @@ describe('POST /api/my/artifacts/:id/fork — what does not travel', () => {
  * for a reader to tell those three apart with.
  */
 describe('the fork credit line', () => {
+  it('projects fresh privacy-safe provenance through the actual page payload after source visibility changes',async()=>{
+    const w=await world();asSession({id:w.bob.id,email:w.bob.email});
+    const copy=await (await fork(w.doc.id)).json() as {id:string};noSession();
+    const credit=async()=>{
+      const response=await pageRoute(jreq(`/api/page/artifact/${copy.id}`,'GET'),params(copy.id));
+      expect(response.status).toBe(200);
+      return (await response.json()).surface.forkedFrom;
+    };
+    const initial=await credit();
+    expect(initial).toEqual({label:expect.stringContaining(w.doc.id),href:expect.stringContaining(w.doc.id)});
+    const db=await getDb();
+    for(const visibility of ['private','unlisted','public']){
+      await db.query('UPDATE artifacts SET visibility = $2 WHERE id = $1',[w.doc.id,visibility]);
+      expect(await credit()).toEqual(visibility==='public'?initial:{label:'a document that is not public',href:null});
+    }
+    await db.query('DELETE FROM artifacts WHERE id = $1',[w.doc.id]);
+    expect(await credit()).toEqual({label:'a document that is not public',href:null});
+  });
   const served = async (id: string, query = '') =>
     (await rawRoute(new Request(`${BASE}/a/${id}/raw${query}`), params(id))).text();
 
