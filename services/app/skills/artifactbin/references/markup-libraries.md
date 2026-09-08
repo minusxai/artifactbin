@@ -29,7 +29,7 @@ asset hostname to be configured.
 <style>{`canvas {width:100%;height:100%;display:block}`}</style>
 <canvas id="scene" width="800" height="450" />
 <p id="scene-status" role="status" />
-<script id="three-bundle" type="module" src="https://artifactbin.dev/libraries/three-0.185.1/index.js" />
+<script id="three-bundle" type="module" src="[[ base ]]/libraries/three-0.185.1/index.js" />
 <script>{`
 (async () => {
   const THREE = await import(document.getElementById('three-bundle').src);

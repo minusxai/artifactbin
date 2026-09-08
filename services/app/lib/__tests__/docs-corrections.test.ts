@@ -224,7 +224,7 @@ describe('URL-kept external assets', () => {
     expect(flat(markup)).toContain('a URL that will not fetch is a warning, not a failed publish');
   });
   it('the subresource roster names all three positions and the `$` binding', () => {
-    expect(flat(markup)).toContain('Only `<img src>`, `<Video poster>` and `<File src>` take a URL');
+    expect(flat(markup)).toContain('In parent markup only `<img src>`, `<Video poster>` and `<File src>` take a URL');
     expect(flat(markup)).toContain('An image `src` also binds');
     expect(markup).toContain('{$pick}');
   });
