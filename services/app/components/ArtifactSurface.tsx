@@ -454,8 +454,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   // so the browser refetches instead of showing a stale document.
   const rawKey = live?.editId ?? editId;
 
-  const transport = useMemo(() => createAuthenticatedTransport(id), [id]);
-  useEffect(() => () => transport.dispose(), [transport]);
+  const transportFactory = useCallback(() => createAuthenticatedTransport(id), [id]);
   const [frameLoaded, setFrameLoaded] = useState(false);
   const onController = useCallback((controller: InlineStoryController | null) => {
     runtimeRef.current = controller;
@@ -901,7 +900,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           <InlineStoryRuntime
             key={id}
             data={props.runtime?.data ?? {nodes: storyUpdateParts(shownSource ?? '')?.nodes ?? [], refData: {}, dataflow: dataflow ?? undefined, colorMode: readerMode, template, chrome: true}}
-            transport={transport}
+            transportFactory={transportFactory}
             prepared={props.runtime}
             authorScript={props.runtime?.authorScript}
             onController={onController}

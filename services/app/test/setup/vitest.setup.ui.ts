@@ -24,6 +24,16 @@ global.ResizeObserver = vi.fn().mockImplementation(function (this: any) {
 // HTMLCanvasElement.getContext stub
 HTMLCanvasElement.prototype.getContext = vi.fn(() => null) as any;
 
+// jsdom has no rendering/top layer. This models lifecycle only; browser gates
+// verify the actual CSS/security boundary using native popovers.
+Object.defineProperties(HTMLElement.prototype, {
+  showPopover: { configurable:true, writable:true, value:function(this:HTMLElement) {
+    if (!this.isConnected || !this.hasAttribute('popover')) throw new DOMException('Invalid popover state', 'InvalidStateError');
+    this.setAttribute('data-test-popover-open','');
+  } },
+  hidePopover: { configurable:true, writable:true, value:function(this:HTMLElement) { this.removeAttribute('data-test-popover-open'); } },
+});
+
 // Next.js navigation (AgentHtml's link bridge grabs a router)
 
 /**

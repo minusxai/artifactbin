@@ -169,7 +169,7 @@ export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditControll
       }
     };
     return subscribeDocument({ frameRef, runtimeRef }, onMessage);
-  }, [frameRef, runtimeRef, sourceRef]);
+  }, [frameRef, runtimeRef, sourceRef, sessionNonce]);
 
   // ── entering and leaving ──────────────────────────────────────────────────
   useEffect(() => {
@@ -179,7 +179,7 @@ export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditControll
       // Leaving unmounts this; the document must not stay editable.
       if (editing) postToFrame({ type: STORY_EDIT_MODE_MESSAGE, on: false });
     };
-  }, [editing, postToFrame]);
+  }, [editing, postToFrame, sessionNonce]);
 
   /*
    * A frame that has only just painted has not heard the request to enter edit

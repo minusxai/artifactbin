@@ -72,6 +72,7 @@ export interface QueryTransport {
 }
 
 export interface DataflowStore {
+  readonly disposed: boolean;
   /** Revoke this document lifetime, including queued and in-flight completions. */
   dispose(): void;
   readonly flow: Dataflow;
@@ -441,6 +442,7 @@ export function createDataflowStore(
   };
 
   return {
+    get disposed() { return disposed; },
     dispose() {
       if (disposed) return;
       disposed = true;

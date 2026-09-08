@@ -34,7 +34,8 @@ export interface InlineStoryController {
 
 export interface InlineStoryRuntimeProps {
   data: StoryIslandData;
-  transport: QueryTransport;
+  transport?: QueryTransport;
+  transportFactory?: () => QueryTransport & { dispose(): void };
   authorScript?: string | null;
   prepared?: PreparedStoryRuntime;
   onController(controller: InlineStoryController | null): void;
@@ -49,10 +50,18 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
   latest.current = props;
   const [current, setCurrent] = useState(props.data);
   const [styles, setStyles] = useState<{baseCss:string;compiledCss:string|null;authorCss:string|null;theme:string|null}>({baseCss:props.prepared?.baseCss ?? '', compiledCss:props.prepared?.compiledCss ?? null, authorCss:props.prepared?.authorCss ?? null, theme:props.prepared?.theme ?? null});
-  const [store] = useState(() => createDataflowStore(props.data.dataflow ?? { flow: EMPTY_DATAFLOW }, { transport: props.transport }));
+  const createLifetime = () => {
+    const transport = latest.current.transportFactory?.() ?? latest.current.transport;
+    return { transport, store:createDataflowStore(latest.current.data.dataflow ?? {flow:EMPTY_DATAFLOW}, {transport}) };
+  };
+  const [lifetime, setLifetime] = useState(createLifetime);
+  const { store } = lifetime;
   const editRef = useRef<FrameEditSession | null>(null);
   const [, redraw] = useState(0);
   useLayoutEffect(() => {
+    // StrictMode replays effects without remounting state. Revoked capabilities
+    // stay revoked; replay obtains an entirely new document lifetime instead.
+    if (store.disposed) { setLifetime(createLifetime()); return; }
     let disposed = false;
     let documentData = latest.current.data;
     let editRequested = false;
@@ -66,7 +75,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
     const listeners = new Set<(event: unknown) => void>();
     const nonce = crypto.randomUUID();
     const emit = (event: unknown) => { if (!disposed) for (const listener of [...listeners]) listener(event); };
-    const channel: RuntimeChannel = { nonce, post: emit, innerHtmlOf: element => element.innerHTML };
+    const channel: RuntimeChannel = { nonce, post: event => queueMicrotask(() => emit(event)), innerHtmlOf: element => element.innerHTML };
     const render = () => {
       if (disposed) return;
       editRef.current?.setNodes(documentData.nodes);
@@ -149,15 +158,16 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
         editRef.current?.dispose(); editRef.current = null;
         annotate?.dispose(); selection?.dispose();
         store.dispose();
+        if (lifetime.transport && 'dispose' in lifetime.transport) (lifetime.transport as QueryTransport & {dispose():void}).dispose();
       },
     };
     latest.current.onController(controller);
     author.replace(latest.current.authorScript ?? null);
     store.start();
     return () => { controller.dispose(); latest.current.onController(null); };
-  }, [store]);
+  }, [lifetime]);
   return <><TrustedUi overlay><SelectionPortal ready={portalReady} /></TrustedUi><div ref={root} data-mx-inline-story="" data-theme={styles.theme ?? undefined} className={current.colorMode}>
     <style>{[styles.baseCss,styles.compiledCss,styles.authorCss].filter(Boolean).join('\n')}</style>
-    <StoryRuntimeApp {...current} store={store} importAsset={props.transport.importAsset} editDecorate={editRef.current?.decorate} />
+    <StoryRuntimeApp {...current} store={store} importAsset={lifetime.transport?.importAsset} editDecorate={editRef.current?.decorate} />
   </div></>;
 }

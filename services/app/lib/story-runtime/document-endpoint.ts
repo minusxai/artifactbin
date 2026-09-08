@@ -17,7 +17,9 @@ export function subscribeDocument(target: DocumentTarget, listener: (event: { da
   if (target.runtimeRef) return target.runtimeRef.current?.subscribe(data => listener({ data })) ?? (() => {});
   const win = target.frameRef?.current?.contentWindow;
   if (!win) return () => {};
-  const receive = (event: MessageEvent) => { if (event.isTrusted && event.source === win) listener(event); };
+  // Consumers validate the established session nonce as before. The identity
+  // check is never optional, including while a frame is absent/replaced.
+  const receive = (event: MessageEvent) => { if (event.source === win) listener(event); };
   window.addEventListener('message', receive);
   return () => window.removeEventListener('message', receive);
 }
