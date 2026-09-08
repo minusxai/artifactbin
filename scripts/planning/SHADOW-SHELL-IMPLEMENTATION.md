@@ -61,6 +61,14 @@ All stage results must record observed commands/output. A prototype pass is not 
 
 ## Baseline notes
 
+### Integrated review followups (not final acceptance)
+
+- Client retirement integrated as 912274f: shared document typography/fonts/insets, runtime `chrome:true` for interactive documents, sandbox/asset configuration, and immediate-adopt author startup fix. Superseded public/region/control entrypoints removed. Root UI 155 files / 1174 passed; Node 372 files / 3869 passed plus one skip. API found a test-harness naming violation, corrected in 2cf76ec; full repeat pending.
+- Root reproduced editor-anchor spoofing with the implementation guard removed: five failures, including selecting AAAA incorrectly resolving BBBB. Restored b5f2ab4: all 17 interpreter tests and validation pass.
+- Root seeded and reproduced missing live glyphs in both API frame and mounted runtime. 2a5bea4 carries server-resolved glyphs through live adoption; full integrated rerun pending.
+- First full 54-gate attempt stopped early: actual `/api/start` returned 500 because the app encoder omitted browser nonces when the retired controls setting was empty. 18096b4 fixes the real producer, with proxy→app start/adopt/disconnect regression coverage. Do not substitute utility-generated cookie tests for this integration.
+- The same attempt exposed a browser startup crash (`global is not defined`): Surface presentation imported a font validator through the server resolver/database graph. fda634a extracts the pure font contract. Rebuilt app no longer includes server-module externalization warnings. Real browser reboot and complete gate rerun are required before acceptance.
+
 Unchanged main full run: API 166 files / 1335 tests passed; Node 366/369 files passed with database startup/hook failures and login-provider timeout. Isolated retry passed all 70 tests. Full baseline UI passed 151 files / 1208 tests. Integrated prerequisite production build and typecheck pass at 6a960a7; remaining initial-page/top-level integration seeds intentionally red. Root caught two late runtime test typing errors and merged 6a960a7; prior agent's typecheck claim preceded those test edits.
 
 ## Current implementation ownership
