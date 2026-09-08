@@ -187,6 +187,8 @@ export const STORY_DOCUMENT_MESSAGE = 'mx:document';
 export interface StoryDocumentUpdate {
   type: typeof STORY_DOCUMENT_MESSAGE;
   nodes: JsxNode[];
+  /** Server-resolved icon vocabulary for these nodes; absent preserves the current map. */
+  glyphs?: GlyphMap;
   /**
    * The declarations as a flow. `state` is OPTIONAL: a live frame carries the
    * flow and no rows (the store re-runs every query through its transport);

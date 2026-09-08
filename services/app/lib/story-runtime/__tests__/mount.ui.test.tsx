@@ -13,6 +13,14 @@ let mounted: MountedStory | undefined;
 afterEach(async () => { await act(async () => { mounted?.dispose(); }); mounted = undefined; document.body.replaceChildren(); vi.restoreAllMocks(); });
 
 describe('reusable story runtime lifecycle', () => {
+  it('adopts newly introduced server-resolved icon glyphs without reloading', async () => {
+    const host = document.createElement('div'); document.body.append(host);
+    await act(async () => { mounted = mountStory({ root: host, peerOrigin: window.location.origin, renderMode: 'render',
+      data: { nodes: nodes('<p>No icons yet</p>'), refData: {}, glyphs: {}, colorMode: 'light', chrome: true } }); });
+    await act(async () => mounted!.adopt({ type: STORY_DOCUMENT_MESSAGE, nodes: nodes('<Icon name="Heart" />'),
+      glyphs: { Heart: { cls: 'lucide-heart', inner: '<path d="M1 2 L3 4" />' } } }));
+    expect(host.querySelector('svg.lucide-heart path')).toHaveAttribute('d', 'M1 2 L3 4');
+  });
   it('renders into the explicit top-level host, adopts updates and disposes', async () => {
     const host = document.createElement('div');
     document.body.append(host);
