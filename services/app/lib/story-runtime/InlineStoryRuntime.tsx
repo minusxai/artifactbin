@@ -114,7 +114,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
             if (disposed || !editRequested || !root.current) return;
             editRef.current = createFrameEditSession({ win: window, root: root.current, channel, requestRender: render });
             render();
-          }).finally(() => { editLoading = false; });
+          }).catch(error => { if (!disposed) console.error('Failed to load artifact editor', error); }).finally(() => { editLoading = false; });
           return;
         }
         if (command.type === STORY_ANNOTATIONS_MESSAGE) {
@@ -127,7 +127,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
             annotate = createFrameAnnotateSession({ win: window, root: root.current, channel, isEditing: () => editRequested });
             annotate.setNodes(documentData.nodes);
             if (annotationCommand) annotate.update(annotationCommand);
-          }).finally(() => { annotationLoading = false; });
+          }).catch(error => { if (!disposed) console.error('Failed to load artifact annotations', error); }).finally(() => { annotationLoading = false; });
           return;
         }
         if (command.type === STORY_SELECTION_ACTIONS_MESSAGE) {
@@ -140,7 +140,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
             selection = createFrameSelectionActions({ win: window, root:root.current, portal:portal.current, onAction: (action, selected) => emit({ type: STORY_SELECTION_ACTION_MESSAGE, nonce, action, selection: selected }) });
             selection.setNodes(documentData.nodes);
             if (selectionCommand) selection.update(selectionCommand);
-          }).finally(() => { selectionLoading = false; });
+          }).catch(error => { if (!disposed) console.error('Failed to load artifact selection actions', error); }).finally(() => { selectionLoading = false; });
           return;
         }
         if (command.type === STORY_SELECT_MESSAGE && !editRef.current) annotate?.select(command.path);

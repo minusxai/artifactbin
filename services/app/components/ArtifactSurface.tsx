@@ -65,7 +65,7 @@ const SocialPreviewDialog = dynamic(() => import('@/components/SocialPreviewDial
 
 export interface ArtifactSurfaceProps {
   runtime?: PreparedStoryRuntime;
-  author?: { username: string; forkedFrom?: ReaderForkedFrom | null } | null;
+  author?: { username: string | null; forkedFrom?: ReaderForkedFrom | null } | null;
   /**
    * The exporter's signed key, when this render IS a capture (server-parsed
    * from `?key=`). Null for every human render.
