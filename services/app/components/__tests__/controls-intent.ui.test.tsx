@@ -16,6 +16,11 @@ function setup() {
   return vi.spyOn(api,'appNavigate').mockImplementation(()=>{});
 }
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();layers.length=0;});
+it('shows enabled trusted reader actions as pointer controls',()=>{
+  setup();
+  render(<ArtifactShell role="viewer"><ArtifactSurface {...props} follow={{userId:'owner',following:false,count:0}}/></ArtifactShell>);
+  for(const label of ['Like artifact','Toggle comments','Follow author'])expect(screen.getByLabelText(label)).toHaveClass('cursor-pointer');
+});
 it.each([['Like artifact','like',401],['Like artifact','like',403],['Follow author','follow',401],['Follow author','follow',403]] as const)('%s handles %s response %s without permission/login confusion',async(label,intent,status)=>{
   const navigate=setup();
   const request=vi.fn(async()=>new Response('{}',{status}));vi.stubGlobal('fetch',request);

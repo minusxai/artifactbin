@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import Shelf, { SHELF_LIST_PER_PAGE, type ShelfRow } from '@/components/Shelf';
+import {configureAppApi} from '@/web/api-origin';
 
 const doc = (id: string, day: number, extra: Partial<ShelfRow> = {}): ShelfRow => ({
   id,
@@ -20,12 +21,25 @@ const asset = (id: string, day: number, format = 'dataset'): ShelfRow => ({
 });
 
 afterEach(() => {
+  configureAppApi(window.location.origin,window.location.origin,'standalone');
   localStorage.clear();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 describe('Shelf — grid and list views', () => {
+  it('loads artifact previews from the public read origin inside trusted controls',()=>{
+    configureAppApi(window.location.origin,'https://public.example.test','page');
+    const {container}=render(<Shelf rows={[doc('abc123',28)]}/>);
+    expect(container.querySelector('img')?.src).toBe('https://public.example.test/a/abc123/export?format=jpg&mode=card&v=1&r=2');
+    configureAppApi(window.location.origin,window.location.origin,'standalone');
+  });
+  it('replaces a failed thumbnail spinner with an accessible failure fallback',()=>{
+    const {container}=render(<Shelf rows={[doc('abc123',28)]}/>);
+    fireEvent.error(container.querySelector('img')!);
+    expect(container.querySelector('.animate-spin')).toBeNull();
+    expect(screen.getByText(/preview unavailable/i)).toBeInTheDocument();
+  });
   it('remembers the view across remounts and ignores unknown stored values', () => {
     localStorage.setItem('artifactbin:shelf-view', 'unknown');
     const first = render(<Shelf rows={[doc('one', 28)]} />);
