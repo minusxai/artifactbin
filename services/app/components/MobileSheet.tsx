@@ -16,6 +16,7 @@
  */
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useTrustedPortalContainer } from './TrustedUi';
 
 /**
  * Tailwind's `sm` threshold, by innerWidth rather than matchMedia: readable in
@@ -54,6 +55,7 @@ export default function MobileSheet({ label, onClose, size = 'tall', header, chi
   header?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const portalContainer = useTrustedPortalContainer();
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
@@ -87,6 +89,6 @@ export default function MobileSheet({ label, onClose, size = 'tall', header, chi
         <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
       </div>
     </>,
-    document.body,
+    portalContainer ?? document.body,
   );
 }
