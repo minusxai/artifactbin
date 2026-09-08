@@ -336,7 +336,9 @@ export function createFrameSelectionActions({
   const releaseButton = () => { buttonHeld = false; };
   const onPointerUp = (event: PointerEvent) => {
     buttonHeld = false;
-    if ((event.target as Element | null)?.closest?.(`[${SELECTION_ACTIONS_ATTR}]`)) return;
+    // Shadow DOM retargets event.target to the host. Rebuilding the toolbar
+    // on this pointerup would detach the button before its click can arrive.
+    if (toolbar && event.composedPath().includes(toolbar)) return;
     win.queueMicrotask(showForSelection);
   };
   const onKeyUp = (event: KeyboardEvent) => { if (changesSelection(event)) showForSelection(); };

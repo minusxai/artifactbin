@@ -66,6 +66,22 @@ afterEach(() => {
 });
 
 describe('view-mode text selection actions', () => {
+  it('keeps the clicked shadow-portal button mounted between pointerup and click',async()=>{
+    actions.dispose();
+    const host=document.createElement('div');document.body.appendChild(host);
+    const shadow=host.attachShadow({mode:'open'});
+    const portal=document.createElement('div');shadow.appendChild(portal);
+    actions=createFrameSelectionActions({win:window,portal,onAction});actions.setNodes(parsed.nodes);
+    actions.update({type:'mx:selection-actions',edit:true,annotate:true});
+    await selectText();
+    const button=shadow.querySelector<HTMLButtonElement>('[aria-label="Comment on selected text"]')!;
+    expect(button).not.toBeNull();
+    button.dispatchEvent(new MouseEvent('pointerdown',{bubbles:true,composed:true}));
+    button.dispatchEvent(new MouseEvent('pointerup',{bubbles:true,composed:true}));
+    await Promise.resolve();
+    expect(button.isConnected).toBe(true);
+    button.click();expect(onAction).toHaveBeenCalledWith('annotate',expect.objectContaining({path:'0'}));
+  });
   /*
    * A triple-click, and a drag that ends at the end of a line, leave the Range
    * ENDING at offset 0 of the following block — a node the selection does not
