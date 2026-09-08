@@ -20,7 +20,7 @@ beforeAll(async () => {
     if (mode === 'oversize') { res.writeHead(200,{'content-length':String(65*1024*1024)});res.flushHeaders();return; }
     if (mode === 'stream-size') { res.writeHead(200);res.end(Buffer.alloc(65*1024*1024));return; }
     if (mode === 'slow') { res.writeHead(200);res.write('pending');return; }
-    res.writeHead(200,{'content-type':'text/javascript','set-cookie':'secret=yes','location':'/private','access-control-allow-credentials':'true','content-security-policy':"default-src 'none'"});res.end('bytes');
+    res.writeHead(200,{'content-type':'text/javascript','set-cookie':'secret=yes; Secure; HttpOnly','location':'/private','access-control-allow-credentials':'true','content-security-policy':"default-src 'none'"});res.end('bytes');
   });
 });
 afterAll(async () => { await app.close(); });
