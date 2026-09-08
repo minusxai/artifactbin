@@ -1,9 +1,37 @@
-import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
+import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {afterEach,expect,it,vi} from 'vitest';
 import {MemoryRouter,useLocation} from 'react-router';
 const account={kind:'account',user:{id:'qa_account',email:null},mixpanel:{token:null,host:''}};
 const none={kind:'none',user:null,mixpanel:{token:null,host:''}};
 afterEach(()=>{cleanup();document.getElementById('mx-page-data')?.remove();vi.unstubAllGlobals();vi.resetModules();});
+
+it('guards repeated form submits throughout pending session verification and permits retry after failure',async()=>{
+ vi.resetModules();let signedIn=false,signIns=0,checks=0;
+ let settle!:(response:Response)=>void;
+ const pending=new Promise<Response>(resolve=>{settle=resolve;});
+ vi.stubGlobal('fetch',vi.fn(async(url)=>{
+  if(String(url).includes('/sign-in/')){signedIn=true;signIns++;}
+  if(String(url).endsWith('/session')){if(signedIn){checks++;return checks===1?pending:Response.json(account);}return Response.json(none);}
+  return Response.json({});
+ }));
+ const {SessionProvider,useSession}=await import('../session');const {default:LoginForm}=await import('@/components/LoginForm');const {AppNavigationBinding}=await import('../AppNavigation');
+ function Probe(){return <><p aria-label="Identity">{useSession().session?.kind??'pending'}</p><p aria-label="Route">{useLocation().pathname}</p><LoginForm/></>;}
+ render(<MemoryRouter initialEntries={['/login']}><AppNavigationBinding/><SessionProvider><Probe/></SessionProvider></MemoryRouter>);
+ await waitFor(()=>expect(screen.getByLabelText('Identity').textContent).toBe('none'));
+ fireEvent.change(screen.getByLabelText('Email'),{target:{value:'qa@example.com'}});fireEvent.click(screen.getByLabelText('Log in with email'));
+ fireEvent.change(await screen.findByLabelText('Login code'),{target:{value:'123456'}});
+ const form=screen.getByLabelText('Verify code').closest('form')!;
+ fireEvent.submit(form);fireEvent.submit(form);
+ await waitFor(()=>expect(checks).toBeGreaterThan(0));
+ fireEvent.submit(form);
+ expect(signIns).toBe(1);expect(checks).toBe(1);
+ expect(screen.getByLabelText('Retry loading session')).toBeDisabled();
+ expect(screen.getByLabelText('Route').textContent).toBe('/login');
+ await act(async()=>{settle(new Response('{}',{status:503}));});
+ const retry=screen.getByLabelText('Retry loading session');expect(retry).toBeEnabled();
+ fireEvent.click(retry);await waitFor(()=>expect(screen.getByLabelText('Route').textContent).toBe('/'));
+ expect(signIns).toBe(1);expect(checks).toBe(2);
+});
 
 it('updates the shared session after OTP success before navigating to the local callback',async()=>{
  vi.resetModules();let signedIn=false;

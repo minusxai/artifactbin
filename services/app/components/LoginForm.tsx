@@ -1,7 +1,7 @@
 'use client';
 
 import {appFetch as fetch, appNavigate} from '@/web/api-origin';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button, Input } from '@/components/ui';
 import { internalRedirectTarget } from '@/lib/safe-redirect';
 import {useSession} from '@/web/session';
@@ -22,6 +22,8 @@ export default function LoginForm() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [authenticated,setAuthenticated] = useState(false);
+  // Synchronous guard: form submissions can arrive before React renders disabled.
+  const verifying = useRef(false);
 
   const requestCode = async (address: string) => {
     setBusy(true);
@@ -88,27 +90,33 @@ export default function LoginForm() {
         className="mt-5 flex flex-col gap-3"
         onSubmit={async (e) => {
           e.preventDefault();
+          if (verifying.current) return;
+          verifying.current = true;
           setBusy(true);
           setError(null);
-          const res = authenticated ? null : await fetch('/api/auth/sign-in/email-otp', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, otp: code }),
-          }).catch(() => null);
-          setBusy(false);
-          if (!authenticated && (!res || !res.ok)) {
-            setError('That code isn’t right, or it expired. Request a new one.');
-            return;
+          try {
+            const res = authenticated ? null : await fetch('/api/auth/sign-in/email-otp', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, otp: code }),
+            }).catch(() => null);
+            if (!authenticated && (!res || !res.ok)) {
+              setError('That code isn’t right, or it expired. Request a new one.');
+              return;
+            }
+            setAuthenticated(true);
+            if (!await refreshAuth()) {
+              setError('Logged in, but your session could not be verified. Retry below; your code has already been accepted.');
+              return;
+            }
+            // callbackUrl is attacker-controllable; internalRedirectTarget refuses
+            // anything that resolves off-origin (including `//evil.com`).
+            const callbackUrl = new URLSearchParams(window.location.search).get('callbackUrl');
+            appNavigate(internalRedirectTarget(callbackUrl, window.location.origin),true);
+          } finally {
+            verifying.current = false;
+            setBusy(false);
           }
-          setAuthenticated(true);
-          if (!await refreshAuth()) {
-            setError('Logged in, but your session could not be verified. Retry below; your code has already been accepted.');
-            return;
-          }
-          // callbackUrl is attacker-controllable; internalRedirectTarget refuses
-          // anything that resolves off-origin (including `//evil.com`).
-          const callbackUrl = new URLSearchParams(window.location.search).get('callbackUrl');
-          appNavigate(internalRedirectTarget(callbackUrl, window.location.origin),true);
         }}
       >
         <Input
