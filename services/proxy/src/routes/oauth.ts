@@ -130,6 +130,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
         resource: requestedResource, scope, codeChallenge, state }, actor.sessionId);
       return render('artifactbin — connect', `<h1>Connect to artifactbin</h1>
       <p>Allow <strong>${esc(client!.clientName)}</strong> to publish artifacts for your account?</p>
+      <p>Artifacts will belong to ${actor.email ? `<strong>${esc(actor.email)}</strong>` : 'your signed-in account'}.</p>
       <form method="POST" action="/oauth/authorize/approve"><input type="hidden" name="approval" value="${approval}"><button type="submit" aria-label="Approve connection">Approve</button></form>`,200,redirectUri);
     }
     const retryPath = `/oauth/authorize?${q.toString()}`;
