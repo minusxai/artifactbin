@@ -11,7 +11,8 @@ Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with spans.
 - Literal props, plus [restricted reactive JSX and dialogs](markup-state.md).
   No spreads, callbacks, or inline handlers; every tag closes (`<br />`),
   comments are `{/* … */}`, and there is no `<html>`/`<head>`/`<body>`.
-  One Helmet script runs in an isolated iframe, without visible DOM access.
+  Same-origin markup is top-level light DOM; controls use closed shadow.
+  Helmet scripts cannot access this.
   DOM libraries use [Iframe](markup-iframe.md); Sandbox stays supported.
   Use the `mx` data API and declarative controls.
 - **Style with Tailwind classes via `className`**, starting from a
@@ -58,13 +59,14 @@ at publish.
 carrying the whole set in `allowed_html_tags`. Only these are refused
 outright, with no list: [% for t in refusedTags %]`[[ t ]]` [% endfor %].
 
-## `<Helmet>` — the document's own head
+## `<Helmet>` — not the page head
 
 At most ONE per document, holding at most one each of `<title>`, `<style>`
 and `<script>`, plus `<meta name content />` pairs, plus any number of the
 DATA declarations `<Value>`, `<Query>`, `<Mutation>` ([data](markup-data.md)).
-Write it anywhere; it is hoisted to the top when stored. It is the ONLY
-place for parent CSS, JS or data; [Iframe](markup-iframe.md) owns isolated child CSS/JS.
+It is hoisted when stored, not into the app's DOM head. Parent CSS, logic and
+data belong here;
+[Iframe](markup-iframe.md) owns isolated child CSS/JS.
 
 ```jsx
 <Helmet>
@@ -79,7 +81,7 @@ place for parent CSS, JS or data; [Iframe](markup-iframe.md) owns isolated child
 </Helmet>
 ```
 
-Helmet scripts have no visible DOM access: use declarative controls and
+Helmet scripts own hidden DOM, not parent DOM. Use controls and
 `mx.params.subscribe` for signal changes. Fetch is blocked. **Rows arrive after
 the script starts**; use `mx.data.subscribe`, not a line-one read. Signal writes
 are asynchronous. See [script API and migration](markup-scripts.md) before

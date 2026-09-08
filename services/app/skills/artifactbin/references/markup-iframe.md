@@ -6,17 +6,19 @@ description: "Managed frames."
 
 Use `<Iframe>` for new scripted canvas, Three.js or other DOM interfaces.
 Write its HTML, CSS and scripts directly as static JSX children; the platform
-packages them into an opaque sandboxed `srcdoc` child inside a protective
-wrapper. Its script can use **its own DOM/canvas**, never the parent artifact,
+packages them into an opaque sandboxed `srcdoc` inside the fixed HTTP
+`/story/author-frame` wrapper, initialized once without author interpolation.
+Its script can use **its own DOM/canvas**, never the parent artifact,
 account APIs, cookies or parent storage. Do not supply `sandbox`, `srcdoc`,
 `api`, `store` or `compiled`; these are platform-owned.
 
-This is separate from the trusted controls iframe. Signals and declared
+The artifact is same-origin top-level light DOM; trusted controls use closed
+shadow DOM, not another iframe. Signals and declared
 mutations cross a bounded message bridge; this does not grant account authority.
 Persistent writes remain authenticated and permission-checked.
 
 External assets require the deployment to configure **`APP__ASSETS_ORIGIN`**:
-a distinct public cached-byte hostname, not the artifact or trusted-controls
+a distinct public cached-byte hostname (normally `a.`), not the artifact
 hostname, with HTTPS/routing configured in app and proxy. Missing configuration
 refuses external asset resolution; it never falls back to contacting the CDN
 from author code. A local canvas with no external assets needs no CDN.
@@ -82,8 +84,8 @@ viewer credentials upstream. Unsupported methods or APIs are not a general HTTP
 proxy. Arbitrary `innerHTML` and CSS URL strings are **not automatically rewritten**.
 
 Rewriting is convenience; **CSP enforces HTTP/resource destinations**: the frame can request
-only the configured public cached-asset origin, not arbitrary external hosts or
-the trusted controls origin. Unsupported/unrewritten requests are blocked.
+only the configured public cached-asset origin, not arbitrary external hosts.
+Unsupported/unrewritten requests are blocked.
 Sandbox and the protective wrapper restrict navigation; do not remove the wrapper
 or weaken its policies to make a library load. WebRTC peer-connection constructors
 are disabled before author code and cannot be restored by it.

@@ -5,9 +5,11 @@ description: >-
 ---
 ## Read first
 
-One `<script>` in `<Helmet>` runs after hydration in a hidden opaque-origin
-iframe. The visible markup is rendered by the trusted runtime. Author scripts
-cannot access that DOM, cookies, or storage. Fetch is blocked by CSP.
+One `<script>` in `<Helmet>` runs after hydration in its own hidden document.
+The fixed HTTP `/story/author-frame` wrapper receives it once, then creates an
+opaque sandboxed inner `srcdoc`; author source exists only there. Visible markup
+is same-origin top-level light DOM; trusted UI uses a closed shadow root. Author
+scripts cannot access either DOM, cookies, storage or fetch.
 
 Use declarative controls for visible interactions and the `mx` data API for
 logic. Existing scripts that attach listeners to visible elements or manipulate
@@ -44,7 +46,7 @@ Only currently declared signals, queries, and mutations are accepted. There is
 no script API for liking, following, commenting, source edits, arbitrary URLs,
 or authenticated fetch. Requests are bounded; a script must not flood the bridge.
 
-Changed or removed scripts revoke their old iframe and subscriptions on live
+Changed or removed scripts revoke their old inner document and subscriptions on live
 updates; unchanged scripts survive prose edits. Revocation does not undo a write
 already accepted by the server. Origin isolation is not a guarantee of CPU or
 memory isolation.

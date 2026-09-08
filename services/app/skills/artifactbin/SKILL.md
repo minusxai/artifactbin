@@ -53,8 +53,8 @@ one column and widen: `grid-cols-1 @2xl:grid-cols-3`, and so does display
 type — `text-4xl @2xl:text-6xl`, never a bare `text-6xl` (60px type breaks a
 phone). Never a fixed pixel width.
 
-Parent rules: self-contained. ONE isolated Helmet script, no parent DOM/network. Use signals/run= for UI;
-managed `<Iframe>` for DOM/canvas/CDN bundles (see `markup-iframe.md`). No CDN
+Markup: same-origin top-level light DOM; controls: closed shadow. Parent rules: self-contained. ONE isolated Helmet script, no parent DOM/network.
+managed `<Iframe>` handles DOM/canvas/CDN. No CDN
 scripts or external stylesheets in parent. Images are a `data:` URI or
 any `https://` URL (publish copies it, your URL stays); web fonts: a Google family via
 `<meta name="font-display" content="Lobster" />`.

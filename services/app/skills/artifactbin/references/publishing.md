@@ -22,11 +22,13 @@ Rules · Endpoints · Errors.
 
 ## Rules every document lives by
 
-Sandboxed at an opaque origin with a per-document CSP: **no
-outbound network except the same-origin endpoints it names** — `/a/<id>/query`
-(data), `/a/<id>/events` + `/events/frame` (live), `/a/<id>/mutate` (declared
-writes), `/a/<id>/resolve` (files), `/geojson/`, `blob:` and `data:`. A CDN `<script src>`, an external stylesheet or any
-other `fetch`/XHR is a 400 at publish. CSS and JS live in `<Helmet>` only.
+Same-origin markup is top-level light DOM; trusted UI uses closed shadow DOM.
+Author code is opaque `srcdoc` behind `/story/author-frame`.
+
+CDN scripts, external CSS and fetch/XHR are rejected. Managed
+`<Iframe>` may import declared HTTPS script/images through bounded GETs and the
+public cache (normally `a.`), never general network or viewer credentials.
+Parent CSS/logic is in `<Helmet>`; child CSS/JS in `<Iframe>`.
 Max [[ maxContentBytes ]] bytes.
 
 Every BODY element has a persistent `id`; storing generates omitted IDs.

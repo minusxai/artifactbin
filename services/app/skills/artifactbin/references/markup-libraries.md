@@ -10,7 +10,8 @@ Three.js-specific component is needed. The following `<Sandbox>` interface is
 retained for compatibility. `artifact.library('three')`
 loads the hosted library; `artifact.resolve('ref:<id>')` resolves readable file
 bytes. Private assets never resolve. No Three.js-specific scene components.
-The child can edit its own DOM, not the surrounding artifact. It also has the
+The child is an opaque `srcdoc` behind `/story/author-frame`. It can edit its
+own DOM, not the top-level artifact or closed-shadow controls. It also has the
 bounded `mx` signals/query/mutation bridge; normal ACL rules still apply.
 
 ## Contents
@@ -85,7 +86,7 @@ width follows the parent container. Give the frame a useful `title`. Parent
 CSS/Tailwind does not enter the child; style its internal HTML directly.
 Changing either string replaces the realm. Resize handlers and animation/GPU
 cleanup belong to the script. Keep data declarations in the parent Helmet.
-The hidden Helmet script remains data-only: it cannot obtain this canvas.
+The hidden Helmet script owns its document, not the parent, and cannot obtain this canvas.
 
 Start with self-contained GLBs, with textures embedded. Separate GLTF buffers,
 relative file trees, external assets, Draco/KTX decoders and workers are not
