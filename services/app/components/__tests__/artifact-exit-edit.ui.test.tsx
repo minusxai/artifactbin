@@ -43,3 +43,17 @@ it('edits the mounted document in place and retains the same host on exit',async
  expect(document.querySelector('[data-artifact-story-host]')).toBe(host);
  expect(screen.getByText('Hello')).toBeVisible();
 });
+it('preserves the reading position when a toolbar changes the document inset',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({})));
+ vi.stubGlobal('scrollY',900);
+ const scroll=vi.fn((x:number|ScrollToOptions,y?:number)=>{vi.stubGlobal('scrollY',typeof x==='object'?x.top??window.scrollY:y??window.scrollY);});
+ vi.stubGlobal('scrollTo',scroll);
+ vi.stubGlobal('scrollBy',vi.fn((x:number|ScrollToOptions,y?:number)=>{vi.stubGlobal('scrollY',window.scrollY+(typeof x==='object'?x.top??0:y??0));}));
+ render(<ArtifactShell role="owner"><ArtifactSurface {...props}/></ArtifactShell>);
+ await screen.findByText('Hello');
+ fireEvent.click(screen.getByLabelText('Open artifact controls'));fireEvent.click(screen.getByLabelText('Edit artifact'));
+ await screen.findByLabelText('Exit edit mode');
+ expect(window.scrollY).toBe(948);
+ fireEvent.click(screen.getByLabelText('Exit edit mode'));
+ expect(window.scrollY).toBe(900);
+});
