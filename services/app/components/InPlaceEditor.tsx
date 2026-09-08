@@ -30,7 +30,6 @@ import { Check, Code, History, Image as ImageIcon, MessageSquare, Paintbrush } f
 import ThemePicker, { ModeChip, TemplateChip } from '@/components/ThemePicker';
 import { Tooltip } from '@/components/Tooltip';
 import { APP_BAR_H, EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
-import { useIsPhoneViewport } from '@/components/MobileSheet';
 import VersionHistory from '@/components/VersionHistory';
 import VizEditorPanel from '@/components/views/story/VizEditorPanel';
 import NumberEditorPanel from '@/components/views/story/NumberEditorPanel';
@@ -171,9 +170,9 @@ export default function InPlaceEditor({
 
   /** Read by callbacks that run after an await, when `source` may have moved on. */
   const sourceRef = useRef(source);
-  // The document's bar is 44px on a desktop; a phone draws none, so the toolbar takes the top there.
-  const phone = useIsPhoneViewport();
-  const barTop = phone ? 0 : APP_BAR_H;
+  // The direct artifact page keeps its page bar at every viewport width.
+  // Editor chrome begins below that stable first row on phone and desktop.
+  const barTop = APP_BAR_H;
   sourceRef.current = source;
   const cssRef = useRef(css);
   cssRef.current = css;

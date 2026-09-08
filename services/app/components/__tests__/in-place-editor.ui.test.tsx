@@ -153,6 +153,13 @@ describe('what the document says', () => {
     expect(screen.getByLabelText('Editor toolbar')).toHaveStyle({ top: '44px' });
   });
 
+  it('keeps mobile editor panels below both persistent bars',async()=>{
+    vi.stubGlobal('innerWidth',390);
+    mount();
+    await fromFrame({type:STORY_SELECTION_MESSAGE,selection:selection({kind:'embed',tag:'Question',path:'0.2'})});
+    expect(screen.getByLabelText('Chart inspector')).toHaveStyle({top:'92px'});
+  });
+
   it('composes a text edit into the source and persists it', async () => {
     mount();
     await fromFrame({ type: STORY_TEXT_EDIT_MESSAGE, path: '0.1', innerHtml: 'goodbye' });
