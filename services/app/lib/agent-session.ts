@@ -26,7 +26,7 @@
  * request re-reads the row, so revoking a token logs the browser out.
  */
 import { decodeAgentSession as decodeSigned, encodeAgentSession as encodeSigned } from '@artifactbin/utils';
-import { AUTH_SECRET, PUBLIC_BASE_URL, CONTROLS_ORIGIN } from '@/lib/config';
+import { AUTH_SECRET, PUBLIC_BASE_URL } from '@/lib/config';
 import { randomBytes } from 'node:crypto';
 import { parseCookie } from '@/lib/http';
 
@@ -100,7 +100,7 @@ export function agentSessionClearCookie(): string {
 
 /** Sign a session for the Set-Cookie value. */
 export async function encodeAgentSession(session: AgentSession): Promise<string> {
-  return encodeSigned({ tokenIds: session.tokenIds, ...(CONTROLS_ORIGIN ? {sessionId: randomBytes(32).toString('base64url')} : {}) }, AUTH_SECRET);
+  return encodeSigned({ tokenIds: session.tokenIds, sessionId: randomBytes(32).toString('base64url') }, AUTH_SECRET);
 }
 
 /**

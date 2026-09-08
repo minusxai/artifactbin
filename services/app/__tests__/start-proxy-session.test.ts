@@ -1,0 +1,32 @@
+import {expect,it} from 'vitest';
+import path from 'node:path';
+import {createTokenReader,inProcess,decodeAgentSession} from '@artifactbin/utils';
+import {createProxy} from '../../proxy/src/parts';
+import {ensureProxySchema} from '../../proxy/src/schema';
+import {createAppServer} from '@/server/app';
+import {AUTH_SECRET,PUBLIC_BASE_URL} from '@/lib/config';
+import {AGENT_COOKIE} from '@/lib/agent-session';
+import {useAppHarness} from './harness';
+
+const harness=useAppHarness();
+it('mints through the real app and registers its real browser nonce before returning the cookie',async()=>{
+ const db=await harness.db();await ensureProxySchema(db);
+ const main=new URL(PUBLIC_BASE_URL).origin;
+ const proxy=createProxy({upstream:inProcess(createAppServer()),identityDb:db,tokens:createTokenReader({db}),cookieSecret:AUTH_SECRET,secure:main.startsWith('https:'),sessions:{resolve:async()=>null},env:{APP__PUBLIC_BASE_URL:main,PROXY__RATE_LIMIT_CONFIG_FILE:path.resolve('../proxy/dev_rate_limits.yml')}});
+ const proof={origin:main,'sec-fetch-site':'same-origin','x-artifactbin-csrf':'1'};
+ const start=await proxy.request(main+'/api/start',{method:'POST',headers:proof});
+ expect(start.status,await start.clone().text()).toBe(201);
+ const document=await start.json();
+ const cookie=start.headers.getSetCookie().find(c=>c.startsWith(AGENT_COOKIE+'='))!.split(';')[0];
+ const decoded=decodeAgentSession(cookie.slice(AGENT_COOKIE.length+1),AUTH_SECRET);
+ expect(decoded?.sessionId).toMatch(/^[A-Za-z0-9_-]{43}$/);
+ const read=()=>proxy.request(main+'/api/artifacts/'+document.id,{headers:{...proof,cookie}});
+ expect((await read()).status).toBe(200);
+ const second=await proxy.request(main+'/api/session/token',{method:'POST',headers:{...proof,'content-type':'application/json'},body:JSON.stringify({token:document.token})});
+ expect(second.status).toBe(204);
+ const secondCookie=second.headers.getSetCookie().find(c=>c.startsWith(AGENT_COOKIE+'='))!.split(';')[0];
+ expect(secondCookie).not.toBe(cookie);
+ expect((await proxy.request(main+'/api/session/token',{method:'DELETE',headers:{...proof,cookie}})).status).toBe(204);
+ expect((await read()).status).toBe(401);
+ expect((await proxy.request(main+'/api/artifacts/'+document.id,{headers:{...proof,cookie:secondCookie}})).status).toBe(200);
+});
