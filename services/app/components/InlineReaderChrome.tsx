@@ -4,7 +4,7 @@ import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
 
 /** Identical desktop/mobile reader layout, with local handlers inside TrustedUi. */
 export function InlineReaderChrome({ input, onAction }: { input: ReaderChromeInput; onAction(action:string):void }): ReactNode {
-  const html = renderReaderChrome(input).replace(READER_CHROME_HIDDEN_CLASS, '').replace('data-mx-reader-state="hidden"', 'data-mx-reader-state="shown"');
+  const html = renderReaderChrome({...input,panels:false}).replace(READER_CHROME_HIDDEN_CLASS, '').replace('data-mx-reader-state="hidden"', 'data-mx-reader-state="shown"').replaceAll('target="_top"', 'target="_self"');
   return <>
     <style>{STORY_CHROME_CSS}</style>
     <div onClick={event => {

@@ -77,6 +77,8 @@ export interface ReaderReactions {
 }
 
 export interface ReaderChromeInput {
+  /** SPA controls are mounted separately in TrustedUi; raw documents retain their own panels. */
+  panels?: boolean;
   /** Stamped on the root (`data-mx-artifact-id`) so the like/comment log can name the document. Omitted when null. */
   artifactId: string | null;
   /** The document's title, for the byline and the share sheet. Omitted when null. */
@@ -254,7 +256,7 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
     + trigger('menu', 'Open menu', ICON_PROFILE, 'profile', 'Profile')
     + '</div>'
     + byline
-    + '<span class="mx-reader-toast" data-mx-reader-toast hidden>link copied</span>'
+    + (input.panels === false ? '' : '<span class="mx-reader-toast" data-mx-reader-toast hidden>link copied</span>'
     + '<input class="mx-reader-copy" data-mx-reader-copy type="text" readonly tabindex="-1" aria-hidden="true">'
     + '<button type="button" class="mx-reader-scrim" data-mx-reader-scrim aria-label="Close page controls" hidden></button>'
     + '<nav class="mx-reader-panel mx-reader-panel--menu" data-mx-reader-panel="menu" aria-label="Menu" hidden>'
@@ -274,5 +276,5 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
     + (signIn ? renderSignIn(signIn) : '')
     + (fork ? renderFork(fork) : '')
     + (forkedFrom ? renderForkedFrom(forkedFrom) : '')
-    + '</section></div>';
+    + '</section>') + '</div>';
 }

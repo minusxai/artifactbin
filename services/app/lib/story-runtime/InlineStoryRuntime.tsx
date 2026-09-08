@@ -13,7 +13,7 @@ import { STORY_EDIT_MODE_MESSAGE, STORY_ANNOTATIONS_MESSAGE, STORY_SELECTION_ACT
 import { isStoryDocumentUpdate } from './document-update';
 import type { PreparedStoryRuntime } from '@/lib/story/prepared-runtime';
 import { TrustedUi, useTrustedPortalContainer } from '@/components/TrustedUi';
-import { isolateStoryCss } from '@/lib/story/inline-css';
+import { isolateStoryCss, isolateStoryNodes } from '@/lib/story/inline-css';
 import { clearInitialStory } from '@/web/initial-story';
 
 function SelectionPortal({ready}:{ready:(element:HTMLElement | null)=>void}) {
@@ -169,9 +169,11 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
     store.start();
     return () => { controller.dispose(); latest.current.onController(null); };
   }, [lifetime]);
-  const css = useMemo(() => isolateStoryCss([styles.baseCss,styles.compiledCss,styles.authorCss].filter(Boolean).join('\n')), [styles.baseCss,styles.compiledCss,styles.authorCss]);
+  const combinedCss = useMemo(() => [styles.baseCss,styles.compiledCss,styles.authorCss].filter(Boolean).join('\n'), [styles.baseCss,styles.compiledCss,styles.authorCss]);
+  const css = useMemo(() => isolateStoryCss(combinedCss), [combinedCss]);
+  const nodes = useMemo(() => isolateStoryNodes(current.nodes, combinedCss), [current.nodes,combinedCss]);
   return <><TrustedUi overlay><SelectionPortal ready={portalReady} /></TrustedUi><div ref={root} data-mx-inline-story="" data-mx-story-root="" data-theme={styles.theme ?? undefined} className={current.colorMode}>
     <style>{css}</style>
-    <StoryRuntimeApp {...current} store={store} importAsset={lifetime.transport?.importAsset} editDecorate={editRef.current?.decorate} />
+    <StoryRuntimeApp {...current} nodes={nodes} store={store} importAsset={lifetime.transport?.importAsset} editDecorate={editRef.current?.decorate} onSlideRename={editRef.current ? (path,title) => editRef.current?.renameSlide(path,title) : undefined} />
   </div></>;
 }
