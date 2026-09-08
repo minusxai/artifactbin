@@ -366,15 +366,26 @@ function ThreadPreview({ a, top, hovered, onOpen, onHover }: {
   const first = a.thread[0];
   const label = first ? authorLabel(first.author) : 'Unknown';
   const messages = a.thread.length;
+  const previewRoot=useRef<HTMLElement>(null);
+  useEffect(()=>{
+    const element=previewRoot.current;
+    if(!element)return;
+    // Native enter/leave retains the actual target across the portal's shadow
+    // boundary; React's delegated enter synthesis sees the retargeted host.
+    const enter=()=>onHover(a.id);
+    const leave=()=>onHover(null);
+    element.addEventListener('mouseenter',enter);
+    element.addEventListener('mouseleave',leave);
+    return()=>{element.removeEventListener('mouseenter',enter);element.removeEventListener('mouseleave',leave);};
+  },[a.id,onHover]);
   const compactWidth = messages > 9
     ? VIEW_COMMENT_MANY_W
     : messages > 1 ? VIEW_COMMENT_COUNTED_W : VIEW_COMMENT_COLLAPSED_W;
   return (
     <article
+      ref={previewRoot}
       data-annotation-id={a.id}
       data-hovered={hovered ? 'true' : undefined}
-      onMouseEnter={() => onHover(a.id)}
-      onMouseLeave={() => onHover(null)}
       className={`group pointer-events-auto overflow-hidden border text-left shadow-md transition-[top,width,height,border-color,background-color,box-shadow] duration-150 ${hovered ? 'z-10 border-edge-bright bg-comment-hover px-3 py-2.5 shadow-xl' : 'border-transparent bg-raised hover:bg-raised'}`}
       style={{
         position: 'fixed',
@@ -778,7 +789,10 @@ export default function AnnotationLayer({
   /** The thread this viewer just asked for; its newest comment is never folded. */
   const [justOpenedId, setJustOpenedId] = useState<string | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
+  const uiHoverId = useRef<string | null>(null);
+  const hoverUi = (id:string|null) => { uiHoverId.current=id; setHoverId(id); };
   const [anchorRects, setAnchorRects] = useState<Record<string, StoryEditRect>>({});
+  const threadsRoot = useRef<HTMLDivElement>(null);
   const [selection, setSelection] = useState<StoryEditSelection | null>(null);
   /**
    * A PICK is on, and how: `block` (the frame outlines blocks under the
@@ -860,7 +874,7 @@ export default function AnnotationLayer({
     const raf = requestAnimationFrame(() => {
       // Optional call: jsdom implements no scrollIntoView, and a missing
       // scroll is a cosmetic no-op, never an error.
-      const thread = document.querySelector(`[data-thread-id="${CSS.escape(openId)}"]`);
+      const thread = threadsRoot.current?.querySelector(`[data-thread-id="${CSS.escape(openId)}"]`);
       thread?.scrollIntoView?.({ block: 'start', inline: 'nearest' });
       /*
        * …and then the NEWEST comment, which is the answer somebody opened the
@@ -992,7 +1006,7 @@ export default function AnnotationLayer({
         return;
       }
       if (event.data.type === STORY_ANNOTATION_HOVER_MESSAGE) {
-        setHoverId(event.data.id);
+        setHoverId(uiHoverId.current ?? event.data.id);
         return;
       }
       if (event.data.type === STORY_SELECTION_MESSAGE && pickingRef.current) {
@@ -1227,7 +1241,7 @@ export default function AnnotationLayer({
               top={top}
               hovered={hoverId === annotation.id}
               onOpen={() => openThread(annotation.id)}
-              onHover={setHoverId}
+              onHover={hoverUi}
             />
           ))}
         </div>
@@ -1391,6 +1405,7 @@ export default function AnnotationLayer({
           </div>
         }
       >
+        <div ref={threadsRoot} className="contents">
         {annotations.length === 0 && !selection && (
           <p className="p-2 font-mono text-xs text-muted">no open comments — select text in the document, or pick a block, to leave one</p>
         )}
@@ -1405,7 +1420,7 @@ export default function AnnotationLayer({
             justOpened={justOpenedId === a.id}
             isCommentFolded={(commentId) => isFolded(folds, 'comments', commentId)}
             onOpen={() => openThread(a.id)}
-            onHover={setHoverId}
+            onHover={hoverUi}
             onReply={(body) => void act(a.id, { reply: body })}
             onResolve={() => void act(a.id, { resolve: true })}
             onReopen={() => {}}
@@ -1440,7 +1455,7 @@ export default function AnnotationLayer({
               setJustOpenedId(a.id);
               setOpenResolvedId((current) => current === a.id ? null : a.id);
             }}
-            onHover={setHoverId}
+            onHover={hoverUi}
             onReply={() => {}}
             onResolve={() => {}}
             onReopen={() => void act(a.id, { reopen: true })}
@@ -1452,6 +1467,7 @@ export default function AnnotationLayer({
         {(resolvedList?.length ?? 0) === 0 && (
           <p className="p-2 font-mono text-xs text-muted">nothing resolved yet</p>
         )}
+        </div>
       </RailChrome>
       )}
     </>

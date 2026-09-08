@@ -142,6 +142,16 @@ const layer = (frame: HTMLIFrameElement, over: Partial<Parameters<typeof Annotat
 };
 
 describe('AnnotationLayer', () => {
+  it('scrolls the newest reply in its own shadow-root rail',async()=>{
+    const {frame,contentWindow}=makeFrame();
+    const view=render(<TrustedUi overlay>{layer(frame,{railOpen:true})}</TrustedUi>);
+    const shadow=view.container.querySelector('[data-trusted-ui]')!.shadowRoot!;
+    await waitFor(()=>expect(shadow.querySelector('[data-thread-id="ann_1"]')).not.toBeNull());
+    const thread=shadow.querySelector('[data-thread-id="ann_1"]')!;
+    const scroll=vi.fn();thread.scrollIntoView=scroll;
+    fromFrame(contentWindow,{type:STORY_ANNOTATION_PIN_MESSAGE,nonce:NONCE,id:ANN.id});
+    await waitFor(()=>expect(scroll).toHaveBeenCalled());
+  });
   it('subscribes when a lazy inline runtime becomes ready after the layer mounts',async()=>{
     const {frame}=makeFrame();
     const runtimeRef:{current:import('@/lib/story-runtime/InlineStoryRuntime').InlineStoryController|null}={current:null};
@@ -233,6 +243,9 @@ describe('AnnotationLayer', () => {
     expect(screen.getByLabelText('vivek avatar').textContent).toBe('V');
     expect(screen.getByRole('link', { name: 'View @vivek profile' }).getAttribute('href')).toBe('/@vivek');
     expect(screen.getByText('is this right?')).toBeTruthy();
+    fromFrame(contentWindow,{type:STORY_ANNOTATION_HOVER_MESSAGE,nonce:NONCE,id:null});
+    await flush();
+    expect(card!.style.width).toBe('288px'); // queued document leave cannot cancel UI hover
     expect(screen.queryByText('one more thought')).toBeNull();
     expect(card!.textContent).toContain('+1 more');
     expect(screen.getByLabelText('Reply participants: vivek')).toBeTruthy();
