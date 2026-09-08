@@ -21,6 +21,8 @@ import { Tooltip } from '@/components/Tooltip';
 import { forgetTokens } from '@/lib/browser-session';
 import { crumbsFor } from '@/lib/breadcrumb';
 import { usePathname } from '@/lib/navigation';
+import {TrustedChrome} from './TrustedUi';
+import {TrustedAppLinks} from '@/web/AppNavigation';
 
 export type AppearanceMode = 'light' | 'dark';
 
@@ -514,9 +516,11 @@ export default function PageChrome({
 }) {
   return (
     <>
+      <TrustedChrome><TrustedAppLinks>
       <AppBar title={title} label={label} hideBreadcrumb={hideBreadcrumb} />
       <PageMenu authed={authed} anon={anon} title={title} fixed triggerless />
       <PageControls fixed triggerless label={label}>{children}</PageControls>
+      </TrustedAppLinks></TrustedChrome>
     </>
   );
 }

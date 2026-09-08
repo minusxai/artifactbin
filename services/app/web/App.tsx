@@ -1,5 +1,7 @@
 import { ChatPage } from './pages/Chat';
-import { Navigate, Route, Routes } from 'react-router';
+import { Navigate, Route, Routes, useParams } from 'react-router';
+import {TrustedAppShell} from './TrustedAppShell';
+import {AppNavigationBinding} from './AppNavigation';
 import MixpanelClient from '@/components/MixpanelClient';
 import { SessionProvider, useSession } from './session';
 import { Shell } from './Shell';
@@ -21,9 +23,15 @@ function Analytics() {
   return session ? <MixpanelClient token={session.mixpanel.token} host={session.mixpanel.host} /> : null;
 }
 
+function ArtifactRoute() {
+  const {id} = useParams();
+  return <ArtifactPage key={id} />;
+}
 export function App() {
   return (
     <SessionProvider>
+      <AppNavigationBinding />
+      <TrustedAppShell>
       <Analytics />
       <Routes>
         <Route element={<Shell />}>
@@ -46,10 +54,11 @@ export function App() {
           <Route path="/docs-human" element={<DocsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
-        <Route path="/a/:id" element={<ArtifactPage />} />
-        <Route path="/controls/a/:id" element={<ArtifactPage />} />
+        <Route path="/a/:id" element={<ArtifactRoute />} />
+        <Route path="/controls/a/:id" element={<ArtifactRoute />} />
         <Route path="/:user/*" element={<ProfilePage />} />
       </Routes>
+      </TrustedAppShell>
     </SessionProvider>
   );
 }

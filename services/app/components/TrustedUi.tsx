@@ -14,7 +14,17 @@ export interface TrustedUiProps {
 }
 
 const PortalContainer = createContext<HTMLElement | null>(null);
+/** One persistent boundary; children stay in light DOM. */
+export function TrustedUiHost(props: TrustedUiProps): ReactNode { return <BoundaryHost {...props} shared />; }
+/** Portals at the source React position; null while its shared host mounts.
+ * Outside a host it preserves existing standalone component behavior. */
+export function TrustedChrome({children}: {children:ReactNode}): ReactNode {
+  const boundary = useContext(SharedBoundary);
+  if (boundary === undefined) return children;
+  return boundary && createPortal(<PortalContainer.Provider value={boundary.portals}>{children}</PortalContainer.Provider>, boundary.content);
+}
 interface Boundary {root: ShadowRoot; style: HTMLStyleElement; scope: HTMLDivElement; content: HTMLDivElement; portals: HTMLDivElement}
+const SharedBoundary = createContext<Boundary | null | undefined>(undefined);
 
 /** `all` deliberately excludes custom properties, direction and unicode-bidi.
  * Reset variables read/declared by trusted CSS plus currently inherited ones.
@@ -32,6 +42,10 @@ function resetCss(host: HTMLElement, styles: string): string {
 }
 
 export function TrustedUi({children, styles, mode}: TrustedUiProps): ReactNode {
+  return <BoundaryHost styles={styles} mode={mode}>{children}</BoundaryHost>;
+}
+
+function BoundaryHost({children, styles, mode, shared = false}: TrustedUiProps & {shared?: boolean}): ReactNode {
   const host = useRef<HTMLDivElement>(null);
   const owned = useRef<Boundary | null>(null);
   const [boundary, setBoundary] = useState<Boundary | null>(null);
@@ -66,6 +80,7 @@ export function TrustedUi({children, styles, mode}: TrustedUiProps): ReactNode {
     // cleanup leaves the host connected and must not destroy the live root.
     if (owned.current && !owned.current.root.host.isConnected) owned.current.root.replaceChildren();
   }, []);
+  if (shared) return <SharedBoundary.Provider value={boundary}><div ref={host} />{children}</SharedBoundary.Provider>;
   return <div ref={host}>{boundary && createPortal(<PortalContainer.Provider value={boundary.portals}>{children}</PortalContainer.Provider>,boundary.content)}</div>;
 }
 

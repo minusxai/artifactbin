@@ -166,16 +166,23 @@ export default function WorkspaceCreate({ onCreated, parentId = null }: { onCrea
 
   useEffect(() => {
     if (!open) return;
+    const boundary = root.current?.getRootNode();
+    const shadow = boundary instanceof ShadowRoot ? boundary : null;
     const close = (event: MouseEvent) => {
+      // The root listener sees the real target; the window listener sees only
+      // the closed host. Do not close a second time after retargeting.
+      if (shadow && event.target === shadow.host) return;
       if (!root.current?.contains(event.target as Node)) setOpen(false);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setOpen(false);
     };
     window.addEventListener('mousedown', close);
+    shadow?.addEventListener('mousedown', close as EventListener);
     window.addEventListener('keydown', closeOnEscape);
     return () => {
       window.removeEventListener('mousedown', close);
+      shadow?.removeEventListener('mousedown', close as EventListener);
       window.removeEventListener('keydown', closeOnEscape);
     };
   }, [open]);

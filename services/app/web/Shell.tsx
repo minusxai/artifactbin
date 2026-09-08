@@ -5,6 +5,7 @@ import AdoptLegacyToken from '@/components/AdoptLegacyToken';
 import { MixpanelIdentify } from '@/components/MixpanelClient';
 import PageChrome from '@/components/PageChrome';
 import { useSession } from './session';
+import {TrustedAppLinks} from './AppNavigation';
 
 /**
  * The reusable frame, also used when `/a/:id` resolves to an owned folder.
@@ -18,7 +19,7 @@ export function ShellFrame({ children, hideBreadcrumb = false }: { children: Rea
       <AdoptLegacyToken />
       {session?.user && <MixpanelIdentify userId={session.user.id} email={session.user.email} />}
       <PageChrome hideBreadcrumb={hideBreadcrumb} authed={!!session?.user} anon={session?.kind === 'anon'} />
-      {children}
+      <TrustedAppLinks>{children}</TrustedAppLinks>
     </>
   );
 }

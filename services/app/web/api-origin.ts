@@ -1,6 +1,24 @@
 import {artifactReturnAddress, stripIntent, withIntent, type Intent} from '@/lib/intent';
 import {isPlatformPage} from '@artifactbin/utils/platform-pages';
 
+/** First-party router registration; returning false preserves native/server navigation. */
+export type AppNavigation = (url: URL, replace: boolean) => boolean;
+let navigation: AppNavigation | null = null;
+export function bindAppNavigation(navigate: AppNavigation): () => void {
+  navigation = navigate;
+  return () => { if (navigation === navigate) navigation = null; };
+}
+/** Route admission is shared by explicit appNavigate and trusted anchor handling. */
+export function isClientAppUrl(url: URL, origin: string): boolean {
+  if (url.origin !== origin || url.username || url.password || url.searchParams.has('key')) return false;
+  return isPlatformPage(url.pathname)
+    || /^\/a\/[A-Za-z0-9]+\/?$/.test(url.pathname)
+    || (/^\/@[\w-]+(?:\/[\w-]+)*\/?$/.test(url.pathname) && !/\/(?:raw|export)\/?$/.test(url.pathname));
+}
+export function tryAppNavigation(url: URL, replace = false): boolean {
+  return clientMode === 'standalone' && window.parent === window && isClientAppUrl(url, window.location.origin) && !!navigation?.(url, replace);
+}
+
 /** Explicit client transport, never a patch to window.fetch. Config is server-owned. */
 export function createAppApi(own: string, api: string | null, fetchImpl: typeof fetch) {
   const ownOrigin = new URL(own).origin;
@@ -29,7 +47,7 @@ let clientMode:ClientMode='standalone';
 let parentAddress: string | null = null;
 const addressListeners = new Set<() => void>();
 export const subscribeArtifactAddress = (listener: () => void) => {addressListeners.add(listener);return () => {addressListeners.delete(listener);};};
-export const getArtifactAddress = (): string | null => clientMode==='controls' ? parentAddress : configured?.url('') ?? (typeof window==='undefined'?null:window.location.href);
+export const getArtifactAddress = (): string | null => clientMode==='controls' ? parentAddress : clientMode==='standalone' ? (typeof window==='undefined'?null:window.location.href) : configured?.url('') ?? (typeof window==='undefined'?null:window.location.href);
 /** Installed before React mounts. The sender and the address each have their own check. */
 export function receiveArtifactAddress(event: MessageEvent): void {
   if (clientMode!=='controls' || !configured?.mainOrigin || event.source !== window.parent || event.origin !== configured.mainOrigin || event.data?.type !== 'mx:controls:address') return;
@@ -67,6 +85,7 @@ export const appUrl = (path: string): string => configured?.url(path) ?? path;
 export const isControlsClient = (): boolean => clientMode==='controls';
 export const isFolderClient = (): boolean => clientMode==='folder';
 export function appNavigate(path: string, replace = false): void {
+  if (navigation && tryAppNavigation(new URL(appUrl(path), window.location.href), replace)) return;
   if (!configured || window.parent === window) {if(replace)window.location.replace(appUrl(path));else window.location.href=appUrl(path);return;}
   const url = new URL(appUrl(path));
   if (url.origin !== configured.mainOrigin) {window.top!.location.href=url.href;return;}

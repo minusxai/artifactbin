@@ -4,6 +4,7 @@
  */
 import { FollowButton } from '@/components/FollowButton';
 import PageChrome from '@/components/PageChrome';
+import {TrustedAppLinks} from '@/web/AppNavigation';
 import { PAGE_COLUMN, MicroLabel } from '@/components/ui';
 
 /**
@@ -18,7 +19,7 @@ export function ListingShell({ authed = false, anon = false, children }: {
       <PageChrome authed={authed} anon={anon} />
       {/* Profiles keep the standard reading column. The populated homepage
         * widens separately because it also carries the analytics rail. */}
-      <main className={`${PAGE_COLUMN} pt-10 pb-24`}>{children}</main>
+      <TrustedAppLinks><main className={`${PAGE_COLUMN} pt-10 pb-24`}>{children}</main></TrustedAppLinks>
     </>
   );
 }
