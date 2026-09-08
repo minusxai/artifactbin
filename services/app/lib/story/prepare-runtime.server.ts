@@ -11,7 +11,6 @@ import { getStoryFontCss, storyFontFaceCss } from '@/lib/data/story/story-fonts'
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
 import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
-import { escapeHtml } from './reader-chrome';
 
 /** Shared preparation for inline app rendering and standalone raw/export rendering. */
 export async function prepareStoryRuntime(input: StoryDocumentInput): Promise<PreparedStoryRuntime> {
