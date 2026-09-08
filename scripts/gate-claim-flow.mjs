@@ -94,7 +94,12 @@ ok(cookies.some((c) => /mx-agent-session/.test(c.name) && c.httpOnly), 'it holds
 await p.locator('[aria-label^="Claim "]').first().uncheck();
 await p.locator('[aria-label="Add to my account"]').click();
 await p.waitForTimeout(1500);
-let mine = await (await fetch(`${B}/api/my/artifacts`, { headers: { cookie: (await p.context().cookies()).map((c) => `${c.name}=${c.value}`).join('; ') } })).json();
+const readMine = () => p.evaluate(async () => {
+  const response = await fetch('/api/my/artifacts');
+  if (!response.ok) throw new Error(`Account listing failed: ${response.status}`);
+  return response.json();
+});
+let mine = await readMine();
 ok((mine.artifacts ?? []).length === 0, 'nothing is claimed while the box is unticked');
 
 // Now tick it and claim for real.
@@ -104,7 +109,7 @@ await p.waitForSelector('[aria-label="Claim result"]', { timeout: 20000 });
 ok(/Added/.test(await p.locator('[aria-label="Claim result"]').innerText()), 'claiming reports what it added');
 
 const cookieHeader = (await p.context().cookies()).map((c) => `${c.name}=${c.value}`).join('; ');
-mine = await (await fetch(`${B}/api/my/artifacts`, { headers: { cookie: cookieHeader } })).json();
+mine = await readMine();
 const titles = (mine.artifacts ?? []).map((a) => a.title).sort();
 ok(titles.includes('Quarterly Review') && titles.includes('Scratch Notes'),
   `both documents now belong to the account (${titles.join(', ')})`);
