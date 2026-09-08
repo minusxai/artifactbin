@@ -58,8 +58,8 @@ describe('createDocumentTransport — importAsset', () => {
     const parent = { postMessage: (m: unknown) => posted.push(m) };
     const t = createDocumentTransport(win(parent), '/a/abc123/query', APP, vi.fn());
     expect(t!.importAsset).toBeTypeOf('function');
-    void t!.importAsset!('https://cdn.x.com/cat.png');
-    expect(posted[0]).toMatchObject({ type: STORY_ASSET_MESSAGE, url: 'https://cdn.x.com/cat.png' });
+    void t!.importAsset!('https://cdn.x.com/app.js','script',new AbortController().signal);
+    expect(posted[0]).toMatchObject({ type: STORY_ASSET_MESSAGE, url: 'https://cdn.x.com/app.js', kind: 'script' });
   });
 
   it('top-level: no importAsset at all — the <img> src is already the endpoint', () => {
