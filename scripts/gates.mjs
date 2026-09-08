@@ -205,6 +205,9 @@ async function bootServer(index, mailOutbox, authSecret) {
       // deny-loopback switch: their deterministic "web" lives on loopback.
       // The metadata/link-local denials remain enforced even in this mode.
       WEB_INGEST__ALLOW_PRIVATE: '1',
+      // The PostgreSQL gate likewise uses a disposable loopback database,
+      // matching the CI browser-gate environment rather than production.
+      DATASET__ALLOW_PRIVATE_NETWORKS: 'true',
       ...(mailOutbox ? { EMAIL__DEV_OUTBOX_PATH: mailOutbox } : {}),
     },
   });
