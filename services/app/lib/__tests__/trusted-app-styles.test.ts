@@ -21,4 +21,5 @@ it('scopes the actual compiled app tokens, preflight, fonts and utilities to the
   for(const name of ['--font-mono','--font-jb-mono','--font-plex-sans','--color-bg','--color-fg','--spacing'])expect(rootTokens.has(name),name).toBe(true);
   expect(css).toContain("[data-trusted-ui-root][data-theme='dark']");
   expect(css).toContain('[data-trusted-ui-root]{background:none;min-height:0;}');
+  expect(css).toContain('[data-trusted-ui-root],[data-trusted-ui-root]>div{display:contents;}');
 },60_000);

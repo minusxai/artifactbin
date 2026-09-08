@@ -5,5 +5,5 @@ export function scopeTrustedStyles(css: string): string {
   const scope = '[data-trusted-ui-root]';
   return css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/[^{}]+(?=\{)/g, selector => {
     return selector.replace(/(^|[\s,>+~(])(?::root\b|:host\b|html\b|body\b)/g, (_match, prefix: string) => prefix + scope);
-  }) + `\n${scope}{background:none;min-height:0;}`;
+  }) + `\n${scope}{background:none;min-height:0;}\n${scope},${scope}>div{display:contents;}`;
 }

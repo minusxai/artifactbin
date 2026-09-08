@@ -1,5 +1,7 @@
-import {appFetch as fetch} from '@/web/api-origin';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {pageJson} from '../page-data';
+import {invalidateBootstrap,pageBootstrap} from '../bootstrap';
+import {PageStatus} from '../PageStatus';
 import { useRefreshable } from '@/lib/navigation';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import ClaimBanner from '@/components/ClaimBanner';
@@ -12,11 +14,14 @@ import UseCarousel from '@/components/UseCarousel';
 import WorkspaceLayout, { HOME_WORKSPACE_COLUMN } from '@/components/WorkspaceLayout';
 import type { AccountWorkspace } from '@/lib/workspace';
 import { PAGE_COLUMN } from '@/components/ui';
-import { useSession } from '@/web/session';
+import { useSession,type SessionState } from '@/web/session';
 
-type Home =
+export type Home =
   | { signedIn: false; drafts?: Parameters<typeof Shelf>[0]['rows'] }
   | ({ signedIn: true } & AccountWorkspace);
+
+export interface HomeViewProps {home:Home;session:SessionState|null;region?:boolean;onReload?:()=>void}
+/** One resolved route body for server presentation and the live client. */
 
 /**
  * THE EMPTY LIBRARY IS THE ONLY PAGE THAT SAYS WHAT TO DO FIRST.
@@ -27,11 +32,10 @@ type Home =
  * borrows other people's documents as the proof of what to ask for, since
  * there is nothing of the reader's own to look at yet.
  */
-function FirstArtifact() {
+function FirstArtifact({session}: {session:SessionState|null}) {
   // The greeting rides the session the chrome already read — a name is worth
   // no second request, and a page that has not learned it yet simply greets
   // nobody rather than flashing a placeholder in.
-  const { session } = useSession();
   const name = session?.user?.email?.split('@')[0] ?? '';
   const greeting = `${name ? `hi ${name}, l` : 'l'}et\u2019s create your first artifact!`;
   return (
@@ -56,13 +60,35 @@ function FirstArtifact() {
 }
 
 export function HomePage({region=false,onPresentation}:{region?:boolean;onPresentation?:(workspace:boolean)=>void}={}) {
-  const [home, setHome] = useState<Home | null>(null);
-  const load = useCallback(() => { void fetch('/api/page/home', { credentials: 'same-origin' }).then((r) => r.json()).then(setHome).catch(() => null); }, []);
-  useEffect(load, [load]);
+  const {session,error:sessionError,reload} = useSession();
+  const identity = session?.user?.id ?? session?.kind ?? 'pending';
+  const [state,setState] = useState<{identity:string;home:Home|null}>(()=>({identity,home:pageBootstrap('/')?.home as Home ?? null}));
+  const [error,setError] = useState<string|null>(null);
+  const request=useRef<AbortController|null>(null);
+  const home=state.identity===identity?state.home:null;
+  const load = useCallback(() => {
+    // Startup data belongs to this first committed presentation, not later visits.
+    invalidateBootstrap();
+    request.current?.abort();const pending=new AbortController();request.current=pending;setError(null);
+    void pageJson<Home>('/api/page/home',pending.signal).then(next=>{
+      if (typeof next.signedIn !== 'boolean') throw new Error('Could not load your workspace. Please retry.');
+      if (!pending.signal.aborted) setState({identity,home:next});
+    }).catch(cause=>{if(!pending.signal.aborted)setError(cause.message);});
+  }, [identity]);
+  useEffect(()=>{load();return()=>request.current?.abort();},[load]);
   // A claim adds artifacts to this library; re-read rather than reload.
   useRefreshable(load);
   useEffect(()=>{if(home)onPresentation?.(home.signedIn || !!home.drafts?.length);},[home,onPresentation]);
-  if (!home) return <main className={`${PAGE_COLUMN} mt-8 pb-24`} aria-busy="true" />;
+  if (sessionError) return <PageStatus label="workspace" error={sessionError} retry={()=>void reload()}/>;
+  if (!home) {
+    if (session?.kind==='none') return region?<GetStarted/>:<Landing/>;
+    return <PageStatus label="workspace" error={error} retry={load}/>;
+  }
+  if (error) return <PageStatus label="workspace" error={error} retry={load}/>;
+  return <HomeView home={home} session={session} region={region} onReload={load}/>;
+}
+
+export function HomeView({home,session,region=false,onReload=()=>{}}:HomeViewProps) {
   if (!home.signedIn) {
     if (home.drafts?.length) {
       return (
@@ -91,7 +117,7 @@ export function HomePage({region=false,onPresentation}:{region?:boolean;onPresen
     <main className={`${empty ? PAGE_COLUMN : HOME_WORKSPACE_COLUMN} mt-8 pb-24`}>
       {empty ? (
         <>
-          <FirstArtifact />
+          <FirstArtifact session={session}/>
           <div className="mb-6"><GetStarted /></div>
         </>
       ) : null}
@@ -108,7 +134,7 @@ export function HomePage({region=false,onPresentation}:{region?:boolean;onPresen
           <UseCarousel label="Inspiration Zone" wheel={false} />
         </div>
       ) : (
-        <WorkspaceLayout workspace={home} onCreated={load}>
+        <WorkspaceLayout workspace={home} onCreated={onReload}>
           {home.artifacts.length > 0 && <Shelf actions="full" assets={false} scopeParentId={null} rows={home.artifacts as never} />}
           <SharedWithYou items={home.shared} />
         </WorkspaceLayout>

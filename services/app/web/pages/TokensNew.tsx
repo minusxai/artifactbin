@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { CopyIcon } from '@/components/CopyIcon';
 import { Button, PANEL } from '@/components/ui';
 import { useSession } from '../session';
+import {PageStatus} from '../PageStatus';
 
 const EXPIRIES = [
   { hours: 1, label: '1 h' },
@@ -25,7 +26,7 @@ interface MintedToken {
 }
 
 export function TokensNewPage() {
-  const { session } = useSession();
+  const { session,error:sessionError,reload } = useSession();
   const [expiresInHours, setExpiresInHours] = useState(6);
   const [minted, setMinted] = useState<MintedToken | null>(null);
   const [busy, setBusy] = useState(false);
@@ -63,6 +64,7 @@ export function TokensNewPage() {
         body: JSON.stringify({ token: next.token }),
       }).catch(() => null);
       if (!exchange?.ok) setError('Token generated, but this browser could not hold its drafts.');
+      else await reload();
     }
   };
 
@@ -81,6 +83,7 @@ export function TokensNewPage() {
     <main className="mx-auto mt-16 max-w-3xl px-6 pb-24">
       <div className="w-full">
         <h1 className="text-base font-semibold"><span className="text-accent">&gt;</span> new token</h1>
+        {!session && !minted && <PageStatus label="token setup" error={sessionError} retry={()=>void reload()}/>}
 
         <div className={`${PANEL} mt-5 p-5`}>
           {minted ? (

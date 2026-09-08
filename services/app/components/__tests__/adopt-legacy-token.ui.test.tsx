@@ -18,6 +18,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
+import {StrictMode} from 'react';
 
 const refresh = vi.fn();
 vi.mock('@/lib/navigation', () => ({ useRouter: () => ({ refresh, push: () => {}, replace: () => {}, back: () => {} }), usePathname: () => '/', useSearchParams: () => new URLSearchParams() }));
@@ -45,6 +46,12 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('AdoptLegacyToken', () => {
+  it('announces a successful credential exchange through StrictMode cleanup',async()=>{
+    localStorage.setItem('mx_token','mx_legacy');
+    render(<StrictMode><AdoptLegacyToken/></StrictMode>);
+    await waitFor(()=>expect(refresh).toHaveBeenCalledOnce());
+    expect(exchanged).toEqual(['mx_legacy']);
+  });
   it('exchanges a leftover token and DELETES it — the bridge leaves nothing behind', async () => {
     localStorage.setItem('mx_token', 'mx_legacy');
     render(<AdoptLegacyToken />);

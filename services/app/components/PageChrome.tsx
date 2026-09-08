@@ -23,6 +23,7 @@ import { crumbsFor } from '@/lib/breadcrumb';
 import { usePathname } from '@/lib/navigation';
 import {TrustedChrome} from './TrustedUi';
 import {TrustedAppLinks} from '@/web/AppNavigation';
+import {useSession} from '@/web/session';
 
 export type AppearanceMode = 'light' | 'dark';
 
@@ -98,6 +99,14 @@ export function PageMenu({
   triggerless?: boolean;
 }) {
   const pathname = usePathname() ?? '';
+  const {refreshAuth} = useSession();
+  const [authError,setAuthError] = useState<string|null>(null);
+  const [credentialChanged,setCredentialChanged] = useState(false);
+  const finishSessionChange=async()=>{
+    setAuthError(null);
+    if(await refreshAuth()){setOpen(false);appNavigate('/');}
+    else setAuthError('Your credentials changed, but the session could not be verified. Please retry.');
+  };
   const [open, setOpen] = useState(false);
   const phone = useIsPhoneViewport();
   const toggle = useExclusiveLayer(open, setOpen);
@@ -187,7 +196,10 @@ export function PageMenu({
             aria-label="Sign out"
             onClick={() => void fetch('/api/auth/sign-out', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
               .catch(() => null)
-              .then(() => { appNavigate('/'); })}
+              .then(async response => {
+                if (!response?.ok) {setAuthError('Could not sign out. Please retry.');return;}
+                setCredentialChanged(true);await finishSessionChange();
+              })}
             className={`${ITEM} cursor-pointer text-muted hover:bg-raised hover:text-fg`}
           >
             <LogOut size={15} strokeWidth={1.5} />
@@ -197,7 +209,7 @@ export function PageMenu({
           <button
             type="button"
             aria-label="Disconnect this browser"
-            onClick={() => void forgetTokens().then(() => { appNavigate('/'); })}
+            onClick={() => void forgetTokens().then(async () => {setCredentialChanged(true);await finishSessionChange();})}
             className={`${ITEM} cursor-pointer text-muted hover:bg-raised hover:text-fg`}
           >
             <LogOut size={15} strokeWidth={1.5} />
@@ -206,6 +218,7 @@ export function PageMenu({
         ) : (
           link('/login', 'Login', <LogIn size={15} strokeWidth={1.5} />, pathname === '/login')
         )}
+        {authError && <div role="alert" aria-label="Session change failed" className="p-3 text-xs text-danger"><p>{authError}</p>{credentialChanged&&<button aria-label="Retry loading session" className="mt-2 cursor-pointer underline" onClick={()=>void finishSessionChange()}>retry session</button>}</div>}
       </nav>
     </>
   );

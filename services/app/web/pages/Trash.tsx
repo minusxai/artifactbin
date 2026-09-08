@@ -1,6 +1,8 @@
 import {appFetch as fetch} from '@/web/api-origin';
 import { ChevronLeft, ChevronRight, RotateCcw, Search } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {pageJson} from '../page-data';
+import {PageStatus} from '../PageStatus';
 import { Navigate } from 'react-router';
 import RowMenu from '@/components/RowMenu';
 import { Tooltip } from '@/components/Tooltip';
@@ -43,19 +45,23 @@ function TypeFilter({ format, active, onToggle }: { format: string; active: bool
  * file collection, not a separate administrative product.
  */
 export function TrashPage() {
-  const { session } = useSession();
+  const { session,error:sessionError,reload } = useSession();
   const [data, setData] = useState<{ files: TrashFile[] } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [formatPicks, setFormatPicks] = useState<string[]>([]);
   const [page, setPage] = useState(0);
+  const [error,setError] = useState<string|null>(null);
+  const request=useRef<AbortController|null>(null);
+  const userId=session?.user?.id;
   const load = useCallback(() => {
-    void fetch('/api/page/trash', { credentials: 'same-origin' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then(setData)
-      .catch(() => null);
-  }, []);
-  useEffect(load, [load]);
+    request.current?.abort();if(!userId){setData(null);return;}
+    const pending=new AbortController();request.current=pending;setError(null);
+    void pageJson<{files:TrashFile[]}>('/api/page/trash',pending.signal)
+      .then(next=>{if(!pending.signal.aborted)setData(next);})
+      .catch(cause=>{if(!pending.signal.aborted)setError(cause.message);});
+  }, [userId]);
+  useEffect(()=>{load();return()=>request.current?.abort();}, [load]);
   useRefreshable(load);
 
   const restore = async (id: string) => {
@@ -68,7 +74,9 @@ export function TrashPage() {
     }
   };
 
-  if (session && !session.user) return <Navigate to="/login?callbackUrl=/trash" replace />;
+  if (!session) return <PageStatus label="trash" error={sessionError} retry={()=>void reload()}/>;
+  if (!session.user) return <Navigate to="/login?callbackUrl=/trash" replace />;
+  if (!data || error) return <PageStatus label="trash" error={error} retry={load}/>;
   const files = data?.files ?? [];
   const formats = FORMAT_ORDER.filter((format) => files.some((file) => file.format === format));
   const q = query.trim().toLowerCase();

@@ -1,6 +1,7 @@
-import {appFetch as fetch} from '@/web/api-origin';
 import { Database } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {pageJson,PageRequestError} from '../page-data';
+import {PageStatus} from '../PageStatus';
 import { Navigate } from 'react-router';
 import type { PickerFolder } from '@/components/FolderPicker';
 import type { ShelfRow } from '@/components/Shelf';
@@ -17,36 +18,35 @@ interface AssetsData {
 
 /** The data/image files that support documents, on their own management page. */
 export function AssetsPage() {
-  const { session } = useSession();
+  const { session,error:sessionError,reload } = useSession();
   const [data, setData] = useState<AssetsData | null>(null);
   const [failed, setFailed] = useState(false);
+  const request=useRef<AbortController|null>(null);
+  const userId=session?.user?.id;
   const load = useCallback(() => {
+    request.current?.abort();if(!userId){setData(null);return;}
+    const pending=new AbortController();request.current=pending;
     setFailed(false);
     void (async () => {
-      const response = await fetch('/api/page/assets', { credentials: 'same-origin' });
-      if (response.ok) return response.json() as Promise<AssetsData>;
+      try {return await pageJson<AssetsData>('/api/page/assets',pending.signal);}
+      catch(cause){if(!(cause instanceof PageRequestError)||cause.status!==404)throw cause;}
       // During Vite development the SPA hot-reloads, while Hono's generated
       // route table is mounted only at process boot. Let a newly-added page
       // work before that one required restart by reading the already-mounted
       // Home payload; production and every subsequent boot use the focused API.
-      if (response.status === 404) {
-        const fallback = await fetch('/api/page/home', { credentials: 'same-origin' });
-        if (fallback.ok) {
-          const home = await fallback.json() as { signedIn: boolean; artifacts?: ShelfRow[] };
-          const rows = home.artifacts ?? [];
-          return {
-            assets: rows.filter((row) => row.format !== 'markup' && row.format !== 'folder'),
-            folders: rows.filter((row) => row.format === 'folder'),
-          };
-        }
-      }
-      throw new Error('assets unavailable');
-    })().then(setData).catch(() => setFailed(true));
-  }, []);
-  useEffect(load, [load]);
+      const home = await pageJson<{ signedIn: boolean; artifacts?: ShelfRow[] }>('/api/page/home',pending.signal);
+      const rows = home.artifacts ?? [];
+      return {
+        assets: rows.filter((row) => row.format !== 'markup' && row.format !== 'folder'),
+        folders: rows.filter((row) => row.format === 'folder'),
+      };
+    })().then(next=>{if(!pending.signal.aborted)setData(next);}).catch(() => {if(!pending.signal.aborted)setFailed(true);});
+  }, [userId]);
+  useEffect(()=>{load();return()=>request.current?.abort();}, [load]);
   useRefreshable(load);
 
-  if (session && !session.user) return <Navigate to="/login?callbackUrl=/assets" replace />;
+  if (!session) return <PageStatus label="assets" error={sessionError} retry={()=>void reload()}/>;
+  if (!session.user) return <Navigate to="/login?callbackUrl=/assets" replace />;
   const folders: PickerFolder[] = (data?.folders ?? []).map((folder) => ({
     id: folder.id,
     title: folder.title,
@@ -65,7 +65,7 @@ export function AssetsPage() {
       {failed ? (
         <section aria-label="Assets unavailable" className={`${PANEL} flex h-24 items-center justify-center gap-3 px-4 font-mono text-xs text-faint`}>
           <span>could not load assets</span>
-          <button type="button" onClick={load} className="cursor-pointer text-accent underline underline-offset-4">retry</button>
+          <button type="button" aria-label="Retry loading assets" onClick={load} className="cursor-pointer text-accent underline underline-offset-4">retry</button>
         </section>
       ) : !data ? (
         <section aria-label="Loading assets" aria-busy="true" className={`${PANEL} flex h-24 items-center justify-center font-mono text-xs text-faint`}>

@@ -64,6 +64,6 @@ describe('assets page', () => {
     expect(table).toHaveTextContent('Revenue.csv');
     expect(table).toHaveTextContent('Research Map.svg');
     expect(table).not.toHaveTextContent('Document');
-    expect(fetchMock).toHaveBeenCalledWith('/api/page/home', { credentials: 'same-origin', headers: new Headers({'x-artifactbin-csrf': '1'}) });
+    expect(fetchMock).toHaveBeenCalledWith('/api/page/home', { credentials: 'same-origin', headers: new Headers({'x-artifactbin-csrf': '1'}), signal: expect.any(AbortSignal) });
   });
 });

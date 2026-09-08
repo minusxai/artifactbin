@@ -4,6 +4,7 @@ import {appFetch as fetch, appNavigate} from '@/web/api-origin';
 import { useState } from 'react';
 import { Button, Input } from '@/components/ui';
 import { internalRedirectTarget } from '@/lib/safe-redirect';
+import {useSession} from '@/web/session';
 
 /**
  * One form for logging in AND signing up, because with emailed codes they are
@@ -14,11 +15,13 @@ import { internalRedirectTarget } from '@/lib/safe-redirect';
  * typo costing five seconds and costing a support email.
  */
 export default function LoginForm() {
+  const {refreshAuth} = useSession();
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [authenticated,setAuthenticated] = useState(false);
 
   const requestCode = async (address: string) => {
     setBusy(true);
@@ -87,14 +90,19 @@ export default function LoginForm() {
           e.preventDefault();
           setBusy(true);
           setError(null);
-          const res = await fetch('/api/auth/sign-in/email-otp', {
+          const res = authenticated ? null : await fetch('/api/auth/sign-in/email-otp', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, otp: code }),
           }).catch(() => null);
           setBusy(false);
-          if (!res || !res.ok) {
+          if (!authenticated && (!res || !res.ok)) {
             setError('That code isn’t right, or it expired. Request a new one.');
+            return;
+          }
+          setAuthenticated(true);
+          if (!await refreshAuth()) {
+            setError('Logged in, but your session could not be verified. Retry below; your code has already been accepted.');
             return;
           }
           // callbackUrl is attacker-controllable; internalRedirectTarget refuses
@@ -112,16 +120,18 @@ export default function LoginForm() {
           aria-label="Login code"
           placeholder="6-digit code"
           value={code}
+          disabled={authenticated}
           onChange={(e) => setCode(e.target.value)}
         />
-        <Button type="submit" aria-label="Verify code" disabled={busy || code.length === 0}>
-          {busy ? 'checking…' : 'log in'}
+        <Button type="submit" aria-label={authenticated?'Retry loading session':'Verify code'} disabled={busy || code.length === 0}>
+          {busy ? 'checking…' : authenticated ? 'retry session' : 'log in'}
         </Button>
       </form>
       <div className="mt-4 flex items-center justify-between text-xs text-muted">
         <button
           type="button"
           aria-label="Change email"
+          disabled={busy || authenticated}
           className="cursor-pointer underline hover:text-accent"
           onClick={() => {
             setSent(false);
@@ -135,7 +145,7 @@ export default function LoginForm() {
           type="button"
           aria-label="Resend code"
           className="cursor-pointer underline hover:text-accent"
-          disabled={busy}
+          disabled={busy || authenticated}
           onClick={() => void requestCode(email)}
         >
           resend code

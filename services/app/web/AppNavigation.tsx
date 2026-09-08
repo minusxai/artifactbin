@@ -1,10 +1,12 @@
 import {useLayoutEffect, type ReactNode} from 'react';
 import {useNavigate} from 'react-router';
 import {bindAppNavigation, tryAppNavigation} from './api-origin';
+import {useAppScroll} from './app-scroll';
 
 /** Lives once inside React Router. Only marked first-party DOM roots and the
  * closed trusted root's own listener are eligible for native-anchor routing. */
 export function AppNavigationBinding(): ReactNode {
+  useAppScroll();
   const navigate = useNavigate();
   useLayoutEffect(() => bindAppNavigation((url, replace) => {
     void navigate(url.pathname + url.search + url.hash, {replace});

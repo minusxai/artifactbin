@@ -19,7 +19,7 @@
  *
  * Deletable once no browser plausibly holds a pre-cookie token.
  */
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useRouter } from '@/lib/navigation';
 import { adoptToken } from '@/lib/browser-session';
 
@@ -56,8 +56,9 @@ function forgetLeftovers(): void {
 
 export default function AdoptLegacyToken() {
   const router = useRouter();
+  const refresh = useRef(router.refresh);
+  refresh.current = router.refresh;
   useEffect(() => {
-    let live = true;
     try { if (sessionStorage.getItem(TRIED_KEY)) return; } catch { /* private mode */ }
     const token = leftoverToken();
     if (!token) return;
@@ -67,9 +68,10 @@ export default function AdoptLegacyToken() {
       // (revoked/unknown), and a dead token must not be retried forever.
       forgetLeftovers();
       // Only a real adoption changes what this page should show.
-      if (ok && live) router.refresh();
+      // The credential changed even if a route/StrictMode cleanup happened
+      // while the exchange was in flight. Announce that fact exactly once.
+      if (ok) refresh.current();
     });
-    return () => { live = false; };
-  }, [router]);
+  }, []);
   return null;
 }

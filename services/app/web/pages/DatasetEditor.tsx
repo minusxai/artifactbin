@@ -10,6 +10,8 @@ import type { DatasetColumn } from '@/lib/story/dataset-shape';
 import type { Row } from '@/lib/story/dataflow';
 import { useRouter } from '@/lib/navigation';
 import { useSession } from '@/web/session';
+import {PageStatus} from '../PageStatus';
+import {pageJson} from '../page-data';
 
 type ModelDraft = { cell: NotebookCell; schema: string; columns: DatasetColumn[]; selected: string[]; stale: boolean; collapsed: boolean; legacy: boolean; preview?: CatalogPreview };
 type StoredDraft = { key: string; schema: string; name: string; rows: string; retained: boolean };
@@ -29,7 +31,7 @@ async function request<T>(url: string, body?: unknown, method = 'POST'): Promise
 export function DatasetEditorPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { session } = useSession();
+  const { session,error:sessionError,reload } = useSession();
   const [title, setTitle] = useState('');
   const [kind, setKind] = useState<DatasetCatalog['kind']>('stored');
   const [connection, setConnection] = useState(initialConnection);
@@ -42,6 +44,7 @@ export function DatasetEditorPage() {
   const [version, setVersion] = useState<number>();
   const [loading, setLoading] = useState(Boolean(id));
   const [loadFailed, setLoadFailed] = useState(false);
+  const [loadAttempt,setLoadAttempt] = useState(0);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [connectionFeedback, setConnectionFeedback] = useState<{ kind: 'connecting' | 'success' | 'error'; message: string } | null>(null);
@@ -77,16 +80,18 @@ export function DatasetEditorPage() {
 
   useEffect(() => {
     if (!id) return;
+    setLoading(true);setLoadFailed(false);
     let alive = true;
-    void request<{ title: string; version: number; meta: { catalog?: DatasetCatalog }; source?: string }>(`/api/my/artifacts/${encodeURIComponent(id)}`).then(data => {
+    const pending=new AbortController();
+    void pageJson<{ title: string; version: number; meta: { catalog?: DatasetCatalog }; source?: string }>(`/api/my/artifacts/${encodeURIComponent(id)}`,pending.signal).then(data => {
       if (!alive) return;
       const catalog = data.meta.catalog;
       if (!catalog) throw new Error('This artifact does not have a dataset catalog.');
       setTitle(data.title ?? ''); setVersion(data.version);
       loadDefinition({ ...catalog, tables: catalog.tables.map(({ objectKey: _, ...table }) => ({ ...table, columns: table.columns.map(c => c.name) })) }, catalog);
     }).catch(err => { if (alive) { setError(err.message); setLoadFailed(true); } }).finally(() => { if (alive) setLoading(false); });
-    return () => { alive = false; };
-  }, [id]);
+    return () => { alive = false;pending.abort(); };
+  }, [id,loadAttempt]);
 
   const run = async (operation: string, action: () => Promise<void>) => {
     setBusy(operation); setError('');
@@ -190,7 +195,9 @@ export function DatasetEditorPage() {
   const previewDraft = useCallback<CatalogQuery>(sql => queryDraft.current(sql), []);
   const selectedSchemas = [...new Set(exposedTables.map(t => t.schema))];
 
-  if (session && !session.user) return <Navigate to={`/login?callbackUrl=${encodeURIComponent(id ? `/datasets/${id}/edit` : '/datasets/new')}`} replace />;
+  if (!session) return <><PageStatus label="dataset editor" error={sessionError} retry={()=>void reload()}/><div className="mx-auto max-w-4xl px-4"><Button aria-label="Save dataset" disabled>Create dataset</Button></div></>;
+  if (!session.user) return <Navigate to={`/login?callbackUrl=${encodeURIComponent(id ? `/datasets/${id}/edit` : '/datasets/new')}`} replace />;
+  if (loading || loadFailed) return <PageStatus label="dataset editor" error={loadFailed?error:null} retry={()=>setLoadAttempt(n=>n+1)}/>;
   return <main className="mx-auto w-full min-w-0 max-w-5xl space-y-6 px-4 py-8 sm:px-6">
     <header className="flex flex-wrap items-start justify-between gap-4"><div><a aria-label="Back to assets" href="/assets" className="text-xs text-muted hover:text-fg">← Assets</a><h1 className="mt-3 text-2xl font-semibold tracking-tight text-fg">{id ? 'Edit dataset' : 'Create dataset'}</h1><p className="mt-2 max-w-xl text-sm text-muted">Connect your data, shape it with SQL, and choose what readers can query.</p></div><Database className="mt-6 text-faint" size={24} /></header>
     {error && <p role="alert" aria-label="Dataset error" className="rounded border border-danger/30 bg-danger-soft p-3 text-sm text-danger">{error}</p>}

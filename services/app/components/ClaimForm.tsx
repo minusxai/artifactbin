@@ -3,6 +3,7 @@
 import {appFetch as fetch} from '@/web/api-origin';
 import { useState } from 'react';
 import { Button, TokenInput } from '@/components/ui';
+import {REFRESH_EVENT} from '@/lib/navigation';
 
 /** Paste an anonymous agent token to attach it (and its artifacts) to your account. */
 export default function ClaimForm() {
@@ -25,7 +26,7 @@ export default function ClaimForm() {
           setIsError(false);
           setMessage(`Claimed — ${body.claimedArtifacts} artifact(s) attached to your account.`);
           setToken('');
-          window.location.reload();
+          window.dispatchEvent(new Event(REFRESH_EVENT));
         } else {
           setIsError(true);
           setMessage('That token is unknown, revoked, or belongs to another account.');

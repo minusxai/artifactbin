@@ -2,8 +2,11 @@
 
 import {appFetch as fetch} from '@/web/api-origin';
 import { Ban } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback,useEffect,useRef,useState } from 'react';
 import { Button, MicroLabel, PANEL, TABLE_ROW } from '@/components/ui';
+import {useRefreshable} from '@/lib/navigation';
+import {pageJson} from '@/web/page-data';
+import {PageStatus} from '@/web/PageStatus';
 
 export interface UserTokenView {
   id: string;
@@ -34,14 +37,18 @@ const statusDot = (status: UserTokenView['status']): string =>
 /** The user's machines: every token minted for/claimed by this account, with revoke. */
 export default function TokensPanel({ tokens: initial = [] }: { tokens?: UserTokenView[] }) {
   const [tokens, setTokens] = useState<UserTokenView[]>(initial);
-  useEffect(() => {
-    void fetch('/api/my/tokens').then((r) => (r.ok ? r.json() : null)).then((body) => {
-      if (body && Array.isArray(body.tokens)) setTokens(body.tokens as UserTokenView[]);
-    }).catch(() => null);
-  }, []);
   const [error, setError] = useState<string | null>(null);
+  const request=useRef<AbortController|null>(null);
+  const load=useCallback(()=>{
+    request.current?.abort();const pending=new AbortController();request.current=pending;setError(null);
+    void pageJson<{tokens:UserTokenView[]}>('/api/my/tokens',pending.signal).then(body=>{
+      if(!pending.signal.aborted && Array.isArray(body.tokens))setTokens(body.tokens);
+    }).catch(cause=>{if(!pending.signal.aborted)setError(cause.message);});
+  },[]);
+  useEffect(()=>{load();return()=>request.current?.abort();},[load]);
+  useRefreshable(load);
 
-  if (tokens.length === 0) return null;
+  if (tokens.length === 0) return error?<PageStatus label="tokens" error={error} retry={load}/>:null;
 
   return (
     <section>
