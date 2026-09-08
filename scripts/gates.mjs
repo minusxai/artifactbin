@@ -201,7 +201,10 @@ async function bootServer(index, mailOutbox, authSecret) {
       // A gate's "web" is a fixture host on 127.0.0.1, and a production-mode
       // server refuses to fetch one (lib/web-ingest/guard) — the same reason
       // the mint ceiling is raised here rather than in the gate.
-      WEB_INGEST__ALLOW_PRIVATE: process.env.WEB_INGEST__ALLOW_PRIVATE ?? '1',
+      // Disposable fixture servers must not inherit the production .env's
+      // deny-loopback switch: their deterministic "web" lives on loopback.
+      // The metadata/link-local denials remain enforced even in this mode.
+      WEB_INGEST__ALLOW_PRIVATE: '1',
       ...(mailOutbox ? { EMAIL__DEV_OUTBOX_PATH: mailOutbox } : {}),
     },
   });
