@@ -7,8 +7,17 @@ import { ProfilePage } from '../pages/Profile';
 vi.mock('@/components/ArtifactShell', () => ({ default: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock('@/components/ArtifactSurface', () => ({ default: ({ id, search }: { id: string; search: string }) => <div aria-label="surface">{id}{search}</div> }));
 vi.mock('../bootstrap', () => ({ takeBootstrap: () => null }));
+vi.mock('../Shell', () => ({ ShellFrame: ({children}: {children: React.ReactNode}) => <><header aria-label="Page bar">artifactbin</header>{children}</> }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 const response = (id: string, canonical = `/a/${id}`) => ({ ok: true, json: async () => ({ canonical, role: 'viewer', kind: 'none', surface: { id } }) });
+
+it.each(['/a/abc123', '/@owner'])('keeps a page bar and loading state while %s resolves', async path => {
+  vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})));
+  const router = createMemoryRouter([{path:'/a/:id',element:<ProfilePage/>},{path:'/:user/*',element:<ProfilePage/>}], {initialEntries:[path]});
+  render(<RouterProvider router={router}/>);
+  expect(await screen.findByRole('banner', {name:'Page bar'})).toBeVisible();
+  expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'true');
+});
 
 it('loads the next artifact, aborts obsolete requests, and ignores late responses', async () => {
   let old!: (value: unknown) => void;
