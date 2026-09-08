@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui';
+import {appFetch as fetch} from '@/web/api-origin';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 import type { DatasetColumn } from '@/lib/story/dataset-shape';
 import type { Row } from '@/lib/story/dataflow';

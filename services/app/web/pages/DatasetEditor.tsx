@@ -12,6 +12,7 @@ import { useRouter } from '@/lib/navigation';
 import { useSession } from '@/web/session';
 import {PageStatus} from '../PageStatus';
 import {pageJson} from '../page-data';
+import {appFetch as fetch} from '../api-origin';
 
 type ModelDraft = { cell: NotebookCell; schema: string; columns: DatasetColumn[]; selected: string[]; stale: boolean; collapsed: boolean; legacy: boolean; preview?: CatalogPreview };
 type StoredDraft = { key: string; schema: string; name: string; rows: string; retained: boolean };

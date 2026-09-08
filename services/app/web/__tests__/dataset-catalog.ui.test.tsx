@@ -61,6 +61,12 @@ function savedDefinition() {
   return write ? parseDatasetDefinition(write.body.dataset) : undefined;
 }
 describe('dataset editor', () => {
+  it('sends browser proof when creating a dataset',async()=>{
+    editor();click('Add stored table');change('Stored schema 1','main');change('Stored table name 1','rows');change('Stored rows 1','[{"id":1}]');change('Default schema','main');click('Save dataset');
+    await waitFor(()=>expect(savedDefinition()).toMatchObject({kind:'stored',defaultSchema:'main'}));
+    const call=vi.mocked(fetch).mock.calls.find(([url,init])=>String(url).startsWith('/api/my/artifacts')&&init?.method!=='GET');
+    expect(call).toBeDefined();expect(new Headers(call![1]?.headers).get('x-artifactbin-csrf')).toBe('1');
+  });
   it('authenticates the browser table query with the shared CSRF proof', async () => {
     render(<DatasetCatalogView id="data-1" catalog={catalog} canEdit={false} />);
     await screen.findByLabelText('Table preview');

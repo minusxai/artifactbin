@@ -22,6 +22,12 @@ it('mints through the real app and registers its real browser nonce before retur
  expect(decoded?.sessionId).toMatch(/^[A-Za-z0-9_-]{43}$/);
  const read=()=>proxy.request(main+'/api/artifacts/'+document.id,{headers:{...proof,cookie}});
  expect((await read()).status).toBe(200);
+ const dataset=await proxy.request(main+'/api/artifacts',{method:'POST',headers:{authorization:`Bearer ${document.token}`,'content-type':'application/json'},body:JSON.stringify({dataset:[{month:'2026-01',revenue:120}]})});
+ expect(dataset.status,await dataset.clone().text()).toBe(201);const {id:datasetId}=await dataset.json();
+ const tables=(headers:Record<string,string>)=>proxy.request(`${main}/a/${datasetId}/tables`,{method:'POST',headers:{cookie,'content-type':'application/json',...headers},body:JSON.stringify({sql:'select * from public.rows',limit:50,offset:0})});
+ expect((await tables({origin:main,'sec-fetch-site':'same-origin'})).status).toBe(403);
+ const result=await tables(proof);expect(result.status,await result.clone().text()).toBe(200);
+ expect((await result.json()).rows).toEqual([{month:'2026-01',revenue:120}]);
  const second=await proxy.request(main+'/api/session/token',{method:'POST',headers:{...proof,'content-type':'application/json'},body:JSON.stringify({token:document.token})});
  expect(second.status).toBe(204);
  const secondCookie=second.headers.getSetCookie().find(c=>c.startsWith(AGENT_COOKIE+'='))!.split(';')[0];

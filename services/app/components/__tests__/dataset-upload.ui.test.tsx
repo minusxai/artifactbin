@@ -15,9 +15,11 @@ let reply: { ok: boolean; body: Record<string, unknown> };
 let previewRows: Record<string, unknown>[];
 /** Does this browser already hold a token (as its httpOnly cookie)? */
 let credentialed = false;
+let writeProofs:Array<string|null>=[];
 
 beforeEach(() => {
   posts = [];
+  writeProofs=[];
   fetched = [];
   reply = { ok: true, body: { id: 'abc123', url: 'http://x/a/abc123', title: 'sales', rowCount: 2, columns: [{ name: 'month', type: 'string' }, { name: 'revenue', type: 'number' }] } };
   previewRows = [{ month: '2026-01', revenue: 120 }, { month: '2026-02', revenue: null }];
@@ -25,6 +27,7 @@ beforeEach(() => {
   credentialed = false;
   vi.stubGlobal('fetch', (async (url: string, init: RequestInit) => {
     fetched.push(String(url));
+    if(init?.method==='POST')writeProofs.push(new Headers(init.headers).get('x-artifactbin-csrf'));
     // The credential probe: an authorized read means this browser already
     // holds a token (as its httpOnly cookie), so no mint is needed.
     if (String(url) === '/api/my/artifacts' && (init?.method ?? 'GET') === 'GET') {
@@ -53,6 +56,10 @@ beforeEach(() => {
 });
 
 afterEach(() => vi.unstubAllGlobals());
+it('authenticates mint and upload writes using the shared browser proof',async()=>{
+  render(<DatasetUpload/>);chooseFile('a\n1');await screen.findByLabelText('Uploaded dataset');
+  expect(writeProofs).toHaveLength(3);expect(writeProofs).toEqual(['1','1','1']);
+});
 
 const chooseFile = (text: string, name = 'sales.csv') => {
   const input = screen.getByLabelText('CSV file') as HTMLInputElement;
