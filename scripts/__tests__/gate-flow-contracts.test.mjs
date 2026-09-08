@@ -15,3 +15,10 @@ it('authorizes only the mutation gate sharing setup, preserving its guest forger
  expect(gate).toContain('headers:browserGateHeaders(base),data:patch');
  expect(gate).toContain('guest.request.post(`${fixture.url}/mutate`,{data:');
 });
+it('does not wait for navigation before releasing the deliberately held OAuth approval',()=>{
+ const helper=readFileSync(new URL('../lib/main-page-login.mjs',import.meta.url),'utf8');
+ expect(helper).toContain("getByLabel('Approve connection').click({noWaitAfter:true})");
+ expect(helper).toContain("assert.equal(page.url(),consent");
+ expect(helper).toContain("release();await page.waitForURL");
+ expect(helper).toContain("code_verifier:verifier");
+});

@@ -95,7 +95,7 @@ export async function verifyMainPageLogin({browser,base,controls,sink,id,mainFet
   let release;const delay=new Promise(resolve=>{release=resolve;});
   await page.route(base+'/oauth/authorize/approve',async route=>{await delay;await route.continue();});
   await page.goto(consent);const consentFrame=page.mainFrame();
-  await consentFrame.getByLabel('Approve connection').click();
+  await consentFrame.getByLabel('Approve connection').click({noWaitAfter:true});
   assert.equal(page.url(),consent,'a delayed approval stays at the main consent address');
   assert.equal(await page.locator('input[name="approval"]').count(),1,'native same-origin consent carries its one-time approval nonce');
   release();await page.waitForURL(u=>u.origin==='http://127.0.0.1:5498');
