@@ -17,9 +17,9 @@
  *           to re-inject after hydration — or run inline when there is no
  *           runtime, since the document is already complete.
  *
- * Render trusts canonical stored source (validation happened at the door), with
- * two belts mirroring the interpreter's defense-in-depth stance: source that no
- * longer parses renders as escaped text (never mangled), and a script that
+ * Render validates stored source again at the shared read boundary: historical
+ * rows may predate today's publish door. Source that no longer passes the
+ * grammar renders as escaped text (never mangled), and a script that
  * somehow carries `</script` is DROPPED — emitting it would let text escape the
  * script element, and mutating code silently is worse than omitting it.
  */

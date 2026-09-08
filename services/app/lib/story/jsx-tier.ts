@@ -18,7 +18,7 @@
  */
 import { syntaxErrorDetail } from '@/lib/jsx/syntax-error';
 import { repairJsxSource } from '@/lib/jsx/repair';
-import { parseJsx, serializeJsx, validateJsx } from '@/lib/jsx';
+import { parseJsx, serializeJsx } from '@/lib/jsx';
 import { hoistHelmet, splitHelmet, validateHelmet } from '@/lib/story/helmet';
 import { fixHtmlNesting } from '@/lib/story/nesting';
 import { analyzeRowScopes } from './row-scope';
@@ -38,6 +38,7 @@ import type { AssetWarning } from '@/lib/web-assets';
 import { documentFonts, invalidFontFamilies } from './document-fonts';
 import { MAX_EXTERNAL_ASSETS_PER_PUBLISH, MAX_EXTERNAL_IMAGES_PER_PUBLISH } from '@/lib/config';
 import { checkDocumentData } from './data-checks';
+import { validateStoryStructure } from './markup-validation';
 
 /** The full story vocabulary: kit registry + the data embeds (minusx JSX_STORY_COMPONENT_NAMES verbatim). */
 export const JSX_TIER_COMPONENTS = JSX_STORY_COMPONENT_NAMES;
@@ -182,8 +183,8 @@ export async function publishJsx(body: Record<string, unknown>, sourceIn: string
   if (!parsed.ok) {
     return json({ error: 'invalid_jsx', details: [syntaxErrorDetail(source, parsed)] }, 400);
   }
-  const split = splitHelmet(parsed.nodes);
-  const helmetErrors = validateHelmet(parsed.nodes);
+  const structure = validateStoryStructure(parsed.nodes);
+  const { split, helmetErrors } = structure;
 
   // FONTS the document asks for (Helmet <meta name="font-display" …>),
   // resolved at PUBLISH so a reader never waits on — or is exposed to — an
@@ -205,11 +206,7 @@ export async function publishJsx(body: Record<string, unknown>, sourceIn: string
   const errors = [
     ...helmetErrors,
     ...analyzeRowScopes(split.body).errors.map((message) => ({ message })),
-    ...validateJsx(split.body, {
-      components: JSX_TIER_COMPONENTS,
-      allowedHtmlTags: STORY_HTML_TAGS,
-      stylePolicy: 'no-inline-style',
-    }),
+    ...structure.bodyErrors,
     ...findExternalSubresources(source),
     // An embed with no data prop publishes fine and renders empty — reject it.
     ...findBrokenEmbeds(source),

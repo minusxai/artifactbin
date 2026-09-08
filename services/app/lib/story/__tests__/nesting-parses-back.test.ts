@@ -140,9 +140,10 @@ describe('the list of tags that break a paragraph is the parser\'s, not a guess'
     const wrong: string[] = [];
     let breakers = 0;
     for (const tag of STORY_HTML_TAGS) {
-      // Void tags have no closing form, and SVG's camelCase names are a
-      // different parsing mode entirely.
-      if (['br', 'wbr', 'img', 'input', 'source', 'col', 'track'].includes(tag)) continue;
+      // Void tags have no closing form. Body-level <title> is rejected by the
+      // document grammar before nesting repair (SVG <title> remains valid in
+      // its own subtree), so it is not a candidate for this parser-only sweep.
+      if (['br', 'wbr', 'img', 'input', 'source', 'col', 'track', 'title'].includes(tag)) continue;
       if (tag !== tag.toLowerCase()) continue;
 
       const breaksParagraph = survives('div', tag) && !survives('p', tag);

@@ -46,8 +46,9 @@ export interface StoryUpdateParts {
 }
 
 /**
- * Null when the source does not parse — an update that cannot be described is
- * not sent. `assets` is the serve-time asset lookup (lib/story/asset-url): the
+ * Null when the source does not parse or fails the shared markup grammar — an
+ * update that cannot be safely described is not sent. `assets` is the
+ * serve-time asset lookup (lib/story/asset-url): the
  * server passes the rows it holds so a live frame names our copy of an external
  * image exactly as a reload would, and the OWNER'S PAGE passes a predicate,
  * because the editor knows a stored document's URLs were imported at its last

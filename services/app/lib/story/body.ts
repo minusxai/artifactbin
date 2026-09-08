@@ -13,12 +13,15 @@
  * from the one a reload gives them.
  *
  * So the passes live here, in order, and both consumers call this:
- *   1. `fixHtmlNesting` — nesting the HTML parser will not undo (a `<p>` around
+ *   1. The shared markup grammar — the same Helmet, component, HTML-tag and
+ *      attribute validation used by the publish door. Historical stored rows
+ *      do not get a weaker path into reader DOM.
+ *   2. `fixHtmlNesting` — nesting the HTML parser will not undo (a `<p>` around
  *      a block parses back as a different tree, which React answers by
  *      discarding the whole server tree; every document published before the
  *      door existed is still stored with the fault).
- *   2. `splitHelmet` — `[Helmet?, ...body]`, the canonical shape.
- *   3. The ASSET MAPPING (lib/story/asset-url) — external image sources, and
+ *   3. `splitHelmet` — `[Helmet?, ...body]`, the canonical shape.
+ *   4. The ASSET MAPPING (lib/story/asset-url) — external image sources, and
  *      the `@font-face` urls in the author's own stylesheet, pointed at our
  *      copy. Above the split because both the body and the Helmet's style carry
  *      one.
@@ -31,6 +34,7 @@ import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { splitHelmet, type HelmetContent } from '@/lib/story/helmet';
 import { fixHtmlNesting } from '@/lib/story/nesting';
 import { mapExternalCssUrls, mapExternalImageSources, type AssetLookup, type AssetMapOptions } from '@/lib/story/asset-url';
+import { validateStoryStructure } from '@/lib/story/markup-validation';
 
 export interface StoryBody {
   /** The `<Helmet>`'s content — with its stylesheet already asset-mapped. */
@@ -40,8 +44,8 @@ export interface StoryBody {
 }
 
 /**
- * Null when the source does not parse: a document that cannot be described is
- * not served or sent.
+ * Null when the source does not parse or fails the shared markup grammar: a
+ * document that cannot be safely described is not rendered or sent.
  *
  * `opts` is the mapping's, and there is exactly one of them: a CAPTURE render
  * wants every image eager and a single `src` (lib/story/asset-url). It travels
@@ -51,6 +55,8 @@ export interface StoryBody {
 export function storyBodyFor(source: string, assets?: AssetLookup, opts?: AssetMapOptions): StoryBody | null {
   const parsed = parseJsx(source);
   if (!parsed.ok) return null;
+  const validation = validateStoryStructure(parsed.nodes);
+  if (validation.helmetErrors.length || validation.bodyErrors.length) return null;
   const { content, body } = splitHelmet(fixHtmlNesting(parsed.nodes));
   if (!assets) return { content, body };
   return {
