@@ -41,60 +41,17 @@ and shares do not, and the original is never touched. The copy's footer says whe
 source only when that source is `public`, since `unlisted` exists to be listed
 nowhere.
 
-Author Helmet scripts run only in an opaque `sandbox="allow-scripts"` child.
-They cannot access the visible document's DOM or storage, or call account APIs.
-A private, bounded MessageChannel exposes declared signals, query refreshes and
-mutations. Restricted reactive JSX, Dialog primitives and SQL local state compose
-document UI without DOM scripts. Inline table writes are page-local; scalar
-Values retain their existing URL-backed state. Persistent dataset writes retain
-their existing permissions. Authorized mutations commit immediately, including
-from non-owner documents: there is no extra dataset-consent prompt. Scripts can
-invoke these declared mutations automatically; a relay message is not proof of
-a human gesture.
+Pages run behind a strict CSP: inline script/style allowed, **all external
+network blocked**, and a `sandbox` directive gives each artifact an opaque
+origin so it can't touch the app's storage. Documents are always
+self-contained — but you don't have to make them so by hand.
 
-By default, served documents also retain the opaque document sandbox. To keep
-owner/editor documents top-level with trusted app controls in a child iframe,
-optionally set `APP__CONTROLS_ORIGIN=https://i.<your-public-host>` in both app and
-proxy processes. Provision HTTPS and route that hostname to the same proxy first;
-preserve public Host/protocol forwarding headers. The controls host serves trusted
-app code and full authenticated browser APIs. The main host receives only
-read-scoped identity; it cannot use that credential for mutations. Dataset
-mutations and edit operations relay through the trusted controls, which call
-their own host with the exact-origin/CSRF checks and current server ACLs.
-Do not add parent-domain full-authority cookies or wildcard credentialed CORS.
-First-party addresses (home, login, account/tokens, chat, assets, dataset editors,
-profiles and folders) stay on the public host. A credential-free public wrapper
-embeds only trusted platform UI from dedicated controls routes; account forms and
-API calls remain on the controls origin. OAuth consent follows the same pattern:
-its one-use session-bound approval stays inside the trusted frame, and only the
-server-validated callback leaves it. Author documents never enter these page
-frames. Account sign-out and disconnecting separately held agent capabilities
-remain distinct actions. Anonymous readers retain heart/comment/fork controls;
-sign-in returns to their current document, query and fragment without granting
-additional edit or comment permissions.
-
-For one-server local development, use a shared `.localhost` site, for example:
-
-```dotenv
-APP__PUBLIC_BASE_URL=http://artifactbin.localhost:3030
-APP__CONTROLS_ORIGIN=http://i.artifactbin.localhost:3030
-APP__ASSETS_ORIGIN=http://a.artifactbin.localhost:3030
-```
-
-These names resolve locally in supported browsers and are secure contexts without
-test certificates. Login mail stays in the development outbox. Bare `localhost`
-plus `i.localhost` is not the same-site cookie topology: use the shared
-`artifactbin.localhost` suffix instead. Production HTTPS/SameSite rules are unchanged.
-
-In this opt-in topology the top-level document is not opaque; author code still
-is. CSS may hide controls, and this is not a clickjacking guarantee or a hard CPU
-quota. Raw/export documents retain their old sandbox. Unset the option to restore
-the previous serving topology (not a boundary-preserving rollback).
-Run `node scripts/gate-trusted-controls.mjs` after
-a build for local HTTPS, login, editing, private-data and hostile-script checks.
-No production DNS or session migration is performed by enabling this code.
-Repeat with `--anonymous-live=false` to verify the optional anonymous-live
-off-switch; authenticated streams and local UI remain available.
+Author scripts run in a second opaque child reached through the fixed
+`/story/author-frame` wrapper, never in the visible renderer. A bounded
+MessagePort exposes only declared signals, query refreshes and permitted
+dataset mutations. Managed `<Iframe>` assets are imported through the
+document-scoped resolver and served anonymously from `APP__ASSETS_ORIGIN`;
+arbitrary network, navigation, account APIs and parent DOM access remain denied.
 
 **Import from the web.** Point at an image, a PDF, a font or a CSV and the
 server fetches it once, stores a copy, and serves it from this origin:

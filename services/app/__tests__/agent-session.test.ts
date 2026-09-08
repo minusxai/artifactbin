@@ -21,12 +21,12 @@ import { POST as agentPrompt } from '@/app/api/my/artifacts/[id]/agent-prompt/ro
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { servesDocumentDirectly } from '@/server/app';
-import { AGENT_COOKIE, decodeAgentSession, encodeAgentSession } from '@/lib/agent-session';
+import { AGENT_COOKIE, decodeAgentSessionEnvelope, encodeAgentSession } from '@/lib/agent-session';
 import { existingPaste } from '@/lib/agent-copy';
 import { mintToken, resolveTokenById, revokeToken } from '@/lib/tokens';
 import { claimableTokensById, claimTokenById, createUser } from '@/lib/users';
 import { getArtifactFor } from '@/lib/artifacts';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
 
 // harness-exempt: cookie exercises the agent-session codec and cookie attributes themselves
 
@@ -61,8 +61,9 @@ describe('POST /api/session/token', () => {
     expect(echoed.status).toBe(204);
     expect(await echoed.text()).toBe('');
 
-    const session = await decodeAgentSession(cookieFrom(res));
+    const session = await decodeAgentSessionEnvelope(cookieFrom(res));
     expect(session?.tokenIds).toEqual([minted.id]);
+    expect(session?.sessionId).toMatch(/^[A-Za-z0-9_-]{43}$/);
   });
 
   it('refuses an unknown or revoked token with a uniform 401', async () => {
@@ -81,12 +82,23 @@ describe('POST /api/session/token', () => {
     const first = await mintToken('one');
     const second = await mintToken('two');
     const a = await exchangeRoute(request('/api/session/token', { method: 'POST', json: { token: first.token } }));
-    const b = await exchangeRoute(request('/api/session/token', { method: 'POST', json: { token: second.token }, cookie: cookieHeader(cookieFrom(a)) }));
-    expect((await decodeAgentSession(cookieFrom(b)))?.tokenIds).toEqual([first.id, second.id]);
+    const b = await exchangeRoute(request('/api/session/token', { method: 'POST', json: { token: second.token }, cookie: cookieHeader(cookieFrom(a)), actor: { credential: 'agent-cookie', tokenId: first.id, heldTokenIds: [first.id] } }));
+    expect((await decodeAgentSessionEnvelope(cookieFrom(b)))?.tokenIds).toEqual([first.id, second.id]);
 
     // Re-presenting the first PROMOTES it: last touched authorizes the next write.
-    const c = await exchangeRoute(request('/api/session/token', { method: 'POST', json: { token: first.token }, cookie: cookieHeader(cookieFrom(b)) }));
-    expect((await decodeAgentSession(cookieFrom(c)))?.tokenIds).toEqual([second.id, first.id]);
+    const c = await exchangeRoute(request('/api/session/token', { method: 'POST', json: { token: first.token }, cookie: cookieHeader(cookieFrom(b)), actor: { credential: 'agent-cookie', tokenId: second.id, heldTokenIds: [first.id, second.id] } }));
+    expect((await decodeAgentSessionEnvelope(cookieFrom(c)))?.tokenIds).toEqual([second.id, first.id]);
+  });
+
+  it('does not rejuvenate token ids from a cookie the proxy rejected', async () => {
+    const stale = await mintToken('stale');
+    const fresh = await mintToken('fresh');
+    const cookie = cookieHeader(await encodeAgentSession({ tokenIds: [stale.id] }));
+    const res = await exchangeRoute(request('/api/session/token', {
+      method: 'POST', json: { token: fresh.token }, cookie,
+      actor: { credential: 'none' },
+    }));
+    expect((await decodeAgentSessionEnvelope(cookieFrom(res)))?.tokenIds).toEqual([fresh.id]);
   });
 });
 
@@ -115,13 +127,13 @@ describe('DELETE /api/session/token', () => {
 describe('the anonymous session as a credential', () => {
   it('is re-resolved per request: revoking the token ends it immediately', async () => {
     const minted = await mintToken('test');
-    const cookie = cookieHeader(await encodeAgentSession({ tokenIds: [minted.id] }));
+    const cookie = await agentCookie([minted.id]);
 
     const before = await listMine(request('/api/my/artifacts', { cookie: cookie }));
     expect(before.status).toBe(200);
 
     await revokeToken(minted.id);
-    const after = await listMine(request('/api/my/artifacts', { cookie: cookie }));
+    const after = await listMine(request('/api/my/artifacts', { cookie: cookie, actor: { credential: 'none' } }));
     expect(after.status).toBe(401);
     expect(await resolveTokenById(minted.id)).toBeNull();
   });
@@ -132,7 +144,7 @@ describe('the anonymous session as a credential', () => {
     const ours = (await (await createArtifact(request('/api/artifacts', { method: 'POST', token: mine.token, json: { markup: '<h1>mine</h1>' } }))).json()) as { id: string };
     await createArtifact(request('/api/artifacts', { method: 'POST', token: other.token, json: { markup: '<h1>other</h1>' } }));
 
-    const res = await listMine(request('/api/my/artifacts', { cookie: cookieHeader(await encodeAgentSession({ tokenIds: [mine.id] })) }));
+    const res = await listMine(request('/api/my/artifacts', { cookie: await agentCookie([mine.id]) }));
     const body = (await res.json()) as { artifacts: Array<{ id: string }> };
     expect(body.artifacts.map((a) => a.id)).toEqual([ours.id]);
   });
@@ -141,7 +153,7 @@ describe('the anonymous session as a credential', () => {
     const minted = await mintToken('test');
     const good = await encodeAgentSession({ tokenIds: [minted.id] });
     for (const bad of [good.slice(0, -4), `${good}x`, 'not-a-jwt', '']) {
-      expect(await decodeAgentSession(bad)).toBeNull();
+      expect(await decodeAgentSessionEnvelope(bad)).toBeNull();
       expect((await listMine(request('/api/my/artifacts', { cookie: cookieHeader(bad) }))).status).toBe(401);
     }
   });
@@ -150,7 +162,7 @@ describe('the anonymous session as a credential', () => {
 describe('Origin check', () => {
   it('rejects a cross-site cookie mutation, and never blocks a bearer agent call', async () => {
     const minted = await mintToken('test');
-    const cookie = cookieHeader(await encodeAgentSession({ tokenIds: [minted.id] }));
+    const cookie = await agentCookie([minted.id]);
 
     // A browser form/fetch from another site, riding the cookie.
     const crossSite = await createArtifact(request('/api/artifacts', { method: 'POST', cookie: cookie, origin: 'https://evil.example', json: { markup: '<h1>x</h1>' } }));
@@ -203,7 +215,7 @@ describe('handing the document to another agent', () => {
     const mine = await mintToken('mine');
     const doc = (await (await createArtifact(request('/api/artifacts', { method: 'POST', token: mine.token, json: { markup: '<h1>anon owned</h1>' } }))).json()) as { id: string };
 
-    const cookie = cookieHeader(await encodeAgentSession({ tokenIds: [mine.id] }));
+    const cookie = await agentCookie([mine.id]);
     const res = await agentPrompt(request(`/api/my/artifacts/${doc.id}/agent-prompt`, { method: 'POST', cookie: cookie, origin: BASE }), {
       params: Promise.resolve({ id: doc.id }),
     });
@@ -235,7 +247,7 @@ describe('handing the document to another agent', () => {
     const theirs = await mintToken('theirs');
     const doc = (await (await createArtifact(request('/api/artifacts', { method: 'POST', token: theirs.token, json: { markup: '<h1>not mine</h1>' } }))).json()) as { id: string };
 
-    const res = await agentPrompt(request(`/api/my/artifacts/${doc.id}/agent-prompt`, { method: 'POST', cookie: cookieHeader(await encodeAgentSession({ tokenIds: [mine.id] })), origin: BASE }), { params: Promise.resolve({ id: doc.id }) });
+    const res = await agentPrompt(request(`/api/my/artifacts/${doc.id}/agent-prompt`, { method: 'POST', cookie: await agentCookie([mine.id]), origin: BASE }), { params: Promise.resolve({ id: doc.id }) });
     expect(res.status).toBe(404);
   });
 });
@@ -254,9 +266,9 @@ describe('one viewer, every surface', () => {
     const minted = await mintToken('mine');
     await claimTokenById(user.id, minted.id);
     const doc = (await (await createArtifact(request('/api/artifacts', { method: 'POST', token: minted.token, json: { markup: '<h1>SPLIT-VIEWER</h1>', visibility: 'private' } }))).json()) as { id: string };
-    const cookie = cookieHeader(await encodeAgentSession({ tokenIds: [minted.id] }));
+    const cookie = await agentCookie([minted.id]);
 
-    const raw = await rawRoute(request(`/a/${doc.id}/raw`, { cookie: cookie }), { params: Promise.resolve({ id: doc.id }) });
+    const raw = await rawRoute(request(`/a/${doc.id}/raw`, { cookie: cookie, actor: { credential: 'agent-cookie', tokenId: minted.id, userId: user.id, heldTokenIds: [minted.id] } }), { params: Promise.resolve({ id: doc.id }) });
     expect(raw.status, 'raw').toBe(200);
     expect(await raw.text()).toContain('SPLIT-VIEWER');
 
@@ -281,7 +293,7 @@ describe('one viewer, every surface', () => {
     await claimTokenById(user.id, minted.id);
     const doc = (await (await createArtifact(request('/api/artifacts', { method: 'POST', token: minted.token, json: { markup: '<h1>x</h1>', visibility: 'private' } }))).json()) as { id: string };
 
-    const cookie = cookieHeader(await encodeAgentSession({ tokenIds: [minted.id] }));
+    const cookie = await agentCookie([minted.id]);
     const served = await servesDocumentDirectly(request(`/a/${doc.id}`, { cookie }));
     expect(served).toBeNull(); // the page (shell), not the document
   });

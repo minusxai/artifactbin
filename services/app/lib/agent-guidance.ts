@@ -95,13 +95,13 @@ export const CSV_URL_FIELD_GUIDANCE =
   'Types are inferred per column, same as the dataset field.';
 
 export const MARKUP_FIELD_GUIDANCE = [
-  'Document tier: JSX over the kit; declare data in <Helmet>, bind $name.',
+  'THE document tier: story JSX over the shadcn kit; data is declared in <Helmet>, bound by $name.',
   `STYLING IS NOT OPTIONAL. ${MARKUP_STYLE_RULE}`,
   'Open with <div data-design="tw" className="@container …"> and style every child (spacing, type, colour).',
-  'Inline style=/onClick= rejected. <Helmet> holds <style> and ONE isolated <script>: no parent DOM/network. Use signals/run= for parent UI; managed <Iframe> for DOM/canvas/CDN bundles.',
-  'Use theme tokens (text-muted-foreground, bg-muted) over hex.',
+  'Inline style=/onClick= rejected: ONE <Helmet> carries <style> (theme vars on :root) and <script>, which RUNS — use addEventListener.',
+  'Prefer theme tokens (text-muted-foreground, bg-muted) over hex so themes apply.',
   `Read ${PUBLIC_BASE_URL}/docs/artifactbin/references/markup.md for the vocabulary first.`,
   'Data: <Helmet><Query name="q">{`select … from ref_<datasetId>`}</Query></Helmet>, then <Question data="$q" viz={{"kind":"vega-lite","spec":{…}}} />.',
-  'Filters: <Value name="x" /> in Helmet; <select value="$x" options="$q" /> in body; $x in SQL. Param/data="ref:…" RETIRED.',
+  'Filters: <Value name="x" /> in Helmet, <select value="$x" options="$q" /> in the body, $x in SQL. data="ref:…" and Param are RETIRED.',
   COMPUTED_FIGURE_RULE,
 ].join(' ');

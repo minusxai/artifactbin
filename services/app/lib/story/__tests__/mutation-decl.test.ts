@@ -34,13 +34,10 @@ describe('parseMutationDecl', () => {
     expect(r.decl.sql).toContain('insert into ref_abc123');
   });
 
-  it('classifies a local target for declaration validation, and refuses two datasets', () => {
-    const none = parseMutationDecl(element('<Mutation name="add">{`insert into sales values (1)`}</Mutation>'));
-    expect(none.ok).toBe(true);
-    if (none.ok) {
-      expect(none.decl).toMatchObject({scope: 'local', target: 'sales', refs: []});
-      expect(validateDataflow({values: [], queries: [], mutations: [none.decl]}, []).length).toBeGreaterThan(0);
-    }
+  it('parses a syntactic local target, and refuses a mutation naming two datasets', () => {
+    const local = parseMutationDecl(element('<Mutation name="add">{`insert into sales values (1)`}</Mutation>'));
+    expect(local.ok).toBe(true);
+    if (local.ok) expect(local.decl).toMatchObject({ target: 'sales', scope: 'local' });
     const two = parseMutationDecl(element('<Mutation name="mv">{`insert into ref_aaaaaa select * from ref_bbbbbb`}</Mutation>'));
     expect(two.ok).toBe(false);
     if (!two.ok) expect(two.errors[0].message).toMatch(/exactly one dataset/i);

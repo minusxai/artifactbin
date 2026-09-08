@@ -17,23 +17,6 @@
  */
 import { immutableSet } from '@/lib/utils/immutable-collections';
 
-// Shared pure URL checks: reader code must not import the source validator/parser.
-const DANGEROUS_URL = /^(javascript|vbscript|data):/i;
-const SAFE_DATA_URL = /^data:image\//i;
-/** Match browser scheme normalization, including embedded ASCII whitespace/control bytes. */
-export function hasDangerousScheme(url: string): boolean {
-  // eslint-disable-next-line no-control-regex -- deliberately mirrors browser scheme normalization
-  const normalized = url.replace(/[\x00-\x20]/g, '');
-  return DANGEROUS_URL.test(normalized) && !SAFE_DATA_URL.test(normalized);
-}
-/** Scheme-check every URL in a srcset/ping-style list. */
-export function listHasDangerousScheme(value: string): boolean {
-  return value.split(',').some(entry => {
-    const url = entry.trim().split(/\s+/)[0];
-    return !!url && hasDangerousScheme(url);
-  });
-}
-
 /** Attributes whose whole value is a single URL. */
 export const URL_ATTRS = immutableSet([
   'href',

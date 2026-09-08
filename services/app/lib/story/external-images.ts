@@ -39,7 +39,7 @@ const walk = (nodes: JsxNode[], visit: (el: JsxElement) => void): void => {
   for (const n of nodes) {
     if (n.type !== 'element') continue;
     visit(n);
-    if(n.tag!=='Iframe')walk(n.children, visit);
+    walk(n.children, visit);
   }
 };
 

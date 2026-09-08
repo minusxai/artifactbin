@@ -21,7 +21,6 @@ import { SIGNALS_TABLE } from '@/lib/story/local-target';
 export type DatasetTables = Record<string, { rows: Row[]; columns: DatasetColumn[] }>;
 
 export interface RunDataflowOptions {
-  /** Reader-local inline table rows; schemas always come from declarations. */
   localTables?: Record<string, Row[]>;
   sourceQuery?: (query:Dataflow["queries"][number],values:Record<string,Scalar>,page?:QueryPage)=>Promise<import("@/lib/story/dataflow").TableResult>;
   /** Override the declared defaults (a reader's current selections). Unknown names are ignored. */

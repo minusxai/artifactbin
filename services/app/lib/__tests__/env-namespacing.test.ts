@@ -28,13 +28,6 @@ describe('lib/config.ts', () => {
 
 describe('env()', () => {
   afterEach(() => { vi.unstubAllEnvs(); vi.resetModules(); });
-  it.each([[undefined,true],['true',true],['false',false]])('anonymous live flag %s resolves to %s',async(value,expected)=>{
-    vi.stubEnv('FEATURE_FLAG__LIVE_UPDATES_ANON_ENABLED',value);
-    vi.resetModules();
-    const config=await import('../config');
-    expect(config.LIVE_UPDATES_ANON_ENABLED).toBe(expected);
-    expect(config.envNamesRead().has('FEATURE_FLAG__LIVE_UPDATES_ANON_ENABLED')).toBe(true);
-  });
 
   it('reads the namespaced name and nothing else', async () => {
     const { env } = await import('../config');

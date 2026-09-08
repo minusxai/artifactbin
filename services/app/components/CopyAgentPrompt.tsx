@@ -11,7 +11,6 @@
  *    reaches only what it created and the original plaintext exists nowhere —
  *    so the button says "sign in" instead.
  */
-import {appFetch as fetch} from '@/web/api-origin';
 import { Bot, Check } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Tooltip } from '@/components/Tooltip';

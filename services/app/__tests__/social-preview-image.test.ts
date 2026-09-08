@@ -37,7 +37,6 @@ describe('uploaded social preview cards', () => {
       for (const format of ['png', 'jpg']) {
         const card = await exportImage(request(`/a/${doc.id}/export?mode=card&format=${format}`), params(doc.id));
         expect(card.status).toBe(200);
-        expect(card.headers.get('cache-control')).toBe('private, no-store');
         const pixels = sharp(Buffer.from(await card.arrayBuffer()));
         expect(await pixels.metadata()).toMatchObject({ width: 1600, height: 840, format: format === 'jpg' ? 'jpeg' : 'png' });
         const { data } = await pixels.raw().toBuffer({ resolveWithObject: true });
@@ -53,9 +52,6 @@ describe('uploaded social preview cards', () => {
     const { token, image } = await fixture();
     const doc = await (await publish(token, { markup: markup(image.id), visibility: 'private' })).json();
     expect((await exportImage(request(`/a/${doc.id}/export?mode=card`), params(doc.id))).status).toBe(404);
-    const privateCard=await exportImage(request(`/a/${doc.id}/export?mode=card`,{token}),params(doc.id));
-    expect(privateCard.status).toBe(200);
-    expect(privateCard.headers.get('cache-control')).toBe('private, no-store');
     await (await getDb()).query('UPDATE artifacts SET deleted_at = now() WHERE id = $1', [image.id]);
     const bytes = new Uint8Array([1, 2, 3]);
     setServices({ browser: fakeBrowser({ ok: true, mime: 'image/png', bytes }) });

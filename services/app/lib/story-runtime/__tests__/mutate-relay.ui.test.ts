@@ -41,17 +41,12 @@ const setup = () => {
 };
 
 describe('relay transport — mutate', () => {
-  it('carries local rows and returns the local SQL result without losing it', async () => {
-    const {transport, posted, answer} = setup();
-    const local = {target: 'drafts', affected: 1, table: {columns: [{name: 'id', type: 'number'}], rows: [{id: 2}]}};
-    const done = transport.mutate!({}, 'add', undefined, {drafts: []});
-    answer({type: STORY_MUTATE_RESULT_MESSAGE, id: posted[0].message.id, ok: true, dataset: '', local});
-    expect(await done).toEqual({dataset: '', local});
-    expect(posted[0].message).toMatchObject({localTables: {drafts: []}});
-    const query = transport.run({}, ['q'], {drafts: [{id: 2}]});
-    answer({type: STORY_QUERY_RESULT_MESSAGE, id: posted.at(-1)!.message.id, tables: {}, errors: {}});
-    await query;
-    expect(posted.at(-1)!.message).toMatchObject({localTables: {drafts: [{id: 2}]}});
+  it('carries local table snapshots on query runs', async () => {
+    const { transport, posted, answer } = setup();
+    const done = transport.run({}, ['total'], { cart: [{ id: 1 }] });
+    expect(posted[0].message).toMatchObject({ localTables: { cart: [{ id: 1 }] } });
+    answer({ type: STORY_QUERY_RESULT_MESSAGE, id: posted[0].message.id, tables: {}, errors: {} });
+    await done;
   });
   it('posts the name and values to the parent, at the app origin, and resolves with the dataset written', async () => {
     const { transport, posted, answer } = setup();
@@ -61,6 +56,14 @@ describe('relay transport — mutate', () => {
     expect(posted[0].message).toMatchObject({ type: STORY_MUTATE_MESSAGE, mutation: 'vote', values: { choice: 'tacos' } });
     answer({ type: STORY_MUTATE_RESULT_MESSAGE, id: posted[0].message.id, ok: true, dataset: 'k3Pq9z', version: 2, affected: 1 });
     await expect(done).resolves.toEqual({ dataset: 'k3Pq9z' });
+  });
+
+  it('posts the current local table snapshot to the parent', async () => {
+    const { transport, posted, answer } = setup();
+    const done = transport.mutate!({}, 'add', undefined, { cart: [{ id: 1 }] });
+    expect(posted[0].message).toMatchObject({ localTables: { cart: [{ id: 1 }] } });
+    answer({ type: STORY_MUTATE_RESULT_MESSAGE, id: posted[0].message.id, ok: true, dataset: '', version: 0, affected: 0, local: { target: 'cart', table: { columns: [], rows: [] } } });
+    await expect(done).resolves.toMatchObject({ local: { target: 'cart' } });
   });
 
   it('rejects with the page\'s message when the write was refused', async () => {

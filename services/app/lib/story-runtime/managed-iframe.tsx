@@ -9,7 +9,7 @@ import {managedFrameLayout} from '@/lib/story/managed-frame-layout';
 export function managedAuthorDocument(origin?:string):string {
   if(origin && (new URL(origin).origin!==origin||!/^https?:\/\//.test(origin)))throw Error('Invalid managed asset origin');
   const asset=origin?' '+origin:'';
-  const csp=`default-src 'none'; script-src 'unsafe-inline'${asset}; connect-src${asset||" 'none'"}; img-src data: blob:${asset}; media-src data: blob:${asset}; font-src data:${asset}; style-src 'unsafe-inline'; frame-src 'none'; worker-src 'none'; form-action 'none'; base-uri 'none'`;
+  const csp=`default-src 'none'; script-src 'unsafe-inline'${asset}; connect-src${asset} blob: data:; img-src data: blob:${asset}; media-src data: blob:${asset}; font-src data:${asset}; style-src 'unsafe-inline'; frame-src 'none'; worker-src 'none'; form-action 'none'; base-uri 'none'`;
   return '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="'+csp+'"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;width:100%;height:100%}</style></head><body><script>'+AUTHOR_SCRIPT_BOOTSTRAP+'</script></body></html>';
 }
 export function ManagedIframeView({compiled,store,assets,importAsset,title,height,id,className,'data-mx-ast':ast}:{compiled:ManagedIframeContent;store:DataflowStore;assets?:ManagedAssetsConfig;importAsset?:ManagedAssetRelay;title?:unknown;height?:unknown;id?:string;className?:string;'data-mx-ast'?:string}) {
@@ -26,5 +26,5 @@ export function ManagedIframeView({compiled,store,assets,importAsset,title,heigh
     }).catch(error=>{if(!disposed)setError(String(error.message).slice(0,500));});
     return()=>{disposed=true;resolver.dispose();stop();target.replaceChildren();};
   },[content,configuration,store,label,importAsset]);
-  return <div id={id} className={className} data-mx-ast={ast} aria-label={label} style={{height:pixels,width:'100%'}}><div ref={host} style={{height:'100%'}}/>{error&&<p role="alert">{error}</p>}</div>;
+  return <div id={id} className={className} data-mx-ast={ast} data-mx-managed-frame="" aria-label={label} style={{height:pixels,width:'100%'}}><div ref={host} style={{height:'100%'}}/>{error&&<p role="alert">{error}</p>}</div>;
 }

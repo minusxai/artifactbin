@@ -17,7 +17,7 @@ import { GET as artifactPage } from '@/app/api/artifacts/[id]/route';
 import { anonymousPaste } from '@/lib/agent-copy';
 import { issueStartHandle } from '@/lib/start-links';
 import { DEFAULT_TOKEN_TTL_MS } from '@/lib/tokens';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { registerAgentCookie, useAppHarness, request } from '@/__tests__/harness';
 
 const harness = useAppHarness();
 
@@ -149,12 +149,14 @@ describe('POST /api/start', () => {
     const first = (await firstRes.json()) as Start;
     const cookie = cookieOf(firstRes);
     expect(cookie).not.toBe('');
+    await registerAgentCookie(firstRes);
 
     // A browser holds token IDS, so there is no plaintext left to hand a second
     // agent — and an anonymous token reaches only what it created, so reusing
     // one would produce a document its own agent could not edit. A fresh token
     // per document is the answer the cookie's LIST was built for.
     const secondRes = await startRoute(request('/api/start', { method: 'POST', cookie: cookie }));
+    await registerAgentCookie(secondRes, cookie);
     const second = (await secondRes.json()) as Start;
     expect(second.id).not.toBe(first.id);
 

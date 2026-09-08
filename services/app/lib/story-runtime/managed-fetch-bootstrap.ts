@@ -34,7 +34,7 @@ export const MANAGED_FETCH_BOOTSTRAP = `
       };
     };
     const assetFetch = async (input, init = {}) => {
-      if (!nativeFetch || !assetOrigin) throw new Error('External iframe assets are not configured');
+      if (!nativeFetch) throw new Error('Iframe fetch is unavailable');
       const original = typeof Request !== 'undefined' && input instanceof Request ? input : null;
       const method = init.method || (original && original.method) || 'GET';
       const headers = new Headers(init.headers || (original && original.headers) || {});
@@ -49,9 +49,11 @@ export const MANAGED_FETCH_BOOTSTRAP = `
       const timeout = setTimeout(cancel,30000);
       try {
         const inputUrl = new URL(original ? original.url : String(input));
-        if ((!/^https?:$/.test(inputUrl.protocol)&&!/^ref:[A-Za-z0-9]{6}$/.test(inputUrl.href)) || inputUrl.username || inputUrl.password || inputUrl.href.length > 4096) throw new Error('Expected an HTTP(S) asset URL');
-        const resolved = assetLocation(inputUrl.href)?inputUrl.href:await request({ op: 'asset', url: inputUrl.href, kind: 'binary' });
-        if (!assetLocation(resolved)) throw new Error('Invalid resolved asset origin');
+        const local = /^(blob:|data:)$/.test(inputUrl.protocol);
+        if ((!local&&!/^https?:$/.test(inputUrl.protocol)&&!/^ref:[A-Za-z0-9]{6}$/.test(inputUrl.href)) || inputUrl.username || inputUrl.password || inputUrl.href.length > 4096) throw new Error('Expected an HTTP(S), ref, blob, or data asset URL');
+        if(!local&&!assetOrigin)throw new Error('External iframe assets are not configured');
+        const resolved = local?inputUrl.href:assetLocation(inputUrl.href)?inputUrl.href:await request({ op: 'asset', url: inputUrl.href, kind: 'binary' });
+        if (!local&&!assetLocation(resolved)) throw new Error('Invalid resolved asset origin');
         const response = await nativeFetch(resolved, { method: 'GET', credentials: 'omit', redirect: 'error', signal: abort.signal });
         const reader = response.body && response.body.getReader();
         const chunks = []; let size = 0;

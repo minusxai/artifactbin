@@ -42,4 +42,9 @@ describe('kitchen-sink doc', () => {
     expect(SRC).toContain('ref:ksrecipe01');
     expect(SRC).toContain('ref:ksimage01');
   });
+
+  it('keeps the modal closed so the gallery remains interactive', () => {
+    expect(SRC).toContain('<Dialog>');
+    expect(SRC).not.toContain('<Dialog defaultOpen>');
+  });
 });

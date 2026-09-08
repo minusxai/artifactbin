@@ -54,10 +54,6 @@ export interface OAuthClient {
   clientName: string;
   redirectUris: string[];
 }
-export interface OAuthConsent extends AuthorizationGrant {
-  codeChallenge: string;
-  state: string;
-}
 
 export interface RefreshGrant {
   token: string;
@@ -68,8 +64,6 @@ export interface RefreshGrant {
 }
 
 export interface OAuthStore {
-  issueConsent(grant: OAuthConsent, sessionId: string): Promise<string>;
-  consumeConsent(token: string, userId: string, sessionId: string): Promise<OAuthConsent | null>;
   register(body: Record<string, unknown>): Promise<Record<string, unknown>>;
   client(clientId: string): Promise<OAuthClient | null>;
   issueAuthorizationCode(grant: AuthorizationGrant, codeChallenge: string, now?: number): Promise<string>;
@@ -106,21 +100,6 @@ export function createOAuthStore(db: Queryable, schema = 'auth', appSchema?: str
   const accessTokens = `${appSchema ? `${identifier(appSchema, 'app schema')}.` : ''}tokens`;
   const sweep = () => db.query(`DELETE FROM ${credentials} WHERE expires_at <= now()`);
   return {
-    async issueConsent(grant, sessionId) {
-      const token = randomBytes(32).toString('base64url');
-      await db.query(`INSERT INTO ${credentials} (kind,credential_hash,subject_id,group_id,payload,expires_at)
-        VALUES ('oauth-consent',$1,$2,$3,$4,now()+interval '5 minutes')`,
-        [hash(token), grant.userId, sessionId, JSON.stringify(grant)]);
-      return token;
-    },
-    async consumeConsent(token, userId, sessionId) {
-      if (!/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
-      const result = await db.query<{ payload: OAuthConsent }>(`UPDATE ${credentials} SET consumed_at=now()
-        WHERE kind='oauth-consent' AND credential_hash=$1 AND subject_id=$2 AND group_id=$3
-          AND consumed_at IS NULL AND deleted_at IS NULL AND expires_at>now() RETURNING payload`,
-        [hash(token), userId, sessionId]);
-      return result.rows[0]?.payload ?? null;
-    },
     async register(body) {
       const valid = registration(body);
       const clientId = `mcp_${randomBytes(24).toString('base64url')}`;

@@ -207,18 +207,16 @@ export function ownsArtifact(row: Pick<ArtifactRow, 'user_id' | 'token_id'>, act
 export async function roleWithoutLink(
   row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id'>,
   actor: RoleActor,
-  db?: Queryable,
 ): Promise<ArtifactRole> {
   if (ownsArtifact(row, actor)) return 'owner';
-  return namedRoleFor(row, actor, db);
+  return namedRoleFor(row, actor);
 }
 
 export async function effectiveRole(
   row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | 'visibility' | 'link_role'>,
   actor: RoleActor,
-  db?: Queryable,
 ): Promise<ArtifactRole> {
-  const held = await roleWithoutLink(row, actor, db);
+  const held = await roleWithoutLink(row, actor);
   if (held === 'owner') return 'owner';
   // THE ANONYMOUS CEILING applies to the LINK only, never to a named share:
   // being invited by address is itself an account-shaped act, while holding a
@@ -257,10 +255,9 @@ export function linkRoleOf(row: Pick<ArtifactRow, 'visibility' | 'link_role'>): 
 async function namedRoleFor(
   row: Pick<ArtifactRow, 'id'>,
   actor: RoleActor,
-  connection?: Queryable,
 ): Promise<ArtifactRole> {
   if (!actor.userId) return 'none';
-  const db = connection ?? await getDb();
+  const db = await getDb();
   await resolveSharesFor(db, row.id, actor.userId);
   const r = await db.query<{ role: ShareRole }>(
     `SELECT s.role FROM artifact_shares s
@@ -1514,9 +1511,7 @@ export async function updateSharingFor(actor: TokenActor, id: string, patch: Sha
   const db = await getDb();
   const scope = ownerScope(actor);
   const done = await db.transaction(async (tx) => {
-    // Serialize ACL changes with dataset commits, which lock their source
-    // document and target before checking roles in a fresh statement.
-    const owned = await tx.query(`SELECT 1 FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val]);
+    const owned = await tx.query(`SELECT 1 FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
     if (owned.rows.length === 0) return false;
     if (patch.visibility) {
       await tx.query(`UPDATE artifacts SET visibility = $3 WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val, patch.visibility]);
@@ -1822,13 +1817,13 @@ function rowToResolvedRef(row: ArtifactRow, owned = false): ResolvedRef {
 export type WriteRefusal = 'not_a_dataset' | 'dataset_read_only';
 
 /** The dataset must allow writes AND the current actor must hold its editor role. */
-export async function canWriteDataset(dataset: ArtifactRow, actor: RoleActor, db?: Queryable): Promise<WriteRefusal | null> {
+export async function canWriteDataset(dataset: ArtifactRow, actor: RoleActor): Promise<WriteRefusal | null> {
   if (dataset.format !== 'dataset') return 'not_a_dataset';
   if(catalogOf(dataset)?.kind==='postgres')return 'dataset_read_only';
   // An unreachable dataset is reported as read-only, never as "not yours":
   // the caller answers a uniform 404 for anything it could not resolve, and
   // this one it could — the document names it, so its existence is not news.
-  if (!canEdit(await effectiveRole(dataset, actor, db))) return 'dataset_read_only';
+  if (!canEdit(await effectiveRole(dataset, actor))) return 'dataset_read_only';
   return dataset.access === 'readwrite' ? null : 'dataset_read_only';
 }
 
@@ -1843,7 +1838,7 @@ export const writerFor = (doc: ArtifactRow): TokenActor => ({ tokenId: doc.token
 export type DocumentMutationOutcome =
   | { ok: true; dataset: ArtifactRow; affected: number; rowCount: number }
   | { ok: true; local: LocalMutationResult }
-  | { ok: false; reason: 'unknown_mutation' | WriteRefusal | 'dataset_full' | 'invalid_sql' | 'contended' | 'row_changed' | 'row_not_unique' | 'invalid_row' | 'document_changed'; detail?: string };
+  | { ok: false; reason: 'unknown_mutation' | WriteRefusal | 'dataset_full' | 'invalid_sql' | 'contended' | 'row_changed' | 'row_not_unique' | 'invalid_row'; detail?: string };
 
 export async function runDocumentMutation(
   doc: ArtifactRow,
@@ -1905,7 +1900,7 @@ export async function runDocumentMutation(
       return {ok: false, reason: 'invalid_sql', detail: error instanceof Error ? error.message : 'Local mutation failed'};
     }
   }
-  const result = await mutateDataset(dataset!, actor, decl.sql, bound, { row: rowBinding, expectedAffected: decl.expectedAffected, source:!!decl.source, document: {id: doc.id, editId: doc.edit_id} });
+  const result = await mutateDataset(dataset!, actor, decl.sql, bound, { row: rowBinding, expectedAffected: decl.expectedAffected, source:!!decl.source });
   if (isMutationRefused(result)) return { ok: false, reason: result.reason, detail: result.detail };
   return { ok: true, dataset: result.row, affected: result.affected, rowCount: result.rowCount };
 }

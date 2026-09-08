@@ -79,6 +79,9 @@ const v6Head = (ip: string): number | null => {
 
 const forbiddenV6 = (ip: string): boolean => {
   if (ip === '::' || ip === '::1') return true;
+  // v4-mapped (::ffff:a.b.c.d) — the classic bypass: judge the embedded v4.
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(ip);
+  if (mapped) return isForbiddenIp(mapped[1]);
   // NAT64 embeds a v4 we cannot see through — forbid the whole prefix.
   if (ip.startsWith('64:ff9b:')) return true;
   if (ip.startsWith('2001:db8:')) return true; // documentation
@@ -98,20 +101,10 @@ export function isForbiddenIp(ip: string, policy?: WebIngestPolicy): boolean {
   const trimmed = ip.trim().toLowerCase();
   if (!trimmed) return true;
   if (trimmed.includes(':')) {
-    // URL literals and DNS answers can spell the same address differently.
-    // Validate the complete IPv6 address and normalize *before* classifying;
-    // WHATWG turns ::ffff:127.0.0.1 into ::ffff:7f00:1, not dotted IPv4.
-    if (!/^[0-9a-f:.]+$/.test(trimmed)) return true;
-    let normalized: string;
-    try { normalized = new URL(`http://[${trimmed}]/`).hostname.slice(1,-1); }
-    catch { return true; }
-    const mapped = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(normalized);
-    if (mapped) {
-      const high = parseInt(mapped[1],16), low = parseInt(mapped[2],16);
-      return isForbiddenIp(`${high >>> 8}.${high & 255}.${low >>> 8}.${low & 255}`,policy);
-    }
-    if (policy?.allowPrivate && normalized === '::1') return false;
-    return forbiddenV6(normalized);
+    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(trimmed);
+    if (mapped) return isForbiddenIp(mapped[1], policy);
+    if (policy?.allowPrivate && (trimmed === '::1')) return false;
+    return forbiddenV6(trimmed);
   }
   const octets = parseV4(trimmed);
   if (!octets) return true; // fail closed

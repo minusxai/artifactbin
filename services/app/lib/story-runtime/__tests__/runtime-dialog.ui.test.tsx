@@ -25,7 +25,11 @@ it('binds dialog state two ways and submits with current signals through the exi
   expect(store.getValue('editing')).toBe(true);
   expect(view.getByText('Editing')).toBeVisible();
   fireEvent.change(view.getByLabelText('Title'), {target: {value: 'Updated'}});
-  fireEvent.submit(view.getByRole('dialog').querySelector('form')!);
+  const field = view.getByLabelText('Title') as HTMLInputElement;
+  expect(field.value).toBe('Updated');
+  expect(field.validity.valid).toBe(true);
+  expect(view.getByRole('dialog').querySelector('form')!.checkValidity()).toBe(true);
+  fireEvent.click(view.getByText('Save'));
   await waitFor(() => expect(store.getValue('editing')).toBe(false));
   expect(mutate).toHaveBeenCalledWith(expect.objectContaining({title:'Updated'}), 'save');
   expect(view.queryByText('Editing')).toBeNull();

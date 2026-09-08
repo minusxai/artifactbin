@@ -19,8 +19,8 @@
  * Create an artifact and take the agent's token from the start response.
  * Returns `{ id, token, editId, prompt }`.
  */
-export async function startDocument(base, headers = {}, fetchImpl = fetch) {
-  const res = await fetchImpl(`${base}/api/start`, { method: 'POST', headers });
+export async function startDocument(base) {
+  const res = await fetch(`${base}/api/start`, { method: 'POST' });
   const body = await res.json().catch(() => ({}));
   if (!res.ok || !body.id) {
     throw new Error(
@@ -47,17 +47,14 @@ export async function startDocument(base, headers = {}, fetchImpl = fetch) {
  * bare document. Exchanges the token for the httpOnly session cookie — the
  * same call the app's own UI makes.
  *
- * The public homepage may be only a credential-free wrapper. Resolve its
- * trusted app frame before exchanging; single-origin deployments use the page.
+ * Must run from a page on the app's origin: the document itself is
+ * opaque-origin and cannot fetch anything at all.
  */
 export async function becomeOwner(page, base, token) {
   await page.goto(`${base}/`, { waitUntil: 'load' });
-  const selector='iframe[title="Home workspace"],iframe[title="Artifactbin app"]';
-  const app=await page.locator(selector).count()?page.frameLocator(selector):page;
-  await app.locator('#root').waitFor({state:'attached'});
-  const status = await app.locator('body').evaluate(async (_,t) => (await fetch('/api/session/token', {
+  const status = await page.evaluate(async (t) => (await fetch('/api/session/token', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-artifactbin-csrf': '1' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token: t }),
   })).status, token);
   if (status !== 204) throw new Error(`could not adopt the token into a session (${status})`);

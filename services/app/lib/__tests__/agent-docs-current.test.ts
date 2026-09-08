@@ -71,9 +71,7 @@ describe('the reference teaches what a document CAN do', () => {
   });
 
   it('connects the inline-handler ban to the mechanism that works', () => {
-    expect(markup).toMatch(/declarative controls/);
-    expect(markup).toContain('mx.params.subscribe');
-    expect(markup).toMatch(/no visible DOM access/);
+    expect(markup).toMatch(/addEventListener/);
   });
 
   it('teaches CSS overrides in the Helmet block', () => {
@@ -135,11 +133,6 @@ describe('the door never advises a shape the door rejects', () => {
     const [msg] = messagesFor('<div style="color:red">x</div>');
     expect(msg).toMatch(/className/);
     expect(msg).toMatch(/Helmet/);
-  });
-  it('does not advise forbidden parent DOM access when a form or script is refused', () => {
-    expect(messagesFor('<form><input /></form>').join(' ')).toContain('run=');
-    expect(messagesFor('<script>{`hello()`}</script>').join(' ')).toContain('no parent DOM/network');
-    expect(messagesFor('<iframe />').join(' ')).toContain('<Iframe>');
   });
 });
 

@@ -14,7 +14,7 @@ import { artifactSummaryToWire } from '@/lib/artifact-wire';
 import { actorForArtifacts } from '@/lib/viewer';
 import { ensureUserToken } from '@/lib/tokens';
 import { createArtifactFromRequest } from '@/app/api/artifacts/route';
-import { publicLinkBase, json, unauthorized } from '@/lib/http';
+import { baseUrl, json, unauthorized } from '@/lib/http';
 
 export async function POST(request: Request) {
   const actor = await browserActor(request);
@@ -36,6 +36,6 @@ export async function GET(request: Request) {
   const rows = scoped.userId
     ? await listOwnedArtifacts('user_id', scoped.userId)
     : await listOwnedArtifacts('token_id', scoped.tokenId);
-  const base = publicLinkBase(request);
+  const base = baseUrl(request);
   return json({ artifacts: rows.map((r) => artifactSummaryToWire(r, base)) });
 }

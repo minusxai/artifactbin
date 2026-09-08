@@ -21,8 +21,6 @@
  *          save-less protocol as before, and pushes structural changes back
  *          down as `mx:document`, which the runtime re-renders in place.
  */
-import type {DocumentPeer} from '@/lib/story/document-peer';
-import {appFetch as fetch} from '@/web/api-origin';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from '@/lib/dynamic';
 import { Check, Code, History, Image as ImageIcon, MessageSquare, Paintbrush } from 'lucide-react';
@@ -110,7 +108,7 @@ export default function InPlaceEditor({
 }: {
   art: EditorArtifact;
   /** The live document. Never remounted — that is the whole point. */
-  frameRef: { current: DocumentPeer | null };
+  frameRef: { current: HTMLIFrameElement | null };
   /** Learned by the page when the document announced itself, long before this mounted. */
   sessionNonce: string | null;
   flushRef?: EditorFlushRef;
@@ -204,7 +202,6 @@ export default function InPlaceEditor({
       type: 'mx:document',
       nodes: parts.nodes,
       ...(parts.authorCss !== null ? { authorCss: parts.authorCss } : {}),
-      authorScript: parts.authorScript,
       /*
        * Absent means "unchanged"; NULL means "this document has no stylesheet".
        * Sending null because we happen not to hold one yet strips the sheet

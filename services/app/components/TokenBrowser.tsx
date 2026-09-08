@@ -1,6 +1,5 @@
 'use client';
 
-import {appFetch as fetch} from '@/web/api-origin';
 import { ChevronDown, ChevronLeft, ChevronRight, Folder, EyeOff, FolderInput, Globe, Lock, Pencil, Search, Share2, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Tooltip } from '@/components/Tooltip';
@@ -12,7 +11,7 @@ import { MoveMenu, type PickerFolder } from '@/components/FolderPicker';
 import { parentOfRow } from '@/lib/shelf';
 import { adoptToken } from '@/lib/browser-session';
 import type { Visibility } from '@/lib/artifacts';
-import {artifactCardUrl} from '@/web/public-read-url';
+import { CARD_RENDER_GENERATION } from '@/lib/export-card';
 
 interface ArtifactSummary {
   id: string;
@@ -436,7 +435,7 @@ export function ArtifactTable({ artifacts, treeRows, includeAssets = true, folde
                     <span className="relative hidden h-[19px] w-9 shrink-0 overflow-hidden rounded-[2px] border border-edge bg-raised sm:block">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={artifactCardUrl(a)}
+                        src={`/a/${a.id}/export?format=jpg&mode=card&v=${a.version}&r=${CARD_RENDER_GENERATION}`}
                         alt=""
                         loading="lazy"
                         className="h-full w-full object-cover"

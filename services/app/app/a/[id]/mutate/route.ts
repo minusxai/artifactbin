@@ -24,7 +24,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   if (!artifact) return json({ error: 'not_found' }, 404, CORS);
 
   const actor = await requestOrSessionActor(request);
-  if (actor.credential === 'read-session' || refusesCrossSite(request, actor)) {
+  if (refusesCrossSite(request, actor)) {
     return json({ error: 'forbidden' }, 403, CORS);
   }
   if (!(await canReadArtifact(artifact, actor.viewer))) return json({ error: 'not_found' }, 404, CORS);
@@ -34,8 +34,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const parsed = parseMutationRequest(body);
   if (parsed instanceof Response) return parsed;
 
-  const roleActor={userId:actor.viewer?.userId ?? null,tokenId:actor.tokenId,email:actor.viewer?.email};
-  const result = await runDocumentMutation(artifact, parsed.mutation, parsed.values ?? {}, parsed.row, roleActor, parsed.localTables);
+  const result = await runDocumentMutation(artifact, parsed.mutation, parsed.values ?? {}, parsed.row, {userId:actor.viewer?.userId ?? null,tokenId:actor.tokenId,email:actor.viewer?.email}, parsed.localTables);
   if (!result.ok) {
     switch (result.reason) {
       case 'unknown_mutation':
@@ -44,7 +43,6 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
         return json({ error: 'invalid_row', detail: result.detail }, 400, CORS);
       case 'row_changed':
       case 'row_not_unique':
-      case 'document_changed':
         return json({ error: result.reason, detail: result.detail }, 409, CORS);
       case 'dataset_full':
         return json({ error: 'dataset_full', detail: result.detail }, 409, CORS);

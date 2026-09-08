@@ -21,7 +21,7 @@
 import sharp from 'sharp';
 import { loadImage } from './story/image-store';
 import { createHash } from 'node:crypto';
-import { EXPORT_INTERNAL_ORIGIN } from '@/lib/config';
+import { ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN } from '@/lib/config';
 import { services } from '@/lib/services';
 import { ArtifactRow, declarationsOf, getArtifactById, referencedArtifactForRow } from './artifacts';
 import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from './export-card';
@@ -59,11 +59,14 @@ const RENDER_RETRY_MS = 1_000;
  * Generation 2: a markup document is shot from its own page (`raw?chrome=0`)
  * rather than through the app page's iframe element, whose box is the viewport
  * — "full" used to mean the first screen, on every document ever exported.
+ * Generation 4: managed iframe exports admit their configured asset origin;
+ * Generation 5: managed iframe exports wait for author/module readiness;
+ * earlier generations could cache a blank frame before its bundle loaded.
  *
  * Bump this whenever the framing changes. Old entries then go cold on their own,
  * exactly like the card key's stage size does.
  */
-export const EXPORT_RENDER_GENERATION = 3;
+export const EXPORT_RENDER_GENERATION = 5;
 const CACHE_MAX_ENTRIES = 24;
 
 /** `format` value → export format; null when absent or unrecognized. */
@@ -232,6 +235,8 @@ async function renderOnce(
     // Same-origin requests are the app itself; anything cross-origin is a
     // stray — abort it, which doubles as the CSP discipline for the surface.
     sameOriginOnly: true,
+    ...(ASSETS_ORIGIN ? {allowedOrigins:[ASSETS_ORIGIN]} : {}),
+    waitForManagedFrames: true,
     // The Next dev overlay ("N issues") is fixed to the corner and lands in
     // page-level shots on dev servers; the element doesn't exist in prod.
     injectCss: 'nextjs-portal{display:none !important}',
@@ -366,7 +371,7 @@ function remember(s: ExportState, key: string, shot: { mime: string; bytes: Buff
 export async function exportImageResponse(
   // `source` is here so the SELECTION can be read the way the document itself
   // reads it — through its own declarations. See `selection` below.
-  artifact: Pick<ArtifactRow, 'id' | 'version' | 'format' | 'source' | 'visibility'>,
+  artifact: Pick<ArtifactRow, 'id' | 'version' | 'format' | 'source'>,
   q: { format?: string | null; mode?: string | null; slide?: string | null; crop?: string | null; image?: string | null; search?: string | null },
   base: string,
 ): Promise<Response> {
@@ -458,7 +463,7 @@ export async function exportImageResponse(
           return new Response(new Uint8Array(bytes), { headers: {
             'Content-Type': EXPORT_MIME[format],
             'X-Content-Type-Options': 'nosniff',
-            'Cache-Control': imageOverview || artifact.visibility!=='public' ? 'private, no-store' : 'public, max-age=86400',
+            'Cache-Control': imageOverview ? 'private, no-store' : 'public, max-age=86400',
           } });
         }
       } catch {
@@ -512,7 +517,7 @@ export async function exportImageResponse(
       // version-busted URL (&v=), so they may cache hard. Editor previews are
       // private-cacheable; full shots keep no-store so an agent re-asking
       // after an edit never sees stale output.
-      'Cache-Control': draftCrop || artifact.visibility!=='public'
+      'Cache-Control': draftCrop
         ? 'private, no-store'
         : capture === 'card'
         ? 'public, max-age=86400'

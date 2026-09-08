@@ -1,5 +1,6 @@
 import type {ManagedIframeContent} from '@/lib/story/managed-iframe';
 import {URL_ATTRS,URL_LIST_ATTRS,SVG_PAINT_ATTRS} from '@/lib/jsx/url-attrs';
+import {parsePing,parseSrcset} from '@/lib/story/managed-url-list';
 export interface ManagedAssetsConfig {origin: string; resolveUrl: string}
 export type ManagedAssetKind='image'|'font'|'pdf'|'script'|'binary';
 export type ManagedAssetRelay=(url:string,kind?:ManagedAssetKind,signal?:AbortSignal)=>Promise<{url:string}|{refused:string}>;
@@ -77,7 +78,11 @@ export async function prepareManagedContent(content:ManagedIframeContent,resolve
     for(const attr of [...element.attributes]) {
       if(attr.name==='cite'||(attr.name==='href'&&['A','AREA'].includes(element.tagName)))continue;
       if(URL_LIST_ATTRS.has(attr.name)) {
-        const parts=[];for(const item of attr.value.split(',')){const [url,...descriptor]=item.trim().split(/\s+/);parts.push([await resolve(url,'image'),...descriptor].join(' '));}element.setAttribute(attr.name,parts.join(', '));
+        if(attr.name==='srcset') {
+          const parts=[];for(const item of parseSrcset(attr.value))parts.push([await resolve(item.url,'image'),item.descriptor].filter(Boolean).join(' '));element.setAttribute(attr.name,parts.join(', '));
+        } else {
+          const parts=[];for(const url of parsePing(attr.value))parts.push(await resolve(url,'binary'));element.setAttribute(attr.name,parts.join(' '));
+        }
       } else if(URL_ATTRS.has(attr.name)) element.setAttribute(attr.name,await resolve(attr.value,element.tagName==='IMG'?'image':'binary'));
       else if(attr.name==='style'||SVG_PAINT_ATTRS.has(attr.name))element.setAttribute(attr.name,await css(attr.value));
     }

@@ -63,11 +63,6 @@ export const STORY_COLUMN_CSS = `
 `;
 
 export const STORY_CHROME_CSS = `
-#mx-controls-loading{pointer-events:none;font:12px monospace;color:var(--mx-reader-muted);opacity:.65}
-#mx-controls-loading .mx-loading-bar{position:fixed;top:0;left:0;right:0;height:44px;padding:0 16px;display:flex;align-items:center;justify-content:space-between;background:var(--mx-reader-bg);border-bottom:1px solid var(--mx-reader-border);z-index:2147482999}
-#mx-controls-loading .mx-loading-byline{position:fixed;bottom:16px;left:16px;display:flex;gap:12px;z-index:2147482999}
-#mx-controls-loading .mx-loading-reactions{position:fixed;bottom:16px;right:16px;display:flex;gap:24px;padding:12px;z-index:2147482999}
-@media(max-width:639px){#mx-controls-loading .mx-loading-byline{bottom:80px}}
 .mx-deck { display: flex; align-items: flex-start; }
 .mx-rail {
   position: sticky; top: 0; flex: 0 0 190px; width: 190px; height: 100vh;
@@ -196,7 +191,7 @@ input.mx-rail-title { min-width: 0; width: 100%; background: transparent; border
    top, with the document inset under it and the page's editor toolbar. */
 /* App controls follow light/dark mode using the app's own fixed palettes.
    Document theme colors never supply these tokens. */
-.mx-reader-chrome,#mx-controls-loading {
+.mx-reader-chrome {
   --mx-reader-bg: #ffffff;
   --mx-reader-fg: #1a2129;
   --mx-reader-muted: #5a6572;
@@ -205,7 +200,7 @@ input.mx-rail-title { min-width: 0; width: 100%; background: transparent; border
   --mx-reader-on-accent: #ffffff;
   --mx-reader-scheme: light;
 }
-html.dark .mx-reader-chrome,html.dark #mx-controls-loading {
+html.dark .mx-reader-chrome {
   --mx-reader-bg: #10151b;
   --mx-reader-fg: #e6edf3;
   --mx-reader-muted: #7d8590;

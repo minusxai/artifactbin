@@ -11,14 +11,13 @@
  * Cross-site requests are refused (403), like claim.
  */
 import {
-  AGENT_COOKIE,
   agentSessionClearCookie,
   agentSessionSetCookie,
-  decodeAgentSession,
+  liveAgentSession,
   encodeAgentSession,
   withoutToken,
 } from '@/lib/agent-session';
-import { isCrossSiteRequest, json, parseCookie, readJson } from '@/lib/http';
+import { isCrossSiteRequest, json, readJson } from '@/lib/http';
 import { revokeHeldToken } from '@/lib/tokens';
 import { sessionActor } from '@/lib/viewer';
 
@@ -26,7 +25,7 @@ export async function POST(request: Request): Promise<Response> {
   if (isCrossSiteRequest(request)) return json({ error: 'forbidden' }, 403);
   const body = await readJson(request);
   const tokenId = typeof body?.tokenId === 'string' ? body.tokenId : '';
-  const held = await decodeAgentSession(parseCookie(request.headers.get('cookie'), AGENT_COOKIE));
+  const held = await liveAgentSession(request);
   if (!tokenId || !held?.tokenIds.includes(tokenId)) return json({ error: 'not_found' }, 404);
 
   const actor = await sessionActor(request);

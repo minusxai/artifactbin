@@ -27,6 +27,7 @@ import { webAssetsForSource } from '@/lib/web-assets';
 export interface LiveFrame extends Omit<ArtifactLiveEvent, 'compiledCss' | 'authorCss' | 'dataflow'> {
   compiledCss: string | null;
   authorCss: string | null;
+  authorScript: string | null;
   /** A stable signature of the data declarations; the client rebinds when it moves. */
   declarations: string | null;
   /** The declarations as a flow, rows deliberately absent (the client re-runs). */

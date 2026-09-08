@@ -109,13 +109,11 @@ export function kitchenSinkMarkup(refs: KitchenSinkRefs): string {
       <CollapsibleTrigger className="text-sm font-semibold underline underline-offset-2">Toggle details</CollapsibleTrigger>
       <CollapsibleContent><p className="mt-2 text-sm text-muted-foreground">Collapsible content, open by default for the capture.</p></CollapsibleContent>
     </Collapsible>
-    <Sandbox title="Isolated content" html="&lt;p&gt;Sandbox content&lt;/p&gt;" script="" height={100} />
-    <Iframe title="Managed content" height={100}><p>Isolated markup</p></Iframe>
-    <Dialog><DialogTrigger className="underline">Open dialog</DialogTrigger>
-      <DialogContent aria-label="Example dialog" className="m-auto rounded-xl bg-card p-6">
-        <p>Native modal focus and Escape handling.</p><DialogClose>Close</DialogClose>
-      </DialogContent>
+    <Dialog>
+      <DialogTrigger>Open dialog</DialogTrigger>
+      <DialogContent aria-label="Kitchen sink dialog"><p>Dialog content opened from the gallery.</p><DialogClose>Close</DialogClose></DialogContent>
     </Dialog>
+    <Iframe title="Isolated gallery region" height={100}><p>Content isolated from the parent page.</p></Iframe>
     <div className="flex items-start gap-8">
       <TooltipProvider>
         <Tooltip defaultOpen>

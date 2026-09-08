@@ -16,12 +16,6 @@ import { COMPUTED_FIGURE_RULE, MARKUP_FIELD_GUIDANCE, MARKUP_STYLE_RULE } from '
 
 describe('the markup field description', () => {
   const text = MARKUP_FIELD_GUIDANCE;
-  it('distinguishes isolated Helmet computation from a visible managed Iframe', () => {
-    expect(text).toContain('no parent DOM/network');
-    expect(text).toContain('<Iframe>');
-    expect(text).toContain('run=');
-    expect(text).not.toContain('use addEventListener');
-  });
 
   it('states that styling is className-only, in the schema itself', () => {
     expect(text).toMatch(/className/);

@@ -306,16 +306,14 @@ describe('buildStoryDocument', () => {
     expect(html).toContain(STORY_ISLAND_ID);
   });
 
-  it('never executes author script inline, including otherwise static documents', async () => {
+  it('always parks author scripts and forces the isolated runtime', async () => {
     const stat = await doc({ source: '<Helmet><script>{`window.x=1;`}</script></Helmet><p>plain</p>' });
-    expect(stat).not.toContain('<script>window.x=1;</script>');
-    expect(stat).toContain('text/mx-author');
+    expect(stat).toContain('type="text/mx-author"');
     expect(stat).toContain('story-runtime.js');
+    expect(stat).not.toContain('<script>window.x=1;</script>');
 
     const live = await doc({ source: '<Helmet><script>{`window.x=1;`}</script></Helmet><Card>c</Card>' });
     expect(live).toContain('type="text/mx-author"');
-    const noRuntime = await doc({ runtimeSrc: null, source: '<Helmet><script>{`window.x=1;`}</script></Helmet><p>plain</p>' });
-    expect(noRuntime).not.toContain('<script>window.x=1;</script>');
   });
 
   it('tells the page it has painted — parse time, not load time', async () => {

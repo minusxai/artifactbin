@@ -9,10 +9,8 @@ import { actorOf } from '@artifactbin/utils';
 import type { Credential } from '@artifactbin/contracts';
 import { syncProfile } from './profiles';
 import { effectiveRole as artifactRole, ownsArtifact, type ArtifactRole, type ArtifactRow, type RoleActor, type TokenActor, type Viewer } from './artifacts';
-import { AGENT_COOKIE, decodeAgentSession } from './agent-session';
-import { parseCookie } from './http';
+import { liveAgentSession } from './agent-session';
 import { resolveToken, resolveTokenById, touchToken } from './tokens';
-import { LIVE_UPDATES_ANON_ENABLED } from './config';
 
 /**
  * The account behind the request, if any. Behind the proxy that is the signed
@@ -54,11 +52,6 @@ export interface RequestActor {
 }
 
 export const NO_ACTOR: RequestActor = { viewer: null, tokenId: null, credential: 'none' };
-
-/** Server-decided live eligibility, independently of the document's read ACL.
- * A resolved read-session or token-holding browser is not anonymous. */
-export const canReceiveLiveUpdates = (actor: RequestActor): boolean =>
-  LIVE_UPDATES_ANON_ENABLED || (actor.credential !== 'none' && !!(actor.viewer?.userId || actor.tokenId));
 
 /** A cookie authorized this request — the only case a same-site guard applies to. */
 export const isCookieCredential = (actor: Pick<RequestActor, 'credential'>): boolean =>
@@ -131,8 +124,7 @@ export async function sessionActor(request?: Request, opts: { headerOnly?: boole
   // The request in hand, or the one the server is holding for this call
   // (lib/request-context). Off-request there is no cookie and no credential.
   const carrying = request ?? currentRequest();
-  const raw = carrying ? parseCookie(carrying.headers.get('cookie'), AGENT_COOKIE) : undefined;
-  const session = await decodeAgentSession(raw);
+  const session = carrying ? await liveAgentSession(carrying) : null;
   if (!session) return NO_ACTOR;
 
   // The LAST id is the primary — the token a write acts as. Earlier ids are

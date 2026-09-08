@@ -28,7 +28,6 @@ vi.mock('@/components/ArtifactEditor', () => ({
 }));
 
 import ArtifactShell from '../ArtifactShell';
-import * as apiOrigin from '@/web/api-origin';
 import ArtifactSurface, { type ArtifactSurfaceProps } from '../ArtifactSurface';
 import {
   STORY_PAINTED_MESSAGE, STORY_READER_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, STORY_SELECTION_ACTION_MESSAGE, STORY_SESSION_MESSAGE,
@@ -99,27 +98,6 @@ const openDocumentControls = () => {
 };
 
 describe('the surface header buttons are owner chrome', () => {
-  it('keeps recognizable heart and comment controls for a signed-out reader and sends comments through login', () => {
-    const navigate = vi.spyOn(apiOrigin, 'appNavigate').mockImplementation(() => {});
-    const url = vi.spyOn(apiOrigin, 'appUrl').mockReturnValue('http://localhost:3000/');
-    window.history.replaceState(null, '', '/a/story1?$region=west#section');
-    try {
-      render(<ArtifactShell role="viewer"><ArtifactSurface {...surfaceProps({ controlsOnly: true, accountSession: false })} /></ArtifactShell>);
-      expect(screen.getByLabelText('Like artifact').querySelector('.lucide-heart')).toBeTruthy();
-      expect(screen.getByLabelText('Toggle comments').querySelector('.lucide-message-square')).toBeTruthy();
-      fireEvent.click(screen.getByLabelText('Toggle comments'));
-      expect(navigate).toHaveBeenCalledWith(`/login?callbackUrl=${encodeURIComponent('/a/story1?$region=west&intent=comment#section')}`);
-    } finally { navigate.mockRestore(); url.mockRestore(); }
-  });
-  it('keeps the controls-only viewport transparent when its menu covers the frame', () => {
-    const url=vi.spyOn(apiOrigin,'appUrl').mockReturnValue('http://localhost:3000/');
-    try {
-      render(<ArtifactSurface {...surfaceProps({controlsOnly:true})} />);
-      openDocumentControls();
-      expect(screen.getByLabelText('Artifact viewport').style.background).toBe('transparent');
-      expect(document.querySelector('iframe[title="artifact"]')).toBeNull();
-    } finally {url.mockRestore();}
-  });
   it('a reader gets the document without edit or share buttons', () => {
     render(<ArtifactSurface {...surfaceProps({})} />);
     expect(screen.queryByLabelText('Edit artifact')).not.toBeInTheDocument();
@@ -585,7 +563,7 @@ describe('the fork row', () => {
     const original = window.location;
     Object.defineProperty(window, 'location', {
       configurable: true,
-      value: { ...original, pathname: '/a/story1', search, hash: '', origin: 'http://localhost:3000', get href(){return 'http://localhost:3000/a/story1'+search;}, set href(v: string) { assign(v); } },
+      value: { ...original, pathname: '/a/story1', search, hash: '', origin: 'http://localhost:3000', set href(v: string) { assign(v); } },
     });
     try {
       await run(assign);
@@ -692,18 +670,9 @@ describe('the fork row', () => {
       await waitFor(() => expect(screen.queryByLabelText('Fork refused')).toBeNull());
     });
   });
-  it('does not treat permission refusal as an expired login', async () => {
-    vi.stubGlobal('fetch', forkResponse(403, {error:'forbidden'}));
-    await withLocation(async(assign)=>{
-      render(<ArtifactSurface {...surfaceProps({})}/>);
-      openDocumentControls();fireEvent.click(screen.getByLabelText('Fork artifact'));
-      expect(await screen.findByLabelText('Fork refused')).toHaveTextContent('forbidden');
-      expect(assign).not.toHaveBeenCalled();
-    });
-  });
 
-  it.each([[409, 'sign_in_required'], [401, 'unauthorized']] as const)('sends a browser with no account to login after %s, and back here still asking to fork', async (status, error) => {
-    vi.stubGlobal('fetch', forkResponse(status, { error }));
+  it('sends a browser with no account to login, and back here still asking to fork', async () => {
+    vi.stubGlobal('fetch', forkResponse(409, { error: 'sign_in_required' }));
     await withLocation(async (assign) => {
       render(
         <ArtifactShell role="owner">

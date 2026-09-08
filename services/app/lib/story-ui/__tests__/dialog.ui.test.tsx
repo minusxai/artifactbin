@@ -40,3 +40,18 @@ it('keeps a pending submission open, shows rejection, and closes only after succ
   fireEvent.submit(form);
   await waitFor(() => expect(dialog).not.toHaveAttribute('open'));
 });
+
+it('returns focus to the trigger after a successful submission', async () => {
+  document.body.tabIndex = -1;
+  HTMLDialogElement.prototype.close = function () {
+    this.open = false;
+    this.dispatchEvent(new Event('close'));
+    queueMicrotask(() => document.body.focus());
+  };
+  render(<Dialog><DialogTrigger>Open</DialogTrigger><DialogContent aria-label="Editor" onSubmitMutation={async () => {}}><button type="submit">Save</button></DialogContent></Dialog>);
+  const trigger = screen.getByText('Open');
+  fireEvent.click(trigger);
+  fireEvent.submit(screen.getByRole('dialog').querySelector('form')!);
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  await waitFor(() => expect(trigger).toHaveFocus());
+});

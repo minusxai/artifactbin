@@ -53,19 +53,13 @@ describe('createDocumentTransport', () => {
  * its absence is the instruction.
  */
 describe('createDocumentTransport — importAsset', () => {
-  it('top-level controls relay owns writes, but not main-origin asset imports', () => {
-    const peer={postMessage:vi.fn()} as unknown as Window;
-    const t=createDocumentTransport(win('self'),'/a/abc123/query',APP,vi.fn(),undefined,peer);
-    expect(t!.mutate).toBeTypeOf('function');
-    expect(t!.importAsset).toBeUndefined();
-  });
   it('inside a parent: importing posts mx:asset to that parent', () => {
     const posted: unknown[] = [];
     const parent = { postMessage: (m: unknown) => posted.push(m) };
     const t = createDocumentTransport(win(parent), '/a/abc123/query', APP, vi.fn());
     expect(t!.importAsset).toBeTypeOf('function');
-    void t!.importAsset!('https://cdn.x.com/cat.png');
-    expect(posted[0]).toMatchObject({ type: STORY_ASSET_MESSAGE, url: 'https://cdn.x.com/cat.png' });
+    void t!.importAsset!('https://cdn.x.com/app.js','script',new AbortController().signal);
+    expect(posted[0]).toMatchObject({ type: STORY_ASSET_MESSAGE, url: 'https://cdn.x.com/app.js', kind: 'script' });
   });
 
   it('top-level: no importAsset at all — the <img> src is already the endpoint', () => {

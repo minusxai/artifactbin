@@ -94,8 +94,8 @@ ${AUTHOR_REALM_LOCKDOWN}
         started = true;
         try {
           assetOrigin = message.assetOrigin || null;
-          // Compatibility Sandbox retains its pinned-library/ref API policy.
-          // Managed Iframe uses the generic cached-asset transport instead.
+          // Hidden Helmet scripts retain native APIs under their deny-network
+          // CSP. Visible managed Iframes use the cached-asset transport.
           if (!message.managed && nativeFetch) window.fetch = nativeFetch;
           if (!message.managed && nativeXHR) window.XMLHttpRequest = nativeXHR;
           if (message.managed) installAssetSources();
@@ -106,8 +106,17 @@ ${AUTHOR_REALM_LOCKDOWN}
           for (const item of scripts) {
             const script = document.createElement('script');
             if (item.type === 'module') script.type = 'module';
-            if (item.src) script.src = item.src; else script.textContent = item.source;
-            if (item.src || item.type === 'module') await new Promise((resolve,reject) => {
+            if (item.src) script.src = item.src;
+            else if(item.type==='module'){
+              const done='__mx_module_done_'+Math.random().toString(36).slice(2);
+              await new Promise((resolve,reject)=>{
+                Object.defineProperty(globalThis,done,{value:resolve,configurable:true});
+                script.textContent=item.source+'\\n;globalThis['+JSON.stringify(done)+']();';
+                script.onerror=()=>reject(new Error('Iframe script failed to load'));document.body.append(script);
+              }).finally(()=>{delete globalThis[done];});
+              continue;
+            } else script.textContent = item.source;
+            if (item.src) await new Promise((resolve,reject) => {
               script.onload=resolve;script.onerror=()=>reject(new Error('Iframe script failed to load'));document.body.append(script);
             });
             else document.body.append(script);

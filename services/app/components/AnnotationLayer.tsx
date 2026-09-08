@@ -31,8 +31,6 @@
  * reader's document is top-level with no parent window, so nothing here can
  * even reach them.
  */
-import {isDocumentPeerEvent, type DocumentPeer} from '@/lib/story/document-peer';
-import {appFetch as fetch, appNavigate, artifactLoginUrl} from '@/web/api-origin';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, EllipsisVertical, MessageSquare, MousePointerClick, SquareDashed, SquareDashedMousePointer, Trash2, X } from 'lucide-react';
 import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations';
@@ -54,7 +52,7 @@ export interface AnnotationLayerProps {
   /** Every change to the list this layer holds — creates, replies, resolves — so the page's count can follow it. */
   onAnnotationsChange?: (annotations: AnnotationWire[]) => void;
   id: string;
-  frameRef: { current: DocumentPeer | null };
+  frameRef: { current: HTMLIFrameElement | null };
   sessionNonce: string | null;
   /** The thread rail is open — a panel, not a mode, and true in either mode. */
   railOpen: boolean;
@@ -760,14 +758,6 @@ export default function AnnotationLayer({
   id, frameRef, sessionNonce, railOpen, liveAnnotations, showViewComments,
   onRailOpenChange, initialSelection = null, topOffset, onAnnotationsChange, pickOnOpen = true, rightInset = 0,
 }: AnnotationLayerProps) {
-  const loginStarted = useRef(false);
-  const checkSession = useCallback((response: Response) => {
-    if (response.status === 401 && !loginStarted.current) {
-      loginStarted.current = true;
-      appNavigate(artifactLoginUrl(id, 'comment'));
-    }
-    return response;
-  }, [id]);
   const [annotations, setAnnotations] = useState<AnnotationWire[]>([]);
   // The page's own count (the badge on the comment glyph) follows THIS list:
   // a thread resolved or opened here is reflected at once, not when the live
@@ -905,12 +895,11 @@ export default function AnnotationLayer({
     if (!railOpen) return;
     let gone = false;
     void fetch(`/api/my/artifacts/${id}/annotations?status=resolved`)
-      .then(checkSession)
       .then(async (res) => (res.ok ? ((await res.json()) as { annotations: AnnotationWire[] }).annotations : []))
       .then((list) => { if (!gone) setResolvedList(list); })
       .catch(() => {});
     return () => { gone = true; };
-  }, [id, railOpen, annotations, checkSession]);
+  }, [id, railOpen, annotations]);
 
   /*
    * OPENING THE RAIL OPENS A PICK. Someone who presses "comments" is about to
@@ -989,7 +978,7 @@ export default function AnnotationLayer({
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       const frameWindow = frameRef.current?.contentWindow;
-      if (!isDocumentPeerEvent(frameRef.current, event)) return;
+      if (!frameWindow || event.source !== frameWindow) return;
       const nonce = nonceRef.current;
       if (!nonce || !isEditFrameMessage(event.data, nonce)) return;
       if (event.data.type === STORY_ANNOTATION_LAYOUT_MESSAGE) {
@@ -1059,7 +1048,6 @@ export default function AnnotationLayer({
       const res = await fetch(`/api/my/artifacts/${id}/annotations/${annId}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       });
-      checkSession(res);
       if (!res.ok) return;
       const wire = (await res.json()) as AnnotationWire;
       setAnnotations((prev) => {
@@ -1082,20 +1070,19 @@ export default function AnnotationLayer({
         setJustOpenedId(annId);
       }
     } finally { setBusy(false); }
-  }, [id, checkSession]);
+  }, [id]);
 
   const remove = useCallback(async (annId: string) => {
     setBusy(true);
     try {
       const res = await fetch(`/api/my/artifacts/${id}/annotations/${annId}`, { method: 'DELETE' });
-      checkSession(res);
       if (!res.ok) return;
       setAnnotations((prev) => prev.filter((a) => a.id !== annId));
       setResolvedList((prev) => (prev ? prev.filter((a) => a.id !== annId) : prev));
       setOpenId((cur) => (cur === annId ? null : cur));
       setOpenResolvedId((cur) => (cur === annId ? null : cur));
     } finally { setBusy(false); }
-  }, [id, checkSession]);
+  }, [id]);
 
   const save = useCallback(async () => {
     if (!selection || !draft.trim()) return;
@@ -1118,7 +1105,6 @@ export default function AnnotationLayer({
         }),
       });
       if (!res.ok) {
-        checkSession(res);
         setFailure(await annotationFailure(res));
         return;
       }
@@ -1131,7 +1117,7 @@ export default function AnnotationLayer({
       setJustOpenedId(wire.id);
       postToFrame({ type: STORY_SELECT_MESSAGE, path: null });
     } finally { setBusy(false); }
-  }, [id, selection, draft, postToFrame, checkSession]);
+  }, [id, selection, draft, postToFrame]);
 
   const cancelCompose = useCallback(() => {
     setSelection(null);

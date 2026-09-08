@@ -1,6 +1,5 @@
 'use client';
 
-import {appFetch as fetch, appNavigate} from '@/web/api-origin';
 import { useState } from 'react';
 import { Button, Input } from '@/components/ui';
 import { internalRedirectTarget } from '@/lib/safe-redirect';
@@ -100,7 +99,7 @@ export default function LoginForm() {
           // callbackUrl is attacker-controllable; internalRedirectTarget refuses
           // anything that resolves off-origin (including `//evil.com`).
           const callbackUrl = new URLSearchParams(window.location.search).get('callbackUrl');
-          appNavigate(internalRedirectTarget(callbackUrl, window.location.origin),true);
+          window.location.href = internalRedirectTarget(callbackUrl, window.location.origin);
         }}
       >
         <Input

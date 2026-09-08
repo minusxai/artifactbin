@@ -20,7 +20,6 @@ import AgentLink from '@/components/AgentLink';
 import { GitHubIcon } from '@/components/brand-icons';
 import { LINK, PAGE_COLUMN } from '@/components/ui';
 import { REPO_URL } from '@/lib/repo';
-import type {ReactNode} from 'react';
 
 const MINUSX_URL = 'https://minusx.ai';
 /**
@@ -40,7 +39,7 @@ const LINKS: readonly { label: string; href: string; external?: true }[] = [
   { label: 'minusx', href: MINUSX_URL, external: true },
 ];
 
-export default function LandingFooter({ column = PAGE_COLUMN,agentAction }: { column?: string;agentAction?:ReactNode }) {
+export default function LandingFooter({ column = PAGE_COLUMN }: { column?: string }) {
   return (
     <footer className={`${column} mt-14 sm:mt-20`}>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-t border-edge py-4">
@@ -92,7 +91,7 @@ export default function LandingFooter({ column = PAGE_COLUMN,agentAction }: { co
           {/* THE SAME BUTTON AS THE TOP OF THE PAGE, not a link back to it: a
             * reader who got this far and decided should not be sent to the top
             * to find the real control. One AgentLink, two sizes. */}
-          {agentAction??<AgentLink frame={false} docsLink={false} size="inline" />}
+          <AgentLink frame={false} docsLink={false} size="inline" />
         </div>
       </div>
 

@@ -48,12 +48,12 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-const surface = (liveEnabled = true) => render(
+const surface = () => render(
   <ArtifactShell role="owner">
     <ArtifactSurface
       id="Ab3xK9" editId="e1" format="markup" title="doc" source="<p>x</p>" content=""
       columns={[]} compiledCss={null} theme={null} colorMode="light" template={null} refs={[]}
-      version={1} liveEnabled={liveEnabled}
+      version={1}
     />
   </ArtifactShell>,
 );
@@ -75,13 +75,6 @@ const ask = (source: Window | null, message: Record<string, unknown>) =>
   window.dispatchEvent(new MessageEvent('message', { data: message, source: source as unknown as MessageEventSource }));
 
 describe('the write relay (page side)', () => {
-  it('does not open a stream when the server disables live updates',()=>{
-    const mounted=surface(false);
-    expect(FakeEventSource.last).toBeNull();
-    mounted.unmount();
-    surface(false);
-    expect(FakeEventSource.last).toBeNull();
-  });
   it('calls the document\'s mutate endpoint with the name and values, and answers the frame', async () => {
     const { container } = surface();
     const win = frameWindow(container);
@@ -91,6 +84,14 @@ describe('the write relay (page side)', () => {
     expect(fetchCalls.find((c) => c.url === '/a/Ab3xK9/mutate')!.body).toEqual({ mutation: 'vote', values: { choice: 'tacos' } });
     await waitFor(() => expect(posted.some((m) => m.type === STORY_MUTATE_RESULT_MESSAGE)).toBe(true));
     expect(posted.find((m) => m.type === STORY_MUTATE_RESULT_MESSAGE)).toMatchObject({ id: 7, ok: true, dataset: 'k3Pq9z' });
+  });
+
+  it('forwards local table snapshots from the frame to the mutate endpoint', async () => {
+    const { container } = surface();
+    const win = frameWindow(container);
+    ask(win, { type: STORY_MUTATE_MESSAGE, id: 8, mutation: 'add', values: {}, localTables: { cart: [{ id: 1 }] } });
+    await waitFor(() => expect(fetchCalls.some((c) => c.url === '/a/Ab3xK9/mutate')).toBe(true));
+    expect(fetchCalls.find((c) => c.url === '/a/Ab3xK9/mutate')!.body).toEqual({ mutation: 'add', values: {}, localTables: { cart: [{ id: 1 }] } });
   });
 
   it('relays a refusal as an error on the same id — never silence', async () => {

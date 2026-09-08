@@ -7,7 +7,7 @@ describe('credential-free public asset host',()=>{
   const session=vi.fn(async()=>({userId:'secret'}));
   const seen:unknown[]=[];
   const options=await testProxyOptions({sessions:{resolve:session},upstream:async(request,actor)=>{seen.push({actor,cookie:request.headers.get('cookie'),authorization:request.headers.get('authorization')});return new Response('bytes',{headers:{'set-cookie':'leak=yes','content-type':'application/javascript'}});}});
-  options.env={...options.env,APP__PUBLIC_BASE_URL:main,APP__CONTROLS_ORIGIN:controls,APP__ASSETS_ORIGIN:assets};
+  options.env={...options.env,APP__PUBLIC_BASE_URL:main,APP__ASSETS_ORIGIN:assets};
   const proxy=createProxy(options);
   const res=await proxy.request(assets+path,{headers:{cookie:'session=secret',authorization:'Bearer secret',origin:'null'}});
   expect(res.status).toBe(200);expect(await res.text()).toBe('bytes');expect(session).not.toHaveBeenCalled();

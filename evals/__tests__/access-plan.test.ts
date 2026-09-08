@@ -178,17 +178,6 @@ describe('handoff: none — the driver hands over nothing', () => {
 
 /** Which tasks the driver mints a start document for at all — the other half of the same decision. */
 describe('needsStartDocument', () => {
-  it('keeps MCP authority separate from REST setup and API-mode authority', () => {
-    const credential = { token: 'mx_mcp', apiToken: 'mx_api' };
-    const input = { task: task({ seed: '<p>Seed</p>' }), base: BASE, start: START, credential, installed: true };
-    const mcp = planAccess({ ...input, transport: 'mcp' });
-    expect(mcp.mcp?.token).toBe('mx_mcp');
-    expect(mcp.seed?.token).toBe('mx_api');
-    expect(mcp.connectionToken).toBeNull();
-    const api = planAccess({ ...input, transport: 'api' });
-    expect(api.connectionToken).toBe('mx_api');
-    expect(api.access).toMatchObject({ token: 'mx_api' });
-  });
   it('is false for the token-less guard and true for every other handoff', () => {
     expect(needsStartDocument(task({ handoff: 'none' }))).toBe(false);
     expect(needsStartDocument(task({ handoff: 'start-link' }))).toBe(true);

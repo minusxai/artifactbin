@@ -16,24 +16,6 @@ const requestOf = (f: ReturnType<typeof vi.fn>) => {
 };
 
 describe('createFetchTransport', () => {
-  it('carries local query rows in a credential-free POST, not a URL', async () => {
-    const f = vi.fn(async () => ok({tables: {}, errors: {}}));
-    const localTables = {drafts: [{id: 1}]};
-    await createFetchTransport('/a/abc123/query', f).run({}, ['q'], localTables);
-    const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe('/a/abc123/query');
-    expect(init).toMatchObject({method: 'POST', credentials: 'omit', headers: {'Content-Type': 'text/plain'}});
-    expect(JSON.parse(String(init.body))).toEqual({values: {}, only: ['q'], localTables});
-  });
-  it('carries local mutation rows and returns the full local result', async () => {
-    const local = {target: 'drafts', affected: 1, table: {columns: [{name: 'id', type: 'number'}], rows: [{id: 2}]}};
-    const f = vi.fn(async () => ok({ok: true, dataset: '', local}));
-    const t = createFetchTransport('/a/abc123/query', f, '/a/abc123/mutate');
-    expect(await t.mutate!({}, 'add', undefined, {drafts: []})).toEqual({dataset: '', local});
-    const [, init] = f.mock.calls[0] as unknown as [string, RequestInit];
-    expect(JSON.parse(String(init.body))).toEqual({mutation: 'add', values: {}, localTables: {drafts: []}});
-    expect(init.credentials).toBe('omit');
-  });
   it('run(): GETs <queryUrl>?q=<{values, only}> and resolves with tables + errors', async () => {
     const f = vi.fn(async () => ok({ tables: { sales: { rows: [{ a: 1 }], columns: [] } }, errors: {} }));
     const t = createFetchTransport('/a/abc123/query', f);
@@ -45,6 +27,16 @@ describe('createFetchTransport', () => {
     // A simple GET: no custom headers (no preflight), and explicitly no credentials.
     expect(init?.method ?? 'GET').toBe('GET');
     expect(init?.credentials).toBe('omit');
+  });
+
+  it('run(): POSTs local table snapshots instead of placing them in a bounded URL', async () => {
+    const f = vi.fn(async () => ok({ tables: {}, errors: {} }));
+    const t = createFetchTransport('/a/abc123/query', f);
+    await t.run({}, ['total'], { cart: [{ id: 1 }] });
+    const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/a/abc123/query');
+    expect(init).toMatchObject({method: 'POST', credentials: 'omit', headers: {'Content-Type': 'text/plain'}});
+    expect(JSON.parse(String(init.body))).toEqual({ values: {}, only: ['total'], localTables: { cart: [{ id: 1 }] } });
   });
 
   it('page(): sends {values, only:[name], page} and resolves with that table', async () => {
@@ -68,5 +60,13 @@ describe('createFetchTransport', () => {
   it('a network failure rejects with the error message', async () => {
     const f = vi.fn(async () => { throw new TypeError('Failed to fetch'); });
     await expect(createFetchTransport('/a/x/query', f).run({}, ['q'])).rejects.toThrow(/Failed to fetch/);
+  });
+
+  it('mutate(): carries the current local table snapshot to the document endpoint', async () => {
+    const f = vi.fn(async () => ok({ ok: true, dataset: '', local: { target: 'cart', table: { columns: [], rows: [] } } }));
+    const t = createFetchTransport('/a/x/query', f, '/a/x/mutate');
+    await expect(t.mutate!({}, 'add', undefined, { cart: [{ id: 1 }] })).resolves.toMatchObject({ local: { target: 'cart' } });
+    const [, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({ mutation: 'add', values: {}, localTables: { cart: [{ id: 1 }] } });
   });
 });

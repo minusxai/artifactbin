@@ -37,12 +37,6 @@ const preloads = (html: string): string[] =>
 
 const CHART_Q = '<Question data="$q" viz={{"kind":"vega-lite","spec":{"mark":"bar"}}} />';
 
-it('keeps reader identity when live subscriptions are disabled',async()=>{
-  const html=await doc({live:{id:'abc123',editId:'edit1',enabled:false}});
-  expect(html).toContain('data-mx-artifact-id="abc123"');
-  expect(html).not.toContain('data-mx-live-id=');
-});
-
 describe('the runtime is preloaded', () => {
   it('is asked for in the head, crossorigin, exactly once', async () => {
     const html = await doc();

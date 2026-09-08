@@ -97,7 +97,7 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
       for(const m of group){
         let sql=m.sql;
         if(m.source){try{const ref=await load(m.source);if(!ref?.catalog)throw new Error('Dataset source is unavailable');const compiled=compileStoredMutation(ref.catalog,sql,`ref_${m.target}`);sql=compiled.sql;inputTables[`ref_${m.target}`]={columns:compiled.table.columns};}catch(error){details.push(`<Mutation name="${m.name}">: ${error instanceof Error?error.message:'Invalid mutation'}`);continue;}}
-        prepared.push({...m,sql,...(m.scope === 'local' ? {tableName:m.target} : {}),...(rowSchemas[m.name]?{row:{columns:rowSchemas[m.name]}}:{})});
+        prepared.push({...m,sql,...(m.scope === 'local' ? {tableName: m.target} : {}),...(rowSchemas[m.name]?{row:{columns:rowSchemas[m.name]}}:{})});
       }
       if(prepared.length){const wet=await dryRunMutations({tables:inputTables,mutations:prepared,paramNames:[...paramNames,'_value']});details.push(...wet.errors.map(e=>`<Mutation name="${e.name}">: ${e.error}`));}
     }

@@ -123,7 +123,6 @@ function breaksParagraph(nodes: JsxNode[], inSvg = false): boolean {
 export function fixHtmlNesting(nodes: JsxNode[]): JsxNode[] {
   return nodes.map((node) => {
     if (!isElement(node)) return node;
-    if(node.tag==='Iframe')return node;
     const children = fixHtmlNesting(node.children);
     const rewrite = !node.isComponent && node.tag.toLowerCase() === 'p' && breaksParagraph(node.children);
     return { ...node, ...(rewrite ? { tag: 'div' } : {}), children };

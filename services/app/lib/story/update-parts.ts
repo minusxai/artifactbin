@@ -26,7 +26,7 @@ export interface StoryUpdateParts {
   nodes: JsxNode[];
   /** The author's own `<Helmet>` `<style>`, or null when there is none. */
   authorCss: string | null;
-  /** Script data for the isolated child; null explicitly revokes the previous script. */
+  /** Legacy Helmet script, executed only in an isolated author realm. */
   authorScript: string | null;
   /**
    * The `<Value>`/`<Query>` declarations themselves. The runtime needs these to

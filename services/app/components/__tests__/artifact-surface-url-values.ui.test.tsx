@@ -16,9 +16,9 @@
  * per pick, and it would look perfectly correct in a browser.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import ArtifactSurface, { type ArtifactSurfaceProps } from '../ArtifactSurface';
-import { STORY_SESSION_MESSAGE, STORY_VALUES_MESSAGE, STORY_ASSET_MESSAGE } from '@/lib/story-runtime/contract';
+import { STORY_SESSION_MESSAGE, STORY_VALUES_MESSAGE } from '@/lib/story-runtime/contract';
 import { declarationsOf } from '@/lib/artifacts';
 
 const NONCE = 'nonce0123456789abcdef';
@@ -49,25 +49,6 @@ const props = (over: Partial<ArtifactSurfaceProps> = {}): ArtifactSurfaceProps =
 });
 
 const frame = () => screen.getByTitle('artifact') as HTMLIFrameElement;
-describe('managed assets use the existing trusted document relay',()=>{
-  it('preserves kind on its own scoped endpoint without leaking capture keys to the child',async()=>{
-    const fetch=vi.fn(async(_input:RequestInfo|URL)=>({ok:true,status:200,json:async()=>({url:'https://assets.example/assets/'+'a'.repeat(64)})}));vi.stubGlobal('fetch',fetch);
-    render(<ArtifactSurface {...props({captureKey:'scoped-key'})}/>);
-    const peer=frame().contentWindow!,reply=vi.spyOn(peer,'postMessage');
-    act(()=>window.dispatchEvent(new MessageEvent('message',{source:peer,data:{type:STORY_ASSET_MESSAGE,id:1,url:'https://cdn.example/bundle.js',kind:'script'}})));
-    await waitFor(()=>expect(fetch.mock.calls.some(call=>String(call[0]).includes('kind=script'))).toBe(true));
-    expect(fetch.mock.calls.some(call=>String(call[0]).includes('/a/story1/assets?')&&String(call[0]).includes('key=scoped-key'))).toBe(true);
-    await waitFor(()=>expect(reply).toHaveBeenCalled());expect(JSON.stringify(reply.mock.calls)).not.toContain('scoped-key');
-  });
-  it('refuses unsupported kinds and ignores another window before fetching',async()=>{
-    const fetch=vi.fn(async()=>({ok:true,status:200,json:async()=>({})}));vi.stubGlobal('fetch',fetch);
-    render(<ArtifactSurface {...props()}/>);fetch.mockClear();
-    const peer=frame().contentWindow!;
-    act(()=>window.dispatchEvent(new MessageEvent('message',{source:peer,data:{type:STORY_ASSET_MESSAGE,id:1,url:'https://cdn.example/x',kind:'account'}})));
-    act(()=>window.dispatchEvent(new MessageEvent('message',{source:window,data:{type:STORY_ASSET_MESSAGE,id:2,url:'https://cdn.example/x',kind:'script'}})));
-    await Promise.resolve();expect(fetch).not.toHaveBeenCalled();
-  });
-});
 
 /**
  * The nonce announcement is the trust root and the page takes it only from a

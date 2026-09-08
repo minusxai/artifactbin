@@ -27,7 +27,7 @@ import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
 import { sanitizeStoryMarkupCss } from '@/lib/data/story/banned-css';
 import { RETIRED_STORY_THEMES } from '@/lib/data/story/story-themes';
-import { remapMarkupStyleViewportUnits } from '@/lib/story/managed-iframe-source';
+import { managedIframeSourceErrors, remapMarkupStyleViewportUnits, transformOutsideManagedIframes } from '@/lib/story/managed-iframe-source';
 import { compileStoryCss, storyCssCompileVersion } from '@/lib/data/story/story-css.server';
 import { STORY_THEME_NAMES, STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import { json } from '../http';
@@ -210,6 +210,7 @@ export async function publishJsx(body: Record<string, unknown>, sourceIn: string
       allowedHtmlTags: STORY_HTML_TAGS,
       stylePolicy: 'no-inline-style',
     }),
+    ...managedIframeSourceErrors(split.body),
     ...findExternalSubresources(source),
     // An embed with no data prop publishes fine and renders empty — reject it.
     ...findBrokenEmbeds(source),
@@ -239,7 +240,7 @@ export async function publishJsx(body: Record<string, unknown>, sourceIn: string
   // straight through the interpreter, so the compiled-sheet injection remap
   // never sees it (lib/story-surface/viewport-units.ts).
   const normalized = ctx.normalizeMarkup?.(canonicalizeMarkup(source)) ?? source;
-  const sanitized = canonicalizeMarkup(remapMarkupStyleViewportUnits(sanitizeStoryMarkupCss(normalized)));
+  const sanitized = canonicalizeMarkup(remapMarkupStyleViewportUnits(transformOutsideManagedIframes(normalized, sanitizeStoryMarkupCss)));
   if (Buffer.byteLength(sanitized, 'utf8') > MAX_CONTENT_BYTES) return json({ error: 'too_large', maxBytes: MAX_CONTENT_BYTES }, 413);
 
   // The reference graph: every ref:<id> resolves to one of the

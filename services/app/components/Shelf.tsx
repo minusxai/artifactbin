@@ -17,7 +17,6 @@
  * Partitioning and recency order live in `lib/shelf` (pure). This file owns
  * the grid/list presentation and hands list mode to `ArtifactTable`.
  */
-import {appFetch as fetch} from '@/web/api-origin';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Folder, FolderInput, FolderPlus, LayoutGrid, List as ListIcon, Pencil, Search, Share2, Trash2 } from 'lucide-react';
 import ShareLink from '@/components/ShareLink';
@@ -28,7 +27,7 @@ import { Tooltip } from '@/components/Tooltip';
 import { dateStamp, MicroLabel, PANEL, timeAgo, VISIBILITY_TIPS, VisibilityPill } from '@/components/ui';
 import { ViewsMark } from '@/components/ViewsMark';
 import { buildShelf, groupShelfByRecency, parentOfRow, type ShelfRow } from '@/lib/shelf';
-import {artifactCardUrl} from '@/web/public-read-url';
+import { CARD_RENDER_GENERATION } from '@/lib/export-card';
 
 const FOLDER_PREVIEW_LIMIT = 5;
 
@@ -155,13 +154,13 @@ function NewFolder({ parentId, onMade }: { parentId: string | null; onMade: (row
 }
 
 /** Folder covers show a small stack of readable documents inside a tabbed sleeve. */
-function FolderCover({ row, documents, count, controls, showVisibility, canFetch }: { canFetch: boolean; showVisibility: boolean; row: ShelfRow; documents: ShelfRow[]; count: number; controls: React.ReactNode }) {
+function FolderCover({ row, documents, count, controls, showVisibility }: { showVisibility: boolean; row: ShelfRow; documents: ShelfRow[]; count: number; controls: React.ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
   const [loaded, setLoaded] = useState<ShelfRow[]>([]);
-  // Only trusted owner shelves may fetch private placement. Public projections
-  // retain the generic folder cover when children weren't publicly supplied.
+  // Owner shelves already carry their children. Public profiles omit placement,
+  // so ask the folder's existing ACL-filtered page only as its cover comes into view.
   useEffect(() => {
-    if (!canFetch || documents.length || !box.current || typeof IntersectionObserver === 'undefined') return;
+    if (documents.length || !box.current || typeof IntersectionObserver === 'undefined') return;
     const controller = new AbortController();
     const observer = new IntersectionObserver((entries) => {
       if (!entries.some((entry) => entry.isIntersecting)) return;
@@ -173,7 +172,7 @@ function FolderCover({ row, documents, count, controls, showVisibility, canFetch
     }, { rootMargin: '160px' });
     observer.observe(box.current);
     return () => { controller.abort(); observer.disconnect(); };
-  }, [row.id, documents.length, canFetch]);
+  }, [row.id, documents.length]);
   const contents = (documents.length ? documents : loaded)
     .filter((item) => item.format === 'markup')
     .slice().sort((a, b) => b.updated_at.localeCompare(a.updated_at));
@@ -194,7 +193,7 @@ function FolderCover({ row, documents, count, controls, showVisibility, canFetch
       <div className="folder-cover-papers" style={{ '--paper-width': paperCount > 2 ? '48%' : '61%' } as React.CSSProperties}>
         {papers.map((item, i) => (
           <div key={item?.id ?? i} aria-hidden="true" className="folder-cover-paper" style={paperStyle(i)}>
-            {item ? <img src={artifactCardUrl(item)} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.visibility = 'hidden'; }} /> : <div className="folder-cover-lines" />}
+            {item ? <img src={`/a/${item.id}/export?format=jpg&mode=card&v=${item.version}&r=${CARD_RENDER_GENERATION}`} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.visibility = 'hidden'; }} /> : <div className="folder-cover-lines" />}
           </div>
         ))}
         {remaining > 0 && (
@@ -257,7 +256,7 @@ function FolderTile({ row, count, level, folders, onDeleted, documents, gallery,
   if (gallery) {
     return (
       <li className="reveal group relative rounded-md p-3 transition-colors hover:bg-raised/60">
-        <FolderCover row={shown} documents={documents} canFetch={level==='full'} showVisibility={showVisibility} count={count} controls={<>
+        <FolderCover row={shown} documents={documents} showVisibility={showVisibility} count={count} controls={<>
           <Actions row={shown} level={level} folders={folders} childCount={count} onDeleted={onDeleted}
             onRename={() => { setDraft(title ?? ''); setRenaming(true); }} />
         </>} />
@@ -402,26 +401,17 @@ function VisibilityTag({ row, overlay = false }: { row: ShelfRow; overlay?: bool
 
 /** The artifact's own og card — one lazily-rendered image serves unfurls and the drive grid alike. */
 function Thumb({ row, className }: { row: ShelfRow; className: string }) {
-  const [state,setState]=useState<'loading'|'loaded'|'failed'>('loading');
-  const [attempt,setAttempt]=useState(0);
-  const source=artifactCardUrl(row);
-  useEffect(()=>{setState('loading');setAttempt(0);},[source]);
   return (
     <span className={`relative block w-full overflow-hidden bg-raised ${className}`}>
-      {state==='loading' && <span className="absolute inset-0 flex items-center justify-center">
+      <span className="absolute inset-0 flex items-center justify-center">
         <span className="h-4 w-4 animate-spin rounded-full border-2 border-edge-bright border-t-accent" />
-      </span>}
-      {state==='failed' && <span className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1 bg-raised p-2 font-mono text-[10px] text-muted">
-        <span role="status">Preview unavailable</span>
-        <button type="button" aria-label={`Retry preview for ${nameOf(row)}`} onClick={()=>{setState('loading');setAttempt(n=>n+1);}} className="cursor-pointer rounded border border-edge px-2 py-1 hover:text-accent focus-visible:outline-2 focus-visible:outline-accent">Retry</button>
-      </span>}
+      </span>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        key={attempt} src={source+(attempt?`&attempt=${attempt}`:'')}
+        src={`/a/${row.id}/export?format=jpg&mode=card&v=${row.version}&r=${CARD_RENDER_GENERATION}`}
         alt=""
         loading="lazy"
         className="relative h-full w-full object-cover"
-        onLoad={()=>setState('loaded')} onError={()=>setState('failed')}
       />
     </span>
   );

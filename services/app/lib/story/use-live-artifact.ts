@@ -20,8 +20,6 @@
  * keep counting even for frames this hook decides not to surface. See
  * `isOwnFrame`.
  */
-import {appFetch as fetch} from '@/web/api-origin';
-import {appEventSource} from '@/web/api-origin';
 import { useEffect, useRef, useState } from 'react';
 import type { AnnotationWire } from '@/lib/annotations';
 import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing } from '@/lib/story/live';
@@ -76,7 +74,7 @@ export function useLiveArtifact(
   useEffect(() => {
     if (!enabled) return;
     seenVersionRef.current = initialVersion;
-    const source = appEventSource(`/a/${id}/events`);
+    const source = new EventSource(`/a/${id}/events`);
     let alive = true;
     /*
      * The stream carries PINGS; the document is fetched. A ping names the head

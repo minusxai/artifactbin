@@ -46,7 +46,7 @@ describe('trash table', () => {
     fireEvent.click(screen.getByLabelText('Restore Quarterly Review'));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/my/artifacts/doc_1/restore',
-      { method: 'POST', credentials: 'same-origin', headers: new Headers({'x-artifactbin-csrf': '1'}) },
+      { method: 'POST', credentials: 'same-origin' },
     ));
     await waitFor(() => expect(table).not.toHaveTextContent('Quarterly Review'));
   });

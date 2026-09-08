@@ -57,4 +57,17 @@ describe('managed asset adapter',()=>{
     expect(result.scripts[1].source).toBe(content.scripts[1].source);
     expect(document.querySelector('img,style,script')).toBeNull();
   });
+  it('keeps data-image commas intact while rewriting multiple srcset candidates',async()=>{
+    const resolver={resolve:vi.fn(async(url:string)=>'https://assets.example/'+encodeURIComponent(url)),dispose:vi.fn()};
+    const result=await prepareManagedContent({html:'<img srcset="data:image/png;base64,AAAA 1x, https://cdn.example/two.png 2x">',scripts:[]},resolver,document);
+    expect(result.html).toContain('data:image/png;base64,AAAA 1x');
+    expect(result.html).toContain('https://assets.example/https%3A%2F%2Fcdn.example%2Ftwo.png 2x');
+    expect(resolver.resolve).toHaveBeenCalledTimes(1);
+  });
+  it('keeps a descriptor-less srcset candidate separate from the next one',async()=>{
+    const resolver={resolve:vi.fn(async(url:string)=>'https://assets.example/'+encodeURIComponent(url)),dispose:vi.fn()};
+    const result=await prepareManagedContent({html:'<img srcset="https://cdn.example/one.png, https://cdn.example/two.png 2x">',scripts:[]},resolver,document);
+    expect(result.html).toContain('one.png, https://assets.example/https%3A%2F%2Fcdn.example%2Ftwo.png 2x');
+    expect(resolver.resolve).toHaveBeenCalledTimes(2);
+  });
 });

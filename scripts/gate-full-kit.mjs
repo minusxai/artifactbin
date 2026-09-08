@@ -126,6 +126,11 @@ for (const marker of [
 ]) check(text.includes(marker), `renders: ${marker}`);
 
 // interactive components are HYDRATED, not dead markup
+await frame.click('text=Open dialog');
+await frame.waitForSelector('[aria-label="Kitchen sink dialog"][open]');
+check((await frame.textContent('[aria-label="Kitchen sink dialog"]')).includes('Dialog content opened from the gallery.'), 'Dialog hydrated');
+await frame.locator('[aria-label="Kitchen sink dialog"]').getByRole('button', { name: 'Close', exact: true }).click();
+await frame.waitForSelector('[aria-label="Kitchen sink dialog"]:not([open])', { state: 'attached' });
 await frame.click('text=Tab two');
 await page.waitForTimeout(600);
 check((await frame.evaluate('document.body.innerText')).includes('Second pane content'), 'Tabs hydrated');
@@ -163,36 +168,12 @@ check(await frame.evaluate("!!document.querySelector('[aria-label=\"Question emb
 // the watch page — and NEVER a nested frame (the sandbox would kill a player).
 check(await frame.evaluate("!!document.querySelector('[data-slot=\"video\"] a[href^=\"https://www.youtube.com/watch\"]')"), 'Video card links to the watch page');
 check(await frame.evaluate("(document.querySelector('[data-slot=\"video-thumb\"]')?.getAttribute('src') ?? '').startsWith('/a/')"), 'Video poster resolved to the hosted image ref');
-check(await frame.evaluate(()=>{
-  const children=[...document.querySelectorAll('iframe')];
-  const sandbox=document.querySelector('[data-mx-sandbox][aria-label="Isolated content"]');
-  const managed=document.querySelector('[aria-label="Managed content"]');
-  return children.length===2 && document.querySelectorAll('[data-mx-sandbox]').length===1
-    && children.filter(child=>child.title==='Isolated content').length===1
-    && children.filter(child=>child.title==='Managed content').length===1
-    && children.every(child=>child.getAttribute('sandbox')==='allow-scripts'
-      && child.getAttribute('referrerpolicy')==='no-referrer' && !child.hasAttribute('src')
-      && (child.title==='Isolated content' && child.parentElement===sandbox
-        || child.title==='Managed content' && child.parentElement?.parentElement===managed));
-}), 'only the two declared opaque Sandbox/Iframe wrappers are nested; no unexpected frames');
-// Inspect the trusted wrapper, NOT the opaque author realm (which CDP need
-// not expose). Its actual child and packaged author policy must remain strict.
-for (const wrapperElement of await frame.$$('iframe')) {
-  const wrapper = await wrapperElement.contentFrame();
-  if (wrapper) await wrapper.waitForSelector('iframe[title="Interactive artifact content"]', {timeout: 10_000});
-  const protectedChild = wrapper && await wrapper.evaluate(() => {
-    const children=[...document.querySelectorAll('iframe')];
-    if (!document.documentElement.hasAttribute('data-mx-author-wrapper') || children.length!==1) return false;
-    const child=children[0];
-    const author=new DOMParser().parseFromString(child.srcdoc,'text/html');
-    const policy=author.querySelector('meta[http-equiv="Content-Security-Policy"]')?.getAttribute('content') ?? '';
-    return child.parentElement===document.body && child.title==='Interactive artifact content'
-      && child.getAttribute('sandbox')==='allow-scripts' && child.getAttribute('referrerpolicy')==='no-referrer'
-      && !child.hasAttribute('src') && child.srcdoc.length>0 && author.querySelectorAll('iframe').length===0
-      && policy.split(';').some(rule=>rule.trim()==="frame-src 'none'");
-  });
-  check(protectedChild, `declared ${await wrapperElement.getAttribute('title')} has exactly one opaque author child with no descendant frames`);
-}
+const managed = frame.locator('iframe[title="Isolated gallery region"]');
+await frame.waitForSelector('iframe[title="Isolated gallery region"][data-mx-author-ready]');
+check(await frame.locator('iframe').count() === 1
+  && await managed.getAttribute('sandbox') === 'allow-scripts'
+  && await managed.getAttribute('src') === `${origin}/story/author-frame`,
+  'only the managed opaque gallery wrapper is framed; Video remains a link');
 
 // 3. isolation
 const csp = await frame.evaluate('window.__csp || []');

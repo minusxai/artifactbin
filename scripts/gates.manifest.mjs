@@ -24,11 +24,8 @@
 
 /** @type {readonly GateSpec[]} */
 export const GATE_SPECS = Object.freeze([
-  {name:'managed-iframe',start:'shared',needsMail:false,needsClipboard:false,timeoutMs:120_000},
-  {name:'trusted-controls',start:'shared',needsMail:true,needsClipboard:false,timeoutMs:120_000},
-  {name:'late-controls-query',start:'shared',needsMail:false,needsClipboard:false,timeoutMs:60_000},
-  { name: 'author-script-isolation', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 120_000 },
-  { name: 'local-sql-state', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 120_000 },
+  { name: 'managed-iframe', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 120_000 },
+  { name: 'author-script-isolation', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 90_000 },
   { name: 'libraries', start: 'custom', why: 'Uploads a textured GLB and publishes scripts that load it through the optional library registry.', needsMail: false, needsClipboard: false, timeoutMs: 90_000 },
   { name: 'postgres-datasets', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 180_000 },
   { name: 'mutation-permissions', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 120_000 },
@@ -109,6 +106,12 @@ export const GATE_SPECS = Object.freeze([
     name: 'link-access', start: 'custom',
     why: 'Exercises the share menu general-access seam with its own owner, stranger, and logged-out identity setup.',
     needsMail: true, needsClipboard: false, timeoutMs: 60_000,
+  },
+  // measured: implementer pending; orchestrator pending
+  {
+    name: 'local-sql-state', start: 'custom',
+    why: 'Publishes local-state and stored-dataset fixtures, then exercises anonymous top-level and logged-in framed transports.',
+    needsMail: true, needsClipboard: false, timeoutMs: 180_000,
   },
   // measured: implementer 3s; orchestrator 7s
   { name: 'live-data', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },

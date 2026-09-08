@@ -12,11 +12,11 @@
  * stamped DOM is render output only; new-format stories persist JSX source, never DOM.
  */
 import React from 'react';
-import {compileManagedIframe} from '@/lib/story/managed-iframe';
 import { evaluateReactive, isReactiveExpression, REACTIVE_BOOLEAN_PROPS } from '@/lib/jsx/reactive';
+import { compileManagedIframe } from '@/lib/story/managed-iframe';
 import type { JsxNode, JsxElement } from '@/lib/jsx';
 import { immutableSet } from '@/lib/utils/immutable-collections';
-import { hasDangerousScheme, listHasDangerousScheme } from '@/lib/jsx/url-attrs';
+import { hasDangerousScheme, listHasDangerousScheme } from '@/lib/jsx/validate';
 // Shared with the save-time gate in lib/jsx/validate.ts — see lib/jsx/url-attrs.ts
 // for why these must not be maintained separately.
 import { URL_ATTRS as URL_PROPS, URL_LIST_ATTRS as URL_LIST_PROPS, SVG_PAINT_ATTRS, paintHasExternalUrl } from '@/lib/jsx/url-attrs';
@@ -196,13 +196,13 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
   const Component = isComponent ? options.components[node.tag] : null;
   if (isComponent && !Component) return null; // validator rejects these; render stays safe regardless
 
-  if(node.tag==='Iframe' && Component) {
+  if (node.tag === 'Iframe' && Component) {
     try {
-      const compiled=compileManagedIframe(node);
-      const props=buildProps(node.attributes,true,node.tag,path,options.row,options.values);
-      const element=React.createElement(Component,{...props,compiled,key:options.keyFor?.(path)??path});
-      return options.decorateElement?options.decorateElement(element,node,path):element;
-    } catch {return null;} // stored/unvalidated content fails closed, independently of save validation
+      const compiled = compileManagedIframe(node);
+      const props = buildProps(node.attributes, true, node.tag, path, options.row);
+      const element = React.createElement(Component, { ...props, compiled, key: options.keyFor?.(path) ?? path });
+      return options.decorateElement ? options.decorateElement(element, node, path) : element;
+    } catch { return null; }
   }
 
   if (node.tag === 'DataTable' && Component) {

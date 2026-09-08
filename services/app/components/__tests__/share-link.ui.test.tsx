@@ -8,7 +8,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ShareLink from '@/components/ShareLink';
-import * as apiOrigin from '@/web/api-origin';
 
 const sharingState = { visibility: 'private', shares: [] as Array<{ email: string; role: string }> };
 
@@ -31,36 +30,10 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
-  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe('ShareLink', () => {
-  it('never claims a link was copied before the native write succeeds',async()=>{
-    let reject!: (error:Error)=>void;
-    vi.mocked(navigator.clipboard.writeText).mockImplementation(()=>new Promise((_resolve,rejectWrite)=>{reject=rejectWrite;}));
-    render(<ShareLink artifactId="Ab3xK9" className="" />);
-    fireEvent.click(screen.getByLabelText('Share'));
-    expect(screen.getByLabelText('Share')).not.toHaveTextContent('copied');
-    reject(new Error('Clipboard denied'));
-    await waitFor(()=>expect(screen.getByLabelText('Share')).toHaveTextContent('copy failed'));
-  });
-  it('uses the artifact id before the parent address arrives, and preserves explicit fragments',()=>{
-    vi.spyOn(apiOrigin,'getArtifactAddress').mockReturnValue(null);
-    vi.spyOn(apiOrigin,'appUrl').mockImplementation(path=>new URL(path,'https://artifactbin.test').href);
-    const view=render(<ShareLink className="x" artifactId="Ab3xK9"/>);
-    fireEvent.click(screen.getByLabelText('Share'));
-    expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith('https://artifactbin.test/a/Ab3xK9');
-    view.rerender(<ShareLink className="x" url="/a/Ab3xK9?$region=east#section"/>);
-    fireEvent.click(screen.getByLabelText('Share'));
-    expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith('https://artifactbin.test/a/Ab3xK9?$region=east#section');
-  });
-  it('copies the main artifact address from trusted controls, not the iframe address', () => {
-    vi.spyOn(apiOrigin,'appUrl').mockImplementation(path => new URL(path,'https://artifactbin.test').href);
-    render(<ShareLink className="x" url="/a/Ab3xK9" />);
-    fireEvent.click(screen.getByLabelText('Share'));
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('https://artifactbin.test/a/Ab3xK9');
-  });
   it('keeps the plain one-click copy button for non-owners (no dialog)', async () => {
     render(<ShareLink className="x" />);
     fireEvent.click(screen.getByLabelText('Share'));

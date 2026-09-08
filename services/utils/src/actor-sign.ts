@@ -60,7 +60,6 @@ export function verifyActor(header: string | null | undefined, secret: string, o
   if (claims.iat - SKEW_SECONDS > now) return null;
   const actor: Actor = { credential: claims.credential };
   if (typeof claims.userId === 'string') actor.userId = claims.userId;
-  if (typeof claims.sessionId === 'string') actor.sessionId = claims.sessionId;
   if (typeof claims.tokenId === 'string') actor.tokenId = claims.tokenId;
   if (typeof claims.email === 'string') actor.email = claims.email;
   if (typeof claims.emailVerified === 'boolean') actor.emailVerified = claims.emailVerified;

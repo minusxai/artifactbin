@@ -21,6 +21,11 @@ class NoSlideError extends Error { constructor(readonly slides: number) { super(
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
+export function requestOriginAllowed(target:string,pageOrigin:string,allowedOrigins:string[]=[]):boolean {
+  if(target.startsWith('data:')||target.startsWith('blob:'))return true;
+  try{return new Set([pageOrigin,...allowedOrigins]).has(new URL(target).origin);}catch{return false;}
+}
+
 export function createBrowser(opts: { idleShutdownMs?: number } = {}): BrowserService & { close(): Promise<void> } {
   const idleMs = opts.idleShutdownMs ?? 60_000;
   let browser: Promise<Browser> | undefined;
@@ -58,12 +63,16 @@ export function createBrowser(opts: { idleShutdownMs?: number } = {}): BrowserSe
       const mime = req.format === 'jpg' ? 'image/jpeg' as const : 'image/png' as const;
       if (req.sameOriginOnly) {
         const origin = new URL(req.url).origin;
-        await page.route('**/*', (route) => { const t = route.request().url(); return t.startsWith(origin) || t.startsWith('data:') ? route.continue() : route.abort(); });
+        await page.route('**/*', (route) => requestOriginAllowed(route.request().url(),origin,req.allowedOrigins) ? route.continue() : route.abort());
       }
       await page.goto(req.url, { waitUntil: 'load', timeout }).catch((e) => { throw new NavigationError((e as Error).message); });
       if (req.injectCss) await page.addStyleTag({ content: req.injectCss }).catch(() => {});
       const surface = page.locator(req.selector).first();
       await surface.waitFor({ timeout });
+      if(req.waitForManagedFrames)await page.waitForFunction(selector=>{
+        const root=document.querySelector(selector);if(!root)return false;
+        return [...root.querySelectorAll('[data-mx-managed-frame]')].every(host=>host.querySelector('iframe[data-mx-author-ready]'));
+      },req.selector,{timeout});
       await page.waitForTimeout(req.settleMs ?? DEFAULT_SETTLE_MS);
       if (typeof req.capture === 'object' && 'slide' in req.capture) {
         const slides = surface.locator('[data-mx-slide]');

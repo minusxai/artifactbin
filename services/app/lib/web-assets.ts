@@ -206,7 +206,7 @@ export async function importWebAsset(url: string, by: WebAssetImporter, kind: We
   const existing = await webAssetByHash(hash);
   if (existing) return requireKind(existing,kind);
 
-  if (await assetByteQuotaExceeded(by.tokenId,by.userId)) {
+  if (by.tokenId && await assetByteQuotaExceeded(by.tokenId)) {
     throw new WebAssetRefused('quota_exceeded', 'this account is over its stored-byte quota — delete assets you no longer need', url);
   }
 
@@ -263,12 +263,12 @@ export interface DocumentAssetTarget {
  */
 export async function importForDocument(doc: DocumentAssetTarget, url: string, kind: WebAssetKind = 'image'): Promise<string> {
   const held = await webAssetByHash(urlHash(url));
-  if (held) {requireKind(held,kind);return assetUrlFor(url,held);}
+  if (held) { requireKind(held, kind); return assetUrlFor(url); }
   if (docAssetImportRateLimited(doc.id)) {
     throw new WebAssetRefused('rate_limited', 'too many asset imports for this document this hour', url);
   }
   const row=await importWebAsset(url, { tokenId: doc.token_id, userId: doc.user_id },kind);
-  return assetUrlFor(url,row);
+  return assetUrlFor(url);
 }
 
 /**
@@ -311,7 +311,7 @@ export async function refreshWebAsset(url: string, by: WebAssetImporter, kind: W
   const existing = await webAssetByHash(hash);
   if (!existing) return importWebAsset(url, by, kind);
 
-  if (await assetByteQuotaExceeded(by.tokenId,by.userId)) {
+  if (by.tokenId && await assetByteQuotaExceeded(by.tokenId)) {
     throw new WebAssetRefused('quota_exceeded', 'this account is over its stored-byte quota — delete assets you no longer need', url);
   }
 

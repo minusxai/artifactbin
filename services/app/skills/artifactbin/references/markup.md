@@ -1,19 +1,19 @@
 ---
 name: markup
 description: >-
-  JSX vocabulary.
+  Explains JSX markup.
 ---
 ## Read first
 
-`markup` is **static JSX data** over a fixed component registry.
-Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with spans.
+`markup` is **static JSX data**, interpreted over a fixed component registry.
+Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with exact spans.
 
-- Literal props, plus [restricted reactive JSX and dialogs](markup-state.md).
-  No spreads, callbacks, or inline handlers; every tag closes (`<br />`),
-  comments are `{/* … */}`, and there is no `<html>`/`<head>`/`<body>`.
-  One Helmet script runs in an isolated iframe, without visible DOM access.
-  DOM libraries use [Iframe](markup-iframe.md); Sandbox stays supported.
-  Use the `mx` data API and declarative controls.
+- **Static JSX only**: literal props (strings, numbers, booleans, arrays,
+  `{{…}}` objects), plus safe signal conditions; no arbitrary expressions,
+  spreads or inline handlers (`onClick=` is
+  rejected). In JSX, every tag closes (`<br />`); use `{/* … */}` comments; omit
+  `<html>`/`<head>`/`<body>`. Custom DOM/JS belongs inside managed
+  [Iframe](markup-iframe.md), never in the parent page.
 - **Style with Tailwind classes via `className`**, starting from a
   `<div data-design="tw" className="@container …">` wrapper with `@2xl:`
   container variants for responsive layout.
@@ -23,7 +23,7 @@ Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with spans.
 
 ## Contents
 
-Skeleton · Vocabulary · `<Helmet>` · Images · Layout · Do / Don't.
+Skeleton · Vocabulary · Helmet · Images · Layout.
 
 ## Skeleton (editorial)
 
@@ -52,6 +52,8 @@ Plus the embeds `Question` `Number` and the Helmet declarations `Value`
 echoed back. Unknown props are ignored; data bindings and Column contracts are checked
 at publish.
 
+[Conditions and dialogs](markup-state.md).
+
 **HTML tags: write the ordinary tag you mean** — [[ tags | length ]] are allowed
 (prose, headings, lists, tables, links, media, the bare controls `input`
 `select` `textarea` `button`, inline SVG): an unlisted tag answers `400`
@@ -63,27 +65,23 @@ outright, with no list: [% for t in refusedTags %]`[[ t ]]` [% endfor %].
 At most ONE per document, holding at most one each of `<title>`, `<style>`
 and `<script>`, plus `<meta name content />` pairs, plus any number of the
 DATA declarations `<Value>`, `<Query>`, `<Mutation>` ([data](markup-data.md)).
-Write it anywhere; it is hoisted to the top when stored. It is the ONLY
-place for parent CSS, JS or data; [Iframe](markup-iframe.md) owns isolated child CSS/JS.
+Write it anywhere outside Iframe; it is hoisted to the top when stored.
+Parent CSS and data declarations belong here. Iframe owns its own CSS/JS.
 
 ```jsx
 <Helmet>
   <title>Quarterly review</title>
   <style>{`.rise { animation: rise .9s both } @keyframes rise { from { opacity: 0 } }`}</style>
-  <Value name="quantity" type="number" default={1} />
-  <Value name="total" type="number" default={10} />
-  <script>{`mx.params.subscribe(values => {
-    const total = values.quantity * 10;
-    if (values.total !== total) mx.params.set('total', total);
-  });`}</script>
 </Helmet>
 ```
 
-Helmet scripts have no visible DOM access: use declarative controls and
-`mx.params.subscribe` for signal changes. Fetch is blocked. **Rows arrive after
-the script starts**; use `mx.data.subscribe`, not a line-one read. Signal writes
-are asynchronous. See [script API and migration](markup-scripts.md) before
-writing a script. `</script` cannot appear in its text (split the string).
+One legacy Helmet script may run after hydration in a hidden opaque realm:
+no parent DOM, cookies, storage or direct API requests. Use conditions and
+Dialog for parent UI; move DOM scripts into Iframe. See [script APIs](markup-scripts.md).
+`</script` cannot appear in the text (split it: `'</scr' + 'ipt'`).
+Inside Iframe, attach DOM handlers with `addEventListener`. The `mx` bridge
+reads/writes declared signals and runs named mutations. Subscribe to named
+queries for rows that arrive after startup; see the script API reference.
 
 - **Custom CSS lives in that `<style>` block, never inline** (`style=` is rejected).
   Scope rules to your own class names (bare element selectors leak into chart
@@ -117,7 +115,7 @@ Social preview: [upload and crop](publishing-versions.md).
   ([publishing-datasets.md](publishing-datasets.md)) — or write the web URL
   itself: publish stores a copy, YOUR URL STAYS as written, readers are served
   ours, and a URL that will not fetch is a warning, not a failed publish.
-- Only `<img src>`, `<Video poster>` and `<File src>` take a URL;
+- In parent markup only `<img src>`, `<Video poster>` and `<File src>` take a URL;
   `srcSet`/`background` reject an external one. `href` is free.
 - An image `src` also binds: `"$pick"`, or `"https://…/{$pick}.png"` to
   compose one — the only braced position; the first reader imports it.

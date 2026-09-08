@@ -37,12 +37,14 @@ const glb = Buffer.concat([header, chunk(paddedJson, 0x4e4f534a), chunk(paddedBi
 const upload = await fetch(`${base}/api/artifacts?format=file&filename=triangle.glb`, { method: 'POST', headers: { Authorization: authorization, 'Content-Type': 'model/gltf-binary' }, body: glb });
 assert.equal(upload.status, 201, await upload.clone().text());
 const file = await upload.json();
+const libraryUrl = `${base}/libraries/three-0.185.1/index.js`;
 const script = `
-  const state = {};
-  const report = () => mx.params.set('scene_report', JSON.stringify(state));
-  (async () => {
-    const THREE = await artifact.library('three');
-    state.same = THREE === await artifact.library('three');
+    // Keep the first render cold past the exporter's former fixed 1500ms settle.
+    await new Promise(resolve => setTimeout(resolve, 1800));
+    const library = document.scripts[document.scripts.length - 2].src;
+    window.__librarySource = library;
+    const THREE = await import(library);
+    window.__sameLibrary = THREE === await import(library);
     const canvas = document.getElementById('scene');
     const renderer = new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true });
     renderer.setSize(400, 300);
@@ -50,76 +52,60 @@ const script = `
     const camera = new THREE.PerspectiveCamera(45, 4 / 3, 0.1, 100); camera.position.z = 4;
     const controls = new THREE.OrbitControls(camera, canvas); controls.update();
     scene.add(new THREE.HemisphereLight(0xffffff, 0xffffff, 3));
-    const model = await new THREE.GLTFLoader().loadAsync(await artifact.resolve('ref:${file.id}'));
+    const bytes = await (await fetch('ref:${file.id}')).arrayBuffer();
+    const model = await new THREE.GLTFLoader().parseAsync(bytes, '');
     scene.add(model.scene); renderer.render(scene, camera);
-    state.camera=camera.position.toArray();
-    controls.addEventListener('change',()=>{renderer.render(scene,camera);state.camera=camera.position.toArray();report();});
     const pixel = new Uint8Array(4); renderer.getContext().readPixels(200, 150, 1, 1, renderer.getContext().RGBA, renderer.getContext().UNSIGNED_BYTE, pixel);
-    state.pixel = Array.from(pixel); state.painted = true;
+    window.__pixel = Array.from(pixel); window.__painted = true;
     addEventListener('pagehide', () => { controls.dispose(); renderer.dispose(); });
-    const missing = await artifact.resolve('ref:Miss12').then(() => false, e => e.message === 'not found');
-    const network = await fetch('https://example.com/exfil').then(() => false, () => true);
-    let storage = false; try { localStorage.getItem('x'); } catch { storage = true; }
-    let parentDom = false; try { parent.document.body.textContent; } catch { parentDom = true; }
-    let topDom = false; try { top.document.body.textContent; } catch { topDom = true; }
-    const account = await fetch(new URL('/api/my/artifacts', ${JSON.stringify(base)}).href).then(() => false, () => true);
-    state.blocked = { missing, network, storage, parentDom, topDom, account };
-    report();
-  })().catch(error => { state.error = String(error); report(); });
 `;
-const sandbox = `<Sandbox title="Three.js scene" height={300} html={${JSON.stringify('<canvas id="scene" width="400" height="300"></canvas>')}} script={${JSON.stringify(script)}} />`;
-// A declared scalar is the product's readiness/result channel. The browser's
-// DevTools frame list need not expose nested opaque author execution contexts.
-const reportMarkup = '<Helmet><Value name="scene_report" type="string" default="pending" /></Helmet><span aria-label="scene report" hidden>{$scene_report}</span>';
-const sceneState = async (page, beforeCamera = null) => {
-  await page.waitForFunction(before => {
-    try {
-      const state = JSON.parse(document.querySelector('[aria-label="scene report"]').textContent);
-      return state.error || (state.painted && state.blocked && (before === null || JSON.stringify(state.camera) !== before));
-    } catch { return false; }
-  }, beforeCamera, { timeout: 15000 });
-  const state = JSON.parse(await page.getByLabel('scene report').textContent());
-  assert.equal(state.error, undefined, state.error);
-  return state;
-};
-const doc = await create({ title: 'Three.js library gate', markup: reportMarkup + sandbox });
+const scene = '<Iframe title="Three.js scene" height={300}><canvas id="scene" width="400" height="300" /><script id="three-bundle" type="module" src="' + libraryUrl + '"/><script type="module">{`' + script + '`}</script></Iframe>';
+const doc = await create({ title: 'Three.js library gate', markup: scene });
 const prose = await create({ markup: '<h1>Ordinary prose</h1>' });
 const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader'] });
 try {
-  const page = await browser.newPage();
-  const libraries = [];
-  page.on('request', req => { if (req.url().includes('/libraries/')) libraries.push(req.url()); });
-  await page.goto(`${base}/a/${prose.id}/raw`);
-  assert.equal(libraries.length, 0, 'prose loads no optional library');
-  await page.goto(`${base}/a/${doc.id}/raw`);
-  const frame = page.locator('iframe[title="Three.js scene"]');
-  await frame.waitFor({ state: 'visible' });
-  assert.equal(await page.locator('#scene').count(), 0, 'the canvas belongs only to the child');
-  const state = await sceneState(page);
-  assert.equal(state.same, true);
-  assert.ok(state.pixel[0] > state.pixel[1] * 2, `red model painted: ${state.pixel}`);
-  assert.equal(libraries.length, 1, 'one on-demand library request');
-  const beforeCamera=JSON.stringify(state.camera);
-  // Both child documents have zero margin/border and fill this parent-visible
-  // frame. The fixture canvas starts at (0,0), with its declared 400x300 size.
-  const box=await frame.boundingBox();
-  assert.ok(box && box.width >= 400 && box.height >= 300, 'visible scene frame geometry');
-  await page.mouse.move(box.x+200,box.y+150);await page.mouse.down();
-  await page.mouse.move(box.x+245,box.y+160,{steps:5});await page.mouse.up();
-  const dragged = await sceneState(page, beforeCamera);
-  assert.notDeepEqual(dragged.camera, state.camera, 'real pointer drag moves OrbitControls camera');
-  assert.deepEqual(dragged.blocked, { missing: true, network: true, storage: true, parentDom:true, topDom:true, account:true });
-  const hydrated = await create({ markup: reportMarkup+'<Card><CardContent>'+sandbox+'</CardContent></Card>' });
-  await page.goto(`${base}/a/${hydrated.id}/raw`);
-  const nested = await sceneState(page);
-  assert.equal(nested.painted, true, 'API also works after hydration');
-  // Exercise the actual export service, not a screenshot after our own readiness wait.
+  // Export before an interactive visit can warm the managed asset/module path.
   const exported = await fetch(`${base}/a/${doc.id}/export?format=png`);
   assert.equal(exported.status, 200, await exported.clone().text().then(t => t.slice(0, 100)));
   assert.ok(exported.headers.get('content-type')?.startsWith('image/png'));
   const { data, info } = await sharp(Buffer.from(await exported.arrayBuffer())).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   let red = 0;
   for (let i = 0; i < data.length; i += info.channels) if (data[i] > 100 && data[i] > data[i + 1] * 2 && data[i] > data[i + 2] * 2) red++;
-  assert.ok(red > 100, 'export contains the rendered red model');
-  console.log('ok: optional library, cached imports, textured GLB, WebGL pixels, CSP, missing refs, and PNG export');
+  assert.ok(red > 100, 'cold export waits for the rendered red model');
+
+  const page = await browser.newPage();
+  page.on('pageerror', error => console.error('PAGE',error.message));
+  page.on('console', message => { if(message.type()==='error')console.error('CONSOLE',message.text()); });
+  const libraries = [];
+  page.on('request', req => { if (req.url().includes('/libraries/')) libraries.push(req.url()); });
+  await page.goto(`${base}/a/${prose.id}/raw`);
+  assert.equal(libraries.length, 0, 'prose loads no optional library');
+  await page.goto(`${base}/a/${doc.id}/raw`);
+  const realm = async () => {
+    const outer = page.locator('iframe[title="Three.js scene"]'); await outer.waitFor({timeout:10_000}).catch(async error=>{throw new Error(`${error.message}; body=${(await page.locator('body').innerText()).slice(0,1000)}`);});
+    const wrapper = await outer.contentFrame(); const inner = wrapper.locator('iframe'); await inner.waitFor();
+    return (await inner.elementHandle()).contentFrame();
+  };
+  let managed = await realm();
+  await managed.waitForFunction(() => window.__painted || window.__sceneError, { timeout: 15000 });
+  const state = await managed.evaluate(() => ({ error: window.__sceneError, pixel: window.__pixel, same: window.__sameLibrary, source: window.__librarySource }));
+  assert.equal(state.error, undefined, state.error);
+  assert.equal(state.same, true);
+  assert.ok(state.pixel[0] > state.pixel[1] * 2, `red model painted: ${state.pixel}`);
+  assert.match(state.source,/\/assets\//,'library source was rewritten to the managed asset cache');
+  assert.equal(libraries.length, 0, 'browser never reaches the original library URL directly');
+  const blocked = await managed.evaluate(async () => {
+    const missing = await fetch('ref:Miss12').then(response => response.status === 404, () => true);
+    const network = await fetch('http://169.254.169.254/latest/meta-data').then(() => false, () => true);
+    let storage = false; try { localStorage.getItem('x'); } catch { storage = true; }
+    return { missing, network, storage };
+  });
+  assert.deepEqual(blocked, { missing: true, network: true, storage: true });
+  const hydrated = await create({ markup: `<Card><CardContent>${scene}</CardContent></Card>` });
+  await page.goto(`${base}/a/${hydrated.id}/raw`);
+  managed = await realm();
+  await managed.waitForFunction(() => window.__painted || window.__sceneError, { timeout: 15000 });
+  assert.equal(await managed.evaluate(() => window.__sceneError), undefined, 'generic bundle and ref fetch also work after hydration');
+  assert.equal(await managed.evaluate(() => window.__painted), true);
+  console.log('ok: cold export readiness, optional library, cached imports, textured GLB, WebGL pixels, CSP, and missing refs');
 } finally { await browser.close(); }

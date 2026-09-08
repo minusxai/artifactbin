@@ -83,14 +83,6 @@ const realm = (url = START) => {
 };
 
 describe('the narrow URL capability the prelude exposes (spike S2)', () => {
-  it('consumes only the one-shot intent, preserving all other bytes and refusing URL input', () => {
-    const w = realm(`${START}?$x=a+b&intent=fork&%69ntent=comment#section`);
-    w.eval('window.__mxConsumeIntent("https://evil.test/")');
-    expect(w.location.href).toBe(`${START}?$x=a+b#section`);
-    expect(w.eval('Object.getOwnPropertyDescriptor(window,"__mxConsumeIntent").writable')).toBe(false);
-    w.eval('history.replaceState(null,"","/evil")');
-    expect(w.location.href).toBe(`${START}?$x=a+b#section`);
-  });
   it('still leaves history.replaceState inert — the freeze is unchanged', () => {
     const w = realm();
     w.eval('history.replaceState(null,"","/evil")');

@@ -40,13 +40,12 @@ const api = (path, body) => fetch(`${B}${path}`, { method: 'POST', headers: H, b
 // ── 1. publish ──────────────────────────────────────────────────────────────
 const ds = await j(await api('/api/artifacts', { dataset: [{ region: 'EU', revenue: 837 }, { region: 'NA', revenue: 1200 }, { region: 'EU', revenue: 3 }] }));
 ok(!!ds.id, 'the dataset published');
-const doc1 = (ds_) => `<Helmet><title>Dataflow gate</title><Value name="region" type="string" /><Value name="authorReport" type="string" default="pending" />
+const doc1 = (ds_) => `<Helmet><title>Dataflow gate</title><Value name="region" type="string" />
 <Query name="regions">{\`select distinct region from ref_${ds_} order by 1\`}</Query>
 <Query name="sales">{\`select region, sum(revenue) revenue from ref_${ds_} where $region is null or region = $region group by 1 order by 1\`}</Query>
-<script>{\`var changed = false; function show() { if (changed) return; var t = mx.data.get('sales'); mx.params.set('authorReport', 'mx:' + (typeof mx) + ' rows=' + (t ? t.rows.length : 0)); } show(); mx.data.subscribe(['sales'], show); mx.params.subscribe(['region'], function (v) { changed = true; mx.params.set('authorReport', 'changed:' + v.region); });\`}</script>
 </Helmet><div data-design="tw" className="@container p-8"><h1 className="text-3xl font-bold">Sales</h1>
 <select aria-label="Region" value="$region" options="$regions" />
-<p id="out">{$authorReport}</p>
+<Iframe title="Dataflow script" height={100}><p id="out">pending</p><script>{\`var out = document.getElementById('out'); var changed = false; function show() { if (changed) return; var t = mx.data.get('sales'); out.textContent = 'mx:' + (typeof mx) + ' rows=' + (t ? t.rows.length : 0); } show(); mx.data.subscribe(['sales'], show); mx.params.subscribe(['region'], function (v) { changed = true; out.textContent = 'changed:' + v.region; });\`}</script></Iframe>
 <p>Total <Number data="$sales" col="revenue" agg="sum" prefix="$" /></p>
 <Question title="Revenue by region" data="$sales" viz={{"kind":"table"}} height="300px" /></div>`;
 const doc = await j(await api('/api/artifacts', { markup: doc1(ds.id) }));
@@ -77,6 +76,14 @@ ok(csp.includes('sandbox') && csp.includes(`connect-src ${B}/a/${doc.id}/query`)
 ok((await p.locator('iframe[title="artifact"]').count()) === 0, 'no iframe: the public data document IS the page');
 ok(p.url() === `${B}/a/${doc.id}`, `URL unchanged, no redirect (${new URL(p.url()).pathname})`);
 const frame = p.mainFrame();
+const managedRealm = async host => {
+  const outer = host.locator('iframe[title="Dataflow script"]');
+  await outer.waitFor({ timeout: 20000 });
+  const wrapper = await outer.contentFrame();
+  const inner = wrapper.locator('iframe');
+  await inner.waitFor({ timeout: 20000 });
+  return (await inner.elementHandle()).contentFrame();
+};
 /*
  * PAINT FIRST moved what an author script finds at startup. The rows are no
  * longer inlined, so `mx.data.get()` is empty for the round trip it takes to
@@ -84,14 +91,11 @@ const frame = p.mainFrame();
  * above does and what /docs/llm teaches. The script still runs at the first
  * commit; only the data is late.
  */
-// Observe the declared signal the author writes through its capability bridge.
-// The outer author iframe is a protective wrapper, not the author's DOM, and
-// automation's child-frame enumeration is not an execution oracle.
-await frame.waitForSelector('iframe[title="Isolated artifact script"]', { state: 'attached' });
-await frame.waitForFunction(() => document.getElementById('out')?.textContent?.startsWith('mx:'), null, { timeout: 20000 }).catch(() => {});
-ok(/^mx:object /.test(await frame.textContent('#out').catch(() => '')), 'window.mx is defined in the isolated author realm');
-await frame.waitForFunction(() => /rows=2/.test(document.getElementById('out')?.textContent ?? ''), null, { timeout: 20000 }).catch(() => {});
-ok(/^mx:object rows=2/.test(await frame.textContent('#out').catch(() => '')), 'and its query rows reach the script through mx.data.subscribe');
+const scriptRealm = await managedRealm(frame);
+await scriptRealm.waitForFunction(() => document.getElementById('out')?.textContent?.startsWith('mx:'), null, { timeout: 20000 }).catch(() => {});
+ok(/^mx:object /.test(await scriptRealm.textContent('#out').catch(() => '')), 'window.mx is defined when the managed author script runs');
+await scriptRealm.waitForFunction(() => /rows=2/.test(document.getElementById('out')?.textContent ?? ''), null, { timeout: 20000 }).catch(() => {});
+ok(/^mx:object rows=2/.test(await scriptRealm.textContent('#out').catch(() => '')), 'and its query rows reach the managed script through mx.data.subscribe');
 ok(!pageErrors.some((e) => /hydrat/i.test(e)), 'no hydration error — the author script ran after the first commit');
 const options = await frame.$$eval('select[aria-label="Region"] option', (os) => os.map((o) => o.value + '=' + o.textContent));
 ok(JSON.stringify(options) === JSON.stringify(['=All', 'EU=EU', 'NA=NA']), `the bound select lists the query (All + values): ${options.join(' ')}`);
@@ -113,8 +117,7 @@ ok((await frame.textContent('[aria-label="Live number"]')) === '$1,200', 'changi
 const busy = await frame.evaluate(() => ({ seen: window.__busySeen, flash: window.__flashSeen, now: document.querySelector('[aria-label="Question embed"]').getAttribute('aria-busy') }));
 ok(busy.seen && !busy.flash && busy.now === 'false', `the embed showed the busy state during the re-run and cleared it (busy=${busy.seen}, flash=${busy.flash})`);
 ok(!/EU/.test(await frame.textContent('[aria-label="Data table"]')), 'and the table shows only the selected region');
-await frame.waitForFunction(() => document.getElementById('out')?.textContent === 'changed:NA', null, { timeout: 15000 }).catch(() => {});
-ok((await frame.textContent('#out')) === 'changed:NA', 'the isolated author script saw the change through mx.params.subscribe');
+ok((await scriptRealm.textContent('#out')) === 'changed:NA', 'the managed author script saw the change through mx.params.subscribe');
 ok(directCalls.length >= 1 && relayCalls.length === 0, `the re-run was the DOCUMENT'S OWN GET /a/<id>/query?q= (${directCalls.length} direct, ${relayCalls.length} relayed)`);
 await frame.selectOption('select[aria-label="Region"]', '');
 await frame.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent === '$2,040', null, { timeout: 15000 }).catch(() => {});

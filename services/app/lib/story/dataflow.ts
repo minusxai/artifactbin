@@ -90,9 +90,9 @@ export interface QueryDecl extends Span {
 }
 
 export interface MutationDecl extends Span {
-  /** Absent = persistent dataset (existing documents); local targets never enter the ref graph. */
-  scope?: 'local';
   source?: string;
+  /** Absent = persistent dataset; local targets never enter the ref graph. */
+  scope?: 'local';
   name: string;
   sql: string;
   /** `$name` parameters the SQL mentions, in first-appearance order (deduped). */
@@ -501,8 +501,8 @@ export function parseMutationDecl(el: JsxElement): ParseDeclResult<MutationDecl>
   const source = sourceAttribute(el, sql, errors);
   if (errors.length) return {ok:false,errors};
   const refs = source ? [source] : datasetRefsInSql(sql);
-  const direct = localWriteTarget(sql);
-  const local = !source && direct && !direct.name.startsWith('ref_');
+  const direct = source ? null : localWriteTarget(sql);
+  const local = direct && !direct.name.startsWith('ref_');
   if (local && refs.length) {
     return { ok: false, errors: [err('A local mutation cannot mix local and persistent dataset tables', el, tag)] };
   }
@@ -548,7 +548,7 @@ export function collectRefNameUses(body: JsxNode[]): RefNameUse[] {
           }
         }
       }
-      if(n.tag!=='Iframe')visit(n.children);
+      visit(n.children);
     }
   };
   visit(body);

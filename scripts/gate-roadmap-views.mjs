@@ -10,7 +10,6 @@ const browser = await chromium.launch();
 try {
   const ownerPage = await browser.newPage({viewport:{width:1450,height:950}});
   ownerPage.on('pageerror', error => console.error(error.message));
-  ownerPage.on('console', message => {if (message.type() === 'error') console.error(message.text());});
   await becomeOwner(ownerPage,base,fixture.token);
   await ownerPage.goto(fixture.url);
   await ownerPage.locator('iframe[title="artifact"]').waitFor();
@@ -27,25 +26,24 @@ try {
   await page.locator('#view-dag [aria-label="Dependency 1 → 3"]').first().waitFor({timeout:3000});
   assert.equal(await page.getByLabel('Item 1',{exact:true}).isVisible(),false);
   await switchView('Sprint');
+  await ownerPage.waitForFunction(()=>new URLSearchParams(location.search).get('$view_mode')==='sprint');
   await page.locator('#view-sprint').getByLabel('Add Sprint',{exact:true}).click();
   const dialog=ownerPage.frameLocator('iframe[title="artifact"]').getByRole('dialog',{name:'Add sprint'});
   await dialog.waitFor();
   await page.getByLabel('Sprint name',{exact:true}).fill('Planning week');
   await page.getByLabel('Sprint deadline',{exact:true}).fill('2026-09-14');
   await page.getByLabel('Create sprint',{exact:true}).click();
-  await dialog.waitFor({state:'hidden',timeout:10000}).catch(async error => {
-    console.error('Dialog did not save:', await dialog.innerText());
-    console.error('Dialog controls:', await dialog.evaluate(el => [...el.querySelectorAll('input,button,form,fieldset')].map(node => ({tag:node.tagName,type:node.type,disabled:node.disabled,valid:node.validity?.valid,value:node.value}))));
-    throw error;
-  });
+  await dialog.waitFor({state:'hidden'});
   await page.locator('#view-sprint').getByText('Planning week',{exact:true}).waitFor();
   await page.locator('#view-sprint').getByLabel('Add Sprint',{exact:true}).click();
   await page.getByLabel('Sprint name',{exact:true}).fill(' planning WEEK ');
   await page.getByLabel('Create sprint',{exact:true}).click();
-  await page.getByRole('alert').filter({hasText:'already exists'}).waitFor();
+  const refusal=page.getByRole('alert');await refusal.waitFor();
+  assert.match(await refusal.textContent(),/affected|changed|mutation/i);
   assert.equal(await dialog.isVisible(),true);
   await page.getByLabel('Cancel sprint',{exact:true}).click();
   await switchView('Table');
+  await ownerPage.waitForFunction(()=>new URLSearchParams(location.search).get('$view_mode')!=='sprint');
   await page.getByLabel('Sprint 1',{exact:true}).click();
   await page.getByRole('option',{name:'Planning week',exact:true}).waitFor();
   await page.locator('[data-return-label="Sprint 1"]').click();
@@ -56,10 +54,18 @@ try {
   await page.getByLabel('Sprint 1',{exact:true}).click();
   await page.getByRole('option',{name:'Quick sprint',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('button[aria-label="Sprint 1"]')?.textContent.includes('Quick sprint'));
-  await ownerPage.reload();
+  let persisted;
+  for(let attempt=0;attempt<100;attempt++){
+    persisted=await fixture.api(`/api/artifacts/${fixture.datasetId}`,undefined,'GET');
+    if(persisted.rows.find(row=>row.id===1)?.sprint==='Quick sprint')break;
+    await ownerPage.waitForTimeout(50);
+  }
+  assert.equal(persisted?.rows.find(row=>row.id===1)?.sprint,'Quick sprint','sprint assignment persisted before reload');
+  await ownerPage.reload({waitUntil:'load'});
   await ownerPage.locator('iframe[title="artifact"]').waitFor();
   page = await (await ownerPage.locator('iframe[title="artifact"]').elementHandle()).contentFrame();
-  await page.getByRole('button',{name:'Sprint 1',exact:true}).filter({hasText:'Quick sprint'}).waitFor();
+  await page.getByLabel('Item 1',{exact:true}).waitFor({timeout:20_000});
+  await page.getByRole('button',{name:'Sprint 1',exact:true}).filter({hasText:'Quick sprint'}).waitFor({timeout:20_000});
   await ownerPage.setViewportSize({width:390,height:844});
   await page.getByLabel('View',{exact:true}).click();
   const popup=page.getByRole('listbox').locator('..');

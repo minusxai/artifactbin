@@ -6,13 +6,15 @@
  * Seeded skeleton (testmig-2): signatures and doc-comments are the contract; bodies throw.
  */
 import { afterAll, beforeAll, beforeEach } from 'vitest';
-import { attachActor } from '@artifactbin/utils';
+import { attachActor, decodeAgentSession as decodeAgentSessionEnvelope } from '@artifactbin/utils';
 import type { Actor } from '@artifactbin/contracts';
 import { AGENT_COOKIE, encodeAgentSession } from '@/lib/agent-session';
 import { resetRateLimit } from '@/lib/auth';
 import { EVENTS_SCHEMA } from '@/lib/config';
+import { AUTH_SECRET } from '@/lib/config';
 import { getDb, resetDb } from '@/lib/db';
 import { SCHEMA_STATEMENTS } from '@/lib/schema';
+import { createHash } from 'node:crypto';
 
 const SCHEMA_TABLES = SCHEMA_STATEMENTS.flatMap((statement) => {
   const table = /^CREATE TABLE IF NOT EXISTS (\w+)/.exec(statement)?.[1];
@@ -63,7 +65,33 @@ export function request(path: string, opts: RequestOptions = {}): Request {
 
 /** The signed agent cookie header value for these held token ids: `${AGENT_COOKIE}=${encoded}`. */
 export async function agentCookie(tokenIds: string[]): Promise<string> {
-  return `${AGENT_COOKIE}=${await encodeAgentSession({ tokenIds })}`;
+  const value = await encodeAgentSession({ tokenIds });
+  const cookie = `${AGENT_COOKIE}=${value}`;
+  await registerAgentCookieValue(value);
+  return cookie;
+}
+
+async function registerAgentCookieValue(value: string, previousValue?: string): Promise<void> {
+  const session = decodeAgentSessionEnvelope(value, AUTH_SECRET);
+  if (!session?.sessionId || !session.tokenIds.length) return;
+  const db = await getDb();
+  // The proxy owns this schema in production; route tests model only its
+  // browser-liveness row, without importing the proxy package into app.
+  await db.query('CREATE SCHEMA IF NOT EXISTS auth');
+  await db.query('CREATE TABLE IF NOT EXISTS auth.credentials (kind text NOT NULL, credential_hash text NOT NULL, subject_id text NOT NULL, expires_at timestamptz NOT NULL, consumed_at timestamptz, deleted_at timestamptz)');
+  const previous = decodeAgentSessionEnvelope(previousValue, AUTH_SECRET);
+  if (previous?.sessionId) await db.query("UPDATE auth.credentials SET deleted_at=now() WHERE kind='agent-browser' AND credential_hash=$1 AND deleted_at IS NULL", [createHash('sha256').update(previous.sessionId).digest('hex')]);
+  await db.query(
+    "INSERT INTO auth.credentials(kind,credential_hash,subject_id,expires_at) VALUES ('agent-browser',$1,$2,now()+interval '30 days')",
+    [createHash('sha256').update(session.sessionId).digest('hex'), session.tokenIds.at(-1)],
+  );
+}
+
+/** Model the proxy's post-response cookie registration around a direct route call. */
+export async function registerAgentCookie(response: Response, previousCookie?: string): Promise<void> {
+  const next = cookieValue(response).value;
+  const previous = previousCookie?.split(';').map(part => part.trim()).find(part => part.startsWith(`${AGENT_COOKIE}=`))?.slice(AGENT_COOKIE.length + 1);
+  if (next) await registerAgentCookieValue(next, previous);
 }
 
 /** Read one Set-Cookie from a response: its value (null when absent) and whether it CLEARS the cookie (Max-Age=0). */
@@ -89,7 +117,7 @@ export interface AppHarness {
  * SAME database instance; no row written by one test survives into the next; a table added to the schema later is wiped
  * without anyone editing a list.
  */
-export function useAppHarness(options: {afterClose?: () => void | Promise<void>} = {}): AppHarness {
+export function useAppHarness(): AppHarness {
   let database: ReturnType<typeof getDb> | undefined;
 
   beforeAll(() => {
@@ -116,9 +144,6 @@ export function useAppHarness(options: {afterClose?: () => void | Promise<void>}
   afterAll(async () => {
     database = undefined;
     await resetDb();
-    // External fixtures (for example disposable PostgreSQL) outlive their
-    // clients. Keep database ownership here and make teardown order explicit.
-    await options.afterClose?.();
   });
 
   return {

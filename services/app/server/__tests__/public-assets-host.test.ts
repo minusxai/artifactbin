@@ -1,9 +1,12 @@
 import {it,expect,vi} from 'vitest';
-vi.mock('@/lib/config',async original=>({...await original<typeof import('@/lib/config')>(),get PUBLIC_BASE_URL(){return 'https://example.test';},CONTROLS_ORIGIN:'https://i.example.test',ASSETS_ORIGIN:'https://assets.example.test'}));
+vi.mock('@/lib/config',async original=>({...await original<typeof import('@/lib/config')>(),get PUBLIC_BASE_URL(){return 'https://example.test';},ASSETS_ORIGIN:'https://assets.example.test'}));
 import {useAppHarness} from '@/__tests__/harness';
 import {getDb} from '@/lib/db';
 import {objectStore,objectKey} from '@/lib/object-store';
 import {createAppServer} from '../app';
+import {mintToken} from '@/lib/tokens';
+import {createArtifact} from '@/lib/artifacts';
+import {storeFileContent} from '@/lib/story/file-store';
 useAppHarness();
 it('direct app only serves cached byte GET/HEAD on asset host, ignoring credentials and forwarding spoofing',async()=>{
  const hash='a'.repeat(64),data=Buffer.from('bundle'),key=objectKey('webasset',data);
@@ -17,4 +20,18 @@ it('direct app only serves cached byte GET/HEAD on asset host, ignoring credenti
  for(const [path,method]of[['/login','GET'],['/api/auth/get-session','GET'],['/a/abc123/resolve?ref=ref:abc123','GET'],['/assets/'+hash,'POST'],['/assets/'+hash+'?url=secret','GET']]){
   expect((await app.request(host+path,{method,headers:{'x-forwarded-host':'i.example.test'}})).status).toBe(404);
  }
+});
+
+it('reuses public ref bytes anonymously but never exposes a private ref, even with owner credentials',async()=>{
+ const token=await mintToken('asset-host-ref'),bytes=Buffer.from([1,2,3]),stored=await storeFileContent(bytes,'model/gltf-binary','scene.glb');
+ if(stored instanceof Response)throw new Error(await stored.text());
+ const publicRow=await createArtifact(token.id,null,{...stored,title:'public',description:null,visibility:'public'}),privateRow=await createArtifact(token.id,null,{...stored,title:'private',description:null,visibility:'private'});
+ const publicId=publicRow.id,privateId=privateRow.id,app=createAppServer({indexHtml:async()=>'<head></head>'}),host='https://assets.example.test';
+ const first=await app.request(`${host}/assets/ref/${publicId}`,{headers:{authorization:`Bearer ${token.token}`,cookie:'session=secret'}});
+ const second=await app.request(`${host}/assets/ref/${publicId}`);
+ expect(first.status).toBe(200);expect([...new Uint8Array(await first.arrayBuffer())]).toEqual([...bytes]);
+ expect(second.status).toBe(200);expect(second.headers.get('cache-control')).toBe('no-store');
+ await(await getDb()).query("UPDATE artifacts SET visibility = 'private' WHERE id = $1",[publicId]);
+ expect((await app.request(`${host}/assets/ref/${publicId}`)).status).toBe(404);
+ expect((await app.request(`${host}/assets/ref/${privateId}`,{headers:{authorization:`Bearer ${token.token}`,cookie:'session=secret'}})).status).toBe(404);
 });

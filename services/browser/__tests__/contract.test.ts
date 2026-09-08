@@ -6,7 +6,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { BrowserService, RenderRequest } from '@artifactbin/contracts';
 import { BROWSER_ROUTES, browserClient, serveBrowser } from '@artifactbin/browser';
-import { createBrowser } from '@artifactbin/browser/local';
+import { createBrowser,requestOriginAllowed } from '@artifactbin/browser/local';
 import sharp from 'sharp';
 import { withHttpServer, type RunningServer } from '../../app/__tests__/net';
 
@@ -19,6 +19,8 @@ const PAGE = `<html><head><style>
 <div data-mx-slide style="height:100px;background:#c33">one</div>
 <div data-mx-slide style="height:100px;background:#3c3">two</div>
 <div data-mx-slide style="height:100px;background:#33c">three</div></main></body></html>`;
+const READY_PAGE = `<html><body style="margin:0"><main style="width:100px;height:100px;background:#c33"><div data-mx-managed-frame><iframe></iframe></div></main><script>setTimeout(()=>{document.querySelector('iframe').setAttribute('data-mx-author-ready','');document.querySelector('main').style.background='#3c3'},300)</script></body></html>`;
+const NEVER_READY_PAGE = `<html><body><main><div data-mx-managed-frame><iframe></iframe></div></main></body></html>`;
 let pages: RunningServer;
 let url: string;
 
@@ -27,7 +29,7 @@ const server = serveBrowser(local);
 const listening = server.listen(0);
 const remote = browserClient(listening.url, { deadlineMs: 20_000 });
 beforeAll(async () => {
-  pages = await withHttpServer((_q, s) => { s.writeHead(200, { 'content-type': 'text/html' }); s.end(PAGE); });
+  pages = await withHttpServer((q, s) => { s.writeHead(200, { 'content-type': 'text/html' }); s.end(q.url==='/ready'?READY_PAGE:q.url==='/never-ready'?NEVER_READY_PAGE:PAGE); });
   url = `${pages.base}/a/x`;
 });
 afterAll(async () => { await local.close?.(); await server.close(); await pages.close(); });
@@ -35,12 +37,29 @@ afterAll(async () => { await local.close?.(); await server.close(); await pages.
 const base = (): RenderRequest => ({ url, format: 'png', viewport: { width: 1200, height: 630 }, selector: 'main', capture: 'full', sameOriginOnly: true, settleMs: 50, timeoutMs: 10_000 });
 const pngSize = (b: Uint8Array) => { const v = new DataView(b.buffer, b.byteOffset); return { width: v.getUint32(16), height: v.getUint32(20) }; };
 
+it('matches allowed request origins exactly, never by prefix',()=>{
+  expect(requestOriginAllowed('https://assets.example/x','https://app.example',['https://assets.example'])).toBe(true);
+  expect(requestOriginAllowed('https://assets.example.evil/x','https://app.example',['https://assets.example'])).toBe(false);
+  expect(requestOriginAllowed('https://app.example.evil/x','https://app.example')).toBe(false);
+});
+
 describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', remote]])('%s', (_name, svc) => {
   it('shoots the selected element as png, with the cross-origin request aborted', async () => {
     const r = await svc.render(base());
     if (!r.ok) throw new Error(JSON.stringify(r));
     expect(r.mime).toBe('image/png');
     expect(pngSize(r.bytes)).toEqual({ width: 600, height: 300 });
+  });
+  it('waits for managed author readiness instead of capturing a cold blank frame',async()=>{
+    const r=await svc.render({...base(),url:`${pages.base}/ready`,selector:'main',viewport:{width:100,height:100},waitForManagedFrames:true,settleMs:0});
+    if(!r.ok)throw new Error(JSON.stringify(r));
+    const {data,info}=await sharp(Buffer.from(r.bytes)).raw().toBuffer({resolveWithObject:true});
+    const at=(50*info.width+50)*info.channels;
+    expect([...data.subarray(at,at+3)]).toEqual([51,204,51]);
+  });
+  it('fails a managed readiness timeout instead of returning cacheable blank bytes',async()=>{
+    const r=await svc.render({...base(),url:`${pages.base}/never-ready`,waitForManagedFrames:true,settleMs:0,timeoutMs:250});
+    expect(!r.ok&&r.reason).toBe('failed');
   });
   it('shoots one slide as jpg', async () => {
     const r = await svc.render({ ...base(), format: 'jpg', capture: { slide: 2 } });

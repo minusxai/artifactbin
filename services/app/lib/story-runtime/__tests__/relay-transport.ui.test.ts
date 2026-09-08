@@ -112,23 +112,6 @@ describe('who may answer a document\'s query', () => {
  * to the app origin, accepted from the target window at that origin alone.
  */
 describe('importAsset', () => {
-  it('cleans its AbortSignal listener on timeout as well as disposal',async()=>{
-    vi.useFakeTimers();try{
-      const {target,messages}=fakeParent(),controller=new AbortController();
-      const removed=vi.spyOn(controller.signal,'removeEventListener');
-      const t=createRelayTransport(target,APP,window,100);
-      const answer=t.importAsset!('https://cdn.example/a','script',controller.signal);
-      await vi.advanceTimersByTimeAsync(101);expect(await answer).toEqual({refused:'no_answer'});
-      expect(removed).toHaveBeenCalledWith('abort',expect.any(Function));
-      controller.abort();await vi.advanceTimersByTimeAsync(2000);expect(messages()).toHaveLength(1);
-    }finally{vi.useRealTimers();}
-  });
-  it('preserves explicit managed kind without adding endpoint or credentials',async()=>{
-    const {target,messages}=fakeParent();const t=createRelayTransport(target,APP,window);
-    const answer=t.importAsset!('https://cdn.example/bundle.js','script');
-    expect(messages()[0]).toEqual({type:STORY_ASSET_MESSAGE,id:1,url:'https://cdn.example/bundle.js',kind:'script'});
-    deliver(target,{type:STORY_ASSET_RESULT_MESSAGE,id:1,url:'https://assets.example/assets/'+'a'.repeat(64)});await answer;
-  });
   it('posts mx:asset to the app origin and resolves with the address of our copy', async () => {
     const { target, posted, messages } = fakeParent();
     const t = createRelayTransport(target, APP, window);

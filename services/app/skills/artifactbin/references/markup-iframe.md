@@ -11,12 +11,11 @@ wrapper. Its script can use **its own DOM/canvas**, never the parent artifact,
 account APIs, cookies or parent storage. Do not supply `sandbox`, `srcdoc`,
 `api`, `store` or `compiled`; these are platform-owned.
 
-This is separate from the trusted controls iframe. Signals and declared
-mutations cross a bounded message bridge; this does not grant account authority.
+Signals and declared mutations cross a bounded message bridge; this does not grant account authority.
 Persistent writes remain authenticated and permission-checked.
 
 External assets require the deployment to configure **`APP__ASSETS_ORIGIN`**:
-a distinct public cached-byte hostname, not the artifact or trusted-controls
+a distinct public cached-byte hostname, not the artifact
 hostname, with HTTPS/routing configured in app and proxy. Missing configuration
 refuses external asset resolution; it never falls back to contacting the CDN
 from author code. A local canvas with no external assets needs no CDN.
@@ -29,7 +28,7 @@ Counter and canvas · Libraries and assets · State and compatibility.
 
 ```jsx
 <Helmet><Value name="count" type="number" default={0} /></Helmet>
-<p>Shared count: {$count}</p>
+<p>The canvas below reads the shared count.</p>
 <Iframe title="Counter canvas" height={220}>
   <style>{`body {margin:16px;font:16px system-ui} canvas {display:block;margin-top:12px}`}</style>
   <button id="increment" aria-label="Increment count">Add one</button>
@@ -83,8 +82,8 @@ proxy. Arbitrary `innerHTML` and CSS URL strings are **not automatically rewritt
 
 Rewriting is convenience; **CSP enforces HTTP/resource destinations**: the frame can request
 only the configured public cached-asset origin, not arbitrary external hosts or
-the trusted controls origin. Unsupported/unrewritten requests are blocked.
-Sandbox and the protective wrapper restrict navigation; do not remove the wrapper
+another application origin. Unsupported/unrewritten requests are blocked.
+The inner sandbox and protective wrapper restrict navigation; do not remove the wrapper
 or weaken its policies to make a library load. WebRTC peer-connection constructors
 are disabled before author code and cannot be restored by it.
 
@@ -101,8 +100,7 @@ acknowledgment of `.set(name, value)`.
 
 Use `mx.refresh(names)` for declared queries and `await mx.mutate(name, values)`
 for declared mutations. No bridge operation permits arbitrary account APIs or
-source edits. See [script API](markup-scripts.md) and [local state](markup-state.md).
+source edits. See [script API](markup-scripts.md).
 
-The hidden Helmet script and legacy `<Sandbox html="…" script="…" />` remain
-compatible. Use generic `<Iframe>` for new visible scenes; the legacy pinned
-library helper is documented in [libraries](markup-libraries.md).
+The hidden Helmet script remains compatible. Use generic `<Iframe>` for new
+visible scenes; pinned libraries are documented in [libraries](markup-libraries.md).

@@ -24,7 +24,7 @@ import {
   tokenStatus,
   touchToken,
 } from '@/lib/tokens';
-import { decodeAgentSession } from '@/lib/agent-session';
+import { decodeAgentSessionEnvelope } from '@/lib/agent-session';
 import { POST as mintAnonymous } from '@/app/api/tokens/anonymous/route';
 import { POST as reject } from '@/app/api/tokens/reject/route';
 import { GET as listArtifacts } from '@/app/api/artifacts/route';
@@ -190,7 +190,7 @@ describe('reject: POST /api/tokens/reject', () => {
     const res = await reject(request('/api/tokens/reject', { method: 'POST', cookie: await agentCookie([a.id, b.id]), json: { tokenId: a.id } }));
     expect(res.status).toBe(204);
     const { value } = cookieValue(res);
-    expect(await decodeAgentSession(value)).toEqual({ tokenIds: [b.id] });
+    expect(await decodeAgentSessionEnvelope(value)).toMatchObject({ tokenIds: [b.id], sessionId: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/) });
     expect(await resolveTokenById(a.id)).toBeNull();
     expect(tokenStatus(await row(a.id))).toBe('revoked');
     expect(await resolveTokenById(b.id)).not.toBeNull();
@@ -225,7 +225,7 @@ describe('reject: POST /api/tokens/reject', () => {
       method: 'POST',
       cookie,
       json: { tokenId: c.id },
-      actor: { credential: 'session', userId: owner.id, email: 'owner@example.com', emailVerified: true },
+      actor: { credential: 'session', userId: owner.id, email: 'owner@example.com', emailVerified: true, heldTokenIds: [c.id] },
     }));
     expect(asOwner.status).toBe(204);
     expect(await resolveTokenById(c.id)).toBeNull();

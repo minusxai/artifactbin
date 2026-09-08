@@ -67,7 +67,9 @@ function walk(nodes: JsxNode[], visit: (el: JsxElement) => void): void {
   for (const n of nodes) {
     if (n.type !== 'element') continue;
     visit(n);
-    if(n.tag!=='Iframe')walk(n.children, visit);
+    // Managed Iframe contents are compiled and resolved by their isolated
+    // runtime; parent document reference/subresource rules must not consume them.
+    if (n.tag !== 'Iframe') walk(n.children, visit);
   }
 }
 

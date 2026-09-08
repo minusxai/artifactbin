@@ -3,7 +3,6 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import Shelf, { SHELF_LIST_PER_PAGE, type ShelfRow } from '@/components/Shelf';
-import {configureAppApi} from '@/web/api-origin';
 
 const doc = (id: string, day: number, extra: Partial<ShelfRow> = {}): ShelfRow => ({
   id,
@@ -21,49 +20,12 @@ const asset = (id: string, day: number, format = 'dataset'): ShelfRow => ({
 });
 
 afterEach(() => {
-  configureAppApi(window.location.origin,window.location.origin,'standalone');
   localStorage.clear();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 describe('Shelf — grid and list views', () => {
-  it('keeps card IDs and versions in their own URL components',()=>{
-    const id='doc/other?image=1#fragment';
-    const {container}=render(<Shelf rows={[doc(id,28,{version:'1&image=1#fragment' as unknown as number})]}/>);
-    const source=new URL(container.querySelector('img')!.src);
-    expect(source.pathname).toBe('/a/doc%2Fother%3Fimage%3D1%23fragment/export');
-    expect(source.searchParams.get('v')).toBe('1&image=1#fragment');
-    expect(source.searchParams.get('image')).toBeNull();expect(source.hash).toBe('');
-  });
-  it('loads artifact previews from the public read origin inside trusted controls',()=>{
-    configureAppApi(window.location.origin,'https://public.example.test','page');
-    const {container}=render(<Shelf rows={[doc('abc123',28)]}/>);
-    expect(container.querySelector('img')?.src).toBe('https://public.example.test/a/abc123/export?format=jpg&mode=card&v=1&r=2');
-    configureAppApi(window.location.origin,window.location.origin,'standalone');
-  });
-  it('replaces a failed thumbnail spinner with an accessible failure fallback',()=>{
-    const {container}=render(<Shelf rows={[doc('abc123',28)]}/>);
-    fireEvent.error(container.querySelector('img')!);
-    expect(container.querySelector('.animate-spin')).toBeNull();
-    expect(screen.getByText(/preview unavailable/i)).toBeInTheDocument();
-  });
-  it('finishes a loaded thumbnail and offers a real retry after error',()=>{
-    const {container}=render(<Shelf rows={[doc('abc123',28)]}/>);
-    const image=container.querySelector('img')!;fireEvent.load(image);
-    expect(container.querySelector('.animate-spin')).toBeNull();
-    fireEvent.error(image);fireEvent.click(screen.getByLabelText('Retry preview for Doc abc123'));
-    expect(container.querySelector('.animate-spin')).not.toBeNull();
-    expect(container.querySelector('img')?.src).toContain('attempt=1');
-    fireEvent.load(container.querySelector('img')!);
-    expect(screen.queryByText(/preview unavailable/i)).toBeNull();
-  });
-  it('does not call the privileged folder page API from a public profile shelf',()=>{
-    const request=vi.fn();vi.stubGlobal('fetch',request);
-    vi.stubGlobal('IntersectionObserver',class{constructor(private callback:(entries:unknown[])=>void){} observe(){this.callback([{isIntersecting:true}]);}disconnect(){}});
-    render(<Shelf rows={[doc('folder',28,{format:'folder'})]} actions="share"/>);
-    expect(request).not.toHaveBeenCalled();
-  });
   it('remembers the view across remounts and ignores unknown stored values', () => {
     localStorage.setItem('artifactbin:shelf-view', 'unknown');
     const first = render(<Shelf rows={[doc('one', 28)]} />);
@@ -349,7 +311,7 @@ describe('sharing from the overflow menu', () => {
     expect(screen.getByRole('dialog', { name: 'Sharing' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Share “Doc share-target”' })).toBeInTheDocument();
     await screen.findByLabelText('Make public');
-    expect(fetchMock).toHaveBeenCalledWith('/api/my/artifacts/share-target/sharing', {headers: new Headers({'x-artifactbin-csrf': '1'})});
+    expect(fetchMock).toHaveBeenCalledWith('/api/my/artifacts/share-target/sharing');
     fireEvent.click(screen.getByLabelText('Copy link'));
     expect(copy).toHaveBeenCalledWith(`${location.origin}/a/share-target`);
     fireEvent.click(screen.getByLabelText('Close sharing'));

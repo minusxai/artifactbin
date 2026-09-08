@@ -26,10 +26,10 @@ const SOURCE_DIRECTIVES = [
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
   "media-src 'self' data: blob:",
-  // No network frame destinations: raw <iframe> is banned in markup. The
-  // trusted runtime creates only an inline srcdoc author-script sandbox.
-  // Keep default-src 'none' as the navigation boundary until trusted-control
-  // destinations have their own explicit, tested policy.
+  // The runtime's fixed same-origin HTTP wrapper; authored raw frames remain invalid JSX.
+  "frame-src 'self'",
+  // Raw <iframe> remains invalid markup. The trusted runtime owns this HTTP
+  // wrapper; its own frame-src 'none' prevents the inner author navigating.
 ] as const;
 
 /** What the document may DO — content-independent. */
@@ -54,8 +54,6 @@ const BEHAVIOUR_DIRECTIVES = [
    * The owner's shell and the exporter are both same-origin.
    */
   "frame-ancestors 'self'",
-  // Trusted Dialog forms need submit events and validation. form-action none
-  // still forbids navigation; author scripts have their own no-forms sandbox.
   'sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation',
 ] as const;
 
@@ -104,7 +102,7 @@ export const assetsPath = (id: string): string => `/a/${id}/assets`;
  */
 const GEOJSON_DIR_PATH = '/geojson/';
 
-export function markupCsp(origin: string, id: string, controlsOrigin?: string, assetOrigin?:string): string {
+export function markupCsp(origin: string, id: string, assetOrigin?: string): string {
   // connect-src sits with the other source directives, before the behaviour
   // ones — the one per-document line in an otherwise fixed policy.
   const self = origin.replace(/\/+$/, '');
@@ -113,16 +111,15 @@ export function markupCsp(origin: string, id: string, controlsOrigin?: string, a
   // GLB loaders fetch embedded textures/buffers through local blob/data URLs;
   // these add no network destination or access to the application's APIs.
   const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)} ${self}${GEOJSON_DIR_PATH} blob: data:`;
-  const behavior = controlsOrigin ? BEHAVIOUR_DIRECTIVES.filter(d => !d.startsWith('sandbox ')) : BEHAVIOUR_DIRECTIVES;
   if(assetOrigin && (new URL(assetOrigin).origin!==assetOrigin||!/^https?:\/\//.test(assetOrigin)))throw Error('Invalid asset origin');
   const sources=SOURCE_DIRECTIVES.map(d=>{
     // Firefox evaluates inherited 'self' against the opaque srcdoc realm for
     // dynamic imports. Keep the compatibility library directory explicit;
-    // the inner Sandbox still restricts scripts to exact pinned bundle URLs.
+    // the inner managed frame still restricts scripts to cached bundle URLs.
     // This grants neither API fetches nor navigation to the main origin.
     const source=d.startsWith('script-src ')?d+` ${self}/libraries/`:d;
     return assetOrigin && /^(script|img|font|media)-src /.test(source)?source+' '+assetOrigin:source;
   });
   const assetConnect=assetOrigin?` ${assetOrigin} ${self}${assetsPath(id)}`:'';
-  return [...sources, ...(controlsOrigin ? [`frame-src ${controlsOrigin}`] : []), connect+assetConnect, ...behavior].join('; ');
+  return [...sources, connect+assetConnect, ...BEHAVIOUR_DIRECTIVES].join('; ');
 }

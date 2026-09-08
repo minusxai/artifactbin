@@ -1,5 +1,7 @@
-import {parseControlsOrigin, parseAssetsOrigin} from '@artifactbin/utils';
 import {isIP} from 'node:net';
+
+import { parseAssetsOrigin } from '@artifactbin/utils';
+
 /**
  * The ONLY file that reads process.env (minusx convention — keeps runtime
  * configuration auditable in one place).
@@ -108,9 +110,6 @@ export function unknownEnvNames(
  */
 const APP_PORT = env('APP', 'PORT');
 const THIS_PROCESS = `http://127.0.0.1:${APP_PORT ?? '3000'}`;
-
-/** Operational off-switch for credential-less live subscriptions; reads still work. */
-export const LIVE_UPDATES_ANON_ENABLED = env('FEATURE_FLAG', 'LIVE_UPDATES_ANON_ENABLED') !== 'false';
 
 /**
  * Vite's HMR websocket port in dev. Vite defaults to 24678 for EVERY project,
@@ -295,11 +294,8 @@ export const LOGIN_EMAIL_FROM = env('EMAIL', 'FROM') ?? 'artifactbin <login@exam
  * scope (the MCP tools' url echoes). HTTP routes derive it from the request.
  */
 export const PUBLIC_BASE_URL = env('APP', 'PUBLIC_BASE_URL') ?? `http://localhost:${APP_PORT ?? '3030'}`;
-/** Explicit rollout: provision this trusted hostname before enabling top-level owner controls. */
-const controlsOriginSetting = env('APP', 'CONTROLS_ORIGIN');
-export const CONTROLS_ORIGIN = controlsOriginSetting ? parseControlsOrigin(PUBLIC_BASE_URL, controlsOriginSetting) : null;
 const assetsOriginSetting = env('APP', 'ASSETS_ORIGIN');
-export const ASSETS_ORIGIN = assetsOriginSetting ? parseAssetsOrigin(PUBLIC_BASE_URL, CONTROLS_ORIGIN, assetsOriginSetting) : null;
+export const ASSETS_ORIGIN = assetsOriginSetting ? parseAssetsOrigin(PUBLIC_BASE_URL, null, assetsOriginSetting) : null;
 
 /**
  * Where the EXPORT browser reaches this process. Internal by default, for the

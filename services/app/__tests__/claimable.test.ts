@@ -28,6 +28,7 @@ import { claimToken, createUser } from '@/lib/users';
 import { createArtifact } from '@/lib/artifacts';
 
 import { POST as claimableRoute } from '@/app/api/tokens/claimable/route';
+import { POST as claimRoute } from '@/app/api/tokens/claim/route';
 import { agentCookie, request } from '@/__tests__/harness';
 import { useAppHarness } from '@/__tests__/harness';
 
@@ -68,6 +69,22 @@ describe('what it offers', () => {
     expect(body.claimable[0]).not.toHaveProperty('token');
     expect(body.claimable[0].artifacts).toBe(2);
     expect([...body.claimable[0].titles].sort()).toEqual(['Q3 Revenue', 'Sales deck']);
+  });
+
+  it('does not restore held authority from a cookie the proxy rejected', async () => {
+    const t = await mintToken('revoked-browser');
+    await publish(t.id, 'Must stay anonymous');
+    const cookie = await agentCookie([t.id]);
+    const res = await claimableRoute(request('/api/tokens/claimable', {
+      method: 'POST', cookie,
+      actor: { credential: 'session', userId: user.id },
+    }));
+    expect(await res.json()).toEqual({ claimable: [] });
+    const claim = await claimRoute(request('/api/tokens/claim', {
+      method: 'POST', cookie, json: { tokenId: t.id }, origin: 'same',
+      actor: { credential: 'session', userId: user.id },
+    }));
+    expect(claim.status).toBe(404);
   });
 
   it('offers a token that has published nothing yet, with no titles', async () => {

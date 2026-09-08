@@ -6,8 +6,6 @@
  * Home, and the current page's controls. A page may scroll the chrome away
  * with its content, while a full-viewport artifact overlays it.
  */
-import {appFetch as fetch} from '@/web/api-origin';
-import {appNavigate} from '@/web/api-origin';
 import {
   BookOpen, CircleUser, Braces, ChevronRight, FileText, LogIn, LogOut, Menu, Moon,
   SlidersVertical, Sun, User, X,
@@ -185,7 +183,7 @@ export function PageMenu({
             aria-label="Sign out"
             onClick={() => void fetch('/api/auth/sign-out', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
               .catch(() => null)
-              .then(() => { appNavigate('/'); })}
+              .then(() => { window.location.href = '/'; })}
             className={`${ITEM} cursor-pointer text-muted hover:bg-raised hover:text-fg`}
           >
             <LogOut size={15} strokeWidth={1.5} />
@@ -195,7 +193,7 @@ export function PageMenu({
           <button
             type="button"
             aria-label="Disconnect this browser"
-            onClick={() => void forgetTokens().then(() => { appNavigate('/'); })}
+            onClick={() => void forgetTokens().then(() => { window.location.href = '/'; })}
             className={`${ITEM} cursor-pointer text-muted hover:bg-raised hover:text-fg`}
           >
             <LogOut size={15} strokeWidth={1.5} />
@@ -277,7 +275,6 @@ function applyAppAppearance(mode: AppearanceMode) {
   if (mode === 'dark') document.documentElement.dataset.theme = 'dark';
   else delete document.documentElement.dataset.theme;
   try { localStorage.setItem('mx_theme', mode); } catch { /* private mode */ }
-  window.dispatchEvent(new CustomEvent('mx:app:appearance',{detail:mode}));
 }
 
 export function PageControls({

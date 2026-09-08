@@ -31,20 +31,6 @@
 export const INTENTS = ['fork', 'comment', 'new-folder', 'like', 'follow'] as const;
 export type Intent = (typeof INTENTS)[number];
 
-/** A return address is data, never navigation authority: only this artifact on main. */
-export function artifactReturnAddress(value: unknown, origin: string, id: string): string | null {
-  if (typeof value !== 'string') return null;
-  try {
-    const url = new URL(value);
-    if (url.origin !== origin || url.username || url.password) return null;
-    const parts = url.pathname.split('/');
-    const direct = parts.length === 3 && parts[1] === 'a' && parts[2] === id;
-    const leaf = parts.at(-1) ?? '';
-    const pretty = parts.length >= 3 && parts[1].startsWith('@') && parts.slice(1).every(Boolean) && (leaf === id || leaf.startsWith(`${id}-`));
-    return direct || pretty ? url.href : null;
-  } catch { return null; }
-}
-
 /** The parameter's name, in one place: the reader, the stripper and the writer. */
 export const INTENT_KEY = 'intent';
 
