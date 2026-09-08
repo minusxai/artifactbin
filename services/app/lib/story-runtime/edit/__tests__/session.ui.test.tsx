@@ -78,6 +78,22 @@ afterEach(() => {
 });
 
 describe('createFrameEditSession — going in', () => {
+  it.each(['Escape', 'Backspace', 'Delete'])('does not take %s from a closed trusted control', (key) => {
+    const { at } = mount('<Question id="chart" />');
+    fireEvent.click(at('0'));
+    const trustedHost = document.createElement('div');
+    document.body.append(trustedHost);
+    const shadow = trustedHost.attachShadow({ mode: 'closed' });
+    const input = document.createElement('input');
+    shadow.append(input);
+    input.focus();
+    posted.length = 0;
+    const event = new KeyboardEvent('keydown', { key, bubbles: true, composed: true, cancelable: true });
+    input.dispatchEvent(event);
+    expect(sent(STORY_EDIT_KEY_MESSAGE)).toEqual([]);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
   it('announces that edit mode is live', () => {
     mount();
     expect(last(STORY_EDIT_READY_MESSAGE)).toMatchObject({ nonce: NONCE });
