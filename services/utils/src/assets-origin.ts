@@ -22,3 +22,21 @@ export function isPublicAssetRequest(request: Request, origin: string): boolean 
   }
   return true;
 }
+
+/** Strip authority-bearing response metadata and refuse upstream redirects. */
+export function publicAssetResponse(response: Response): Response {
+  if (response.status >= 300 && response.status < 400) {
+    void response.body?.cancel();
+    return new Response('asset upstream refused', { status: 502, headers: { 'cache-control': 'no-store' } });
+  }
+  const headers = new Headers(response.headers);
+  headers.delete('set-cookie');
+  headers.delete('location');
+  headers.delete('access-control-allow-credentials');
+  headers.set('access-control-allow-origin', '*');
+  const policy = headers.get('content-security-policy');
+  if (!policy) headers.set('content-security-policy', 'sandbox');
+  else if (!policy.split(';').some(directive => directive.trim() === 'sandbox')) headers.set('content-security-policy', `${policy}; sandbox`);
+  headers.set('x-content-type-options', 'nosniff');
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}

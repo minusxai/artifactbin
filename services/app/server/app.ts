@@ -19,7 +19,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { actorReceiver } from '@artifactbin/utils';
+import { actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { verifyExportKey } from '@/lib/export-key';
 import { ID_RE } from '@/lib/ids';
@@ -32,6 +32,9 @@ import { ownerUsername } from '@/lib/users';
 import { roleFor, sessionActor } from '@/lib/viewer';
 import { canAnnotate } from '@/lib/share-roles';
 import { baseUrl, json } from '@/lib/http';
+import { ASSETS_ORIGIN } from '@/lib/config';
+import { GET as publicAssetBytes } from '@/app/assets/[hash]/route';
+import { publicRefAssetResponse } from '@/lib/public-ref-assets';
 import { mountRoutes } from './api';
 import { ROUTES } from './routes.generated';
 
@@ -183,6 +186,18 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // Transport identity must be attached before any app middleware or route
   // asks viewer.ts who is calling.
   if (opts.actorSecret) actorReceiver(opts.actorSecret).mount(app);
+  const assetsOrigin = ASSETS_ORIGIN;
+  if (assetsOrigin) app.use('*', async (c, next) => {
+    const incoming = new URL(c.req.url);
+    if (incoming.host !== new URL(assetsOrigin).host && baseUrl(c.req.raw) !== assetsOrigin) return next();
+    const request = new Request(assetsOrigin + incoming.pathname + incoming.search, { method: c.req.method });
+    if (!isPublicAssetRequest(request, assetsOrigin)) return new Response('not found', { status: 404 });
+    const response = incoming.pathname.startsWith('/assets/ref/')
+      ? await publicRefAssetResponse(request, incoming.pathname.slice('/assets/ref/'.length))
+      : await publicAssetBytes(request, { params: Promise.resolve({ hash: incoming.pathname.slice('/assets/'.length) }) });
+    const safe = publicAssetResponse(response);
+    return c.req.method === 'HEAD' ? new Response(null, { status: safe.status, headers: safe.headers }) : safe;
+  });
   if (opts.onTokenRevoked) {
     app.use('/api/*', async (c, next) => {
       await next();
