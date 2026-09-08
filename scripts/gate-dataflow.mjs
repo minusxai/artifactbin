@@ -120,7 +120,8 @@ const reach = await scriptRealm.evaluate(async ({ id, base }) => {
   document.removeEventListener('securitypolicyviolation', record);
   return { violations, targetCount: targets.length };
 }, { id: doc.id, base: B });
-ok(reach.violations.length >= reach.targetCount && reach.violations.some(uri => uri.startsWith(B)) && reach.violations.some(uri => uri.startsWith('https://untrusted.invalid')), `author child direct network is denied by browser connect-src (${JSON.stringify(reach.violations)})`);
+const blockedOrigins = reach.violations.flatMap(uri => { try { return [new URL(uri).origin]; } catch { return []; } });
+ok(reach.violations.length >= reach.targetCount && blockedOrigins.includes(new URL(B).origin) && blockedOrigins.includes('https://untrusted.invalid'), `author child direct network is denied by browser connect-src (${JSON.stringify(reach.violations)})`);
 
 // ── 4. <DataTable> past the cap, through scoped POST windows ───────────────
 // A dataset can never exceed the ingest cap (MAX_ROWS_LIMIT), and the query cap
