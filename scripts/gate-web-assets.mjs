@@ -35,6 +35,7 @@ import { createServer } from 'node:http';
 import { chromium } from './lib/gate-browser.mjs';
 import sharp from 'sharp';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
+import {installLayoutShiftProbe} from './lib/layout-shift-probe.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
 const out = [];
@@ -118,6 +119,7 @@ hits = [];
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
+await page.addInitScript(installLayoutShiftProbe);
 const outbound = [];
 /* Every FONT the document actually loaded, with where it came from and whether
  * it arrived — the only proof that `font-src 'self'` admits the mapped url. A
@@ -133,6 +135,7 @@ await page.goto(`${B}/a/${owner.id}`, { waitUntil: 'networkidle' });
 
 const frame = await storyFrame(page, { timeout: 30_000 });
 const probe = await frame.evaluate(async () => {
+  globalThis.__mxLayoutShiftProbe.mark('initial-assets:probe');
   const deadline = Date.now() + 8000;
   const shot = () => {
     const img = document.querySelector('img[alt="probe"]');
@@ -197,6 +200,7 @@ ok(outbound.length === 0 && hits.length === 0, `zero requests to the source host
  * at DPR 2, where a 768px column needs 1536 device pixels and the full copy is
  * the RIGHT answer. Asserted by the request the browser actually made. */
 const whichCopy = async (label, viewport, deviceScaleFactor) => {
+  await frame.evaluate(label=>globalThis.__mxLayoutShiftProbe.mark(label),`responsive-probe:${label}:${viewport.width}x${viewport.height}:dpr${deviceScaleFactor}:start`);
   const page2 = await browser.newPage({ viewport, deviceScaleFactor });
   const asked = [];
   page2.on('request', (r) => { if (r.resourceType() === 'image') asked.push(new URL(r.url()).search); });
@@ -213,6 +217,7 @@ const whichCopy = async (label, viewport, deviceScaleFactor) => {
     return null;
   });
   await page2.close();
+  await frame.evaluate(()=>globalThis.__mxLayoutShiftProbe.mark('responsive-probe:complete'));
   return { label: `${label} ${viewport.width}px DPR${deviceScaleFactor}`, current, asked };
 };
 
@@ -229,12 +234,14 @@ ok(!(desk.current ?? '').includes('w='), `${desk.label} loads the full copy — 
  * URL, so the only thing that can make a browser ask again is the url the next
  * render emits. */
 const before = probe.wideSrc;
+await frame.evaluate(()=>globalThis.__mxLayoutShiftProbe.mark('asset-refresh:start'));
 wideColour = '#b4381f';
 hits = [];
 const refreshed = await fetch(`${B}/api/artifacts/assets/refresh`, {
   method: 'POST', headers: auth, body: JSON.stringify({ id: owner.id }),
 });
 const refreshBody = await refreshed.json();
+await frame.evaluate(()=>globalThis.__mxLayoutShiftProbe.mark('asset-refresh:response'));
 ok(refreshed.status === 200 && (refreshBody.refreshed ?? []).length > 0,
   `refresh_asset re-fetched the changed sources (${refreshed.status} ${JSON.stringify(refreshBody).slice(0, 160)})`);
 
@@ -263,19 +270,19 @@ ok(
   `…and the reader's browser fetched the new version (${fetchedAfter.filter((u) => u.includes('/assets/')).join(' ') || 'nothing'})`,
 );
 await reader.close();
+await frame.evaluate(()=>globalThis.__mxLayoutShiftProbe.mark('asset-refresh:reader-complete'));
 
 /* ── the layout does not move ───────────────────────────────────────────────
  * Measured the way the reading gates do: cumulative layout shift over the
  * document's own load, which is what the recorded box exists to keep at zero. */
 const shifted = await frame.evaluate(async () => {
-  let total = 0;
-  new PerformanceObserver((list) => {
-    for (const e of list.getEntries()) if (!e.hadRecentInput) total += e.value;
-  }).observe({ type: 'layout-shift', buffered: true });
+  globalThis.__mxLayoutShiftProbe.mark('cls-final-observation');
   await new Promise((r) => setTimeout(r, 600));
-  return total;
+  const {total,entries,marks}=globalThis.__mxLayoutShiftProbe;
+  return {total,entries,marks};
 });
-ok(shifted < 0.02, `no layout shift as the images land (CLS ${shifted.toFixed(4)})`);
+console.log('CLS source diagnostic:',JSON.stringify(shifted));
+ok(shifted.total < 0.02, `no layout shift as the images land (CLS ${shifted.total.toFixed(4)})`);
 
 /* ── R15: the SVG as a TOP-LEVEL navigation ─────────────────────────────────
  * A pass is anything but "a document running in this app's origin": the

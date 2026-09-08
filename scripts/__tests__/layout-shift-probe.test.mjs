@@ -1,0 +1,21 @@
+import {afterEach,expect,it,vi} from 'vitest';
+import {installLayoutShiftProbe} from '../lib/layout-shift-probe.mjs';
+afterEach(()=>{vi.unstubAllGlobals();delete globalThis.__mxLayoutShiftProbe;});
+it('captures shift source snapshots and phases without changing the input-excluded cumulative metric',()=>{
+  let report;const observe=vi.fn();
+  let time=0;vi.stubGlobal('performance',{now:()=>time});
+  vi.stubGlobal('PerformanceObserver',class{constructor(callback){report=callback;}observe=observe;});
+  installLayoutShiftProbe();
+  const probe=globalThis.__mxLayoutShiftProbe;
+  const node={tagName:'IMG',id:'wide',getAttribute:name=>name==='class'?'rounded':null};
+  const entry={startTime:25,value:0.0271,hadRecentInput:false,sources:[{node,previousRect:{x:1,y:2,width:3,height:4},currentRect:{x:1,y:20,width:3,height:4}}]};
+  report({getEntries:()=>[entry]});
+  time=40;probe.mark('asset-refresh:start');
+  report({getEntries:()=>[{...entry,startTime:50,value:0.5,hadRecentInput:true}]});
+  node.id='changed-after-entry';
+  expect(observe).toHaveBeenCalledWith({type:'layout-shift',buffered:true});
+  expect(probe.total).toBe(0.0271);
+  expect(probe.entries[0]).toMatchObject({time:25,value:0.0271,phase:'initial-load',sources:[{tag:'IMG',id:'wide',class:'rounded',previous:{x:1,y:2,width:3,height:4},current:{x:1,y:20,width:3,height:4}}]});
+  expect(probe.entries[1]).toMatchObject({phase:'asset-refresh:start',hadRecentInput:true});
+  expect(probe.marks.map(m=>m.phase)).toEqual(['initial-load','asset-refresh:start']);
+});
