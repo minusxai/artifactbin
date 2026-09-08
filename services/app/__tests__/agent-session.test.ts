@@ -20,7 +20,7 @@ import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { POST as agentPrompt } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
-import { servesDocumentDirectly } from '@/server/app';
+import { APP_CSP, createAppServer } from '@/server/app';
 import { AGENT_COOKIE, decodeAgentSessionEnvelope, encodeAgentSession } from '@/lib/agent-session';
 import { existingPaste } from '@/lib/agent-copy';
 import { mintToken, resolveTokenById, revokeToken } from '@/lib/tokens';
@@ -294,8 +294,10 @@ describe('one viewer, every surface', () => {
     const doc = (await (await createArtifact(request('/api/artifacts', { method: 'POST', token: minted.token, json: { markup: '<h1>x</h1>', visibility: 'private' } }))).json()) as { id: string };
 
     const cookie = await agentCookie([minted.id]);
-    const served = await servesDocumentDirectly(request(`/a/${doc.id}`, { cookie }));
-    expect(served).toBeNull(); // the page (shell), not the document
+    const app=createAppServer({indexHtml:async()=>'<html><head></head><body><div id="root"></div></body></html>'});
+    let served=await app.request(request(`/a/${doc.id}`,{cookie}));
+    if(served.status===302)served=await app.request(served.headers.get('location')!,{headers:{cookie}});
+    expect(served.status).toBe(200);expect(served.headers.get('content-security-policy')).toBe(APP_CSP);
   });
 });
 

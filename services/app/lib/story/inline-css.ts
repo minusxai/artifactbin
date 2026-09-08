@@ -19,6 +19,15 @@ export function isolateStoryNodes(nodes: JsxNode[], css: string): JsxNode[] {
   const visit = (items: JsxNode[]): JsxNode[] => items.map(node => {
     if (node.type !== 'element' || node.tag === 'Iframe') return node;
     return { ...node, children: visit(node.children), attributes: node.attributes.map(attr => {
+      if (['fontfamily', 'font-family'].includes(attr.name.toLowerCase()) && attr.value.static && typeof attr.value.json === 'string') {
+        const input = cssTree.generate({ type: 'String', value: attr.value.json });
+        const filtered = cssTree.parse(isolateStoryCss(`${aliases.join('')}.inline{font-family:${input}}`));
+        let family = attr.value.json;
+        cssTree.walk(filtered, { visit: 'Declaration', enter(decl) {
+          if (decl.property === 'font-family' && decl.value.type === 'Value' && decl.value.children.first?.type === 'String') family = decl.value.children.first.value;
+        } });
+        return { ...attr, value: { static: true, json: family } };
+      }
       if (!['style','labelstyle'].includes(attr.name.toLowerCase()) || !attr.value.static || !attr.value.json || typeof attr.value.json !== 'object' || Array.isArray(attr.value.json)) return attr;
       const style = { ...attr.value.json };
       for (const [property, value] of Object.entries(style)) {
@@ -42,6 +51,9 @@ export function isolateStoryNodes(nodes: JsxNode[], css: string): JsxNode[] {
 const INLINE_ROOT = '[data-mx-inline-story]';
 const SAFE_AT_RULES = new Set(['media', 'supports', 'container', 'layer', 'scope', 'keyframes', '-webkit-keyframes', 'font-face', 'starting-style']);
 const familyKey = (name: string) => name.trim().replace(/^['"]|['"]$/g, '').toLowerCase();
+// Named families consumed by app/globals.css; arbitrary document/chart families
+// stay unchanged because trusted controls never consume them.
+const TRUSTED_FAMILIES = new Set(['JetBrains Mono Variable', 'IBM Plex Sans', 'Cormorant Garamond Variable', 'SF Mono', 'Menlo', 'EB Garamond', 'Georgia'].map(familyKey));
 const decoded = (name: string) => cssTree.ident.decode(name);
 
 /** Scope a complete document stylesheet for a shared app document. Browser safe.
@@ -73,6 +85,7 @@ export function isolateStoryCss(css: string): string {
         if (decl.type !== 'Declaration' || decoded(decl.property).toLowerCase() !== 'font-family') return;
         const key = familyKey(cssTree.generate(decl.value));
         const normalized = decoded(key);
+        if (!TRUSTED_FAMILIES.has(normalized)) return;
         fonts.set(normalized, normalized.startsWith('mx-author-') ? normalized : `mx-author-${sha256Hex(normalized).slice(0, 16)}`);
       });
     },

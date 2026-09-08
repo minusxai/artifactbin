@@ -3,20 +3,27 @@ import { isolateStoryCss, isolateStoryNodes } from '../inline-css';
 import { parseJsx } from '@/lib/jsx';
 
 describe('inline document CSS isolation', () => {
+  it('preserves custom chart font names but aliases trusted UI families in SVG attributes', () => {
+    const css = '@font-face{font-family:"My Font";src:url(/webfonts/a.woff2)}@font-face{font-family:"IBM Plex Sans";src:url(/webfonts/b.woff2)}';
+    expect(isolateStoryCss(css)).toContain('font-family:"My Font"');
+    const parsed = parseJsx('<svg><text fontFamily="IBM Plex Sans">Label</text></svg>');
+    if (!parsed.ok) throw Error(parsed.error);
+    expect(JSON.stringify(isolateStoryNodes(parsed.nodes, css))).toContain('mx-author-');
+  });
   it('keeps cached imported webfonts', () => {
     expect(isolateStoryCss('@font-face{font-family:F;src:url(/webfonts/font.woff2)}')).toContain('/webfonts/font.woff2');
   });
   it('maps inline font references and unsafe image-set values without changing numeric styles or iframe payloads', () => {
-    const parsed = parseJsx('<p id="kept" style={{fontFamily:"My Font",fontSize:14,backgroundImage:\'image-set("https://evil.test/p" 1x)\'}}>Text</p><Iframe><p style={{fontFamily:"My Font"}}>Inner</p></Iframe>');
+    const parsed = parseJsx('<p id="kept" style={{fontFamily:"IBM Plex Sans",fontSize:14,backgroundImage:\'image-set("https://evil.test/p" 1x)\'}}>Text</p><Iframe><p style={{fontFamily:"My Font"}}>Inner</p></Iframe>');
     if (!parsed.ok) throw Error(parsed.error);
-    const nodes = isolateStoryNodes(parsed.nodes, '@font-face{font-family:"My Font";src:url(/webfonts/a.woff2)}');
+    const nodes = isolateStoryNodes(parsed.nodes, '@font-face{font-family:"IBM Plex Sans";src:url(/webfonts/a.woff2)}');
     const first = nodes[0];
     if (first.type !== 'element') throw Error('Missing p');
     const style = first.attributes.find(attr=>attr.name==='style')?.value;
     expect(style?.static && style.json).toMatchObject({fontSize:14,fontFamily:expect.stringContaining('mx-author-')});
     expect(JSON.stringify(style)).not.toContain('evil.test');
     expect(nodes[1]).toEqual(parsed.nodes[1]);
-    expect(JSON.stringify(parsed.nodes[0])).toContain('My Font');
+    expect(JSON.stringify(parsed.nodes[0])).toContain('IBM Plex Sans');
   });
   it('removes global property registrations and namespaces font faces with their references', () => {
     const css = isolateStoryCss('@property --color-fg{syntax:"<color>";inherits:true;initial-value:red}@font-face{font-family:"JetBrains Mono Variable";src:url(/fonts/font.woff2)}body{font-family:"JetBrains Mono Variable",monospace}');

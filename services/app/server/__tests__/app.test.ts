@@ -24,7 +24,7 @@ const SECRET = 'vitest-actor-secret-0000000000000000';
 const BASE = 'http://localhost:3000';
 const actorHeaders = (actor: Actor, secret: string): Record<string, string> => ({ [ACTOR_HEADER]: signActor(actor, secret) });
 
-const app = createAppServer({ actorSecret: SECRET, indexHtml: async () => '<!doctype html><div id="root">SPA</div>' });
+const app = createAppServer({ actorSecret: SECRET, indexHtml: async () => '<!doctype html><html><head><title>SPA</title></head><body><div id="root">SPA</div></body></html>' });
 const as = (actor: Parameters<typeof actorHeaders>[0]) => actorHeaders(actor, SECRET);
 
 async function world() {
@@ -35,12 +35,13 @@ async function world() {
 }
 
 describe('reader or owner', () => {
-  it('serves a reader the DOCUMENT at /a/<id> and at the pretty URL — raw\'s response, CSP and all', async () => {
+  it('serves readable initial markup under app CSP at the canonical address', async () => {
     const w = await world();
     for (const path of [`/a/${w.pub.id}`, `/@${w.owner.username}/${w.pub.id}-pub`]) {
-      const res = await app.request(path, { headers: as({ credential: 'none' }) });
+      let res = await app.request(path, { headers: as({ credential: 'none' }) });
+      if (res.status === 302) res = await app.request(res.headers.get('location')!, { headers: as({ credential: 'none' }) });
       expect(res.status, path).toBe(200);
-      expect(res.headers.get('content-security-policy'), path).toContain("default-src 'none'");
+      expect(res.headers.get('content-security-policy'), path).toBe(APP_CSP);
       expect(await res.text()).toContain('public words');
     }
   });
@@ -83,7 +84,7 @@ describe('reader or owner', () => {
   });
 });
 
-describe('the address heals for the page, never for the reader', () => {
+describe('the address heals after checking read access', () => {
   it('redirects the owner from /a/<id> to the canonical pretty URL', async () => {
     const w = await world();
     const res = await app.request(`/a/${w.pub.id}`, { headers: as({ credential: 'session', userId: w.owner.id, email: w.owner.email }) });
@@ -96,11 +97,11 @@ describe('the address heals for the page, never for the reader', () => {
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe(`/@${w.owner.username}/${w.pub.id}-pub`);
   });
-  it('never redirects a READER — the link they were handed IS the address they are served at', async () => {
+  it('heals a public reader address to its canonical app route', async () => {
     const w = await world();
     const res = await app.request(`/a/${w.pub.id}`, { headers: as({ credential: 'none' }) });
-    expect(res.status).toBe(200);
-    expect(res.headers.get('content-security-policy')).toContain("default-src 'none'");
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe(`/@${w.owner.username}/${w.pub.id}-pub`);
   });
   it('never redirects an unreadable document — that target would name its owner', async () => {
     const w = await world();

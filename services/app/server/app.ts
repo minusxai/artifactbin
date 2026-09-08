@@ -2,11 +2,9 @@
  * THE APP SERVER — Hono, the whole app behind the proxy:
  *
  *  - every `app/**\/route.ts` handler, from the generated table (server/api);
- *  - the READER/OWNER split for `/a/<id>` and `/@user/...` (the one thing
- *    `proxy.ts` did as Next middleware): a reader is served the document
- *    ITSELF — the `raw` handler's response, per-row CSP and all, at the same
- *    URL, no iframe, no redirect; an owner, an editor, a commenter, or any
- *    document whose data needs the page's relay gets the app page;
+ *  - canonical artifact URLs use the same app document for every viewer,
+ *    with permission-filtered prepared data and readable initial story HTML;
+ *    explicit raw/export responses retain their document sandbox policy;
  *  - the app's pages: one SPA (web/, built by Vite) served for the app's
  *    paths under the app CSP;
  *  - the static tree under public/ with the cache rules next.config used to
@@ -19,7 +17,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { loadStorySsr } from '@/lib/story/ssr.server';
 import type { PreparedStoryRuntime } from '@/lib/story/prepared-runtime';
-import { isolateStoryCss } from '@/lib/story/inline-css';
+import { isolateStoryCss, isolateStoryNodes } from '@/lib/story/inline-css';
 import { escapeHtml } from '@/lib/story/reader-chrome';
 import { STORY_ROOT_ATTR } from '@/lib/story-surface';
 import { Hono } from 'hono';
@@ -28,14 +26,11 @@ import { actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artif
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { verifyExportKey } from '@/lib/export-key';
 import { ID_RE } from '@/lib/ids';
-import { readIntent } from '@/lib/intent';
 import { runWithRequest } from '@/lib/request-context';
-import { declaresLiveData, declaresMutations } from '@/lib/story/helmet';
 import { SHOWCASE_ORIGIN } from '@/lib/showcase';
 import { canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
 import { ownerUsername } from '@/lib/users';
-import { roleFor, sessionActor } from '@/lib/viewer';
-import { canAnnotate } from '@/lib/share-roles';
+import { sessionActor } from '@/lib/viewer';
 import { baseUrl, json } from '@/lib/http';
 import { ASSETS_ORIGIN } from '@/lib/config';
 import { GET as publicAssetBytes } from '@/app/assets/[hash]/route';
@@ -58,12 +53,15 @@ export const withBootstrap = (html: string, data: unknown): string =>
  * before React mounts and removed when the inline runtime commits. App root
  * and head bootstrap precede ALL author nodes, including colliding ids.
  */
-export function withInitialStory(html: string, runtime: PreparedStoryRuntime, id: string, description?: string | null): string {
-  const css = isolateStoryCss([runtime.baseCss, runtime.compiledCss ?? '', runtime.authorCss ?? ''].join('\n')).replace(/<\/style/gi, '');
-  const body = loadStorySsr().renderStoryBody(runtime.data);
+export function withInitialStory(html: string, runtime: PreparedStoryRuntime, id: string, description?: string | null, origin = ''): string {
+  const combined = [runtime.baseCss, runtime.compiledCss ?? '', runtime.authorCss ?? ''].join('\n');
+  const css = isolateStoryCss(combined).replace(/<\/style/gi, '');
+  const body = loadStorySsr().renderStoryBody({ ...runtime.data, nodes: isolateStoryNodes(runtime.data.nodes, combined) });
   const metadata = `<meta property="og:title" content="${escapeHtml(runtime.title)}">`
     + (description ? `<meta name="description" content="${escapeHtml(description)}"><meta property="og:description" content="${escapeHtml(description)}">` : '')
-    + `<meta property="og:image" content="/a/${escapeHtml(id)}/export?mode=card"><meta name="twitter:card" content="summary_large_image">`;
+    + `<meta property="og:image" content="${escapeHtml(origin)}/a/${escapeHtml(id)}/export?mode=card"><meta name="twitter:card" content="summary_large_image">`
+    + `<link rel="help" href="${escapeHtml(origin)}/docs" title="Agents: read this first to edit any artifact here">`
+    + `<meta name="artifactbin:agent" content="To edit this artifact with an agent, read ${escapeHtml(origin)}/docs — tokens at ${escapeHtml(origin)}/tokens/new">`;
   return html.replace(/<title>[\s\S]*?<\/title>/i, () => `<title>${escapeHtml(runtime.title)}</title>`)
     .replace('</head>', () => `${metadata}</head>`)
     .replace('</body>', () => `<div data-mx-initial-story="" data-mx-inline-story="" ${STORY_ROOT_ATTR} class="${runtime.data.colorMode}"${runtime.theme ? ` data-theme="${escapeHtml(runtime.theme)}"` : ''}><style>${css}</style>${body}</div></body>`);
@@ -130,57 +128,6 @@ export function candidateDocument(pathname: string): { id: string } | null {
   return file ? { id: file.id } : null;
 }
 
-/**
- * Reader or owner? A rewrite to the served document when the viewer is a
- * plain reader of a markup document that needs no session for its data;
- * otherwise the page. Ported from proxy.ts unchanged in its decisions.
- */
-export async function servesDocumentDirectly(request: Request): Promise<string | null> {
-  const url = new URL(request.url);
-  const found = candidateDocument(url.pathname);
-  if (!found) return null;
-  if (url.searchParams.has('key')) return null;
-  const actor = await sessionActor(request).catch(() => null);
-  const anonymous = !actor || (!actor.viewer && !actor.tokenId);
-  /*
-   * `?intent=` is an instruction only the SHELL can carry out (fork, comment —
-   * lib/intent), so an address carrying one has to reach the shell.
-   *
-   * Scoped to a viewer who is NOT anonymous, and that scope is the whole
-   * safety of it: `intent` rides on a link anyone may hand over and anyone may
-   * append to, so unscoped it would let a stranger — or a crawler — turn every
-   * public document's fast path into the app page by typing six characters.
-   * Someone with no credential can neither fork nor comment, so there is
-   * nothing for the shell to do for them either.
-   *
-   * Read through the SAME allowlist the page acts on, rather than by asking
-   * whether the key is merely present: the two halves have to agree, or a
-   * signed-in reader at `?intent=garbage` is pushed onto the shell's slower
-   * path for an instruction that will then correctly do nothing there.
-   *
-   * Above the row read, beside the `key` bypass, so a credential-less reader
-   * still reaches the document without touching the database.
-   */
-  if (!anonymous && readIntent(url.search) !== null) return null;
-  const artifact = await getArtifactById(found.id);
-  // A FOLDER IS NEVER SERVED TOP-LEVEL. It has no document — its listing is app
-  // data the page endpoint answers and `withBootstrap` inlines — so `raw` is a
-  // 404 for one and there is nothing here to hand over. Everyone gets the app
-  // page, and the ACL is unchanged: a folder this viewer may not read is the
-  // same uniform 404 the page already answers for an unknown id.
-  if (!artifact || artifact.format !== 'markup') return null;
-  const needsSessionForData = declaresLiveData(artifact.source) && !(await canReadArtifact(artifact, null));
-  if (needsSessionForData) return null;
-  // A dataset editor may only VIEW this document. Its mutations still need
-  // the parent session relay; opaque top-level documents have no credentials.
-  if (!anonymous && declaresMutations(artifact.source)) return null;
-  // The shell is for anyone who may do more than READ it — today owner,
-  // editor and commenter; tomorrow whoever a `comment`-granting link lets in,
-  // with no change here. A plain viewer is served the document itself.
-  if (!anonymous && canAnnotate(await roleFor(artifact, actor))) return null;
-  if (!(await canReadArtifact(artifact, actor?.viewer ?? null))) return null;
-  return found.id;
-}
 
 const SPA_PATHS = /^(\/|\/login|\/account|\/chat|\/assets|\/trash|\/tokens|\/docs-human|\/datasets\/new|\/datasets\/[A-Za-z0-9]+\/edit)$/;
 
@@ -231,7 +178,6 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   }
   const webDir = opts.webDir ?? path.resolve('dist/web');
   const publicDir = opts.publicDir ?? path.resolve('public');
-  const raw = ROUTES.find((r) => r.dir === '/a/[id]/raw')?.module.GET as ((request: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response>) | undefined;
   let indexCache: string | null = null;
   const index = async (url: string): Promise<string> => {
     if (opts.indexHtml) return opts.indexHtml(url);
@@ -260,9 +206,12 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     if (code === 404 && !(c.req.raw.headers.get('accept') ?? '').includes('text/html')) return apiNotFound(c);
     const surface = (data?.artifact as { surface?: { id: string; runtime?: PreparedStoryRuntime }; description?: string | null } | undefined);
     const shell = surface?.surface?.runtime
-      ? withInitialStory(html, surface.surface.runtime, surface.surface.id, surface.description)
+      ? withInitialStory(html, surface.surface.runtime, surface.surface.id, surface.description, baseUrl(c.req.raw))
       : html;
-    return new Response(data ? withBootstrap(shell, data) : shell, { status: code, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS } });
+    return new Response(data ? withBootstrap(shell, data) : shell, { status: code, headers: {
+      'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
+      ...(surface?.surface?.runtime ? { Link: `<${baseUrl(c.req.raw)}/docs>; rel="help"` } : {}),
+    } });
   };
 
   const pageData = (dir: string) => ROUTES.find((r) => r.dir === dir)?.module.GET as ((request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>) | undefined;
