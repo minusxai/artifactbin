@@ -62,7 +62,8 @@ export const STORY_COLUMN_CSS = `
 .mx-doc { flex: 1 1 auto; min-width: 0; container-type: inline-size; overflow-x: clip; }
 `;
 
-export const STORY_CHROME_CSS = `
+/** Layout owned by the document runtime, independent of first-party controls. */
+export const STORY_DOCUMENT_CHROME_CSS = `
 .mx-deck { display: flex; align-items: flex-start; }
 .mx-rail {
   position: sticky; top: 0; flex: 0 0 190px; width: 190px; height: 100vh;
@@ -161,6 +162,14 @@ input.mx-rail-title { min-width: 0; width: 100%; background: transparent; border
 :fullscreen .mx-outline { display: none; }
 @media (max-width: 1023px) { .mx-outline { display: none; } }
 @media print { .mx-outline { display: none; } }
+`;
+
+const STORY_READER_CHROME_CSS = `
+#mx-controls-loading{pointer-events:none;font:12px monospace;color:var(--mx-reader-muted);opacity:.65}
+#mx-controls-loading .mx-loading-bar{position:fixed;top:0;left:0;right:0;height:44px;padding:0 16px;display:flex;align-items:center;justify-content:space-between;background:var(--mx-reader-bg);border-bottom:1px solid var(--mx-reader-border);z-index:2147482999}
+#mx-controls-loading .mx-loading-byline{position:fixed;bottom:16px;left:16px;display:flex;gap:12px;z-index:2147482999}
+#mx-controls-loading .mx-loading-reactions{position:fixed;bottom:16px;right:16px;display:flex;gap:24px;padding:12px;z-index:2147482999}
+@media(max-width:639px){#mx-controls-loading .mx-loading-byline{bottom:80px}}
 /*
  * THE READER'S CHROME — Instagram-shaped, and the shape is the point.
  *
@@ -540,6 +549,9 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
 :fullscreen .mx-reader-chrome { display: none !important; }
 @media print { .mx-reader-chrome { display: none !important; } }
 `;
+
+/** Standalone/raw documents still need both document layout and reader UI. */
+export const STORY_CHROME_CSS = STORY_DOCUMENT_CHROME_CSS + STORY_READER_CHROME_CSS;
 
 /**
  * The EMBED busy state — the visible half of stale-while-revalidate. A value

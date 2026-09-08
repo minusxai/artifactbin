@@ -1,5 +1,6 @@
 import {createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode} from 'react';
 import {createPortal} from 'react-dom';
+import {TrustedAppLinks} from '@/web/AppNavigation';
 
 /** First-party CSS isolation, never an author-script or authentication boundary.
  * Callers supply first-party styles only. The root owns its portal target and
@@ -21,7 +22,7 @@ export function TrustedUiHost(props: TrustedUiProps): ReactNode { return <Bounda
 export function TrustedChrome({children}: {children:ReactNode}): ReactNode {
   const boundary = useContext(SharedBoundary);
   if (boundary === undefined) return children;
-  return boundary && createPortal(<PortalContainer.Provider value={boundary.portals}>{children}</PortalContainer.Provider>, boundary.content);
+  return boundary && createPortal(<PortalContainer.Provider value={boundary.portals}><TrustedAppLinks>{children}</TrustedAppLinks></PortalContainer.Provider>, boundary.content);
 }
 interface Boundary {root: ShadowRoot; style: HTMLStyleElement; scope: HTMLDivElement; content: HTMLDivElement; portals: HTMLDivElement}
 const SharedBoundary = createContext<Boundary | null | undefined>(undefined);

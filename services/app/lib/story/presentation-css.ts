@@ -1,5 +1,5 @@
 import {getStoryFontCss,storyFontFaceCss} from '@/lib/data/story/story-fonts';
-import {STORY_COLUMN_CSS,STORY_EMBED_CSS,STORY_TABLE_CSS} from '@/lib/story-runtime/chrome-css';
+import {STORY_COLUMN_CSS,STORY_DOCUMENT_CHROME_CSS,STORY_EMBED_CSS,STORY_TABLE_CSS} from '@/lib/story-runtime/chrome-css';
 import {STORY_BARE_TYPOGRAPHY_CSS} from '@/lib/story-surface/bare-typography';
 import {documentFontCss,documentFonts} from '@/lib/story/document-fonts';
 import type {HelmetContent} from '@/lib/story/helmet';
@@ -11,7 +11,7 @@ export function storyPresentationCss(theme:StoryThemeName|null,helmet:HelmetCont
   const fonts=documentFonts(helmet);
   return [
     ':root { --mx-vh: 100vh; }',
-    STORY_BARE_TYPOGRAPHY_CSS,STORY_EMBED_CSS,STORY_TABLE_CSS,STORY_COLUMN_CSS,
+    STORY_BARE_TYPOGRAPHY_CSS,STORY_EMBED_CSS,STORY_TABLE_CSS,STORY_COLUMN_CSS,STORY_DOCUMENT_CHROME_CSS,
     getStoryFontCss(theme??undefined),
     faces.length?storyFontFaceCss(faces):'',
     documentFontCss(fonts),

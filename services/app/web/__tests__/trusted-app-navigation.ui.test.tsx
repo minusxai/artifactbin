@@ -4,7 +4,7 @@ import {MemoryRouter,useLocation,useNavigate} from 'react-router';
 import {expect,it,vi} from 'vitest';
 import {TrustedChrome,TrustedUiHost,useTrustedPortalContainer} from '@/components/TrustedUi';
 import WorkspaceCreate from '@/components/WorkspaceCreate';
-import {AppNavigationBinding,TrustedAppLinks,trustedAnchorNavigation} from '../AppNavigation';
+import {AppNavigationBinding,trustedAnchorNavigation} from '../AppNavigation';
 import {appNavigate,isClientAppUrl} from '../api-origin';
 
 it('keeps route contexts in chrome and light-page dialogs outside the persistent boundary',async()=>{
@@ -17,9 +17,9 @@ it('keeps route contexts in chrome and light-page dialogs outside the persistent
  await act(async()=>{await go!('/terms');});expect(root!.host).toBe(host);expect(privateTarget).toBe(target);expect(root!.textContent).toContain('source:/terms');view.unmount();
 });
 
-it('binds explicit and closed-root link navigation to Router with replace and back support',async()=>{
+it('binds every trusted-chrome link to Router with replace and back support',async()=>{
  let root:ShadowRoot;let go:ReturnType<typeof useNavigate>;
- function Probe(){const location=useLocation();go=useNavigate();return <><p aria-label="Address">{location.pathname+location.search+location.hash}</p><TrustedChrome><TrustedAppLinks><a href="/terms?lang=en#policy" aria-label="Terms link" ref={el=>{if(el)root=el.getRootNode() as ShadowRoot;}}>Terms</a></TrustedAppLinks></TrustedChrome></>;}
+ function Probe(){const location=useLocation();go=useNavigate();return <><p aria-label="Address">{location.pathname+location.search+location.hash}</p><TrustedChrome><a href="/terms?lang=en#policy" aria-label="Terms link" ref={el=>{if(el)root=el.getRootNode() as ShadowRoot;}}>Terms</a></TrustedChrome></>;}
  render(<MemoryRouter initialEntries={['/privacy']}><AppNavigationBinding/><TrustedUiHost styles="" mode="light"><Probe/></TrustedUiHost></MemoryRouter>);
  fireEvent.click(root!.querySelector('[aria-label="Terms link"]')!);await waitFor(()=>expect(screen.getByLabelText('Address').textContent).toBe('/terms?lang=en#policy'));
  act(()=>appNavigate('/account',true));await waitFor(()=>expect(screen.getByLabelText('Address').textContent).toBe('/account'));
