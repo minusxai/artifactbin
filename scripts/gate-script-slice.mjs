@@ -3,7 +3,7 @@
  *
  * The vitest suite proves the document's bytes; what only a browser can prove:
  *
- *   1. the Helmet <script> EXECUTES in view mode (DOM mutation observed)
+ *   1. a managed Iframe script EXECUTES in view mode (DOM mutation observed)
  *   2. the sandbox holds: opaque origin (no localStorage, no parent reach),
  *      CSP blocks network exfiltration (fetch + img beacon)
  *   3. the author <style> actually paints
@@ -40,8 +40,8 @@ const SCRIPT = [
   "document.body.dataset.scriptRan = '1';",
   "const el = document.createElement('div'); el.id = 'script-made'; el.textContent = 'made by script'; document.body.appendChild(el);",
   "window.__exfil = 'pending';",
-  "fetch('https://example.com/x').then(() => { window.__exfil = 'allowed'; }, () => { window.__exfil = 'blocked'; });",
-  "const img = new Image(); img.onload = () => { window.__img = 'allowed'; }; img.onerror = () => { window.__img = 'blocked'; }; img.src = 'https://example.com/pixel.png';",
+  "fetch('http://169.254.169.254/latest/meta-data').then(() => { window.__exfil = 'allowed'; }, () => { window.__exfil = 'blocked'; });",
+  "const img = new Image(); img.onload = () => { window.__img = 'allowed'; }; img.onerror = () => { window.__img = 'blocked'; }; img.src = 'http://169.254.169.254/pixel.png';",
   "try { void parent.document.title; window.__parent = 'reachable'; } catch { window.__parent = 'blocked'; }",
   "try { localStorage.getItem('x'); window.__storage = 'reachable'; } catch { window.__storage = 'blocked'; }",
 ].join('\n');
@@ -50,8 +50,9 @@ const markup = [
   '<Helmet><title>slice gate</title>',
   `<Query name="rows">{\`select * from ref_${ds.id}\`}</Query>`,
   '<style>{`h1 { color: rgb(200, 10, 10); }`}</style>',
-  '<script>{`' + SCRIPT + '`}</script></Helmet>',
+  '</Helmet>',
   '<h1 className="text-4xl font-bold">Slice doc</h1>',
+  '<Iframe title="Slice script" height={100}><p>managed script</p><script>{`' + SCRIPT + '`}</script></Iframe>',
   `<p>total: <Number data="$rows" col="revenue" agg="sum" /></p>`,
   '<Tabs defaultValue="one"><TabsList><TabsTrigger value="one">Tab one</TabsTrigger><TabsTrigger value="two">Tab two</TabsTrigger></TabsList>',
   '<TabsContent value="one"><p>first pane</p></TabsContent><TabsContent value="two"><p>second pane</p></TabsContent></Tabs>',
@@ -69,18 +70,25 @@ await page.goto(`${BASE}/a/${doc.id}`);
 const frameEl = await page.waitForSelector('iframe[title="artifact"]', { timeout: 15000 });
 const frame = await frameEl.contentFrame();
 await frame.waitForSelector('h1', { timeout: 15000 });
+const managedRealm = async (host, title) => {
+  const outer = host.locator(`iframe[title="${title}"]`); await outer.waitFor({ timeout: 20000 });
+  const wrapper = await outer.contentFrame(); const inner = wrapper.locator('iframe'); await inner.waitFor({ timeout: 20000 });
+  return (await inner.elementHandle()).contentFrame();
+};
+const scriptRealm = await managedRealm(frame, 'Slice script');
 
 // 1. script executed
-await frame.waitForFunction("document.body.dataset.scriptRan === '1'", { timeout: 10000 }).catch(() => {});
-check(await frame.evaluate("document.body.dataset.scriptRan === '1'"), 'Helmet script executed in view mode');
-check(await frame.evaluate("!!document.getElementById('script-made')"), 'script-created element present');
+await scriptRealm.waitForFunction("document.body.dataset.scriptRan === '1'", { timeout: 10000 }).catch(() => {});
+check(await scriptRealm.evaluate("document.body.dataset.scriptRan === '1'"), 'managed script executed in view mode');
+check(await scriptRealm.evaluate("!!document.getElementById('script-made')"), 'script-created element present only in its managed realm');
 
 // 2. isolation
-await frame.waitForFunction("window.__exfil !== 'pending'", { timeout: 10000 }).catch(() => {});
-check((await frame.evaluate('window.__exfil')) === 'blocked', 'CSP blocked fetch exfiltration');
-check((await frame.evaluate('window.__img')) === 'blocked', 'CSP blocked img beacon');
-check((await frame.evaluate('window.__parent')) === 'blocked', 'parent document unreachable (opaque origin)');
-check((await frame.evaluate('window.__storage')) === 'blocked', 'localStorage unreachable (opaque origin)');
+await scriptRealm.waitForFunction("window.__exfil !== 'pending'", { timeout: 10000 }).catch(() => {});
+check((await scriptRealm.evaluate('window.__exfil')) === 'blocked', 'CSP blocked fetch exfiltration');
+check((await scriptRealm.evaluate('window.__img')) === 'blocked', 'CSP blocked img beacon');
+check((await scriptRealm.evaluate('window.__parent')) === 'blocked', 'parent document unreachable (opaque origin)');
+check((await scriptRealm.evaluate('window.__storage')) === 'blocked', 'localStorage unreachable (opaque origin)');
+check((await frame.locator('#script-made').count()) === 0, 'managed author DOM never enters the document parent');
 
 // 3. author style painted
 const color = await frame.evaluate("getComputedStyle(document.querySelector('h1')).color");
@@ -142,17 +150,17 @@ check(remounted, 'remote edit reached the view (iframe remounted)');
 //     rest of the interactive vocabulary were allowed.
 const interactive = await api('/api/artifacts', {
   markup: [
-    '<Helmet><script>{`',
+    '<Iframe title="Interactive script" height={120}><script>{`',
     "document.addEventListener('click', function (e) {",
     "  if (e.target && e.target.id === 'tick') {",
     "    var n = document.getElementById('count');",
     "    n.textContent = String(Number(n.textContent) + 1);",
     '  }',
     '});',
-    '`}</script></Helmet>',
+    '`}</script>',
     '<p id="count">0</p>',
     '<button id="tick">count up</button>',
-    '<input id="field" type="text" value="typed" />',
+    '<input id="field" type="text" value="typed" /></Iframe>',
   ].join('\n'),
 });
 {
@@ -160,16 +168,17 @@ const interactive = await api('/api/artifacts', {
   await becomeOwner(p2, BASE, mint.token); // a fresh context owns nothing
   await p2.goto(`${BASE}/a/${interactive.id}`);
   const f2 = await (await p2.waitForSelector('iframe[title="artifact"]', { timeout: 20000 })).contentFrame();
-  await f2.waitForSelector('#tick', { timeout: 20000 });
+  const interactiveRealm = await managedRealm(f2, 'Interactive script');
+  await interactiveRealm.waitForSelector('#tick', { timeout: 20000 });
   await p2.waitForTimeout(1500);
-  await f2.click('#tick');
-  await f2.click('#tick');
+  await interactiveRealm.click('#tick');
+  await interactiveRealm.click('#tick');
   await p2.waitForTimeout(400);
-  check((await f2.textContent('#count')) === '2', 'an author script drives a real <button>');
+  check((await interactiveRealm.textContent('#count')) === '2', 'a managed author script drives a real <button>');
   // An authored value is the STARTING value, not a binding: React would
   // otherwise make the field controlled with no onChange and refuse input.
-  await f2.fill('#field', 'edited by the reader');
-  check((await f2.inputValue('#field')) === 'edited by the reader', 'and an authored <input> stays editable');
+  await interactiveRealm.fill('#field', 'edited by the reader');
+  check((await interactiveRealm.inputValue('#field')) === 'edited by the reader', 'and an authored <input> stays editable');
   await p2.close();
 }
 
@@ -209,8 +218,8 @@ const broken = await api('/api/artifacts', {
  * second rendering: what the script CANNOT do is write, because it has no way
  * to sign a message (gate-inplace-edit proves that).
  *
- * What must hold here is that a scripted document is editable at all, in the
- * frame it was already in, without the script being re-run.
+ * What must hold here is that a document containing a managed script is
+ * editable in the frame it was already in, without remounting that script.
  */
 await becomeOwner(page, BASE, mint.token);
 await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
@@ -218,7 +227,8 @@ await page.waitForSelector('iframe[title="artifact"]', { timeout: 30000 });
 await page.waitForTimeout(4000);
 const documentFrame = () => page.frames().find((f) => /\/raw/.test(f.url()));
 await page.evaluate(() => { document.querySelector('iframe[title="artifact"]').__probe = 'same-frame'; });
-const runsBefore = await documentFrame().evaluate("document.querySelectorAll('#script-made').length").catch(() => 0);
+const beforeRealm = await managedRealm(documentFrame(), 'Slice script');
+const runsBefore = await beforeRealm.evaluate("document.querySelectorAll('#script-made').length").catch(() => 0);
 
 await openArtifactControls(page);
 await page.click('[aria-label="Edit artifact"]');
@@ -229,8 +239,9 @@ check(await page.evaluate(() => document.querySelector('iframe[title="artifact"]
   'a scripted document is edited in the frame it was already in');
 check(await documentFrame().evaluate("!!document.querySelector('h1')?.isContentEditable").catch(() => false),
   'and it becomes editable');
-check(await documentFrame().evaluate("document.querySelectorAll('#script-made').length").catch(() => -1) === runsBefore,
-  'entering edit did not re-run the author script');
+const afterRealm = await managedRealm(documentFrame(), 'Slice script');
+check(await afterRealm.evaluate("document.querySelectorAll('#script-made').length").catch(() => -1) === runsBefore,
+  'entering edit did not re-run the managed author script');
 
 await browser.close();
 if (failures.length) { console.error(`\n${failures.length} failure(s)`); process.exit(1); }

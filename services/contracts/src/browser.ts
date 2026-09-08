@@ -31,6 +31,8 @@ export interface RenderRequest {
   capture: RenderCapture;
   /** Abort every request the page makes to another origin (the document is self-contained by rule). */
   sameOriginOnly?: boolean;
+  /** Exact additional first-party origins allowed while `sameOriginOnly` remains enforced. */
+  allowedOrigins?: string[];
   /** Extra CSS applied before the shot (hide dev overlays, etc.). */
   injectCss?: string;
   /** Fixed wait after the selector appears, for embeds to hydrate. */

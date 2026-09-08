@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { BrowserService, RenderRequest, RenderResult } from '@artifactbin/contracts';
 import { exportImageResponse, resetExportRenderer } from '@/lib/export';
 import { setServices } from '@/lib/services';
+import {ASSETS_ORIGIN} from '@/lib/config';
 
 /** A browser that answers whatever this test says, and counts the asks. */
 function scripted(...answers: RenderResult[]): BrowserService & { seen: RenderRequest[] } {
@@ -125,6 +126,7 @@ describe('what the app asks the browser for', () => {
       expect(request.url).toMatch(/\/a\/exprt1\/raw\?chrome=0&key=/);
       expect(request.selector).toBe('body');
       expect(request.sameOriginOnly).toBe(true);
+      expect(request.allowedOrigins).toEqual(ASSETS_ORIGIN ? [ASSETS_ORIGIN] : undefined);
     }
     // A FRESH key per attempt: minted at call time, because a key that expired
     // in the queue produced a 200 PNG of a 404 page.

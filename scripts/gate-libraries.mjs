@@ -37,10 +37,12 @@ const glb = Buffer.concat([header, chunk(paddedJson, 0x4e4f534a), chunk(paddedBi
 const upload = await fetch(`${base}/api/artifacts?format=file&filename=triangle.glb`, { method: 'POST', headers: { Authorization: authorization, 'Content-Type': 'model/gltf-binary' }, body: glb });
 assert.equal(upload.status, 201, await upload.clone().text());
 const file = await upload.json();
+const libraryUrl = `${base}/libraries/three-0.185.1/index.js`;
 const script = `
-  (async () => {
-    const THREE = await artifact.library('three');
-    window.__sameLibrary = THREE === await artifact.library('three');
+    const library = document.scripts[document.scripts.length - 2].src;
+    window.__librarySource = library;
+    const THREE = await import(library);
+    window.__sameLibrary = THREE === await import(library);
     const canvas = document.getElementById('scene');
     const renderer = new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true });
     renderer.setSize(400, 300);
@@ -48,41 +50,52 @@ const script = `
     const camera = new THREE.PerspectiveCamera(45, 4 / 3, 0.1, 100); camera.position.z = 4;
     const controls = new THREE.OrbitControls(camera, canvas); controls.update();
     scene.add(new THREE.HemisphereLight(0xffffff, 0xffffff, 3));
-    const model = await new THREE.GLTFLoader().loadAsync(await artifact.resolve('ref:${file.id}'));
+    const bytes = await (await fetch('ref:${file.id}')).arrayBuffer();
+    const model = await new THREE.GLTFLoader().parseAsync(bytes, '');
     scene.add(model.scene); renderer.render(scene, camera);
     const pixel = new Uint8Array(4); renderer.getContext().readPixels(200, 150, 1, 1, renderer.getContext().RGBA, renderer.getContext().UNSIGNED_BYTE, pixel);
     window.__pixel = Array.from(pixel); window.__painted = true;
     addEventListener('pagehide', () => { controls.dispose(); renderer.dispose(); });
-  })().catch(error => { window.__sceneError = String(error); });
 `;
-const doc = await create({ title: 'Three.js library gate', markup: '<Helmet><script>{`' + script + '`}</script></Helmet><canvas id="scene" width="400" height="300" />' });
+const scene = '<Iframe title="Three.js scene" height={300}><canvas id="scene" width="400" height="300" /><script id="three-bundle" type="module" src="' + libraryUrl + '"/><script type="module">{`' + script + '`}</script></Iframe>';
+const doc = await create({ title: 'Three.js library gate', markup: scene });
 const prose = await create({ markup: '<h1>Ordinary prose</h1>' });
 const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader'] });
 try {
   const page = await browser.newPage();
+  page.on('pageerror', error => console.error('PAGE',error.message));
+  page.on('console', message => { if(message.type()==='error')console.error('CONSOLE',message.text()); });
   const libraries = [];
   page.on('request', req => { if (req.url().includes('/libraries/')) libraries.push(req.url()); });
   await page.goto(`${base}/a/${prose.id}/raw`);
   assert.equal(libraries.length, 0, 'prose loads no optional library');
   await page.goto(`${base}/a/${doc.id}/raw`);
-  await page.waitForFunction(() => window.__painted || window.__sceneError, { timeout: 15000 });
-  const state = await page.evaluate(() => ({ error: window.__sceneError, pixel: window.__pixel, same: window.__sameLibrary }));
+  const realm = async () => {
+    const outer = page.locator('iframe[title="Three.js scene"]'); await outer.waitFor({timeout:10_000}).catch(async error=>{throw new Error(`${error.message}; body=${(await page.locator('body').innerText()).slice(0,1000)}`);});
+    const wrapper = await outer.contentFrame(); const inner = wrapper.locator('iframe'); await inner.waitFor();
+    return (await inner.elementHandle()).contentFrame();
+  };
+  let managed = await realm();
+  await managed.waitForFunction(() => window.__painted || window.__sceneError, { timeout: 15000 });
+  const state = await managed.evaluate(() => ({ error: window.__sceneError, pixel: window.__pixel, same: window.__sameLibrary, source: window.__librarySource }));
   assert.equal(state.error, undefined, state.error);
   assert.equal(state.same, true);
   assert.ok(state.pixel[0] > state.pixel[1] * 2, `red model painted: ${state.pixel}`);
-  assert.equal(libraries.length, 1, 'one on-demand library request');
-  const blocked = await page.evaluate(async () => {
-    const missing = await artifact.resolve('ref:Miss12').then(() => false, e => e.message === 'not found');
-    const network = await fetch('https://example.com/exfil').then(() => false, () => true);
+  assert.match(state.source,/\/assets\//,'library source was rewritten to the managed asset cache');
+  assert.equal(libraries.length, 0, 'browser never reaches the original library URL directly');
+  const blocked = await managed.evaluate(async () => {
+    const missing = await fetch('ref:Miss12').then(response => response.status === 404, () => true);
+    const network = await fetch('http://169.254.169.254/latest/meta-data').then(() => false, () => true);
     let storage = false; try { localStorage.getItem('x'); } catch { storage = true; }
     return { missing, network, storage };
   });
   assert.deepEqual(blocked, { missing: true, network: true, storage: true });
-  const hydrated = await create({ markup: '<Helmet><script>{`' + script + '`}</script></Helmet><Card><CardContent><canvas id="scene" width="400" height="300" /></CardContent></Card>' });
+  const hydrated = await create({ markup: `<Card><CardContent>${scene}</CardContent></Card>` });
   await page.goto(`${base}/a/${hydrated.id}/raw`);
-  await page.waitForFunction(() => window.__painted || window.__sceneError, { timeout: 15000 });
-  assert.equal(await page.evaluate(() => window.__sceneError), undefined, 'API also works after hydration');
-  assert.equal(await page.evaluate(() => window.__painted), true);
+  managed = await realm();
+  await managed.waitForFunction(() => window.__painted || window.__sceneError, { timeout: 15000 });
+  assert.equal(await managed.evaluate(() => window.__sceneError), undefined, 'generic bundle and ref fetch also work after hydration');
+  assert.equal(await managed.evaluate(() => window.__painted), true);
   // Exercise the actual export service, not a screenshot after our own readiness wait.
   const exported = await fetch(`${base}/a/${doc.id}/export?format=png`);
   assert.equal(exported.status, 200, await exported.clone().text().then(t => t.slice(0, 100)));

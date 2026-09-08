@@ -21,7 +21,7 @@
 import sharp from 'sharp';
 import { loadImage } from './story/image-store';
 import { createHash } from 'node:crypto';
-import { EXPORT_INTERNAL_ORIGIN } from '@/lib/config';
+import { ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN } from '@/lib/config';
 import { services } from '@/lib/services';
 import { ArtifactRow, declarationsOf, getArtifactById, referencedArtifactForRow } from './artifacts';
 import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from './export-card';
@@ -59,11 +59,13 @@ const RENDER_RETRY_MS = 1_000;
  * Generation 2: a markup document is shot from its own page (`raw?chrome=0`)
  * rather than through the app page's iframe element, whose box is the viewport
  * — "full" used to mean the first screen, on every document ever exported.
+ * Generation 4: managed iframe exports admit their configured asset origin;
+ * earlier generations could cache a blank frame before its bundle loaded.
  *
  * Bump this whenever the framing changes. Old entries then go cold on their own,
  * exactly like the card key's stage size does.
  */
-export const EXPORT_RENDER_GENERATION = 3;
+export const EXPORT_RENDER_GENERATION = 4;
 const CACHE_MAX_ENTRIES = 24;
 
 /** `format` value → export format; null when absent or unrecognized. */
@@ -232,6 +234,7 @@ async function renderOnce(
     // Same-origin requests are the app itself; anything cross-origin is a
     // stray — abort it, which doubles as the CSP discipline for the surface.
     sameOriginOnly: true,
+    ...(ASSETS_ORIGIN ? {allowedOrigins:[ASSETS_ORIGIN]} : {}),
     // The Next dev overlay ("N issues") is fixed to the corner and lands in
     // page-level shots on dev servers; the element doesn't exist in prod.
     injectCss: 'nextjs-portal{display:none !important}',

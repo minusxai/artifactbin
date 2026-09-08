@@ -6,7 +6,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { BrowserService, RenderRequest } from '@artifactbin/contracts';
 import { BROWSER_ROUTES, browserClient, serveBrowser } from '@artifactbin/browser';
-import { createBrowser } from '@artifactbin/browser/local';
+import { createBrowser,requestOriginAllowed } from '@artifactbin/browser/local';
 import sharp from 'sharp';
 import { withHttpServer, type RunningServer } from '../../app/__tests__/net';
 
@@ -34,6 +34,12 @@ afterAll(async () => { await local.close?.(); await server.close(); await pages.
 
 const base = (): RenderRequest => ({ url, format: 'png', viewport: { width: 1200, height: 630 }, selector: 'main', capture: 'full', sameOriginOnly: true, settleMs: 50, timeoutMs: 10_000 });
 const pngSize = (b: Uint8Array) => { const v = new DataView(b.buffer, b.byteOffset); return { width: v.getUint32(16), height: v.getUint32(20) }; };
+
+it('matches allowed request origins exactly, never by prefix',()=>{
+  expect(requestOriginAllowed('https://assets.example/x','https://app.example',['https://assets.example'])).toBe(true);
+  expect(requestOriginAllowed('https://assets.example.evil/x','https://app.example',['https://assets.example'])).toBe(false);
+  expect(requestOriginAllowed('https://app.example.evil/x','https://app.example')).toBe(false);
+});
 
 describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', remote]])('%s', (_name, svc) => {
   it('shoots the selected element as png, with the cross-origin request aborted', async () => {

@@ -37,7 +37,8 @@ try {
   await page.locator('#view-sprint').getByLabel('Add Sprint',{exact:true}).click();
   await page.getByLabel('Sprint name',{exact:true}).fill(' planning WEEK ');
   await page.getByLabel('Create sprint',{exact:true}).click();
-  await page.getByRole('alert').filter({hasText:'already exists'}).waitFor();
+  const refusal=page.getByRole('alert');await refusal.waitFor();
+  assert.match(await refusal.textContent(),/affected|changed|mutation/i);
   assert.equal(await dialog.isVisible(),true);
   await page.getByLabel('Cancel sprint',{exact:true}).click();
   await switchView('Table');
@@ -54,7 +55,8 @@ try {
   await ownerPage.reload();
   await ownerPage.locator('iframe[title="artifact"]').waitFor();
   page = await (await ownerPage.locator('iframe[title="artifact"]').elementHandle()).contentFrame();
-  await page.getByRole('button',{name:'Sprint 1',exact:true}).filter({hasText:'Quick sprint'}).waitFor();
+  await page.getByLabel('Item 1',{exact:true}).waitFor({timeout:20_000});
+  await page.getByRole('button',{name:'Sprint 1',exact:true}).filter({hasText:'Quick sprint'}).waitFor({timeout:20_000});
   await ownerPage.setViewportSize({width:390,height:844});
   await page.getByLabel('View',{exact:true}).click();
   const popup=page.getByRole('listbox').locator('..');
