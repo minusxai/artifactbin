@@ -148,13 +148,14 @@ describe('reader bundle hygiene', () => {
     expect([...reach.packages.keys()]).toContain('react');
   });
 
-  it('the story component layer stays out of the reader graph (view = iframe, editor = dynamic)', () => {
-    // The interpreter module itself may ride along (snapshot.ts's CSS
-    // extraction lives beside it — no heavy deps); the COMPONENT layer —
-    // embeds, kit, charts — must not.
+  it('the top-level reader carries the shared story component layer', () => {
+    // The artifact page now mounts the same runtime as the standalone document;
+    // this list being non-empty guards against accidentally restoring a second
+    // iframe-only renderer. Heavy editor-only packages remain forbidden below.
     const engine = [...reach.files].map((f) => path.relative(ROOT, f))
       .filter((f) => f.startsWith('components/views/') || f.startsWith('components/kit/'));
-    expect(engine).toEqual([]);
+    expect(engine).toContain('components/kit/button.tsx');
+    expect(engine).toContain('components/views/story/QuestionEmbed.tsx');
   });
 
   it.each(FORBIDDEN)('never statically reaches %s', (pkg) => {

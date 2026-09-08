@@ -22,7 +22,7 @@ import {reportControlsInset} from '@/web/controls-shell';
 import {isDocumentPeerEvent, type DocumentPeer} from '@/lib/story/document-peer';
 import dynamic from '@/lib/dynamic';
 import { FolderPlus, Heart, MessageSquare, Pencil } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useArtifactOwner, useCanAnnotateArtifact, useCanEditArtifact } from '@/components/ArtifactShell';
 import AnnotationLayer from '@/components/AnnotationLayer';
 import CopyAgentPrompt from '@/components/CopyAgentPrompt';
@@ -49,6 +49,10 @@ import { resolveStoryMode } from '@/lib/data/story/story-themes';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import type { StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import {isStoryAssetRequest} from '@/lib/story-runtime/contract';
+import { mountStory, type MountedStory } from '@/lib/story-runtime/mount';
+import { storyBodyFor } from '@/lib/story/body';
+import type { StoryIslandData } from '@/lib/story-runtime/contract';
+import { TrustedChrome } from '@/components/TrustedUi';
 
 const ArtifactEditor = dynamic(() => import('@/components/ArtifactEditor'), {
   ssr: false,
@@ -85,6 +89,11 @@ export interface ArtifactSurfaceProps {
   refs: Array<{ id: string; kind: string }>;
   /** The document's server-run dataflow (lib/artifacts dataflowForRow) — seeds the editor's canvas. */
   dataflow?: StoryIslandDataflow | null;
+  /** Server-prepared, validated runtime payload. Local parsing is a test/legacy fallback only. */
+  preparedStory?: StoryIslandData | null;
+  /** Validated Helmet fields kept outside the author-controlled AST. */
+  authorCss?: string | null;
+  authorScript?: string | null;
   /**
    * The page's own query string, from the router (never `window.location` in
    * render — that is a hydration mismatch waiting to happen). Its `$` params
@@ -484,11 +493,61 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    */
   const [frameLoaded, setFrameLoaded] = useState(false);
   const frameRef = useRef<DocumentPeer | null>(null);
+  const storyHostRef = useRef<HTMLDivElement>(null);
+  const mountedStoryRef = useRef<MountedStory | null>(null);
+  const directMarkup = format === 'markup' && !captureKey && !controlsOnly;
   if (controlsOnly && !frameRef.current) frameRef.current = {
     contentWindow: window.parent,
     origin: new URL(appUrl(`/a/${id}`)).origin,
     getBoundingClientRect: () => new DOMRect(0,0,innerWidth,innerHeight),
   };
+  useLayoutEffect(() => {
+    if (!directMarkup || !storyHostRef.current) return;
+    const split = props.preparedStory ? null : storyBodyFor(source ?? '');
+    const prepared = props.preparedStory ?? (split ? {
+      nodes: split.body,
+      refData: {},
+      colorMode: resolveStoryMode(theme, colorMode),
+      template,
+      chrome: false,
+      ...(dataflow ? { dataflow } : {}),
+    } satisfies StoryIslandData : null);
+    if (!prepared) { storyHostRef.current.textContent = source ?? ''; setFrameLoaded(true); return; }
+    const host = storyHostRef.current;
+    frameRef.current = { contentWindow: window, origin: window.location.origin, getBoundingClientRect: () => host.getBoundingClientRect() };
+    const mounted = mountStory({ root: host, data: prepared, renderMode: 'render', peer: window, peerOrigin: window.location.origin,
+      authorScript: props.authorScript ?? split?.content.script ?? null });
+    mountedStoryRef.current = mounted;
+    mounted.adopt({ type: STORY_DOCUMENT_MESSAGE, nodes: prepared.nodes, compiledCss, authorCss: props.authorCss ?? split?.content.style ?? null });
+    setFrameLoaded(true);
+    return () => {
+      if (mountedStoryRef.current === mounted) mountedStoryRef.current = null;
+      frameRef.current = null;
+      // This lifecycle is nested beneath ArtifactSurface's React root. React
+      // forbids synchronously unmounting a second root while it is reconciling
+      // the parent; the detached host is already gone, so disposal can safely
+      // finish at the next microtask boundary.
+      queueMicrotask(() => mounted.dispose());
+    };
+  }, [directMarkup, id]);
+  useLayoutEffect(() => {
+    const mounted = mountedStoryRef.current;
+    if (!directMarkup || !mounted) return;
+    const split = props.preparedStory ? null : storyBodyFor(source ?? '');
+    const nodes = props.preparedStory?.nodes ?? split?.body;
+    if (!nodes) return;
+    mounted.adopt({
+      type: STORY_DOCUMENT_MESSAGE,
+      nodes,
+      ...(props.preparedStory?.refData ? { refData: props.preparedStory.refData } : {}),
+      ...(dataflow ? { dataflow } : {}),
+      compiledCss,
+      authorCss: props.authorCss ?? split?.content.style ?? null,
+      authorScript: props.authorScript ?? split?.content.script ?? null,
+      colorMode: resolveStoryMode(theme, colorMode),
+      theme,
+    });
+  }, [directMarkup, props.preparedStory, props.authorScript, props.authorCss, source, dataflow, theme, colorMode, compiledCss]);
   /**
    * Bumped to throw away a frame whose document is gone (see the liveness
    * check below). It rides in the iframe's `key` beside `rawKey`, so the only
@@ -680,7 +739,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   // on the document: a live edit no longer replaces the frame (see below), and
   // hiding a live document to announce an edit to it was the flash this whole
   // path exists to remove.
-  useEffect(() => { setFrameLoaded(false); }, [frameNonce]);
+  useEffect(() => { if (!directMarkup) setFrameLoaded(false); }, [directMarkup, frameNonce]);
   /*
    * A REPLACED frame is a new document load, so it is the one moment the seed
    * may move — and must: a frame replaced after the reader has narrowed the
@@ -784,6 +843,10 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       theme: live.theme,
       ...(live.colorMode ? { colorMode: live.colorMode } : {}),
     };
+    if (directMarkup && mountedStoryRef.current) {
+      mountedStoryRef.current.adopt(update);
+      return;
+    }
     /*
      * Asked repeatedly, for the same reason the position is: the runtime is a
      * module that loads after the document says it has painted, so the first
@@ -804,7 +867,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     ask();
     const timer = window.setInterval(ask, DOCUMENT_ASK_INTERVAL_MS);
     return () => { window.clearInterval(timer); window.removeEventListener('message', onAck); };
-  }, [live, format]);
+  }, [directMarkup, live, format]);
 
   /**
    * The other half of that signal — ASKING, not only listening.
@@ -1308,7 +1371,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   if (isDocumentFormat) {
     return (
       <>
-        {controlsOnly && <><AppBar fixed title={shownTitle} label="Artifact controls" />
+        {(controlsOnly || directMarkup) && <TrustedChrome><><AppBar fixed title={shownTitle} label="Artifact controls" />
           <div data-controls-region className="fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-xl border border-edge bg-surface p-2 shadow-lg">
             <button aria-label="Like artifact" disabled={socialPending.current.like} aria-pressed={likeRef.current.liked} onClick={() => void toggleLike(null)} className="flex cursor-pointer items-center gap-2 rounded px-3 py-2 transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-60"><Heart size={18} fill={likeRef.current.liked ? 'currentColor' : 'none'} />{likeRef.current.count}</button>
             <button aria-label="Toggle comments" onClick={() => {if (canAnnotate || accountSession) setRailOpen(open => !open);else appNavigate(artifactLoginUrl(id, 'comment'));}} className="flex cursor-pointer items-center gap-2 rounded px-3 py-2 transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-accent"><MessageSquare size={18} />{openAnnotationCount}</button>
@@ -1317,20 +1380,20 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             {props.authorUsername && <a href={`/@${props.authorUsername}`} aria-label={`View @${props.authorUsername}'s profile`} className="min-w-0 truncate rounded px-2 py-2 font-mono text-xs text-accent hover:underline focus-visible:outline-2 focus-visible:outline-accent">@{props.authorUsername}</a>}
             {followRef.current && <button aria-label="Follow author" disabled={socialPending.current.follow} aria-pressed={followRef.current.following} onClick={() => void toggleFollow(null)} className="cursor-pointer rounded px-3 py-2 transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-60">{followRef.current.following ? 'Following' : 'Follow'}</button>}
           </div>}
-        </>}
+        </></TrustedChrome>}
         {editing ? (
           /* EDIT MODE: the document's own bar stays, PINNED at the top, and the
              editor's toolbar sits under it. The panels drop below both. */
-          <>
+          <TrustedChrome><>
             <PageMenu authed={accountSession} anon={anonSession} title={shownTitle} fixed triggerless panelTop={APP_BAR_H + EDIT_BAR_H + 8} />
             <PageControls fixed triggerless label="Artifact controls" mode={readerMode} onModeChange={setReaderMode} active={railOpen} badge={openAnnotationCount} panelTop={APP_BAR_H + EDIT_BAR_H + 8}>
               {documentControls}
             </PageControls>
-          </>
+          </></TrustedChrome>
         ) : (
           /* The framed document draws the chrome (logo, rail, byline) — the
              same one a stranger sees — and asks this page to open these. */
-          <>
+          <TrustedChrome><>
             <PageMenu authed={accountSession} anon={anonSession} title={shownTitle} fixed triggerless />
             <PageControls
               fixed
@@ -1344,11 +1407,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             >
               {documentControls}
             </PageControls>
-          </>
+          </></TrustedChrome>
         )}
         <div
           aria-label="Artifact viewport"
-          className="fixed inset-x-0 bottom-0 overflow-hidden"
+          className={directMarkup ? 'relative min-h-screen overflow-visible' : 'fixed inset-x-0 bottom-0 overflow-hidden'}
           /*
            * The ground a loading frame sits on. It belongs to the DOCUMENT, not
            * to the app: painting the app's ground (or white, which is what the
@@ -1388,7 +1451,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
               loading…
             </div>
           )}
-          {!controlsOnly && <iframe
+          {directMarkup && <div ref={storyHostRef} data-artifact-story-host />}
+          {!controlsOnly && !directMarkup && <iframe
             /*
              * NOT keyed on the document: a live edit is posted INTO this frame
              * (above), and re-keying here is what made every agent write a full
@@ -1440,11 +1504,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             threads on the page (which holds the content and the session).
             Mounted in EVERY mode — the `!editing` gate that used to be here is
             exactly what made commenting mid-edit a four-navigation detour. */}
-        {controlsOnly && accountSession && !canAnnotate && railOpen && <aside aria-label="Annotation sidebar" className="fixed right-0 top-11 bottom-0 z-50 w-80 max-w-full border-l border-edge bg-surface p-4">
+        {controlsOnly && accountSession && !canAnnotate && railOpen && <TrustedChrome><aside aria-label="Annotation sidebar" className="fixed right-0 top-11 bottom-0 z-50 w-80 max-w-full border-l border-edge bg-surface p-4">
           <div className="flex items-center justify-between"><h2 className="font-semibold">Comments</h2><button aria-label="Close comments" onClick={() => setRailOpen(false)} className="rounded px-2 py-1">Close</button></div>
           <p role="status" className="mt-4 text-sm text-muted">Commenting is not enabled for your access. Ask the owner for comment access.</p>
-        </aside>}
-        {canAnnotate && (
+        </aside></TrustedChrome>}
+        {canAnnotate && (<TrustedChrome>
           <AnnotationLayer
             id={id}
             frameRef={frameRef}
@@ -1462,9 +1526,9 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             rightInset={frameGutter}
             onAnnotationsChange={setLayerAnnotations}
           />
-        )}
+        </TrustedChrome>)}
         {/* Edit mode is CHROME around the document, not a replacement for it. */}
-        {editing && (
+        {editing && (<TrustedChrome>
           <ArtifactEditor
             id={id}
             seed={editorSeed}
@@ -1481,19 +1545,19 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             // the document's own bar has: short of the frame's scrollbar only.
             rightInset={frameGutter}
           />
-        )}
-        {forkAsked && <ForkConfirm id={id} title={shownTitle} onClose={() => setForkAsked(false)} />}
+        </TrustedChrome>)}
+        {forkAsked && <TrustedChrome><ForkConfirm id={id} title={shownTitle} onClose={() => setForkAsked(false)} /></TrustedChrome>}
         {namingFolder && canEdit && isFolder && (
-          <NewFolderPrompt parentId={id} onClose={() => setNamingFolder(false)} />
+          <TrustedChrome><NewFolderPrompt parentId={id} onClose={() => setNamingFolder(false)} /></TrustedChrome>
         )}
         {socialPreviewOpen && shownSource !== null && (
-          <SocialPreviewDialog
+          <TrustedChrome><SocialPreviewDialog
             id={id}
             source={shownSource}
             editId={live?.editId ?? editId}
             version={live?.version ?? version}
             onClose={() => setSocialPreviewOpen(false)}
-          />
+          /></TrustedChrome>
         )}
       </>
     );
@@ -1579,7 +1643,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       )}
 
       </main>
-      {forkAsked && <ForkConfirm id={id} title={shownTitle} onClose={() => setForkAsked(false)} />}
+      {forkAsked && (
+        <TrustedChrome>
+          <ForkConfirm id={id} title={shownTitle} onClose={() => setForkAsked(false)} />
+        </TrustedChrome>
+      )}
     </>
   );
 }

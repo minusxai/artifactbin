@@ -136,6 +136,12 @@ describe('GET /api/page/artifact/:id', () => {
     expect(anon).toMatchObject({ role: 'viewer', kind: 'none', canonical: `/@${w.owner.username}/${w.pub.id}-public-one` });
     expect(anon.surface).toMatchObject({ id: w.pub.id, editId: w.pub.edit_id, format: 'markup', title: 'Public one', version: 1 });
     expect(anon.surface).toHaveProperty('compiledCss');
+    expect(anon.surface.preparedStory).toMatchObject({
+      colorMode: expect.stringMatching(/^(light|dark)$/),
+      chrome: false,
+      refData: {},
+      nodes: [{ type: 'element', tag: 'div' }],
+    });
     asSession(w.owner);
     const own = await (await artifactPage(request(`/api/page/artifact/${w.priv.id}`), params({ id: w.priv.id }))).json();
     expect(own).toMatchObject({ role: 'owner', kind: 'account' });

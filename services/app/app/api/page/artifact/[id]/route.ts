@@ -7,12 +7,12 @@ import {catalogOf,publicCatalogOf} from '@/lib/datasets/catalog';
  * server-run dataflow, the open-annotation count).
  */
 import { countOpenAnnotations } from '@/lib/annotations';
-import { canReadArtifact, declarationsForRow, getArtifactById } from '@/lib/artifacts';
+import { canReadArtifact, declarationsForRow, getArtifactById, refDataForRow } from '@/lib/artifacts';
 import { folderPageFor } from '@/lib/folders';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
-import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
+import { resolveStoredStoryDesign, resolveStoryMode } from '@/lib/data/story/story-themes';
 import { verifyExportKey } from '@/lib/export-key';
-import { json } from '@/lib/http';
+import { baseUrl, json } from '@/lib/http';
 import { ID_RE } from '@/lib/ids';
 import { count, has } from '@/lib/relations';
 import { loadDatasetRows } from '@/lib/story/dataset-store';
@@ -23,6 +23,12 @@ import { browserSessionKind, canReceiveLiveUpdates, roleFor, sessionActor } from
 import { accountWorkspaceFor } from '@/lib/workspace';
 import { canAnnotate } from '@/lib/share-roles';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
+import { storyBodyFor } from '@/lib/story/body';
+import { glyphsForNodes } from '@/lib/story/icon-glyphs';
+import { webAssetsForSource } from '@/lib/web-assets';
+import { assetLookupFrom } from '@/lib/story/asset-url';
+import { ASSETS_ORIGIN } from '@/lib/config';
+import { assetsPath } from '@/lib/story/markup-csp';
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -85,6 +91,27 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   };
   const design = resolveStoredStoryDesign(meta.theme, meta.colorMode);
   const isDoc = artifact.format === 'markup';
+  const prepared = isDoc
+    ? await Promise.all([webAssetsForSource(artifact.source), refDataForRow(artifact)]).then(([assets, refData]) => {
+      const split = storyBodyFor(artifact.source ?? '', assetLookupFrom(assets));
+      if (!split) return null;
+      const glyphs = glyphsForNodes(split.body);
+      return {
+        story: {
+          nodes: split.body,
+          refData,
+          ...(Object.keys(glyphs).length ? { glyphs } : {}),
+          ...(declarationsForRow(artifact) ? { dataflow: declarationsForRow(artifact)! } : {}),
+          colorMode: resolveStoryMode(design.theme, design.colorMode),
+          template: meta.template ?? null,
+          chrome: false,
+          ...(ASSETS_ORIGIN ? { managedAssets: { origin: ASSETS_ORIGIN, resolveUrl: `${baseUrl(request)}${assetsPath(artifact.id)}` } } : {}),
+        },
+        authorCss: split.content.style || null,
+        authorScript: split.content.script || null,
+      };
+    })
+    : null;
   // The heart renders from THIS answer: asking a second door for it would
   // leave the control blank (or wrong) for a frame on every page load. An
   // anonymous reader still gets the count — it is the number, not the button,
@@ -125,6 +152,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // running them here only held the owner's own page behind the SQL, with
       // the results inlined into its HTML (withBootstrap).
       dataflow: isDoc && artifact.source ? declarationsForRow(artifact) : null,
+      ...(prepared ? { preparedStory: prepared.story, authorCss: prepared.authorCss, authorScript: prepared.authorScript } : {}),
       accountSession: kind === 'account',
       anonSession: kind === 'anon',
       version: artifact.version,

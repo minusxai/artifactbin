@@ -33,11 +33,11 @@ const surfaceProps: ArtifactSurfaceProps = {
 };
 
 describe('the artifact viewport boundary', () => {
-  it('gives the full artifact viewport to /raw, with no parent-page footer', () => {
+  it('lets a top-level document participate in parent scrolling, with no parent-page footer', () => {
     render(<ArtifactSurface {...surfaceProps} format="markup" source="<p>doc</p>" />);
 
-    expect(screen.getByLabelText('Artifact viewport')).toHaveClass('fixed', 'overflow-hidden');
-    expect(screen.getByTitle('artifact')).toHaveAttribute('src', '/a/story1/raw');
+    expect(screen.getByLabelText('Artifact viewport')).toHaveClass('relative', 'overflow-visible');
+    expect(document.querySelector('[data-artifact-story-host]')).toBeTruthy();
     expect(screen.queryByLabelText('Artifact credits')).not.toBeInTheDocument();
   });
 

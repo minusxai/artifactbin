@@ -19,6 +19,7 @@ export const STORY_UI_RECIPE_CLASSES: readonly string[] = [
   "--gi-y",
   "--mx-vh",
   "-space-x-2",
+  "./TrustedUi",
   "./cell-sessions",
   "./cn",
   "./contract",

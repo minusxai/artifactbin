@@ -6,7 +6,7 @@
  * is relayed as an error, never dropped.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
 
 
 import ArtifactSurface, { type ArtifactSurfaceProps } from '../ArtifactSurface';
@@ -43,25 +43,25 @@ const props = (over: Partial<ArtifactSurfaceProps> = {}): ArtifactSurfaceProps =
   ...over,
 });
 
-const frame = () => screen.getByTitle('artifact') as HTMLIFrameElement;
+const peer = () => window as unknown as Window;
 
 /** Post as a given window, capturing what the page posts back to it. */
 function ask(source: Window, data: unknown) {
   const posted: unknown[] = [];
   const spy = vi.spyOn(source, 'postMessage').mockImplementation((m: unknown) => { posted.push(m); });
-  act(() => { window.dispatchEvent(new MessageEvent('message', { data, source: source as unknown as MessageEventSource })); });
+  act(() => { window.dispatchEvent(new MessageEvent('message', { data, source: source as unknown as MessageEventSource, origin: window.location.origin })); });
   return { posted, spy };
 }
 
 describe('the query relay', () => {
   it('answers the frame with the rows /a/<id>/query returns', async () => {
     render(<ArtifactSurface {...props()} />);
-    const win = frame().contentWindow!;
+    const win = peer();
     const { posted } = ask(win, { type: STORY_QUERY_MESSAGE, id: 7, values: { region: 'EU' }, only: ['sales'] });
-    await waitFor(() => expect(posted).toHaveLength(1));
+    await waitFor(() => expect(posted.some((message) => (message as {type?:string}).type === STORY_QUERY_RESULT_MESSAGE)).toBe(true));
     expect(fetchCalls[0].url).toBe('/a/story1/query');
     expect(fetchCalls[0].body).toEqual({ values: { region: 'EU' }, only: ['sales'] });
-    expect(posted[0]).toEqual({ type: STORY_QUERY_RESULT_MESSAGE, id: 7, tables: { sales: { rows: [{ a: 1 }], columns: [] } }, errors: {} });
+    expect(posted.find((message) => (message as {type?:string}).type === STORY_QUERY_RESULT_MESSAGE)).toEqual({ type: STORY_QUERY_RESULT_MESSAGE, id: 7, tables: { sales: { rows: [{ a: 1 }], columns: [] } }, errors: {} });
   });
 
   it('ignores a request from a window that is not the document frame', async () => {
@@ -71,23 +71,23 @@ describe('the query relay', () => {
     const { posted } = ask(stranger.contentWindow!, { type: STORY_QUERY_MESSAGE, id: 1, values: {}, only: [] });
     await new Promise((r) => setTimeout(r, 50));
     expect(fetchCalls).toHaveLength(0);
-    expect(posted).toHaveLength(0);
+    expect(posted.some((message) => (message as {type?:string}).type === STORY_QUERY_RESULT_MESSAGE)).toBe(false);
     stranger.remove();
   });
 
   it('relays a failed fetch as an error on the same id, never silence', async () => {
     fetchImpl = async () => ({ ok: false, status: 404, json: async () => ({}) });
     render(<ArtifactSurface {...props()} />);
-    const { posted } = ask(frame().contentWindow!, { type: STORY_QUERY_MESSAGE, id: 3, values: {}, only: ['sales'] });
-    await waitFor(() => expect(posted).toHaveLength(1));
-    expect(posted[0]).toEqual({ type: STORY_QUERY_RESULT_MESSAGE, id: 3, error: 'query failed (404)' });
+    const { posted } = ask(peer(), { type: STORY_QUERY_MESSAGE, id: 3, values: {}, only: ['sales'] });
+    await waitFor(() => expect(posted.some((message) => (message as {type?:string}).type === STORY_QUERY_RESULT_MESSAGE)).toBe(true));
+    expect(posted.find((message) => (message as {type?:string}).type === STORY_QUERY_RESULT_MESSAGE)).toEqual({ type: STORY_QUERY_RESULT_MESSAGE, id: 3, error: 'query failed (404)' });
   });
 
   it('leaves the paint/hello protocol untouched (a string message is not a query)', async () => {
     render(<ArtifactSurface {...props()} />);
-    const { posted } = ask(frame().contentWindow!, 'mx:painted');
+    const { posted } = ask(peer(), 'mx:painted');
     await new Promise((r) => setTimeout(r, 50));
     expect(fetchCalls).toHaveLength(0);
-    expect(posted).toHaveLength(0);
+    expect(posted.some((message) => (message as {type?:string}).type === STORY_QUERY_RESULT_MESSAGE)).toBe(false);
   });
 });

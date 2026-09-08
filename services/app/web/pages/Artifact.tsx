@@ -7,7 +7,7 @@ import {appFetch as fetch} from '@/web/api-origin';
 import {isControlsClient,isFolderClient} from '@/web/api-origin';
 import { useEffect, useState } from 'react';
 import { takeBootstrap } from '../bootstrap';
-import { useLocation, useParams } from 'react-router';
+import { useLocation, useNavigate, useParams } from 'react-router';
 import ArtifactShell from '@/components/ArtifactShell';
 import ArtifactSurface from '@/components/ArtifactSurface';
 import type { AccountWorkspace } from '@/lib/workspace';
@@ -32,23 +32,26 @@ type Page =
 export function ArtifactPage({ id: given }: { id?: string } = {}) {
   const params = useParams();
   const { search } = useLocation();
+  const navigate = useNavigate();
   const id = given ?? params.id!;
+  const requestKey = `${id}\n${search}`;
   // The server may have inlined this page's data (server/app): render from it at once.
-  const [page, setPage] = useState<Page | 'missing' | null>(() => takeBootstrap<Page>(window.location.pathname, 'artifact'));
+  const [loaded, setLoaded] = useState<{ key: string; page: Page | 'missing' | null }>(() => ({ key: requestKey, page: takeBootstrap<Page>(window.location.pathname, 'artifact') }));
+  const page = loaded.key === requestKey ? loaded.page : null;
   useEffect(() => {
-    if (page) return; // served with its data
+    if (loaded.key === requestKey && loaded.page) return; // served with its data
     let alive = true;
     void fetch(`/api/page/artifact/${id}${search}`, { credentials: 'same-origin' })
       .then((r): Promise<Page | 'missing'> => (r.ok ? (r.json() as Promise<Page>) : Promise.resolve('missing' as const)))
-      .then((p) => { if (alive) setPage(p); })
-      .catch(() => { if (alive) setPage('missing'); });
+      .then((p) => { if (alive) setLoaded({ key: requestKey, page: p }); })
+      .catch(() => { if (alive) setLoaded({ key: requestKey, page: 'missing' }); });
     return () => { alive = false; };
-  }, [id, search, page]);
+  }, [id, search, requestKey, loaded]);
   useEffect(() => {
     // The address heals to the canonical one — after the ACL, which the fetch already passed.
     if(isFolderClient())return; // Main's server already owns canonicalization.
-    if (!isControlsClient() && page && page !== 'missing' && !page.surface?.captureKey && page.canonical !== window.location.pathname) window.history.replaceState(null, '', page.canonical + search + window.location.hash);
-  }, [page, search]);
+    if (!isControlsClient() && page && page !== 'missing' && !page.surface?.captureKey && page.canonical !== window.location.pathname) navigate(page.canonical + search + window.location.hash, { replace: true });
+  }, [navigate, page, search]);
   if (page === null) return <div aria-label="Loading page" />;
   if (page === 'missing') return <NotFoundPage />;
   // A type change after server admission must never turn this trusted frame

@@ -65,14 +65,13 @@ const surface = (liveEnabled = true) => render(
  * shape query-relay.ui.test.tsx uses.
  */
 function frameWindow(container: HTMLElement) {
-  const iframe = container.querySelector('iframe') as HTMLIFrameElement;
   const win = window as unknown as Window;
-  Object.defineProperty(iframe, 'contentWindow', { value: win, configurable: true });
+  expect(container.querySelector('[data-artifact-story-host]')).toBeTruthy();
   vi.spyOn(win, 'postMessage').mockImplementation(((m: unknown) => { posted.push(m as Record<string, unknown>); }) as typeof win.postMessage);
   return win;
 }
 const ask = (source: Window | null, message: Record<string, unknown>) =>
-  window.dispatchEvent(new MessageEvent('message', { data: message, source: source as unknown as MessageEventSource }));
+  window.dispatchEvent(new MessageEvent('message', { data: message, source: source as unknown as MessageEventSource, origin: window.location.origin }));
 
 describe('the write relay (page side)', () => {
   it('does not open a stream when the server disables live updates',()=>{
@@ -109,20 +108,18 @@ describe('the write relay (page side)', () => {
     ask(null, { type: STORY_MUTATE_MESSAGE, id: 11, mutation: 'vote', values: {} });
     await new Promise((r) => setTimeout(r, 20));
     expect(fetchCalls.some((c) => c.url.includes('/mutate'))).toBe(false);
-    expect(posted).toEqual([]);
+    expect(posted.some((message) => message.type === STORY_MUTATE_RESULT_MESSAGE)).toBe(false);
   });
 
   it('forwards a live DATA frame into the frame, and never replaces it', async () => {
     const { container } = surface();
-    const iframe = container.querySelector('iframe') as HTMLIFrameElement;
+    const host = container.querySelector('[data-artifact-story-host]');
     frameWindow(container);
-    const before = iframe.getAttribute('src');
     await waitFor(() => expect(FakeEventSource.last).toBeTruthy());
     FakeEventSource.last!.emitData({ datasets: ['k3Pq9z'], version: 4 });
     await waitFor(() => expect(posted.some((m) => m.type === STORY_DATA_MESSAGE)).toBe(true));
     expect(posted.find((m) => m.type === STORY_DATA_MESSAGE)).toMatchObject({ datasets: ['k3Pq9z'] });
     // The frame is exactly where it was: same element, same src.
-    expect(container.querySelector('iframe')).toBe(iframe);
-    expect(iframe.getAttribute('src')).toBe(before);
+    expect(container.querySelector('[data-artifact-story-host]')).toBe(host);
   });
 });
