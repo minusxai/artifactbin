@@ -68,12 +68,12 @@ const relayCalls = [];
 const directCalls = [];
 p.on('request', (r) => {
   if (!r.url().includes(`/a/${doc.id}/query`)) return;
-  if (r.method() === 'POST') relayCalls.push(r.url());
+  if (r.method() === 'POST') relayCalls.push({ url: r.url(), body: r.postDataJSON() });
   if (r.method() === 'GET' && /[?&]q=/.test(r.url())) directCalls.push(r.url());
 });
 const resp = await p.goto(`${B}/a/${doc.id}`, { waitUntil: 'load' });
 const csp = resp.headers()['content-security-policy'] ?? '';
-ok(csp.includes('sandbox') && csp.includes(`connect-src ${B}/a/${doc.id}/query`), 'the reader\'s document is served top-level under the sandbox CSP, connect-src = its own query url');
+ok(csp.includes("default-src 'none'") && csp.includes("connect-src 'self'") && !/(?:^|;)\s*sandbox(?:\s|;|$)/.test(csp), 'the reader uses the strict navigable app CSP; author execution is isolated in its child frame');
 ok((await p.locator('iframe[title="artifact"]').count()) === 0, 'no iframe: the public data document IS the page');
 ok(p.url() === `${B}/a/${doc.id}`, `URL unchanged, no redirect (${new URL(p.url()).pathname})`);
 const frame = p.mainFrame();
@@ -119,24 +119,28 @@ const busy = await frame.evaluate(() => ({ seen: window.__busySeen, flash: windo
 ok(busy.seen && !busy.flash && busy.now === 'false', `the embed showed the busy state during the re-run and cleared it (busy=${busy.seen}, flash=${busy.flash})`);
 ok(!/EU/.test(await frame.textContent('[aria-label="Data table"]')), 'and the table shows only the selected region');
 ok((await scriptRealm.textContent('#out')) === 'changed:NA', 'the managed author script saw the change through mx.params.subscribe');
-ok(directCalls.length >= 1 && relayCalls.length === 0, `the re-run was the DOCUMENT'S OWN GET /a/<id>/query?q= (${directCalls.length} direct, ${relayCalls.length} relayed)`);
+ok(directCalls.length === 0 && relayCalls.some(call => call.body.values?.region === 'NA'), `the scoped query POST carries the selected value (${directCalls.length} GET, ${relayCalls.length} POST)`);
 await frame.selectOption('select[aria-label="Region"]', '');
 await frame.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent === '$2,040', null, { timeout: 15000 }).catch(() => {});
 ok((await frame.textContent('[aria-label="Live number"]')) === '$2,040', 'back to All restores the whole result');
-// The CSP admits exactly the query url — from INSIDE the sandboxed document.
-const reach = await frame.evaluate(async (id) => {
-  const tryFetch = async (url, init) => { try { const r = await fetch(url, init); return String(r.status); } catch { return 'blocked'; } };
-  return {
-    query: await tryFetch(`/a/${id}/query?q=${encodeURIComponent('{}')}`),
-    start: await tryFetch(`/a/${id}/start`, { method: 'POST' }),
-    // Deliberately raw, and deliberately NOT through lib/mint-anon: this fetch is issued by the
-    // SANDBOXED DOCUMENT and must die on the CSP's connect-src, long before the proxy's door sees it.
-    api: await tryFetch('/api/tokens/anonymous', { method: 'POST' }),
-    other: await tryFetch('/a/zzzzzz/query?q=%7B%7D'),
-  };
-}, doc.id);
-ok(reach.query === '200', `the document may fetch its own query url (${reach.query})`);
-ok(reach.start === 'blocked' && reach.api === 'blocked' && reach.other === 'blocked', `…and nothing else on the origin: start=${reach.start} api=${reach.api} other-doc=${reach.other}`);
+// The trusted main runtime may call its scoped query endpoint; arbitrary author
+// code runs in the managed child and cannot make these direct network calls.
+const queryStatus = await frame.evaluate(async id => (await fetch(`/a/${id}/query?q=%7B%7D`)).status, doc.id);
+ok(queryStatus === 200, `the trusted page can query the public document (${queryStatus})`);
+const reach = await scriptRealm.evaluate(async ({ id, base }) => {
+  // fetch/XHR are convenience asset-proxy wrappers. Beacon bypasses those
+  // wrappers, so these violations demonstrate browser CSP, not a JS guard.
+  const violations = [];
+  const record = event => { if (event.effectiveDirective === 'connect-src') violations.push(event.blockedURI); };
+  document.addEventListener('securitypolicyviolation', record);
+  const targets = [`${base}/a/${id}/query`, `${base}/api/tokens/anonymous`, 'https://untrusted.invalid/probe'];
+  for (const target of targets) { try { navigator.sendBeacon(target, '{}'); } catch {} }
+  const deadline = Date.now() + 2000;
+  while (violations.length < targets.length && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+  document.removeEventListener('securitypolicyviolation', record);
+  return { violations, targetCount: targets.length };
+}, { id: doc.id, base: B });
+ok(reach.violations.length >= reach.targetCount && reach.violations.some(uri => uri.startsWith(B)) && reach.violations.some(uri => uri.startsWith('https://untrusted.invalid')), `author child direct network is denied by browser connect-src (${JSON.stringify(reach.violations)})`);
 
 // ── 4. <DataTable> past the cap, through the same direct GET ───────────────
 // A dataset can never exceed the ingest cap (MAX_ROWS_LIMIT), and the query cap
@@ -150,8 +154,8 @@ const tdoc = await j(await api('/api/artifacts', { markup: `<Helmet><Query name=
 <div data-design="tw" className="@container p-8"><h1 className="text-3xl font-bold">Big table</h1>
 <DataTable data="$all" height="360px" columns={[{"col":"id","title":"ID"},{"col":"region","title":"Region"},{"col":"revenue","title":"Revenue","fmt":"$,.0f","bar":true}]} /></div>` }));
 ok(!!tdoc.id, 'the DataTable document published');
-const pageGets = [];
-p.on('request', (r) => { if (r.url().includes(`/a/${tdoc.id}/query`) && r.method() === 'GET') pageGets.push(r.url()); });
+const pageCalls = [];
+p.on('request', (r) => { if (r.url().includes(`/a/${tdoc.id}/query`)) pageCalls.push({ method: r.method(), body: r.method() === 'POST' ? r.postDataJSON() : null }); });
 await p.goto(`${B}/a/${tdoc.id}`, { waitUntil: 'load' });
 ok((await p.locator('iframe[title="artifact"]').count()) === 0, 'the table document is top-level too');
 const f2 = p.mainFrame();
@@ -168,7 +172,7 @@ ok(topCell === `$${expectedMax.toLocaleString('en-US')}`, `a header click sorts 
 await f2.click('[aria-label="Load more rows"]');
 await f2.waitForFunction(() => document.querySelector('[aria-label="Row count"]')?.textContent?.startsWith('1,000 of'), null, { timeout: 20000 }).catch(() => {});
 ok(/1,000 of 40,000/.test(await f2.textContent('[aria-label="Row count"]')), 'load more reads the next window');
-ok(pageGets.length >= 2, `sort and paging went through the document's own GET (${pageGets.length} calls)`);
+ok(pageCalls.filter(call => call.method === 'POST' && call.body.page?.name === 'all').length >= 2 && pageCalls.every(call => call.method === 'POST'), `sort and paging use the scoped POST with engine windows (${pageCalls.length} calls)`);
 ok(pageErrors.length === 0, `no page errors (${pageErrors.length})`);
 
 // ── 5. the reader ACL: a PRIVATE data document keeps the shell ──────────────
@@ -237,14 +241,14 @@ const up = await b.newPage({ viewport: { width: 1200, height: 900 } });
 const upErrors = [];
 up.on('pageerror', (e) => upErrors.push(e.message));
 const upQueries = [];
-up.on('request', (r) => { if (r.url().includes(`/a/${udoc.id}/query`)) upQueries.push(r.url()); });
+up.on('request', (r) => { if (r.url().includes(`/a/${udoc.id}/query`)) upQueries.push({ method: r.method(), body: r.method() === 'POST' ? r.postDataJSON() : null }); });
 await up.goto(`${B}/a/${udoc.id}?$region=west`, { waitUntil: 'load' });
 const uf = up.mainFrame();
 await uf.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent?.startsWith('$'), null, { timeout: 20000 }).catch(() => {});
 ok((await uf.$eval('select[aria-label="Region"]', (el) => el.value)) === 'west', `the link's selection is what the control shows at first paint (${await uf.$eval('select[aria-label="Region"]', (el) => el.value)})`);
 ok((await uf.textContent('[aria-label="Live number"]')) === '$10', 'and the numbers are the SELECTED ones, not the defaults corrected a moment later');
 ok(upQueries.length === 1, `the document ran its queries ONCE, with the selection (${upQueries.length} query request(s))`);
-ok(upQueries[0].includes('west'), 'and that one run carried it');
+ok(upQueries[0]?.method === 'POST' && upQueries[0]?.body.values?.region === 'west', 'and that one scoped POST carried the selection in its body');
 ok(!upErrors.some((e) => /hydrat/i.test(e)), 'no hydration error: the SSR control and the hydrated store agree by construction');
 // (b) the address follows the reader
 await uf.selectOption('select[aria-label="Region"]', 'east');

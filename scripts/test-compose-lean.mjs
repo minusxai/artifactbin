@@ -189,14 +189,16 @@ async function main() {
     const res = await fetch(`${base}/a/${id}`);
     const html = await res.text();
     const csp = res.headers.get('content-security-policy') ?? '';
-    // The served document carries its own og card and the strict per-row CSP
-    // (default-src 'none' — the app SPA never sets that on its own pages),
-    // and does NOT carry the SPA's bootstrap island.
+    // Canonical readers share the navigable app document, but still have
+    // meaningful initial HTML and SEO before JavaScript boots.
     const hasOg = /<meta\s+property="og:title"/.test(html);
-    const sandboxed = csp.includes("default-src 'none'");
-    const notSpa = !html.includes('mx-page-data') && !html.includes('id="root"');
-    say('GET /a/<id> through the proxy IS the document', res.status === 200 && hasOg && sandboxed && notSpa,
-      `og:title ${hasOg}, CSP default-src 'none' ${sandboxed}, not the SPA ${notSpa}`);
+    const strictApp = csp.includes("default-src 'none'") && !/(?:^|;)\s*sandbox(?:\s|;|$)/.test(csp);
+    const prepared = html.includes('mx-page-data') && html.includes('data-mx-initial-story');
+    const readable = /<h2[^>]*>The split shape on one host<\/h2>/.test(html);
+    say('GET /a/<id> has readable initial HTML and navigable app bootstrap', res.status === 200 && hasOg && strictApp && prepared && readable,
+      `og:title ${hasOg}, strict app CSP ${strictApp}, prepared ${prepared}, readable ${readable}`);
+    const raw = await fetch(`${base}/a/${id}/raw`);
+    say('explicit raw document retains its sandbox', raw.ok && /(?:^|;)\s*sandbox(?:\s|;|$)/.test(raw.headers.get('content-security-policy') ?? ''));
   }
 
   // 5. The document's own query URL — real DuckDB rows from the sql container.

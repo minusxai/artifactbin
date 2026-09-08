@@ -109,6 +109,11 @@ page.on('request', (r) => {
   if (r.url().startsWith(WEB)) outbound.push(r.url());
   if (r.url().includes(`/a/${owner.id}/assets`)) endpointCalls.push(r.url());
 });
+const waitForImport = (url) => page.waitForResponse(r => {
+  const address = new URL(r.url());
+  return address.pathname === `/a/${owner.id}/assets` && address.searchParams.get('u') === url && r.status() === 200;
+}).then(r => r.json());
+const firstImport = waitForImport(ONE);
 await page.goto(`${B}/a/${owner.id}`, { waitUntil: 'networkidle' });
 
 /**
@@ -136,15 +141,18 @@ const shot = (expect) => page.evaluate(async (want) => {
   return read();
 }, expect);
 
-const first = await shot(encodeURIComponent(ONE));
-ok(first.src?.includes(`/a/${owner.id}/assets?u=`) === true, `the first sight of a URL goes through the document's endpoint (${first.src})`);
+const firstAnswer = await firstImport;
+const first = await shot(firstAnswer.url);
+ok(/^\/assets\/[0-9a-f]{64}$/.test(first.src ?? '') && first.src === firstAnswer.url, `the first import renders the scoped endpoint's cached content address (${first.src})`);
 ok(first.natural[0] === 48 && first.natural[1] === 32, `it paints at the source's size (${first.natural.join('×')})`);
 ok(hits.filter((h) => h === '/pic1.png').length === 1, `the source host was asked ONCE for the first picture (${JSON.stringify(hits)})`);
 
 // ── pick the second, then come back to the first ────────────────────────────
+const secondImport = waitForImport(TWO);
 await page.selectOption('select[aria-label="pick"]', TWO);
-const second = await shot(encodeURIComponent(TWO));
-ok(second.src?.includes(encodeURIComponent(TWO)) === true, `picking another URL imports that one (${second.src})`);
+const secondAnswer = await secondImport;
+const second = await shot(secondAnswer.url);
+ok(/^\/assets\/[0-9a-f]{64}$/.test(second.src ?? '') && second.src === secondAnswer.url && second.src !== first.src, `picking another URL renders that import's distinct cached address (${second.src})`);
 ok(second.natural[0] === 48, `it paints too (${second.natural.join('×')})`);
 ok(hits.filter((h) => h === '/pic2.png').length === 1, `the source host was asked once for the second (${JSON.stringify(hits)})`);
 
