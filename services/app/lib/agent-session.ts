@@ -27,8 +27,10 @@
  */
 import { decodeAgentSession as decodeSigned, encodeAgentSession as encodeSigned } from '@artifactbin/utils';
 import { AUTH_SECRET, PUBLIC_BASE_URL } from '@/lib/config';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { parseCookie } from '@/lib/http';
+import { actorOf } from '@artifactbin/utils';
+import { getDb } from '@/lib/db';
 
 /**
  * `__Host-` WHEN THE COOKIE IS SECURE, and never otherwise: the prefix forces
@@ -107,9 +109,25 @@ export async function encodeAgentSession(session: AgentSession): Promise<string>
  * Read a cookie value back. Every failure — absent, tampered, expired, wrong
  * shape — is the same `null`: this is a credential, so it fails CLOSED.
  */
-export async function decodeAgentSession(value: string | undefined | null): Promise<AgentSession | null> {
+export async function decodeAgentSessionEnvelope(value: string | undefined | null): Promise<AgentSession | null> {
   const parsed = decodeSigned(value, AUTH_SECRET);
   return parsed && parsed.tokenIds.length ? parsed : null;
+}
+
+/** The cookie is authority only while its per-browser credential is live. */
+export async function liveAgentSession(request: Request): Promise<AgentSession | null> {
+  const attached = actorOf(request);
+  if (attached) return attached.heldTokenIds?.length ? { tokenIds: attached.heldTokenIds } : null;
+  const parsed = await decodeAgentSessionEnvelope(parseCookie(request.headers.get('cookie'), AGENT_COOKIE));
+  const primary = parsed?.tokenIds.at(-1);
+  if (!parsed?.sessionId || !primary || !/^[A-Za-z0-9_-]{43}$/.test(parsed.sessionId)) return null;
+  const schema = process.env.AUTH__SCHEMA || 'auth';
+  if (!/^[a-z_][a-z0-9_]*$/.test(schema)) return null;
+  try {
+    const hash = createHash('sha256').update(parsed.sessionId).digest('hex');
+    const row = await (await getDb()).query(`SELECT 1 FROM ${schema}.credentials WHERE kind='agent-browser' AND credential_hash=$1 AND subject_id=$2 AND deleted_at IS NULL AND consumed_at IS NULL AND expires_at>now()`, [hash, primary]);
+    return row.rows.length === 1 ? parsed : null;
+  } catch { return null; }
 }
 
 /**
@@ -140,7 +158,7 @@ export function withoutToken(session: AgentSession | null, tokenId: string): Age
 }
 
 export async function withAgentSession(request: Request, res: Response, tokenId: string): Promise<Response> {
-  const carried = await decodeAgentSession(parseCookie(request.headers.get('cookie'), AGENT_COOKIE));
+  const carried = await liveAgentSession(request);
   res.headers.append('Set-Cookie', agentSessionSetCookie(await encodeAgentSession(withToken(carried, tokenId))));
   return res;
 }

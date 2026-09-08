@@ -6,13 +6,15 @@
  * Seeded skeleton (testmig-2): signatures and doc-comments are the contract; bodies throw.
  */
 import { afterAll, beforeAll, beforeEach } from 'vitest';
-import { attachActor } from '@artifactbin/utils';
+import { attachActor, decodeAgentSession as decodeAgentSessionEnvelope } from '@artifactbin/utils';
 import type { Actor } from '@artifactbin/contracts';
 import { AGENT_COOKIE, encodeAgentSession } from '@/lib/agent-session';
 import { resetRateLimit } from '@/lib/auth';
 import { EVENTS_SCHEMA } from '@/lib/config';
+import { AUTH_SECRET } from '@/lib/config';
 import { getDb, resetDb } from '@/lib/db';
 import { SCHEMA_STATEMENTS } from '@/lib/schema';
+import { createHash } from 'node:crypto';
 
 const SCHEMA_TABLES = SCHEMA_STATEMENTS.flatMap((statement) => {
   const table = /^CREATE TABLE IF NOT EXISTS (\w+)/.exec(statement)?.[1];
@@ -63,7 +65,21 @@ export function request(path: string, opts: RequestOptions = {}): Request {
 
 /** The signed agent cookie header value for these held token ids: `${AGENT_COOKIE}=${encoded}`. */
 export async function agentCookie(tokenIds: string[]): Promise<string> {
-  return `${AGENT_COOKIE}=${await encodeAgentSession({ tokenIds })}`;
+  const value = await encodeAgentSession({ tokenIds });
+  const cookie = `${AGENT_COOKIE}=${value}`;
+  const session = decodeAgentSessionEnvelope(value, AUTH_SECRET);
+  if (session?.sessionId && tokenIds.length) {
+    const db = await getDb();
+    // The proxy owns this schema in production; route tests model only its
+    // browser-liveness row, without importing the proxy package into app.
+    await db.query('CREATE SCHEMA IF NOT EXISTS auth');
+    await db.query('CREATE TABLE IF NOT EXISTS auth.credentials (kind text NOT NULL, credential_hash text NOT NULL, subject_id text NOT NULL, expires_at timestamptz NOT NULL, consumed_at timestamptz, deleted_at timestamptz)');
+    await db.query(
+      "INSERT INTO auth.credentials(kind,credential_hash,subject_id,expires_at) VALUES ('agent-browser',$1,$2,now()+interval '30 days')",
+      [createHash('sha256').update(session.sessionId).digest('hex'), tokenIds.at(-1)],
+    );
+  }
+  return cookie;
 }
 
 /** Read one Set-Cookie from a response: its value (null when absent) and whether it CLEARS the cookie (Max-Age=0). */

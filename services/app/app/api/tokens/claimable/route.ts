@@ -12,8 +12,8 @@
  * window) lives in lib/users.
  */
 import { auth } from '@/auth';
-import { AGENT_COOKIE, decodeAgentSession } from '@/lib/agent-session';
-import { isCrossSiteRequest, json, parseCookie, unauthorized } from '@/lib/http';
+import { liveAgentSession } from '@/lib/agent-session';
+import { isCrossSiteRequest, json, unauthorized } from '@/lib/http';
 import { claimableTokensById } from '@/lib/users';
 
 /** A browser cannot plausibly hold more than a handful; the cap bounds the query. */
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user?.id) return unauthorized(request);
   if (isCrossSiteRequest(request)) return json({ error: 'forbidden' }, 403);
-  const held = await decodeAgentSession(parseCookie(request.headers.get('cookie'), AGENT_COOKIE));
+  const held = await liveAgentSession(request);
   if (!held) return json({ claimable: [] });
   return json({ claimable: await claimableTokensById(session.user.id, held.tokenIds.slice(-MAX_TOKENS)) });
 }

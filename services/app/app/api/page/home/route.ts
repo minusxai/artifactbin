@@ -7,8 +7,8 @@
  * public. Both come decorated (handles, titles) because the SPA holds no
  * database and must not spend a request per row learning names.
  */
-import { AGENT_COOKIE, decodeAgentSession } from '@/lib/agent-session';
-import { json, parseCookie } from '@/lib/http';
+import { liveAgentSession } from '@/lib/agent-session';
+import { json } from '@/lib/http';
 import { listDraftsByTokenIds } from '@/lib/users';
 import { sessionActor } from '@/lib/viewer';
 import { accountWorkspaceFor } from '@/lib/workspace';
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   if (!user?.userId) {
     const cookie = actor.heldTokenIds
       ? null
-      : await decodeAgentSession(parseCookie(request.headers.get('cookie'), AGENT_COOKIE));
+      : await liveAgentSession(request);
     const heldTokenIds = actor.heldTokenIds ?? cookie?.tokenIds;
     if (!heldTokenIds?.length) return json({ signedIn: false }, 200, { 'Cache-Control': 'no-store' });
     const drafts = await listDraftsByTokenIds(heldTokenIds);

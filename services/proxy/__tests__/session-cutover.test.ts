@@ -29,6 +29,10 @@ describe('agent browser session rollback compatibility',()=>{
     const legacy=setCookieHeader(encodeAgentSession({tokenIds:[token.id]},secret),false).split(';')[0]!;
     expect(await (await createProxy(options()).request('http://app.test/a/x',{headers:{cookie:legacy}})).json()).toEqual({credential:'none'});
   });
+  it('rejects an expired browser nonce',async()=>{
+    await testDb().query("INSERT INTO auth.credentials(kind,credential_hash,subject_id,expires_at) VALUES ('agent-browser',$1,$2,now()-interval '1 second')",[createHash('sha256').update(sessionId).digest('hex'),token.id]);
+    expect(await (await createProxy(options()).request('http://app.test/a/x',{headers:{cookie:await cookie()}})).json()).toEqual({credential:'none'});
+  });
   it('keeps the account session but drops held token authority from a revoked browser cookie',async()=>{
     await testDb().query("INSERT INTO auth.credentials(kind,credential_hash,subject_id,expires_at,deleted_at) VALUES ('agent-browser',$1,$2,now()+interval '30 days',now())",[createHash('sha256').update(sessionId).digest('hex'),token.id]);
     const configured=options();configured.sessions={resolve:async()=>({userId:'usr_other',email:'other@example.test'})};

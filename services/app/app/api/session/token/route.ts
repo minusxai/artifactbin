@@ -11,14 +11,13 @@
  * build the agent-cookie actor and never writes it.
  */
 import {
-  AGENT_COOKIE,
   agentSessionClearCookie,
   agentSessionSetCookie,
-  decodeAgentSession,
+  liveAgentSession,
   encodeAgentSession,
   withToken,
 } from '@/lib/agent-session';
-import { parseCookie, readJson, unauthorized } from '@/lib/http';
+import { readJson, unauthorized } from '@/lib/http';
 import { resolveToken } from '@/lib/tokens';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
@@ -28,7 +27,7 @@ export async function POST(request: Request) {
   const offered = typeof body?.token === 'string' ? body.token.trim() : '';
   const token = offered ? await resolveToken(offered) : null;
   if (!token) return unauthorized(request);
-  const held = await decodeAgentSession(parseCookie(request.headers.get('cookie'), AGENT_COOKIE));
+  const held = await liveAgentSession(request);
   const value = await encodeAgentSession(withToken(held, token.id));
   return new Response(null, {
     status: 204,

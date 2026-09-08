@@ -1,6 +1,6 @@
 import { auth } from '@/auth';
-import { AGENT_COOKIE, decodeAgentSession } from '@/lib/agent-session';
-import { isCrossSiteRequest, json, parseCookie, readJson, unauthorized } from '@/lib/http';
+import { liveAgentSession } from '@/lib/agent-session';
+import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
 import { claimToken, claimTokenById } from '@/lib/users';
 
 /**
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   // id from someone else's browser would claim their draft. `token` remains
   // for anything holding the plaintext (an agent, a paste).
   if (typeof body?.tokenId === 'string' && body.tokenId) {
-    const held = await decodeAgentSession(parseCookie(request.headers.get('cookie'), AGENT_COOKIE));
+    const held = await liveAgentSession(request);
     if (!held?.tokenIds.includes(body.tokenId)) return json({ error: 'not_found' }, 404);
     const claimed = await claimTokenById(session.user.id, body.tokenId);
     if (!claimed) return json({ error: 'not_found' }, 404);
