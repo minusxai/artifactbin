@@ -158,9 +158,15 @@ try {
   check(await hasCommentPermission(stranger,doc.id), 'link=can comment: the same stranger now has comment permission');
   // Inside the open popover, so the two absences below are real absences.
   await openControls(stranger);
-  check((await stranger.locator('[aria-label="Toggle comments"]').count()) === 1, '…with the comments control');
-  check((await stranger.locator('[aria-label="Edit artifact"]').count()) === 0, '…and NO edit button — a commenter is not an editor');
-  check((await stranger.locator('[aria-label="Share"]').count()) === 0, '…and no share control: the ACL stays the owner\'s');
+  const strangerControls=stranger.getByRole('dialog',{name:'Artifact controls',exact:true});
+  check(await strangerControls.getByLabel('Toggle comments',{exact:true}).isVisible(), '…with the comments control');
+  check((await strangerControls.getByLabel('Edit artifact',{exact:true}).count()) === 0, '…and NO edit button — a commenter is not an editor');
+  check(await strangerControls.getByLabel('Share',{exact:true}).isVisible(), '…with Share for copying the link');
+  check(await stranger.getByLabel('Link role',{exact:true}).count()===0 && await stranger.getByLabel('Invite email',{exact:true}).count()===0,'sharing ACL controls remain owner-only');
+  const aclWrite=await stranger.evaluate(async id=>(await fetch(`/api/my/artifacts/${id}/sharing`,{
+    method:'PUT',headers:{'Content-Type':'application/json','x-artifactbin-csrf':'1'},body:JSON.stringify({linkRole:'editor'}),
+  })).status,doc.id);
+  check(aclWrite===403,'the commenter cannot change the ACL even with a legitimate same-origin request');
   await closeControls(stranger);
 
   // ── 3b. …carrying the COMMENT layer, not the hydration runtime ───────────
@@ -168,6 +174,7 @@ try {
   check((await stranger.locator('[contenteditable="true"]').count())===0 && !fetched.some(u=>u.includes('SourceEditor')),'commenter receives no editable author surface or source editor');
 
   // ── 4. they comment, from selection to saved thread ──────────────────────
+  await owner.evaluate(()=>{window.__gateLinkAccessOwnerIdentity='same-owner-window';});
   const frame = stranger.mainFrame();
   await frame.locator('#claim').waitFor({ timeout: 15000 });
   const bubble = frame.locator('[data-mx-selection-actions]');
@@ -192,10 +199,10 @@ try {
   check(saved === 1, 'the comment is stored — a person nobody invited left feedback');
 
   // ── 5. the owner never reloaded ──────────────────────────────────────────
-  // The count rides the framed document's comment glyph now (the page keeps it live).
+  // Read the persistent trusted comment control, not both it and the menu copy.
   const ownerFrame = owner.mainFrame();
-  const live = await until(() => ownerFrame.locator('[aria-label="Toggle comments"]').textContent().catch(() => null), (t) => t === '1', 20000);
-  check(live === '1', 'the owner watches the count arrive over the live stream — no reload');
+  const live = await until(() => ownerFrame.locator('[data-controls-region] [aria-label="Toggle comments"]').textContent().then(t=>t?.trim()).catch(() => null), (t) => t === '1', 20000);
+  check(live === '1' && await owner.evaluate(()=>window.__gateLinkAccessOwnerIdentity==='same-owner-window'), 'the owner watches the count arrive over the live stream — no reload');
 
   // ── 6. logged OUT on the same link: the anonymous ceiling ────────────────
   const anonCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });

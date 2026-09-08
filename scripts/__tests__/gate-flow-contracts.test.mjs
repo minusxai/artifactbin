@@ -57,3 +57,22 @@ it('does not block token adoption on unrelated home image load completion',()=>{
  expect(helper).toContain("page.goto(`${base}/`, { waitUntil: 'domcontentloaded' })");
  expect(helper).toContain("if (status !== 204) throw");
 });
+it('compares native and wrapped runtime frames by identity in the delayed query gate',()=>{
+ const gate=readFileSync(new URL('../gate-late-controls-query.mjs',import.meta.url),'utf8');
+ expect(gate).toContain('sameGateFrame(req.frame(),page.mainFrame())');
+ expect(gate).not.toContain('assert.equal(req.frame(),page.mainFrame()');
+});
+it('scopes comment controls and separates copyable Share from owner-only ACL writes',()=>{
+ const gate=readFileSync(new URL('../gate-link-access.mjs',import.meta.url),'utf8');
+ expect(gate).toContain("strangerControls.getByLabel('Toggle comments',{exact:true})");
+ expect(gate).toContain("strangerControls.getByLabel('Share',{exact:true})");
+ expect(gate).toContain('aclWrite===403');
+ expect(gate).toContain('[data-controls-region] [aria-label="Toggle comments"]');
+ expect(gate).toContain('window.__gateLinkAccessOwnerIdentity');
+});
+it('requires live reader content in the main document while excluding an author document iframe',()=>{
+ const gate=readFileSync(new URL('../gate-live-reader.mjs',import.meta.url),'utf8');
+ expect(gate).toContain('host.ownerDocument===document && window===top');
+ expect(gate).toContain('iframe[title="artifact"]');
+ expect(gate).not.toContain('the reader gets the document itself, not the app shell');
+});

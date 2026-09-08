@@ -62,7 +62,11 @@ const browser = await chromium.launch();
   page.on('framenavigated', (f) => { if (sameGateFrame(f,page.mainFrame())) reloads++; });
   await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
   await page.waitForFunction(() => /the first version/.test(document.body.textContent ?? ''), null, { timeout: 20000 });
-  ok(!(await page.evaluate(() => !!document.querySelector('[data-artifact-story-host]'))), 'the reader gets the document itself, not the app shell');
+  ok(await page.evaluate(() => {
+    const host=document.querySelector('[data-artifact-story-host]');
+    return !!host && host.ownerDocument===document && window===top && /the first version/.test(host.textContent??'');
+  }), 'the live reader content belongs to the first-party main document');
+  ok(await page.locator('iframe[title="artifact"], iframe[title="Artifactbin app"]').count()===0,'neither author document nor app UI uses a whole-page frame');
   await sleep(3000);
 
   // Where they are, and what they are looking at.

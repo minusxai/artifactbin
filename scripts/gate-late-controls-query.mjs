@@ -8,7 +8,7 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {randomBytes} from 'node:crypto';
 import net from 'node:net';
-import {chromium} from './lib/gate-browser.mjs';
+import {chromium,sameGateFrame} from './lib/gate-browser.mjs';
 import {startDocument,becomeOwner} from './lib/start-doc.mjs';
 
 const requested=Number(process.argv.find(a=>a.startsWith('--port-base='))?.split('=')[1]??0);
@@ -41,7 +41,7 @@ try{
  let delayed=0;const durations=[],queries=[],writes=[];
  page.on('request',req=>{
    if(req.url().includes('/query') || (req.method()==='POST'&&req.url().includes('/mutate'))){
-     assert.equal(req.frame(),page.mainFrame(),'query/mutation transport belongs to first-party runtime, never author frame');
+     assert(sameGateFrame(req.frame(),page.mainFrame()),'query/mutation transport belongs to first-party runtime, never author frame');
      if(req.url().includes('/query'))queries.push(req.url());else writes.push(req.url());
    }
  });
