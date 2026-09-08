@@ -1,5 +1,43 @@
-import * as cssTree from 'css-tree';
+import * as cssTree from './css-parser';
 import { sha256Hex } from '@/lib/sha256';
+import type { JsxNode } from '@/lib/jsx';
+
+/** Apply the same CSS policy to static inline style values, without entering Iframes. */
+export function isolateStoryNodes(nodes: JsxNode[], css: string): JsxNode[] {
+  // Parse the font declarations once; only these small aliases are carried
+  // through inline-value sanitization, not the entire compiled stylesheet for
+  // every element. Values are parsed as values, so they cannot close a rule.
+  const aliases: string[] = [];
+  try {
+    cssTree.walk(cssTree.parse(css), { visit: 'Atrule', enter(node) {
+      if (decoded(node.name).toLowerCase() !== 'font-face' || !node.block) return;
+      node.block.children.forEach(part => {
+        if (part.type === 'Declaration' && decoded(part.property).toLowerCase() === 'font-family') aliases.push(`@font-face{font-family:${cssTree.generate(part.value)}}`);
+      });
+    } });
+  } catch { /* No valid definitions; inline URL policy still applies. */ }
+  const visit = (items: JsxNode[]): JsxNode[] => items.map(node => {
+    if (node.type !== 'element' || node.tag === 'Iframe') return node;
+    return { ...node, children: visit(node.children), attributes: node.attributes.map(attr => {
+      if (!['style','labelstyle'].includes(attr.name.toLowerCase()) || !attr.value.static || !attr.value.json || typeof attr.value.json !== 'object' || Array.isArray(attr.value.json)) return attr;
+      const style = { ...attr.value.json };
+      for (const [property, value] of Object.entries(style)) {
+        if (typeof value !== 'string') continue;
+        const cssProperty = property.startsWith('--') ? property : property.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`);
+        try {
+          const parsed = cssTree.parse(value, { context: 'value' });
+          const filtered = cssTree.parse(isolateStoryCss(`${aliases.join('')}.inline{${cssProperty}:${cssTree.generate(parsed)}}`));
+          let rewritten: string | undefined;
+          cssTree.walk(filtered, { visit: 'Declaration', enter(decl) { if (decl.property === cssProperty) rewritten = cssTree.generate(decl.value); } });
+          if (rewritten !== undefined) style[property] = rewritten;
+          else delete style[property];
+        } catch { delete style[property]; }
+      }
+      return { ...attr, value: { static: true, json: style } };
+    }) };
+  });
+  return visit(nodes);
+}
 
 const INLINE_ROOT = '[data-mx-inline-story]';
 const SAFE_AT_RULES = new Set(['media', 'supports', 'container', 'layer', 'scope', 'keyframes', '-webkit-keyframes', 'font-face', 'starting-style']);
@@ -43,7 +81,7 @@ export function isolateStoryCss(css: string): string {
     const defaults = cssTree.parse(localDefaults.join(''), { parseCustomProperty: true }) as cssTree.StyleSheet;
     ast.children.prependList(defaults.children);
   }
-  const safeUrl = (value: string) => /^(?:data:|#|\/(?:assets|fonts)\/|\/a\/[A-Za-z0-9]+\/(?:assets|raw|export)(?:[?/#]|$))/i.test(value.trim()) ? value : 'data:,';
+  const safeUrl = (value: string) => /^(?:data:|#|\/(?:assets|fonts|webfonts)\/|\/a\/[A-Za-z0-9]+\/(?:assets|raw|export)(?:[?/#]|$))/i.test(value.trim()) ? value : 'data:,';
   cssTree.walk(ast, {
     enter(this: cssTree.WalkContext, node: cssTree.CssNode, item: cssTree.ListItem<cssTree.CssNode>, list: cssTree.List<cssTree.CssNode>) {
       if (node.type === 'PseudoClassSelector' && ['root', 'host'].includes(decoded(node.name).toLowerCase())

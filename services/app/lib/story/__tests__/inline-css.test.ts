@@ -1,7 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { isolateStoryCss } from '../inline-css';
+import { isolateStoryCss, isolateStoryNodes } from '../inline-css';
+import { parseJsx } from '@/lib/jsx';
 
 describe('inline document CSS isolation', () => {
+  it('keeps cached imported webfonts', () => {
+    expect(isolateStoryCss('@font-face{font-family:F;src:url(/webfonts/font.woff2)}')).toContain('/webfonts/font.woff2');
+  });
+  it('maps inline font references and unsafe image-set values without changing numeric styles or iframe payloads', () => {
+    const parsed = parseJsx('<p id="kept" style={{fontFamily:"My Font",fontSize:14,backgroundImage:\'image-set("https://evil.test/p" 1x)\'}}>Text</p><Iframe><p style={{fontFamily:"My Font"}}>Inner</p></Iframe>');
+    if (!parsed.ok) throw Error(parsed.error);
+    const nodes = isolateStoryNodes(parsed.nodes, '@font-face{font-family:"My Font";src:url(/webfonts/a.woff2)}');
+    const first = nodes[0];
+    if (first.type !== 'element') throw Error('Missing p');
+    const style = first.attributes.find(attr=>attr.name==='style')?.value;
+    expect(style?.static && style.json).toMatchObject({fontSize:14,fontFamily:expect.stringContaining('mx-author-')});
+    expect(JSON.stringify(style)).not.toContain('evil.test');
+    expect(nodes[1]).toEqual(parsed.nodes[1]);
+    expect(JSON.stringify(parsed.nodes[0])).toContain('My Font');
+  });
   it('removes global property registrations and namespaces font faces with their references', () => {
     const css = isolateStoryCss('@property --color-fg{syntax:"<color>";inherits:true;initial-value:red}@font-face{font-family:"JetBrains Mono Variable";src:url(/fonts/font.woff2)}body{font-family:"JetBrains Mono Variable",monospace}');
     expect(css).not.toContain('@property');
