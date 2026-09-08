@@ -1457,7 +1457,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             // re-parent.
             top: 0,
             right: 0,
-            ...(directMarkup ? {paddingTop: directInset, boxSizing:'border-box' as const, '--mx-vh': `calc(100vh - ${directInset}px)`} : {}),
+            ...(directMarkup ? {paddingTop: directInset, paddingRight: railInset, boxSizing:'border-box' as const, '--mx-vh': `calc(100vh - ${directInset}px)`} : {}),
             background: readerMode === 'dark' ? DOCUMENT_GROUND.dark : DOCUMENT_GROUND.light,
           }}
         >

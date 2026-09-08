@@ -16,6 +16,23 @@ it('reserves document space for the desktop comment rail and restores it on clos
  fireEvent.click(await screen.findByLabelText('Close comments'));
  expect(screen.getByLabelText('Artifact viewport')).toHaveStyle({paddingRight:'0px'});
 });
+it('keeps the phone comment sheet overlaid without remounting or resetting document state',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({annotations:[]})));
+ vi.stubGlobal('innerWidth',390);
+ const mobileProps:ArtifactSurfaceProps={...props,source:'<input aria-label="Local value" type="range" min={0} max={10} value="$amount" />',dataflow:{flow:{values:[{kind:'scalar',name:'amount',type:'number',default:2,start:0,end:0}],queries:[]}}};
+ render(<ArtifactShell role="owner"><ArtifactSurface {...mobileProps}/></ArtifactShell>);
+ const input=await screen.findByLabelText('Local value') as HTMLInputElement;
+ fireEvent.change(input,{target:{value:'7'}});
+ expect(input).toHaveValue('7');
+ const viewport=screen.getByLabelText('Artifact viewport');
+ fireEvent.click(screen.getByLabelText('Toggle comments'));
+ expect(viewport).toHaveStyle({paddingRight:'0px'});
+ fireEvent.click(await screen.findByLabelText('Close comments'));
+ fireEvent.click(screen.getByLabelText('Toggle comments'));
+ expect(screen.getByLabelText('Local value')).toBe(input);
+ expect(input).toHaveValue('7');
+ expect(viewport).toHaveStyle({paddingRight:'0px'});
+});
 it('edits the mounted document in place and retains the same host on exit',async()=>{
  vi.stubGlobal('fetch',vi.fn(async()=>Response.json({})));
  render(<ArtifactShell role="owner"><ArtifactSurface {...props}/></ArtifactShell>);
