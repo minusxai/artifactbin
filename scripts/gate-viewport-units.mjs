@@ -64,13 +64,13 @@ await page.waitForTimeout(4000); // let the surface settle (MutationObserver-dri
 // The document is a SERVED page in an opaque-origin frame now, so it is
 // measured through the frame API rather than reached into (contentDocument is
 // null across origins by design — that opacity is the sandbox).
-const frameEl = await page.waitForSelector('iframe[title="artifact"]', { timeout: 20000 });
-const docFrame = await frameEl.contentFrame();
+const frameEl = await page.waitForSelector('[data-mx-inline-story]', { timeout: 20000 });
+const docFrame = page.mainFrame();
 await docFrame.waitForSelector('h1', { timeout: 20000 });
 const frameBox = await frameEl.boundingBox();
 
 const measured = await docFrame.evaluate(() => {
-  const root = document.querySelector('[data-mx-story-root]') ?? document.body;
+  const root = document.querySelector('[data-mx-inline-story]') ?? document.body;
   const heading = root?.querySelector('h1');
   const sheet = document.querySelector('style[data-mx-tw]')?.textContent ?? '';
   return {
@@ -98,10 +98,10 @@ console.log(JSON.stringify(measured, null, 1));
  * true — and is what a reader actually sees — is that `100vh` inside the
  * document means the frame, exactly once.
  */
-check(frameBox !== null && frameBox.height > 200, `the document frame is viewport-sized (${frameBox?.height}px)`);
+check(frameBox !== null && frameBox.height > 200, `the inline document has content height (${frameBox?.height}px)`);
 check(
-  Math.abs(measured.viewport - frameBox.height) <= 2,
-  `the document's own viewport IS the frame (${measured.viewport} vs ${frameBox.height})`,
+  Math.abs(measured.viewport - page.viewportSize().height) <= 2,
+  `the document uses the browser viewport, not its content height (${measured.viewport} vs ${page.viewportSize().height})`,
 );
 // A slide fills the READER's viewport — not the whole document's height.
 check(

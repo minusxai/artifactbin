@@ -1,3 +1,4 @@
+import { artifactDocument } from './lib/artifact-document.mjs';
 /** Full served-document test: real cell writes, two readers, conflict, portals and virtual rows. */
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
@@ -15,9 +16,9 @@ try {
   for (const page of [aPage, bPage]) page.on('pageerror', error => errors.push(error.message));
   await Promise.all([becomeOwner(aPage,base,fixture.token),becomeOwner(bPage,base,fixture.token)]);
   await Promise.all([aPage.goto(fixture.url), bPage.goto(fixture.url)]);
-  await Promise.all([aPage.locator('iframe[title="artifact"]').waitFor(),bPage.locator('iframe[title="artifact"]').waitFor()]);
-  const a = await (await aPage.locator('iframe[title="artifact"]').elementHandle()).contentFrame();
-  const b = await (await bPage.locator('iframe[title="artifact"]').elementHandle()).contentFrame();
+  await Promise.all([aPage.locator('[data-mx-inline-story]').waitFor(),bPage.locator('[data-mx-inline-story]').waitFor()]);
+  const a = await artifactDocument(aPage);
+  const b = await artifactDocument(bPage);
   await Promise.all([a.getByLabel('Item 1', { exact: true }).waitFor(), b.getByLabel('Item 1', { exact: true }).waitFor()]);
   const select = async (page, label, option) => {
     const trigger = page.getByRole('button', { name: label, exact: true });
@@ -162,7 +163,7 @@ try {
   owner.on('pageerror', error => errors.push(error.message));
   await becomeOwner(owner, base, fixture.token);
   await owner.goto(fixture.url);
-  const frame = owner.frameLocator('iframe[title="artifact"]');
+  const frame = owner.locator('[data-mx-inline-story]');
   await frame.getByLabel('Item 1', { exact: true }).waitFor();
   await frame.getByLabel('Owner 1', { exact: true }).click();
   await commit(owner, () => frame.getByRole('option', { name: '@ppsreejith', exact: true }).click());

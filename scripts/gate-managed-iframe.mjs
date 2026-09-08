@@ -88,9 +88,8 @@ try {
   page.on('console',message=>{if(message.type()==='error')console.error('CONSOLE',message.text());});
   for(let attempt=0;attempt<2;attempt++) {
     await page.goto(base+'/a/'+seed.id);
-    await page.locator('iframe[title="artifact"], iframe[title="Managed demo"]').first().waitFor();
-    const artifactHandle=await page.$('iframe[title="artifact"]');
-    const artifact=artifactHandle ? await artifactHandle.contentFrame() : page;
+    await page.locator('[data-mx-inline-story]').waitFor();
+    const artifact=page;
     const outer=artifact.locator('iframe[title="Managed demo"]');await outer.waitFor();
     const wrapper=await outer.contentFrame();const inner=wrapper.locator('iframe');await inner.waitFor();const realm=await inner.contentFrame();
     await realm.locator('#result').filter({hasText:'AB:42:true'}).waitFor({timeout:20000});

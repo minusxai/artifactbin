@@ -1,3 +1,4 @@
+import { artifactDocument } from './lib/artifact-document.mjs';
 /**
  * Gate: a document's own typeface must not arrive after the reader does.
  *
@@ -106,8 +107,8 @@ ok(docHead.indexOf('rel="preload"') < docHead.indexOf('@font-face'), 'and it com
 const reqs = [];
 p.on('request', (r) => { if (r.url().includes('/fonts/')) reqs.push(r.url()); });
 await p.goto(`${B}/a/${st.id}`, { waitUntil: 'load' });
-const frameEl = await p.waitForSelector('iframe[title="artifact"]', { timeout: 20_000 });
-const docFrame = await frameEl.contentFrame();
+const frameEl = await p.waitForSelector('[data-mx-inline-story]', { timeout: 20_000 });
+const docFrame = p.mainFrame();
 await docFrame.waitForSelector('h1', { timeout: 20_000 });
 await p.waitForTimeout(2500);
 
@@ -141,7 +142,7 @@ ok(inside.start !== null && inside.start <= inside.domInteractive,
 
 // ── 5. a WARM load spends no round trip (the immutable win) ────────────────
 await p.goto(`${B}/a/${st.id}`, { waitUntil: 'load' });
-const warmFrame = await (await p.waitForSelector('iframe[title="artifact"]', { timeout: 20_000 })).contentFrame();
+const warmFrame = await artifactDocument(p, { timeout: 20_000 });
 await warmFrame.waitForSelector('h1', { timeout: 20_000 });
 await p.waitForTimeout(2000);
 const warm = await warmFrame.evaluate(() => performance.getEntriesByType('resource')
@@ -195,13 +196,8 @@ const measure = async () => {
    * Verified with a frame-navigation log: the document is still fetched exactly
    * ONCE, so this is the gate's timing, not the page's behaviour.
    */
-  const el = await p.waitForSelector('iframe[title="artifact"]', { timeout: 30_000 });
-  for (let i = 0; i < 300; i++) {
-    const f = await el.contentFrame();
-    if (f && f.url().includes('/raw')) return f.evaluate(FONT_ORDER_PROBE);
-    await p.waitForTimeout(100);
-  }
-  throw new Error('the document frame never navigated to /raw');
+  await p.waitForSelector('[data-mx-inline-story]', { timeout: 30_000 });
+  return p.evaluate(FONT_ORDER_PROBE);
 };
 let order = null;
 for (let attempt = 0; attempt < 3 && order === null; attempt++) {

@@ -1,3 +1,4 @@
+import { artifactDocument } from './lib/artifact-document.mjs';
 /**
  * Gate: an image bound by `ref:<id>` must actually paint.
  *
@@ -61,7 +62,7 @@ await page.goto(`${B}/a/${doc.id}`, { waitUntil: 'networkidle' });
 
 // The document is a SERVED page in an opaque-origin frame: reached through the
 // frame API, never contentDocument (which is null across origins by design).
-const docFrame = await (await page.waitForSelector('iframe[title="artifact"]', { timeout: 30_000 })).contentFrame();
+const docFrame = await artifactDocument(page, { timeout: 30_000 });
 const probe = await docFrame.evaluate(async () => {
   const deadline = Date.now() + 8000;
   while (Date.now() < deadline) {
@@ -112,7 +113,7 @@ const VALID_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAgCAIAAAD
   await p2.route(`**/a/${owner2.id}/raw*`, async (route) => { await held; await route.continue(); });
   await becomeOwner(p2, B, owner2.token);
   await p2.goto(`${B}/a/${d.id}`, { waitUntil: 'domcontentloaded' });
-  const f2 = await (await p2.waitForSelector('iframe[title="artifact"]', { timeout: 30_000 })).contentFrame();
+  const f2 = await artifactDocument(p2, { timeout: 30_000 });
   await f2.waitForSelector('img[alt="blurred"]', { timeout: 20_000 });
 
   const during = await f2.evaluate(() => {

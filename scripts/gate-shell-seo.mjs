@@ -89,13 +89,13 @@ const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 // The shell (and its frame) belongs to the owner; readers get the document.
 await becomeOwner(page, BASE, mint.token);
 await page.goto(`${BASE}/a/${doc.id}`);
-const frameEl = await page.waitForSelector('iframe[title="artifact"]', { timeout: 20000 });
+const frameEl = await page.waitForSelector('[data-mx-inline-story]', { timeout: 20000 });
 const before = await frameEl.boundingBox();
 // The shell draws no hamburger or controls button of its own now: the framed
 // document carries the chrome and asks the page for its panels.
 check((await page.locator('[aria-label="Open menu"], [aria-label="Open artifact controls"]').count()) === 0, 'the shell draws no corner buttons of its own');
-const docFrame = page.frames().find((f) => f !== page.mainFrame());
-check(!!docFrame && (await docFrame.locator('[data-mx-reader-trigger="menu"]').count()) === 1, 'the framed document carries the menu control');
+const docFrame = page.mainFrame();
+check(!!docFrame && (await docFrame.locator('[data-mx-reader-trigger="menu"]').count()) === 1, 'the protected reader chrome carries the menu control');
 check(!!docFrame && (await docFrame.locator('[data-mx-reader-trigger="controls"]').count()) === 1, 'and the artifact controls');
 await openMenu(page);
 for (const item of ['Artifacts', 'Account', 'Human Docs', 'Agent docs']) {
@@ -112,10 +112,12 @@ check(!(await page.isVisible('[aria-label="Artifacts"]').catch(() => false)), 'E
 await openMenu(page);
 await page.waitForTimeout(300);
 const covers = await page.evaluate(() => {
-  const el = document.querySelector('[aria-label="Close the menu"]');
+  const el = [...document.querySelectorAll('[data-trusted-ui]')].flatMap(host => [...(host.shadowRoot?.querySelectorAll('[aria-label="Close the menu"]') ?? [])])[0];
   const r = el?.getBoundingClientRect();
-  return !!r && r.height > window.innerHeight / 2 && document.elementFromPoint(
-    Math.round(window.innerWidth * 0.7), Math.round(window.innerHeight * 0.6)) === el;
+  const x = Math.round(window.innerWidth * 0.7), y = Math.round(window.innerHeight * 0.6);
+  let hit = document.elementFromPoint(x, y);
+  while (hit?.shadowRoot) { const inner = hit.shadowRoot.elementFromPoint(x, y); if (!inner || inner === hit) break; hit = inner; }
+  return !!r && r.height > window.innerHeight / 2 && hit === el;
 });
 check(covers, 'the click-away layer actually covers the document');
 await page.mouse.click(Math.round(1400 * 0.7), Math.round(900 * 0.6));
@@ -129,11 +131,11 @@ check(before.y === after.y && before.x === after.x, `the document never shifts (
 check(after.width >= 1390, `the document is full-bleed (${after.width}px of ${1400})`);
 
 // The frame is the one place the document renders in the shell.
-const frame = await frameEl.contentFrame();
-check(!(await page.evaluate((phrase) => document.body.innerText.includes(phrase), PHRASE)),
-  "the shell's own html carries none of the document's text");
+const frame = page.mainFrame();
+check(await page.locator('[data-mx-inline-story]').innerText().then(text => text.includes(PHRASE)),
+  'the document text is in the actual top-level page');
 await frame.waitForSelector('h1', { timeout: 20000 });
-check((await frame.evaluate('document.body.innerText')).includes(PHRASE), 'the frame shows the real document');
+check((await frame.evaluate('document.body.innerText')).includes(PHRASE), 'the main document shows the real content');
 
 // 4. JS off: the served document is server-rendered, so the text is there.
 const noJs = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1200, height: 800 } });

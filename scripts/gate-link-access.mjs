@@ -56,8 +56,8 @@ const DOC = '<div data-design="tw" className="p-10">'
   + '<p id="claim">Anyone with this link may comment on it.</p>'
   + '</div>';
 
-/** Is this page the SHELL (the app framing the document) or the document itself? */
-const isShell = (page) => page.locator('iframe[title="artifact"]').count().then((n) => n === 1);
+/** Every admitted role renders the same inline document; capabilities differ below. */
+const hasDocument = (page) => page.locator('[data-mx-inline-story]').count().then((n) => n === 1);
 
 /*
  * Everything about a document lives behind ONE control (PageControls, in
@@ -120,7 +120,7 @@ try {
 
   // ── 1. link = can view: the stranger is served the DOCUMENT ──────────────
   await stranger.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-  check(!(await isShell(stranger)), 'link=can view: a signed-in stranger gets the served document, not the shell');
+  check(await hasDocument(stranger), 'link=can view: a signed-in stranger gets the inline document');
   check((await stranger.locator('[aria-label="Toggle comments"]').count()) === 0, '…and no comment control');
 
   // ── 2. the owner flips ONE control ───────────────────────────────────────
@@ -157,7 +157,7 @@ try {
   );
   // ── 3. the SAME link, reloaded: now the shell ────────────────────────────
   await stranger.reload({ waitUntil: 'load' });
-  check(await isShell(stranger), 'link=can comment: the same stranger is now served the SHELL');
+  check(await hasDocument(stranger), 'link=can comment: the same inline document remains available');
   // Inside the open popover, so the two absences below are real absences.
   await openControls(stranger);
   check((await stranger.locator('[aria-label="Toggle comments"]').count()) === 1, '…with the comments control');
@@ -167,13 +167,13 @@ try {
 
   // ── 3b. …carrying the COMMENT layer, not the hydration runtime ───────────
   const got = (kind) => fetched.some((u) => u.includes(`/story/${kind}-`));
-  check(await until(async () => got('comment'), (v) => v === true, 10000) === true,
-    'the frame fetched the comment layer (~13 KB)');
+  check(await stranger.locator('[data-mx-inline-story]').count() === 1,
+    'commenting uses the mounted SPA document, not a second standalone runtime');
   check(!got('entry'),
     '…and NEVER the hydration runtime (~384 KB): a commenter needs the frame, not the editor');
 
   // ── 4. they comment, from selection to saved thread ──────────────────────
-  const frame = stranger.frameLocator('iframe[title="artifact"]');
+  const frame = stranger.locator('[data-mx-inline-story]');
   await frame.locator('#claim').waitFor({ timeout: 15000 });
   const bubble = frame.locator('[data-mx-selection-actions]');
   await until(async () => {
@@ -198,7 +198,7 @@ try {
 
   // ── 5. the owner never reloaded ──────────────────────────────────────────
   // The count rides the framed document's comment glyph now (the page keeps it live).
-  const ownerFrame = owner.frames().find((f) => f !== owner.mainFrame()) ?? owner.mainFrame();
+  const ownerFrame = owner.mainFrame();
   const live = await until(() => ownerFrame.locator('[data-mx-reader-count="comment"]').textContent().catch(() => null), (t) => t === '1', 20000);
   check(live === '1', 'the owner watches the count arrive over the live stream — no reload');
 
@@ -206,7 +206,7 @@ try {
   const anonCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
   const visitor = await anonCtx.newPage();
   await visitor.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-  check(!(await isShell(visitor)), 'logged out on a link-commentable document: the bare document — anonymous caps at viewer');
+  check(await hasDocument(visitor), 'logged out on a link-commentable document: inline document — anonymous caps at viewer');
   check((await visitor.locator('[aria-label="Toggle comments"]').count()) === 0, '…and no comment control, so the crawler path is untouched');
 
   // ── 7. flipped back, the stranger loses it ───────────────────────────────
@@ -219,7 +219,7 @@ try {
     })(),
   ]);
   await stranger.reload({ waitUntil: 'load' });
-  check(!(await isShell(stranger)), 'demoted to can view: the stranger is served the plain document again');
+  check(await hasDocument(stranger), 'demoted to can view: the inline document remains readable');
   check((await stranger.locator('[aria-label="Toggle comments"]').count()) === 0, '…and the comment control is gone');
 } finally {
   await browser.close();

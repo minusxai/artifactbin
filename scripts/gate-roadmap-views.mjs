@@ -1,3 +1,4 @@
+import { artifactDocument } from './lib/artifact-document.mjs';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { createEditableTableFixture } from './lib/editable-table-fixture.mjs';
@@ -12,8 +13,8 @@ try {
   ownerPage.on('pageerror', error => console.error(error.message));
   await becomeOwner(ownerPage,base,fixture.token);
   await ownerPage.goto(fixture.url);
-  await ownerPage.locator('iframe[title="artifact"]').waitFor();
-  let page = await (await ownerPage.locator('iframe[title="artifact"]').elementHandle()).contentFrame();
+  await ownerPage.locator('[data-mx-inline-story]').waitFor();
+  let page = await artifactDocument(ownerPage);
   const switchView = async name => {
     await page.getByLabel('View', {exact:true}).click();
     await page.getByRole('option',{name,exact:true}).click();
@@ -28,7 +29,7 @@ try {
   await switchView('Sprint');
   await ownerPage.waitForFunction(()=>new URLSearchParams(location.search).get('$view_mode')==='sprint');
   await page.locator('#view-sprint').getByLabel('Add Sprint',{exact:true}).click();
-  const dialog=ownerPage.frameLocator('iframe[title="artifact"]').getByRole('dialog',{name:'Add sprint'});
+  const dialog=ownerPage.locator('[data-mx-inline-story]').getByRole('dialog',{name:'Add sprint'});
   await dialog.waitFor();
   await page.getByLabel('Sprint name',{exact:true}).fill('Planning week');
   await page.getByLabel('Sprint deadline',{exact:true}).fill('2026-09-14');
@@ -62,8 +63,8 @@ try {
   }
   assert.equal(persisted?.rows.find(row=>row.id===1)?.sprint,'Quick sprint','sprint assignment persisted before reload');
   await ownerPage.reload({waitUntil:'load'});
-  await ownerPage.locator('iframe[title="artifact"]').waitFor();
-  page = await (await ownerPage.locator('iframe[title="artifact"]').elementHandle()).contentFrame();
+  await ownerPage.locator('[data-mx-inline-story]').waitFor();
+  page = await artifactDocument(ownerPage);
   await page.getByLabel('Item 1',{exact:true}).waitFor({timeout:20_000});
   await page.getByRole('button',{name:'Sprint 1',exact:true}).filter({hasText:'Quick sprint'}).waitFor({timeout:20_000});
   await ownerPage.setViewportSize({width:390,height:844});

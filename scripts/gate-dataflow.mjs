@@ -1,3 +1,4 @@
+import { artifactDocument } from './lib/artifact-document.mjs';
 /**
  * Gate: the DATAFLOW, end to end in a real browser — the durable form of what
  * the feature was verified with while it was built.
@@ -154,7 +155,7 @@ p.on('request', (r) => { if (r.url().includes(`/a/${tdoc.id}/query`) && r.method
 await p.goto(`${B}/a/${tdoc.id}`, { waitUntil: 'load' });
 ok((await p.locator('iframe[title="artifact"]').count()) === 0, 'the table document is top-level too');
 const f2 = p.mainFrame();
-await f2.waitForFunction(() => typeof window.mx === 'object', null, { timeout: 20000 });
+await f2.locator('[aria-label="Data grid"] tbody tr').first().waitFor({ timeout: 20000 });
 await f2.waitForTimeout(600);
 const domRows = await f2.$$eval('[aria-label="Data grid"] tbody tr', (trs) => trs.length);
 ok(domRows > 0 && domRows < 200, `the table is virtualised (${domRows} DOM rows for 10,000 loaded)`);
@@ -204,8 +205,8 @@ reader.on('request', (r) => {
 });
 const privResp = await reader.goto(`${B}/a/${priv.id}`, { waitUntil: 'load' });
 ok(privResp.status() === 200, `the admitted reader opens the private document (${privResp.status()})`);
-ok((await reader.locator('iframe[title="artifact"]').count()) === 1, 'and gets the SHELL — the private data document stays in the iframe');
-const pf = await (await reader.waitForSelector('iframe[title="artifact"]')).contentFrame();
+ok((await reader.locator('[data-mx-inline-story]').count()) === 1, 'the admitted private document renders inline after its ACL');
+const pf = await artifactDocument(reader);
 await pf.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent === '$30', null, { timeout: 20000 }).catch(() => {});
 ok((await pf.textContent('[aria-label="Live number"]').catch(() => '')) === '$30', 'the private document renders its server-run data for the reader');
 await pf.selectOption('select[aria-label="Region"]', 'NA');
@@ -263,9 +264,9 @@ await up.close();
 // PAGE writes the address — and the frame must NOT be re-navigated by that,
 // which would be a full document reload once per pick.
 let frameLoads = 0;
-owner.on('framenavigated', (f) => { if (f !== owner.mainFrame() && f.url().includes(`/a/${udoc.id}/raw`)) frameLoads++; });
+owner.on('domcontentloaded', () => { frameLoads++; });
 await owner.goto(`${B}/a/${udoc.id}?$region=west`, { waitUntil: 'load' });
-const ownerFrame = await (await owner.waitForSelector('iframe[title="artifact"]')).contentFrame();
+const ownerFrame = await artifactDocument(owner);
 await ownerFrame.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent?.startsWith('$'), null, { timeout: 20000 }).catch(() => {});
 ok(ownerFrame.url().includes('$region=west'), `the shell seeds its frame with the link's selection (${new URL(ownerFrame.url()).search})`);
 ok((await ownerFrame.$eval('select[aria-label="Region"]', (el) => el.value)) === 'west', 'the framed control shows it');

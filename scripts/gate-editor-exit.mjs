@@ -97,10 +97,10 @@ await becomeOwner(page, B, st.token);
    * null. Playwright can address it directly; the page never could, which is
    * the whole security property.
    */
-  const documentFrame = () => page.frames().find((f) => /\/raw/.test(f.url()));
+  const documentFrame = () => page.mainFrame();
   await page.waitForFunction(() => {
     // The runtime loads its edit chunk on demand; a caret exists only after.
-    const f = [...document.querySelectorAll('iframe')].find((el) => /\/raw/.test(el.src));
+    const f = document.querySelector('[data-mx-inline-story]');
     return !!f;
   }, null, { timeout: 60_000 });
   const frame = documentFrame();

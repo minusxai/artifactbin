@@ -98,7 +98,7 @@ check(doc.visibility === 'public', 'probe doc is public');
 // ── 1. reader: the document itself, top-level, sandboxed ──────────────────
 const readerResp = await reader.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
 const readerCsp = readerResp.headers()['content-security-policy'] ?? '';
-check(readerCsp.includes('sandbox') && readerCsp.includes("default-src 'none'"), `reader /a/<id> carries the sandbox CSP (${readerCsp.slice(0, 40)}…)`);
+check(!readerCsp.includes('sandbox') && /script-src[^;]*'self'/.test(readerCsp) && !/script-src[^;]*'unsafe-eval'/.test(readerCsp), `reader carries strict app CSP; author children own the sandbox (${readerCsp.slice(0, 80)}…)`);
 check(reader.url() === `${BASE}/a/${doc.id}`, `reader URL unchanged, no redirect (${new URL(reader.url()).pathname})`);
 check((await reader.locator('iframe[title="artifact"]').count()) === 0, 'reader page has NO artifact iframe');
 await reader.waitForFunction(() => { const t = document.getElementById('sec-probe')?.textContent ?? ''; return /"fetch"/.test(t) && /"ownQuery"/.test(t) && /"start"/.test(t); }, null, { timeout: 15000 }).catch(() => {});
@@ -118,7 +118,7 @@ check(reader.url() === `${BASE}/a/${doc.id}`, 'author probe left the top-level U
 
 // signed-in NON-owner: same document, same URL, no hop
 const otherResp = await other.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-check((otherResp.headers()['content-security-policy'] ?? '').includes('sandbox'), 'signed-in non-owner gets the sandboxed document');
+check(!(otherResp.headers()['content-security-policy'] ?? '').includes('sandbox'), 'signed-in non-owner gets the same top-level app policy');
 check(other.url() === `${BASE}/a/${doc.id}`, 'signed-in non-owner: URL unchanged, no redirect');
 check((await other.locator('iframe[title="artifact"]').count()) === 0, 'signed-in non-owner: no iframe');
 
@@ -128,11 +128,11 @@ check(priv.visibility === 'private', 'owned doc is born private');
 check((await other.goto(`${BASE}/a/${priv.id}`, { waitUntil: 'load' })).status() === 404, 'private: signed-in non-owner is a uniform 404');
 check((await reader.goto(`${BASE}/a/${priv.id}`, { waitUntil: 'load' })).status() === 404, 'private: session-less reader is a uniform 404');
 await owner.goto(`${BASE}/a/${priv.id}`, { waitUntil: 'load' });
-check((await owner.frameLocator('iframe[title="artifact"]').locator('h1').first().textContent({ timeout: 20000 }).catch(() => null)) === 'SEC-PRIVATE', 'private: owner sees it in the shell');
+check((await owner.locator('[data-mx-inline-story]').locator('h1').first().textContent({ timeout: 20000 }).catch(() => null)) === 'SEC-PRIVATE', 'private: owner sees it in the shell');
 
 // ── 2. owner: app shell + iframe; EDITING DOES NOT WEAKEN THE SANDBOX ──────
 await owner.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-const ownerFrame = owner.frameLocator('iframe[title="artifact"]');
+const ownerFrame = owner.locator('[data-mx-inline-story]');
 const ownerText = await ownerFrame.locator('h1').first().textContent({ timeout: 20000 }).catch(() => null);
 check(ownerText === 'SEC-PROBE-DOC', 'owner sees the shell with the document in the sandboxed iframe');
 
@@ -144,22 +144,23 @@ check(ownerText === 'SEC-PROBE-DOC', 'owner sees the shell with the document in 
  * what `contentDocument === null` means from here), and the frame keeps every
  * sandbox flag it had.
  */
+await owner.locator('iframe[title="Isolated artifact script"]').waitFor({ state: 'attached' });
 const sandboxBefore = await owner.evaluate(() =>
-  document.querySelector('iframe[title="artifact"]')?.getAttribute('sandbox') ?? null);
+  document.querySelector('iframe[title="Isolated artifact script"]')?.getAttribute('sandbox') ?? null);
 await openArtifactControls(owner);
 await owner.click('[aria-label="Edit artifact"]');
 await owner.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 20000 });
 await owner.waitForTimeout(3000);
 const editing = await owner.evaluate(() => {
-  const f = document.querySelector('iframe[title="artifact"]');
+  const f = document.querySelector('iframe[title="Isolated artifact script"]');
   let reachable = false;
   try { reachable = !!f?.contentDocument; } catch { reachable = false; }
   return { sandbox: f?.getAttribute('sandbox') ?? null, reachable };
 });
 check(editing.sandbox === sandboxBefore && !!sandboxBefore,
-  'entering edit mode keeps every sandbox flag the document had');
+  'entering edit mode keeps every sandbox flag the author script had');
 check(!editing.reachable,
-  'and the document it edits is STILL opaque to the page (contentDocument null)');
+  'and author code is STILL opaque to the page (contentDocument null)');
 
 // ── 3. export still works for a reader ────────────────────────────────────
 const shot = await readerCtx.request.get(`${BASE}/a/${doc.id}/export`);
@@ -218,7 +219,7 @@ check(!!sess && sess.httpOnly, `session cookie is httpOnly (${sess?.name ?? 'mis
 const stored = await anonPage.evaluate(() => [localStorage.getItem('mx_token'), localStorage.getItem('mx_tokens')]);
 check(stored.every((v) => v === null), 'no token in localStorage after the exchange');
 await anonPage.goto(`${BASE}/a/${anonDoc.id}`, { waitUntil: 'load' });
-const anonFrameText = await anonPage.frameLocator('iframe[title="artifact"]').locator('h1').first().textContent({ timeout: 20000 }).catch(() => null);
+const anonFrameText = await anonPage.locator('[data-mx-inline-story]').locator('h1').first().textContent({ timeout: 20000 }).catch(() => null);
 check(anonFrameText === 'ANON-OWNED', 'after exchange: the anonymous owner gets the shell (iframe) at the same URL');
 
 // ── 6b. the anonymous owner can DISCONNECT — the cookie's own sign-out ──────
@@ -258,7 +259,7 @@ const splitExchange = await splitPage.evaluate(async (t) => (await fetch('/api/s
 })).status, anon.token);
 check(splitExchange === 204, 'the split-viewer browser holds only the agent cookie (no NextAuth session)');
 await splitPage.goto(`${BASE}/a/${claimedPriv.id}`, { waitUntil: 'load' });
-const splitText = await splitPage.frameLocator('iframe[title="artifact"]').locator('h1').first().textContent({ timeout: 20000 }).catch(() => null);
+const splitText = await splitPage.locator('[data-mx-inline-story]').locator('h1').first().textContent({ timeout: 20000 }).catch(() => null);
 check(splitText === 'CLAIMED-PRIVATE-BODY', 'the shell frame shows the DOCUMENT, not a 404 — raw resolved the cookie viewer');
 // And a browser with neither credential still gets the uniform 404.
 const nobodyCtx = await browser.newContext();
@@ -428,7 +429,7 @@ await oldPage.waitForFunction(() => !localStorage.getItem('mx_token') && !localS
 check(await oldPage.evaluate(() => !localStorage.getItem('mx_token') && !localStorage.getItem('mx_tokens')), 'migration: the leftover token is exchanged and DELETED');
 check((await oldCtx.cookies(BASE)).some((c) => /mx-agent-session/.test(c.name) && c.httpOnly), 'migration: the browser now holds the httpOnly cookie instead');
 await oldPage.goto(`${BASE}/a/${legacyDoc.id}`, { waitUntil: 'load' });
-const migratedText = await oldPage.frameLocator('iframe[title="artifact"]').locator('h1').first().textContent({ timeout: 20000 }).catch(() => null);
+const migratedText = await oldPage.locator('[data-mx-inline-story]').locator('h1').first().textContent({ timeout: 20000 }).catch(() => null);
 check(migratedText === 'LEGACY-OWNED', 'migration: and owns its document again — the shell, at the same URL');
 await oldCtx.close();
 

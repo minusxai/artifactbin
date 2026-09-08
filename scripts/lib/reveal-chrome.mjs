@@ -25,7 +25,8 @@
  * (a framed document hides its own; the parent supplies the visible one).
  */
 export async function revealReaderChrome(target) {
-  const present = await target.evaluate(() => !!document.querySelector('[data-mx-reader-chrome]')).catch(() => false);
+  const chrome = target.locator('[data-mx-reader-chrome]').first();
+  const present = await chrome.count();
   if (!present) return false;
   /*
    * WAIT FOR THE WIRING, not for the markup. The chrome is server-rendered and
@@ -34,11 +35,10 @@ export async function revealReaderChrome(target) {
    * heard. Its own side effect is the probe: the server renders the appearance
    * choices with no `aria-pressed`, and the entry stamps them.
    */
-  await target.waitForFunction(() => !!document.querySelector('[data-mx-mode-choice][aria-pressed]'), null, { timeout: 30_000 })
-    .catch(() => {});
+  await chrome.waitFor({ state: 'attached', timeout: 30_000 });
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    const shown = await target.evaluate(() =>
-      document.querySelector('[data-mx-reader-chrome]')?.classList.contains('mx-reader-chrome--hidden') === false,
+    const shown = await chrome.evaluate(element =>
+      element.classList.contains('mx-reader-chrome--hidden') === false,
     ).catch(() => false);
     if (shown) return true;
     /*
@@ -55,8 +55,8 @@ export async function revealReaderChrome(target) {
     await target.evaluate(() => window.scrollBy(0, -160));
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
-  return target.evaluate(() =>
-    document.querySelector('[data-mx-reader-chrome]')?.classList.contains('mx-reader-chrome--hidden') === false,
+  return chrome.evaluate(element =>
+    element.classList.contains('mx-reader-chrome--hidden') === false,
   ).catch(() => false);
 }
 
@@ -73,19 +73,13 @@ async function chromeHost(page, timeout = 30_000) {
   // Whichever shape this page takes arrives after navigation, not with it:
   // wait for the first sign of any of them.
   await page.waitForSelector(
-    '[data-mx-reader-chrome], iframe[title="artifact"], [aria-label="Open artifact controls"], [aria-label="Open page controls"], [aria-label="Open menu"]',
+    '[data-mx-reader-chrome], [aria-label="Open artifact controls"], [aria-label="Open page controls"], [aria-label="Open menu"]',
     { state: 'attached', timeout },
   ).catch(() => {});
   // A document served top-level IS the page, and its chrome carries "Open menu"
   // too — so this is asked before the page-button question, or a hidden
   // trigger gets clicked as if it were a bar button.
   if (await page.locator('[data-mx-reader-chrome]').count()) return { kind: 'document', target: page };
-  const handle = await page.$('iframe[title="artifact"]');
-  const frame = handle ? await handle.contentFrame() : null;
-  if (frame) {
-    await frame.waitForSelector('[data-mx-reader-chrome]', { state: 'attached', timeout }).catch(() => {});
-    return { kind: 'frame', target: frame };
-  }
   return { kind: 'page', target: page };
 }
 
@@ -98,10 +92,8 @@ export async function openArtifactControls(page, { timeout = 30_000 } = {}) {
   }
   await revealReaderChrome(host.target);
   await host.target.locator('[data-mx-reader-trigger="controls"]').click({ timeout });
-  if (host.kind === 'frame') {
-    await page.waitForSelector('[aria-label="Artifact controls"], [aria-label="Page controls"]', { timeout }).catch(() => {});
-    await refocusPage(page, '[aria-label="Artifact controls"], [aria-label="Page controls"]');
-  }
+  await page.waitForSelector('[aria-label="Artifact controls"], [aria-label="Page controls"]', { timeout });
+  await refocusPage(page, '[aria-label="Artifact controls"], [aria-label="Page controls"]');
 }
 
 /*
@@ -110,17 +102,16 @@ export async function openArtifactControls(page, { timeout = 30_000 } = {}) {
  * panel. Hand focus to the panel the page just opened.
  */
 async function refocusPage(page, panelSelector) {
-  await page.evaluate((sel) => {
+  await page.locator(panelSelector).first().evaluate((panel) => {
     // Blur the frame first: that alone returns keyboard focus to the page.
     // Then prefer a focusable that is actually rendered — the panel's first
     // control may be a phone-only button that display:none makes unfocusable.
     const active = document.activeElement;
     if (active && active !== document.body && typeof active.blur === 'function') active.blur();
-    const panel = document.querySelector(sel);
     const candidates = panel ? Array.from(panel.querySelectorAll('button, a, input, [tabindex]')) : [];
     const visible = candidates.find((el) => el.getClientRects().length > 0);
     if (visible) visible.focus();
-  }, panelSelector).catch(() => {});
+  }).catch(() => {});
 }
 
 /** Open the menu (account / navigation) panel, wherever the control is. */
@@ -132,8 +123,6 @@ export async function openMenu(page, { timeout = 30_000 } = {}) {
   }
   await revealReaderChrome(host.target);
   await host.target.locator('[data-mx-reader-trigger="menu"]').click({ timeout });
-  if (host.kind === 'frame') {
-    await page.waitForSelector('nav[aria-label="Menu"]', { timeout }).catch(() => {});
-    await refocusPage(page, 'nav[aria-label="Menu"]');
-  }
+  await page.waitForSelector('nav[aria-label="Menu"]', { timeout });
+  await refocusPage(page, 'nav[aria-label="Menu"]');
 }

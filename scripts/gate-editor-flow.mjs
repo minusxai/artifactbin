@@ -77,7 +77,7 @@ check(page.url().includes(`/a/${doc.id}`) && page.url().endsWith('#edit'), `Edit
 await becomeOwner(page, BASE, token);
 await page.goto(`${BASE}/a/${doc.id}#edit`, { waitUntil: 'load' });
 await page.waitForTimeout(4500);
-let frame = page.frames().find((f) => f !== page.mainFrame());
+let frame = page.mainFrame();
 check(!!frame, 'story surface mounted in the editor');
 check((await frame.locator('svg.marks, canvas').count()) > 0, 'embeds render inside the editor');
 
@@ -100,7 +100,7 @@ await page.waitForTimeout(3000);
 const readBack = await api(`/api/artifacts/${doc.id}`, {}, token);
 check(readBack.version > beforeTyping, `typing persists with no save (v${beforeTyping} → v${readBack.version})`);
 check(readBack.markup.includes('Edited by the gate'), 'the typed text reached the stored source');
-frame = page.frames().find((f) => f !== page.mainFrame());
+frame = page.mainFrame();
 check((await frame.locator('svg.marks, canvas').count()) > 0, 'embeds still render after persisting');
 
 // Idle must not spend versions: nothing typed ⇒ nothing written.
@@ -116,7 +116,7 @@ const agentEdit = await api(`/api/artifacts/${doc.id}/edits`, {
 }, token);
 check(agentEdit.markup.includes('Agent total:'), 'a concurrent agent edit applies while a human has the editor open');
 await page.waitForTimeout(3500);
-frame = page.frames().find((f) => f !== page.mainFrame());
+frame = page.mainFrame();
 const shown = await frame.locator('body').innerText();
 check(/Agent total:/.test(shown), 'the idle editor adopted the agent edit without a reload');
 check(/Edited by the gate/.test(shown), "the human's own text survived the adoption");
@@ -238,7 +238,7 @@ check((await page.getByText('Editor gate', { exact: false }).count()) > 0, 'clai
 await page.goto(`${BASE}/a/${doc.id}#edit`, { waitUntil: 'load' });
 await page.waitForTimeout(4500);
 check((await page.locator('[aria-label="Owning token"]').count()) === 0, 'a signed-in owner opens the editor with nothing to paste');
-frame = page.frames().find((f) => f !== page.mainFrame());
+frame = page.mainFrame();
 await frame.locator('h1').first().click({ clickCount: 3 });
 await page.keyboard.type('Edited by the session');
 // Blurred, not clicked away — same reason as the token-authed pass above.

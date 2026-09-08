@@ -57,7 +57,7 @@ await api(`/api/artifacts/${start.id}`, {
 
 await page.goto(`${BASE}/a/${start.id}#edit`, { waitUntil: 'load' });
 check((await page.locator('[aria-label="Save"]').count()) === 0, 'the editor has no Save button');
-const surface = () => page.frames().find((f) => f !== page.mainFrame());
+const surface = () => page.mainFrame();
 // Wait for the CANVAS to populate rather than a fixed pause: the editor now
 // runs the document's dataflow (DuckDB) on load, so the paragraphs land later
 // than a flat timeout assumed.
@@ -65,7 +65,7 @@ const surface = () => page.frames().find((f) => f !== page.mainFrame());
 // document's dataflow on load and remounts the canvas once when it completes,
 // so a click during that window hits a detached frame (verified: stable by ~8s).
 await page.waitForFunction(() => {
-  const f = Array.from(document.querySelectorAll('iframe')).map((i) => i.contentDocument).find(Boolean);
+  const f = document.querySelector('[data-mx-inline-story]');
   return (f?.querySelectorAll('p').length ?? 0) >= 2;
 }, null, { timeout: 30000 }).catch(() => {});
 await page.waitForTimeout(6000);
@@ -120,14 +120,14 @@ check(/Typed by the human\./.test(await surface().locator('body').innerText()), 
   }, token);
   await viewer.waitForTimeout(3000);
 
-  const watched = await viewer.frames().find((f) => f !== viewer.mainFrame())?.locator('body').innerText();
+  const watched = await viewer.mainFrame()?.locator('body').innerText();
   check(/Written while watching/.test(watched ?? ''), 'the viewer saw the live edit');
 
   // Reading is chromeless until the artifact controls are opened.
   await openArtifactControls(viewer);
   await viewer.click('[aria-label="Edit artifact"]');
   await viewer.waitForTimeout(4000);
-  const inEditor = await viewer.frames().find((f) => f !== viewer.mainFrame())?.locator('body').innerText();
+  const inEditor = await viewer.mainFrame()?.locator('body').innerText();
   check(/Written while watching/.test(inEditor ?? ''), 'the editor opens on the LIVE document, not the page it was rendered with');
   // This used to read the editor's version chip; the save-less editor has none.
   // Same intent, anchored on the server: the document is on a real, advanced

@@ -134,7 +134,7 @@ const copyRow = await forker.evaluate(
 check(copyRow.forked_from === doc.id, `the copy records its source (forked_from = ${copyRow.forked_from})`);
 check(copyRow.id !== doc.id, 'a new id — the original is untouched');
 
-const credit = forker.frameLocator('iframe[title="artifact"]').locator('[data-mx-forked-from]');
+const credit = forker.locator('[data-mx-inline-story]').locator('[data-mx-forked-from]');
 await credit.waitFor({ state: 'attached', timeout: 30000 });
 const creditText = await credit.innerText();
 check(creditText.toLowerCase().includes('forked from'), `the copy's credits name its source ("${creditText.trim()}")`);

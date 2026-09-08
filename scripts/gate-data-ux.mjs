@@ -91,12 +91,12 @@ await becomeOwner(p, B, st.token);
   let sawUnavailable = false;
   for (let i = 0; i < 70; i++) {
     await p.waitForTimeout(150);
-    const fr = p.frames().find((x) => x !== p.mainFrame());
+    const fr = p.mainFrame();
     const txt = fr ? await fr.locator('body').innerText().catch(() => '') : '';
     if (/data unavailable/.test(txt)) sawUnavailable = true;
     if (fr && (await fr.locator('svg.marks, canvas').count().catch(() => 0))) break;
   }
-  const ef = p.frames().find((x) => x !== p.mainFrame());
+  const ef = p.mainFrame();
   const marks = ef ? await ef.locator('svg.marks, canvas').count().catch(() => 0) : 0;
   const text = ef ? await ef.locator('body').innerText().catch(() => '') : '';
   ok(marks > 0, `a chart renders in EDIT mode (${marks} marks)`);

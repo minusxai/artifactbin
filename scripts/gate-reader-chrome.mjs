@@ -95,11 +95,11 @@ const readerContext = async (viewport) => {
   return ctx;
 };
 
-const chromeState = (page) => page.evaluate(() => {
-  const root = document.querySelector('[data-mx-reader-chrome]');
+const chromeState = (page) => page.locator('[data-mx-reader-chrome]').evaluate(root => {
+  const tree = root.getRootNode();
   if (!root) return null;
   const box = (sel) => {
-    const el = document.querySelector(sel);
+    const el = tree.querySelector(sel);
     if (!el) return null;
     const r = el.getBoundingClientRect();
     return { left: Math.round(r.left), right: Math.round(r.right), top: Math.round(r.top), bottom: Math.round(r.bottom), width: Math.round(r.width), height: Math.round(r.height) };
@@ -218,10 +218,10 @@ for (const [name, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
   check(s?.credits === 0, `${name}: no credits footer anywhere`);
 
   // 6. the byline links the author; the logo is home, and home goes there
-  const links = await page.evaluate(() => ({
-    author: document.querySelector('.mx-reader-author')?.getAttribute('href') ?? null,
-    logo: document.querySelector('[data-mx-reader-logo]')?.getAttribute('href') ?? null,
-    title: document.querySelector('.mx-reader-title')?.textContent ?? null,
+  const links = await page.locator('[data-mx-reader-chrome]').evaluate(root => ({
+    author: root.querySelector('.mx-reader-author')?.getAttribute('href') ?? null,
+    logo: root.querySelector('[data-mx-reader-logo]')?.getAttribute('href') ?? null,
+    title: root.querySelector('.mx-reader-title')?.textContent ?? null,
   }));
   check(links.author === `/@${handle}`, `${name}: the byline links the author (${links.author})`);
   check(links.logo === '/', `${name}: the logo is home (${links.logo})`);
@@ -239,25 +239,25 @@ for (const [name, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
     const tip = async (sel) => {
       await page.hover(sel);
       await page.waitForTimeout(500);
-      return page.evaluate((s) => getComputedStyle(document.querySelector(s), '::after').content, sel);
+      return page.locator(sel).evaluate(element => getComputedStyle(element, '::after').content);
     };
     check((await tip('[aria-label="Like"]')) === '"Like"', `${name}: hovering Like shows its tip`);
     check((await tip('[data-mx-reader-trigger="controls"]')) === '"Artifact settings"', `${name}: hovering settings shows its tip`);
     check((await tip('[data-mx-reader-trigger="menu"]')) === '"Profile"', `${name}: hovering profile shows its tip`);
     await page.mouse.move(5, 400);
     await page.waitForTimeout(200);
-    const gone = await page.evaluate(() => getComputedStyle(document.querySelector('[aria-label="Like"]'), '::after').content);
+    const gone = await page.locator('[aria-label="Like"]').evaluate(element => getComputedStyle(element, '::after').content);
     check(gone === 'none' || gone === 'normal', `${name}: and the tip goes when the cursor leaves (${gone})`);
   }
 
   // 11. the PROFILE menu is a popover like the settings panel, never a drawer
   await revealReaderChrome(page);
   await page.locator('[data-mx-reader-trigger="menu"]').click();
-  await page.waitForSelector('[data-mx-reader-panel="menu"]:not([hidden])', { timeout: 10_000 });
+  await page.waitForSelector('[aria-label="Menu"]', { timeout: 10_000 });
   // The panel rises into place over 140ms; measure where it lands, not where it starts.
   await settle(page);
-  const menu = await page.evaluate(() => {
-    const r = document.querySelector('[data-mx-reader-panel="menu"]').getBoundingClientRect();
+  const menu = await page.locator('[aria-label="Menu"]').evaluate(element => {
+    const r = element.getBoundingClientRect();
     return { left: Math.round(r.left), right: Math.round(r.right), top: Math.round(r.top), bottom: Math.round(r.bottom), width: window.innerWidth, height: window.innerHeight };
   });
   if (viewport === DESKTOP) {
@@ -267,7 +267,7 @@ for (const [name, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
     check(menu.bottom >= menu.height - 2 && menu.top > menu.height / 3,
       `${name}: the profile menu is a bottom sheet, not a drawer (${JSON.stringify(menu)})`);
   }
-  check(await page.locator('[data-mx-reader-panel="menu"] a[href="/account"]').isVisible(), `${name}: …holding Account`);
+  check(await page.locator('[aria-label="Menu"] a[href="/account"]').isVisible(), `${name}: …holding Account`);
   await page.keyboard.press('Escape');
 
   // 8b. the COPY names where it came from, inside the same panel

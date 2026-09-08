@@ -63,7 +63,7 @@ const run = async () => {
     const page = await owner.newPage();
     await becomeOwner(page, BASE, token);
     await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
-    const frame = page.frameLocator('iframe[title="artifact"]');
+    const frame = page.locator('[data-mx-inline-story]');
     await frame.locator('#figure').waitFor({ timeout: 15000 });
 
     // ── the view-mode selection bubble ────────────────────────────────────
@@ -350,9 +350,9 @@ async function quoteLeg(browser) {
   const page = await ctx.newPage();
   await becomeOwner(page, BASE, token);
   await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
-  const frame = page.frameLocator('iframe[title="artifact"]');
+  const frame = page.locator('[data-mx-inline-story]');
   await frame.locator('#second').waitFor({ timeout: 15000 });
-  const raw = await until(async () => page.frame({ url: (u) => u.pathname.includes('/raw') }), (f) => !!f, 15000);
+  const raw = await until(async () => page.mainFrame(), (f) => !!f, 15000);
 
   /*
    * The drag: from one CHARACTER inside the first paragraph to one inside the
@@ -360,7 +360,6 @@ async function quoteLeg(browser) {
    * of the element's box — a paragraph's box is the whole column, so 45% of it
    * lands past the end of a short sentence and the drag starts on nothing.
    */
-  const frameBox = await page.locator('iframe[title="artifact"]').boundingBox();
   const pointAt = async (selector, index) => {
     const inFrame = await raw.evaluate(([sel, at]) => {
       const range = document.createRange();
@@ -369,7 +368,7 @@ async function quoteLeg(browser) {
       const box = range.getBoundingClientRect();
       return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
     }, [selector, index]);
-    return { x: frameBox.x + inFrame.x, y: frameBox.y + inFrame.y };
+    return { x: inFrame.x, y: inFrame.y };
   };
   const dragAcross = async () => {
     const from = await pointAt('#first', 24);   // inside "ahead of plan."
@@ -412,7 +411,7 @@ async function quoteLeg(browser) {
   // (b) THE PAINT, AFTER A RELOAD: nothing about it is stored in the DOM, so a
   // reload is the honest test that the range alone can re-find the words.
   await page.reload({ waitUntil: 'load' });
-  const reloaded = await until(async () => page.frame({ url: (u) => u.pathname.includes('/raw') }), (f) => !!f && f !== raw, 15000);
+  const reloaded = await until(async () => page.mainFrame(), (f) => !!f, 15000);
   const paint = await until(
     () => reloaded.evaluate((name) => {
       const highlight = window.CSS?.highlights?.get(name);
@@ -497,7 +496,7 @@ async function markdownLeg(browser) {
   const page = await ctx.newPage();
   await becomeOwner(page, BASE, token);
   await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
-  const frame = page.frameLocator('iframe[title="artifact"]');
+  const frame = page.locator('[data-mx-inline-story]');
   await frame.locator('#cap').waitFor({ timeout: 15000 });
 
   // The comment itself through the browser door, with the session the page
@@ -598,7 +597,7 @@ async function foldLeg(browser) {
   const page = await ctx.newPage();
   await becomeOwner(page, BASE, token);
   await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
-  const frame = page.frameLocator('iframe[title="artifact"]');
+  const frame = page.locator('[data-mx-inline-story]');
   await frame.locator('#cap').waitFor({ timeout: 15000 });
 
   const head = await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: auth })).json();
@@ -635,9 +634,9 @@ async function foldLeg(browser) {
   await page.locator('[aria-label="Open annotation thread"]').first().click({ timeout: 15000 });
   await page.locator('[aria-label="Reply to annotation"]').first().waitFor({ timeout: 8000 });
 
-  const read = () => page.evaluate((reply) => {
-    const sheet = document.querySelector('[aria-label="Annotation sidebar"]');
-    const thread = document.querySelector('[aria-label="Annotation thread"]');
+  const read = () => page.locator('[aria-label="Annotation sidebar"]').evaluate((sheet, reply) => {
+    const tree = sheet.getRootNode();
+    const thread = tree.querySelector('[aria-label="Annotation thread"]');
     if (!sheet || !thread) return null;
     const node = [...thread.querySelectorAll('p, li, div')]
       .reverse()
@@ -645,7 +644,7 @@ async function foldLeg(browser) {
     // The page's own action bar FLOATS OVER the bottom of the sheet on a
     // phone, so the sheet's rect is not what a reader can see. Measure against
     // what is left of it.
-    const bar = document.querySelector('[aria-label="Page actions"][data-scroll-hidden="false"]');
+    const bar = tree.querySelector('[aria-label="Page actions"][data-scroll-hidden="false"]');
     const barTop = bar?.getBoundingClientRect().top ?? Infinity;
     const sheetBox = sheet.getBoundingClientRect();
     const replyBox = node?.getBoundingClientRect() ?? null;
@@ -725,9 +724,8 @@ async function foldLeg(browser) {
   });
   ok(resolvedRes.ok, 'the agent resolves the thread over plain HTTP');
   const muted = await until(
-    () => page.evaluate(() => {
-      const card = document.querySelector('[aria-label="Resolved annotation thread"]');
-      const open = document.querySelector('[aria-label="Annotation thread"]');
+    () => page.locator('[aria-label="Resolved annotation thread"]').first().evaluate(card => {
+      const open = card.getRootNode().querySelector('[aria-label="Annotation thread"]');
       return card
         ? { opacity: Number(getComputedStyle(card).opacity), open: open ? Number(getComputedStyle(open).opacity) : null }
         : null;
@@ -761,7 +759,7 @@ async function pickLeg(browser) {
   const page = await ctx.newPage();
   await becomeOwner(page, BASE, token);
   await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
-  const frame = page.frameLocator('iframe[title="artifact"]');
+  const frame = page.locator('[data-mx-inline-story]');
   await frame.locator('#figure').waitFor({ timeout: 15000 });
 
   await openArtifactControls(page);
@@ -822,13 +820,12 @@ async function pickLeg(browser) {
   // rectangle rides the comment as its range, painted back as an overlay.
   await page.locator('[aria-label="Draw an area to comment on"]').click();
   ok(await page.locator('[aria-label="Picking a block"]').textContent().then((t) => /drag/i.test(t ?? '')), 'the pill says to drag');
-  const frameBox = await page.locator('iframe[title="artifact"]').boundingBox();
   const from = await frame.locator('#figure').boundingBox();
   const to = await frame.locator('#list li').last().boundingBox();
-  await page.mouse.move(frameBox.x + from.x + 8, frameBox.y + from.y + 4);
+  await page.mouse.move(from.x + 8, from.y + 4);
   await page.mouse.down();
-  await page.mouse.move(frameBox.x + from.x + 20, frameBox.y + from.y + 10, { steps: 3 });
-  await page.mouse.move(frameBox.x + to.x + to.width / 2, frameBox.y + to.y + to.height - 2, { steps: 15 });
+  await page.mouse.move(from.x + 20, from.y + 10, { steps: 3 });
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height - 2, { steps: 15 });
   ok(await frame.locator('[data-mx-annotate-band]').count() === 1, 'the band is drawn while dragging');
   await page.mouse.up();
   const areaComposer = await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);

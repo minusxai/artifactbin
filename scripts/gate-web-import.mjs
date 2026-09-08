@@ -145,7 +145,7 @@ if (fontPut.status === 200) {
     // read contentDocument: drive it through Playwright's frame API.
     let inserted = null;
     for (let i = 0; i < 40 && !(inserted && inserted.w > 0); i++) {
-      const frame = page.frames().find((f) => f !== page.mainFrame());
+      const frame = page.mainFrame();
       inserted = frame
         ? await frame.evaluate(() => {
             // NOT `querySelector('img')`: every served document carries the

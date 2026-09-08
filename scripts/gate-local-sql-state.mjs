@@ -1,3 +1,4 @@
+import { artifactDocument } from './lib/artifact-document.mjs';
 /**
  * Gate: reactive JSX, document-local SQL, and Dialog over both document
  * transports. Local state belongs to one loaded document: it may travel to the
@@ -61,7 +62,7 @@ const exercise = async (page, framed, documentId) => {
     }
   });
   await page.goto(`${B}/a/${documentId}?$choice=b`, {waitUntil:'load'});
-  const frame = framed ? await (await page.waitForSelector('iframe[title="artifact"]')).contentFrame() : page.mainFrame();
+  const frame = framed ? await artifactDocument(page) : page.mainFrame();
   await frame.waitForFunction(() => document.querySelector('[aria-label="Rows"]')?.textContent?.trim() === '1', null, {timeout:20_000}).catch(async error => {
     throw new Error(`${error.message}; page=${(await frame.locator('body').innerText()).slice(0, 1000)}`);
   });
@@ -94,7 +95,7 @@ const exercise = async (page, framed, documentId) => {
   ok(snapshots.some(call => call.url.endsWith('/mutate')) && snapshots.some(call => call.url.endsWith('/query')), `${framed ? 'relayed' : 'direct'} mutation and query snapshots reached their routes`);
   await page.waitForFunction(() => new URLSearchParams(location.search).get('$count') === '1', null, {timeout:5_000});
   await page.reload({waitUntil:'load'});
-  const reloaded = framed ? await (await page.waitForSelector('iframe[title="artifact"]')).contentFrame() : page.mainFrame();
+  const reloaded = framed ? await artifactDocument(page) : page.mainFrame();
   await reloaded.waitForFunction(() => document.querySelector('[aria-label="Rows"]')?.textContent?.trim() === '1', null, {timeout:20_000});
   ok((await reloaded.textContent('[aria-label="Count"]')) === '1' && (await reloaded.textContent('[aria-label="Branch"]')) === 'bee', 'reload resets local rows while URL scalar changes persist');
 };

@@ -61,8 +61,8 @@ await becomeOwner(page, BASE, mint.token);
 
 // 1. no sideways shift: measure the document's left edge on first paint and again after hydration.
 await page.goto(`${BASE}/a/${deck.id}`);
-const frameEl = await page.waitForSelector('iframe[title="artifact"]', { timeout: 20000 });
-const frame = await frameEl.contentFrame();
+const frameEl = await page.waitForSelector('[data-mx-inline-story]', { timeout: 20000 });
+const frame = page.mainFrame();
 // SCOPED to the document column: the rail's previews are real <Slide>
 // elements too (that is what makes them faithful), so an unscoped query
 // measures a miniature — the same trap the runtime's own navigation hit.
