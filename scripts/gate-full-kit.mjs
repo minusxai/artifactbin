@@ -168,7 +168,12 @@ check(await frame.evaluate("!!document.querySelector('[aria-label=\"Question emb
 // the watch page — and NEVER a nested frame (the sandbox would kill a player).
 check(await frame.evaluate("!!document.querySelector('[data-slot=\"video\"] a[href^=\"https://www.youtube.com/watch\"]')"), 'Video card links to the watch page');
 check(await frame.evaluate("(document.querySelector('[data-slot=\"video-thumb\"]')?.getAttribute('src') ?? '').startsWith('/a/')"), 'Video poster resolved to the hosted image ref');
-check(await frame.evaluate("document.querySelectorAll('iframe').length === 0"), 'the document contains no nested frames');
+const managed = frame.locator('iframe[title="Isolated gallery region"]');
+await frame.waitForSelector('iframe[title="Isolated gallery region"][data-mx-author-ready]');
+check(await frame.locator('iframe').count() === 1
+  && await managed.getAttribute('sandbox') === 'allow-scripts'
+  && await managed.getAttribute('src') === `${origin}/story/author-frame`,
+  'only the managed opaque gallery wrapper is framed; Video remains a link');
 
 // 3. isolation
 const csp = await frame.evaluate('window.__csp || []');
