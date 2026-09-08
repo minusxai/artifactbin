@@ -1,3 +1,4 @@
+import {attachActor} from '@artifactbin/utils';
 /**
  * A PDF over a REAL SOCKET — because the parts of this that can go wrong are in
  * the writer, not in the handler.
@@ -48,7 +49,7 @@ describe('a PDF as the socket actually writes it', () => {
     const whole = samplePdf(3);
 
     const app = createAppServer({ indexHtml: async () => '<!doctype html><div id="root">SPA</div>' });
-    const server = await withHttpServer(getRequestListener(app.fetch));
+    const server = await withHttpServer(getRequestListener(request=>app.fetch(attachActor(request,{credential:'none'}))));
     try {
       const full = await fetchRaw(server.port, `/a/${id}/raw`);
       expect(full.status).toBe(200);

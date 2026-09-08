@@ -7,6 +7,7 @@ import { Hono } from 'hono';
 import { ACTOR_HEADER } from '@artifactbin/contracts';
 import { assemble, inProcess, overHttp, serve, signActor } from '@artifactbin/utils';
 import { createAppServer } from '@/server/app';
+import {proxyRequest} from '@/server/__tests__/proxy-request';
 import { forward, forwardedHeaders, proxyParts } from '../src/parts';
 import { testProxyOptions } from './helpers';
 
@@ -19,13 +20,13 @@ describe('forward', () => {
   it('forwards status, headers and body unchanged (in-process)', async () => {
     const app = createAppServer({ indexHtml: async () => '<!doctype html><div id="root">SPA</div>' });
     const proxy = assemble([forward(inProcess(app), await testProxyOptions())]);
-    const direct = await app.request('/health'); const via = await proxy.request('/health');
+    const direct = await proxyRequest(app,'/health'); const via = await proxy.request('/health');
     expect(via.status).toBe(direct.status); expect(await via.text()).toBe(await direct.text());
   });
   it('a document response reaches the client with every header the app set and nothing added', async () => {
     const app = createAppServer({ indexHtml: async () => '<!doctype html><div id="root">SPA</div>' });
     const proxy = assemble([forward(inProcess(app), await testProxyOptions())]);
-    const direct = await app.request('/a/zzzzzz/raw'); const via = await proxy.request('/a/zzzzzz/raw');
+    const direct = await proxyRequest(app,'/a/zzzzzz/raw'); const via = await proxy.request('/a/zzzzzz/raw');
     expect([...via.headers.keys()].sort()).toEqual([...direct.headers.keys()].sort());
   });
   it('drops a forged inbound x-mx-actor and sets x-forwarded-{for,host,proto} itself when it is the outermost hop', async () => {
@@ -76,7 +77,8 @@ describe('forward', () => {
       const forged = await fetch(`${appServer.url}/api/page/account`, {
         headers: { [ACTOR_HEADER]: signActor(actor, 'x'.repeat(32)) },
       });
-      expect(forged.status).toBe(401);
+      expect(forged.status).toBe(403);
+      expect(await forged.json()).toMatchObject({error:'proxy_required'});
     } finally {
       await Promise.allSettled([proxyServer.close(), appServer.close()]);
     }

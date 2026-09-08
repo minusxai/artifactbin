@@ -1,3 +1,4 @@
+import {proxyRequest} from '@/server/__tests__/proxy-request';
 /**
  * THE APP PAGES CARRY A CSP, AND A DOCUMENT NEVER TAKES IT. `frame-ancestors`
  * + `object-src` + `base-uri` lock the app's own pages (the share dialog,
@@ -24,8 +25,9 @@ describe('the app CSP', () => {
     expect(APP_CSP).toContain("frame-ancestors 'self'");
     expect(APP_CSP).toContain("object-src 'none'");
     expect(APP_CSP).toContain("base-uri 'self'");
+    expect(APP_CSP).toContain("media-src 'self' data: blob:");
     for (const path of ['/', '/login', '/docs-human', '/account']) {
-      const res = await app.request(path);
+      const res = await proxyRequest(app,path);
       expect(res.headers.get('content-security-policy'), path).toBe(APP_CSP);
       expect(res.headers.get('x-content-type-options'), path).toBe('nosniff');
       expect(res.headers.get('referrer-policy'), path).toBe('strict-origin-when-cross-origin');
@@ -85,7 +87,7 @@ describe('the app CSP', () => {
 
   it('never lands on an artifact address or a machine surface', async () => {
     for (const path of ['/a/Ab3xK9/raw', '/a/Ab3xK9/export', '/api/artifacts', '/docs/artifactbin/references/publishing.md']) {
-      const res = await app.request(path);
+      const res = await proxyRequest(app,path);
       expect(res.headers.get('content-security-policy'), path).not.toBe(APP_CSP);
     }
   });

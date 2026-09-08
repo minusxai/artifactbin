@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createAuthorScriptSession, startAuthorScript } from '../author-script';
 import { createDataflowStore } from '../store';
 import { AUTHOR_SCRIPT_FRAME_TITLE } from '../author-script-contract';
+import {AUTHOR_SCRIPT_DOCUMENT} from '../author-script-bootstrap';
 
 afterEach(() => { document.body.replaceChildren(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 describe('isolated author script host', () => {
@@ -45,6 +46,8 @@ describe('isolated author script host', () => {
     expect(document.querySelector('iframe')).toBeNull();
   });
   it('creates only an opaque, hidden script frame; never executes in the document realm', () => {
+    const port={postMessage:vi.fn(),start:vi.fn(),close:vi.fn(),onmessage:null};
+    vi.stubGlobal('MessageChannel',class {port1=port;port2={};});
     const store = createDataflowStore({ flow: { values: [], queries: [] } });
     const cleanup = startAuthorScript('window.__authorEscaped = true', store);
     const frame = document.querySelector('iframe')!;
@@ -53,9 +56,10 @@ describe('isolated author script host', () => {
     expect(frame.hidden).toBe(true);
     expect(document.querySelector('script')).toBeNull();
     expect((window as unknown as { __authorEscaped?: boolean }).__authorEscaped).toBeUndefined();
-    expect(frame.srcdoc).toContain("default-src 'none'");
-    expect(frame.srcdoc).toContain("connect-src 'none'");
-    expect(frame.srcdoc).toContain("form-action 'none'");
+    expect(frame.srcdoc).toBe('');expect(new URL(frame.src).pathname).toBe('/story/author-frame');
+    const post=vi.spyOn(frame.contentWindow!,'postMessage');frame.dispatchEvent(new Event('load'));
+    expect(post).toHaveBeenCalledWith({type:'mx:author:init',document:AUTHOR_SCRIPT_DOCUMENT},'*',[{}]);
+    expect(AUTHOR_SCRIPT_DOCUMENT).toContain("connect-src 'none'");
     cleanup();
     expect(document.querySelector('iframe')).toBeNull();
   });

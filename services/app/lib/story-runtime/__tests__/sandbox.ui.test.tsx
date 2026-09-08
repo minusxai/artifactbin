@@ -15,6 +15,7 @@ describe('visible sandbox contract',()=>{
     if(!parsed.ok) throw new Error('parse failed');
     const {container}=render(<StoryRuntimeApp nodes={parsed.nodes} refData={{}} colorMode="light" sandboxApi={fixtureApi}/>);
     expect(container.querySelector('iframe')?.title).toBe('Model');
+    expect(new URL(container.querySelector('iframe')!.src).searchParams.get('artifact')).toBe('Abc123');
     expect(container.querySelector('#outside')?.textContent).toBe('Outside');
     expect(container.querySelector('#scene')).toBeNull();
   });

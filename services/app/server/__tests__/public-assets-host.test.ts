@@ -3,8 +3,18 @@ vi.mock('@/lib/config',async original=>({...await original<typeof import('@/lib/
 import {useAppHarness} from '@/__tests__/harness';
 import {getDb} from '@/lib/db';
 import {objectStore,objectKey} from '@/lib/object-store';
-import {createAppServer} from '../app';
+import {createAppServer,APP_CSP} from '../app';
 useAppHarness();
+it('does not let cached author scripts widen the main application script or network policy',()=>{
+ const directives=new Map(APP_CSP.split('; ').map(d=>{const [name,...sources]=d.split(' ');return[name,sources];}));
+ for(const name of ['script-src','connect-src']){
+  expect(directives.get(name),name).not.toContain('https://assets.example.test');
+  expect(directives.get(name),name).not.toContain('https://i.example.test');
+  expect(directives.get(name),name).not.toContain('*');
+ }
+ expect(directives.get('script-src')).not.toContain("'unsafe-inline'");
+ expect(directives.get('frame-src')).toEqual(["'self'"]);
+});
 it('direct app only serves cached byte GET/HEAD on asset host, ignoring credentials and forwarding spoofing',async()=>{
  const hash='a'.repeat(64),data=Buffer.from('bundle'),key=objectKey('webasset',data);
  await objectStore().put(key,data,'text/javascript');

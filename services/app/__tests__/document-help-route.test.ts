@@ -1,3 +1,5 @@
+import {PUBLIC_BASE_URL} from '@/lib/config';
+import {proxyRequest} from '@/server/__tests__/proxy-request';
 /**
  * DISCOVER: the REAL reader route serves the help pointer — as an HTTP `Link: <…/docs>; rel="help"` header (for
  * agents that read headers or strip HTML) and in <head> — built on the request's own base URL. Seeded RED.
@@ -37,12 +39,12 @@ describe('GET /a/:id (the document itself)', () => {
     const owner = await ensureUsername(await createUser({ email: 'pretty-help@example.com' }));
     const t = await mintToken('t', owner.id);
     const row = await createArtifact(t.id, owner.id, { format: 'markup', content: '', source: '<div>pretty</div>', meta: {}, title: 'Pretty help', description: null, visibility: 'public' });
-    const app = createAppServer({ indexHtml: async () => '<!doctype html><div id="root">SPA</div>' });
-    const res = await app.request(`${BASE}/@${owner.username}/${row.id}-pretty-help`);
+    const app = createAppServer({ indexHtml: async () => '<html><head></head><body><div id="root"></div></body></html>' });
+    const res = await proxyRequest(app,`${BASE}/@${owner.username}/${row.id}-pretty-help`);
     expect(res.status).toBe(200);
-    expect(res.headers.get('link')).toBe(`<${BASE}/docs>; rel="help"`);
+    expect(res.headers.get('link')).toBe(`<${PUBLIC_BASE_URL}/docs>; rel="help"`);
     const html = await res.text();
-    expect(html).toContain(`<link rel="help" href="${BASE}/docs" title="Agents: read this first to edit any artifact here">`);
-    expect(html).toContain(`read ${BASE}/docs — tokens at ${BASE}/tokens/new`);
+    expect(html).toContain(`<link rel="help" href="${PUBLIC_BASE_URL}/docs" title="Agents: read this first to edit any artifact here">`);
+    expect(html).toContain(`read ${PUBLIC_BASE_URL}/docs — tokens at ${PUBLIC_BASE_URL}/tokens/new`);
   });
 });

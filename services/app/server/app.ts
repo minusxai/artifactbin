@@ -2,11 +2,8 @@
  * THE APP SERVER — Hono, the whole app behind the proxy:
  *
  *  - every `app/**\/route.ts` handler, from the generated table (server/api);
- *  - the READER/OWNER split for `/a/<id>` and `/@user/...` (the one thing
- *    `proxy.ts` did as Next middleware): a reader is served the document
- *    ITSELF — the `raw` handler's response, per-row CSP and all, at the same
- *    URL, no iframe, no redirect; an owner, an editor, a commenter, or any
- *    document whose data needs the page's relay gets the app page;
+ *  - direct app pages for `/a/<id>` and `/@user/...`, with ACL-checked
+ *    bootstrap data; explicit raw/export routes retain isolated rendering;
  *  - the app's pages: one SPA (web/, built by Vite) served for the app's
  *    paths under the app CSP;
  *  - the static tree under public/ with the cache rules next.config used to
@@ -20,26 +17,28 @@ import path from 'node:path';
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { actorOf, actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
-import {isPlatformPage, platformFramePage, platformPageResponse} from '@artifactbin/utils/platform-pages';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { verifyExportKey } from '@/lib/export-key';
 import { ID_RE } from '@/lib/ids';
-import { readIntent } from '@/lib/intent';
 import { runWithRequest } from '@/lib/request-context';
-import { declaresLiveData, declaresMutations } from '@/lib/story/helmet';
 import { SHOWCASE_ORIGIN } from '@/lib/showcase';
 import { canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
 import { ownerUsername } from '@/lib/users';
-import { roleFor, sessionActor, NO_ACTOR } from '@/lib/viewer';
+import { roleFor, sessionActor } from '@/lib/viewer';
 import { canAnnotate } from '@/lib/share-roles';
+import {displayTitle} from '@/lib/story/title';
+import {CARD_RENDER_GENERATION} from '@/lib/export-card';
 import { baseUrl, json } from '@/lib/http';
-import {CONTROLS_ORIGIN, PUBLIC_BASE_URL, ASSETS_ORIGIN} from '@/lib/config';
+import {PUBLIC_BASE_URL, ASSETS_ORIGIN, SSR_ENABLED} from '@/lib/config';
 import {GET as publicAssetBytes} from '@/app/assets/[hash]/route';
 import {GET as publicRefBytes} from '@/app/assets/ref/[id]/route';
 import { mountRoutes } from './api';
 import { ROUTES } from './routes.generated';
-import {publicPageHtml} from './public-page';
-import {publicPagePath,trustedRegionRoute,type PublicProfileData} from '@/web/public-page-contract';
+import {directPageHtml} from './direct-page';
+import {authorFrameResponse} from './author-frame';
+import {AUTHOR_FRAME_PATH} from '@/lib/story-runtime/author-frame';
+import type {PageBootstrap} from '@/web/page-bootstrap-contract';
+import type {SessionState} from '@/web/session';
 
 /** Where the server hands the SPA a page's data so its FIRST paint is its final one. */
 export const BOOTSTRAP_ID = 'mx-page-data';
@@ -65,6 +64,7 @@ export const APP_CSP = [
   // (lib/showcase). `'self'` admits them only when the app IS that origin, so
   // the landing page's pictures worked on the deployment and nowhere else.
   `img-src 'self' ${SHOWCASE_ORIGIN} data: blob:`, "font-src 'self' data:",
+  "media-src 'self' data: blob:",
   "connect-src 'self' https://api-js.mixpanel.com https://api.mixpanel.com",
   "manifest-src 'self'", "frame-src 'self'", "frame-ancestors 'self'",
   // The source editor wires a Monaco worker (components/SourceEditor). It is
@@ -111,60 +111,7 @@ export function candidateDocument(pathname: string): { id: string } | null {
   return file ? { id: file.id } : null;
 }
 
-/**
- * Reader or owner? A rewrite to the served document when the viewer is a
- * plain reader of a markup document that needs no session for its data;
- * otherwise the page. Ported from proxy.ts unchanged in its decisions.
- */
-export async function servesDocumentDirectly(request: Request): Promise<string | null> {
-  const url = new URL(request.url);
-  const found = candidateDocument(url.pathname);
-  if (!found) return null;
-  if (url.searchParams.has('key')) return null;
-  const actor = await sessionActor(request).catch(() => null);
-  const anonymous = !actor || (!actor.viewer && !actor.tokenId);
-  /*
-   * `?intent=` is an instruction only the SHELL can carry out (fork, comment —
-   * lib/intent), so an address carrying one has to reach the shell.
-   *
-   * Scoped to a viewer who is NOT anonymous, and that scope is the whole
-   * safety of it: `intent` rides on a link anyone may hand over and anyone may
-   * append to, so unscoped it would let a stranger — or a crawler — turn every
-   * public document's fast path into the app page by typing six characters.
-   * Someone with no credential can neither fork nor comment, so there is
-   * nothing for the shell to do for them either.
-   *
-   * Read through the SAME allowlist the page acts on, rather than by asking
-   * whether the key is merely present: the two halves have to agree, or a
-   * signed-in reader at `?intent=garbage` is pushed onto the shell's slower
-   * path for an instruction that will then correctly do nothing there.
-   *
-   * Above the row read, beside the `key` bypass, so a credential-less reader
-   * still reaches the document without touching the database.
-   */
-  if (!CONTROLS_ORIGIN && !anonymous && readIntent(url.search) !== null) return null;
-  const artifact = await getArtifactById(found.id);
-  // A FOLDER IS NEVER SERVED TOP-LEVEL. It has no document — its listing is app
-  // data the page endpoint answers and `withBootstrap` inlines — so `raw` is a
-  // 404 for one and there is nothing here to hand over. Everyone gets the app
-  // page, and the ACL is unchanged: a folder this viewer may not read is the
-  // same uniform 404 the page already answers for an unknown id.
-  if (!artifact || artifact.format !== 'markup') return null;
-  if (CONTROLS_ORIGIN && baseUrl(request) === new URL(PUBLIC_BASE_URL).origin) return await roleFor(artifact,actor ?? NO_ACTOR) !== 'none' ? found.id : null;
-  const needsSessionForData = declaresLiveData(artifact.source) && !(await canReadArtifact(artifact, null));
-  if (needsSessionForData) return null;
-  // A dataset editor may only VIEW this document. Its mutations still need
-  // the parent session relay; opaque top-level documents have no credentials.
-  if (!anonymous && declaresMutations(artifact.source)) return null;
-  // The shell is for anyone who may do more than READ it — today owner,
-  // editor and commenter; tomorrow whoever a `comment`-granting link lets in,
-  // with no change here. A plain viewer is served the document itself.
-  if (!anonymous && canAnnotate(await roleFor(artifact, actor))) return null;
-  if (!(await canReadArtifact(artifact, actor?.viewer ?? null))) return null;
-  return found.id;
-}
-
-const SPA_PATHS = /^(\/|\/login|\/account|\/chat|\/assets|\/trash|\/tokens|\/docs-human|\/datasets\/new|\/datasets\/[A-Za-z0-9]+\/edit)$/;
+const SPA_PATHS = /^(\/|\/login|\/account|\/chat|\/assets|\/trash|\/tokens|\/docs-human|\/privacy|\/terms|\/datasets\/new|\/datasets\/[A-Za-z0-9]+\/edit)$/;
 
 /**
  * A guessed machine address is answered in the machine's language. `/docs`
@@ -204,7 +151,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // Split-host authentication is enforced by the proxy, never by legacy
   // cookie fallbacks in app routes. Even anonymous requests must carry its
   // verdict. A directly exposed backend or app-only boot must fail closed.
-  if (CONTROLS_ORIGIN) app.use('*', async (c, next) => {
+  app.use('*', async (c, next) => {
     if (!actorOf(c.req.raw)) return json({ error: 'proxy_required' }, 403, { 'Cache-Control': 'no-store' });
     return next();
   });
@@ -218,20 +165,10 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   }
   const webDir = opts.webDir ?? path.resolve('dist/web');
   const publicDir = opts.publicDir ?? path.resolve('public');
-  const raw = ROUTES.find((r) => r.dir === '/a/[id]/raw')?.module.GET as ((request: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response>) | undefined;
   let indexCache: string | null = null;
   const index = async (url: string): Promise<string> => {
     if (opts.indexHtml) return opts.indexHtml(url);
     return (indexCache ??= readFileSync(path.join(webDir, 'index.html'), 'utf8'));
-  };
-  const pageIndex = async (url:string,entryName:'public'|'region') => {
-    const html=await index(url);
-    if(opts.indexHtml)return html.replace('/main.tsx',`/${entryName}.tsx`);
-    const manifest=JSON.parse(readFileSync(path.join(webDir,'.vite/manifest.json'),'utf8')) as Record<string,{file:string}>;
-    const entry=manifest[entryName+'.tsx'];
-    if(!entry)throw new Error('Public page entry missing from build manifest');
-    return html.replace(/<link\b[^>]*rel="modulepreload"[^>]*>/g,'')
-      .replace(/<script\b[^>]*type="module"[^>]*>[\s\S]*?<\/script>/g,()=>`<script type="module" crossorigin src="/${entry.file}"></script>`);
   };
   /**
    * The app page. When the address names something the page will immediately
@@ -241,15 +178,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
    * The endpoints stay the truth; this is the same data, arriving earlier.
    */
   const page = async (c: { req: { raw: Request; url: string } }, status?: 200 | 404) => {
-    if(CONTROLS_ORIGIN && baseUrl(c.req.raw)!==CONTROLS_ORIGIN && status!==404){
-      const url=new URL(c.req.url),found=candidateDocument(url.pathname);
-      const row=found?await getArtifactById(found.id):null;
-      if(row?.format==='folder')return platformPageResponse(new URL(PUBLIC_BASE_URL).origin,CONTROLS_ORIGIN,url.pathname,url.search,row.id);
-    }
-    const source = await index(c.req.url);
-    const html = CONTROLS_ORIGIN && baseUrl(c.req.raw) === CONTROLS_ORIGIN
-      ? source.replace('</head>', () => `<script type="application/json" id="mx-app-config">${safeJson({apiOrigin:new URL(PUBLIC_BASE_URL).origin})}</script></head>`)
-      : source;
+    const html = await index(c.req.url);
     const data = await bootstrapFor(c.req.raw);
     // An @-address whose profile resolves to NOTHING is a miss, and a miss is
     // 404 as a STATUS (the rule documents already live by) — the SPA is still
@@ -262,59 +191,34 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // gets the app's own 404 page, anything else (curl's `*/*`, a fetch tool)
     // gets the refusal that names the way on.
     if (code === 404 && !(c.req.raw.headers.get('accept') ?? '').includes('text/html')) return apiNotFound(c);
-    return new Response(data ? withBootstrap(html, data) : html, { status: code, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS } });
+    const session = await callPage(c.req.raw, sessionData, {}) as SessionState;
+    if (!session) return json({error:'session_unavailable'},503,{'Cache-Control':'no-store'});
+    const pathname = new URL(c.req.url).pathname;
+    const presentation:PageBootstrap['presentation'] = pathname==='/' ? (session.kind==='none'?'public':'workspace')
+      : data?.artifact ? 'artifact' : pathname.startsWith('/@') ? 'profile' : pathname==='/account'||pathname==='/tokens' ? 'account' : 'page';
+    const home = pathname==='/' && SSR_ENABLED && session.kind!=='none' ? await callPage(c.req.raw,homeData,{}) : undefined;
+    const bootstrap:PageBootstrap={path:pathname,session,presentation,ssr:false,...data,...(home?{home}:{})};
+    // Only a successfully ACL-checked page contributes document metadata.
+    const found=data?.artifact?candidateDocument(pathname):null;
+    const row=found?await getArtifactById(found.id):null;
+    const main=new URL(PUBLIC_BASE_URL).origin;
+    const social=row?{title:displayTitle(row),description:row.description,image:`${main}/a/${encodeURIComponent(row.id)}/export?mode=card&v=${row.version}&r=${CARD_RENDER_GENERATION}`}:undefined;
+    const captureKey=new URL(c.req.url).searchParams.get('key');
+    const capture=!!row&&!!captureKey&&verifyExportKey(row.id,captureKey);
+    const rendered=directPageHtml(html,bootstrap,main,SSR_ENABLED||capture,code,social);
+    return new Response(withBootstrap(rendered.html, rendered.data), { status: code, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', link:`<${main}/docs>; rel="help"`, ...APP_SECURITY_HEADERS } });
   };
 
   const pageData = (dir: string) => ROUTES.find((r) => r.dir === dir)?.module.GET as ((request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>) | undefined;
-  // Main holds the public address; dedicated i shells hold trusted UI/APIs.
-  // Author documents never enter the trusted page frame.
-  if (CONTROLS_ORIGIN) app.use('*', async (c,next) => {
-    const url = new URL(c.req.url);
-    if (baseUrl(c.req.raw) !== CONTROLS_ORIGIN) {
-      if (baseUrl(c.req.raw) === new URL(PUBLIC_BASE_URL).origin && c.req.method === 'GET' && isPlatformPage(url.pathname)) {
-        if(publicPagePath(url.pathname) && url.pathname!=='/docs-human'){
-          let profile:PublicProfileData|undefined;
-          if(url.pathname.startsWith('/@')){
-            const bootstrap=await bootstrapFor(c.req.raw);
-            const data=bootstrap?.profile as (PublicProfileData&{kind?:string})|undefined;
-            if(data?.kind!=='public-profile')return next();
-            profile={handle:data.handle,files:data.files};
-          }
-          const main=new URL(PUBLIC_BASE_URL).origin;
-          const html=publicPageHtml(await pageIndex(c.req.url,'public'),{path:url.pathname,search:url.search,controls:CONTROLS_ORIGIN!,...(profile?{profile}:{})},main);
-          return new Response(html,{headers:{...APP_SECURITY_HEADERS,'content-security-policy':APP_CSP.replace("frame-src 'self'",`frame-src 'self' ${CONTROLS_ORIGIN}`),'content-type':'text/html; charset=utf-8','cache-control':'no-store'}});
-        }
-        if(url.pathname.startsWith('/@') && !(await bootstrapFor(c.req.raw)))return next();
-        return platformPageResponse(new URL(PUBLIC_BASE_URL).origin,CONTROLS_ORIGIN!,url.pathname,url.search);
-      }
-      return next();
-    }
-    if(c.req.method==='GET' && isPlatformPage(url.pathname))return Response.redirect(new URL(PUBLIC_BASE_URL).origin+url.pathname+url.search,302);
-    const folderId=url.pathname.match(/^\/controls\/folder\/([A-Za-z0-9]+)$/)?.[1];
-    if(folderId){
-      const row=await getArtifactById(folderId),actor=await sessionActor(c.req.raw).catch(()=>null);
-      if(!row || row.format!=='folder' || await roleFor(row,actor??NO_ACTOR)==='none')return new Response('Not found',{status:404});
-    }
-    const region=trustedRegionRoute(url.pathname,url.searchParams.get('page'));
-    const platformPath=region?.page??(folderId?'/a/'+folderId:platformFramePage(url.pathname));
-    if(c.req.method==='GET' && platformPath!==null){
-      const main=new URL(PUBLIC_BASE_URL).origin;
-      const shell=(await (region?pageIndex(c.req.url,'region'):index(c.req.url))).replace('</head>',()=>`<script type="application/json" id="mx-page-frame-config">${safeJson({apiOrigin:main,path:platformPath,...(folderId?{folderOnly:true}:{}),...(region?{region:region.kind,search:url.searchParams.get('search')??''}:{})})}</script><base target="_top" />${region?'<style>html,body,#root{background:transparent!important;min-height:0}</style>':''}</head>`);
-      return new Response(shell,{headers:{...APP_SECURITY_HEADERS,'content-security-policy':APP_CSP.replace("img-src 'self'",`img-src 'self' ${main}`).replace("frame-ancestors 'self'",`frame-ancestors ${main}`),'content-type':'text/html; charset=utf-8','cache-control':'no-store'}});
-    }
-    if(url.pathname.startsWith('/controls/page') || url.pathname.startsWith('/controls/folder') || url.pathname.startsWith('/controls/region'))return new Response('Not found',{status:404});
-    if (c.req.method === 'GET' && /^\/controls\/a\/[A-Za-z0-9]+$/.test(url.pathname)) {
-      const shell = (await index(c.req.url)).replace('</head>', () => `<script type="application/json" id="mx-controls-config">${safeJson({apiOrigin:new URL(PUBLIC_BASE_URL).origin})}</script><base target="_top" /><style>html,body,#root{background:transparent!important}</style></head>`);
-      const main = new URL(PUBLIC_BASE_URL).origin;
-      const csp = APP_CSP.replace("connect-src 'self'", `connect-src 'self' ${main}`).replace("img-src 'self'", `img-src 'self' ${main}`).replace("frame-src 'self'", `frame-src 'self' ${main}`).replace("frame-ancestors 'self'", `frame-ancestors ${main}`);
-      return new Response(shell,{headers:{...APP_SECURITY_HEADERS,'content-security-policy':csp,'content-type':'text/html; charset=utf-8','cache-control':'no-store'}});
-    }
-    const documentApi = /^\/a\/[A-Za-z0-9]+\/(?:query|mutate|events(?:\/frame)?)$/.test(url.pathname);
-    if ((!documentApi && /^\/(?:a(?:\/|$)|@)/.test(url.pathname)) || /^\/assets\/(?:[a-f0-9]{64}(?:[./]|$)|ref(?:\/|$))/i.test(url.pathname)) return new Response('Not found',{status:404});
-    await next();
-    c.header('content-security-policy', (c.res.headers.get('content-security-policy') ?? APP_CSP).replace(/frame-ancestors[^;]*/, "frame-ancestors 'none'"));
-    c.header('cache-control','no-store');
-  });
+  // The retired controls documents never create an alternate app architecture.
+  app.all('/controls/*', () => new Response('Not found',{status:404,headers:{'cache-control':'no-store'}}));
+  const sessionData = pageData('/api/page/session');
+  const homeData = pageData('/api/page/home');
+  const callPage = async (request:Request, fn:ReturnType<typeof pageData>, params:Record<string,string>) => {
+    if(!fn)return null;
+    const response=await runWithRequest(request,()=>fn(request,{params:Promise.resolve(params)}));
+    return response.ok?response.json():null;
+  };
   const artifactData = pageData('/api/page/artifact/[id]');
   const profileData = pageData('/api/page/profile/[user]/[[...path]]');
 
@@ -327,11 +231,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   async function bootstrapFor(request: Request): Promise<{ path: string; profile?: unknown; artifact?: unknown } | null> {
     const url = new URL(request.url);
     const segments = url.pathname.split('/').filter(Boolean);
-    const call = async (fn: typeof artifactData, params: Record<string, string>) => {
-      if (!fn) return null;
-      const res = await runWithRequest(request, () => fn(request, { params: Promise.resolve(params) }));
-      return res.ok ? await res.json() : null;
-    };
+    const call = (fn:typeof artifactData,params:Record<string,string>) => callPage(request,fn,params);
     if (segments[0] === 'a' && segments.length === 2) {
       const artifact = await call(artifactData, { id: segments[1] });
       return artifact ? { path: url.pathname, artifact } : null;
@@ -367,6 +267,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     if (!row) return null;
     const actor = await sessionActor(request).catch(() => null);
     if (!(await canReadArtifact(row, actor?.viewer ?? null))) return null;
+    if (!actor || !canAnnotate(await roleFor(row,actor))) return null;
     const canonical = canonicalArtifactPath(row, await ownerUsername(row.user_id));
     return canonical === url.pathname ? null : canonical + url.search;
   };
@@ -386,6 +287,9 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     return (await canReadArtifact(row, actor?.viewer ?? null)) ? 200 : 404;
   };
 
+  // The author wrapper is HTTP, not srcdoc: it owns an independent restrictive
+  // policy. Register before immutable /story assets so config changes revalidate.
+  app.get(AUTHOR_FRAME_PATH,c=>authorFrameResponse(c.req.raw,ASSETS_ORIGIN,new URL(PUBLIC_BASE_URL).origin));
   // Static: content-addressed trees are immutable; everything else is served plainly.
   app.use('/story/*', async (c, next) => { await next(); c.header('cache-control', IMMUTABLE); c.header('access-control-allow-origin', '*'); });
   app.use('/libraries/*', async (c, next) => { await next(); c.header('cache-control', 'public, max-age=3600'); c.header('access-control-allow-origin', '*'); });
@@ -421,10 +325,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   app.all('/openapi.json', apiNotFound);
   app.all('/.well-known/ai-plugin.json', apiNotFound);
 
-  // The reader/owner split, then the app page.
+  // Normal document addresses always render the ACL-checked app page.
   const documentAddress = async (c: { req: { raw: Request; url: string } }) => {
-    const id = await runWithRequest(c.req.raw, () => servesDocumentDirectly(c.req.raw));
-    if (id && raw) return runWithRequest(c.req.raw, () => raw(c.req.raw, { params: Promise.resolve({ id }) }));
     const to = await runWithRequest(c.req.raw, () => healTo(c.req.raw));
     if (to) return new Response(null, { status: 302, headers: { location: to, 'cache-control': 'no-store' } });
     // documentStatus's 404 is final; its 200 only means "not a document

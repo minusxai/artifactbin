@@ -1,3 +1,4 @@
+import {proxyRequest} from '@/server/__tests__/proxy-request';
 /**
  * Curlable image export: `GET /a/<id>/export?format=png|jpg` renders the stored
  * HTML to image bytes on demand (headless Chromium in production),
@@ -340,7 +341,7 @@ describe('GET /a/<folder>/export', () => {
     // `</head>` is where the server inlines the page's data (withBootstrap),
     // so the shell under test needs one to be a shell at all.
     const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head></head><body><div id="root"></div></body></html>' });
-    const served = await app.request(new URL(shot.url).pathname + new URL(shot.url).search);
+    const served = await proxyRequest(app,new URL(shot.url).pathname + new URL(shot.url).search);
     expect(served.status).toBe(200);
     const html = await served.text();
     expect(html).toContain('Opening Note');

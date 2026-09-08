@@ -1,3 +1,4 @@
+import {attachActor} from '@artifactbin/utils';
 /**
  * A ROUTE'S HEADER OBJECT IS NOT A CONSTANT — the server writes into it.
  *
@@ -61,13 +62,14 @@ describe('what the server promises is what it sends', () => {
     const big = await create(`<div><p>${'much longer text '.repeat(400)}</p></div>`);
 
     const app = createAppServer({ indexHtml: async () => '<!doctype html><div id="root">SPA</div>' });
-    const server = await withHttpServer(getRequestListener(app.fetch));
+    const server = await withHttpServer(getRequestListener(request=>app.fetch(attachActor(request,{credential:'none'}))));
     try {
       // The order is the point: the SECOND response is the one that inherits a
       // stale length. Both are checked, so neither direction can hide it.
       for (const id of [small.id, big.id, small.id]) {
         const res = await raw(server.port, `/a/${id}/events/frame`);
         expect(res.promised, `content-length for ${id}`).toBe(res.bytes);
+        expect(JSON.parse(res.body)).not.toHaveProperty('error');
         expect(() => JSON.parse(res.body), `parseable frame for ${id}`).not.toThrow();
       }
     } finally {

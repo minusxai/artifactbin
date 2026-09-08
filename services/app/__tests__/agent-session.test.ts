@@ -21,7 +21,8 @@ import { POST as createArtifact } from '@/app/api/artifacts/route';
 import { POST as agentPrompt } from '@/app/api/my/artifacts/[id]/agent-prompt/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
-import { servesDocumentDirectly } from '@/server/app';
+import { createAppServer } from '@/server/app';
+import { proxyRequest } from '@/server/__tests__/proxy-request';
 import { AGENT_COOKIE, decodeAgentSession, encodeAgentSession } from '@/lib/agent-session';
 import { existingPaste } from '@/lib/agent-copy';
 import { mintToken, resolveTokenById, revokeToken } from '@/lib/tokens';
@@ -282,9 +283,11 @@ describe('one viewer, every surface', () => {
     await claimTokenById(user.id, minted.id);
     const doc = (await (await createArtifact(request('/api/artifacts', { method: 'POST', token: minted.token, json: { markup: '<h1>x</h1>', visibility: 'private' } }))).json()) as { id: string };
 
-    const cookie = cookieHeader(await encodeAgentSession({ tokenIds: [minted.id] }));
-    const served = await servesDocumentDirectly(request(`/a/${doc.id}`, { cookie }));
-    expect(served).toBeNull(); // the page (shell), not the document
+    const app=createAppServer({indexHtml:async()=>'<head></head><body><div id="root"></div></body>'});
+    const actor={credential:'agent-cookie' as const,tokenId:minted.id,heldTokenIds:[minted.id],userId:user.id};
+    const served=await proxyRequest(app,`/a/${doc.id}`,undefined,actor);
+    const page=served.status===302?await proxyRequest(app,served.headers.get('location')!,undefined,actor):served;
+    expect(page.status).toBe(200);expect(await page.text()).toContain('mx-page-data');
   });
 });
 

@@ -1,32 +1,28 @@
-/** Trusted wrapper document. Inner content is data, never wrapper script source. */
-export function protectedAuthorDocument(innerDocument: string): string {
-  const policy=innerDocument.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)"/)?.[1];
-  const basePolicy=policy??"default-src 'none'; script-src 'unsafe-inline'; frame-src 'none'; form-action 'none'; base-uri 'none'";
-  // srcdoc inherits this policy. Managed content already permits inline styles;
-  // retain that contract. Hidden scripts need only our fixed wrapper stylesheet.
-  const csp=basePolicy.split(';').some(rule=>rule.trim().startsWith('style-src '))?basePolicy:basePolicy+"; style-src 'sha256-jKvfmEYIGlm8DGk4pp05gJ0MwYdTY+NU6tSvyPZyDow='";
-  const payload=JSON.stringify(innerDocument).replace(/</g,'\\u003c');
-  return '<!doctype html><html data-mx-author-wrapper><head><meta http-equiv="Content-Security-Policy" content="'+csp+'"><style>html,body,iframe{margin:0;width:100%;height:100%;border:0;display:block}</style></head><body><script>'+`
-  (()=>{
-    let initialized=false, loaded=false, pendingPort=null, transferred=false;
-    const frame=document.createElement('iframe');
-    frame.title='Interactive artifact content';
-    frame.setAttribute('sandbox','allow-scripts');
-    frame.setAttribute('referrerpolicy','no-referrer');
-    const transfer=()=>{
-      if(!loaded||!pendingPort||transferred)return;
-      transferred=true;
-      frame.contentWindow.postMessage('mx:author:init','*',[pendingPort]); pendingPort=null;
-    };
-    addEventListener('message',event=>{
-      if(initialized||event.source!==parent||event.data!=='mx:author:init'||event.ports.length!==1)return;
-      initialized=true;pendingPort=event.ports[0];transfer();
-    });
+/** Fixed trusted HTTP document. It never interpolates author source. The
+ * response owns its sandbox/CSP, independent from the main app's script policy;
+ * the inner srcdoc adds its own stricter policy. */
+export const AUTHOR_FRAME_PATH='/story/author-frame';
+export const AUTHOR_FRAME_DOCUMENT='<!doctype html><html data-mx-author-wrapper><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body,iframe{margin:0;width:100%;height:100%;border:0;display:block}</style></head><body><script>'+String.raw`
+(()=>{
+  let initialized=false, loaded=false, pendingPort=null, transferred=false;
+  const frame=document.createElement('iframe');
+  frame.title='Interactive artifact content';
+  frame.setAttribute('sandbox','allow-scripts');
+  frame.setAttribute('referrerpolicy','no-referrer');
+  const transfer=()=>{
+    if(!loaded||!pendingPort||transferred)return;
+    transferred=true;
+    frame.contentWindow.postMessage('mx:author:init','*',[pendingPort]);pendingPort=null;
+  };
+  addEventListener('message',event=>{
+    if(initialized||event.source!==parent||event.data?.type!=='mx:author:init'||typeof event.data.document!=='string'||event.ports.length!==1)return;
+    initialized=true;pendingPort=event.ports[0];
     frame.onload=()=>{
       if(loaded){parent.postMessage('mx:author:navigated','*');frame.remove();return;}
       loaded=true;transfer();
     };
-    frame.srcdoc=${payload};
+    frame.srcdoc=event.data.document;
     document.body.append(frame);
-  })();`+'</script></body></html>';
-}
+  });
+})();
+`+'</script></body></html>';

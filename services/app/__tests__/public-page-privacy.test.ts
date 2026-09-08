@@ -21,7 +21,10 @@ it('renders the public profile and metadata without private rows/account bootstr
     expect(html).toContain(`<title>@${owner.username} · artifactbin</title>`);
     expect(html).toContain('Public card title');expect(html).not.toContain('Private card title');
     expect(html).not.toContain(owner.email);expect(html).not.toContain('Stored author source');
-    expect(html).not.toContain('mx-page-data');expect(html).not.toContain('id="app-frame"');
+    const bootstrap=JSON.parse(html.match(/id="mx-page-data">([\s\S]*?)<\/script>/)![1]);
+    expect(bootstrap.session.kind).toBe(actor.credential==='session'?'account':'none');
+    expect(bootstrap).not.toHaveProperty('home');expect(bootstrap).not.toHaveProperty('artifact');
+    expect(response.headers.get('cache-control')).toContain('no-store');expect(html).not.toContain('id="app-frame"');
   }
   expect((await app.fetch(attachActor(new Request('http://localhost:3000/@mxmx_missing'),{credential:'none'}))).status).toBe(404);
 });

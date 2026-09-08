@@ -14,6 +14,7 @@ import { mintToken, resolveToken } from '@/lib/tokens';
 import { claimToken, createUser } from '@/lib/users';
 import { listTrashFor, restoreArtifactFor } from '@/lib/trash';
 import { createAppServer } from '@/server/app';
+import {proxyRequest} from '@/server/__tests__/proxy-request';
 
 useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -23,7 +24,7 @@ async function owner() {
   const u = await createUser({ email: 'o@example.com' });
   await claimToken(u.id, t.token);
   const actor = (await resolveToken(t.token)) as unknown as TokenActor;
-  return { token: t.token, actor };
+  return { token: t.token, actor, tokenId:t.id,userId:u.id };
 }
 const create = async (token: string, body: Record<string, unknown>) => { const r = await j(await createRoute(request('/api/artifacts', { method: 'POST', json: body, token }))); expect(r.status, JSON.stringify(r.body)).toBe(201); return r.body; };
 const del = (token: string, id: string) => deleteRoute(request(`/api/artifacts/${id}`, { method: 'DELETE', token }), params(id));
@@ -84,7 +85,7 @@ describe('the trash', () => {
      * directly would never have run it and would pass either way.
      */
     const app = createAppServer({ webDir: 'dist/web' });
-    expect((await app.fetch(new Request(`http://localhost/api/artifacts/${fresh.id}`, { headers: { authorization: `Bearer ${o.token}` } }))).status).toBe(404);
+    expect((await proxyRequest(app,`/api/artifacts/${fresh.id}`,undefined,{credential:'bearer',tokenId:o.tokenId,userId:o.userId})).status).toBe(404);
     // The sweep was unawaited by design; give it every chance to land.
     await new Promise((r) => setTimeout(r, 300));
     expect((await db.query('SELECT id FROM artifacts WHERE id = $1', [ancient.id])).rows).toHaveLength(1);

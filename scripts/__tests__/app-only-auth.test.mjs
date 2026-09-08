@@ -37,15 +37,15 @@ it.each(['AUTH__SECRET', 'CONTRACT__ACTOR_SECRET'])('app-only startup accepts pr
       });
     });
     const actor = { credential: 'session', userId: 'app-only-test-user', email: 'app-only-test@example.com' };
-    const session = async key => {
+    const session = async (key, status = 200) => {
       const response = await fetch(`http://127.0.0.1:${port}/api/page/session`, {
         headers: { [ACTOR_HEADER]: signActor(actor, key) },
       });
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(status);
       return response.json();
     };
     expect(await session(secret)).toMatchObject({ kind: 'account', user: { id: actor.userId } });
-    expect(await session('wrong-secret')).toMatchObject({ user: null });
+    expect(await session('wrong-secret', 403)).toMatchObject({ error: 'proxy_required' });
   } finally {
     if (child.exitCode === null && child.signalCode === null) {
       const exited = new Promise(resolve => child.once('exit', resolve));

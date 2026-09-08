@@ -1,7 +1,6 @@
 /**
- * A DOCUMENT CARRIES NO APP CHROME. Assert the routes as rendered output: app
- * pages get the shell masthead, while both artifact addresses render the
- * document surface without it.
+ * Every route composes one shared trusted masthead; the authored document
+ * surface remains separate. Browser tests prove the actual shadow boundary.
  */
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -10,7 +9,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GET as docs } from '@/app/docs/[[...path]]/route';
 import { App } from '@/web/App';
 
+// Inspect route composition without requiring a browser-created portal target.
+// shared-trusted-shell.ui.test.tsx covers the real Shadow DOM boundary.
+vi.mock('@/web/TrustedAppShell', () => ({TrustedAppShell: ({children}: {children: import('react').ReactNode}) => children}));
+
 vi.mock('@/web/bootstrap', () => ({
+  pageBootstrap: () => null,
+  invalidateBootstrap: () => {},
   takeBootstrap: (_path: string, which: 'profile' | 'artifact') => {
     if (which === 'profile') return { kind: 'artifact', id: 'abc123' };
     return {
@@ -44,19 +49,17 @@ const renderPath = (path: string) => {
   );
 };
 
-describe('artifact pages carry no app chrome', () => {
-  it('the chrome lives in the SPA shell, and only there', () => {
-    expect(renderPath('/login')).toContain(MASTHEAD);
-    expect(renderPath('/a/abc123')).not.toContain(MASTHEAD);
-    expect(renderPath('/@owner/abc123-document')).not.toContain(MASTHEAD);
+describe('artifact pages share trusted app chrome', () => {
+  it('each route composes exactly one masthead', () => {
+    for(const path of ['/login','/a/abc123','/@owner/abc123-document'])expect(renderPath(path).split(MASTHEAD)).toHaveLength(2);
   });
 
-  it('the artifact page is the shell around the document, and nothing else', () => {
+  it('the artifact page mounts the top-level surface beside one trusted masthead', () => {
     const html = renderPath('/a/abc123');
     expect(html).toContain('aria-label="Artifact viewport"');
     expect(html).toContain('data-artifact-story-host="true"');
     expect(html).not.toContain('<iframe');
-    expect(html).not.toContain(MASTHEAD);
+    expect(html.split(MASTHEAD)).toHaveLength(2);
   });
 
   it('both artifact addresses render through that ONE page', () => {

@@ -19,12 +19,18 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { freePort } from './net';
+import {withHttpServer} from './net';
+import {getRequestListener} from '@hono/node-server';
+import {ACTOR_HEADER,type Actor} from '@artifactbin/contracts';
+import {signActor} from '@artifactbin/utils';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const APP_ROOT = path.join(ROOT, 'services', 'app');
 const SERVER_TS = path.join(ROOT, 'server.ts');
 const DEV_APP = path.join(ROOT, 'scripts', 'dev-app.mjs');
 const TSX = path.join(ROOT, 'node_modules', '.bin', 'tsx');
+const TRANSPORT_SECRET='dev-app-test-signed-transport-secret';
+const verified=(actor:Actor)=>({[ACTOR_HEADER]:signActor(actor,TRANSPORT_SECRET)});
 
 /** A fetch that fails LOUDLY (status + body) instead of an assertion further out. */
 async function fetchChecked(url: string, init?: RequestInit): Promise<Response> {
@@ -39,18 +45,20 @@ describe('server.ts --app-only', () => {
   let base: string;
   let child: import('node:child_process').ChildProcess;
   let output = '';
+  let proxy:Awaited<ReturnType<typeof withHttpServer>>;
+  let backend:string;
 
   /** Publish the document each local-service assertion consumes, so shuffled tests remain independent. */
   async function publishDocument(): Promise<string> {
     const minted = await fetchChecked(`${base}/api/tokens/anonymous`, { method: 'POST' });
     expect(minted.status).toBe(201);
-    const { token } = await minted.json() as { token: string };
+    const { token,id:tokenId } = await minted.json() as { token: string;id:string };
     const markup = '<Helmet><Value name="tiny" type="table" value={[{"a":1},{"a":2}]} />'
       + '<Query name="q">{`select sum(a) total from tiny`}</Query></Helmet>'
       + '<Number data="$q" col="total" />';
     const created = await fetchChecked(`${base}/api/artifacts`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, ...verified({credential:'bearer',tokenId}) },
       body: JSON.stringify({ title: 'dev-app boot walk', markup, visibility: 'public' }),
     });
     expect(created.status).toBe(201);
@@ -59,7 +67,17 @@ describe('server.ts --app-only', () => {
 
   beforeAll(async () => {
     const port = await freePort();
-    base = `http://127.0.0.1:${port}`;
+    backend = `http://127.0.0.1:${port}`;
+    // A test-only signed hop models the separate proxy required by app-only.
+    // It has no credential resolver: explicit bearer verdicts are minted by
+    // this test after publication; all browser capture/static reads are none.
+    proxy=await withHttpServer(getRequestListener(async request=>{
+      const url=new URL(request.url),headers=new Headers(request.headers);
+      if(!headers.has(ACTOR_HEADER))headers.set(ACTOR_HEADER,signActor({credential:'none'},TRANSPORT_SECRET));
+      try{return await fetch(backend+url.pathname+url.search,{method:request.method,headers,body:request.method==='GET'||request.method==='HEAD'?undefined:await request.arrayBuffer(),redirect:'manual'});}
+      catch{return new Response('starting',{status:503});}
+    }));
+    base=`http://127.0.0.1:${proxy.port}`;
     const objects = mkdtempSync(path.join(os.tmpdir(), 'dev-app-objects-'));
     /*
      * The child is its own composition root: no URL names sql or browser
@@ -81,6 +99,8 @@ describe('server.ts --app-only', () => {
       PROXY__RATE_LIMIT_CONFIG_FILE: path.join(ROOT, 'services/proxy/selfhost_rate_limits.yml'),
       ARTIFACTS__ALLOW_PUBLIC: '1',
       EMAIL__RESEND_API_KEY: 'test-resend-key',
+      AUTH__SECRET: TRANSPORT_SECRET,
+      EXPORT__INTERNAL_ORIGIN:base,
     });
 
     child = spawn(TSX, [SERVER_TS, '--app-only'], { cwd: APP_ROOT, stdio: ['ignore', 'pipe', 'pipe'], env });
@@ -98,12 +118,15 @@ describe('server.ts --app-only', () => {
     throw new Error(`server never answered /health:\n${output}`);
   }, 120_000);
 
-  afterAll(() => {
+  afterAll(async () => {
     child?.kill('SIGTERM');
+    await proxy?.close();
   });
 
   it('boots the app alone: the log names the app-only boot and the proxy\'s routes are gone', async () => {
     expect(await (await fetchChecked(`${base}/health`)).json()).toEqual({ ok: true });
+    const direct=await fetch(`${backend}/health`);
+    expect(direct.status).toBe(403);expect(await direct.json()).toEqual({error:'proxy_required'});
     expect(output).toMatch(/\[boot\] app-only/);
     // NO proxy is mounted — the double-proxy trap is what dev:app exists to
     // prevent: a proxy in front of a dev app that itself expects a proxy.

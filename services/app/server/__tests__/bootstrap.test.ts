@@ -80,7 +80,11 @@ describe('inlined page data', () => {
     expect(html).not.toContain('secret');
   });
 
-  it('inlines nothing for the app\'s own pages — they have no address-specific answer', async () => {
-    for (const p of ['/', '/login', '/account']) expect(inlined(await (await app.request(p)).text()), p).toBeNull();
+  it('inlines the validated session and presentation for app pages without artifact data', async () => {
+    for (const p of ['/', '/login', '/account']) {
+      const data=inlined(await (await app.request(p,{headers:as({credential:'none'})})).text());
+      expect(data,p).toMatchObject({path:p,session:{kind:'none',user:null}});
+      expect(data).not.toHaveProperty('artifact');
+    }
   });
 });

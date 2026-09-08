@@ -6,15 +6,16 @@
  */
 import { describe, expect, it } from 'vitest';
 import { createAppServer } from '@/server/app';
+import {proxyRequest} from '@/server/__tests__/proxy-request';
 
 const app = createAppServer({ indexHtml: async () => '<!doctype html><div id="root">SPA</div>' });
-const cacheOf = async (path: string) => (await app.request(path)).headers.get('cache-control');
+const cacheOf = async (path: string) => (await proxyRequest(app,path)).headers.get('cache-control');
 
 describe('static cache headers', () => {
   it('serves the content-addressed trees immutable for a year, CORS-open', async () => {
     for (const path of ['/fonts/anything.woff2', '/story/entry-ABC123.js']) {
       expect(await cacheOf(path), path).toContain('immutable');
-      expect((await app.request(path)).headers.get('access-control-allow-origin'), path).toBe('*');
+      expect((await proxyRequest(app,path)).headers.get('access-control-allow-origin'), path).toBe('*');
     }
   });
 

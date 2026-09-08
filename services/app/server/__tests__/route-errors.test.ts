@@ -1,3 +1,4 @@
+import {proxyRequest} from '@/server/__tests__/proxy-request';
 /**
  * A 500 THAT SAYS NOTHING IS AN OUTAGE WITH NO HANDLE.
  *
@@ -27,7 +28,7 @@ describe('a route that throws', () => {
 
     const app = new Hono();
     mountRoutes(app, routes as unknown as Parameters<typeof mountRoutes>[1]);
-    const res = await app.request('/api/boom');
+    const res = await proxyRequest(app,'/api/boom');
 
     expect(res.status).toBe(500);
     expect(await res.text(), 'the caller is told nothing about our internals').not.toContain('on fire');
@@ -42,7 +43,7 @@ describe('a route that throws', () => {
 describe('the token mint page', () => {
   it('serves the CLI installer as shell text ahead of profile routing', async () => {
     const app = createAppServer({ indexHtml: async () => '<main>app shell</main>' });
-    const res = await app.request('/chat/install.sh');
+    const res = await proxyRequest(app,'/chat/install.sh');
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('text/x-shellscript');
     expect(res.headers.get('x-content-type-options')).toBe('nosniff');
@@ -50,7 +51,7 @@ describe('the token mint page', () => {
   });
   it('serves /tokens/new as a successful SPA page ahead of catch-all routing', async () => {
     const app = createAppServer({ indexHtml: async () => '<!doctype html><main>app shell</main>' });
-    const res = await app.request('/tokens/new');
+    const res = await proxyRequest(app,'/tokens/new');
 
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('text/html');

@@ -295,6 +295,9 @@ export const LOGIN_EMAIL_FROM = env('EMAIL', 'FROM') ?? 'artifactbin <login@exam
  * scope (the MCP tools' url echoes). HTTP routes derive it from the request.
  */
 export const PUBLIC_BASE_URL = env('APP', 'PUBLIC_BASE_URL') ?? `http://localhost:${APP_PORT ?? '3030'}`;
+/** Initial Home/profile/folder bodies; other dynamic routes retain themed
+ * skeletons. Static pages/capture renders are independent. Never changes ACL/CSP. */
+export const SSR_ENABLED = env('APP', 'SSR_ENABLED') === 'true';
 /** Explicit rollout: provision this trusted hostname before enabling top-level owner controls. */
 const controlsOriginSetting = env('APP', 'CONTROLS_ORIGIN');
 export const CONTROLS_ORIGIN = controlsOriginSetting ? parseControlsOrigin(PUBLIC_BASE_URL, controlsOriginSetting) : null;

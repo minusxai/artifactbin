@@ -4,7 +4,7 @@ import { AUTHOR_SCRIPT_DOCUMENT } from './author-script-bootstrap';
 import { AUTHOR_SCRIPT_FRAME_TITLE, AUTHOR_SCRIPT_INIT, type AuthorScriptSnapshot } from './author-script-contract';
 import { authorStateDelta } from './author-state';
 import type { DataflowState } from '@/lib/story/dataflow';
-import { protectedAuthorDocument } from './author-frame';
+import { AUTHOR_FRAME_PATH } from './author-frame';
 import type {ManagedIframeContent} from '@/lib/story/managed-iframe';
 import {createManagedAssetResolver,type ManagedAssetsConfig,type ManagedAssetRelay} from './managed-assets';
 
@@ -28,7 +28,7 @@ export function createAuthorScriptSession(store: DataflowStore, doc: Document = 
 }
 
 /** Own one sandbox + port. Disposing revokes its capability and removes its frame. */
-export interface AuthorScriptMount {host: HTMLElement; title: string; html: string; document: string; scripts?: ManagedIframeContent['scripts']; assets?: ManagedAssetsConfig; importAsset?:ManagedAssetRelay}
+export interface AuthorScriptMount {host: HTMLElement; title: string; html: string; document: string; scripts?: ManagedIframeContent['scripts']; assets?: ManagedAssetsConfig; importAsset?:ManagedAssetRelay; resolveArtifactId?:string}
 export function startAuthorScript(source: string, store: DataflowStore, doc: Document = document, visible?: AuthorScriptMount): () => void {
   const frame = doc.createElement('iframe');
   frame.title = visible?.title ?? AUTHOR_SCRIPT_FRAME_TITLE;
@@ -37,7 +37,15 @@ export function startAuthorScript(source: string, store: DataflowStore, doc: Doc
   else { frame.style.width='100%'; frame.style.height='100%'; frame.style.border='0'; frame.style.display='block'; }
   frame.setAttribute('sandbox', 'allow-scripts');
   frame.setAttribute('referrerpolicy', 'no-referrer');
-  frame.srcdoc = protectedAuthorDocument(visible?.document ?? AUTHOR_SCRIPT_DOCUMENT);
+  // Use the module's serving origin even when the containing raw document is
+  // opaque. A real HTTP response does not inherit the main app's script CSP.
+  const moduleUrl=new URL(import.meta.url);
+  const wrapperUrl=new URL(AUTHOR_FRAME_PATH,/^https?:$/.test(moduleUrl.protocol)?moduleUrl:doc.baseURI);
+  if(visible?.resolveArtifactId){
+    if(!/^[A-Za-z0-9]{6}$/.test(visible.resolveArtifactId))throw new Error('Invalid author resolver scope');
+    wrapperUrl.searchParams.set('artifact',visible.resolveArtifactId);
+  }
+  frame.src=wrapperUrl.href;
   const bridge = createAuthorScriptBridge(store);
   const assets=createManagedAssetResolver(visible?.assets,visible?.importAsset);
   let disposed = false;
@@ -109,7 +117,7 @@ export function startAuthorScript(source: string, store: DataflowStore, doc: Doc
     };
     port.start();
     // '*' is necessary for an opaque target. The port goes only to this exact WindowProxy.
-    frame.contentWindow.postMessage(AUTHOR_SCRIPT_INIT, '*', [channel.port2]);
+    frame.contentWindow.postMessage({type:AUTHOR_SCRIPT_INIT,document:visible?.document??AUTHOR_SCRIPT_DOCUMENT}, '*', [channel.port2]);
     snapshot();
     unsubscribe = store.subscribe(schedule);
     port.postMessage({ type: 'run', source, ...(visible ? {html:visible.html,scripts:visible.scripts,assetOrigin:visible.assets?.origin,managed:visible.scripts!==undefined} : {}) });

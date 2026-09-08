@@ -35,7 +35,7 @@ export function SandboxView({html,script,title,height,id,className,store,api,'da
   const configuration=JSON.stringify(api);
   useEffect(()=>{
     if(!host.current || !valid) return;
-    return startAuthorScript(script,store,host.current.ownerDocument,{host:host.current,title:label,html,document:sandboxDocument(api)});
+    return startAuthorScript(script,store,host.current.ownerDocument,{host:host.current,title:label,html,document:sandboxDocument(api),...(api.resolveUrl?{resolveArtifactId:new URL(api.resolveUrl).pathname.split('/')[2]}:{})});
   },[html,script,label,store,configuration,valid]);
   return <div ref={host} id={id} className={className} data-mx-ast={ast} data-mx-sandbox="" aria-label={label} style={{height:pixels,width:'100%'}}/>;
 }

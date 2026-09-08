@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createAppServer } from '@/server/app';
+import {proxyRequest} from '@/server/__tests__/proxy-request';
 
 const app = createAppServer({ indexHtml: async () => '<!doctype html><div id="root">SPA</div>' });
 
@@ -20,7 +21,7 @@ describe('the story runtime assets', () => {
   });
 
   it('are served immutable AND CORS-open — an opaque document imports its chunks in CORS mode', async () => {
-    const res = await app.request('/story/entry-ABCDEFGH.js');
+    const res = await proxyRequest(app,'/story/entry-ABCDEFGH.js');
     expect(res.headers.get('cache-control')).toContain('immutable');
     expect(res.headers.get('access-control-allow-origin')).toBe('*');
   });

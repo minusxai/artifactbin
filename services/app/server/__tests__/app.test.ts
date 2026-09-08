@@ -24,7 +24,7 @@ const SECRET = 'vitest-actor-secret-0000000000000000';
 const BASE = 'http://localhost:3000';
 const actorHeaders = (actor: Actor, secret: string): Record<string, string> => ({ [ACTOR_HEADER]: signActor(actor, secret) });
 
-const app = createAppServer({ actorSecret: SECRET, indexHtml: async () => '<!doctype html><div id="root">SPA</div>' });
+const app = createAppServer({ actorSecret: SECRET, indexHtml: async () => '<!doctype html><html><head></head><body><div id="root"></div><span>SPA</span></body></html>' });
 const as = (actor: Parameters<typeof actorHeaders>[0]) => actorHeaders(actor, SECRET);
 
 async function world() {
@@ -35,12 +35,12 @@ async function world() {
 }
 
 describe('reader or owner', () => {
-  it('serves a reader the DOCUMENT at /a/<id> and at the pretty URL — raw\'s response, CSP and all', async () => {
+  it('serves every reader the direct app page and validated artifact payload at both addresses', async () => {
     const w = await world();
     for (const path of [`/a/${w.pub.id}`, `/@${w.owner.username}/${w.pub.id}-pub`]) {
       const res = await app.request(path, { headers: as({ credential: 'none' }) });
       expect(res.status, path).toBe(200);
-      expect(res.headers.get('content-security-policy'), path).toContain("default-src 'none'");
+      expect(res.headers.get('content-security-policy'), path).toBe(APP_CSP);
       expect(await res.text()).toContain('public words');
     }
   });
@@ -113,11 +113,11 @@ describe('the address heals for the page, never for the reader', () => {
 describe('the app\'s paths', () => {
   it('serve the SPA under the app CSP, and anything else is a 404', async () => {
     for (const p of ['/', '/login', '/account', '/assets', '/trash', '/docs-human']) {
-      const res = await app.request(p);
+      const res = await app.request(p,{headers:as({credential:'none'})});
       expect(res.status, p).toBe(200);
       expect(res.headers.get('content-security-policy'), p).toContain('frame-ancestors');
     }
-    expect((await app.request('/nope/nothing')).status).toBe(404);
+    expect((await app.request('/nope/nothing',{headers:as({credential:'none'})})).status).toBe(404);
   });
   /**
    * A miss is 404 as a STATUS — and, TO A BROWSER, the SPA as a body, so the
@@ -131,12 +131,12 @@ describe('the app\'s paths', () => {
   it('a miss is the 404 STATUS carrying the SPA, wherever it happens', async () => {
     const w = await world();
     for (const p of ['/nope/nothing', '/@nobody_here']) {
-      const res = await app.request(p, { headers: { accept: 'text/html' } });
+      const res = await app.request(p, { headers: { accept: 'text/html',...as({credential:'none'}) } });
       expect(res.status, p).toBe(404);
       expect(res.headers.get('content-security-policy'), p).toContain('frame-ancestors');
       expect(await res.text(), p).toContain('SPA');
     }
-    expect((await app.request(`/@${w.owner.username}`, { headers: { accept: 'text/html' } })).status).toBe(200);
+    expect((await app.request(`/@${w.owner.username}`, { headers: { accept: 'text/html',...as({credential:'none'}) } })).status).toBe(200);
   });
   it('mounts the API: an unauthenticated write is the handler\'s own 401', async () => {
     const res = await app.request('/api/artifacts', { method: 'POST', body: '{}', headers: { 'content-type': 'application/json', ...as({ credential: 'none' }) } });
