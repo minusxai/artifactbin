@@ -61,6 +61,14 @@ All stage results must record observed commands/output. A prototype pass is not 
 
 ## Baseline notes
 
+### Latest integrated checks — not ready for merge
+
+- Root API: 169 files / 1,325 tests passed, including initial-head font preload integration. Root Node: 375 files / 3,883 passed, one existing skip. Production build passed; full UI exposed initial-theme adoption regressions which were reproduced and corrected in 1b21b9e. Final all-suite rerun remains required.
+- Completed 54 browser gates on the earlier integrated build: 23 passed, 31 failed, including serial retries. This is a diagnostic run, **not an acceptance result**. Several fixtures still assumed retired cookie names, opaque first-party DOM, or parsed canonical slugs as IDs; corrections retain real session validation, exact CSRF, opaque author-frame probes, and meaningful asset/render assertions.
+- Real product regressions found: missing direct-page font preloads; URL values not seeded before first query; duplicate initial dataflow adoption; initial theme/reader color-mode conflicts; keyboard and clipboard events from trusted controls reaching document editing; absent viewer Share and fork provenance. The first five have integrated fixes and regression coverage. Sharing/provenance restoration is in progress.
+- Native OAuth approval test deadlocks when it awaits navigation before releasing its deliberately delayed request. Correct the fixture ordering, then verify the complete one-use approval/PKCE exchange. Email-login timeout remains under investigation.
+- Layout/scroll, mobile inspector geometry, full current-build browser gates, cross-engine review, and PR CI remain OPEN. The web-assets CLS result (0.0271) must be investigated or explicitly reconciled against the known baseline, not hidden by raising a threshold.
+
 ### Integrated review followups (not final acceptance)
 
 - Client retirement integrated as 912274f: shared document typography/fonts/insets, runtime `chrome:true` for interactive documents, sandbox/asset configuration, and immediate-adopt author startup fix. Superseded public/region/control entrypoints removed. Root UI 155 files / 1174 passed; Node 372 files / 3869 passed plus one skip. API found a test-harness naming violation, corrected in 2cf76ec; full repeat pending.
