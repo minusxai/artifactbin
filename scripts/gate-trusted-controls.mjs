@@ -14,6 +14,7 @@ import {loginViaEmail} from './lib/mail-login.mjs';
 import {measureInteraction} from './planning/interaction-perf.mjs';
 import {verifyControlsLogin} from './lib/controls-login.mjs';
 import {verifyMainPageLogin} from './lib/main-page-login.mjs';
+import {verifyPublicFirstPaint} from './lib/public-first-paint.mjs';
 
 const scratch = mkdtempSync(join(tmpdir(),'afbin-controls-gate-'));
 const interactive=process.argv.includes('--interactive');
@@ -124,6 +125,7 @@ try {
     await verifyMainPageLogin({browser,base,controls,sink,id:seed.id,mainFetch,backend});
   } else {
   browser = await engine.launch(engineName==='chromium' ? {args:['--host-resolver-rules=MAP artifactbin.test 127.0.0.1, MAP i.artifactbin.test 127.0.0.1, MAP assets.artifactbin.test 127.0.0.1','--proxy-bypass-list=*']} : {});
+  await verifyPublicFirstPaint({browser,base,controls});
   await verifyMainPageLogin({browser,base,controls,sink,id:seed.id,mainFetch,backend});
   // Actual production configuration, no client mocks: an anonymous reader
   // either subscribes normally or never opens a connection, including reload.
@@ -268,14 +270,17 @@ try {
     setTimeout(()=>reject(new Error('Protected preview timed out')),30000);
   }));
   await chrome.getByLabel('Cancel social preview',{exact:true}).click();
-  const oauthRedirect=base+'/oauth-browser-callback',verifier=randomBytes(32).toString('base64url');
+  // Native HTTP callback admission deliberately stays literal loopback; the
+  // app's same-site *.localhost development hosts do not broaden that policy.
+  const oauthRedirect=(localDev?'http://127.0.0.1:5498':base)+'/oauth-browser-callback',verifier=randomBytes(32).toString('base64url');
+  if(localDev)await page.route(oauthRedirect+'?*',route=>route.fulfill({contentType:'text/html',body:'Connected'}));
   const registered=await mainFetch(backend+'/oauth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_name:'Security gate client',redirect_uris:[oauthRedirect]})});
   assert.equal(registered.status,201);
   const client=(await registered.json()).client_id;
   const authorizeQuery=new URLSearchParams({client_id:client,redirect_uri:oauthRedirect,response_type:'code',code_challenge:createHash('sha256').update(verifier).digest('base64url'),code_challenge_method:'S256',resource:base+'/mcp',scope:'artifacts',state:'browser-gate'});
   await page.goto(base+'/oauth/authorize?'+authorizeQuery);
   await appFrame.getByLabel('Approve connection',{exact:true}).click();
-  await page.waitForURL(url=>url.origin===base && url.pathname==='/oauth-browser-callback');
+  await page.waitForURL(url=>url.origin===new URL(oauthRedirect).origin && url.pathname==='/oauth-browser-callback');
   const oauthCallback=new URL(page.url());
   assert.equal(oauthCallback.searchParams.get('state'),'browser-gate');
   const exchange=await mainFetch(backend+'/oauth/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'authorization_code',client_id:client,redirect_uri:oauthRedirect,code:oauthCallback.searchParams.get('code'),code_verifier:verifier,resource:base+'/mcp'}).toString()});
@@ -292,7 +297,7 @@ try {
   const privateDoc=await privateResponse.json();
   // The capture shell is the remaining real framed ArtifactSurface path.
   // Exercise its scoped parent relay, not just the top-level reader resolver.
-  const previewMarkup='<Helmet><Value name="privateAsset" type="string" default="waiting"/></Helmet><p aria-label="Private asset">{$privateAsset}</p><Iframe title="Private managed preview"><script src="'+previewBundle+'"/></Iframe>';
+  const previewMarkup='<Helmet><Value name="privateAsset" type="string" default="waiting"/></Helmet><p aria-label="Private asset">{$privateAsset}</p><Iframe title="Private managed preview"><p id="managed-style-proof" style="color:rgb(12, 34, 56)">Styled content</p><script src="'+previewBundle+'"/></Iframe>';
   const previewResponse=await mainFetch(backend+'/api/artifacts',{method:'POST',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({markup:previewMarkup,visibility:'private'})});
   assert.equal(previewResponse.status,201,await previewResponse.clone().text());const previewDoc=await previewResponse.json();
   const capture=await browser.newPage({ignoreHTTPSErrors:true});
@@ -308,6 +313,11 @@ try {
   catch(error){console.error('CAPTURE STATE',await previewFrame.locator('body').innerText(),await capture.evaluate(()=>window.__typedAssets),resolverRequests.map(url=>new URL(url).pathname));throw error;}
   assert((await capture.evaluate(()=>window.__typedAssets)).includes('script'),'private capture imports script through typed parent relay');
   assert(resolverRequests.some(url=>new URL(url).searchParams.get('key')===key),'platform parent supplies source-scoped capture key');
+  let styled=false;
+  for(const inner of capture.frames())if(await inner.locator('#managed-style-proof').count()){
+    assert.equal(await inner.locator('#managed-style-proof').evaluate(el=>getComputedStyle(el).color),'rgb(12, 34, 56)','managed CSS survives inherited wrapper CSP');styled=true;
+  }
+  assert(styled,'managed styled DOM was rendered inside its own isolated frame');
   await capture.close();
   console.log('PASS: private framed capture preview resolves bundled script via typed asset relay and parent-owned scoped key');
   const invitedEmail=`mxmx_test_controls_invited_${Date.now()}@example.com`;
@@ -369,7 +379,8 @@ try {
   await chrome.getByLabel('Open menu',{exact:true}).click();
   await chrome.getByLabel('Sign out',{exact:true}).click();
   await page.waitForURL(base+'/');
-  const sessionKind=()=>appFrame.locator('body').evaluate(async ()=>{
+  const homeChrome=page.frameLocator('iframe[title="Page controls"]');
+  const sessionKind=()=>homeChrome.locator('body').evaluate(async ()=>{
     const response=await fetch('/api/page/session',{headers:{'x-artifactbin-csrf':'1'}});
     if (!response.ok) throw new Error(`Session read failed: ${response.status}`);
     return (await response.json()).kind;
@@ -377,13 +388,13 @@ try {
   assert.equal(await sessionKind(),'anon','sign-out clears the account session but preserves independent agent capabilities');
   // Account logout deliberately does not revoke independently held agent
   // capabilities. Disconnect that browser capability through its own UI.
-  await appFrame.getByLabel('Open menu',{exact:true}).click();
+  await homeChrome.getByLabel('Open menu',{exact:true}).click();
   const retainedCookies=await page.context().cookies();
   // Disconnect performs a same-URL full navigation. Polling fetch during that
   // transition fails in WebKit's outgoing context; await the navigation itself.
   await Promise.all([
     page.waitForNavigation({waitUntil:'domcontentloaded'}),
-    appFrame.getByLabel('Disconnect this browser',{exact:true}).click(),
+    homeChrome.getByLabel('Disconnect this browser',{exact:true}).click(),
   ]);
   assert.equal(await sessionKind(),'none');
   assert.equal((await page.goto(`${base}/a/${seed.id}`)).status(),404,'disconnected browser loses private document access');

@@ -1,6 +1,6 @@
 import type { Actor } from '@artifactbin/contracts';
 import { parseControlsOrigin } from '@artifactbin/utils';
-import {platformFramePage} from '@artifactbin/utils/platform-pages';
+import {platformFramePage,trustedRegionRoute} from '@artifactbin/utils/platform-pages';
 
 /** Deployment-owned route and browser-authority policy. The proxy asks before
  * resolving cookies and before dispatch; no UI component can relax it. */
@@ -65,7 +65,8 @@ export function createBrowserBoundary(main: string, configured: string): Browser
     },
     responseHeaders(request, headers): Record<string, string> {
       if (new URL(request.url).host !== controls.host) return {};
-      const frameable = new URL(request.url).pathname==='/controls/consent' || /^\/controls\/(?:a|folder)\/[A-Za-z0-9]+$/.test(new URL(request.url).pathname) || platformFramePage(new URL(request.url).pathname)!==null;
+      const url=new URL(request.url);
+      const frameable = url.pathname==='/controls/consent' || /^\/controls\/(?:a|folder)\/[A-Za-z0-9]+$/.test(url.pathname) || platformFramePage(url.pathname)!==null || trustedRegionRoute(url.pathname,url.searchParams.get('page'))!==null;
       const policy = (headers.get('content-security-policy') ?? '').split(';')
         .map(p => p.trim()).filter(p => p && !p.startsWith('frame-ancestors '));
       policy.push(`frame-ancestors ${frameable ? root.origin : "'none'"}`);

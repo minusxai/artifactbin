@@ -78,7 +78,9 @@ export function installControlsShell(mainOrigin: string): () => void {
     stops[next].focus({preventScroll:true});
   };
   const escape = (event: MessageEvent) => {
-    if (event.source !== window.parent || event.origin !== mainOrigin || event.data?.type !== 'mx:controls:escape') return;
+    if (event.source !== window.parent || event.origin !== mainOrigin) return;
+    if(event.data?.type==='mx:region:measure'){previous='';schedule();return;}
+    if(event.data?.type !== 'mx:controls:escape')return;
     document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
   };
   document.addEventListener('keydown',keys);

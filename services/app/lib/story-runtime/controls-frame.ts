@@ -11,7 +11,8 @@ export function createControlsFrame(url: string) {
   frame.setAttribute('allow','fullscreen; clipboard-write');
   Object.assign(frame.style,{position:'fixed',inset:'0',width:'100%',height:'100%',border:'0',zIndex:'2147483000',clipPath:'inset(100%)',background:'transparent'});
   document.body.append(frame);
-  const postAddress = () => frame.contentWindow?.postMessage({type:'mx:controls:address',url:location.href},origin);
+  let ready=false;
+  const postAddress = () => {if(ready)frame.contentWindow?.postMessage({type:'mx:controls:address',url:location.href},origin);};
   let releaseModal: (() => void) | undefined;
   const setModal = (modal: boolean) => {
     if (!modal) {releaseModal?.();releaseModal=undefined;return;}
@@ -25,6 +26,7 @@ export function createControlsFrame(url: string) {
   };
   const receive = (event: MessageEvent) => {
     if (event.source !== frame.contentWindow || event.origin !== origin) return;
+    if(!ready){ready=true;postScroll();}
     if (event.data?.type === 'mx:controls:address-request') {postAddress();return;}
     if (event.data?.type === 'mx:controls:consume-intent') {
       (window as Window & {__mxConsumeIntent?: () => void}).__mxConsumeIntent?.();
@@ -39,6 +41,7 @@ export function createControlsFrame(url: string) {
       return;
     }
     if (event.data?.type !== 'mx:controls:regions') return;
+    document.getElementById('mx-controls-loading')?.remove();
     setModal(event.data.modal === true);
     frame.style.clipPath = controlsClipPath(event.data.rects,innerWidth,innerHeight);
     const inset = event.data.rightInset;
@@ -47,15 +50,15 @@ export function createControlsFrame(url: string) {
       if (root) root.style.marginRight = `${inset}px`;
     }
   };
-  const postScroll = () => frame.contentWindow?.postMessage({
+  const postScroll = () => {if(ready)frame.contentWindow?.postMessage({
     type:STORY_SCROLL_MESSAGE,
     scrollY:Math.max(0,scrollY),
     atBottom:innerHeight+Math.max(0,scrollY)>=document.documentElement.scrollHeight-4,
     gutter:Math.max(0,innerWidth-document.documentElement.clientWidth),
-  },origin);
+  },origin);};
   window.addEventListener('message',receive);
   const escape = (event: KeyboardEvent) => {
-    if (event.key === 'Escape' && !event.defaultPrevented) frame.contentWindow?.postMessage({type:'mx:controls:escape'},origin);
+    if (ready && event.key === 'Escape' && !event.defaultPrevented) frame.contentWindow?.postMessage({type:'mx:controls:escape'},origin);
   };
   document.addEventListener('keydown',escape);
   window.addEventListener('scroll',postScroll,{passive:true});

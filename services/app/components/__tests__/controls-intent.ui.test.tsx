@@ -16,6 +16,37 @@ function setup() {
   return vi.spyOn(api,'appNavigate').mockImplementation(()=>{});
 }
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();layers.length=0;});
+it('shows enabled trusted reader actions as pointer controls',()=>{
+  setup();
+  render(<ArtifactShell role="viewer"><ArtifactSurface {...props} follow={{userId:'owner',following:false,count:0}}/></ArtifactShell>);
+  for(const label of ['Like artifact','Toggle comments','Follow author'])expect(screen.getByLabelText(label)).toHaveClass('cursor-pointer');
+});
+it.each([false,true])('keeps linked author byline separate from reactions (account %s)',accountSession=>{
+  setup();
+  render(<ArtifactShell role="viewer"><ArtifactSurface {...props} accountSession={accountSession} authorUsername="mxmx_author" follow={{userId:'owner',following:false,count:0}}/></ArtifactShell>);
+  const author=screen.getByLabelText("View @mxmx_author's profile");
+  expect(author).toHaveAttribute('href','/@mxmx_author');
+  expect(author.closest('[data-controls-region]')).toContainElement(screen.getByLabelText('Follow author'));
+  expect(author.closest('[data-controls-region]')).not.toContainElement(screen.getByLabelText('Like artifact'));
+  expect(author.closest('[data-controls-region]')).toHaveClass('left-4');
+});
+it('keeps the self byline but has nobody to follow, and anonymous documents have neither',()=>{
+  setup();
+  const {rerender}=render(<ArtifactShell role="owner"><ArtifactSurface {...props} authorUsername="mxmx_me" follow={null}/></ArtifactShell>);
+  expect(screen.getByLabelText("View @mxmx_me's profile")).toBeInTheDocument();
+  expect(screen.queryByLabelText('Follow author')).toBeNull();
+  rerender(<ArtifactShell role="viewer"><ArtifactSurface {...props} authorUsername={null} follow={null}/></ArtifactShell>);
+  expect(screen.queryByLabelText(/View @/)).toBeNull();
+});
+it.each(['Like artifact','Follow author'])('disables %s during its authenticated write and does not duplicate the request',async label=>{
+  setup();let resolve!:(response:Response)=>void;
+  const request=vi.fn(()=>new Promise<Response>(done=>{resolve=done;}));vi.stubGlobal('fetch',request);
+  render(<ArtifactShell role="viewer"><ArtifactSurface {...props} authorUsername="mxmx_author" follow={{userId:'owner',following:false,count:0}}/></ArtifactShell>);
+  const button=screen.getByLabelText(label);fireEvent.click(button);fireEvent.click(button);
+  expect(button).toBeDisabled();expect(request).toHaveBeenCalledTimes(1);
+  await act(async()=>resolve(Response.json(label==='Like artifact'?{liked:true,count:1}:{following:true,count:1})));
+  expect(button).toBeEnabled();expect(button).toHaveAttribute('aria-pressed','true');
+});
 it.each([['Like artifact','like',401],['Like artifact','like',403],['Follow author','follow',401],['Follow author','follow',403]] as const)('%s handles %s response %s without permission/login confusion',async(label,intent,status)=>{
   const navigate=setup();
   const request=vi.fn(async()=>new Response('{}',{status}));vi.stubGlobal('fetch',request);

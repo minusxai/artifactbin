@@ -4,7 +4,7 @@ import {appNavigate,appUrl} from './api-origin';
 import {rewritePublicLinks} from './public-links';
 
 /** The main address owns history; frame-local routing never adds hidden entries. */
-export function PageFrameRouter({path,main,children}:{path:string;main:string;children:ReactNode}) {
+export function PageFrameRouter({path,main,children,search=window.location.search}:{path:string;main:string;children:ReactNode;search?:string}) {
   const [hash,setHash]=useState(window.location.hash);
   const navigator:Navigator={
     createHref:to=>appUrl(typeof to==='string'?to:createPath(to)),
@@ -37,5 +37,5 @@ export function PageFrameRouter({path,main,children}:{path:string;main:string;ch
     window.parent.postMessage({type:'mx:page:ready'},main);
     return()=>{observer.disconnect();document.removeEventListener('click',navigate,true);window.removeEventListener('message',address);};
   },[main]);
-  return <Router location={path+window.location.search+hash} navigator={navigator}>{children}</Router>;
+  return <Router location={path+search+hash} navigator={navigator}>{children}</Router>;
 }

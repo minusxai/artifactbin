@@ -1,5 +1,17 @@
 /** Platform UI only. Author documents, asset bytes and APIs are never app pages. */
 export const PAGE_FRAME_PREFIX = '/controls/page';
+export type PublicPath='/'|'/privacy'|'/terms'|'/docs-human'|`/@${string}`;
+export type TrustedRegionKind='chrome'|'home'|'follow';
+export function publicPagePath(path:string):path is PublicPath {
+  return ['/','/privacy','/terms','/docs-human'].includes(path)||/^\/@[\w-]+\/?$/.test(path);
+}
+/** Shared app/proxy admission: no author or account route is a public-region target. */
+export function trustedRegionRoute(path:string,page:string|null):{kind:TrustedRegionKind;page:PublicPath}|null {
+  const kind=path.match(/^\/controls\/region\/(chrome|home|follow)$/)?.[1] as TrustedRegionKind|undefined;
+  if(!kind || !page || !publicPagePath(page))return null;
+  if(kind==='home'&&page!=='/' || kind==='follow'&&!page.startsWith('/@'))return null;
+  return {kind,page};
+}
 export function isPlatformPage(path: string): boolean {
   return ['/', '/login', '/account', '/tokens', '/tokens/new', '/trash', '/chat', '/assets', '/datasets/new', '/privacy', '/terms', '/docs-human'].includes(path)
     || /^\/@[\w-]+\/?$/.test(path)

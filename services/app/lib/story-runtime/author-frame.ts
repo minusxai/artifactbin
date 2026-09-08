@@ -1,7 +1,10 @@
 /** Trusted wrapper document. Inner content is data, never wrapper script source. */
 export function protectedAuthorDocument(innerDocument: string): string {
   const policy=innerDocument.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)"/)?.[1];
-  const csp=policy??"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-src 'none'; form-action 'none'; base-uri 'none'";
+  const basePolicy=policy??"default-src 'none'; script-src 'unsafe-inline'; frame-src 'none'; form-action 'none'; base-uri 'none'";
+  // srcdoc inherits this policy. Managed content already permits inline styles;
+  // retain that contract. Hidden scripts need only our fixed wrapper stylesheet.
+  const csp=basePolicy.split(';').some(rule=>rule.trim().startsWith('style-src '))?basePolicy:basePolicy+"; style-src 'sha256-jKvfmEYIGlm8DGk4pp05gJ0MwYdTY+NU6tSvyPZyDow='";
   const payload=JSON.stringify(innerDocument).replace(/</g,'\\u003c');
   return '<!doctype html><html data-mx-author-wrapper><head><meta http-equiv="Content-Security-Policy" content="'+csp+'"><style>html,body,iframe{margin:0;width:100%;height:100%;border:0;display:block}</style></head><body><script>'+`
   (()=>{

@@ -21,6 +21,7 @@ import UseCarousel from '@/components/UseCarousel';
 import FeatureSpecimens from '@/components/FeatureSpecimens';
 import LandingFaq from '@/components/LandingFaq';
 import { type ArtVariant } from '@/lib/landing-content';
+import type {ReactNode} from 'react';
 
 const COLUMN = 'mx-auto max-w-3xl px-4 sm:px-6';
 
@@ -37,10 +38,10 @@ const COLUMN = 'mx-auto max-w-3xl px-4 sm:px-6';
  */
 const ART: ArtVariant = 'water';
 
-export default function Landing() {
+export default function Landing({start,workspace=false}:{start?:ReactNode;workspace?:boolean}={}) {
   return (
-    <main className="pb-20">
-      <section aria-label="What artifactbin is" className={`${COLUMN} pt-6 sm:pt-7`}>
+    <main className={workspace?'':'pb-20'}>
+      {!workspace && <section aria-label="What artifactbin is" className={`${COLUMN} pt-6 sm:pt-7`}>
         {/* SERIF STATES, MONO LABELS, SANS EXPLAINS — the rule the landing's
           * typography now follows (see --font-serif in globals.css). This is the
           * page's largest claim in its own words, so it is set in the display
@@ -66,12 +67,13 @@ export default function Landing() {
           <span className="text-accent">annotate</span> and{' '}
           <span className="text-accent">share</span>.
         </h1>
+      </section>}
+
+      <section id="get-started" className={workspace?'':`${COLUMN} mt-6`}>
+        {start??<GetStarted />}
       </section>
 
-      <section className={`${COLUMN} mt-6`}>
-        <GetStarted />
-      </section>
-
+      {!workspace && <div>
       <section className={`${COLUMN} mt-14 sm:mt-16`}>
         <UseCarousel />
       </section>
@@ -88,7 +90,8 @@ export default function Landing() {
         * full-bleed sheet a visible end. */}
       <LandingFaq column={`${COLUMN} mt-14 sm:mt-16`} />
 
-      <LandingFooter column={COLUMN} />
+      <LandingFooter column={COLUMN} agentAction={start?<a href="#get-started" aria-label="Go to create a live document" className="rounded border border-edge px-3 py-1.5 font-mono text-xs text-accent hover:bg-raised">create a live document</a>:undefined}/>
+      </div>}
     </main>
   );
 }

@@ -277,6 +277,7 @@ function applyAppAppearance(mode: AppearanceMode) {
   if (mode === 'dark') document.documentElement.dataset.theme = 'dark';
   else delete document.documentElement.dataset.theme;
   try { localStorage.setItem('mx_theme', mode); } catch { /* private mode */ }
+  window.dispatchEvent(new CustomEvent('mx:app:appearance',{detail:mode}));
 }
 
 export function PageControls({

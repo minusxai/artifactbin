@@ -11,11 +11,12 @@ import { useCallback, useRef, useState } from 'react';
 
 const PILL = 'inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-edge bg-surface px-3 py-1 font-mono text-xs text-muted no-underline transition-colors hover:border-accent hover:text-fg disabled:cursor-default disabled:opacity-60';
 
-export function FollowButton({ userId, following, count, signedIn }: {
+export function FollowButton({ userId, following, count, signedIn, returnTo }: {
   userId: string;
   following: boolean;
   count: number;
   signedIn: boolean;
+  returnTo?: string;
 }) {
   const [state, setState] = useState({ following, count });
   const [busy, setBusy] = useState(false);
@@ -50,7 +51,7 @@ export function FollowButton({ userId, following, count, signedIn }: {
     </>
   );
   if (!signedIn){
-    const current=getArtifactAddress();
+    const current=returnTo?new URL(returnTo,location.origin).href:getArtifactAddress();
     if(!current)return <a href="/login" aria-label={label} className={PILL}>{body}</a>;
     const address=new URL(current);
     const callback=address.pathname+address.search+address.hash;

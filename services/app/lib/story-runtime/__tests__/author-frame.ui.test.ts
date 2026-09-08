@@ -4,7 +4,23 @@ import {startAuthorScript} from '../author-script';
 import {createDataflowStore} from '../store';
 import {runInNewContext} from 'node:vm';
 import {vi} from 'vitest';
+import {createHash} from 'node:crypto';
+import {AUTHOR_SCRIPT_DOCUMENT} from '../author-script-bootstrap';
+import {managedAuthorDocument} from '../managed-iframe';
 describe('protected author frame contract',()=>{
+ it('preserves managed inline styling through the inherited srcdoc wrapper policy',()=>{
+  const inner=managedAuthorDocument('https://assets.example.test');
+  const doc=new DOMParser().parseFromString(protectedAuthorDocument(inner),'text/html');
+  expect(doc.querySelector('meta')!.getAttribute('content')).toContain("style-src 'unsafe-inline'");
+  expect(doc.querySelector('meta')!.getAttribute('content')).toContain("frame-src 'none'");
+ });
+ it('authorizes only its own wrapper stylesheet while preserving the hidden inner policy',()=>{
+  const doc=new DOMParser().parseFromString(protectedAuthorDocument(AUTHOR_SCRIPT_DOCUMENT),'text/html');
+  const hash=createHash('sha256').update(doc.querySelector('style')!.textContent!).digest('base64');
+  expect(doc.querySelector('meta')!.getAttribute('content')).toContain(`style-src 'sha256-${hash}'`);
+  expect(doc.querySelector('meta')!.getAttribute('content')).toContain("frame-src 'none'");
+  expect(AUTHOR_SCRIPT_DOCUMENT).not.toContain('style-src');
+ });
  it('transfers once only from its parent and revokes a navigated inner frame',()=>{
   const html=protectedAuthorDocument('<p>inside</p>');
   const source=new DOMParser().parseFromString(html,'text/html').querySelector('script')!.textContent!;

@@ -1,6 +1,7 @@
 'use client';
 
 import {appFetch as fetch,appUrl} from '@/web/api-origin';
+import {publicReadUrl} from '@/web/public-read-url';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RotateCcw, X } from 'lucide-react';
 import {
@@ -91,18 +92,18 @@ export default function SocialPreviewDialog({ id, source, editId, version, onClo
   const frameRef = useRef<HTMLDivElement | null>(null);
   const interaction = useRef<Interaction | null>(null);
 
-  const documentPreviewUrl = `/a/${id}/export?mode=preview&format=jpg&v=${version}&pv=${SOCIAL_PREVIEW_OVERVIEW_GENERATION}${previewAttempt ? `&attempt=${previewAttempt}` : ''}`;
+  const documentPreviewUrl = publicReadUrl(`/a/${id}/export?mode=preview&format=jpg&v=${version}&pv=${SOCIAL_PREVIEW_OVERVIEW_GENERATION}${previewAttempt ? `&attempt=${previewAttempt}` : ''}`);
   const previewUrl = imageId
     ? imageId === initialImage
-      ? `/a/${id}/export?mode=preview&image=1&v=${version}&attempt=${previewAttempt}`
-      : `/a/${imageId}/raw?attempt=${previewAttempt}`
+      ? publicReadUrl(`/a/${id}/export?mode=preview&image=1&v=${version}&attempt=${previewAttempt}`)
+      : publicReadUrl(`/a/${imageId}/raw?attempt=${previewAttempt}`)
     : documentPreviewUrl;
   const boundCrop = useCallback((next: SocialPreviewCrop, height: number) =>
     imageId ? clampImageCrop(next, height) : clampCrop(next, height), [imageId]);
   const height = socialPreviewCropHeight(crop.width);
   const magnification = Math.round(SOCIAL_PREVIEW_WIDTH / crop.width * 100);
   const focusedCrop = rounded(crop);
-  const focusedUrl = `/a/${id}/export?mode=preview&format=png&v=${version}&pv=${SOCIAL_PREVIEW_OVERVIEW_GENERATION}&focus=1&crop=${encodeURIComponent(`x=${focusedCrop.x};y=${focusedCrop.y};width=${focusedCrop.width}`)}`;
+  const focusedUrl = publicReadUrl(`/a/${id}/export?mode=preview&format=png&v=${version}&pv=${SOCIAL_PREVIEW_OVERVIEW_GENERATION}&focus=1&crop=${encodeURIComponent(`x=${focusedCrop.x};y=${focusedCrop.y};width=${focusedCrop.width}`)}`);
   const focusedReady = loadedFocusedUrl === focusedUrl;
   const cameraHeight = socialPreviewCropHeight(camera.width) * CAMERA_PADDING;
   const cameraWidth = camera.width * CAMERA_PADDING;
