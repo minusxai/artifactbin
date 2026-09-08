@@ -88,7 +88,7 @@ export const STORY_UI_COMPONENTS: Record<string, React.ComponentType<any>> = {
   Dialog, DialogTrigger, DialogContent, DialogClose,
   Iframe: props => {
     const { label, pixels } = managedFrameLayout(props.title, props.height);
-    return createElement('div', { id: props.id, className: props.className, 'data-mx-ast': props['data-mx-ast'], 'aria-label': label, style: { height: pixels, width: '100%' } }, createElement('div', { style: { height: '100%' } }));
+    return createElement('div', { id: props.id, className: props.className, 'data-mx-ast': props['data-mx-ast'], 'data-mx-managed-frame': '', 'aria-label': label, style: { height: pixels, width: '100%' } }, createElement('div', { style: { height: '100%' } }));
   },
   Card,
   CardHeader,

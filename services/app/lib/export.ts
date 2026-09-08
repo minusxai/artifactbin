@@ -60,12 +60,13 @@ const RENDER_RETRY_MS = 1_000;
  * rather than through the app page's iframe element, whose box is the viewport
  * — "full" used to mean the first screen, on every document ever exported.
  * Generation 4: managed iframe exports admit their configured asset origin;
+ * Generation 5: managed iframe exports wait for author/module readiness;
  * earlier generations could cache a blank frame before its bundle loaded.
  *
  * Bump this whenever the framing changes. Old entries then go cold on their own,
  * exactly like the card key's stage size does.
  */
-export const EXPORT_RENDER_GENERATION = 4;
+export const EXPORT_RENDER_GENERATION = 5;
 const CACHE_MAX_ENTRIES = 24;
 
 /** `format` value → export format; null when absent or unrecognized. */
@@ -235,6 +236,7 @@ async function renderOnce(
     // stray — abort it, which doubles as the CSP discipline for the surface.
     sameOriginOnly: true,
     ...(ASSETS_ORIGIN ? {allowedOrigins:[ASSETS_ORIGIN]} : {}),
+    waitForManagedFrames: true,
     // The Next dev overlay ("N issues") is fixed to the corner and lands in
     // page-level shots on dev servers; the element doesn't exist in prod.
     injectCss: 'nextjs-portal{display:none !important}',

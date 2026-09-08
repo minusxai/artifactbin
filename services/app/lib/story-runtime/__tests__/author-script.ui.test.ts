@@ -2,10 +2,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createAuthorScriptSession, startAuthorScript } from '../author-script';
 import { createDataflowStore } from '../store';
 import { AUTHOR_SCRIPT_FRAME_TITLE } from '../author-script-contract';
-import {AUTHOR_SCRIPT_DOCUMENT} from '../author-script-bootstrap';
+import {AUTHOR_SCRIPT_BOOTSTRAP,AUTHOR_SCRIPT_DOCUMENT} from '../author-script-bootstrap';
 
 afterEach(() => { document.body.replaceChildren(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 describe('isolated author script host', () => {
+  it('ships a syntactically valid self-contained bootstrap',()=>expect(()=>new Function(AUTHOR_SCRIPT_BOOTSTRAP)).not.toThrow());
   it('coalesces state only, keeps the initial snapshot, and cancels disposed delivery',()=>{
     vi.useFakeTimers();
     const port={postMessage:vi.fn(),start:vi.fn(),close:vi.fn(),onmessage:null as null | ((event:{data:unknown})=>void)};
@@ -74,5 +75,12 @@ describe('isolated author script host', () => {
     port.onmessage!({data:{op:'asset',id:5,url:'https://cdn.example/a.js',kind:'script'}});
     port.onmessage!({data:{op:'asset',id:4,url:'https://cdn.example/a.js',kind:'script'}});
     await Promise.resolve();expect(relay).toHaveBeenCalledTimes(1);
+  });
+  it('fails closed when the wrapper never completes its handshake',()=>{
+    vi.useFakeTimers();
+    const store=createDataflowStore({flow:{values:[],queries:[]}});
+    startAuthorScript('void 0',store);
+    vi.advanceTimersByTime(15_000);
+    expect(document.querySelector('iframe')).toBeNull();
   });
 });

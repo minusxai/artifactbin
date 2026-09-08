@@ -69,6 +69,10 @@ export function createBrowser(opts: { idleShutdownMs?: number } = {}): BrowserSe
       if (req.injectCss) await page.addStyleTag({ content: req.injectCss }).catch(() => {});
       const surface = page.locator(req.selector).first();
       await surface.waitFor({ timeout });
+      if(req.waitForManagedFrames)await page.waitForFunction(selector=>{
+        const root=document.querySelector(selector);if(!root)return false;
+        return [...root.querySelectorAll('[data-mx-managed-frame]')].every(host=>host.querySelector('iframe[data-mx-author-ready]'));
+      },req.selector,{timeout});
       await page.waitForTimeout(req.settleMs ?? DEFAULT_SETTLE_MS);
       if (typeof req.capture === 'object' && 'slide' in req.capture) {
         const slides = surface.locator('[data-mx-slide]');

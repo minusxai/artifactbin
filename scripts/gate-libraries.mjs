@@ -39,6 +39,8 @@ assert.equal(upload.status, 201, await upload.clone().text());
 const file = await upload.json();
 const libraryUrl = `${base}/libraries/three-0.185.1/index.js`;
 const script = `
+    // Keep the first render cold past the exporter's former fixed 1500ms settle.
+    await new Promise(resolve => setTimeout(resolve, 1800));
     const library = document.scripts[document.scripts.length - 2].src;
     window.__librarySource = library;
     const THREE = await import(library);
@@ -62,6 +64,15 @@ const doc = await create({ title: 'Three.js library gate', markup: scene });
 const prose = await create({ markup: '<h1>Ordinary prose</h1>' });
 const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader'] });
 try {
+  // Export before an interactive visit can warm the managed asset/module path.
+  const exported = await fetch(`${base}/a/${doc.id}/export?format=png`);
+  assert.equal(exported.status, 200, await exported.clone().text().then(t => t.slice(0, 100)));
+  assert.ok(exported.headers.get('content-type')?.startsWith('image/png'));
+  const { data, info } = await sharp(Buffer.from(await exported.arrayBuffer())).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  let red = 0;
+  for (let i = 0; i < data.length; i += info.channels) if (data[i] > 100 && data[i] > data[i + 1] * 2 && data[i] > data[i + 2] * 2) red++;
+  assert.ok(red > 100, 'cold export waits for the rendered red model');
+
   const page = await browser.newPage();
   page.on('pageerror', error => console.error('PAGE',error.message));
   page.on('console', message => { if(message.type()==='error')console.error('CONSOLE',message.text()); });
@@ -96,13 +107,5 @@ try {
   await managed.waitForFunction(() => window.__painted || window.__sceneError, { timeout: 15000 });
   assert.equal(await managed.evaluate(() => window.__sceneError), undefined, 'generic bundle and ref fetch also work after hydration');
   assert.equal(await managed.evaluate(() => window.__painted), true);
-  // Exercise the actual export service, not a screenshot after our own readiness wait.
-  const exported = await fetch(`${base}/a/${doc.id}/export?format=png`);
-  assert.equal(exported.status, 200, await exported.clone().text().then(t => t.slice(0, 100)));
-  assert.ok(exported.headers.get('content-type')?.startsWith('image/png'));
-  const { data, info } = await sharp(Buffer.from(await exported.arrayBuffer())).removeAlpha().raw().toBuffer({ resolveWithObject: true });
-  let red = 0;
-  for (let i = 0; i < data.length; i += info.channels) if (data[i] > 100 && data[i] > data[i + 1] * 2 && data[i] > data[i + 2] * 2) red++;
-  assert.ok(red > 100, 'export contains the rendered red model');
-  console.log('ok: optional library, cached imports, textured GLB, WebGL pixels, CSP, missing refs, and PNG export');
+  console.log('ok: cold export readiness, optional library, cached imports, textured GLB, WebGL pixels, CSP, and missing refs');
 } finally { await browser.close(); }

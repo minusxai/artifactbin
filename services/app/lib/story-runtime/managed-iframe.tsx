@@ -26,5 +26,5 @@ export function ManagedIframeView({compiled,store,assets,importAsset,title,heigh
     }).catch(error=>{if(!disposed)setError(String(error.message).slice(0,500));});
     return()=>{disposed=true;resolver.dispose();stop();target.replaceChildren();};
   },[content,configuration,store,label,importAsset]);
-  return <div id={id} className={className} data-mx-ast={ast} aria-label={label} style={{height:pixels,width:'100%'}}><div ref={host} style={{height:'100%'}}/>{error&&<p role="alert">{error}</p>}</div>;
+  return <div id={id} className={className} data-mx-ast={ast} data-mx-managed-frame="" aria-label={label} style={{height:pixels,width:'100%'}}><div ref={host} style={{height:'100%'}}/>{error&&<p role="alert">{error}</p>}</div>;
 }

@@ -47,6 +47,14 @@ const shoot = (browser: BrowserService, query: Record<string, string> = {}) => {
 };
 
 describe('the browser verdict becomes the HTTP answer', () => {
+  it('does not cache a failed readiness render as image bytes',async()=>{
+    const artifact=row();
+    const failed=scripted({ok:false,reason:'failed'});setServices({browser:failed});
+    expect((await exportImageResponse(artifact,{},'http://localhost:3000')).status).toBe(500);
+    const recovered=scripted(PNG);setServices({browser:recovered});
+    expect((await exportImageResponse(artifact,{},'http://localhost:3000')).status).toBe(200);
+    expect(recovered.seen).toHaveLength(1);
+  });
   it('bytes → 200, with the image type and nosniff', async () => {
     const res = await shoot(scripted(PNG));
     expect(res.status).toBe(200);
@@ -127,6 +135,7 @@ describe('what the app asks the browser for', () => {
       expect(request.selector).toBe('body');
       expect(request.sameOriginOnly).toBe(true);
       expect(request.allowedOrigins).toEqual(ASSETS_ORIGIN ? [ASSETS_ORIGIN] : undefined);
+      expect(request.waitForManagedFrames).toBe(true);
     }
     // A FRESH key per attempt: minted at call time, because a key that expired
     // in the queue produced a 200 PNG of a 404 page.
