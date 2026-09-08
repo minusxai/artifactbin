@@ -16,6 +16,7 @@ const browser = await chromium.launch();
 try {
   const page = await browser.newPage();
   await page.goto(`${base}/a/${first.id}`);
+  await page.locator('[data-mx-inline-story]:not([data-mx-initial-story])').waitFor();
   await page.getByLabel('Artifact A', { exact: true }).waitFor();
   assert.equal(await page.evaluate(() => document.querySelector('[aria-label="Artifact A"]')?.getRootNode() === document), true, 'artifact is in top-level DOM');
   await page.evaluate(() => { window.__navigationProbe = 'same-document'; });
