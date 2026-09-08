@@ -17,7 +17,7 @@ import {FolderPage,type FolderPageProps} from '@/web/pages/Folder';
  * ACLs. `ssr` describes a rendered route body, never permission or a promise. */
 export function directPageHtml(template:string,data:PageBootstrap,main:string,dynamicSsr:boolean,status:number,social?:{title:string;description:string|null;image:string}):{html:string;data:PageBootstrap} {
   const profile=data.profile as ProfileListingData|undefined;
-  const artifact=data.artifact as ({canonical?:string;surface?:{title?:string|null}}&Partial<FolderPageProps>)|undefined;
+  const artifact=data.artifact as ({canonical?:string;surface?:{title?:string|null;fontPreloads?:string[]}}&Partial<FolderPageProps>)|undefined;
   const names:Record<string,string>={'/account':'account','/login':'login','/chat':'remote sessions','/tokens/new':'new token','/tokens':'account','/trash':'trash','/assets':'assets','/datasets/new':'dataset editor','/docs-human':'human docs','/privacy':'privacy','/terms':'terms'};
   const name=data.presentation==='workspace'?'workspace':data.presentation==='artifact'?'artifact':data.presentation==='profile'?'profile':names[data.path]??(data.path.startsWith('/datasets/')?'dataset editor':'page');
   let body:ReactNode=<PageStatus label={name}/>;
@@ -39,8 +39,11 @@ export function directPageHtml(template:string,data:PageBootstrap,main:string,dy
   const markup=renderToString(<StaticRouter location={data.path}><div inert aria-hidden="true"><AppBar title={social?.title}/></div>{body}</StaticRouter>);
   const socialTags=social?`<meta property="og:title" content="${escapeHtml(social.title)}">${social.description?`<meta property="og:description" content="${escapeHtml(social.description)}">`:''}<meta property="og:image" content="${escapeHtml(social.image)}">`:'';
   const help=template.includes('rel="help"')?'':`<link rel="help" href="${escapeHtml(main+'/docs')}" title="Agents: read this first to edit any artifact here"><meta name="artifactbin:agent" content="To edit this artifact, read ${escapeHtml(main+'/docs')} — tokens at ${escapeHtml(main+'/tokens/new')}">`;
+  // The admitted page payload has already resolved critical font assets. Start
+  // those requests before client mounting; never derive URLs from author DOM.
+  const fonts=status===200?[...new Set(artifact?.surface?.fontPreloads??[])].map(href=>`<link rel="preload" as="font" type="font/woff2" crossorigin="anonymous" href="${escapeHtml(href)}">`).join(''):'';
   const html=template.replace(/<title>[\s\S]*?<\/title>/g,'').replace(/<meta name="description"[^>]*>/g,'').replace(/<link rel="canonical"[^>]*>/g,'')
-    .replace('</head>',()=>`<title>${escapeHtml(title)}</title><meta name="description" content="${escapeHtml(description)}"><link rel="canonical" href="${escapeHtml(canonical)}">${socialTags}${help}</head>`)
+    .replace('</head>',()=>`<title>${escapeHtml(title)}</title><meta name="description" content="${escapeHtml(description)}"><link rel="canonical" href="${escapeHtml(canonical)}">${socialTags}${help}${fonts}</head>`)
     .replace('<div id="root"></div>',()=>`<div id="root">${markup}</div>`);
   return {html,data:{...data,ssr:rendered}};
 }

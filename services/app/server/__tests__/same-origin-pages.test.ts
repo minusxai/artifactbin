@@ -9,12 +9,24 @@ import { useAppHarness, request } from '@/__tests__/harness';
 const config = vi.hoisted(() => ({ ssr: false, controls:null as string|null }));
 vi.mock('@/lib/config', async original => ({ ...await original<typeof import('@/lib/config')>(), get CONTROLS_ORIGIN(){return config.controls;}, get SSR_ENABLED() { return config.ssr; } }));
 import { createAppServer,APP_CSP } from '../app';
+import {directPageHtml} from '../direct-page';
 useAppHarness();
 const secret = 'same-origin-pages-fixture-secret';
 const app = createAppServer({ actorSecret: secret, indexHtml: async () => '<!doctype html><html><head><title>artifactbin</title></head><body><div id="root"></div><script type="module" src="/main.tsx"></script></body></html>' });
 const headers = (actor: Actor) => ({ [ACTOR_HEADER]: signActor(actor, secret), accept: 'text/html' });
 
 describe('same-origin initial app responses with dynamic SSR disabled', () => {
+  it('places resolved artifact font preloads in the initial head, once and safely escaped',()=>{
+    const template='<html><head></head><body><div id="root"></div></body></html>';
+    const data={path:'/a/Ab1234',presentation:'artifact' as const,ssr:false,session:{kind:'none' as const,user:null,mixpanel:{token:null,host:''}},artifact:{surface:{fontPreloads:['/fonts/modernist.woff2','/fonts/modernist.woff2','/fonts/custom.woff2?x="&y=<']}}};
+    const {html}=directPageHtml(template,data,'https://example.test',false,200);
+    const head=html.split('</head>')[0];
+    expect(head).toContain('<link rel="preload" as="font" type="font/woff2" crossorigin="anonymous" href="/fonts/modernist.woff2">');
+    expect(head.match(/href="\/fonts\/modernist.woff2"/g)).toHaveLength(1);
+    expect(head).toContain('href="/fonts/custom.woff2?x=&quot;&amp;y=&lt;"');
+    expect(html.split('</head>')[1]).not.toContain('as="font"');
+    expect(directPageHtml(template,data,'https://example.test',false,404).html).not.toContain('as="font"');
+  });
   it('does not bypass the proxy verdict when controls origin is retired', async () => {
     const response = await app.request('/account', { headers: { accept: 'text/html' } });
     expect(response.status).toBe(403);
@@ -127,6 +139,18 @@ describe('same-origin initial app responses with dynamic SSR disabled', () => {
       expect(html).toContain('"ssr":false');expect(html).toContain('aria-label="Loading artifact"');
       expect(html.indexOf('id="mx-page-data"')).toBeLessThan(html.indexOf('<body>'));
     }finally{config.ssr=false;}}
+  });
+  it('preloads the admitted artifact payload fonts in the real initial response before mounting',async()=>{
+    const token=await mintToken('font-head');
+    const made=await createArtifact(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<h1>Font head proof</h1>',theme:'modernist',visibility:'public'}}));
+    expect(made.status).toBe(201);const {id}=await made.json();
+    const response=await app.request('/a/'+id,{headers:headers({credential:'none'})});
+    expect(response.status).toBe(200);const html=await response.text();
+    const payload=JSON.parse(html.match(/<script type="application\/json" id="mx-page-data">(.*?)<\/script>/s)![1]);
+    const fonts:string[]=payload.artifact.surface.fontPreloads;
+    expect(fonts.length).toBeGreaterThan(0);
+    const head=html.split('</head>')[0];
+    for(const href of fonts)expect(head).toContain(`crossorigin="anonymous" href="${href}"`);
   });
   it('renders the existing folder body only with SSR enabled, while always bootstrapping readable rows',async()=>{
     const token=await mintToken('folder-ssr');
