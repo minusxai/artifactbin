@@ -91,7 +91,7 @@ const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 await becomeOwner(page, BASE, mint.token);
 await page.goto(`${BASE}/a/${doc.id}`);
 await artifactDocument(page, { timeout: 20000 });
-const frameEl = page.locator('[data-mx-inline-story]:not([data-mx-initial-story])');
+const frameEl = page.locator('body > #root [data-mx-inline-story]');
 const before = await frameEl.boundingBox();
 // The shell draws no hamburger or controls button of its own now: the framed
 // document carries the chrome and asks the page for its panels.

@@ -605,10 +605,17 @@ ok(placed.buttons.length > 0 && placed.buttons.every((h) => h >= 44),
  * because no browser this gate can drive puts one there: the bubble needs a
  * capability, and everyone who has one is served the shell.
  */
-const dockBox = await touch.locator('[data-mx-reader-chrome], [aria-label="Page actions"]').first().boundingBox();
-const overDock = { bubbleBottom: placed.bottom, dockTop: dockBox?.y ?? null };
-ok(placed.bottom > placed.top && (overDock.dockTop === null || overDock.bubbleBottom <= overDock.dockTop + 1),
-  `touch: and it stays clear of the page's bottom dock (bubble bottom ${Math.round(overDock.bubbleBottom)} vs dock top ${overDock.dockTop === null ? 'none' : Math.round(overDock.dockTop)})`);
+// The chrome container spans the viewport; its rail/byline are the actual
+// painted bottom controls. Hidden or non-overlapping controls cannot collide.
+const bottomControls = await touch.locator('.mx-reader-rail, [data-mx-reader-byline]').evaluateAll(elements => elements.flatMap(el => {
+  const style = getComputedStyle(el), box = el.getBoundingClientRect();
+  if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0 || !box.width || !box.height) return [];
+  return [{left: box.left, right: box.right, top: box.top, bottom: box.bottom}];
+}));
+const overlaps = bottomControls.filter(box => placed.left < box.right && placed.right > box.left
+  && placed.top < box.bottom && placed.bottom > box.top);
+ok(placed.bottom > placed.top && overlaps.length === 0,
+  `touch: the bubble stays clear of visible bottom controls (${overlaps.length} overlaps)`);
 
 // A tap, not a click: the whole point is the finger.
 await docFrame.locator('[aria-label="Comment on selected text"]').tap();

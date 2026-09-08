@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { render } from '@/test/helpers/surface-ui';
+import { router, resetRouter } from '@/test/setup/router';
 import { useLayoutEffect } from 'react';
 import type { InlineStoryController, InlineStoryRuntimeProps } from '@/lib/story-runtime/InlineStoryRuntime';
 
@@ -68,6 +69,7 @@ class FakeEventSource {
 }
 
 beforeEach(() => {
+  resetRouter();
   runtimes.length = 0;
   layerProps.length = 0;
   window.location.hash = '';
@@ -559,7 +561,8 @@ describe('the fork row', () => {
       );
       openDocumentControls();
       fireEvent.click(screen.getByLabelText('Fork artifact'));
-      await waitFor(() => expect(assign).toHaveBeenCalledWith('http://localhost:3000/@me/copy01-doc'));
+      await waitFor(() => expect(router.pushed).toContain('http://localhost:3000/@me/copy01-doc'));
+      expect(assign).not.toHaveBeenCalled();
       // The owner's sheet also loads its sharing state, so the fork call is
       // found by its address rather than by being first.
       const forkCall = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls
@@ -585,7 +588,7 @@ describe('the fork row', () => {
       // A guard that READS state lets both through — and this door creates a
       // real artifact each time.
       act(() => { row.click(); row.click(); });
-      await waitFor(() => expect(assign).toHaveBeenCalled());
+      await waitFor(() => expect(router.pushed.length).toBe(1));
       const forkCalls = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls
         .filter((call) => String(call[0]).endsWith('/fork'));
       expect(forkCalls.length).toBe(1);
@@ -620,10 +623,11 @@ describe('the fork row', () => {
       );
       openDocumentControls();
       fireEvent.click(screen.getByLabelText('Fork artifact'));
-      await waitFor(() => expect(assign).toHaveBeenCalled());
+      await waitFor(() => expect(router.pushed.length).toBe(1));
+      expect(assign).not.toHaveBeenCalled();
       // The reader's own selection travels with them — the callback is this
       // address plus the intent, never a bare path.
-      expect(String(assign.mock.calls[0][0]))
+      expect(router.pushed[0])
         .toBe(`/login?callbackUrl=${encodeURIComponent('/a/story1?$region=west&intent=fork')}`);
     }, '?$region=west');
   });

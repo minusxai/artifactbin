@@ -89,7 +89,7 @@ try {
   // Reload to prove the frame is restored from persisted source, not dialog state.
   await page.reload({ waitUntil: 'load' });
   await openArtifactControls(page);
-  await page.getByLabel('Share', { exact: true }).click();
+  await page.getByLabel('Owner actions').getByLabel('Share', { exact: true }).click();
   await page.getByRole('dialog', { name: 'Sharing', exact: true }).getByLabel('Edit social preview').click();
   const resetDialog = page.getByRole('dialog', { name: 'Social preview' });
   await resetDialog.getByLabel('Move social preview crop').waitFor({ timeout: 30_000 });
