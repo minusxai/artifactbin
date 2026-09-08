@@ -22,6 +22,7 @@ it('uses the shared reveal-on-upscroll policy, while edit mode pins chrome',()=>
    scroll(100);expect(root).toHaveAttribute('data-mx-reader-state','shown');
    scroll(300);expect(root).toHaveAttribute('data-mx-reader-state','hidden');
    view.rerender(<InlineReaderChrome input={input} pinned onAction={vi.fn()} />);
+   expect(view.container.querySelector('[data-mx-reader-chrome]')).toBe(root);
    scroll(500);expect(view.container.querySelector('[data-mx-reader-chrome]')).toHaveAttribute('data-mx-reader-state','shown');
  } finally {if(original)Object.defineProperty(window,'scrollY',original);}
 });

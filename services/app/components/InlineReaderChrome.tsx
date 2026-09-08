@@ -1,4 +1,4 @@
-import { useLayoutEffect,useRef,type ReactNode } from 'react';
+import { useLayoutEffect,useMemo,useRef,type ReactNode } from 'react';
 import { renderReaderChrome, READER_CHROME_HIDDEN_CLASS, type ReaderChromeInput } from '@/lib/story/reader-chrome';
 import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
 import { chromeAfterSample,type ChromeState } from '@/lib/story-runtime/reader-chrome-policy';
@@ -11,6 +11,7 @@ export function InlineReaderChrome({ input, onAction,pinned=false }: { input: Re
   const state=useRef<ChromeState|null>(null);
   const sharing=useRef<ReturnType<typeof wireReaderSharing>|null>(null);
   const html = renderReaderChrome({...input,panels:false}).replaceAll('target="_top"', 'target="_self"');
+  const markup=useMemo(()=>({__html:html}),[html]);
   useLayoutEffect(()=>{
     const root=holder.current?.querySelector<HTMLElement>('[data-mx-reader-chrome]');
     if(!root)return;
@@ -45,6 +46,6 @@ export function InlineReaderChrome({ input, onAction,pinned=false }: { input: Re
       event.preventDefault();
       if(target.getAttribute('data-mx-reader-action')==='share'){sharing.current?.share();return;}
       onAction(target.getAttribute('data-mx-reader-action') ?? target.getAttribute('data-mx-reader-trigger') ?? '');
-    }} dangerouslySetInnerHTML={{__html:html}} />
+    }} dangerouslySetInnerHTML={markup} />
   </>;
 }
