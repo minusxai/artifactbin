@@ -129,7 +129,7 @@ for (const marker of [
 await frame.click('text=Open dialog');
 await frame.waitForSelector('[aria-label="Kitchen sink dialog"][open]');
 check((await frame.textContent('[aria-label="Kitchen sink dialog"]')).includes('Dialog content opened from the gallery.'), 'Dialog hydrated');
-await frame.click('text=Close');
+await frame.locator('[aria-label="Kitchen sink dialog"]').getByRole('button', { name: 'Close', exact: true }).click();
 await frame.waitForSelector('[aria-label="Kitchen sink dialog"]:not([open])');
 await frame.click('text=Tab two');
 await page.waitForTimeout(600);

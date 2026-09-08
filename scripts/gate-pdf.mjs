@@ -35,6 +35,13 @@ const PDF = samplePdf(3);
 
 const owner = await startDocument(B);
 const auth = { 'Content-Type': 'application/json', Authorization: `Bearer ${owner.token}` };
+const plainRes = await fetch(`${B}/api/artifacts`, {
+  method: 'POST', headers: auth,
+  body: JSON.stringify({ title: 'Plain CSP control', markup: '<p>Plain document</p>', visibility: 'public' }),
+});
+if (plainRes.status !== 201) throw new Error(`plain control publish failed: ${plainRes.status}`);
+const plain = await plainRes.json();
+const plainCsp = (await fetch(`${B}/a/${plain.id}`)).headers.get('content-security-policy');
 
 // 1. the file itself
 const fileRes = await fetch(`${B}/api/artifacts`, {
@@ -158,7 +165,10 @@ ok(seek.bytes === PDF.subarray(PDF.byteLength - 32).toString('latin1'), 'the byt
 // The document's CSP is UNCHANGED by any of this: a link is navigation, and
 // nothing here asked for a new connect-src, frame-src or object-src.
 const docCsp = (await context.request.get(`${B}/a/${owner.id}`)).headers()['content-security-policy'];
-ok(!/object-src|frame-src/.test(docCsp ?? ''), 'the document needed no new CSP allowance for the card');
+// The runtime now permits its same-origin author wrapper in every document.
+// A File card must not widen that policy or enable a PDF/object embed.
+ok(Boolean(plainCsp) && docCsp === plainCsp.replaceAll(`/a/${plain.id}/`, `/a/${owner.id}/`),
+  'the document needed no new CSP allowance for the card');
 
 await context.close();
 await browser.close();
