@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseJsx } from '@/lib/jsx';
 import { InlineStoryRuntime, type InlineStoryController } from '../InlineStoryRuntime';
-import { STORY_DOCUMENT_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_COMMIT_MESSAGE, STORY_SELECT_MESSAGE, type StoryIslandData } from '../contract';
+import { STORY_DOCUMENT_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_COMMIT_MESSAGE, STORY_SELECT_MESSAGE, STORY_READER_MODE_MESSAGE, type StoryIslandData } from '../contract';
 import { StrictMode } from 'react';
 
 afterEach(cleanup);
@@ -14,6 +14,14 @@ const data = (label: string): StoryIslandData => {
 const transport = { run: vi.fn(async () => ({ tables: {}, errors: {} })), page: vi.fn(async () => ({ rows: [], columns: [] })) };
 
 describe('inline artifact runtime lifetime', () => {
+  it('retains the reader color choice while adopting an authored version', async () => {
+    let controller:InlineStoryController|null=null;
+    const view=render(<InlineStoryRuntime data={data('First')} onController={value=>{controller=value;}} />);
+    await waitFor(()=>expect(controller).not.toBeNull());
+    await act(async()=>controller!.send({type:STORY_READER_MODE_MESSAGE,mode:'dark'}));
+    await act(async()=>controller!.update({type:STORY_DOCUMENT_MESSAGE,nodes:data('Second').nodes,colorMode:'light'}));
+    expect(view.container.querySelector('[data-mx-inline-story]')).toHaveClass('dark');
+  });
   it('survives StrictMode replay with a live store and scoped signal updates', async () => {
     const initial = data('Strict');
     initial.dataflow = {flow:{values:[{kind:'scalar',name:'n',type:'number',default:0,start:0,end:0}],queries:[{name:'q',sql:'select $n',params:['n'],refs:[],start:0,end:0}]}};

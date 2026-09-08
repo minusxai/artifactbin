@@ -67,6 +67,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
     if (store.disposed) { setLifetime(createLifetime()); return; }
     let disposed = false;
     let documentData = latest.current.data;
+    let readerModeOverride: 'light' | 'dark' | null = null;
     let editRequested = false;
     let editLoading = false;
     let annotationLoading = false;
@@ -97,7 +98,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
         if (!command || typeof command !== 'object') return;
         const message = command as { type?: string; datasets?: string[]; mode?: 'light'|'dark' };
         if (message.type === STORY_DATA_MESSAGE && Array.isArray(message.datasets)) { controller.invalidate(message.datasets); return; }
-        if (message.type === STORY_READER_MODE_MESSAGE && (message.mode === 'light' || message.mode === 'dark')) { documentData = { ...documentData, colorMode: message.mode }; render(); return; }
+        if (message.type === STORY_READER_MODE_MESSAGE && (message.mode === 'light' || message.mode === 'dark')) { readerModeOverride = message.mode; documentData = { ...documentData, colorMode: message.mode }; render(); return; }
         if (!isEditParentMessage(command)) return;
         if (command.type === STORY_EDIT_MODE_MESSAGE) {
           editRequested = command.on;
@@ -147,6 +148,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
         if (update.dataflow) store.replaceFlow(update.dataflow);
         if (update.authorScript !== undefined) author.replace(update.authorScript);
         documentData = { ...documentData, nodes: update.nodes, ...(update.refData ? { refData: { ...documentData.refData, ...update.refData } } : {}), ...(update.colorMode ? { colorMode: update.colorMode } : {}) };
+        if (readerModeOverride) documentData.colorMode = readerModeOverride;
         render();
       },
       invalidate(datasets) { if (!disposed) store.invalidateDatasets(datasets); },

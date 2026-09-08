@@ -43,10 +43,8 @@ import { useIsPhoneViewport } from '@/components/MobileSheet';
 import { APP_BAR_H, EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
 import type { ArtifactFormat } from '@/lib/story/input';
 import { useLiveArtifact } from '@/lib/story/use-live-artifact';
-import { STORY_READER_ACTION_MESSAGE, STORY_READER_ACTION_RESULT_MESSAGE, STORY_READER_CHROME_MESSAGE, type StoryReaderActionMessage, type StoryReaderActionResultMessage } from '@/lib/story-runtime/contract';
-import { STORY_ASSET_MESSAGE, STORY_ASSET_RESULT_MESSAGE, type StoryAssetRequest, type StoryAssetResult, STORY_DATA_MESSAGE, STORY_DOCUMENT_ACK_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_HELLO_MESSAGE, STORY_MUTATE_MESSAGE, STORY_MUTATE_RESULT_MESSAGE, STORY_PAINTED_MESSAGE, STORY_READER_MODE_MESSAGE, STORY_SCROLL_MESSAGE, type StoryDataUpdate, type StoryMutateRequest, type StoryMutateResult, type StoryScrollMessage, STORY_ADOPTS_MESSAGE, STORY_QUERY_MESSAGE, STORY_QUERY_RESULT_MESSAGE, isEditFrameMessage, isSessionMessage, isValuesMessage, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, type StoryDocumentUpdate, type StoryEditSelection, type StoryQueryRequest, type StoryQueryResult, type StorySelectionActionsMessage } from '@/lib/story-runtime/contract';
-import type { DataflowState } from '@/lib/story/dataflow';
-import { readUrlValues, urlValuesSearch, writeUrlValues } from '@/lib/story/url-values';
+import { STORY_DATA_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_READER_MODE_MESSAGE, type StoryDataUpdate, isEditFrameMessage, isValuesMessage, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, type StoryEditSelection, type StorySelectionActionsMessage } from '@/lib/story-runtime/contract';
+import { readUrlValues, writeUrlValues } from '@/lib/story/url-values';
 import { displayTitle } from '@/lib/story/title';
 import { formatFileSize } from '@/lib/file-display';
 import { resolveStoryMode } from '@/lib/data/story/story-themes';
@@ -397,27 +395,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   }, [id, format, live]);
   const shownCatalog = liveCatalog?.id === id && liveCatalog.version >= version ? liveCatalog.catalog : props.catalog;
 
-  /*
-   * THE READER'S `<Value>` SELECTION, AND THE ADDRESS BAR (lib/story/url-values).
-   *
-   * Two halves that must not be confused with each other:
-   *
-   *  - the frame is SEEDED once, from the link this page was opened at. The
-   *    `src` must then never change again, because a `src` write NAVIGATES the
-   *    frame: a full document reload, every chart rebuilt, the reader's place
-   *    gone — once per pick, and it would look entirely correct while doing it.
-   *    So the seed is state that moves only when the frame is being replaced
-   *    anyway (`frameNonce`), never with the live address.
-   *  - the ADDRESS follows the picks. A framed document cannot write it: the
-   *    `location` its own capability reaches is the FRAME's, so it would move
-   *    `/a/<id>/raw?edit=1`, which nobody can copy (measured on the spike).
-   *    It reports instead, and this page writes — re-deriving the whole search
-   *    through `writeUrlValues` against the flow it holds, because the frame is
-   *    sandboxed markup and never an authority about what this document
-   *    declares.
-   */
-  const selectionRef = useRef(urlValuesSearch(search));
-  const [frameSearch, setFrameSearch] = useState(selectionRef.current);
   const liveSource = live && live.format === 'markup' ? live.source : null;
   const shownSource = liveSource ?? source;
   // What the row actually holds — null when nobody has named it. The editor's
@@ -463,6 +440,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     setFrameLoaded(!!controller);
   }, []);
   const readerMode = readerModeOverride ?? resolveStoryMode(shownTheme, shownColorMode);
+  // Signal changes update this document's store and route, never its initial
+  // seed. Only a new artifact identity receives a new runtime and URL seed.
   const initialRuntimeData = useMemo(() => props.runtime?.data ?? {
     nodes: storyUpdateParts(source ?? '')?.nodes ?? [], refData: {},
     dataflow: dataflow ? {...dataflow, values:{...dataflow.values,...readUrlValues(search,dataflow.flow)}} : undefined,
@@ -863,28 +842,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
         <div
           aria-label="Artifact viewport"
           className="relative min-h-screen"
-          /*
-           * The ground a loading frame sits on. It belongs to the DOCUMENT, not
-           * to the app: painting the app's ground (or white, which is what the
-           * revealed frame used to carry) flashes the wrong colour under every
-           * dark document before its own background arrives. The frame paints
-           * over this the moment it says it has.
-           */
-          /*
-           * Editing adds one contextual bar, so the viewport starts lower.
-           * A style change, deliberately — the frame stays exactly where it is
-           * in the tree, and an iframe that is re-parented RELOADS, which is
-           * the entire thing this rewrite exists to stop.
-           */
           style={{
-            // The frame is ALWAYS full-size. The bars overlay it and the
-            // document insets itself under them; the comment rail overlays
-            // its right edge below the bar and the document leaves it that
-            // width (mx:reader-chrome `railInset`). Narrowing the frame for
-            // the rail was tried first, and it narrowed the bar drawn inside
-            // the frame with it — every control shifting left the moment the
-            // rail opened. Style-only either way: the frame must never
-            // re-parent.
+            // Edit/annotation controls change the inset, not runtime identity.
             paddingTop: (phone ? 0 : APP_BAR_H) + (editing ? EDIT_BAR_H : 0),
             paddingRight: railInset,
             right: 0,
