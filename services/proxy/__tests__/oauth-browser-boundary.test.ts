@@ -58,7 +58,9 @@ async function authorize(cookie: string) {
   expect(page.status).toBe(200);
   expect(page.headers.get('x-frame-options')).toBe('DENY');
   expect(page.headers.get('content-security-policy')).toContain(`form-action 'self' ${new URL(redirect).origin}`);
-  const approval = /name="approval" value="([A-Za-z0-9_-]+)"/.exec(await page.text())?.[1];
+  const consentHtml = await page.text();
+  expect(consentHtml).toContain('oauth-boundary@example.test');
+  const approval = /name="approval" value="([A-Za-z0-9_-]+)"/.exec(consentHtml)?.[1];
   expect(approval).toBeTruthy();
   return { client, approval: approval! };
 }
