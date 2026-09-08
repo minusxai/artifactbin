@@ -802,13 +802,12 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     return (
       <>
         <TrustedUi overlay>
-        <InlineReaderChrome input={{artifactId:id, title:shownTitle, author:props.author ?? null, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={action => {
+        <InlineReaderChrome pinned={editing} input={{artifactId:id, title:shownTitle, author:props.author ?? null, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={action => {
           if (action === 'like') void toggleLike();
           else if (action === 'follow') void toggleFollow();
           else if (action === 'edit' && canEdit) { if (editing) void finishEdit(); else enterEdit(); }
           else if (action === 'comment') { if (canAnnotate) setRailOpen(value => !value); else void navigate(`/login?callbackUrl=${encodeURIComponent(window.location.pathname + withIntent('', 'comment'))}`); }
           else if (action === 'controls' || action === 'menu') requestPageChrome(action);
-          else if (action === 'share') void navigator.clipboard?.writeText(window.location.href);
         }} />
         {editing ? (
           /* EDIT MODE: the document's own bar stays, PINNED at the top, and the

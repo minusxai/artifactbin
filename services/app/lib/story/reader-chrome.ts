@@ -256,9 +256,9 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
     + trigger('menu', 'Open menu', ICON_PROFILE, 'profile', 'Profile')
     + '</div>'
     + byline
-    + (input.panels === false ? '' : '<span class="mx-reader-toast" data-mx-reader-toast hidden>link copied</span>'
+    + '<span class="mx-reader-toast" data-mx-reader-toast hidden>link copied</span>'
     + '<input class="mx-reader-copy" data-mx-reader-copy type="text" readonly tabindex="-1" aria-hidden="true">'
-    + '<button type="button" class="mx-reader-scrim" data-mx-reader-scrim aria-label="Close page controls" hidden></button>'
+    + (input.panels === false ? '' : '<button type="button" class="mx-reader-scrim" data-mx-reader-scrim aria-label="Close page controls" hidden></button>'
     + '<nav class="mx-reader-panel mx-reader-panel--menu" data-mx-reader-panel="menu" aria-label="Menu" hidden>'
     + '<a class="mx-reader-brand" href="/" target="_top"><img src="/logo-128.png" alt="">artifactbin</a>'
     + (login ? `<a class="mx-reader-signin" data-mx-login href="${escapeHtml(login.href)}" target="_top" aria-label="Sign in">sign in</a>` : '')

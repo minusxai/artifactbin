@@ -17,9 +17,9 @@
 export const SCROLLABLE_ATTR = 'data-mx-scrollable';
 
 /** Mark now, and keep the marks honest on scroll and resize. Returns a disposer. */
-export function markScrollableTables(doc: Document): () => void {
+export function markScrollableTables(doc: Document, root: Document | HTMLElement = doc): () => void {
   const win = doc.defaultView;
-  const tables = () => [...doc.querySelectorAll<HTMLTableElement>('table')];
+  const tables = () => [...root.querySelectorAll<HTMLTableElement>('table')];
 
   const measure = (table: HTMLTableElement) => {
     const overflows = table.scrollWidth > table.clientWidth + 1;
@@ -61,7 +61,7 @@ export function markScrollableTables(doc: Document): () => void {
     if (queued) return;
     queued = win.setTimeout(() => { queued = 0; sweep(); }, 16);
   }) : null;
-  observer?.observe(doc.body, { childList: true, subtree: true });
+  observer?.observe(root === doc ? doc.body : root, { childList: true, subtree: true });
 
   return () => {
     if (win) {

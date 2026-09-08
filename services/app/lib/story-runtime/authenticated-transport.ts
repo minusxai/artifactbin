@@ -5,12 +5,12 @@ import type { DataflowState } from '@/lib/story/dataflow';
 export function createAuthenticatedTransport(id: string, fetcher: typeof fetch = fetch): QueryTransport & {dispose():void} {
   const controller = new AbortController();
   const base = `/a/${encodeURIComponent(id)}`;
-  const request = async (path: string, init: RequestInit = {}) => {
+  const request = async (path: string, init: RequestInit = {}, asset = false) => {
     controller.signal.throwIfAborted();
     const response = await fetcher(path, { ...init, credentials:'same-origin', signal: init.signal ? AbortSignal.any([controller.signal, init.signal]) : controller.signal });
     controller.signal.throwIfAborted();
-    const body = await response.json();
-    if (!response.ok) throw new Error(body.detail ?? body.error ?? `request failed (${response.status})`);
+    const body = asset ? await response.json().catch(() => ({error:'fetch_failed'})) : await response.json();
+    if (!response.ok && !asset) throw new Error(body.detail ?? body.error ?? `request failed (${response.status})`);
     return body;
   };
   const post = (path: string, body: unknown) => request(path, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -30,8 +30,8 @@ export function createAuthenticatedTransport(id: string, fetcher: typeof fetch =
     },
     importAsset: async (url, kind, signal) => {
       const query = new URLSearchParams({u:url,...(kind ? {kind} : {})});
-      const result = await request(`${base}/assets?${query}`, {headers:{Accept:'application/json'},signal});
-      return result.url ? {url:result.url} : {refused:result.code ?? 'fetch_failed'};
+      const result = await request(`${base}/assets?${query}`, {headers:{Accept:'application/json'},signal}, true);
+      return result.url ? {url:result.url} : {refused:result.code ?? result.error ?? 'fetch_failed'};
     },
   };
 }

@@ -1,6 +1,12 @@
 import { expect, it, vi } from 'vitest';
 import { createAuthenticatedTransport } from '../authenticated-transport';
 
+it('returns an explicit asset refusal so bound images clear stale content',async()=>{
+  const transport=createAuthenticatedTransport('AbC123',vi.fn(async()=>new Response(JSON.stringify({error:'blocked_address',detail:'destination is not public'}),{status:403})));
+  await expect(transport.importAsset!('https://private.test/a.png','image')).resolves.toEqual({refused:'blocked_address'});
+  transport.dispose();
+});
+
 it('uses scoped authenticated doors and cancels requests at document disposal', async () => {
   const fetcher = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({ok:true,dataset:'data',tables:{},errors:{},url:'/assets/cached'})));
   const transport = createAuthenticatedTransport('AbC123', fetcher);

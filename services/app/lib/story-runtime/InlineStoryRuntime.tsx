@@ -15,6 +15,8 @@ import type { PreparedStoryRuntime } from '@/lib/story/prepared-runtime';
 import { TrustedUi, useTrustedPortalContainer } from '@/components/TrustedUi';
 import { isolateStoryCss, isolateStoryNodes } from '@/lib/story/inline-css';
 import { clearInitialStory } from '@/web/initial-story';
+import { wireOutline } from './outline-nav';
+import { markScrollableTables } from './table-scroll';
 
 function SelectionPortal({ready}:{ready:(element:HTMLElement | null)=>void}) {
   const portal = useTrustedPortalContainer();
@@ -89,6 +91,8 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
       redraw(n => n + 1);
     };
     const author = createAuthorScriptSession(store);
+    const stopOutline = root.current ? wireOutline(document,root.current) : () => {};
+    const stopTables = root.current ? markScrollableTables(document,root.current) : () => {};
     const stopValues = syncValuesToUrl(store, () => store.flow, { post: values => emit({ type: STORY_VALUES_MESSAGE, nonce, values }) });
     const controller: InlineStoryController = {
       nonce,
@@ -159,6 +163,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
         disposed = true;
         listeners.clear();
         stopValues();
+        stopOutline(); stopTables();
         author.dispose();
         editRef.current?.dispose(); editRef.current = null;
         annotate?.dispose(); selection?.dispose();

@@ -14,6 +14,21 @@ const data = (label: string): StoryIslandData => {
 const transport = { run: vi.fn(async () => ({ tables: {}, errors: {} })), page: vi.fn(async () => ({ rows: [], columns: [] })) };
 
 describe('inline artifact runtime lifetime', () => {
+  it('wires outline navigation and overflowing tables only inside its owned root',async()=>{
+    const parsed=parseJsx('<article><h2>One</h2><h2>Two</h2><h2>Three</h2><table><tbody><tr><td>Wide</td></tr></tbody></table></article>');
+    if(!parsed.ok)throw Error(parsed.error);
+    vi.spyOn(HTMLTableElement.prototype,'scrollWidth','get').mockReturnValue(1000);
+    vi.spyOn(HTMLTableElement.prototype,'clientWidth','get').mockReturnValue(100);
+    const view=render(<><table aria-label="Outside" /><InlineStoryRuntime data={{...data(''),nodes:parsed.nodes,chrome:true,template:'editorial'}} onController={()=>{}} /></>);
+    const root=view.container.querySelector('[data-mx-inline-story]')!;
+    await waitFor(()=>expect(root.querySelector('table')).toHaveAttribute('data-mx-scrollable',''));
+    expect(screen.getByLabelText('Outside')).not.toHaveAttribute('data-mx-scrollable');
+    const target=root.querySelectorAll('h2')[2];target.scrollIntoView=vi.fn();
+    fireEvent.click(screen.getByLabelText('Go to section 3: Three'));
+    expect(target.scrollIntoView).toHaveBeenCalled();
+    expect(root.querySelector('.mx-outline-row[aria-current]')).not.toBeNull();
+    view.unmount();vi.restoreAllMocks();
+  });
   it('retains the reader color choice while adopting an authored version', async () => {
     let controller:InlineStoryController|null=null;
     const view=render(<InlineStoryRuntime data={data('First')} onController={value=>{controller=value;}} />);

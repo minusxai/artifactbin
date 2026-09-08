@@ -27,9 +27,7 @@ import { READER_CHROME_HIDDEN_CLASS, type ReaderChromeState } from '@/lib/story/
 import { STORY_MODE_HOOK, STORY_READER_ACTION_MESSAGE, STORY_READER_ACTION_RESULT_MESSAGE, STORY_READER_CHROME_MESSAGE, type StoryReaderActionKind, type StoryReaderActionMessage, type StoryReaderActionResultMessage, type StoryReaderChromeMessage } from './contract';
 import { applyReaderMode, persistReaderMode } from './reader-mode';
 import { chromeAfterSample, type ChromeState } from './reader-chrome-policy';
-
-/** How long "link copied" stays up. Long enough to read, short enough to forget. */
-const TOAST_MS = 1500;
+import { wireReaderSharing } from './reader-share';
 
 export interface ReaderChromeHandle {
   /** Remove every listener this wiring installed. */
@@ -199,56 +197,9 @@ export function wireReaderChrome(win: Window, doc: Document): ReaderChromeHandle
     pill.textContent = following ? 'following' : 'follow';
   };
 
-  const toast = root.querySelector<HTMLElement>('[data-mx-reader-toast]');
-  let toastTimer = 0;
-  const say = () => {
-    if (!toast) return;
-    toast.hidden = false;
-    win.clearTimeout(toastTimer);
-    toastTimer = win.setTimeout(() => { toast.hidden = true; }, TOAST_MS);
-  };
-  cleanups.push(() => win.clearTimeout(toastTimer));
-
-  /*
-   * The last resort, for a browser with neither a share sheet nor a clipboard
-   * permission: a hidden readonly field the document selects and copies out of.
-   * It is in the markup rather than created here because an element appended
-   * during a click handler is not always focusable in time.
-   */
-  const copyField = root.querySelector<HTMLInputElement>('[data-mx-reader-copy]');
-  const copyByExecCommand = (url: string): boolean => {
-    if (!copyField || typeof doc.execCommand !== 'function') return false;
-    copyField.value = url;
-    copyField.select();
-    try {
-      return doc.execCommand('copy');
-    } catch {
-      return false;
-    }
-  };
-
-  const shareTitle = () => {
-    const titled = root.querySelector<HTMLElement>('.mx-reader-title');
-    return (titled?.textContent ?? '').trim() || doc.title;
-  };
-  const share = () => {
-    // The reader's document is served TOP-LEVEL, so its location is the real,
-    // shareable address — not a frame's internal one.
-    const url = win.location.href;
-    const nav = win.navigator as Navigator & { share?: (data: ShareData) => Promise<void> };
-    if (typeof nav.share === 'function') {
-      // A dismissed sheet rejects; that is the reader saying no, not a failure.
-      void nav.share({ title: shareTitle(), url }).catch(() => {});
-      return;
-    }
-    const clipboard = nav.clipboard as Clipboard | undefined;
-    if (clipboard && typeof clipboard.writeText === 'function') {
-      void clipboard.writeText(url).then(say, () => { if (copyByExecCommand(url)) say(); });
-      return;
-    }
-    if (copyByExecCommand(url)) say();
-  };
-
+  const sharing=wireReaderSharing(win,doc,root);
+  const share=sharing.share;
+  cleanups.push(sharing.dispose);
   for (const button of Array.from(root.querySelectorAll<HTMLElement>('[data-mx-reader-action]'))) {
     const kind = button.dataset.mxReaderAction;
     on(button, 'click', () => {
@@ -286,7 +237,7 @@ export function wireReaderChrome(win: Window, doc: Document): ReaderChromeHandle
       if (source !== parent || !data || typeof data !== 'object') return;
       if (data.type === STORY_READER_ACTION_RESULT_MESSAGE) {
         // The page shared on our behalf; the toast is ours to show.
-        if (data.kind === 'share' && data.ok) say();
+        if (data.kind === 'share' && data.ok) sharing.copied();
         // The page liked or followed for us; the heart and the pill follow suit.
         if (data.kind === 'like' && data.ok && typeof data.liked === 'boolean') showLike(data.liked, data.count ?? null);
         if (data.kind === 'follow' && data.ok && typeof data.following === 'boolean') showFollow(data.following);
