@@ -653,23 +653,30 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * replaced frame cannot receive a stale one.
    */
   useEffect(() => {
+    const pending = new Map<number, Promise<StoryQueryResult>>();
     const onQuery = async (e: MessageEvent) => {
       const data = e.data as Partial<StoryQueryRequest> | undefined;
       if (!data || typeof data !== 'object' || data.type !== STORY_QUERY_MESSAGE) return;
       if (!isDocumentPeerEvent(frameRef.current, e)) return;
       const reply = (msg: StoryQueryResult) => (e.source as Window | null)?.postMessage(msg, '*');
-      try {
+      const requestId = data.id!;
+      let request = pending.get(requestId);
+      if (!request) request = (async ():Promise<StoryQueryResult> => { try {
         const res = await fetch(`/a/${id}/query`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ values: data.values ?? {}, only: data.only ?? [], ...(data.page ? { page: data.page } : {}), ...(data.localTables ? {localTables: data.localTables} : {}) }),
         });
-        if (!res.ok) { reply({ type: STORY_QUERY_RESULT_MESSAGE, id: data.id!, error: `query failed (${res.status})` }); return; }
+        if (!res.ok) return { type: STORY_QUERY_RESULT_MESSAGE, id:requestId, error: `query failed (${res.status})` };
         const body = (await res.json()) as Pick<DataflowState,'tables'|'errors'|'mutationAccess'>;
-        reply({ type: STORY_QUERY_RESULT_MESSAGE, id: data.id!, ...body });
+        return { type: STORY_QUERY_RESULT_MESSAGE, id:requestId, ...body };
       } catch (err) {
-        reply({ type: STORY_QUERY_RESULT_MESSAGE, id: data.id!, error: err instanceof Error ? err.message : 'query failed' });
-      }
+        return { type: STORY_QUERY_RESULT_MESSAGE, id:requestId, error: err instanceof Error ? err.message : 'query failed' };
+      } })();
+      pending.set(requestId,request);
+      const result=await request;
+      reply(result);
+      if(pending.get(requestId)===request)pending.delete(requestId);
     };
     window.addEventListener('message', onQuery);
     return () => window.removeEventListener('message', onQuery);
@@ -925,7 +932,10 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   useEffect(() => {
     // Nothing to ask while the editor holds the page: the loop used to keep
     // counting through an edit session and reveal a frame that did not exist.
-    if (frameLoaded || editing) return;
+    // A direct mount is already in this window and has no frame bootstrap to
+    // greet. Sending hello to ourselves makes its relay transport replay an
+    // outstanding initial query.
+    if (directMarkup || frameLoaded || editing) return;
     let asked = 0;
     const ask = () => {
       frameRef.current?.contentWindow?.postMessage(STORY_HELLO_MESSAGE, '*');
@@ -934,7 +944,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     const timer = setInterval(ask, 250);
     ask();
     return () => clearInterval(timer);
-  }, [frameLoaded, editing, frameNonce]);
+  }, [directMarkup, frameLoaded, editing, frameNonce]);
 
   /**
    * ...and asking again on the way BACK IN, because revealing the frame is
@@ -959,7 +969,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * repair, and the fallback text goes back up while the new one loads.
    */
   useEffect(() => {
-    if (!frameLoaded) return;
+    if (directMarkup || !frameLoaded) return;
     let timer = 0;
     const verify = () => {
       const win = frameRef.current?.contentWindow;
@@ -983,7 +993,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('pageshow', verify);
     };
-  }, [frameLoaded]);
+  }, [directMarkup, frameLoaded]);
 
   /*
    * The signed export key is the EXPORTER's fingerprint: it is the only caller
