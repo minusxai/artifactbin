@@ -147,6 +147,12 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); frameEl.remove(); });
 
 describe('what the document says', () => {
+  it('keeps the phone editor toolbar below the persistent 44px page bar', () => {
+    vi.stubGlobal('innerWidth', 390);
+    mount();
+    expect(screen.getByLabelText('Editor toolbar')).toHaveStyle({ top: '44px' });
+  });
+
   it('composes a text edit into the source and persists it', async () => {
     mount();
     await fromFrame({ type: STORY_TEXT_EDIT_MESSAGE, path: '0.1', innerHtml: 'goodbye' });
