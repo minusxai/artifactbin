@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { StoryDocumentUpdate, StoryEditParentMessage, StoryIslandData } from './contract';
 import type { QueryTransport } from './store';
 import { createDataflowStore } from './store';
@@ -13,6 +13,8 @@ import { STORY_EDIT_MODE_MESSAGE, STORY_ANNOTATIONS_MESSAGE, STORY_SELECTION_ACT
 import { isStoryDocumentUpdate } from './document-update';
 import type { PreparedStoryRuntime } from '@/lib/story/prepared-runtime';
 import { TrustedUi, useTrustedPortalContainer } from '@/components/TrustedUi';
+import { isolateStoryCss } from '@/lib/story/inline-css';
+import { clearInitialStory } from '@/web/initial-story';
 
 function SelectionPortal({ready}:{ready:(element:HTMLElement | null)=>void}) {
   const portal = useTrustedPortalContainer();
@@ -59,6 +61,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
   const editRef = useRef<FrameEditSession | null>(null);
   const [, redraw] = useState(0);
   useLayoutEffect(() => {
+    clearInitialStory();
     // StrictMode replays effects without remounting state. Revoked capabilities
     // stay revoked; replay obtains an entirely new document lifetime instead.
     if (store.disposed) { setLifetime(createLifetime()); return; }
@@ -166,8 +169,9 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
     store.start();
     return () => { controller.dispose(); latest.current.onController(null); };
   }, [lifetime]);
-  return <><TrustedUi overlay><SelectionPortal ready={portalReady} /></TrustedUi><div ref={root} data-mx-inline-story="" data-theme={styles.theme ?? undefined} className={current.colorMode}>
-    <style>{[styles.baseCss,styles.compiledCss,styles.authorCss].filter(Boolean).join('\n')}</style>
+  const css = useMemo(() => isolateStoryCss([styles.baseCss,styles.compiledCss,styles.authorCss].filter(Boolean).join('\n')), [styles.baseCss,styles.compiledCss,styles.authorCss]);
+  return <><TrustedUi overlay><SelectionPortal ready={portalReady} /></TrustedUi><div ref={root} data-mx-inline-story="" data-mx-story-root="" data-theme={styles.theme ?? undefined} className={current.colorMode}>
+    <style>{css}</style>
     <StoryRuntimeApp {...current} store={store} importAsset={lifetime.transport?.importAsset} editDecorate={editRef.current?.decorate} />
   </div></>;
 }

@@ -19,7 +19,7 @@ import { DatasetCatalogView } from '@/components/DatasetCatalogView';
 import dynamic from '@/lib/dynamic';
 import { FolderPlus, MessageSquare, Pencil } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { InlineStoryRuntime, type InlineStoryController } from '@/lib/story-runtime/InlineStoryRuntime';
+import type { InlineStoryController } from '@/lib/story-runtime/InlineStoryRuntime';
 import { createAuthenticatedTransport } from '@/lib/story-runtime/authenticated-transport';
 import { subscribeDocument } from '@/lib/story-runtime/document-endpoint';
 import type { PreparedStoryRuntime } from '@/lib/story/prepared-runtime';
@@ -53,6 +53,7 @@ import { resolveStoryMode } from '@/lib/data/story/story-themes';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import type { StoryIslandDataflow } from '@/lib/story-runtime/contract';
 
+const InlineStoryRuntime = dynamic(() => import('@/lib/story-runtime/InlineStoryRuntime').then(module => ({default:module.InlineStoryRuntime})), { ssr: false });
 const ArtifactEditor = dynamic(() => import('@/components/ArtifactEditor'), {
   ssr: false,
   loading: () => <p className="mt-10 text-center text-xs text-faint">loading the editor…</p>,

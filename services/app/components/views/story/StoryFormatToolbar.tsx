@@ -17,6 +17,7 @@
 import { sendDocument, subscribeDocument, documentRect, documentReady, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
+import { useTrustedPortalContainer } from '@/components/TrustedUi';
 import {
   AArrowDown, AArrowUp, AlignCenter, AlignJustify, AlignLeft, AlignRight,
   ArrowDownFromLine, ArrowDownToLine, ArrowLeftFromLine, ArrowLeftToLine,
@@ -70,6 +71,7 @@ export interface StoryFormatToolbarProps {
 export default function StoryFormatToolbar({
   selection, frameRef, runtimeRef, onApply, onApplyLink, onSelect, onDelete, onComment,
 }: StoryFormatToolbarProps) {
+  const portal = useTrustedPortalContainer();
   const [linkDraft, setLinkDraft] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const linkInputRef = useRef<HTMLInputElement>(null);
@@ -348,6 +350,6 @@ export default function StoryFormatToolbar({
         </div>
       )}
     </div>,
-    document.body,
+    portal ?? document.body,
   );
 }
