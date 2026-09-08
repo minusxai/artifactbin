@@ -20,7 +20,8 @@
  *     gets to report.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { act, render } from '@testing-library/react';
+import { act } from '@testing-library/react';
+import { render } from '@/test/helpers/surface-ui';
 
 
 /** Records the moment the editor's module graph is first pulled in. */

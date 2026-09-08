@@ -46,7 +46,7 @@ import { useLiveArtifact } from '@/lib/story/use-live-artifact';
 import { STORY_READER_ACTION_MESSAGE, STORY_READER_ACTION_RESULT_MESSAGE, STORY_READER_CHROME_MESSAGE, type StoryReaderActionMessage, type StoryReaderActionResultMessage } from '@/lib/story-runtime/contract';
 import { STORY_ASSET_MESSAGE, STORY_ASSET_RESULT_MESSAGE, type StoryAssetRequest, type StoryAssetResult, STORY_DATA_MESSAGE, STORY_DOCUMENT_ACK_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_HELLO_MESSAGE, STORY_MUTATE_MESSAGE, STORY_MUTATE_RESULT_MESSAGE, STORY_PAINTED_MESSAGE, STORY_READER_MODE_MESSAGE, STORY_SCROLL_MESSAGE, type StoryDataUpdate, type StoryMutateRequest, type StoryMutateResult, type StoryScrollMessage, STORY_ADOPTS_MESSAGE, STORY_QUERY_MESSAGE, STORY_QUERY_RESULT_MESSAGE, isEditFrameMessage, isSessionMessage, isValuesMessage, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, type StoryDocumentUpdate, type StoryEditSelection, type StoryQueryRequest, type StoryQueryResult, type StorySelectionActionsMessage } from '@/lib/story-runtime/contract';
 import type { DataflowState } from '@/lib/story/dataflow';
-import { urlValuesSearch, writeUrlValues } from '@/lib/story/url-values';
+import { readUrlValues, urlValuesSearch, writeUrlValues } from '@/lib/story/url-values';
 import { displayTitle } from '@/lib/story/title';
 import { formatFileSize } from '@/lib/file-display';
 import { resolveStoryMode } from '@/lib/data/story/story-themes';
@@ -463,6 +463,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     setFrameLoaded(!!controller);
   }, []);
   const readerMode = readerModeOverride ?? resolveStoryMode(shownTheme, shownColorMode);
+  const initialRuntimeData = useMemo(() => props.runtime?.data ?? {
+    nodes: storyUpdateParts(source ?? '')?.nodes ?? [], refData: {},
+    dataflow: dataflow ? {...dataflow, values:{...dataflow.values,...readUrlValues(search,dataflow.flow)}} : undefined,
+    colorMode: readerMode, template, chrome: true,
+  }, [id]);
   const setReaderMode = useCallback((mode: AppearanceMode) => {
     setReaderModeOverride(mode);
     runtimeRef.current?.send({ type: STORY_READER_MODE_MESSAGE, mode });
@@ -900,7 +905,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           )}
           <InlineStoryRuntime
             key={id}
-            data={props.runtime?.data ?? {nodes: storyUpdateParts(shownSource ?? '')?.nodes ?? [], refData: {}, dataflow: dataflow ?? undefined, colorMode: readerMode, template, chrome: true}}
+            data={initialRuntimeData}
             transportFactory={transportFactory}
             prepared={props.runtime}
             authorScript={props.runtime?.authorScript}

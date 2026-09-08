@@ -54,16 +54,16 @@ describe('artifact pages carry no app chrome', () => {
   it('the artifact page is the shell around the document, and nothing else', () => {
     const html = renderPath('/a/abc123');
     expect(html).toContain('aria-label="Artifact viewport"');
-    expect(html).toContain('<iframe');
-    expect(html).toContain('src="/a/abc123/raw?edit=1"');
+    expect(html).not.toContain('<iframe');
+    expect(html).not.toContain('/a/abc123/raw');
     expect(html).not.toContain(MASTHEAD);
   });
 
   it('both artifact addresses render through that ONE page', () => {
     for (const path of ['/a/abc123', '/@owner/abc123-document']) {
       const html = renderPath(path);
-      expect(html, path).toContain('title="artifact"');
-      expect(html, path).toContain('src="/a/abc123/raw?edit=1"');
+      expect(html, path).toContain('aria-label="Artifact viewport"');
+      expect(html, path).not.toContain('/a/abc123/raw');
     }
   });
 
