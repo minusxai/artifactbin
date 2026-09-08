@@ -203,7 +203,8 @@ await op.getByText('dom:blocked storage:blocked network:blocked',{exact:true}).w
   const probe = await op.evaluate(() => {
     const f = document.querySelector('[data-artifact-story-host]');
     if (!f) return { missing: true };
-    const scripts=[...f.querySelectorAll('iframe[title="Isolated artifact script"]')];
+    // Hidden Helmet workers mount on body, outside the visible story host.
+    const scripts=[...document.querySelectorAll('iframe[title="Isolated artifact script"]')];
     return {topLevel:f.ownerDocument===document,count:scripts.length,unsafe:scripts.some(el=>el.getAttribute('sandbox')!=='allow-scripts'),readable:scripts.some(el=>!!el.contentDocument)};
   });
   ok(!probe.missing && probe.topLevel && probe.count===1 && !probe.unsafe,'prose is top-level; author execution remains sandboxed without same-origin');

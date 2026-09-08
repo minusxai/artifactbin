@@ -124,7 +124,7 @@ await frame.waitForFunction(() => document.querySelector('[aria-label="Live numb
 ok((await frame.textContent('[aria-label="Live number"]')) === '$2,040', 'back to All restores the whole result');
 // The CSP admits exactly the query url — from INSIDE the sandboxed document.
 const wrapper = await (await frame.$('iframe[title="Isolated artifact script"]')).contentFrame();
-await wrapper.waitForSelector('iframe[title="Interactive artifact content"]');
+await wrapper.waitForSelector('iframe[title="Interactive artifact content"]', {state:'attached'});
 const authorRealm = await (await wrapper.$('iframe[title="Interactive artifact content"]')).contentFrame();
 const reach = await authorRealm.evaluate(async ({id,base}) => {
   const tryFetch = async (url, init) => { try { const r = await fetch(url, init); return String(r.status); } catch { return 'blocked'; } };

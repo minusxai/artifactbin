@@ -29,3 +29,10 @@ it('receives the OAuth redirect at a real bounded loopback listener',()=>{
  expect(helper).toContain('finally {await new Promise(resolve=>callbackServer.close(resolve));}');
  expect(helper).not.toContain("page.route('http://127.0.0.1:5498");
 });
+it('checks hidden author workers by attachment and the document-level worker mount',()=>{
+ const data=readFileSync(new URL('../gate-dataflow.mjs',import.meta.url),'utf8');
+ expect(data).toContain('wrapper.waitForSelector(\'iframe[title="Interactive artifact content"]\', {state:\'attached\'})');
+ const app=readFileSync(new URL('../gate-app-flows.mjs',import.meta.url),'utf8');
+ expect(app).toContain('document.querySelectorAll(\'iframe[title="Isolated artifact script"]\')');
+ expect(app).toContain("probe.count===1 && !probe.unsafe");
+});
