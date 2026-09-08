@@ -18,12 +18,12 @@ Old split-unified-shell work is paused and must not be merged.
 | Priority / gate | Status | Evidence / required acceptance |
 |---|---|---|
 | Stored legacy markup cannot execute in first-party realm | MITIGATED at shared reader | 59 relevant tests green after f113e26; root removed guard and reproduced six failures, then restored it. Full client mount must use the same guard. |
-| Same-origin cookie operations retain strict CSRF proof | OPEN, reproduced | Seed same-origin-browser.test.ts composed proxy: 6 proof-refusal cases red, valid cookie/bearer cases green. |
+| Same-origin cookie operations retain strict CSRF proof | MITIGATED prerequisite | 204e651 exact Origin/CSRF and unconditional one-use OAuth consent. Independent mixed selection 537 green; root disabled boundary and observed eight failures, restored implementation. Full cutover still pending. |
 | ShadowRoot preserves context and contains portals | MITIGATED primitive; integration OPEN | 19 primitive/tooltip/sheet tests independently green at 3f71fa9. BrowserOS actual-component fixture: controls blue despite author red!important; tooltip/input absent from light DOM; action click increments; closed root. Author CSS :has probe remains 100px before/after dummy sensitive attribute change. Author script parent DOM = SecurityError; network blocked; server observed zero API calls. Full built styles, dialogs and keyboard still require integration review. |
 | Parent bootstrap cannot be clobbered by author IDs or stale lifecycle | OPEN | Explicit root/data references; no lookup into authored subtree for trusted config. Route teardown tests required. |
-| Top-level runtime retains editing/data/live capabilities | OPEN | Need reusable mount/dispose lifecycle over existing StoryRuntimeApp/store/edit protocol, not a second interpreter or author iframe. |
+| Top-level runtime retains editing/data/live capabilities | Lifecycle MITIGATED; integration OPEN | 51d25d1 reusable mount/dispose over existing runtime. Runtime selections green; independent disabled-mount control red. Relay listeners and pending timers now disposed. Integration seed still red until ArtifactSurface conversion. |
 | Auth returns and private cache stay correct | OPEN | Actual login, expired session, logout, return intent, account/tokens; private no-store and uniform 404s. |
-| Client routing truly avoids document reload | OPEN | Home/account/profile/artifact/back/forward with window identity and shell host identity checks. Save failure must prevent losing edits. |
+| Client routing truly avoids document reload | PARTIALLY MEASURED | Production bundle, BrowserOS: privacy→terms→account→login retains window marker and same topbar backend IDs, zero framing iframes. Found scroll reset/sticky header bugs; client agent fixing with regression coverage. Artifact transitions/save blocking remain open. |
 | Both SSR settings produce correct functional pages | OPEN | Static landing; themed pending states; CSR mount vs SSR hydration; metadata/ACL unaffected; captures still render content. |
 | Browser/platform regressions | OPEN | Full node/API/UI suites and browser gates, plus cross-engine boundary/focus lifecycle checks and mobile browser review. |
 
@@ -45,4 +45,11 @@ All stage results must record observed commands/output. A prototype pass is not 
 
 ## Baseline notes
 
-Unchanged main full run: API 166 files / 1335 tests passed; Node 366/369 files passed with database startup/hook failures and login-provider timeout. Isolated retry is in progress; not classified as harmless. Integration shared shell and initial-page tests intentionally remain red until their implementation phases.
+Unchanged main full run: API 166 files / 1335 tests passed; Node 366/369 files passed with database startup/hook failures and login-provider timeout. Isolated retry passed all 70 tests. Full baseline UI passed 151 files / 1208 tests. Integrated prerequisite production build and typecheck pass at 6a960a7; remaining initial-page/top-level integration seeds intentionally red. Root caught two late runtime test typing errors and merged 6a960a7; prior agent's typecheck claim preceded those test edits.
+
+## Current implementation ownership
+
+- page-server: direct server responses, SSR flag, validated startup projection and mandatory proxy verdict.
+- page-client: bootstrap consumption, no-flash Home/account loading, auth refresh, route scrolling and sticky trusted host.
+- artifact_completion: top-level ArtifactSurface, safe runtime payload, trusted artifact controls and edit/data/live preservation. Replaces an agent whose response context was exhausted; that was not a repository blocker.
+- Root: independent reviews, real production-build browser checks, final cutover/deletion planning and final regression/PR.
