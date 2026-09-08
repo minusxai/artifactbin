@@ -1,7 +1,12 @@
-import { render, cleanup, act } from '@testing-library/react';
+import { render, cleanup, act, fireEvent, within } from '@testing-library/react';
+import { StrictMode, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { afterEach, describe, expect, it } from 'vitest';
-import { TrustedUi, useTrustedPortalContainer } from '../TrustedUi';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { TrustedUi, useTrustedPortalContainer, configureTrustedUiStyles } from '../TrustedUi';
+import AnchoredPanel from '../AnchoredPanel';
+import MobileSheet from '../MobileSheet';
+import { SelectMenu } from '../SelectMenu';
+import { Tooltip } from '../Tooltip';
 
 afterEach(cleanup);
 
@@ -11,6 +16,13 @@ function SensitiveDialog() {
 }
 
 describe('trusted UI CSS boundary', () => {
+  it('keeps exactly one protected root during StrictMode ref replay', () => {
+    const result = render(<StrictMode><TrustedUi><button aria-label="Strict control">Safe</button></TrustedUi></StrictMode>);
+    const root = result.container.querySelector('[data-trusted-ui]')!.shadowRoot!;
+    expect(root.querySelectorAll('[data-trusted-ui-root]')).toHaveLength(1);
+    expect(root.querySelectorAll('style')).toHaveLength(1);
+    expect(root.querySelectorAll('button')).toHaveLength(1);
+  });
   it('keeps controls and portalled secrets out of the author-selectable document', async () => {
     let control: HTMLButtonElement | null = null;
     const result = render(<TrustedUi><button ref={el => { control = el; }} aria-label="Revoke token">Revoke token</button><SensitiveDialog /></TrustedUi>);
@@ -38,5 +50,74 @@ describe('trusted UI CSS boundary', () => {
     expect(control).toBe(before);
     expect(control!.getRootNode()).toBe(root);
     expect((root as ShadowRoot).activeElement).toBe(before);
+  });
+
+  it('does not change the portal destination outside a protected boundary', () => {
+    let target: HTMLElement | undefined;
+    function Probe() { target = useTrustedPortalContainer(); return null; }
+    render(<Probe />);
+    expect(target).toBeUndefined();
+  });
+
+  it('installs only registered trusted styles, resets consumed custom properties and follows theme without remount', async () => {
+    const authorStyle = document.createElement('style');
+    authorStyle.textContent = 'button { background: url(/author-style-probe) }';
+    document.head.append(authorStyle);
+    configureTrustedUiStyles(':root,:host { --color-fg: black } body { color:var(--color-fg); transform:var(--tw-transform); }');
+    const result = render(<TrustedUi><button aria-label="Styled control">Safe</button></TrustedUi>);
+    const host = result.container.querySelector('[data-trusted-ui]')!;
+    const root = host.shadowRoot!;
+    expect(root.textContent).not.toContain('author-style-probe');
+    expect(root.textContent).toContain('--tw-transform: initial');
+    expect(root.textContent).not.toContain(':root');
+    const control = root.querySelector('button');
+    await act(async () => { document.documentElement.setAttribute('data-theme', 'dark'); });
+    expect(root.querySelector('[data-trusted-ui-root]')?.getAttribute('data-theme')).toBe('dark');
+    expect(root.querySelector('button')).toBe(control);
+    await act(async () => { configureTrustedUiStyles(':root { --color-fg: blue; }'); });
+    expect(root.textContent).toContain('--color-fg: blue');
+    result.unmount();
+    authorStyle.remove();
+    document.documentElement.removeAttribute('data-theme');
+    configureTrustedUiStyles('');
+  });
+
+  it('keeps desktop panels, select lists and tooltips in the boundary; keyboard events retain component state', () => {
+    window.innerWidth = 1200;
+    function Controls() {
+      const [value, setValue] = useState('a');
+      return <>
+        <AnchoredPanel label="Protected panel" open onOpenChange={() => {}} trigger={<button aria-label="Panel trigger">Open</button>}><input aria-label="Panel secret" /></AnchoredPanel>
+        <SelectMenu value={value} onChange={setValue} ariaLabel="Choice" options={[{value:'a',label:'A'},{value:'b',label:'B'}]} />
+        <Tooltip open content="Protected tip"><button aria-label="Tip trigger">Tip</button></Tooltip>
+      </>;
+    }
+    const result = render(<TrustedUi><Controls /></TrustedUi>);
+    const root = result.container.querySelector('[data-trusted-ui]')!.shadowRoot!;
+    const q = within(root as unknown as HTMLElement);
+    expect(q.getByLabelText('Panel secret')).toBeTruthy();
+    expect(root.textContent).toContain('Protected tip');
+    const select = q.getByLabelText('Choice');
+    fireEvent.keyDown(select, {key:'ArrowDown'});
+    expect(q.getByLabelText('Choice options')).toBeTruthy();
+    fireEvent.keyDown(select, {key:'ArrowDown'});
+    fireEvent.keyDown(select, {key:'Enter'});
+    expect(select.textContent).toContain('B');
+    expect(q.queryByLabelText('Choice options')).toBeNull();
+    expect(document.querySelector('[aria-label="Panel secret"]')).toBeNull();
+    expect(document.querySelector('[data-slot="tooltip-content"]')).toBeNull();
+  });
+
+  it('keeps mobile sheets protected and removes their Escape listener on unmount', () => {
+    const close = vi.fn();
+    const result = render(<TrustedUi><MobileSheet label="Protected sheet" onClose={close}><input aria-label="Sheet secret" /></MobileSheet></TrustedUi>);
+    const root = result.container.querySelector('[data-trusted-ui]')!.shadowRoot!;
+    expect(root.querySelector('[aria-label="Sheet secret"]')).not.toBeNull();
+    expect(document.querySelector('[aria-label="Sheet secret"]')).toBeNull();
+    fireEvent.keyDown(root.querySelector('input')!, {key:'Escape', composed:true});
+    expect(close).toHaveBeenCalledTimes(1);
+    result.unmount();
+    fireEvent.keyDown(document, {key:'Escape'});
+    expect(close).toHaveBeenCalledTimes(1);
   });
 });
