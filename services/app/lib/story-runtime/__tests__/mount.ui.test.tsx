@@ -85,7 +85,7 @@ describe('reusable story runtime lifecycle', () => {
     const host = document.createElement('div'); host.innerHTML = '<div class="mx-doc"><p id="first" data-mx-ast="0">First</p></div>'; document.body.append(host);
     await act(async () => { mounted = mountStory({ root: host, peerOrigin: window.location.origin, renderMode: 'hydrate',
       data: { nodes: nodes('<p id="first">First</p>'), refData: {}, colorMode: 'light', chrome: false } }); });
-    mounted.adopt({ type: STORY_DOCUMENT_MESSAGE, nodes: nodes('<p id="first">Second</p>'), compiledCss: '.new{}', authorCss: '.new-author{}' });
+    mounted!.adopt({ type: STORY_DOCUMENT_MESSAGE, nodes: nodes('<p id="first">Second</p>'), compiledCss: '.new{}', authorCss: '.new-author{}' });
     expect(document.head.querySelectorAll('style[data-mx-tw]')).toHaveLength(1);
     expect(compiled.textContent).toBe('.new{}');
     expect(author.textContent).toBe('.new-author{}');
@@ -102,7 +102,7 @@ describe('reusable story runtime lifecycle', () => {
     mounted = mountStory({ root: host, peer: window, peerOrigin: window.location.origin, renderMode: 'render',
       data: { nodes: nodes('<p id="editable">Edit me</p>'), refData: {}, colorMode: 'light', chrome: false } });
     const command = (on: boolean) => ({ isTrusted: true, source: window, origin: window.location.origin,
-      data: { type: STORY_EDIT_MODE_MESSAGE, on } } as MessageEvent);
+      data: { type: STORY_EDIT_MODE_MESSAGE, on } } as unknown as MessageEvent);
     await act(async () => { for (const listener of added) listener(command(true)); });
     await waitFor(() => expect(host.querySelector('[contenteditable="true"]')).not.toBeNull());
     await act(async () => { for (const listener of added) listener(command(false)); });
