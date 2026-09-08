@@ -7,6 +7,7 @@
 import { chromium, type Browser } from 'playwright';
 import sharp from 'sharp';
 import type { BrowserService, RenderRequest, RenderResult } from '@artifactbin/contracts';
+import { internalAssetResponse } from './internal-assets';
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_SETTLE_MS = 1_500;
@@ -57,13 +58,31 @@ export function createBrowser(opts: { idleShutdownMs?: number } = {}): BrowserSe
       ? clamp(req.viewport.width / Math.max(1, requestedCrop.width), 1, 4)
       : 1;
     // reducedMotion: the motion kit never arms scroll reveals under it, so a capture always sees the finished page.
-    const page = await b.newPage({ viewport: req.viewport, reducedMotion: 'reduce', deviceScaleFactor: cardDensity });
+    const page = await b.newPage({ viewport: req.viewport, reducedMotion: 'reduce', deviceScaleFactor: cardDensity, serviceWorkers: 'block' });
+    const forwarding = new AbortController();
+    const pending = new Set<Promise<void>>();
     try {
       const shotOpts = { timeout, ...(req.format === 'jpg' ? { type: 'jpeg' as const, quality: req.quality ?? 85 } : { type: 'png' as const }) };
       const mime = req.format === 'jpg' ? 'image/jpeg' as const : 'image/png' as const;
-      if (req.sameOriginOnly) {
+      if (req.sameOriginOnly || req.assetOrigin) {
         const origin = new URL(req.url).origin;
-        await page.route('**/*', (route) => requestOriginAllowed(route.request().url(),origin,req.allowedOrigins) ? route.continue() : route.abort());
+        // Context routing also covers popup first requests. Service workers are
+        // disabled above so no worker can bypass this admission/forwarding seam.
+        await page.context().route('**/*', route => {
+          const run = (async () => {
+            const request = route.request();
+            try {
+              if (req.assetOrigin && new URL(request.url()).origin === req.assetOrigin) {
+                const signal = AbortSignal.any([forwarding.signal, AbortSignal.timeout(Math.min(timeout, DEFAULT_TIMEOUT_MS))]);
+                const response = await internalAssetResponse(request.url(), request.method(), req.assetOrigin, origin, signal);
+                await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) });
+              } else if (!req.sameOriginOnly || requestOriginAllowed(request.url(), origin, req.allowedOrigins)) await route.continue();
+              else await route.abort();
+            } catch { await route.abort().catch(() => {}); }
+          })();
+          pending.add(run); void run.finally(() => pending.delete(run));
+          return run;
+        });
       }
       await page.goto(req.url, { waitUntil: 'load', timeout }).catch((e) => { throw new NavigationError((e as Error).message); });
       if (req.injectCss) await page.addStyleTag({ content: req.injectCss }).catch(() => {});
@@ -147,6 +166,8 @@ export function createBrowser(opts: { idleShutdownMs?: number } = {}): BrowserSe
       const bytes = await page.screenshot({ clip: { x: box.x, y: box.y, width: Math.min(box.width, width) || width, height }, ...shotOpts });
       return { mime, bytes: new Uint8Array(bytes) };
     } finally {
+      forwarding.abort();
+      await Promise.allSettled(pending);
       await page.close().catch(() => {});
       scheduleIdle();
     }

@@ -11,6 +11,7 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {randomBytes} from 'node:crypto';
 import {chromium,firefox,webkit} from 'playwright';
+import sharp from 'sharp';
 import {startDocument,becomeOwner} from './lib/start-doc.mjs';
 
 const engineName=process.argv.find(arg=>arg.startsWith('--browser='))?.split('=')[1]??'chromium';
@@ -112,7 +113,17 @@ try {
   for(const path of ['/one.js','/two.js','/dynamic.js','/data.json','/image.png'])assert.equal(hits.get(path),1,path+' imported once');
   assert(wire.some(row=>row.host===new URL(assets).host&&row.url.startsWith('/assets/')),'cached assets served on dedicated origin');
   assert(wire.filter(row=>row.host===new URL(assets).host&&row.url==='/assets/ref/'+refId).length>=3,'public refs re-read without immutable caching');
-  console.log(JSON.stringify({engine:engineName,version:browser.version(),loads:3,signals:true,persistentMutation:true,permissionDenial:true,bundledClassicAndModule:true,dynamicImageAndScript:true,rawCompatibility:true,immutableWebRtcDenial:true,ssrHeightStable:true,nestedNavigationBlocked:true,singleNavigationControl:true,cdnHits:Object.fromEntries(hits),assetRequests:wire.filter(row=>row.host===new URL(assets).host).length}));
+  // The export Chromium has NO host-resolver override or self-signed TLS bypass.
+  // Its asset URL can only work through the renderer's internal byte transport.
+  const exportMarkup='<main><Iframe title="Internal export" height={100}><style>{`body{margin:0}`}</style><canvas width="100" height="100"/><script src="'+cdn+'/one.js"/><script type="module">{`await new Promise(resolve=>setTimeout(resolve,1800));const ctx=document.querySelector("canvas").getContext("2d");ctx.fillStyle=window.bundleOrder==="A"?"#33cc33":"#cc3333";ctx.fillRect(0,0,100,100);`}</script></Iframe></main>';
+  const exportDoc=await mainFetch(backend+'/api/artifacts',{method:'POST',headers:authHeaders,body:JSON.stringify({title:'Internal asset export',markup:exportMarkup,visibility:'unlisted'})});assert(exportDoc.ok,await exportDoc.clone().text());
+  const exportId=(await exportDoc.json()).id, beforeExportWire=wire.length;
+  const exported=await mainFetch(backend+'/a/'+exportId+'/export?format=png');assert(exported.ok,await exported.clone().text());
+  const {data:pixels,info}=await sharp(Buffer.from(await exported.arrayBuffer())).raw().toBuffer({resolveWithObject:true});
+  let green=0;for(let offset=0;offset<pixels.length;offset+=info.channels)if(pixels[offset]===51&&pixels[offset+1]===204&&pixels[offset+2]===51)green++;
+  assert(green>=9000,'cold managed export includes the cached library and awaited canvas');
+  assert.equal(wire.slice(beforeExportWire).filter(row=>row.host===new URL(assets).host).length,0,'export cached assets bypass public TLS entirely');
+  console.log(JSON.stringify({engine:engineName,version:browser.version(),loads:3,signals:true,persistentMutation:true,permissionDenial:true,bundledClassicAndModule:true,dynamicImageAndScript:true,rawCompatibility:true,immutableWebRtcDenial:true,ssrHeightStable:true,nestedNavigationBlocked:true,singleNavigationControl:true,internalColdExport:true,cdnHits:Object.fromEntries(hits),assetRequests:wire.filter(row=>row.host===new URL(assets).host).length}));
 } finally {
   await browser?.close();if(server&&server.exitCode===null){const exited=once(server,'exit');server.kill('SIGTERM');await exited;}await new Promise(resolve=>tls.close(resolve));await new Promise(resolve=>fixture.close(resolve));rmSync(scratch,{recursive:true,force:true});
 }
