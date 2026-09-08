@@ -86,6 +86,14 @@ describe('the write relay (page side)', () => {
     expect(posted.find((m) => m.type === STORY_MUTATE_RESULT_MESSAGE)).toMatchObject({ id: 7, ok: true, dataset: 'k3Pq9z' });
   });
 
+  it('forwards local table snapshots from the frame to the mutate endpoint', async () => {
+    const { container } = surface();
+    const win = frameWindow(container);
+    ask(win, { type: STORY_MUTATE_MESSAGE, id: 8, mutation: 'add', values: {}, localTables: { cart: [{ id: 1 }] } });
+    await waitFor(() => expect(fetchCalls.some((c) => c.url === '/a/Ab3xK9/mutate')).toBe(true));
+    expect(fetchCalls.find((c) => c.url === '/a/Ab3xK9/mutate')!.body).toEqual({ mutation: 'add', values: {}, localTables: { cart: [{ id: 1 }] } });
+  });
+
   it('relays a refusal as an error on the same id — never silence', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'dataset_read_only', detail: 'this dataset is not open for writes' }), { status: 403 })));
     const { container } = surface();

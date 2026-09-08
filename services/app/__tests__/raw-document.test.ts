@@ -43,7 +43,7 @@ const markupCspFor = (id: string) => [
   // becomes `window.parent`, and the parent is who the runtime takes edit-mode
   // and document-replacement commands from.
   "frame-ancestors 'self'",
-  'sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation',
+  'sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation',
 ].join('; ');
 
 const publish = async (markup: string): Promise<string> => {

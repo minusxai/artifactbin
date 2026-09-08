@@ -53,7 +53,9 @@ export function DialogContent({children, run, onSubmitMutation, unavailable, con
     }
     if (!open && dialog.open) {
       dialog.close();
-      if (context?.trigger.current?.isConnected) context.trigger.current.focus({preventScroll: true});
+      queueMicrotask(() => {
+        if (context?.trigger.current?.isConnected) context.trigger.current.focus({preventScroll: true});
+      });
     }
   }, [open, context]);
   return <dialog {...props} ref={ref} onCancel={event => {
@@ -66,7 +68,12 @@ export function DialogContent({children, run, onSubmitMutation, unavailable, con
       submitting.current = true;
       context?.setBusy(true);
       setError(null);
-      Promise.resolve().then(onSubmitMutation).then(() => context?.setOpen(false)).catch((failure: unknown) => {
+      Promise.resolve().then(onSubmitMutation).then(() => {
+        // Re-enable the trigger in the same render that closes the dialog;
+        // browsers cannot focus a disabled button during close restoration.
+        context?.setBusy(false);
+        context?.setOpen(false);
+      }).catch((failure: unknown) => {
         const message = failure instanceof Error ? failure.message : 'That did not save';
         setError(conflictMessage && /row_changed|changed/.test(message) ? conflictMessage : message);
       }).finally(() => {submitting.current = false; context?.setBusy(false);});

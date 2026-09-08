@@ -34,10 +34,10 @@ describe('parseMutationDecl', () => {
     expect(r.decl.sql).toContain('insert into ref_abc123');
   });
 
-  it('refuses a mutation naming no dataset, or two', () => {
-    const none = parseMutationDecl(element('<Mutation name="add">{`insert into sales values (1)`}</Mutation>'));
-    expect(none.ok).toBe(false);
-    if (!none.ok) expect(none.errors[0].message).toMatch(/exactly one dataset.*ref_<id>/i);
+  it('parses a syntactic local target, and refuses a mutation naming two datasets', () => {
+    const local = parseMutationDecl(element('<Mutation name="add">{`insert into sales values (1)`}</Mutation>'));
+    expect(local.ok).toBe(true);
+    if (local.ok) expect(local.decl).toMatchObject({ target: 'sales', scope: 'local' });
     const two = parseMutationDecl(element('<Mutation name="mv">{`insert into ref_aaaaaa select * from ref_bbbbbb`}</Mutation>'));
     expect(two.ok).toBe(false);
     if (!two.ok) expect(two.errors[0].message).toMatch(/exactly one dataset/i);

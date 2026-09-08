@@ -64,6 +64,14 @@ describe('the query relay', () => {
     expect(posted[0]).toEqual({ type: STORY_QUERY_RESULT_MESSAGE, id: 7, tables: { sales: { rows: [{ a: 1 }], columns: [] } }, errors: {} });
   });
 
+  it('forwards local table snapshots to the query endpoint', async () => {
+    render(<ArtifactSurface {...props()} />);
+    const win = frame().contentWindow!;
+    const { posted } = ask(win, { type: STORY_QUERY_MESSAGE, id: 8, values: {}, only: ['total'], localTables: { cart: [{ id: 1 }] } });
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(fetchCalls[0].body).toEqual({ values: {}, only: ['total'], localTables: { cart: [{ id: 1 }] } });
+  });
+
   it('ignores a request from a window that is not the document frame', async () => {
     render(<ArtifactSurface {...props()} />);
     const stranger = document.createElement('iframe');

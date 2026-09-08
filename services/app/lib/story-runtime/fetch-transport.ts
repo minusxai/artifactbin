@@ -29,9 +29,9 @@ export function createFetchTransport(queryUrl: string, fetchFn: FetchLike = (i, 
     return { tables: body.tables ?? {}, errors: body.errors ?? {}, ...(body.mutationAccess ? {mutationAccess:body.mutationAccess} : {}) };
   };
   return {
-    run: (values, only) => ask({ values, only }),
-    page: async (values, name, page): Promise<TableResult> => {
-      const r = await ask({ values, only: [name], page: { name, ...page } });
+    run: (values, only, localTables) => ask({ values, only, ...(localTables ? { localTables } : {}) }),
+    page: async (values, name, page, localTables): Promise<TableResult> => {
+      const r = await ask({ values, only: [name], page: { name, ...page }, ...(localTables ? { localTables } : {}) });
       const table = r.tables[name];
       if (!table) throw new Error(r.errors[name] ?? `no rows for "${name}"`);
       return table;
@@ -48,16 +48,16 @@ export function createFetchTransport(queryUrl: string, fetchFn: FetchLike = (i, 
      */
     ...(mutateUrl
       ? {
-        mutate: async (values: Record<string, unknown>, name: string, row?: Record<string, unknown>) => {
+        mutate: async (values: Record<string, unknown>, name: string, row?: Record<string, unknown>, localTables?: Record<string, import('@/lib/story/dataflow').Row[]>) => {
           const res = await fetchFn(mutateUrl, {
             method: 'POST',
             credentials: 'omit',
             headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify({ mutation: name, values, ...(row ? { row } : {}) }),
+            body: JSON.stringify({ mutation: name, values, ...(row ? { row } : {}), ...(localTables ? { localTables } : {}) }),
           });
-          const body = (await res.json().catch(() => ({}))) as { ok?: boolean; dataset?: string; error?: string; detail?: string };
+          const body = (await res.json().catch(() => ({}))) as { ok?: boolean; dataset?: string; local?: import('@/lib/story/local-state').LocalMutationResult; error?: string; detail?: string };
           if (!res.ok || !body.ok) throw new Error(body.detail ?? body.error ?? `write failed (${res.status})`);
-          return { dataset: body.dataset ?? '' };
+          return { dataset: body.dataset ?? '', ...(body.local ? { local: body.local } : {}) };
         },
       }
       : {}),

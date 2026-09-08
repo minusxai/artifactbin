@@ -29,6 +29,13 @@ describe('createFetchTransport', () => {
     expect(init?.credentials).toBe('omit');
   });
 
+  it('run(): carries local table snapshots used by dependent queries', async () => {
+    const f = vi.fn(async () => ok({ tables: {}, errors: {} }));
+    const t = createFetchTransport('/a/abc123/query', f);
+    await t.run({}, ['total'], { cart: [{ id: 1 }] });
+    expect(requestOf(f).q).toEqual({ values: {}, only: ['total'], localTables: { cart: [{ id: 1 }] } });
+  });
+
   it('page(): sends {values, only:[name], page} and resolves with that table', async () => {
     const f = vi.fn(async () => ok({ tables: { sales: { rows: [{ a: 2 }], columns: [], totalRows: 9 } }, errors: {} }));
     const t = createFetchTransport('/a/abc123/query', f);
@@ -50,5 +57,13 @@ describe('createFetchTransport', () => {
   it('a network failure rejects with the error message', async () => {
     const f = vi.fn(async () => { throw new TypeError('Failed to fetch'); });
     await expect(createFetchTransport('/a/x/query', f).run({}, ['q'])).rejects.toThrow(/Failed to fetch/);
+  });
+
+  it('mutate(): carries the current local table snapshot to the document endpoint', async () => {
+    const f = vi.fn(async () => ok({ ok: true, dataset: '', local: { target: 'cart', table: { columns: [], rows: [] } } }));
+    const t = createFetchTransport('/a/x/query', f, '/a/x/mutate');
+    await expect(t.mutate!({}, 'add', undefined, { cart: [{ id: 1 }] })).resolves.toMatchObject({ local: { target: 'cart' } });
+    const [, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({ mutation: 'add', values: {}, localTables: { cart: [{ id: 1 }] } });
   });
 });

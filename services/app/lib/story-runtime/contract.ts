@@ -11,7 +11,8 @@ import type { AnnotationRange } from '@/lib/story/annotation-range';
 import type { JsxNode } from '@/lib/jsx';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 import type { RefDataMap } from '@/lib/story/ref-data';
-import type { Dataflow, DataflowState, Scalar } from '@/lib/story/dataflow';
+import type { Dataflow, DataflowState, Row, Scalar } from '@/lib/story/dataflow';
+import type { LocalMutationResult } from '@/lib/story/local-state';
 import type { ScrollAnchor } from '@/lib/story/scroll-anchor';
 
 /** The document's data as the island carries it: what is declared, and its state at render. */
@@ -350,6 +351,7 @@ export interface StoryQueryRequest {
   id: number;
   values: Record<string, Scalar>;
   only: string[];
+  localTables?: Record<string, Row[]>;
   /** A window of one query (a table reading past the cap) — see lib/sql/engine QueryPage. */
   page?: { name: string; offset: number; limit: number; sort?: { col: string; dir: 'asc' | 'desc' } };
 }
@@ -408,10 +410,11 @@ export interface StoryMutateRequest {
   mutation: string;
   values: Record<string, Scalar>;
   row?: Record<string, Scalar>;
+  localTables?: Record<string, Row[]>;
 }
 
 export type StoryMutateResult =
-  | { type: typeof STORY_MUTATE_RESULT_MESSAGE; id: number; ok: true; dataset: string; version: number; affected: number }
+  | { type: typeof STORY_MUTATE_RESULT_MESSAGE; id: number; ok: true; dataset: string; version: number; affected: number; local?: LocalMutationResult }
   | { type: typeof STORY_MUTATE_RESULT_MESSAGE; id: number; ok: false; error: string };
 
 /**
