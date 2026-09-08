@@ -32,19 +32,19 @@ beforeAll(async () => {
 afterAll(async () => {await issuer.close(); await pg.close();});
 const pairs = (response: Response) => response.headers.getSetCookie().map(c => c.split(';')[0]).join('; ');
 async function begin() {
-  const start = await auth.handler(new Request(`${controls}/api/auth/sign-in/social`, {
-    method: 'POST', headers: {origin: controls, 'content-type': 'application/json'},
+  const start = await auth.handler(new Request(`${main}/api/auth/sign-in/social`, {
+    method: 'POST', headers: {origin: main, 'content-type': 'application/json'},
     body: JSON.stringify({provider: 'acme', callbackURL: '/'})}));
   expect(start.status).toBe(200);
   const {url} = await start.json() as {url: string};
-  expect(new URL(new URL(url).searchParams.get('redirect_uri')!).origin).toBe(controls);
+  expect(new URL(new URL(url).searchParams.get('redirect_uri')!).origin).toBe(main);
   const redirect = await fetch(url, {redirect: 'manual'});
   return {back: redirect.headers.get('location')!, cookie: pairs(start)};
 }
 describe('real Better Auth OIDC on the trusted hostname', () => {
-  it('rejects a main-host callback and missing state, then issues distinct full/read sessions once', async () => {
+  it('rejects a retired-host callback and missing state, then issues only a full session once', async () => {
     const {back, cookie} = await begin();
-    const wrongHost = back.replace(controls, main);
+    const wrongHost = back.replace(main, controls);
     expect((await auth.handler(new Request(wrongHost, {headers: {cookie}}))).status).toBe(403);
     const before = exchanges;
     const bad = new URL(back); bad.searchParams.set('state', 'forged');
@@ -53,13 +53,13 @@ describe('real Better Auth OIDC on the trusted hostname', () => {
     expect(exchanges).toBe(before);
     const done = await auth.handler(new Request(back, {headers: {cookie}}));
     expect(done.status).toBe(302);
-    expect(new URL(done.headers.get('location')!, back).href).toBe(`${controls}/`);
+    expect(new URL(done.headers.get('location')!, back).href).toBe(`${main}/`);
     const issued = pairs(done);
     expect(issued).toContain('__Host-mx.session_token=');
-    expect(issued).toContain('__Secure-mx-read=');
-    const full = await auth.sessions.resolve(new Request(controls, {headers: {cookie: issued}}));
+    expect(issued).not.toContain('__Secure-mx-read=');
+    const full = await auth.sessions.resolve(new Request(main, {headers: {cookie: issued}}));
     expect(full?.email).toBe('oidc@example.test');
-    expect(await auth.sessions.resolveRead!(new Request(main, {headers: {cookie: issued}}))).toEqual({userId: full!.userId, email:'oidc@example.test'});
+    expect(await auth.sessions.resolve(new Request(controls, {headers: {cookie: issued}}))).toBeNull();
     const replay = await auth.handler(new Request(back, {headers: {cookie}}));
     expect(replay.headers.get('location')).toMatch(/error/);
     expect(exchanges).toBe(before + 1);

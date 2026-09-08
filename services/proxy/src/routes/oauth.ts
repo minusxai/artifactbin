@@ -18,8 +18,6 @@ import {
   sameRedirectTarget,
 } from '../identity/oauth';
 import type { ProxyApp } from '../parts';
-import {platformPageResponse} from '@artifactbin/utils/platform-pages';
-import {frameConsent} from './consent-frame';
 
 type App = ProxyApp;
 
@@ -70,7 +68,6 @@ export interface OAuthRoutesOptions {
   upstream: Upstream;
   trustedHops: number;
   publicBaseUrl?: string;
-  controlsOrigin?: string;
 }
 
 async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId: string; resource: string; scope: string }): Promise<{ id: string; token: string; expiresAt?: string }> {
@@ -105,18 +102,8 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     }
   });
 
-  app.on('GET',['/oauth/authorize','/controls/consent'], async (c) => {
-    const url=new URL(c.req.url),main=base(c.req.raw);
-    const framed=url.pathname==='/controls/consent';
-    const trustedHost=o.controlsOrigin && url.host===new URL(o.controlsOrigin).host;
-    if(framed && !trustedHost)return c.notFound();
-    if(o.controlsOrigin && !framed){
-      if(trustedHost)return Response.redirect(main+url.pathname+url.search,302);
-      return platformPageResponse(main,o.controlsOrigin,url.pathname,url.search);
-    }
-    const render=(title:string,body:string,status=200,redirect='')=>{
-      const response=page(title,body,status,redirect);return framed?frameConsent(response,main):response;
-    };
+  app.get('/oauth/authorize', async (c) => {
+    const render=page;
     const q = new URL(c.req.url).searchParams;
     const clientId = q.get('client_id') ?? '';
     const redirectUri = q.get('redirect_uri') ?? '';

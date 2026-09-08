@@ -8,17 +8,17 @@ import { testDb, testProxyOptions } from './helpers';
 
 let serial = 0;
 afterAll(async () => { await testDb().pg().close(); });
-describe.each(['split','same-origin'])('%s OAuth browser boundary', mode=>{
-const main = 'https://example.test', controls = mode==='split'?'https://i.example.test':main;
+describe.each(['retired-setting','same-origin'])('%s OAuth browser boundary', mode=>{
+const main = 'https://example.test', controls = main;
 const redirect = 'http://127.0.0.1:9987/callback', verifier = 'v'.repeat(43);
 let proxy: ReturnType<typeof createProxy>;
 const mail: OutgoingMail[] = [];
 beforeAll(async () => {
   const opts = await testProxyOptions();
-  const auth = await createHumanAuth({ pglite: testDb().pg(), baseURL: main, controlsOrigin: mode==='split'?controls:undefined,
+  const auth = await createHumanAuth({ pglite: testDb().pg(), baseURL: main, controlsOrigin: mode==='retired-setting'?controls:undefined,
     secure: true, secret: 'oauth-boundary-test'.padEnd(32, '0'), mail: { send: async m => { mail.push(m); } } });
   proxy = createProxy({ ...opts, secure: true, sessions: sessionStoreOf(auth),
-    env: { ...opts.env, APP__PUBLIC_BASE_URL: main, ...(mode==='split'?{APP__CONTROLS_ORIGIN:controls}:{}) },
+    env: { ...opts.env, APP__PUBLIC_BASE_URL: main, ...(mode==='retired-setting'?{APP__CONTROLS_ORIGIN:'https://i.example.test'}:{}) },
     upstream: async (request, actor) => {
       if (new URL(request.url).pathname === '/api/tokens/anonymous' && actor.credential === 'session') {
         const body = await request.json();
@@ -54,9 +54,9 @@ async function authorize(cookie: string) {
   const path = '/oauth/authorize?' + query;
   const moved = await proxy.request(main + path, { headers: { cookie } });
   expect(moved.status).toBe(200); expect(moved.headers.get('location')).toBeNull();
-  const page = mode==='split'?await proxy.request(controls + '/controls/consent?' + query, { headers: { cookie } }):moved;
+  const page = moved;
   expect(page.status).toBe(200);
-  if(mode==='split')expect(page.headers.get('content-security-policy')).toContain(`frame-ancestors ${main}`);
+  expect(page.headers.get('x-frame-options')).toBe('DENY');
   expect(page.headers.get('content-security-policy')).toContain(`form-action 'self' ${new URL(redirect).origin}`);
   const approval = /name="approval" value="([A-Za-z0-9_-]+)"/.exec(await page.text())?.[1];
   expect(approval).toBeTruthy();
@@ -73,8 +73,8 @@ describe('real OTP → trusted OAuth consent → main-host MCP bearer', () => {
   it('binds approval to the live session and rejects cross-origin posts and replay', async () => {
     const cookie = await login();
     const { client, approval } = await authorize(cookie);
-    for (const origin of [mode==='split'?main:'https://evil.example.test', 'null', null]) expect((await approve(cookie, approval, origin)).status).toBe(403);
-    if(mode==='split')expect((await approve(cookie, approval, controls, main)).status).toBe(403);
+    for (const origin of ['https://evil.example.test', 'null', null]) expect((await approve(cookie, approval, origin)).status).toBe(403);
+    expect((await approve(cookie, approval, 'https://i.example.test')).status).toBe(403);
     const otherSession = await login();
     expect((await approve(otherSession, approval)).status).toBe(400);
     const allowed = await approve(cookie, approval);

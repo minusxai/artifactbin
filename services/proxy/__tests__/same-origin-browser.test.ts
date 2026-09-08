@@ -1,3 +1,4 @@
+import {createAgentBrowserSessions} from '../src/auth/agent-browser-session';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
 import { actorOf, inProcess, cookieName, encodeAgentSession } from '@artifactbin/utils';
@@ -60,7 +61,8 @@ describe('same-origin proxy authority without a controls hostname', () => {
   });
   it('preserves held-token authority only with proof, and leaves truly anonymous declared mutations to their route ACL',async()=>{
     const proxy=createProxy({...options,sessions:{resolve:async()=>null}});
-    const cookie=`${cookieName(false)}=${encodeAgentSession({tokenIds:['same-origin-agent']},options.cookieSecret)}`;
+    await createAgentBrowserSessions(testDb()).register('p'.repeat(43),'same-origin-agent');
+    const cookie=`${cookieName(false)}=${encodeAgentSession({sessionId:'p'.repeat(43),tokenIds:['same-origin-agent']},options.cookieSecret)}`;
     const allowed=await proxy.request(main+'/a/abc123/mutate',{method:'POST',headers:{cookie,origin:main,'x-artifactbin-csrf':'1'}});
     expect(await allowed.json()).toMatchObject({credential:'agent-cookie',tokenId:'same-origin-agent'});
     expect((await proxy.request(main+'/a/abc123/mutate',{method:'POST',headers:{cookie,origin:'null'}})).status).toBe(403);

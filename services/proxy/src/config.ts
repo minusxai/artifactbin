@@ -28,7 +28,7 @@
  * than silently exempted by a prefix.
  */
 import { randomBytes } from 'node:crypto';
-import { createEnv, parseControlsOrigin, parseAssetsOrigin } from '@artifactbin/utils';
+import { createEnv, parseAssetsOrigin } from '@artifactbin/utils';
 import type { OidcProvider } from './auth/human';
 import { readEnv } from './env';
 
@@ -76,7 +76,8 @@ export interface ProxyConfig {
   appSchema: string;
   /** APP__PUBLIC_BASE_URL — the URL humans reach this proxy on; login's baseURL. */
   publicBaseUrl?: string;
-  controlsOrigin?: string;
+  /** @deprecated Ignored. Browser authority is publicBaseUrl only. */
+  controlsOrigin?: never;
   assetsOrigin?: string;
   /** EMAIL__*. */
   mail: ProxyMailConfig;
@@ -170,9 +171,9 @@ export function loadConfig(source: Record<string, string | undefined>, opts: Loa
   const host = env('APP', 'HOST') || undefined;
   const publicBaseUrl = env('APP', 'PUBLIC_BASE_URL') || undefined;
   const controlsSetting = env('APP', 'CONTROLS_ORIGIN');
-  const controlsOrigin = controlsSetting ? parseControlsOrigin(publicBaseUrl ?? '', controlsSetting) : undefined;
+  if(controlsSetting)console.warn('APP__CONTROLS_ORIGIN is retired and ignored; browser authentication uses APP__PUBLIC_BASE_URL.');
   const assetsSetting = env('APP', 'ASSETS_ORIGIN');
-  const assetsOrigin = assetsSetting ? parseAssetsOrigin(publicBaseUrl ?? '', controlsOrigin ?? null, assetsSetting) : undefined;
+  const assetsOrigin = assetsSetting ? parseAssetsOrigin(publicBaseUrl ?? '', null, assetsSetting) : undefined;
   const authSchema = env('AUTH', 'SCHEMA') || 'auth';
   const appSchema = env('APP', 'SCHEMA') || 'app';
   const mail = {
@@ -215,7 +216,6 @@ export function loadConfig(source: Record<string, string | undefined>, opts: Loa
     authSchema,
     appSchema,
     ...(publicBaseUrl ? { publicBaseUrl } : {}),
-    ...(controlsOrigin ? {controlsOrigin} : {}),
     ...(assetsOrigin ? {assetsOrigin} : {}),
     mail,
     secure,

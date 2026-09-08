@@ -7,6 +7,7 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ACTOR_HEADER, ANONYMOUS } from '@artifactbin/contracts';
+import {createAgentBrowserSessions} from '../src/auth/agent-browser-session';
 import { signActor } from '@artifactbin/utils';
 import { assemble, cookieName, encodeAgentSession } from '@artifactbin/utils';
 import { proxyParts, type ProxyOptions } from '../src/parts';
@@ -43,14 +44,17 @@ describe('the session part', () => {
     const app = await proxy({
       sessions: { resolve: async () => ({ userId: 'usr_2', email: 's@example.com', emailVerified: true }) },
     });
-    await app.request('/api/artifacts', { headers: { cookie: `${cookieName(false)}=${await encodeAgentSession({ tokenIds: ['tok_h'] }, 'test-cookie-secret-00000000000000000000')}` } });
+    await mintTestToken({id:'tok_h',userId:null,pg:testDb().pg()});
+    await createAgentBrowserSessions(testDb()).register('h'.repeat(43),'tok_h');
+    await app.request('/api/artifacts', { headers: { cookie: `${cookieName(false)}=${await encodeAgentSession({ sessionId:'h'.repeat(43),tokenIds: ['tok_h'] }, 'test-cookie-secret-00000000000000000000')}` } });
     expect(seenActor).toMatchObject({ credential: 'session', userId: 'usr_2', email: 's@example.com', emailVerified: true, heldTokenIds: ['tok_h'] });
   });
   it('authenticates the agent cookie as agent-cookie by its primary (last) id', async () => {
     const app = await proxy();
     await mintTestToken({ id: 'tok_c', userId: null, pg: testDb().pg() });
-    await app.request('/api/artifacts', { headers: { cookie: `${cookieName(false)}=${await encodeAgentSession({ tokenIds: ['tok_x', 'tok_c'] }, 'test-cookie-secret-00000000000000000000')}` } });
-    expect(seenActor).toEqual({ credential: 'agent-cookie', tokenId: 'tok_c', heldTokenIds: ['tok_x', 'tok_c'] });
+    await createAgentBrowserSessions(testDb()).register('c'.repeat(43),'tok_c');
+    await app.request('/api/artifacts', { headers: { cookie: `${cookieName(false)}=${await encodeAgentSession({sessionId:'c'.repeat(43), tokenIds: ['tok_x', 'tok_c'] }, 'test-cookie-secret-00000000000000000000')}` } });
+    expect(seenActor).toEqual({ credential: 'agent-cookie', tokenId: 'tok_c', sessionId:'c'.repeat(43), heldTokenIds: ['tok_x', 'tok_c'] });
   });
   it('ignores a forged inbound actor header, even one signed with a real key — the actor never travelled by header', async () => {
     const app = await proxy({ secret: 'forged-secret-00000000000000000000000' });

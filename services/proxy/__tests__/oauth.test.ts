@@ -53,7 +53,7 @@ beforeEach(async () => { await resetTestDb(); session = null; });
 const asUser = (userId = 'usr_1', email = 'u@example.com') => { session = { userId, email, sessionId:'test-session-'+userId }; return { cookie: 'sess=1' }; };
 
 async function register(redirectUri = REGISTERED_REDIRECT): Promise<string> {
-  const response = await app.request('/oauth/register', {
+  const response = await app.request(BASE+'/oauth/register', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ client_name: 'Codex', redirect_uris: [redirectUri], token_endpoint_auth_method: 'none' }),
@@ -75,11 +75,11 @@ const approveForm = (clientId: string) => new URLSearchParams({
 async function approve(clientId: string): Promise<string> {
   const headers=asUser();
   const query=approveForm(clientId);query.set('response_type','code');query.set('code_challenge_method','S256');
-  const page=await app.request('/oauth/authorize?'+query,{headers});
+  const page=await app.request(BASE+'/oauth/authorize?'+query,{headers});
   expect(page.status).toBe(200);
   const approval=/name="approval" value="([A-Za-z0-9_-]+)"/.exec(await page.text())?.[1];
   expect(approval).toBeTruthy();
-  const response = await app.request('/oauth/authorize/approve', {
+  const response = await app.request(BASE+'/oauth/authorize/approve', {
     method: 'POST',
     body: new URLSearchParams({approval:approval!}),
     headers: { ...headers, origin: BASE, 'content-type': 'application/x-www-form-urlencoded' },
@@ -90,7 +90,7 @@ async function approve(clientId: string): Promise<string> {
 
 describe('the oauth provider routes', () => {
   it('uses the configured public origin and persists unique dynamic client registrations', async () => {
-    const md = await (await app.request('http://wrong-internal-host/.well-known/oauth-authorization-server')).json() as Record<string, unknown>;
+    const md = await (await app.request(BASE+'/.well-known/oauth-authorization-server')).json() as Record<string, unknown>;
     expect(md.token_endpoint).toBe(`${BASE}/oauth/token`);
     expect(md.grant_types_supported).toEqual(['authorization_code', 'refresh_token']);
     const first = await register();
@@ -102,13 +102,13 @@ describe('the oauth provider routes', () => {
   });
 
   it('rejects unsafe registration metadata and an unregistered redirect', async () => {
-    const missing = await app.request('/oauth/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+    const missing = await app.request(BASE+'/oauth/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
     expect(missing.status).toBe(400);
-    const unsafe = await app.request('/oauth/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ redirect_uris: ['http://evil.example/cb'] }) });
+    const unsafe = await app.request(BASE+'/oauth/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ redirect_uris: ['http://evil.example/cb'] }) });
     expect(unsafe.status).toBe(400);
     const clientId = await register('https://client.example/cb');
     const url = `/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent('https://evil.example/cb')}&code_challenge=${s256(verifier)}&code_challenge_method=S256&resource=${encodeURIComponent(RESOURCE)}`;
-    const response = await app.request(url);
+    const response = await app.request(new URL(url,BASE).href);
     expect(response.status).toBe(400);
     expect(await response.text()).toContain('Redirect URI not registered');
   });
@@ -116,21 +116,21 @@ describe('the oauth provider routes', () => {
   it('sends a stranger to login and offers an authenticated user consent, without a guest grant', async () => {
     const clientId = await register();
     const authorizeUrl = `/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(REDIRECT)}&code_challenge=${s256(verifier)}&code_challenge_method=S256&state=st&resource=${encodeURIComponent(RESOURCE)}&scope=artifacts`;
-    const anon = await app.request(authorizeUrl);
+    const anon = await app.request(new URL(authorizeUrl,BASE).href);
     const anonHtml = await anon.text();
     expect(anonHtml).toContain('Log in with email');
     expect(anonHtml).not.toContain('Approve');
     expect(anon.headers.get('x-frame-options')).toBe('DENY');
-    const html = await (await app.request(authorizeUrl, { headers: asUser() })).text();
+    const html = await (await app.request(new URL(authorizeUrl,BASE).href, { headers: asUser() })).text();
     expect(html).toContain('Approve');
     expect(html).not.toMatch(/guest/i);
   });
 
   it('exchanges a bound PKCE code and rotates refresh tokens without another login', async () => {
     const clientId = await register();
-    expect((await app.request('/oauth/authorize/approve', { method: 'POST', body: approveForm(clientId), headers: { origin: BASE, 'content-type': 'application/x-www-form-urlencoded' } })).status).toBe(401);
+    expect((await app.request(BASE+'/oauth/authorize/approve', { method: 'POST', body: approveForm(clientId), headers: { origin: BASE, 'content-type': 'application/x-www-form-urlencoded' } })).status).toBe(401);
     const code = await approve(clientId);
-    const tokenResponse = await app.request('/oauth/token', {
+    const tokenResponse = await app.request(BASE+'/oauth/token', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ grant_type: 'authorization_code', client_id: clientId, code, code_verifier: verifier, redirect_uri: REDIRECT, resource: RESOURCE }),
@@ -149,7 +149,7 @@ describe('the oauth provider routes', () => {
     expect(await (await app.request(`${BASE}/api/artifacts`, { headers: { authorization: `Bearer ${first.access_token}` } })).json()).toMatchObject({ credential: 'none' });
     expect((await query("SELECT credential_hash FROM auth.credentials WHERE kind = 'refresh_token'")).rows[0]).not.toMatchObject({ credential_hash: first.refresh_token });
 
-    const refreshed = await app.request('/oauth/token', {
+    const refreshed = await app.request(BASE+'/oauth/token', {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ grant_type: 'refresh_token', client_id: clientId, refresh_token: first.refresh_token, resource: RESOURCE }),
@@ -159,13 +159,13 @@ describe('the oauth provider routes', () => {
     expect(second.access_token).toMatch(/^mx_/);
     expect(second.refresh_token).not.toBe(first.refresh_token);
 
-    const replay = await app.request('/oauth/token', {
+    const replay = await app.request(BASE+'/oauth/token', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ grant_type: 'refresh_token', client_id: clientId, refresh_token: first.refresh_token, resource: RESOURCE }),
     });
     expect((await replay.json()) as Record<string, string>).toMatchObject({ error: 'invalid_grant' });
-    const familyRevoked = await app.request('/oauth/token', {
+    const familyRevoked = await app.request(BASE+'/oauth/token', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ grant_type: 'refresh_token', client_id: clientId, refresh_token: second.refresh_token, resource: RESOURCE }),

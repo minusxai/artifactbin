@@ -63,14 +63,14 @@ describe('boot', () => {
   it('is idempotent: a second boot against the same database keeps the tables and the sessions', async () => {
     const cookie = await signInByOtp('boot@example.com');
     const again = await createHumanAuth({ pglite: pg, secret: 'human-auth-secret'.padEnd(32, '0'), baseURL: 'http://localhost:4794', mail: { send: async (m) => { sent.push(m); } } });
-    expect((await again.sessions.resolve(new Request('http://x', { headers: { cookie } })))?.email).toBe('boot@example.com');
+    expect((await again.sessions.resolve(new Request('http://localhost:4794', { headers: { cookie } })))?.email).toBe('boot@example.com');
   });
 });
 
 describe('email OTP', () => {
   it('signs in with a code sent by our mailer, under our usr_ ids, and the session resolves to a session actor', async () => {
     const cookie = await signInByOtp('a@example.com');
-    expect(cookie).toContain('better-auth');
+    expect(cookie).toContain('mx-full.session_token=');
     const session = await auth.sessions.resolve(new Request('http://localhost:4794/x', { headers: { cookie } }));
     expect(session).toMatchObject({ email: 'a@example.com', emailVerified: true });
     expect(session!.userId).toMatch(/^usr_[a-z0-9]+$/);
@@ -85,9 +85,9 @@ describe('email OTP', () => {
 
   it('revocation is immediate: the very next request after the session row goes is anonymous', async () => {
     const cookie = await signInByOtp('b@example.com');
-    expect(await auth.sessions.resolve(new Request('http://x', { headers: { cookie } }))).not.toBeNull();
+    expect(await auth.sessions.resolve(new Request('http://localhost:4794', { headers: { cookie } }))).not.toBeNull();
     await pg.exec('DELETE FROM auth.session');
-    expect(await auth.sessions.resolve(new Request('http://x', { headers: { cookie } }))).toBeNull();
+    expect(await auth.sessions.resolve(new Request('http://localhost:4794', { headers: { cookie } }))).toBeNull();
   });
 
   it('email change reaches the NEW address, and the old one keeps the login until it is confirmed', async () => {
@@ -96,7 +96,7 @@ describe('email OTP', () => {
     const res = await call('/change-email', { newEmail: 'c-new@example.com', callbackURL: '/' }, cookie);
     expect(res.status).toBe(200);
     expect(sent.some((m) => m.to === 'c-new@example.com')).toBe(true);
-    expect((await auth.sessions.resolve(new Request('http://x', { headers: { cookie } })))!.email).toBe('c@example.com');
+    expect((await auth.sessions.resolve(new Request('http://localhost:4794', { headers: { cookie } })))!.email).toBe('c@example.com');
   });
 });
 
@@ -116,11 +116,11 @@ describe('OIDC', () => {
 
   it('a VERIFIED email links to the existing user — the OTP user who later clicks the IdP keeps their usr_', async () => {
     const otpCookie = await signInByOtp('link@example.com');
-    const before = (await auth.sessions.resolve(new Request('http://x', { headers: { cookie: otpCookie } })))!.userId;
+    const before = (await auth.sessions.resolve(new Request('http://localhost:4794', { headers: { cookie: otpCookie } })))!.userId;
     const r = await oidcRoundTrip({ id: 'oidc-link', email: 'link@example.com', emailVerified: true });
     expect(r.status, r.location).toBeGreaterThanOrEqual(300);
     expect(r.location, 'the callback did not land on an error').not.toMatch(/error/);
-    const after = (await auth.sessions.resolve(new Request('http://x', { headers: { cookie: r.cookie } })))!.userId;
+    const after = (await auth.sessions.resolve(new Request('http://localhost:4794', { headers: { cookie: r.cookie } })))!.userId;
     expect(after).toBe(before);
     expect((await pg.query<{ n: string }>("select count(*)::text n from auth.user where email = 'link@example.com'")).rows[0].n).toBe('1');
   });

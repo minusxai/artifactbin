@@ -1,4 +1,4 @@
-import {parseControlsOrigin, parseAssetsOrigin} from '@artifactbin/utils';
+import {parseAssetsOrigin} from '@artifactbin/utils';
 import {isIP} from 'node:net';
 /**
  * The ONLY file that reads process.env (minusx convention — keeps runtime
@@ -300,7 +300,9 @@ export const PUBLIC_BASE_URL = env('APP', 'PUBLIC_BASE_URL') ?? `http://localhos
 export const SSR_ENABLED = env('APP', 'SSR_ENABLED') === 'true';
 /** Explicit rollout: provision this trusted hostname before enabling top-level owner controls. */
 const controlsOriginSetting = env('APP', 'CONTROLS_ORIGIN');
-export const CONTROLS_ORIGIN = controlsOriginSetting ? parseControlsOrigin(PUBLIC_BASE_URL, controlsOriginSetting) : null;
+if(controlsOriginSetting)console.warn('APP__CONTROLS_ORIGIN is retired and ignored; browser authentication uses APP__PUBLIC_BASE_URL.');
+/** Retired compatibility export for unserved legacy client modules. */
+export const CONTROLS_ORIGIN = null;
 const assetsOriginSetting = env('APP', 'ASSETS_ORIGIN');
 export const ASSETS_ORIGIN = assetsOriginSetting ? parseAssetsOrigin(PUBLIC_BASE_URL, CONTROLS_ORIGIN, assetsOriginSetting) : null;
 

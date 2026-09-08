@@ -17,7 +17,7 @@ That's the entire integration. Against `https://artifactbin.dev`, the API in one
 POST /api/artifacts  create ({markup}, title?, theme?, template?)
 ```
 
-For MCP clients, add `https://artifactbin.dev/mcp` with no credentials and the client pops a browser — approve in one click as a guest or while logged in.
+For MCP clients, add `https://artifactbin.dev/mcp` with no credentials; the client opens the main-origin login and a session-bound approval page.
 
 ## Self-host
 

@@ -82,7 +82,7 @@ describe('the anonymous mint door', () => {
   /**
    * The production shape, and the one that would have silently blocked the real page: behind TLS
    * termination the browser says `origin: https://artifactbin.dev` while this hop received plain http.
-   * The check compares HOSTS for exactly this reason.
+   * The public Host is preserved while the protocol differs.
    */
   it('lets the real page through behind a TLS-terminating hop', async () => {
     let reached = false;
@@ -90,7 +90,7 @@ describe('the anonymous mint door', () => {
       env: { PROXY__RATE_LIMIT_CONFIG_FILE: RELAXED_POLICY_FILE, APP__PUBLIC_BASE_URL: 'https://artifactbin.dev' },
       upstream: async () => { reached = true; return new Response('{"token":"mx_x"}', { status: 201 }); },
     })));
-    const res = await proxy.fetch(new Request('http://localhost/api/tokens/anonymous', {
+    const res = await proxy.fetch(new Request('http://artifactbin.dev/api/tokens/anonymous', {
       method: 'POST',
       headers: { origin: 'https://artifactbin.dev', 'sec-fetch-site': 'same-origin' },
     }));
@@ -132,9 +132,8 @@ describe('the door beside the limiter, and the hosts it calls its own', () => {
     expect((await page()).status).toBe(429);
   });
 
-  it('lets the page through on a hostname that is not the configured one', async () => {
-    // APP__PUBLIC_BASE_URL says localhost; a person opens 127.0.0.1. Refusing here is an outage whose only
-    // symptom is "Could not generate a token", with nothing in the logs saying why.
+  it('refuses a hostname that is not the configured browser authority', async () => {
+    // A second hostname must not acquire cookie-backed browser authority.
     let reached = false;
     const proxy = assemble(await proxyParts(await testProxyOptions({
       env: { PROXY__RATE_LIMIT_CONFIG_FILE: RELAXED_POLICY_FILE, APP__PUBLIC_BASE_URL: 'http://localhost:5401' },
@@ -143,8 +142,8 @@ describe('the door beside the limiter, and the hosts it calls its own', () => {
     const res = await proxy.fetch(new Request('http://127.0.0.1:5401/api/tokens/anonymous', {
       method: 'POST', headers: { origin: 'http://127.0.0.1:5401', 'sec-fetch-site': 'same-origin' },
     }));
-    expect(reached).toBe(true);
-    expect(res.status).toBe(201);
+    expect(reached).toBe(false);
+    expect(res.status).toBe(421);
   });
 
   it('still refuses a stranger host that is neither', async () => {
@@ -154,7 +153,7 @@ describe('the door beside the limiter, and the hosts it calls its own', () => {
     const res = await proxy.fetch(new Request('http://127.0.0.1:5401/api/tokens/anonymous', {
       method: 'POST', headers: { origin: 'https://evil.test', 'sec-fetch-site': 'same-origin' },
     }));
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(421);
   });
 
   it('tags a harness the app would tag, however it was spelled', async () => {

@@ -14,11 +14,11 @@ it('does not retain the legacy credentialed main-host CORS write path', async ()
   expect(preflight.status).toBe(403);
   expect(preflight.headers.get('access-control-allow-origin')).toBeNull();
   expect((await proxy.request('https://artifactbin.test/api/my/probe', {method:'POST',headers:{Origin:'https://i.artifactbin.test'}})).status).toBe(403);
-  const accepted = await proxy.request('https://i.artifactbin.test/api/my/probe', {method:'POST',headers:{Origin:'https://i.artifactbin.test','x-artifactbin-csrf':'1'}});
+  const accepted = await proxy.request('https://artifactbin.test/api/my/probe', {method:'POST',headers:{Origin:'https://artifactbin.test','x-artifactbin-csrf':'1'}});
   expect(accepted.status).toBe(200);
   expect(accepted.headers.get('access-control-allow-credentials')).toBeNull();
   const refused = await proxy.request('https://i.artifactbin.test/api/my/probe', {method:'POST',headers:{Origin:'https://evil.artifactbin.test','Sec-Fetch-Site':'same-site'}});
-  expect(refused.status).toBe(403);
+  expect(refused.status).toBe(421);
   expect(refused.headers.get('access-control-allow-origin')).toBeNull();
   expect(writes).toBe(1);
 });

@@ -28,4 +28,18 @@ it('revokes copied browser cookies after disconnect without revoking another bro
   expect((await proxy.request(main + '/api/session/token', { method: 'DELETE', headers: { ...proof, cookie: one } })).status).toBe(204);
   expect(await account(one)).toEqual({ credential: 'none' });
   expect(await account(two)).toMatchObject({ credential: 'agent-cookie', tokenId: 'tok_same_origin_revoke' });
+  expect(await account(two+'; '+two)).toEqual({credential:'none'});
+  await testDb().query("UPDATE auth.credentials SET expires_at=now()-interval '1 second' WHERE kind='agent-browser'");
+  expect(await account(two)).toEqual({credential:'none'});
+});
+
+it('never resurrects legacy signed cookies without a registered browser nonce, even without identity storage',async()=>{
+  const main='https://example.test',options=await testProxyOptions();
+  await mintTestToken({id:'tok_legacy_browser',userId:null,pg:testDb().pg()});
+  const cookie=setCookieHeader(encodeAgentSession({tokenIds:['tok_legacy_browser']},options.cookieSecret),true).split(';')[0];
+  for(const identityDb of [options.identityDb,undefined]){
+    const proxy=createProxy({...options,identityDb,secure:true,env:{...options.env,APP__PUBLIC_BASE_URL:main},upstream:async(request,actor)=>Response.json({actor,cookie:request.headers.get('cookie')})});
+    const response=await proxy.request(main+'/api/my/artifacts',{headers:{cookie,origin:main,'sec-fetch-site':'same-origin'}});
+    expect(await response.json()).toEqual({actor:{credential:'none'},cookie:null});
+  }
 });

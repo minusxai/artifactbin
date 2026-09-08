@@ -1,6 +1,6 @@
 import {cookieName, decodeAgentSession} from '@artifactbin/utils';
 import type {AgentSession, Queryable, TokenReader} from '@artifactbin/contracts';
-import {createAgentReadSessions} from './agent-read-session';
+import {createAgentBrowserSessions} from './agent-browser-session';
 
 const oneCookie = (header: string | null, name: string): string | null => {
   const matches = (header ?? '').split(';').map(p => p.trim()).filter(p => p.startsWith(name + '='));
@@ -9,12 +9,11 @@ const oneCookie = (header: string | null, name: string): string | null => {
 };
 
 /** Cookie lifecycle at the proxy boundary; the app still owns token adoption.
- * A returned agent cookie gets separate read authority before reaching the
- * browser. Disconnect/rotation revokes this browser, not everyone with its token. */
-export function createAgentBrowser(opts: {db: Queryable; tokens: TokenReader; secret: string; main: string; secure: boolean; schema?: string}) {
-  const sessions = createAgentReadSessions(opts.db, opts.schema);
-  const fullName = cookieName(opts.secure), readName = opts.secure ? '__Secure-mx-agent-read' : 'mx-agent-read';
-  const attributes = `; Domain=${new URL(opts.main).hostname}; Path=/; HttpOnly; SameSite=Lax${opts.secure ? '; Secure' : ''}`;
+ * The signed browser nonce must also be live in the database. Disconnect
+ * revokes this browser, not everyone with its token. No read cookie is issued. */
+export function createAgentBrowser(opts: {db: Queryable; tokens: TokenReader; secret: string; secure: boolean; schema?: string}) {
+  const sessions = createAgentBrowserSessions(opts.db, opts.schema);
+  const fullName = cookieName(opts.secure);
   const signed = (header: string | null) => decodeAgentSession(oneCookie(header, fullName), opts.secret);
   const liveToken = (id: string) => {
     // Browser read handles promise revocation on the next request, not the
@@ -29,25 +28,19 @@ export function createAgentBrowser(opts: {db: Queryable; tokens: TokenReader; se
       if (!held?.sessionId || !primary || !await sessions.live(held.sessionId, primary) || !await liveToken(primary)) return null;
       return held;
     },
-    async read(header: string | null) {
-      const value = oneCookie(header, readName);
-      const id = value ? await sessions.resolve(value) : null;
-      return id ? liveToken(id) : null;
-    },
-    async responseCookies(previous: string | null, response: Headers): Promise<string[]> {
+    async observeResponse(previous: string | null, response: Headers): Promise<void> {
       const changes = response.getSetCookie().filter(c => c.startsWith(fullName + '='));
       const [change] = changes;
-      if (change === undefined) return [];
+      if (change === undefined) return;
       if (changes.length !== 1) throw new Error('Ambiguous agent session response');
       const [pair = ''] = change.split(';');
       const value = pair.slice(fullName.length + 1);
       const old = signed(previous);
       if (old?.sessionId) await sessions.revoke(old.sessionId);
-      if (!value || /;\s*Max-Age=0(?:;|$)/i.test(change)) return [`${readName}=${attributes}; Max-Age=0`];
+      if (!value || /;\s*Max-Age=0(?:;|$)/i.test(change)) return;
       const next = decodeAgentSession(value, opts.secret), primary = next?.tokenIds.at(-1);
       if (!next?.sessionId || !primary || !await liveToken(primary)) throw new Error('Invalid new browser session');
-      const read = await sessions.issue(next.sessionId, primary);
-      return [`${readName}=${read.token}${attributes}; Expires=${read.expiresAt.toUTCString()}`];
+      await sessions.register(next.sessionId, primary);
     },
   };
 }

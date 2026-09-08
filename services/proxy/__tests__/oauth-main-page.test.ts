@@ -16,14 +16,15 @@ it('advertises a main-domain consent page without moving token exchange or issue
   expect(await response.json()).toMatchObject({issuer:main,authorization_endpoint:main+'/oauth/authorize',token_endpoint:main+'/oauth/token'});
 });
 
-it('keeps consent navigation on main and never puts an approval form in the parent',async()=>{
+it('renders consent errors directly on main without any controls frame',async()=>{
   const response=await proxy.request(main+'/oauth/authorize?client_id=unknown');
-  expect(response.status).toBe(200);
+  expect(response.status).toBe(400);
   expect(response.headers.get('location')).toBeNull();
   expect(response.headers.get('cache-control')).toContain('no-store');
   const html=await response.text();
-  expect(html).toContain('<iframe');
-  expect(html).toContain(controls+'/controls/');
+  expect(html).not.toContain('<iframe');
+  expect(html).not.toContain(controls+'/controls/');
+  expect(html).toContain('Unknown client');
   expect(html).not.toContain('name="approval"');
   expect(html).not.toContain('<form');
 });

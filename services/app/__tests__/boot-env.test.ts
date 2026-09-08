@@ -103,6 +103,12 @@ async function runBoot(port: number, overrides: Record<string, string>): Promise
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
 describe('production boot environment', () => {
+  it('boots the real monolith with a retired controls setting without parsing or using it',async()=>{
+    const port=await availablePort(4);
+    const result=await runBoot(port,{NODE_ENV:'production',AUTH__SECRET:'cutover-production-secret',APP__PUBLIC_BASE_URL:`http://127.0.0.1:${port}`,APP__CONTROLS_ORIGIN:'retired malformed value'});
+    expect(result.kind,result.output).toBe('listened');
+    expect(result.output).toContain('APP__CONTROLS_ORIGIN is retired and ignored');
+  },90_000);
   it('exits before listening when AUTH__SECRET is absent', async () => {
     const port = await availablePort(0);
     const result = await runBoot(port, {

@@ -83,6 +83,31 @@
 
 ## Deploying
 
+### Same-origin browser authentication cutover
+
+`APP__PUBLIC_BASE_URL` is the sole browser authority. Preserve its Host through
+the TLS proxy; other hosts cannot serve app/auth APIs. `APP__CONTROLS_ORIGIN`
+is retired and ignored (with a startup warning); remove it from deployment env.
+Login, OAuth consent, edits and dataset mutations use main. Browser writes
+require exact Origin and the CSRF header; private fetches require same-origin
+browser proof. Native OAuth consent retains its one-use session-bound nonce;
+machine bearer APIs and PKCE token exchange remain independent.
+
+Secure human sessions are host-only `__Host-mx.session_token`, HttpOnly,
+SameSite=Lax, Path=/, with no Domain attribute. After upgrading from the split
+host deployment, users sign in again on main: old read handles never become
+full sessions. Keep existing user/database rows and `AUTH__SECRET`; update
+Google/OIDC callback allowlists to main `/api/auth/callback/<provider>` or
+`/api/auth/oauth2/callback/<provider>` as applicable before rollout. Do not
+forward old-host POSTs or copy cookies to migrate a session.
+
+Anonymous held-token browser sessions also require a live hashed DB nonce;
+disconnect revokes that browser immediately without revoking another browser
+holding the same token. `APP__ASSETS_ORIGIN` remains an optional public-byte
+host only: credentials are stripped and auth/app/private routes are refused.
+Author JavaScript remains in opaque sandboxed child frames; the main page's
+Shadow DOM protects trusted UI styling, not script authority.
+
 ```bash
 cp .env.example .env      # set AUTH__SECRET + APP__PUBLIC_BASE_URL (and DATABASE_URL
                           # if you're bringing your own Postgres)

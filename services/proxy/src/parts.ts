@@ -23,7 +23,7 @@ import {
 } from '@artifactbin/contracts';
 import type { RateLimiter } from '@artifactbin/contracts/rate-limits';
 import { Hono, type Context } from 'hono';
-import { assemble, cookieName, decodeAgentSession, readCookie, parseAssetsOrigin, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
+import { assemble, cookieName, parseAssetsOrigin, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
 import { createRateLimiter, memoryBackend } from '@artifactbin/utils/rate-limits';
 import { loadPolicyFile, resolvePolicyFilePath } from './rate-limits';
 import { baseUrlOf, mountOAuthRoutes } from './routes/oauth';
@@ -43,7 +43,6 @@ export interface SessionInfo { userId: string; sessionId?: string; email?: strin
  */
 export interface SessionStore {
   resolve(request: Request): Promise<SessionInfo | null>;
-  resolveRead?(request: Request): Promise<{ userId: string; email?: string } | null>;
   handler?: (request: Request) => Promise<Response>;
 }
 
@@ -324,7 +323,6 @@ export function oauthRoutes(o: ProxyOptions): Part<ProxyEnv> {
         upstream: o.upstream,
         trustedHops: trustedHopsOf(o.env),
         publicBaseUrl: readEnv(o.env, 'APP__PUBLIC_BASE_URL'),
-        controlsOrigin: readEnv(o.env, 'APP__CONTROLS_ORIGIN'),
       });
     },
   };
@@ -341,7 +339,7 @@ export function proxyParts(o: ProxyOptions): Part<ProxyEnv>[] {
   // refusal to boot, never a request quietly metered by numbers nobody chose.
   limiterFor(o);
   const assetSetting = readEnv(o.env,'APP__ASSETS_ORIGIN');
-  const assetOrigin = assetSetting ? parseAssetsOrigin(readEnv(o.env,'APP__PUBLIC_BASE_URL') ?? '',readEnv(o.env,'APP__CONTROLS_ORIGIN') ?? null,assetSetting) : null;
+  const assetOrigin = assetSetting ? parseAssetsOrigin(readEnv(o.env,'APP__PUBLIC_BASE_URL') ?? '',null,assetSetting) : null;
   const assetBoundary: Part<ProxyEnv>[] = assetOrigin ? [{name:'public-assets',mount:app=>app.use('*',async(c,next)=>{
     if(new URL(c.req.url).host !== new URL(assetOrigin).host)return next();
     const incoming=new URL(c.req.url);
@@ -355,7 +353,7 @@ export function proxyParts(o: ProxyOptions): Part<ProxyEnv>[] {
     catch{return new Response('asset upstream unavailable',{status:502});}
   })}] : [];
   const policy = browserBoundaryOf(o);
-  const boundary: Part<ProxyEnv>[] = policy ? [{name:'controls-origin', mount: app => app.use('*', async (c,next) => {
+  const boundary: Part<ProxyEnv>[] = policy ? [{name:'browser-origin', mount: app => app.use('*', async (c,next) => {
     const refused = policy.check(c.req.raw,c.get('actor'));
     if (refused) return refused;
     const previousCookies = c.req.raw.headers.get('cookie');
@@ -363,16 +361,16 @@ export function proxyParts(o: ProxyOptions): Part<ProxyEnv>[] {
     // Resolve the restricted actor first, then discard ambient cookies before
     // legacy handlers can decode them again and widen the proxy's verdict.
     if (policy.credentialAt(c.req.raw) !== 'full') c.req.raw.headers.delete('cookie');
-    else if (agent && !c.get('actor').heldTokenIds) {
+    else if (!c.get('actor').heldTokenIds) {
       // Invalid/expired browser cookies must not regain authority through an
       // app handler's compatibility decoder (dashboard and token claiming).
-      const remaining = (previousCookies ?? '').split(';').map(p=>p.trim()).filter(p=>p && !p.startsWith(agent.fullName+'='));
+      const remaining = (previousCookies ?? '').split(';').map(p=>p.trim()).filter(p=>p && !p.startsWith(cookieName(o.secure??false)+'='));
       if (remaining.length) c.req.raw.headers.set('cookie',remaining.join('; '));
       else c.req.raw.headers.delete('cookie');
     }
     await next();
     if (agent && policy.credentialAt(c.req.raw) === 'full') {
-      for (const cookie of await agent.responseCookies(previousCookies,c.res.headers)) c.header('set-cookie',cookie,{append:true});
+      await agent.observeResponse(previousCookies,c.res.headers);
     }
     // Hono's header API handles immutable redirects; assigning c.res instead
     // would merge the old CSP back over the new framing restriction.
@@ -387,16 +385,15 @@ export const createProxy = (o: ProxyOptions): ProxyApp => assemble(proxyParts(o)
 const browserBoundaries = new WeakMap<ProxyOptions, BrowserBoundary | null>();
 const agentBrowsers = new WeakMap<ProxyOptions, ReturnType<typeof createAgentBrowser>>();
 function agentBrowserOf(o: ProxyOptions) {
-  if (!o.identityDb || !readEnv(o.env,'APP__CONTROLS_ORIGIN')) return null;
+  if (!o.identityDb) return null;
   if (!agentBrowsers.has(o)) agentBrowsers.set(o,createAgentBrowser({db:o.identityDb,tokens:o.tokens,secret:o.cookieSecret,
-    main:readEnv(o.env,'APP__PUBLIC_BASE_URL')!,secure:o.secure ?? false,schema:readEnv(o.env,'AUTH__SCHEMA') ?? 'auth'}));
+    secure:o.secure ?? false,schema:readEnv(o.env,'AUTH__SCHEMA') ?? 'auth'}));
   return agentBrowsers.get(o)!;
 }
 function browserBoundaryOf(o: ProxyOptions): BrowserBoundary | null {
   if (!browserBoundaries.has(o)) {
-    const controls = readEnv(o.env, 'APP__CONTROLS_ORIGIN');
     const main=readEnv(o.env,'APP__PUBLIC_BASE_URL');
-    browserBoundaries.set(o, main ? createBrowserBoundary(main, controls) : null);
+    browserBoundaries.set(o, main ? createBrowserBoundary(main) : null);
   }
   return browserBoundaries.get(o)!;
 }
@@ -415,16 +412,8 @@ async function resolveActor(request: Request, o: ProxyOptions): Promise<Actor> {
   if (boundary) {
     const kind = boundary.credentialAt(request);
     if (kind === 'none') return ANONYMOUS;
-    if (kind === 'read') {
-      const reader = await o.sessions.resolveRead?.(request).catch(() => null);
-      if (reader) return { credential: 'read-session', userId: reader.userId, ...(reader.email ? {email:reader.email} : {}) };
-      const token = await agentBrowserOf(o)?.read(request.headers.get('cookie'));
-      return token && tokenFitsRequest(token,request,o) ? {credential:'read-session',tokenId:token.id,...(token.userId?{userId:token.userId}:{})} : ANONYMOUS;
-    }
   }
-  const secure = o.secure ?? false;
-  const held = readEnv(o.env,'APP__CONTROLS_ORIGIN') ? await agentBrowserOf(o)?.full(request.headers.get('cookie'))
-    : decodeAgentSession(readCookie(request.headers.get('cookie'), cookieName(secure)), o.cookieSecret);
+  const held = await agentBrowserOf(o)?.full(request.headers.get('cookie')).catch(()=>null);
   const heldIds = held?.tokenIds.length ? { heldTokenIds: held.tokenIds } : {};
   const session = await o.sessions.resolve(request).catch(() => null);
   if (session) {
