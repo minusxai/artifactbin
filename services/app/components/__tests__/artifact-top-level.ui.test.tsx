@@ -20,6 +20,26 @@ const props: ArtifactSurfaceProps = {
   template: null, refs: [], version: 1, columns: [], compiledCss: null, theme: null, colorMode: 'light', liveEnabled: false,
 };
 
+it('offers copy-link sharing to a viewer without granting management', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({})));
+  render(<ArtifactShell role="viewer"><ArtifactSurface {...props} /></ArtifactShell>);
+  fireEvent.click(screen.getByLabelText('Artifact controls'));
+  expect(await screen.findByLabelText('Share')).toBeVisible();
+});
+
+it.each([
+  { label: '@writer/source-original', href: '/@writer/source-original' },
+  { label: 'a document that is not public', href: null },
+])('retains server-resolved fork provenance without inventing a private link: $label', async (forkedFrom) => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({})));
+  render(<ArtifactShell role="viewer"><ArtifactSurface {...props} forkedFrom={forkedFrom} /></ArtifactShell>);
+  fireEvent.click(screen.getByLabelText('Artifact controls'));
+  expect(await screen.findByText(`forked from ${forkedFrom.label}`)).toBeVisible();
+  const link = screen.queryByLabelText('Open the artifact this was forked from');
+  if (forkedFrom.href) expect(link).toHaveAttribute('href', forkedFrom.href);
+  else expect(link).toBeNull();
+});
+
 it('routes artifact Home and author links without a native document navigation', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({})));
   const roots: ShadowRoot[] = [];

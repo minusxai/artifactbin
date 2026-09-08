@@ -82,6 +82,8 @@ export interface ArtifactSurfaceProps {
   title: string | null;
   /** Public identity resolved by the page endpoint, never parent-authored messages. */
   authorUsername?: string | null;
+  /** Server-resolved public provenance; nonpublic sources carry a neutral label and no URL. */
+  forkedFrom?: import('@/lib/story/reader-chrome').ReaderForkedFrom | null;
   /** pdf: how big the file is and how long, as the file view says it. */
   bytes?: number;
   pages?: number | null;
