@@ -66,30 +66,31 @@ const api = async (path, body) => {
   return res.json();
 };
 
-// A public doc whose author script probes its own sandbox and writes the
-// answers into the DOM (the ONLY channel out of an opaque document).
-const PROBE = `<Helmet><title>Sec Probe</title><script>{\`
+// Author code now owns an isolated child realm. Its declared signal is the
+// reporting channel; it must never reach the parent's DOM to report a result.
+const PROBE = `<Helmet><title>Sec Probe</title><Value name="probe" type="string" default="{}"/><script>{\`
 (function(){
   var out = {};
   function t(k, fn){ try { out[k] = String(fn()); } catch (e) { out[k] = 'THROW ' + e.name; } }
   t('origin', function(){ return window.origin; });
   t('isTop', function(){ return window.top === window; });
+  t('parentDom', function(){ return parent.document.body.textContent; });
   t('cookie', function(){ return document.cookie; });
   t('storage', function(){ return localStorage.length; });
   t('sw', function(){ navigator.serviceWorker.register('/sw.js').catch(function(){}); return 'attempted'; });
   var before = location.pathname;
   t('replaceState', function(){ history.replaceState(null, '', '/spoofed'); return location.pathname === before ? 'held' : 'SPOOFED ' + location.pathname; });
   fetch('/api/artifacts').then(function(r){ out.fetch = 'OK ' + r.status; render(); }, function(){ out.fetch = 'blocked'; render(); });
-  // The ONE url the CSP admits is the document's own query endpoint; a
-  // sibling route on the same path prefix is not it.
+  // Direct requests from author code are denied; declared data operations use
+  // the bridge. The trusted parent query allowance is checked separately.
   var id = location.pathname.split('/')[2] || 'unknown';
   fetch('/a/' + id + '/query?q=%7B%7D').then(function(r){ out.ownQuery = 'OK ' + r.status; render(); }, function(){ out.ownQuery = 'blocked'; render(); });
   fetch('/a/' + id + '/start', { method: 'POST' }).then(function(r){ out.start = 'OK ' + r.status; render(); }, function(){ out.start = 'blocked'; render(); });
-  function render(){ var el = document.getElementById('sec-probe'); if (el) el.textContent = JSON.stringify(out); }
+  function render(){ mx.params.set('probe', JSON.stringify(out)); }
   render();
 })();
 \`}</script></Helmet>
-<div className="p-8"><h1 className="text-3xl font-bold">SEC-PROBE-DOC</h1><pre id="sec-probe">pending</pre></div>`;
+<div className="p-8"><h1 className="text-3xl font-bold">SEC-PROBE-DOC</h1><pre id="sec-probe">{$probe}</pre></div>`;
 
 const doc = await api('/api/artifacts', { title: 'Sec Probe', markup: PROBE, visibility: 'public' });
 check(doc.visibility === 'public', 'probe doc is public');
@@ -102,14 +103,18 @@ check(reader.url() === `${BASE}/a/${doc.id}`, `reader URL unchanged, no redirect
 check((await reader.locator('iframe[title="artifact"]').count()) === 0, 'reader page has NO artifact iframe');
 await reader.waitForFunction(() => { const t = document.getElementById('sec-probe')?.textContent ?? ''; return /"fetch"/.test(t) && /"ownQuery"/.test(t) && /"start"/.test(t); }, null, { timeout: 15000 }).catch(() => {});
 const probe = JSON.parse(await reader.locator('#sec-probe').textContent().catch(() => '{}') || '{}');
-check(probe.origin === 'null', `document origin is opaque (${probe.origin})`);
-check(probe.isTop === 'true', 'document is the top-level browsing context');
+check(probe.origin === 'null', `author origin is opaque (${probe.origin})`);
+check(probe.isTop === 'false', 'author code runs in a child realm, not the top-level document');
+check(/THROW/.test(probe.parentDom ?? ''), 'author cannot access the parent DOM');
 check(/THROW/.test(probe.cookie ?? ''), `document.cookie throws (${probe.cookie})`);
 check(/THROW/.test(probe.storage ?? ''), `localStorage throws (${probe.storage})`);
 check(probe.fetch === 'blocked', `fetch to /api is blocked (${probe.fetch})`);
-check(probe.ownQuery === 'OK 200', `fetch to the document's OWN query url is admitted (${probe.ownQuery}) — the one connect-src`);
+check(probe.ownQuery === 'blocked', `author code cannot directly fetch a query endpoint (${probe.ownQuery})`);
+const parentQuery = await reader.evaluate(async id => (await fetch('/a/' + id + '/query?q=%7B%7D')).status, doc.id);
+check(parentQuery === 200, `trusted document runtime can fetch its scoped query (${parentQuery})`);
 check(probe.start === 'blocked', `fetch to /a/<id>/start is blocked (${probe.start}) — path-exact, not a prefix`);
-check(probe.replaceState === 'held', `history prelude holds — replaceState cannot spoof the URL (${probe.replaceState})`);
+check(probe.replaceState === 'held' || /THROW/.test(probe.replaceState ?? ''), `author history cannot spoof the page URL (${probe.replaceState})`);
+check(reader.url() === `${BASE}/a/${doc.id}`, 'author probe left the top-level URL unchanged');
 
 // signed-in NON-owner: same document, same URL, no hop
 const otherResp = await other.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
@@ -264,7 +269,7 @@ await splitCtx.close();
 
 // ── 6d. a HOSTILE artifact cannot touch the reader who opens it ────────────
 // The real question: a logged-in user opens SOMEONE ELSE's malicious document.
-// Its script now runs top-level in that user's tab, with the user's session
+// Its document is top-level in that user's tab, with the user's session
 // cookie riding the navigation that fetched it. Prove the script can neither
 // READ the victim's credential nor ACT as them — both the mechanism (opaque
 // origin + CSP) and the outcome (no state change on the victim's account).
@@ -272,10 +277,10 @@ await splitCtx.close();
 // `owner` is signed in and owns real artifacts (it claimed anon.token above);
 // `other` is a different account. `other` publishes the hostile doc, `owner`
 // is its reader.
-const HOSTILE = `<Helmet><title>Hostile</title><script>{\`
+const HOSTILE = `<Helmet><title>Hostile</title><Value name="attack" type="string" default="{}"/><script>{\`
 (function(){
   var out = {};
-  function render(){ var el = document.getElementById('h'); if (el) el.textContent = JSON.stringify(out); }
+  function render(){ mx.params.set('attack', JSON.stringify(out)); }
   out.cookie = (function(){ try { return document.cookie === '' ? 'empty' : 'READABLE:' + document.cookie; } catch (e) { return 'throw:' + e.name; } })();
   out.storage = (function(){ try { return String(localStorage.length); } catch (e) { return 'throw:' + e.name; } })();
   function probe(k, p){ p.then(function(r){ out[k] = 'HTTP ' + r.status; render(); }, function(e){ out[k] = 'blocked:' + e.name; render(); }); }
@@ -290,7 +295,7 @@ const HOSTILE = `<Helmet><title>Hostile</title><script>{\`
   render();
 })();
 \`}</script></Helmet>
-<div className="p-8"><h1 className="text-3xl font-bold">HOSTILE-DOC</h1><pre id="h">pending</pre></div>`;
+<div className="p-8"><h1 className="text-3xl font-bold">HOSTILE-DOC</h1><pre id="h">{$attack}</pre></div>`;
 const hostile = await (await fetch(`${BASE}/api/artifacts`, {
   method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${(await mintAnon(BASE)).token}` },
   body: JSON.stringify({ title: 'Hostile', markup: HOSTILE, visibility: 'public' }),
