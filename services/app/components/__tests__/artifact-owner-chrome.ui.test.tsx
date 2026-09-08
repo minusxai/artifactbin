@@ -6,7 +6,8 @@
  * not-logged-in readers holding a token that owns other artifacts.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { render } from '@/test/helpers/surface-ui';
 
 /*
  * The layer renders nothing here — this file is about the PAGE's chrome and
