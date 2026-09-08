@@ -1,7 +1,7 @@
 ---
 name: markup
 description: >-
-  JSX, components, Helmet, CSS, scripts, fonts and layout.
+  Explains JSX markup.
 ---
 ## Read first
 
@@ -22,7 +22,7 @@ Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with exact spa
 
 ## Contents
 
-Skeleton · Vocabulary · `<Helmet>` · Images · Layout · Do / Don't.
+Skeleton · Tags · Layout.
 
 ## Skeleton (editorial)
 
@@ -50,6 +50,8 @@ Plus the embeds `Question` `Number` and the Helmet declarations `Value`
 `Query` `Mutation`; a name outside that list is rejected with the registry
 echoed back. Unknown props are ignored; data bindings and Column contracts are checked
 at publish.
+
+[Conditions and dialogs](markup-state.md).
 
 **HTML tags: write the ordinary tag you mean** — [[ tags | length ]] are allowed
 (prose, headings, lists, tables, links, media, the bare controls `input`

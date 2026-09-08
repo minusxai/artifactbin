@@ -126,6 +126,11 @@ for (const marker of [
 ]) check(text.includes(marker), `renders: ${marker}`);
 
 // interactive components are HYDRATED, not dead markup
+await frame.click('text=Open dialog');
+await frame.waitForSelector('[aria-label="Kitchen sink dialog"][open]');
+check((await frame.textContent('[aria-label="Kitchen sink dialog"]')).includes('Dialog content opened from the gallery.'), 'Dialog hydrated');
+await frame.click('text=Close');
+await frame.waitForSelector('[aria-label="Kitchen sink dialog"]:not([open])');
 await frame.click('text=Tab two');
 await page.waitForTimeout(600);
 check((await frame.evaluate('document.body.innerText')).includes('Second pane content'), 'Tabs hydrated');

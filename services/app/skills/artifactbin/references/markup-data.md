@@ -1,7 +1,7 @@
 ---
 name: markup-data
 description: >-
-  Queries, Values, Mutations, charts, DataTable settings and reader controls.
+  Explains document data.
 order: 1
 ---
 ## Read first
@@ -48,6 +48,9 @@ Declarations · Bindings: embeds · Bindings: controls.
 - `<Value name="tiny" type="table" value={[{…}, …]} />` — an inline table (flat
   objects; `columns={[{name,type}]}` optional). Read it in SQL by its bare
   name (`from tiny`) or bind it directly (`data="$tiny"`).
+  Local Mutations may edit its rows; dependent local Queries re-run. `_signals`
+  is the implicit one-row scalar table and accepts `UPDATE` only. [Examples and
+  reload semantics](markup-state.md).
 - `<Query name source="<datasetId>">{`select …`}</Query>` — SQL as a
   template-literal child, exactly one SELECT over that dataset’s exposed tables.
   Without `source`, SQL runs locally in DuckDB; another query
@@ -71,6 +74,10 @@ Declarations · Bindings: embeds · Bindings: controls.
   naming the fix. Only viewers with dataset edit permission can run it, supplying VALUES only.
   Bound write controls disable automatically; filters and live reads still work. DuckDB's `uuid()` and `now()` give a
   row its own id and timestamp.
+
+A Mutation targeting `_signals` or an inline table is local; it never changes
+datasets or permissions. Dataset Mutations require
+`access: readwrite`. See [composable state](markup-state.md).
 
 ## Bindings: embeds (body)
 
@@ -132,8 +139,3 @@ Declarations · Bindings: embeds · Bindings: controls.
   - `<Slider value="$min_rev" min={0} max={5000} step={100} prefix="$" format=",.0f" />`.
   - `<DatePicker value="$since" min max />` (a `date` Value), `<Switch checked="$flag" />` (a boolean).
   Dropdowns belong in a control row, never inside a `<GridItem>`.
-- Native controls bind the same way, bare browser chrome: `<select value="$region"
-  options="$regions" />`; `<input type="range|number|text|date" value="$x" />`
-  (`checked="$flag"` for a checkbox); `<textarea value="$note" />`.
-  While a re-run is in flight an embed keeps its rows, dims, and shows an
-  "updating…" chip; a failed query shows the engine's message in its place.

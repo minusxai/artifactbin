@@ -105,6 +105,12 @@ export const GATE_SPECS = Object.freeze([
     why: 'Exercises the share menu general-access seam with its own owner, stranger, and logged-out identity setup.',
     needsMail: true, needsClipboard: false, timeoutMs: 60_000,
   },
+  // measured: implementer pending; orchestrator pending
+  {
+    name: 'local-sql-state', start: 'custom',
+    why: 'Publishes local-state and stored-dataset fixtures, then exercises anonymous top-level and logged-in framed transports.',
+    needsMail: true, needsClipboard: false, timeoutMs: 180_000,
+  },
   // measured: implementer 3s; orchestrator 7s
   { name: 'live-data', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
   // measured: implementer 20s; orchestrator 20s

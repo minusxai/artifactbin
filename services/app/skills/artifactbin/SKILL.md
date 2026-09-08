@@ -121,6 +121,7 @@ text flush to the viewport edge).
 | design craft — hierarchy, type, spacing, color, motifs | `design.md` |
 | tag/component allowlists, `<Helmet>`, layout | `markup.md` |
 | charts (vega specs), controls, `<Mutation>`, data formats | `markup-data.md` |
+| state | `markup-state.md` |
 | editable cells, tags and reference pickers | `markup-editing.md` |
 | scroll reveals and ambient motion classes | `markup-motion.md` |
 | Video embeds | `markup-video.md` |
