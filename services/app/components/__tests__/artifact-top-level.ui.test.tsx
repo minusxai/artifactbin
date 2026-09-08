@@ -1,5 +1,5 @@
 import { StrictMode } from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router';
 import { TrustedUiHost } from '../TrustedUi';
 import { AppNavigationBinding } from '@/web/AppNavigation';
@@ -22,20 +22,32 @@ const props: ArtifactSurfaceProps = {
 
 it('offers copy-link sharing to a viewer without granting management', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({})));
-  render(<ArtifactShell role="viewer"><ArtifactSurface {...props} /></ArtifactShell>);
-  fireEvent.click(screen.getByLabelText('Artifact controls'));
-  expect(await screen.findByLabelText('Share')).toBeVisible();
+  const ui = mountTrustedViewer();
+  fireEvent.click(ui.getByLabelText('Open artifact controls'));
+  expect(await ui.findByLabelText('Share')).toBeVisible();
 });
+
+function mountTrustedViewer(extra: Partial<ArtifactSurfaceProps> = {}) {
+  const attach = Element.prototype.attachShadow;
+  let root: ShadowRoot;
+  const spy = vi.spyOn(Element.prototype, 'attachShadow').mockImplementation(function(this: Element, init: ShadowRootInit) {
+    return root = attach.call(this, init);
+  });
+  try {
+    render(<TrustedUiHost styles="" mode="light"><ArtifactShell role="viewer"><ArtifactSurface {...props} {...extra} /></ArtifactShell></TrustedUiHost>);
+    return within(root!.querySelector<HTMLElement>('[data-trusted-ui-root]')!);
+  } finally { spy.mockRestore(); }
+}
 
 it.each([
   { label: '@writer/source-original', href: '/@writer/source-original' },
   { label: 'a document that is not public', href: null },
 ])('retains server-resolved fork provenance without inventing a private link: $label', async (forkedFrom) => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({})));
-  render(<ArtifactShell role="viewer"><ArtifactSurface {...props} forkedFrom={forkedFrom} /></ArtifactShell>);
-  fireEvent.click(screen.getByLabelText('Artifact controls'));
-  expect(await screen.findByText(`forked from ${forkedFrom.label}`)).toBeVisible();
-  const link = screen.queryByLabelText('Open the artifact this was forked from');
+  const ui = mountTrustedViewer({ forkedFrom });
+  fireEvent.click(ui.getByLabelText('Open artifact controls'));
+  expect(await ui.findByText(`forked from ${forkedFrom.label}`)).toBeVisible();
+  const link = ui.queryByLabelText('Open the artifact this was forked from');
   if (forkedFrom.href) expect(link).toHaveAttribute('href', forkedFrom.href);
   else expect(link).toBeNull();
 });
