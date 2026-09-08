@@ -1039,7 +1039,7 @@ export default function AnnotationLayer({
       }
     };
     return subscribeDocument({ frameRef, runtimeRef }, onMessage);
-  }, [frameRef, runtimeRef, openThread]);
+  }, [frameRef, runtimeRef, sessionNonce, openThread]);
 
   const act = useCallback(async (annId: string, body: { reply?: string; resolve?: boolean; reopen?: boolean }) => {
     setBusy(true);

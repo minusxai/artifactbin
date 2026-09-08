@@ -142,6 +142,17 @@ const layer = (frame: HTMLIFrameElement, over: Partial<Parameters<typeof Annotat
 };
 
 describe('AnnotationLayer', () => {
+  it('subscribes when a lazy inline runtime becomes ready after the layer mounts',async()=>{
+    const {frame}=makeFrame();
+    const runtimeRef:{current:import('@/lib/story-runtime/InlineStoryRuntime').InlineStoryController|null}={current:null};
+    const frameRef={current:frame};
+    const view=render(layer(frame,{frameRef,runtimeRef,sessionNonce:null,showViewComments:true,liveAnnotations:[ANN]}));
+    const listeners=new Set<(event:unknown)=>void>();
+    runtimeRef.current={nonce:NONCE,send:vi.fn(),update:vi.fn(),invalidate:vi.fn(),dispose:vi.fn(),getViewportRect:()=>new DOMRect(0,0,1000,800),subscribe:listener=>{listeners.add(listener);return()=>{listeners.delete(listener);};}};
+    view.rerender(layer(frame,{frameRef,runtimeRef,sessionNonce:NONCE,showViewComments:true,liveAnnotations:[ANN]}));
+    await act(async()=>{ for(const listener of listeners)listener({type:STORY_ANNOTATION_LAYOUT_MESSAGE,nonce:NONCE,positions:[{id:ANN.id,rect:{x:20,y:150,width:100,height:30}}]}); });
+    expect(screen.getByLabelText(/^Open annotation conversation by vivek/)).toBeInTheDocument();
+  });
   it('keeps a shadow-root thread menu open for pointer gestures inside that menu',async()=>{
     const {frame}=makeFrame();
     const view=render(<TrustedUi overlay>{layer(frame,{railOpen:true})}</TrustedUi>);
