@@ -515,7 +515,7 @@ function Thread({
   useEffect(() => {
     if (!menuOpen) return;
     const dismiss = (event: PointerEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+      if (!menuRef.current || !event.composedPath().includes(menuRef.current)) setMenuOpen(false);
     };
     const escape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setMenuOpen(false);

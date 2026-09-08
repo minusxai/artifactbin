@@ -9,7 +9,8 @@
  * carries the edit toolbar's breadcrumb so a comment can widen to an ancestor.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { act, render, screen, fireEvent, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, within,waitFor } from '@testing-library/react';
+import { TrustedUi } from '../TrustedUi';
 import AnnotationLayer from '../AnnotationLayer';
 import {
   STORY_ANNOTATIONS_MESSAGE, STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE,
@@ -141,6 +142,18 @@ const layer = (frame: HTMLIFrameElement, over: Partial<Parameters<typeof Annotat
 };
 
 describe('AnnotationLayer', () => {
+  it('keeps a shadow-root thread menu open for pointer gestures inside that menu',async()=>{
+    const {frame}=makeFrame();
+    const view=render(<TrustedUi overlay>{layer(frame,{railOpen:true})}</TrustedUi>);
+    const shadow=view.container.querySelector('[data-trusted-ui]')!.shadowRoot!;
+    await waitFor(()=>expect(shadow.querySelector('[aria-label="Annotation actions"]')).not.toBeNull());
+    fireEvent.click(shadow.querySelector('[aria-label="Annotation actions"]')!);
+    const button=shadow.querySelector('[aria-label="Delete annotation"]')!;
+    expect(button).not.toBeNull();
+    fireEvent.pointerDown(button,{bubbles:true,composed:true});
+    expect(button.isConnected).toBe(true);
+    expect(shadow.querySelector('[aria-label="Annotation action menu"]')).not.toBeNull();
+  });
   it('posts the pin set into the frame even in view mode (pins are owner view chrome)', async () => {
     const { frame, postMessage } = makeFrame();
     render(layer(frame));
