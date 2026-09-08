@@ -17,9 +17,9 @@ Old split-unified-shell work is paused and must not be merged.
 
 | Priority / gate | Status | Evidence / required acceptance |
 |---|---|---|
-| Stored legacy markup cannot execute in first-party realm | OPEN, reproduced | Seed read-time-safety.test.ts: 6 unsafe cases red, 2 valid cases green. Shared storyBodyFor feeds document and live parts. |
+| Stored legacy markup cannot execute in first-party realm | MITIGATED at shared reader | 59 relevant tests green after f113e26; root removed guard and reproduced six failures, then restored it. Full client mount must use the same guard. |
 | Same-origin cookie operations retain strict CSRF proof | OPEN, reproduced | Seed same-origin-browser.test.ts composed proxy: 6 proof-refusal cases red, valid cookie/bearer cases green. |
-| ShadowRoot preserves context and contains portals | OPEN, contract seeded | trusted-ui.ui.test.ts: 2 red stub tests; real browser styles/focus test required after implementation. |
+| ShadowRoot preserves context and contains portals | MITIGATED primitive; integration OPEN | 19 primitive/tooltip/sheet tests independently green at 3f71fa9. BrowserOS actual-component fixture: controls blue despite author red!important; tooltip/input absent from light DOM; action click increments; closed root. Author CSS :has probe remains 100px before/after dummy sensitive attribute change. Author script parent DOM = SecurityError; network blocked; server observed zero API calls. Full built styles, dialogs and keyboard still require integration review. |
 | Parent bootstrap cannot be clobbered by author IDs or stale lifecycle | OPEN | Explicit root/data references; no lookup into authored subtree for trusted config. Route teardown tests required. |
 | Top-level runtime retains editing/data/live capabilities | OPEN | Need reusable mount/dispose lifecycle over existing StoryRuntimeApp/store/edit protocol, not a second interpreter or author iframe. |
 | Auth returns and private cache stay correct | OPEN | Actual login, expired session, logout, return intent, account/tokens; private no-store and uniform 404s. |
@@ -38,7 +38,11 @@ Old split-unified-shell work is paused and must not be merged.
 
 - Root: contracts, red verification, integration architecture, local browser verification and independent review.
 - shadow_read_safety: read-time boundary only; separate worktree.
-- migration_review (new task): TrustedUi primitive + app portal adapters only; separate worktree.
+- migration_review: primitive reviewed; now persistent host, PageChrome and SPA navigation in separate worktree. shared-trusted-shell seed independently red (zero roots).
 - restore_interactions (new task): same-origin server browser proof only; separate worktree. Older work is not resumed.
 
 All stage results must record observed commands/output. A prototype pass is not a production signoff.
+
+## Baseline notes
+
+Unchanged main full run: API 166 files / 1335 tests passed; Node 366/369 files passed with database startup/hook failures and login-provider timeout. Isolated retry is in progress; not classified as harmless. Integration shared shell and initial-page tests intentionally remain red until their implementation phases.
