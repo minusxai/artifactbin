@@ -529,7 +529,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       authorScript: props.authorScript ?? split?.content.script ?? null });
     mountedStoryRef.current = mounted;
     mountedUpdateRef.current = mounted;
-    const initialUpdate: StoryDocumentUpdate = { type: STORY_DOCUMENT_MESSAGE, nodes: prepared.nodes, glyphs: prepared.glyphs, compiledCss, authorCss: props.authorCss ?? split?.content.style ?? null };
+    const initialUpdate: StoryDocumentUpdate = { type: STORY_DOCUMENT_MESSAGE, nodes: prepared.nodes, glyphs: prepared.glyphs, compiledCss, authorCss: props.authorCss ?? split?.content.style ?? null, theme, colorMode: prepared.colorMode };
     mounted.adopt(initialUpdate);
     setFrameLoaded(true);
     return () => {
