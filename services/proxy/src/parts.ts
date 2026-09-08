@@ -30,6 +30,7 @@ import { baseUrlOf, mountOAuthRoutes } from './routes/oauth';
 import { say, type ProxySubject } from './events';
 import { createOAuthStore } from './identity/oauth';
 import { readEnv } from './env';
+import { createAgentBrowserSessions } from './auth/agent-browser-session';
 
 /** What the session part resolves an account to. */
 export interface SessionInfo { userId: string; email?: string; emailVerified?: boolean }
@@ -197,6 +198,13 @@ const subjectOf = (actor: Actor | undefined): ProxySubject | null => {
  * unknown policy name REFUSES TO BOOT instead of meeting a request with built-in numbers nobody chose.
  */
 const limiters = new WeakMap<ProxyOptions, RateLimiter>();
+const agentBrowsers = new WeakMap<ProxyOptions, ReturnType<typeof createAgentBrowserSessions>>();
+const agentBrowserOf = (o:ProxyOptions) => {
+  if(!o.identityDb)return null;
+  let browser=agentBrowsers.get(o);
+  if(!browser){browser=createAgentBrowserSessions(o.identityDb,readEnv(o.env,'AUTH__SCHEMA')??'auth');agentBrowsers.set(o,browser);}
+  return browser;
+};
 const limiterFor = (o: ProxyOptions): RateLimiter => {
   let l = limiters.get(o);
   if (!l) {
@@ -214,6 +222,18 @@ export function session(o: ProxyOptions): Part<ProxyEnv> {
       c.set('limiter', limiterFor(o));
       c.set('actor', await resolveActor(c.req.raw, o));
       await next();
+      const browser=agentBrowserOf(o);
+      if(!browser)return;
+      const name=cookieName(o.secure??false);
+      const previous=decodeAgentSession(readCookie(c.req.raw.headers.get('cookie'),name),o.cookieSecret);
+      const changes=c.res.headers.getSetCookie().filter(value=>value.startsWith(name+'='));
+      if(changes.length!==1)return;
+      const pair=changes[0]!.split(';')[0]!,value=pair.slice(name.length+1);
+      if(previous?.sessionId)await browser.revoke(previous.sessionId);
+      if(!value)return;
+      const nextSession=decodeAgentSession(value,o.cookieSecret),primary=nextSession?.tokenIds.at(-1);
+      if(!nextSession?.sessionId||!primary){c.res.headers.append('set-cookie',`${name}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${o.secure?'; Secure':''}`);return;}
+      await browser.issue(nextSession.sessionId,primary);
     }),
   };
 }
@@ -372,6 +392,8 @@ async function resolveActor(request: Request, o: ProxyOptions): Promise<Actor> {
   }
   const lastHeld = held?.tokenIds[held.tokenIds.length - 1];
   if (lastHeld !== undefined) {
+    const browser=agentBrowserOf(o);
+    if(browser&&(!held?.sessionId||!await browser.live(held.sessionId,lastHeld)))return ANONYMOUS;
     const token = await o.tokens.byId(lastHeld);
     if (token && tokenFitsRequest(token, request, o)) return { credential: 'agent-cookie', tokenId: token.id, ...(token.userId ? { userId: token.userId } : {}), ...heldIds };
   }

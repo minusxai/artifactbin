@@ -6,6 +6,7 @@
  * the hop's own IP behind an untrusted one.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
+import {createHash} from 'node:crypto';
 import { ACTOR_HEADER, ANONYMOUS } from '@artifactbin/contracts';
 import { signActor } from '@artifactbin/utils';
 import { assemble, cookieName, encodeAgentSession } from '@artifactbin/utils';
@@ -49,7 +50,9 @@ describe('the session part', () => {
   it('authenticates the agent cookie as agent-cookie by its primary (last) id', async () => {
     const app = await proxy();
     await mintTestToken({ id: 'tok_c', userId: null, pg: testDb().pg() });
-    await app.request('/api/artifacts', { headers: { cookie: `${cookieName(false)}=${await encodeAgentSession({ tokenIds: ['tok_x', 'tok_c'] }, 'test-cookie-secret-00000000000000000000')}` } });
+    const sessionId='c'.repeat(43);
+    await testDb().query("INSERT INTO auth.credentials(kind,credential_hash,subject_id,expires_at) VALUES ('agent-browser',$1,'tok_c',now()+interval '30 days')",[createHash('sha256').update(sessionId).digest('hex')]);
+    await app.request('/api/artifacts', { headers: { cookie: `${cookieName(false)}=${await encodeAgentSession({ tokenIds: ['tok_x', 'tok_c'],sessionId }, 'test-cookie-secret-00000000000000000000')}` } });
     expect(seenActor).toEqual({ credential: 'agent-cookie', tokenId: 'tok_c', heldTokenIds: ['tok_x', 'tok_c'] });
   });
   it('ignores a forged inbound actor header, even one signed with a real key — the actor never travelled by header', async () => {

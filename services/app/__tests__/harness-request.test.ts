@@ -48,7 +48,7 @@ describe('agentCookie() and cookieValue()', () => {
   it('the cookie header round-trips through the app\'s own decoder', async () => {
     const header = await agentCookie(['tok_a', 'tok_b']);
     expect(header.startsWith(`${AGENT_COOKIE}=`)).toBe(true);
-    expect(await decodeAgentSession(header.slice(AGENT_COOKIE.length + 1))).toEqual({ tokenIds: ['tok_a', 'tok_b'] });
+    expect(await decodeAgentSession(header.slice(AGENT_COOKIE.length + 1))).toMatchObject({ tokenIds: ['tok_a', 'tok_b'], sessionId: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/) });
   });
   it('reads a rewritten cookie and recognises a cleared one', async () => {
     const a = await mintToken('a');
@@ -57,7 +57,7 @@ describe('agentCookie() and cookieValue()', () => {
     expect(res.status).toBe(204);
     const rewritten = cookieValue(res);
     expect(rewritten.cleared).toBe(false);
-    expect(await decodeAgentSession(rewritten.value)).toEqual({ tokenIds: [b.id] });
+    expect(await decodeAgentSession(rewritten.value)).toMatchObject({ tokenIds: [b.id], sessionId: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/) });
     const last = await reject(request('/api/tokens/reject', { method: 'POST', json: { tokenId: b.id }, cookie: rewritten.value ? `${AGENT_COOKIE}=${rewritten.value}` : '' }));
     expect(cookieValue(last).cleared).toBe(true);
     expect(cookieValue(new Response(null)).value).toBeNull();

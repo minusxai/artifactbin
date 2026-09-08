@@ -63,6 +63,7 @@ describe('POST /api/session/token', () => {
 
     const session = await decodeAgentSession(cookieFrom(res));
     expect(session?.tokenIds).toEqual([minted.id]);
+    expect(session?.sessionId).toMatch(/^[A-Za-z0-9_-]{43}$/);
   });
 
   it('refuses an unknown or revoked token with a uniform 401', async () => {
