@@ -78,14 +78,12 @@ const exercise = async (page, framed, documentId) => {
     const field = dialog.querySelector('[aria-label="Note"]');
     const submit = dialog.querySelector('[aria-label="Save dialog"]');
     const form = dialog.querySelector('form');
-    return {value:field.value, disabled:field.disabled, valid:field.validity.valid, formValid:form.checkValidity(), submitDisabled:submit.disabled};
+    return {value:field.value, disabled:field.disabled, fieldsetDisabled:dialog.querySelector('fieldset').disabled, valid:field.validity.valid, formValid:form.checkValidity(), submitDisabled:submit.disabled, submitType:submit.type, associated:submit.form === form, contentEditable:submit.contentEditable, picking:document.documentElement.getAttribute('data-mx-annotate-picking'), status:dialog.querySelector('[role="status"]')?.textContent ?? null};
   });
   ok(validity.value === 'changed' && !validity.disabled && validity.valid && validity.formValid && !validity.submitDisabled,
     `Dialog field is filled, enabled, and valid before submit (${JSON.stringify(validity)})`);
   await frame.click('[aria-label="Save dialog"]');
-  await frame.waitForFunction(() => document.querySelector('[aria-label="Count"]')?.textContent === '1').catch(async error => {
-    throw new Error(`${error.message}; dialog=${await frame.locator('[aria-label="Draft dialog"]').innerText()}; calls=${JSON.stringify(routeBodies)}`);
-  });
+  await frame.waitForFunction(() => document.querySelector('[aria-label="Count"]')?.textContent === '1', null, {timeout:15_000});
   ok((await frame.locator('[aria-label="Draft dialog"]').evaluate(el => el.open)) === false && (await frame.textContent('[aria-label="Positive"]')) === 'positive', 'submit closes Dialog and _signals drives && rendering');
   ok(await frame.locator('[aria-label="Open dialog"]').evaluate(el => el === document.activeElement), 'successful submit restores focus to the trigger');
   await frame.click('[aria-label="Open dialog"]');
@@ -94,6 +92,7 @@ const exercise = async (page, framed, documentId) => {
   ok(await frame.locator('[aria-label="Open dialog"]').evaluate(el => el === document.activeElement), 'Escape closes Dialog and restores focus');
   const snapshots = routeBodies.filter(call => call.body?.localTables && Object.keys(call.body.localTables).length);
   ok(snapshots.some(call => call.url.endsWith('/mutate')) && snapshots.some(call => call.url.endsWith('/query')), `${framed ? 'relayed' : 'direct'} mutation and query snapshots reached their routes`);
+  await page.waitForFunction(() => new URLSearchParams(location.search).get('$count') === '1', null, {timeout:5_000});
   await page.reload({waitUntil:'load'});
   const reloaded = framed ? await (await page.waitForSelector('iframe[title="artifact"]')).contentFrame() : page.mainFrame();
   await reloaded.waitForFunction(() => document.querySelector('[aria-label="Rows"]')?.textContent?.trim() === '1', null, {timeout:20_000});

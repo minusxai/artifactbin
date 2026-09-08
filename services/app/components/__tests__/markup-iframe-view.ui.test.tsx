@@ -73,6 +73,7 @@ describe('markup view mode is the sandboxed /raw iframe', () => {
     expect(frame).toHaveAttribute('src', '/a/story1/raw');
     const sandbox = frame.getAttribute('sandbox') ?? '';
     expect(sandbox).toContain('allow-scripts');
+    expect(sandbox).toContain('allow-forms');
     expect(sandbox).not.toContain('allow-same-origin');
   });
 
