@@ -138,7 +138,7 @@ try {
   const openShare = async (page) => {
     if (await linkRole.isVisible().catch(() => false)) return;
     await openControls(page);
-    await page.locator('[aria-label="Share"]').first().click();
+    await page.getByLabel('Owner actions').getByLabel('Share', { exact: true }).click();
     await linkRole.waitFor({ timeout: 15000 });
   };
   await openShare(owner);
@@ -162,7 +162,8 @@ try {
   await openControls(stranger);
   check((await stranger.locator('[aria-label="Toggle comments"]').count()) === 1, '…with the comments control');
   check((await stranger.locator('[aria-label="Edit artifact"]').count()) === 0, '…and NO edit button — a commenter is not an editor');
-  check((await stranger.locator('[aria-label="Share"]').count()) === 0, '…and no share control: the ACL stays the owner\'s');
+  check((await stranger.getByLabel('Document actions').getByLabel('Share', { exact: true }).count()) === 0
+    && await stranger.getByLabel('Owner actions').count() === 0, '…and no permissions-sharing control: the ACL stays the owner\'s');
   await closeControls(stranger);
 
   // ── 3b. …carrying the COMMENT layer, not the hydration runtime ───────────
@@ -175,16 +176,16 @@ try {
   // ── 4. they comment, from selection to saved thread ──────────────────────
   const frame = stranger.locator('[data-mx-inline-story]');
   await frame.locator('#claim').waitFor({ timeout: 15000 });
-  const bubble = frame.locator('[data-mx-selection-actions]');
+  const bubble = stranger.locator('[data-mx-selection-actions]');
   await until(async () => {
     await frame.locator('#claim').click({ clickCount: 3, timeout: 2000 }).catch(() => {});
     return bubble.isVisible().catch(() => false);
   }, (v) => v === true, 20000);
   check(await bubble.isVisible(), 'selecting words offers the stranger the action bubble');
-  check((await frame.locator('[aria-label="Edit selected text"]').count()) === 0,
+  check((await stranger.locator('[aria-label="Edit selected text"]').count()) === 0,
     'the bubble offers annotate and NOT edit — the capability follows the role');
 
-  await frame.locator('[aria-label="Comment on selected text"]').click();
+  await stranger.locator('[aria-label="Comment on selected text"]').click();
   const composer = await until(() => stranger.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
   check(composer === 1, 'the composer opens on those words');
   await stranger.locator('[aria-label="Annotation comment"]').fill('a stranger with the link, saying something');
@@ -199,7 +200,7 @@ try {
   // ── 5. the owner never reloaded ──────────────────────────────────────────
   // The count rides the framed document's comment glyph now (the page keeps it live).
   const ownerFrame = owner.mainFrame();
-  const live = await until(() => ownerFrame.locator('[data-mx-reader-count="comment"]').textContent().catch(() => null), (t) => t === '1', 20000);
+  const live = await until(() => owner.locator('[data-mx-reader-count="comment"]').textContent().catch(() => null), (t) => t === '1', 20000);
   check(live === '1', 'the owner watches the count arrive over the live stream — no reload');
 
   // ── 6. logged OUT on the same link: the anonymous ceiling ────────────────

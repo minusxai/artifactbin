@@ -246,7 +246,7 @@ await p.waitForTimeout(3500);
 
 // The document is the SERVED page in a sandboxed frame now, so everything a
 // reader sees is asserted inside that frame — the theme included.
-const themeOf = async () => surface()?.locator('[data-theme]').first().getAttribute('data-theme').catch(() => null);
+const themeOf = async () => surface()?.locator('[data-mx-inline-story]:not([data-mx-initial-story])').getAttribute('data-theme').catch(() => null);
 ok((await themeOf()) === 'modernist', 'the served document carries the authored theme');
 const before = (await surface().getByText('Total:').first().textContent()).trim();
 await surface().locator('select').first().selectOption('EU');
@@ -264,11 +264,11 @@ ok((await p.locator('[aria-label="Edit artifact"]').count()) === 1, 'artifact co
 // drift a gate reading the attribute is here to catch.
 await p.click('[aria-label="Light mode"]');
 await p.waitForFunction(() => !document.documentElement.dataset.theme);
-await surface().locator('html:not(.dark)').waitFor({ timeout: 8000 });
+await surface().locator('[data-mx-inline-story]:not([data-mx-initial-story]).light').waitFor({ timeout: 8000 });
 ok(true, 'one appearance choice turns both the app and document light');
 await p.click('[aria-label="Dark mode"]');
 await p.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
-await surface().locator('html.dark').waitFor({ timeout: 8000 });
+await surface().locator('[data-mx-inline-story]:not([data-mx-initial-story]).dark').waitFor({ timeout: 8000 });
 ok(true, 'the same appearance choice turns both the app and document dark');
 await p.keyboard.press('Escape');
 

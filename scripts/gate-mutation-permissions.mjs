@@ -34,6 +34,6 @@ try {
  await share({access:'read'});
  await frame.locator('[aria-label="Item 2"]:disabled').waitFor();
  await frame.getByLabel('Filter status',{exact:true}).click();
- await frame.getByRole('option',{name:'backlog',exact:true}).click();
+ await friend.getByRole('option',{name:'backlog',exact:true}).click();
  console.log(`all good: anonymous refusal, shared editor, live grant/revoke, preserved draft, read-only live updates and filters: ${fixture.url}`);
 }finally{await browser.close();await sink.close();}

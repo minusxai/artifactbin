@@ -264,7 +264,7 @@ const browser = await chromium.launch();
     const idle = rows.find((r) => r !== cur) ?? rows[0];
     return {
       rows: rows.length,
-      isDark: document.documentElement.classList.contains('dark'),
+      isDark: document.querySelector("[data-mx-inline-story]:not([data-mx-initial-story])").classList.contains('dark'),
       bgLum: lum(bg),
       idle: ratio(px(cs(idle).color), bg),
       current: ratio(px(cs(cur).color), bg),
@@ -287,9 +287,9 @@ const browser = await chromium.launch();
   // The chrome opens hidden now — a scroll up is what brings it back.
   await revealReaderChrome(page);
   await openArtifactControls(page);
-  await page.click('[data-mx-mode-choice="dark"]');
+  await page.getByLabel('Dark mode', {exact: true}).click();
   await sleep(400);
-  ok(await page.evaluate(() => document.documentElement.classList.contains('dark')
+  ok(await page.evaluate(() => document.querySelector("[data-mx-inline-story]:not([data-mx-initial-story])").classList.contains('dark')
     && getComputedStyle(document.querySelector('.mx-outline')).display !== 'none'),
     'and the reader\'s own dark toggle keeps the rail');
   await ctx.close();

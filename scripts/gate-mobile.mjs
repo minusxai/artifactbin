@@ -110,8 +110,9 @@ ok(!(await overflows(view)), 'viewer: the page does not scroll sideways');
  * in whichever document actually scrolls: hidden on load, a scroll down keeps
  * it away, a scroll up brings it back.
  */
-ok((await view.locator('[aria-label="Page actions"], [aria-label="Open menu"], [aria-label="Open artifact controls"]').count()) === 0,
-  'viewer: the page draws no dock or corner buttons of its own');
+ok((await view.getByLabel('Open menu', {exact:true}).count()) === 1
+  && (await view.getByLabel('Open artifact controls', {exact:true}).count()) === 1,
+  'viewer: the inline reader draws one menu and one artifact-controls trigger');
 // An owner reads through the sandboxed artifact frame; a public reader may be
 // served the document itself. Exercise whichever window actually scrolls.
 const readingFrame = view.mainFrame();
@@ -576,8 +577,7 @@ for (let attempt = 0; attempt < 20 && !raised; attempt += 1) {
 }
 ok(raised, 'touch: a selection that fires NO pointerup raises the bubble — selectionchange is all a touch gesture gives');
 
-const placed = await docFrame.evaluate(() => {
-  const surface = document.querySelector('[data-mx-selection-actions]');
+const placed = await bubble.evaluate((surface) => {
   const box = surface.getBoundingClientRect();
   const lines = [...getSelection().getRangeAt(0).getClientRects()].filter((r) => r.width > 0 && r.height > 0);
   const last = lines.at(-1);

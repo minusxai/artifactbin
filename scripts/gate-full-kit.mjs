@@ -185,7 +185,7 @@ check(pageErrors.length === 0, `no page errors${pageErrors.length ? `: ${pageErr
 // 3b. the chart module is LAZY: a prose document must not download it
 //     (vega is ~1 MB; the old reader bundle kept it behind a dynamic import
 //     and the unified document must not regress that).
-check(requests.some((u) => /\/story\/chunks\/VegaChart-/.test(u)), 'a chart document fetched the lazy chart chunk');
+check(requests.some((u) => /\/(?:story\/chunks\/|assets\/)?VegaChart[-.]/.test(u) || /\/VegaChart\.tsx(?:\?|$)/.test(u)), 'a chart document fetched the lazy chart chunk');
 
 // 4. the font resolved INSIDE the opaque frame
 const fontOk = await frame.evaluate(async () => {
@@ -234,7 +234,7 @@ await prosePage.goto(`${BASE}/a/${prose.id}`);
 const proseFrame = await artifactDocument(prosePage);
 await proseFrame.waitForSelector('h1', { timeout: 20000 });
 await prosePage.waitForTimeout(3000);
-check(!proseRequests.some((u) => /\/story\/chunks\/VegaChart-/.test(u)), 'a prose document never fetches the chart chunk');
+check(!proseRequests.some((u) => /\/(?:story\/chunks\/|assets\/)?VegaChart[-.]/.test(u) || /\/VegaChart\.tsx(?:\?|$)/.test(u)), 'a prose document never fetches the chart chunk');
 
 await browser.close();
 if (failures.length) { console.error(`\n${failures.length} failure(s)`); process.exit(1); }

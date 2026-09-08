@@ -101,7 +101,7 @@ const sharingPut = () => page.waitForResponse(
 );
 // Reading has no bar; the artifact controls carry the sharing surface.
 await openArtifactControls(page);
-await page.locator('[aria-label="Share"]').first().click();
+await page.getByLabel('Owner actions').getByLabel('Share', { exact: true }).click();
 const sharingDialog = page.locator('[role="dialog"][aria-label="Sharing"]');
 await sharingDialog.waitFor({ timeout: 15000 });
 await page.waitForTimeout(250); // let the restrained entrance transform settle before measuring its center

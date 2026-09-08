@@ -46,7 +46,7 @@ try {
   await becomeOwner(page, BASE, start.token);
   await page.goto(`${BASE}/a/${start.id}`, { waitUntil: 'load' });
   await openArtifactControls(page);
-  await page.getByLabel('Share', { exact: true }).click();
+  await page.getByLabel('Owner actions').getByLabel('Share', { exact: true }).click();
   await page.getByRole('dialog', { name: 'Sharing', exact: true }).getByLabel('Edit social preview').click();
   const dialog = page.getByRole('dialog', { name: 'Social preview' });
   await dialog.waitFor();

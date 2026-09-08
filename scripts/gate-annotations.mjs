@@ -114,7 +114,7 @@ const run = async () => {
     // and the document leaves the rail its width instead.
     ok(await page.locator('[aria-label="Artifact viewport"]').evaluate((el) => el.style.right === '0px'),
       'the open rail leaves the frame full-width, so the bar inside it does not move');
-    const railInset = await until(() => frame.locator('html').evaluate((el) => getComputedStyle(el).getPropertyValue('--mx-rail-inset').trim()), (v) => v === '320px', 5000);
+    const railInset = await until(() => page.getByLabel('Artifact viewport').evaluate((el) => getComputedStyle(el).paddingRight), (v) => v === '320px', 5000);
     ok(railInset === '320px', `the document leaves the rail its width (got ${railInset})`);
     ok(await page.locator('[aria-label="Annotation sidebar"]').evaluate((el) => el.style.top === '44px'),
       'the rail sits under the document\'s bar');
@@ -128,7 +128,7 @@ const run = async () => {
     const stillTinted = await until(() => frame.locator('#figure[data-mx-annotated]').count(), (n) => n === 1, 5000);
     ok(stillTinted === 1, 'the tint is ambient: a commented node stays marked with no rail and no mode');
     // The count rides the framed document's comment glyph now, kept live by the page.
-    ok((await frame.locator('[data-mx-reader-count="comment"]').textContent())?.trim() === '1', 'the comment glyph carries the unresolved count');
+    ok((await page.locator('[data-mx-reader-count="comment"]').textContent())?.trim() === '1', 'the comment glyph carries the unresolved count');
     const viewComments = page.locator('[aria-label="Open annotation comments"]');
     await viewComments.waitFor({ timeout: 8000 });
     const viewComment = page.locator('[aria-label^="Open annotation conversation by"]');
@@ -136,7 +136,7 @@ const run = async () => {
     const compactBox = await viewComment.boundingBox();
     ok(!!compactBox && compactBox.width <= 40 && compactBox.height <= 40,
       'the ambient annotation is a compact identity marker');
-    const railGone2 = await until(() => frame.locator('html').evaluate((el) => getComputedStyle(el).getPropertyValue('--mx-rail-inset').trim()), (v) => v === '0px', 5000);
+    const railGone2 = await until(() => page.getByLabel('Artifact viewport').evaluate((el) => getComputedStyle(el).paddingRight), (v) => v === '0px', 5000);
     ok(railGone2 === '0px', 'closing the rail gives the document its width back');
     ok(await page.locator('[aria-label="Artifact viewport"]').evaluate((el) => (el).style.right === '0px'),
       'the floating marker leaves the document full-width');
@@ -209,7 +209,7 @@ const run = async () => {
     ok(gone === 0, 'the resolve reaches the open tab live: the highlight lifts with no reload');
     const threadGone = await until(() => page.locator('[aria-label="Annotation thread"]').count(), (n) => n === 0, 8000);
     ok(threadGone === 0, 'the open-thread list empties live too');
-    const badgeGone = await until(() => frame.locator('[data-mx-reader-count="comment"]').textContent().then((t) => (t ?? '').trim()), (t) => t === '', 5000);
+    const badgeGone = await until(() => page.locator('[data-mx-reader-count="comment"]').textContent().then((t) => (t ?? '').trim()), (t) => t === '', 5000);
     ok(badgeGone === '', 'the count badge drops with the resolve');
     const resolvedCard = await until(() => page.locator('[aria-label="Resolved annotation thread"]').count(), (n) => n === 1, 8000);
     ok(resolvedCard === 1, 'resolved history lists the closed thread below the open list');
@@ -780,7 +780,7 @@ async function pickLeg(browser) {
   ok(typeof stamped === 'string', 'hovering a block while picking stamps it');
   const painted = await intro.evaluate((el) => getComputedStyle(el).outlineStyle);
   ok(painted !== 'none', `…and the outline is PAINTED, not only stamped (outline-style ${painted})`);
-  const cursor = await frame.locator('html').evaluate((el) => getComputedStyle(el).cursor);
+  const cursor = await intro.evaluate((el) => getComputedStyle(el).cursor);
   ok(cursor === 'crosshair', `the document cursor says pick (${cursor})`);
 
   await intro.click();

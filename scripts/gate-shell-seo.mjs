@@ -17,6 +17,7 @@ import { chromium } from 'playwright';
 import { openMenu } from './lib/reveal-chrome.mjs';
 import { becomeOwner } from './lib/start-doc.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
+import { artifactDocument } from './lib/artifact-document.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3040';
 const failures = [];
@@ -89,11 +90,14 @@ const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 // The shell (and its frame) belongs to the owner; readers get the document.
 await becomeOwner(page, BASE, mint.token);
 await page.goto(`${BASE}/a/${doc.id}`);
-const frameEl = await page.waitForSelector('[data-mx-inline-story]', { timeout: 20000 });
+await artifactDocument(page, { timeout: 20000 });
+const frameEl = page.locator('[data-mx-inline-story]:not([data-mx-initial-story])');
 const before = await frameEl.boundingBox();
 // The shell draws no hamburger or controls button of its own now: the framed
 // document carries the chrome and asks the page for its panels.
-check((await page.locator('[aria-label="Open menu"], [aria-label="Open artifact controls"]').count()) === 0, 'the shell draws no corner buttons of its own');
+check((await page.getByLabel('Open menu', {exact:true}).count()) === 1
+  && (await page.getByLabel('Open artifact controls', {exact:true}).count()) === 1,
+  'the inline reader has exactly one menu and one artifact-controls trigger');
 const docFrame = page.mainFrame();
 check(!!docFrame && (await docFrame.locator('[data-mx-reader-trigger="menu"]').count()) === 1, 'the protected reader chrome carries the menu control');
 check(!!docFrame && (await docFrame.locator('[data-mx-reader-trigger="controls"]').count()) === 1, 'and the artifact controls');

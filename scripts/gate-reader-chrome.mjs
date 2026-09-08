@@ -207,8 +207,8 @@ for (const [name, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
   await revealReaderChrome(page);
   await page.locator('[data-mx-reader-trigger="controls"]').click();
   await page.waitForSelector('[aria-label="Artifact controls"]', { timeout: 10_000 });
-  check(await page.locator('[data-mx-mode-choice="light"]').isVisible(), `${name}: the settings panel offers light`);
-  check(await page.locator('[data-mx-mode-choice="dark"]').isVisible(), `${name}: …and dark`);
+  check(await page.getByLabel('Light mode', {exact: true}).isVisible(), `${name}: the settings panel offers light`);
+  check(await page.getByLabel('Dark mode', {exact: true}).isVisible(), `${name}: …and dark`);
   check(await page.locator('[aria-label="Fork artifact"]').isVisible(), `${name}: …and fork`);
   check((await page.locator('[data-mx-forked-from]').count()) === 0, `${name}: a document nobody forked says nothing about provenance`);
   await page.keyboard.press('Escape');
