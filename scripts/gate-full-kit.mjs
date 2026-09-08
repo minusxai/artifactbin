@@ -172,7 +172,8 @@ check(await frame.evaluate(()=>{
     && children.filter(child=>child.title==='Isolated content').length===1
     && children.filter(child=>child.title==='Managed content').length===1
     && children.every(child=>child.getAttribute('sandbox')==='allow-scripts'
-      && child.getAttribute('referrerpolicy')==='no-referrer' && !child.hasAttribute('src')
+      && child.getAttribute('referrerpolicy')==='no-referrer' && !child.hasAttribute('srcdoc')
+      && new URL(child.src).origin===location.origin && new URL(child.src).pathname==='/story/author-frame'
       && (child.title==='Isolated content' && child.parentElement===sandbox
         || child.title==='Managed content' && child.parentElement?.parentElement===managed));
 }), 'only the two declared opaque Sandbox/Iframe wrappers are nested; no unexpected frames');
@@ -204,7 +205,9 @@ check(pageErrors.length === 0, `no page errors${pageErrors.length ? `: ${pageErr
 // 3b. the chart module is LAZY: a prose document must not download it
 //     (vega is ~1 MB; the old reader bundle kept it behind a dynamic import
 //     and the unified document must not regress that).
-check(requests.some((u) => /\/story\/chunks\/VegaChart-/.test(u)), 'a chart document fetched the lazy chart chunk');
+// Vite manifest: ../components/viz/VegaChart.tsx is a dynamic entry under assets/.
+const isChartChunk=u=>/^\/assets\/VegaChart-[\w-]+\.js$/.test(new URL(u).pathname);
+check(requests.some(isChartChunk), 'a chart document fetched the lazy chart chunk');
 
 // 4. the font resolved INSIDE the opaque frame
 const fontOk = await frame.evaluate(async () => {
@@ -253,7 +256,7 @@ await prosePage.goto(`${BASE}/a/${prose.id}`);
 const proseFrame = await storyFrame(prosePage);
 await proseFrame.waitForSelector('h1', { timeout: 20000 });
 await prosePage.waitForTimeout(3000);
-check(!proseRequests.some((u) => /\/story\/chunks\/VegaChart-/.test(u)), 'a prose document never fetches the chart chunk');
+check(!proseRequests.some(isChartChunk), 'a prose document never fetches the chart chunk');
 
 await browser.close();
 if (failures.length) { console.error(`\n${failures.length} failure(s)`); process.exit(1); }

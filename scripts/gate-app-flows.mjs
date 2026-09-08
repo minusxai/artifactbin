@@ -183,6 +183,8 @@ ok(await signedIn(), 'log back in with a fresh code works');
 
 // ───────────────────────────── VIEWER ─────────────────────────────
 console.log('█ SANDBOX');
+const isolationSource = `<Helmet><Value name="isolation" type="string" default="pending"/><script>{\`(async function(){var out=[];try{void parent.document;out.push('dom:OPEN')}catch{out.push('dom:blocked')}try{void localStorage.length;out.push('storage:OPEN')}catch{out.push('storage:blocked')}try{await fetch(${JSON.stringify(new URL('/api/page/session',B).href)});out.push('network:OPEN')}catch{out.push('network:blocked')}mx.params.set('isolation',out.join(' '));})();\`}</script></Helmet><p id="isolation-report">{$isolation}</p>`;
+const isolationDoc = (await J('/api/artifacts',{method:'POST',body:JSON.stringify({title:'Author boundary probe',markup:isolationSource,visibility:'public'})},T)).body;
 // Two shapes, one guarantee. For the OWNER the document is a child frame of the
 // app, which is only safe while that frame keeps an OPAQUE origin — the parent
 // holds the session cookie, and author JS must not reach it. For everyone else
@@ -195,15 +197,16 @@ console.log('█ SANDBOX');
 const ownerCtx = await browser.newContext({ viewport: { width: 1500, height: 950 } });
 const op = await ownerCtx.newPage();
 await becomeOwner(op, B, T);
-await op.goto(`${B}/a/${made.markup.id}`, { waitUntil: 'load' });
+await op.goto(`${B}/a/${isolationDoc.id}`, { waitUntil: 'load' });
+await op.getByText('dom:blocked storage:blocked network:blocked',{exact:true}).waitFor({timeout:15000});
 {
   const probe = await op.evaluate(() => {
     const f = document.querySelector('[data-artifact-story-host]');
     if (!f) return { missing: true };
     const scripts=[...f.querySelectorAll('iframe[title="Isolated artifact script"]')];
-    return {topLevel:f.ownerDocument===document,unsafe:scripts.some(el=>el.getAttribute('sandbox')!=='allow-scripts'),readable:scripts.some(el=>!!el.contentDocument)};
+    return {topLevel:f.ownerDocument===document,count:scripts.length,unsafe:scripts.some(el=>el.getAttribute('sandbox')!=='allow-scripts'),readable:scripts.some(el=>!!el.contentDocument)};
   });
-  ok(!probe.missing && probe.topLevel && !probe.unsafe,'prose is top-level; any author execution remains sandboxed without same-origin');
+  ok(!probe.missing && probe.topLevel && probe.count===1 && !probe.unsafe,'prose is top-level; author execution remains sandboxed without same-origin');
   ok(probe.readable === false, 'no author execution frame shares first-party DOM/storage');
 }
 
@@ -211,10 +214,10 @@ await op.goto(`${B}/a/${made.markup.id}`, { waitUntil: 'load' });
 {
   const readerCtx = await browser.newContext();
   const rp = await readerCtx.newPage();
-  await rp.goto(`${B}/a/${made.markup.id}`, { waitUntil: 'load' });
+  await rp.goto(`${B}/a/${isolationDoc.id}`, { waitUntil: 'load' });
   ok((await rp.locator('iframe[title="artifact"]').count()) === 0, 'a reader is served the document itself, with no app frame');
-  const opaque = await rp.evaluate(() => { try { void localStorage.length; return false; } catch { return true; } });
-  ok(opaque, 'and that document has an opaque origin — storage is unreachable inside it');
+  await rp.getByText('dom:blocked storage:blocked network:blocked',{exact:true}).waitFor({timeout:15000});
+  ok(await rp.evaluate(()=>window===top && !!document.querySelector('[data-artifact-story-host]')) && new URL(rp.url()).origin===new URL(B).origin,'reader prose is first-party DOM while actual author code cannot reach parent DOM/storage/network');
   await readerCtx.close();
 }
 await ownerCtx.close();
@@ -242,7 +245,7 @@ await p.waitForTimeout(3500);
 
 // The document is the SERVED page in a sandboxed frame now, so everything a
 // reader sees is asserted inside that frame — the theme included.
-const themeOf = async () => surface()?.locator('[data-theme]').first().getAttribute('data-theme').catch(() => null);
+const themeOf = async () => surface()?.locator('html').getAttribute('data-theme').catch(() => null);
 ok((await themeOf()) === 'modernist', 'the served document carries the authored theme');
 const before = (await surface().getByText('Total:').first().textContent()).trim();
 await surface().locator('select').first().selectOption('EU');
@@ -259,13 +262,15 @@ ok((await p.locator('[aria-label="Edit artifact"]').count()) === 1, 'artifact co
 // what this read when dark was the default, which is exactly the shape of
 // drift a gate reading the attribute is here to catch.
 await p.click('[aria-label="Light mode"]');
-await p.waitForFunction(() => !document.documentElement.dataset.theme);
+await p.locator('[data-trusted-ui-root][data-app-appearance="light"]').waitFor({timeout:8000});
 await surface().locator('html:not(.dark)').waitFor({ timeout: 8000 });
 ok(true, 'one appearance choice turns both the app and document light');
+ok(await themeOf()==='modernist','light appearance preserves the authored document theme');
 await p.click('[aria-label="Dark mode"]');
-await p.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+await p.locator('[data-trusted-ui-root][data-app-appearance="dark"]').waitFor({timeout:8000});
 await surface().locator('html.dark').waitFor({ timeout: 8000 });
 ok(true, 'the same appearance choice turns both the app and document dark');
+ok(await themeOf()==='modernist','dark appearance preserves the authored document theme');
 await p.keyboard.press('Escape');
 
 // A deck's navigation lives INSIDE the document (scripts/gate-deck-chrome.mjs

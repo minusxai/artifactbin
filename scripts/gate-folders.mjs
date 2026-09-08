@@ -36,7 +36,7 @@
  *     node scripts/gate-folders.mjs [base]
  */
 import { chromium } from './lib/gate-browser.mjs';
-import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
+import { startMailSink, loginViaEmail, isSignedInAs } from './lib/mail-login.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
@@ -67,9 +67,9 @@ for (const [who, p] of [['owner', owner], ['stranger', stranger]]) {
 }
 
 await loginViaEmail(owner, BASE, sink, OWNER_EMAIL);
-check(Boolean((await ownerCtx.cookies(BASE)).find((c) => /better-auth/.test(c.name))), 'owner logged in');
+check(await isSignedInAs(owner,OWNER_EMAIL), 'owner logged in');
 await loginViaEmail(editor, BASE, sink, EDITOR_EMAIL);
-check(Boolean((await editorCtx.cookies(BASE)).find((c) => /better-auth/.test(c.name))), 'editor logged in');
+check(await isSignedInAs(editor,EDITOR_EMAIL), 'editor logged in');
 
 // The owner's token — minted anonymously, claimed by the session. This is what
 // stands in for the AGENT below: the same credential an agent would hold.

@@ -8,6 +8,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import {browserGateHeaders} from './gate-request.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const outboxPath = () => process.env.EMAIL__DEV_OUTBOX_PATH ?? path.join(ROOT, '.artifactbin', 'dev-mail.jsonl');
@@ -78,8 +79,10 @@ export async function loginViaEmail(page, base, sink, email) {
 
 /** Read the browser's authenticated identity without depending on page chrome. */
 export async function isSignedInAs(page, email) {
-  const response = await page.request.get(new URL('/api/page/session', page.url()).href, {headers:{'x-artifactbin-csrf':'1',origin:new URL(page.url()).origin}});
-  if (!response.ok()) return false;
-  const session = await response.json();
-  return session.kind === 'account' && session.user?.email === email;
+  const session = await readBrowserSession(page);
+  return session?.kind === 'account' && session.user?.email === email;
+}
+export async function readBrowserSession(pageOrContext,base=pageOrContext.url()){
+  const response=await pageOrContext.request.get(new URL('/api/page/session',base).href,{headers:browserGateHeaders(base)});
+  return response.ok()?response.json():null;
 }

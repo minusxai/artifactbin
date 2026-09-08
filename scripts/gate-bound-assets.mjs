@@ -233,6 +233,8 @@ if (mine.status !== 201) {
   ok(readBack.visibility === 'private', `a signed-in user's document is born private (${readBack.visibility})`);
 
   const beforePriv = hits.filter((h) => h === '/pic3.png').length;
+  const privateImages=[];
+  holder.on('response',response=>{if(response.request().resourceType()==='image')privateImages.push(response);});
   await holder.goto(`${B}/a/${mine.body.id}`, { waitUntil: 'networkidle' });
   const own = await storyFrame(holder, { timeout: 30_000 });
   const owned = await own.evaluate(async () => {
@@ -252,8 +254,12 @@ if (mine.status !== 201) {
   // The relay knows the stored object version; unlike the browser's URL-only
   // memo, it returns a cache-busted address. Verify BOTH source and byte identity.
   const cached = await fetch(new URL(assetPath(PRIV), B));
-  const version = createHash('sha256').update(Buffer.from(await cached.arrayBuffer())).digest('hex').slice(0, 8);
-  ok(cached.ok && owned.src === `${assetPath(PRIV)}?v=${version}`, `and its src is the exact source address and cached byte version the relay handed back (${owned.src})`);
+  const cachedBytes=Buffer.from(await cached.arrayBuffer());
+  const version = createHash('sha256').update(cachedBytes).digest('hex').slice(0, 8);
+  const delivered=privateImages.find(response=>new URL(response.url()).pathname===assetPath(PRIV) && response.status()===200);
+  const initialSource=new URL(owned.src,B);
+  ok(initialSource.origin===new URL(B).origin && initialSource.pathname===`/a/${mine.body.id}/assets` && initialSource.searchParams.get('u')===PRIV,'the first-party image starts at its document-scoped authenticated import endpoint');
+  ok(cached.ok && delivered && new URL(delivered.url()).searchParams.get('v')===version && Buffer.from(await delivered.body()).equals(cachedBytes),'the image redirect delivers the exact source identity and cached byte version');
   ok(hits.filter((h) => h === '/pic3.png').length === beforePriv + 1, `the source host was asked exactly once for it (${hits.filter((h) => h === '/pic3.png').length - beforePriv})`);
 
   // Charged to the DOCUMENT'S OWNER (R10) — read back through the owner's own

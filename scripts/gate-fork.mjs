@@ -28,7 +28,8 @@
  */
 import { chromium } from './lib/gate-browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
-import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
+import { startMailSink, loginViaEmail, isSignedInAs } from './lib/mail-login.mjs';
+import {JSDOM} from 'jsdom';
 import { mintAnon } from './lib/mint-anon.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
@@ -62,7 +63,7 @@ const owner = await ownerCtx.newPage();
 const forker = await forkerCtx.newPage();
 
 await loginViaEmail(owner, BASE, sink, OWNER_EMAIL);
-check(Boolean((await ownerCtx.cookies(BASE)).find((c) => /better-auth/.test(c.name))), 'owner logged in');
+check(await isSignedInAs(owner,OWNER_EMAIL), 'owner logged in');
 
 // ── 1. a public document, published by the owner's own claimed token ──────
 const anon = await mintAnon(BASE);
@@ -88,8 +89,11 @@ check(doc.visibility === 'public', 'a PUBLIC document — the case a stranger ca
 
 // ── 2. the parameter is not a lever on a shared link ──────────────────────
 const strangerHtml = await (await fetch(`${BASE}/a/${doc.id}?intent=fork`)).text();
-check(strangerHtml.includes('data-mx-fork'), 'an anonymous ?intent=fork is still the DOCUMENT (it carries the fork anchor)');
-check(!strangerHtml.includes('id="root"'), '…and never the app shell');
+const initial=new JSDOM(strangerHtml);
+const bootstrap=JSON.parse(initial.window.document.querySelector('head script#mx-page-data')?.textContent??'null');
+check(bootstrap?.path===`/a/${doc.id}` && bootstrap.presentation==='artifact' && bootstrap.ssr===false && bootstrap.session.kind==='none','anonymous intent request retains artifact identity and named non-SSR bootstrap');
+check(!!initial.window.document.querySelector('#root [role="status"]'),'the first-party shell names its artifact loading state');
+initial.window.close();
 
 // ── 3. the logged-out reader taps Fork in the document's own controls ─────
 await forker.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });

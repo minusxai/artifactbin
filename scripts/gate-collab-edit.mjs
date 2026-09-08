@@ -21,7 +21,7 @@
  */
 import { chromium } from './lib/gate-browser.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
-import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
+import { startMailSink, loginViaEmail, isSignedInAs } from './lib/mail-login.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
@@ -39,7 +39,7 @@ const pickRole = async (page, email, label) => {
 };
 /** True once the row for `email` reads `label` (bounded), false if it never does. */
 const roleReads = (page, email, label, budgetMs = 10000) =>
-  page.waitForFunction(([sel, want]) => (document.querySelector(`[aria-label="${sel}"]`)?.textContent ?? '').includes(want), [`Role for ${email}`, label], { timeout: budgetMs }).then(() => true, () => false);
+  roleTrigger(page,email).filter({hasText:label}).waitFor({state:'visible',timeout:budgetMs}).then(() => true, () => false);
 const check = (ok, label) => { console.log(`${ok ? '  ok ' : 'FAIL '} ${label}`); if (!ok) failures.push(label); };
 const stamp = Date.now().toString(36);
 const OWNER_EMAIL = `mxmx_test_collab_owner_${stamp}@example.com`;
@@ -54,9 +54,9 @@ const owner = await ownerCtx.newPage();
 const editor = await editorCtx.newPage();
 
 await loginViaEmail(owner, BASE, sink, OWNER_EMAIL);
-check(Boolean((await ownerCtx.cookies(BASE)).find((c) => /better-auth/.test(c.name))), 'owner logged in');
+check(await isSignedInAs(owner,OWNER_EMAIL), 'owner logged in');
 await loginViaEmail(editor, BASE, sink, EDITOR_EMAIL);
-check(Boolean((await editorCtx.cookies(BASE)).find((c) => /better-auth/.test(c.name))), 'editor logged in');
+check(await isSignedInAs(editor,EDITOR_EMAIL), 'editor logged in');
 
 // The owner's token: minted anonymously, claimed by the session.
 const anon = await mintAnon(BASE);
@@ -94,7 +94,7 @@ check(await roleReads(owner, EDITOR_EMAIL, 'can edit'), 'promoted to can edit fr
 const commenterCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
 const commenter = await commenterCtx.newPage();
 await loginViaEmail(commenter, BASE, sink, COMMENTER_EMAIL);
-check(Boolean((await commenterCtx.cookies(BASE)).find((c) => /better-auth/.test(c.name))), 'commenter logged in');
+check(await isSignedInAs(commenter,COMMENTER_EMAIL), 'commenter logged in');
 await owner.fill('[aria-label="Invite email"]', COMMENTER_EMAIL);
 await Promise.all([sharingPut(owner), owner.click('[aria-label="Add email"]')]);
 await roleTrigger(owner, COMMENTER_EMAIL).waitFor({ timeout: 15000 });

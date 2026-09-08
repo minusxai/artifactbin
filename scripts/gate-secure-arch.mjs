@@ -24,7 +24,7 @@
  */
 import { chromium } from './lib/gate-browser.mjs';
 import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
-import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
+import { startMailSink, loginViaEmail, readBrowserSession } from './lib/mail-login.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
@@ -44,9 +44,10 @@ const other = await otherCtx.newPage();
 await loginViaEmail(other, BASE, sink, `mxmx_test_sec_b_${ts}@example.com`);
 const readerCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
 const reader = await readerCtx.newPage();
-const sessionOf = async (ctx) => (await ctx.cookies(BASE)).some((c) => /better-auth/.test(c.name));
+const [ownerSession,otherSession,readerSession]=await Promise.all([ownerCtx,otherCtx,readerCtx].map(ctx=>readBrowserSession(ctx,BASE)));
 check(
-  (await sessionOf(ownerCtx)) && (await sessionOf(otherCtx)) && !(await sessionOf(readerCtx)),
+  ownerSession?.kind==='account' && ownerSession.user.email===`mxmx_test_sec_a_${ts}@example.com`
+    && otherSession?.kind==='account' && otherSession.user.email===`mxmx_test_sec_b_${ts}@example.com` && readerSession?.kind==='none',
   'two sessions (owner A, other B) and a session-less reader are up',
 );
 

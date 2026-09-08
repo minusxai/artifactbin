@@ -67,8 +67,10 @@ const pageErrors = [];
 p.on('pageerror', (e) => pageErrors.push(e.message));
 const relayCalls = [];
 const directCalls = [];
+const queryBoundaries = [];
 p.on('request', (r) => {
   if (!r.url().includes(`/a/${doc.id}/query`)) return;
+  queryBoundaries.push(sameGateFrame(r.frame(),p.mainFrame()) && new URL(r.url()).origin===new URL(B).origin && r.headers()['x-artifactbin-csrf']==='1');
   if (r.method() === 'POST') relayCalls.push(r.url());
   if (r.method() === 'GET' && /[?&]q=/.test(r.url())) directCalls.push(r.url());
 });
@@ -116,23 +118,26 @@ ok(busy.seen && !busy.flash && busy.now === 'false', `the embed showed the busy 
 ok(!/EU/.test(await frame.textContent('[aria-label="Data table"]')), 'and the table shows only the selected region');
 await frame.waitForFunction(() => document.getElementById('out')?.textContent === 'changed:NA', null, { timeout: 15000 }).catch(() => {});
 ok((await frame.textContent('#out')) === 'changed:NA', 'the isolated author script saw the change through mx.params.subscribe');
-ok(directCalls.length >= 1 && relayCalls.length === 0, `the re-run was the DOCUMENT'S OWN GET /a/<id>/query?q= (${directCalls.length} direct, ${relayCalls.length} relayed)`);
+ok(relayCalls.length >= 1 && directCalls.length === 0 && queryBoundaries.every(Boolean), `the re-run uses first-party POST with browser CSRF marker (${relayCalls.length} POST, ${directCalls.length} GET)`);
 await frame.selectOption('select[aria-label="Region"]', '');
 await frame.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent === '$2,040', null, { timeout: 15000 }).catch(() => {});
 ok((await frame.textContent('[aria-label="Live number"]')) === '$2,040', 'back to All restores the whole result');
 // The CSP admits exactly the query url — from INSIDE the sandboxed document.
-const reach = await frame.evaluate(async (id) => {
+const wrapper = await (await frame.$('iframe[title="Isolated artifact script"]')).contentFrame();
+await wrapper.waitForSelector('iframe[title="Interactive artifact content"]');
+const authorRealm = await (await wrapper.$('iframe[title="Interactive artifact content"]')).contentFrame();
+const reach = await authorRealm.evaluate(async ({id,base}) => {
   const tryFetch = async (url, init) => { try { const r = await fetch(url, init); return String(r.status); } catch { return 'blocked'; } };
   return {
-    query: await tryFetch(`/a/${id}/query?q=${encodeURIComponent('{}')}`),
-    start: await tryFetch(`/a/${id}/start`, { method: 'POST' }),
+    query: await tryFetch(`${base}/a/${id}/query?q=${encodeURIComponent('{}')}`),
+    start: await tryFetch(`${base}/a/${id}/start`, { method: 'POST' }),
     // Deliberately raw, and deliberately NOT through lib/mint-anon: this fetch is issued by the
     // SANDBOXED DOCUMENT and must die on the CSP's connect-src, long before the proxy's door sees it.
-    api: await tryFetch('/api/tokens/anonymous', { method: 'POST' }),
-    other: await tryFetch('/a/zzzzzz/query?q=%7B%7D'),
+    api: await tryFetch(`${base}/api/tokens/anonymous`, { method: 'POST' }),
+    other: await tryFetch(`${base}/a/zzzzzz/query?q=%7B%7D`),
   };
-}, doc.id);
-ok(reach.query === '200', `the document may fetch its own query url (${reach.query})`);
+}, {id:doc.id,base:new URL(B).origin});
+ok(reach.query === 'blocked', `author code cannot fetch even its query URL; declared reads use the capability bridge (${reach.query})`);
 ok(reach.start === 'blocked' && reach.api === 'blocked' && reach.other === 'blocked', `…and nothing else on the origin: start=${reach.start} api=${reach.api} other-doc=${reach.other}`);
 
 // ── 4. <DataTable> past the cap, through the same direct GET ───────────────
@@ -197,7 +202,7 @@ const readerRelay = [];
 const readerDirect = [];
 reader.on('request', (r) => {
   if (!r.url().includes(`/a/${priv.id}/query`)) return;
-  if (r.method() === 'POST') readerRelay.push(1);
+  if (r.method() === 'POST') readerRelay.push(sameGateFrame(r.frame(),reader.mainFrame()) && new URL(r.url()).origin===new URL(B).origin && r.headers()['x-artifactbin-csrf']==='1');
   if (r.method() === 'GET') readerDirect.push(1);
 });
 const privResp = await reader.goto(`${B}/a/${priv.id}`, { waitUntil: 'load' });
@@ -209,7 +214,7 @@ ok((await pf.textContent('[aria-label="Live number"]').catch(() => '')) === '$30
 await pf.selectOption('select[aria-label="Region"]', 'NA');
 await pf.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent === '$20', null, { timeout: 15000 }).catch(() => {});
 ok((await pf.textContent('[aria-label="Live number"]')) === '$20', 'the reader\'s re-run works through the PAGE');
-ok(readerRelay.length >= 1 && readerDirect.length === 0, `…as the relay POST with the session (${readerRelay.length} relayed, ${readerDirect.length} direct)`);
+ok(readerRelay.length >= 1 && readerRelay.every(Boolean) && readerDirect.length === 0, `…as first-party POST with the reader session and browser CSRF marker (${readerRelay.length} POST, ${readerDirect.length} GET)`);
 
 // ── 5b. THE READER'S SELECTION TRAVELS IN THE LINK (F2) ─────────────────────
 // `?$region=west` is parsed on the SERVER and seeded through the island's

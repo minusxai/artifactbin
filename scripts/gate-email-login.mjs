@@ -16,7 +16,7 @@
  *     node scripts/gate-email-login.mjs [base]
  */
 import { chromium } from './lib/gate-browser.mjs';
-import { startMailSink } from './lib/mail-login.mjs';
+import { startMailSink, isSignedInAs } from './lib/mail-login.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const failures = [];
@@ -48,9 +48,10 @@ check(await page.locator('[aria-label="Email"]').isVisible(), 'the login page as
 check((await page.locator('[aria-label="Password"]').count()) === 0, 'there is no password field anywhere');
 
 await page.fill('[aria-label="Email"]', EMAIL);
-const codeResponse = page.waitForResponse((r) => r.url().includes('/api/auth/email-otp/send-verification-otp'));
-await page.click('[aria-label="Log in with email"]');
-const res = await codeResponse;
+const authTraffic=[];
+page.on('response',r=>{if(new URL(r.url()).pathname.startsWith('/api/auth/'))authTraffic.push({path:new URL(r.url()).pathname,status:r.status()});});
+const codeResponse = page.waitForResponse((r) => new URL(r.url()).pathname==='/api/auth/email-otp/send-verification-otp' && r.request().method()==='POST');
+const [res] = await Promise.all([codeResponse,page.click('[aria-label="Log in with email"]')]).catch(cause=>{throw new Error(`OTP response not observed: ${JSON.stringify(authTraffic)}`,{cause});});
 const bodyText = await res.text();
 check(res.status() === 200, `the OTP door answered 200 (${res.status()})`);
 check(!/\d{6}/.test(bodyText), `the response body carries NO code (${bodyText})`);
@@ -90,8 +91,7 @@ await page.click('[aria-label="Verify code"]');
 await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 15_000 }).catch(() => {});
 check(!new URL(page.url()).pathname.startsWith('/login'), `logged in and left /login (at ${page.url()})`);
 
-const cookies = await page.context().cookies();
-check(cookies.some((c) => /better-auth.*session_token|authjs.session-token/.test(c.name)), 'a session cookie was set');
+check(await isSignedInAs(page,EMAIL), 'the browser cookie establishes the verified account session');
 
 // ── OAuth consent now recognises the session ────────────────────────────────
 const redirectUri = 'https://chatgpt.com/connector_platform_oauth_redirect';

@@ -18,7 +18,7 @@
  *   usage: node scripts/gate-annotations.mjs [base]
  */
 import { chromium } from './lib/gate-browser.mjs';
-import { openArtifactControls } from './lib/reveal-chrome.mjs';
+import { openArtifactControls, toggleArtifactComments } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
@@ -102,7 +102,7 @@ const run = async () => {
 
     // ── the rail is a PANEL, not a mode ───────────────────────────────────
     await openArtifactControls(page);
-    await page.locator('[aria-label="Toggle comments"]').click();
+    await toggleArtifactComments(page);
     await page.locator('[aria-label="Annotation sidebar"]').waitFor({ timeout: 8000 });
     ok(await page.evaluate(() => location.hash) === '', 'opening the rail moves no hash');
     await openArtifactControls(page);
@@ -517,7 +517,7 @@ async function markdownLeg(browser) {
   // Open the rail, and open the thread inside it: the compact surfaces show
   // the plain text on purpose, so only the opened thread renders the tree.
   await openArtifactControls(page);
-  await page.locator('[aria-label="Toggle comments"]').click();
+  await toggleArtifactComments(page);
   await page.locator('[aria-label="Annotation sidebar"]').waitFor({ timeout: 8000 });
   await page.keyboard.press('Escape');
   const thread = page.locator('[aria-label="Annotation thread"]').first();
@@ -628,7 +628,7 @@ async function foldLeg(browser) {
   ok(lastWord === 200, `the human answers shortly underneath (${lastWord})`);
 
   await openArtifactControls(page);
-  await page.locator('[aria-label="Toggle comments"]').click();
+  await toggleArtifactComments(page);
   // No Escape here, unlike the desktop legs: on a phone the rail IS a sheet,
   // and Escape is how a sheet closes.
   await page.locator('[aria-label="Annotation sidebar"]').waitFor({ timeout: 8000 });
@@ -767,7 +767,7 @@ async function pickLeg(browser) {
   await openArtifactControls(page);
   // The comments control closes the panel itself — no Escape here, which
   // would now stand the pick down that opening the rail just started.
-  await page.locator('[aria-label="Toggle comments"]').click();
+  await toggleArtifactComments(page);
   await page.locator('[aria-label="Annotation sidebar"]').waitFor({ timeout: 8000 });
 
   // Opening the rail opened the pick: nothing to press before the first click.

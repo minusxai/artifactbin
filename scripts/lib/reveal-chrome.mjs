@@ -11,6 +11,9 @@ export async function revealReaderChrome(target) {
 export async function openArtifactControls(page,{timeout=30_000}={}) {
   await page.locator('[data-trusted-ui-root] [aria-label="Open artifact controls"], [data-trusted-ui-root] [aria-label="Open page controls"]').first().click({timeout});
 }
+export async function toggleArtifactComments(page){
+  await page.getByRole('dialog',{name:'Artifact controls',exact:true}).getByLabel('Toggle comments',{exact:true}).click();
+}
 export async function openMenu(page,{timeout=30_000}={}) {
   try { await page.locator('[data-trusted-ui-root] [aria-label="Open menu"]').first().click({timeout}); }
   catch(cause){
