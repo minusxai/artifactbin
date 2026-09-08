@@ -17,6 +17,7 @@
  */
 import { chromium } from './lib/gate-browser.mjs';
 import { startMailSink, isSignedInAs } from './lib/mail-login.mjs';
+import {recordOtpResponses} from './lib/gate-otp-response.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const failures = [];
@@ -41,6 +42,18 @@ const codeFromInbox = () => {
 
 const browser = await chromium.launch();
 const page = await browser.newPage();
+await page.addInitScript(recordOtpResponses);
+let otpRequests=0;
+page.on('request',request=>{if(request.url()===BASE+'/api/auth/email-otp/send-verification-otp'&&request.method()==='POST')otpRequests++;});
+const readOtpResponse=async count=>{
+ await page.waitForFunction(count=>window.__gateOtpResponses?.[count-1]?.complete,count,{timeout:10000}).catch(cause=>{throw new Error(`OTP response capture did not complete: requests=${otpRequests}, traffic=${JSON.stringify(authTraffic)}`,{cause});});
+ const records=await page.evaluate(()=>window.__gateOtpResponses);
+ check(records.length===count&&otpRequests===count,`exactly ${count} real OTP request(s), without replay`);
+ const record=records[count-1];
+ check(!record.error,`browser OTP body read completed (${record.error??'ok'})`);
+ check(record.status===200,`the OTP door answered 200 (${record.status})`);
+ check(typeof record.body==='string'&&!/\d{6}/.test(record.body),'the real browser response body carries NO code');
+};
 
 // ── Step one: ask for a code ────────────────────────────────────────────────
 await page.goto(`${BASE}/login`, { waitUntil: 'load' });
@@ -51,14 +64,8 @@ await page.fill('[aria-label="Email"]', EMAIL);
 console.log('  step email filled');
 const authTraffic=[];
 page.on('response',r=>{if(new URL(r.url()).pathname.startsWith('/api/auth/')){const result={path:new URL(r.url()).pathname,status:r.status()};authTraffic.push(result);console.log('  auth response',JSON.stringify(result));}});
-const codeResponse = page.waitForResponse((r) => new URL(r.url()).pathname==='/api/auth/email-otp/send-verification-otp' && r.request().method()==='POST',{timeout:10000});
-const [res] = await Promise.all([codeResponse,page.click('[aria-label="Log in with email"]').then(()=>console.log('  step email submitted'))]).catch(cause=>{throw new Error(`OTP response not observed: ${JSON.stringify(authTraffic)}`,{cause});});
-console.log('  step OTP response matched',res.request().method());
-let bodyTimer;
-const bodyText = await Promise.race([res.text(),new Promise((_,reject)=>{bodyTimer=setTimeout(()=>reject(new Error('OTP response body did not finish within 10 seconds')),10000);})]).finally(()=>clearTimeout(bodyTimer));
-console.log('  step OTP response body read');
-check(res.status() === 200, `the OTP door answered 200 (${res.status()})`);
-check(!/\d{6}/.test(bodyText), `the response body carries NO code (${bodyText})`);
+await page.click('[aria-label="Log in with email"]');
+await readOtpResponse(1);
 
 await page.waitForSelector('[aria-label="Login code"]', { timeout: 10_000 });
 check((await page.locator('[aria-label="Login code"]').count()) === 1, 'the form advanced to the code screen');
@@ -68,6 +75,7 @@ await page.click('[aria-label="Change email"]');
 await page.waitForSelector('[aria-label="Email"]');
 check(await page.inputValue('[aria-label="Email"]') === EMAIL, 'change email returns to a prefilled, editable field');
 await page.click('[aria-label="Log in with email"]');
+await readOtpResponse(2);
 await page.waitForSelector('[aria-label="Login code"]', { timeout: 10_000 });
 
 // ── The code arrives by EMAIL and only by email ─────────────────────────────
