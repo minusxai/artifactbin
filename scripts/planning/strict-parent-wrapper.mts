@@ -1,15 +1,15 @@
 /** Local reproduction: strict parent CSP, srcdoc versus independent HTTP wrapper. */
 import { createServer } from 'node:http';
 import { build } from 'esbuild';
-import { protectedAuthorDocument } from '../../services/app/lib/story-runtime/author-frame';
-import { AUTHOR_SCRIPT_DOCUMENT } from '../../services/app/lib/story-runtime/author-script-bootstrap';
+import { AUTHOR_FRAME_DOCUMENT } from '../../services/app/lib/story-runtime/author-frame';
+import { authorFrameResponse } from '../../services/app/server/author-frame';
 
-const bundle = await build({ absWorkingDir: process.cwd(), tsconfig: 'tsconfig.json', bundle: true, write: false, platform: 'browser', format: 'iife', stdin: { resolveDir: process.cwd(), loader: 'ts', contents: `
+const bundle = await build({ absWorkingDir: process.cwd(), tsconfig: 'tsconfig.json', bundle: true, write: false, platform: 'browser', format: 'esm', stdin: { resolveDir: process.cwd(), loader: 'ts', contents: `
 import {startAuthorScript} from './services/app/lib/story-runtime/author-script';
 import {createDataflowStore} from './services/app/lib/story-runtime/store';
-if(location.pathname.startsWith('/http')) {
+if(location.pathname==='/srcdoc') {
   const create=document.createElement.bind(document);
-  document.createElement=function(tag,options){const element=create(tag,options);if(tag==='iframe')Object.defineProperty(element,'srcdoc',{set(){element.src='/wrapper';}});return element;};
+  document.createElement=function(tag,options){const element=create(tag,options);if(tag==='iframe')Object.defineProperty(element,'src',{set(){element.srcdoc=${JSON.stringify(AUTHOR_FRAME_DOCUMENT)};}});return element;};
 }
 const store=createDataflowStore({flow:{values:[{kind:'scalar',name:'result',type:'string',default:'pending',start:0,end:0}],queries:[]}});
 window.result=()=>store.getState().values;
@@ -22,12 +22,15 @@ new MutationObserver(()=>{if(document.querySelector('iframe'))hadFrame=true;else
 startAuthorScript(source,store,document);
 ` } });
 let requests=0;
-createServer((req,res)=>{
-  if(req.url==='/entry.js'){res.setHeader('content-type','text/javascript');res.end(bundle.outputFiles[0].text);return;}
-  if(req.url==='/wrapper'){res.setHeader('content-type','text/html');res.setHeader('cache-control','no-store');res.setHeader('content-security-policy',"sandbox allow-scripts");res.end(protectedAuthorDocument(AUTHOR_SCRIPT_DOCUMENT));return;}
+createServer(async(req,res)=>{
+  if(req.url==='/entry.js'){res.setHeader('content-type','text/javascript');res.setHeader('access-control-allow-origin','*');res.end(bundle.outputFiles[0].text);return;}
+  if(req.url?.startsWith('/story/author-frame')){
+    const response=authorFrameResponse(new Request('http://127.0.0.1:5804'+req.url),null,'http://127.0.0.1:5804');
+    res.writeHead(response.status,Object.fromEntries(response.headers));res.end(await response.text());return;
+  }
   if(req.url?.startsWith('/api/fixture')){requests++;res.end('fixture');return;}
   if(req.url==='/results'){res.setHeader('content-type','application/json');res.end(JSON.stringify({requests}));return;}
   res.setHeader('content-type','text/html');
   res.setHeader('content-security-policy',"default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; frame-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'"+(req.url==='/http-opaque'?'; sandbox allow-scripts':''));
-  res.end('<!doctype html><title>Strict parent wrapper reproduction</title><h1>Strict parent wrapper</h1><p id="status">pending</p><script src="/entry.js"></script>');
+  res.end('<!doctype html><title>Strict parent wrapper reproduction</title><h1>Strict parent wrapper</h1><p id="status">pending</p><script type="module" src="/entry.js"></script>');
 }).listen(5804,'127.0.0.1',()=>console.log('Strict parent probe http://127.0.0.1:5804/srcdoc and /http'));
