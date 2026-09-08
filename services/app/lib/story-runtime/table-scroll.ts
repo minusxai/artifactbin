@@ -11,15 +11,15 @@
  * `end` once the reader has scrolled to the last column, which drops the
  * fade — nothing is hidden there any more.
  *
- * Runs from the ~1 KB entry every document loads (anchor-entry), because a
- * prose document has tables too and ships no runtime. React-free.
+ * Runs from the ~1 KB entry every served document loads (anchor-entry), and
+ * from the direct app mount for its owned story root. React-free.
  */
 export const SCROLLABLE_ATTR = 'data-mx-scrollable';
 
 /** Mark now, and keep the marks honest on scroll and resize. Returns a disposer. */
-export function markScrollableTables(doc: Document): () => void {
+export function markScrollableTables(doc: Document, root: ParentNode = doc): () => void {
   const win = doc.defaultView;
-  const tables = () => [...doc.querySelectorAll<HTMLTableElement>('table')];
+  const tables = () => [...root.querySelectorAll<HTMLTableElement>('table')];
 
   const measure = (table: HTMLTableElement) => {
     const overflows = table.scrollWidth > table.clientWidth + 1;
@@ -61,7 +61,7 @@ export function markScrollableTables(doc: Document): () => void {
     if (queued) return;
     queued = win.setTimeout(() => { queued = 0; sweep(); }, 16);
   }) : null;
-  observer?.observe(doc.body, { childList: true, subtree: true });
+  observer?.observe(root === doc ? doc.body : root, { childList: true, subtree: true });
 
   return () => {
     if (win) {

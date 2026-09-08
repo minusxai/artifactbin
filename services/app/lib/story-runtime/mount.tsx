@@ -20,6 +20,8 @@ import { capturePristine } from './pristine';
 import type { FrameEditSession } from './edit/session';
 import type { FrameAnnotateSession } from './edit/annotate';
 import type { FrameSelectionActions } from './edit/selection-actions';
+import { markScrollableTables } from './table-scroll';
+import { wireOutline } from './outline-nav';
 
 /** Explicit references supplied by trusted app code, never author DOM IDs. */
 export interface StoryMountOptions {
@@ -110,6 +112,12 @@ export function mountStory(_options: StoryMountOptions): MountedStory {
   if (options.renderMode === 'render') {
     reactRoot.render(createElement(StoryRuntimeApp, { ...renderProps(), onMounted: runAuthor }));
   }
+  // Served/hydrated documents receive these from anchor-entry. Direct app
+  // mounts do not load that entry, so install the two document enhancements
+  // here, bounded to authored runtime DOM rather than trusted app chrome.
+  const stopReaderEnhancements = options.renderMode === 'render'
+    ? [wireOutline(doc, options.root), markScrollableTables(doc, options.root)]
+    : [];
   const readyTimer = win.setTimeout(runAuthor, 3000);
   if (!channel) store.start();
 
@@ -233,6 +241,7 @@ export function mountStory(_options: StoryMountOptions): MountedStory {
       disposed = true;
       win.clearTimeout(readyTimer);
       stopUrl();
+      for (const stop of stopReaderEnhancements) stop();
       win.removeEventListener('message', onMessage);
       win.removeEventListener('mx:app:appearance',appAppearance);
       for (const timer of timers) win.clearTimeout(timer);

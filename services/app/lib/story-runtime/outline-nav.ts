@@ -1,6 +1,6 @@
 /**
- * The OUTLINE's behaviour — wired from the ~1 KB entry EVERY document loads
- * (anchor-entry), never from the runtime.
+ * The OUTLINE's behaviour — wired from the ~1 KB entry for served documents
+ * (anchor-entry), and by the direct app mount for its owned story root.
  *
  * The rail's markup is server-rendered by the runtime's React tree so it is
  * in the SSR string at its final width (StoryRuntimeApp OutlineRail). Its
@@ -21,28 +21,28 @@ import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 export const OUTLINE_TARGET_ATTR = 'data-mx-target';
 
 /** The rail's rows, and each one's heading in the DOCUMENT (never the rail's own text). */
-function pairs(doc: Document): Array<{ row: HTMLElement; heading: HTMLElement | null }> {
-  return [...doc.querySelectorAll<HTMLElement>(`.mx-outline-row[${OUTLINE_TARGET_ATTR}]`)].map((row) => ({
+function pairs(root: ParentNode): Array<{ row: HTMLElement; heading: HTMLElement | null }> {
+  return [...root.querySelectorAll<HTMLElement>(`.mx-outline-row[${OUTLINE_TARGET_ATTR}]`)].map((row) => ({
     row,
-    heading: doc.querySelector<HTMLElement>(`.mx-doc [${AST_PATH_ATTR}="${row.getAttribute(OUTLINE_TARGET_ATTR)}"]`),
+    heading: root.querySelector<HTMLElement>(`.mx-doc [${AST_PATH_ATTR}="${row.getAttribute(OUTLINE_TARGET_ATTR)}"]`),
   }));
 }
 
 /** Wire the outline in `doc`. Returns a disposer. A no-op when the document has none. */
-export function wireOutline(doc: Document): () => void {
+export function wireOutline(doc: Document, root: ParentNode = doc): () => void {
   const win = doc.defaultView;
   if (!win) return () => {};
 
   const onClick = (e: MouseEvent) => {
     const row = (e.target as Element | null)?.closest?.(`.mx-outline-row[${OUTLINE_TARGET_ATTR}]`) as HTMLElement | null;
     if (!row) return;
-    const heading = doc.querySelector<HTMLElement>(`.mx-doc [${AST_PATH_ATTR}="${row.getAttribute(OUTLINE_TARGET_ATTR)}"]`);
+    const heading = root.querySelector<HTMLElement>(`.mx-doc [${AST_PATH_ATTR}="${row.getAttribute(OUTLINE_TARGET_ATTR)}"]`);
     heading?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   // The heading last crossed the upper third is the section being read.
   const mark = () => {
-    const list = pairs(doc);
+    const list = pairs(root);
     if (!list.length) return;
     const line = win.innerHeight / 3;
     let active = 0;
@@ -53,7 +53,7 @@ export function wireOutline(doc: Document): () => void {
     });
   };
 
-  doc.addEventListener('click', onClick);
+  root.addEventListener('click', onClick as EventListener);
   win.addEventListener('scroll', mark, { passive: true });
   win.addEventListener('resize', mark);
   /*
@@ -69,11 +69,11 @@ export function wireOutline(doc: Document): () => void {
     if (queued) return;
     queued = win.setTimeout(() => { queued = 0; mark(); }, 16);
   });
-  observer.observe(doc.body, { childList: true, subtree: true });
+  observer.observe(root === doc ? doc.body : root, { childList: true, subtree: true });
   mark();
 
   return () => {
-    doc.removeEventListener('click', onClick);
+    root.removeEventListener('click', onClick as EventListener);
     win.removeEventListener('scroll', mark);
     win.removeEventListener('resize', mark);
     if (queued) win.clearTimeout(queued);
