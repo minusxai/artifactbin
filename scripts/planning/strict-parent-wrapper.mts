@@ -24,10 +24,10 @@ startAuthorScript(source,store,document);
 let requests=0;
 createServer((req,res)=>{
   if(req.url==='/entry.js'){res.setHeader('content-type','text/javascript');res.end(bundle.outputFiles[0].text);return;}
-  if(req.url==='/wrapper'){res.setHeader('content-type','text/html');res.setHeader('cache-control','public, max-age=3600');res.end(protectedAuthorDocument(AUTHOR_SCRIPT_DOCUMENT));return;}
+  if(req.url==='/wrapper'){res.setHeader('content-type','text/html');res.setHeader('cache-control','no-store');res.setHeader('content-security-policy',"sandbox allow-scripts");res.end(protectedAuthorDocument(AUTHOR_SCRIPT_DOCUMENT));return;}
   if(req.url?.startsWith('/api/fixture')){requests++;res.end('fixture');return;}
   if(req.url==='/results'){res.setHeader('content-type','application/json');res.end(JSON.stringify({requests}));return;}
   res.setHeader('content-type','text/html');
-  res.setHeader('content-security-policy',"default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; frame-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'");
+  res.setHeader('content-security-policy',"default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; frame-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'"+(req.url==='/http-opaque'?'; sandbox allow-scripts':''));
   res.end('<!doctype html><title>Strict parent wrapper reproduction</title><h1>Strict parent wrapper</h1><p id="status">pending</p><script src="/entry.js"></script>');
 }).listen(5804,'127.0.0.1',()=>console.log('Strict parent probe http://127.0.0.1:5804/srcdoc and /http'));
