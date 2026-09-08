@@ -34,6 +34,7 @@ import VizEditorPanel from '@/components/views/story/VizEditorPanel';
 import NumberEditorPanel from '@/components/views/story/NumberEditorPanel';
 import StoryFormatToolbar from '@/components/views/story/StoryFormatToolbar';
 import { useLiveEdits, type EditorFlushRef } from '@/lib/story/use-live-edits';
+import { useNavigationGuard } from '@/web/NavigationBoundary';
 import { useLiveArtifact } from '@/lib/story/use-live-artifact';
 import { useInPlaceEdit } from '@/lib/story/use-in-place-edit';
 import { useArtifactVersions, type ArtifactVersionSnapshot } from '@/lib/story/use-versions';
@@ -259,7 +260,7 @@ export default function InPlaceEditor({
   const editRef = useRef<ReturnType<typeof useInPlaceEdit> | null>(null);
   const isUserEditing = useCallback(() => editRef.current?.isUserEditing() ?? false, []);
 
-  const { state: live, queue, flushNow, adoptRemote, isOwnEdit } = useLiveEdits({
+  const { state: live, queue, flushNow, flushForNavigation, adoptRemote, isOwnEdit } = useLiveEdits({
     id: art.id,
     initialEditId: art.edit_id,
     initialVersion: art.version,
@@ -398,6 +399,10 @@ export default function InPlaceEditor({
     await editRef.current?.commitPending();
     await flushNow();
   }, [flushNow]);
+  useNavigationGuard(useCallback(() => flushForNavigation(async () => {
+    if (!editRef.current) throw new Error('editor is unavailable');
+    await editRef.current.commitPending(true);
+  }), [flushForNavigation]));
 
   useEffect(() => {
     if (!flushRef) return;

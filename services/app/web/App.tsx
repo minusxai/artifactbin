@@ -5,7 +5,6 @@ import { SessionProvider, useSession } from './session';
 import { Shell } from './Shell';
 import { AccountPage } from './pages/Account';
 import { AssetsPage } from './pages/Assets';
-import { ArtifactPage } from './pages/Artifact';
 import { DatasetEditorPage } from './pages/DatasetEditor';
 import { DocsPage } from './pages/Docs';
 import { HomePage } from './pages/Home';
@@ -46,7 +45,7 @@ export function App() {
           <Route path="/docs-human" element={<DocsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
-        <Route path="/a/:id" element={<ArtifactPage />} />
+        <Route path="/a/:id" element={<ProfilePage />} />
         <Route path="/:user/*" element={<ProfilePage />} />
       </Routes>
     </SessionProvider>

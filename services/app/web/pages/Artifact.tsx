@@ -3,9 +3,9 @@
  * document, from /api/page/artifact/:id. A reader never reaches this — the
  * server hands them the document itself at the same URL.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { takeBootstrap } from '../bootstrap';
-import { useLocation, useParams } from 'react-router';
+import { useLocation, useNavigate, useParams } from 'react-router';
 import ArtifactShell from '@/components/ArtifactShell';
 import ArtifactSurface from '@/components/ArtifactSurface';
 import type { AccountWorkspace } from '@/lib/workspace';
@@ -29,23 +29,34 @@ type Page =
 
 export function ArtifactPage({ id: given }: { id?: string } = {}) {
   const params = useParams();
-  const { search } = useLocation();
   const id = given ?? params.id!;
+  return <ArtifactDocument key={id} id={id} />;
+}
+
+/** Identity alone owns this lifetime; signal/search updates never recreate the editor. */
+function ArtifactDocument({ id }: { id: string }) {
+  const location = useLocation();
+  const { search } = location;
+  const navigate = useNavigate();
   // The server may have inlined this page's data (server/app): render from it at once.
   const [page, setPage] = useState<Page | 'missing' | null>(() => takeBootstrap<Page>(window.location.pathname, 'artifact'));
+  const initialSearch = useRef(search).current;
+  const bootstrapped = useRef(page !== null).current;
   useEffect(() => {
-    if (page) return; // served with its data
-    let alive = true;
-    void fetch(`/api/page/artifact/${id}${search}`, { credentials: 'same-origin' })
+    if (bootstrapped) return;
+    const controller = new AbortController();
+    void fetch(`/api/page/artifact/${id}${initialSearch}`, { credentials: 'same-origin', signal: controller.signal })
       .then((r): Promise<Page | 'missing'> => (r.ok ? (r.json() as Promise<Page>) : Promise.resolve('missing' as const)))
-      .then((p) => { if (alive) setPage(p); })
-      .catch(() => { if (alive) setPage('missing'); });
-    return () => { alive = false; };
-  }, [id, search, page]);
+      .then((p) => { if (!controller.signal.aborted) setPage(p); })
+      .catch(() => { if (!controller.signal.aborted) setPage('missing'); });
+    return () => { controller.abort(); };
+  }, [id, initialSearch, bootstrapped]);
   useEffect(() => {
     // The address heals to the canonical one — after the ACL, which the fetch already passed.
-    if (page && page !== 'missing' && !page.surface?.captureKey && page.canonical !== window.location.pathname) window.history.replaceState(null, '', page.canonical + search + window.location.hash);
-  }, [page, search]);
+    if (page && page !== 'missing' && !page.surface?.captureKey && page.canonical !== location.pathname) {
+      void navigate(page.canonical + search + location.hash, { replace: true, state: location.state });
+    }
+  }, [page, search, location.pathname, location.hash, location.state, navigate]);
   if (page === null) return <div aria-label="Loading page" />;
   if (page === 'missing') return <NotFoundPage />;
   // A folder is a listing, not a document: no ArtifactShell and no surface

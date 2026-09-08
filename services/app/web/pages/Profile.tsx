@@ -4,7 +4,7 @@ import { takeBootstrap } from '../bootstrap';
 import { Navigate, useLocation, useParams } from 'react-router';
 import { ListingHero, ListingShell, NothingHere } from '@/components/Listing';
 import Shelf from '@/components/Shelf';
-import { canonicalArtifactPath } from '@/lib/urls';
+import { canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
 import { ArtifactPage } from './Artifact';
 import { NotFoundPage } from './NotFound';
 
@@ -14,7 +14,15 @@ type Resolved =
   | { kind: 'public-profile'; handle: string; owner?: { id: string }; follow?: { following: boolean; count: number }; files: never[]; authed: boolean; anon: boolean };
 
 export function ProfilePage() {
-  const { user, '*': rest } = useParams();
+  const { user, '*': rest, id } = useParams();
+  // Both aliases use this SAME route element/child position, so healing /a/id
+  // to its pretty address does not tear down the editor or author runtime.
+  const artifactId = id ?? (user?.startsWith('@') ? parsePrettyPath((rest ?? '').split('/'))?.id : undefined);
+  if (artifactId) return <ArtifactPage id={artifactId} />;
+  return <ResolvedProfile key={`${user}/${rest}`} user={user} rest={rest} />;
+}
+
+function ResolvedProfile({ user, rest }: { user: string | undefined; rest: string | undefined }) {
   const { pathname } = useLocation();
   const [page, setPage] = useState<Resolved | 'missing' | null>(() => takeBootstrap<Resolved>(window.location.pathname, 'profile'));
   const served = useRef<string | null>(page ? window.location.pathname : null);
@@ -26,13 +34,13 @@ export function ProfilePage() {
     // Served with its data (server/app inlines it): nothing to fetch for THIS address.
     if (served.current === pathname) return;
     served.current = null;
-    let alive = true;
+    const controller = new AbortController();
     setPage(null);
-    void fetch(`/api/page/profile/${encodeURIComponent(user ?? '')}${rest ? '/' + rest : ''}`, { credentials: 'same-origin' })
+    void fetch(`/api/page/profile/${encodeURIComponent(user ?? '')}${rest ? '/' + rest : ''}`, { credentials: 'same-origin', signal: controller.signal })
       .then((r): Promise<Resolved | 'missing'> => (r.ok ? (r.json() as Promise<Resolved>) : Promise.resolve('missing' as const)))
-      .then((p) => { if (alive) setPage(p); })
-      .catch(() => { if (alive) setPage('missing'); });
-    return () => { alive = false; };
+      .then((p) => { if (!controller.signal.aborted) setPage(p); })
+      .catch(() => { if (!controller.signal.aborted) setPage('missing'); });
+    return () => { controller.abort(); };
   }, [user, rest, pathname, typo]);
   if (typo) return <NotFoundPage />;
   if (page === null) return <div aria-label="Loading page" />;

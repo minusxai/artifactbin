@@ -66,7 +66,7 @@ export interface InPlaceEditController {
    * commits on blur, so the last thing typed lives only in its DOM until
    * somebody asks for it.
    */
-  commitPending: () => Promise<void>;
+  commitPending: (requireAcknowledgement?: boolean) => Promise<void>;
   /** Show a new version of the document in the frame, without replacing it. */
   pushDocument: (update: {
     nodes: JsxNode[];
@@ -86,7 +86,8 @@ export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditControll
   nonceRef.current = sessionNonce;
   const typingRef = useRef(false);
   /** Resolves the in-flight commitPending, if there is one. */
-  const committedRef = useRef<(() => void) | null>(null);
+  const committedRef = useRef<((acknowledged?: boolean) => void) | null>(null);
+  const commitRequestRef = useRef<Promise<boolean> | null>(null);
   const selectionRef = useRef<StoryEditSelection | null>(null);
   selectionRef.current = selection;
 
@@ -223,19 +224,29 @@ export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditControll
     postToFrame({ type: STORY_SELECT_MESSAGE, path });
   }, [postToFrame]);
 
-  const commitPending = useCallback(() => new Promise<void>((resolve) => {
-    if (!frameRef.current?.contentWindow) { resolve(); return; }
-    // Bounded: a document that cannot answer must not strand the reader in an
-    // editor they have already left.
-    const timer = window.setTimeout(finish, 1200);
-    function finish() {
-      window.clearTimeout(timer);
-      committedRef.current = null;
-      resolve();
+  const commitPending = useCallback(async (requireAcknowledgement = false): Promise<void> => {
+    if (!frameRef.current?.contentWindow) {
+      if (requireAcknowledgement) throw new Error('editor is unavailable');
+      return;
     }
-    committedRef.current = finish;
-    postToFrame({ type: STORY_COMMIT_MESSAGE });
-  }), [frameRef, postToFrame]);
+    // Visibility, navigation and image insertion can request the same commit.
+    // Share its acknowledgement rather than overwriting a caller's resolver.
+    if (!commitRequestRef.current) {
+      commitRequestRef.current = new Promise<boolean>(resolve => {
+        const timer = window.setTimeout(() => finish(false), 1200);
+        function finish(acknowledged = true) {
+          window.clearTimeout(timer);
+          committedRef.current = null;
+          commitRequestRef.current = null;
+          resolve(acknowledged);
+        }
+        committedRef.current = finish;
+        postToFrame({ type: STORY_COMMIT_MESSAGE });
+      });
+    }
+    const acknowledged = await commitRequestRef.current;
+    if (requireAcknowledgement && !acknowledged) throw new Error('editor commit timed out');
+  }, [frameRef, postToFrame]);
 
   commitPendingRef.current = commitPending;
 

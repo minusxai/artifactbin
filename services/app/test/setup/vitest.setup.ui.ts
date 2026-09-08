@@ -61,10 +61,10 @@ const preventJsdomNavigation = (event: MouseEvent) => {
   if (target) event.preventDefault();
 };
 beforeAll(() => {
-  // React handlers run at their root before this document-level listener, so
-  // link behavior is still exercised; only jsdom's unsupported default
+  // React and the navigation boundary run before this window-level listener,
+  // so link behavior is still exercised; only jsdom's unsupported default
   // full-document navigation is cancelled afterward.
-  document.addEventListener('click', preventJsdomNavigation);
+  window.addEventListener('click', preventJsdomNavigation);
   console.error = (...args: any[]) => {
     const msg = typeof args[0] === 'string' ? args[0] : '';
     if (msg.includes('Warning: ReactDOM.render') || msg.includes('act(') || msg.includes('Not implemented: navigation')) return;
@@ -72,6 +72,6 @@ beforeAll(() => {
   };
 });
 afterAll(() => {
-  document.removeEventListener('click', preventJsdomNavigation);
+  window.removeEventListener('click', preventJsdomNavigation);
   console.error = originalError;
 });
