@@ -57,3 +57,13 @@ it('preserves the reading position when a toolbar changes the document inset',as
  fireEvent.click(screen.getByLabelText('Exit edit mode'));
  expect(window.scrollY).toBe(900);
 });
+it('keeps the document origin fixed while adding edit clearance at the top',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({})));
+ vi.stubGlobal('scrollY',0);
+ const scrollBy=vi.fn();vi.stubGlobal('scrollBy',scrollBy);
+ render(<ArtifactShell role="owner"><ArtifactSurface {...props}/></ArtifactShell>);
+ await screen.findByText('Hello');
+ fireEvent.click(screen.getByLabelText('Open artifact controls'));fireEvent.click(screen.getByLabelText('Edit artifact'));
+ expect(screen.getByLabelText('Artifact viewport')).toHaveStyle({paddingTop:'92px'});
+ expect(window.scrollY).toBe(0);expect(scrollBy).not.toHaveBeenCalled();
+});

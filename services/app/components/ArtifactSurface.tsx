@@ -54,10 +54,11 @@ import type { StoryIslandData } from '@/lib/story-runtime/contract';
 import { TrustedChrome } from '@/components/TrustedUi';
 import { Tooltip } from '@/components/Tooltip';
 import {storyPresentationCss} from '@/lib/story/presentation-css';
+import EditorLoading from '@/components/EditorLoading';
 
 const ArtifactEditor = dynamic(() => import('@/components/ArtifactEditor'), {
   ssr: false,
-  loading: () => <p className="mt-10 text-center text-xs text-faint">loading the editor…</p>,
+  loading: EditorLoading,
 });
 
 const SocialPreviewDialog = dynamic(() => import('@/components/SocialPreviewDialog'), {
@@ -502,6 +503,27 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const directMarkup = format === 'markup' && !captureKey;
   const localPresentation = directMarkup && !props.surfaceCss && !props.preparedStory ? storyBodyFor(source ?? '') : null;
   const directInset = APP_BAR_H + (editing ? EDIT_BAR_H : 0);
+  const previousDirectInset = useRef(directInset);
+  useLayoutEffect(() => {
+    const previous = previousDirectInset.current;
+    previousDirectInset.current = directInset;
+    if (!directMarkup || previous === directInset || window.scrollY <= 0) return;
+    // The padding change intentionally moves the document below/above the
+    // toolbar. Compensate the scroll in the same layout phase so the paragraph
+    // being read stays at the same viewport position. Disable native scroll
+    // anchoring for this frame; otherwise Chromium may apply the delta twice.
+    const html = document.documentElement;
+    const oldAnchor = html.style.overflowAnchor;
+    html.style.overflowAnchor = 'none';
+    window.scrollBy(0, directInset - previous);
+    const frame = window.requestAnimationFrame(() => {
+      if (html.style.overflowAnchor === 'none') html.style.overflowAnchor = oldAnchor;
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (html.style.overflowAnchor === 'none') html.style.overflowAnchor = oldAnchor;
+    };
+  }, [directInset, directMarkup]);
   useLayoutEffect(() => {
     if (!directMarkup || !storyHostRef.current) return;
     const split = props.preparedStory ? null : storyBodyFor(source ?? '');
@@ -1146,6 +1168,9 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     setInitialEditSelectionPath(null);
     if (pushedEdit.current) {
       pushedEdit.current = false;
+      // The editor is already drained. Do not keep it mounted until the
+      // browser delivers the asynchronous hashchange from history.back().
+      setEditing(false);
       history.back();
     } else {
       history.pushState(null, '', location.pathname);
@@ -1192,9 +1217,10 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
 
   // The contextual editor action remains present in edit mode, so it must honor the
   // editor's same drain-before-leaving contract as the editing bar's `done`.
-  const finishEdit = useCallback(async () => {
-    await editorFlush.current?.();
-    exitEdit();
+  const finishEdit = useCallback(() => {
+    const flush = editorFlush.current;
+    if (!flush) { exitEdit(); return; }
+    void flush().then(exitEdit);
   }, [exitEdit]);
 
   /*

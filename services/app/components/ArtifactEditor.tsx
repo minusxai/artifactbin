@@ -22,6 +22,7 @@ import {appFetch as fetch} from '@/web/api-origin';
 import { Home, Lock } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import InPlaceEditor from '@/components/InPlaceEditor';
+import EditorLoading from '@/components/EditorLoading';
 import type { StoryEditSelection } from '@/lib/story-runtime/contract';
 import type { StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import { Button, LINK, PANEL, TokenInput } from '@/components/ui';
@@ -218,7 +219,7 @@ export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, s
     );
   }
 
-  if (!art) return <p className="mt-10 text-xs text-faint">loading…</p>;
+  if (!art) return <EditorLoading />;
 
   return (
     <InPlaceEditor
