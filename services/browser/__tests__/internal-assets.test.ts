@@ -24,7 +24,7 @@ beforeAll(async () => {
   app = await withHttpServer((req, res) => {
     if (req.url === '/assets/' + 'b'.repeat(64)) {
       assetReads++;
-      expect(req.headers['x-forwarded-host']).toBe('cached-assets.invalid');
+      expect(req.headers.host).toBe('cached-assets.invalid');
       res.writeHead(200, { 'content-type': 'image/png' }); res.end(image); return;
     }
     if (req.url === path) {
@@ -32,7 +32,7 @@ beforeAll(async () => {
       expect(req.headers.cookie).toBeUndefined();
       expect(req.headers.authorization).toBeUndefined();
       expect(req.headers.origin).toBeUndefined();
-      expect(req.headers['x-forwarded-host']).toBe('cached-assets.invalid');
+      expect(req.headers.host).toBe('cached-assets.invalid');
       res.writeHead(200, { 'content-type': 'text/javascript', 'content-encoding': 'gzip', 'set-cookie': 'asset=secret', 'location': '/evil' });
       res.end(gzipSync("if(import.meta.url.startsWith('https://cached-assets.invalid/assets/'))document.querySelector('main').style.background='#33cc33'"));
       return;

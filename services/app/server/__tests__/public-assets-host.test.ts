@@ -10,6 +10,8 @@ import {storeFileContent} from '@/lib/story/file-store';
 import {internalAssetResponse} from '../../../browser/src/internal-assets';
 import {withHttpServer} from '@/__tests__/net';
 import {getRequestListener} from '@hono/node-server';
+import {createProxy} from '@artifactbin/proxy';
+import {testProxyOptions} from '../../../proxy/__tests__/helpers';
 useAppHarness();
 it('direct app only serves cached byte GET/HEAD on asset host, ignoring credentials and forwarding spoofing',async()=>{
  const hash='a'.repeat(64),data=Buffer.from('bundle'),key=objectKey('webasset',data);
@@ -47,8 +49,13 @@ it('internal export transport reaches the real public-byte middleware, not the a
  await objectStore().put(key,bytes,'application/octet-stream');
  await(await getDb()).query('insert into web_assets(url_hash,url,object_key,content_type,bytes)values($1,$2,$3,$4,$5)',[hash,'https://cdn.example.test/model',key,'application/octet-stream',bytes.length]);
  const app=createAppServer({indexHtml:async()=>'<head></head>'});
- const server=await withHttpServer(getRequestListener(app.fetch));
+ const options=await testProxyOptions({upstream:async(request)=>app.fetch(request)});
+ options.env={...options.env,APP__PUBLIC_BASE_URL:'https://example.test',APP__ASSETS_ORIGIN:'https://assets.example.test'};
+ const proxy=createProxy(options);
+ for(const fetch of [app.fetch,proxy.fetch]){
+ const server=await withHttpServer(getRequestListener(fetch));
  const read=(path:string)=>internalAssetResponse('https://assets.example.test'+path,'GET','https://assets.example.test',server.base,AbortSignal.timeout(3000));
+ await(await getDb()).query("UPDATE artifacts SET visibility='public' WHERE id=$1",[publicRow.id]);
  try{
   for(const path of ['/assets/'+hash,'/assets/ref/'+publicRow.id]){
    const response=await read(path);expect(response.status).toBe(200);expect([...new Uint8Array(await response.arrayBuffer())]).toEqual([...bytes]);
@@ -58,4 +65,5 @@ it('internal export transport reaches the real public-byte middleware, not the a
   await(await getDb()).query("UPDATE artifacts SET visibility='private' WHERE id=$1",[publicRow.id]);
   expect((await read('/assets/ref/'+publicRow.id)).status).toBe(404);
  }finally{await server.close();}
+ }
 });

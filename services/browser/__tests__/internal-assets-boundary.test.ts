@@ -11,9 +11,8 @@ let mode = 'ok';
 beforeAll(async () => {
   app = await withHttpServer((req,res) => {
     reads++;
-    expect(req.headers['x-forwarded-host']).toBe('assets.invalid');
-    expect(req.headers['x-forwarded-proto']).toBe('https');
-    for (const name of ['cookie','authorization','origin','referer','x-mx-actor']) expect(req.headers[name]).toBeUndefined();
+    expect(req.headers.host).toBe('assets.invalid');
+    for (const name of ['cookie','authorization','origin','referer','x-mx-actor','x-forwarded-host','x-forwarded-proto']) expect(req.headers[name]).toBeUndefined();
     req.on('close', () => closed++);
     if (mode === 'redirect') { res.writeHead(302,{location:app.base+'/private'});res.end();return; }
     if (mode === 'external-redirect') { res.writeHead(307,{location:'https://external.invalid/private'});res.end();return; }

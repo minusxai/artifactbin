@@ -14,8 +14,8 @@ A Chromium that renders a URL to an image. `@artifactbin/contracts` `BrowserServ
 App exports set `sameOriginOnly` and `assetOrigin`, **not** a broad `allowedOrigins` exception.
 The page is loaded through its existing internal render URL. Requests to `assetOrigin` retain that URL
 in Chromium, but only public byte GET/HEAD routes admitted by `isPublicAssetRequest` are fetched by the
-renderer from the render URL's internal origin. Fixed `x-forwarded-host`/`x-forwarded-proto`, derived only
-from `assetOrigin`, select the app's existing public-byte middleware (including public-ref ACLs).
+renderer from the render URL's internal origin. A fixed `Host`, derived only from `assetOrigin`, selects
+the existing public-byte middleware in both direct-app and cohost proxy deployments (including public-ref ACLs).
 No browser request headers, viewer credentials or export keys are forwarded. No redirect is followed,
 even internally, and failures never fall back to fetching the public hostname. Asset responses have
 the same CORS, nosniff and sandbox policy as public serving, with cookies/redirect metadata removed.

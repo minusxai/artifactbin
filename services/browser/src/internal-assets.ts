@@ -1,4 +1,8 @@
 import { isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
+import { Readable } from 'node:stream';
+import { createGunzip, createInflate, createBrotliDecompress } from 'node:zlib';
 
 // Export transport bounds, independent of the app's configurable ingest limit.
 const MAX_BYTES = 64 * 1024 * 1024;
@@ -12,13 +16,26 @@ export async function internalAssetResponse(target: string, method: string, asse
     || !isPublicAssetRequest(new Request(url, { method }), assetOrigin)) {
     throw new Error('asset request refused');
   }
-  const response = await fetch(internal.origin + url.pathname + url.search, {
-    method, redirect: 'manual', credentials: 'omit', signal,
-    // Fixed deployment forwarding fields select the app's public-asset middleware,
-    // including /assets/ref visibility checks. Node fetch owns Host; never copy
-    // browser Cookie, Origin, auth, Host or forwarding headers. The TCP destination
-    // remains the internal render origin, with no DNS lookup of the public host.
-    headers: { 'x-forwarded-host': asset.host, 'x-forwarded-proto': asset.protocol.slice(0, -1), 'accept-encoding': 'identity' },
+  // Node fetch owns/ignores Host. A fixed Host through node:http selects the
+  // identical asset boundary both directly in the app and through a cohost proxy.
+  // No browser headers, credentials, redirects or environment proxy are used.
+  const response = await new Promise<Response>((resolve, reject) => {
+    const request = (internal.protocol === 'https:' ? httpsRequest : httpRequest)(internal.origin + url.pathname + url.search, {
+      method, signal, headers: { host: asset.host, 'accept-encoding': 'identity' },
+    }, incoming => {
+      const headers = new Headers();
+      for (const [key,value] of Object.entries(incoming.headers)) if(value !== undefined) headers.set(key, Array.isArray(value) ? value.join(', ') : value);
+      const encoding = headers.get('content-encoding');
+      const decoder = encoding === 'gzip' ? createGunzip() : encoding === 'br' ? createBrotliDecompress() : encoding === 'deflate' ? createInflate() : null;
+      if (encoding && encoding !== 'identity' && !decoder) { incoming.destroy();reject(new Error('asset encoding refused'));return; }
+      const source = decoder ? incoming.pipe(decoder) : incoming;
+      if (decoder) { incoming.on('error', error => decoder.destroy(error)); decoder.on('close', () => incoming.destroy()); }
+      const status = incoming.statusCode ?? 502;
+      const noBody = method === 'HEAD' || [204,205,304].includes(status);
+      if(noBody)incoming.resume();
+      resolve(new Response(noBody ? null : Readable.toWeb(source) as ReadableStream<Uint8Array>, {status,headers}));
+    });
+    request.on('error', reject);request.end();
   });
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   try {
@@ -36,7 +53,7 @@ export async function internalAssetResponse(target: string, method: string, asse
       chunks.push(value);
     }
     const headers = new Headers(response.headers);
-    // Node fetch decompresses even when an upstream ignores accept-encoding.
+    // Decompress even when an upstream ignores accept-encoding.
     // Fulfill receives decoded bytes, so wire length/encoding must not survive.
     for (const name of ['content-encoding', 'content-length', 'transfer-encoding', 'connection']) headers.delete(name);
     const body = method === 'HEAD' || [204, 205, 304].includes(response.status) ? null : Buffer.concat(chunks, size);
