@@ -108,52 +108,15 @@ export function parseCookie(header: string | null, name: string): string | undef
   return undefined;
 }
 
-/**
- * Is this a cross-site browser request?
- *
- * `Origin` (and `Sec-Fetch-Site`) are set BY THE BROWSER and cannot be forged
- * by page script — unlike a path, which any same-origin script can rewrite.
- * That is the whole reason this is the CSRF signal.
- *
- * Absence is NOT cross-site: an agent curling the API with a bearer token
- * sends no Origin, and the protocol must keep working. This is therefore only
- * ever consulted for requests authorized by a COOKIE — where a browser is by
- * definition the caller, and where a missing Origin means a same-origin
- * navigation-ish request that SameSite=Lax already vouched for.
- */
+/** Cookie mutation proof. Bearer callers never consult this guard.
+ * Deployment origins, including scheme and port, are authority; forwarded
+ * headers describe public links but cannot authorize a browser request. */
 export function isCrossSiteRequest(request: Request): boolean {
   const site = request.headers.get('sec-fetch-site');
-  if (CONTROLS_ORIGIN) {
-    const origin = request.headers.get('origin');
-    return origin ? origin !== new URL(PUBLIC_BASE_URL).origin && origin !== CONTROLS_ORIGIN : site !== 'same-origin';
-  }
-  if (site) return site === 'cross-site';
   const origin = request.headers.get('origin');
-  if (!origin) return false;
-  try {
-    return new URL(origin).host !== addressedHost(request);
-  } catch {
-    return true; // an unparseable Origin is not our own
-  }
-}
-
-/**
- * The host the CLIENT addressed — not the one this process is listening on.
- *
- * Behind a reverse proxy those differ: the browser asks for the public name
- * while `request.url` carries the container's internal address, so comparing
- * an Origin against the latter makes every request look foreign — and a
- * browser that sends no `Sec-Fetch-Site` (older Safari) would then get 403 on
- * every cookie-authenticated mutation. Reading the forwarded host is what
- * keeps those working. `x-forwarded-host` wins where the proxy also rewrites
- * `Host`.
- */
-function addressedHost(request: Request): string {
-  const forwarded = request.headers.get('x-forwarded-host')?.split(',')[0].trim();
-  if (forwarded) return forwarded;
-  const host = request.headers.get('host')?.trim();
-  if (host) return host;
-  return new URL(request.url).host;
+  return origin !== (CONTROLS_ORIGIN ?? new URL(PUBLIC_BASE_URL).origin)
+    || request.headers.get('x-artifactbin-csrf') !== '1'
+    || (site !== null && site !== 'same-origin');
 }
 
 /**

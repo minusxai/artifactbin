@@ -6,16 +6,19 @@ import { createProxy } from '../src/parts';
 import { s256 } from '../src/identity/oauth';
 import { testDb, testProxyOptions } from './helpers';
 
-const main = 'https://example.test', controls = 'https://i.example.test';
+let serial = 0;
+afterAll(async () => { await testDb().pg().close(); });
+describe.each(['split','same-origin'])('%s OAuth browser boundary', mode=>{
+const main = 'https://example.test', controls = mode==='split'?'https://i.example.test':main;
 const redirect = 'http://127.0.0.1:9987/callback', verifier = 'v'.repeat(43);
-let proxy: ReturnType<typeof createProxy>, serial = 0;
+let proxy: ReturnType<typeof createProxy>;
 const mail: OutgoingMail[] = [];
 beforeAll(async () => {
   const opts = await testProxyOptions();
-  const auth = await createHumanAuth({ pglite: testDb().pg(), baseURL: main, controlsOrigin: controls,
+  const auth = await createHumanAuth({ pglite: testDb().pg(), baseURL: main, controlsOrigin: mode==='split'?controls:undefined,
     secure: true, secret: 'oauth-boundary-test'.padEnd(32, '0'), mail: { send: async m => { mail.push(m); } } });
   proxy = createProxy({ ...opts, secure: true, sessions: sessionStoreOf(auth),
-    env: { ...opts.env, APP__PUBLIC_BASE_URL: main, APP__CONTROLS_ORIGIN: controls },
+    env: { ...opts.env, APP__PUBLIC_BASE_URL: main, ...(mode==='split'?{APP__CONTROLS_ORIGIN:controls}:{}) },
     upstream: async (request, actor) => {
       if (new URL(request.url).pathname === '/api/tokens/anonymous' && actor.credential === 'session') {
         const body = await request.json();
@@ -28,7 +31,6 @@ beforeAll(async () => {
     },
   });
 });
-afterAll(async () => { await testDb().pg().close(); });
 const headers = { origin: controls, 'x-artifactbin-csrf': '1', 'content-type': 'application/json' };
 async function login() {
   const email = 'oauth-boundary@example.test';
@@ -52,9 +54,9 @@ async function authorize(cookie: string) {
   const path = '/oauth/authorize?' + query;
   const moved = await proxy.request(main + path, { headers: { cookie } });
   expect(moved.status).toBe(200); expect(moved.headers.get('location')).toBeNull();
-  const page = await proxy.request(controls + '/controls/consent?' + query, { headers: { cookie } });
+  const page = mode==='split'?await proxy.request(controls + '/controls/consent?' + query, { headers: { cookie } }):moved;
   expect(page.status).toBe(200);
-  expect(page.headers.get('content-security-policy')).toContain(`frame-ancestors ${main}`);
+  if(mode==='split')expect(page.headers.get('content-security-policy')).toContain(`frame-ancestors ${main}`);
   expect(page.headers.get('content-security-policy')).toContain(`form-action 'self' ${new URL(redirect).origin}`);
   const approval = /name="approval" value="([A-Za-z0-9_-]+)"/.exec(await page.text())?.[1];
   expect(approval).toBeTruthy();
@@ -71,8 +73,8 @@ describe('real OTP → trusted OAuth consent → main-host MCP bearer', () => {
   it('binds approval to the live session and rejects cross-origin posts and replay', async () => {
     const cookie = await login();
     const { client, approval } = await authorize(cookie);
-    for (const origin of [main, 'null', null]) expect((await approve(cookie, approval, origin)).status).toBe(403);
-    expect((await approve(cookie, approval, controls, main)).status).toBe(403);
+    for (const origin of [mode==='split'?main:'https://evil.example.test', 'null', null]) expect((await approve(cookie, approval, origin)).status).toBe(403);
+    if(mode==='split')expect((await approve(cookie, approval, controls, main)).status).toBe(403);
     const otherSession = await login();
     expect((await approve(otherSession, approval)).status).toBe(400);
     const allowed = await approve(cookie, approval);
@@ -102,4 +104,6 @@ describe('real OTP → trusted OAuth consent → main-host MCP bearer', () => {
     expect((await approve(cookie, revoked.approval)).status).not.toBe(303);
     expect((await testDb().query("SELECT 1 FROM auth.credentials WHERE kind='oauth-consent' AND consumed_at IS NULL AND expires_at>now()")).rows).toHaveLength(1);
   });
+});
+
 });

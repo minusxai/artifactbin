@@ -1,3 +1,4 @@
+import {PUBLIC_BASE_URL,CONTROLS_ORIGIN} from '@/lib/config';
 /**
  * The browser holds an httpOnly session cookie, never a bearer secret.
  *
@@ -81,11 +82,11 @@ describe('POST /api/session/token', () => {
     const first = await mintToken('one');
     const second = await mintToken('two');
     const a = await exchangeRoute(request('/api/session/token', { method: 'POST', json: { token: first.token } }));
-    const b = await exchangeRoute(request('/api/session/token', { method: 'POST', json: { token: second.token }, cookie: cookieHeader(cookieFrom(a)) }));
+    const b = await exchangeRoute(request('/api/session/token', { browser: true, method: 'POST', json: { token: second.token }, cookie: cookieHeader(cookieFrom(a)) }));
     expect((await decodeAgentSession(cookieFrom(b)))?.tokenIds).toEqual([first.id, second.id]);
 
     // Re-presenting the first PROMOTES it: last touched authorizes the next write.
-    const c = await exchangeRoute(request('/api/session/token', { method: 'POST', json: { token: first.token }, cookie: cookieHeader(cookieFrom(b)) }));
+    const c = await exchangeRoute(request('/api/session/token', { browser: true, method: 'POST', json: { token: first.token }, cookie: cookieHeader(cookieFrom(b)) }));
     expect((await decodeAgentSession(cookieFrom(c)))?.tokenIds).toEqual([second.id, first.id]);
   });
 });
@@ -157,7 +158,7 @@ describe('Origin check', () => {
     expect(crossSite.status).toBe(403);
 
     // The same call from our own origin is ordinary.
-    const sameSite = await createArtifact(request('/api/artifacts', { method: 'POST', cookie: cookie, origin: BASE, json: { markup: '<h1>x</h1>' } }));
+    const sameSite = await createArtifact(request('/api/artifacts', { method: 'POST', cookie: cookie, origin: CONTROLS_ORIGIN??new URL(PUBLIC_BASE_URL).origin, headers: {'x-artifactbin-csrf':'1'}, json: { markup: '<h1>x</h1>' } }));
     expect(sameSite.status).toBe(201);
 
     // An agent curling with a bearer sends NO Origin — the protocol must not care.
@@ -204,7 +205,7 @@ describe('handing the document to another agent', () => {
     const doc = (await (await createArtifact(request('/api/artifacts', { method: 'POST', token: mine.token, json: { markup: '<h1>anon owned</h1>' } }))).json()) as { id: string };
 
     const cookie = cookieHeader(await encodeAgentSession({ tokenIds: [mine.id] }));
-    const res = await agentPrompt(request(`/api/my/artifacts/${doc.id}/agent-prompt`, { method: 'POST', cookie: cookie, origin: BASE }), {
+    const res = await agentPrompt(request(`/api/my/artifacts/${doc.id}/agent-prompt`, { method: 'POST', cookie: cookie, origin: CONTROLS_ORIGIN??new URL(PUBLIC_BASE_URL).origin, headers: {'x-artifactbin-csrf':'1'} }), {
       params: Promise.resolve({ id: doc.id }),
     });
     expect(res.status).toBe(409);
@@ -218,7 +219,7 @@ describe('handing the document to another agent', () => {
     await claimTokenById(user.id, mine.id);
 
     sessionUser.id = user.id;
-    const res = await agentPrompt(request(`/api/my/artifacts/${doc.id}/agent-prompt`, { method: 'POST', origin: BASE }), {
+    const res = await agentPrompt(request(`/api/my/artifacts/${doc.id}/agent-prompt`, { method: 'POST', origin: CONTROLS_ORIGIN??new URL(PUBLIC_BASE_URL).origin, headers: {'x-artifactbin-csrf':'1'} }), {
       params: Promise.resolve({ id: doc.id }),
     });
     sessionUser.id = '';
@@ -235,7 +236,7 @@ describe('handing the document to another agent', () => {
     const theirs = await mintToken('theirs');
     const doc = (await (await createArtifact(request('/api/artifacts', { method: 'POST', token: theirs.token, json: { markup: '<h1>not mine</h1>' } }))).json()) as { id: string };
 
-    const res = await agentPrompt(request(`/api/my/artifacts/${doc.id}/agent-prompt`, { method: 'POST', cookie: cookieHeader(await encodeAgentSession({ tokenIds: [mine.id] })), origin: BASE }), { params: Promise.resolve({ id: doc.id }) });
+    const res = await agentPrompt(request(`/api/my/artifacts/${doc.id}/agent-prompt`, { method: 'POST', cookie: cookieHeader(await encodeAgentSession({ tokenIds: [mine.id] })), origin: CONTROLS_ORIGIN??new URL(PUBLIC_BASE_URL).origin, headers: {'x-artifactbin-csrf':'1'} }), { params: Promise.resolve({ id: doc.id }) });
     expect(res.status).toBe(404);
   });
 });

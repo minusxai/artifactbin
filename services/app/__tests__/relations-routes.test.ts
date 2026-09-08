@@ -26,12 +26,12 @@ describe('POST/DELETE/GET /api/my/artifacts/[id]/like', () => {
     const db = await harness.db();
     await db.query(`INSERT INTO artifacts (id, token_id, user_id, content, visibility) VALUES ('art0pu', 'tok_o', $1, 'x', 'public'), ('art0pr', 'tok_o', $1, 'x', 'private')`, [owner.id]);
 
-    expect((await like(request('/api/my/artifacts/art0pu/like', { method: 'POST', origin: 'same' }), ctx('art0pu'))).status).toBe(401);
+    expect((await like(request('/api/my/artifacts/art0pu/like', { browser: true, method: 'POST', origin: 'same' }), ctx('art0pu'))).status).toBe(401);
 
-    const liked = await like(request('/api/my/artifacts/art0pu/like', { method: 'POST', actor: session(fan), origin: 'same' }), ctx('art0pu'));
+    const liked = await like(request('/api/my/artifacts/art0pu/like', { browser: true, method: 'POST', actor: session(fan), origin: 'same' }), ctx('art0pu'));
     expect(liked.status).toBe(200);
     expect(await liked.json()).toEqual({ liked: true, count: 1 });
-    const again = await like(request('/api/my/artifacts/art0pu/like', { method: 'POST', actor: session(fan), origin: 'same' }), ctx('art0pu'));
+    const again = await like(request('/api/my/artifacts/art0pu/like', { browser: true, method: 'POST', actor: session(fan), origin: 'same' }), ctx('art0pu'));
     expect(await again.json()).toEqual({ liked: true, count: 1 });
 
     const state = await likeState(request('/api/my/artifacts/art0pu/like', { actor: session(fan) }), ctx('art0pu'));
@@ -39,11 +39,11 @@ describe('POST/DELETE/GET /api/my/artifacts/[id]/like', () => {
     const anonymousState = await likeState(request('/api/my/artifacts/art0pu/like'), ctx('art0pu'));
     expect(await anonymousState.json()).toEqual({ liked: false, count: 1 });
 
-    const unliked = await unlike(request('/api/my/artifacts/art0pu/like', { method: 'DELETE', actor: session(fan), origin: 'same' }), ctx('art0pu'));
+    const unliked = await unlike(request('/api/my/artifacts/art0pu/like', { browser: true, method: 'DELETE', actor: session(fan), origin: 'same' }), ctx('art0pu'));
     expect(await unliked.json()).toEqual({ liked: false, count: 0 });
 
-    expect((await like(request('/api/my/artifacts/art0pr/like', { method: 'POST', actor: session(fan), origin: 'same' }), ctx('art0pr'))).status).toBe(404);
-    expect((await like(request('/api/my/artifacts/nope00/like', { method: 'POST', actor: session(fan), origin: 'same' }), ctx('nope00'))).status).toBe(404);
+    expect((await like(request('/api/my/artifacts/art0pr/like', { browser: true, method: 'POST', actor: session(fan), origin: 'same' }), ctx('art0pr'))).status).toBe(404);
+    expect((await like(request('/api/my/artifacts/nope00/like', { browser: true, method: 'POST', actor: session(fan), origin: 'same' }), ctx('nope00'))).status).toBe(404);
   });
 });
 
@@ -52,12 +52,12 @@ describe('POST/DELETE/GET /api/users/[id]/follow', () => {
     const a = await createUser({ email: 'mxmx_test_rel_a@example.com' });
     const b = await createUser({ email: 'mxmx_test_rel_b@example.com' });
     expect((await follow(request(`/api/users/${b.id}/follow`, { method: 'POST', origin: 'same' }), ctx(b.id))).status).toBe(401);
-    const followed = await follow(request(`/api/users/${b.id}/follow`, { method: 'POST', actor: session(a), origin: 'same' }), ctx(b.id));
+    const followed = await follow(request(`/api/users/${b.id}/follow`, { browser: true, method: 'POST', actor: session(a), origin: 'same' }), ctx(b.id));
     expect(followed.status).toBe(200);
     expect(await followed.json()).toEqual({ following: true, count: 1 });
-    expect((await follow(request(`/api/users/${a.id}/follow`, { method: 'POST', actor: session(a), origin: 'same' }), ctx(a.id))).status).toBe(400);
-    expect((await follow(request('/api/users/usr_nobody/follow', { method: 'POST', actor: session(a), origin: 'same' }), ctx('usr_nobody'))).status).toBe(404);
+    expect((await follow(request(`/api/users/${a.id}/follow`, { browser: true, method: 'POST', actor: session(a), origin: 'same' }), ctx(a.id))).status).toBe(400);
+    expect((await follow(request('/api/users/usr_nobody/follow', { browser: true, method: 'POST', actor: session(a), origin: 'same' }), ctx('usr_nobody'))).status).toBe(404);
     expect(await (await followState(request(`/api/users/${b.id}/follow`, { actor: session(a) }), ctx(b.id))).json()).toEqual({ following: true, count: 1 });
-    expect(await (await unfollow(request(`/api/users/${b.id}/follow`, { method: 'DELETE', actor: session(a), origin: 'same' }), ctx(b.id))).json()).toEqual({ following: false, count: 0 });
+    expect(await (await unfollow(request(`/api/users/${b.id}/follow`, { browser: true, method: 'DELETE', actor: session(a), origin: 'same' }), ctx(b.id))).json()).toEqual({ following: false, count: 0 });
   });
 });

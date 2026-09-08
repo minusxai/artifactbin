@@ -187,7 +187,7 @@ describe('reject: POST /api/tokens/reject', () => {
   it('revokes a held token and rewrites the cookie without it, keeping the others in order', async () => {
     const a = await mintToken('a');
     const b = await mintToken('b');
-    const res = await reject(request('/api/tokens/reject', { method: 'POST', cookie: await agentCookie([a.id, b.id]), json: { tokenId: a.id } }));
+    const res = await reject(request('/api/tokens/reject', { browser: true, method: 'POST', cookie: await agentCookie([a.id, b.id]), json: { tokenId: a.id } }));
     expect(res.status).toBe(204);
     const { value } = cookieValue(res);
     expect(await decodeAgentSession(value)).toEqual({ tokenIds: [b.id] });
@@ -198,7 +198,7 @@ describe('reject: POST /api/tokens/reject', () => {
 
   it('rejecting the last held token clears the cookie', async () => {
     const a = await mintToken('a');
-    const res = await reject(request('/api/tokens/reject', { method: 'POST', cookie: await agentCookie([a.id]), json: { tokenId: a.id } }));
+    const res = await reject(request('/api/tokens/reject', { browser: true, method: 'POST', cookie: await agentCookie([a.id]), json: { tokenId: a.id } }));
     expect(res.status).toBe(204);
     expect(cookieValue(res).cleared).toBe(true);
     expect(await resolveTokenById(a.id)).toBeNull();
@@ -207,10 +207,10 @@ describe('reject: POST /api/tokens/reject', () => {
   it('404 when the cookie does not hold the id, and nothing is revoked', async () => {
     const a = await mintToken('a');
     const b = await mintToken('b');
-    const res = await reject(request('/api/tokens/reject', { method: 'POST', cookie: await agentCookie([b.id]), json: { tokenId: a.id } }));
+    const res = await reject(request('/api/tokens/reject', { browser: true, method: 'POST', cookie: await agentCookie([b.id]), json: { tokenId: a.id } }));
     expect(res.status).toBe(404);
     expect(await resolveTokenById(a.id)).not.toBeNull();
-    const none = await reject(request('/api/tokens/reject', { method: 'POST', json: { tokenId: a.id } }));
+    const none = await reject(request('/api/tokens/reject', { browser:true, method: 'POST', json: { tokenId: a.id } }));
     expect(none.status).toBe(404);
   });
 
@@ -218,10 +218,10 @@ describe('reject: POST /api/tokens/reject', () => {
     const owner = await createUser({ email: 'owner@example.com' });
     const c = await mintToken('c', owner.id);
     const cookie = await agentCookie([c.id]);
-    const stranger = await reject(request('/api/tokens/reject', { method: 'POST', cookie, json: { tokenId: c.id } }));
+    const stranger = await reject(request('/api/tokens/reject', { browser: true, method: 'POST', cookie, json: { tokenId: c.id } }));
     expect(stranger.status).toBe(404);
     expect(await resolveTokenById(c.id)).not.toBeNull();
-    const asOwner = await reject(request('/api/tokens/reject', {
+    const asOwner = await reject(request('/api/tokens/reject', { browser: true,
       method: 'POST',
       cookie,
       json: { tokenId: c.id },

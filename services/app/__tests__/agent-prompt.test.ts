@@ -36,7 +36,7 @@ describe('POST /api/my/artifacts/:id/agent-prompt', () => {
     const { id } = (await createRes.json()) as { id: string };
 
     sessionUser.id = user.id;
-    const res = await agentPromptRoute(request(`/api/my/artifacts/${id}/agent-prompt`, { method: 'POST' }), params({ id }));
+    const res = await agentPromptRoute(request(`/api/my/artifacts/${id}/agent-prompt`, { browser: true, method: 'POST' }), params({ id }));
     expect(res.status).toBe(201);
     const body = (await res.json()) as { prompt: string; url: string; token?: string };
     expect(body.url).toBe(`${BASE}/a/${id}`);
@@ -56,11 +56,11 @@ describe('POST /api/my/artifacts/:id/agent-prompt', () => {
     );
     const { id } = (await createRes.json()) as { id: string };
 
-    const anon = await agentPromptRoute(request(`/api/my/artifacts/${id}/agent-prompt`, { method: 'POST' }), params({ id }));
+    const anon = await agentPromptRoute(request(`/api/my/artifacts/${id}/agent-prompt`, { browser: true, method: 'POST' }), params({ id }));
     expect(anon.status).toBe(401);
 
     sessionUser.id = stranger.id;
-    const foreign = await agentPromptRoute(request(`/api/my/artifacts/${id}/agent-prompt`, { method: 'POST' }), params({ id }));
+    const foreign = await agentPromptRoute(request(`/api/my/artifacts/${id}/agent-prompt`, { browser: true, method: 'POST' }), params({ id }));
     expect(foreign.status).toBe(404);
   });
 });

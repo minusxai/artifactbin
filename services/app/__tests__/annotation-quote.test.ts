@@ -57,7 +57,7 @@ const list = async (token: string, id: string): Promise<Wire[]> => {
 };
 const comment = (w: Awaited<ReturnType<typeof setup>>, extra: Record<string, unknown>, editId = w.doc.edit_id) =>
   myCreateAnnotationRoute(
-    request(`/api/my/artifacts/${w.doc.id}/annotations`, { method: 'POST', cookie: w.cookie, json: { path: '1', edit_id: editId, body: 'is this right?', ...extra } }),
+    request(`/api/my/artifacts/${w.doc.id}/annotations`, { browser: true, method: 'POST', cookie: w.cookie, json: { path: '1', edit_id: editId, body: 'is this right?', ...extra } }),
     params({ id: w.doc.id }),
   );
 
@@ -136,7 +136,7 @@ describe('a comment keeps its quote and range', () => {
 
     const { edit_id } = await head(w.t.token, w.doc.id);
     const plain = await myCreateAnnotationRoute(
-      request(`/api/my/artifacts/${w.doc.id}/annotations`, { method: 'POST', cookie: w.cookie, json: { path: '2', edit_id, body: 'plain' } }),
+      request(`/api/my/artifacts/${w.doc.id}/annotations`, { browser: true, method: 'POST', cookie: w.cookie, json: { path: '2', edit_id, body: 'plain' } }),
       params({ id: w.doc.id }),
     );
     expect(plain.status, await plain.clone().text()).toBe(201);
@@ -189,7 +189,7 @@ describe('resolving a range against the SOURCE', () => {
     // The anchored <p> is `[text "Lead in ", <strong>, text " 40% in Q3."]`:
     // element child 0 is the <strong>, AST child 0 is the text before it.
     const made = await myCreateAnnotationRoute(
-      request(`/api/my/artifacts/${w.doc.id}/annotations`, {
+      request(`/api/my/artifacts/${w.doc.id}/annotations`, { browser: true,
         method: 'POST', cookie: w.cookie,
         json: {
           path: '1', edit_id: w.doc.edit_id, body: 'which quarter?',
@@ -217,7 +217,7 @@ describe('resolving a range against the SOURCE', () => {
     ]) {
       const { edit_id } = await head(w.t.token, w.doc.id);
       const one = await myCreateAnnotationRoute(
-        request(`/api/my/artifacts/${w.doc.id}/annotations`, {
+        request(`/api/my/artifacts/${w.doc.id}/annotations`, { browser: true,
           method: 'POST', cookie: w.cookie,
           json: { path: '1', edit_id, body: `only ${part.rel}`, quote: part.text, range: { v: 1, parts: [part] } },
         }),
@@ -231,7 +231,7 @@ describe('resolving a range against the SOURCE', () => {
   it('reads a node the way the DOM does: the text either side of a tag joins with NOTHING', async () => {
     const w = await setupWith('<p>Untouched.</p><p>Total<strong>42</strong>units sold.</p>');
     const made = await myCreateAnnotationRoute(
-      request(`/api/my/artifacts/${w.doc.id}/annotations`, {
+      request(`/api/my/artifacts/${w.doc.id}/annotations`, { browser: true,
         method: 'POST', cookie: w.cookie,
         json: {
           path: '1', edit_id: w.doc.edit_id, body: 'is that right?',

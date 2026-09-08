@@ -68,7 +68,7 @@ describe('a move is its own verb, at both placement doors', () => {
     const folder = await w.mk({ format: 'folder', title: 'F' });
     const doc = await w.mk({ markup: '<h1>x</h1>', title: 'D' });
     listen();
-    const r = await patchRoute(request(`/api/my/artifacts/${doc.id}`, { method: 'PATCH', json: { parent_id: folder.id }, cookie: w.cookie }), params(doc.id));
+    const r = await patchRoute(request(`/api/my/artifacts/${doc.id}`, { browser: true, method: 'PATCH', json: { parent_id: folder.id }, cookie: w.cookie }), params(doc.id));
     expect(r.status).toBe(200);
     const moved = said('moved');
     expect(moved).toHaveLength(1);
@@ -80,7 +80,7 @@ describe('a move is its own verb, at both placement doors', () => {
     const folder = await w.mk({ format: 'folder', title: 'F' });
     const doc = await w.mk({ markup: '<h1>x</h1>', title: 'D', parent_id: folder.id });
     listen();
-    await patchRoute(request(`/api/my/artifacts/${doc.id}`, { method: 'PATCH', json: { parent_id: null }, cookie: w.cookie }), params(doc.id));
+    await patchRoute(request(`/api/my/artifacts/${doc.id}`, { browser: true, method: 'PATCH', json: { parent_id: null }, cookie: w.cookie }), params(doc.id));
     expect(said('moved')[0]?.payload).toMatchObject({ from_parent_id: folder.id, to_parent_id: null });
   });
 
@@ -104,7 +104,7 @@ describe('a delete is said once, at the door, and never twice', () => {
     const w = await world();
     const doc = await w.mk({ markup: '<h1>x</h1>', title: 'D' });
     listen();
-    const r = await deleteRoute(request(`/api/my/artifacts/${doc.id}`, { method: 'DELETE', cookie: w.cookie }), params(doc.id));
+    const r = await deleteRoute(request(`/api/my/artifacts/${doc.id}`, { browser: true, method: 'DELETE', cookie: w.cookie }), params(doc.id));
     expect(r.status).toBe(200);
     await new Promise((res) => setTimeout(res, 80));
     expect(said('deleted')).toHaveLength(1);
@@ -119,7 +119,7 @@ describe('a delete is said once, at the door, and never twice', () => {
     await w.mk({ markup: '<h1>a</h1>', title: 'A', parent_id: folder.id });
     await w.mk({ markup: '<h1>b</h1>', title: 'B', parent_id: folder.id });
     listen();
-    await deleteRoute(request(`/api/my/artifacts/${folder.id}`, { method: 'DELETE', cookie: w.cookie }), params(folder.id));
+    await deleteRoute(request(`/api/my/artifacts/${folder.id}`, { browser: true, method: 'DELETE', cookie: w.cookie }), params(folder.id));
     await new Promise((res) => setTimeout(res, 80));
     expect(said('deleted')[0]).toMatchObject({ object_id: folder.id, payload: { format: 'folder', subtree: 2 } });
   });
@@ -128,9 +128,9 @@ describe('a delete is said once, at the door, and never twice', () => {
     const w = await world();
     const folder = await w.mk({ format: 'folder', title: 'F' });
     const doc = await w.mk({ markup: '<h1>x</h1>', title: 'D', parent_id: folder.id });
-    await deleteRoute(request(`/api/my/artifacts/${doc.id}`, { method: 'DELETE', cookie: w.cookie }), params(doc.id));
+    await deleteRoute(request(`/api/my/artifacts/${doc.id}`, { browser: true, method: 'DELETE', cookie: w.cookie }), params(doc.id));
     listen();
-    const r = await restoreRoute(request(`/api/my/artifacts/${doc.id}/restore`, { method: 'POST', cookie: w.cookie }), params(doc.id));
+    const r = await restoreRoute(request(`/api/my/artifacts/${doc.id}/restore`, { browser: true, method: 'POST', cookie: w.cookie }), params(doc.id));
     expect(r.status).toBe(200);
     expect(said('restored')).toHaveLength(1);
     expect(said('restored')[0]).toMatchObject({ object_id: doc.id, payload: { landed_at_root: false } });
@@ -140,10 +140,10 @@ describe('a delete is said once, at the door, and never twice', () => {
     const w = await world();
     const folder = await w.mk({ format: 'folder', title: 'F' });
     const doc = await w.mk({ markup: '<h1>x</h1>', title: 'D', parent_id: folder.id });
-    await deleteRoute(request(`/api/my/artifacts/${folder.id}`, { method: 'DELETE', cookie: w.cookie }), params(folder.id));
+    await deleteRoute(request(`/api/my/artifacts/${folder.id}`, { browser: true, method: 'DELETE', cookie: w.cookie }), params(folder.id));
     // Restore the CHILD alone: its folder is still trashed, so it re-roots.
     listen();
-    await restoreRoute(request(`/api/my/artifacts/${doc.id}/restore`, { method: 'POST', cookie: w.cookie }), params(doc.id));
+    await restoreRoute(request(`/api/my/artifacts/${doc.id}/restore`, { browser: true, method: 'POST', cookie: w.cookie }), params(doc.id));
     expect(said('restored')[0]?.payload).toMatchObject({ landed_at_root: true });
   });
 });

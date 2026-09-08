@@ -90,10 +90,10 @@ describe('node project through real routes',()=>{
   });
   it('creating and deleting a comment does not edit or clean identity from source',async()=>{
     const s=await setup('<p id="para">Hi</p>');const base=await s.read();const before=await history(s.doc.id);const cookie=await agentCookie([s.t.id]);
-    const made=await commentRoute(request(`/api/my/artifacts/${s.doc.id}/annotations`,{method:'POST',cookie,json:{node_id:'para',body:'Check'}}),params(s.doc.id));
+    const made=await commentRoute(request(`/api/my/artifacts/${s.doc.id}/annotations`,{ browser: true,method:'POST',cookie,json:{node_id:'para',body:'Check'}}),params(s.doc.id));
     expect(made.status,await made.clone().text()).toBe(201);const ann=await made.json();
     const commented=await s.read();expect(commented.edit_id).toBe(base.edit_id);expect(commented.markup).toBe(base.markup);expect(await history(s.doc.id)).toEqual(before);
-    const deleted=await deleteCommentRoute(request(`/api/my/artifacts/${s.doc.id}/annotations/${ann.id}`,{method:'DELETE',cookie}),{params:Promise.resolve({id:s.doc.id,annId:ann.id})});
+    const deleted=await deleteCommentRoute(request(`/api/my/artifacts/${s.doc.id}/annotations/${ann.id}`,{ browser: true,method:'DELETE',cookie}),{params:Promise.resolve({id:s.doc.id,annId:ann.id})});
     expect(deleted.status).toBeLessThan(300);expect((await s.read()).markup).toBe(base.markup);expect(await history(s.doc.id)).toEqual(before);
   });
   it('rejects mixed edit forms by presence without touching history',async()=>{

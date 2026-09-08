@@ -221,6 +221,7 @@ export function session(o: ProxyOptions): Part<ProxyEnv> {
       // token back into authority. Unknown credentials must remain available
       // to the separate operator-secret verifier; they are not app tokens.
       const authorization = c.req.raw.headers.get('authorization') ?? '';
+      if (/^Bearer(?:\s|$)/i.test(authorization)) c.req.raw.headers.delete('cookie');
       if (/^Bearer(?:\s|$)/i.test(authorization) && actor.credential !== 'bearer'
         && await o.tokens.byToken(authorization.slice(6).trim())) c.req.raw.headers.delete('authorization');
       await next();
@@ -386,7 +387,7 @@ export const createProxy = (o: ProxyOptions): ProxyApp => assemble(proxyParts(o)
 const browserBoundaries = new WeakMap<ProxyOptions, BrowserBoundary | null>();
 const agentBrowsers = new WeakMap<ProxyOptions, ReturnType<typeof createAgentBrowser>>();
 function agentBrowserOf(o: ProxyOptions) {
-  if (!o.identityDb || !browserBoundaryOf(o)) return null;
+  if (!o.identityDb || !readEnv(o.env,'APP__CONTROLS_ORIGIN')) return null;
   if (!agentBrowsers.has(o)) agentBrowsers.set(o,createAgentBrowser({db:o.identityDb,tokens:o.tokens,secret:o.cookieSecret,
     main:readEnv(o.env,'APP__PUBLIC_BASE_URL')!,secure:o.secure ?? false,schema:readEnv(o.env,'AUTH__SCHEMA') ?? 'auth'}));
   return agentBrowsers.get(o)!;
@@ -394,7 +395,8 @@ function agentBrowserOf(o: ProxyOptions) {
 function browserBoundaryOf(o: ProxyOptions): BrowserBoundary | null {
   if (!browserBoundaries.has(o)) {
     const controls = readEnv(o.env, 'APP__CONTROLS_ORIGIN');
-    browserBoundaries.set(o, controls ? createBrowserBoundary(readEnv(o.env, 'APP__PUBLIC_BASE_URL') ?? '', controls) : null);
+    const main=readEnv(o.env,'APP__PUBLIC_BASE_URL');
+    browserBoundaries.set(o, main ? createBrowserBoundary(main, controls) : null);
   }
   return browserBoundaries.get(o)!;
 }
@@ -421,7 +423,7 @@ async function resolveActor(request: Request, o: ProxyOptions): Promise<Actor> {
     }
   }
   const secure = o.secure ?? false;
-  const held = boundary ? await agentBrowserOf(o)?.full(request.headers.get('cookie'))
+  const held = readEnv(o.env,'APP__CONTROLS_ORIGIN') ? await agentBrowserOf(o)?.full(request.headers.get('cookie'))
     : decodeAgentSession(readCookie(request.headers.get('cookie'), cookieName(secure)), o.cookieSecret);
   const heldIds = held?.tokenIds.length ? { heldTokenIds: held.tokenIds } : {};
   const session = await o.sessions.resolve(request).catch(() => null);

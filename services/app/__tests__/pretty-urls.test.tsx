@@ -338,7 +338,7 @@ describe('PATCH /api/my/artifacts/:id — the metadata-only move', () => {
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
     const moved = await patchArtifactRoute(
-      request(`/api/my/artifacts/${doc.id}`, { method: 'PATCH', json: { parent_id: box.id } }),
+      request(`/api/my/artifacts/${doc.id}`, { browser:true, method: 'PATCH', json: { parent_id: box.id } }),
       params({ id: doc.id }),
     );
     expect(moved.status).toBe(200);
@@ -357,7 +357,7 @@ describe('PATCH /api/my/artifacts/:id — the metadata-only move', () => {
       [{ parent_id: doc.id }, 'invalid_parent'],
     ] as const) {
       const bad = await patchArtifactRoute(
-        request(`/api/my/artifacts/${doc.id}`, { method: 'PATCH', json: body }),
+        request(`/api/my/artifacts/${doc.id}`, { browser:true, method: 'PATCH', json: body }),
         params({ id: doc.id }),
       );
       expect(bad.status, JSON.stringify(body)).toBe(400);

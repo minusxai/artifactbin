@@ -21,11 +21,11 @@ async function postgresDataset(owner:Awaited<ReturnType<typeof user>>){
 }
 it('refuses reader and owner forks after a live read; a new dataset requires its own replacement secret',async()=>{
  const owner=await user('owner'),reader=await user('reader'),{id,definition}=await postgresDataset(owner);
- const warm=await tables(request(`/a/${id}/tables`,{method:'POST',actor:{credential:'session',userId:reader.account.id,email:reader.account.email??'',emailVerified:true},json:{sql:'select * from rows'}}),ctx(id));expect(warm.status).toBe(200);
+ const warm=await tables(request(`/a/${id}/tables`,{ browser: true,method:'POST',actor:{credential:'session',userId:reader.account.id,email:reader.account.email??'',emailVerified:true},json:{sql:'select * from rows'}}),ctx(id));expect(warm.status).toBe(200);
  const db=await harness.db();const before=Number((await db.query<{n:string}>('SELECT count(*) n FROM artifacts')).rows[0].n);
  for(const actor of [reader,owner]){
   current.id=actor.account.id;current.email=actor.account.email??'';
-  const denied=await forkRoute(request(`/api/my/artifacts/${id}/fork`,{method:'POST'}),ctx(id));expect(denied.status).toBe(403);expect(await denied.json()).toMatchObject({error:'not_forkable',hint:expect.stringContaining('bound to the original dataset')});
+  const denied=await forkRoute(request(`/api/my/artifacts/${id}/fork`,{ browser: true,method:'POST'}),ctx(id));expect(denied.status).toBe(403);expect(await denied.json()).toMatchObject({error:'not_forkable',hint:expect.stringContaining('bound to the original dataset')});
   expect(Number((await db.query<{n:string}>('SELECT count(*) n FROM artifacts')).rows[0].n)).toBe(before);
  }
  const reused=await create(request('/api/artifacts',{method:'POST',token:owner.token.token,json:{dataset:definition,visibility:'public'}}));expect(reused.status).toBe(403);
@@ -37,7 +37,7 @@ it('refuses a shared editor fork and copying the dataset-bound secret into a new
  const owner=await user('owner'),editor=await user('editor'),{id,definition}=await postgresDataset(owner),db=await harness.db();
  await db.query("INSERT INTO artifact_shares(artifact_id,email,role) VALUES($1,$2,'editor')",[id,editor.account.email]);
  current.id=editor.account.id;current.email=editor.account.email??'';
- const response=await forkRoute(request(`/api/my/artifacts/${id}/fork`,{method:'POST'}),ctx(id));expect(response.status).toBe(403);expect(await response.json()).toMatchObject({error:'not_forkable'});
+ const response=await forkRoute(request(`/api/my/artifacts/${id}/fork`,{ browser: true,method:'POST'}),ctx(id));expect(response.status).toBe(403);expect(await response.json()).toMatchObject({error:'not_forkable'});
  const copied=await create(request('/api/artifacts',{method:'POST',token:editor.token.token,json:{dataset:definition,visibility:'public'}}));expect(copied.status).toBe(403);
  expect(Number((await db.query<{n:string}>('SELECT count(*) n FROM artifacts')).rows[0].n)).toBe(1);
 });

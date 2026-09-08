@@ -16,7 +16,7 @@ async function makePostgres(id:string,tokenId:string){const secret=await createD
 describe('Postgres dataset access boundaries',()=>{
  it('refuses readwrite before applying any other sharing fields and reports dataset kind',async()=>{
   const {token,id}=await stored();await makePostgres(id,token.id);const cookie=await agentCookie([token.id]);
-  const response=await sharingPut(request(`/api/my/artifacts/${id}/sharing`,{method:'PUT',cookie,json:{access:'readwrite',visibility:'unlisted',shares:[{email:'friend@example.com',role:'editor'}]}}),params(id));
+  const response=await sharingPut(request(`/api/my/artifacts/${id}/sharing`,{ browser: true,method:'PUT',cookie,json:{access:'readwrite',visibility:'unlisted',shares:[{email:'friend@example.com',role:'editor'}]}}),params(id));
   expect(response.status).toBe(400);expect(await response.json()).toMatchObject({error:'dataset_read_only'});
   expect(await getArtifactById(id)).toMatchObject({access:'read',visibility:'public'});
   const state=await sharingGet(request(`/api/my/artifacts/${id}/sharing`,{cookie}),params(id));

@@ -25,14 +25,14 @@ it('commits a permitted non-owner dataset write immediately without consent',asy
   const dataset=await publish({dataset:[{n:1}],access:'readwrite'});
   const document=await publish({markup:`<Helmet><Mutation name="add">{\`insert into ref_${dataset} values (2)\`}</Mutation></Helmet><Button run="$add">Add</Button>`});
   await updateSharingFor({tokenId:owner.id,userId:null},dataset,{shares:[{email:viewer.email,role:'editor'}]});
-  const req=attachActor(new Request(`${trusted}/a/${document}/mutate`,{method:'POST',headers:{origin:trusted,'content-type':'application/json'},body:JSON.stringify({mutation:'add'})}),{credential:'session',userId:viewer.id,email:viewer.email,sessionId:'session-one'});
+  const req=attachActor(new Request(`${trusted}/a/${document}/mutate`,{method:'POST',headers:{origin:trusted,'x-artifactbin-csrf':'1','content-type':'application/json'},body:JSON.stringify({mutation:'add'})}),{credential:'session',userId:viewer.id,email:viewer.email,sessionId:'session-one'});
   const response=await mutate(req,{params:Promise.resolve({id:document})});
   expect(response.status).toBe(200);
   expect(await response.json()).not.toHaveProperty('consentUrl');
   expect((await getArtifactById(dataset))?.version).toBe(2);
-  const readOnly=attachActor(new Request(`${trusted}/a/${document}/mutate`,{method:'POST',headers:{origin:trusted,'content-type':'application/json'},body:JSON.stringify({mutation:'add'})}),{credential:'read-session',userId:viewer.id,email:viewer.email});
+  const readOnly=attachActor(new Request(`${trusted}/a/${document}/mutate`,{method:'POST',headers:{origin:trusted,'x-artifactbin-csrf':'1','content-type':'application/json'},body:JSON.stringify({mutation:'add'})}),{credential:'read-session',userId:viewer.id,email:viewer.email});
   expect((await mutate(readOnly,{params:Promise.resolve({id:document})})).status).toBe(403);
-  const write=(origin=trusted)=>mutate(attachActor(new Request(`${trusted}/a/${document}/mutate`,{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify({mutation:'add'})}),{credential:'session',userId:viewer.id,email:viewer.email}),{params:Promise.resolve({id:document})});
+  const write=(origin=trusted)=>mutate(attachActor(new Request(`${trusted}/a/${document}/mutate`,{method:'POST',headers:{origin,'x-artifactbin-csrf':'1','content-type':'application/json'},body:JSON.stringify({mutation:'add'})}),{credential:'session',userId:viewer.id,email:viewer.email}),{params:Promise.resolve({id:document})});
   // Cross-site guard here; the stricter main-vs-controls boundary is proxy-owned.
   expect((await write('https://evil.example')).status).toBe(403);
   await updateSharingFor({tokenId:owner.id,userId:null},dataset,{shares:[]});

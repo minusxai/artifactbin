@@ -55,7 +55,7 @@ it('gives dataset editors exposure control but rejects credential redirection an
 it('keeps a pre-claim pending secret with its claimed account and rejects unauthenticated creation',async()=>{
  const token=await mintToken('claim');const made=await createSecret(request('/api/my/secrets',{method:'POST',token:token.token,json:{value:'claim-password',connection:target}}));expect(made.status).toBe(201);const user=await createUser({email:'mxmx_test_secret_review_claim@example.com'});await claimToken(user.id,token.token);const secret=(await made.json()).secret.id;
  expect((await discover(request('/api/my/datasets/discover',{method:'POST',token:token.token,json:{connection:{...target,passwordSecretId:secret}}}))).status).toBe(200);
- expect((await createSecret(request('/api/my/secrets',{method:'POST',json:{value:'x',connection:target}}))).status).toBe(401);
+ expect((await createSecret(request('/api/my/secrets',{ browser: true,method:'POST',json:{value:'x',connection:target}}))).status).toBe(401);
 });
 it('never returns connection, notebook, or secret material through public dataset reads',async()=>{
  const {owner,dataset}=await fixture();const published=await createArtifact(request('/api/artifacts',{method:'POST',token:owner.token.token,json:{dataset:{...dataset,notebook:{cells:[]}},visibility:'public'}}));expect(published.status,await published.clone().text()).toBe(201);const body=await published.json();expect(body.markup).toContain('<Connection');expect(body.markup).not.toContain('private-review-password');

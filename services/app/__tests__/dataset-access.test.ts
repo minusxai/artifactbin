@@ -76,7 +76,7 @@ describe('access on the browser surfaces', () => {
     const t = await mintToken('t');
     const cookie = await agentCookie([t.id]);
     const id = ((await (await create(t.token, { dataset: ROWS })).json()) as { id: string }).id;
-    const res = await sessionPatchRoute(request(`/api/my/artifacts/${id}`, { method: 'PATCH', cookie: cookie, json: { access: 'readwrite' } }), params({ id }));
+    const res = await sessionPatchRoute(request(`/api/my/artifacts/${id}`, { browser: true, method: 'PATCH', cookie: cookie, json: { access: 'readwrite' } }), params({ id }));
     expect(res.status).toBe(200);
     expect((await res.json()) as object).toMatchObject({ id, access: 'readwrite' });
     const row = (await getArtifactById(id))!;
@@ -84,7 +84,7 @@ describe('access on the browser surfaces', () => {
     expect(row.version).toBe(1);
 
     const doc = ((await (await create(t.token, { markup: '<p>hi</p>' })).json()) as { id: string }).id;
-    const nope = await sessionPatchRoute(request(`/api/my/artifacts/${doc}`, { method: 'PATCH', cookie: cookie, json: { access: 'readwrite' } }), params({ id: doc }));
+    const nope = await sessionPatchRoute(request(`/api/my/artifacts/${doc}`, { browser: true, method: 'PATCH', cookie: cookie, json: { access: 'readwrite' } }), params({ id: doc }));
     expect(nope.status).toBe(400);
   });
 
@@ -106,7 +106,7 @@ describe('access on the browser surfaces', () => {
     expect(state.access).toBe('readwrite');
     expect(state.writtenBy).toEqual([{ id: ((await doc.json()) as { id: string }).id, title: 'Lunch poll', mutations: ['vote'] }]);
 
-    const put = await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', cookie: cookie, json: { access: 'read' } }), params({ id: ds }));
+    const put = await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { browser: true, method: 'PUT', cookie: cookie, json: { access: 'read' } }), params({ id: ds }));
     expect(put.status).toBe(200);
     expect(((await put.json()) as { access: string }).access).toBe('read');
     expect((await getArtifactById(ds))!.access).toBe('read');
@@ -122,11 +122,11 @@ describe('access on the browser surfaces', () => {
     const doc = ((await (await create(t.token, { markup: '<p>not a dataset</p>' })).json()) as { id: string }).id;
 
     const viaSharing = await sharingPut(
-      request(`/api/my/artifacts/${doc}/sharing`, { method: 'PUT', cookie: cookie, json: { access: 'readwrite' } }),
+      request(`/api/my/artifacts/${doc}/sharing`, { browser: true, method: 'PUT', cookie: cookie, json: { access: 'readwrite' } }),
       params({ id: doc }),
     );
     const viaPatch = await sessionPatchRoute(
-      request(`/api/my/artifacts/${doc}`, { method: 'PATCH', cookie: cookie, json: { access: 'readwrite' } }),
+      request(`/api/my/artifacts/${doc}`, { browser: true, method: 'PATCH', cookie: cookie, json: { access: 'readwrite' } }),
       params({ id: doc }),
     );
     expect([viaSharing.status, viaPatch.status]).toEqual([400, 400]);
@@ -138,11 +138,11 @@ describe('access on the browser surfaces', () => {
     const t = await mintToken('t');
     const cookie = await agentCookie([t.id]);
     const ds = ((await (await create(t.token, { dataset: ROWS })).json()) as { id: string }).id;
-    const sharing = await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', cookie: cookie, json: { access: 'readwrite' } }), params({ id: ds }));
+    const sharing = await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { browser: true, method: 'PUT', cookie: cookie, json: { access: 'readwrite' } }), params({ id: ds }));
     expect(sharing.status).toBe(200);
     expect((await sharing.json()) as object).toMatchObject({ access: 'readwrite' });
-    await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', cookie: cookie, json: { access: 'read' } }), params({ id: ds }));
-    const patch = await sessionPatchRoute(request(`/api/my/artifacts/${ds}`, { method: 'PATCH', cookie: cookie, json: { access: 'readwrite' } }), params({ id: ds }));
+    await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { browser: true, method: 'PUT', cookie: cookie, json: { access: 'read' } }), params({ id: ds }));
+    const patch = await sessionPatchRoute(request(`/api/my/artifacts/${ds}`, { browser: true, method: 'PATCH', cookie: cookie, json: { access: 'readwrite' } }), params({ id: ds }));
     expect(patch.status).toBe(200);
     expect((await patch.json()) as object).toMatchObject({ access: 'readwrite' });
   });
@@ -154,10 +154,10 @@ describe('access on the browser surfaces', () => {
     const got = await sharingGet(request(`/api/my/artifacts/${ds}/sharing`, { cookie: cookie }), params({ id: ds }));
     expect(got.status).toBe(200);
     expect((await got.json()) as object).toMatchObject({ visibility: 'public', access: 'read', shares: [] });
-    const rw = await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', cookie: cookie, json: { access: 'readwrite', visibility: 'unlisted' } }), params({ id: ds }));
+    const rw = await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { browser: true, method: 'PUT', cookie: cookie, json: { access: 'readwrite', visibility: 'unlisted' } }), params({ id: ds }));
     expect(rw.status).toBe(200);
     expect((await getArtifactById(ds))!).toMatchObject({ access: 'readwrite', visibility: 'unlisted' });
-    const priv = await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', cookie: cookie, json: { visibility: 'private' } }), params({ id: ds }));
+    const priv = await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { browser: true, method: 'PUT', cookie: cookie, json: { visibility: 'private' } }), params({ id: ds }));
     expect(priv.status).toBe(400);
     expect(((await priv.json()) as { error: string }).error).toBe('private_requires_account');
     // A stranger's cookie is the uniform 404.

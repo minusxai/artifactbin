@@ -53,7 +53,7 @@ const share = async (ownerId: string, id: string, emails: string[]) => {
   sessionUser.id = ownerId;
   sessionUser.email = 'share-owner@example.com';
   const res = await putSharingRoute(
-    request(`/api/my/artifacts/${id}/sharing`, { method: 'PUT', json: { shares: emails } }),
+    request(`/api/my/artifacts/${id}/sharing`, { browser: true, method: 'PUT', json: { shares: emails } }),
     params({ id }),
   );
   expect(res.status).toBe(200);

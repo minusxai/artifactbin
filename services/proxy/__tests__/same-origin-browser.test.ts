@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
-import { actorOf, inProcess } from '@artifactbin/utils';
+import { actorOf, inProcess, cookieName, encodeAgentSession } from '@artifactbin/utils';
 import { createProxy, type ProxyOptions } from '../src/parts';
 import { mintTestToken, testDb, testProxyOptions } from './helpers';
 
@@ -24,7 +24,7 @@ describe('same-origin proxy authority without a controls hostname', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ credential: 'session', userId: 'viewer' });
   });
-  it.each([
+  it.each<Record<string,string>>([
     {},
     { origin: main },
     { origin: 'null', 'x-artifactbin-csrf': '1' },
@@ -39,5 +39,32 @@ describe('same-origin proxy authority without a controls hostname', () => {
     const response = await call({ authorization: `Bearer ${bearer}` }, '/api/artifacts');
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ credential: 'bearer', userId: 'agent' });
+  });
+  it('does not pass ambient cookies downstream with an invalid bearer',async()=>{
+    const proxy=createProxy({...options,upstream:async(request,actor)=>Response.json({actor,cookie:request.headers.get('cookie')})});
+    const response=await proxy.request(main+'/api/artifacts',{method:'POST',headers:{authorization:'Bearer invalid',cookie:'session=valid'}});
+    expect(await response.json()).toEqual({actor:{credential:'none'},cookie:null});
+  });
+  it('rejects foreign and opaque private reads while admitting navigation and native same-origin streams',async()=>{
+    const proxy=createProxy(options);
+    for(const origin of ['null','https://evil.example.test','http://example.test']){
+      expect((await proxy.request(main+'/api/page/session',{headers:{origin,'sec-fetch-site':'same-origin'}})).status).toBe(403);
+    }
+    expect((await proxy.request(main+'/account',{headers:{'sec-fetch-mode':'navigate','sec-fetch-site':'none'}})).status).toBe(200);
+    expect((await proxy.request(main+'/account',{headers:{'sec-fetch-mode':'navigate','sec-fetch-dest':'document','sec-fetch-site':'cross-site'}})).status).toBe(200);
+    expect((await proxy.request(main+'/api/page/session',{headers:{'sec-fetch-mode':'navigate','sec-fetch-dest':'document','sec-fetch-site':'cross-site'}})).status).toBe(403);
+    expect((await proxy.request(main+'/a/abc123/events',{headers:{accept:'text/event-stream','sec-fetch-site':'same-origin'}})).status).toBe(200);
+    expect((await proxy.request(main+'/api/page/session',{headers:{'sec-fetch-site':'same-origin'}})).status).toBe(200);
+    expect((await proxy.request(main+'/api/page/session')).status).toBe(403);
+    expect((await proxy.request(main+'/a/abc123/events',{headers:{accept:'text/event-stream'}})).status).toBe(403);
+  });
+  it('preserves held-token authority only with proof, and leaves truly anonymous declared mutations to their route ACL',async()=>{
+    const proxy=createProxy({...options,sessions:{resolve:async()=>null}});
+    const cookie=`${cookieName(false)}=${encodeAgentSession({tokenIds:['same-origin-agent']},options.cookieSecret)}`;
+    const allowed=await proxy.request(main+'/a/abc123/mutate',{method:'POST',headers:{cookie,origin:main,'x-artifactbin-csrf':'1'}});
+    expect(await allowed.json()).toMatchObject({credential:'agent-cookie',tokenId:'same-origin-agent'});
+    expect((await proxy.request(main+'/a/abc123/mutate',{method:'POST',headers:{cookie,origin:'null'}})).status).toBe(403);
+    const anonymous=await proxy.request(main+'/a/abc123/mutate',{method:'POST'});
+    expect(await anonymous.json()).toEqual({credential:'none'});
   });
 });

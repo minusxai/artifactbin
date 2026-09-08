@@ -1,3 +1,4 @@
+import {PUBLIC_BASE_URL,CONTROLS_ORIGIN} from '@/lib/config';
 /**
  * A SHARE CARRIES A ROLE — and the third role is COMMENTER: a named person who
  * may read the document and annotate it (open threads, reply, resolve), and
@@ -32,7 +33,7 @@ vi.mock('@/auth', () => ({
 }));
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 const jreq = (path: string, method: string, body?: unknown, token?: string) =>
-  new Request(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
+  new Request(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json', ...(!token ? {'Origin': CONTROLS_ORIGIN??new URL(PUBLIC_BASE_URL).origin, 'x-artifactbin-csrf':'1'} : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
 const asSession = (u: { id: string; email: string }) => { sessionUser.id = u.id; sessionUser.email = u.email; };
 const human = { kind: 'human' as const, label: null, transport: 'browser' as const };
 

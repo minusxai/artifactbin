@@ -59,7 +59,7 @@ interface AnnotationWire {
 }
 
 const annotate = (id: string, cookie: string, body: Record<string, unknown>, origin?: string) =>
-  myCreateAnnotationRoute(request(`/api/my/artifacts/${id}/annotations`, { method: 'POST', cookie: cookie, json: body, origin: origin }), params({ id }));
+  myCreateAnnotationRoute(request(`/api/my/artifacts/${id}/annotations`, { browser: true, method: 'POST', cookie: cookie, json: body, origin: origin }), params({ id }));
 
 /** The current head pointer — a create may have bumped it (the anchor-key stamping edit). */
 const headEditId = async (token: string, id: string) => {
@@ -215,7 +215,7 @@ describe('reply / resolve — the agent\'s one mutation', () => {
     expect(r2.thread[2].author).toMatchObject({ kind: 'agent', label: 'Codex', transport: 'http' });
 
     const reopened = await myActOnAnnotationRoute(
-      request(`/api/my/artifacts/${doc.id}/annotations/${a.id}`, { method: 'POST', cookie: cookie, json: { reopen: true } }),
+      request(`/api/my/artifacts/${doc.id}/annotations/${a.id}`, { browser: true, method: 'POST', cookie: cookie, json: { reopen: true } }),
       params({ id: doc.id, annId: a.id }),
     );
     expect(reopened.status).toBe(200);
@@ -238,7 +238,7 @@ describe('reply / resolve — the agent\'s one mutation', () => {
     const { doc, cookie } = await publish();
     const a = (await (await annotate(doc.id, cookie, { path: '1', edit_id: doc.edit_id, body: 'q' })).json()) as AnnotationWire;
     const res = await myActOnAnnotationRoute(
-      request(`/api/my/artifacts/${doc.id}/annotations/${a.id}`, { method: 'POST', cookie: cookie, json: { reply: 'never mind' } }),
+      request(`/api/my/artifacts/${doc.id}/annotations/${a.id}`, { browser: true, method: 'POST', cookie: cookie, json: { reply: 'never mind' } }),
       params({ id: doc.id, annId: a.id }),
     );
     expect(res.status).toBe(200);
@@ -286,13 +286,13 @@ describe('lifecycle', () => {
     const stranger = await mintToken('other');
     const strangerCookie = await agentCookie([stranger.id]);
     const refused = await myDeleteAnnotationRoute(
-      request(`/api/my/artifacts/${doc.id}/annotations/${a.id}`, { method: 'DELETE', cookie: strangerCookie }),
+      request(`/api/my/artifacts/${doc.id}/annotations/${a.id}`, { browser: true, method: 'DELETE', cookie: strangerCookie }),
       params({ id: doc.id, annId: a.id }),
     );
     expect(refused.status).toBe(404);
 
     const deleted = await myDeleteAnnotationRoute(
-      request(`/api/my/artifacts/${doc.id}/annotations/${a.id}`, { method: 'DELETE', cookie: cookie }),
+      request(`/api/my/artifacts/${doc.id}/annotations/${a.id}`, { browser: true, method: 'DELETE', cookie: cookie }),
       params({ id: doc.id, annId: a.id }),
     );
     expect(deleted.status).toBe(200);

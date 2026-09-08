@@ -9,9 +9,11 @@ export interface BrowserBoundary {
   check(request: Request, actor: Actor): Response | null;
   responseHeaders(request: Request, headers: Headers): Record<string, string>;
 }
-export function createBrowserBoundary(main: string, configured: string): BrowserBoundary {
-  const root = new URL(main), controls = new URL(parseControlsOrigin(main, configured));
-  if (root.hostname === controls.hostname) throw new Error('Controls require a distinct hostname');
+export function createBrowserBoundary(main: string, configured?: string): BrowserBoundary {
+  const root = new URL(main), controls = configured ? new URL(parseControlsOrigin(main, configured)) : root;
+  const split=!!configured;
+  const machineOAuth=(request:Request)=>/^\/oauth\/(?:token|register)$/.test(new URL(request.url).pathname);
+  if (split && root.hostname === controls.hostname) throw new Error('Controls require a distinct hostname');
   const read = (request: Request) => {
     const path = new URL(request.url).pathname;
     if (request.method === 'POST') return /^\/a\/[A-Za-z0-9]+\/query$/.test(path);
@@ -24,12 +26,37 @@ export function createBrowserBoundary(main: string, configured: string): Browser
   const deny = (error: string, status = 403) => Response.json({ error }, { status, headers: { 'cache-control': 'no-store' } });
   return {
     credentialAt(request) {
+      if(!split)return machineOAuth(request)?'none':'full';
       const host = new URL(request.url).host;
       return host === controls.host ? 'full' : host === root.host && read(request) ? 'read' : 'none';
     },
-    check(request, _actor) {
+    check(request, actor) {
       const { host, pathname } = new URL(request.url);
-      if (host !== root.host && host !== controls.host) return deny('unknown_host', 421);
+      if (split && host !== root.host && host !== controls.host) return deny('unknown_host', 421);
+      if(!split){
+        if(machineOAuth(request))return null; // route-owned PKCE/client proof, never cookies
+        // Bearer is an independent authority, including a rejected bearer that
+        // must reach the separate operator verifier without cookie fallback.
+        if(/^Bearer(?:\s|$)/i.test(request.headers.get('authorization')??''))return null;
+        const origin=request.headers.get('origin'),site=request.headers.get('sec-fetch-site');
+        const foreign=(origin!==null&&origin!==root.origin)||(site!==null&&!['same-origin','none'].includes(site));
+        const safe=['GET','HEAD','OPTIONS'].includes(request.method);
+        const callback=request.method==='GET'&&/^\/api\/auth\/(?:callback|oauth2\/callback)\/[^/]+$/.test(pathname);
+        if(callback)return null; // provider state/PKCE remains the route's proof
+        if(pathname==='/oauth/authorize/approve'&&request.method==='POST'){
+          return origin===root.origin&&!foreign&&(request.headers.get('accept')!=='application/json'||request.headers.get('x-artifactbin-csrf')==='1')?null:deny('browser_origin_required');
+        }
+        const cookie=actor.credential==='session'||actor.credential==='agent-cookie'||actor.credential==='read-session';
+        const privateApi=/^\/api\/(?:auth|my|page|browser|session)(?:\/|$)/.test(pathname);
+        const navigation=request.method==='GET'&&!/^\/(?:api|oauth)(?:\/|$)/.test(pathname)&&origin===null
+          &&request.headers.get('sec-fetch-mode')==='navigate'&&request.headers.get('sec-fetch-dest')==='document';
+        if(foreign&&!navigation&&(cookie||privateApi))return deny('browser_origin_required');
+        const dataRead=/^\/api(?:\/|$)/.test(pathname)||/^\/a\/[A-Za-z0-9]+\/(?:query|events(?:\/frame)?)$/.test(pathname);
+        if(safe&&cookie&&dataRead&&origin!==root.origin&&site!=='same-origin')return deny('browser_origin_required');
+        if(!safe&&(cookie||request.headers.has('cookie')||/^\/api\/auth(?:\/|$)/.test(pathname))
+          &&(origin!==root.origin||request.headers.get('x-artifactbin-csrf')!=='1'||(site!==null&&site!=='same-origin')))return deny('browser_origin_required');
+        return null;
+      }
       if (host === root.host) {
         if (pathname === '/oauth/authorize/approve') return deny('trusted_host_required');
         const publicPage = ['GET', 'HEAD'].includes(request.method) && /^\/api\/page\/(?:session|home|profile(?:\/.*)?)$/.test(pathname);
@@ -64,6 +91,7 @@ export function createBrowserBoundary(main: string, configured: string): Browser
       return null;
     },
     responseHeaders(request, headers): Record<string, string> {
+      if(!split)return {};
       if (new URL(request.url).host !== controls.host) return {};
       const url=new URL(request.url);
       const frameable = url.pathname==='/controls/consent' || /^\/controls\/(?:a|folder)\/[A-Za-z0-9]+$/.test(url.pathname) || platformFramePage(url.pathname)!==null || trustedRegionRoute(url.pathname,url.searchParams.get('page'))!==null;

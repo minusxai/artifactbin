@@ -43,7 +43,7 @@ describe('the 429 names the POLICY', () => {
   it('the login send is counted per ADDRESS and named login_send — the special case inside loginRoutes is gone', async () => {
     const app = await proxy();
     const send = (email: string) => app.request(`${BASE}/api/auth/email-otp/send-verification-otp`, {
-      method: 'POST', headers: { 'content-type': 'application/json', origin: BASE }, body: JSON.stringify({ email, type: 'sign-in' }),
+      method: 'POST', headers: { 'content-type': 'application/json', origin: BASE, 'x-artifactbin-csrf':'1' }, body: JSON.stringify({ email, type: 'sign-in' }),
     });
     expect((await send('Someone@Example.test')).status).toBe(200);
     const denied = await send('someone@example.test');
@@ -55,7 +55,7 @@ describe('the 429 names the POLICY', () => {
   it('an email-keyed route with no address in the body is 400 email_invalid — on ANY route, not just the one loginRoutes owns', async () => {
     const app = await proxy();
     const post = (path: string, body: unknown) => app.request(`${BASE}${path}`, {
-      method: 'POST', headers: { 'content-type': 'application/json', origin: BASE }, body: JSON.stringify(body),
+      method: 'POST', headers: { 'content-type': 'application/json', origin: BASE, 'x-artifactbin-csrf':'1' }, body: JSON.stringify(body),
     });
     // the login send, as `loginRoutes` used to do it by hand
     expect((await post('/api/auth/email-otp/send-verification-otp', { type: 'sign-in' })).status).toBe(400);

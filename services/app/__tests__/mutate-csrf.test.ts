@@ -37,7 +37,7 @@ vi.mock('@/auth', () => ({
 }));
 
 const mutationRequest = (path: string, init: { token?: string; cookie?: string; origin?: string; body?: unknown } = {}) =>
-  request(path, { method: 'POST', token: init.token, cookie: init.cookie, origin: init.origin, headers: { 'Content-Type': 'text/plain' }, json: init.body ?? {} });
+  request(path, { browser: !init.token, method: 'POST', token: init.token, cookie: init.cookie, origin: init.origin===BASE?'same':init.origin, headers: { 'Content-Type': 'text/plain' }, json: init.body ?? {} });
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 const create = async (token: string, body: Record<string, unknown>) => {
   const res = await createArtifactRoute(new Request(`${BASE}/api/artifacts`, {

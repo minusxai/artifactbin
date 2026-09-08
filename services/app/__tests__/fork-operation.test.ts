@@ -1,3 +1,4 @@
+import {PUBLIC_BASE_URL,CONTROLS_ORIGIN} from '@/lib/config';
 /**
  * F8 — agents can fork: `fork_artifact` on the operations registry (SEEDED RED by the orchestrator).
  *
@@ -28,7 +29,7 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const jreq = (path: string, method: string, body?: unknown, token?: string) =>
   new Request(`${BASE}${path}`, {
     method,
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {Origin:CONTROLS_ORIGIN??new URL(PUBLIC_BASE_URL).origin,'x-artifactbin-csrf':'1'}) },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
 const create = async (token: string, body: Record<string, unknown>) => {

@@ -154,7 +154,7 @@ describe('POST /api/start', () => {
     // agent — and an anonymous token reaches only what it created, so reusing
     // one would produce a document its own agent could not edit. A fresh token
     // per document is the answer the cookie's LIST was built for.
-    const secondRes = await startRoute(request('/api/start', { method: 'POST', cookie: cookie }));
+    const secondRes = await startRoute(request('/api/start', { browser: true, method: 'POST', cookie: cookie }));
     const second = (await secondRes.json()) as Start;
     expect(second.id).not.toBe(first.id);
 

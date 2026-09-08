@@ -68,7 +68,7 @@ async function setup() {
 
 const annotate = (id: string, cookie: string, editId: string) =>
   myCreateAnnotationRoute(
-    request(`/api/my/artifacts/${id}/annotations`, { method: 'POST', cookie: cookie, json: { path: '1', edit_id: editId, body: 'look here' } }),
+    request(`/api/my/artifacts/${id}/annotations`, { browser: true, method: 'POST', cookie: cookie, json: { path: '1', edit_id: editId, body: 'look here' } }),
     params({ id }),
   );
 

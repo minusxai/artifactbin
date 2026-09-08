@@ -176,7 +176,7 @@ describe('write events', () => {
     const doc = await create(t.token, { markup: '<p>x</p>' });
     sessionUser.id = user.id;
     sessionUser.email = user.email;
-    expect((await deleteMyArtifactRoute(request(`/api/my/artifacts/${doc.id}`, { method: 'DELETE' }), params({ id: doc.id }))).status).toBe(200);
+    expect((await deleteMyArtifactRoute(request(`/api/my/artifacts/${doc.id}`, { browser: true, method: 'DELETE' }), params({ id: doc.id }))).status).toBe(200);
     expect(await expectEvent(doc.id, 'delete')).toMatchObject({ user_id: user.id });
   });
 });

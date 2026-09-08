@@ -16,7 +16,7 @@ const verifier = 'v'.repeat(43);
 let pg: PGlite;
 let auth: HumanAuth;
 let app: ReturnType<typeof assemble<any>>;
-let session: { userId: string; email: string } | null = null;
+let session: { userId: string; email: string;sessionId:string } | null = null;
 let mintedCount = 0;
 
 const optionsOf = async (): Promise<ProxyOptions> => {
@@ -24,7 +24,7 @@ const optionsOf = async (): Promise<ProxyOptions> => {
   const base = await testProxyOptions({
     env: { PROXY__RATE_LIMIT_CONFIG_FILE: RELAXED_POLICY_FILE, APP__PUBLIC_BASE_URL: BASE },
     sessions: {
-      resolve: async () => session ? { userId: session.userId, email: session.email, emailVerified: true } : null,
+      resolve: async () => session ? { ...session, emailVerified: true } : null,
     },
     upstream: async (request, actor) => {
       if (new URL(request.url).pathname === '/api/tokens/anonymous' && actor.credential === 'session' && actor.userId) {
@@ -50,7 +50,7 @@ beforeAll(async () => {
 });
 afterAll(async () => { await pg.close(); });
 beforeEach(async () => { await resetTestDb(); session = null; });
-const asUser = (userId = 'usr_1', email = 'u@example.com') => { session = { userId, email }; return { cookie: 'sess=1' }; };
+const asUser = (userId = 'usr_1', email = 'u@example.com') => { session = { userId, email, sessionId:'test-session-'+userId }; return { cookie: 'sess=1' }; };
 
 async function register(redirectUri = REGISTERED_REDIRECT): Promise<string> {
   const response = await app.request('/oauth/register', {
@@ -73,10 +73,16 @@ const approveForm = (clientId: string) => new URLSearchParams({
 });
 
 async function approve(clientId: string): Promise<string> {
+  const headers=asUser();
+  const query=approveForm(clientId);query.set('response_type','code');query.set('code_challenge_method','S256');
+  const page=await app.request('/oauth/authorize?'+query,{headers});
+  expect(page.status).toBe(200);
+  const approval=/name="approval" value="([A-Za-z0-9_-]+)"/.exec(await page.text())?.[1];
+  expect(approval).toBeTruthy();
   const response = await app.request('/oauth/authorize/approve', {
     method: 'POST',
-    body: approveForm(clientId),
-    headers: { ...asUser(), 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({approval:approval!}),
+    headers: { ...headers, origin: BASE, 'content-type': 'application/x-www-form-urlencoded' },
   });
   expect(response.status).toBe(303);
   return new URL(response.headers.get('location')!).searchParams.get('code')!;
@@ -122,7 +128,7 @@ describe('the oauth provider routes', () => {
 
   it('exchanges a bound PKCE code and rotates refresh tokens without another login', async () => {
     const clientId = await register();
-    expect((await app.request('/oauth/authorize/approve', { method: 'POST', body: approveForm(clientId), headers: { 'content-type': 'application/x-www-form-urlencoded' } })).status).toBe(401);
+    expect((await app.request('/oauth/authorize/approve', { method: 'POST', body: approveForm(clientId), headers: { origin: BASE, 'content-type': 'application/x-www-form-urlencoded' } })).status).toBe(401);
     const code = await approve(clientId);
     const tokenResponse = await app.request('/oauth/token', {
       method: 'POST',

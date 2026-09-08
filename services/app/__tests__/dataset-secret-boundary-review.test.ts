@@ -65,6 +65,6 @@ it('keeps the editable definition available to editors while public readers rece
     expect(response.status).toBe(200); const wire = await response.text();
     for (const internal of ['private-review-password','passwordSecretId','db.example.com','notebookSources','private_note']) expect(wire).not.toContain(internal);
   }
-  const anonymous = await discover(request('/api/my/datasets/discover',{method:'POST',json:{datasetId:id,connection:dataset.connection}}));
+  const anonymous = await discover(request('/api/my/datasets/discover',{ browser: true,method:'POST',json:{datasetId:id,connection:dataset.connection}}));
   expect(anonymous.status).toBe(401);
 });

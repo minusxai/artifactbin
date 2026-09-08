@@ -1,75 +1,22 @@
-/**
- * `isCrossSiteRequest` / `parseCookie` — the two request-reading primitives the
- * cookie-auth surfaces stand on (lib/http).
- *
- * They were only ever exercised THROUGH routes, which hides their edges. Both
- * edges matter:
- *
- *  - a MISSING Origin must not read as cross-site. An agent curling the API
- *    with a bearer token sends none, and treating absence as hostile would
- *    break the whole protocol — the check exists for browsers, which always
- *    send it.
- *  - `Sec-Fetch-Site` is the browser's own verdict and wins when present; only
- *    `cross-site` is refused, because `same-origin` and `same-site` are ours
- *    and `none` is a user-typed address or a bookmark.
- *  - a cookie value is read WHOLE and undecoded: a JWE is URL-safe already,
- *    and a name must never match a prefix of another name.
- */
-import { describe, expect, it } from 'vitest';
-import { isCrossSiteRequest, parseCookie } from '@/lib/http';
-
-// harness-exempt: request constructs arbitrary absolute origins because request classification is the subject under test
-
-const req = (headers: Record<string, string>, url = 'https://app.test/api/x') =>
-  new Request(url, { headers });
-
-describe('isCrossSiteRequest', () => {
-  it('is false when nothing says otherwise — an agent sends no Origin', () => {
-    expect(isCrossSiteRequest(req({}))).toBe(false);
+import {describe,expect,it} from 'vitest';
+import {isCrossSiteRequest,parseCookie} from '@/lib/http';
+import {PUBLIC_BASE_URL,CONTROLS_ORIGIN} from '@/lib/config';
+const origin=CONTROLS_ORIGIN??new URL(PUBLIC_BASE_URL).origin;
+describe('isCrossSiteRequest',()=>{
+  const check=(headers:Record<string,string>)=>isCrossSiteRequest(new Request('http://internal:3000/api/x',{method:'POST',headers}));
+  it('requires explicit browser proof, never missing Origin or same-site alone',()=>{
+    const incomplete:Record<string,string>[]=[{},{origin},{'sec-fetch-site':'same-origin'},{origin,'x-artifactbin-csrf':'1','sec-fetch-site':'same-site'}];
+    for(const headers of incomplete)expect(check(headers)).toBe(true);
+    expect(check({origin,'x-artifactbin-csrf':'1'})).toBe(false);
+    expect(check({origin,'x-artifactbin-csrf':'1','sec-fetch-site':'same-origin'})).toBe(false);
   });
-
-  it('trusts Sec-Fetch-Site when the browser sent it', () => {
-    expect(isCrossSiteRequest(req({ 'sec-fetch-site': 'cross-site' }))).toBe(true);
-    for (const site of ['same-origin', 'same-site', 'none']) {
-      expect(isCrossSiteRequest(req({ 'sec-fetch-site': site })), site).toBe(false);
+  it('uses exact deployment origin, not conflicting metadata or forwarded hosts',()=>{
+    for(const foreign of ['null','https://evil.test','http://evil.test','not a url',origin.replace(/^https:/,'http:')+'evil']){
+      expect(check({origin:foreign,'x-artifactbin-csrf':'1','sec-fetch-site':'same-origin','x-forwarded-host':'evil.test',host:'evil.test'})).toBe(true);
     }
-  });
-
-  it('prefers Sec-Fetch-Site over Origin, since the browser computed it', () => {
-    // A same-origin fetch whose Origin header is absent/odd is still same-origin.
-    expect(isCrossSiteRequest(req({ 'sec-fetch-site': 'same-origin', origin: 'https://evil.test' }))).toBe(false);
-    expect(isCrossSiteRequest(req({ 'sec-fetch-site': 'cross-site', origin: 'https://app.test' }))).toBe(true);
-  });
-
-  it('falls back to comparing Origin HOST when Sec-Fetch-Site is absent', () => {
-    expect(isCrossSiteRequest(req({ origin: 'https://app.test' }))).toBe(false);
-    expect(isCrossSiteRequest(req({ origin: 'https://evil.test' }))).toBe(true);
-    // A different PORT is a different origin — and the host comparison sees it.
-    expect(isCrossSiteRequest(req({ origin: 'https://app.test:8443' }))).toBe(true);
-  });
-
-  it('compares against the HOST THE CLIENT ADDRESSED, not the server\'s own url', () => {
-    // Behind a reverse proxy the app is reached at the public name while
-    // `request.url` is the container's internal address, so comparing against
-    // that made every Origin look foreign: production answered 403 to any
-    // cookie-authenticated mutation from a browser that sends no
-    // Sec-Fetch-Site (older Safari). The Host header is what the client asked
-    // for, and is what nginx forwards.
-    const proxied = (headers: Record<string, string>) =>
-      new Request('http://localhost:3000/api/x', { headers });
-    expect(isCrossSiteRequest(proxied({ host: 'app.test', origin: 'https://app.test' }))).toBe(false);
-    expect(isCrossSiteRequest(proxied({ host: 'app.test', origin: 'https://evil.test' }))).toBe(true);
-    // X-Forwarded-Host wins where the proxy rewrites Host as well.
-    expect(isCrossSiteRequest(proxied({ host: 'internal:3000', 'x-forwarded-host': 'app.test', origin: 'https://app.test' }))).toBe(false);
-  });
-
-  it('treats an unparseable Origin as not ours', () => {
-    for (const origin of ['null', 'not a url', '://', 'javascript:alert(1)']) {
-      expect(isCrossSiteRequest(req({ origin })), origin).toBe(true);
-    }
+    expect(check({origin,'x-artifactbin-csrf':'1','sec-fetch-site':'cross-site'})).toBe(true);
   });
 });
-
 describe('parseCookie', () => {
   it('reads one cookie out of a header, whitespace and all', () => {
     expect(parseCookie('a=1; b=2', 'b')).toBe('2');

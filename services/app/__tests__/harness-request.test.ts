@@ -5,6 +5,7 @@
  * refused rather than silently merged.
  */
 import { describe, expect, it } from 'vitest';
+import {PUBLIC_BASE_URL,CONTROLS_ORIGIN} from '@/lib/config';
 import { GET as listArtifacts } from '@/app/api/artifacts/route';
 import { POST as reject } from '@/app/api/tokens/reject/route';
 import { AGENT_COOKIE, decodeAgentSession } from '@/lib/agent-session';
@@ -35,8 +36,15 @@ describe('request()', () => {
   });
   it('origin: "same" is the app\'s own origin; any other string is sent verbatim', () => {
     const same = request('/api/x', { origin: 'same' });
-    expect(same.headers.get('origin')).toBe(new URL(same.url).origin);
+    expect(same.headers.get('origin')).toBe(CONTROLS_ORIGIN??new URL(PUBLIC_BASE_URL).origin);
     expect(request('/api/x', { origin: 'https://evil.example' }).headers.get('origin')).toBe('https://evil.example');
+  });
+  it('adds browser proof only when explicitly requested and preserves hostile origin overrides',()=>{
+    expect(request('/api/x',{method:'POST'}).headers.get('x-artifactbin-csrf')).toBeNull();
+    const browser=request('/api/x',{method:'POST',browser:true});
+    expect(browser.headers.get('origin')).toBe(CONTROLS_ORIGIN??new URL(PUBLIC_BASE_URL).origin);
+    expect(browser.headers.get('x-artifactbin-csrf')).toBe('1');
+    expect(request('/api/x',{browser:true,origin:'null'}).headers.get('origin')).toBe('null');
   });
   it('refuses a bearer AND an actor in one request — two credentials is a test bug', async () => {
     const t = await mintToken('t');
@@ -53,12 +61,12 @@ describe('agentCookie() and cookieValue()', () => {
   it('reads a rewritten cookie and recognises a cleared one', async () => {
     const a = await mintToken('a');
     const b = await mintToken('b');
-    const res = await reject(request('/api/tokens/reject', { method: 'POST', json: { tokenId: a.id }, cookie: await agentCookie([a.id, b.id]) }));
+    const res = await reject(request('/api/tokens/reject', { browser: true, method: 'POST', json: { tokenId: a.id }, cookie: await agentCookie([a.id, b.id]) }));
     expect(res.status).toBe(204);
     const rewritten = cookieValue(res);
     expect(rewritten.cleared).toBe(false);
     expect(await decodeAgentSession(rewritten.value)).toEqual({ tokenIds: [b.id] });
-    const last = await reject(request('/api/tokens/reject', { method: 'POST', json: { tokenId: b.id }, cookie: rewritten.value ? `${AGENT_COOKIE}=${rewritten.value}` : '' }));
+    const last = await reject(request('/api/tokens/reject', { browser: true, method: 'POST', json: { tokenId: b.id }, cookie: rewritten.value ? `${AGENT_COOKIE}=${rewritten.value}` : '' }));
     expect(cookieValue(last).cleared).toBe(true);
     expect(cookieValue(new Response(null)).value).toBeNull();
   });

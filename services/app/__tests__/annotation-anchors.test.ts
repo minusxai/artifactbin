@@ -53,7 +53,7 @@ async function setup() {
   const cookie = await agentCookie([t.id]);
   // Annotate the <div> — body path '1' (no Helmet in this fixture, so body == source).
   const made = await myCreateAnnotationRoute(
-    request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', cookie: cookie, json: { path: '1', edit_id: doc.edit_id, body: 'check this figure' } }),
+    request(`/api/my/artifacts/${doc.id}/annotations`, { browser: true, method: 'POST', cookie: cookie, json: { path: '1', edit_id: doc.edit_id, body: 'check this figure' } }),
     params({ id: doc.id }),
   );
   expect(made.status, await made.clone().text()).toBe(201);
@@ -139,7 +139,7 @@ describe('the annotation anchor', () => {
     const { t, doc, cookie, ann } = await setup();
     const h = await head(t.token, doc.id);
     const second = await myCreateAnnotationRoute(
-      request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', cookie: cookie, json: { path: '1', edit_id: h.edit_id, body: 'also this' } }),
+      request(`/api/my/artifacts/${doc.id}/annotations`, { browser: true, method: 'POST', cookie: cookie, json: { path: '1', edit_id: h.edit_id, body: 'also this' } }),
       params({ id: doc.id }),
     );
     expect(second.status, await second.clone().text()).toBe(201);
@@ -153,7 +153,7 @@ describe('the annotation anchor', () => {
   it('deleting the last thread on a node cleans its attribute back out of the source', async () => {
     const { t, doc, cookie, ann } = await setup();
     const del = await myDeleteAnnotationRoute(
-      request(`/api/my/artifacts/${doc.id}/annotations/${ann.id}`, { method: 'DELETE', cookie: cookie }),
+      request(`/api/my/artifacts/${doc.id}/annotations/${ann.id}`, { browser: true, method: 'DELETE', cookie: cookie }),
       params({ id: doc.id, annId: ann.id }),
     );
     expect(del.status).toBe(200);
@@ -164,7 +164,7 @@ describe('the annotation anchor', () => {
   it('a prior comment does not stale the document head', async () => {
     const { t, doc, cookie } = await setup();
     const res = await myCreateAnnotationRoute(
-      request(`/api/my/artifacts/${doc.id}/annotations`, { method: 'POST', cookie: cookie, json: { path: '0', edit_id: doc.edit_id, body: 'x' } }),
+      request(`/api/my/artifacts/${doc.id}/annotations`, { browser: true, method: 'POST', cookie: cookie, json: { path: '0', edit_id: doc.edit_id, body: 'x' } }),
       params({ id: doc.id }),
     );
     expect(res.status).toBe(201);

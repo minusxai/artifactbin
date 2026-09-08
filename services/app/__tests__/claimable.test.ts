@@ -40,7 +40,7 @@ vi.mock('@/auth', () => ({ auth: async () => (sessionUser.id ? { user: { id: ses
 /** Ask as a browser holding exactly these token ids. */
 const claimableResponse = async (tokenIds: string[]) => {
   const cookie = tokenIds.length ? await agentCookie(tokenIds) : '';
-  const res = await claimableRoute(request('/api/tokens/claimable', { method: 'POST', cookie }));
+  const res = await claimableRoute(request('/api/tokens/claimable', { browser: true, method: 'POST', cookie }));
   return { status: res.status, body: await res.json() };
 };
 

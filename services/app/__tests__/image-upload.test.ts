@@ -37,6 +37,7 @@ const PNG_BYTES = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAD
 function imgReq(path: string, opts: { token?: string; bytes?: Buffer; contentType?: string } = {}): Request {
   const headers: Record<string, string> = { 'Content-Type': opts.contentType ?? 'image/png' };
   if (opts.token) headers.Authorization = `Bearer ${opts.token}`;
+  else Object.assign(headers, Object.fromEntries(request(path,{browser:true}).headers));
   return new Request(`${BASE}${path}`, {
     method: 'POST',
     headers,
@@ -47,6 +48,7 @@ function imgReq(path: string, opts: { token?: string; bytes?: Buffer; contentTyp
 function jsonReq(path: string, opts: { token?: string; body: unknown }): Request {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (opts.token) headers.Authorization = `Bearer ${opts.token}`;
+  else Object.assign(headers, Object.fromEntries(request(path,{browser:true}).headers));
   return new Request(`${BASE}${path}`, { method: 'POST', headers, body: JSON.stringify(opts.body) });
 }
 

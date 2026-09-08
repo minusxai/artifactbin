@@ -146,7 +146,7 @@ describe('POST /a/<id>/mutate — the document\'s door', () => {
     const doc = (await create(t.token, { markup: POLL(ds), visibility: 'private' })).id;
     expect((await mutate(doc, { mutation: 'vote', values: { choice: 'ramen' } })).status).toBe(404);
     const cookie = await agentCookie([t.id]);
-    const ok = await mutate(doc, { mutation: 'vote', values: { choice: 'ramen' } }, { cookie, origin: BASE });
+    const ok = await mutate(doc, { mutation: 'vote', values: { choice: 'ramen' } }, { browser:true, cookie, origin: 'same' });
     expect(ok.status, await ok.clone().text()).toBe(200);
     const csrf = await mutate(doc, { mutation: 'vote', values: { choice: 'ramen' } }, { cookie, origin: 'https://evil.example' });
     expect(csrf.status).toBe(403);

@@ -88,16 +88,16 @@ describe('GET/PATCH /api/my/profile', () => {
     const profile = await (await getProfileRoute(request('/api/my/profile'))).json();
     expect(profile).toMatchObject({ email: 'me@x.com', username: user.username });
 
-    const renamed = await patchProfileRoute(request('/api/my/profile', { method: 'PATCH', json: { username: 'brand_new' } }));
+    const renamed = await patchProfileRoute(request('/api/my/profile', { browser: true, method: 'PATCH', json: { username: 'brand_new' } }));
     expect(renamed.status).toBe(200);
     expect(await renamed.json()).toMatchObject({ username: 'brand_new' });
 
     const taken = await createUser({ email: 'other@x.com' });
     await ensureUsername(taken);
     sessionUser.id = taken.id;
-    const conflict = await patchProfileRoute(request('/api/my/profile', { method: 'PATCH', json: { username: 'brand_new' } }));
+    const conflict = await patchProfileRoute(request('/api/my/profile', { browser: true, method: 'PATCH', json: { username: 'brand_new' } }));
     expect(conflict.status).toBe(409);
-    const invalid = await patchProfileRoute(request('/api/my/profile', { method: 'PATCH', json: { username: 'no-hyphens' } }));
+    const invalid = await patchProfileRoute(request('/api/my/profile', { browser: true, method: 'PATCH', json: { username: 'no-hyphens' } }));
     expect(invalid.status).toBe(400);
   });
 });

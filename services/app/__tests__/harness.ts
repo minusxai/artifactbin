@@ -10,7 +10,7 @@ import { attachActor } from '@artifactbin/utils';
 import type { Actor } from '@artifactbin/contracts';
 import { AGENT_COOKIE, encodeAgentSession } from '@/lib/agent-session';
 import { resetRateLimit } from '@/lib/auth';
-import { EVENTS_SCHEMA } from '@/lib/config';
+import { EVENTS_SCHEMA, PUBLIC_BASE_URL, CONTROLS_ORIGIN } from '@/lib/config';
 import { getDb, resetDb } from '@/lib/db';
 import { SCHEMA_STATEMENTS } from '@/lib/schema';
 
@@ -32,6 +32,8 @@ export interface RequestOptions {
   actor?: Actor;
   /** The browser's cookie header, e.g. from `agentCookie(ids)`. */
   cookie?: string;
+  /** Explicit first-party browser fetch proof. Omit for negative CSRF/bearer tests. */
+  browser?: boolean;
   /** An Origin header (CSRF tests); `same` means the app's own origin. */
   origin?: string | 'same';
   headers?: Record<string, string>;
@@ -46,12 +48,14 @@ export function request(path: string, opts: RequestOptions = {}): Request {
   if (opts.token && opts.actor) throw new Error('request accepts only one credential: token or actor');
 
   const headers = new Headers(opts.headers);
+  const browserOrigin=CONTROLS_ORIGIN??new URL(PUBLIC_BASE_URL).origin;
+  if(opts.browser){headers.set('origin',browserOrigin);headers.set('x-artifactbin-csrf','1');headers.set('sec-fetch-site','same-origin');}
   if (opts.json !== undefined && !headers.has('content-type')) headers.set('content-type', 'application/json');
   if (opts.token) headers.set('authorization', `Bearer ${opts.token}`);
   if (opts.cookie !== undefined) headers.set('cookie', opts.cookie);
 
   const baseUrl = 'http://localhost:3000';
-  if (opts.origin) headers.set('origin', opts.origin === 'same' ? baseUrl : opts.origin);
+  if (opts.origin) headers.set('origin', opts.origin === 'same' ? browserOrigin : opts.origin);
 
   const built = new Request(`${baseUrl}${path}`, {
     method: opts.method ?? 'GET',

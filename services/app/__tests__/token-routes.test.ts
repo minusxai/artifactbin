@@ -57,7 +57,7 @@ describe('token routes served by the app', () => {
     const anon = await json(await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST' })));
     expect(anon.token).toMatch(/^mx_/);
     const user = await createUser({ email: 'a@example.com' });
-    const owned = await json(await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST', actor: { credential: 'session', userId: user.id, email: 'a@example.com', emailVerified: true } })));
+    const owned = await json(await mintAnonymous(request('/api/tokens/anonymous', { browser: true, method: 'POST', actor: { credential: 'session', userId: user.id, email: 'a@example.com', emailVerified: true } })));
     const { rows } = await (await harness.db()).query<{ user_id: string | null }>('SELECT user_id FROM tokens WHERE id = $1', [owned.id]);
     expect(rows[0]?.user_id).toBe(user.id);
   });
@@ -66,13 +66,13 @@ describe('token routes served by the app', () => {
     expect((await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST', json: grant }))).status).toBe(400);
     const user = await createUser({ email: 'oauth@example.com' });
     const actor = { credential: 'session' as const, userId: user.id, email: 'oauth@example.com', emailVerified: true };
-    const minted = await json(await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST', actor, json: grant })));
+    const minted = await json(await mintAnonymous(request('/api/tokens/anonymous', { browser: true, method: 'POST', actor, json: grant })));
     const { rows } = await (await harness.db()).query<{ audience: string | null; scope: string | null }>('SELECT audience, scope FROM tokens WHERE id = $1', [minted.id]);
     expect(rows[0]).toEqual(grant);
   });
   it('allows MCP HTTP audiences only on loopback including localhost subdomains',async()=>{
     const user=await createUser({email:'mxmx_test_local_mcp@example.com'}),actor={credential:'session' as const,userId:user.id};
-    const mint=(audience:string)=>mintAnonymous(request('/api/tokens/anonymous',{method:'POST',actor,json:{audience,scope:'artifacts'}}));
+    const mint=(audience:string)=>mintAnonymous(request('/api/tokens/anonymous',{ browser: true,method:'POST',actor,json:{audience,scope:'artifacts'}}));
     expect((await mint('http://artifactbin.localhost:5400/mcp')).status).toBe(201);
     expect((await mint('http://artifactbin.localhost.evil.test/mcp')).status).toBe(400);
   });
@@ -80,7 +80,7 @@ describe('token routes served by the app', () => {
     expect((await listMine(request('/api/my/tokens'))).status).toBe(401);
     const user = await createUser({ email: 'b@example.com' });
     const actor = { credential: 'session' as const, userId: user.id, email: 'b@example.com', emailVerified: true };
-    await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST', actor }));
+    await mintAnonymous(request('/api/tokens/anonymous', { browser: true, method: 'POST', actor }));
     await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST' }));
     const list = await json(await listMine(request('/api/my/tokens', { actor })));
     expect((list.tokens as unknown[]).length).toBe(1);
@@ -89,10 +89,10 @@ describe('token routes served by the app', () => {
     const a = await createUser({ email: 'c@example.com' }); const b = await createUser({ email: 'd@example.com' });
     const actorA = { credential: 'session' as const, userId: a.id, email: 'c@example.com', emailVerified: true };
     const actorB = { credential: 'session' as const, userId: b.id, email: 'd@example.com', emailVerified: true };
-    const { id } = await json(await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST', actor: actorA })));
-    expect((await revokeMine(request(`/api/my/tokens/${id}`, { method: 'DELETE', actor: actorB }), params({ id: String(id) }))).status).toBe(404);
+    const { id } = await json(await mintAnonymous(request('/api/tokens/anonymous', { browser: true, method: 'POST', actor: actorA })));
+    expect((await revokeMine(request(`/api/my/tokens/${id}`, { browser: true, method: 'DELETE', actor: actorB }), params({ id: String(id) }))).status).toBe(404);
     expect((await revokeMine(request(`/api/my/tokens/${id}`, { method: 'DELETE', actor: actorA, origin: 'https://evil.example', headers: { host: 'localhost' } }), params({ id: String(id) }))).status).toBe(403);
-    expect((await revokeMine(request(`/api/my/tokens/${id}`, { method: 'DELETE', actor: actorA }), params({ id: String(id) }))).status).toBe(204);
+    expect((await revokeMine(request(`/api/my/tokens/${id}`, { browser: true, method: 'DELETE', actor: actorA }), params({ id: String(id) }))).status).toBe(204);
   });
   it('POST /api/session/token adopts a token into the agent cookie; DELETE clears it', async () => {
     const { token } = await json(await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST' })));

@@ -30,7 +30,7 @@ async function owner(name = 'owner') {
 const create = async (token: string, body: Record<string, unknown>) => j(await createRoute(request('/api/artifacts', { method: 'POST', json: body, token })));
 const readBack = async (token: string, id: string) => j(await getRoute(request(`/api/artifacts/${id}`, { token }), params(id)));
 const move = async (cookie: string, id: string, parent_id: string | null) =>
-  j(await patchMineRoute(request(`/api/my/artifacts/${id}`, { method: 'PATCH', json: { parent_id }, cookie, origin: 'same' }), params(id)));
+  j(await patchMineRoute(request(`/api/my/artifacts/${id}`, { browser: true, method: 'PATCH', json: { parent_id }, cookie, origin: 'same' }), params(id)));
 
 describe('creating a folder', () => {
   it('is an artifact of format folder, at root, with NO content of any kind', async () => {
@@ -275,7 +275,7 @@ describe("a folder's PUT is a metadata edit", () => {
   const putBearer = async (token: string, id: string, body: Record<string, unknown>) =>
     j(await putRoute(request(`/api/artifacts/${id}`, { method: 'PUT', json: body, token }), params(id)));
   const putSession = async (cookie: string, id: string, body: Record<string, unknown>) =>
-    j(await putMineRoute(request(`/api/my/artifacts/${id}`, { method: 'PUT', json: body, cookie, origin: 'same' }), params(id)));
+    j(await putMineRoute(request(`/api/my/artifacts/${id}`, { browser: true, method: 'PUT', json: body, cookie, origin: 'same' }), params(id)));
 
   it('renames through PUT with no version, no archived copy and no edit-log row — at either door', async () => {
     const o = await owner();
@@ -364,7 +364,7 @@ describe("a folder's PUT is a metadata edit", () => {
       return keep;
     };
     const doors = [
-      ['PATCH', async (id: string) => j(await patchMineRoute(request(`/api/my/artifacts/${id}`, { method: 'PATCH', json: { title: '  Quarterly  ' }, cookie: o.cookie, origin: 'same' }), params(id)))],
+      ['PATCH', async (id: string) => j(await patchMineRoute(request(`/api/my/artifacts/${id}`, { browser: true, method: 'PATCH', json: { title: '  Quarterly  ' }, cookie: o.cookie, origin: 'same' }), params(id)))],
       ['PUT', async (id: string) => putBearer(o.token, id, { title: '  Quarterly  ' })],
     ] as const;
     for (const [door, run] of doors) {

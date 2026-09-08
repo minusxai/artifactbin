@@ -44,9 +44,9 @@ it('lets a shared editor add notebook models, expand exposure and replace creden
 it('rechecks private dataset access before serving a previously cached Postgres result',async()=>{
  vi.mocked(executeCatalog).mockClear();
  const f=await pgFixture();await f.db.query("UPDATE artifacts SET visibility='private' WHERE id=$1",[f.id]);await f.db.query("INSERT INTO artifact_shares(artifact_id,email,role) VALUES($1,$2,'viewer')",[f.id,f.friend.email]);
- const first=await tables(request(`/a/${f.id}/tables`,{method:'POST',actor:session(f.friend),json:{sql:'select * from people'}}),ctx(f.id));expect(first.status).toBe(200);expect(executeCatalog).toHaveBeenCalledTimes(1);expect(executeCatalog).toHaveBeenLastCalledWith(expect.anything(),'select * from people',{},expect.objectContaining({datasetId:f.id}));
+ const first=await tables(request(`/a/${f.id}/tables`,{ browser: true,method:'POST',actor:session(f.friend),json:{sql:'select * from people'}}),ctx(f.id));expect(first.status).toBe(200);expect(executeCatalog).toHaveBeenCalledTimes(1);expect(executeCatalog).toHaveBeenLastCalledWith(expect.anything(),'select * from people',{},expect.objectContaining({datasetId:f.id}));
  await f.db.query('DELETE FROM artifact_shares WHERE artifact_id=$1 AND email=$2',[f.id,f.friend.email]);
- const revoked=await tables(request(`/a/${f.id}/tables`,{method:'POST',actor:session(f.friend),json:{sql:'select * from people'}}),ctx(f.id));expect(revoked.status).toBe(404);expect(executeCatalog).toHaveBeenCalledTimes(1);
+ const revoked=await tables(request(`/a/${f.id}/tables`,{ browser: true,method:'POST',actor:session(f.friend),json:{sql:'select * from people'}}),ctx(f.id));expect(revoked.status).toBe(404);expect(executeCatalog).toHaveBeenCalledTimes(1);
 });
 it('reports Postgres mutations as inactive and refuses execution after a writable source changes kind',async()=>{
  const f=await pgFixture();
@@ -71,7 +71,7 @@ it.each(['bearer','browser'] as const)('returns a controlled unavailable-secret 
  try{
   result=transport==='bearer'
    ?await revert(request(`/api/artifacts/${f.id}/revert`,{method:'POST',token:f.ownerToken.token,json:{version:1}}),ctx(f.id))
-   :await browserRevert(request(`/api/my/artifacts/${f.id}/revert`,{method:'POST',cookie:await agentCookie([f.ownerToken.id]),json:{version:1}}),ctx(f.id));
+   :await browserRevert(request(`/api/my/artifacts/${f.id}/revert`,{ browser: true,method:'POST',cookie:await agentCookie([f.ownerToken.id]),json:{version:1}}),ctx(f.id));
  }catch(error){result=error;}
  expect(await getArtifactById(f.id)).toMatchObject({version:before.version,edit_id:before.edit_id,source:before.source,meta:before.meta});
  expect(result).toBeInstanceOf(Response);const response=result as Response;expect(response.status).toBe(503);expect(await response.json()).toMatchObject({error:'dataset_error',details:['Dataset credentials are unavailable']});

@@ -26,8 +26,8 @@ async function fixture(){
  const ds=await publish({dataset:[{n:1}],access:'readwrite'});
  const doc=await publish({markup:`<Helmet><Query name="rows">{\`select * from ref_${ds}\`}</Query><Mutation name="add">{\`insert into ref_${ds} values (2)\`}</Mutation></Helmet><Button run="$add">Add</Button><DataTable data="$rows" />`});
  const cookie=await agentCookie([friend.id]);
- const write=(auth?:string)=>mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:auth,json:{mutation:'add'}}),ctx(doc));
- const permissions=async(auth?:string)=>{const r=auth?await query(request(`/a/${doc}/query`,{method:'POST',cookie:auth,json:{}}),ctx(doc)):await anonymousQuery(request(`/a/${doc}/query?q=%7B%7D`),ctx(doc));expect(r.status).toBe(200);return r.json();};
+ const write=(auth?:string)=>mutate(request(`/a/${doc}/mutate`,{ browser: true,method:'POST',cookie:auth,json:{mutation:'add'}}),ctx(doc));
+ const permissions=async(auth?:string)=>{const r=auth?await query(request(`/a/${doc}/query`,{ browser: true,method:'POST',cookie:auth,json:{}}),ctx(doc)):await anonymousQuery(request(`/a/${doc}/query?q=%7B%7D`),ctx(doc));expect(r.status).toBe(200);return r.json();};
  const share=(id:string,role:'viewer'|'editor')=>updateSharingFor({tokenId:owner.id,userId:null},id,{shares:[{email:user.email,role}]});
  return {owner,friend,ds,doc,cookie,write,permissions,share};
 }

@@ -1,3 +1,4 @@
+import {PUBLIC_BASE_URL,CONTROLS_ORIGIN} from '@/lib/config';
 /**
  * Multi-user editing: a share carries a ROLE.
  *
@@ -47,7 +48,7 @@ const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.re
 const jreq = (path: string, method: string, body?: unknown, token?: string) =>
   new Request(`${BASE}${path}`, {
     method,
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    headers: { 'Content-Type': 'application/json', ...(!token ? {'Origin': CONTROLS_ORIGIN??new URL(PUBLIC_BASE_URL).origin, 'x-artifactbin-csrf':'1'} : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
 const create = async (token: string, body: Record<string, unknown>) => {

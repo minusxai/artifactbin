@@ -1,3 +1,4 @@
+import {PUBLIC_BASE_URL,CONTROLS_ORIGIN} from '@/lib/config';
 /**
  * F1 (API half) — fork an artifact (SEEDED RED by the orchestrator).
  *
@@ -34,8 +35,9 @@ const jreq = (path: string, method: string, body?: unknown, token?: string, cook
     method,
     headers: {
       'Content-Type': 'application/json',
+      ...(!token ? {'Origin': CONTROLS_ORIGIN??new URL(PUBLIC_BASE_URL).origin, 'x-artifactbin-csrf':'1'} : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(cookie ? { Cookie: cookie, Origin: BASE } : {}),
+      ...(cookie ? { Cookie: cookie } : {}),
     },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });

@@ -130,7 +130,7 @@ describe('a private document stays private through every write', () => {
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
     const res = await patchMineRoute(
-      request(`/api/my/artifacts/${doc.id}`, { method: 'PATCH', json: { parent_id: moved } }),
+      request(`/api/my/artifacts/${doc.id}`, { browser: true, method: 'PATCH', json: { parent_id: moved } }),
       params({ id: doc.id }),
     );
     expect(res.status).toBe(200);

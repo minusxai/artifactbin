@@ -81,7 +81,7 @@ describe('POST /a/<id>/query (reader path)', () => {
     const doc = (await create(t.token, { markup: DOC(ds), visibility: 'private' })).id;
 
     const cookie = await agentCookie([t.id]);
-    const res = await queryRoute(request(`/a/${doc}/query`, { method: 'POST', cookie: cookie, json: { values: { region: 'NA' }, only: ['sales'] } }), params({ id: doc }));
+    const res = await queryRoute(request(`/a/${doc}/query`, { browser: true, method: 'POST', cookie: cookie, json: { values: { region: 'NA' }, only: ['sales'] } }), params({ id: doc }));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { tables: Record<string, { rows: unknown[] }> };
     expect(body.tables.sales.rows).toEqual([{ region: 'NA', revenue: 1200 }]);
@@ -129,7 +129,7 @@ describe('POST /api/query (owner path — a draft)', () => {
     const t = await mintToken('t');
     const ds = (await create(t.token, { dataset: ROWS })).id;
     const cookie = await agentCookie([t.id]);
-    const res = await draftQueryRoute(request('/api/query', { method: 'POST', cookie: cookie, origin: BASE, json: { markup: DOC(ds), values: { region: 'EU' } } }));
+    const res = await draftQueryRoute(request('/api/query', { browser: true, method: 'POST', cookie: cookie, origin: 'same', json: { markup: DOC(ds), values: { region: 'EU' } } }));
     expect(res.status).toBe(200);
     expect(((await res.json()) as { tables: Record<string, { rows: unknown[] }> }).tables.sales.rows).toEqual([{ region: 'EU', revenue: 840 }]);
   });
@@ -159,7 +159,7 @@ describe('POST /api/query (owner path — a draft)', () => {
 
   it('requires a credential and a markup body', async () => {
     const t = await mintToken('t');
-    expect((await draftQueryRoute(request('/api/query', { method: 'POST', json: { markup: '<p>x</p>' } }))).status).toBe(401);
+    expect((await draftQueryRoute(request('/api/query', { browser:true, method: 'POST', json: { markup: '<p>x</p>' } }))).status).toBe(401);
     expect((await draftQueryRoute(request('/api/query', { method: 'POST', token: t.token, json: {} }))).status).toBe(400);
   });
 
@@ -218,7 +218,7 @@ describe('GET /a/<id>/query?q= (the document fetches for itself)', () => {
     const doc = (await create(t.token, { markup: DOC(ds), visibility: 'private' })).id;
     const cookie = await agentCookie([t.id]);
     // The POST (relay) path admits this very cookie — the contrast is the point.
-    expect((await queryRoute(request(`/a/${doc}/query`, { method: 'POST', cookie: cookie, origin: BASE, json: {} }), params({ id: doc }))).status).toBe(200);
+    expect((await queryRoute(request(`/a/${doc}/query`, { browser: true, method: 'POST', cookie: cookie, origin: 'same', json: {} }), params({ id: doc }))).status).toBe(200);
     expect((await queryGet(getReq(`/a/${doc}/query?q=${q({})}`, cookie), params({ id: doc }))).status).toBe(404);
     expect((await queryGet(getReq(`/a/${doc}/query?q=${q({})}`), params({ id: doc }))).status).toBe(404);
     expect((await queryGet(getReq(`/a/zzzzzz/query?q=${q({})}`), params({ id: 'zzzzzz' }))).status).toBe(404);

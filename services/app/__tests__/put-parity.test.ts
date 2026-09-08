@@ -50,7 +50,7 @@ describe('the bearer and browser replace paths answer alike', () => {
 
     const b = await subject();
     const viaBrowser = await (await putBrowser(
-      request(`/api/my/artifacts/${b.id}`, { method: 'PUT', cookie: b.cookie, json: { markup: '<h1 id="heading">browser</h1>' } }),
+      request(`/api/my/artifacts/${b.id}`, { browser: true, method: 'PUT', cookie: b.cookie, json: { markup: '<h1 id="heading">browser</h1>' } }),
       params({ id: b.id }),
     )).json();
 
@@ -74,7 +74,7 @@ describe('the bearer and browser replace paths answer alike', () => {
     );
     const b = await subject();
     const browser = await putBrowser(
-      request(`/api/my/artifacts/${b.id}`, { method: 'PUT', cookie: b.cookie, json: { markup: '<p>x</p>', expectedVersion: 99 } }),
+      request(`/api/my/artifacts/${b.id}`, { browser: true, method: 'PUT', cookie: b.cookie, json: { markup: '<p>x</p>', expectedVersion: 99 } }),
       params({ id: b.id }),
     );
     expect([bearer.status, browser.status]).toEqual([409, 409]);
@@ -89,7 +89,7 @@ describe('the bearer and browser replace paths answer alike', () => {
     );
     const b = await subject();
     const browser = await putBrowser(
-      request(`/api/my/artifacts/${b.id}`, { method: 'PUT', cookie: b.cookie, json: { markup: '<p>x</p>', visibility: 'private' } }),
+      request(`/api/my/artifacts/${b.id}`, { browser: true, method: 'PUT', cookie: b.cookie, json: { markup: '<p>x</p>', visibility: 'private' } }),
       params({ id: b.id }),
     );
     expect([bearer.status, browser.status]).toEqual([400, 400]);
@@ -115,7 +115,7 @@ describe('the bearer and browser replace paths answer alike', () => {
     )).json();
     const b = await mk();
     const viaBrowser = await (await putBrowser(
-      request(`/api/my/artifacts/${b.id}`, { method: 'PUT', cookie: b.cookie, json: { dataset: [{ a: 2 }] } }),
+      request(`/api/my/artifacts/${b.id}`, { browser: true, method: 'PUT', cookie: b.cookie, json: { dataset: [{ a: 2 }] } }),
       params({ id: b.id }),
     )).json();
     expect(viaBearer.access).toBe('readwrite');
@@ -132,7 +132,7 @@ describe('the bearer and browser replace paths answer alike', () => {
       params({ id: mine.id }),
     );
     const browser = await putBrowser(
-      request(`/api/my/artifacts/${mine.id}`, { method: 'PUT', cookie: stranger.cookie, json: { markup: '<p>x</p>' } }),
+      request(`/api/my/artifacts/${mine.id}`, { browser: true, method: 'PUT', cookie: stranger.cookie, json: { markup: '<p>x</p>' } }),
       params({ id: mine.id }),
     );
     expect([bearer.status, browser.status]).toEqual([404, 404]);

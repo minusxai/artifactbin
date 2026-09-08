@@ -29,7 +29,7 @@ async function setup() {
 }
 const comment = (w: Awaited<ReturnType<typeof setup>>, extra: Record<string, unknown>) =>
   myCreateAnnotationRoute(
-    request(`/api/my/artifacts/${w.doc.id}/annotations`, { method: 'POST', cookie: w.cookie, json: { path: '0', edit_id: w.doc.edit_id, body: 'this region', ...extra } }),
+    request(`/api/my/artifacts/${w.doc.id}/annotations`, { browser: true, method: 'POST', cookie: w.cookie, json: { path: '0', edit_id: w.doc.edit_id, body: 'this region', ...extra } }),
     params({ id: w.doc.id }),
   );
 const list = async (token: string, id: string): Promise<Wire[]> => {
