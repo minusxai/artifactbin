@@ -75,7 +75,7 @@ check(Boolean((await editorCtx.cookies(BASE)).find((c) => /better-auth/.test(c.n
 // stands in for the AGENT below: the same credential an agent would hold.
 const anon = await mintAnon(BASE);
 const claimed = await owner.evaluate(
-  async (t) => (await fetch('/api/tokens/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }) })).status,
+  async (t) => (await fetch('/api/tokens/claim', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-artifactbin-csrf':'1' }, body: JSON.stringify({ token: t }) })).status,
   anon.token,
 );
 check(claimed === 200, 'owner claimed the token');
@@ -192,7 +192,7 @@ check(await owner.evaluate(() => window.__gateMark === 'kept'), 'and it arrived 
 // menu would have called.
 const shared = await owner.evaluate(async ({ id, email }) => (await fetch(`/api/my/artifacts/${id}/sharing`, {
   method: 'PUT',
-  headers: { 'Content-Type': 'application/json' },
+  headers: { 'Content-Type': 'application/json', 'x-artifactbin-csrf':'1' },
   body: JSON.stringify({ shares: [{ email, role: 'editor' }] }),
 })).status, { id: folder.id, email: EDITOR_EMAIL });
 check(shared === 200, `the folder is shared with the editor (${shared})`);

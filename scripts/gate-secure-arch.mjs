@@ -52,7 +52,7 @@ check(
 
 const anon = await mintAnon(BASE);
 const claimed = await owner.evaluate(async (t) => (await fetch('/api/tokens/claim', {
-  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }),
+  method: 'POST', headers: { 'Content-Type': 'application/json', 'x-artifactbin-csrf':'1' }, body: JSON.stringify({ token: t }),
 })).status, anon.token);
 check(claimed === 200, 'owner A claimed a token');
 
@@ -205,7 +205,7 @@ check((await anonPage.locator('iframe[title="artifact"]').count()) === 0, 'befor
 // that it cannot is the sandbox working, and is asserted above.
 await anonPage.goto(`${BASE}/`, { waitUntil: 'load' });
 const exchange = await anonPage.evaluate(async (t) => (await fetch('/api/session/token', {
-  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }),
+  method: 'POST', headers: { 'Content-Type': 'application/json', 'x-artifactbin-csrf':'1' }, body: JSON.stringify({ token: t }),
 })).status, anon2.token);
 check(exchange === 204, `POST /api/session/token exchanged the token for a session (${exchange})`);
 const cookies = await anonCtx.cookies(BASE);
@@ -250,7 +250,7 @@ const splitPage = await splitCtx.newPage();
 // token for the agent cookie, and nothing else.
 await splitPage.goto(`${BASE}/`, { waitUntil: 'load' });
 const splitExchange = await splitPage.evaluate(async (t) => (await fetch('/api/session/token', {
-  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }),
+  method: 'POST', headers: { 'Content-Type': 'application/json', 'x-artifactbin-csrf':'1' }, body: JSON.stringify({ token: t }),
 })).status, anon.token);
 check(splitExchange === 204, 'the split-viewer browser holds only the agent cookie (no NextAuth session)');
 await splitPage.goto(`${BASE}/a/${claimedPriv.id}`, { waitUntil: 'load' });

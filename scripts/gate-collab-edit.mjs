@@ -60,7 +60,7 @@ check(Boolean((await editorCtx.cookies(BASE)).find((c) => /better-auth/.test(c.n
 
 // The owner's token: minted anonymously, claimed by the session.
 const anon = await mintAnon(BASE);
-const claimed = await owner.evaluate(async (t) => (await fetch('/api/tokens/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }) })).status, anon.token);
+const claimed = await owner.evaluate(async (t) => (await fetch('/api/tokens/claim', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-artifactbin-csrf':'1' }, body: JSON.stringify({ token: t }) })).status, anon.token);
 check(claimed === 200, 'owner claimed the token');
 const api = async (path, init = {}) => {
   const res = await fetch(`${BASE}${path}`, { ...init, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${anon.token}`, ...(init.headers ?? {}) } });
@@ -105,13 +105,13 @@ await openArtifactControls(commenter);
 check((await commenter.locator('[aria-label="Edit artifact"]').count()) === 0, 'the commenter sees no edit button');
 const head = await api(`/api/artifacts/${doc.id}`);
 const annotated = await commenter.evaluate(async ({ id, editId }) => {
-  const r = await fetch(`/api/my/artifacts/${id}/annotations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: '0', edit_id: editId, body: 'a comment from the commenter' }) });
+  const r = await fetch(`/api/my/artifacts/${id}/annotations`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-artifactbin-csrf':'1' }, body: JSON.stringify({ path: '0', edit_id: editId, body: 'a comment from the commenter' }) });
   return r.status;
 }, { id: doc.id, editId: head.edit_id });
 check(annotated === 201, `the commenter may open a thread from the browser (${annotated})`);
 const editAttempt = await commenter.evaluate(async ({ id }) => {
   const h = await (await fetch(`/api/artifacts/${id}`)).json().catch(() => ({}));
-  const r = await fetch(`/api/my/artifacts/${id}/edits`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ edit_id: h.edit_id ?? 'x', source: '<div><p>nope</p></div>' }) });
+  const r = await fetch(`/api/my/artifacts/${id}/edits`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-artifactbin-csrf':'1' }, body: JSON.stringify({ edit_id: h.edit_id ?? 'x', source: '<div><p>nope</p></div>' }) });
   return r.status;
 }, { id: doc.id });
 check(editAttempt === 404, `…and may not edit — the uniform 404 (${editAttempt})`);
@@ -129,7 +129,7 @@ check((await editor.locator('[aria-label="Edit social preview"]').count()) === 1
 check((await editor.locator('[aria-label="Make public"]').count()) === 0 && (await editor.locator('[aria-label="Invite email"]').count()) === 0, 'sharing does not expose access controls to the editor');
 const sharingAttempt = await editor.evaluate(async ({ id }) => {
   const r = await fetch(`/api/my/artifacts/${id}/sharing`, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-artifactbin-csrf':'1' },
     body: JSON.stringify({ visibility: 'public' }),
   });
   return r.status;

@@ -18,6 +18,7 @@
  *   usage: node scripts/gate-claim-flow.mjs [base]
  */
 import { chromium } from './lib/gate-browser.mjs';
+import { browserGateHeaders } from './lib/gate-request.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 import { startMailSink, loginViaEmail, isSignedInAs } from './lib/mail-login.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
@@ -122,7 +123,7 @@ const stranger = await mintAnon(B);
 await api('/api/artifacts', { method: 'POST', body: JSON.stringify({ title: 'Not Yours', markup: '<div data-design="tw" className="p-8"><h1 className="text-3xl">x</h1></div>' }) }, stranger.token);
 const claimable = await (await fetch(`${B}/api/tokens/claimable`, {
   method: 'POST',
-  headers: { 'Content-Type': 'application/json', cookie: cookieHeader },
+  headers: { ...browserGateHeaders(B), cookie: cookieHeader },
   body: JSON.stringify({ tokens: [anon.token, stranger.token] }),
 })).json();
 // The stranger's token is anonymous and fresh, so it IS offerable to whoever

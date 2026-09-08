@@ -27,7 +27,7 @@ import {storyFrame} from './lib/gate-browser.mjs';
  *   (local dev and gates read the protected development outbox)
 
  */
-import { chromium } from './lib/gate-browser.mjs';
+import { chromium, sameGateFrame } from './lib/gate-browser.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
 const B = process.argv[2] ?? 'http://localhost:3030';
@@ -179,14 +179,14 @@ const ownerCtx = await b.newContext();
 const owner = await ownerCtx.newPage();
 await loginViaEmail(owner, B, sink, `mxmx_test_dataflow_owner_${stamp}@example.com`);
 const ownerTok = (await mintAnon(B)).token;
-const claimed = await owner.evaluate(async (t) => (await fetch('/api/tokens/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }) })).status, ownerTok);
+const claimed = await owner.evaluate(async (t) => (await fetch('/api/tokens/claim', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-artifactbin-csrf':'1' }, body: JSON.stringify({ token: t }) })).status, ownerTok);
 ok(claimed === 200, 'the owner claimed a token');
 const OH = { Authorization: `Bearer ${ownerTok}`, 'Content-Type': 'application/json' };
 const pds = await j(await fetch(`${B}/api/artifacts`, { method: 'POST', headers: OH, body: JSON.stringify({ dataset: [{ region: 'EU', revenue: 10 }, { region: 'NA', revenue: 20 }] }) }));
 const priv = await j(await fetch(`${B}/api/artifacts`, { method: 'POST', headers: OH, body: JSON.stringify({ markup: doc1(pds.id), visibility: 'private' }) }));
 ok(priv.visibility === 'private', `a private data document published (${priv.id})`);
 const readerEmail = `mxmx_test_dataflow_reader_${stamp}@example.com`;
-const shared = await owner.evaluate(async ([id, email]) => (await fetch(`/api/my/artifacts/${id}/sharing`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shares: [email] }) })).status, [priv.id, readerEmail]);
+const shared = await owner.evaluate(async ([id, email]) => (await fetch(`/api/my/artifacts/${id}/sharing`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-artifactbin-csrf':'1' }, body: JSON.stringify({ shares: [email] }) })).status, [priv.id, readerEmail]);
 ok(shared === 200, 'the owner shared it with the reader');
 const anonGet = await fetch(`${B}/a/${priv.id}/query?q=%7B%7D`);
 ok(anonGet.status === 404, `the document's own GET is the uniform 404 for a private document (${anonGet.status})`);
@@ -261,7 +261,7 @@ await up.close();
 // PAGE writes the address — and the frame must NOT be re-navigated by that,
 // which would be a full document reload once per pick.
 let frameLoads = 0;
-owner.on('request',request=>{if(request.isNavigationRequest() && request.frame()===owner.mainFrame())frameLoads++;});
+owner.on('request',request=>{if(request.isNavigationRequest() && sameGateFrame(request.frame(),owner.mainFrame()))frameLoads++;});
 await owner.goto(`${B}/a/${udoc.id}?$region=west`, { waitUntil: 'load' });
 const ownerFrame = await storyFrame(owner);
 await ownerFrame.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent?.startsWith('$'), null, { timeout: 20000 }).catch(() => {});

@@ -191,7 +191,7 @@ async function bootServer(index, mailOutbox, authSecret) {
       // A .env written for the dev server names ITS port for the exporter's
       // fetch; inherited unchanged, every booted server would fetch from the
       // machine's other server. It is per-process.
-      EXPORT__INTERNAL_ORIGIN: `http://127.0.0.1:${port}`,
+      EXPORT__INTERNAL_ORIGIN: base,
       OBJECT_STORE__LOCAL_DIR: objects,
       ARTIFACTS__ALLOW_PUBLIC: process.env.ARTIFACTS__ALLOW_PUBLIC ?? '1',
       PROXY__RATE_LIMIT_CONFIG_FILE: process.env.PROXY__RATE_LIMIT_CONFIG_FILE ?? path.join(ROOT, 'services/proxy/dev_rate_limits.yml'),

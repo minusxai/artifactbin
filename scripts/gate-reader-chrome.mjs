@@ -46,7 +46,7 @@ const owner = await ownerCtx.newPage();
 await loginViaEmail(owner, BASE, sink, EMAIL);
 const anon = await mintAnon(BASE);
 const claimed = await owner.evaluate(
-  async (t) => (await fetch('/api/tokens/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }) })).status,
+  async (t) => (await fetch('/api/tokens/claim', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-artifactbin-csrf':'1' }, body: JSON.stringify({ token: t }) })).status,
   anon.token,
 );
 check(claimed === 200, 'the owner claimed a token, so the document has an author');

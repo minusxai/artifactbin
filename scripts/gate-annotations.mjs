@@ -507,7 +507,7 @@ async function markdownLeg(browser) {
   const created = await page.evaluate(async ([docId, editId]) => {
     const res = await fetch(`/api/my/artifacts/${docId}/annotations`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-artifactbin-csrf':'1' },
       body: JSON.stringify({ path: '0.1', edit_id: editId, body: 'why is the cap 5?' }),
     });
     return { status: res.status, body: await res.text() };
@@ -605,7 +605,7 @@ async function foldLeg(browser) {
   const created = await page.evaluate(async ([docId, editId]) => {
     const res = await fetch(`/api/my/artifacts/${docId}/annotations`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-artifactbin-csrf':'1' },
       body: JSON.stringify({ path: '0.1', edit_id: editId, body: 'why is the cap 5?' }),
     });
     return { status: res.status, body: await res.text() };
@@ -621,7 +621,7 @@ async function foldLeg(browser) {
   ok(replied.ok, 'the agent answers with sixty lines over plain HTTP');
   const lastWord = await page.evaluate(async ([docId, annId, body]) => {
     const res = await fetch(`/api/my/artifacts/${docId}/annotations/${annId}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reply: body }),
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-artifactbin-csrf':'1' }, body: JSON.stringify({ reply: body }),
     });
     return res.status;
   }, [id, ann.id, HUMAN_LAST_WORD]);

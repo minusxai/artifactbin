@@ -3,8 +3,36 @@
  * retaining native mode=closed, event retargeting and the real production CSS.
  * Install before navigation; no production open roots or application globals.
  */
-import {chromium as nativeChromium,firefox as nativeFirefox,webkit as nativeWebkit} from 'playwright';
+import {chromium as nativeChromium,firefox as nativeFirefox,webkit as nativeWebkit,selectors} from 'playwright';
 import assert from 'node:assert/strict';
+
+// A custom main-world engine makes the WHOLE native selector chain run in
+// that world. Utility-world DOM wrappers cannot see our own-property getter.
+await selectors.register('mx-main',()=>({query:root=>root.documentElement??root,queryAll:root=>[root.documentElement??root]}),{contentScript:false});
+const scoped=selector=>`${selector} >> mx-main=`;
+const pageWrappers=new WeakMap();
+const nativePages=new WeakMap();
+/** Request/event APIs still expose native frames; keep identity checks exact. */
+export const sameGateFrame=(left,right)=>(nativePages.get(left)??left)===(nativePages.get(right)??right);
+const selectorMethods=new Set(['locator','frameLocator','$','$$','$eval','$$eval','click','dblclick','fill','check','uncheck','hover','focus','press','selectOption','setInputFiles','tap','textContent','innerText','innerHTML','getAttribute','inputValue','isChecked','isDisabled','isEditable','isEnabled','isHidden','isVisible','waitForSelector','dispatchEvent']);
+export function wrapGatePage(page){
+ if(pageWrappers.has(page))return pageWrappers.get(page);
+ const wrapped=new Proxy(page,{get(target,key){
+  if(typeof key==='string'&&key.startsWith('getBy'))return (...args)=>target[key](...args).locator('mx-main=');
+  if(selectorMethods.has(key))return (selector,...args)=>target[key](scoped(selector),...args);
+  if(key==='mainFrame'||key==='frame')return (...args)=>{const frame=target[key](...args);return frame?wrapGatePage(frame):frame;};
+  if(key==='frames')return ()=>target.frames().map(wrapGatePage);
+  if(key==='context')return ()=>wrapContext(target.context());
+  const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;
+ }});pageWrappers.set(page,wrapped);nativePages.set(wrapped,page);return wrapped;
+}
+function wrapContext(context){
+ return new Proxy(context,{get(target,key){
+  if(key==='newPage')return async(...args)=>wrapGatePage(await target.newPage(...args));
+  if(key==='pages')return ()=>target.pages().map(wrapGatePage);
+  const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;
+ }});
+}
 
 export function instrumentClosedRoots() {
   const attach=Element.prototype.attachShadow;
@@ -21,7 +49,7 @@ export function wrapBrowser(browser) {
     if(key==='newContext'||key==='newPage')return async(...args)=>{
       const created=await target[key](...args);
       await created.addInitScript(instrumentClosedRoots);
-      return created;
+      return key==='newContext'?wrapContext(created):wrapGatePage(created);
     };
     const value=Reflect.get(target,key,target);
     return typeof value==='function'?value.bind(target):value;

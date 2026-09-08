@@ -67,7 +67,7 @@ check(Boolean((await ownerCtx.cookies(BASE)).find((c) => /better-auth/.test(c.na
 // ── 1. a public document, published by the owner's own claimed token ──────
 const anon = await mintAnon(BASE);
 const claimed = await owner.evaluate(
-  async (t) => (await fetch('/api/tokens/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }) })).status,
+  async (t) => (await fetch('/api/tokens/claim', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-artifactbin-csrf':'1' }, body: JSON.stringify({ token: t }) })).status,
   anon.token,
 );
 check(claimed === 200, 'owner claimed the token');
@@ -148,7 +148,7 @@ check(creditText.includes(doc.id), 'and the source is named by its address, not 
 const narrowed = await owner.evaluate(
   async (id) => (await fetch(`/api/my/artifacts/${id}/sharing`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-artifactbin-csrf':'1' },
     credentials: 'same-origin',
     body: JSON.stringify({ visibility: 'unlisted' }),
   })).status,
@@ -163,7 +163,7 @@ check(strangerCopy.includes('forked from a document that is not public'), '…an
 const invited = await owner.evaluate(
   async ([id, email]) => (await fetch(`/api/my/artifacts/${id}/sharing`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-artifactbin-csrf':'1' },
     credentials: 'same-origin',
     body: JSON.stringify({ shares: [{ email, role: 'commenter' }] }),
   })).status,

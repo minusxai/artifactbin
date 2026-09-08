@@ -221,7 +221,7 @@ const PRIV = `${WEB}/pic3.png?run=${RUN}`;
 const mine = await holder.evaluate(async (u) => {
   const created = await fetch('/api/my/artifacts', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-artifactbin-csrf':'1' },
     body: JSON.stringify({ markup: `<Helmet><Value name="pick" type="string" default="${u}" /></Helmet><div><img src="$pick" alt="a" /></div>`, title: 'private bound' }),
   });
   return { status: created.status, body: await created.json().catch(() => ({})) };
@@ -271,7 +271,7 @@ if (mine.status !== 201) {
   const guestEmail = `mxmx_test_boundguest_${Date.now()}@example.com`;
   const shared = await holder.evaluate(async ([id, email]) => {
     const r = await fetch(`/api/my/artifacts/${id}/sharing`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-artifactbin-csrf':'1' },
       body: JSON.stringify({ shares: [{ email, role: 'viewer' }] }),
     });
     return r.status;

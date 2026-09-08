@@ -23,8 +23,8 @@ describe('test-only closed-root browser instrumentation',()=>{
   const page={addInitScript:context.addInitScript};
   const native={async newContext(){expect(this).toBe(native);order.push('context');return context;},async newPage(){expect(this).toBe(native);order.push('page');return page;},isConnected(){return this===native;}};
   const browser=wrapBrowser(native);
-  expect(await browser.newContext()).toBe(context);expect(order).toEqual(['context','instrument']);
-  order.length=0;expect(await browser.newPage()).toBe(page);expect(order).toEqual(['page','instrument']);
+  expect((await browser.newContext()).addInitScript).toBeTypeOf('function');expect(order).toEqual(['context','instrument']);
+  order.length=0;expect((await browser.newPage()).addInitScript).toBeTypeOf('function');expect(order).toEqual(['page','instrument']);
   expect(browser.isConnected()).toBe(true);
  });
 });

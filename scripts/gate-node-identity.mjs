@@ -1,5 +1,6 @@
 /** Built-server acceptance: source identity, atomic moves, relation-only comments. */
 import assert from 'node:assert/strict';
+import {browserGateHeaders} from './lib/gate-request.mjs';
 import { startDocument } from './lib/start-doc.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:3000';
@@ -8,7 +9,7 @@ const path = `/api/artifacts/${started.id}`;
 async function call(route, method = 'GET', body, cookie) {
   return fetch(`${base}${route}`, {method, headers:{
     'Content-Type':'application/json',
-    ...(cookie ? {Cookie:cookie, Origin:base} : {Authorization:`Bearer ${started.token}`}),
+    ...(cookie ? {...browserGateHeaders(base),Cookie:cookie} : {Authorization:`Bearer ${started.token}`}),
   }, body:body === undefined ? undefined : JSON.stringify(body)});
 }
 async function ok(route, method, body, cookie) {

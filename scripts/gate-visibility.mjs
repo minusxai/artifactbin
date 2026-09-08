@@ -48,7 +48,7 @@ check(Boolean(sessionCookie), 'email-code login landed a session cookie');
 // A user-owned token: mint anonymously, claim from the session context.
 const anon = await mintAnon(BASE);
 const claimed = await page.evaluate(async (t) => {
-  const r = await fetch('/api/tokens/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }) });
+  const r = await fetch('/api/tokens/claim', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-artifactbin-csrf':'1' }, body: JSON.stringify({ token: t }) });
   return r.status;
 }, anon.token);
 check(claimed === 200, 'the session claimed the token');

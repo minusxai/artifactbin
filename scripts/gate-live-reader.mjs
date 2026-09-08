@@ -14,7 +14,7 @@
  *
  *   usage: node scripts/gate-live-reader.mjs [base]
  */
-import { chromium } from './lib/gate-browser.mjs';
+import { chromium, sameGateFrame } from './lib/gate-browser.mjs';
 import { startDocument } from './lib/start-doc.mjs';
 import { openArtifactControls, revealReaderChrome } from './lib/reveal-chrome.mjs';
 
@@ -59,7 +59,7 @@ const browser = await chromium.launch();
   const ctx = await browser.newContext();
   const page = await ctx.newPage({ viewport: { width: 1200, height: 900 } });
   let reloads = 0;
-  page.on('framenavigated', (f) => { if (f === page.mainFrame()) reloads++; });
+  page.on('framenavigated', (f) => { if (sameGateFrame(f,page.mainFrame())) reloads++; });
   await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
   await page.waitForFunction(() => /the first version/.test(document.body.textContent ?? ''), null, { timeout: 20000 });
   ok(!(await page.evaluate(() => !!document.querySelector('[data-artifact-story-host]'))), 'the reader gets the document itself, not the app shell');

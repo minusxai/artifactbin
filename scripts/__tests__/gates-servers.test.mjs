@@ -12,6 +12,10 @@
  * `npm run test:gates -- <base>` — and an explicit `--servers=N` still wins over the derived count.
  */
 import { readFileSync } from 'node:fs';
+it('uses the exact main origin for gate export captures',()=>{
+ const runner=readFileSync(new URL('../gates.mjs',import.meta.url),'utf8');
+ expect(runner).toContain('EXPORT__INTERNAL_ORIGIN: base');
+});
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';

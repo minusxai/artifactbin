@@ -27,7 +27,7 @@ const secretFree = value => {
   assert.ok(!serialized.includes('hidden-west') && !serialized.includes('hidden-east'), 'hidden source values must not appear in public output');
 };
 const ownerApi = async (page, path, method = 'GET', data) => page.evaluate(async ({ path, method, data }) => {
-  const response = await fetch(path, { method, headers: { 'Content-Type': 'application/json' }, ...(data === undefined ? {} : { body: JSON.stringify(data) }) });
+  const response = await fetch(path, { method, headers: { 'Content-Type': 'application/json', 'x-artifactbin-csrf':'1' }, ...(data === undefined ? {} : { body: JSON.stringify(data) }) });
   return { status: response.status, body: await response.json().catch(() => ({})) };
 }, { path, method, data });
 const guestApi = async (path, data) => {

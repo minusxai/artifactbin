@@ -111,7 +111,7 @@ try {
   // The owner's token, minted anonymously and claimed by their session.
   const anon = await mintAnon(BASE);
   await owner.evaluate(async (t) => fetch('/api/tokens/claim', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }),
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-artifactbin-csrf':'1' }, body: JSON.stringify({ token: t }),
   }), anon.token);
 
   const created = await fetch(`${BASE}/api/artifacts`, {
