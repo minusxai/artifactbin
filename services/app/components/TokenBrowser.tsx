@@ -12,7 +12,7 @@ import { MoveMenu, type PickerFolder } from '@/components/FolderPicker';
 import { parentOfRow } from '@/lib/shelf';
 import { adoptToken } from '@/lib/browser-session';
 import type { Visibility } from '@/lib/artifacts';
-import { CARD_RENDER_GENERATION } from '@/lib/export-card';
+import {artifactCardUrl} from '@/web/public-read-url';
 
 interface ArtifactSummary {
   id: string;
@@ -436,7 +436,7 @@ export function ArtifactTable({ artifacts, treeRows, includeAssets = true, folde
                     <span className="relative hidden h-[19px] w-9 shrink-0 overflow-hidden rounded-[2px] border border-edge bg-raised sm:block">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={`/a/${a.id}/export?format=jpg&mode=card&v=${a.version}&r=${CARD_RENDER_GENERATION}`}
+                        src={artifactCardUrl(a)}
                         alt=""
                         loading="lazy"
                         className="h-full w-full object-cover"

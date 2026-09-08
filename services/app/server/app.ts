@@ -38,6 +38,8 @@ import {GET as publicAssetBytes} from '@/app/assets/[hash]/route';
 import {GET as publicRefBytes} from '@/app/assets/ref/[id]/route';
 import { mountRoutes } from './api';
 import { ROUTES } from './routes.generated';
+import {publicPageHtml} from './public-page';
+import {publicPagePath,trustedRegionRoute,type PublicProfileData} from '@/web/public-page-contract';
 
 /** Where the server hands the SPA a page's data so its FIRST paint is its final one. */
 export const BOOTSTRAP_ID = 'mx-page-data';
@@ -222,6 +224,15 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     if (opts.indexHtml) return opts.indexHtml(url);
     return (indexCache ??= readFileSync(path.join(webDir, 'index.html'), 'utf8'));
   };
+  const pageIndex = async (url:string,entryName:'public'|'region') => {
+    const html=await index(url);
+    if(opts.indexHtml)return html.replace('/main.tsx',`/${entryName}.tsx`);
+    const manifest=JSON.parse(readFileSync(path.join(webDir,'.vite/manifest.json'),'utf8')) as Record<string,{file:string}>;
+    const entry=manifest[entryName+'.tsx'];
+    if(!entry)throw new Error('Public page entry missing from build manifest');
+    return html.replace(/<link\b[^>]*rel="modulepreload"[^>]*>/g,'')
+      .replace(/<script\b[^>]*type="module"[^>]*>[\s\S]*?<\/script>/g,()=>`<script type="module" crossorigin src="/${entry.file}"></script>`);
+  };
   /**
    * The app page. When the address names something the page will immediately
    * ask for — a document, a profile — the server answers that question HERE
@@ -261,6 +272,18 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const url = new URL(c.req.url);
     if (baseUrl(c.req.raw) !== CONTROLS_ORIGIN) {
       if (baseUrl(c.req.raw) === new URL(PUBLIC_BASE_URL).origin && c.req.method === 'GET' && isPlatformPage(url.pathname)) {
+        if(publicPagePath(url.pathname) && url.pathname!=='/docs-human'){
+          let profile:PublicProfileData|undefined;
+          if(url.pathname.startsWith('/@')){
+            const bootstrap=await bootstrapFor(c.req.raw);
+            const data=bootstrap?.profile as (PublicProfileData&{kind?:string})|undefined;
+            if(data?.kind!=='public-profile')return next();
+            profile={handle:data.handle,files:data.files};
+          }
+          const main=new URL(PUBLIC_BASE_URL).origin;
+          const html=publicPageHtml(await pageIndex(c.req.url,'public'),{path:url.pathname,search:url.search,controls:CONTROLS_ORIGIN!,...(profile?{profile}:{})},main);
+          return new Response(html,{headers:{...APP_SECURITY_HEADERS,'content-security-policy':APP_CSP.replace("frame-src 'self'",`frame-src 'self' ${CONTROLS_ORIGIN}`),'content-type':'text/html; charset=utf-8','cache-control':'no-store'}});
+        }
         if(url.pathname.startsWith('/@') && !(await bootstrapFor(c.req.raw)))return next();
         return platformPageResponse(new URL(PUBLIC_BASE_URL).origin,CONTROLS_ORIGIN!,url.pathname,url.search);
       }
@@ -272,13 +295,14 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
       const row=await getArtifactById(folderId),actor=await sessionActor(c.req.raw).catch(()=>null);
       if(!row || row.format!=='folder' || await roleFor(row,actor??NO_ACTOR)==='none')return new Response('Not found',{status:404});
     }
-    const platformPath=folderId?'/a/'+folderId:platformFramePage(url.pathname);
+    const region=trustedRegionRoute(url.pathname,url.searchParams.get('page'));
+    const platformPath=region?.page??(folderId?'/a/'+folderId:platformFramePage(url.pathname));
     if(c.req.method==='GET' && platformPath!==null){
       const main=new URL(PUBLIC_BASE_URL).origin;
-      const shell=(await index(c.req.url)).replace('</head>',()=>`<script type="application/json" id="mx-page-frame-config">${safeJson({apiOrigin:main,path:platformPath,...(folderId?{folderOnly:true}:{})})}</script><base target="_top" /></head>`);
+      const shell=(await (region?pageIndex(c.req.url,'region'):index(c.req.url))).replace('</head>',()=>`<script type="application/json" id="mx-page-frame-config">${safeJson({apiOrigin:main,path:platformPath,...(folderId?{folderOnly:true}:{}),...(region?{region:region.kind,search:url.searchParams.get('search')??''}:{})})}</script><base target="_top" />${region?'<style>html,body,#root{background:transparent!important;min-height:0}</style>':''}</head>`);
       return new Response(shell,{headers:{...APP_SECURITY_HEADERS,'content-security-policy':APP_CSP.replace("img-src 'self'",`img-src 'self' ${main}`).replace("frame-ancestors 'self'",`frame-ancestors ${main}`),'content-type':'text/html; charset=utf-8','cache-control':'no-store'}});
     }
-    if(url.pathname.startsWith('/controls/page') || url.pathname.startsWith('/controls/folder'))return new Response('Not found',{status:404});
+    if(url.pathname.startsWith('/controls/page') || url.pathname.startsWith('/controls/folder') || url.pathname.startsWith('/controls/region'))return new Response('Not found',{status:404});
     if (c.req.method === 'GET' && /^\/controls\/a\/[A-Za-z0-9]+$/.test(url.pathname)) {
       const shell = (await index(c.req.url)).replace('</head>', () => `<script type="application/json" id="mx-controls-config">${safeJson({apiOrigin:new URL(PUBLIC_BASE_URL).origin})}</script><base target="_top" /><style>html,body,#root{background:transparent!important}</style></head>`);
       const main = new URL(PUBLIC_BASE_URL).origin;

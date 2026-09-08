@@ -366,7 +366,7 @@ function remember(s: ExportState, key: string, shot: { mime: string; bytes: Buff
 export async function exportImageResponse(
   // `source` is here so the SELECTION can be read the way the document itself
   // reads it — through its own declarations. See `selection` below.
-  artifact: Pick<ArtifactRow, 'id' | 'version' | 'format' | 'source'>,
+  artifact: Pick<ArtifactRow, 'id' | 'version' | 'format' | 'source' | 'visibility'>,
   q: { format?: string | null; mode?: string | null; slide?: string | null; crop?: string | null; image?: string | null; search?: string | null },
   base: string,
 ): Promise<Response> {
@@ -458,7 +458,7 @@ export async function exportImageResponse(
           return new Response(new Uint8Array(bytes), { headers: {
             'Content-Type': EXPORT_MIME[format],
             'X-Content-Type-Options': 'nosniff',
-            'Cache-Control': imageOverview ? 'private, no-store' : 'public, max-age=86400',
+            'Cache-Control': imageOverview || artifact.visibility!=='public' ? 'private, no-store' : 'public, max-age=86400',
           } });
         }
       } catch {
@@ -512,7 +512,7 @@ export async function exportImageResponse(
       // version-busted URL (&v=), so they may cache hard. Editor previews are
       // private-cacheable; full shots keep no-store so an agent re-asking
       // after an edit never sees stale output.
-      'Cache-Control': draftCrop
+      'Cache-Control': draftCrop || artifact.visibility!=='public'
         ? 'private, no-store'
         : capture === 'card'
         ? 'public, max-age=86400'

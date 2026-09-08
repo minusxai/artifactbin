@@ -33,7 +33,7 @@ export function ListingShell({ authed = false, anon = false, children }: {
  * own address, this page is the account ROOT, and the trail from `ancestor_ids`
  * is drawn on the folder's own document. So there is nothing here to segment.
  */
-export function ListingHero({ handle, label, count, noun, follow }: {
+export function ListingHero({ handle, label, count, noun, follow,followSlot }: {
   handle: string; label: string; count: number; noun: string;
   /**
    * The follow control, on a STRANGER's profile only — the page route ships
@@ -41,6 +41,7 @@ export function ListingHero({ handle, label, count, noun, follow }: {
    * owner looking at their own listing, with nobody to follow.
    */
   follow?: { userId: string; following: boolean; count: number; signedIn: boolean };
+  followSlot?: React.ReactNode;
 }) {
   return (
     <header className="reveal mb-8">
@@ -55,7 +56,7 @@ export function ListingHero({ handle, label, count, noun, follow }: {
           {count} {noun}
           {count === 1 ? '' : 's'}
         </p>
-        {follow && <FollowButton {...follow} />}
+        {followSlot ?? (follow && <FollowButton {...follow} />)}
       </div>
     </header>
   );

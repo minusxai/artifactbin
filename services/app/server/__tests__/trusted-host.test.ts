@@ -12,7 +12,7 @@ import {mintToken} from '@/lib/tokens';
 import {POST as createArtifact} from '@/app/api/artifacts/route';
 useAppHarness();
 const main = 'http://localhost:3000', controls = 'http://i.localhost:3000';
-const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head></head><body>Trusted SPA</body></html>' });
+const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head></head><body><div id="root"></div><span>Trusted SPA</span></body></html>' });
 const throughProxy = (url: string) => app.fetch(attachActor(new Request(url), { credential: 'none' }));
 it('refuses direct app access when the controls boundary is enabled', async () => {
   for (const origin of [main, controls]) {
@@ -42,7 +42,7 @@ it('dedicates a frameable controls path without serving author document routes t
   expect((await throughProxy(controls + '/a/abc123')).status).toBe(404);
 });
 it('keeps first-party app addresses on main with a credential-free trusted page frame', async () => {
-  for (const path of ['/', '/login?callbackUrl=%2Fa%2Fabc123', '/account', '/tokens/new', '/trash', '/chat', '/datasets/new']) {
+  for (const path of ['/login?callbackUrl=%2Fa%2Fabc123', '/account', '/tokens/new', '/trash', '/chat', '/datasets/new']) {
     const res = await throughProxy(main + path);
     expect(res.status, path).toBe(200);
     expect(res.headers.get('location'), path).toBeNull();
@@ -66,10 +66,10 @@ it('frames only platform app pages, never author documents or arbitrary proxy de
     expect(res.status, path).toBe(404);
   }
 });
-it('frames public profile roots without admitting pretty author addresses',async()=>{
+it('renders public profile content on main without admitting pretty author addresses on controls',async()=>{
   const owner=await ensureUsername(await createUser({email:'mxmx_test_frame_profile@example.com'}));
   const path='/@'+owner.username;
-  const root=await throughProxy(main+path);expect(root.status).toBe(200);expect(await root.text()).toContain('<iframe');
+  const root=await throughProxy(main+path);expect(root.status).toBe(200);const html=await root.text();expect(html).toContain('/controls/region/follow');expect(html).toContain(owner.username);expect(html).not.toContain('id="app-frame"');
   const frame=await throughProxy(controls+'/controls/page'+path);expect(frame.status).toBe(200);expect(await frame.text()).toContain('Trusted SPA');
   expect((await throughProxy(controls+'/controls/page'+path+'/Ab3xK9-title')).status).toBe(404);
 });

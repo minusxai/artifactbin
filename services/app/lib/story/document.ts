@@ -37,7 +37,7 @@ import type { RefDataMap } from '@/lib/story/ref-data';
 import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
 import { STORY_ROOT_ATTR } from '@/lib/story-surface';
-import { escapeHtml, renderReaderChrome, type ReaderForkedFrom, type ReaderReactions } from '@/lib/story/reader-chrome';
+import { escapeHtml, renderReaderChrome, renderReaderLoadingShell, type ReaderForkedFrom, type ReaderReactions } from '@/lib/story/reader-chrome';
 import { criticalStoryFonts, getStoryFontCss, storyFontFaceCss, STORY_FONTS_ATTR } from '@/lib/data/story/story-fonts';
 import { documentFonts, documentFontCss } from './document-fonts';
 import { webFontAssets } from '@/lib/webfonts';
@@ -416,7 +416,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
       ownerBreadcrumb: input.ownerBreadcrumb,
       reactions: input.reactions ?? null,
     })
-    : '';
+    : chrome && input.controlsUrl ? renderReaderLoadingShell(input.author ?? null) : '';
 
   /*
    * Resolved ONCE and handed to both the SSR render and the island below: the

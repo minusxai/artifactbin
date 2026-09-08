@@ -35,7 +35,7 @@ let n = 0;
 /** A fresh version every time, so neither cache layer can answer for the browser. */
 // `source` rides along because the export door reads the document's own
 // `<Value>` declarations to canonicalize a link's selection (lib/export).
-const row = () => ({ id: 'exprt1', version: ++n + 1000, format: 'markup' as const, source: '<p>hi</p>' });
+const row = () => ({ id: 'exprt1', version: ++n + 1000, format: 'markup' as const, source: '<p>hi</p>',visibility:'public' as const });
 
 beforeEach(async () => { await resetExportRenderer(); });
 afterEach(async () => { await resetExportRenderer(); setServices({ browser: undefined }); });

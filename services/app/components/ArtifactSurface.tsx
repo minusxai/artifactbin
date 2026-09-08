@@ -74,6 +74,8 @@ export interface ArtifactSurfaceProps {
   editId: string;
   format: ArtifactFormat;
   title: string | null;
+  /** Public identity resolved by the page endpoint, never parent-authored messages. */
+  authorUsername?: string | null;
   /** pdf: how big the file is and how long, as the file view says it. */
   bytes?: number;
   pages?: number | null;
@@ -972,6 +974,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const likeRef = useRef(like);
   const [, updateSocial] = useState(0);
   const followRef = useRef(follow);
+  const socialPending=useRef({like:false,follow:false});
   const answer = useCallback((frame: Window | null, reply: Omit<StoryReaderActionResultMessage, 'type'>) => {
     frame?.postMessage({ type: STORY_READER_ACTION_RESULT_MESSAGE, ...reply } satisfies StoryReaderActionResultMessage, '*');
   }, []);
@@ -982,12 +985,16 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     }
     const next = want ?? !likeRef.current.liked;
     if (next === likeRef.current.liked) { answer(frame, { kind: 'like', ok: true, ...likeRef.current }); return; }
+    if(socialPending.current.like)return;
+    socialPending.current.like=true;updateSocial(n=>n+1);
+    try{
     const res = await fetch(`/api/my/artifacts/${id}/like`, { method: next ? 'POST' : 'DELETE', credentials: 'same-origin' }).catch(() => null);
     if (res?.status === 401) {appNavigate(artifactLoginUrl(id, 'like'));return;}
     if (!res?.ok) return;
     likeRef.current = (await res.json()) as { liked: boolean; count: number };
     updateSocial(n => n+1);
     answer(frame, { kind: 'like', ok: true, ...likeRef.current });
+    }finally{socialPending.current.like=false;updateSocial(n=>n+1);}
   }, [accountSession, answer, id]);
   const toggleFollow = useCallback(async (frame: Window | null, want?: boolean) => {
     const target = followRef.current;
@@ -998,6 +1005,9 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     }
     const next = want ?? !target.following;
     if (next === target.following) { answer(frame, { kind: 'follow', ok: true, following: target.following, count: target.count }); return; }
+    if(socialPending.current.follow)return;
+    socialPending.current.follow=true;updateSocial(n=>n+1);
+    try{
     const res = await fetch(`/api/users/${target.userId}/follow`, { method: next ? 'POST' : 'DELETE', credentials: 'same-origin' }).catch(() => null);
     if (res?.status === 401) {appNavigate(artifactLoginUrl(id, 'follow'));return;}
     if (!res?.ok) return;
@@ -1005,6 +1015,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     followRef.current = { ...target, ...state };
     updateSocial(n => n+1);
     answer(frame, { kind: 'follow', ok: true, ...state });
+    }finally{socialPending.current.follow=false;updateSocial(n=>n+1);}
   }, [accountSession, answer, id]);
   // A frame that (re)announces itself is told what is true now — it may have
   // been served before an intent-driven like landed, or been replaced since.
@@ -1299,10 +1310,14 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       <>
         {controlsOnly && <><AppBar fixed title={shownTitle} label="Artifact controls" />
           <div data-controls-region className="fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-xl border border-edge bg-surface p-2 shadow-lg">
-            <button aria-label="Like artifact" aria-pressed={likeRef.current.liked} onClick={() => void toggleLike(null)} className="flex items-center gap-2 rounded px-3 py-2"><Heart size={18} fill={likeRef.current.liked ? 'currentColor' : 'none'} />{likeRef.current.count}</button>
-            <button aria-label="Toggle comments" onClick={() => {if (canAnnotate || accountSession) setRailOpen(open => !open);else appNavigate(artifactLoginUrl(id, 'comment'));}} className="flex items-center gap-2 rounded px-3 py-2"><MessageSquare size={18} />{openAnnotationCount}</button>
-            {followRef.current && <button aria-label="Follow author" aria-pressed={followRef.current.following} onClick={() => void toggleFollow(null)} className="rounded px-3 py-2">{followRef.current.following ? 'Following' : 'Follow'}</button>}
-          </div></>}
+            <button aria-label="Like artifact" disabled={socialPending.current.like} aria-pressed={likeRef.current.liked} onClick={() => void toggleLike(null)} className="flex cursor-pointer items-center gap-2 rounded px-3 py-2 transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-60"><Heart size={18} fill={likeRef.current.liked ? 'currentColor' : 'none'} />{likeRef.current.count}</button>
+            <button aria-label="Toggle comments" onClick={() => {if (canAnnotate || accountSession) setRailOpen(open => !open);else appNavigate(artifactLoginUrl(id, 'comment'));}} className="flex cursor-pointer items-center gap-2 rounded px-3 py-2 transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-accent"><MessageSquare size={18} />{openAnnotationCount}</button>
+          </div>
+          {(props.authorUsername || followRef.current) && <div data-controls-region aria-label="Artifact author" className="fixed bottom-20 left-4 z-40 flex max-w-[calc(100vw-2rem)] items-center gap-1 rounded-xl border border-edge bg-surface p-2 shadow-lg sm:bottom-4 sm:max-w-[calc(100vw-13rem)]">
+            {props.authorUsername && <a href={`/@${props.authorUsername}`} aria-label={`View @${props.authorUsername}'s profile`} className="min-w-0 truncate rounded px-2 py-2 font-mono text-xs text-accent hover:underline focus-visible:outline-2 focus-visible:outline-accent">@{props.authorUsername}</a>}
+            {followRef.current && <button aria-label="Follow author" disabled={socialPending.current.follow} aria-pressed={followRef.current.following} onClick={() => void toggleFollow(null)} className="cursor-pointer rounded px-3 py-2 transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-60">{followRef.current.following ? 'Following' : 'Follow'}</button>}
+          </div>}
+        </>}
         {editing ? (
           /* EDIT MODE: the document's own bar stays, PINNED at the top, and the
              editor's toolbar sits under it. The panels drop below both. */

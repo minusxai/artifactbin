@@ -95,4 +95,12 @@ describe('the composed proxy browser boundary', () => {
     expect((await call(controls, '/controls/page/login')).headers.get('content-security-policy')).toContain(`frame-ancestors ${main}`);
     expect((await call(controls, '/controls/page/a/abc123')).headers.get('content-security-policy')).toContain("frame-ancestors 'none'");
   });
+  it('frames only admitted public-page regions, never arbitrary documents or account routes',async()=>{
+    for(const path of ['/controls/region/home?page=%2F','/controls/region/chrome?page=%2F%40alice','/controls/region/follow?page=%2F%40alice']){
+      expect((await call(controls,path)).headers.get('content-security-policy')).toContain(`frame-ancestors ${main}`);
+    }
+    for(const path of ['/controls/region/home?page=%2Faccount','/controls/region/follow?page=%2F%40alice%2Fabc123','/controls/region/chrome?page=https%3A%2F%2Fevil.test','/controls/region/unknown?page=%2F']){
+      expect((await call(controls,path)).headers.get('content-security-policy')).toContain("frame-ancestors 'none'");
+    }
+  });
 });

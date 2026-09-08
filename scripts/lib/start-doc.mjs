@@ -52,7 +52,8 @@ export async function startDocument(base, headers = {}, fetchImpl = fetch) {
  */
 export async function becomeOwner(page, base, token) {
   await page.goto(`${base}/`, { waitUntil: 'load' });
-  const app=await page.locator('iframe[title="Artifactbin app"]').count()?page.frameLocator('iframe[title="Artifactbin app"]'):page;
+  const selector='iframe[title="Home workspace"],iframe[title="Artifactbin app"]';
+  const app=await page.locator(selector).count()?page.frameLocator(selector):page;
   await app.locator('#root').waitFor({state:'attached'});
   const status = await app.locator('body').evaluate(async (_,t) => (await fetch('/api/session/token', {
     method: 'POST',

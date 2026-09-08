@@ -67,7 +67,9 @@ export async function loginViaEmail(page, base, sink, email) {
   // The dashboard no longer prints an email or a profile link in its chrome.
   // Await the actual response. A polling predicate that returns a Promise
   // can finish on its truthiness even when that Promise resolves to false.
-  const session = await form.locator('body').evaluate(async () => {
+  const current=await page.locator('iframe[title="Home workspace"],iframe[title="Artifactbin app"]').count()
+    ?page.frameLocator('iframe[title="Home workspace"],iframe[title="Artifactbin app"]').first():page;
+  const session = await current.locator('body').evaluate(async () => {
     const response = await fetch('/api/page/session', { credentials: 'same-origin', headers: {'x-artifactbin-csrf':'1'} });
     return response.ok ? response.json() : null;
   });

@@ -1,5 +1,5 @@
 import {expect,it,vi} from 'vitest';
-vi.mock('@/lib/config',async importOriginal=>({...await importOriginal<typeof import('@/lib/config')>(),PUBLIC_BASE_URL:'https://public.example.test',CONTROLS_ORIGIN:'https://i.public.example.test'}));
+vi.mock('@/lib/config',async importOriginal=>({...await importOriginal<typeof import('@/lib/config')>(),get PUBLIC_BASE_URL(){return 'https://public.example.test';},CONTROLS_ORIGIN:'https://i.public.example.test'}));
 import {createAppServer} from '@/server/app';
 import {attachActor} from '@artifactbin/utils';
 

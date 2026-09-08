@@ -40,6 +40,22 @@ describe('Shelf — grid and list views', () => {
     expect(container.querySelector('.animate-spin')).toBeNull();
     expect(screen.getByText(/preview unavailable/i)).toBeInTheDocument();
   });
+  it('finishes a loaded thumbnail and offers a real retry after error',()=>{
+    const {container}=render(<Shelf rows={[doc('abc123',28)]}/>);
+    const image=container.querySelector('img')!;fireEvent.load(image);
+    expect(container.querySelector('.animate-spin')).toBeNull();
+    fireEvent.error(image);fireEvent.click(screen.getByLabelText('Retry preview for Doc abc123'));
+    expect(container.querySelector('.animate-spin')).not.toBeNull();
+    expect(container.querySelector('img')?.src).toContain('attempt=1');
+    fireEvent.load(container.querySelector('img')!);
+    expect(screen.queryByText(/preview unavailable/i)).toBeNull();
+  });
+  it('does not call the privileged folder page API from a public profile shelf',()=>{
+    const request=vi.fn();vi.stubGlobal('fetch',request);
+    vi.stubGlobal('IntersectionObserver',class{constructor(private callback:(entries:unknown[])=>void){} observe(){this.callback([{isIntersecting:true}]);}disconnect(){}});
+    render(<Shelf rows={[doc('folder',28,{format:'folder'})]} actions="share"/>);
+    expect(request).not.toHaveBeenCalled();
+  });
   it('remembers the view across remounts and ignores unknown stored values', () => {
     localStorage.setItem('artifactbin:shelf-view', 'unknown');
     const first = render(<Shelf rows={[doc('one', 28)]} />);

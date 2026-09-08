@@ -101,6 +101,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       ? { userId: artifact.user_id, following: viewerId ? await has(viewerId, 'follow', artifact.user_id) : false, count: await count('follow', artifact.user_id) }
       : null,
     surface: {
+      authorUsername: await ownerUsername(artifact.user_id),
       liveEnabled: !exporting && canReceiveLiveUpdates(actor),
       captureKey: exporting ? key : null,
       id: artifact.id,

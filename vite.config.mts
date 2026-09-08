@@ -12,7 +12,8 @@ export default defineConfig({
   root: path.resolve(import.meta.dirname, 'services/app/web'),
   plugins: [react(), tailwindcss()],
   resolve: { alias: { '@': path.resolve(import.meta.dirname, 'services/app') } },
-  build: { outDir: path.resolve(import.meta.dirname, 'services/app/dist/web'), emptyOutDir: true, sourcemap: false },
+  build: { outDir: path.resolve(import.meta.dirname, 'services/app/dist/web'), emptyOutDir: true, sourcemap: false,
+    manifest:true,rollupOptions:{input:{app:path.resolve(import.meta.dirname,'services/app/web/index.html'),public:path.resolve(import.meta.dirname,'services/app/web/public.tsx'),region:path.resolve(import.meta.dirname,'services/app/web/region.tsx')}} },
   server: { middlewareMode: true },
   appType: 'custom',
 });

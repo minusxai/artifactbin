@@ -131,6 +131,13 @@ const ICON_CHEVRON = ICON('<path d="m9 18 6-6-6-6"/>', 14);
 const ICON_GITHUB = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M12 .5A11.5 11.5 0 0 0 .5 12a11.5 11.5 0 0 0 7.86 10.92c.575.106.785-.25.785-.554 0-.273-.01-.997-.015-1.957-3.196.695-3.87-1.54-3.87-1.54-.523-1.33-1.277-1.684-1.277-1.684-1.043-.714.08-.699.08-.699 1.153.081 1.76 1.184 1.76 1.184 1.026 1.757 2.69 1.25 3.345.956.105-.743.401-1.25.73-1.538-2.552-.29-5.235-1.276-5.235-5.68 0-1.255.448-2.281 1.183-3.086-.119-.291-.513-1.46.112-3.044 0 0 .965-.309 3.163 1.179a10.98 10.98 0 0 1 2.88-.388c.977.005 1.961.132 2.88.388 2.196-1.488 3.16-1.179 3.16-1.179.626 1.584.232 2.753.114 3.044.737.805 1.181 1.831 1.181 3.086 0 4.415-2.687 5.386-5.247 5.671.412.355.78 1.056.78 2.129 0 1.537-.014 2.776-.014 3.154 0 .307.207.665.79.552A11.5 11.5 0 0 0 23.5 12 11.5 11.5 0 0 0 12 .5z"/></svg>';
 const ICON_HEART = ICON('<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21.2l7.7-7.7 1.1-1.1a5.5 5.5 0 0 0 0-7.8z"/>');
 const ICON_COMMENT = ICON('<path d="M21 11.5a8.4 8.4 0 0 1-9 8.5 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.2A8.4 8.4 0 0 1 4 12a8.4 8.4 0 0 1 8.5-9 8.4 8.4 0 0 1 8.5 8.5z"/>');
+/** Public, powerless geometry while the authenticated reader controls load. */
+export function renderReaderLoadingShell(author:ReaderChromeInput['author']):string {
+  return '<div id="mx-controls-loading" inert aria-hidden="true" aria-busy="true">'
+    + '<div class="mx-loading-bar"><span>artifactbin</span><span>···</span></div>'
+    + (author?.username?`<div class="mx-loading-byline">@${escapeHtml(author.username)} <span>follow</span></div>`:'')
+    + `<div class="mx-loading-reactions">${ICON_HEART}${ICON_COMMENT}</div></div>`;
+}
 const ICON_SEND = ICON('<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>');
 const ICON_PENCIL = ICON('<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>');
 // `mx-rc-open`, like the sliders: the glyph a trigger swaps for the X while its panel is open.

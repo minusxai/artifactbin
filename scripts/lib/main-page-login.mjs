@@ -59,7 +59,35 @@ export async function verifyMainPageLogin({browser,base,controls,sink,id,mainFet
   const credentialWrites=(await Promise.all(writes)).filter(value=>new URL(value.url).pathname.startsWith('/api/auth/'));
   assert(credentialWrites.length>=2,'real OTP request and verification were observed');
   assert(credentialWrites.every(value=>new URL(value.url).origin===controls && value.origin===controls),'credential writes originate and terminate at trusted origin');
-  await page.goto(base+'/');await page.frameLocator('iframe[title="Artifactbin app"]').getByLabel('Open menu',{exact:true}).waitFor();
+  await page.goto(base+'/');await page.frameLocator('iframe[title="Page controls"]').getByLabel('Open menu',{exact:true}).waitFor();
+  await page.frameLocator('iframe[title="Home workspace"]').getByLabel('Shelf',{exact:true}).waitFor();
+  await page.waitForFunction(()=>document.querySelector('[data-trusted-region="home"]')?.getAttribute('aria-busy')==='false');
+  assert.equal(await page.locator('body').evaluate((el,email)=>el.textContent.includes(email),email),false,'private dashboard identity never enters the main DOM');
+  assert.equal(await page.locator('iframe[title="Home workspace"]').evaluate(el=>{try{void el.contentWindow.document;return 'readable';}catch(error){return error.name;}}),'SecurityError');
+  console.log('PASS public main SSR transitions to a private workspace region without copying account data');
+  const workspace=page.frameLocator('iframe[title="Home workspace"]');
+  await workspace.locator('body').evaluate(async()=>{
+    for(let batch=0;batch<4;batch++)await Promise.all(Array.from({length:8},async()=>{
+      const response=await fetch('/api/start',{method:'POST',headers:{'x-artifactbin-csrf':'1'}});
+      if(!response.ok)throw new Error('workspace fixture create '+response.status);
+    }));
+  });
+  await page.reload();await workspace.getByLabel('Shelf',{exact:true}).waitFor();
+  await page.waitForFunction(()=>document.querySelector('[data-trusted-region="home"]')?.getAttribute('aria-busy')==='false');
+  assert.equal(await workspace.locator('body').evaluate(()=>document.documentElement.scrollHeight>innerHeight),true,'real private rows form a long workspace');
+  await workspace.getByLabel(/^More actions for /).last().click();
+  await workspace.getByLabel(/^Manage sharing for /).click();
+  const sharing=workspace.getByRole('dialog',{name:'Sharing',exact:true});await sharing.waitFor();
+  assert.equal(await sharing.evaluate(el=>{const r=el.getBoundingClientRect();return r.top>=0 && r.top<innerHeight && r.bottom<=innerHeight+1;}),true,'sharing dialog remains inside the visible workspace viewport');
+  await page.waitForFunction(()=>document.querySelector('[data-trusted-region="chrome"]')?.inert===true);
+  await sharing.press('Escape');await sharing.waitFor({state:'hidden'});
+  await page.waitForFunction(()=>document.querySelector('[data-trusted-region="chrome"]')?.inert===false);
+  const pageControls=page.frameLocator('iframe[title="Page controls"]');
+  await pageControls.getByLabel('Open page controls',{exact:true}).click();
+  await pageControls.getByLabel('Dark mode',{exact:true}).click();
+  await page.waitForFunction(()=>document.documentElement.dataset.theme==='dark');
+  await workspace.locator('html[data-theme="dark"]').waitFor();
+  console.log('PASS long private workspace sharing geometry, sibling modal isolation and parent/sibling appearance synchronization');
   assert.equal(new URL(page.url()).origin,base);
   const callback='http://127.0.0.1:5498/callback?fixed=yes',verifier='v'.repeat(43);
   const registration=await mainFetch(backend+'/oauth/register',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({redirect_uris:[callback]})});
@@ -89,10 +117,14 @@ export async function verifyMainPageLogin({browser,base,controls,sink,id,mainFet
   });
   await page.goBack();assert.equal(page.url(),base+'/docs-human');
   const guest=await browser.newPage({ignoreHTTPSErrors:true});
-  await guest.route(controls+'/controls/page/',route=>route.abort());
-  await guest.goto(base+'/');await guest.getByLabel('Retry loading app').waitFor({state:'visible',timeout:18000});
-  await guest.unroute(controls+'/controls/page/');await guest.getByLabel('Retry loading app').click();
-  const home=guest.frameLocator('iframe[title="Artifactbin app"]');await home.getByLabel('Install for my agent').click();
+  await guest.route(controls+'/controls/region/home?*',route=>route.abort());
+  const publicResponse=await guest.goto(base+'/');
+  assert((await publicResponse.text()).includes('<h1'),'public first HTML contains its actual heading');
+  assert.equal(await guest.locator('#app-frame').count(),0,'public home is not a full-page iframe');
+  await guest.locator('h1').waitFor({state:'visible'});
+  await guest.getByLabel('Retry loading home').waitFor({state:'visible',timeout:18000});
+  await guest.unroute(controls+'/controls/region/home?*');await guest.getByLabel('Retry loading home').click();
+  const home=guest.frameLocator('iframe[title="Home workspace"]');await home.getByLabel('Install for my agent').click();
   await home.getByLabel('Choose Others agent family').click();
   console.log('CLIPBOARD POLICY',await home.locator('body').evaluate(async()=>({secure:isSecureContext,policy:document.featurePolicy?.allowsFeature('clipboard-write'),permission:await navigator.permissions.query({name:'clipboard-write'}).then(p=>p.state).catch(()=>'unsupported'),focused:document.hasFocus()})));
   await home.locator('body').evaluate(()=>{
