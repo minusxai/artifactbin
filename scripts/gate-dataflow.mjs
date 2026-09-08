@@ -140,7 +140,7 @@ const reach = await authorRealm.evaluate(async ({id,base}) => {
 ok(reach.query === 'blocked', `author code cannot fetch even its query URL; declared reads use the capability bridge (${reach.query})`);
 ok(reach.start === 'blocked' && reach.api === 'blocked' && reach.other === 'blocked', `…and nothing else on the origin: start=${reach.start} api=${reach.api} other-doc=${reach.other}`);
 
-// ── 4. <DataTable> past the cap, through the same direct GET ───────────────
+// ── 4. <DataTable> past the cap, through the authenticated query POST ──────
 // A dataset can never exceed the ingest cap (MAX_ROWS_LIMIT), and the query cap
 // defaults to the same number — so a result past the cap comes from the QUERY:
 // a cross join of a 200-row dataset is 40,000 rows, 10,000 of which the island
@@ -152,8 +152,8 @@ const tdoc = await j(await api('/api/artifacts', { markup: `<Helmet><Query name=
 <div data-design="tw" className="@container p-8"><h1 className="text-3xl font-bold">Big table</h1>
 <DataTable data="$all" height="360px" columns={[{"col":"id","title":"ID"},{"col":"region","title":"Region"},{"col":"revenue","title":"Revenue","fmt":"$,.0f","bar":true}]} /></div>` }));
 ok(!!tdoc.id, 'the DataTable document published');
-const pageGets = [];
-p.on('request', (r) => { if (r.url().includes(`/a/${tdoc.id}/query`) && r.method() === 'GET') pageGets.push(r.url()); });
+const pageQueries = [];
+p.on('request', (r) => { if (new URL(r.url()).pathname === `/a/${tdoc.id}/query`) pageQueries.push(r); });
 await p.goto(`${B}/a/${tdoc.id}`, { waitUntil: 'load' });
 ok((await p.locator('iframe[title="artifact"]').count()) === 0, 'the table document is top-level too');
 const f2 = p.mainFrame();
@@ -162,15 +162,19 @@ await f2.waitForTimeout(600);
 const domRows = await f2.$$eval('[aria-label="Data grid"] tbody tr', (trs) => trs.length);
 ok(domRows > 0 && domRows < 200, `the table is virtualised (${domRows} DOM rows for 10,000 loaded)`);
 ok(/10,000 of 40,000/.test(await f2.textContent('[aria-label="Row count"]')), 'and honest about holding a sample of the result');
+const beforeSort = pageQueries.length;
 await f2.click('[aria-label="Sort by Revenue"]');
 await f2.click('[aria-label="Sort by Revenue"]');
 await f2.waitForFunction(() => document.querySelector('[aria-label="Row count"]')?.textContent?.startsWith('500 of'), null, { timeout: 20000 }).catch(() => {});
 const topCell = await f2.$eval('[aria-label="Data grid"] tbody tr td:nth-child(3)', (td) => td.textContent);
 ok(topCell === `$${expectedMax.toLocaleString('en-US')}`, `a header click sorts the WHOLE result through the engine (desc: ${topCell} first, expected $${expectedMax.toLocaleString('en-US')})`);
+ok(pageQueries.length > beforeSort, 'sorting issued a new engine query');
+const beforePaging = pageQueries.length;
 await f2.click('[aria-label="Load more rows"]');
 await f2.waitForFunction(() => document.querySelector('[aria-label="Row count"]')?.textContent?.startsWith('1,000 of'), null, { timeout: 20000 }).catch(() => {});
 ok(/1,000 of 40,000/.test(await f2.textContent('[aria-label="Row count"]')), 'load more reads the next window');
-ok(pageGets.length >= 2, `sort and paging went through the document's own GET (${pageGets.length} calls)`);
+ok(pageQueries.length > beforePaging, 'paging issued a new engine query');
+ok(pageQueries.length >= 2 && pageQueries.every(r => r.method() === 'POST' && r.headers()['x-artifactbin-csrf'] === '1'), `sort and paging used authenticated query POSTs (${pageQueries.length} calls)`);
 ok(pageErrors.length === 0, `no page errors (${pageErrors.length})`);
 
 // ── 5. the reader ACL: a PRIVATE data document keeps the shell ──────────────
