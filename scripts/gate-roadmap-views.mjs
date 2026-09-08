@@ -26,6 +26,7 @@ try {
   await page.locator('#view-dag [aria-label="Dependency 1 → 3"]').first().waitFor({timeout:3000});
   assert.equal(await page.getByLabel('Item 1',{exact:true}).isVisible(),false);
   await switchView('Sprint');
+  await ownerPage.waitForFunction(()=>new URLSearchParams(location.search).get('$view_mode')==='sprint');
   await page.locator('#view-sprint').getByLabel('Add Sprint',{exact:true}).click();
   const dialog=ownerPage.frameLocator('iframe[title="artifact"]').getByRole('dialog',{name:'Add sprint'});
   await dialog.waitFor();
@@ -42,6 +43,7 @@ try {
   assert.equal(await dialog.isVisible(),true);
   await page.getByLabel('Cancel sprint',{exact:true}).click();
   await switchView('Table');
+  await ownerPage.waitForFunction(()=>new URLSearchParams(location.search).get('$view_mode')!=='sprint');
   await page.getByLabel('Sprint 1',{exact:true}).click();
   await page.getByRole('option',{name:'Planning week',exact:true}).waitFor();
   await page.locator('[data-return-label="Sprint 1"]').click();
@@ -52,7 +54,14 @@ try {
   await page.getByLabel('Sprint 1',{exact:true}).click();
   await page.getByRole('option',{name:'Quick sprint',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('button[aria-label="Sprint 1"]')?.textContent.includes('Quick sprint'));
-  await ownerPage.reload();
+  let persisted;
+  for(let attempt=0;attempt<100;attempt++){
+    persisted=await fixture.api(`/api/artifacts/${fixture.datasetId}`,undefined,'GET');
+    if(persisted.rows.find(row=>row.id===1)?.sprint==='Quick sprint')break;
+    await ownerPage.waitForTimeout(50);
+  }
+  assert.equal(persisted?.rows.find(row=>row.id===1)?.sprint,'Quick sprint','sprint assignment persisted before reload');
+  await ownerPage.reload({waitUntil:'load'});
   await ownerPage.locator('iframe[title="artifact"]').waitFor();
   page = await (await ownerPage.locator('iframe[title="artifact"]').elementHandle()).contentFrame();
   await page.getByLabel('Item 1',{exact:true}).waitFor({timeout:20_000});
