@@ -13,6 +13,12 @@ const app = createAppServer({ actorSecret: secret, indexHtml: async () => '<!doc
 const headers = (actor: Actor) => ({ [ACTOR_HEADER]: signActor(actor, secret), accept: 'text/html' });
 
 describe('same-origin initial app responses with dynamic SSR disabled', () => {
+  it('does not bypass the proxy verdict when controls origin is retired', async () => {
+    const response = await app.request('/account', { headers: { accept: 'text/html' } });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ error: 'proxy_required' });
+  });
+
   it('serves useful static logged-out landing HTML, without a framing wait', async () => {
     const response = await app.request('/', { headers: headers({ credential: 'none' }) });
     expect(response.status).toBe(200);
