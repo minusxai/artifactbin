@@ -16,6 +16,37 @@ function SensitiveDialog() {
 }
 
 describe('trusted UI CSS boundary', () => {
+  it('opens an inner top-layer overlay and closes it on unmount without exposing controls on the host', () => {
+    const show = vi.fn(), hide = vi.fn();
+    const originalShow = HTMLElement.prototype.showPopover, originalHide = HTMLElement.prototype.hidePopover;
+    HTMLElement.prototype.showPopover = show;
+    HTMLElement.prototype.hidePopover = hide;
+    try {
+      const result = render(<TrustedUi overlay><button aria-label="Protected overlay action">Safe</button></TrustedUi>);
+      const host = result.container.querySelector('[data-trusted-ui]')!;
+      const root = host.shadowRoot!;
+      const layer = root.querySelector('[data-trusted-ui-root]');
+      expect(layer?.getAttribute('popover')).toBe('manual');
+      expect(host.hasAttribute('popover')).toBe(false);
+      expect(show).toHaveBeenCalledTimes(1);
+      expect(show.mock.instances[0]).toBe(layer);
+      expect(root.textContent).toContain(':host::before');
+      result.unmount();
+      expect(hide).toHaveBeenCalledTimes(1);
+    } finally {
+      HTMLElement.prototype.showPopover = originalShow;
+      HTMLElement.prototype.hidePopover = originalHide;
+    }
+  });
+
+  it('fails closed for overlay controls when the browser has no top-layer API', () => {
+    const original = HTMLElement.prototype.showPopover;
+    delete (HTMLElement.prototype as Partial<HTMLElement>).showPopover;
+    try {
+      expect(() => render(<TrustedUi overlay><button aria-label="Unsafe fallback">Unsafe</button></TrustedUi>)).toThrow(/popover/i);
+      expect(document.querySelector('[aria-label="Unsafe fallback"]')).toBeNull();
+    } finally { HTMLElement.prototype.showPopover = original; }
+  });
   it('keeps exactly one protected root during StrictMode ref replay', () => {
     const result = render(<StrictMode><TrustedUi><button aria-label="Strict control">Safe</button></TrustedUi></StrictMode>);
     const root = result.container.querySelector('[data-trusted-ui]')!.shadowRoot!;

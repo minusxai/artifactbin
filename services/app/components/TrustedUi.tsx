@@ -3,12 +3,26 @@ import { createPortal } from 'react-dom';
 
 const PortalContainer = createContext<HTMLElement | undefined>(undefined);
 const ROOT = '[data-trusted-ui-root]';
-let trustedCss = '';
+const BOUNDARY_CSS = `
+:host::before, :host::after { content: none !important; display: none !important; }
+${ROOT}[popover] {
+  position: fixed !important; inset: 0 !important; margin: 0 !important;
+  width: 100vw !important; height: 100vh !important;
+  max-width: none !important; max-height: none !important;
+  padding: 0 !important; border: 0 !important; overflow: visible !important;
+  background: transparent !important; pointer-events: none !important;
+}
+${ROOT}[popover]:popover-open { display: block !important; }
+${ROOT}[popover] > div { pointer-events: auto; }
+`;
+let trustedCss = BOUNDARY_CSS;
 const installedStyles = new Set<HTMLStyleElement>();
 
 /** CSS boundary for first-party UI. Author content must never be mounted inside it. */
 export interface TrustedUiProps {
   children: ReactNode;
+  /** Artifact chrome only: protects its paint order from author sibling overlays. */
+  overlay?: boolean;
 }
 
 /** Register only the app's compiled CSS, imported explicitly by its entrypoint. */
@@ -25,12 +39,12 @@ export function configureTrustedUiStyles(cssText: string): void {
   // enters here, never artifact stylesheets.
   const scoped = cssText.replace(/:root\b|:host\b/g, ROOT)
     .replace(/(^|[},\s])(?:html|body)(?=[\s,{])/g, `$1${ROOT}`);
-  trustedCss = `@layer trusted-ui-reset { ${ROOT} { all: initial; ${reset} } }\n${scoped}\n${ROOT} { display: contents; }`;
+  trustedCss = `@layer trusted-ui-reset { ${ROOT} { all: initial; ${reset} } }\n${scoped}\n${ROOT} { display: contents; }\n${BOUNDARY_CSS}`;
   for (const style of installedStyles) style.textContent = trustedCss;
 }
 
 /** Owns the protected root and its portal destination; no extra document or auth origin. */
-export function TrustedUi({ children }: TrustedUiProps): ReactNode {
+export function TrustedUi({ children, overlay = false }: TrustedUiProps): ReactNode {
   const [mount, setMount] = useState<{ root: HTMLElement; portal: HTMLElement } | null>(null);
   const owned = useRef<{ host: HTMLElement; style: HTMLStyleElement; root: HTMLElement; content: HTMLElement; portal: HTMLElement } | null>(null);
   const attach = useCallback((host: HTMLDivElement | null) => {
@@ -49,7 +63,17 @@ export function TrustedUi({ children }: TrustedUiProps): ReactNode {
       owned.current = { host, style, root, content, portal };
     }
     const { style, root, content, portal } = owned.current;
+    // A normal stacking context is not a safe fallback: an author sibling
+    // could paint a false label above a real action. Fail before mounting any
+    // privileged controls when the requested top-layer protection is absent.
+    if (overlay && typeof root.showPopover !== 'function') {
+      throw new Error('Trusted UI overlay requires browser popover support');
+    }
     style.textContent = trustedCss;
+    if (overlay) {
+      root.setAttribute('popover', 'manual');
+      root.showPopover();
+    } else root.removeAttribute('popover');
     installedStyles.add(style);
     setMount(previous => previous?.root === content ? previous : { root: content, portal });
     const syncTheme = () => {
@@ -61,10 +85,11 @@ export function TrustedUi({ children }: TrustedUiProps): ReactNode {
     return () => {
       observer.disconnect();
       installedStyles.delete(style);
+      if (overlay) root.hidePopover();
       // React owns the portal children and removes them during unmount. Do
       // not clear them before React's deletion pass.
     };
-  }, []);
+  }, [overlay]);
   // The host is deliberately not a security boundary against JS. Author JS
   // remains in its opaque sandbox; Shadow DOM prevents author CSS selectors
   // from reaching controls. No slots or parts expose those controls outside.
