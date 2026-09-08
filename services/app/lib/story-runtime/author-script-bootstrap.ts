@@ -94,8 +94,8 @@ ${AUTHOR_REALM_LOCKDOWN}
         started = true;
         try {
           assetOrigin = message.assetOrigin || null;
-          // Compatibility Sandbox retains its pinned-library/ref API policy.
-          // Managed Iframe uses the generic cached-asset transport instead.
+          // Hidden Helmet scripts retain native APIs under their deny-network
+          // CSP. Visible managed Iframes use the cached-asset transport.
           if (!message.managed && nativeFetch) window.fetch = nativeFetch;
           if (!message.managed && nativeXHR) window.XMLHttpRequest = nativeXHR;
           if (message.managed) installAssetSources();

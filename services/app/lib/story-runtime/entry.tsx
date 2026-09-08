@@ -3,8 +3,8 @@
  * owner's iframe) — bundled to public/story/entry-<hash>.js by
  * scripts/build-story-runtime.mjs and loaded as a crossorigin ES module at the
  * end of the document body. The author's Helmet <script> is parked inert
- * (AUTHOR_SCRIPT_TYPE) and re-injected by runAuthorScript after hydration, so
- * author code never runs against an unhydrated tree.
+ * (AUTHOR_SCRIPT_TYPE) and started in an opaque child after hydration;
+ * author code never executes in this renderer's document.
  *
  * Reads the JSON island the builder embedded and hydrates the SSR'd tree with
  * the SAME StoryRuntimeApp the server rendered — the island carries parsed
@@ -35,10 +35,8 @@ import { syncValuesToUrl } from './url-values-sync';
 import { EMPTY_DATAFLOW } from '@/lib/story/dataflow';
 
 /**
- * Run the author's Helmet <script>, which the builder parked in an inert
- * <script type="text/mx-author"> block. Re-injecting it as a real classic
- * script gives it exactly the semantics an author expects — global scope,
- * `var`, no module wrapper — but only once the document is hydrated.
+ * Start the parked Helmet script in its opaque realm after the renderer's
+ * first commit. Classic-script globals belong to that child, not this page.
  */
 let authorScriptRan = false;
 let authorSession: ReturnType<typeof createAuthorScriptSession> | null = null;
@@ -84,9 +82,9 @@ if (island?.textContent && root) {
     authorSession = createAuthorScriptSession(store);
     window.addEventListener('pagehide', event => { if (!event.persisted) authorSession?.dispose(); });
     /*
-     * The asset verb, threaded to the view for the ONE consumer that needs it:
-     * a bound `<img src="$pick">`, which cannot load the import endpoint for
-     * itself inside a parent (opaque origin, no cookie). Present exactly when
+     * The asset verb serves bound images and managed Iframes, which cannot
+     * authenticate their own import requests inside an opaque document.
+     * Present exactly when
      * the transport is the relay, so its presence IS "am I framed" — decided
      * once, above, like everything else about where this document talks.
      */

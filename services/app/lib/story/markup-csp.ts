@@ -28,10 +28,8 @@ const SOURCE_DIRECTIVES = [
   "media-src 'self' data: blob:",
   // The runtime's fixed same-origin HTTP wrapper; authored raw frames remain invalid JSX.
   "frame-src 'self'",
-  // No network frame destinations: raw <iframe> is banned in markup. The
-  // trusted runtime creates only an inline srcdoc author-script sandbox.
-  // Keep default-src 'none' as the navigation boundary until trusted-control
-  // destinations have their own explicit, tested policy.
+  // Raw <iframe> remains invalid markup. The trusted runtime owns this HTTP
+  // wrapper; its own frame-src 'none' prevents the inner author navigating.
 ] as const;
 
 /** What the document may DO — content-independent. */
