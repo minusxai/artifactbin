@@ -7,8 +7,8 @@ These two are grouped because they share consumers — `components/views`, `lib/
 `lib/validation`.
 
 These trees are rendered in exactly ONE place: the SERVED document
-(`lib/story-runtime`, SSR'd by `lib/story/document.ts` and hydrated in an opaque-origin
-iframe). The same-origin editing canvas that used to render them a second time is gone,
+(`lib/story-runtime`, mounted directly in the normal app page; explicit raw/capture HTML
+is SSR'd by `lib/story/document.ts` with an opaque document sandbox). The editing canvas that used to render them a second time is gone,
 and with it `lib/story-surface`'s mounting/serializing machinery and `lib/html`'s iframe
 plumbing — editing is a mode the served document enters IN PLACE (`lib/story-runtime/edit/`).
 
@@ -149,7 +149,7 @@ The vendored popover never portals, and the vendored tooltip drops its portal wh
 `TooltipProvider` is `portalled={false}`, so floating content stays inside the document's own subtree
 instead of escaping to a body in another window. (`floating.ts` forced Radix's popper wrapper to
 `absolute` for a canvas that rendered documents inside `<svg><foreignObject>`; this product serves them
-in an iframe, where `position: fixed` works, and nothing injected that CSS.) `cn.ts` re-exports
+in ordinary document DOM, where `position: fixed` works, and nothing injects that CSS.) `cn.ts` re-exports
 `components/kit/cn.ts`.
 
 ## The compiled-CSS candidate set
@@ -222,12 +222,13 @@ Its bounded bridge exposes declared signals, query refreshes and mutations, not 
 account APIs, credentials or source editing. Changed/removed source replaces/revokes the realm.
 
 There is ONE document renderer: `lib/story-runtime`, SSR'd by `lib/story/document.ts`.
-With `APP__CONTROLS_ORIGIN` enabled it is top-level and the trusted app controls are a
-cross-origin child. The default/raw/export path retains the existing opaque document sandbox.
+Normal artifacts are top-level on the main origin. Trusted app controls use one shared
+Shadow DOM host for CSS isolation, not a separate authentication origin. `APP__CONTROLS_ORIGIN`
+is retired and ignored. Explicit raw/export paths retain the opaque document sandbox.
 Never evaluate general JSX expressions: restricted signal expressions remain an inert AST.
 
 Editing is a MODE of that document. Its runtime owns `contentEditable` hosts and sends
-authenticated, addressed edits to trusted controls. Author code cannot access those hosts.
+authenticated, addressed edits through the first-party runtime. Author code cannot access those hosts.
 Compose visibility with restricted JSX and dialogs with the kit primitives; local SQL updates
 declared inline tables or the reserved `_signals` scalar projection through Mutation/run.
 

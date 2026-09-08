@@ -1,7 +1,7 @@
 import {describe,expect,it} from 'vitest';
 import {isCrossSiteRequest,parseCookie} from '@/lib/http';
-import {PUBLIC_BASE_URL,CONTROLS_ORIGIN} from '@/lib/config';
-const origin=CONTROLS_ORIGIN??new URL(PUBLIC_BASE_URL).origin;
+import {PUBLIC_BASE_URL} from '@/lib/config';
+const origin=new URL(PUBLIC_BASE_URL).origin;
 describe('isCrossSiteRequest',()=>{
   const check=(headers:Record<string,string>)=>isCrossSiteRequest(new Request('http://internal:3000/api/x',{method:'POST',headers}));
   it('requires explicit browser proof, never missing Origin or same-site alone',()=>{

@@ -10,7 +10,7 @@
     ".": "./src/index.ts",
     "./shape": "./src/shape.ts",
     "./rate-limits": "./src/rate-limits.ts",
-    "./platform-pages": "./src/platform-pages.ts"
+    "./page-paths": "./src/page-paths.ts"
   },
   "files": [
     "src"

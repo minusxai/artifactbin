@@ -1,6 +1,6 @@
 import {expect,it,vi} from 'vitest';
 const policy=vi.hoisted(()=>({anonymousLive:false}));
-vi.mock('@/lib/config',async original=>({...await original<object>(),CONTROLS_ORIGIN:'http://i.localhost:3000',get PUBLIC_BASE_URL(){return 'http://localhost:3000';},get LIVE_UPDATES_ANON_ENABLED(){return policy.anonymousLive;}}));
+vi.mock('@/lib/config',async original=>({...await original<object>(),get PUBLIC_BASE_URL(){return 'http://localhost:3000';},get LIVE_UPDATES_ANON_ENABLED(){return policy.anonymousLive;}}));
 import {attachActor} from '@artifactbin/utils';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as mutate} from '@/app/a/[id]/mutate/route';
@@ -14,7 +14,7 @@ import {mintToken} from '@/lib/tokens';
 import {createUser} from '@/lib/users';
 import {request,useAppHarness} from './harness';
 useAppHarness();
-const trusted='http://i.localhost:3000';
+const trusted='http://localhost:3000';
 it('commits a permitted non-owner dataset write immediately without consent',async()=>{
   const owner=await mintToken('owner');
   const viewer=await createUser({email:'mxmx_test_immediate_viewer@example.com'});

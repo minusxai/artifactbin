@@ -43,7 +43,7 @@ import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { declaresMutations } from '@/lib/story/helmet';
 import { assetsPath, resolvePath, markupCsp, mutatePath, queryPath } from '@/lib/story/markup-csp';
-import {CONTROLS_ORIGIN, PUBLIC_BASE_URL, ASSETS_ORIGIN} from '@/lib/config';
+import {ASSETS_ORIGIN} from '@/lib/config';
 import { readUrlValues } from '@/lib/story/url-values';
 import { storyRuntimeAssets } from '@/lib/story/runtime-asset';
 import { ownerUsername } from '@/lib/users';
@@ -289,8 +289,6 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // every OG card).
       const chrome = new URL(request.url).searchParams.get('chrome') !== '0';
       const base = baseUrl(request);
-      const controlsUrl = CONTROLS_ORIGIN && chrome && !key && base === new URL(PUBLIC_BASE_URL).origin && !new URL(request.url).pathname.endsWith('/raw')
-        ? `${CONTROLS_ORIGIN}/controls/a/${artifact.id}${new URL(request.url).search}` : undefined;
       /*
        * ?edit=1 — the OWNER's copy. In-place editing is the runtime, and a
        * document of pure prose ships none; asking for it here means pressing
@@ -391,7 +389,6 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         }
         : null;
       const html = await buildStoryDocument({
-        controlsUrl,
         reactions,
         ownerBreadcrumb,
         assetUrls,
@@ -496,7 +493,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         status: 200,
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
-          'Content-Security-Policy': markupCsp(base, artifact.id, controlsUrl ? CONTROLS_ORIGIN! : undefined, ASSETS_ORIGIN??undefined),
+          'Content-Security-Policy': markupCsp(base, artifact.id, {assetOrigin:ASSETS_ORIGIN??undefined}),
       ...(chrome ? { Link: `<${base}/docs>; rel="help"` } : {}),
           ...COMMON,
         },

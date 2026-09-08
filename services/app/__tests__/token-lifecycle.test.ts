@@ -190,7 +190,7 @@ describe('reject: POST /api/tokens/reject', () => {
     const res = await reject(request('/api/tokens/reject', { browser: true, method: 'POST', cookie: await agentCookie([a.id, b.id]), json: { tokenId: a.id } }));
     expect(res.status).toBe(204);
     const { value } = cookieValue(res);
-    expect(await decodeAgentSession(value)).toEqual({ tokenIds: [b.id] });
+    expect(await decodeAgentSession(value)).toEqual({ tokenIds: [b.id], sessionId:expect.stringMatching(/^[A-Za-z0-9_-]{43}$/) });
     expect(await resolveTokenById(a.id)).toBeNull();
     expect(tokenStatus(await row(a.id))).toBe('revoked');
     expect(await resolveTokenById(b.id)).not.toBeNull();

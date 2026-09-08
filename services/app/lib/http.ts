@@ -1,6 +1,6 @@
 import { AGENT_HEADER, declaredAgentSlug } from '@artifactbin/contracts';
 import { currentHeaders } from './request-context';
-import { PUBLIC_BASE_URL, CONTROLS_ORIGIN } from '@/lib/config';
+import { PUBLIC_BASE_URL } from '@/lib/config';
 
 /** Absolute origin as the client sees it — honors reverse-proxy forwarding headers. Accepts a plain Request too (the MCP handler), falling back to its url. */
 export function baseUrl(request: Request): string {
@@ -16,7 +16,7 @@ export function baseUrl(request: Request): string {
 
 /** Shareable document/docs URLs use main; request-host security checks still use baseUrl. */
 export function publicLinkBase(request: Request): string {
-  return CONTROLS_ORIGIN ? new URL(PUBLIC_BASE_URL).origin : baseUrl(request);
+  return baseUrl(request);
 }
 
 /**
@@ -114,7 +114,7 @@ export function parseCookie(header: string | null, name: string): string | undef
 export function isCrossSiteRequest(request: Request): boolean {
   const site = request.headers.get('sec-fetch-site');
   const origin = request.headers.get('origin');
-  return origin !== (CONTROLS_ORIGIN ?? new URL(PUBLIC_BASE_URL).origin)
+  return origin !== new URL(PUBLIC_BASE_URL).origin
     || request.headers.get('x-artifactbin-csrf') !== '1'
     || (site !== null && site !== 'same-origin');
 }

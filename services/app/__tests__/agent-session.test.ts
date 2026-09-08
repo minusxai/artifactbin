@@ -1,4 +1,4 @@
-import {PUBLIC_BASE_URL,CONTROLS_ORIGIN} from '@/lib/config';
+import {PUBLIC_BASE_URL} from '@/lib/config';
 /**
  * The browser holds an httpOnly session cookie, never a bearer secret.
  *
@@ -159,7 +159,7 @@ describe('Origin check', () => {
     expect(crossSite.status).toBe(403);
 
     // The same call from our own origin is ordinary.
-    const sameSite = await createArtifact(request('/api/artifacts', { method: 'POST', cookie: cookie, origin: CONTROLS_ORIGIN??new URL(PUBLIC_BASE_URL).origin, headers: {'x-artifactbin-csrf':'1'}, json: { markup: '<h1>x</h1>' } }));
+    const sameSite = await createArtifact(request('/api/artifacts', { method: 'POST', cookie: cookie, origin: new URL(PUBLIC_BASE_URL).origin, headers: {'x-artifactbin-csrf':'1'}, json: { markup: '<h1>x</h1>' } }));
     expect(sameSite.status).toBe(201);
 
     // An agent curling with a bearer sends NO Origin — the protocol must not care.
@@ -206,7 +206,7 @@ describe('handing the document to another agent', () => {
     const doc = (await (await createArtifact(request('/api/artifacts', { method: 'POST', token: mine.token, json: { markup: '<h1>anon owned</h1>' } }))).json()) as { id: string };
 
     const cookie = cookieHeader(await encodeAgentSession({ tokenIds: [mine.id] }));
-    const res = await agentPrompt(request(`/api/my/artifacts/${doc.id}/agent-prompt`, { method: 'POST', cookie: cookie, origin: CONTROLS_ORIGIN??new URL(PUBLIC_BASE_URL).origin, headers: {'x-artifactbin-csrf':'1'} }), {
+    const res = await agentPrompt(request(`/api/my/artifacts/${doc.id}/agent-prompt`, { method: 'POST', cookie: cookie, origin: new URL(PUBLIC_BASE_URL).origin, headers: {'x-artifactbin-csrf':'1'} }), {
       params: Promise.resolve({ id: doc.id }),
     });
     expect(res.status).toBe(409);
@@ -220,7 +220,7 @@ describe('handing the document to another agent', () => {
     await claimTokenById(user.id, mine.id);
 
     sessionUser.id = user.id;
-    const res = await agentPrompt(request(`/api/my/artifacts/${doc.id}/agent-prompt`, { method: 'POST', origin: CONTROLS_ORIGIN??new URL(PUBLIC_BASE_URL).origin, headers: {'x-artifactbin-csrf':'1'} }), {
+    const res = await agentPrompt(request(`/api/my/artifacts/${doc.id}/agent-prompt`, { method: 'POST', origin: new URL(PUBLIC_BASE_URL).origin, headers: {'x-artifactbin-csrf':'1'} }), {
       params: Promise.resolve({ id: doc.id }),
     });
     sessionUser.id = '';
@@ -237,7 +237,7 @@ describe('handing the document to another agent', () => {
     const theirs = await mintToken('theirs');
     const doc = (await (await createArtifact(request('/api/artifacts', { method: 'POST', token: theirs.token, json: { markup: '<h1>not mine</h1>' } }))).json()) as { id: string };
 
-    const res = await agentPrompt(request(`/api/my/artifacts/${doc.id}/agent-prompt`, { method: 'POST', cookie: cookieHeader(await encodeAgentSession({ tokenIds: [mine.id] })), origin: CONTROLS_ORIGIN??new URL(PUBLIC_BASE_URL).origin, headers: {'x-artifactbin-csrf':'1'} }), { params: Promise.resolve({ id: doc.id }) });
+    const res = await agentPrompt(request(`/api/my/artifacts/${doc.id}/agent-prompt`, { method: 'POST', cookie: cookieHeader(await encodeAgentSession({ tokenIds: [mine.id] })), origin: new URL(PUBLIC_BASE_URL).origin, headers: {'x-artifactbin-csrf':'1'} }), { params: Promise.resolve({ id: doc.id }) });
     expect(res.status).toBe(404);
   });
 });

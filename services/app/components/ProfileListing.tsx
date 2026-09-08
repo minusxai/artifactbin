@@ -2,9 +2,10 @@ import type {ReactNode} from 'react';
 import {ListingHero,NothingHere} from './Listing';
 import Shelf from './Shelf';
 import {canonicalArtifactPath} from '@/lib/urls';
-import type {PublicProfileData} from '@/web/public-page-contract';
 
-export interface ProfileListingData extends PublicProfileData {
+export interface ProfileListingData {
+  handle:string;
+  files:Array<Record<string,unknown>&{id:string;format:string}>;
   owner?:{id:string};
   follow?:{following:boolean;count:number};
   authed?:boolean;

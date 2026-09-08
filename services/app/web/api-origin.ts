@@ -1,5 +1,5 @@
 import {stripIntent, withIntent, type Intent} from '@/lib/intent';
-import {isPlatformPage} from '@artifactbin/utils/platform-pages';
+import {isPlatformPage} from '@artifactbin/utils/page-paths';
 
 /** First-party router registration; returning false preserves native/server navigation. */
 export type AppNavigation = (url: URL, replace: boolean) => boolean;

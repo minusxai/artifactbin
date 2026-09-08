@@ -301,10 +301,8 @@ export const SSR_ENABLED = env('APP', 'SSR_ENABLED') === 'true';
 /** Explicit rollout: provision this trusted hostname before enabling top-level owner controls. */
 const controlsOriginSetting = env('APP', 'CONTROLS_ORIGIN');
 if(controlsOriginSetting)console.warn('APP__CONTROLS_ORIGIN is retired and ignored; browser authentication uses APP__PUBLIC_BASE_URL.');
-/** Retired compatibility export for unserved legacy client modules. */
-export const CONTROLS_ORIGIN = null;
 const assetsOriginSetting = env('APP', 'ASSETS_ORIGIN');
-export const ASSETS_ORIGIN = assetsOriginSetting ? parseAssetsOrigin(PUBLIC_BASE_URL, CONTROLS_ORIGIN, assetsOriginSetting) : null;
+export const ASSETS_ORIGIN = assetsOriginSetting ? parseAssetsOrigin(PUBLIC_BASE_URL, null, assetsOriginSetting) : null;
 
 /**
  * Where the EXPORT browser reaches this process. Internal by default, for the

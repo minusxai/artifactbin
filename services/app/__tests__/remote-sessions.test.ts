@@ -1,4 +1,4 @@
-import {PUBLIC_BASE_URL,CONTROLS_ORIGIN} from '@/lib/config';
+import {PUBLIC_BASE_URL} from '@/lib/config';
 import { describe, expect, it, afterEach } from "vitest";
 import { useAppHarness, request, agentCookie } from "./harness";
 import { mintToken } from "@/lib/tokens";
@@ -192,7 +192,7 @@ it("the real comment and reply routes notify the selected session after saving",
       method: "POST",
       cookie,
       json: { path: "0", edit_id: doc.edit_id, body: `${mention} review this` },
-      origin: CONTROLS_ORIGIN??new URL(PUBLIC_BASE_URL).origin, headers: {'x-artifactbin-csrf':'1'},
+      origin: new URL(PUBLIC_BASE_URL).origin, headers: {'x-artifactbin-csrf':'1'},
     }),
     { params: Promise.resolve({ id: doc.id }) },
   );
@@ -214,7 +214,7 @@ it("the real comment and reply routes notify the selected session after saving",
       method: "POST",
       cookie,
       json: { reply: `${mention} one more thing` },
-      origin: CONTROLS_ORIGIN??new URL(PUBLIC_BASE_URL).origin, headers: {'x-artifactbin-csrf':'1'},
+      origin: new URL(PUBLIC_BASE_URL).origin, headers: {'x-artifactbin-csrf':'1'},
     }),
     { params: Promise.resolve({ id: doc.id, annId: ann.id }) },
   );

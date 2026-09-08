@@ -10,7 +10,7 @@ import { attachActor } from '@artifactbin/utils';
 import type { Actor } from '@artifactbin/contracts';
 import { AGENT_COOKIE, encodeAgentSession } from '@/lib/agent-session';
 import { resetRateLimit } from '@/lib/auth';
-import { EVENTS_SCHEMA, PUBLIC_BASE_URL, CONTROLS_ORIGIN } from '@/lib/config';
+import { EVENTS_SCHEMA, PUBLIC_BASE_URL } from '@/lib/config';
 import { getDb, resetDb } from '@/lib/db';
 import { SCHEMA_STATEMENTS } from '@/lib/schema';
 
@@ -48,7 +48,7 @@ export function request(path: string, opts: RequestOptions = {}): Request {
   if (opts.token && opts.actor) throw new Error('request accepts only one credential: token or actor');
 
   const headers = new Headers(opts.headers);
-  const browserOrigin=CONTROLS_ORIGIN??new URL(PUBLIC_BASE_URL).origin;
+  const browserOrigin=new URL(PUBLIC_BASE_URL).origin;
   if(opts.browser){headers.set('origin',browserOrigin);headers.set('x-artifactbin-csrf','1');headers.set('sec-fetch-site','same-origin');}
   if (opts.json !== undefined && !headers.has('content-type')) headers.set('content-type', 'application/json');
   if (opts.token) headers.set('authorization', `Bearer ${opts.token}`);

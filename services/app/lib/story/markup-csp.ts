@@ -18,6 +18,7 @@
  * (`sandbox` without allow-same-origin), no form navigation, no base, no third-party
  * destinations of any kind. Guarded by __tests__/raw-document.test.ts.
  */
+import {AUTHOR_FRAME_PATH} from '@/lib/story-runtime/author-frame';
 /** Where each kind of subresource may come from — content-independent. */
 const SOURCE_DIRECTIVES = [
   "default-src 'none'",
@@ -26,10 +27,7 @@ const SOURCE_DIRECTIVES = [
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
   "media-src 'self' data: blob:",
-  // No network frame destinations: raw <iframe> is banned in markup. The
-  // trusted runtime creates only an inline srcdoc author-script sandbox.
-  // Keep default-src 'none' as the navigation boundary until trusted-control
-  // destinations have their own explicit, tested policy.
+  // The only frame destination is added below: the fixed HTTP author wrapper.
 ] as const;
 
 /** What the document may DO — content-independent. */
@@ -104,7 +102,7 @@ export const assetsPath = (id: string): string => `/a/${id}/assets`;
  */
 const GEOJSON_DIR_PATH = '/geojson/';
 
-export function markupCsp(origin: string, id: string, controlsOrigin?: string, assetOrigin?:string): string {
+export function markupCsp(origin: string, id: string, options:{assetOrigin?:string}={}): string {
   // connect-src sits with the other source directives, before the behaviour
   // ones — the one per-document line in an otherwise fixed policy.
   const self = origin.replace(/\/+$/, '');
@@ -113,7 +111,7 @@ export function markupCsp(origin: string, id: string, controlsOrigin?: string, a
   // GLB loaders fetch embedded textures/buffers through local blob/data URLs;
   // these add no network destination or access to the application's APIs.
   const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)} ${self}${GEOJSON_DIR_PATH} blob: data:`;
-  const behavior = controlsOrigin ? BEHAVIOUR_DIRECTIVES.filter(d => !d.startsWith('sandbox ')) : BEHAVIOUR_DIRECTIVES;
+  const {assetOrigin}=options;
   if(assetOrigin && (new URL(assetOrigin).origin!==assetOrigin||!/^https?:\/\//.test(assetOrigin)))throw Error('Invalid asset origin');
   const sources=SOURCE_DIRECTIVES.map(d=>{
     // Firefox evaluates inherited 'self' against the opaque srcdoc realm for
@@ -124,5 +122,5 @@ export function markupCsp(origin: string, id: string, controlsOrigin?: string, a
     return assetOrigin && /^(script|img|font|media)-src /.test(source)?source+' '+assetOrigin:source;
   });
   const assetConnect=assetOrigin?` ${assetOrigin} ${self}${assetsPath(id)}`:'';
-  return [...sources, ...(controlsOrigin ? [`frame-src ${controlsOrigin}`] : []), connect+assetConnect, ...behavior].join('; ');
+  return [...sources, `frame-src ${self}${AUTHOR_FRAME_PATH}`, connect+assetConnect, ...BEHAVIOUR_DIRECTIVES].join('; ');
 }

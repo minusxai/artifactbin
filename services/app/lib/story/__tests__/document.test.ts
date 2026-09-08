@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { buildStoryDocument, type StoryDocumentInput } from '@/lib/story/document';
 import { STORY_ISLAND_ID, STORY_ROOT_ID } from '@/lib/story-runtime/contract';
 import { criticalStoryFonts } from '@/lib/data/story/story-fonts';
+import {markupCsp} from '@/lib/story/markup-csp';
 
 const CSS = 'h1 { letter-spacing: -0.02em; }';
 const JS = 'document.body.dataset.ran = "1";';
@@ -28,6 +29,21 @@ const doc = (over: Partial<StoryDocumentInput> = {}): Promise<string> =>
   });
 
 describe('buildStoryDocument', () => {
+  it('cannot re-enable split controls through a stale renderer input',async()=>{
+    const legacy={source:'<p>Direct reader</p>',title:null,theme:null,colorMode:null,compiledCss:null,refData:{},runtimeSrc:'/story-runtime.js',controlsUrl:'https://i.example.test/controls/a/Abc123'};
+    const html=await buildStoryDocument(legacy);
+    expect(html).not.toContain('data-mx-controls');
+    expect(html).not.toContain(legacy.controlsUrl);
+  });
+  it('never drops the raw sandbox when an old positional controls origin is passed',()=>{
+    const policy=Reflect.apply(markupCsp,null,['https://example.test','Abc123','https://i.example.test']);
+    expect(policy).toContain('sandbox allow-scripts');
+    expect(policy).not.toContain('https://i.example.test');
+  });
+  it('allows raw author boot only through the fixed HTTP wrapper destination',()=>{
+    const policy=markupCsp('https://example.test','Abc123');
+    expect(policy.split('; ').find(d=>d.startsWith('frame-src '))).toBe('frame-src https://example.test/story/author-frame');
+  });
   it('emits a complete page: doctype, charset, root, island, runtime, author script', async () => {
     const html = await doc();
     expect(html.startsWith('<!DOCTYPE html>')).toBe(true);

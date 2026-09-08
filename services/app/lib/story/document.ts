@@ -37,7 +37,7 @@ import type { RefDataMap } from '@/lib/story/ref-data';
 import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
 import { STORY_ROOT_ATTR } from '@/lib/story-surface';
-import { escapeHtml, renderReaderChrome, renderReaderLoadingShell, type ReaderForkedFrom, type ReaderReactions } from '@/lib/story/reader-chrome';
+import { escapeHtml, renderReaderChrome, type ReaderForkedFrom, type ReaderReactions } from '@/lib/story/reader-chrome';
 import { criticalStoryFonts, getStoryFontCss, storyFontFaceCss, STORY_FONTS_ATTR } from '@/lib/data/story/story-fonts';
 import { documentFonts, documentFontCss } from './document-fonts';
 import { webFontAssets } from '@/lib/webfonts';
@@ -62,7 +62,6 @@ export interface StoryDocumentInput {
   assetUrls?: ReadonlySet<string> | ReadonlyMap<string, WebAssetBox>;
   /** The document's `<Value>`/`<Query>`/`<Mutation>` declarations + render-time state (lib/artifacts dataflowForRow); null when it declares nothing. */
   dataflow?: StoryIslandDataflow | null;
-  controlsUrl?: string;
   /** Stored title (Helmet's own <title> wins over it in the head). */
   title: string | null;
   /** src of the hydration runtime; null omits the tag (unit tests, scriptless contexts). */
@@ -403,7 +402,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    * the omission is structural: /export photographs this frame, and neither the
    * rail nor the attribution belongs in an unfurl card.
    */
-  const readerChrome = chrome && !input.controlsUrl
+  const readerChrome = chrome
     ? renderReaderChrome({
       // Snapshot-only readers still need document identity for their chrome;
       // live eligibility controls subscription attributes, not attribution.
@@ -421,7 +420,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
       ownerBreadcrumb: input.ownerBreadcrumb,
       reactions: input.reactions ?? null,
     })
-    : chrome && input.controlsUrl ? renderReaderLoadingShell(input.author ?? null) : '';
+    : '';
 
   /*
    * Resolved ONCE and handed to both the SSR render and the island below: the
@@ -493,7 +492,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    * must degrade to the old, heavy, WORKING delivery rather than to silence.
    */
   const commentFallback = !!input.commenting && !commentSrc;
-  const hydrates = !!split && !!runtimeSrc && (needsRuntime(split.body) || !!helmet.script || !!dataflow || !!input.editable || !!input.controlsUrl || commentFallback);
+  const hydrates = !!split && !!runtimeSrc && (needsRuntime(split.body) || !!helmet.script || !!dataflow || !!input.editable || commentFallback);
   /*
    * The THIRD delivery: comments without hydration. A commenter's frame used
    * to ask for `?edit=1` — which made this `hydrates` — so a page of prose
@@ -532,7 +531,6 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
 
   const island: StoryIslandData = { nodes: split?.body ?? [], refData, ...(Object.keys(glyphs).length ? { glyphs } : {}), ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, ...(input.queryUrl ? { queryUrl: input.queryUrl } : {}), ...(input.mutateUrl ? { mutateUrl: input.mutateUrl } : {}), ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}) };
   // `<` escaped so no row value can close the script element from inside JSON.
-  if (input.controlsUrl) island.controlsUrl = input.controlsUrl;
   island.sandboxApi = sandboxApi;
   if(input.managedAssets)island.managedAssets=input.managedAssets;
   const islandJson = JSON.stringify(island).replace(/</g, '\\u003c');
@@ -590,7 +588,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
     `${fontPreloads}${modulePreloads}${styles}</head>` +
     // The live attributes are what the reading-position module reads to open
     // this document's own stream (lib/story-runtime/anchor-entry).
-    `<body ${STORY_ROOT_ATTR}${input.controlsUrl ? ' data-mx-controls="true"' : ''}${live && live.enabled !== false ? ` data-mx-live-id="${escapeHtml(live.id)}" data-mx-live-edit="${escapeHtml(live.editId)}"` : ''}>` +
+    `<body ${STORY_ROOT_ATTR}${live && live.enabled !== false ? ` data-mx-live-id="${escapeHtml(live.id)}" data-mx-live-edit="${escapeHtml(live.editId)}"` : ''}>` +
     `<div id="${STORY_ROOT_ID}">${bodyHtml}</div>` +
     readerChrome +
     /*
