@@ -125,5 +125,14 @@ try {
   assert.equal(wire.slice(beforeExportWire).filter(row=>row.host===new URL(assets).host).length,0,'export cached assets bypass public TLS entirely');
   console.log(JSON.stringify({engine:engineName,version:browser.version(),loads:3,signals:true,persistentMutation:true,permissionDenial:true,bundledClassicAndModule:true,dynamicImageAndScript:true,rawCompatibility:true,immutableWebRtcDenial:true,ssrHeightStable:true,nestedNavigationBlocked:true,singleNavigationControl:true,internalColdExport:true,cdnHits:Object.fromEntries(hits),assetRequests:wire.filter(row=>row.host===new URL(assets).host).length}));
 } finally {
-  await browser?.close();if(server&&server.exitCode===null){const exited=once(server,'exit');server.kill('SIGTERM');await exited;}await new Promise(resolve=>tls.close(resolve));await new Promise(resolve=>fixture.close(resolve));rmSync(scratch,{recursive:true,force:true});
+  await browser?.close();
+  if(server&&server.exitCode===null){
+    const exited=once(server,'exit');server.kill('SIGTERM');
+    // In-process Chromium installs signal handlers; a gate's disposable app
+    // must not keep CI alive indefinitely after all assertions have completed.
+    const force=setTimeout(()=>server.kill('SIGKILL'),5000);force.unref();
+    try{await exited;}finally{clearTimeout(force);}
+  }
+  tls.closeAllConnections();fixture.closeAllConnections();
+  await new Promise(resolve=>tls.close(resolve));await new Promise(resolve=>fixture.close(resolve));rmSync(scratch,{recursive:true,force:true});
 }
