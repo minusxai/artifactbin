@@ -327,6 +327,9 @@ function buildProps(
   const props: Record<string, unknown> = { [AST_PATH_ATTR]: path };
   for (const a of attributes) {
     const lower = a.name.toLowerCase();
+    // Editor identity belongs to this AST position, never to authored props.
+    // Filter all spellings: HTML folds case, while SVG/components may retain it.
+    if (lower === AST_PATH_ATTR) continue;
     if (lower.startsWith('on') || DENIED_PROPS.has(lower)) continue;
     if (!a.value.static) {
       if (REACTIVE_BOOLEAN_PROPS.has(a.name) && isReactiveExpression(a.value.reactive)) {

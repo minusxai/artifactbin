@@ -11,6 +11,8 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { parseJsx } from '@/lib/jsx';
 import { renderStoryNodes } from '../interpreter';
+import { storyBodyFor } from '@/lib/story/body';
+import { describeSelection } from '@/lib/story-runtime/edit/describe-selection';
 
 const propsProbe: Record<string, unknown>[] = [];
 const StubCard = ({ children, ...props }: { children?: React.ReactNode } & Record<string, unknown>) => {
@@ -67,6 +69,23 @@ describe('rendering basics', () => {
     expect(container.querySelector('#AAAA')?.getAttribute('data-mx-ast')).toBe('0');
     expect(screen.getByLabelText('stub-card').getAttribute('data-mx-ast')).toBe('1');
     expect(propsProbe.at(-1)?.['data-mx-ast']).toBe('1');
+  });
+
+  it.each(['data-mx-ast', 'DATA-MX-AST', 'data-Mx-AsT'])('keeps validated native, SVG, component and row selection identity with %s', (attribute) => {
+    // Existing stored markup stays readable; only the interpreter owns paths.
+    const parts = storyBodyFor(`<p id="AAAA" ${attribute}="1" data-note="keep" data-mx-custom="also-keep">Edit me</p><Card id="BBBB" ${attribute}="0">Other</Card><svg id="CCCC" ${attribute}="0"><circle id="DDDD" ${attribute}="1" r={4}/></svg><p id="EEEE" ${attribute}="$_row.target" data-row="$_row.label">Row</p>`);
+    expect(parts).not.toBeNull();
+    const {container} = render(<>{renderStoryNodes(parts!.body, {components: REGISTRY, row: {target: '1', label: 'row-value'}})}</>);
+    for (const [nodeId, path] of [['AAAA','0'], ['BBBB','1'], ['CCCC','2'], ['DDDD','2.0'], ['EEEE','3']]) {
+      const element = container.querySelector(`#${nodeId}`)!;
+      expect(describeSelection(element, parts!.body)).toMatchObject({nodeId, path});
+      // SVG preserves attribute case, unlike HTML: no hidden duplicate stamp.
+      expect(element.getAttributeNames().filter(name => name.toLowerCase() === 'data-mx-ast')).toEqual(['data-mx-ast']);
+    }
+    expect(container.querySelector('#AAAA')).toHaveAttribute('data-note', 'keep');
+    expect(container.querySelector('#AAAA')).toHaveAttribute('data-mx-custom', 'also-keep');
+    expect(container.querySelector('#EEEE')).toHaveAttribute('data-row', 'row-value');
+    expect(propsProbe.at(-1)?.[attribute]).toBe(attribute === 'data-mx-ast' ? '1' : undefined);
   });
 });
 
