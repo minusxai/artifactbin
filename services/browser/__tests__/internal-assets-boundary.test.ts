@@ -14,6 +14,7 @@ beforeAll(async () => {
     expect(req.headers.host).toBe('assets.invalid');
     for (const name of ['cookie','authorization','origin','referer','x-mx-actor','x-forwarded-host','x-forwarded-proto']) expect(req.headers[name]).toBeUndefined();
     req.on('close', () => closed++);
+    if (mode === 'gzip-head') { res.writeHead(200,{'content-encoding':'gzip','content-length':'42'});res.end();return; }
     if (mode === 'redirect') { res.writeHead(302,{location:app.base+'/private'});res.end();return; }
     if (mode === 'external-redirect') { res.writeHead(307,{location:'https://external.invalid/private'});res.end();return; }
     if (mode === 'oversize') { res.writeHead(200,{'content-length':String(65*1024*1024)});res.flushHeaders();return; }
@@ -32,6 +33,11 @@ it('forwards only bytes with a fixed deployment Host and sanitized response poli
   expect(response.headers.get('x-content-type-options')).toBe('nosniff');
   expect(response.headers.get('content-security-policy')).toBe("default-src 'none'; sandbox");
   expect(await (await read(origin+path,'HEAD')).text()).toBe('');
+});
+it('does not try to decode a bodyless HEAD with compression metadata',async()=>{
+ mode='gzip-head';const response=await read(origin+path,'HEAD');
+ expect(response.status).toBe(200);expect(await response.text()).toBe('');
+ await new Promise(resolve=>setTimeout(resolve,20));
 });
 describe.each([
  ['non-asset',origin+'/api/my/session','GET'],['prefix',origin+'.evil'+path,'GET'],

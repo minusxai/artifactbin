@@ -25,15 +25,15 @@ export async function internalAssetResponse(target: string, method: string, asse
     }, incoming => {
       const headers = new Headers();
       for (const [key,value] of Object.entries(incoming.headers)) if(value !== undefined) headers.set(key, Array.isArray(value) ? value.join(', ') : value);
+      const status = incoming.statusCode ?? 502;
+      const noBody = method === 'HEAD' || [204,205,304].includes(status);
+      if(noBody) { incoming.resume();resolve(new Response(null,{status,headers}));return; }
       const encoding = headers.get('content-encoding');
       const decoder = encoding === 'gzip' ? createGunzip() : encoding === 'br' ? createBrotliDecompress() : encoding === 'deflate' ? createInflate() : null;
       if (encoding && encoding !== 'identity' && !decoder) { incoming.destroy();reject(new Error('asset encoding refused'));return; }
       const source = decoder ? incoming.pipe(decoder) : incoming;
       if (decoder) { incoming.on('error', error => decoder.destroy(error)); decoder.on('close', () => incoming.destroy()); }
-      const status = incoming.statusCode ?? 502;
-      const noBody = method === 'HEAD' || [204,205,304].includes(status);
-      if(noBody)incoming.resume();
-      resolve(new Response(noBody ? null : Readable.toWeb(source) as ReadableStream<Uint8Array>, {status,headers}));
+      resolve(new Response(Readable.toWeb(source) as ReadableStream<Uint8Array>, {status,headers}));
     });
     request.on('error', reject);request.end();
   });
