@@ -7,7 +7,7 @@
  */
 import { parseRowRef } from '@/lib/story/row-scope';
 import { isReactiveExpression, reactiveNames, REACTIVE_BOOLEAN_PROPS } from './reactive';
-import { validateManagedIframeSource } from '@/lib/story/managed-iframe-source';
+import { compileManagedIframe } from '@/lib/story/managed-iframe';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 // Shared with the render-time gate in lib/story-ui/interpreter.tsx — see
 // lib/jsx/url-attrs.ts for why these must not be maintained separately.
@@ -108,7 +108,7 @@ function walk(
     errors.push({message: 'Row expressions belong inside a DataTable Column', start: attr.start, end: attr.end});
   }
   if (node.tag === 'Iframe') {
-    try { validateManagedIframeSource(node); }
+    try { compileManagedIframe(node); }
     catch (error) { errors.push({ message: error instanceof Error ? error.message : String(error), tag: node.tag, start: node.start, end: node.end }); }
     return;
   }

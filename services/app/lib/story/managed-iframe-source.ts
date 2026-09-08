@@ -13,6 +13,16 @@ export function validateManagedIframeSource(node:JsxElement):void {
   }
 }
 
+/** Save-only syntax validation, deliberately outside the reader's validator graph. */
+export function managedIframeSourceErrors(nodes:JsxNode[]):Array<{message:string;tag:string;start:number;end:number}> {
+  const errors:Array<{message:string;tag:string;start:number;end:number}>=[];
+  const walk=(items:JsxNode[])=>{for(const node of items)if(node.type==='element'){
+    if(node.tag==='Iframe'){try{validateManagedIframeSource(node);}catch(error){errors.push({message:error instanceof Error?error.message:String(error),tag:node.tag,start:node.start,end:node.end});}}
+    else walk(node.children);
+  }};
+  walk(nodes);return errors;
+}
+
 /** Apply parent-only source transforms without changing bytes inside managed frames. */
 export function transformOutsideManagedIframes(source:string, transform:(source:string)=>string):string {
   const parsed=parseJsx(source);
