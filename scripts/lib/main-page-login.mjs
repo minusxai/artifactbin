@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
+import {createServer} from 'node:http';
 
 /** Stage-one proof against the real proxy/session/cookie/CSP arrangement. */
 export async function verifyMainPageLogin({browser,base,controls,sink,id,mainFetch,backend}) {
@@ -87,22 +88,28 @@ export async function verifyMainPageLogin({browser,base,controls,sink,id,mainFet
   await workspace.locator('html[data-theme="dark"]').waitFor();
   console.log('PASS long private workspace sharing geometry, sibling modal isolation and parent/sibling appearance synchronization');
   assert.equal(new URL(page.url()).origin,base);
-  const callback='http://127.0.0.1:5498/callback?fixed=yes',verifier='v'.repeat(43);
+  const callbacks=[];
+  const callbackServer=createServer((request,response)=>{callbacks.push(request.url);response.end('Connected');});
+  await new Promise((resolve,reject)=>{callbackServer.once('error',reject);callbackServer.listen(0,'127.0.0.1',resolve);});
+  try {
+  const callbackOrigin=`http://127.0.0.1:${callbackServer.address().port}`;
+  const callback=callbackOrigin+'/callback?fixed=yes',verifier='v'.repeat(43);
   const registration=await mainFetch(backend+'/oauth/register',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({redirect_uris:[callback]})});
   assert.equal(registration.status,201);const client=(await registration.json()).client_id;
   const consent=base+'/oauth/authorize?'+new URLSearchParams({client_id:client,redirect_uri:callback,response_type:'code',code_challenge:createHash('sha256').update(verifier).digest('base64url'),code_challenge_method:'S256',resource:base+'/mcp',scope:'artifacts',state:'preserved-state'});
-  await page.route('http://127.0.0.1:5498/callback?*',route=>route.fulfill({body:'Connected',contentType:'text/html'}));
   let release;const delay=new Promise(resolve=>{release=resolve;});
   await page.route(base+'/oauth/authorize/approve',async route=>{await delay;await route.continue();});
   await page.goto(consent);const consentFrame=page.mainFrame();
   await consentFrame.getByLabel('Approve connection').click({noWaitAfter:true});
   assert.equal(page.url(),consent,'a delayed approval stays at the main consent address');
   assert.equal(await page.locator('input[name="approval"]').count(),1,'native same-origin consent carries its one-time approval nonce');
-  release();await page.waitForURL(u=>u.origin==='http://127.0.0.1:5498');
+  release();await page.waitForURL(u=>u.origin===callbackOrigin,{timeout:15000});
+  assert.equal(callbacks.length,1);assert.equal(new URL(callbacks[0],callbackOrigin).href,page.url(),'the actual callback server receives the browser code and state');
   const returned=new URL(page.url());assert.equal(returned.searchParams.get('fixed'),'yes');assert.equal(returned.searchParams.get('state'),'preserved-state');assert(returned.searchParams.get('code'));
   const exchange=await mainFetch(backend+'/oauth/token',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'authorization_code',code:returned.searchParams.get('code'),client_id:client,redirect_uri:callback,code_verifier:verifier,resource:base+'/mcp'}).toString()});
   assert.equal(exchange.status,200,exchange.ok?'framed consent produces a real exchangeable PKCE code':await exchange.text());
   console.log('PASS main-address native OAuth consent: delayed authenticated approval, bounded external callback and real PKCE exchange');
+  } finally {await new Promise(resolve=>callbackServer.close(resolve));}
   await page.goto(base+'/docs-human');const docs=page.mainFrame();
   const contentsLink=docs.locator('nav[aria-label="Contents"] a').nth(3);
   await contentsLink.waitFor();const href=await contentsLink.getAttribute('href');

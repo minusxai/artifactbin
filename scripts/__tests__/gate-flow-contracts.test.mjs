@@ -22,3 +22,10 @@ it('does not wait for navigation before releasing the deliberately held OAuth ap
  expect(helper).toContain("release();await page.waitForURL");
  expect(helper).toContain("code_verifier:verifier");
 });
+it('receives the OAuth redirect at a real bounded loopback listener',()=>{
+ const helper=readFileSync(new URL('../lib/main-page-login.mjs',import.meta.url),'utf8');
+ expect(helper).toContain("callbackServer.listen(0,'127.0.0.1'");
+ expect(helper).toContain('assert.equal(callbacks.length,1)');
+ expect(helper).toContain('finally {await new Promise(resolve=>callbackServer.close(resolve));}');
+ expect(helper).not.toContain("page.route('http://127.0.0.1:5498");
+});
