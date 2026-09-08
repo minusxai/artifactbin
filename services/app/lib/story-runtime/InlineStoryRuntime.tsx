@@ -49,7 +49,11 @@ export interface InlineStoryRuntimeProps {
 export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
   const root = useRef<HTMLDivElement>(null);
   const portal = useRef<HTMLElement | null>(null);
-  const [portalReady] = useState(() => (element:HTMLElement | null) => { portal.current = element; });
+  const selectionReady = useRef<(() => void) | null>(null);
+  const [portalReady] = useState(() => (element:HTMLElement | null) => {
+    portal.current = element;
+    selectionReady.current?.();
+  });
   const latest = useRef(props);
   latest.current = props;
   const [current, setCurrent] = useState(props.data);
@@ -76,12 +80,25 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
     let selectionLoading = false;
     let annotate: FrameAnnotateSession | null = null;
     let selection: FrameSelectionActions | null = null;
+    let selectionFactory: typeof import('./edit/selection-actions').createFrameSelectionActions | null = null;
     let annotationCommand: Parameters<FrameAnnotateSession['update']>[0] | null = null;
     let selectionCommand: Parameters<FrameSelectionActions['update']>[0] | null = null;
     const listeners = new Set<(event: unknown) => void>();
     const nonce = crypto.randomUUID();
     const emit = (event: unknown) => { if (!disposed) for (const listener of [...listeners]) listener(event); };
     const channel: RuntimeChannel = { nonce, post: event => queueMicrotask(() => emit(event)), innerHtmlOf: element => element.innerHTML };
+    // The lazy module, grant and protected portal may arrive in any order.
+    // Keep their latest state in this document lifetime and join only when all
+    // three are ready; a missing portal must not silently consume the grant.
+    const ensureSelection = () => {
+      if (disposed || selection || !selectionFactory || !root.current || !portal.current
+        || !selectionCommand || (!selectionCommand.edit && !selectionCommand.annotate)) return;
+      selection = selectionFactory({ win: window, root:root.current, portal:portal.current,
+        onAction: (action, selected) => emit({type: STORY_SELECTION_ACTION_MESSAGE, nonce, action, selection: selected}) });
+      selection.setNodes(documentData.nodes);
+      selection.update(selectionCommand);
+    };
+    selectionReady.current = ensureSelection;
     const render = () => {
       if (disposed) return;
       editRef.current?.setNodes(documentData.nodes);
@@ -133,13 +150,12 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
         if (command.type === STORY_SELECTION_ACTIONS_MESSAGE) {
           selectionCommand = command;
           if (selection) { selection.update(command); return; }
+          if (selectionFactory) { ensureSelection(); return; }
           if ((!command.edit && !command.annotate) || selectionLoading) return;
           selectionLoading = true;
           void import('./edit/selection-actions').then(({ createFrameSelectionActions }) => {
-            if (disposed || !root.current || !portal.current) return;
-            selection = createFrameSelectionActions({ win: window, root:root.current, portal:portal.current, onAction: (action, selected) => emit({ type: STORY_SELECTION_ACTION_MESSAGE, nonce, action, selection: selected }) });
-            selection.setNodes(documentData.nodes);
-            if (selectionCommand) selection.update(selectionCommand);
+            selectionFactory = createFrameSelectionActions;
+            ensureSelection();
           }).catch(error => { if (!disposed) console.error('Failed to load artifact selection actions', error); }).finally(() => { selectionLoading = false; });
           return;
         }
@@ -161,6 +177,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
       dispose() {
         if (disposed) return;
         disposed = true;
+        if (selectionReady.current === ensureSelection) selectionReady.current = null;
         listeners.clear();
         stopValues();
         stopOutline(); stopTables();
