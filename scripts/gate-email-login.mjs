@@ -53,7 +53,9 @@ const authTraffic=[];
 page.on('response',r=>{if(new URL(r.url()).pathname.startsWith('/api/auth/')){const result={path:new URL(r.url()).pathname,status:r.status()};authTraffic.push(result);console.log('  auth response',JSON.stringify(result));}});
 const codeResponse = page.waitForResponse((r) => new URL(r.url()).pathname==='/api/auth/email-otp/send-verification-otp' && r.request().method()==='POST');
 const [res] = await Promise.all([codeResponse,page.click('[aria-label="Log in with email"]').then(()=>console.log('  step email submitted'))]).catch(cause=>{throw new Error(`OTP response not observed: ${JSON.stringify(authTraffic)}`,{cause});});
+console.log('  step OTP response matched');
 const bodyText = await res.text();
+console.log('  step OTP response body read');
 check(res.status() === 200, `the OTP door answered 200 (${res.status()})`);
 check(!/\d{6}/.test(bodyText), `the response body carries NO code (${bodyText})`);
 
