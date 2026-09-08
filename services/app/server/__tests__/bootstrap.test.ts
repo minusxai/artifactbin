@@ -8,6 +8,7 @@
 import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts';
 import { signActor } from '@artifactbin/utils';
 import { describe, expect, it } from 'vitest';
+import { JSDOM } from 'jsdom';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 import { mintToken } from '@/lib/tokens';
@@ -35,6 +36,27 @@ async function world() {
 }
 
 describe('inlined page data', () => {
+  it('keeps SSR as the sole in-flow document until the captured handoff is removed', async () => {
+    const runtime = await prepareStoryRuntime({source:'<h1>Stable first paint</h1><div id="root">Author collision</div>',compiledCss:null,theme:null,colorMode:'light',refData:{},title:'Stable'});
+    const html = withInitialStory('<html><head></head><body><div id="root"><main style="min-height:100vh">Lazy app</main></div></body></html>',runtime,'ABC123');
+    const dom = new JSDOM(html);
+    const root = dom.window.document.body.firstElementChild!;
+    const initial = dom.window.document.body.lastElementChild!;
+    expect(dom.window.getComputedStyle(root).display).toBe('none');
+    expect(dom.window.getComputedStyle(initial).display).not.toBe('none');
+    expect(dom.window.getComputedStyle(initial.querySelector('#root')!).display).not.toBe('none');
+    expect(initial.querySelector('[data-mx-inline-story]')).not.toBeNull();
+    expect(initial.textContent).toContain('Stable first paint');
+    initial.remove();
+    expect(dom.window.document.querySelector('style')).toBeNull();
+    // jsdom retains cached style rules when their ancestor is detached. Reparse
+    // the remaining DOM to check the resulting policy; browser CLS gates own
+    // verification of the live, pre-paint removal.
+    const after = new JSDOM(dom.serialize());
+    expect(after.window.getComputedStyle(after.window.document.body.firstElementChild!).display).not.toBe('none');
+    after.window.close();
+    dom.window.close();
+  });
   it('keeps trusted root and bootstrap ahead of author-colliding ids and leaves author scripts inert', async () => {
     const runtime = await prepareStoryRuntime({source:`<Helmet><script>{\`globalThis.shouldNotRun=true\`}</script></Helmet><div id="root">Collision</div><div id="${BOOTSTRAP_ID}">Not data</div>`,compiledCss:null,theme:null,colorMode:'light',refData:{},title:'Safe'});
     const shell = '<html><head><title>x</title></head><body><div id="root"></div></body></html>';

@@ -20,6 +20,7 @@ import type { PreparedStoryRuntime } from '@/lib/story/prepared-runtime';
 import { isolateStoryCss, isolateStoryNodes } from '@/lib/story/inline-css';
 import { escapeHtml } from '@/lib/story/reader-chrome';
 import { STORY_ROOT_ATTR } from '@/lib/story-surface';
+import { APP_BAR_H } from '@/lib/story/edit-bar';
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
@@ -57,6 +58,11 @@ export function withInitialStory(html: string, runtime: PreparedStoryRuntime, id
   const combined = [runtime.baseCss, runtime.compiledCss ?? '', runtime.authorCss ?? ''].join('\n');
   const css = isolateStoryCss(combined).replace(/<\/style/gi, '');
   const body = loadStorySsr().renderStoryBody({ ...runtime.data, nodes: isolateStoryNodes(runtime.data.nodes, combined) });
+  // While lazy app code mounts, it must not push the readable server sibling
+  // down by its viewport height. This temporary rule belongs to the captured
+  // sibling, so its removal atomically reveals the committed app document.
+  // Only the real first body child is hidden, never an authored colliding id.
+  const handoffCss = `body > #root:first-child{display:none!important}[data-mx-initial-story]{position:relative;min-height:100vh;box-sizing:border-box;padding-top:0}@media(min-width:640px){[data-mx-initial-story]{padding-top:${APP_BAR_H}px}}`;
   const metadata = `<meta property="og:title" content="${escapeHtml(runtime.title)}">`
     + (description ? `<meta name="description" content="${escapeHtml(description)}"><meta property="og:description" content="${escapeHtml(description)}">` : '')
     + `<meta property="og:image" content="${escapeHtml(origin)}/a/${escapeHtml(id)}/export?mode=card"><meta name="twitter:card" content="summary_large_image">`
@@ -64,7 +70,7 @@ export function withInitialStory(html: string, runtime: PreparedStoryRuntime, id
     + `<meta name="artifactbin:agent" content="To edit this artifact with an agent, read ${escapeHtml(origin)}/docs — tokens at ${escapeHtml(origin)}/tokens/new">`;
   return html.replace(/<title>[\s\S]*?<\/title>/i, () => `<title>${escapeHtml(runtime.title)}</title>`)
     .replace('</head>', () => `${metadata}</head>`)
-    .replace('</body>', () => `<div data-mx-initial-story="" data-mx-inline-story="" ${STORY_ROOT_ATTR} class="${runtime.data.colorMode}"${runtime.theme ? ` data-theme="${escapeHtml(runtime.theme)}"` : ''}><style>${css}</style>${body}</div></body>`);
+    .replace('</body>', () => `<div data-mx-initial-story=""><style>${handoffCss}</style><div data-mx-inline-story="" ${STORY_ROOT_ATTR} class="${runtime.data.colorMode}"${runtime.theme ? ` data-theme="${escapeHtml(runtime.theme)}"` : ''}><style>${css}</style>${body}</div></div></body>`);
 }
 
 // Inline scripts emitted by our source HTML and Vite's development transform.
