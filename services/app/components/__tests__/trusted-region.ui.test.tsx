@@ -3,6 +3,11 @@ import {afterEach, expect, it, vi} from 'vitest';
 import {TrustedRegion} from '../TrustedRegion';
 
 afterEach(()=>vi.useRealTimers());
+it.each(['javascript:alert(1)','data:text/html,<script>alert(1)</script>','https://user:secret@i.example.test','https://i.example.test/path','https://i.example.test?next=evil','https://i.example.test#fragment','//i.example.test'])('refuses a noncanonical controls origin before creating a frame: %s',controls=>{
+  const {container}=render(<TrustedRegion kind="home" page="/" controls={controls} fallback={<span>Public fallback</span>}/>);
+  expect(container.querySelector('iframe')).toBeNull();
+  expect(screen.getByRole('status')).toHaveTextContent('Controls unavailable');
+});
 it('keeps the public fallback powerless and accepts only its own trusted ready/size message',()=>{
   const workspace=vi.fn();
   const {container}=render(<TrustedRegion kind="home" page="/" controls="https://i.example.test" fallback={<button aria-label="Start placeholder">Start</button>} onWorkspace={workspace}/>);

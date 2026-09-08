@@ -28,6 +28,14 @@ afterEach(() => {
 });
 
 describe('Shelf — grid and list views', () => {
+  it('keeps card IDs and versions in their own URL components',()=>{
+    const id='doc/other?image=1#fragment';
+    const {container}=render(<Shelf rows={[doc(id,28,{version:'1&image=1#fragment' as unknown as number})]}/>);
+    const source=new URL(container.querySelector('img')!.src);
+    expect(source.pathname).toBe('/a/doc%2Fother%3Fimage%3D1%23fragment/export');
+    expect(source.searchParams.get('v')).toBe('1&image=1#fragment');
+    expect(source.searchParams.get('image')).toBeNull();expect(source.hash).toBe('');
+  });
   it('loads artifact previews from the public read origin inside trusted controls',()=>{
     configureAppApi(window.location.origin,'https://public.example.test','page');
     const {container}=render(<Shelf rows={[doc('abc123',28)]}/>);

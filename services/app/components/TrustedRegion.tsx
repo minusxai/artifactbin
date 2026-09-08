@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState, type ReactNode} from 'react';
-import type {PublicPath, TrustedRegionKind} from '@/web/public-page-contract';
+import {trustedRegionAddress,type PublicPath,type TrustedRegionKind} from '@/web/public-page-contract';
 import {controlsClipPath} from '@/lib/story-runtime/controls-regions';
 import {isPlatformPage} from '@artifactbin/utils/platform-pages';
 
@@ -12,7 +12,8 @@ export interface TrustedRegionProps {
   onWorkspace?: (workspace: boolean) => void;
 }
 /** Owns exact source/origin checks, sizing, readiness, retry and public navigation. */
-export function TrustedRegion({kind,page,controls,search='',fallback,onWorkspace}: TrustedRegionProps) {
+export function TrustedRegion({kind,page,controls:configured,search='',fallback,onWorkspace}: TrustedRegionProps) {
+  const address=trustedRegionAddress(configured,kind,page,search),controls=address?.origin??'';
   const frame=useRef<HTMLIFrameElement>(null);
   const loaded=useRef(false);
   const [ready,setReady]=useState(false), [failed,setFailed]=useState(false), [attempt,setAttempt]=useState(0);
@@ -21,6 +22,7 @@ export function TrustedRegion({kind,page,controls,search='',fallback,onWorkspace
   const workspace=useRef(onWorkspace);workspace.current=onWorkspace;
   useEffect(()=>{
     setReady(false);setFailed(false);setPrivateWorkspace(false);loaded.current=false;
+    if(!controls)return;
     let releaseModal:(()=>void)|undefined;
     const setModal=(modal:boolean)=>{
       if(!modal){releaseModal?.();releaseModal=undefined;return;}
@@ -75,12 +77,12 @@ export function TrustedRegion({kind,page,controls,search='',fallback,onWorkspace
   const chrome=kind==='chrome';
   return <div data-trusted-region={kind} className="relative" style={chrome?{height:44}:undefined} aria-busy={!ready}>
     {!ready && <div inert aria-hidden="true">{fallback}</div>}
-    {failed && <button type="button" aria-label={`Retry loading ${kind}`} onClick={()=>setAttempt(n=>n+1)} className="relative z-[70] cursor-pointer rounded border border-edge bg-surface px-3 py-2 text-fg">Retry loading {kind}</button>}
-    <iframe key={`${kind}:${page}:${search}:${attempt}`} ref={frame} title={chrome?'Page controls':kind==='home'?'Home workspace':'Profile follow'}
-      src={`${controls}/controls/region/${kind}?page=${encodeURIComponent(page)}&search=${encodeURIComponent(search)}`}
+    {!address?<p role="status">Controls unavailable</p>:failed && <button type="button" aria-label={`Retry loading ${kind}`} onClick={()=>setAttempt(n=>n+1)} className="relative z-[70] cursor-pointer rounded border border-edge bg-surface px-3 py-2 text-fg">Retry loading {kind}</button>}
+    {address && <iframe key={`${kind}:${page}:${search}:${attempt}`} ref={frame} title={chrome?'Page controls':kind==='home'?'Home workspace':'Profile follow'}
+      src={address.href}
       onLoad={()=>{loaded.current=true;frame.current?.contentWindow?.postMessage({type:'mx:page:hash',hash:location.hash},controls);}}
       referrerPolicy="no-referrer" allow="clipboard-write" aria-hidden={!ready?true:undefined} tabIndex={ready?undefined:-1} inert={!ready}
       style={chrome?{position:'fixed',inset:0,width:'100%',height:'100%',border:0,zIndex:2147483000,clipPath:clip,background:'transparent'}:
-        {display:'block',width:'100%',height:ready?(privateWorkspace?'calc(100dvh - 44px)':height):1,border:0,visibility:ready?'visible':'hidden',...(ready?{}:{position:'absolute',pointerEvents:'none'})}}/>
+        {display:'block',width:'100%',height:ready?(privateWorkspace?'calc(100dvh - 44px)':height):1,border:0,visibility:ready?'visible':'hidden',...(ready?{}:{position:'absolute',pointerEvents:'none'})}}/>}
   </div>;
 }
