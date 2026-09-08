@@ -2,9 +2,24 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {createServer} from 'node:http';
 
+/** This auth fixture uses test-only DNS/certificates unavailable to the server's
+ * export browser. Stub its decorative thumbnail images before they request a
+ * capture; real export behavior is covered by the dedicated export gates.
+ * All page/auth/API requests still reach the actual server and may fail normally.
+ */
+async function stubAuthFixtureThumbnails(page,base){
+ await page.route(url=>url.origin===base&&/^\/a\/[^/]+\/export$/.test(url.pathname),route=>{
+  const request=route.request();
+  if(request.resourceType()==='image')return route.fulfill({status:200,contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aS1cAAAAASUVORK5CYII=','base64')});
+  return route.continue();
+ });
+}
+
 /** Stage-one proof against the real proxy/session/cookie/CSP arrangement. */
 export async function verifyMainPageLogin({browser,base,controls,sink,id,mainFetch,backend}) {
   const page=await browser.newPage({ignoreHTTPSErrors:true});
+  await stubAuthFixtureThumbnails(page,base);
+  console.log('AUTH FIXTURE: same-origin decorative capture images use a fixed PNG; page/auth/API and export gates remain real');
   const writes=[];page.on('request',r=>{if(r.method()==='POST')writes.push(r.allHeaders().then(headers=>({url:r.url(),origin:headers.origin})));});
   page.on('pageerror',error=>console.error('MAIN PAGE',error.message));
   page.on('console',message=>{if(message.type()==='error')console.error('PAGE CONSOLE',message.text());});
@@ -122,6 +137,7 @@ export async function verifyMainPageLogin({browser,base,controls,sink,id,mainFet
   });
   await page.goBack();assert.equal(page.url(),base+'/docs-human');
   const guest=await browser.newPage({ignoreHTTPSErrors:true});
+  await stubAuthFixtureThumbnails(guest,base);
   await guest.route(base+'/api/page/session',route=>route.abort());
   const publicResponse=await guest.goto(base+'/');
   assert((await publicResponse.text()).includes('<h1'),'public first HTML contains its actual heading');
@@ -142,7 +158,7 @@ export async function verifyMainPageLogin({browser,base,controls,sink,id,mainFet
   const proof=await home.locator('body').getAttribute('data-clipboard-proof');
   if(proof!=='ok'){
     console.log('CLIPBOARD ACTIVATION',await home.locator('body').getAttribute('data-activation'));
-    const top=await browser.newPage({ignoreHTTPSErrors:true});await top.goto(base+'/');
+    const top=await browser.newPage({ignoreHTTPSErrors:true});await stubAuthFixtureThumbnails(top,base);await top.goto(base+'/');
     await top.getByLabel('Install for my agent').click();await top.getByLabel('Choose Others agent family').click();
     await top.evaluate(()=>{const write=navigator.clipboard.writeText.bind(navigator.clipboard);navigator.clipboard.writeText=async value=>{try{await write(value);document.body.dataset.clipboardProof='ok';}catch(error){document.body.dataset.clipboardProof=error.name+': '+error.message;throw error;}};});
     await top.getByLabel('Copy the connector URL').click();await top.locator('body[data-clipboard-proof]').waitFor();

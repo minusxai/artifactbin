@@ -82,23 +82,18 @@ const open = async (viewport, hash = '', id = st.id) => {
 /**
  * Does the contextual EDITOR bar overflow its own box? Reading has no bar.
  */
-const barOverflows = (page) => page.evaluate(() => {
-  const bar = document.querySelector('header');
-  return bar ? bar.scrollWidth > bar.clientWidth + 1 : true;
-});
+const barOverflows = (page) => page.getByLabel('Editor toolbar',{exact:true}).evaluate(bar => bar.scrollWidth > bar.clientWidth + 1);
 
 /** Does the PAGE scroll sideways? The plainest symptom of chrome that overflows. */
 const overflows = (page) => page.evaluate(() =>
   document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
 
 /** Is this element's box inside the viewport, horizontally? */
-const fitsAcross = (page, label) => page.evaluate((l) => {
-  const el = document.querySelector(`[aria-label="${l}"]`);
-  if (!el) return { found: false };
+const fitsAcross = (page, label) => page.getByLabel(label,{exact:true}).evaluate(el => {
   const r = el.getBoundingClientRect();
   const w = document.documentElement.clientWidth;
   return { found: true, left: Math.round(r.left), right: Math.round(r.right), viewport: w, fits: r.left >= -1 && r.right <= w + 1 };
-}, label);
+});
 
 // ── 1. the viewer on a phone ───────────────────────────────────────────────
 const view = await open(PHONE);
@@ -138,9 +133,9 @@ await view.waitForTimeout(300);
 const menu = await fitsAcross(view, 'Menu');
 ok(menu.fits, `app menu: fits the screen (${menu.left}..${menu.right}px of ${menu.viewport}px)`);
 ok(!(await overflows(view)), 'app menu: and opening it does not make the page scroll sideways');
-const clippedItems = await view.evaluate(() => {
+const clippedItems = await view.getByLabel('Menu',{exact:true}).evaluate(menu => {
   const w = document.documentElement.clientWidth;
-  return [...document.querySelectorAll('[aria-label="Menu"] a, [aria-label="Menu"] button')]
+  return [...menu.querySelectorAll('a, button')]
     .filter((el) => el.getBoundingClientRect().right > w + 1).length;
 });
 ok(clippedItems === 0, `app menu: no item is cut off (${clippedItems} clipped)`);
@@ -164,9 +159,9 @@ const pop = await fitsAcross(edit, 'Themes');
 ok(pop.fits, `theme popover: fits the screen (${pop.left}..${pop.right}px of ${pop.viewport}px)`);
 ok(!(await overflows(edit)), 'theme popover: and opening it does not make the page scroll sideways');
 // Every theme has to be reachable, not merely present in the DOM.
-const clipped = await edit.evaluate(() => {
+const clipped = await edit.getByLabel('Themes',{exact:true}).evaluate(themes => {
   const w = document.documentElement.clientWidth;
-  return [...document.querySelectorAll('[aria-label^="Theme "]')]
+  return [...themes.querySelectorAll('[aria-label^="Theme "]')]
     .filter((el) => el.getBoundingClientRect().right > w + 1).length;
 });
 ok(clipped === 0, `theme popover: no theme card is cut off (${clipped} clipped)`);
@@ -187,8 +182,7 @@ await wide.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 90_000 })
 await wide.waitForTimeout(2000);
 await wide.locator('[aria-label="Theme"]').click({ timeout: 30_000 });
 await wide.waitForSelector('[aria-label="Themes"]', { timeout: 10_000 });
-const cols = await wide.evaluate(() => {
-  const el = document.querySelector('[aria-label="Themes"]');
+const cols = await wide.getByLabel('Themes',{exact:true}).evaluate(el => {
   return getComputedStyle(el).gridTemplateColumns.split(' ').length;
 });
 ok(cols >= 2, `desktop: the popover keeps its multi-column grid (${cols} columns)`);
@@ -203,13 +197,14 @@ ok(cols >= 2, `desktop: the popover keeps its multi-column grid (${cols} columns
  * through to the document iframe. So the check is a hit test: whatever is at
  * the middle of the first card has to BE the card.
  */
-const reachable = (page, sel) => page.evaluate((s) => {
-  const el = document.querySelector(s);
-  if (!el) return { found: false };
+const reachable = (page, sel) => page.locator(sel).first().evaluate(el => {
   const r = el.getBoundingClientRect();
-  const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-  return { found: true, reachable: !!(hit && el.contains(hit)), hit: hit?.tagName ?? null };
-}, sel);
+  const x=r.left+r.width/2,y=r.top+r.height/2;
+  const root=el.getRootNode();
+  const hit = el.getRootNode().elementFromPoint(x,y);
+  const outerHit=document.elementFromPoint(x,y);
+  return { found: true, reachable: !!(hit && el.contains(hit) && (outerHit===root.host || outerHit===hit || el.contains(outerHit))), hit: hit?.tagName ?? null };
+});
 
 const card = await reachable(wide, '[aria-label^="Theme "]');
 ok(card.reachable, `desktop: a theme card can actually be clicked (hit ${card.hit})`);
@@ -585,8 +580,7 @@ for (let attempt = 0; attempt < 20 && !raised; attempt += 1) {
 }
 ok(raised, 'touch: a selection that fires NO pointerup raises the bubble — selectionchange is all a touch gesture gives');
 
-const placed = await docFrame.evaluate(() => {
-  const surface = document.querySelector('[data-mx-selection-actions]');
+const placed = await bubble.evaluate(surface => {
   const box = surface.getBoundingClientRect();
   const lines = [...getSelection().getRangeAt(0).getClientRects()].filter((r) => r.width > 0 && r.height > 0);
   const last = lines.at(-1);

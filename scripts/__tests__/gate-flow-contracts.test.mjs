@@ -36,3 +36,11 @@ it('checks hidden author workers by attachment and the document-level worker mou
  expect(app).toContain('document.querySelectorAll(\'iframe[title="Isolated artifact script"]\')');
  expect(app).toContain("probe.count===1 && !probe.unsafe");
 });
+it('stubs only thumbnail images in the fake-DNS auth fixture and preserves annotation Escape failure',()=>{
+ const login=readFileSync(new URL('../lib/main-page-login.mjs',import.meta.url),'utf8');
+ expect(login).toContain("request.resourceType()==='image'");expect(login).toContain("url.origin===base");
+ expect(login).toContain("route.fulfill({status:200,contentType:'image/png'");
+ const annotations=readFileSync(new URL('../gate-annotations.mjs',import.meta.url),'utf8');
+ expect(annotations).toContain("'Escape dismisses artifact controls before interacting with the rail'");
+ expect(annotations).toContain("getByLabel('Dismiss artifact controls',{exact:true}).click()");
+});

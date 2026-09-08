@@ -138,6 +138,7 @@ const copyRow = await forker.evaluate(
 check(copyRow.forked_from === doc.id, `the copy records its source (forked_from = ${copyRow.forked_from})`);
 check(copyRow.id !== doc.id, 'a new id — the original is untouched');
 
+await openArtifactControls(forker);
 const credit = forker.mainFrame().locator('[data-mx-forked-from]');
 await credit.waitFor({ state: 'attached', timeout: 30000 });
 const creditText = await credit.innerText();
@@ -149,6 +150,10 @@ check(creditText.includes(doc.id), 'and the source is named by its address, not 
 // nowhere, so a copy that somebody else made public must stop republishing its
 // address — measured as a STRANGER, which is who reads a shared copy, and this
 // is the exact shape a review measured in a browser before the rule existed.
+const publishedCopy=await forker.evaluate(async id=>(await fetch(`/api/my/artifacts/${id}/sharing`,{
+  method:'PUT',headers:{'Content-Type':'application/json','x-artifactbin-csrf':'1'},body:JSON.stringify({visibility:'public'}),
+})).status,copyId);
+check(publishedCopy===200,'the forker explicitly publishes their copy before testing stranger provenance');
 const narrowed = await owner.evaluate(
   async (id) => (await fetch(`/api/my/artifacts/${id}/sharing`, {
     method: 'PUT',
@@ -159,9 +164,18 @@ const narrowed = await owner.evaluate(
   doc.id,
 );
 check(narrowed === 200, 'the owner narrowed the source to unlisted');
-const strangerCopy = await (await fetch(`${BASE}/a/${copyId}/raw`)).text();
-check(!strangerCopy.includes(doc.id), "a stranger reading the copy no longer sees the unlisted source's address");
-check(strangerCopy.includes('forked from a document that is not public'), '…and gets the same neutral sentence a private or deleted source gets');
+const stranger=await browser.newPage();
+await stranger.goto(`${BASE}/a/${copyId}`);
+for(const reload of [false,true]){
+  if(reload)await stranger.reload();
+  await openArtifactControls(stranger);
+  const strangerCredit=stranger.locator('[data-mx-forked-from]');
+  await strangerCredit.waitFor({state:'visible'});
+  const strangerCopy=await strangerCredit.innerText();
+  check(!strangerCopy.includes(doc.id), `a stranger reading the copy no longer sees the unlisted source's address${reload?' after reload':''}`);
+  check(strangerCopy.includes('forked from a document that is not public'), '…and gets the same neutral sentence a private or deleted source gets');
+}
+await stranger.close();
 
 // ── 7. `intent=comment` opens the conversation for an invited commenter ───
 const invited = await owner.evaluate(

@@ -26,6 +26,7 @@ import { chromium } from './lib/gate-browser.mjs';
 import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
 import { startMailSink, loginViaEmail, readBrowserSession } from './lib/mail-login.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
+import {JSDOM} from 'jsdom';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const failures = [];
@@ -97,6 +98,10 @@ check(doc.visibility === 'public', 'probe doc is public');
 
 // ── 1. reader: the document itself, top-level, sandboxed ──────────────────
 const readerResp = await reader.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
+// The server owns canonical repair; author history calls must not change it.
+const canonical=new JSDOM(await readerResp.text()).window.document.head.querySelector('link[rel="canonical"]')?.getAttribute('href');
+if(!canonical)throw new Error('server omitted canonical artifact address');
+const expectedReaderUrl=new URL(canonical,BASE).href;
 const readerCsp = readerResp.headers()['content-security-policy'] ?? '';
 check(!/(?:^|;)\s*sandbox(?:\s|;|$)/.test(readerCsp) && readerCsp.includes('script-src'), 'first-party reader shell has a script policy and is not sandboxed');
 check(reader.url() === `${BASE}/a/${doc.id}`, `reader URL unchanged, no redirect (${new URL(reader.url()).pathname})`);
@@ -110,7 +115,7 @@ check(/THROW/.test(probe.storage ?? ''), `localStorage throws (${probe.storage})
 check(probe.fetch === 'blocked', `fetch to /api is blocked (${probe.fetch})`);
 check(probe.ownQuery === 'blocked', `even own-query fetch is blocked for author code (${probe.ownQuery}); queries use the data bridge`);
 check(probe.start === 'blocked', `fetch to /a/<id>/start is blocked (${probe.start}) — path-exact, not a prefix`);
-check(/THROW/.test(probe.replaceState ?? '') && reader.url() === `${BASE}/a/${doc.id}`, `author cannot spoof the artifact URL (${probe.replaceState})`);
+check(probe.replaceState === 'THROW SecurityError' && reader.url() === expectedReaderUrl, `author cannot spoof the canonical artifact URL (${probe.replaceState}, ${new URL(reader.url()).pathname})`);
 
 // signed-in NON-owner: same document, same URL, no hop
 const otherResp = await other.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });

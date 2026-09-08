@@ -158,7 +158,8 @@ ok(seek.bytes === PDF.subarray(PDF.byteLength - 32).toString('latin1'), 'the byt
 // The document's CSP is UNCHANGED by any of this: a link is navigation, and
 // nothing here asked for a new connect-src, frame-src or object-src.
 const docCsp = (await context.request.get(`${B}/a/${owner.id}`)).headers()['content-security-policy'];
-ok(!/object-src|frame-src/.test(docCsp ?? ''), 'the document needed no new CSP allowance for the card');
+const policy=new Map((docCsp??'').split(';').map(part=>{const [name,...values]=part.trim().split(/\s+/);return [name,values.join(' ')];}));
+ok(policy.get('object-src')==="'none'" && policy.get('frame-src')==="'self'", 'the first-party shell forbids object embedding and adds no PDF frame origin');
 
 await context.close();
 await browser.close();

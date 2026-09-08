@@ -108,6 +108,12 @@ const run = async () => {
     await openArtifactControls(page);
     ok(await page.locator('[aria-label="Edit artifact"]').count() === 1, 'edit stays offered while the rail is open');
     await page.keyboard.press('Escape');
+    const controlsDialog=page.getByRole('dialog',{name:'Artifact controls',exact:true});
+    const controlsGone=await until(()=>controlsDialog.count(),n=>n===0,1500);
+    ok(controlsGone===0,'Escape dismisses artifact controls before interacting with the rail');
+    // Preserve the failure above, but dismiss normally so later rail checks run.
+    if(await controlsDialog.count())await controlsDialog.getByLabel('Dismiss artifact controls',{exact:true}).click();
+    await controlsDialog.waitFor({state:'hidden'});
     const thread = page.locator('[aria-label="Annotation thread"]');
     ok((await thread.textContent())?.includes('Q3 sheet'), 'the saved comment appears as a rail thread');
     // The frame stays FULL-WIDTH — the bar drawn inside it must not narrow —
