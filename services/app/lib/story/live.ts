@@ -92,6 +92,8 @@ export interface ArtifactLiveEvent {
   nodes?: JsxNode[];
   /** The author's own <Helmet> <style>, on the same absent/null rule as compiledCss. */
   authorCss?: string | null;
+  /** Legacy Helmet script; null revokes the prior isolated realm. */
+  authorScript?: string | null;
   /**
    * The data declarations and their freshly run state — sent ONLY when the
    * declarations changed. A prose edit needs no query engine, and running a

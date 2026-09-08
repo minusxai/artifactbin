@@ -1,4 +1,5 @@
 import type * as React from 'react';
+import { createElement } from 'react';
 
 import {
   Card,
@@ -80,10 +81,15 @@ import { File } from '@/components/kit/file';
 import { DataTable } from '@/components/kit/data-table';
 import {Dialog, DialogTrigger, DialogContent, DialogClose} from '@/components/kit/dialog';
 import { Files } from '@/components/kit/files';
+import { managedFrameLayout } from '@/lib/story/managed-frame-layout';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const STORY_UI_COMPONENTS: Record<string, React.ComponentType<any>> = {
   Dialog, DialogTrigger, DialogContent, DialogClose,
+  Iframe: props => {
+    const { label, pixels } = managedFrameLayout(props.title, props.height);
+    return createElement('div', { id: props.id, className: props.className, 'data-mx-ast': props['data-mx-ast'], 'aria-label': label, style: { height: pixels, width: '100%' } }, createElement('div', { style: { height: '100%' } }));
+  },
   Card,
   CardHeader,
   CardTitle,

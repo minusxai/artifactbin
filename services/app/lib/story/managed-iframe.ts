@@ -1,6 +1,7 @@
 import type { JsxElement, JsxNode } from '@/lib/jsx/types';
 import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
 import { URL_ATTRS, URL_LIST_ATTRS } from '@/lib/jsx/url-attrs';
+import { parsePing, parseSrcset } from './managed-url-list';
 
 export interface ManagedIframeScript { type: 'classic' | 'module'; source?: string; src?: string }
 export interface ManagedIframeContent { html: string; scripts: ManagedIframeScript[] }
@@ -46,7 +47,10 @@ export function compileManagedIframe(node: JsxElement): ManagedIframeContent {
       if (value !== null && typeof value === 'object') fail(`attribute ${attr.name} must be scalar`);
       if (outer && name === 'height' && (typeof value !== 'number' || !Number.isFinite(value) || value < 100 || value > 4096)) fail('height must be a number from 100 to 4096');
       if (typeof value === 'string' && URL_ATTRS.has(name) && !safeUrl(value, el.tag === 'script')) fail(`unsafe URL in ${attr.name}`);
-      if (typeof value === 'string' && URL_LIST_ATTRS.has(name) && value.split(',').some(entry => !safeUrl(entry.trim().split(/\s+/)[0]))) fail(`unsafe URL in ${attr.name}`);
+      if (typeof value === 'string' && URL_LIST_ATTRS.has(name)) {
+        const urls = name === 'srcset' ? parseSrcset(value).map(candidate => candidate.url) : parsePing(value);
+        if (urls.some(url => !safeUrl(url))) fail(`unsafe URL in ${attr.name}`);
+      }
       if (value === null || value === false) return '';
       const mapped = attr.name === 'className' ? 'class' : attr.name === 'htmlFor' ? 'for' : attr.name;
       return bounded(value === true ? ` ${mapped}` : ` ${mapped}="${escape(String(value))}"`);

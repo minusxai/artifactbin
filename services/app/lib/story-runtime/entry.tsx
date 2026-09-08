@@ -29,6 +29,7 @@ import { applyDocumentChrome, isStoryDocumentUpdate } from './document-update';
 import { readerMode } from './reader-mode';
 import { createDataflowStore, type DataflowStore } from './store';
 import { installMx } from './mx';
+import { createAuthorScriptSession } from './author-script';
 import { createDocumentTransport } from './document-transport';
 import { syncValuesToUrl } from './url-values-sync';
 import { EMPTY_DATAFLOW } from '@/lib/story/dataflow';
@@ -40,14 +41,14 @@ import { EMPTY_DATAFLOW } from '@/lib/story/dataflow';
  * `var`, no module wrapper — but only once the document is hydrated.
  */
 let authorScriptRan = false;
+let authorSession: ReturnType<typeof createAuthorScriptSession> | null = null;
 function runAuthorScript(): void {
   if (authorScriptRan) return; // the commit signal and the failure path may both arrive
   authorScriptRan = true;
   document.dispatchEvent(new Event(STORY_READY_EVENT));
   for (const parked of document.querySelectorAll<HTMLScriptElement>(`script[type="${AUTHOR_SCRIPT_TYPE}"]`)) {
-    const real = document.createElement('script');
-    real.textContent = parked.textContent;
-    parked.replaceWith(real);
+    authorSession?.replace(parked.textContent ?? '');
+    parked.remove();
   }
 }
 
@@ -80,6 +81,8 @@ if (island?.textContent && root) {
     // admits exactly that. Neither: values still change, tables stay.
     const transport = createDocumentTransport(window, data.queryUrl, appOrigin, undefined, data.mutateUrl);
     const store: DataflowStore = createDataflowStore(data.dataflow ?? { flow: EMPTY_DATAFLOW }, { transport });
+    authorSession = createAuthorScriptSession(store);
+    window.addEventListener('pagehide', event => { if (!event.persisted) authorSession?.dispose(); });
     /*
      * The asset verb, threaded to the view for the ONE consumer that needs it:
      * a bound `<img src="$pick">`, which cannot load the import endpoint for
@@ -272,6 +275,7 @@ if (island?.textContent && root) {
       // Absent declarations mean the data did not change — replacing the flow
       // with an empty one would drop every table the reader is looking at.
       if (update.dataflow) store.replaceFlow(update.dataflow);
+      if (update.authorScript !== undefined) authorSession?.replace(update.authorScript);
       current = {
         ...current,
         nodes: update.nodes,
@@ -283,8 +287,7 @@ if (island?.textContent && root) {
         ...(update.dataflow ? { dataflow: { flow: update.dataflow.flow, state: update.dataflow.state ?? current.dataflow?.state ?? { values: {}, tables: {}, errors: {} } } } : {}),
         ...(update.colorMode && !readerOverride ? { colorMode: update.colorMode } : {}),
       };
-      // No onMounted: the author's script belongs to the document, not to the
-      // version — running it again would double every listener it installed.
+      // The author session above replaces changed code and disposes its old realm.
       renderApp();
     };
     (window as unknown as Record<string, unknown>)[STORY_ADOPT_HOOK] = adopt;

@@ -46,6 +46,9 @@ import { Button } from '@/components/kit/button';
 import { cn } from '@/components/kit/cn';
 import { DataTable } from '@/components/kit/data-table';
 import { Files } from '@/components/kit/files';
+import { ManagedIframeView } from './managed-iframe';
+import type { ManagedIframeContent } from '@/lib/story/managed-iframe';
+import type { ManagedAssetRelay } from './managed-assets';
 import { GridItemContext } from '@/components/kit/grid';
 import { DateControl, SegmentedControl, SelectControl, SliderControl, SwitchControl, normalizeControlOptions, num, shellRest, str } from '@/components/kit/controls';
 import { parseColumnSpecs, parseSortSpec, parseTableHeight, type SortSpec } from '@/lib/story/data-table';
@@ -158,6 +161,8 @@ interface RuntimeEmbedContextValue {
   chrome: boolean;
   glyphs?: GlyphMap;
   colorMode: 'light' | 'dark';
+  managedAssets?: StoryIslandData['managedAssets'];
+  importManagedAsset?: ManagedAssetRelay;
 }
 
 const RuntimeEmbedContext = createContext<RuntimeEmbedContextValue>({
@@ -719,6 +724,10 @@ const RUNTIME_REGISTRY: Record<string, ComponentType<Record<string, unknown>>> =
   ...STORY_UI_COMPONENTS,
   Dialog: DialogAdapter,
   DialogContent: DialogContentAdapter,
+  Iframe: props => {
+    const { store, managedAssets, importManagedAsset } = useContext(RuntimeEmbedContext);
+    return store ? <ManagedIframeView {...props} compiled={props.compiled as ManagedIframeContent} store={store} assets={managedAssets} importAsset={importManagedAsset} /> : null;
+  },
   Files: FilesAdapter,
   Question: QuestionAdapter,
   Number: NumberAdapter,
@@ -1027,7 +1036,7 @@ export type StoryRuntimeAppProps = StoryIslandData & {
    * the page the authority over a bound `<img>`'s source; absent, the element
    * loads the endpoint for itself.
    */
-  importAsset?: (url: string) => Promise<{ url: string } | { refused: string }>;
+  importAsset?: ManagedAssetRelay;
 };
 
 const EMPTY_GLYPHS: GlyphMap = {};
@@ -1035,7 +1044,7 @@ const EMPTY_GLYPHS: GlyphMap = {};
 /** A store-less subscribe (a Button rendered outside a document): nothing ever changes. */
 const NO_SUBSCRIBE = () => () => {};
 
-export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, template = null, chrome = true, assetsUrl = null, importAsset, store: givenStore, onMounted, editDecorate, onSlideRename }: StoryRuntimeAppProps) {
+export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, template = null, chrome = true, assetsUrl = null, managedAssets, importAsset, store: givenStore, onMounted, editDecorate, onSlideRename }: StoryRuntimeAppProps) {
   const [store] = useState<DataflowStore>(() => givenStore ?? createDataflowStore(dataflow ?? { flow: EMPTY_DATAFLOW }));
   const mountedRef = useRef(onMounted);
   mountedRef.current = onMounted;
@@ -1074,7 +1083,7 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, t
 
   const body = (
     <RuntimeAssetContext.Provider value={assets}>
-      <RuntimeEmbedContext.Provider value={{ store, flow: store.flow, state, pending, setValue, fetchPage: store.fetchPage, refData, chrome, colorMode }}>
+      <RuntimeEmbedContext.Provider value={{ store, flow: store.flow, state, pending, setValue, fetchPage: store.fetchPage, refData, chrome, colorMode, managedAssets, importManagedAsset: importAsset }}>
         {renderStoryNodes(nodes, {
           values: state.values,
           // Identity across an adopted document: a live update re-renders this

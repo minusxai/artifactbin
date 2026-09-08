@@ -46,6 +46,13 @@ network blocked**, and a `sandbox` directive gives each artifact an opaque
 origin so it can't touch the app's storage. Documents are always
 self-contained — but you don't have to make them so by hand.
 
+Author scripts run in a second opaque child reached through the fixed
+`/story/author-frame` wrapper, never in the visible renderer. A bounded
+MessagePort exposes only declared signals, query refreshes and permitted
+dataset mutations. Managed `<Iframe>` assets are imported through the
+document-scoped resolver and served anonymously from `APP__ASSETS_ORIGIN`;
+arbitrary network, navigation, account APIs and parent DOM access remain denied.
+
 **Import from the web.** Point at an image, a PDF, a font or a CSV and the
 server fetches it once, stores a copy, and serves it from this origin:
 

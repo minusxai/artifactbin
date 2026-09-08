@@ -24,6 +24,8 @@
 
 /** @type {readonly GateSpec[]} */
 export const GATE_SPECS = Object.freeze([
+  { name: 'managed-iframe', start: 'custom', why: 'Boots deterministic local asset and dedicated-origin hosts to exercise the complete managed child boundary.', needsMail: false, needsClipboard: false, timeoutMs: 120_000 },
+  { name: 'author-script-isolation', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 90_000 },
   { name: 'libraries', start: 'custom', why: 'Uploads a textured GLB and publishes scripts that load it through the optional library registry.', needsMail: false, needsClipboard: false, timeoutMs: 90_000 },
   { name: 'postgres-datasets', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 180_000 },
   { name: 'mutation-permissions', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 120_000 },

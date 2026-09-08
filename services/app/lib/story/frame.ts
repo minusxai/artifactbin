@@ -27,6 +27,7 @@ import { webAssetsForSource } from '@/lib/web-assets';
 export interface LiveFrame extends Omit<ArtifactLiveEvent, 'compiledCss' | 'authorCss' | 'dataflow'> {
   compiledCss: string | null;
   authorCss: string | null;
+  authorScript: string | null;
   /** A stable signature of the data declarations; the client rebinds when it moves. */
   declarations: string | null;
   /** The declarations as a flow, rows deliberately absent (the client re-runs). */
@@ -74,6 +75,7 @@ async function build(row: ArtifactRow): Promise<LiveFrame> {
       : null,
     compiledCss: css,
     authorCss: parts?.authorCss ?? null,
+    authorScript: parts?.authorScript ?? null,
     ...(parts ? { nodes: parts.nodes } : {}),
     declarations: parts?.declarations ?? null,
     ...(parts && parts.flow.queries.length + parts.flow.values.length > 0 ? { dataflow: { flow: parts.flow } } : {}),

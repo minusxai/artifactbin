@@ -13,6 +13,7 @@
  */
 import React from 'react';
 import { evaluateReactive, isReactiveExpression, REACTIVE_BOOLEAN_PROPS } from '@/lib/jsx/reactive';
+import { compileManagedIframe } from '@/lib/story/managed-iframe';
 import type { JsxNode, JsxElement } from '@/lib/jsx';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import { hasDangerousScheme, listHasDangerousScheme } from '@/lib/jsx/validate';
@@ -194,6 +195,15 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
   const isComponent = node.isComponent;
   const Component = isComponent ? options.components[node.tag] : null;
   if (isComponent && !Component) return null; // validator rejects these; render stays safe regardless
+
+  if (node.tag === 'Iframe' && Component) {
+    try {
+      const compiled = compileManagedIframe(node);
+      const props = buildProps(node.attributes, true, node.tag, path, options.row);
+      const element = React.createElement(Component, { ...props, compiled, key: options.keyFor?.(path) ?? path });
+      return options.decorateElement ? options.decorateElement(element, node, path) : element;
+    } catch { return null; }
+  }
 
   if (node.tag === 'DataTable' && Component) {
     const props = buildProps(node.attributes, true, node.tag, path, options.row, options.values);

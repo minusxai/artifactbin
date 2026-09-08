@@ -7,6 +7,7 @@
  */
 import { parseRowRef } from '@/lib/story/row-scope';
 import { isReactiveExpression, reactiveNames, REACTIVE_BOOLEAN_PROPS } from './reactive';
+import { validateManagedIframeSource } from '@/lib/story/managed-iframe-source';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 // Shared with the render-time gate in lib/story-ui/interpreter.tsx — see
 // lib/jsx/url-attrs.ts for why these must not be maintained separately.
@@ -105,6 +106,11 @@ function walk(
   validateElement(node, components, allowedHtml, stylePolicy, errors, inSvg);
   for (const attr of node.attributes) if (!inColumn && !attr.value.static && isReactiveExpression(attr.value.reactive) && reactiveNames(attr.value.reactive).fields.length) {
     errors.push({message: 'Row expressions belong inside a DataTable Column', start: attr.start, end: attr.end});
+  }
+  if (node.tag === 'Iframe') {
+    try { validateManagedIframeSource(node); }
+    catch (error) { errors.push({ message: error instanceof Error ? error.message : String(error), tag: node.tag, start: node.start, end: node.end }); }
+    return;
   }
   const childrenInSvg = inSvg || (!node.isComponent && node.tag.toLowerCase() === 'svg');
   for (const child of node.children) walk(child, components, allowedHtml, stylePolicy, errors, childrenInSvg, node.tag === 'Column' ? parent === 'DataTable' : node.tag === 'DataTable' ? false : inColumn, node.tag);

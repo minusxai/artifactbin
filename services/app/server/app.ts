@@ -37,6 +37,8 @@ import { GET as publicAssetBytes } from '@/app/assets/[hash]/route';
 import { publicRefAssetResponse } from '@/lib/public-ref-assets';
 import { mountRoutes } from './api';
 import { ROUTES } from './routes.generated';
+import { authorFrameResponse } from './author-frame';
+import { AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
 
 /** Where the server hands the SPA a page's data so its FIRST paint is its final one. */
 export const BOOTSTRAP_ID = 'mx-page-data';
@@ -187,6 +189,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // asks viewer.ts who is calling.
   if (opts.actorSecret) actorReceiver(opts.actorSecret).mount(app);
   const assetsOrigin = ASSETS_ORIGIN;
+  app.get(AUTHOR_FRAME_PATH, c => authorFrameResponse(c.req.raw, assetsOrigin, baseUrl(c.req.raw)));
   if (assetsOrigin) app.use('*', async (c, next) => {
     const incoming = new URL(c.req.url);
     if (incoming.host !== new URL(assetsOrigin).host && baseUrl(c.req.raw) !== assetsOrigin) return next();

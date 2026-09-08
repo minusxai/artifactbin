@@ -306,10 +306,11 @@ describe('buildStoryDocument', () => {
     expect(html).toContain(STORY_ISLAND_ID);
   });
 
-  it('runs the author script inline when nothing will hydrate, parked when something will', async () => {
+  it('always parks author scripts and forces the isolated runtime', async () => {
     const stat = await doc({ source: '<Helmet><script>{`window.x=1;`}</script></Helmet><p>plain</p>' });
-    expect(stat).toContain('<script>window.x=1;</script>');
-    expect(stat).not.toContain('text/mx-author');
+    expect(stat).toContain('type="text/mx-author"');
+    expect(stat).toContain('story-runtime.js');
+    expect(stat).not.toContain('<script>window.x=1;</script>');
 
     const live = await doc({ source: '<Helmet><script>{`window.x=1;`}</script></Helmet><Card>c</Card>' });
     expect(live).toContain('type="text/mx-author"');

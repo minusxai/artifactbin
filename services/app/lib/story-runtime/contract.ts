@@ -14,6 +14,7 @@ import type { RefDataMap } from '@/lib/story/ref-data';
 import type { Dataflow, DataflowState, Row, Scalar } from '@/lib/story/dataflow';
 import type { LocalMutationResult } from '@/lib/story/local-state';
 import type { ScrollAnchor } from '@/lib/story/scroll-anchor';
+import type { ManagedAssetsConfig, ManagedAssetKind } from './managed-assets';
 
 /** The document's data as the island carries it: what is declared, and its state at render. */
 export interface StoryIslandDataflow {
@@ -106,6 +107,7 @@ export interface StoryIslandData {
    * render that is not a served document, where a bound image renders static.
    */
   assetsUrl?: string | null;
+  managedAssets?: ManagedAssetsConfig;
 }
 
 /** The GET query endpoint's one parameter: the JSON of a QueryRequest (lib/story/query-request). */
@@ -203,6 +205,7 @@ export interface StoryDocumentUpdate {
   compiledCss?: string | null;
   /** The author's own <Helmet> <style> (data-mx-author). */
   authorCss?: string | null;
+  authorScript?: string | null;
   theme?: string | null;
   colorMode?: 'light' | 'dark';
 }
@@ -387,6 +390,7 @@ export interface StoryAssetRequest {
   id: number;
   /** The web URL the document ended up with — never a path, never ours. */
   url: string;
+  kind?: ManagedAssetKind;
 }
 
 export type StoryAssetResult =

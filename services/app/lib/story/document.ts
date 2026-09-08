@@ -23,7 +23,6 @@
  * somehow carries `</script` is DROPPED — emitting it would let text escape the
  * script element, and mutating code silently is worse than omitting it.
  */
-import { artifactApiScript } from './script-api';
 import { libraryUrls } from '@/lib/libraries';
 import path from 'path';
 import { pathToFileURL } from 'url';
@@ -117,6 +116,7 @@ export interface StoryDocumentInput {
    * them (the canvas, unit tests), where a bound image renders static.
    */
   assetsUrl?: string | null;
+  managedAssets?: StoryIslandData['managedAssets'];
   /** Absolute scoped asset transport, usable from opaque-origin scripts. */
   resolveUrl?: string | null;
   libraryOrigin?: string;
@@ -396,9 +396,8 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    */
   const readerChrome = chrome
     ? renderReaderChrome({
-      // The document knows its own id only when it is live enough to hear its
-      // author; a capture and a unit render have none, and the like/comment
-      // log then names nothing rather than guessing.
+      // Snapshot-only readers still need document identity for their chrome;
+      // live eligibility controls subscription attributes, not attribution.
       artifactId: live?.id ?? null,
       // The STORED title, never the Helmet's: the Helmet is head content and
       // nothing of it may reach the body (a rule this file already lives by),
@@ -432,7 +431,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    * import from without this and rendered as a bare alt until hydration.
    */
   const bodyHtml = split
-    ? loadSsrBundle().renderStoryBody({ nodes: split.body, refData, glyphs, ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}) })
+    ? loadSsrBundle().renderStoryBody({ nodes: split.body, refData, glyphs, ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, managedAssets: input.managedAssets, ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}) })
     : `<pre>${escapeHtml(source)}</pre>`;
 
   // Style order mirrors the engine's injection order (compiled Tailwind → bare
@@ -484,7 +483,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    * must degrade to the old, heavy, WORKING delivery rather than to silence.
    */
   const commentFallback = !!input.commenting && !commentSrc;
-  const hydrates = !!split && !!runtimeSrc && (needsRuntime(split.body) || !!dataflow || !!input.editable || commentFallback);
+  const hydrates = !!split && !!runtimeSrc && (needsRuntime(split.body) || !!helmet.script || !!dataflow || !!input.editable || commentFallback);
   /*
    * The THIRD delivery: comments without hydration. A commenter's frame used
    * to ask for `?edit=1` — which made this `hydrates` — so a page of prose
@@ -523,6 +522,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
 
   const island: StoryIslandData = { nodes: split?.body ?? [], refData, ...(Object.keys(glyphs).length ? { glyphs } : {}), ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, ...(input.queryUrl ? { queryUrl: input.queryUrl } : {}), ...(input.mutateUrl ? { mutateUrl: input.mutateUrl } : {}), ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}) };
   // `<` escaped so no row value can close the script element from inside JSON.
+  if(input.managedAssets)island.managedAssets=input.managedAssets;
   const islandJson = JSON.stringify(island).replace(/</g, '\\u003c');
 
   /**
@@ -535,9 +535,8 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    * time, which is also when the document is complete.
    */
   const safeScript = helmet.script && !/<\/script/i.test(helmet.script) ? helmet.script : null;
-  const authorApi = safeScript ? `<script>${artifactApiScript({ resolveUrl: input.resolveUrl ?? null, libraries: libraryUrls(input.libraryOrigin) })}</script>` : '';
   const authorScript = safeScript
-    ? (hydrates ? `<script type="${AUTHOR_SCRIPT_TYPE}">${safeScript}</script>` : `<script>${safeScript}</script>`)
+    ? `<script type="${AUTHOR_SCRIPT_TYPE}">${safeScript}</script>`
     : '';
 
   return (
@@ -570,7 +569,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
       : '') +
     // First script in the document: the author's runs at the end of <body>,
     // and anything that could hand the URL bar away must already be closed.
-    `<script>${HISTORY_PRELUDE}</script>` + authorApi +
+    `<script>${HISTORY_PRELUDE}</script>` +
     // Before any paint: a persisted reader mode override replaces the class
     // the server stamped, so a live reload never flashes the author's mode.
     // Chrome-gated with the toggle itself — a capture must render the stored

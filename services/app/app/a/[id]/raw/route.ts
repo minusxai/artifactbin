@@ -50,6 +50,7 @@ import { displayTitle } from '@/lib/story/title';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import { catalogOf,publicCatalogOf } from '@/lib/datasets/catalog';
+import { ASSETS_ORIGIN } from '@/lib/config';
 
 // The markup document's policy — per document, built in lib/story/markup-csp:
 // content-independent except for the ONE connect-src that admits exactly this
@@ -461,6 +462,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         queryUrl: queryPath(artifact.id),
         resolveUrl: `${baseUrl(request)}${resolvePath(artifact.id)}`,
         libraryOrigin: baseUrl(request),
+        ...(ASSETS_ORIGIN ? { managedAssets: { origin: ASSETS_ORIGIN, resolveUrl: `${baseUrl(request)}${assetsPath(artifact.id)}${byExportKey ? `?key=${encodeURIComponent(key!)}` : ''}` } } : {}),
         /*
          * …and where it imports an image URL only its reader can compute (a
          * bound <img src="$pick">). Unconditional, unlike mutateUrl: a source
@@ -489,7 +491,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         status: 200,
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
-          'Content-Security-Policy': markupCsp(base, artifact.id),
+          'Content-Security-Policy': markupCsp(base, artifact.id, ASSETS_ORIGIN ?? undefined),
       ...(chrome ? { Link: `<${base}/docs>; rel="help"` } : {}),
           ...COMMON,
         },

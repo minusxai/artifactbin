@@ -579,12 +579,13 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   useEffect(() => {
     const onAsset = async (e: MessageEvent) => {
       const data = e.data as Partial<StoryAssetRequest> | undefined;
-      if (!data || typeof data !== 'object' || data.type !== STORY_ASSET_MESSAGE || typeof data.url !== 'string') return;
+      if (!data || typeof data !== 'object' || data.type !== STORY_ASSET_MESSAGE || typeof data.url !== 'string' || (data.kind !== undefined && !['image','font','pdf','script','binary'].includes(data.kind))) return;
       if (frameRef.current && e.source !== frameRef.current.contentWindow) return;
       const reply = (msg: StoryAssetResult) => (e.source as Window | null)?.postMessage(msg, '*');
       try {
         const key = captureKey ? `&key=${encodeURIComponent(captureKey)}` : '';
-        const res = await fetch(`/a/${id}/assets?u=${encodeURIComponent(data.url)}${key}`, { headers: { Accept: 'application/json' } });
+        const kind = data.kind ? `&kind=${encodeURIComponent(data.kind)}` : '';
+        const res = await fetch(`/a/${id}/assets?u=${encodeURIComponent(data.url)}${kind}${key}`, { headers: { Accept: 'application/json' } });
         const body = (await res.json().catch(() => ({}))) as { url?: string; code?: string };
         if (res.ok && body.url) reply({ type: STORY_ASSET_RESULT_MESSAGE, id: data.id!, url: body.url });
         else reply({ type: STORY_ASSET_RESULT_MESSAGE, id: data.id!, refused: body.code ?? `http_${res.status}` });
@@ -763,6 +764,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       ...(live.dataflow ? { dataflow: live.dataflow } : {}),
       ...(live.compiledCss !== undefined ? { compiledCss: live.compiledCss } : {}),
       ...(live.authorCss !== undefined ? { authorCss: live.authorCss } : {}),
+      ...(live.authorScript !== undefined ? { authorScript: live.authorScript } : {}),
       theme: live.theme,
       ...(live.colorMode ? { colorMode: live.colorMode } : {}),
     };

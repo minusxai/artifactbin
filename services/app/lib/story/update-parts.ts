@@ -26,6 +26,8 @@ export interface StoryUpdateParts {
   nodes: JsxNode[];
   /** The author's own `<Helmet>` `<style>`, or null when there is none. */
   authorCss: string | null;
+  /** Legacy Helmet script, executed only in an isolated author realm. */
+  authorScript: string | null;
   /**
    * The `<Value>`/`<Query>` declarations themselves. The runtime needs these to
    * re-run a query at all, so a sender pushing a version whose data changed has
@@ -58,6 +60,7 @@ export function storyUpdateParts(source: string, assets?: AssetLookup): StoryUpd
   return {
     nodes: body,
     authorCss: content.style ?? null,
+    authorScript: content.script ?? null,
     flow: { values: content.values, queries: content.queries, ...(content.mutations.length ? { mutations: content.mutations } : {}) },
     declarations: JSON.stringify({
       values: content.values.map((v) => ({ ...v, start: 0, end: 0 })),
