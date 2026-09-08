@@ -24,13 +24,9 @@
  * script element, and mutating code silently is worse than omitting it.
  */
 import { libraryUrls } from '@/lib/libraries';
-import path from 'path';
-import { pathToFileURL } from 'url';
-import { createRequire } from 'module';
-import { IS_DEV } from '@/lib/config';
-import { EMPTY_HELMET_CONTENT, type HelmetContent } from '@/lib/story/helmet';
-import { storyBodyFor } from '@/lib/story/body';
-import { assetLookupFrom, type WebAssetBox } from '@/lib/story/asset-url';
+import { prepareStoryParts } from './prepare-runtime.server';
+import { loadStorySsr } from './ssr.server';
+import type { WebAssetBox } from '@/lib/story/asset-url';
 import { AUTHOR_SCRIPT_TYPE, STORY_HELLO_MESSAGE, STORY_VALUES_HOOK, STORY_ISLAND_ID, STORY_PAINTED_MESSAGE, STORY_ROOT_ID, type StoryIslandData, type StoryIslandDataflow, type StorySsrBundle } from '@/lib/story-runtime/contract';
 import type { JsxNode } from '@/lib/jsx';
 import type { RefDataMap } from '@/lib/story/ref-data';
@@ -208,19 +204,6 @@ export interface StoryDocumentInput {
 // createRequire is the one loader neither Turbopack nor Vitest intercepts —
 // the specifier resolves at runtime, from disk, on the server. (Sanctioned
 // dynamic import, like lib/db.ts's engine pick.)
-let ssrBundle: StorySsrBundle | null = null;
-function loadSsrBundle(): StorySsrBundle {
-  const req = createRequire(pathToFileURL(path.join(process.cwd(), 'package.json')).href);
-  const file = path.join(process.cwd(), 'lib', 'story-runtime', 'dist', 'story-ssr.cjs');
-  // In DEV the bundle is rebuilt under the running server, so a cached copy
-  // would render markup from before the rebuild while the browser loads the
-  // new client half — a hydration mismatch manufactured by the dev loop.
-  if (IS_DEV) delete req.cache[req.resolve(file)];
-  else if (ssrBundle) return ssrBundle;
-  const loaded = req(file) as StorySsrBundle;
-  if (!IS_DEV) ssrBundle = loaded;
-  return loaded;
-}
 
 /**
  * Does this document need the runtime at all?
@@ -378,15 +361,13 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    * reason: a reader watching an agent write must be adopting the document a
    * reload would give them.
    */
-  const split = storyBodyFor(source, input.assetUrls ? assetLookupFrom(input.assetUrls) : undefined, { capture: !chrome });
-  const helmet: HelmetContent = split?.content ?? EMPTY_HELMET_CONTENT;
+  const { runtime: prepared, split, helmet, mode, title, glyphs, docFonts, importedFaces } = await prepareStoryParts(input);
+  const bodyHtml = split ? loadStorySsr().renderStoryBody(prepared.data) : `<pre>${escapeHtml(source)}</pre>`;
 
   // Mode resolution lives HERE, for every reader: a theme is designed for
   // one mode and wins; colorMode decides unthemed documents. The edit canvas
   // resolves it the same way (JsxArtifactEditor), which is what keeps a
   // document from being edited in a mode it will never be read in.
-  const mode = resolveStoryMode(theme, colorMode);
-  const title = helmet.title?.trim() || input.title || 'artifact';
 
   /*
    * THE READER'S CHROME (lib/story/reader-chrome) — assembled here and dropped
@@ -420,7 +401,6 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    * them missing — is a mismatch. Empty for a document that draws no icons,
    * which is 153 of the 155 on production.
    */
-  const glyphs = split ? loadSsrBundle().glyphsForNodes(split.body) : {};
 
   /*
    * The SSR string and the island below are built from SEPARATE prop lists, and
@@ -430,9 +410,6 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    * absence here is correct, while a bound `<img src="$pick">` has nowhere to
    * import from without this and rendered as a bare alt until hydration.
    */
-  const bodyHtml = split
-    ? loadSsrBundle().renderStoryBody({ nodes: split.body, refData, glyphs, ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, managedAssets: input.managedAssets, ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}) })
-    : `<pre>${escapeHtml(source)}</pre>`;
 
   // Style order mirrors the engine's injection order (compiled Tailwind → bare
   // typography floor → fonts), author CSS last so it sees everything it may
@@ -446,8 +423,6 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
   // The families this document ASKED for (Helmet meta), already resolved and
   // copied at publish (lib/webfonts) — served from this origin like a bundled
   // face, and preloaded on the same rule (the latin upright only).
-  const docFonts = documentFonts(helmet);
-  const importedFaces = docFonts.families.length > 0 ? await webFontAssets(docFonts.families) : [];
   const fontPreloads = [...criticalStoryFonts(theme ?? undefined), ...importedFaces.filter((f) => f.preload)]
     .map((f) => `<link rel="preload" href="${escapeHtml(f.url)}" as="font" type="font/woff2" crossorigin>`)
     .join('');
@@ -520,7 +495,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
     ...(hydrates ? [runtimeSrc!, ...(drawsChart(split!.body) ? input.lazyChunks ?? [] : [])] : []),
   ].map((href) => `<link rel="modulepreload" href="${escapeHtml(href)}" crossorigin>`).join('');
 
-  const island: StoryIslandData = { nodes: split?.body ?? [], refData, ...(Object.keys(glyphs).length ? { glyphs } : {}), ...(dataflow ? { dataflow } : {}), colorMode: mode, template, chrome, ...(input.queryUrl ? { queryUrl: input.queryUrl } : {}), ...(input.mutateUrl ? { mutateUrl: input.mutateUrl } : {}), ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}) };
+  const island = prepared.data;
   // `<` escaped so no row value can close the script element from inside JSON.
   if(input.managedAssets)island.managedAssets=input.managedAssets;
   const islandJson = JSON.stringify(island).replace(/</g, '\\u003c');

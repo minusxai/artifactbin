@@ -7,12 +7,18 @@ import {catalogOf,publicCatalogOf} from '@/lib/datasets/catalog';
  * server-run dataflow, the open-annotation count).
  */
 import { countOpenAnnotations } from '@/lib/annotations';
-import { canReadArtifact, declarationsForRow, getArtifactById } from '@/lib/artifacts';
+import { canReadArtifact, declarationsForRow, getArtifactById, refDataForRow } from '@/lib/artifacts';
 import { folderPageFor } from '@/lib/folders';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { verifyExportKey } from '@/lib/export-key';
-import { json } from '@/lib/http';
+import { baseUrl, json } from '@/lib/http';
+import { ASSETS_ORIGIN } from '@/lib/config';
+import { prepareStoryRuntime } from '@/lib/story/prepare-runtime.server';
+import { webAssetsForSource } from '@/lib/web-assets';
+import { assetsPath, mutatePath, queryPath } from '@/lib/story/markup-csp';
+import { declaresMutations } from '@/lib/story/helmet';
+import { readUrlValues } from '@/lib/story/url-values';
 import { ID_RE } from '@/lib/ids';
 import { count, has } from '@/lib/relations';
 import { loadDatasetRows } from '@/lib/story/dataset-store';
@@ -89,8 +95,21 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // anonymous reader still gets the count — it is the number, not the button,
   // that everyone can see.
   const viewerId = actor.viewer?.userId ?? null;
+  const authorUsername = await ownerUsername(artifact.user_id);
+  const compiledCss = isDoc ? await currentStoryCss(meta, artifact.source) : meta.compiledCss ?? null;
+  const declared = isDoc && artifact.source ? declarationsForRow(artifact) : null;
+  const dataflow = declared ? { ...declared, values: readUrlValues(new URL(request.url).search, declared.flow) } : null;
+  const runtime = isDoc ? await prepareStoryRuntime({
+    source: artifact.source ?? '', compiledCss, theme: design.theme,
+    colorMode: design.colorMode, title: artifact.title, template: meta.template ?? null,
+    refData: await refDataForRow(artifact), assetUrls: await webAssetsForSource(artifact.source), dataflow,
+    queryUrl: queryPath(artifact.id), assetsUrl: assetsPath(artifact.id),
+    ...(declaresMutations(artifact.source) ? { mutateUrl: mutatePath(artifact.id) } : {}),
+    ...(ASSETS_ORIGIN ? { managedAssets: { origin: ASSETS_ORIGIN, resolveUrl: `${baseUrl(request)}${assetsPath(artifact.id)}` } } : {}),
+  }) : undefined;
   return json({
-    canonical: canonicalArtifactPath(artifact, await ownerUsername(artifact.user_id)),
+    canonical: canonicalArtifactPath(artifact, authorUsername),
+    description: artifact.description,
     role,
     kind,
     like: { liked: viewerId ? await has(viewerId, 'like', artifact.id) : false, count: await count('like', artifact.id) },
@@ -105,6 +124,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       editId: artifact.edit_id,
       format: artifact.format,
       title: artifact.title,
+      author: authorUsername ? { username: authorUsername } : null,
+      ...(runtime ? { runtime } : {}),
       source: artifact.format==='dataset'&&role!=='owner'&&role!=='editor'?null:artifact.source,
       content: isDoc ? '' : artifact.format === 'dataset' ? JSON.stringify(await loadDatasetRows(artifact)) : artifact.content,
       columns: meta.columns ?? [],
@@ -112,7 +133,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // A stored FILE is not a document the app can render, so its view is the
       // two facts a person picks a file by plus the link that opens it.
       ...(artifact.format === 'pdf' || artifact.format === 'file' ? { bytes: (meta as { bytes?: number }).bytes ?? 0, pages: (meta as { pages?: number }).pages ?? null } : {}),
-      compiledCss: isDoc ? await currentStoryCss(meta, artifact.source) : meta.compiledCss ?? null,
+      compiledCss,
       theme: design.theme,
       colorMode: design.colorMode,
       template: meta.template ?? null,
@@ -121,7 +142,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // seed the editor, and the editor runs a draft's queries itself — so
       // running them here only held the owner's own page behind the SQL, with
       // the results inlined into its HTML (withBootstrap).
-      dataflow: isDoc && artifact.source ? declarationsForRow(artifact) : null,
+      dataflow,
       accountSession: kind === 'account',
       anonSession: kind === 'anon',
       version: artifact.version,

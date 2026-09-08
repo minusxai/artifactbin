@@ -12,6 +12,7 @@
  * stamped DOM is render output only; new-format stories persist JSX source, never DOM.
  */
 import React from 'react';
+import { DENIED_JSX_ATTRS } from '@/lib/jsx/denied-attrs';
 import { evaluateReactive, isReactiveExpression, REACTIVE_BOOLEAN_PROPS } from '@/lib/jsx/reactive';
 import { compileManagedIframe } from '@/lib/story/managed-iframe';
 import type { JsxNode, JsxElement } from '@/lib/jsx';
@@ -155,7 +156,7 @@ const VALUE_CONTROLLED_TAGS = immutableSet(['Tabs', 'Accordion']);
 const FORM_CONTROL_TAGS = immutableSet(['input', 'textarea', 'select']);
 
 /** Name-denied props, lowercase (mirrors lib/jsx/validate.ts DENIED_ATTRS + React internals). */
-const DENIED_PROPS = immutableSet(['dangerouslysetinnerhtml', 'ref', 'key', 'srcdoc', 'is']);
+const DENIED_PROPS = DENIED_JSX_ATTRS;
 
 /** URL-bearing props, lowercase (scheme-filtered; list-valued ones checked per entry). */
 

@@ -17,6 +17,11 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { loadStorySsr } from '@/lib/story/ssr.server';
+import type { PreparedStoryRuntime } from '@/lib/story/prepared-runtime';
+import { isolateStoryCss } from '@/lib/story/inline-css';
+import { escapeHtml } from '@/lib/story/reader-chrome';
+import { STORY_ROOT_ATTR } from '@/lib/story-surface';
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { actorReceiver, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
@@ -48,6 +53,21 @@ export const withBootstrap = (html: string, data: unknown): string =>
   // A function replacement keeps JavaScript's special replacement tokens in
   // user-authored JSON literal instead of expanding them with the HTML shell.
   html.replace('</head>', () => `  <script type="application/json" id="${BOOTSTRAP_ID}">${safeJson(data)}</script>\n  </head>`);
+
+/** Initial readable document, outside React's empty root; captured by reference
+ * before React mounts and removed when the inline runtime commits. App root
+ * and head bootstrap precede ALL author nodes, including colliding ids.
+ */
+export function withInitialStory(html: string, runtime: PreparedStoryRuntime, id: string, description?: string | null): string {
+  const css = isolateStoryCss([runtime.baseCss, runtime.compiledCss ?? '', runtime.authorCss ?? ''].join('\n')).replace(/<\/style/gi, '');
+  const body = loadStorySsr().renderStoryBody(runtime.data);
+  const metadata = `<meta property="og:title" content="${escapeHtml(runtime.title)}">`
+    + (description ? `<meta name="description" content="${escapeHtml(description)}"><meta property="og:description" content="${escapeHtml(description)}">` : '')
+    + `<meta property="og:image" content="/a/${escapeHtml(id)}/export?mode=card"><meta name="twitter:card" content="summary_large_image">`;
+  return html.replace(/<title>[\s\S]*?<\/title>/i, () => `<title>${escapeHtml(runtime.title)}</title>`)
+    .replace('</head>', () => `${metadata}</head>`)
+    .replace('</body>', () => `<div data-mx-initial-story="" data-mx-inline-story="" ${STORY_ROOT_ATTR} class="${runtime.data.colorMode}"${runtime.theme ? ` data-theme="${escapeHtml(runtime.theme)}"` : ''}><style>${css}</style>${body}</div></body>`);
+}
 
 // Inline scripts emitted by our source HTML and Vite's development transform.
 // Keeping the hashes explicit preserves the production policy while allowing
@@ -238,7 +258,11 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // gets the app's own 404 page, anything else (curl's `*/*`, a fetch tool)
     // gets the refusal that names the way on.
     if (code === 404 && !(c.req.raw.headers.get('accept') ?? '').includes('text/html')) return apiNotFound(c);
-    return new Response(data ? withBootstrap(html, data) : html, { status: code, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS } });
+    const surface = (data?.artifact as { surface?: { id: string; runtime?: PreparedStoryRuntime }; description?: string | null } | undefined);
+    const shell = surface?.surface?.runtime
+      ? withInitialStory(html, surface.surface.runtime, surface.surface.id, surface.description)
+      : html;
+    return new Response(data ? withBootstrap(shell, data) : shell, { status: code, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS } });
   };
 
   const pageData = (dir: string) => ROUTES.find((r) => r.dir === dir)?.module.GET as ((request: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>) | undefined;
@@ -350,8 +374,9 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
 
   // The reader/owner split, then the app page.
   const documentAddress = async (c: { req: { raw: Request; url: string } }) => {
-    const id = await runWithRequest(c.req.raw, () => servesDocumentDirectly(c.req.raw));
-    if (id && raw) return runWithRequest(c.req.raw, () => raw(c.req.raw, { params: Promise.resolve({ id }) }));
+    // Canonical readers share the app document so its router can transition
+    // without changing security policy. Only /raw and exports retain the
+    // standalone top-level sandbox; authored scripts still run in Iframes.
     const to = await runWithRequest(c.req.raw, () => healTo(c.req.raw));
     if (to) return new Response(null, { status: 302, headers: { location: to, 'cache-control': 'no-store' } });
     // documentStatus's 404 is final; its 200 only means "not a document

@@ -12,7 +12,8 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
-import { BOOTSTRAP_ID, createAppServer, withBootstrap } from '../app';
+import { BOOTSTRAP_ID, createAppServer, withBootstrap, withInitialStory } from '../app';
+import { prepareStoryRuntime } from '@/lib/story/prepare-runtime.server';
 import { useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
@@ -34,6 +35,30 @@ async function world() {
 }
 
 describe('inlined page data', () => {
+  it('keeps trusted root and bootstrap ahead of author-colliding ids and leaves author scripts inert', async () => {
+    const runtime = await prepareStoryRuntime({source:`<Helmet><script>{\`globalThis.shouldNotRun=true\`}</script></Helmet><div id="root">Collision</div><div id="${BOOTSTRAP_ID}">Not data</div>`,compiledCss:null,theme:null,colorMode:'light',refData:{},title:'Safe'});
+    const shell = '<html><head><title>x</title></head><body><div id="root"></div></body></html>';
+    const html = withBootstrap(withInitialStory(shell,runtime,'ABC123'),{runtime});
+    expect(html.indexOf('<div id="root"></div>')).toBeLessThan(html.indexOf('data-mx-initial-story'));
+    expect(html.indexOf(`id="${BOOTSTRAP_ID}"`)).toBeLessThan(html.indexOf('data-mx-initial-story'));
+    expect(html).not.toContain('<script>globalThis.shouldNotRun');
+    expect(inlined(html).runtime.authorScript).toBe('globalThis.shouldNotRun=true');
+  });
+  it('serves public markup as readable initial content under app CSP, with one prepared bootstrap', async () => {
+    const w = await world();
+    const owner = as({ credential: 'session', userId: w.owner.id, email: w.owner.email });
+    const canonical = (await app.request(`/a/${w.pub.id}`, { headers: owner })).headers.get('location')!;
+    const response = await app.request(canonical);
+    const html = await response.text();
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-security-policy')).not.toContain('sandbox');
+    expect(html).toContain('data-mx-initial-story');
+    expect(html).toContain('>hi</p>');
+    expect(html).toContain('<title>Pub</title>');
+    expect(inlined(html).artifact.surface.runtime.data.nodes.length).toBeGreaterThan(0);
+    const raw = await app.request(`/a/${w.pub.id}/raw`);
+    expect(raw.headers.get('content-security-policy')).toContain('sandbox');
+  });
   it('escapes `<` so the payload can never end the script early', () => {
     const html = withBootstrap('<head></head>', { evil: '</script><img onerror=alert(1)>' });
     expect(html).not.toContain('</script><img');
