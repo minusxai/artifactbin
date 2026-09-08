@@ -209,3 +209,27 @@ describe('importAsset', () => {
     expect(await p).toEqual({ refused: 'no_answer' });
   });
 });
+
+describe('dispose', () => {
+  it('removes all listeners, clears retries and settles pending work', async () => {
+    vi.useFakeTimers();
+    try {
+      const added = vi.spyOn(window, 'addEventListener');
+      const removed = vi.spyOn(window, 'removeEventListener');
+      const { target, messages } = fakeParent();
+      const transport = createRelayTransport(target, APP, window, 20_000);
+      const query = transport.run({}, ['sales']);
+      const asset = transport.importAsset!('https://cdn.example/a.png');
+      transport.dispose!();
+      await expect(query).rejects.toThrow('disposed');
+      await expect(asset).resolves.toEqual({ refused: 'aborted' });
+      const sent = messages().length;
+      await vi.advanceTimersByTimeAsync(25_000);
+      expect(messages()).toHaveLength(sent);
+      expect(added.mock.calls.filter(([type]) => type === 'message')).toHaveLength(3);
+      expect(removed.mock.calls.filter(([type]) => type === 'message')).toHaveLength(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

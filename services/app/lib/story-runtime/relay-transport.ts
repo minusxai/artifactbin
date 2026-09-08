@@ -27,7 +27,7 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
   // `clear` rather than a bare timer handle: a request owns its timeout AND its
   // retries, and every path that finishes it has to drop all of them.
   const waiting = new Map<number, { resolve: (r: Extract<StoryQueryResult, { tables: unknown }>) => void; reject: (e: Error) => void; clear: () => void; post: () => void }>();
-  source.addEventListener('message', (e: MessageEvent) => {
+  const receiveQueries = (e: MessageEvent) => {
     if (e.source !== target || e.origin !== appOrigin) return;
     // The controls can load after the initial retry burst. Their authenticated
     // greeting re-posts only outstanding reads, using the same IDs/deadlines.
@@ -46,7 +46,8 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
     w.clear();
     if ('error' in data) w.reject(new Error(data.error));
     else w.resolve(data);
-  });
+  };
+  source.addEventListener('message', receiveQueries);
   /*
    * A postMessage nobody is listening for yet is not queued — it is GONE, and
    * with one send per request that meant waiting out the timeout with empty
@@ -77,7 +78,7 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
    */
   let writeSeq = 0;
   const writers = new Map<number, { resolve: (r: MutationAnswer) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
-  source.addEventListener('message', (e: MessageEvent) => {
+  const receiveWrites = (e: MessageEvent) => {
     if (e.source !== target || e.origin !== appOrigin) return;
     const data = e.data as StoryMutateResult | undefined;
     if (!data || typeof data !== 'object' || data.type !== STORY_MUTATE_RESULT_MESSAGE) return;
@@ -87,7 +88,8 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
     clearTimeout(w.timer);
     if (data.ok) w.resolve({ dataset: data.dataset, ...(data.local ? {local: data.local} : {}) });
     else w.reject(new Error(data.error));
-  });
+  };
+  source.addEventListener('message', receiveWrites);
 
   /**
    * The ASSET half. Its own message type and waiter map, for the reason the
@@ -101,7 +103,7 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
    */
   let assetSeq = 0;
   const importers = new Map<number, { settle: (r: { url: string } | { refused: string }) => void; clear: () => void; post: () => void }>();
-  source.addEventListener('message', (e: MessageEvent) => {
+  const receiveAssets = (e: MessageEvent) => {
     if (e.source !== target || e.origin !== appOrigin) return;
     const data = e.data as StoryAssetResult | undefined;
     if (!data || typeof data !== 'object' || data.type !== STORY_ASSET_RESULT_MESSAGE) return;
@@ -110,9 +112,21 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
     importers.delete(data.id);
     w.clear();
     w.settle('url' in data ? { url: data.url } : { refused: data.refused });
-  });
+  };
+  source.addEventListener('message', receiveAssets);
 
   return {
+    dispose: () => {
+      source.removeEventListener('message', receiveQueries);
+      source.removeEventListener('message', receiveWrites);
+      source.removeEventListener('message', receiveAssets);
+      for (const pending of waiting.values()) { pending.clear(); pending.reject(new Error('query transport disposed')); }
+      waiting.clear();
+      for (const pending of writers.values()) { clearTimeout(pending.timer); pending.reject(new Error('query transport disposed')); }
+      writers.clear();
+      for (const pending of importers.values()) { pending.clear(); pending.settle({ refused: 'aborted' }); }
+      importers.clear();
+    },
     importAsset: (url,kind,signal) => new Promise<{ url: string } | { refused: string }>((settle) => {
       if(signal?.aborted){settle({refused:'aborted'});return;}
       const id = ++assetSeq;

@@ -35,9 +35,17 @@ export function isStoryDocumentUpdate(data: unknown): data is StoryDocumentUpdat
  * not stomp it, so the mode class is left alone and everything else still
  * applies.
  */
-export function applyDocumentChrome(doc: Document, update: StoryDocumentUpdate, readerMode: 'light' | 'dark' | null = null): void {
-  if (update.compiledCss !== undefined) setStyle(doc, 'data-mx-tw', update.compiledCss);
-  if (update.authorCss !== undefined) setStyle(doc, 'data-mx-author', update.authorCss);
+export interface StoryOwnedStyles { compiled: HTMLStyleElement | null; author: HTMLStyleElement | null }
+
+export function applyDocumentChrome(doc: Document, update: StoryDocumentUpdate, readerMode: 'light' | 'dark' | null = null, owned?: StoryOwnedStyles): void {
+  if (update.compiledCss !== undefined) {
+    if (owned) owned.compiled = setOwnedStyle(doc, owned.compiled, 'data-mx-tw', update.compiledCss);
+    else setStyle(doc, 'data-mx-tw', update.compiledCss);
+  }
+  if (update.authorCss !== undefined) {
+    if (owned) owned.author = setOwnedStyle(doc, owned.author, 'data-mx-author', update.authorCss);
+    else setStyle(doc, 'data-mx-author', update.authorCss);
+  }
 
   const root = doc.documentElement;
   if (update.theme !== undefined) {
@@ -48,6 +56,14 @@ export function applyDocumentChrome(doc: Document, update: StoryDocumentUpdate, 
     root.classList.toggle('dark', update.colorMode === 'dark');
     root.classList.toggle('light', update.colorMode !== 'dark');
   }
+}
+
+function setOwnedStyle(doc: Document, existing: HTMLStyleElement | null, attr: string, css: string | null): HTMLStyleElement | null {
+  if (css === null) { existing?.remove(); return null; }
+  const el = existing ?? doc.createElement('style');
+  if (!existing) { el.setAttribute(attr, ''); doc.head.appendChild(el); }
+  if (el.textContent !== css) el.textContent = css;
+  return el;
 }
 
 /**

@@ -65,7 +65,10 @@ export interface PristineChannel {
  */
 export function capturePristine(win: Window, appOrigin: string, trustedPeer?: Window): PristineChannel | null {
   const parentWin = trustedPeer ?? win.parent;
-  if (!parentWin || parentWin === win) return null;
+  // A same-window peer exists only when trusted app code supplied it
+  // explicitly. It is never inferred from `parent`, so an author-created DOM
+  // node or opaque child cannot opt itself into this first-party channel.
+  if (!parentWin || (!trustedPeer && parentWin === win)) return null;
 
   const post = parentWin.postMessage.bind(parentWin) as (message: unknown, targetOrigin: string) => void;
   const innerHtmlGetter = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML')?.get;

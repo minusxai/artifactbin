@@ -42,6 +42,8 @@ export interface TablePage {
 
 /** What the store asks of the outside to re-run queries. */
 export interface QueryTransport {
+  /** Release listeners, timers and pending requests owned by this transport. */
+  dispose?(): void;
   /**
    * Run `only` (dependency-closed by the server) with these values; resolve
    * with the resulting tables + errors for those queries. A rejection is
@@ -129,6 +131,8 @@ export interface DataflowStore {
    * the control takes. Their old rows stay on screen until the run lands.
    */
   replaceFlow(next: { flow: Dataflow; state?: DataflowState }): void;
+  /** Permanently stop timers, subscribers and late async commits for this document. */
+  dispose(): void;
 }
 
 export interface CreateStoreOptions {
@@ -182,6 +186,7 @@ export function createDataflowStore(
   // A run started before a later change must not overwrite it: results are
   // applied only if they belong to the newest run.
   let runSeq = 0;
+  let disposed = false;
 
   /*
    * Queries whose rows are NOT CURRENT — dirty as well as in flight.
@@ -209,10 +214,11 @@ export function createDataflowStore(
     return pendingCache;
   };
 
-  const notify = () => { for (const l of [...listeners]) l(); };
-  const commit = (next: DataflowState) => { state = next; notify(); };
+  const notify = () => { if (!disposed) for (const l of [...listeners]) l(); };
+  const commit = (next: DataflowState) => { if (!disposed) { state = next; notify(); } };
 
   const flush = () => {
+    if (disposed) return;
     if (timer) { clearTimeout(timer); timer = null; }
     if (!transport || (dirty.size === 0 && !permissionsDirty)) return;
     permissionsDirty = false;
@@ -252,6 +258,7 @@ export function createDataflowStore(
     );
   };
   const schedule = () => {
+    if (disposed) return;
     if (!transport || (dirty.size === 0 && !permissionsDirty)) return;
     if (timer) clearTimeout(timer);
     timer = setTimeout(flush, debounceMs);
@@ -277,6 +284,7 @@ export function createDataflowStore(
   );
 
   const setValues = (values: Record<string, Scalar>) => {
+    if (disposed) return;
     const changed: string[] = [];
     for (const [k, v] of Object.entries(values)) {
       if (!scalarNames.has(k)) continue;
@@ -294,6 +302,7 @@ export function createDataflowStore(
   };
 
   const replaceFlow: DataflowStore['replaceFlow'] = (next) => {
+    if (disposed) return;
     generation++;
     localRevision++;
     // Preserve local drafts only when both schema and authored initial rows are
@@ -356,6 +365,7 @@ export function createDataflowStore(
 
   /** Queries that read these datasets (and their dependents) go dirty. */
   const invalidateDatasets: DataflowStore['invalidateDatasets'] = (datasetIds) => {
+    if (disposed) return;
     const ids = [...datasetIds];
     const affected = queriesReadingDatasets(flow, ids);
     if (flow.mutations?.some(m => ids.includes(m.target))) permissionsDirty = true;
@@ -466,7 +476,7 @@ export function createDataflowStore(
      */
     start: () => { flush(); },
     subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    setTransport: (t) => { transport = t; commit({ ...state }); flush(); },
+    setTransport: (t) => { if (transport !== t) transport?.dispose?.(); transport = t; commit({ ...state }); flush(); },
     refresh: (only) => {
       permissionsDirty = !!flow.mutations?.length;
       const names = only ? [...only] : flow.queries.map((q) => q.name);
@@ -475,9 +485,25 @@ export function createDataflowStore(
       flush();
     },
     fetchPage: (name, page) => {
+      if (disposed) return Promise.reject(new Error('dataflow store disposed'));
       if (!transport) return Promise.reject(new Error('no query transport'));
       const rows = localRows();
       return rows ? transport.page({ ...state.values }, name, page, rows) : transport.page({ ...state.values }, name, page);
+    },
+    dispose: () => {
+      if (disposed) return;
+      disposed = true;
+      runSeq++;
+      generation++;
+      if (timer) clearTimeout(timer);
+      timer = null;
+      transport?.dispose?.();
+      transport = null;
+      dirty.clear();
+      inFlight.clear();
+      writing.clear();
+      writingCounts.clear();
+      listeners.clear();
     },
   };
 }

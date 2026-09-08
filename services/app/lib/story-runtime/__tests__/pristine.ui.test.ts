@@ -96,6 +96,14 @@ describe('capturePristine', () => {
     expect(capturePristine(window, APP)).toBeNull();
   });
 
+  it('accepts a same-window peer only when trusted app code supplies it explicitly', () => {
+    const channel = capturePristine(window, APP, window);
+    expect(channel).not.toBeNull();
+    expect(channel!.isFromParent({ source: window, origin: APP })).toBe(true);
+    expect(channel!.isFromParent({ source: window, origin: 'https://evil.example' })).toBe(false);
+    expect(channel!.isFromParent({ source: inner(), origin: APP })).toBe(false);
+  });
+
   it('posts to the captured parent even after window.parent is SHADOWED', () => {
     const seen: unknown[] = [];
     window.addEventListener('message', (e) => seen.push(e.data));
