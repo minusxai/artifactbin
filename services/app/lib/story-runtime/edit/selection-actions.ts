@@ -219,8 +219,22 @@ export function createFrameSelectionActions({
       hide();
       return;
     }
-    const range = nativeSelection.getRangeAt(0);
-    if (root && (!root.contains(range.startContainer) || !root.contains(range.endContainer))) { hide(); return; }
+    let range = nativeSelection.getRangeAt(0);
+    if (root) {
+      if (!root.contains(range.startContainer)) { hide(); return; }
+      if (!root.contains(range.endContainer)) {
+        // Chromium triple-clicking the final paragraph may end at offset zero
+        // of the next app sibling. Own the selected text, not that empty
+        // endpoint: clip to the document and refuse if any outside text was
+        // actually included. All subsequent anchors/quotes use the owned range.
+        const bounds = doc.createRange();
+        bounds.selectNodeContents(root);
+        const clipped = range.cloneRange();
+        clipped.setEnd(bounds.endContainer, bounds.endOffset);
+        if (clipped.collapsed || clipped.toString() !== range.toString()) { hide(); return; }
+        range = clipped;
+      }
+    }
     const stampedAt = (node: Node): Element | null => {
       const element = node.nodeType === 1 ? node as Element : node.parentElement;
       return element?.closest(`[${AST_PATH_ATTR}]`) ?? null;
