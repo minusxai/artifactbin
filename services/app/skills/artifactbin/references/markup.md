@@ -11,8 +11,8 @@ Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with spans.
 - Literal props, plus [restricted reactive JSX and dialogs](markup-state.md).
   No spreads, callbacks, or inline handlers; every tag closes (`<br />`),
   comments are `{/* … */}`, and there is no `<html>`/`<head>`/`<body>`.
-  Same-origin markup is top-level light DOM; controls use closed shadow.
-  Helmet scripts cannot access this.
+  Markup: same-origin top-level light DOM; controls: closed shadow.
+  Helmet scripts have no visible DOM access.
   DOM libraries use [Iframe](markup-iframe.md); Sandbox stays supported.
   Use the `mx` data API and declarative controls.
 - **Style with Tailwind classes via `className`**, starting from a
@@ -81,7 +81,7 @@ data belong here;
 </Helmet>
 ```
 
-Helmet scripts own hidden DOM, not parent DOM. Use controls and
+Helmet scripts own hidden DOM, not parent. Use controls and
 `mx.params.subscribe` for signal changes. Fetch is blocked. **Rows arrive after
 the script starts**; use `mx.data.subscribe`, not a line-one read. Signal writes
 are asynchronous. See [script API and migration](markup-scripts.md) before

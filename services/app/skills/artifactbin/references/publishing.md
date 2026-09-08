@@ -22,12 +22,12 @@ Rules · Endpoints · Errors.
 
 ## Rules every document lives by
 
-Same-origin markup is top-level light DOM; trusted UI uses closed shadow DOM.
-Author code is opaque `srcdoc` behind `/story/author-frame`.
+Same-origin markup: top-level light DOM; trusted UI: closed shadow DOM.
+Author: opaque `srcdoc` behind `/story/author-frame`.
 
-CDN scripts, external CSS and fetch/XHR are rejected. Managed
-`<Iframe>` may import declared HTTPS script/images through bounded GETs and the
-public cache (normally `a.`), never general network or viewer credentials.
+Parent CDN/CSS/fetch/XHR are rejected. Operations use `/query`, `/events`,
+`/mutate`, `/resolve` and `/geojson/`. Managed `<Iframe>` loads declared assets
+by bounded GET from public cache (`a.`); no general network or credentials.
 Parent CSS/logic is in `<Helmet>`; child CSS/JS in `<Iframe>`.
 Max [[ maxContentBytes ]] bytes.
 
