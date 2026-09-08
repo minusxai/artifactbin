@@ -23,6 +23,7 @@ import type { InlineStoryController } from '@/lib/story-runtime/InlineStoryRunti
 import { createAuthenticatedTransport } from '@/lib/story-runtime/authenticated-transport';
 import { subscribeDocument } from '@/lib/story-runtime/document-endpoint';
 import type { PreparedStoryRuntime } from '@/lib/story/prepared-runtime';
+import type { ReaderForkedFrom } from '@/lib/story/reader-chrome';
 import { storyUpdateParts } from '@/lib/story/update-parts';
 import { TrustedUi } from '@/components/TrustedUi';
 import { useLocation, useNavigate } from 'react-router';
@@ -64,7 +65,7 @@ const SocialPreviewDialog = dynamic(() => import('@/components/SocialPreviewDial
 
 export interface ArtifactSurfaceProps {
   runtime?: PreparedStoryRuntime;
-  author?: { username: string } | null;
+  author?: { username: string; forkedFrom?: ReaderForkedFrom | null } | null;
   /**
    * The exporter's signed key, when this render IS a capture (server-parsed
    * from `?key=`). Null for every human render.
@@ -709,6 +710,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           first time. */}
       <section aria-label="Document actions">
         <h2 className="mb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">Artifact</h2>
+        {props.author?.forkedFrom && <p data-mx-forked-from className="px-2 py-2 font-mono text-xs text-muted">
+          forked from {props.author.forkedFrom.href
+            ? <a href={props.author.forkedFrom.href} aria-label="Open the artifact this was forked from" className="underline">{props.author.forkedFrom.label}</a>
+            : props.author.forkedFrom.label}
+        </p>}
         {canAnnotate && format === 'markup' && (
           <button
             type="button"
