@@ -28,7 +28,11 @@ import { glyphsForNodes } from '@/lib/story/icon-glyphs';
 import { webAssetsForSource } from '@/lib/web-assets';
 import { assetLookupFrom } from '@/lib/story/asset-url';
 import { ASSETS_ORIGIN } from '@/lib/config';
-import { assetsPath } from '@/lib/story/markup-csp';
+import { assetsPath,resolvePath } from '@/lib/story/markup-csp';
+import {libraryUrls} from '@/lib/libraries';
+import {documentFonts} from '@/lib/story/document-fonts';
+import {webFontAssets} from '@/lib/webfonts';
+import {storyPresentationCss} from '@/lib/story/presentation-css';
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -92,10 +96,12 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const design = resolveStoredStoryDesign(meta.theme, meta.colorMode);
   const isDoc = artifact.format === 'markup';
   const prepared = isDoc
-    ? await Promise.all([webAssetsForSource(artifact.source), refDataForRow(artifact)]).then(([assets, refData]) => {
+    ? await Promise.all([webAssetsForSource(artifact.source), refDataForRow(artifact)]).then(async ([assets, refData]) => {
       const split = storyBodyFor(artifact.source ?? '', assetLookupFrom(assets));
       if (!split) return null;
       const glyphs = glyphsForNodes(split.body);
+      const faces = await webFontAssets(documentFonts(split.content).families);
+      const origin=baseUrl(request);
       return {
         story: {
           nodes: split.body,
@@ -104,11 +110,14 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           ...(declarationsForRow(artifact) ? { dataflow: declarationsForRow(artifact)! } : {}),
           colorMode: resolveStoryMode(design.theme, design.colorMode),
           template: meta.template ?? null,
-          chrome: false,
+          chrome: !exporting,
+          sandboxApi:{resolveUrl:`${origin}${resolvePath(artifact.id)}`,libraries:libraryUrls(origin)},
+          assetsUrl:assetsPath(artifact.id),
           ...(ASSETS_ORIGIN ? { managedAssets: { origin: ASSETS_ORIGIN, resolveUrl: `${baseUrl(request)}${assetsPath(artifact.id)}` } } : {}),
         },
         authorCss: split.content.style || null,
         authorScript: split.content.script || null,
+        surfaceCss: storyPresentationCss(design.theme,split.content,faces),
       };
     })
     : null;
@@ -152,7 +161,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // running them here only held the owner's own page behind the SQL, with
       // the results inlined into its HTML (withBootstrap).
       dataflow: isDoc && artifact.source ? declarationsForRow(artifact) : null,
-      ...(prepared ? { preparedStory: prepared.story, authorCss: prepared.authorCss, authorScript: prepared.authorScript } : {}),
+      ...(prepared ? { preparedStory: prepared.story, authorCss: prepared.authorCss, authorScript: prepared.authorScript, surfaceCss:prepared.surfaceCss } : {}),
       accountSession: kind === 'account',
       anonSession: kind === 'anon',
       version: artifact.version,

@@ -63,6 +63,16 @@ describe('reusable story runtime lifecycle', () => {
     expect(document.querySelector('iframe[title="Isolated artifact script"]')).toBeNull();
   });
 
+  it('starts the author after an immediate adoption reaches its first commit', async () => {
+    const host=document.createElement('div');document.body.append(host);
+    await act(async()=>{
+      mounted=mountStory({root:host,peerOrigin:window.location.origin,renderMode:'render',authorScript:'mx.params.get("ready")',data:{nodes:nodes('<p>First</p>'),refData:{},colorMode:'light',chrome:true}});
+      mounted.adopt({type:STORY_DOCUMENT_MESSAGE,nodes:nodes('<p>Adopted</p>')});
+    });
+    await waitFor(()=>expect(document.querySelector('iframe[title="Isolated artifact script"]')).not.toBeNull());
+    expect(host).toHaveTextContent('Adopted');
+  });
+
   it('removes only styles it owns', async () => {
     const existing = document.createElement('style');
     existing.setAttribute('data-mx-author', 'decoy');

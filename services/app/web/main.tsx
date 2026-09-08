@@ -11,7 +11,7 @@ import {configureAppApi} from './api-origin';
 const appConfig = document.getElementById('mx-app-config');
 if (appConfig?.textContent) {
   const {apiOrigin} = JSON.parse(appConfig.textContent) as {apiOrigin:string};
-  configureAppApi(window.location.href,apiOrigin,'standalone');
+  configureAppApi(window.location.href,apiOrigin);
 }
 
 createRoot(document.getElementById('root')!).render(

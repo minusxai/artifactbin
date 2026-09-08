@@ -148,7 +148,7 @@ export function mountStory(_options: StoryMountOptions): MountedStory {
     if (disposed) return;
     edit?.setNodes(current.nodes); annotate?.setNodes(current.nodes); selection?.setNodes(current.nodes);
     reactRoot.render(createElement(StoryRuntimeApp, {
-      ...renderProps(),
+      ...renderProps(), onMounted: runAuthor,
       ...(edit ? { editDecorate: edit.decorate, onSlideRename: (path: string, title: string) => edit?.renameSlide(path, title) } : {}),
     }));
   };

@@ -138,9 +138,15 @@ describe('GET /api/page/artifact/:id', () => {
     expect(anon.surface).toHaveProperty('compiledCss');
     expect(anon.surface.preparedStory).toMatchObject({
       colorMode: expect.stringMatching(/^(light|dark)$/),
-      chrome: false,
+      chrome: true,
       refData: {},
       nodes: [{ type: 'element', tag: 'div' }],
+    });
+    expect(anon.surface.surfaceCss).toContain('font-size:2.5rem');
+    expect(anon.surface.preparedStory).toMatchObject({
+      chrome:true,
+      assetsUrl:`/a/${w.pub.id}/assets`,
+      sandboxApi:{resolveUrl:expect.stringContaining(`/a/${w.pub.id}/resolve`),libraries:expect.objectContaining({three:expect.any(String)})},
     });
     asSession(w.owner);
     const own = await (await artifactPage(request(`/api/page/artifact/${w.priv.id}`), params({ id: w.priv.id }))).json();

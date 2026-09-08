@@ -17,6 +17,10 @@ it('renders managed prose in the parent document and disposes it on route unmoun
   await waitFor(() => expect(screen.getByText('Top-level author text')).toBeVisible());
   expect(view.container.querySelector('iframe[title="artifact"]')).toBeNull();
   expect(screen.getByText('Top-level author text').ownerDocument).toBe(document);
+  expect(screen.getByLabelText('Artifact viewport')).toHaveStyle({paddingTop:'44px'});
+  expect(view.container.querySelector('[data-mx-story-root]')).toBeTruthy();
+  expect(view.container.querySelector('style[data-mx-presentation]')).toHaveTextContent('font-size:2.5rem');
+  expect(view.container.querySelector('[data-artifact-story-host]')).toHaveStyle({'--mx-vh':'calc(100vh - 44px)'});
   view.unmount();
   expect(screen.queryByText('Top-level author text')).toBeNull();
 });

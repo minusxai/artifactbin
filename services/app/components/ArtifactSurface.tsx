@@ -17,12 +17,11 @@ import { DatasetCatalogView } from '@/components/DatasetCatalogView';
  * and Monaco, and a reader of a shared document must never pay for that.
  */
 import {appFetch as fetch} from '@/web/api-origin';
-import {appUrl, appNavigate, artifactLoginUrl, getArtifactAddress, subscribeArtifactAddress, consumeArtifactIntent} from '@/web/api-origin';
-import {reportControlsInset} from '@/web/controls-shell';
+import {appNavigate, artifactLoginUrl, consumeArtifactIntent} from '@/web/api-origin';
 import {isDocumentPeerEvent, type DocumentPeer} from '@/lib/story/document-peer';
 import dynamic from '@/lib/dynamic';
 import { FolderPlus, Heart, MessageSquare, Pencil } from 'lucide-react';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { useArtifactOwner, useCanAnnotateArtifact, useCanEditArtifact } from '@/components/ArtifactShell';
 import AnnotationLayer from '@/components/AnnotationLayer';
 import CopyAgentPrompt from '@/components/CopyAgentPrompt';
@@ -54,6 +53,7 @@ import { storyBodyFor } from '@/lib/story/body';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
 import { TrustedChrome } from '@/components/TrustedUi';
 import { Tooltip } from '@/components/Tooltip';
+import {storyPresentationCss} from '@/lib/story/presentation-css';
 
 const ArtifactEditor = dynamic(() => import('@/components/ArtifactEditor'), {
   ssr: false,
@@ -68,7 +68,6 @@ const SocialPreviewDialog = dynamic(() => import('@/components/SocialPreviewDial
 export interface ArtifactSurfaceProps {
   /** Resolved server policy: false means snapshot-only, without reconnect attempts. */
   liveEnabled?: boolean;
-  controlsOnly?: boolean;
   /**
    * The exporter's signed key, when this render IS a capture (server-parsed
    * from `?key=`). Null for every human render.
@@ -95,6 +94,8 @@ export interface ArtifactSurfaceProps {
   /** Validated Helmet fields kept outside the author-controlled AST. */
   authorCss?: string | null;
   authorScript?: string | null;
+  /** Server-prepared document presentation floor, scoped by data-mx-story-root. */
+  surfaceCss?: string | null;
   /**
    * The page's own query string, from the router (never `window.location` in
    * render — that is a hydration mismatch waiting to happen). Its `$` params
@@ -237,7 +238,6 @@ const selectionActionCapabilities = (canEdit: boolean, canAnnotate: boolean, inV
 });
 
 export default function ArtifactSurface(props: ArtifactSurfaceProps) {
-  const controlsOnly = props.controlsOnly === true;
   const [copiedRef, setCopiedRef] = useState(false);
   const { id, editId, format, title, source, content, columns, bytes: fileBytes = 0, pages: filePages = null, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', accountSession = false, anonSession = false, version, captureKey = null, openAnnotations = 0, like = { liked: false, count: 0 }, follow = null } = props;
   const [editing, setEditing] = useState(false);
@@ -269,7 +269,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const [socialPreviewOpen, setSocialPreviewOpen] = useState(false);
   /** Desktop comments reserve a rail; on a phone the same surface is a sheet. */
   const phone = useIsPhoneViewport();
-  useEffect(() => {if (controlsOnly) reportControlsInset(railOpen && !phone ? RIGHT_RAIL_W : 0);},[controlsOnly,railOpen,phone]);
   /** A reading preference, separate from the author's stored default. */
   const [readerModeOverride, setReaderModeOverride] = useState<AppearanceMode | null>(null);
   /** Same handoff for the annotation composer. */
@@ -355,15 +354,14 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const isFolder = format === 'folder';
 
   const intentDone = useRef(false);
-  const artifactAddress = useSyncExternalStore(subscribeArtifactAddress, getArtifactAddress, () => null);
   useEffect(() => {
-    if (intentDone.current || (controlsOnly && !artifactAddress)) return;
+    if (intentDone.current) return;
     intentDone.current = true;
-    const intent = readIntent(controlsOnly && artifactAddress ? new URL(artifactAddress).search : search || window.location.search);
+    const intent = readIntent(search || window.location.search);
     if (intent === 'fork') setForkAsked(true);
     // Exactly the comments row's effect, and gated by exactly its capability:
     // opening a rail for someone who may not comment is an empty panel.
-    else if (intent === 'comment' && (canAnnotate || (controlsOnly && accountSession))) setRailOpen(true);
+    else if (intent === 'comment' && (canAnnotate || accountSession)) setRailOpen(true);
     // The document's own control can only ASK (opaque origin, no session); the
     // shell holds the credential, so this is where the field opens. Gated by
     // the same capability the bar's row is, for the same reason.
@@ -373,7 +371,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     else if (intent === 'like') void toggleLike(frameRef.current?.contentWindow ?? null, true);
     else if (intent === 'follow') void toggleFollow(frameRef.current?.contentWindow ?? null, true);
     consumeArtifactIntent();
-  }, [search, canAnnotate, canEdit, isFolder, controlsOnly, artifactAddress, accountSession]);
+  }, [search, canAnnotate, canEdit, isFolder, accountSession]);
 
   // The authorized page — never the sandbox — decides which selection actions
   // exist. Whoever may edit gets Edit; whoever may annotate — owner, editor
@@ -496,12 +494,9 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const frameRef = useRef<DocumentPeer | null>(null);
   const storyHostRef = useRef<HTMLDivElement>(null);
   const mountedStoryRef = useRef<MountedStory | null>(null);
-  const directMarkup = format === 'markup' && !captureKey && !controlsOnly;
-  if (controlsOnly && !frameRef.current) frameRef.current = {
-    contentWindow: window.parent,
-    origin: new URL(appUrl(`/a/${id}`)).origin,
-    getBoundingClientRect: () => new DOMRect(0,0,innerWidth,innerHeight),
-  };
+  const directMarkup = format === 'markup' && !captureKey;
+  const localPresentation = directMarkup && !props.surfaceCss && !props.preparedStory ? storyBodyFor(source ?? '') : null;
+  const directInset = APP_BAR_H + (editing ? EDIT_BAR_H : 0);
   useLayoutEffect(() => {
     if (!directMarkup || !storyHostRef.current) return;
     const split = props.preparedStory ? null : storyBodyFor(source ?? '');
@@ -510,7 +505,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       refData: {},
       colorMode: resolveStoryMode(theme, colorMode),
       template,
-      chrome: false,
+      chrome: true,
       ...(dataflow ? { dataflow } : {}),
     } satisfies StoryIslandData : null);
     if (!prepared) { storyHostRef.current.textContent = source ?? ''; setFrameLoaded(true); return; }
@@ -519,6 +514,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     // Give each nested React root its own node so the deferred unmount can
     // never race createRoot on the replacement's container.
     const mountRoot = host.ownerDocument.createElement('div');
+    mountRoot.setAttribute('data-mx-story-root','');
     host.replaceChildren(mountRoot);
     frameRef.current = { contentWindow: window, origin: window.location.origin, getBoundingClientRect: () => host.getBoundingClientRect() };
     const mounted = mountStory({ root: mountRoot, data: prepared, renderMode: 'render', peer: window, peerOrigin: window.location.origin,
@@ -1378,7 +1374,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   if (isDocumentFormat) {
     return (
       <>
-        {(controlsOnly || directMarkup) && <TrustedChrome><><AppBar fixed title={shownTitle} label="Artifact controls" />
+        {directMarkup && <TrustedChrome><><AppBar fixed title={shownTitle} label="Artifact controls" />
           <div data-controls-region className="fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-xl border border-edge bg-surface p-2 shadow-lg">
             <Tooltip content="Like artifact"><button aria-label="Like artifact" disabled={socialPending.current.like} aria-pressed={likeRef.current.liked} onClick={() => void toggleLike(null)} className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded px-3 py-2 transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-60"><Heart size={18} fill={likeRef.current.liked ? 'currentColor' : 'none'} />{likeRef.current.count}</button></Tooltip>
             <Tooltip content="Comments"><button aria-label="Toggle comments" onClick={() => {if (canAnnotate || accountSession) setRailOpen(open => !open);else appNavigate(artifactLoginUrl(id, 'comment'));}} className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded px-3 py-2 transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-accent"><MessageSquare size={18} />{openAnnotationCount}</button></Tooltip>
@@ -1443,7 +1439,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             // re-parent.
             top: 0,
             right: 0,
-            background: controlsOnly ? 'transparent' : readerMode === 'dark' ? DOCUMENT_GROUND.dark : DOCUMENT_GROUND.light,
+            ...(directMarkup ? {paddingTop: directInset, boxSizing:'border-box' as const, '--mx-vh': `calc(100vh - ${directInset}px)`} : {}),
+            background: readerMode === 'dark' ? DOCUMENT_GROUND.dark : DOCUMENT_GROUND.light,
           }}
         >
           {/* On the document's ground, in a colour that reads on either mode:
@@ -1458,8 +1455,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
               loading…
             </div>
           )}
-          {directMarkup && <div ref={storyHostRef} data-artifact-story-host />}
-          {!controlsOnly && !directMarkup && <iframe
+          {directMarkup && <><style data-mx-presentation>{props.surfaceCss ?? (localPresentation ? storyPresentationCss(theme,localPresentation.content) : '')}</style><div ref={storyHostRef} data-artifact-story-host style={{'--mx-vh':`calc(100vh - ${directInset}px)`} as CSSProperties} /></>}
+          {!directMarkup && <iframe
             /*
              * NOT keyed on the document: a live edit is posted INTO this frame
              * (above), and re-keying here is what made every agent write a full
@@ -1511,7 +1508,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             threads on the page (which holds the content and the session).
             Mounted in EVERY mode — the `!editing` gate that used to be here is
             exactly what made commenting mid-edit a four-navigation detour. */}
-        {(controlsOnly || directMarkup) && accountSession && !canAnnotate && railOpen && <TrustedChrome><aside aria-label="Annotation sidebar" className="fixed right-0 top-11 bottom-0 z-50 w-80 max-w-full border-l border-edge bg-surface p-4">
+        {directMarkup && accountSession && !canAnnotate && railOpen && <TrustedChrome><aside aria-label="Annotation sidebar" className="fixed right-0 top-11 bottom-0 z-50 w-80 max-w-full border-l border-edge bg-surface p-4">
           <div className="flex items-center justify-between"><h2 className="font-semibold">Comments</h2><button aria-label="Close comments" onClick={() => setRailOpen(false)} className="rounded px-2 py-1">Close</button></div>
           <p role="status" className="mt-4 text-sm text-muted">Commenting is not enabled for your access. Ask the owner for comment access.</p>
         </aside></TrustedChrome>}
@@ -1528,7 +1525,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             pickOnOpen={!editing}
             // Under the document's bar (44px on desktop; a phone draws no bar
             // and gets a sheet anyway), and under the editor toolbar too.
-            topOffset={(controlsOnly || !phone ? APP_BAR_H : 0) + (editing ? EDIT_BAR_H : 0)}
+            topOffset={(!phone ? APP_BAR_H : 0) + (editing ? EDIT_BAR_H : 0)}
             // Short of the frame's own scrollbar, which stays at the window's edge.
             rightInset={frameGutter}
             onAnnotationsChange={setLayerAnnotations}

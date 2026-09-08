@@ -21,7 +21,7 @@ const asset = (id: string, day: number, format = 'dataset'): ShelfRow => ({
 });
 
 afterEach(() => {
-  configureAppApi(window.location.origin,window.location.origin,'standalone');
+  configureAppApi(window.location.origin,window.location.origin);
   localStorage.clear();
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -37,10 +37,10 @@ describe('Shelf — grid and list views', () => {
     expect(source.searchParams.get('image')).toBeNull();expect(source.hash).toBe('');
   });
   it('loads artifact previews from the public read origin inside trusted controls',()=>{
-    configureAppApi(window.location.origin,'https://public.example.test','page');
+    configureAppApi(window.location.origin,'https://public.example.test');
     const {container}=render(<Shelf rows={[doc('abc123',28)]}/>);
     expect(container.querySelector('img')?.src).toBe('https://public.example.test/a/abc123/export?format=jpg&mode=card&v=1&r=2');
-    configureAppApi(window.location.origin,window.location.origin,'standalone');
+    configureAppApi(window.location.origin,window.location.origin);
   });
   it('replaces a failed thumbnail spinner with an accessible failure fallback',()=>{
     const {container}=render(<Shelf rows={[doc('abc123',28)]}/>);

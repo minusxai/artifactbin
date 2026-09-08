@@ -55,7 +55,6 @@ export function App() {
           <Route path="*" element={<NotFoundPage />} />
         </Route>
         <Route path="/a/:id" element={<ArtifactRoute />} />
-        <Route path="/controls/a/:id" element={<ArtifactRoute />} />
         <Route path="/:user/*" element={<ProfilePage />} />
       </Routes>
       </TrustedAppShell>

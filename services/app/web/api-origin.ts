@@ -1,4 +1,4 @@
-import {artifactReturnAddress, stripIntent, withIntent, type Intent} from '@/lib/intent';
+import {stripIntent, withIntent, type Intent} from '@/lib/intent';
 import {isPlatformPage} from '@artifactbin/utils/platform-pages';
 
 /** First-party router registration; returning false preserves native/server navigation. */
@@ -16,7 +16,7 @@ export function isClientAppUrl(url: URL, origin: string): boolean {
     || (/^\/@[\w-]+(?:\/[\w-]+)*\/?$/.test(url.pathname) && !/\/(?:raw|export)\/?$/.test(url.pathname));
 }
 export function tryAppNavigation(url: URL, replace = false): boolean {
-  return clientMode === 'standalone' && window.parent === window && isClientAppUrl(url, window.location.origin) && !!navigation?.(url, replace);
+  return window.parent === window && isClientAppUrl(url, window.location.origin) && !!navigation?.(url, replace);
 }
 
 /** Explicit client transport, never a patch to window.fetch. Config is server-owned. */
@@ -42,22 +42,7 @@ export function createAppApi(own: string, api: string | null, fetchImpl: typeof 
 }
 
 let configured: ReturnType<typeof createAppApi> | null = null;
-type ClientMode='standalone'|'controls'|'page'|'folder';
-let clientMode:ClientMode='standalone';
-let parentAddress: string | null = null;
-const addressListeners = new Set<() => void>();
-export const subscribeArtifactAddress = (listener: () => void) => {addressListeners.add(listener);return () => {addressListeners.delete(listener);};};
-export const getArtifactAddress = (): string | null => clientMode==='controls' ? parentAddress : clientMode==='standalone' ? (typeof window==='undefined'?null:window.location.href) : configured?.url('') ?? (typeof window==='undefined'?null:window.location.href);
-/** Installed before React mounts. The sender and the address each have their own check. */
-export function receiveArtifactAddress(event: MessageEvent): void {
-  if (clientMode!=='controls' || !configured?.mainOrigin || event.source !== window.parent || event.origin !== configured.mainOrigin || event.data?.type !== 'mx:controls:address') return;
-  const id = window.location.pathname.match(/^\/controls\/a\/([^/]+)$/)?.[1];
-  if (!id) return;
-  const next = artifactReturnAddress(event.data.url, configured.mainOrigin, id);
-  if (!next || next === parentAddress) return;
-  parentAddress = next;
-  for (const listener of addressListeners) listener();
-}
+export const getArtifactAddress = (): string | null => typeof window==='undefined'?null:window.location.href;
 export function artifactLoginUrl(id: string, intent: Intent): string {
   const address = getArtifactAddress() ?? appUrl(`/a/${id}`);
   const parsed = new URL(address, window.location.origin);
@@ -67,28 +52,17 @@ export function artifactLoginUrl(id: string, intent: Intent): string {
   return `/login?callbackUrl=${encodeURIComponent(callback)}`;
 }
 export function consumeArtifactIntent(): void {
-  if (clientMode==='controls' && configured?.mainOrigin) {
-    window.parent.postMessage({type:'mx:controls:consume-intent'}, configured.mainOrigin);
-  } else {
-    const next = stripIntent(window.location.search);
-    if (next !== window.location.search) window.history.replaceState(null, '', window.location.pathname + next + window.location.hash);
-  }
+  const next = stripIntent(window.location.search);
+  if (next !== window.location.search) window.history.replaceState(null, '', window.location.pathname + next + window.location.hash);
 }
-export function configureAppApi(own: string, api: string, mode:ClientMode='controls'): void {
+export function configureAppApi(own: string, api: string): void {
   configured = createAppApi(own, api, (...args) => globalThis.fetch(...args));
-  clientMode = mode;
-  parentAddress = null;
 }
 export const appFetch: typeof fetch = (...args) => configured ? configured.fetch(...args)
   : createAppApi(window.location.origin, null, (...input) => globalThis.fetch(...input)).fetch(...args);
 export const appUrl = (path: string): string => configured?.url(path) ?? path;
-export const isControlsClient = (): boolean => clientMode==='controls';
-export const isFolderClient = (): boolean => clientMode==='folder';
 export function appNavigate(path: string, replace = false): void {
   if (navigation && tryAppNavigation(new URL(appUrl(path), window.location.href), replace)) return;
-  if (!configured || window.parent === window) {if(replace)window.location.replace(appUrl(path));else window.location.href=appUrl(path);return;}
-  const url = new URL(appUrl(path));
-  if (url.origin !== configured.mainOrigin) {window.top!.location.href=url.href;return;}
-  window.parent.postMessage({type:'mx:controls:navigate',url:url.href,...(replace?{replace:true}:{})},configured.mainOrigin!);
+  if(replace)window.location.replace(appUrl(path));else window.location.href=appUrl(path);
 }
 export const appEventSource = (path: string): EventSource => new EventSource(path);

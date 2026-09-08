@@ -3,7 +3,6 @@
  * document, from /api/page/artifact/:id. A reader never reaches this — the
  * server hands them the document itself at the same URL.
  */
-import {isControlsClient,isFolderClient} from '@/web/api-origin';
 import { useEffect, useReducer, useState, type ReactNode } from 'react';
 import { takeBootstrap } from '../bootstrap';
 import { useLocation, useNavigate, useParams } from 'react-router';
@@ -55,8 +54,7 @@ export function ArtifactPage({ id: given }: { id?: string } = {}) {
   }, [id, search, requestKey, loaded, retry]);
   useEffect(() => {
     // The address heals to the canonical one — after the ACL, which the fetch already passed.
-    if(isFolderClient())return; // Main's server already owns canonicalization.
-    if (!isControlsClient() && page && page !== 'missing' && !(page instanceof Error) && !page.surface?.captureKey && page.canonical !== window.location.pathname) navigate(page.canonical + search + window.location.hash, { replace: true });
+    if (page && page !== 'missing' && !(page instanceof Error) && !page.surface?.captureKey && page.canonical !== window.location.pathname) navigate(page.canonical + search + window.location.hash, { replace: true });
   }, [navigate, page, search]);
   const withChrome = (content: ReactNode) => <><PageChrome authed={false} title={null} label="Artifact controls" />{content}</>;
   if (page === null) return withChrome(<PageStatus label="artifact" />);
@@ -64,7 +62,6 @@ export function ArtifactPage({ id: given }: { id?: string } = {}) {
   if (page instanceof Error) return withChrome(<PageStatus label="artifact" error={page.message} retry={() => { setLoaded({key: requestKey, page: null}); retryLoad(); }} />);
   // A type change after server admission must never turn this trusted frame
   // into an author surface. Only the dedicated artifact-controls path may do that.
-  if(isFolderClient() && !page.folder)return <NotFoundPage />;
   // A folder is a listing, not a document: no ArtifactShell and no surface
   // (there is nothing to frame). Every folder gets the normal PAGE frame;
   // account-wide dashboard data is still supplied only to its owner.
@@ -82,7 +79,7 @@ export function ArtifactPage({ id: given }: { id?: string } = {}) {
           props are what the DOCUMENT is, and this is what the viewer is to
           it — one fetch either way, and the export capture (which has no
           viewer) never carries it. */}
-      <ArtifactSurface key={page.surface.id} {...page.surface} controlsOnly={isControlsClient()} search={search} {...(page.like ? { like: page.like } : {})} {...(page.follow !== undefined ? { follow: page.follow } : {})} />
+      <ArtifactSurface key={page.surface.id} {...page.surface} search={search} {...(page.like ? { like: page.like } : {})} {...(page.follow !== undefined ? { follow: page.follow } : {})} />
     </ArtifactShell>
   );
 }
