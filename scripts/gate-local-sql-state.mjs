@@ -39,7 +39,7 @@ const source = `<Helmet>
   <Dialog open="$open">
     <DialogTrigger aria-label="Open dialog">Open dialog</DialogTrigger>
     <DialogContent aria-label="Draft dialog" run="$increment">
-      <input aria-label="Note" value="$note" autoFocus />
+      <input aria-label="Note" value="$note" required autoFocus />
       <button aria-label="Save dialog" type="submit">Save</button>
       <DialogClose aria-label="Close dialog">Cancel</DialogClose>
     </DialogContent>
@@ -74,6 +74,14 @@ const exercise = async (page, framed, documentId) => {
   await frame.click('[aria-label="Open dialog"]');
   ok(await frame.locator('[aria-label="Draft dialog"]').evaluate(el => el.open) && await frame.locator('[aria-label="Note"]').evaluate(el => el === document.activeElement), 'Dialog opens and focuses its field');
   await frame.fill('[aria-label="Note"]', 'changed');
+  const validity = await frame.locator('[aria-label="Draft dialog"]').evaluate(dialog => {
+    const field = dialog.querySelector('[aria-label="Note"]');
+    const submit = dialog.querySelector('[aria-label="Save dialog"]');
+    const form = dialog.querySelector('form');
+    return {value:field.value, disabled:field.disabled, valid:field.validity.valid, formValid:form.checkValidity(), submitDisabled:submit.disabled};
+  });
+  ok(validity.value === 'changed' && !validity.disabled && validity.valid && validity.formValid && !validity.submitDisabled,
+    `Dialog field is filled, enabled, and valid before submit (${JSON.stringify(validity)})`);
   await frame.click('[aria-label="Save dialog"]');
   await frame.waitForFunction(() => document.querySelector('[aria-label="Count"]')?.textContent === '1').catch(async error => {
     throw new Error(`${error.message}; dialog=${await frame.locator('[aria-label="Draft dialog"]').innerText()}; calls=${JSON.stringify(routeBodies)}`);
