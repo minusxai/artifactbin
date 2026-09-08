@@ -10,7 +10,7 @@
 import { canReadArtifact, datasetsForDocument, getArtifactById } from '@/lib/artifacts';
 import { ID_RE } from '@/lib/ids';
 import { channelFor, channelForAnnotations } from '@/lib/story/live';
-import { canReceiveLiveUpdates, sessionActor } from '@/lib/viewer';
+import { sessionActor } from '@/lib/viewer';
 
 export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -19,7 +19,6 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   if (!row) return new Response('not found', { status: 404 });
   const actor = await sessionActor(request);
   if (!(await canReadArtifact(row, actor.viewer))) return new Response('not found', { status: 404 });
-  if (!canReceiveLiveUpdates(actor)) return new Response(null, {status: 204, headers: {'Cache-Control': 'no-store'}});
   const datasets = row.format === 'markup' ? datasetsForDocument(row.source) : [];
   return Response.json(
     {

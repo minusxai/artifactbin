@@ -45,13 +45,12 @@ export async function startMailSink() {
  */
 export async function loginViaEmail(page, base, sink, email) {
   await page.goto(`${base}/login`, { waitUntil: 'load' });
-  const form=await page.locator('iframe[title="Artifactbin app"]').count()?page.frameLocator('iframe[title="Artifactbin app"]'):page;
   // The pages render in the browser now: wait for the form rather than assuming
   // it is in the HTML the server sent.
-  await form.getByLabel('Email',{exact:true}).waitFor({timeout:20_000});
-  await form.getByLabel('Email',{exact:true}).fill(email);
-  await form.getByLabel('Log in with email',{exact:true}).click();
-  await form.getByLabel('Login code',{exact:true}).waitFor({timeout:15_000});
+  await page.waitForSelector('[aria-label="Email"]', { timeout: 20_000 });
+  await page.fill('[aria-label="Email"]', email);
+  await page.click('[aria-label="Log in with email"]');
+  await page.waitForSelector('[aria-label="Login code"]', { timeout: 15_000 });
 
   const code = sink.lastCode(email);
   if (!code) {
@@ -60,26 +59,27 @@ export async function loginViaEmail(page, base, sink, email) {
       `Request a new code, then run: npm run dev:otp -- ${email}`,
     );
   }
-  await form.getByLabel('Login code',{exact:true}).fill(code);
-  await form.getByLabel('Verify code',{exact:true}).click();
-  await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 20_000 });
+  await page.fill('[aria-label="Login code"]', code);
+  await page.click('[aria-label="Verify code"]');
+  await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 20_000 }).catch(() => {});
   // Verify the cookie-backed identity through the same endpoint the app uses.
   // The dashboard no longer prints an email or a profile link in its chrome.
-  // Await the actual response. A polling predicate that returns a Promise
-  // can finish on its truthiness even when that Promise resolves to false.
-  const current=await page.locator('iframe[title="Home workspace"],iframe[title="Artifactbin app"]').count()
-    ?page.frameLocator('iframe[title="Home workspace"],iframe[title="Artifactbin app"]').first():page;
-  const session = await current.locator('body').evaluate(async () => {
-    const response = await fetch('/api/page/session', { credentials: 'same-origin', headers: {'x-artifactbin-csrf':'1'} });
-    return response.ok ? response.json() : null;
+  await page.waitForFunction(async (expectedEmail) => {
+    try {
+      const response = await fetch('/api/page/session', { credentials: 'same-origin' });
+      if (!response.ok) return false;
+      const session = await response.json();
+      return session.kind === 'account' && session.user?.email === expectedEmail;
+    } catch { return false; }
+  }, email, { timeout: 20_000 }).catch(() => {
+    throw new Error(`login did not establish the session for ${email} within 20s (url ${page.url()})`);
   });
-  if (session?.kind !== 'account' || session.user?.email !== email) throw new Error(`login did not establish the session for ${email} (url ${page.url()})`);
   return email;
 }
 
 /** Read the browser's authenticated identity without depending on page chrome. */
 export async function isSignedInAs(page, email) {
-  const response = await page.request.get(new URL('/api/page/session', page.url()).href, {headers:{'x-artifactbin-csrf':'1',origin:new URL(page.url()).origin}});
+  const response = await page.request.get(new URL('/api/page/session', page.url()).href);
   if (!response.ok()) return false;
   const session = await response.json();
   return session.kind === 'account' && session.user?.email === email;

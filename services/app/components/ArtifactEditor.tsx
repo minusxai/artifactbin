@@ -17,8 +17,6 @@
  * protocol shortly after they stop arriving, and every way OUT drains first
  * (the flush ref below, published up to the page).
  */
-import type {DocumentPeer} from '@/lib/story/document-peer';
-import {appFetch as fetch} from '@/web/api-origin';
 import { Home, Lock } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import InPlaceEditor from '@/components/InPlaceEditor';
@@ -82,7 +80,7 @@ export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, s
    * Where the reader was in the document when they pressed edit — the editor
    */
   /** The live document's iframe — editing happens IN it, so it is never remounted. */
-  frameRef: { current: DocumentPeer | null };
+  frameRef: { current: HTMLIFrameElement | null };
   /** The document's session secret, learned by the page when it announced itself. */
   sessionNonce: string | null;
   /** View-mode text selection to restore once the edit runtime is ready. */

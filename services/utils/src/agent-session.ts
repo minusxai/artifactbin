@@ -12,7 +12,7 @@ import type { AgentSession } from '@artifactbin/contracts';
 export const AGENT_COOKIE = 'mx-agent-session';
 export const AGENT_COOKIE_MAX_AGE = 30 * 24 * 60 * 60;
 
-const canonical = (s: AgentSession) => JSON.stringify({ tokenIds: s.tokenIds, ...(s.sessionId ? {sessionId: s.sessionId} : {}) });
+const canonical = (s: AgentSession) => JSON.stringify({ tokenIds: s.tokenIds });
 const sig = (payload: string, secret: string) => createHmac('sha256', `agent:${secret}`).update(payload).digest('base64url');
 
 export function encodeAgentSession(session: AgentSession, secret: string): string {
@@ -31,8 +31,7 @@ export function decodeAgentSession(value: string | undefined | null, secret: str
   try {
     const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as AgentSession;
     if (!Array.isArray(parsed.tokenIds) || !parsed.tokenIds.every((t) => typeof t === 'string')) return null;
-    if (parsed.sessionId !== undefined && (typeof parsed.sessionId !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(parsed.sessionId))) return null;
-    return { tokenIds: parsed.tokenIds, ...(parsed.sessionId ? {sessionId: parsed.sessionId} : {}) };
+    return { tokenIds: parsed.tokenIds };
   } catch {
     return null;
   }

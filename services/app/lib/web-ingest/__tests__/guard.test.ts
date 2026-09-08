@@ -39,23 +39,6 @@ describe('isForbiddenIp — IPv4', () => {
 });
 
 describe('isForbiddenIp — IPv6', () => {
-  it.each(['::ffff:808:808','0:0:0:0:0:ffff:0808:0808','::FFFF:8.8.8.8'])('admits public mapped address %s',ip=>{
-    expect(isForbiddenIp(ip,STRICT)).toBe(false);
-    expect(parseWebUrl(`https://[${ip}]/`,STRICT).hostname).toBe('[::ffff:808:808]');
-  });
-  it.each(['::ffff:7f00:1','0:0:0:0:0:ffff:127.0.0.1','0:0:0:0:0:0:0:1'])('normalizes private address %s before applying dev policy',ip=>{
-    expect(isForbiddenIp(ip,STRICT)).toBe(true);
-    expect(isForbiddenIp(ip,LAX)).toBe(false);
-    expect(()=>parseWebUrl(`http://[${ip}]/`,LAX)).not.toThrow();
-  });
-  it.each(['0:0:0:0:0:ffff:a9fe:a9fe','::ffff:169.254.169.254'])('never admits mapped metadata address %s even in development',ip=>{
-    expect(isForbiddenIp(ip,LAX)).toBe(true);
-    expect(()=>parseWebUrl(`http://[${ip}]/`,LAX)).toThrow(WebIngestError);
-  });
-  it.each(['2606:garbage','2606::1::2','12345::1','::ffff:999.1.1.1','::1]/@example.com/['])('fails closed for malformed IPv6 %s',ip=>{
-    expect(isForbiddenIp(ip,STRICT)).toBe(true);
-    expect(isForbiddenIp(ip,LAX)).toBe(true);
-  });
   const forbidden = [
     '::', '::1',                            // unspecified + loopback
     'fc00::1', 'fd12:3456::1',              // unique-local fc00::/7

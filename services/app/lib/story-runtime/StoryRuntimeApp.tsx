@@ -21,7 +21,6 @@ import type { CSSProperties, ReactElement, ReactNode } from 'react';
 import type { JsxElement } from '@/lib/jsx';
 import type { ComponentType } from 'react';
 import { renderStoryNodes, type BoundControlProps, type BoundSourceProps, type CellControlProps } from '@/lib/story-ui/interpreter';
-import {Dialog, DialogContent} from '@/components/kit/dialog';
 import { useNodeKeys } from '@/lib/story-ui/use-node-keys';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import { STORY_UI_COMPONENTS } from '@/lib/story-ui/registry';
@@ -47,10 +46,6 @@ import { cn } from '@/components/kit/cn';
 import { DataTable } from '@/components/kit/data-table';
 import { Files } from '@/components/kit/files';
 import { GridItemContext } from '@/components/kit/grid';
-import {SandboxView} from './sandbox';
-import {ManagedIframeView} from './managed-iframe';
-import type {ManagedIframeContent} from '@/lib/story/managed-iframe';
-import type {ManagedAssetRelay} from './managed-assets';
 import { DateControl, SegmentedControl, SelectControl, SliderControl, SwitchControl, normalizeControlOptions, num, shellRest, str } from '@/components/kit/controls';
 import { parseColumnSpecs, parseSortSpec, parseTableHeight, type SortSpec } from '@/lib/story/data-table';
 import { createPreviewIdentityAllocator } from './preview-identity';
@@ -162,9 +157,6 @@ interface RuntimeEmbedContextValue {
   chrome: boolean;
   glyphs?: GlyphMap;
   colorMode: 'light' | 'dark';
-  sandboxApi?: StoryIslandData['sandboxApi'];
-  managedAssets?: StoryIslandData['managedAssets'];
-  importAsset?: ManagedAssetRelay;
 }
 
 const RuntimeEmbedContext = createContext<RuntimeEmbedContextValue>({
@@ -483,23 +475,6 @@ function SwitchAdapter(props: Record<string, unknown>) {
  * that silently does nothing is the failure this whole path exists to avoid —
  * and the message clears on the next attempt.
  */
-function DialogAdapter(props: Record<string, unknown>) {
-  const {state, setValue} = useContext(RuntimeEmbedContext);
-  const name = typeof props.open === 'string' ? refName(props.open) : null;
-  return <Dialog {...props} open={name ? state.values[name] === true : typeof props.open === 'boolean' ? props.open : undefined}
-    onOpenChange={name ? open => setValue(name, open) : undefined} />;
-}
-
-function DialogContentAdapter(props: Record<string, unknown>) {
-  const {store, chrome} = useContext(RuntimeEmbedContext);
-  const name = typeof props.run === 'string' ? refName(props.run) : null;
-  const unavailable = useSyncExternalStore(store?.subscribe ?? NO_SUBSCRIBE,
-    () => name ? store?.mutationUnavailable(name) ?? (store ? null : 'Checking edit access…') : null,
-    () => name ? 'Checking edit access…' : null);
-  return <DialogContent {...props} unavailable={!chrome && name ? 'Read-only preview' : unavailable}
-    onSubmitMutation={name && store ? () => store.mutate(name) : undefined} />;
-}
-
 function ButtonAdapter(props: Record<string, unknown>) {
   const { store, chrome } = useContext(RuntimeEmbedContext);
   const name = typeof props.run === 'string' ? refName(props.run) : null;
@@ -722,20 +697,8 @@ function FilesAdapter(props: Record<string, unknown>) {
   );
 }
 
-const EMPTY_SANDBOX_API = {resolveUrl:null,libraries:{}};
-function SandboxAdapter(props: Record<string, unknown>) {
-  const {store,sandboxApi}=useContext(RuntimeEmbedContext);
-  return store ? <SandboxView {...props} store={store} api={sandboxApi ?? EMPTY_SANDBOX_API}/> : null;
-}
 const RUNTIME_REGISTRY: Record<string, ComponentType<Record<string, unknown>>> = {
   ...STORY_UI_COMPONENTS,
-  Iframe: props => {
-    const {store,managedAssets,importAsset}=useContext(RuntimeEmbedContext);
-    return store ? <ManagedIframeView {...props} compiled={props.compiled as ManagedIframeContent} store={store} assets={managedAssets} importAsset={importAsset}/> : null;
-  },
-  Sandbox: SandboxAdapter,
-  Dialog: DialogAdapter,
-  DialogContent: DialogContentAdapter,
   Files: FilesAdapter,
   Question: QuestionAdapter,
   Number: NumberAdapter,
@@ -787,8 +750,7 @@ const PREVIEW_REGISTRY: Record<string, ComponentType<Record<string, unknown>>> =
   Video: PREVIEW_EMBED('video'),
 };
 
-function SlideRail({ slides, documentNodes, values, active, onGo, onRename }: {
-  values: Record<string, unknown>;
+function SlideRail({ slides, documentNodes, active, onGo, onRename }: {
   slides: DiscoveredSlide[];
   documentNodes: StoryRuntimeAppProps['nodes'];
   active: number;
@@ -851,7 +813,6 @@ function SlideRail({ slides, documentNodes, values, active, onGo, onRename }: {
                 viewport, and in here the viewport is this box. */}
             <div style={{ ['--mx-vh' as string]: '800px' }}>
               {renderStoryNodes([slide.node], {
-                values,
                 components: PREVIEW_REGISTRY,
                 decorateElement: allocatePreviewIdentity([slide.node], slide.path),
               })}
@@ -1044,7 +1005,7 @@ export type StoryRuntimeAppProps = StoryIslandData & {
    * the page the authority over a bound `<img>`'s source; absent, the element
    * loads the endpoint for itself.
    */
-  importAsset?: ManagedAssetRelay;
+  importAsset?: (url: string) => Promise<{ url: string } | { refused: string }>;
 };
 
 const EMPTY_GLYPHS: GlyphMap = {};
@@ -1052,7 +1013,7 @@ const EMPTY_GLYPHS: GlyphMap = {};
 /** A store-less subscribe (a Button rendered outside a document): nothing ever changes. */
 const NO_SUBSCRIBE = () => () => {};
 
-export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, template = null, chrome = true, assetsUrl = null, sandboxApi, managedAssets, importAsset, store: givenStore, onMounted, editDecorate, onSlideRename }: StoryRuntimeAppProps) {
+export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, template = null, chrome = true, assetsUrl = null, importAsset, store: givenStore, onMounted, editDecorate, onSlideRename }: StoryRuntimeAppProps) {
   const [store] = useState<DataflowStore>(() => givenStore ?? createDataflowStore(dataflow ?? { flow: EMPTY_DATAFLOW }));
   const mountedRef = useRef(onMounted);
   mountedRef.current = onMounted;
@@ -1091,9 +1052,8 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, t
 
   const body = (
     <RuntimeAssetContext.Provider value={assets}>
-      <RuntimeEmbedContext.Provider value={{ store, flow: store.flow, state, pending, setValue, fetchPage: store.fetchPage, refData, chrome, colorMode, sandboxApi, managedAssets, importAsset }}>
+      <RuntimeEmbedContext.Provider value={{ store, flow: store.flow, state, pending, setValue, fetchPage: store.fetchPage, refData, chrome, colorMode }}>
         {renderStoryNodes(nodes, {
-          values: state.values,
           // Identity across an adopted document: a live update re-renders this
           // tree, and positional keys would remount everything below the edit.
           keyFor: nodeKeys.keyFor,
@@ -1133,7 +1093,7 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, t
 
   return withGlyphs(
     <div className="mx-deck">
-      <SlideRail slides={slides} documentNodes={nodes} values={state.values} active={active} onGo={go} onRename={onSlideRename} />
+      <SlideRail slides={slides} documentNodes={nodes} active={active} onGo={go} onRename={onSlideRename} />
       <div className="mx-doc">{body}</div>
       <PresentBar active={active} total={slides.length} onGo={go} />
     </div>,

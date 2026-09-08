@@ -25,7 +25,7 @@
 import { getDb } from '@/lib/db';
 import { objectKey, objectStore } from '@/lib/object-store';
 import { optimiseImage } from '@/lib/images/optimise';
-import { MAX_IMAGE_BYTES, MAX_PDF_BYTES, MAX_FILE_BYTES } from '@/lib/config';
+import { MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/config';
 import { fetchWebResource } from '@/lib/web-ingest/fetch';
 import { WebIngestError } from '@/lib/web-ingest/guard';
 import { sniffAssetType, sniffImageType, sniffFontType } from '@/lib/web-ingest/sniff';
@@ -36,16 +36,7 @@ import { assetByteQuotaExceeded } from '@/lib/asset-quota';
 import { webIngestRateLimited } from '@/lib/auth';
 
 /** What kind of asset a caller expects the URL to hold — the sniff, the cap and the optimiser follow it. */
-export type WebAssetKind = 'image' | 'font' | 'pdf' | 'script' | 'binary';
-export const WEB_ASSET_KINDS: readonly WebAssetKind[] = ['image','font','pdf','script','binary'];
-const SCRIPT_TYPES = new Set(['text/javascript','application/javascript','application/ecmascript','text/ecmascript']);
-function requireKind(row: WebAssetRow, kind: WebAssetKind): WebAssetRow {
-  // Generic fetch reads bytes of any already-approved cache entry. A typed
-  // load cannot promote arbitrary octets to executable JavaScript.
-  const valid = kind === 'binary' || (kind === 'script' ? SCRIPT_TYPES.has(row.content_type) : kindOfRow(row) === kind);
-  if (!valid) throw new WebAssetRefused('unsupported_type','cached URL does not match the requested asset kind',row.url);
-  return row;
-}
+export type WebAssetKind = 'image' | 'font' | 'pdf';
 
 /** Who pays for an import: a token, and the account behind it when there is one. */
 export interface WebAssetImporter {
@@ -108,33 +99,14 @@ export async function webAssetByHash(hash: string): Promise<WebAssetRow | null> 
 /** Fetch, sniff and optimise — everything between the network and the row. */
 async function fetchAsset(url: string, kind: WebAssetKind): Promise<Omit<WebAssetRow, 'url_hash' | 'url' | 'fetched_by_token_id' | 'fetched_by_user_id'>> {
   let bytes: Buffer;
-  let contentType: string;
   try {
-    ({ bytes, contentType } = await fetchWebResource(url, {
-      maxBytes: kind === 'font' ? MAX_FONT_BYTES : kind === 'pdf' ? MAX_PDF_BYTES : kind === 'script' || kind === 'binary' ? MAX_FILE_BYTES : MAX_IMAGE_BYTES,
-      accept: kind === 'font' ? 'font/woff2,font/woff,*/*' : kind === 'pdf' ? 'application/pdf,*/*' : kind === 'script' ? 'text/javascript,application/javascript' : kind === 'binary' ? '*/*' : 'image/*',
+    ({ bytes } = await fetchWebResource(url, {
+      maxBytes: kind === 'font' ? MAX_FONT_BYTES : kind === 'pdf' ? MAX_PDF_BYTES : MAX_IMAGE_BYTES,
+      accept: kind === 'font' ? 'font/woff2,font/woff,*/*' : kind === 'pdf' ? 'application/pdf,*/*' : 'image/*',
     }));
   } catch (error) {
     if (error instanceof WebIngestError) throw new WebAssetRefused(error.code, error.message, url);
     throw error;
-  }
-
-  if (kind === 'script' || kind === 'binary') {
-    if (kind === 'script') {
-      if (!SCRIPT_TYPES.has(contentType.toLowerCase())) throw new WebAssetRefused('unsupported_type','script URL must serve a JavaScript MIME type',url);
-      try { new TextDecoder('utf-8',{fatal:true}).decode(bytes); }
-      catch { throw new WebAssetRefused('unsupported_type','script bundle must be valid UTF-8',url); }
-    }
-    // Preserve only recognised safe types for a generic-first import, so a
-    // later typed declaration of the same URL is order-independent. HTML and
-    // unknown upstream types remain inert octets. No code is evaluated.
-    let type = kind === 'script' ? 'text/javascript' : sniffAssetType(bytes) ?? sniffFontType(bytes) ?? 'application/octet-stream';
-    if (kind === 'binary' && SCRIPT_TYPES.has(contentType.toLowerCase())) {
-      try {new TextDecoder('utf-8',{fatal:true}).decode(bytes);type='text/javascript';} catch { /* binary remains binary */ }
-    }
-    const key = objectKey('webasset',bytes);
-    await objectStore().put(key,bytes,type);
-    return {object_key:key,content_type:type,bytes:bytes.length,width:null,height:null,placeholder:null,small_object_key:null,small_width:null};
   }
 
   // The type comes from the BYTES: a remote Content-Type is attacker-controlled
@@ -204,9 +176,9 @@ async function fetchAsset(url: string, kind: WebAssetKind): Promise<Omit<WebAsse
 export async function importWebAsset(url: string, by: WebAssetImporter, kind: WebAssetKind = 'image'): Promise<WebAssetRow> {
   const hash = urlHash(url);
   const existing = await webAssetByHash(hash);
-  if (existing) return requireKind(existing,kind);
+  if (existing) return existing;
 
-  if (await assetByteQuotaExceeded(by.tokenId,by.userId)) {
+  if (by.tokenId && await assetByteQuotaExceeded(by.tokenId)) {
     throw new WebAssetRefused('quota_exceeded', 'this account is over its stored-byte quota — delete assets you no longer need', url);
   }
 
@@ -222,7 +194,7 @@ export async function importWebAsset(url: string, by: WebAssetImporter, kind: We
   );
   // Re-read rather than return what we built: a concurrent importer may have
   // won the insert, and the row that EXISTS is the one every reader will serve.
-  return requireKind((await webAssetByHash(hash))!,kind);
+  return (await webAssetByHash(hash))!;
 }
 
 /**
@@ -261,14 +233,13 @@ export interface DocumentAssetTarget {
  * never the upstream body, which is what keeps this from being a way to read a
  * response the caller could not have fetched for themselves.
  */
-export async function importForDocument(doc: DocumentAssetTarget, url: string, kind: WebAssetKind = 'image'): Promise<string> {
-  const held = await webAssetByHash(urlHash(url));
-  if (held) {requireKind(held,kind);return assetUrlFor(url,held);}
+export async function importForDocument(doc: DocumentAssetTarget, url: string): Promise<string> {
+  if (await webAssetByHash(urlHash(url))) return assetUrlFor(url);
   if (docAssetImportRateLimited(doc.id)) {
     throw new WebAssetRefused('rate_limited', 'too many asset imports for this document this hour', url);
   }
-  const row=await importWebAsset(url, { tokenId: doc.token_id, userId: doc.user_id },kind);
-  return assetUrlFor(url,row);
+  await importWebAsset(url, { tokenId: doc.token_id, userId: doc.user_id });
+  return assetUrlFor(url);
 }
 
 /**
@@ -311,7 +282,7 @@ export async function refreshWebAsset(url: string, by: WebAssetImporter, kind: W
   const existing = await webAssetByHash(hash);
   if (!existing) return importWebAsset(url, by, kind);
 
-  if (await assetByteQuotaExceeded(by.tokenId,by.userId)) {
+  if (by.tokenId && await assetByteQuotaExceeded(by.tokenId)) {
     throw new WebAssetRefused('quota_exceeded', 'this account is over its stored-byte quota — delete assets you no longer need', url);
   }
 
@@ -383,7 +354,7 @@ export interface AssetRefreshResult {
 
 /** A URL's kind, read back from what we stored for it. */
 export const kindOfRow = (row: WebAssetRow): WebAssetKind =>
-  (SCRIPT_TYPES.has(row.content_type) ? 'script' : row.content_type === 'application/octet-stream' ? 'binary' : row.content_type.startsWith('font/') ? 'font' : row.content_type === 'application/pdf' ? 'pdf' : 'image');
+  (row.content_type.startsWith('font/') ? 'font' : row.content_type === 'application/pdf' ? 'pdf' : 'image');
 
 /**
  * Re-fetch a set of URLs we already hold and report what moved.

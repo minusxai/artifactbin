@@ -1,8 +1,8 @@
 /**
  * THE CHANNEL THE AUTHOR'S SCRIPT CANNOT REACH.
  *
- * Historically, a served document ran the author's own `<script>` in the same
- * realm as the runtime. Once the runtime could also send EDITS to the page — which is what
+ * A served document runs the author's own `<script>` in the same realm as the
+ * runtime. Once the runtime can also send EDITS to the page — which is what
  * in-place editing means — "the frame said so" stops being good enough: a
  * hostile script is one `top.postMessage(...)` away from writing to someone
  * else's document.
@@ -24,10 +24,11 @@
  * posts (`mx:painted`, `mx:anchor`, `mx:query`). Nothing privileged crossed,
  * but a channel that works only sometimes is not a channel.
  *
- * Author scripts now run in a separate opaque child (author-script.ts), so
- * they cannot reach the renderer's globals or puppet its editable DOM. Keep
- * this channel as defense in depth and as the existing editor protocol;
- * isolated execution does not make source/origin/nonce validation optional.
+ * What this does NOT stop, deliberately: a script can still puppet the editor
+ * through trusted UA APIs (`focus()` + `execCommand`). That writes what the
+ * editor itself can write — visible text, through the door's sanitizer — and
+ * cannot inject a script, touch the Helmet, or persist itself. See
+ * seamless-editing-v2.md §5.
  */
 
 /** 128 bits of nonce, hex — long enough that guessing is not a strategy. */
@@ -63,8 +64,8 @@ export interface PristineChannel {
  * MUST be called before the author's script is injected — that ordering is the
  * whole security property, and `entry.tsx` is the only correct caller.
  */
-export function capturePristine(win: Window, appOrigin: string, trustedPeer?: Window): PristineChannel | null {
-  const parentWin = trustedPeer ?? win.parent;
+export function capturePristine(win: Window, appOrigin: string): PristineChannel | null {
+  const parentWin = win.parent;
   if (!parentWin || parentWin === win) return null;
 
   const post = parentWin.postMessage.bind(parentWin) as (message: unknown, targetOrigin: string) => void;
@@ -81,15 +82,7 @@ export function capturePristine(win: Window, appOrigin: string, trustedPeer?: Wi
        * from the author script's.
        */
       // A frame whose parent has gone away must not take the document down.
-      // A newly created trusted child starts at about:blank. WebKit binds an
-      // extracted postMessage to that initial Window, even after its WindowProxy
-      // navigates. Resolve the method through the captured peer on each send;
-      // keep the window identity and exact destination origin pinned. Author
-      // code is in a separate opaque frame and cannot replace this method.
-      try {
-        if (trustedPeer) parentWin.postMessage(message, appOrigin);
-        else post(message, appOrigin);
-      } catch { /* the page is gone; nothing to say */ }
+      try { post(message, appOrigin); } catch { /* the page is gone; nothing to say */ }
     },
     innerHtmlOf(el: Element): string {
       const raw = innerHtmlGetter ? innerHtmlGetter.call(el) : el.innerHTML;

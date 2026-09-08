@@ -1,6 +1,6 @@
 import { AGENT_HEADER, declaredAgentSlug } from '@artifactbin/contracts';
 import { currentHeaders } from './request-context';
-import { PUBLIC_BASE_URL, CONTROLS_ORIGIN } from '@/lib/config';
+import { PUBLIC_BASE_URL } from '@/lib/config';
 
 /** Absolute origin as the client sees it — honors reverse-proxy forwarding headers. Accepts a plain Request too (the MCP handler), falling back to its url. */
 export function baseUrl(request: Request): string {
@@ -12,11 +12,6 @@ export function baseUrl(request: Request): string {
     .split(',')[0]
     .trim();
   return `${proto}://${host}`;
-}
-
-/** Shareable document/docs URLs use main; request-host security checks still use baseUrl. */
-export function publicLinkBase(request: Request): string {
-  return CONTROLS_ORIGIN ? new URL(PUBLIC_BASE_URL).origin : baseUrl(request);
 }
 
 /**
@@ -55,7 +50,7 @@ export function json(body: unknown, status = 200, headers: Record<string, string
  * agent sent them. The declaration is self-reported and only ever decides copy — never access.
  */
 export function unauthorized(request: Request): Response {
-  const base = publicLinkBase(request);
+  const base = baseUrl(request);
   const source = declaredAgentSlug(request.headers.get(AGENT_HEADER));
   return json(
     {
@@ -123,10 +118,6 @@ export function parseCookie(header: string | null, name: string): string | undef
  */
 export function isCrossSiteRequest(request: Request): boolean {
   const site = request.headers.get('sec-fetch-site');
-  if (CONTROLS_ORIGIN) {
-    const origin = request.headers.get('origin');
-    return origin ? origin !== new URL(PUBLIC_BASE_URL).origin && origin !== CONTROLS_ORIGIN : site !== 'same-origin';
-  }
   if (site) return site === 'cross-site';
   const origin = request.headers.get('origin');
   if (!origin) return false;

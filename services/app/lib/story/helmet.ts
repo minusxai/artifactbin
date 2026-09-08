@@ -88,7 +88,7 @@ const isHelmet = (n: JsxNode): boolean => n.type === 'element' && n.isComponent 
 /** Every Helmet element in the tree, in document order. */
 function findHelmets(nodes: JsxNode[], out: JsxElement[] = []): JsxElement[] {
   for (const n of nodes) {
-    if (n.type !== 'element' || n.tag === 'Iframe') continue;
+    if (n.type !== 'element') continue;
     if (isHelmet(n)) out.push(n);
     findHelmets(n.children, out);
   }
@@ -245,7 +245,7 @@ function helmetContent(helmet: JsxElement): HelmetContent {
 function withoutHelmets(nodes: JsxNode[]): JsxNode[] {
   const out: JsxNode[] = [];
   for (const n of nodes) {
-    if (n.type !== 'element' || n.tag === 'Iframe') { out.push(n); continue; }
+    if (n.type !== 'element') { out.push(n); continue; }
     if (isHelmet(n)) continue;
     const children = withoutHelmets(n.children);
     out.push(children === n.children || children.every((c, i) => c === n.children[i]) && children.length === n.children.length

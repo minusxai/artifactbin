@@ -47,7 +47,6 @@ export function App() {
           <Route path="*" element={<NotFoundPage />} />
         </Route>
         <Route path="/a/:id" element={<ArtifactPage />} />
-        <Route path="/controls/a/:id" element={<ArtifactPage />} />
         <Route path="/:user/*" element={<ProfilePage />} />
       </Routes>
     </SessionProvider>

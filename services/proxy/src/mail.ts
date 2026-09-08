@@ -61,7 +61,7 @@ export function devOutboxMailer(opts: DevOutboxOptions = {}): Mailer {
 export function usesDevOutbox(publicBaseUrl: string): boolean {
   try {
     const host = new URL(publicBaseUrl).hostname;
-    return host === 'localhost' || host.endsWith('.localhost') || host === '127.0.0.1' || host === '[::1]' || host === '::1';
+    return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
   } catch {
     return false;
   }

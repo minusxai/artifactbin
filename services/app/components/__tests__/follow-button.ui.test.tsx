@@ -39,7 +39,7 @@ describe('FollowButton', () => {
   it('an anonymous viewer sees the count and a link to /login; the door is never asked', () => {
     render(<MemoryRouter><FollowButton userId="usr_a" following={false} count={7} signedIn={false} /></MemoryRouter>);
     const link = screen.getByRole('link', { name: /follow/i });
-    expect(link.getAttribute('href')).toBe('/login?callbackUrl=%2F');
+    expect(link.getAttribute('href')).toBe('/login');
     expect(link.textContent).toContain('7');
     expect(calls).toEqual([]);
   });

@@ -26,13 +26,11 @@
  *   usage: node scripts/gate-bound-assets.mjs [base]
  */
 import { createServer } from 'node:http';
-import { createHash } from 'node:crypto';
 import { chromium } from 'playwright';
 import { startDocument } from './lib/start-doc.mjs';
 import { loginViaEmail, startMailSink } from './lib/mail-login.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
-const assetPath = (source) => `/assets/${createHash('sha256').update(new URL(source).href).digest('hex')}`;
 const out = [];
 const ok = (c, l) => { const line = `${c ? '  ok ' : 'FAIL'} ${l}`; out.push(line); console.log(line); return c; };
 
@@ -152,7 +150,7 @@ ok(hits.filter((h) => h === '/pic2.png').length === 1, `the source host was aske
 const beforeReturn = { web: hits.length, endpoint: endpointCalls.length };
 await page.selectOption('select[aria-label="pick"]', ONE);
 const back = await shot('/assets/');
-ok(back.src === assetPath(ONE), `coming back renders the exact cached source identity directly (${back.src})`);
+ok(/^\/assets\/[0-9a-f]{64}$/.test(back.src ?? ''), `coming back renders our copy directly (${back.src})`);
 ok(back.natural[0] === 48, `and it still paints (${back.natural.join('×')})`);
 ok(hits.length === beforeReturn.web, `the source host was not asked again (${hits.length - beforeReturn.web} new requests)`);
 ok(endpointCalls.length === beforeReturn.endpoint, `nor was the endpoint (${endpointCalls.length - beforeReturn.endpoint} new calls)`);
@@ -248,11 +246,7 @@ if (mine.status !== 201) {
     return read();
   });
   ok(owned.natural[0] === 48 && owned.natural[1] === 32, `a private document's OWNER sees the picture, imported through the page (${JSON.stringify(owned)})`);
-  // The relay knows the stored object version; unlike the browser's URL-only
-  // memo, it returns a cache-busted address. Verify BOTH source and byte identity.
-  const cached = await fetch(new URL(assetPath(PRIV), B));
-  const version = createHash('sha256').update(Buffer.from(await cached.arrayBuffer())).digest('hex').slice(0, 8);
-  ok(cached.ok && owned.src === `${assetPath(PRIV)}?v=${version}`, `and its src is the exact source address and cached byte version the relay handed back (${owned.src})`);
+  ok(/^\/assets\/[0-9a-f]{64}$/.test(owned.src ?? ''), `and its src is the public content address the relay handed back (${owned.src})`);
   ok(hits.filter((h) => h === '/pic3.png').length === beforePriv + 1, `the source host was asked exactly once for it (${hits.filter((h) => h === '/pic3.png').length - beforePriv})`);
 
   // Charged to the DOCUMENT'S OWNER (R10) — read back through the owner's own

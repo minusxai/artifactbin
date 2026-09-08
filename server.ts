@@ -39,7 +39,7 @@ import http from 'node:http';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { getRequestListener } from '@hono/node-server';
-import { assemble, createTokenReader, inProcess, parseControlsOrigin } from '@artifactbin/utils';
+import { assemble, createTokenReader, inProcess } from '@artifactbin/utils';
 import { ensureProxySchema, proxyEnvNamesRead, proxyParts, readEnv, resolvePolicyFilePath, mailerForRuntime, createHumanAuth, loginProvidersOf, sessionStoreOf } from '@artifactbin/proxy';
 
 async function main(): Promise<void> {
@@ -72,7 +72,7 @@ async function main(): Promise<void> {
   // An image built without an engine or a browser needs to be told where they
   // went — before a boot canary passes and the first export answers 503.
   const {
-    BROWSER_SERVICE_URL, EVENTS_SCHEMA, EVENTS_SERVICE_URL, MAX_QUERY_ROWS, QUERY_TIMEOUT_MS, SQL_SERVICE_URL, ASSETS_ORIGIN,
+    BROWSER_SERVICE_URL, EVENTS_SCHEMA, EVENTS_SERVICE_URL, MAX_QUERY_ROWS, QUERY_TIMEOUT_MS, SQL_SERVICE_URL,
   } = await import('@/lib/config');
 
   /*
@@ -176,11 +176,9 @@ async function main(): Promise<void> {
       devOutboxPath: readEnv(env, 'EMAIL__DEV_OUTBOX_PATH'),
     });
     const loginProviders = loginProvidersOf(env);
-    const controlsSetting = readEnv(env,'APP__CONTROLS_ORIGIN');
     human = await createHumanAuth({
       secret: authSecret,
       baseURL,
-      ...(controlsSetting ? {controlsOrigin:parseControlsOrigin(baseURL,controlsSetting)} : {}),
       mail: mailer,
       events,
       ...(raw.kind === 'pglite' ? { pglite: raw.instance } : { pool: raw.pool as import('pg').Pool }),
@@ -254,16 +252,9 @@ async function main(): Promise<void> {
    * everything else. (One behaviour change from the old Node runner: Vite's
    * asset paths are matched BEFORE the door check rather than after. Dev only.)
    */
-  const assetHost = ASSETS_ORIGIN ? new URL(ASSETS_ORIGIN).host : null;
-  const server = http.createServer(vite ? (req,res) => {
-    // Vite must never answer arbitrary source/module routes on the byte-only
-    // host. Both direct Host and split-proxy forwarded Host are restrictive:
-    // spoofing either can only send a request to the narrower asset policy.
-    const hosts = [req.headers.host,req.headers['x-forwarded-host']].flat()
-      .filter((value): value is string => typeof value === 'string').map(value=>value.split(',')[0].trim());
-    if (assetHost && hosts.includes(assetHost)) {void listener(req,res);return;}
-    vite!.middlewares(req,res,()=>void listener(req,res));
-  } : listener);
+  const server = http.createServer(
+    vite ? (req, res) => vite!.middlewares(req, res, () => void listener(req, res)) : listener,
+  );
   server.once('error', (error: NodeJS.ErrnoException) => {
     if (error.code === 'EADDRINUSE') {
       console.error(`[boot] Port ${port} is already in use.${dev ? ' Choose a free app/HMR pair with: npm run setup -- --yes --port <port>' : ''}`);

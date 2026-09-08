@@ -11,7 +11,6 @@
 import { Parser } from 'acorn';
 import jsxPlugin from 'acorn-jsx';
 import type { JsxNode, JsxElement, JsxAttribute, JsxExpression, StaticValue, JsonValue, ParseResult } from './types';
-import { reactiveExpression } from './reactive';
 
 const JsxParser = Parser.extend(jsxPlugin());
 const WRAP_OPEN = '<>';
@@ -100,37 +99,10 @@ function normalizeElement(node: AnyNode): JsxElement {
   };
 }
 
-function normalizeExpressionChild(node: AnyNode): JsxNode | null {
+function normalizeExpressionChild(node: AnyNode): JsxExpression | null {
   const expr = node.expression as AnyNode;
   if (expr.type === 'JSXEmptyExpression') return null; // `{}` or a `{/* comment */}`
-  return normalizeConditional(expr, node) ?? { type: 'expression', value: exprToStatic(expr), source: rawOf(expr), ...span(node) };
-}
-
-/** Branch wrappers are structural data, not authored tags. They keep stable
- * child paths even when a metadata-hoisting pass removes nodes in one branch. */
-function normalizeConditional(expr: AnyNode, outer = expr): JsxElement | null {
-  const and = expr.type === 'LogicalExpression' && expr.operator === '&&';
-  if (!and && expr.type !== 'ConditionalExpression') return null;
-  const test = reactiveExpression(and ? expr.left : expr.test);
-  if (!test) return null;
-  const branch = (value: AnyNode | null): JsxElement | null => {
-    let children: JsxNode[];
-    if (!value || (value.type === 'Literal' && (value.value === null || value.value === false))) children = [];
-    else if (value.type === 'JSXFragment') children = normalizeChildren(value.children as AnyNode[]);
-    else if (value.type === 'JSXElement') children = [normalizeElement(value)];
-    else {
-      const nested = normalizeConditional(value);
-      const literal = exprToStatic(value);
-      if (nested) children = [nested];
-      else if (literal.static || literal.reactive) children = [{type: 'expression', value: literal, source: rawOf(value), ...span(value)}];
-      else return null;
-    }
-    return {type: 'element', tag: '__mx_fragment', isComponent: true, control: {kind: 'fragment'}, attributes: [], children, selfClosing: false, ...span(value ?? outer)};
-  };
-  const yes = branch((and ? expr.right : expr.consequent) as AnyNode);
-  const no = branch(and ? null : expr.alternate as AnyNode);
-  if (!yes || !no) return null;
-  return {type: 'element', tag: '__mx_condition', isComponent: true, control: {kind: and ? 'and' : 'conditional', test}, attributes: [], children: [yes, no], selfClosing: false, ...span(outer)};
+  return { type: 'expression', value: exprToStatic(expr), source: rawOf(expr), ...span(node) };
 }
 
 function normalizeAttrValue(value: AnyNode | null): StaticValue {
@@ -142,9 +114,7 @@ function normalizeAttrValue(value: AnyNode | null): StaticValue {
 
 function exprToStatic(expr: AnyNode): StaticValue {
   const r = tryJson(expr);
-  if (r.ok) return { static: true, json: r.value };
-  const reactive = reactiveExpression(expr);
-  return { static: false, exprType: expr.type, source: rawOf(expr), ...(reactive ? {reactive} : {}) };
+  return r.ok ? { static: true, json: r.value } : { static: false, exprType: expr.type, source: rawOf(expr) };
 }
 
 function tryJson(expr: AnyNode): { ok: true; value: JsonValue } | { ok: false } {

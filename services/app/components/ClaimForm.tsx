@@ -1,6 +1,5 @@
 'use client';
 
-import {appFetch as fetch} from '@/web/api-origin';
 import { useState } from 'react';
 import { Button, TokenInput } from '@/components/ui';
 

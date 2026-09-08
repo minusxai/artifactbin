@@ -104,15 +104,6 @@ until `ARTIFACTS__ALLOW_PUBLIC` and a `PROXY__RATE_LIMIT_CONFIG_FILE` whose
 `anon_mint` is not 0 explicitly open them. Retired or misspelled names are
 reported at boot but are not read.
 
-**Anonymous live updates.** `FEATURE_FLAG__LIVE_UPDATES_ANON_ENABLED=true`
-is the default. Set it to `false` and restart every app replica to serve
-credential-less visitors snapshots: document, dataset and folder clients do
-not subscribe; stale clients receive terminal HTTP 204 rather than retrying.
-The live frame/authorization endpoints apply the same policy. Public reads,
-reloads, filters and local SQL interactions remain available. Resolved human,
-agent-token and read-session identities retain live updates under their read
-ACLs. This flag does not grant or remove persistent write permission.
-
 **The rate limits are a file.** Every number lives in a policy file, and
 `PROXY__RATE_LIMIT_CONFIG_FILE` says which one — it and
 `RATE_LIMITER__TRUSTED_PROXY_HOPS` are the only rate-limit env names there are.

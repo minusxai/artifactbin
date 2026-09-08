@@ -15,29 +15,19 @@
  */
 import {
   STORY_ASSET_MESSAGE, STORY_ASSET_RESULT_MESSAGE,
-  STORY_HELLO_MESSAGE,
   STORY_MUTATE_MESSAGE, STORY_MUTATE_RESULT_MESSAGE, STORY_QUERY_MESSAGE, STORY_QUERY_RESULT_MESSAGE,
   type StoryAssetRequest, type StoryAssetResult,
   type StoryMutateRequest, type StoryMutateResult, type StoryQueryRequest, type StoryQueryResult,
 } from './contract';
-import type { QueryTransport, MutationAnswer } from './store';
+import type { QueryTransport } from './store';
 
 export function createRelayTransport(target: Window, appOrigin: string, source: Window = window, timeoutMs = 20_000): QueryTransport {
   let seq = 0;
   // `clear` rather than a bare timer handle: a request owns its timeout AND its
   // retries, and every path that finishes it has to drop all of them.
-  const waiting = new Map<number, { resolve: (r: Extract<StoryQueryResult, { tables: unknown }>) => void; reject: (e: Error) => void; clear: () => void; post: () => void }>();
+  const waiting = new Map<number, { resolve: (r: Extract<StoryQueryResult, { tables: unknown }>) => void; reject: (e: Error) => void; clear: () => void }>();
   source.addEventListener('message', (e: MessageEvent) => {
     if (e.source !== target || e.origin !== appOrigin) return;
-    // The controls can load after the initial retry burst. Their authenticated
-    // greeting re-posts only outstanding reads, using the same IDs/deadlines.
-    // Writes are deliberately excluded: a missing answer is not proof that a
-    // mutation did not commit.
-    if (e.data === STORY_HELLO_MESSAGE) {
-      for (const pending of waiting.values()) pending.post();
-      for (const pending of importers.values()) pending.post();
-      return;
-    }
     const data = e.data as StoryQueryResult | undefined;
     if (!data || typeof data !== 'object' || data.type !== STORY_QUERY_RESULT_MESSAGE) return;
     const w = waiting.get(data.id);
@@ -64,9 +54,9 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
     const post = () => target.postMessage({ type: STORY_QUERY_MESSAGE, id, ...req } satisfies StoryQueryRequest, appOrigin);
     const timers = [
       ...RETRIES_AT.map((at) => setTimeout(() => { if (waiting.has(id)) post(); }, at)),
-      setTimeout(() => { const pending=waiting.get(id);waiting.delete(id);pending?.clear();reject(new Error('the page did not answer the query')); }, timeoutMs),
+      setTimeout(() => { waiting.delete(id); reject(new Error('the page did not answer the query')); }, timeoutMs),
     ];
-    waiting.set(id, { resolve, reject, post, clear: () => { for (const t of timers) clearTimeout(t); } });
+    waiting.set(id, { resolve, reject, clear: () => { for (const t of timers) clearTimeout(t); } });
     post();
   });
 
@@ -76,7 +66,7 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
    * reply, and vice versa.
    */
   let writeSeq = 0;
-  const writers = new Map<number, { resolve: (r: MutationAnswer) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
+  const writers = new Map<number, { resolve: (r: { dataset: string }) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   source.addEventListener('message', (e: MessageEvent) => {
     if (e.source !== target || e.origin !== appOrigin) return;
     const data = e.data as StoryMutateResult | undefined;
@@ -85,7 +75,7 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
     if (!w) return;
     writers.delete(data.id);
     clearTimeout(w.timer);
-    if (data.ok) w.resolve({ dataset: data.dataset, ...(data.local ? {local: data.local} : {}) });
+    if (data.ok) w.resolve({ dataset: data.dataset });
     else w.reject(new Error(data.error));
   });
 
@@ -100,7 +90,7 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
    * rejection here would only become an unhandled promise and an empty box.
    */
   let assetSeq = 0;
-  const importers = new Map<number, { settle: (r: { url: string } | { refused: string }) => void; clear: () => void; post: () => void }>();
+  const importers = new Map<number, { settle: (r: { url: string } | { refused: string }) => void; clear: () => void }>();
   source.addEventListener('message', (e: MessageEvent) => {
     if (e.source !== target || e.origin !== appOrigin) return;
     const data = e.data as StoryAssetResult | undefined;
@@ -113,10 +103,9 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
   });
 
   return {
-    importAsset: (url,kind,signal) => new Promise<{ url: string } | { refused: string }>((settle) => {
-      if(signal?.aborted){settle({refused:'aborted'});return;}
+    importAsset: (url) => new Promise<{ url: string } | { refused: string }>((settle) => {
       const id = ++assetSeq;
-      const post = () => target.postMessage({ type: STORY_ASSET_MESSAGE, id, url,...(kind?{kind}:{}) } satisfies StoryAssetRequest, appOrigin);
+      const post = () => target.postMessage({ type: STORY_ASSET_MESSAGE, id, url } satisfies StoryAssetRequest, appOrigin);
       /*
        * Re-posted on the SAME schedule as a query, and for the same reason: a
        * message nobody is listening for yet is not queued anywhere, it is gone.
@@ -129,25 +118,23 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
        */
       const timers = [
         ...RETRIES_AT.map((at) => setTimeout(() => { if (importers.has(id)) post(); }, at)),
-        setTimeout(() => { const pending=importers.get(id);importers.delete(id);pending?.clear();settle({ refused: 'no_answer' }); }, timeoutMs),
+        setTimeout(() => { importers.delete(id); settle({ refused: 'no_answer' }); }, timeoutMs),
       ];
-      const abort=()=>{const pending=importers.get(id);importers.delete(id);pending?.clear();settle({refused:'aborted'});};
-      importers.set(id, { settle, post, clear: () => { for (const t of timers) clearTimeout(t);signal?.removeEventListener('abort',abort); } });
-      signal?.addEventListener('abort',abort,{once:true});
+      importers.set(id, { settle, clear: () => { for (const t of timers) clearTimeout(t); } });
       post();
     }),
-    run: async (values, only, localTables) => {
-      const r = await send({ values, only, ...(localTables ? {localTables} : {}) });
+    run: async (values, only) => {
+      const r = await send({ values, only });
       return { tables: r.tables, errors: r.errors, ...(r.mutationAccess ? {mutationAccess:r.mutationAccess} : {}) };
     },
-    mutate: (values, mutation, row, localTables) => new Promise<MutationAnswer>((resolve, reject) => {
+    mutate: (values, mutation, row) => new Promise<{ dataset: string }>((resolve, reject) => {
       const id = ++writeSeq;
       const timer = setTimeout(() => { writers.delete(id); reject(new Error('the page did not answer the write')); }, timeoutMs);
       writers.set(id, { resolve, reject, timer });
-      target.postMessage({ type: STORY_MUTATE_MESSAGE, id, mutation, values, ...(row ? { row } : {}), ...(localTables ? {localTables} : {}) } satisfies StoryMutateRequest, appOrigin);
+      target.postMessage({ type: STORY_MUTATE_MESSAGE, id, mutation, values, ...(row ? { row } : {}) } satisfies StoryMutateRequest, appOrigin);
     }),
-    page: async (values, name, page, localTables) => {
-      const r = await send({ values, only: [name], page: { name, ...page }, ...(localTables ? {localTables} : {}) });
+    page: async (values, name, page) => {
+      const r = await send({ values, only: [name], page: { name, ...page } });
       const table = r.tables[name];
       if (!table) throw new Error(r.errors[name] ?? `no rows for "${name}"`);
       return table;

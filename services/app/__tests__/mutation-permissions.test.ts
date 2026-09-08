@@ -1,6 +1,5 @@
 import {expect,it,vi} from 'vitest';
 import {getDb} from '@/lib/db';
-import * as sqlEngine from '@/lib/sql/engine';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as mutate} from '@/app/a/[id]/mutate/route';
 import {GET as anonymousQuery,POST as query} from '@/app/a/[id]/query/route';
@@ -11,14 +10,6 @@ import {claimToken,createUser} from '@/lib/users';
 import {agentCookie,request,useAppHarness} from './harness';
 useAppHarness();
 const ctx=(id:string)=>({params:Promise.resolve({id})});
-function afterSql(action:()=>Promise<unknown>){
- const run=sqlEngine.runMutation;let once=false;
- return vi.spyOn(sqlEngine,'runMutation').mockImplementation(async input=>{
-   const result=await run(input);
-   if(!once){once=true;await action();}
-   return result;
- });
-}
 async function fixture(){
  const owner=await mintToken('owner');const friend=await mintToken('friend');
  const user=await createUser({email:'mxmx_test_dataset_friend@example.com'});await claimToken(user.id,friend.token);
@@ -55,33 +46,13 @@ it('gives a dataset editor the session relay even when they only view the docume
 });
 it('refuses a save when the share is revoked while its SQL is running',async()=>{
  const f=await fixture();await f.share(f.ds,'editor');
- const db=await getDb();
- const spy=afterSql(()=>db.query('DELETE FROM artifact_shares WHERE artifact_id = $1',[f.ds]));
+ const db=await getDb();const original=db.query.bind(db);let revoked=false;
+ const spy=vi.spyOn(db,'query').mockImplementation(async(sql:string,values?:unknown[])=>{
+   if(!revoked && sql.includes('WITH updated AS') && sql.includes('actor_user_id = $13')){
+     revoked=true;await original('DELETE FROM artifact_shares WHERE artifact_id = $1',[f.ds]);
+   }
+   return original(sql,values);
+ });
  try {expect((await f.write(f.cookie)).status).toBe(403);expect((await getArtifactById(f.ds))?.version).toBe(1);}
  finally {spy.mockRestore();}
-});
-it('refuses a mutation whose stored document changes before the dataset commit',async()=>{
- const f=await fixture();await f.share(f.ds,'editor');
- const db=await getDb();
- const spy=afterSql(()=>db.query('UPDATE artifacts SET edit_id=md5(random()::text) WHERE id=$1',[f.doc]));
- try {
-   const response=await f.write(f.cookie);
-   expect(response.status).toBe(409);
-   expect((await response.json()).error).toBe('document_changed');
-   expect((await getArtifactById(f.ds))?.version).toBe(1);
- } finally {spy.mockRestore();}
-});
-it('refuses a mutation if access to its private document is revoked before commit',async()=>{
- const f=await fixture();await f.share(f.ds,'editor');
- const ownerUser=await createUser({email:'mxmx_test_private_mutation_owner@example.com'});
- await claimToken(ownerUser.id,f.owner.token);
- await updateSharingFor({tokenId:f.owner.id,userId:ownerUser.id},f.doc,{visibility:'private'});
- await f.share(f.doc,'viewer');
- const db=await getDb();
- const spy=afterSql(()=>db.query('DELETE FROM artifact_shares WHERE artifact_id=$1',[f.doc]));
- try {
-   const response=await f.write(f.cookie);
-   expect(response.status).toBe(403);
-   expect((await getArtifactById(f.ds))?.version).toBe(1);
- } finally {spy.mockRestore();}
 });

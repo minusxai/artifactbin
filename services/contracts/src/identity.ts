@@ -46,4 +46,4 @@ export interface CodeStore {
 }
 
 /** The signed browser cookie: token IDS, never secrets; the last id is the primary. */
-export interface AgentSession { tokenIds: string[]; sessionId?: string }
+export interface AgentSession { tokenIds: string[] }

@@ -6,7 +6,7 @@
  * the operation's `run` (which is itself the shared lib/artifact-wire
  * pipeline both transports call).
  */
-import { json, publicLinkBase } from '@/lib/http';
+import { json, baseUrl } from '@/lib/http';
 import type { TokenActor } from '@/lib/artifacts';
 import type { AnnotationAuthor } from '@/lib/annotations';
 import { OPERATIONS, type OpContext, type Operation, type OpReply } from './registry';
@@ -39,6 +39,6 @@ export async function runOperation(
   input: Record<string, unknown>,
   author: AnnotationAuthor = { kind: 'agent', label: null, transport: 'http' },
 ): Promise<Response> {
-  const ctx: OpContext = { actor, base: publicLinkBase(request), request, author };
+  const ctx: OpContext = { actor, base: baseUrl(request), request, author };
   return opResponse(await operation(name).run(ctx, input));
 }

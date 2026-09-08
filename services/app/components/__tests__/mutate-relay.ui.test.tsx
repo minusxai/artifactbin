@@ -48,12 +48,12 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-const surface = (liveEnabled = true) => render(
+const surface = () => render(
   <ArtifactShell role="owner">
     <ArtifactSurface
       id="Ab3xK9" editId="e1" format="markup" title="doc" source="<p>x</p>" content=""
       columns={[]} compiledCss={null} theme={null} colorMode="light" template={null} refs={[]}
-      version={1} liveEnabled={liveEnabled}
+      version={1}
     />
   </ArtifactShell>,
 );
@@ -75,13 +75,6 @@ const ask = (source: Window | null, message: Record<string, unknown>) =>
   window.dispatchEvent(new MessageEvent('message', { data: message, source: source as unknown as MessageEventSource }));
 
 describe('the write relay (page side)', () => {
-  it('does not open a stream when the server disables live updates',()=>{
-    const mounted=surface(false);
-    expect(FakeEventSource.last).toBeNull();
-    mounted.unmount();
-    surface(false);
-    expect(FakeEventSource.last).toBeNull();
-  });
   it('calls the document\'s mutate endpoint with the name and values, and answers the frame', async () => {
     const { container } = surface();
     const win = frameWindow(container);

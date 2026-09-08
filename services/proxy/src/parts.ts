@@ -23,18 +23,16 @@ import {
 } from '@artifactbin/contracts';
 import type { RateLimiter } from '@artifactbin/contracts/rate-limits';
 import { Hono, type Context } from 'hono';
-import { assemble, cookieName, decodeAgentSession, readCookie, parseAssetsOrigin, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
+import { assemble, cookieName, decodeAgentSession, readCookie } from '@artifactbin/utils';
 import { createRateLimiter, memoryBackend } from '@artifactbin/utils/rate-limits';
 import { loadPolicyFile, resolvePolicyFilePath } from './rate-limits';
 import { baseUrlOf, mountOAuthRoutes } from './routes/oauth';
 import { say, type ProxySubject } from './events';
 import { createOAuthStore } from './identity/oauth';
 import { readEnv } from './env';
-import { createBrowserBoundary, type BrowserBoundary } from './browser-boundary';
-import { createAgentBrowser } from './auth/agent-browser';
 
 /** What the session part resolves an account to. */
-export interface SessionInfo { userId: string; sessionId?: string; email?: string; emailVerified?: boolean }
+export interface SessionInfo { userId: string; email?: string; emailVerified?: boolean }
 
 /**
  * Better Auth, as the parts see it: the session resolver for every request,
@@ -43,7 +41,6 @@ export interface SessionInfo { userId: string; sessionId?: string; email?: strin
  */
 export interface SessionStore {
   resolve(request: Request): Promise<SessionInfo | null>;
-  resolveRead?(request: Request): Promise<{ userId: string; email?: string } | null>;
   handler?: (request: Request) => Promise<Response>;
 }
 
@@ -215,14 +212,7 @@ export function session(o: ProxyOptions): Part<ProxyEnv> {
     name: 'session',
     mount: (app) => app.use('*', async (c, next) => {
       c.set('limiter', limiterFor(o));
-      const actor=await resolveActor(c.req.raw, o);
-      c.set('actor', actor);
-      // An app compatibility resolver must not turn an audience-rejected
-      // token back into authority. Unknown credentials must remain available
-      // to the separate operator-secret verifier; they are not app tokens.
-      const authorization = c.req.raw.headers.get('authorization') ?? '';
-      if (/^Bearer(?:\s|$)/i.test(authorization) && actor.credential !== 'bearer'
-        && await o.tokens.byToken(authorization.slice(6).trim())) c.req.raw.headers.delete('authorization');
+      c.set('actor', await resolveActor(c.req.raw, o));
       await next();
     }),
   };
@@ -323,7 +313,6 @@ export function oauthRoutes(o: ProxyOptions): Part<ProxyEnv> {
         upstream: o.upstream,
         trustedHops: trustedHopsOf(o.env),
         publicBaseUrl: readEnv(o.env, 'APP__PUBLIC_BASE_URL'),
-        controlsOrigin: readEnv(o.env, 'APP__CONTROLS_ORIGIN'),
       });
     },
   };
@@ -339,97 +328,29 @@ export function proxyParts(o: ProxyOptions): Part<ProxyEnv>[] {
   // The limiter is built HERE, at composition — a policy file that does not exist or does not parse is a
   // refusal to boot, never a request quietly metered by numbers nobody chose.
   limiterFor(o);
-  const assetSetting = readEnv(o.env,'APP__ASSETS_ORIGIN');
-  const assetOrigin = assetSetting ? parseAssetsOrigin(readEnv(o.env,'APP__PUBLIC_BASE_URL') ?? '',readEnv(o.env,'APP__CONTROLS_ORIGIN') ?? null,assetSetting) : null;
-  const assetBoundary: Part<ProxyEnv>[] = assetOrigin ? [{name:'public-assets',mount:app=>app.use('*',async(c,next)=>{
-    if(new URL(c.req.url).host !== new URL(assetOrigin).host)return next();
-    const incoming=new URL(c.req.url);
-    const publicRequest=new Request(assetOrigin+incoming.pathname+incoming.search,{method:c.req.method});
-    if(!isPublicAssetRequest(publicRequest,assetOrigin))return new Response('not found',{status:404});
-    // A new narrow request: no ambient cookie, bearer, forged actor or forwarding headers.
-    const headers = new Headers();
-    headers.set(FORWARDED_HOST,new URL(assetOrigin).host);headers.set(FORWARDED_PROTO,new URL(assetOrigin).protocol.slice(0,-1));
-    const request=new Request(c.req.url,{method:c.req.method,headers,signal:c.req.raw.signal});
-    try{return publicAssetResponse(await o.upstream(request,ANONYMOUS));}
-    catch{return new Response('asset upstream unavailable',{status:502});}
-  })}] : [];
-  const policy = browserBoundaryOf(o);
-  const boundary: Part<ProxyEnv>[] = policy ? [{name:'controls-origin', mount: app => app.use('*', async (c,next) => {
-    const refused = policy.check(c.req.raw,c.get('actor'));
-    if (refused) return refused;
-    const previousCookies = c.req.raw.headers.get('cookie');
-    const agent = agentBrowserOf(o);
-    // Resolve the restricted actor first, then discard ambient cookies before
-    // legacy handlers can decode them again and widen the proxy's verdict.
-    if (policy.credentialAt(c.req.raw) !== 'full') c.req.raw.headers.delete('cookie');
-    else if (agent && !c.get('actor').heldTokenIds) {
-      // Invalid/expired browser cookies must not regain authority through an
-      // app handler's compatibility decoder (dashboard and token claiming).
-      const remaining = (previousCookies ?? '').split(';').map(p=>p.trim()).filter(p=>p && !p.startsWith(agent.fullName+'='));
-      if (remaining.length) c.req.raw.headers.set('cookie',remaining.join('; '));
-      else c.req.raw.headers.delete('cookie');
-    }
-    await next();
-    if (agent && policy.credentialAt(c.req.raw) === 'full') {
-      for (const cookie of await agent.responseCookies(previousCookies,c.res.headers)) c.header('set-cookie',cookie,{append:true});
-    }
-    // Hono's header API handles immutable redirects; assigning c.res instead
-    // would merge the old CSP back over the new framing restriction.
-    for (const [name,value] of Object.entries(policy.responseHeaders(c.req.raw,c.res.headers))) c.header(name,value);
-  })}] : [];
-  return [...assetBoundary, session(o), ...boundary, rateLimit(o), loginRoutes(o), oauthRoutes(o), forwardedHeaders({ trustedHops: trustedHopsOf(o.env), ...(o.secure ? { secure: true } : {}) }), forward(o.upstream, o)];
+  return [session(o), rateLimit(o), loginRoutes(o), oauthRoutes(o), forwardedHeaders({ trustedHops: trustedHopsOf(o.env), ...(o.secure ? { secure: true } : {}) }), forward(o.upstream, o)];
 }
 
 /** The proxy, assembled from its parts. */
 export const createProxy = (o: ProxyOptions): ProxyApp => assemble(proxyParts(o));
 
-const browserBoundaries = new WeakMap<ProxyOptions, BrowserBoundary | null>();
-const agentBrowsers = new WeakMap<ProxyOptions, ReturnType<typeof createAgentBrowser>>();
-function agentBrowserOf(o: ProxyOptions) {
-  if (!o.identityDb || !browserBoundaryOf(o)) return null;
-  if (!agentBrowsers.has(o)) agentBrowsers.set(o,createAgentBrowser({db:o.identityDb,tokens:o.tokens,secret:o.cookieSecret,
-    main:readEnv(o.env,'APP__PUBLIC_BASE_URL')!,secure:o.secure ?? false,schema:readEnv(o.env,'AUTH__SCHEMA') ?? 'auth'}));
-  return agentBrowsers.get(o)!;
-}
-function browserBoundaryOf(o: ProxyOptions): BrowserBoundary | null {
-  if (!browserBoundaries.has(o)) {
-    const controls = readEnv(o.env, 'APP__CONTROLS_ORIGIN');
-    browserBoundaries.set(o, controls ? createBrowserBoundary(readEnv(o.env, 'APP__PUBLIC_BASE_URL') ?? '', controls) : null);
-  }
-  return browserBoundaries.get(o)!;
-}
-
 /** Who is asking — bearer first, then the account session, then the agent cookie. Absent or invalid → `none`. */
 async function resolveActor(request: Request, o: ProxyOptions): Promise<Actor> {
   const auth = request.headers.get('authorization') ?? '';
-  const bearer = /^Bearer(?:\s|$)/i.test(auth);
-  const presented = bearer ? auth.slice(6).trim() : '';
-  if (bearer) {
+  const presented = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  if (presented) {
     const token = await o.tokens.byToken(presented);
     if (token && tokenFitsRequest(token, request, o)) return { credential: 'bearer', tokenId: token.id, ...(token.userId ? { userId: token.userId } : {}) };
     return ANONYMOUS;
   }
-  const boundary = browserBoundaryOf(o);
-  if (boundary) {
-    const kind = boundary.credentialAt(request);
-    if (kind === 'none') return ANONYMOUS;
-    if (kind === 'read') {
-      const reader = await o.sessions.resolveRead?.(request).catch(() => null);
-      if (reader) return { credential: 'read-session', userId: reader.userId, ...(reader.email ? {email:reader.email} : {}) };
-      const token = await agentBrowserOf(o)?.read(request.headers.get('cookie'));
-      return token && tokenFitsRequest(token,request,o) ? {credential:'read-session',tokenId:token.id,...(token.userId?{userId:token.userId}:{})} : ANONYMOUS;
-    }
-  }
   const secure = o.secure ?? false;
-  const held = boundary ? await agentBrowserOf(o)?.full(request.headers.get('cookie'))
-    : decodeAgentSession(readCookie(request.headers.get('cookie'), cookieName(secure)), o.cookieSecret);
+  const held = decodeAgentSession(readCookie(request.headers.get('cookie'), cookieName(secure)), o.cookieSecret);
   const heldIds = held?.tokenIds.length ? { heldTokenIds: held.tokenIds } : {};
   const session = await o.sessions.resolve(request).catch(() => null);
   if (session) {
     return {
       credential: 'session',
       userId: session.userId,
-      ...(session.sessionId ? { sessionId: session.sessionId } : {}),
       ...(session.email ? { email: session.email } : {}),
       ...(session.emailVerified !== undefined ? { emailVerified: session.emailVerified } : {}),
       ...heldIds,
@@ -438,7 +359,7 @@ async function resolveActor(request: Request, o: ProxyOptions): Promise<Actor> {
   const lastHeld = held?.tokenIds[held.tokenIds.length - 1];
   if (lastHeld !== undefined) {
     const token = await o.tokens.byId(lastHeld);
-    if (token && tokenFitsRequest(token, request, o)) return { credential: 'agent-cookie', tokenId: token.id, ...(held?.sessionId ? {sessionId:held.sessionId} : {}), ...(token.userId ? { userId: token.userId } : {}), ...heldIds };
+    if (token && tokenFitsRequest(token, request, o)) return { credential: 'agent-cookie', tokenId: token.id, ...(token.userId ? { userId: token.userId } : {}), ...heldIds };
   }
   return ANONYMOUS;
 }

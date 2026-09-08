@@ -4,7 +4,7 @@
  * verbatim rather than approximately.
  */
 import { describe, expect, it } from 'vitest';
-import { renderReaderChrome, renderReaderLoadingShell, type ReaderChromeInput } from '@/lib/story/reader-chrome';
+import { renderReaderChrome, type ReaderChromeInput } from '@/lib/story/reader-chrome';
 
 const chrome = (over: Partial<ReaderChromeInput> = {}): string =>
   renderReaderChrome({
@@ -15,11 +15,6 @@ const chrome = (over: Partial<ReaderChromeInput> = {}): string =>
   });
 
 describe('renderReaderChrome', () => {
-  it('renders a powerless loading shell with escaped public attribution and no actions',()=>{
-    const html=renderReaderLoadingShell({username:'ada<script>'});
-    expect(html).toContain('id="mx-controls-loading"');expect(html).toContain('inert');
-    expect(html).toContain('@ada&lt;script&gt;');expect(html).not.toMatch(/<(?:a|button)\b|data-mx-reader-action/);
-  });
   it('marks the owner byline as a breadcrumb and escapes the artifact name', () => {
     const html = chrome({ ownerBreadcrumb: true, title: 'Report <2026>' });
     expect(html).toContain('data-mx-owner-breadcrumb');

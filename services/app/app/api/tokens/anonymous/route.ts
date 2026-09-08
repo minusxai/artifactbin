@@ -11,7 +11,7 @@
  * it publishes lands in its dashboard without a claim; anyone else gets an
  * anonymous token that reaches only what it itself creates, claimable later.
  */
-import { publicLinkBase, json } from '@/lib/http';
+import { baseUrl, json } from '@/lib/http';
 import { agentContract } from '@/lib/agent-contract';
 import { MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, mintToken, sourcedTokenName } from '@/lib/tokens';
 import { sessionActor } from '@/lib/viewer';
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     if (actor.credential !== 'session' || typeof body.audience !== 'string' || body.scope !== 'artifacts') return json({ error: 'invalid_audience' }, 400);
     try {
       const target = new URL(body.audience);
-      const loopback = target.protocol === 'http:' && (['localhost', '127.0.0.1', '::1', '[::1]'].includes(target.hostname) || target.hostname.endsWith('.localhost'));
+      const loopback = target.protocol === 'http:' && ['localhost', '127.0.0.1', '::1', '[::1]'].includes(target.hostname);
       if ((target.protocol !== 'https:' && !loopback) || target.pathname !== '/mcp' || target.search || target.hash || target.username || target.password) return json({ error: 'invalid_audience' }, 400);
       audience = target.href;
       scope = body.scope;
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
       id: minted.id,
       token: minted.token,
       expiresAt: minted.expiresAt,
-      note: agentContract(publicLinkBase(request), 'http'),
+      note: agentContract(baseUrl(request), 'http'),
     },
     201,
   );

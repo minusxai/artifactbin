@@ -1,19 +1,18 @@
 ---
 name: markup
 description: >-
-  JSX vocabulary.
+  JSX, components, Helmet, CSS, scripts, fonts and layout.
 ---
 ## Read first
 
-`markup` is **static JSX data** over a fixed component registry.
-Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with spans.
+`markup` is **static JSX data**, interpreted over a fixed component registry.
+Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with exact spans.
 
-- Literal props, plus [restricted reactive JSX and dialogs](markup-state.md).
-  No spreads, callbacks, or inline handlers; every tag closes (`<br />`),
-  comments are `{/* … */}`, and there is no `<html>`/`<head>`/`<body>`.
-  One Helmet script runs in an isolated iframe, without visible DOM access.
-  DOM libraries use [Iframe](markup-iframe.md); Sandbox stays supported.
-  Use the `mx` data API and declarative controls.
+- **Static JSX only**: literal props (strings, numbers, booleans, arrays,
+  `{{…}}` objects); no expressions, spreads or inline handlers (`onClick=` is
+  rejected). In JSX, every tag closes (`<br />`); use `{/* … */}` comments; omit
+  `<html>`/`<head>`/`<body>`. One `<script>` in `<Helmet>` runs after hydration:
+  use `addEventListener` on your own ids.
 - **Style with Tailwind classes via `className`**, starting from a
   `<div data-design="tw" className="@container …">` wrapper with `@2xl:`
   container variants for responsive layout.
@@ -64,26 +63,25 @@ At most ONE per document, holding at most one each of `<title>`, `<style>`
 and `<script>`, plus `<meta name content />` pairs, plus any number of the
 DATA declarations `<Value>`, `<Query>`, `<Mutation>` ([data](markup-data.md)).
 Write it anywhere; it is hoisted to the top when stored. It is the ONLY
-place for parent CSS, JS or data; [Iframe](markup-iframe.md) owns isolated child CSS/JS.
+place for custom CSS, JS or data — any of those in the body is refused.
 
 ```jsx
 <Helmet>
   <title>Quarterly review</title>
   <style>{`.rise { animation: rise .9s both } @keyframes rise { from { opacity: 0 } }`}</style>
-  <Value name="quantity" type="number" default={1} />
-  <Value name="total" type="number" default={10} />
-  <script>{`mx.params.subscribe(values => {
-    const total = values.quantity * 10;
-    if (values.total !== total) mx.params.set('total', total);
-  });`}</script>
+  <script>{`document.getElementById('tab-2').addEventListener('click', () => { document.getElementById('panel-2').hidden = false });`}</script>
 </Helmet>
 ```
 
-Helmet scripts have no visible DOM access: use declarative controls and
-`mx.params.subscribe` for signal changes. Fetch is blocked. **Rows arrive after
-the script starts**; use `mx.data.subscribe`, not a line-one read. Signal writes
-are asynchronous. See [script API and migration](markup-scripts.md) before
-writing a script. `</script` cannot appear in its text (split the string).
+Your script runs sandboxed with an opaque origin: no cookies, no access to
+the surrounding page, and no network beyond its CSP's document endpoints.
+`</script` cannot appear in the text (split it: `'</scr' + 'ipt'`).
+`window.mx` is defined before it runs: `mx.params.get/set/subscribe` (a set
+re-runs dependent queries and re-renders bound embeds);
+`mx.data.get('sales')` (`{rows, columns}`) `/.pending()/.subscribe()`;
+`mx.mutate(name)`; `mx.refresh()`. **Rows arrive AFTER your script runs** (the
+document paints first, then fetches): read them in `mx.data.subscribe(fn)`,
+never on line one.
 
 - **Custom CSS lives in that `<style>` block, never inline** (`style=` is rejected).
   Scope rules to your own class names (bare element selectors leak into chart

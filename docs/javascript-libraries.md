@@ -1,12 +1,7 @@
 # Hosted JavaScript libraries
 
-DOM-based libraries run inside a generic `<Sandbox>`, not the parent artifact
-or its hidden Helmet script. `html` is a static HTML string for that realm;
-`script` is its static JavaScript string. `title` labels the iframe and numeric
-`height` reserves 100–4096 pixels (default 320); width follows its container.
-The child owns its DOM/canvas, but cannot touch the parent, controls or cookies.
-Parent Tailwind styles do not cross the frame; use CSS inside its HTML.
-The sandbox's author API has two entry points:
+Artifacts use their existing Helmet script and ordinary HTML/canvas. The
+author API has two entry points:
 
 ```js
 const THREE = await artifact.library('three');
@@ -49,21 +44,6 @@ textures. External model dependencies and additional decoder workers are not
 included. Authors own rendering, resizing, animation and GPU cleanup. Export
 uses the existing bounded settling window; long asynchronous scene preparation
 may exceed that window; there is no new scene-readiness protocol in this version.
-
-The sandbox also receives the existing bounded `mx` data bridge: declared
-signals, refreshes and named mutations. Persistent writes still pass current
-ACL checks; a sandbox is not a write grant. No account/edit verbs or
-arbitrary network destination are added. Replacing HTML/script replaces its
-realm; removing it revokes the port. Local state resets on document reload.
-Focus and pointer/touch input stay inside its visible bounds. Physical-device
-keyboard/zoom and assistive-technology certification are separate rollout gates.
-
-Migration: move the old Helmet DOM script to `Sandbox.script` and its target
-canvas/HTML to `Sandbox.html`. Keep document data declarations in Helmet.
-Code targeting arbitrary elements elsewhere in the artifact must be rewritten
-using the declared data bridge, not granted parent DOM access. Sandbox content
-is an atomic parent node for comments/editing; its internal HTML IDs belong to
-the child realm, not the artifact node-ID namespace.
 
 ## File transport
 

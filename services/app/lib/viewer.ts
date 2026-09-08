@@ -12,7 +12,6 @@ import { effectiveRole as artifactRole, ownsArtifact, type ArtifactRole, type Ar
 import { AGENT_COOKIE, decodeAgentSession } from './agent-session';
 import { parseCookie } from './http';
 import { resolveToken, resolveTokenById, touchToken } from './tokens';
-import { LIVE_UPDATES_ANON_ENABLED } from './config';
 
 /**
  * The account behind the request, if any. Behind the proxy that is the signed
@@ -54,11 +53,6 @@ export interface RequestActor {
 }
 
 export const NO_ACTOR: RequestActor = { viewer: null, tokenId: null, credential: 'none' };
-
-/** Server-decided live eligibility, independently of the document's read ACL.
- * A resolved read-session or token-holding browser is not anonymous. */
-export const canReceiveLiveUpdates = (actor: RequestActor): boolean =>
-  LIVE_UPDATES_ANON_ENABLED || (actor.credential !== 'none' && !!(actor.viewer?.userId || actor.tokenId));
 
 /** A cookie authorized this request — the only case a same-site guard applies to. */
 export const isCookieCredential = (actor: Pick<RequestActor, 'credential'>): boolean =>

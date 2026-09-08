@@ -1,4 +1,3 @@
-import {appFetch as fetch} from '@/web/api-origin';
 import { useCallback, useEffect, useState } from 'react';
 import { useRefreshable } from '@/lib/navigation';
 import { ActivityFeed } from '@/components/ActivityFeed';
@@ -55,13 +54,12 @@ function FirstArtifact() {
   );
 }
 
-export function HomePage({region=false,onPresentation}:{region?:boolean;onPresentation?:(workspace:boolean)=>void}={}) {
+export function HomePage() {
   const [home, setHome] = useState<Home | null>(null);
   const load = useCallback(() => { void fetch('/api/page/home', { credentials: 'same-origin' }).then((r) => r.json()).then(setHome).catch(() => null); }, []);
   useEffect(load, [load]);
   // A claim adds artifacts to this library; re-read rather than reload.
   useRefreshable(load);
-  useEffect(()=>{if(home)onPresentation?.(home.signedIn || !!home.drafts?.length);},[home,onPresentation]);
   if (!home) return <main className={`${PAGE_COLUMN} mt-8 pb-24`} aria-busy="true" />;
   if (!home.signedIn) {
     if (home.drafts?.length) {
@@ -84,7 +82,7 @@ export function HomePage({region=false,onPresentation}:{region?:boolean;onPresen
     }
     // A stranger has nothing to log into yet: the landing proves the product
     // and hands over the instruction; the page menu keeps the login door.
-    return region?<GetStarted/>:<Landing />;
+    return <Landing />;
   }
   const empty = home.artifacts.length === 0 && home.shared.length === 0;
   return (

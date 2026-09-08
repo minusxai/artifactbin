@@ -4,7 +4,6 @@ import { json, readJson } from '@/lib/http';
 import { sessionActor } from '@/lib/viewer';
 import { parseQueryRequest, type QueryRequest } from '@/lib/story/query-request';
 import { QUERY_REQUEST_PARAM } from '@/lib/story-runtime/contract';
-import { LocalStateInputError } from '@/lib/story/local-tables';
 
 /**
  * GET  /a/<id>/query?q=<JSON {values?, only?, page?}> → { tables, errors }
@@ -74,8 +73,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
    * listing: no private children, no counts. Measured on the dev walk, where
    * every artifact belongs to an unclaimed token.
    */
-  const cors: Record<string, string> = !actor.viewer && !actor.tokenId ? {'Access-Control-Allow-Origin': '*'} : {};
-  return answer(artifact, parsed, { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null }, cors);
+  return answer(artifact, parsed, { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null });
 }
 
 /**
@@ -91,11 +89,6 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
  */
 async function answer(artifact: ArtifactRow, parsed: QueryRequest, viewer: RoleActor | null, extra: Record<string, string> = {}): Promise<Response> {
   if (artifact.format !== 'markup' && artifact.format !== 'folder') return json({ tables: {}, errors: {} }, 200, extra);
-  let flow;
-  try { flow = await dataflowForRow(artifact, { ...parsed, viewer }); }
-  catch (error) {
-    if (error instanceof LocalStateInputError) return json({error: 'invalid_local_state', detail: error.message}, 400, extra);
-    throw error;
-  }
+  const flow = await dataflowForRow(artifact, { ...parsed, viewer });
   return json({ tables: flow?.state.tables ?? {}, errors: flow?.state.errors ?? {}, ...(flow?.flow.mutations?.length ? {mutationAccess:flow.state.mutationAccess ?? {}} : {}) }, 200, {...extra,'Cache-Control':'no-store'});
 }

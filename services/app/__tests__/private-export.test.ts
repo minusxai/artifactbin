@@ -9,10 +9,6 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
-import {GET as exportImage} from '@/app/a/[id]/export/route';
-import {setServices} from '@/lib/services';
-import {resetExportRenderer} from '@/lib/export';
-import {fakeBrowser} from '@artifactbin/utils';
 import { createArtifact } from '@/lib/artifacts';
 
 import { mintExportKey } from '@/lib/export-key';
@@ -27,11 +23,9 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const rawResponse = (path: string) => rawRoute(request(path), params(path.split('/')[2]));
 
 let privateId: string;
-let ownerId:string;
 
 beforeEach(async () => {
   const user = await createUser({ email: 'owner@example.com' });
-  ownerId=user.id;
   const token = await mintToken('t', user.id);
   const row = await createArtifact(token.id, user.id, {
     format: 'markup', content: '', source: '<h1>secret body</h1>', meta: {},
@@ -41,16 +35,6 @@ beforeEach(async () => {
 });
 
 describe('GET /a/<id>/raw with an export key', () => {
-  it('admits private card bytes only for the owner read-session and never public-caches them',async()=>{
-    setServices({browser:fakeBrowser({ok:true,mime:'image/png',bytes:new Uint8Array([1,2,3])})});
-    const other=await createUser({email:'mxmx_test_private_card_other@example.com'});
-    try{
-      const url=`/a/${privateId}/export?mode=card`;
-      for(const actor of [{credential:'none' as const},{credential:'read-session' as const,userId:other.id}])expect((await exportImage(request(url,{actor}),params(privateId))).status).toBe(404);
-      const response=await exportImage(request(url,{actor:{credential:'read-session',userId:ownerId}}),params(privateId));
-      expect(response.status).toBe(200);expect(response.headers.get('cache-control')).toBe('private, no-store');
-    }finally{await resetExportRenderer();setServices({});}
-  });
   it('serves the document, so the captured frame is the document and not a 404', async () => {
     const res = await rawResponse(`/a/${privateId}/raw?chrome=0&key=${mintExportKey(privateId)}`);
     expect(res.status).toBe(200);

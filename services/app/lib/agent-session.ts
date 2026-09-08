@@ -26,8 +26,7 @@
  * request re-reads the row, so revoking a token logs the browser out.
  */
 import { decodeAgentSession as decodeSigned, encodeAgentSession as encodeSigned } from '@artifactbin/utils';
-import { AUTH_SECRET, PUBLIC_BASE_URL, CONTROLS_ORIGIN } from '@/lib/config';
-import { randomBytes } from 'node:crypto';
+import { AUTH_SECRET, PUBLIC_BASE_URL } from '@/lib/config';
 import { parseCookie } from '@/lib/http';
 
 /**
@@ -59,7 +58,6 @@ const SALT = AGENT_COOKIE;
 /** What the cookie carries: the token ids this browser holds, oldest first. */
 export interface AgentSession {
   tokenIds: string[];
-  sessionId?: string;
 }
 
 export function agentCookieOptions(): {
@@ -100,7 +98,7 @@ export function agentSessionClearCookie(): string {
 
 /** Sign a session for the Set-Cookie value. */
 export async function encodeAgentSession(session: AgentSession): Promise<string> {
-  return encodeSigned({ tokenIds: session.tokenIds, ...(CONTROLS_ORIGIN ? {sessionId: randomBytes(32).toString('base64url')} : {}) }, AUTH_SECRET);
+  return encodeSigned({ tokenIds: session.tokenIds }, AUTH_SECRET);
 }
 
 /**
@@ -109,7 +107,7 @@ export async function encodeAgentSession(session: AgentSession): Promise<string>
  */
 export async function decodeAgentSession(value: string | undefined | null): Promise<AgentSession | null> {
   const parsed = decodeSigned(value, AUTH_SECRET);
-  return parsed && parsed.tokenIds.length ? parsed : null;
+  return parsed && parsed.tokenIds.length ? { tokenIds: parsed.tokenIds } : null;
 }
 
 /**

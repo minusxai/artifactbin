@@ -5,7 +5,6 @@
  * logged-out only: POST /api/session/token { token } so the id lands in the agent cookie. Never a GET that
  * mints; nothing is stored; a fresh render shows the confirm step.
  */
-import {appFetch as fetch} from '@/web/api-origin';
 import { useState } from 'react';
 import { CopyIcon } from '@/components/CopyIcon';
 import { Button, PANEL } from '@/components/ui';

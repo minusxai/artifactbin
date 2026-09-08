@@ -15,7 +15,7 @@
  * (lib/http baseUrl: the public origin behind the proxy).
  *
  * Everything else is content-independent: opaque origin
- * (`sandbox` without allow-same-origin), no form navigation, no base, no third-party
+ * (`sandbox` without allow-same-origin), no forms, no base, no third-party
  * destinations of any kind. Guarded by __tests__/raw-document.test.ts.
  */
 /** Where each kind of subresource may come from — content-independent. */
@@ -26,10 +26,9 @@ const SOURCE_DIRECTIVES = [
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
   "media-src 'self' data: blob:",
-  // No network frame destinations: raw <iframe> is banned in markup. The
-  // trusted runtime creates only an inline srcdoc author-script sandbox.
-  // Keep default-src 'none' as the navigation boundary until trusted-control
-  // destinations have their own explicit, tested policy.
+  // No frame-src: nothing renders a nested frame — raw <iframe> is banned in
+  // markup and <Video> is a click-to-open card (a player iframe would inherit
+  // this sandbox's opaque origin and refuse to run anyway).
 ] as const;
 
 /** What the document may DO — content-independent. */
@@ -54,9 +53,7 @@ const BEHAVIOUR_DIRECTIVES = [
    * The owner's shell and the exporter are both same-origin.
    */
   "frame-ancestors 'self'",
-  // Trusted Dialog forms need submit events and validation. form-action none
-  // still forbids navigation; author scripts have their own no-forms sandbox.
-  'sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation',
+  'sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation',
 ] as const;
 
 /** The path the document may fetch: its own query endpoint. */
@@ -83,13 +80,12 @@ const eventsPath = (id: string): string => `/a/${id}/events`;
 export const mutatePath = (id: string): string => `/a/${id}/mutate`;
 
 /**
- * …and the document-scoped endpoint where a
+ * …and the one document endpoint deliberately ABSENT from this policy: where a
  * document imports an image URL only its reader can compute
  * (app/a/[id]/assets). It belongs here because this is the registry of a
- * document's own addresses. Legacy images use it as their src; configured
- * managed frames additionally resolve URLs through its JSON GET API from the
- * trusted parent runtime. Only that configured policy adds it to connect-src;
- * the author child receives cached asset URLs, never this resolver endpoint.
+ * document's own addresses, and it is missing from `connect-src` because it is
+ * never fetched — it is the `src` of an `<img>`, which `img-src 'self'` already
+ * admits. A policy entry for it would state the opposite of what is true.
  */
 export const assetsPath = (id: string): string => `/a/${id}/assets`;
 
@@ -104,7 +100,7 @@ export const assetsPath = (id: string): string => `/a/${id}/assets`;
  */
 const GEOJSON_DIR_PATH = '/geojson/';
 
-export function markupCsp(origin: string, id: string, controlsOrigin?: string, assetOrigin?:string): string {
+export function markupCsp(origin: string, id: string): string {
   // connect-src sits with the other source directives, before the behaviour
   // ones — the one per-document line in an otherwise fixed policy.
   const self = origin.replace(/\/+$/, '');
@@ -113,16 +109,5 @@ export function markupCsp(origin: string, id: string, controlsOrigin?: string, a
   // GLB loaders fetch embedded textures/buffers through local blob/data URLs;
   // these add no network destination or access to the application's APIs.
   const connect = `connect-src ${self}${queryPath(id)} ${self}${eventsPath(id)} ${self}${eventsPath(id)}/frame ${self}${mutatePath(id)} ${self}${resolvePath(id)} ${self}${GEOJSON_DIR_PATH} blob: data:`;
-  const behavior = controlsOrigin ? BEHAVIOUR_DIRECTIVES.filter(d => !d.startsWith('sandbox ')) : BEHAVIOUR_DIRECTIVES;
-  if(assetOrigin && (new URL(assetOrigin).origin!==assetOrigin||!/^https?:\/\//.test(assetOrigin)))throw Error('Invalid asset origin');
-  const sources=SOURCE_DIRECTIVES.map(d=>{
-    // Firefox evaluates inherited 'self' against the opaque srcdoc realm for
-    // dynamic imports. Keep the compatibility library directory explicit;
-    // the inner Sandbox still restricts scripts to exact pinned bundle URLs.
-    // This grants neither API fetches nor navigation to the main origin.
-    const source=d.startsWith('script-src ')?d+` ${self}/libraries/`:d;
-    return assetOrigin && /^(script|img|font|media)-src /.test(source)?source+' '+assetOrigin:source;
-  });
-  const assetConnect=assetOrigin?` ${assetOrigin} ${self}${assetsPath(id)}`:'';
-  return [...sources, ...(controlsOrigin ? [`frame-src ${controlsOrigin}`] : []), connect+assetConnect, ...behavior].join('; ');
+  return [...SOURCE_DIRECTIVES, connect, ...BEHAVIOUR_DIRECTIVES].join('; ');
 }

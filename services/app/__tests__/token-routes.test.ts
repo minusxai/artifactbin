@@ -70,12 +70,6 @@ describe('token routes served by the app', () => {
     const { rows } = await (await harness.db()).query<{ audience: string | null; scope: string | null }>('SELECT audience, scope FROM tokens WHERE id = $1', [minted.id]);
     expect(rows[0]).toEqual(grant);
   });
-  it('allows MCP HTTP audiences only on loopback including localhost subdomains',async()=>{
-    const user=await createUser({email:'mxmx_test_local_mcp@example.com'}),actor={credential:'session' as const,userId:user.id};
-    const mint=(audience:string)=>mintAnonymous(request('/api/tokens/anonymous',{method:'POST',actor,json:{audience,scope:'artifacts'}}));
-    expect((await mint('http://artifactbin.localhost:5400/mcp')).status).toBe(201);
-    expect((await mint('http://artifactbin.localhost.evil.test/mcp')).status).toBe(400);
-  });
   it('GET /api/my/tokens lists only this account\'s live tokens; 401 without a session', async () => {
     expect((await listMine(request('/api/my/tokens'))).status).toBe(401);
     const user = await createUser({ email: 'b@example.com' });

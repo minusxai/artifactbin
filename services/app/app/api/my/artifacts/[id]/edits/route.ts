@@ -8,7 +8,7 @@ import { respondToEdit } from '@/lib/artifact-wire';
 import { applyEditFor } from '@/lib/artifacts';
 import { browserActor } from '@/lib/auth';
 import { actorForArtifacts } from '@/lib/viewer';
-import { publicLinkBase, readJson, unauthorized } from '@/lib/http';
+import { baseUrl, readJson, unauthorized } from '@/lib/http';
 
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const actor = await browserActor(request);
@@ -16,5 +16,5 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const scoped = actorForArtifacts(actor);
   if (!scoped) return unauthorized(request);
   const { id } = await ctx.params;
-  return respondToEdit(publicLinkBase(request), await readJson(request), (input) => applyEditFor(scoped, id, input));
+  return respondToEdit(baseUrl(request), await readJson(request), (input) => applyEditFor(scoped, id, input));
 }

@@ -27,7 +27,7 @@ import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
 import { sanitizeStoryMarkupCss } from '@/lib/data/story/banned-css';
 import { RETIRED_STORY_THEMES } from '@/lib/data/story/story-themes';
-import { remapMarkupStyleViewportUnits } from '@/lib/story/managed-iframe-source';
+import { remapMarkupStyleViewportUnits } from '@/lib/story-surface/viewport-units';
 import { compileStoryCss, storyCssCompileVersion } from '@/lib/data/story/story-css.server';
 import { STORY_THEME_NAMES, STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import { json } from '../http';

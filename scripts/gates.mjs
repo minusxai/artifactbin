@@ -199,10 +199,6 @@ async function bootServer(index, mailOutbox, authSecret) {
       // server refuses to fetch one (lib/web-ingest/guard) — the same reason
       // the mint ceiling is raised here rather than in the gate.
       WEB_INGEST__ALLOW_PRIVATE: process.env.WEB_INGEST__ALLOW_PRIVATE ?? '1',
-      // The PostgreSQL gate owns a loopback-only disposable Docker database.
-      // Enable that fixture only on servers this runner owns, and only when
-      // the gate is selected. Production defaults and supplied servers stay untouched.
-      ...(selected.some(g => g.name === 'postgres-datasets') ? { DATASET__ALLOW_PRIVATE_NETWORKS: 'true' } : {}),
       ...(mailOutbox ? { EMAIL__DEV_OUTBOX_PATH: mailOutbox } : {}),
     },
   });

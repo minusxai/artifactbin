@@ -60,7 +60,7 @@ export interface AccessPlanInput {
   /** What `needsStartDocument` said to mint, or null for a task that hands the agent nothing. */
   start: StartDocument | null;
   /** The leg's ACCOUNT credential, or null when the product's own paste carries the token instead. */
-  credential: { token: string; apiToken?: string } | null;
+  credential: { token: string } | null;
   /** Does this mode install the skills into the session (`lib/mode installsSkills`)? */
   installed: boolean;
   /** The action transport the harness actually runs, after any substitution (`lib/mode planTransport`). */
@@ -114,15 +114,12 @@ export function planAccess(input: AccessPlanInput): AccessPlan {
     seed: task.seed === undefined ? null : { id: start.id, token, markup: task.seed },
   });
   if (credential) {
-    const apiToken = credential.apiToken ?? credential.token;
-    const selected = transport === 'mcp' ? credential.token : apiToken;
-    const plan = withToken(selected);
-    if (plan.seed) plan.seed.token = apiToken;
+    const plan = withToken(credential.token);
     // The token rides the harness's MCP configuration, as it does for a person who connected the
     // server; and for API actions it rides the skill's own connection file in the agent's HOME, which
     // is why the prompt can stop naming it. An MCP leg never gets that file: a second, curl-shaped way
     // in would measure something other than the MCP treatment.
-    return transport === 'mcp' || !installed ? plan : { ...plan, connectionToken: selected };
+    return transport === 'mcp' || !installed ? plan : { ...plan, connectionToken: credential.token };
   }
   // The product's paste. A `token` task needs the driver to hold the credential (to seed a document,
   // or to write an MCP config), so the driver reads it out of the paste; a `start-link` task passes

@@ -53,12 +53,6 @@ describe('createDocumentTransport', () => {
  * its absence is the instruction.
  */
 describe('createDocumentTransport — importAsset', () => {
-  it('top-level controls relay owns writes, but not main-origin asset imports', () => {
-    const peer={postMessage:vi.fn()} as unknown as Window;
-    const t=createDocumentTransport(win('self'),'/a/abc123/query',APP,vi.fn(),undefined,peer);
-    expect(t!.mutate).toBeTypeOf('function');
-    expect(t!.importAsset).toBeUndefined();
-  });
   it('inside a parent: importing posts mx:asset to that parent', () => {
     const posted: unknown[] = [];
     const parent = { postMessage: (m: unknown) => posted.push(m) };

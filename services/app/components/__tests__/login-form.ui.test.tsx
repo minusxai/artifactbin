@@ -101,7 +101,7 @@ describe('after a good code', () => {
     verifyStatus = 200;
     const assign = vi.fn();
     const original = window.location;
-    Object.defineProperty(window, 'location', { configurable: true, value: { ...original, search: '?callbackUrl=https://evil.example/x', origin: 'http://localhost:3000', replace:assign, set href(v: string) { throw new Error('login must replace its transient history entry: '+v); } } });
+    Object.defineProperty(window, 'location', { configurable: true, value: { ...original, search: '?callbackUrl=https://evil.example/x', origin: 'http://localhost:3000', set href(v: string) { assign(v); } } });
     try {
       render(<LoginForm />);
       type(emailField(), 'v@minusx.ai');

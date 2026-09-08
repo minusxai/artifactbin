@@ -50,13 +50,8 @@ async function accountFor(tokenId: string): Promise<string | null> {
  * is one, and the token's own when there is not.
  */
 export async function assetBytesForToken(tokenId: string): Promise<number> {
-  const userId = await accountFor(tokenId);
-  return assetBytesForOwner(tokenId,userId);
-}
-
-/** Same accounting for account-created documents which have no agent token. */
-async function assetBytesForOwner(tokenId: string | null, userId: string | null): Promise<number> {
   const db = await getDb();
+  const userId = await accountFor(tokenId);
   const r = userId
     ? await db.query<{ n: number }>(
       `SELECT
@@ -79,9 +74,8 @@ async function assetBytesForOwner(tokenId: string | null, userId: string | null)
 }
 
 /** True when the next import must be refused with `quota_exceeded`. */
-export async function assetByteQuotaExceeded(tokenId: string | null, userId: string | null = null): Promise<boolean> {
+export async function assetByteQuotaExceeded(tokenId: string): Promise<boolean> {
   const cap = override !== undefined ? override : ASSETS_MAX_BYTES_PER_TOKEN;
   if (!cap) return false;
-  const bytes = userId ? await assetBytesForOwner(tokenId,userId) : tokenId ? await assetBytesForToken(tokenId) : 0;
-  return bytes >= cap;
+  return (await assetBytesForToken(tokenId)) >= cap;
 }

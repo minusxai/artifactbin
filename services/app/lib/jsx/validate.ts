@@ -6,14 +6,10 @@
  * give the "static" guarantee for free — this pass enforces it.
  */
 import { parseRowRef } from '@/lib/story/row-scope';
-import {validateManagedIframeSource} from '@/lib/story/managed-iframe-source';
-import { isReactiveExpression, reactiveNames, REACTIVE_BOOLEAN_PROPS } from './reactive';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 // Shared with the render-time gate in lib/story-ui/interpreter.tsx — see
 // lib/jsx/url-attrs.ts for why these must not be maintained separately.
 import { URL_ATTRS, URL_LIST_ATTRS, SVG_PAINT_ATTRS, paintHasExternalUrl } from './url-attrs';
-import {hasDangerousScheme, listHasDangerousScheme} from './url-attrs';
-export {hasDangerousScheme, listHasDangerousScheme} from './url-attrs';
 import { DANGEROUS_TAGS } from './dangerous-tags';
 import { STORY_COMPONENT_NAMES } from '@/lib/data/story/story-components';
 import type { JsxNode, JsxElement, ValidationError, ValidateOptions } from './types';
@@ -39,6 +35,29 @@ const DENIED_ATTRS = immutableSet(['dangerouslysetinnerhtml', 'ref', 'key', 'src
 // alias (<Param>); keep this list explicit so unrelated data props are never rejected by suffix.
 const INLINE_STYLE_ATTRS = immutableSet(['style', 'labelstyle']);
 
+// `data:image/...` is allowed (inline images); other `data:` (e.g. text/html) is not.
+const DANGEROUS_URL = /^(javascript|vbscript|data):/i;
+const SAFE_DATA_URL = /^data:image\//i;
+
+/**
+ * True when a URL value carries a dangerous scheme. Browsers strip ASCII control chars and
+ * spaces INSIDE the scheme before resolving (`java\tscript:` runs as `javascript:`), so the
+ * check normalizes the same way instead of trusting the raw string.
+ */
+export function hasDangerousScheme(url: string): boolean {
+  // eslint-disable-next-line no-control-regex -- deliberately mirrors browser scheme normalization
+  const normalized = url.replace(/[\x00-\x20]/g, '');
+  return DANGEROUS_URL.test(normalized) && !SAFE_DATA_URL.test(normalized);
+}
+
+/** Scheme-check every URL in a srcset/ping-style list ("url descriptor, url descriptor"). */
+export function listHasDangerousScheme(value: string): boolean {
+  return value.split(',').some(entry => {
+    const url = entry.trim().split(/\s+/)[0];
+    return !!url && hasDangerousScheme(url);
+  });
+}
+
 export function validateJsx(nodes: JsxNode[], options: ValidateOptions): ValidationError[] {
   const components = new Set(options.components);
   // Case-insensitive: tags are compared lowercased below, so an allowlist may
@@ -61,35 +80,13 @@ function walk(
   parent?: string,
 ): void {
   if (node.type === 'expression') {
-    if (!node.value.static && isReactiveExpression(node.value.reactive)) {
-      if (!inColumn && reactiveNames(node.value.reactive).fields.length) errors.push({message: 'Row expressions belong inside a DataTable Column', start: node.start, end: node.end});
-      return;
-    }
     if (!node.value.static && !(inColumn && parseRowRef(node.source.trim()))) {
       errors.push({ message: `Expression child must be a JSON literal, got ${node.value.exprType}`, start: node.start, end: node.end });
     }
     return;
   }
   if (node.type === 'text') return;
-  if (node.control) {
-    const fragment = node.control.kind === 'fragment';
-    if (node.tag !== (fragment ? '__mx_fragment' : '__mx_condition') || node.attributes.length
-      || (node.control.kind !== 'fragment' && (node.children.length !== 2 || !isReactiveExpression(node.control.test)))) {
-      errors.push({message: 'Invalid conditional structure', start: node.start, end: node.end});
-      return;
-    }
-    if (node.control.kind !== 'fragment' && !inColumn && reactiveNames(node.control.test).fields.length) errors.push({message: 'Row conditions belong inside a DataTable Column', start: node.start, end: node.end});
-    for (const child of node.children) walk(child, components, allowedHtml, stylePolicy, errors, inSvg, inColumn, parent);
-    return;
-  }
   validateElement(node, components, allowedHtml, stylePolicy, errors, inSvg);
-  if(node.tag==='Iframe') {
-    try {validateManagedIframeSource(node);} catch(error) {errors.push({message:error instanceof Error?error.message:String(error),tag:node.tag,start:node.start,end:node.end});}
-    return;
-  }
-  for (const attr of node.attributes) if (!inColumn && !attr.value.static && isReactiveExpression(attr.value.reactive) && reactiveNames(attr.value.reactive).fields.length) {
-    errors.push({message: 'Row expressions belong inside a DataTable Column', start: attr.start, end: attr.end});
-  }
   const childrenInSvg = inSvg || (!node.isComponent && node.tag.toLowerCase() === 'svg');
   for (const child of node.children) walk(child, components, allowedHtml, stylePolicy, errors, childrenInSvg, node.tag === 'Column' ? parent === 'DataTable' : node.tag === 'DataTable' ? false : inColumn, node.tag);
 }
@@ -103,19 +100,6 @@ function validateElement(
   inSvg: boolean,
 ): void {
   const lower = el.isComponent ? '' : el.tag.toLowerCase();
-  if(el.tag==='Sandbox') {
-    const attr=(name:string)=>el.attributes.find(a=>a.name===name);
-    const value=(name:string)=>{const a=attr(name);return a?.value.static?a.value.json:undefined;};
-    const reject=(message:string)=>errors.push({message:`Sandbox: ${message}`,tag:el.tag,start:el.start,end:el.end});
-    for(const name of ['html','script']) {
-      const text=value(name);
-      if(typeof text!=='string' || text.length>262144) reject(`${name} must be a static string of at most 262144 characters`);
-    }
-    const height=value('height');
-    if(attr('height') && (typeof height!=='number' || !Number.isFinite(height) || height<100 || height>4096)) reject('height must be a number from 100 to 4096');
-    if(el.children.some(n=>n.type!=='text' || n.value.trim())) reject('put internal HTML in html=, not JSX children');
-    if(attr('api') || attr('store')) reject('API and store configuration are platform-owned');
-  }
   /*
    * Document-level tags have ONE home: `<Helmet>` (lib/story/helmet.ts). In the
    * body they are not a second opinion, they are a second door —
@@ -131,11 +115,11 @@ function validateElement(
    */
   /** What an author should reach for instead of a denied tag. */
   const DENIED_ALTERNATIVES: Record<string, string> = {
-    form: 'use <input>/<select> signal bindings and <Button run="$mutation"> without a <form>; use managed <Iframe> for custom DOM',
-    iframe: 'use managed <Iframe> for isolated DOM/canvas, or <Video> for supported video hosts',
+    form: 'the controls work without a <form> (<input>, <select>, <button>); drive them from the <Helmet> script',
+    iframe: 'use the <Video> component for the sanctioned embed hosts',
     object: 'use the <Video> component, or <img>/<video> with a ref: source',
     embed: 'use the <Video> component, or <img>/<video> with a ref: source',
-    script: 'ONE isolated <Helmet><script>{`…`}</script></Helmet> has no parent DOM/network; use managed <Iframe> for DOM/canvas/CDN bundles',
+    script: 'a document carries ONE script, in <Helmet><script>{`…`}</script></Helmet>',
     link: 'no external stylesheets or fonts — style with className, or <Helmet><style>',
     meta: '<meta name content /> belongs in <Helmet>; http-equiv is the document\'s own to set',
     base: 'the document sets its own base target; relative links already resolve',
@@ -206,7 +190,6 @@ function validateElement(
   for (const a of el.attributes) {
     // Spread / non-static attribute values.
     if (!a.value.static) {
-      if (REACTIVE_BOOLEAN_PROPS.has(a.name) && isReactiveExpression(a.value.reactive)) continue;
       errors.push({
         message: `Attribute "${a.name}" must be a JSON literal, got ${a.value.exprType}`,
         attr: a.name, tag: el.tag, start: a.start, end: a.end,

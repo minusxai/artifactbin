@@ -1,4 +1,3 @@
-import {appFetch as fetch} from '@/web/api-origin';
 import { useCallback, useEffect, useState } from 'react';
 import { useRefreshable } from '@/lib/navigation';
 import { Navigate } from 'react-router';

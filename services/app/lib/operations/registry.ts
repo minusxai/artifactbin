@@ -55,7 +55,7 @@ export interface OpReply {
 /** What every `run` gets: who is calling, from where, and how to attribute them. */
 export interface OpContext {
   actor: TokenActor;
-  /** The public document origin — every `url` in a reply is built from it. */
+  /** The caller's own origin — every `url` in a reply is built from it. */
   base: string;
   /** The transport request passed through to the publish pipeline. */
   request: Request;
