@@ -61,6 +61,15 @@ function savedDefinition() {
   return write ? parseDatasetDefinition(write.body.dataset) : undefined;
 }
 describe('dataset editor', () => {
+  it('authenticates the browser table query with the shared CSRF proof', async () => {
+    render(<DatasetCatalogView id="data-1" catalog={catalog} canEdit={false} />);
+    await screen.findByLabelText('Table preview');
+    const call = vi.mocked(fetch).mock.calls.find(([url]) => String(url).endsWith('/tables'));
+    expect(call).toBeDefined();
+    expect(new Headers(call![1]?.headers).get('x-artifactbin-csrf')).toBe('1');
+    expect(call![1]?.credentials).toBe('same-origin');
+  });
+
   it('lets a reader browse every exposed schema, table and column without editing or fetching raw discovery', async () => {
     render(<DatasetCatalogView id="data-1" catalog={{...catalog,tables:[catalog.tables[0],{...tables[1],source:{schema:'crm',table:'people'}}]}} canEdit={false} />);
     await screen.findByLabelText('Table preview');
