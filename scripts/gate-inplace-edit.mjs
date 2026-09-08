@@ -81,19 +81,23 @@ const browser = await chromium.launch();
     window.scrollTo(0, 900);
   });
   await sleep(700);
-  const readingAt = await frame().evaluate(() => window.scrollY);
-  ok(readingAt > 500, `the reader is somewhere specific before editing (scrollY ${readingAt})`);
+  const initialReadingAt = await frame().evaluate(() => window.scrollY);
+  ok(initialReadingAt > 500, `the reader is somewhere specific before editing (scrollY ${initialReadingAt})`);
 
   // ENTER
   await openArtifactControls(page);
+  // Revealing hidden reader controls intentionally scrolls. Baseline the Edit
+  // action itself, after that gesture, rather than attributing it to editing.
+  const readingAt = await frame().evaluate(() => window.scrollY);
   await page.click('[aria-label="Edit artifact"]');
   await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 20000 });
   await sleep(3000);
   ok(await page.evaluate(() => window.__swaps) === 0
     && await page.evaluate(() => document.querySelector('[data-mx-inline-story]')?.__probe) === 'same-document',
     'entering edit did not replace the document');
-  ok(Math.abs(await frame().evaluate(() => window.scrollY) - readingAt) < 5,
-    'and did not move the reader');
+  const afterEntering = await frame().evaluate(() => window.scrollY);
+  ok(Math.abs(afterEntering - readingAt) < 5,
+    `and did not move the reader (${readingAt} → ${afterEntering})`);
   ok(await frame().evaluate(() => !!document.querySelector('#lede')?.isContentEditable),
     'the document itself became editable');
 
@@ -126,7 +130,8 @@ const browser = await chromium.launch();
   const after = await (await api(start.id, start.token, '', {})).json();
   ok(after.version > before.version, `typing persists with no save (v${before.version} → v${after.version})`);
   ok(after.markup.includes('EDITED IN PLACE'), 'the typed text reached the stored source');
-  ok(Math.abs(await frame().evaluate(() => window.scrollY) - readingAt) < 5, 'and typing did not move the reader');
+  const afterTyping = await frame().evaluate(() => window.scrollY);
+  ok(Math.abs(afterTyping - readingAt) < 5, `and typing did not move the reader (${readingAt} → ${afterTyping})`);
 
   // AN AGENT WRITES, into the paragraph the cursor is parked in
   const head = await (await api(start.id, start.token, '', {})).json();
