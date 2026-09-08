@@ -2,6 +2,15 @@
 
 ## Operational notes
 
+- **Capture routing after same-origin cutover:** exports default to
+  `APP__PUBLIC_BASE_URL`, not a loopback alias. The browser service must resolve
+  that host and trust its TLS certificate. An explicit `EXPORT__INTERNAL_ORIGIN`
+  may select internal HTTP routing but must retain the same host and port;
+  mismatches now fail startup clearly. Remove old `127.0.0.1`/service-name
+  overrides or arrange browser-side DNS/routing for the canonical host before
+  rollout. This does not change proxy host authorization. Failed HTTP responses
+  are capture failures, never successful images cached as document previews.
+
 - **Storage**: ONE env, `DATABASE_URL`, and the URL is the type. Unset ⇒
   embedded [PGLite](https://pglite.dev) in `./data/pglite` (no database
   server); `pglite://<path>` ⇒ PGLite there (`pglite://memory` for RAM);

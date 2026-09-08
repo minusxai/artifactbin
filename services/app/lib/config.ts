@@ -107,7 +107,6 @@ export function unknownEnvNames(
  * so it never reaches `envNamesRead` and the boot notice calls it unread.
  */
 const APP_PORT = env('APP', 'PORT');
-const THIS_PROCESS = `http://127.0.0.1:${APP_PORT ?? '3000'}`;
 
 /** Operational off-switch for credential-less live subscriptions; reads still work. */
 export const LIVE_UPDATES_ANON_ENABLED = env('FEATURE_FLAG', 'LIVE_UPDATES_ANON_ENABLED') !== 'false';
@@ -305,16 +304,20 @@ const assetsOriginSetting = env('APP', 'ASSETS_ORIGIN');
 export const ASSETS_ORIGIN = assetsOriginSetting ? parseAssetsOrigin(PUBLIC_BASE_URL, null, assetsOriginSetting) : null;
 
 /**
- * Where the EXPORT browser reaches this process. Internal by default, for the
- * local browser: a screenshot of our own page has no business leaving the
- * host, and a certificate the browser
- * does not trust ends the render — measured behind a TLS reverse proxy,
- * `net::ERR_CERT_AUTHORITY_INVALID` on every export, which is the ordinary
- * self-signed / internal-CA self-host. Set it explicitly when the browser is
- * somewhere else (`BROWSER__SERVICE_URL`), where this must resolve from THAT side.
- * Blank values, as shipped in .env.example, also use the local default.
+ * Capture uses the same admitted host as ordinary reads. A loopback alias is
+ * not an alternate authority: the proxy correctly refuses it. Deployments may
+ * select HTTP behind TLS termination, but must keep the public host and port
+ * and arrange DNS/routing from the browser service; never disable host checks.
  */
-export const EXPORT_INTERNAL_ORIGIN = env('EXPORT', 'INTERNAL_ORIGIN')?.trim() || THIS_PROCESS;
+export const EXPORT_INTERNAL_ORIGIN = (() => {
+  const configured=env('EXPORT','INTERNAL_ORIGIN')?.trim();
+  if(!configured)return new URL(PUBLIC_BASE_URL).origin;
+  let url:URL;
+  try{url=new URL(configured);}catch{throw new Error('EXPORT__INTERNAL_ORIGIN must be an HTTP(S) origin using the APP__PUBLIC_BASE_URL host and port.');}
+  if(!['http:','https:'].includes(url.protocol)||url.host!==new URL(PUBLIC_BASE_URL).host||url.username||url.password||url.pathname!=='/'||url.search||url.hash)
+    throw new Error('EXPORT__INTERNAL_ORIGIN must be an HTTP(S) origin using the APP__PUBLIC_BASE_URL host and port; configure browser-side DNS/routing instead of a different hostname.');
+  return url.origin;
+})();
 
 /**
  * Mixpanel product analytics (components/MixpanelClient). Unset token ⇒

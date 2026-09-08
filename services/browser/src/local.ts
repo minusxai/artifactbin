@@ -60,7 +60,8 @@ export function createBrowser(opts: { idleShutdownMs?: number } = {}): BrowserSe
         const origin = new URL(req.url).origin;
         await page.route('**/*', (route) => { const t = route.request().url(); return t.startsWith(origin) || t.startsWith('data:') ? route.continue() : route.abort(); });
       }
-      await page.goto(req.url, { waitUntil: 'load', timeout }).catch((e) => { throw new NavigationError((e as Error).message); });
+      const response=await page.goto(req.url, { waitUntil: 'load', timeout }).catch((e) => { throw new NavigationError((e as Error).message); });
+      if(!response?.ok())throw new NavigationError(`Capture navigation returned ${response?.status()??'no HTTP response'}`);
       if (req.injectCss) await page.addStyleTag({ content: req.injectCss }).catch(() => {});
       const surface = page.locator(req.selector).first();
       await surface.waitFor({ timeout });

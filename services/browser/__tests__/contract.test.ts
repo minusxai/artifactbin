@@ -27,7 +27,7 @@ const server = serveBrowser(local);
 const listening = server.listen(0);
 const remote = browserClient(listening.url, { deadlineMs: 20_000 });
 beforeAll(async () => {
-  pages = await withHttpServer((_q, s) => { s.writeHead(200, { 'content-type': 'text/html' }); s.end(PAGE); });
+  pages = await withHttpServer((q, s) => { s.writeHead(q.url==='/wrong-host'?421:200, { 'content-type': 'text/html' }); s.end(PAGE); });
   url = `${pages.base}/a/x`;
 });
 afterAll(async () => { await local.close?.(); await server.close(); await pages.close(); });
@@ -102,6 +102,10 @@ describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', re
   it('names a page that cannot be reached', async () => {
     const r = await svc.render({ ...base(), url: 'http://127.0.0.1:1/nope', timeoutMs: 2000 });
     expect(!r.ok && r.reason).toBe('navigation');
+  });
+  it('does not turn a rendered HTTP refusal into a successful cached image', async () => {
+    const result=await svc.render({...base(),url:`${pages.base}/wrong-host`});
+    expect(result).toEqual({ok:false,reason:'navigation',detail:expect.stringContaining('421')});
   });
   it('names a selector that never appears as failed', async () => {
     const r = await svc.render({ ...base(), selector: '#never', timeoutMs: 1000 });
