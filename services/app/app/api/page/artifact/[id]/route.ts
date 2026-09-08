@@ -15,6 +15,7 @@ import { verifyExportKey } from '@/lib/export-key';
 import { baseUrl, json } from '@/lib/http';
 import { ASSETS_ORIGIN } from '@/lib/config';
 import { prepareStoryRuntime } from '@/lib/story/prepare-runtime.server';
+import { forkedFromCredit } from '@/lib/story/fork-credit.server';
 import { webAssetsForSource } from '@/lib/web-assets';
 import { assetsPath, mutatePath, queryPath } from '@/lib/story/markup-csp';
 import { declaresMutations } from '@/lib/story/helmet';
@@ -95,7 +96,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // anonymous reader still gets the count — it is the number, not the button,
   // that everyone can see.
   const viewerId = actor.viewer?.userId ?? null;
-  const authorUsername = await ownerUsername(artifact.user_id);
+  const [authorUsername, forkedFrom] = await Promise.all([ownerUsername(artifact.user_id), forkedFromCredit(artifact.forked_from)]);
   const compiledCss = isDoc ? await currentStoryCss(meta, artifact.source) : meta.compiledCss ?? null;
   const declared = isDoc && artifact.source ? declarationsForRow(artifact) : null;
   const dataflow = declared ? { ...declared, values: readUrlValues(new URL(request.url).search, declared.flow) } : null;
@@ -124,7 +125,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       editId: artifact.edit_id,
       format: artifact.format,
       title: artifact.title,
-      author: authorUsername ? { username: authorUsername } : null,
+      author: { username: authorUsername, forkedFrom },
       ...(runtime ? { runtime } : {}),
       source: artifact.format==='dataset'&&role!=='owner'&&role!=='editor'?null:artifact.source,
       content: isDoc ? '' : artifact.format === 'dataset' ? JSON.stringify(await loadDatasetRows(artifact)) : artifact.content,

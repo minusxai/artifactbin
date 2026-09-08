@@ -63,7 +63,8 @@ export function withInitialStory(html: string, runtime: PreparedStoryRuntime, id
   // sibling, so its removal atomically reveals the committed app document.
   // Only the real first body child is hidden, never an authored colliding id.
   const handoffCss = `body > #root:first-child{display:none!important}[data-mx-initial-story]{position:relative;min-height:100vh;box-sizing:border-box;padding-top:0}@media(min-width:640px){[data-mx-initial-story]{padding-top:${APP_BAR_H}px}}`;
-  const metadata = `<meta property="og:title" content="${escapeHtml(runtime.title)}">`
+  const fontPreloads = (runtime.fontPreloads ?? []).map(url => `<link rel="preload" href="${escapeHtml(url)}" as="font" type="font/woff2" crossorigin>`).join('');
+  const metadata = fontPreloads + `<meta property="og:title" content="${escapeHtml(runtime.title)}">`
     + (description ? `<meta name="description" content="${escapeHtml(description)}"><meta property="og:description" content="${escapeHtml(description)}">` : '')
     + `<meta property="og:image" content="${escapeHtml(origin)}/a/${escapeHtml(id)}/export?mode=card"><meta name="twitter:card" content="summary_large_image">`
     + `<link rel="help" href="${escapeHtml(origin)}/docs" title="Agents: read this first to edit any artifact here">`

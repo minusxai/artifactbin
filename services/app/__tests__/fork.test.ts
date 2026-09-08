@@ -13,6 +13,7 @@ import { agentCookie, useAppHarness } from './harness';
 import { POST as forkRoute } from '@/app/api/my/artifacts/[id]/fork/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
+import { GET as pageRoute } from '@/app/api/page/artifact/[id]/route';
 import { GET as getMineRoute } from '@/app/api/my/artifacts/[id]/route';
 import { GET as getSharingRoute, PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { GET as versionsMineRoute } from '@/app/api/my/artifacts/[id]/versions/route';
@@ -300,6 +301,22 @@ describe('POST /api/my/artifacts/:id/fork — what does not travel', () => {
  * for a reader to tell those three apart with.
  */
 describe('the fork credit line', () => {
+  it('preserves page provenance for anonymous authors and redacts every non-public source', async () => {
+    const w = await world();
+    asSession({ id: w.bob.id, email: w.bob.email });
+    const copy = (await (await fork(w.doc.id)).json()) as { id: string };
+    const db = await getDb();
+    await db.query('UPDATE artifacts SET user_id = NULL, visibility = $2 WHERE id = $1', [copy.id, 'public']);
+    noSession();
+    const author = async () => (await (await pageRoute(new Request(`${BASE}/api/page/artifact/${copy.id}`), params(copy.id))).json()).surface.author;
+    expect(await author()).toMatchObject({ username: null, forkedFrom: { href: expect.stringContaining(w.doc.id) } });
+    for (const visibility of ['unlisted', 'private']) {
+      await db.query('UPDATE artifacts SET visibility = $2 WHERE id = $1', [w.doc.id, visibility]);
+      expect(await author()).toEqual({ username: null, forkedFrom: { label: 'a document that is not public', href: null } });
+    }
+    await db.query('DELETE FROM artifacts WHERE id = $1', [w.doc.id]);
+    expect(await author()).toEqual({ username: null, forkedFrom: { label: 'a document that is not public', href: null } });
+  });
   const served = async (id: string, query = '') =>
     (await rawRoute(new Request(`${BASE}/a/${id}/raw${query}`), params(id))).text();
 

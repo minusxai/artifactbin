@@ -15,6 +15,7 @@ import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
 import { BOOTSTRAP_ID, createAppServer, withBootstrap, withInitialStory } from '../app';
 import { prepareStoryRuntime } from '@/lib/story/prepare-runtime.server';
+import { criticalStoryFonts } from '@/lib/data/story/story-fonts';
 import { useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
@@ -36,6 +37,13 @@ async function world() {
 }
 
 describe('inlined page data', () => {
+  it('discovers only the theme critical fonts as crossorigin preloads before body markup', async () => {
+    const runtime = await prepareStoryRuntime({source:'<h1>Headline</h1>',compiledCss:null,theme:'manuscript',colorMode:'light',refData:{},title:'Fonts'});
+    const html = withInitialStory('<html><head></head><body><div id="root"></div></body></html>',runtime,'ABC123');
+    const head = html.split('</head>')[0];
+    const urls = [...head.matchAll(/<link rel="preload" href="([^"]+)" as="font" type="font\/woff2" crossorigin>/g)].map(match=>match[1]);
+    expect(urls).toEqual(criticalStoryFonts('manuscript').map(font=>font.url));
+  });
   it('keeps SSR as the sole in-flow document until the captured handoff is removed', async () => {
     const runtime = await prepareStoryRuntime({source:'<h1>Stable first paint</h1><div id="root">Author collision</div>',compiledCss:null,theme:null,colorMode:'light',refData:{},title:'Stable'});
     const html = withInitialStory('<html><head></head><body><div id="root"><main style="min-height:100vh">Lazy app</main></div></body></html>',runtime,'ABC123');

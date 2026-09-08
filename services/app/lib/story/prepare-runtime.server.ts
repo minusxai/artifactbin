@@ -7,7 +7,7 @@ import { resolveStoryMode } from '@/lib/data/story/story-themes';
 import { loadStorySsr } from './ssr.server';
 import { documentFonts, documentFontCss } from './document-fonts';
 import { webFontAssets } from '@/lib/webfonts';
-import { getStoryFontCss, storyFontFaceCss } from '@/lib/data/story/story-fonts';
+import { criticalStoryFonts, getStoryFontCss, storyFontFaceCss } from '@/lib/data/story/story-fonts';
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
 import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
@@ -45,6 +45,7 @@ export async function prepareStoryParts(input: StoryDocumentInput) {
     data, baseCss, compiledCss: input.compiledCss, authorCss: helmet.style,
     authorScript: helmet.script && !/<\/script/i.test(helmet.script) ? helmet.script : null,
     theme: input.theme, title,
+    fontPreloads: [...new Set([...criticalStoryFonts(input.theme ?? undefined), ...importedFaces.filter(face => face.preload)].map(face => face.url))],
   };
   return { runtime, split, helmet, mode, title, glyphs, docFonts, importedFaces };
 }

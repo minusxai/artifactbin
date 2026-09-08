@@ -34,7 +34,7 @@ import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } 
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
 import { STORY_ROOT_ATTR } from '@/lib/story-surface';
 import { escapeHtml, renderReaderChrome, type ReaderForkedFrom, type ReaderReactions } from '@/lib/story/reader-chrome';
-import { criticalStoryFonts, getStoryFontCss, storyFontFaceCss, STORY_FONTS_ATTR } from '@/lib/data/story/story-fonts';
+import { getStoryFontCss, storyFontFaceCss, STORY_FONTS_ATTR } from '@/lib/data/story/story-fonts';
 import { documentFonts, documentFontCss } from './document-fonts';
 import { webFontAssets } from '@/lib/webfonts';
 import { resolveStoryMode } from '@/lib/data/story/story-themes';
@@ -423,8 +423,8 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
   // The families this document ASKED for (Helmet meta), already resolved and
   // copied at publish (lib/webfonts) — served from this origin like a bundled
   // face, and preloaded on the same rule (the latin upright only).
-  const fontPreloads = [...criticalStoryFonts(theme ?? undefined), ...importedFaces.filter((f) => f.preload)]
-    .map((f) => `<link rel="preload" href="${escapeHtml(f.url)}" as="font" type="font/woff2" crossorigin>`)
+  const fontPreloads = (prepared.fontPreloads ?? [])
+    .map((url) => `<link rel="preload" href="${escapeHtml(url)}" as="font" type="font/woff2" crossorigin>`)
     .join('');
 
   const styles = [

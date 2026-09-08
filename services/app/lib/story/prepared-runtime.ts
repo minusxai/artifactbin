@@ -10,4 +10,6 @@ export interface PreparedStoryRuntime {
   authorScript: string | null;
   theme: StoryThemeName | null;
   title: string;
+  /** Cached critical font URLs for discovery in the initial server head. */
+  fontPreloads?: string[];
 }
