@@ -48,7 +48,8 @@ export async function startDocument(base, headers = {}, fetchImpl = fetch) {
  * The exchange happens in the first-party main document, never an i. frame.
  */
 export async function becomeOwner(page, base, token) {
-  await page.goto(`${base}/`, { waitUntil: 'load' });
+  // Establish the main document; decorative home images are not session setup.
+  await page.goto(`${base}/`, { waitUntil: 'domcontentloaded' });
   const app=page;
   await app.locator('#root').waitFor({state:'attached'});
   const status = await app.locator('body').evaluate(async (_,t) => (await fetch('/api/session/token', {
@@ -57,4 +58,9 @@ export async function becomeOwner(page, base, token) {
     body: JSON.stringify({ token: t }),
   })).status, token);
   if (status !== 204) throw new Error(`could not adopt the token into a session (${status})`);
+  const session=await app.evaluate(async()=>{
+    const response=await fetch('/api/page/session',{headers:{'x-artifactbin-csrf':'1'}});
+    return response.ok?response.json():null;
+  });
+  if(!['anon','account'].includes(session?.kind))throw new Error('adopted token did not establish a validated browser session');
 }

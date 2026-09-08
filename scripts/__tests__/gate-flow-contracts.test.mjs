@@ -44,3 +44,16 @@ it('stubs only thumbnail images in the fake-DNS auth fixture and preserves annot
  expect(annotations).toContain("'Escape dismisses artifact controls before interacting with the rail'");
  expect(annotations).toContain("getByLabel('Dismiss artifact controls',{exact:true}).click()");
 });
+it('keeps the navigation positive control executable only in a dedicated hash-authorized fixture',()=>{
+ const gate=readFileSync(new URL('../gate-managed-iframe.mjs',import.meta.url),'utf8');
+ expect(gate).toContain("page.goto(base+'/managed-positive-fixture')");
+ expect(gate).toContain("createHash('sha256').update(positiveScript)");
+ expect(gate).toContain("frame-src 'self'");
+ expect(gate).toContain("nested author cannot navigate to first-party application origin");
+ expect(gate).not.toContain("await page.evaluate(url=>{const frame=document.createElement('iframe')");
+});
+it('does not block token adoption on unrelated home image load completion',()=>{
+ const helper=readFileSync(new URL('../lib/start-doc.mjs',import.meta.url),'utf8');
+ expect(helper).toContain("page.goto(`${base}/`, { waitUntil: 'domcontentloaded' })");
+ expect(helper).toContain("if (status !== 204) throw");
+});

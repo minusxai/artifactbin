@@ -9,7 +9,7 @@ import {createServer} from 'node:http';
 import {request as httpRequest} from 'node:http';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
-import {randomBytes} from 'node:crypto';
+import {randomBytes,createHash} from 'node:crypto';
 import {chromium,firefox,webkit} from './lib/gate-browser.mjs';
 import {startDocument} from './lib/start-doc.mjs';
 
@@ -28,6 +28,11 @@ const backend=`http://127.0.0.1:${backendPort}`,cdn=`http://127.0.0.1:${cdnPort}
 // Default CI Chromium has no third-party DNS dependency. The explicit optional
 // cross-engine probes use the same nip.io mechanism as trusted-controls.
 const hostname=engineName==='chromium'?'artifactbin.test':'127.0.0.1.nip.io',base=`https://${hostname}:${port}`,controls=`https://i.${hostname}:${port}`,assets=`https://assets.${hostname}:${port}`;
+// Explicit control document: keep frame-src self + opaque allow-scripts sandbox,
+// but authorize exactly its navigation script. Production app CSP is untouched.
+const positiveScript='location.href='+JSON.stringify(base+'/managed-positive');
+const positiveCsp=`default-src 'none'; frame-src 'self'; script-src 'sha256-${createHash('sha256').update(positiveScript).digest('base64')}'; object-src 'none'; base-uri 'none'`;
+const positiveSrcdoc=('<script>'+positiveScript+'</script>').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
 const hits=new Map(),wire=[];
 const fixture=createServer((req,res)=>{
   hits.set(req.url,(hits.get(req.url)??0)+1);
@@ -44,6 +49,13 @@ const fixture=createServer((req,res)=>{
 execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=artifactbin.test','-keyout',join(scratch,'key.pem'),'-out',join(scratch,'cert.pem')],{stdio:'ignore'});
 const tls=httpsServer({key:readFileSync(join(scratch,'key.pem')),cert:readFileSync(join(scratch,'cert.pem'))},(req,res)=>{
   wire.push({host:req.headers.host,url:req.url,method:req.method});
+  if(req.headers.host===new URL(base).host&&req.url==='/managed-positive-fixture'){
+    res.writeHead(200,{'Content-Type':'text/html','Content-Security-Policy':positiveCsp,'Cache-Control':'no-store'});
+    res.end('<!doctype html><iframe title="Navigation positive control" sandbox="allow-scripts" srcdoc="'+positiveSrcdoc+'"></iframe>');return;
+  }
+  if(req.headers.host===new URL(base).host&&req.url==='/managed-positive'){
+    res.writeHead(200,{'Content-Type':'text/plain','Cache-Control':'no-store'});res.end('control reached');return;
+  }
   const upstream=httpRequest(backend+req.url,{method:req.method,headers:{...req.headers,'x-forwarded-host':req.headers.host,'x-forwarded-proto':'https'}},answer=>{res.writeHead(answer.statusCode,answer.headers);answer.pipe(res);});
   upstream.on('error',()=>{res.writeHead(502);res.end();});req.pipe(upstream);
 });
@@ -92,9 +104,10 @@ try {
     await page.getByLabel('Count',{exact:true}).filter({hasText:'1'}).waitFor();
   }
   assert.equal(wire.filter(row=>row.url==='/managed-denied').length,0,'nested author cannot navigate to first-party application origin');
-  // Positive control: the same top-level policy admits this destination for a
-  // single sandbox. Only the protective wrapper supplies the extra refusal.
-  await page.evaluate(url=>{const frame=document.createElement('iframe');frame.sandbox='allow-scripts';frame.srcdoc='<script>location.href='+JSON.stringify(url)+'<\/script>';document.body.append(frame);},base+'/managed-positive');
+  // The exact-script fixture demonstrates navigation is otherwise reachable
+  // under the same frame-src and sandbox flags, without loosening app scripts.
+  await page.goto(base+'/managed-positive-fixture');
+  assert.equal(await page.getByTitle('Navigation positive control').getAttribute('sandbox'),'allow-scripts');
   for(let i=0;i<100&&!wire.some(row=>row.url==='/managed-positive');i++)await new Promise(resolve=>setTimeout(resolve,20));
   assert(wire.some(row=>row.url==='/managed-positive'),'single-frame navigation positive control reached server');
   await page.goto(base+'/a/'+seed.id+'/raw');
