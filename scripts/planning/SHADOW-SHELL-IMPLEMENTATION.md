@@ -9,6 +9,7 @@ Old split-unified-shell work is paused and must not be merged.
 - Browser address and first-party authentication remain on the main origin.
 - One reusable trusted Shadow DOM host holds the topbar on every route and artifact actions/dialogs where applicable. Author markup remains top-level outside it.
 - Author code stays in the existing opaque, protected sandbox frames. Shadow DOM does not replace that security boundary.
+- With the strict first-party CSP, the protective outer author wrapper must be a fixed HTTP document with its own sandbox/CSP; the inner author realm remains opaque sandboxed `srcdoc`. Do not enable inline author scripts in the parent to make startup work.
 - Direct first-party routes and one client router; no whole-page controls iframe or geometry-mirroring protocol.
 - APP__SSR_ENABLED=false by default. Optional dynamic SSR changes initial body rendering only; static logged-out landing remains possible. Auth, ACL, metadata and security headers remain server decisions.
 - No production deployment in this implementation task. End deliverable: tested PR with empty body.
@@ -42,6 +43,14 @@ Old split-unified-shell work is paused and must not be merged.
 - restore_interactions (new task): same-origin server browser proof only; separate worktree. Older work is not resumed.
 
 All stage results must record observed commands/output. A prototype pass is not a production signoff.
+
+## Integration review, September 8
+
+- Client commit 45796c7 independently rerun after integration: validate passed; full UI 1,251 passed, one intentionally pending top-level artifact seed failed. Session bootstrap, loading/retry, shared resolved HomeView and scroll/sticky fixes are present; real-browser geometry review still required.
+- Review caught a login race: busy was cleared before session verification completed. Followup 7a5c3dd adds a synchronous submit guard through the complete flow and a deferred-response regression; integrated as 148d4ba.
+- Artifact commit 3eef918 integrated for cross-module testing, **not accepted as fully reviewed**. Large test deletions need retained-behavior restoration/mapping. Review also found a no-comment-access sidebar condition left on the retired controls-only mode and incomplete route failure UI. Agent is correcting these before acceptance.
+- Strict CSP reproduction: `scripts/planning/strict-parent-wrapper.mts`, port 5804. In BrowserOS, `/srcdoc` stays pending under parent `script-src 'self'`; `/http` executes author code while parent DOM access throws SecurityError and fetch is blocked. `/http-nav` rejects ancestor navigation, removes the frame on attempted self navigation, retains the parent URL, and records zero fixture requests. This is a prototype (test-only srcdoc setter interception), not the implementation acceptance test. The fixed production wrapper must use a one-time port to receive the trusted-prepared inner document and be retested under the real app CSP.
+- Final auth retirement remains open: host-only human session cookie and per-browser disconnect revocation have explicit failing seeds (66407d3, 5f9a934). Old controls-origin config must not silently retain split behavior.
 
 ## Baseline notes
 
