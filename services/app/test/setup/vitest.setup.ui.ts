@@ -24,6 +24,16 @@ global.ResizeObserver = vi.fn().mockImplementation(function (this: any) {
 // HTMLCanvasElement.getContext stub
 HTMLCanvasElement.prototype.getContext = vi.fn(() => null) as any;
 
+// jsdom has no rendering/top layer. This models lifecycle only; browser gates
+// verify the actual CSS/security boundary using native popovers.
+Object.defineProperties(HTMLElement.prototype, {
+  showPopover: { configurable:true, writable:true, value:function(this:HTMLElement) {
+    if (!this.isConnected || !this.hasAttribute('popover')) throw new DOMException('Invalid popover state', 'InvalidStateError');
+    this.setAttribute('data-test-popover-open','');
+  } },
+  hidePopover: { configurable:true, writable:true, value:function(this:HTMLElement) { this.removeAttribute('data-test-popover-open'); } },
+});
+
 // Next.js navigation (AgentHtml's link bridge grabs a router)
 
 /**
@@ -61,10 +71,10 @@ const preventJsdomNavigation = (event: MouseEvent) => {
   if (target) event.preventDefault();
 };
 beforeAll(() => {
-  // React handlers run at their root before this document-level listener, so
-  // link behavior is still exercised; only jsdom's unsupported default
+  // React and the navigation boundary run before this window-level listener,
+  // so link behavior is still exercised; only jsdom's unsupported default
   // full-document navigation is cancelled afterward.
-  document.addEventListener('click', preventJsdomNavigation);
+  window.addEventListener('click', preventJsdomNavigation);
   console.error = (...args: any[]) => {
     const msg = typeof args[0] === 'string' ? args[0] : '';
     if (msg.includes('Warning: ReactDOM.render') || msg.includes('act(') || msg.includes('Not implemented: navigation')) return;
@@ -72,6 +82,6 @@ beforeAll(() => {
   };
 });
 afterAll(() => {
-  document.removeEventListener('click', preventJsdomNavigation);
+  window.removeEventListener('click', preventJsdomNavigation);
   console.error = originalError;
 });

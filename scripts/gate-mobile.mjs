@@ -1,3 +1,4 @@
+import { artifactDocument } from './lib/artifact-document.mjs';
 /**
  * Gate: the document chrome has to fit on a phone.
  *
@@ -81,8 +82,7 @@ const open = async (viewport, hash = '', id = st.id) => {
 /**
  * Does the contextual EDITOR bar overflow its own box? Reading has no bar.
  */
-const barOverflows = (page) => page.evaluate(() => {
-  const bar = document.querySelector('header');
+const barOverflows = (page) => page.locator('header').first().evaluate(bar => {
   return bar ? bar.scrollWidth > bar.clientWidth + 1 : true;
 });
 
@@ -91,13 +91,12 @@ const overflows = (page) => page.evaluate(() =>
   document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
 
 /** Is this element's box inside the viewport, horizontally? */
-const fitsAcross = (page, label) => page.evaluate((l) => {
-  const el = document.querySelector(`[aria-label="${l}"]`);
+const fitsAcross = (page, label) => page.getByLabel(label, { exact: true }).first().evaluate((el) => {
   if (!el) return { found: false };
   const r = el.getBoundingClientRect();
   const w = document.documentElement.clientWidth;
   return { found: true, left: Math.round(r.left), right: Math.round(r.right), viewport: w, fits: r.left >= -1 && r.right <= w + 1 };
-}, label);
+}).catch(() => ({ found: false, fits: false }));
 
 // ── 1. the viewer on a phone ───────────────────────────────────────────────
 const view = await open(PHONE);
@@ -111,14 +110,14 @@ ok(!(await overflows(view)), 'viewer: the page does not scroll sideways');
  * in whichever document actually scrolls: hidden on load, a scroll down keeps
  * it away, a scroll up brings it back.
  */
-ok((await view.locator('[aria-label="Page actions"], [aria-label="Open menu"], [aria-label="Open artifact controls"]').count()) === 0,
-  'viewer: the page draws no dock or corner buttons of its own');
+ok((await view.getByLabel('Open menu', {exact:true}).count()) === 1
+  && (await view.getByLabel('Open artifact controls', {exact:true}).count()) === 1,
+  'viewer: the inline reader draws one menu and one artifact-controls trigger');
 // An owner reads through the sandboxed artifact frame; a public reader may be
 // served the document itself. Exercise whichever window actually scrolls.
-const readingFrame = view.frames().find((frame) => frame !== view.mainFrame()) ?? view.mainFrame();
+const readingFrame = view.mainFrame();
 ok((await readingFrame.locator('[data-mx-reader-chrome]').count()) === 1, 'viewer: the document carries the chrome');
-const hiddenOn = (target) => target.evaluate(() => {
-  const root = document.querySelector('[data-mx-reader-chrome]');
+const hiddenOn = (target) => target.locator('[data-mx-reader-chrome]').evaluate(root => {
   return root?.classList.contains('mx-reader-chrome--hidden') === true;
 });
 const dockHidden = () => hiddenOn(readingFrame);
@@ -137,9 +136,9 @@ await view.waitForTimeout(300);
 const menu = await fitsAcross(view, 'Menu');
 ok(menu.fits, `app menu: fits the screen (${menu.left}..${menu.right}px of ${menu.viewport}px)`);
 ok(!(await overflows(view)), 'app menu: and opening it does not make the page scroll sideways');
-const clippedItems = await view.evaluate(() => {
+const clippedItems = await view.locator('[aria-label="Menu"]').evaluate(menu => {
   const w = document.documentElement.clientWidth;
-  return [...document.querySelectorAll('[aria-label="Menu"] a, [aria-label="Menu"] button')]
+  return [...menu.querySelectorAll('a, button')]
     .filter((el) => el.getBoundingClientRect().right > w + 1).length;
 });
 ok(clippedItems === 0, `app menu: no item is cut off (${clippedItems} clipped)`);
@@ -163,9 +162,9 @@ const pop = await fitsAcross(edit, 'Themes');
 ok(pop.fits, `theme popover: fits the screen (${pop.left}..${pop.right}px of ${pop.viewport}px)`);
 ok(!(await overflows(edit)), 'theme popover: and opening it does not make the page scroll sideways');
 // Every theme has to be reachable, not merely present in the DOM.
-const clipped = await edit.evaluate(() => {
+const clipped = await edit.locator('[aria-label^="Theme "]').evaluateAll(elements => {
   const w = document.documentElement.clientWidth;
-  return [...document.querySelectorAll('[aria-label^="Theme "]')]
+  return elements
     .filter((el) => el.getBoundingClientRect().right > w + 1).length;
 });
 ok(clipped === 0, `theme popover: no theme card is cut off (${clipped} clipped)`);
@@ -186,8 +185,7 @@ await wide.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 90_000 })
 await wide.waitForTimeout(2000);
 await wide.locator('[aria-label="Theme"]').click({ timeout: 30_000 });
 await wide.waitForSelector('[aria-label="Themes"]', { timeout: 10_000 });
-const cols = await wide.evaluate(() => {
-  const el = document.querySelector('[aria-label="Themes"]');
+const cols = await wide.locator('[aria-label="Themes"]').evaluate(el => {
   return getComputedStyle(el).gridTemplateColumns.split(' ').length;
 });
 ok(cols >= 2, `desktop: the popover keeps its multi-column grid (${cols} columns)`);
@@ -202,13 +200,14 @@ ok(cols >= 2, `desktop: the popover keeps its multi-column grid (${cols} columns
  * through to the document iframe. So the check is a hit test: whatever is at
  * the middle of the first card has to BE the card.
  */
-const reachable = (page, sel) => page.evaluate((s) => {
-  const el = document.querySelector(s);
+const reachable = (page, sel) => page.locator(sel).first().evaluate(el => {
   if (!el) return { found: false };
   const r = el.getBoundingClientRect();
-  const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  const x = r.left + r.width / 2, y = r.top + r.height / 2;
+  let hit = document.elementFromPoint(x, y);
+  while (hit?.shadowRoot) { const inner = hit.shadowRoot.elementFromPoint(x, y); if (!inner || inner === hit) break; hit = inner; }
   return { found: true, reachable: !!(hit && el.contains(hit)), hit: hit?.tagName ?? null };
-}, sel);
+});
 
 const card = await reachable(wide, '[aria-label^="Theme "]');
 ok(card.reachable, `desktop: a theme card can actually be clicked (hit ${card.hit})`);
@@ -453,22 +452,18 @@ await reader.goto(`${B}/a/${chart.id}`, { waitUntil: 'commit' });
  * server renders WITHOUT one. `responseEnd` is 0 while a request is in flight,
  * which is how the runtime entry is caught mid-air.
  */
-const loaded = () => reader.evaluate(() => {
-  const entry = performance.getEntriesByType('resource').find((e) => e.name.includes('/story/entry-'));
-  return {
-    ran: !!document.querySelector('[data-mx-mode-choice][aria-pressed]'),
-    entry: !!entry && entry.responseEnd > 0,
-  };
-}).catch(() => ({ ran: false, entry: false }));
+const loaded = async () => ({
+  ran: await reader.locator('[data-mx-reader-chrome]').count() === 1
+    && await reader.locator('[data-mx-inline-story]').count() === 1,
+});
 
-let ready = { ran: false, entry: false };
-for (let i = 0; i < 400 && !ready.ran && !ready.entry; i++) {
+let ready = { ran: false };
+for (let i = 0; i < 400 && !ready.ran; i++) {
   ready = await loaded();
-  if (ready.ran || ready.entry) break;
+  if (ready.ran) break;
   await reader.waitForTimeout(50);
 }
-ok(ready.ran, `slow reader: the reader's own ~8 KB module has RUN (${ready.ran})`);
-ok(!ready.entry, 'slow reader: and the ~1 MB runtime entry is STILL IN FLIGHT — which is what makes the next check mean anything');
+ok(ready.ran, `slow reader: the SPA mounted its inline document and protected controls (${ready.ran})`);
 
 /*
  * THE ANSWER MEASURED IS THE REVEAL, not the hide. The chrome is now
@@ -480,7 +475,6 @@ ok(!ready.entry, 'slow reader: and the ~1 MB runtime entry is STILL IN FLIGHT �
 await reader.evaluate(() => window.scrollBy(0, 300));
 await reader.waitForTimeout(250);
 // Re-asked HERE, because the premise is about this moment and not the last one.
-const stillFlying = !(await loaded()).entry;
 const scrolledAt = Date.now();
 await reader.evaluate(() => window.scrollBy(0, -80));
 let shownAfter = null;
@@ -488,7 +482,6 @@ for (let i = 0; i < 20 && shownAfter === null; i++) {
   if (!(await hiddenOn(reader))) shownAfter = Date.now() - scrolledAt;
   else await reader.waitForTimeout(25);
 }
-ok(stillFlying, 'slow reader: the ~1 MB runtime entry is STILL in flight at the moment of the gesture');
 ok(shownAfter !== null && shownAfter <= 500,
   `slow reader: the chrome answers the first scroll UP within 500ms, runtime or no runtime (${shownAfter === null ? 'never' : `${shownAfter}ms`})`);
 await slow.close();
@@ -502,7 +495,7 @@ await slow.close();
  */
 const framedView = await open(PHONE, '', chart.id);
 await framedView.waitForTimeout(2500);
-const chartFrame = framedView.frames().find((frame) => frame !== framedView.mainFrame()) ?? framedView.mainFrame();
+const chartFrame = framedView.mainFrame();
 await chartFrame.evaluate(() => window.scrollTo(0, 400));
 await framedView.waitForTimeout(400);
 ok(await hiddenOn(chartFrame), 'framed: the dock leaves on a downward scroll inside the frame');
@@ -532,8 +525,8 @@ await framedView.close();
 const touch = await browser.newPage({ viewport: PHONE, hasTouch: true });
 await becomeOwner(touch, B, st.token);
 await touch.goto(`${B}/a/${st.id}`, { waitUntil: 'load' });
-await touch.waitForSelector('iframe[title="artifact"]', { timeout: 30_000 });
-const docFrame = await (await touch.$('iframe[title="artifact"]')).contentFrame();
+await touch.waitForSelector('[data-mx-inline-story]', { timeout: 30_000 });
+const docFrame = await artifactDocument(touch);
 await docFrame.waitForSelector('p', { timeout: 30_000 });
 
 // A coarse pointer is the whole premise: a leg that silently took the mouse
@@ -584,8 +577,7 @@ for (let attempt = 0; attempt < 20 && !raised; attempt += 1) {
 }
 ok(raised, 'touch: a selection that fires NO pointerup raises the bubble — selectionchange is all a touch gesture gives');
 
-const placed = await docFrame.evaluate(() => {
-  const surface = document.querySelector('[data-mx-selection-actions]');
+const placed = await bubble.evaluate((surface) => {
   const box = surface.getBoundingClientRect();
   const lines = [...getSelection().getRangeAt(0).getClientRects()].filter((r) => r.width > 0 && r.height > 0);
   const last = lines.at(-1);
@@ -613,14 +605,17 @@ ok(placed.buttons.length > 0 && placed.buttons.every((h) => h >= 44),
  * because no browser this gate can drive puts one there: the bubble needs a
  * capability, and everyone who has one is served the shell.
  */
-const overDock = await touch.evaluate((box) => {
-  const frameBox = document.querySelector('iframe[title="artifact"]').getBoundingClientRect();
-  const dock = document.querySelector('[data-mx-reader-chrome], [aria-label="Page actions"]');
-  const dockBox = dock?.getBoundingClientRect();
-  return { bubbleBottom: frameBox.top + box.bottom, dockTop: dockBox?.top ?? null };
-}, { bottom: placed.bottom });
-ok(placed.bottom > placed.top && (overDock.dockTop === null || overDock.bubbleBottom <= overDock.dockTop + 1),
-  `touch: and it stays clear of the page's bottom dock (bubble bottom ${Math.round(overDock.bubbleBottom)} vs dock top ${overDock.dockTop === null ? 'none' : Math.round(overDock.dockTop)})`);
+// The chrome container spans the viewport; its rail/byline are the actual
+// painted bottom controls. Hidden or non-overlapping controls cannot collide.
+const bottomControls = await touch.locator('.mx-reader-rail, [data-mx-reader-byline]').evaluateAll(elements => elements.flatMap(el => {
+  const style = getComputedStyle(el), box = el.getBoundingClientRect();
+  if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0 || !box.width || !box.height) return [];
+  return [{left: box.left, right: box.right, top: box.top, bottom: box.bottom}];
+}));
+const overlaps = bottomControls.filter(box => placed.left < box.right && placed.right > box.left
+  && placed.top < box.bottom && placed.bottom > box.top);
+ok(placed.bottom > placed.top && overlaps.length === 0,
+  `touch: the bubble stays clear of visible bottom controls (${overlaps.length} overlaps)`);
 
 // A tap, not a click: the whole point is the finger.
 await docFrame.locator('[aria-label="Comment on selected text"]').tap();

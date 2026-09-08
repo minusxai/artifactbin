@@ -1,3 +1,4 @@
+import { artifactDocument } from './lib/artifact-document.mjs';
 /** Built-server security acceptance: authored JS has data capabilities, never renderer/account authority. */
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
@@ -28,7 +29,9 @@ const markup = code => `<Helmet>
   <Value name="network" type="string" default="waiting" /><Value name="mutation" type="string" default="waiting" />
   <Value name="input" type="number" default={0} /><Value name="output" type="number" default={0} />
   <Query name="probe">{\`select $dom as dom, $storage as storage, $network as network, $mutation as mutation, $output as output\`}</Query>
-  <script>{\`${code}\`}</script></Helmet><h1 id="heading">Script boundary</h1><DataTable data="$probe" />`;
+  <script>{\`${code}\`}</script></Helmet><h1 id="heading">Script boundary</h1><DataTable data="$probe" />
+  <output id="probe-dom">{$dom}</output><output id="probe-storage">{$storage}</output>
+  <output id="probe-network">{$network}</output><output id="probe-mutation">{$mutation}</output><output id="probe-output">{$output}</output>`;
 const doc = await api('/api/artifacts','POST',{title:'mxmx_test_script_isolation',markup:markup(script)});
 const browser = await chromium.launch();
 try {
@@ -37,12 +40,12 @@ try {
   const accountRequests = [];
   page.on('request',r=>{ if (/\/(like|follow|edits|annotations)(?:\?|$)/.test(new URL(r.url()).pathname) && r.method() !== 'GET') accountRequests.push(r.url()); });
   await page.goto(`${base}/a/${doc.id}`);
-  const frame = await (await page.waitForSelector('iframe[title="artifact"]')).contentFrame();
+  const frame = await artifactDocument(page);
   await frame.waitForFunction(()=>{
-    const values=window.mx?.params;
-    return values?.get('dom')==='SecurityError' && values.get('storage')==='SecurityError'
-      && values.get('network')==='blocked' && values.get('mutation')==='refused' && values.get('output')===6;
-  }).catch(async error => { console.error('isolation state', await frame.evaluate(()=>window.mx?.params ? ['dom','storage','network','mutation','input','output'].map(n=>[n,window.mx.params.get(n)]) : 'no mx')); throw error; });
+    const value = name => document.querySelector('#probe-' + name)?.textContent;
+    return value('dom')==='SecurityError' && value('storage')==='SecurityError'
+      && value('network')==='blocked' && value('mutation')==='refused' && value('output')==='6';
+  }).catch(async error => { console.error('isolation state', await frame.locator('output').allTextContents()); throw error; });
   assert.equal(await frame.locator('#heading').textContent(),'Script boundary');
   assert.equal(await frame.locator('iframe[title="Isolated artifact script"]').getAttribute('sandbox'),'allow-scripts');
   assert.deepEqual(accountRequests,[],'author messages must not invoke account APIs');
@@ -50,13 +53,13 @@ try {
   // A changed script replaces its old realm, and a removed script revokes it.
   const before = await frame.locator('iframe[title="Isolated artifact script"]').elementHandle();
   await api(`/api/artifacts/${doc.id}`,'PUT',{markup:markup("mx.params.set('output',77)")});
-  await frame.waitForFunction(()=>window.mx?.params.get('output')===77);
+  await frame.waitForFunction(()=>document.querySelector('#probe-output')?.textContent==='77');
   assert.equal(await before.evaluate(el=>el.isConnected),false);
   await api(`/api/artifacts/${doc.id}`,'PUT',{markup:'<h1 id="heading">Script removed</h1><Card>Still interactive</Card>'});
   await frame.waitForFunction(()=>document.querySelector('#heading')?.textContent==='Script removed');
   assert.equal(await frame.locator('iframe[title="Isolated artifact script"]').count(),0);
   await page.reload();
-  const reloaded = await (await page.waitForSelector('iframe[title="artifact"]')).contentFrame();
+  const reloaded = await artifactDocument(page);
   await reloaded.waitForFunction(()=>document.querySelector('#heading')?.textContent==='Script removed');
   assert.equal(await reloaded.locator('iframe[title="Isolated artifact script"]').count(),0);
   console.log('PASS: opaque script DOM/storage/network isolation, signals, mutation refusal, forged account/edit denial, live replacement/removal, reload');

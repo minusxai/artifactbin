@@ -9,7 +9,8 @@
  * carries the edit toolbar's breadcrumb so a comment can widen to an ancestor.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { act, render, screen, fireEvent, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, within,waitFor } from '@testing-library/react';
+import { TrustedUi } from '../TrustedUi';
 import AnnotationLayer from '../AnnotationLayer';
 import {
   STORY_ANNOTATIONS_MESSAGE, STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE,
@@ -141,6 +142,39 @@ const layer = (frame: HTMLIFrameElement, over: Partial<Parameters<typeof Annotat
 };
 
 describe('AnnotationLayer', () => {
+  it('scrolls the newest reply in its own shadow-root rail',async()=>{
+    const {frame,contentWindow}=makeFrame();
+    const view=render(<TrustedUi overlay>{layer(frame,{railOpen:true})}</TrustedUi>);
+    const shadow=view.container.querySelector('[data-trusted-ui]')!.shadowRoot!;
+    await waitFor(()=>expect(shadow.querySelector('[data-thread-id="ann_1"]')).not.toBeNull());
+    const thread=shadow.querySelector('[data-thread-id="ann_1"]')!;
+    const scroll=vi.fn();thread.scrollIntoView=scroll;
+    fromFrame(contentWindow,{type:STORY_ANNOTATION_PIN_MESSAGE,nonce:NONCE,id:ANN.id});
+    await waitFor(()=>expect(scroll).toHaveBeenCalled());
+  });
+  it('subscribes when a lazy inline runtime becomes ready after the layer mounts',async()=>{
+    const {frame}=makeFrame();
+    const runtimeRef:{current:import('@/lib/story-runtime/InlineStoryRuntime').InlineStoryController|null}={current:null};
+    const frameRef={current:frame};
+    const view=render(layer(frame,{frameRef,runtimeRef,sessionNonce:null,showViewComments:true,liveAnnotations:[ANN]}));
+    const listeners=new Set<(event:unknown)=>void>();
+    runtimeRef.current={nonce:NONCE,send:vi.fn(),update:vi.fn(),invalidate:vi.fn(),dispose:vi.fn(),getViewportRect:()=>new DOMRect(0,0,1000,800),subscribe:listener=>{listeners.add(listener);return()=>{listeners.delete(listener);};}};
+    view.rerender(layer(frame,{frameRef,runtimeRef,sessionNonce:NONCE,showViewComments:true,liveAnnotations:[ANN]}));
+    await act(async()=>{ for(const listener of listeners)listener({type:STORY_ANNOTATION_LAYOUT_MESSAGE,nonce:NONCE,positions:[{id:ANN.id,rect:{x:20,y:150,width:100,height:30}}]}); });
+    expect(screen.getByLabelText(/^Open annotation conversation by vivek/)).toBeInTheDocument();
+  });
+  it('keeps a shadow-root thread menu open for pointer gestures inside that menu',async()=>{
+    const {frame}=makeFrame();
+    const view=render(<TrustedUi overlay>{layer(frame,{railOpen:true})}</TrustedUi>);
+    const shadow=view.container.querySelector('[data-trusted-ui]')!.shadowRoot!;
+    await waitFor(()=>expect(shadow.querySelector('[aria-label="Annotation actions"]')).not.toBeNull());
+    fireEvent.click(shadow.querySelector('[aria-label="Annotation actions"]')!);
+    const button=shadow.querySelector('[aria-label="Delete annotation"]')!;
+    expect(button).not.toBeNull();
+    fireEvent.pointerDown(button,{bubbles:true,composed:true});
+    expect(button.isConnected).toBe(true);
+    expect(shadow.querySelector('[aria-label="Annotation action menu"]')).not.toBeNull();
+  });
   it('posts the pin set into the frame even in view mode (pins are owner view chrome)', async () => {
     const { frame, postMessage } = makeFrame();
     render(layer(frame));
@@ -209,6 +243,9 @@ describe('AnnotationLayer', () => {
     expect(screen.getByLabelText('vivek avatar').textContent).toBe('V');
     expect(screen.getByRole('link', { name: 'View @vivek profile' }).getAttribute('href')).toBe('/@vivek');
     expect(screen.getByText('is this right?')).toBeTruthy();
+    fromFrame(contentWindow,{type:STORY_ANNOTATION_HOVER_MESSAGE,nonce:NONCE,id:null});
+    await flush();
+    expect(card!.style.width).toBe('288px'); // queued document leave cannot cancel UI hover
     expect(screen.queryByText('one more thought')).toBeNull();
     expect(card!.textContent).toContain('+1 more');
     expect(screen.getByLabelText('Reply participants: vivek')).toBeTruthy();

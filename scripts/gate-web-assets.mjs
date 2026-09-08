@@ -1,3 +1,4 @@
+import { artifactDocument } from './lib/artifact-document.mjs';
 /**
  * Gate: an external URL in a document is OURS by the time a reader sees it.
  *
@@ -130,7 +131,7 @@ page.on('response', (r) => {
 await becomeOwner(page, B, owner.token);
 await page.goto(`${B}/a/${owner.id}`, { waitUntil: 'networkidle' });
 
-const frame = await (await page.waitForSelector('iframe[title="artifact"]', { timeout: 30_000 })).contentFrame();
+const frame = await artifactDocument(page, { timeout: 30_000 });
 const probe = await frame.evaluate(async () => {
   const deadline = Date.now() + 8000;
   const shot = () => {
@@ -201,7 +202,7 @@ const whichCopy = async (label, viewport, deviceScaleFactor) => {
   page2.on('request', (r) => { if (r.resourceType() === 'image') asked.push(new URL(r.url()).search); });
   await becomeOwner(page2, B, owner.token);
   await page2.goto(`${B}/a/${owner.id}`, { waitUntil: 'networkidle' });
-  const f = await (await page2.waitForSelector('iframe[title="artifact"]', { timeout: 30_000 })).contentFrame();
+  const f = await artifactDocument(page2, { timeout: 30_000 });
   const current = await f.evaluate(async () => {
     const deadline = Date.now() + 8000;
     while (Date.now() < deadline) {
@@ -242,7 +243,7 @@ const fetchedAfter = [];
 reader.on('response', (r) => { if (r.request().resourceType() === 'image') fetchedAfter.push(new URL(r.url()).pathname + new URL(r.url()).search); });
 await becomeOwner(reader, B, owner.token);
 await reader.goto(`${B}/a/${owner.id}`, { waitUntil: 'networkidle' });
-const readerFrame = await (await reader.waitForSelector('iframe[title="artifact"]', { timeout: 30_000 })).contentFrame();
+const readerFrame = await artifactDocument(reader, { timeout: 30_000 });
 const after = await readerFrame.evaluate(async () => {
   const deadline = Date.now() + 8000;
   while (Date.now() < deadline) {

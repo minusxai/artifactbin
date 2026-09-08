@@ -93,6 +93,9 @@ export function useLiveEdits({ id, initialEditId, initialVersion, onRemoteDocume
   /** The request on the wire, so a drain can wait for it rather than skip past it. */
   const inFlightRef = useRef<Promise<void> | null>(null);
   const timerRef = useRef(0);
+  const navigationFlush = useRef(false);
+  const failedRef = useRef(false);
+  const failedChangeRef = useRef<PendingChange | null>(null);
 
   const endpoint = `/api/my/artifacts/${id}/edits`;
   const flush = useCallback(async () => {
@@ -100,6 +103,7 @@ export function useLiveEdits({ id, initialEditId, initialVersion, onRemoteDocume
     const change = pendingRef.current;
     if (!change) return;
     pendingRef.current = null;
+    failedRef.current = false;
     setState((s) => ({ ...s, pending: true, status: 'saving…' }));
 
     const run = (async () => {
@@ -118,18 +122,22 @@ export function useLiveEdits({ id, initialEditId, initialVersion, onRemoteDocume
       const body = (await res.json().catch(() => ({}))) as FlushResponse;
 
       if (res.ok) {
+        failedChangeRef.current = null;
         editIdRef.current = body.edit_id;
         setState({ editId: body.edit_id, version: body.version, status: '', pending: false });
-      } else if (res.status === 409 && body.edit_id) {
+      } else if (res.status === 409 && body.edit_id && !navigationFlush.current) {
         // Same node changed under us. Take the server's document — ours is at
         // most one flush old, and diverging silently is worse than losing it.
         editIdRef.current = body.edit_id;
         if (typeof body.source === 'string') onRemoteDocument(body.source);
         setState((s) => ({ ...s, editId: body.edit_id, status: 'synced with a change from elsewhere', pending: false }));
       } else if (body.detail === 'identical') {
+        failedChangeRef.current = null;
         // The flush carried no real change (e.g. a blur that committed nothing).
         setState((s) => ({ ...s, status: '', pending: false }));
       } else {
+        failedRef.current = true;
+        failedChangeRef.current = { ...change, ...(pendingRef.current ?? {}) };
         /*
          * Say WHAT is wrong, not merely that something is. The door returns
          * self-correcting diagnostics ("a document may carry only one
@@ -150,13 +158,15 @@ export function useLiveEdits({ id, initialEditId, initialVersion, onRemoteDocume
         }));
       }
     } catch {
+      failedRef.current = true;
+      failedChangeRef.current = { ...change, ...(pendingRef.current ?? {}) };
       // Offline or a dropped request: keep the change and let the next tick retry.
       pendingRef.current = { ...change, ...(pendingRef.current ?? {}) };
       setState((s) => ({ ...s, status: 'offline — will retry', pending: false }));
     } finally {
       inFlightRef.current = null;
       // Anything queued while we were in flight (including a retry) drains now.
-      if (pendingRef.current) {
+      if (pendingRef.current && !navigationFlush.current) {
         window.clearTimeout(timerRef.current);
         timerRef.current = window.setTimeout(() => void flush(), FLUSH_DEBOUNCE_MS);
       }
@@ -188,11 +198,28 @@ export function useLiveEdits({ id, initialEditId, initialVersion, onRemoteDocume
     do {
       window.clearTimeout(timerRef.current);
       await (inFlightRef.current ?? flush());
+      if (failedRef.current) break;
     } while (pendingRef.current || inFlightRef.current);
   }, [flush]);
 
+  /** A route leave is stricter than background sync: never discard a failed draft. */
+  const flushForNavigation = useCallback(async (commit: () => Promise<void>): Promise<boolean> => {
+    navigationFlush.current = true;
+    try {
+      window.clearTimeout(timerRef.current);
+      await commit();
+      if (failedChangeRef.current) pendingRef.current = { ...failedChangeRef.current, ...(pendingRef.current ?? {}) };
+      failedChangeRef.current = null;
+      await flushNow();
+      return !failedRef.current && !pendingRef.current && !inFlightRef.current;
+    } catch {
+      setState((s) => ({ ...s, status: 'not saved — editor did not finish; retry navigation', pending: false }));
+      return false;
+    } finally { navigationFlush.current = false; }
+  }, [flushNow]);
+
   /** True when nothing is queued and nothing is in flight. */
-  const isIdle = useCallback(() => pendingRef.current === null && inFlightRef.current === null, []);
+  const isIdle = useCallback(() => pendingRef.current === null && inFlightRef.current === null && failedChangeRef.current === null, []);
 
   /**
    * "That head pointer is one WE produced" — every accepted write hands back a
@@ -228,5 +255,5 @@ export function useLiveEdits({ id, initialEditId, initialVersion, onRemoteDocume
 
   useEffect(() => () => window.clearTimeout(timerRef.current), []);
 
-  return { state, queue, flushNow, adoptRemote, isIdle, isOwnEdit };
+  return { state, queue, flushNow, flushForNavigation, adoptRemote, isIdle, isOwnEdit };
 }

@@ -7,6 +7,7 @@
 'use client';
 import { useEffect } from 'react';
 import { useLocation, useNavigate, useSearchParams as useRRSearchParams } from 'react-router';
+import { isClientRoute } from '@/web/NavigationBoundary';
 
 /**
  * `refresh()` — "re-read what this page shows", the one call whose Next
@@ -30,9 +31,16 @@ export function useRefreshable(reload: () => void): void {
 
 export function useRouter() {
   const navigate = useNavigate();
+  const go = (to: string, replace = false) => {
+    const url = new URL(to, window.location.href);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
+    if (url.origin === window.location.origin && isClientRoute(url)) void navigate(url.pathname + url.search + url.hash, { replace });
+    else if (replace) window.location.replace(url.href);
+    else window.location.assign(url.href);
+  };
   return {
-    push: (to: string) => void navigate(to),
-    replace: (to: string) => void navigate(to, { replace: true }),
+    push: (to: string) => go(to),
+    replace: (to: string) => go(to, true),
     back: () => void navigate(-1),
     /** Re-read the page's data in place — never a reload (see REFRESH_EVENT). */
     refresh: () => window.dispatchEvent(new Event(REFRESH_EVENT)),

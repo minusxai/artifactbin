@@ -29,6 +29,7 @@
 import * as PopoverPrimitive from '@radix-ui/react-popover';
 import MobileSheet, { useIsPhoneViewport } from '@/components/MobileSheet';
 import { Tooltip } from '@/components/Tooltip';
+import { useTrustedPortalContainer } from './TrustedUi';
 
 export interface AnchoredPanelProps {
   /** Accessible name of the PANEL (and the sheet's dialog label on a phone). */
@@ -68,6 +69,7 @@ export default function AnchoredPanel({
   label, open, onOpenChange, trigger, tooltip, sheetHeader, className = '', children,
 }: AnchoredPanelProps) {
   const phone = useIsPhoneViewport();
+  const portalContainer = useTrustedPortalContainer();
 
   return (
     <>
@@ -81,7 +83,7 @@ export default function AnchoredPanel({
         ) : (
           <PopoverPrimitive.Trigger asChild>{trigger}</PopoverPrimitive.Trigger>
         )}
-        <PopoverPrimitive.Portal>
+        <PopoverPrimitive.Portal container={portalContainer}>
           <PopoverPrimitive.Content
             role="group"
             aria-label={label}

@@ -122,18 +122,18 @@ const browser = await chromium.launch();
   await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
   await page.waitForFunction(() => /mode probe/.test(document.body.textContent ?? ''), null, { timeout: 20000 });
   await sleep(2500);
-  ok(await page.evaluate(() => document.documentElement.classList.contains('light')), 'an unthemed document opens in the author default (light)');
+  ok(await page.evaluate(() => document.querySelector("[data-mx-inline-story]:not([data-mx-initial-story])").classList.contains('light')), 'an unthemed document opens in the author default (light)');
   // The reader's chrome opens hidden; a scroll up is the gesture that reveals it.
   await revealReaderChrome(page);
   await openArtifactControls(page);
-  await page.click('[data-mx-mode-choice="dark"]');
-  ok(await page.evaluate(() => document.documentElement.classList.contains('dark')), 'the top-right toggle flips the document dark');
+  await page.getByLabel('Dark mode', {exact: true}).click();
+  ok(await page.evaluate(() => document.querySelector("[data-mx-inline-story]:not([data-mx-initial-story])").classList.contains('dark')), 'the top-right toggle flips the document dark');
 
   await doc.write(withChart('MODE WRITE LANDED'));
   await page.waitForFunction(() => /MODE WRITE LANDED/.test(document.body.textContent ?? ''), null, { timeout: 25000 })
     .catch(() => {});
   await sleep(1200);
-  ok(await page.evaluate(() => document.documentElement.classList.contains('dark')),
+  ok(await page.evaluate(() => document.querySelector("[data-mx-inline-story]:not([data-mx-initial-story])").classList.contains('dark')),
     "an agent write updates the document but does not stomp the reader's mode");
   await ctx.close();
 }
@@ -148,13 +148,13 @@ const browser = await chromium.launch();
   await sleep(2000);
   await revealReaderChrome(page);
   await openArtifactControls(page);
-  await page.click('[data-mx-mode-choice="dark"]');
+  await page.getByLabel('Dark mode', {exact: true}).click();
 
   await doc.write(prose('MODE PROSE REWRITTEN'));
   await page.waitForFunction(() => /MODE PROSE REWRITTEN/.test(document.body.textContent ?? ''), null, { timeout: 25000 })
     .catch(() => {});
   await sleep(2000);
-  ok(await page.evaluate(() => document.documentElement.classList.contains('dark')),
+  ok(await page.evaluate(() => document.querySelector("[data-mx-inline-story]:not([data-mx-initial-story])").classList.contains('dark')),
     "a no-runtime document's reload carries the reader's mode in window.name");
   await ctx.close();
 }

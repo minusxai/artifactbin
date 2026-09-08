@@ -34,6 +34,14 @@ function announcePanel(which: 'menu' | 'controls', open: boolean) {
 export function requestPageChrome(which: 'menu' | 'controls') {
   window.dispatchEvent(new CustomEvent(REQUEST_EVENT, { detail: which }));
 }
+export function subscribePageChrome(listener:(which:'menu'|'controls',open:boolean)=>void):()=>void {
+  const receive=(event:Event)=>{
+    const detail=(event as CustomEvent<{which:'menu'|'controls';open:boolean}>).detail;
+    if(detail && (detail.which==='menu'||detail.which==='controls') && typeof detail.open==='boolean') listener(detail.which,detail.open);
+  };
+  window.addEventListener(STATE_EVENT,receive);
+  return ()=>window.removeEventListener(STATE_EVENT,receive);
+}
 const ITEM =
   'flex w-full items-center gap-3 rounded-[5px] border-0 bg-transparent px-3 py-3 text-left font-mono text-sm no-underline transition-colors sm:gap-2.5 sm:px-2.5 sm:py-2 sm:text-xs';
 const FLOATING_BUTTON =

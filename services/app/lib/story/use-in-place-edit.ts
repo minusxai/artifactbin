@@ -14,6 +14,7 @@
  * author's script exists (lib/story-runtime/pristine). Everything without it
  * is dropped — including a forgery posted through the unforgeable `top`.
  */
+import { sendDocument, subscribeDocument, documentRect, documentReady, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { isEditFrameMessage, STORY_APPLY_FORMAT_MESSAGE, STORY_APPLY_LINK_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_SELECT_MESSAGE, STORY_COMMIT_MESSAGE, STORY_DOCUMENT_MESSAGE, type StoryEditSelection, type StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { JsxNode } from '@/lib/jsx';
@@ -21,7 +22,8 @@ import { composeSource, type ComposableFormatEdit } from '@/lib/story/edit-compo
 
 export interface InPlaceEditOptions {
   /** The live document's iframe. Never remounted — that is the whole point. */
-  frameRef: { current: HTMLIFrameElement | null };
+  frameRef?: { current: HTMLIFrameElement | null };
+  runtimeRef?: DocumentRuntimeRef;
   /** True while the owner is in edit mode. */
   editing: boolean;
   /**
@@ -66,7 +68,7 @@ export interface InPlaceEditController {
    * commits on blur, so the last thing typed lives only in its DOM until
    * somebody asks for it.
    */
-  commitPending: () => Promise<void>;
+  commitPending: (requireAcknowledgement?: boolean) => Promise<void>;
   /** Show a new version of the document in the frame, without replacing it. */
   pushDocument: (update: {
     nodes: JsxNode[];
@@ -79,14 +81,15 @@ export interface InPlaceEditController {
 }
 
 export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditController {
-  const { frameRef, editing, sessionNonce, sourceRef, onSourceEdited, onEditKey, onSlideTitle, onImageDrop } = options;
+  const { frameRef, runtimeRef, editing, sessionNonce, sourceRef, onSourceEdited, onEditKey, onSlideTitle, onImageDrop } = options;
   const [selection, setSelection] = useState<StoryEditSelection | null>(null);
   const [ready, setReady] = useState(false);
   const nonceRef = useRef<string | null>(sessionNonce);
   nonceRef.current = sessionNonce;
   const typingRef = useRef(false);
   /** Resolves the in-flight commitPending, if there is one. */
-  const committedRef = useRef<(() => void) | null>(null);
+  const committedRef = useRef<((acknowledged?: boolean) => void) | null>(null);
+  const commitRequestRef = useRef<Promise<boolean> | null>(null);
   const selectionRef = useRef<StoryEditSelection | null>(null);
   selectionRef.current = selection;
 
@@ -102,14 +105,12 @@ export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditControll
   const commitPendingRef = useRef<(() => Promise<void>) | null>(null);
 
   const postToFrame = useCallback((message: Record<string, unknown>) => {
-    frameRef.current?.contentWindow?.postMessage(message, '*');
-  }, [frameRef]);
+    sendDocument({ frameRef, runtimeRef }, message);
+  }, [frameRef, runtimeRef]);
 
   // ── listening ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    const onMessage = (event: MessageEvent) => {
-      const frameWindow = frameRef.current?.contentWindow;
-      if (!frameWindow || event.source !== frameWindow) return;
+    const onMessage = (event: { data: unknown }) => {
 
       const nonce = nonceRef.current;
       if (!nonce || !isEditFrameMessage(event.data, nonce)) return;
@@ -167,9 +168,8 @@ export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditControll
           break;
       }
     };
-    window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, [frameRef, sourceRef]);
+    return subscribeDocument({ frameRef, runtimeRef }, onMessage);
+  }, [frameRef, runtimeRef, sourceRef, sessionNonce]);
 
   // ── entering and leaving ──────────────────────────────────────────────────
   useEffect(() => {
@@ -179,7 +179,7 @@ export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditControll
       // Leaving unmounts this; the document must not stay editable.
       if (editing) postToFrame({ type: STORY_EDIT_MODE_MESSAGE, on: false });
     };
-  }, [editing, postToFrame]);
+  }, [editing, postToFrame, sessionNonce]);
 
   /*
    * A frame that has only just painted has not heard the request to enter edit
@@ -223,19 +223,29 @@ export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditControll
     postToFrame({ type: STORY_SELECT_MESSAGE, path });
   }, [postToFrame]);
 
-  const commitPending = useCallback(() => new Promise<void>((resolve) => {
-    if (!frameRef.current?.contentWindow) { resolve(); return; }
-    // Bounded: a document that cannot answer must not strand the reader in an
-    // editor they have already left.
-    const timer = window.setTimeout(finish, 1200);
-    function finish() {
-      window.clearTimeout(timer);
-      committedRef.current = null;
-      resolve();
+  const commitPending = useCallback(async (requireAcknowledgement = false): Promise<void> => {
+    if (!documentReady({ frameRef, runtimeRef })) {
+      if (requireAcknowledgement) throw new Error('editor is unavailable');
+      return;
     }
-    committedRef.current = finish;
-    postToFrame({ type: STORY_COMMIT_MESSAGE });
-  }), [frameRef, postToFrame]);
+    // Visibility, navigation and image insertion can request the same commit.
+    // Share its acknowledgement rather than overwriting a caller's resolver.
+    if (!commitRequestRef.current) {
+      commitRequestRef.current = new Promise<boolean>(resolve => {
+        const timer = window.setTimeout(() => finish(false), 1200);
+        function finish(acknowledged = true) {
+          window.clearTimeout(timer);
+          committedRef.current = null;
+          commitRequestRef.current = null;
+          resolve(acknowledged);
+        }
+        committedRef.current = finish;
+        postToFrame({ type: STORY_COMMIT_MESSAGE });
+      });
+    }
+    const acknowledged = await commitRequestRef.current;
+    if (requireAcknowledgement && !acknowledged) throw new Error('editor commit timed out');
+  }, [frameRef, runtimeRef, postToFrame]);
 
   commitPendingRef.current = commitPending;
 

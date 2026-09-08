@@ -89,8 +89,12 @@ export interface FrameSelectionActions {
 export function createFrameSelectionActions({
   win,
   onAction,
+  root,
+  portal,
 }: {
   win: Window;
+  root?: HTMLElement;
+  portal?: HTMLElement;
   onAction: (action: 'edit' | 'annotate', selection: StoryEditSelection) => void;
 }): FrameSelectionActions {
   const doc = win.document;
@@ -113,7 +117,7 @@ export function createFrameSelectionActions({
   const style = doc.createElement('style');
   style.setAttribute(SELECTION_ACTIONS_CSS_ATTR, '');
   style.textContent = SELECTION_ACTIONS_CSS;
-  doc.head.appendChild(style);
+  (portal ?? doc.head).appendChild(style);
 
   /** The pending touch settle, if a selection is still moving. */
   let settle = 0;
@@ -185,7 +189,7 @@ export function createFrameSelectionActions({
         hide();
         onAction(action, chosen);
       });
-      doc.body.appendChild(toolbar);
+      (portal ?? doc.body).appendChild(toolbar);
     }
     toolbar.replaceChildren();
     if (capabilities.edit) toolbar.appendChild(makeButton('edit'));
@@ -215,7 +219,22 @@ export function createFrameSelectionActions({
       hide();
       return;
     }
-    const range = nativeSelection.getRangeAt(0);
+    let range = nativeSelection.getRangeAt(0);
+    if (root) {
+      if (!root.contains(range.startContainer)) { hide(); return; }
+      if (!root.contains(range.endContainer)) {
+        // Chromium triple-clicking the final paragraph may end at offset zero
+        // of the next app sibling. Own the selected text, not that empty
+        // endpoint: clip to the document and refuse if any outside text was
+        // actually included. All subsequent anchors/quotes use the owned range.
+        const bounds = doc.createRange();
+        bounds.selectNodeContents(root);
+        const clipped = range.cloneRange();
+        clipped.setEnd(bounds.endContainer, bounds.endOffset);
+        if (clipped.collapsed || clipped.toString() !== range.toString()) { hide(); return; }
+        range = clipped;
+      }
+    }
     const stampedAt = (node: Node): Element | null => {
       const element = node.nodeType === 1 ? node as Element : node.parentElement;
       return element?.closest(`[${AST_PATH_ATTR}]`) ?? null;
@@ -331,7 +350,9 @@ export function createFrameSelectionActions({
   const releaseButton = () => { buttonHeld = false; };
   const onPointerUp = (event: PointerEvent) => {
     buttonHeld = false;
-    if ((event.target as Element | null)?.closest?.(`[${SELECTION_ACTIONS_ATTR}]`)) return;
+    // Shadow DOM retargets event.target to the host. Rebuilding the toolbar
+    // on this pointerup would detach the button before its click can arrive.
+    if (toolbar && event.composedPath().includes(toolbar)) return;
     win.queueMicrotask(showForSelection);
   };
   const onKeyUp = (event: KeyboardEvent) => { if (changesSelection(event)) showForSelection(); };

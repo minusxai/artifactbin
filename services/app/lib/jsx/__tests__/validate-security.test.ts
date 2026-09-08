@@ -16,6 +16,12 @@ const bad = (src: string) => validateJsxSource(src, C);
 const ok = (src: string) => expect(validateJsxSource(src, C)).toEqual([]);
 
 describe('name-denied attributes (hard reject, any tag)', () => {
+  it('rejects native top-layer activation outside sandboxed Iframes', () => {
+    for (const attr of ['popover', 'popovertarget', 'popoverTargetAction', 'command', 'commandfor']) {
+      expect(bad(`<button ${attr}="show">Open</button>`).length).toBeGreaterThan(0);
+    }
+    expect(validateJsxSource('<Iframe><button popovertarget="box">Open</button><div id="box" popover="manual">Box</div></Iframe>', ['Iframe'])).toEqual([]);
+  });
   it('rejects dangerouslySetInnerHTML even as a static object literal', () => {
     const errs = bad('<div dangerouslySetInnerHTML={{ __html: "<img onerror=alert(1)>" }} />');
     expect(errs.length).toBeGreaterThan(0);

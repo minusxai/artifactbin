@@ -39,7 +39,7 @@ const pickRole = async (page, email, label) => {
 };
 /** True once the row for `email` reads `label` (bounded), false if it never does. */
 const roleReads = (page, email, label, budgetMs = 10000) =>
-  page.waitForFunction(([sel, want]) => (document.querySelector(`[aria-label="${sel}"]`)?.textContent ?? '').includes(want), [`Role for ${email}`, label], { timeout: budgetMs }).then(() => true, () => false);
+  roleTrigger(page, email).filter({ hasText: label }).waitFor({ state: 'attached', timeout: budgetMs }).then(() => true, () => false);
 const check = (ok, label) => { console.log(`${ok ? '  ok ' : 'FAIL '} ${label}`); if (!ok) failures.push(label); };
 const stamp = Date.now().toString(36);
 const OWNER_EMAIL = `mxmx_test_collab_owner_${stamp}@example.com`;
@@ -78,7 +78,7 @@ check(doc.visibility === 'public', 'a PUBLIC document — the case that had no w
 const sharingPut = (page) => page.waitForResponse((r) => r.url().includes('/sharing') && r.request().method() === 'PUT' && r.status() === 200, { timeout: 15000 });
 await owner.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
 await openArtifactControls(owner);
-await owner.locator('[aria-label="Share"]').first().click();
+await owner.getByLabel('Owner actions').getByLabel('Share', { exact: true }).click();
 await owner.waitForSelector('[aria-label="Invite email"]', { timeout: 15000 });
 check(true, 'the people list is offered on a public document');
 await owner.fill('[aria-label="Invite email"]', EDITOR_EMAIL);
@@ -123,7 +123,7 @@ await openArtifactControls(editor);
 const editBtn = editor.locator('[aria-label="Edit artifact"]');
 check((await editBtn.count()) === 1, 'the editor sees the edit button (the shell, not the served document)');
 // Editors can frame the social preview from sharing; access remains owner-only.
-await editor.click('[aria-label="Share"]');
+await editor.getByLabel('Document actions').getByLabel('Share', { exact: true }).click();
 await editor.locator('[role="dialog"][aria-label="Sharing"]').waitFor();
 check((await editor.locator('[aria-label="Edit social preview"]').count()) === 1, 'the editor can configure social preview from sharing');
 check((await editor.locator('[aria-label="Make public"]').count()) === 0 && (await editor.locator('[aria-label="Invite email"]').count()) === 0, 'sharing does not expose access controls to the editor');
@@ -138,7 +138,7 @@ check(sharingAttempt === 404, `the editor cannot change sharing permissions (${s
 await editor.click('[aria-label="Close sharing"]');
 
 // ── 3. both edit, different paragraphs, no reload ─────────────────────────
-const frameOf = (page) => page.frames().find((f) => f !== page.mainFrame());
+const frameOf = (page) => page.mainFrame();
 const openEditor = async (page) => {
   await page.goto(`${BASE}/a/${doc.id}#edit`, { waitUntil: 'load' });
   await page.waitForFunction(() => true, null, { timeout: 1000 }).catch(() => {});
@@ -192,7 +192,7 @@ await editor.waitForTimeout(6000);
 await Promise.all([sharingPut(owner), (async () => {
   await owner.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
   await openArtifactControls(owner);
-  await owner.locator('[aria-label="Share"]').first().click();
+  await owner.getByLabel('Owner actions').getByLabel('Share', { exact: true }).click();
   await roleTrigger(owner, EDITOR_EMAIL).waitFor({ timeout: 15000 });
   await pickRole(owner, EDITOR_EMAIL, 'can view');
 })()]);

@@ -1,101 +1,29 @@
-/**
- * The page's half of the query relay: a `mx:query` from the DOCUMENT FRAME is
- * answered by calling /a/<id>/query with the page's session and posting the
- * result back to the window that asked. Identity is the source window (the
- * frame's origin is "null"); a stranger's message is ignored; a failed fetch
- * is relayed as an error, never dropped.
- */
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
-
-
-import ArtifactSurface, { type ArtifactSurfaceProps } from '../ArtifactSurface';
-import { STORY_QUERY_MESSAGE, STORY_QUERY_RESULT_MESSAGE } from '@/lib/story-runtime/contract';
-
-class FakeEventSource {
-  /** The named `data` channel (a dataset under the document changed). */
-  listeners: Record<string, Array<(e: MessageEvent) => void>> = {};
-  addEventListener(type: string, fn: (e: MessageEvent) => void) { (this.listeners[type] ??= []).push(fn); }
-  removeEventListener(type: string, fn: (e: MessageEvent) => void) { this.listeners[type] = (this.listeners[type] ?? []).filter((f) => f !== fn); }
-  emitData(payload: unknown) { for (const fn of this.listeners.data ?? []) fn({ data: JSON.stringify(payload) } as MessageEvent); }
-  onmessage: ((e: MessageEvent) => void) | null = null;
-  onerror: (() => void) | null = null;
-  close() {}
-}
-
-let fetchCalls: Array<{ url: string; body: unknown }> = [];
-let fetchImpl: (url: string) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
-
-beforeEach(() => {
-  localStorage.clear();
-  fetchCalls = [];
-  fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({ tables: { sales: { rows: [{ a: 1 }], columns: [] } }, errors: {} }) });
-  vi.stubGlobal('EventSource', FakeEventSource);
-  vi.stubGlobal('fetch', (async (url: string, init?: RequestInit) => {
-    fetchCalls.push({ url: String(url), body: init?.body ? JSON.parse(String(init.body)) : null });
-    return fetchImpl(String(url));
-  }) as unknown as typeof fetch);
+/** Inline documents call an instance-owned transport; window messages have no API authority. */
+import {beforeEach,afterEach,it,expect,vi} from 'vitest';
+import {act,screen} from '@testing-library/react';
+import {render} from '@/test/helpers/surface-ui';
+import {setupSurface,surfaceProps} from '@/test/helpers/inline-surface';
+import ArtifactSurface from '../ArtifactSurface';
+import {createAuthenticatedTransport} from '@/lib/story-runtime/authenticated-transport';
+beforeEach(setupSurface);afterEach(()=>vi.unstubAllGlobals());
+it('sends query values and local tables through the authenticated document door',async()=>{
+ const fetcher=vi.fn(async()=>new Response(JSON.stringify({tables:{sales:{rows:[{a:1}],columns:[]}},errors:{}})));
+ const transport=createAuthenticatedTransport('story1',fetcher);
+ const result=await transport.run({region:'EU'},['sales'],{cart:[{id:1}]});
+ expect(result.tables.sales.rows).toEqual([{a:1}]);
+ expect(fetcher).toHaveBeenCalledWith('/a/story1/query',expect.objectContaining({credentials:'same-origin',body:JSON.stringify({values:{region:'EU'},only:['sales'],localTables:{cart:[{id:1}]}})}));
+ transport.dispose();
 });
-afterEach(() => { vi.unstubAllGlobals(); });
-
-const props = (over: Partial<ArtifactSurfaceProps> = {}): ArtifactSurfaceProps => ({
-  id: 'story1', editId: 'edit_1', format: 'markup', title: 'doc', source: '<p>Hello</p>', template: null, refs: [], version: 1, content: '', columns: [], compiledCss: null, theme: null, colorMode: null,
-  ...over,
+it('surfaces query refusal and revokes requests when the document is disposed',async()=>{
+ const fetcher=vi.fn(async()=>new Response(JSON.stringify({error:'private_document'}),{status:403}));
+ const transport=createAuthenticatedTransport('story1',fetcher);
+ await expect(transport.run({},['sales'])).rejects.toThrow('private_document');
+ transport.dispose();await expect(transport.run({},['sales'])).rejects.toThrow();
+ expect(fetcher).toHaveBeenCalledTimes(1);
 });
-
-const frame = () => screen.getByTitle('artifact') as HTMLIFrameElement;
-
-/** Post as a given window, capturing what the page posts back to it. */
-function ask(source: Window, data: unknown) {
-  const posted: unknown[] = [];
-  const spy = vi.spyOn(source, 'postMessage').mockImplementation((m: unknown) => { posted.push(m); });
-  act(() => { window.dispatchEvent(new MessageEvent('message', { data, source: source as unknown as MessageEventSource })); });
-  return { posted, spy };
-}
-
-describe('the query relay', () => {
-  it('answers the frame with the rows /a/<id>/query returns', async () => {
-    render(<ArtifactSurface {...props()} />);
-    const win = frame().contentWindow!;
-    const { posted } = ask(win, { type: STORY_QUERY_MESSAGE, id: 7, values: { region: 'EU' }, only: ['sales'] });
-    await waitFor(() => expect(posted).toHaveLength(1));
-    expect(fetchCalls[0].url).toBe('/a/story1/query');
-    expect(fetchCalls[0].body).toEqual({ values: { region: 'EU' }, only: ['sales'] });
-    expect(posted[0]).toEqual({ type: STORY_QUERY_RESULT_MESSAGE, id: 7, tables: { sales: { rows: [{ a: 1 }], columns: [] } }, errors: {} });
-  });
-
-  it('forwards local table snapshots to the query endpoint', async () => {
-    render(<ArtifactSurface {...props()} />);
-    const win = frame().contentWindow!;
-    const { posted } = ask(win, { type: STORY_QUERY_MESSAGE, id: 8, values: {}, only: ['total'], localTables: { cart: [{ id: 1 }] } });
-    await waitFor(() => expect(posted).toHaveLength(1));
-    expect(fetchCalls[0].body).toEqual({ values: {}, only: ['total'], localTables: { cart: [{ id: 1 }] } });
-  });
-
-  it('ignores a request from a window that is not the document frame', async () => {
-    render(<ArtifactSurface {...props()} />);
-    const stranger = document.createElement('iframe');
-    document.body.appendChild(stranger);
-    const { posted } = ask(stranger.contentWindow!, { type: STORY_QUERY_MESSAGE, id: 1, values: {}, only: [] });
-    await new Promise((r) => setTimeout(r, 50));
-    expect(fetchCalls).toHaveLength(0);
-    expect(posted).toHaveLength(0);
-    stranger.remove();
-  });
-
-  it('relays a failed fetch as an error on the same id, never silence', async () => {
-    fetchImpl = async () => ({ ok: false, status: 404, json: async () => ({}) });
-    render(<ArtifactSurface {...props()} />);
-    const { posted } = ask(frame().contentWindow!, { type: STORY_QUERY_MESSAGE, id: 3, values: {}, only: ['sales'] });
-    await waitFor(() => expect(posted).toHaveLength(1));
-    expect(posted[0]).toEqual({ type: STORY_QUERY_RESULT_MESSAGE, id: 3, error: 'query failed (404)' });
-  });
-
-  it('leaves the paint/hello protocol untouched (a string message is not a query)', async () => {
-    render(<ArtifactSurface {...props()} />);
-    const { posted } = ask(frame().contentWindow!, 'mx:painted');
-    await new Promise((r) => setTimeout(r, 50));
-    expect(fetchCalls).toHaveLength(0);
-    expect(posted).toHaveLength(0);
-  });
+it('does not expose a query relay to any window, even one forging the previous protocol',async()=>{
+ const fetcher=vi.fn();vi.stubGlobal('fetch',fetcher);
+ render(<ArtifactSurface {...surfaceProps()} />);await screen.findByText('Document body');
+ await act(async()=>{for(const source of [null,window])window.dispatchEvent(new MessageEvent('message',{source,data:{type:'mx:query',id:7,values:{},only:['private']}}));});
+ expect(fetcher).not.toHaveBeenCalled();
 });

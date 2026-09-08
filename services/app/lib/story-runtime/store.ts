@@ -72,6 +72,9 @@ export interface QueryTransport {
 }
 
 export interface DataflowStore {
+  readonly disposed: boolean;
+  /** Revoke this document lifetime, including queued and in-flight completions. */
+  dispose(): void;
   readonly flow: Dataflow;
   /** Current snapshot; identity-stable between changes. */
   getState(): DataflowState;
@@ -156,6 +159,7 @@ export function createDataflowStore(
   let flow = input.flow;
   const debounceMs = options.debounceMs ?? 150;
   let transport: QueryTransport | null = options.transport ?? null;
+  let disposed = false;
   const listeners = new Set<() => void>();
   let state: DataflowState = {
     values: { ...initialValues(flow), ...(input.state?.values ?? {}), ...(input.values ?? {}) },
@@ -209,11 +213,11 @@ export function createDataflowStore(
   };
 
   const notify = () => { for (const l of [...listeners]) l(); };
-  const commit = (next: DataflowState) => { state = next; notify(); };
+  const commit = (next: DataflowState) => { if (disposed) return; state = next; notify(); };
 
   const flush = () => {
     if (timer) { clearTimeout(timer); timer = null; }
-    if (!transport || (dirty.size === 0 && !permissionsDirty)) return;
+    if (disposed || !transport || (dirty.size === 0 && !permissionsDirty)) return;
     permissionsDirty = false;
     const only = [...dirty];
     dirty.clear();
@@ -276,6 +280,7 @@ export function createDataflowStore(
   );
 
   const setValues = (values: Record<string, Scalar>) => {
+    if (disposed) return;
     const changed: string[] = [];
     for (const [k, v] of Object.entries(values)) {
       if (!scalarNames.has(k)) continue;
@@ -293,6 +298,7 @@ export function createDataflowStore(
   };
 
   const replaceFlow: DataflowStore['replaceFlow'] = (next) => {
+    if (disposed) return;
     generation++;
     localRevision++;
     // Preserve local drafts only when both schema and authored initial rows are
@@ -436,6 +442,17 @@ export function createDataflowStore(
   };
 
   return {
+    get disposed() { return disposed; },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      generation++; runSeq++;
+      if (timer) clearTimeout(timer);
+      timer = null;
+      transport = null;
+      listeners.clear();
+      dirty.clear(); inFlight.clear(); writing.clear(); writingCounts.clear();
+    },
     get flow() { return flow; },
     replaceFlow,
     mutate,
@@ -464,8 +481,8 @@ export function createDataflowStore(
      * a first load has nothing to batch.
      */
     start: () => { flush(); },
-    subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    setTransport: (t) => { transport = t; commit({ ...state }); flush(); },
+    subscribe: (listener) => { if (!disposed) listeners.add(listener); return () => { listeners.delete(listener); }; },
+    setTransport: (t) => { if (disposed) return; transport = t; commit({ ...state }); flush(); },
     refresh: (only) => {
       permissionsDirty = !!flow.mutations?.length;
       const names = only ? [...only] : flow.queries.map((q) => q.name);

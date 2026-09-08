@@ -9,7 +9,8 @@
  * the reader sees in their window list, so it has to follow too.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render } from '@testing-library/react';
+import { } from '@testing-library/react';
+import { render } from '@/test/helpers/surface-ui';
 import ArtifactSurface from '@/components/ArtifactSurface';
 
 vi.mock('@/lib/story/use-live-artifact', () => ({ useLiveArtifact: () => null }));

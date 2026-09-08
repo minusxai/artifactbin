@@ -21,6 +21,7 @@
  *          save-less protocol as before, and pushes structural changes back
  *          down as `mx:document`, which the runtime re-renders in place.
  */
+import { sendDocument, subscribeDocument, documentRect, documentReady, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from '@/lib/dynamic';
 import { Check, Code, History, Image as ImageIcon, MessageSquare, Paintbrush } from 'lucide-react';
@@ -34,6 +35,7 @@ import VizEditorPanel from '@/components/views/story/VizEditorPanel';
 import NumberEditorPanel from '@/components/views/story/NumberEditorPanel';
 import StoryFormatToolbar from '@/components/views/story/StoryFormatToolbar';
 import { useLiveEdits, type EditorFlushRef } from '@/lib/story/use-live-edits';
+import { useNavigationGuard } from '@/web/NavigationBoundary';
 import { useLiveArtifact } from '@/lib/story/use-live-artifact';
 import { useInPlaceEdit } from '@/lib/story/use-in-place-edit';
 import { useArtifactVersions, type ArtifactVersionSnapshot } from '@/lib/story/use-versions';
@@ -104,11 +106,12 @@ const refDataFor = (created: { id: string; rawUrl?: string }): { refData: RefDat
 });
 
 export default function InPlaceEditor({
-  art, frameRef, sessionNonce, flushRef, initialSelectionPath = null, onComment, onToggleComments, commentsOpen = false, commentCount = 0, rightInset = 0, onDone = () => {},
+  art, frameRef, runtimeRef, sessionNonce, flushRef, initialSelectionPath = null, onComment, onToggleComments, commentsOpen = false, commentCount = 0, rightInset = 0, onDone = () => {},
 }: {
   art: EditorArtifact;
   /** The live document. Never remounted — that is the whole point. */
-  frameRef: { current: HTMLIFrameElement | null };
+  frameRef?: { current: HTMLIFrameElement | null };
+  runtimeRef?: DocumentRuntimeRef;
   /** Learned by the page when the document announced itself, long before this mounted. */
   sessionNonce: string | null;
   flushRef?: EditorFlushRef;
@@ -198,7 +201,7 @@ export default function InPlaceEditor({
     const parts = storyUpdateParts(next, HELD_ASSETS);
     if (!parts) return;   // mid-keystroke source that does not parse yet
     const declarationsChanged = parts.declarations !== pushedDeclarations.current;
-    frameRef.current?.contentWindow?.postMessage({
+    sendDocument({ frameRef, runtimeRef }, {
       type: 'mx:document',
       nodes: parts.nodes,
       ...(parts.authorCss !== null ? { authorCss: parts.authorCss } : {}),
@@ -230,9 +233,9 @@ export default function InPlaceEditor({
       ...(dataflowRef.current && declarationsChanged
         ? { dataflow: { flow: parts.flow, state: dataflowRef.current } satisfies StoryIslandDataflow }
         : {}),
-    }, '*');
+    });
     pushedDeclarations.current = parts.declarations;
-  }, [frameRef]);
+  }, [frameRef, runtimeRef]);
 
   /** A structural change: source, persistence and the document, in one act. */
   const commitStructural = useCallback((next: string, over?: { refData?: RefDataMap }) => {
@@ -259,7 +262,7 @@ export default function InPlaceEditor({
   const editRef = useRef<ReturnType<typeof useInPlaceEdit> | null>(null);
   const isUserEditing = useCallback(() => editRef.current?.isUserEditing() ?? false, []);
 
-  const { state: live, queue, flushNow, adoptRemote, isOwnEdit } = useLiveEdits({
+  const { state: live, queue, flushNow, flushForNavigation, adoptRemote, isOwnEdit } = useLiveEdits({
     id: art.id,
     initialEditId: art.edit_id,
     initialVersion: art.version,
@@ -273,7 +276,7 @@ export default function InPlaceEditor({
   // door reaches it through this ref so all three insert doors stay ONE path.
   const insertImageRef = useRef<((file: File) => void) | null>(null);
   const edit = useInPlaceEdit({
-    frameRef,
+    frameRef, runtimeRef,
     sessionNonce,
     onImageDrop: useCallback((file: File) => { insertImageRef.current?.(file); }, []),
     editing: mode === 'design' && !preview,
@@ -398,6 +401,10 @@ export default function InPlaceEditor({
     await editRef.current?.commitPending();
     await flushNow();
   }, [flushNow]);
+  useNavigationGuard(useCallback(() => flushForNavigation(async () => {
+    if (!editRef.current) throw new Error('editor is unavailable');
+    await editRef.current.commitPending(true);
+  }), [flushForNavigation]));
 
   useEffect(() => {
     if (!flushRef) return;
@@ -569,7 +576,7 @@ export default function InPlaceEditor({
             // The document carries its own design attributes; tell it directly
             // rather than making it wait for the save to come back around. With
             // no author pick the MODE follows the new theme's declared default.
-            frameRef.current?.contentWindow?.postMessage({ type: 'mx:document', nodes: storyUpdateParts(sourceRef.current, HELD_ASSETS)?.nodes ?? [], theme: t, colorMode: colorMode ?? storyThemeDefaultMode(t) ?? 'light' }, '*');
+            sendDocument({ frameRef, runtimeRef }, { type: 'mx:document', nodes: storyUpdateParts(sourceRef.current, HELD_ASSETS)?.nodes ?? [], theme: t, colorMode: colorMode ?? storyThemeDefaultMode(t) ?? 'light' });
           }}
         />
         <TemplateChip template={art.template} />
@@ -733,7 +740,7 @@ export default function InPlaceEditor({
       {mode === 'design' && (
         <StoryFormatToolbar
           selection={selection}
-          frameRef={frameRef}
+          frameRef={frameRef} runtimeRef={runtimeRef}
           compiledCss={css}
           onApply={edit.applyFormat}
           onApplyLink={edit.applyLink}

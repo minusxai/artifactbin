@@ -1,3 +1,4 @@
+import { artifactDocument } from './lib/artifact-document.mjs';
 /**
  * Gate: A WRITE BY ONE READER REACHES EVERY OTHER, LIVE.
  *
@@ -111,8 +112,8 @@ const totalRows = async (page) => page.evaluate(() => {
 
 await becomeOwner(voterPage,BASE,seed.token);
 await voterPage.goto(`${BASE}/a/${seed.id}`, {waitUntil:'load'});
-await voterPage.locator('iframe[title="artifact"]').waitFor();
-const voter = await (await voterPage.locator('iframe[title="artifact"]').elementHandle()).contentFrame();
+await voterPage.locator('[data-mx-inline-story]').waitFor();
+const voter = await artifactDocument(voterPage);
 await watcher.goto(`${BASE}/a/${seed.id}`, { waitUntil: 'load' });
 await dash.goto(`${BASE}/a/${second.id}`, { waitUntil: 'load' });
 
@@ -230,7 +231,7 @@ ok(refused === 403, `a write to a closed dataset is refused (${refused})`);
 
   // Now the RELAY write: the owner's own document, framed, writing through the page.
   await page.goto(`${BASE}/a/${owner.id}`, { waitUntil: 'load' });
-  const frame = await until(async () => page.frame({ url: (u) => u.pathname.includes('/raw') }), (f) => !!f);
+  const frame = await until(async () => page.mainFrame(), (f) => !!f);
   ok(!!frame, 'the owner sees the document in a frame (the relay path)');
   const relayVotes = async () => frame.evaluate(() => {
     const m = /ramen\s+(\d+)/.exec(document.body.innerText);

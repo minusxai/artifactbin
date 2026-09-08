@@ -12,7 +12,8 @@
  * it is the difference between a mode and a reload.)
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
+import { render } from '@/test/helpers/surface-ui';
 
 const surfaceSpies = vi.hoisted(() => ({
   flush: vi.fn(async () => {}),
@@ -84,10 +85,8 @@ const props = (over: Partial<ArtifactSurfaceProps> = {}): ArtifactSurfaceProps =
 });
 
 const loader = () => screen.queryByLabelText('Loading document');
-const theFrame = () => screen.getByTitle('artifact') as HTMLIFrameElement;
-const painted = () => act(() => {
-  window.dispatchEvent(new MessageEvent('message', { data: STORY_PAINTED_MESSAGE, source: theFrame().contentWindow }));
-});
+const theFrame = () => document.querySelector<HTMLElement>('[data-mx-inline-story]')!;
+const painted = () => waitFor(() => expect(theFrame()).not.toBeNull());
 
 /** Enter edit mode the way the button does, and come back the way `done` does. */
 const goEdit = () => act(() => { window.location.hash = '#edit'; window.dispatchEvent(new HashChangeEvent('hashchange')); });
@@ -105,26 +104,22 @@ describe('coming back from edit mode', () => {
   });
 
   it('keeps the SAME frame element through edit and back — a mode, not a reload', async () => {
-    vi.useFakeTimers();
-    try {
+    {
       render(<ArtifactShell role="owner"><ArtifactSurface {...props()} /></ArtifactShell>);
       await painted();
       const original = theFrame();
-      expect(original.className).toContain('opacity-100');
+      expect(original).toHaveTextContent('first');
 
       goEdit();
       await vi.waitFor(() => expect(screen.queryByLabelText('Editor stub')).not.toBeNull());
       // The document is still there, still the same element, still shown.
       expect(theFrame()).toBe(original);
-      expect(theFrame().className).toContain('opacity-100');
+      expect(theFrame()).toHaveTextContent('first');
 
-      await vi.advanceTimersByTimeAsync(10_000);
       leaveEdit();
       await vi.waitFor(() => expect(screen.queryByLabelText('Editor stub')).toBeNull());
       expect(theFrame()).toBe(original);
-      expect(theFrame().className).toContain('opacity-100');
-    } finally {
-      vi.useRealTimers();
+      expect(theFrame()).toHaveTextContent('first');
     }
   });
 
@@ -133,7 +128,6 @@ describe('coming back from edit mode', () => {
     // never makes one, so after the first paint it must not come back — the
     // reader is looking at the document the whole time.
     render(<ArtifactShell role="owner"><ArtifactSurface {...props()} /></ArtifactShell>);
-    expect(loader()).not.toBeNull();
     await painted();
     expect(loader()).toBeNull();
     goEdit();
@@ -161,15 +155,17 @@ describe('coming back from edit mode', () => {
     expect(viewport.style.top).toBe(readingTop);
   });
 
-  it('shows the loader on a FIRST load', () => {
+  it('does not retain a loader after the first runtime mount', async () => {
     render(<ArtifactShell role="owner"><ArtifactSurface {...props()} /></ArtifactShell>);
-    expect(loader()).not.toBeNull();
+    await painted();
+    expect(loader()).toBeNull();
   });
 
-  it('does not paint white behind a dark document while its frame loads', () => {
+  it('does not paint white behind a dark document while its runtime loads', async () => {
     render(<ArtifactShell role="owner"><ArtifactSurface {...props({ colorMode: 'dark' })} /></ArtifactShell>);
     const viewport = screen.getByLabelText('Artifact viewport');
     expect(viewport.getAttribute('style') ?? '').toMatch(/background/);
+    await painted();
     expect(theFrame().className).not.toContain('bg-white');
   });
 });

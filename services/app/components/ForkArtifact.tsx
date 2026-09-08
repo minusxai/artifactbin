@@ -8,10 +8,8 @@
  * outcomes live here once: a second hand-written copy of a fetch with three
  * branches is how two doors drift apart.
  *
- *  - 201 → the copy exists; go to it. A whole-page navigation, not a router
- *    push: the answer is an ABSOLUTE url under the new owner's handle, and the
- *    page being left holds a live document frame that nothing should try to
- *    carry across.
+ *  - 201 → the copy exists; navigate through the app router, which owns the
+ *    old artifact's guarded teardown and the new document lifetime.
  *  - 400 → the door refused BY NAME (an unownable <Mutation> target, a private
  *    ref). The refusal is the useful part — it names what the forker would have
  *    to change — so it is shown rather than swallowed into "try again".
@@ -22,6 +20,7 @@
 import { GitFork } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { withIntent } from '@/lib/intent';
+import { useRouter } from '@/lib/navigation';
 
 /** What the last attempt produced: the refusal lines, or nothing. */
 export interface ForkState {
@@ -50,11 +49,16 @@ const loginBack = (): string =>
  * surfaces share one implementation.
  */
 export function useForkArtifact(id: string): ForkState {
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<string[] | null>(null);
   /** A navigation is in flight after a 201; nothing may set state into it. */
   const alive = useRef(true);
-  useEffect(() => () => { alive.current = false; }, []);
+  const generation = useRef(0);
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; generation.current += 1; };
+  }, [id]);
   /**
    * The re-entrancy guard is a REF, not the `busy` state, and that is the
    * whole of it: `setBusy(true)` takes effect at the next render, so two
@@ -69,38 +73,40 @@ export function useForkArtifact(id: string): ForkState {
     inFlight.current = true;
     setBusy(true);
     setRefusal(null);
+    const started = generation.current;
+    const current = () => alive.current && started === generation.current;
     /** This attempt ends in a navigation, so the guard never reopens. */
     let leaving = false;
     void (async () => {
       try {
         const res = await fetch(`/api/my/artifacts/${id}/fork`, { method: 'POST', credentials: 'same-origin' });
         const body = (await res.json().catch(() => ({}))) as { url?: string; error?: string; details?: string[] };
+        if (!current()) return;
         if (res.status === 201 && body.url) {
           leaving = true;
-          window.location.href = body.url;
+          router.push(body.url);
           return;
         }
-        if (res.status === 409 && body.error === 'sign_in_required') {
+        if (res.status === 401 || (res.status === 409 && body.error === 'sign_in_required')) {
           leaving = true;
-          window.location.href = loginBack();
+          router.push(loginBack());
           return;
         }
-        if (!alive.current) return;
         setRefusal(body.details?.length ? body.details : [body.error ?? `could not fork (${res.status})`]);
       } catch {
-        if (alive.current) setRefusal(['could not fork — try again']);
+        if (current()) setRefusal(['could not fork — try again']);
       } finally {
         // A 201 or `sign_in_required` LEAVES: the guard stays closed and the
         // label stays busy through the navigation, because a button that
         // re-enables itself while the browser is already on its way to the
         // copy is a second copy.
-        if (!leaving) {
+        if (!leaving && current()) {
           inFlight.current = false;
-          if (alive.current) setBusy(false);
+          setBusy(false);
         }
       }
     })();
-  }, [id]);
+  }, [id, router]);
 
   return { busy, refusal, fork, dismiss: useCallback(() => setRefusal(null), []) };
 }

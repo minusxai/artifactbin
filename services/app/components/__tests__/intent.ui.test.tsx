@@ -17,7 +17,8 @@
  *    of F2 live in this same query string and are the reader's document.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { render } from '@/test/helpers/surface-ui';
 import { readIntent, stripIntent, withIntent } from '@/lib/intent';
 
 const layerProps: Array<Record<string, unknown>> = [];

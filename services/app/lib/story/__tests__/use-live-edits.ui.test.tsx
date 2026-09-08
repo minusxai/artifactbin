@@ -43,6 +43,43 @@ afterEach(() => {
 });
 
 describe('buffering is batching, never a draft', () => {
+  it('navigation refuses a rejected save and keeps the exact draft available for retry', async () => {
+    fetchMock.mockResolvedValueOnce(errResponse(400, { error: 'invalid_jsx' }));
+    const { hook, adopted } = setup();
+    act(() => { hook.result.current.queue({ source: '<p>last typed text</p>' }); });
+    let allowed: boolean | undefined;
+    await act(async () => { allowed = await hook.result.current.flushForNavigation(async () => {}); });
+    expect(allowed).toBe(false);
+    expect(adopted).toEqual([]);
+    expect(hook.result.current.state.status).toMatch(/not saved/);
+    await act(async () => { allowed = await hook.result.current.flushForNavigation(async () => {}); });
+    expect(allowed).toBe(true);
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).source).toBe('<p>last typed text</p>');
+  });
+
+  it('navigation conflict does not replace the local DOM/source with the remote document', async () => {
+    fetchMock.mockResolvedValueOnce(errResponse(409, { error: 'doc_changed', edit_id: 'edit-head', source: '<p>theirs</p>' }));
+    const { hook, adopted } = setup();
+    let allowed: boolean | undefined;
+    await act(async () => {
+      allowed = await hook.result.current.flushForNavigation(async () => { hook.result.current.queue({ source: '<p>mine</p>' }); });
+    });
+    expect(allowed).toBe(false);
+    expect(adopted).toEqual([]);
+    expect(hook.result.current.state.editId).toBe('edit-1');
+  });
+
+  it('navigation offline returns false without a retry spin; commit failure never starts persistence', async () => {
+    fetchMock.mockRejectedValue(new Error('offline'));
+    const { hook } = setup();
+    let allowed: boolean | undefined;
+    await act(async () => { allowed = await hook.result.current.flushForNavigation(async () => { throw new Error('commit timeout'); }); });
+    expect(allowed).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+    await act(async () => { allowed = await hook.result.current.flushForNavigation(async () => { hook.result.current.queue({ title: 'local' }); }); });
+    expect(allowed).toBe(false);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
   it('coalesces a burst into ONE request carrying the latest text', async () => {
     const { hook } = setup();
     act(() => {

@@ -13,6 +13,7 @@ import { immutableSet } from '@/lib/utils/immutable-collections';
 // lib/jsx/url-attrs.ts for why these must not be maintained separately.
 import { URL_ATTRS, URL_LIST_ATTRS, SVG_PAINT_ATTRS, paintHasExternalUrl } from './url-attrs';
 import { DANGEROUS_TAGS } from './dangerous-tags';
+import { DENIED_JSX_ATTRS } from './denied-attrs';
 import { STORY_COMPONENT_NAMES } from '@/lib/data/story/story-components';
 import type { JsxNode, JsxElement, ValidationError, ValidateOptions } from './types';
 
@@ -31,7 +32,7 @@ const LEGACY_STORY_COMPONENT_NAMES = immutableSet(STORY_COMPONENT_NAMES);
 
 // Attributes rejected by NAME on every tag: HTML injection (dangerouslySetInnerHTML, srcdoc),
 // React internals (ref/key — never serializable data), and customized built-ins (is).
-const DENIED_ATTRS = immutableSet(['dangerouslysetinnerhtml', 'ref', 'key', 'srcdoc', 'is']);
+const DENIED_ATTRS = DENIED_JSX_ATTRS;
 
 // Agent-authored styling escape hatches. `labelStyle` is the one historical component-specific
 // alias (<Param>); keep this list explicit so unrelated data props are never rejected by suffix.

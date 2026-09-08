@@ -74,7 +74,7 @@ const doc = await api('/api/artifacts', {
 check(doc.visibility === 'private', 'owned doc is born private');
 
 await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-const iframeText = await page.frameLocator('iframe[title="artifact"]').locator('#pf').textContent({ timeout: 20000 }).catch(() => null);
+const iframeText = await page.locator('[data-mx-inline-story]').locator('#pf').textContent({ timeout: 20000 }).catch(() => null);
 check(iframeText === 'IFRAME-COOKIE-OK', 'PRIVATE html renders for the owner — the sandboxed iframe request carried the session cookie');
 
 const strangerCtx = await browser.newContext();
@@ -101,7 +101,7 @@ const sharingPut = () => page.waitForResponse(
 );
 // Reading has no bar; the artifact controls carry the sharing surface.
 await openArtifactControls(page);
-await page.locator('[aria-label="Share"]').first().click();
+await page.getByLabel('Owner actions').getByLabel('Share', { exact: true }).click();
 const sharingDialog = page.locator('[role="dialog"][aria-label="Sharing"]');
 await sharingDialog.waitFor({ timeout: 15000 });
 await page.waitForTimeout(250); // let the restrained entrance transform settle before measuring its center

@@ -8,11 +8,14 @@
 import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts';
 import { signActor } from '@artifactbin/utils';
 import { describe, expect, it } from 'vitest';
+import { JSDOM } from 'jsdom';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
-import { BOOTSTRAP_ID, createAppServer, withBootstrap } from '../app';
+import { BOOTSTRAP_ID, createAppServer, withBootstrap, withInitialStory } from '../app';
+import { prepareStoryRuntime } from '@/lib/story/prepare-runtime.server';
+import { criticalStoryFonts } from '@/lib/data/story/story-fonts';
 import { useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
@@ -34,6 +37,58 @@ async function world() {
 }
 
 describe('inlined page data', () => {
+  it('discovers only the theme critical fonts as crossorigin preloads before body markup', async () => {
+    const runtime = await prepareStoryRuntime({source:'<h1>Headline</h1>',compiledCss:null,theme:'manuscript',colorMode:'light',refData:{},title:'Fonts'});
+    const html = withInitialStory('<html><head></head><body><div id="root"></div></body></html>',runtime,'ABC123');
+    const head = html.split('</head>')[0];
+    const urls = [...head.matchAll(/<link rel="preload" href="([^"]+)" as="font" type="font\/woff2" crossorigin>/g)].map(match=>match[1]);
+    expect(urls).toEqual(criticalStoryFonts('manuscript').map(font=>font.url));
+  });
+  it('keeps SSR as the sole in-flow document until the captured handoff is removed', async () => {
+    const runtime = await prepareStoryRuntime({source:'<h1>Stable first paint</h1><div id="root">Author collision</div>',compiledCss:null,theme:null,colorMode:'light',refData:{},title:'Stable'});
+    const html = withInitialStory('<html><head></head><body><div id="root"><main style="min-height:100vh">Lazy app</main></div></body></html>',runtime,'ABC123');
+    const dom = new JSDOM(html);
+    const root = dom.window.document.body.firstElementChild!;
+    const initial = dom.window.document.body.lastElementChild!;
+    expect(dom.window.getComputedStyle(root).display).toBe('none');
+    expect(dom.window.getComputedStyle(initial).display).not.toBe('none');
+    expect(dom.window.getComputedStyle(initial.querySelector('#root')!).display).not.toBe('none');
+    expect(initial.querySelector('[data-mx-inline-story]')).not.toBeNull();
+    expect(initial.textContent).toContain('Stable first paint');
+    initial.remove();
+    expect(dom.window.document.querySelector('style')).toBeNull();
+    // jsdom retains cached style rules when their ancestor is detached. Reparse
+    // the remaining DOM to check the resulting policy; browser CLS gates own
+    // verification of the live, pre-paint removal.
+    const after = new JSDOM(dom.serialize());
+    expect(after.window.getComputedStyle(after.window.document.body.firstElementChild!).display).not.toBe('none');
+    after.window.close();
+    dom.window.close();
+  });
+  it('keeps trusted root and bootstrap ahead of author-colliding ids and leaves author scripts inert', async () => {
+    const runtime = await prepareStoryRuntime({source:`<Helmet><script>{\`globalThis.shouldNotRun=true\`}</script></Helmet><div id="root">Collision</div><div id="${BOOTSTRAP_ID}">Not data</div>`,compiledCss:null,theme:null,colorMode:'light',refData:{},title:'Safe'});
+    const shell = '<html><head><title>x</title></head><body><div id="root"></div></body></html>';
+    const html = withBootstrap(withInitialStory(shell,runtime,'ABC123'),{runtime});
+    expect(html.indexOf('<div id="root"></div>')).toBeLessThan(html.indexOf('data-mx-initial-story'));
+    expect(html.indexOf(`id="${BOOTSTRAP_ID}"`)).toBeLessThan(html.indexOf('data-mx-initial-story'));
+    expect(html).not.toContain('<script>globalThis.shouldNotRun');
+    expect(inlined(html).runtime.authorScript).toBe('globalThis.shouldNotRun=true');
+  });
+  it('serves public markup as readable initial content under app CSP, with one prepared bootstrap', async () => {
+    const w = await world();
+    const owner = as({ credential: 'session', userId: w.owner.id, email: w.owner.email });
+    const canonical = (await app.request(`/a/${w.pub.id}`, { headers: owner })).headers.get('location')!;
+    const response = await app.request(canonical);
+    const html = await response.text();
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-security-policy')).not.toContain('sandbox');
+    expect(html).toContain('data-mx-initial-story');
+    expect(html).toContain('>hi</p>');
+    expect(html).toContain('<title>Pub</title>');
+    expect(inlined(html).artifact.surface.runtime.data.nodes.length).toBeGreaterThan(0);
+    const raw = await app.request(`/a/${w.pub.id}/raw`);
+    expect(raw.headers.get('content-security-policy')).toContain('sandbox');
+  });
   it('escapes `<` so the payload can never end the script early', () => {
     const html = withBootstrap('<head></head>', { evil: '</script><img onerror=alert(1)>' });
     expect(html).not.toContain('</script><img');

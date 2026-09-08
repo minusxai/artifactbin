@@ -1,12 +1,34 @@
 /**
- * A shared artifact link opens on the DOCUMENT — every owner affordance
- * (the story viewer's bar with theme/edit, the surface's edit button, the
- * dataset ref copy) exists only for the owner. The signal is the one
- * ArtifactShell provides; readers get chrome-free pages, including
- * not-logged-in readers holding a token that owns other artifacts.
+ * A shared artifact link opens on the document with public reader chrome.
+ * ArtifactShell supplies role authority for editing, commenting and ownership.
+ * This fixture tests Surface's private endpoint contract and visible controls;
+ * the real TrustedUi/runtime security boundaries have their own suites.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { render } from '@/test/helpers/surface-ui';
+import { router, resetRouter } from '@/test/setup/router';
+import { useLayoutEffect } from 'react';
+import type { InlineStoryController, InlineStoryRuntimeProps } from '@/lib/story-runtime/InlineStoryRuntime';
+
+const runtimes: Array<InlineStoryController & { send: ReturnType<typeof vi.fn>; emit(data: unknown): void }> = [];
+vi.mock('@/lib/story-runtime/InlineStoryRuntime', () => ({
+  InlineStoryRuntime: ({onController}: InlineStoryRuntimeProps) => {
+    useLayoutEffect(() => {
+      const listeners = new Set<(event: unknown) => void>();
+      const controller = {
+        nonce: crypto.randomUUID(), send: vi.fn(), update: vi.fn(), invalidate: vi.fn(),
+        subscribe(listener: (event: unknown) => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
+        getViewportRect: () => new DOMRect(), dispose: () => listeners.clear(),
+        emit(data: unknown) { for (const listener of listeners) listener(data); },
+      };
+      runtimes.push(controller);
+      onController(controller);
+      return () => { onController(null); controller.dispose(); };
+    }, [onController]);
+    return <div data-mx-inline-story><p>hi</p></div>;
+  },
+}));
 
 /*
  * The layer renders nothing here — this file is about the PAGE's chrome and
@@ -30,7 +52,7 @@ vi.mock('@/components/ArtifactEditor', () => ({
 import ArtifactShell from '../ArtifactShell';
 import ArtifactSurface, { type ArtifactSurfaceProps } from '../ArtifactSurface';
 import {
-  STORY_PAINTED_MESSAGE, STORY_READER_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, STORY_SELECTION_ACTION_MESSAGE, STORY_SESSION_MESSAGE,
+  STORY_SELECTION_ACTIONS_MESSAGE, STORY_SELECTION_ACTION_MESSAGE,
 } from '@/lib/story-runtime/contract';
 
 class FakeEventSource {
@@ -47,6 +69,9 @@ class FakeEventSource {
 }
 
 beforeEach(() => {
+  resetRouter();
+  runtimes.length = 0;
+  layerProps.length = 0;
   window.location.hash = '';
   localStorage.clear();
   vi.stubGlobal('EventSource', FakeEventSource);
@@ -78,32 +103,23 @@ const surfaceProps = (over: Partial<ArtifactSurfaceProps>): ArtifactSurfaceProps
   ...over,
 });
 
-/**
- * The page draws no controls button of its own on a markup document: the
- * framed document's chrome carries it and ASKS the page (mx:reader-action),
- * the way a stranger's copy would if it held a session. So "open the
- * controls" is that message, from the frame's own window.
- */
+/** Click the actual reader control; the private runtime is not its transport. */
 const openDocumentControls = () => {
   // A dataset or image page has no frame: its bar carries the button itself.
   const button = screen.queryByLabelText('Open artifact controls');
   if (button) { fireEvent.click(button); return; }
-  const frame = document.querySelector<HTMLIFrameElement>('iframe[title="artifact"]');
-  act(() => {
-    window.dispatchEvent(new MessageEvent('message', {
-      data: { type: STORY_READER_ACTION_MESSAGE, kind: 'controls' },
-      source: frame?.contentWindow as unknown as MessageEventSource,
-    }));
-  });
+  const trigger = document.querySelector<HTMLElement>('[data-mx-reader-trigger="controls"]');
+  expect(trigger).not.toBeNull();
+  fireEvent.click(trigger!);
 };
 
 describe('the surface header buttons are owner chrome', () => {
-  it('a reader gets the document without edit or share buttons', () => {
+  it('a reader can share the public link but has no owner controls', () => {
     render(<ArtifactSurface {...surfaceProps({})} />);
     expect(screen.queryByLabelText('Edit artifact')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Share')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Share')).toHaveAttribute('data-mx-reader-action', 'share');
     expect(screen.queryByLabelText('Copy agent instructions')).not.toBeInTheDocument();
-    // …and no `raw` link: /raw is the frame's source now, not a destination.
+    // Standalone raw rendering is not a reader navigation affordance.
     expect(screen.queryByLabelText('Open the raw artifact')).not.toBeInTheDocument();
   });
 
@@ -117,7 +133,7 @@ describe('the surface header buttons are owner chrome', () => {
     expect(screen.getByLabelText('Edit artifact')).toBeInTheDocument();
     expect(screen.getByLabelText('Edit artifact').querySelector('.lucide-pencil')).toBeTruthy();
     expect(screen.getByLabelText('Toggle comments').querySelector('.lucide-message-square')).toBeTruthy();
-    expect(screen.getByLabelText('Share')).toBeInTheDocument();
+    expect(within(screen.getByLabelText('Owner actions')).getByLabelText('Share')).toBeInTheDocument();
     expect(screen.getByLabelText('Copy agent instructions')).toBeInTheDocument();
   });
 
@@ -126,7 +142,7 @@ describe('the surface header buttons are owner chrome', () => {
       render(<ArtifactShell role={role}><ArtifactSurface {...surfaceProps({ source: '<p>hi</p>' })} /></ArtifactShell>);
       openDocumentControls();
       expect(screen.queryByLabelText('Edit social preview'), role).not.toBeInTheDocument();
-      fireEvent.click(screen.getByLabelText('Share'));
+      fireEvent.click(within(screen.getByLabelText(role === 'owner' ? 'Owner actions' : 'Document actions')).getByLabelText('Share'));
       expect(screen.getByRole('dialog', { name: 'Sharing' }), role).toContainElement(screen.getByLabelText('Edit social preview'));
       if (role === 'editor') {
         expect(screen.queryByLabelText('Make public')).not.toBeInTheDocument();
@@ -159,17 +175,15 @@ describe('the surface header buttons are owner chrome', () => {
     expect(screen.getByLabelText('Exit edit mode').querySelector('.lucide-check')).toBeTruthy();
     expect(screen.getByLabelText('Exit edit mode')).toHaveTextContent('done');
     expect(screen.getByLabelText('Editor toolbar')).toContainElement(screen.getByLabelText('Title'));
-    // In edit mode too, the page draws no bar of its own: the document's own
-    // chrome stays, pinned at the top, and asks the page for the panels.
-    expect(screen.queryByLabelText('Open menu')).toBeNull();
-    expect(screen.queryByLabelText('Open artifact controls')).toBeNull();
+    // The trusted reader controls remain available alongside the editor.
+    expect(screen.getByLabelText('Open menu')).toHaveAttribute('data-mx-reader-trigger', 'menu');
+    expect(document.querySelector('[data-mx-reader-trigger="controls"]')).toBeInTheDocument();
     expect(document.title).toBe('doc [edit mode]');
 
     fireEvent.click(screen.getByLabelText('Exit edit mode'));
-    // Out of edit mode the page draws no trigger of its own: the framed
-    // document's chrome carries settings and profile and asks the page.
-    await waitFor(() => expect(screen.queryByLabelText('Open menu')).toBeNull());
-    expect(screen.queryByLabelText('Open artifact controls')).toBeNull();
+    // Exiting preserves the same reader controls rather than duplicating them.
+    await waitFor(() => expect(screen.getByLabelText('Open menu')).toHaveAttribute('data-mx-reader-trigger', 'menu'));
+    expect(screen.getByLabelText('Open artifact controls')).toHaveAttribute('data-mx-reader-trigger', 'controls');
     openDocumentControls();
     expect(screen.getByLabelText('Edit artifact')).toBeInTheDocument();
     expect(screen.getByLabelText('Edit artifact').querySelector('.lucide-pencil')).toBeTruthy();
@@ -270,74 +284,22 @@ describe('the surface header buttons are owner chrome', () => {
 });
 
 /**
- * THE VIEW-MODE SELECTION BUBBLE'S PAGE HALF. Geometry belongs to the frame —
- * only it can see a Selection at an opaque origin — so the page's whole job is
- * AUTHORITY: which actions it grants, and which it will act on when the frame
- * asks. Both ends are asserted here, on the wire, because a helper that agrees
- * with itself proves nothing about the door.
+ * Selection geometry belongs to the inline runtime; Surface owns authority.
+ * Exercise both grants and action re-checks through the private controller.
  */
 describe('the view-mode selection bubble is granted, and re-checked, by the page', () => {
-  const NONCE = 'n'.repeat(32);
   const OTHER_NONCE = 'm'.repeat(32);
-  type FakeFrameWindow = { postMessage: ReturnType<typeof vi.fn> };
-
-  const originalContentWindow = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow')!;
-  const windows = new WeakMap<HTMLIFrameElement, FakeFrameWindow>();
-
-  beforeEach(() => {
-    window.addEventListener('message', trustFirst);
-    // A window PER ELEMENT: a replaced frame must be a different window, or the
-    // re-grant this suite checks would pass by accident.
-    Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
-      configurable: true,
-      get(this: HTMLIFrameElement) {
-        let win = windows.get(this);
-        if (!win) { win = { postMessage: vi.fn() }; windows.set(this, win); }
-        return win;
-      },
-    });
-  });
-  afterEach(() => {
-    window.removeEventListener('message', trustFirst);
-    Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', originalContentWindow);
-  });
-
-  const frameWindow = () => (screen.getByTitle('artifact') as HTMLIFrameElement).contentWindow as unknown as FakeFrameWindow;
-  const granted = (win: FakeFrameWindow) => win.postMessage.mock.calls
+  const currentRuntime = () => runtimes.at(-1)!;
+  const granted = (win: ReturnType<typeof currentRuntime>) => win.send.mock.calls
     .map((call) => call[0] as { type?: string })
     .filter((message) => message?.type === STORY_SELECTION_ACTIONS_MESSAGE);
-  /**
-   * The nonce announcement is the trust root: the page takes it only from a
-   * REAL event. `dispatchEvent` stamps isTrusted FALSE by definition, and jsdom
-   * exposes it as a non-configurable accessor, so the only way to hand the page
-   * a trusted announcement is to flip the implementation object mid-dispatch —
-   * from a listener registered before the component's own.
-   */
-  const trusted = new WeakSet<Event>();
-  const trustFirst = (event: Event) => {
-    if (!trusted.has(event)) return;
-    for (const key of Object.getOwnPropertySymbols(event)) {
-      const impl = (event as unknown as Record<symbol, { isTrusted?: boolean }>)[key];
-      if (impl && typeof impl === 'object' && 'isTrusted' in impl) impl.isTrusted = true;
-    }
-  };
-  const announce = (win: FakeFrameWindow, nonce = NONCE) => act(() => {
-    const event = new MessageEvent('message', {
-      data: { type: STORY_SESSION_MESSAGE, nonce }, source: win as unknown as MessageEventSource,
-    });
-    trusted.add(event);
-    window.dispatchEvent(event);
-  });
-  const chose = (win: FakeFrameWindow, action: 'edit' | 'annotate', nonce = NONCE) => act(() => {
-    window.dispatchEvent(new MessageEvent('message', {
-      data: {
+  const chose = (win: ReturnType<typeof currentRuntime>, action: 'edit' | 'annotate', nonce = win.nonce) => act(() => {
+    win.emit({
         type: STORY_SELECTION_ACTION_MESSAGE,
         nonce,
         action,
         selection: { kind: 'text', path: '0', tag: 'p', rect: { x: 0, y: 0, width: 10, height: 10 }, className: '', style: '', ancestors: [] },
-      },
-      source: win as unknown as MessageEventSource,
-    }));
+    });
   });
 
   it('grants both actions in view mode and withdraws the bubble inside edit mode', async () => {
@@ -346,8 +308,7 @@ describe('the view-mode selection bubble is granted, and re-checked, by the page
         <ArtifactSurface {...surfaceProps({})} />
       </ArtifactShell>,
     );
-    const win = frameWindow();
-    announce(win);
+    const win = currentRuntime();
     expect(granted(win).at(-1)).toEqual({ type: STORY_SELECTION_ACTIONS_MESSAGE, edit: true, annotate: true });
 
     openDocumentControls();
@@ -364,36 +325,32 @@ describe('the view-mode selection bubble is granted, and re-checked, by the page
     expect(granted(win).at(-1)).toMatchObject({ edit: true, annotate: true });
   });
 
-  it('opening the rail tells the document to leave the rail its width, and the frame never narrows', async () => {
+  it('opening the rail reserves content space without remounting the runtime', async () => {
     render(
       <ArtifactShell role="owner">
         <ArtifactSurface {...surfaceProps({})} />
       </ArtifactShell>,
     );
-    const win = frameWindow();
-    announce(win);
-    const chrome = () => win.postMessage.mock.calls
-      .map((call) => call[0] as { type?: string; mode?: string; railInset?: number })
-      .filter((message) => message?.type === 'mx:reader-chrome');
-    expect(chrome().at(-1)).toMatchObject({ mode: 'on', railInset: 0 });
+    const win = currentRuntime();
+    const viewport = screen.getByLabelText('Artifact viewport');
+    expect(viewport).toHaveStyle({paddingTop: '44px', paddingRight: '0px'});
 
     openDocumentControls();
     fireEvent.click(screen.getByLabelText('Toggle comments'));
-    expect(chrome().at(-1)).toMatchObject({ mode: 'on', railInset: 320 });
+    expect(viewport).toHaveStyle({paddingTop: '44px', paddingRight: '320px'});
     expect(screen.getByLabelText('Artifact viewport').style.right).toBe('0px');
     expect(layerProps.at(-1)).toMatchObject({ railOpen: true, topOffset: 44 });
 
-    // Under the editor the rail drops below BOTH bars, and the editor toolbar
-    // stays full-width above it like the document's own bar (its inset is
-    // the frame's scrollbar alone — none here).
+    // Under the editor the rail drops below BOTH bars; the runtime survives.
     openDocumentControls();
     fireEvent.click(screen.getByLabelText('Edit artifact'));
     await waitFor(() => expect(screen.getByLabelText('Exit edit mode')).toBeInTheDocument());
-    expect(chrome().at(-1)).toMatchObject({ mode: 'pinned', inset: 48, railInset: 320 });
+    expect(viewport).toHaveStyle({paddingTop: '92px', paddingRight: '320px'});
     expect(layerProps.at(-1)).toMatchObject({ railOpen: true, topOffset: 92, rightInset: 0 });
 
     fireEvent.click(within(screen.getByLabelText('Editor toolbar')).getByLabelText('Toggle comments'));
-    expect(chrome().at(-1)).toMatchObject({ mode: 'pinned', railInset: 0 });
+    expect(viewport).toHaveStyle({paddingTop: '92px', paddingRight: '0px'});
+    expect(currentRuntime()).toBe(win);
   });
 
   it('grants a named editor BOTH actions, and a reader nothing at all', () => {
@@ -402,46 +359,33 @@ describe('the view-mode selection bubble is granted, and re-checked, by the page
         <ArtifactSurface {...surfaceProps({})} />
       </ArtifactShell>,
     );
-    announce(frameWindow());
-    expect(granted(frameWindow()).at(-1)).toMatchObject({ edit: true, annotate: true });
+    expect(granted(currentRuntime()).at(-1)).toMatchObject({ edit: true, annotate: true });
     unmount();
 
     render(<ArtifactSurface {...surfaceProps({})} />);
-    announce(frameWindow());
-    expect(granted(frameWindow()).at(-1)).toMatchObject({ edit: false, annotate: false });
+    expect(granted(currentRuntime()).at(-1)).toMatchObject({ edit: false, annotate: false });
   });
 
-  it('re-grants to a frame that was replaced, and trusts that frame’s own nonce', () => {
-    vi.useFakeTimers();
-    try {
-      render(
+  it('re-grants a replacement document and rejects the previous runtime session', () => {
+      const view = render(
         <ArtifactShell role="owner">
           <ArtifactSurface {...surfaceProps({})} />
         </ArtifactShell>,
       );
-      const dead = frameWindow();
-      announce(dead);
+      const dead = currentRuntime();
       expect(granted(dead).at(-1)).toMatchObject({ edit: true, annotate: true });
 
-      // Painted once, then silent: the liveness check throws the frame away.
-      act(() => {
-        window.dispatchEvent(new MessageEvent('message', { data: STORY_PAINTED_MESSAGE, source: dead as unknown as MessageEventSource }));
-      });
-      act(() => { window.dispatchEvent(new Event('pageshow')); });
-      act(() => { vi.advanceTimersByTime(2000); });
+      view.rerender(<ArtifactShell role="owner"><ArtifactSurface {...surfaceProps({id: 'story2'})} /></ArtifactShell>);
 
-      const fresh = frameWindow();
+      const fresh = currentRuntime();
       expect(fresh).not.toBe(dead);
-      // A replaced document is a new session: it announces its OWN nonce, and
-      // the page must both re-grant to it and sign against what it announced.
-      announce(fresh, OTHER_NONCE);
       expect(granted(fresh).at(-1)).toMatchObject({ edit: true, annotate: true });
-
-      chose(fresh, 'edit', OTHER_NONCE);
+      chose(dead, 'edit');
+      expect(window.location.hash).toBe('');
+      chose(fresh, 'edit', dead.nonce);
+      expect(window.location.hash).toBe('');
+      chose(fresh, 'edit');
       expect(window.location.hash).toBe('#edit');
-    } finally {
-      vi.useRealTimers();
-    }
   });
 
   it('opens the composer on the words the owner chose, without entering a mode', () => {
@@ -450,8 +394,7 @@ describe('the view-mode selection bubble is granted, and re-checked, by the page
         <ArtifactSurface {...surfaceProps({})} />
       </ArtifactShell>,
     );
-    const win = frameWindow();
-    announce(win);
+    const win = currentRuntime();
 
     chose(win, 'annotate');
     expect(window.location.hash).toBe(''); // commenting is not a mode; nothing enters the URL
@@ -479,8 +422,7 @@ describe('the view-mode selection bubble is granted, and re-checked, by the page
 
   it('refuses an action the viewer may not take, and one that arrives after a mode opened', () => {
     const { unmount } = render(<ArtifactSurface {...surfaceProps({})} />);
-    const readerWin = frameWindow();
-    announce(readerWin);
+    const readerWin = currentRuntime();
     chose(readerWin, 'edit');
     expect(window.location.hash).toBe('');
     unmount();
@@ -491,8 +433,7 @@ describe('the view-mode selection bubble is granted, and re-checked, by the page
         <ArtifactSurface {...surfaceProps({})} />
       </ArtifactShell>,
     );
-    const win = frameWindow();
-    announce(win);
+    const win = currentRuntime();
     openDocumentControls();
     fireEvent.click(screen.getByLabelText('Edit artifact'));
 
@@ -620,7 +561,8 @@ describe('the fork row', () => {
       );
       openDocumentControls();
       fireEvent.click(screen.getByLabelText('Fork artifact'));
-      await waitFor(() => expect(assign).toHaveBeenCalledWith('http://localhost:3000/@me/copy01-doc'));
+      await waitFor(() => expect(router.pushed).toContain('http://localhost:3000/@me/copy01-doc'));
+      expect(assign).not.toHaveBeenCalled();
       // The owner's sheet also loads its sharing state, so the fork call is
       // found by its address rather than by being first.
       const forkCall = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls
@@ -646,7 +588,7 @@ describe('the fork row', () => {
       // A guard that READS state lets both through — and this door creates a
       // real artifact each time.
       act(() => { row.click(); row.click(); });
-      await waitFor(() => expect(assign).toHaveBeenCalled());
+      await waitFor(() => expect(router.pushed.length).toBe(1));
       const forkCalls = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls
         .filter((call) => String(call[0]).endsWith('/fork'));
       expect(forkCalls.length).toBe(1);
@@ -681,10 +623,11 @@ describe('the fork row', () => {
       );
       openDocumentControls();
       fireEvent.click(screen.getByLabelText('Fork artifact'));
-      await waitFor(() => expect(assign).toHaveBeenCalled());
+      await waitFor(() => expect(router.pushed.length).toBe(1));
+      expect(assign).not.toHaveBeenCalled();
       // The reader's own selection travels with them — the callback is this
       // address plus the intent, never a bare path.
-      expect(String(assign.mock.calls[0][0]))
+      expect(router.pushed[0])
         .toBe(`/login?callbackUrl=${encodeURIComponent('/a/story1?$region=west&intent=fork')}`);
     }, '?$region=west');
   });

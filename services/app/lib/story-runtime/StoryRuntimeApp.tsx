@@ -1045,7 +1045,8 @@ const EMPTY_GLYPHS: GlyphMap = {};
 const NO_SUBSCRIBE = () => () => {};
 
 export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, template = null, chrome = true, assetsUrl = null, managedAssets, importAsset, store: givenStore, onMounted, editDecorate, onSlideRename }: StoryRuntimeAppProps) {
-  const [store] = useState<DataflowStore>(() => givenStore ?? createDataflowStore(dataflow ?? { flow: EMPTY_DATAFLOW }));
+  const [localStore] = useState<DataflowStore>(() => givenStore ?? createDataflowStore(dataflow ?? { flow: EMPTY_DATAFLOW }));
+  const store = givenStore ?? localStore;
   const mountedRef = useRef(onMounted);
   mountedRef.current = onMounted;
   useEffect(() => { mountedRef.current?.(); }, []);

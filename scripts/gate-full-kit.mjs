@@ -1,3 +1,4 @@
+import { artifactDocument } from './lib/artifact-document.mjs';
 /**
  * Gate: the WHOLE component kit through the unified pipeline — the
  * kitchen-sink document served as the
@@ -111,8 +112,8 @@ await page.addInitScript(() => {
 });
 
 await page.goto(`${BASE}/a/${doc.id}`);
-const frameEl = await page.waitForSelector('iframe[title="artifact"]', { timeout: 30000 });
-const frame = await frameEl.contentFrame();
+const frameEl = await page.waitForSelector('[data-mx-inline-story]', { timeout: 30000 });
+const frame = page.mainFrame();
 await frame.waitForSelector('h1', { timeout: 30000 });
 await page.waitForTimeout(6000); // charts hydrate and draw
 
@@ -184,7 +185,7 @@ check(pageErrors.length === 0, `no page errors${pageErrors.length ? `: ${pageErr
 // 3b. the chart module is LAZY: a prose document must not download it
 //     (vega is ~1 MB; the old reader bundle kept it behind a dynamic import
 //     and the unified document must not regress that).
-check(requests.some((u) => /\/story\/chunks\/VegaChart-/.test(u)), 'a chart document fetched the lazy chart chunk');
+check(requests.some((u) => /\/(?:story\/chunks\/|assets\/)?VegaChart[-.]/.test(u) || /\/VegaChart\.tsx(?:\?|$)/.test(u)), 'a chart document fetched the lazy chart chunk');
 
 // 4. the font resolved INSIDE the opaque frame
 const fontOk = await frame.evaluate(async () => {
@@ -230,10 +231,10 @@ const prosePage = await browser.newPage({ viewport: { width: 1200, height: 800 }
   await becomeOwner(prosePage, BASE, mint.token); // a fresh context owns nothing
 prosePage.on('request', (r) => proseRequests.push(r.url()));
 await prosePage.goto(`${BASE}/a/${prose.id}`);
-const proseFrame = await (await prosePage.waitForSelector('iframe[title="artifact"]')).contentFrame();
+const proseFrame = await artifactDocument(prosePage);
 await proseFrame.waitForSelector('h1', { timeout: 20000 });
 await prosePage.waitForTimeout(3000);
-check(!proseRequests.some((u) => /\/story\/chunks\/VegaChart-/.test(u)), 'a prose document never fetches the chart chunk');
+check(!proseRequests.some((u) => /\/(?:story\/chunks\/|assets\/)?VegaChart[-.]/.test(u) || /\/VegaChart\.tsx(?:\?|$)/.test(u)), 'a prose document never fetches the chart chunk');
 
 await browser.close();
 if (failures.length) { console.error(`\n${failures.length} failure(s)`); process.exit(1); }

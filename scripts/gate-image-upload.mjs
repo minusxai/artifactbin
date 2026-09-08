@@ -59,14 +59,12 @@ async function paintedImages(page) {
   const countIn = (ctx) => ctx.evaluate(async () => {
     const deadline = Date.now() + 8000;
     const count = () => {
-      const own = Array.from(document.querySelectorAll('img'));
-      const inner = document.querySelector('[aria-label="Story canvas"] iframe');
-      const nested = Array.from(inner?.contentDocument?.querySelectorAll('img') ?? []);
+      const own = Array.from(document.querySelectorAll('[data-mx-inline-story] img'));
       // ONLY artifact images. Every served document carries the credits-footer
       // logo (/logo-128.png), and counting it made this check pass while a
       // freshly inserted image rendered its literal `ref:<id>` — which is
       // exactly the bug that hid here until gate-web-import measured properly.
-      return [...own, ...nested]
+      return own
         .filter((i) => /\/a\/[A-Za-z0-9]+\/raw/.test(i.getAttribute('src') ?? ''))
         .filter((i) => i.complete && i.naturalWidth > 0).length;
     };
@@ -75,11 +73,7 @@ async function paintedImages(page) {
     return n;
   });
 
-  const docFrameEl = await page.$('iframe[title="artifact"]');
-  if (docFrameEl) {
-    const f = await docFrameEl.contentFrame();
-    if (f) return countIn(f);
-  }
+  await page.locator('[data-mx-inline-story]').waitFor();
   return countIn(page);
 }
 
@@ -104,8 +98,8 @@ await becomeOwner(page, B, st.token);
  * end-to-end assertion possible here.
  */
 async function documentFrame(page) {
-  const el = await page.$('iframe[title="artifact"]');
-  return el ? el.contentFrame() : null;
+  await page.locator('[data-mx-inline-story]').waitFor();
+  return page.mainFrame();
 }
 
 async function dispatchFileEvent(page, kind, b64) {
@@ -121,7 +115,7 @@ async function dispatchFileEvent(page, kind, b64) {
       : new DragEvent('drop', { bubbles: true, cancelable: true });
     // Both are read-only on the constructor in Chromium; define them.
     Object.defineProperty(ev, kind === 'paste' ? 'clipboardData' : 'dataTransfer', { value: dt });
-    document.body.dispatchEvent(ev);
+    document.querySelector('[data-mx-inline-story]').dispatchEvent(ev);
     return 'dispatched';
   }, { kind, b64 });
 }

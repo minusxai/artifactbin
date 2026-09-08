@@ -88,8 +88,9 @@ check(doc.visibility === 'public', 'a PUBLIC document — the case a stranger ca
 
 // ── 2. the parameter is not a lever on a shared link ──────────────────────
 const strangerHtml = await (await fetch(`${BASE}/a/${doc.id}?intent=fork`)).text();
-check(strangerHtml.includes('data-mx-fork'), 'an anonymous ?intent=fork is still the DOCUMENT (it carries the fork anchor)');
-check(!strangerHtml.includes('id="root"'), '…and never the app shell');
+check(strangerHtml.includes('data-mx-initial-story') && strangerHtml.includes('The original, published by its owner.'),
+  'an anonymous ?intent=fork still receives the server-rendered document');
+check(strangerHtml.includes('id="root"'), 'the shared SPA supplies the authenticated fork action, not an outer document iframe');
 
 // ── 3. the logged-out reader taps Fork in the document's own controls ─────
 await forker.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
@@ -134,8 +135,9 @@ const copyRow = await forker.evaluate(
 check(copyRow.forked_from === doc.id, `the copy records its source (forked_from = ${copyRow.forked_from})`);
 check(copyRow.id !== doc.id, 'a new id — the original is untouched');
 
-const credit = forker.frameLocator('iframe[title="artifact"]').locator('[data-mx-forked-from]');
-await credit.waitFor({ state: 'attached', timeout: 30000 });
+await openArtifactControls(forker);
+const credit = forker.locator('[data-mx-forked-from]');
+await credit.waitFor({ state: 'visible', timeout: 30000 });
 const creditText = await credit.innerText();
 check(creditText.toLowerCase().includes('forked from'), `the copy's credits name its source ("${creditText.trim()}")`);
 check(creditText.includes(doc.id), 'and the source is named by its address, not vaguely');

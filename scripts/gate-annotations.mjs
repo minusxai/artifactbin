@@ -63,7 +63,7 @@ const run = async () => {
     const page = await owner.newPage();
     await becomeOwner(page, BASE, token);
     await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
-    const frame = page.frameLocator('iframe[title="artifact"]');
+    const frame = page.locator('[data-mx-inline-story]');
     await frame.locator('#figure').waitFor({ timeout: 15000 });
 
     // ── the view-mode selection bubble ────────────────────────────────────
@@ -71,19 +71,19 @@ const run = async () => {
     // frame, because only the document can see a Selection at an opaque origin.
     // Clicked-until-it-takes for the same reason as the node click below — the
     // capability grant and the lazy chunk land a beat after the page does.
-    const bubble = frame.locator('[data-mx-selection-actions]');
+    const bubble = page.locator('[data-mx-selection-actions]');
     await until(async () => {
       await frame.locator('#figure').click({ clickCount: 3, timeout: 2000 }).catch(() => {});
       return bubble.isVisible().catch(() => false);
     }, (v) => v === true, 15000);
     ok(await bubble.isVisible(), 'selecting text in view mode raises the action bubble inside the document');
-    ok(await frame.locator('[aria-label="Edit selected text"]').count() === 1
-      && await frame.locator('[aria-label="Comment on selected text"]').count() === 1,
+    ok(await page.locator('[aria-label="Edit selected text"]').count() === 1
+      && await page.locator('[aria-label="Comment on selected text"]').count() === 1,
       'the owner is offered both edit and annotate');
 
     // Choosing Annotate opens the composer on those exact words — and enters
     // NOTHING. Commenting is a layer, so no hash moves and no mode opens.
-    await frame.locator('[aria-label="Comment on selected text"]').click();
+    await page.locator('[aria-label="Comment on selected text"]').click();
     const seeded = await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
     ok(seeded === 1, 'the composer opens on the selected words — no second click on the same text');
     ok(await page.evaluate(() => location.hash) === '', 'commenting enters no mode: the hash is untouched');
@@ -114,7 +114,7 @@ const run = async () => {
     // and the document leaves the rail its width instead.
     ok(await page.locator('[aria-label="Artifact viewport"]').evaluate((el) => el.style.right === '0px'),
       'the open rail leaves the frame full-width, so the bar inside it does not move');
-    const railInset = await until(() => frame.locator('html').evaluate((el) => getComputedStyle(el).getPropertyValue('--mx-rail-inset').trim()), (v) => v === '320px', 5000);
+    const railInset = await until(() => page.getByLabel('Artifact viewport').evaluate((el) => getComputedStyle(el).paddingRight), (v) => v === '320px', 5000);
     ok(railInset === '320px', `the document leaves the rail its width (got ${railInset})`);
     ok(await page.locator('[aria-label="Annotation sidebar"]').evaluate((el) => el.style.top === '44px'),
       'the rail sits under the document\'s bar');
@@ -128,7 +128,7 @@ const run = async () => {
     const stillTinted = await until(() => frame.locator('#figure[data-mx-annotated]').count(), (n) => n === 1, 5000);
     ok(stillTinted === 1, 'the tint is ambient: a commented node stays marked with no rail and no mode');
     // The count rides the framed document's comment glyph now, kept live by the page.
-    ok((await frame.locator('[data-mx-reader-count="comment"]').textContent())?.trim() === '1', 'the comment glyph carries the unresolved count');
+    ok((await page.locator('[data-mx-reader-count="comment"]').textContent())?.trim() === '1', 'the comment glyph carries the unresolved count');
     const viewComments = page.locator('[aria-label="Open annotation comments"]');
     await viewComments.waitFor({ timeout: 8000 });
     const viewComment = page.locator('[aria-label^="Open annotation conversation by"]');
@@ -136,7 +136,7 @@ const run = async () => {
     const compactBox = await viewComment.boundingBox();
     ok(!!compactBox && compactBox.width <= 40 && compactBox.height <= 40,
       'the ambient annotation is a compact identity marker');
-    const railGone2 = await until(() => frame.locator('html').evaluate((el) => getComputedStyle(el).getPropertyValue('--mx-rail-inset').trim()), (v) => v === '0px', 5000);
+    const railGone2 = await until(() => page.getByLabel('Artifact viewport').evaluate((el) => getComputedStyle(el).paddingRight), (v) => v === '0px', 5000);
     ok(railGone2 === '0px', 'closing the rail gives the document its width back');
     ok(await page.locator('[aria-label="Artifact viewport"]').evaluate((el) => (el).style.right === '0px'),
       'the floating marker leaves the document full-width');
@@ -209,7 +209,7 @@ const run = async () => {
     ok(gone === 0, 'the resolve reaches the open tab live: the highlight lifts with no reload');
     const threadGone = await until(() => page.locator('[aria-label="Annotation thread"]').count(), (n) => n === 0, 8000);
     ok(threadGone === 0, 'the open-thread list empties live too');
-    const badgeGone = await until(() => frame.locator('[data-mx-reader-count="comment"]').textContent().then((t) => (t ?? '').trim()), (t) => t === '', 5000);
+    const badgeGone = await until(() => page.locator('[data-mx-reader-count="comment"]').textContent().then((t) => (t ?? '').trim()), (t) => t === '', 5000);
     ok(badgeGone === '', 'the count badge drops with the resolve');
     const resolvedCard = await until(() => page.locator('[aria-label="Resolved annotation thread"]').count(), (n) => n === 1, 8000);
     ok(resolvedCard === 1, 'resolved history lists the closed thread below the open list');
@@ -350,9 +350,9 @@ async function quoteLeg(browser) {
   const page = await ctx.newPage();
   await becomeOwner(page, BASE, token);
   await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
-  const frame = page.frameLocator('iframe[title="artifact"]');
+  const frame = page.locator('[data-mx-inline-story]');
   await frame.locator('#second').waitFor({ timeout: 15000 });
-  const raw = await until(async () => page.frame({ url: (u) => u.pathname.includes('/raw') }), (f) => !!f, 15000);
+  const raw = await until(async () => page.mainFrame(), (f) => !!f, 15000);
 
   /*
    * The drag: from one CHARACTER inside the first paragraph to one inside the
@@ -360,7 +360,6 @@ async function quoteLeg(browser) {
    * of the element's box — a paragraph's box is the whole column, so 45% of it
    * lands past the end of a short sentence and the drag starts on nothing.
    */
-  const frameBox = await page.locator('iframe[title="artifact"]').boundingBox();
   const pointAt = async (selector, index) => {
     const inFrame = await raw.evaluate(([sel, at]) => {
       const range = document.createRange();
@@ -369,7 +368,7 @@ async function quoteLeg(browser) {
       const box = range.getBoundingClientRect();
       return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
     }, [selector, index]);
-    return { x: frameBox.x + inFrame.x, y: frameBox.y + inFrame.y };
+    return { x: inFrame.x, y: inFrame.y };
   };
   const dragAcross = async () => {
     const from = await pointAt('#first', 24);   // inside "ahead of plan."
@@ -383,14 +382,14 @@ async function quoteLeg(browser) {
     await page.mouse.move(to.x, to.y, { steps: 20 });
     await page.mouse.up();
   };
-  const bubble = frame.locator('[data-mx-selection-actions]');
+  const bubble = page.locator('[data-mx-selection-actions]');
   await until(async () => {
     await dragAcross().catch(() => {});
     return bubble.isVisible().catch(() => false);
   }, (v) => v === true, 20000);
   ok(await bubble.isVisible(), 'a drag across two paragraphs raises the bubble');
 
-  await frame.locator('[aria-label="Comment on selected text"]').click();
+  await page.locator('[aria-label="Comment on selected text"]').click();
   await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
   await page.locator('[aria-label="Annotation comment"]').fill('does this hold for both?');
   await page.locator('[aria-label="Save annotation"]').click();
@@ -412,7 +411,7 @@ async function quoteLeg(browser) {
   // (b) THE PAINT, AFTER A RELOAD: nothing about it is stored in the DOM, so a
   // reload is the honest test that the range alone can re-find the words.
   await page.reload({ waitUntil: 'load' });
-  const reloaded = await until(async () => page.frame({ url: (u) => u.pathname.includes('/raw') }), (f) => !!f && f !== raw, 15000);
+  const reloaded = await until(async () => page.mainFrame(), (f) => !!f, 15000);
   const paint = await until(
     () => reloaded.evaluate((name) => {
       const highlight = window.CSS?.highlights?.get(name);
@@ -497,7 +496,7 @@ async function markdownLeg(browser) {
   const page = await ctx.newPage();
   await becomeOwner(page, BASE, token);
   await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
-  const frame = page.frameLocator('iframe[title="artifact"]');
+  const frame = page.locator('[data-mx-inline-story]');
   await frame.locator('#cap').waitFor({ timeout: 15000 });
 
   // The comment itself through the browser door, with the session the page
@@ -598,7 +597,7 @@ async function foldLeg(browser) {
   const page = await ctx.newPage();
   await becomeOwner(page, BASE, token);
   await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
-  const frame = page.frameLocator('iframe[title="artifact"]');
+  const frame = page.locator('[data-mx-inline-story]');
   await frame.locator('#cap').waitFor({ timeout: 15000 });
 
   const head = await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: auth })).json();
@@ -635,9 +634,9 @@ async function foldLeg(browser) {
   await page.locator('[aria-label="Open annotation thread"]').first().click({ timeout: 15000 });
   await page.locator('[aria-label="Reply to annotation"]').first().waitFor({ timeout: 8000 });
 
-  const read = () => page.evaluate((reply) => {
-    const sheet = document.querySelector('[aria-label="Annotation sidebar"]');
-    const thread = document.querySelector('[aria-label="Annotation thread"]');
+  const read = () => page.locator('[aria-label="Annotation sidebar"]').evaluate((sheet, reply) => {
+    const tree = sheet.getRootNode();
+    const thread = tree.querySelector('[aria-label="Annotation thread"]');
     if (!sheet || !thread) return null;
     const node = [...thread.querySelectorAll('p, li, div')]
       .reverse()
@@ -645,7 +644,7 @@ async function foldLeg(browser) {
     // The page's own action bar FLOATS OVER the bottom of the sheet on a
     // phone, so the sheet's rect is not what a reader can see. Measure against
     // what is left of it.
-    const bar = document.querySelector('[aria-label="Page actions"][data-scroll-hidden="false"]');
+    const bar = tree.querySelector('[aria-label="Page actions"][data-scroll-hidden="false"]');
     const barTop = bar?.getBoundingClientRect().top ?? Infinity;
     const sheetBox = sheet.getBoundingClientRect();
     const replyBox = node?.getBoundingClientRect() ?? null;
@@ -725,9 +724,8 @@ async function foldLeg(browser) {
   });
   ok(resolvedRes.ok, 'the agent resolves the thread over plain HTTP');
   const muted = await until(
-    () => page.evaluate(() => {
-      const card = document.querySelector('[aria-label="Resolved annotation thread"]');
-      const open = document.querySelector('[aria-label="Annotation thread"]');
+    () => page.locator('[aria-label="Resolved annotation thread"]').first().evaluate(card => {
+      const open = card.getRootNode().querySelector('[aria-label="Annotation thread"]');
       return card
         ? { opacity: Number(getComputedStyle(card).opacity), open: open ? Number(getComputedStyle(open).opacity) : null }
         : null;
@@ -761,7 +759,7 @@ async function pickLeg(browser) {
   const page = await ctx.newPage();
   await becomeOwner(page, BASE, token);
   await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
-  const frame = page.frameLocator('iframe[title="artifact"]');
+  const frame = page.locator('[data-mx-inline-story]');
   await frame.locator('#figure').waitFor({ timeout: 15000 });
 
   await openArtifactControls(page);
@@ -782,7 +780,7 @@ async function pickLeg(browser) {
   ok(typeof stamped === 'string', 'hovering a block while picking stamps it');
   const painted = await intro.evaluate((el) => getComputedStyle(el).outlineStyle);
   ok(painted !== 'none', `…and the outline is PAINTED, not only stamped (outline-style ${painted})`);
-  const cursor = await frame.locator('html').evaluate((el) => getComputedStyle(el).cursor);
+  const cursor = await intro.evaluate((el) => getComputedStyle(el).cursor);
   ok(cursor === 'crosshair', `the document cursor says pick (${cursor})`);
 
   await intro.click();
@@ -822,13 +820,12 @@ async function pickLeg(browser) {
   // rectangle rides the comment as its range, painted back as an overlay.
   await page.locator('[aria-label="Draw an area to comment on"]').click();
   ok(await page.locator('[aria-label="Picking a block"]').textContent().then((t) => /drag/i.test(t ?? '')), 'the pill says to drag');
-  const frameBox = await page.locator('iframe[title="artifact"]').boundingBox();
   const from = await frame.locator('#figure').boundingBox();
   const to = await frame.locator('#list li').last().boundingBox();
-  await page.mouse.move(frameBox.x + from.x + 8, frameBox.y + from.y + 4);
+  await page.mouse.move(from.x + 8, from.y + 4);
   await page.mouse.down();
-  await page.mouse.move(frameBox.x + from.x + 20, frameBox.y + from.y + 10, { steps: 3 });
-  await page.mouse.move(frameBox.x + to.x + to.width / 2, frameBox.y + to.y + to.height - 2, { steps: 15 });
+  await page.mouse.move(from.x + 20, from.y + 10, { steps: 3 });
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height - 2, { steps: 15 });
   ok(await frame.locator('[data-mx-annotate-band]').count() === 1, 'the band is drawn while dragging');
   await page.mouse.up();
   const areaComposer = await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);

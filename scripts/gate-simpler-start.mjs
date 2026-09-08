@@ -97,10 +97,7 @@ const seenInFrame = async (p, text) => {
   for (let i = 0; i < 60; i++) {
     // A no-runtime document RELOADS to show a live update, which destroys the
     // execution context mid-poll: that is the update arriving, not a failure.
-    const f = await (await p.$('iframe[title="artifact"]').catch(() => null))?.contentFrame();
-    const body = f
-      ? await f.evaluate('document.body.innerText').catch(() => '')
-      : await p.evaluate('document.body.innerText').catch(() => '');
+    const body = await p.locator('[data-mx-inline-story]').innerText().catch(() => '');
     if (body.includes(text)) return true;
     await p.waitForTimeout(500);
   }

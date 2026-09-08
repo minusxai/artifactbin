@@ -1,3 +1,4 @@
+import { artifactDocument } from './lib/artifact-document.mjs';
 /**
  * Gate: a REAL ⌘V, not a synthetic ClipboardEvent.
  *
@@ -64,7 +65,7 @@ await page.goto(`${B}/a/${st.id}#edit`, { waitUntil: 'load' });
 await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 90_000 });
 await page.waitForTimeout(3000);
 
-const frame = await (await page.$('iframe[title="artifact"]')).contentFrame();
+const frame = await artifactDocument(page);
 
 // ── 1. a real TEXT paste must land in the paragraph ─────────────────────────
 await page.evaluate(() => navigator.clipboard.writeText('PASTED_TEXT_OK'));

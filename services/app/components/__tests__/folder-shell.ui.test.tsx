@@ -17,7 +17,8 @@
  * (lib/folders notifyParent) — which is why nothing here reloads.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { render } from '@/test/helpers/surface-ui';
 import { STORY_READER_ACTION_MESSAGE } from '@/lib/story-runtime/contract';
 
 vi.mock('@/components/AnnotationLayer', () => ({ default: () => null }));

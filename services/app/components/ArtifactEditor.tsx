@@ -17,6 +17,7 @@
  * protocol shortly after they stop arriving, and every way OUT drains first
  * (the flush ref below, published up to the page).
  */
+import { sendDocument, subscribeDocument, documentRect, documentReady, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { Home, Lock } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import InPlaceEditor from '@/components/InPlaceEditor';
@@ -72,7 +73,7 @@ export interface EditorSeed {
   dataflow?: StoryIslandDataflow | null;
 }
 
-export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, sessionNonce, initialSelectionPath = null, onComment, onToggleComments, commentsOpen = false, commentCount = 0, rightInset = 0 }: {
+export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, runtimeRef, sessionNonce, initialSelectionPath = null, onComment, onToggleComments, commentsOpen = false, commentCount = 0, rightInset = 0 }: {
   id: string;
   seed?: EditorSeed;
   onExit: () => void;
@@ -80,7 +81,8 @@ export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, s
    * Where the reader was in the document when they pressed edit — the editor
    */
   /** The live document's iframe — editing happens IN it, so it is never remounted. */
-  frameRef: { current: HTMLIFrameElement | null };
+  frameRef?: { current: HTMLIFrameElement | null };
+  runtimeRef?: DocumentRuntimeRef;
   /** The document's session secret, learned by the page when it announced itself. */
   sessionNonce: string | null;
   /** View-mode text selection to restore once the edit runtime is ready. */
@@ -220,7 +222,7 @@ export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, s
 
   return (
     <InPlaceEditor
-      frameRef={frameRef}
+      frameRef={frameRef} runtimeRef={runtimeRef}
       sessionNonce={sessionNonce}
       art={{
         id: art.id,

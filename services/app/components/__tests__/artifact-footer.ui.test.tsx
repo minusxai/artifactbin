@@ -5,7 +5,8 @@
  * handle is the byline — and the strip this test was written for is retired.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
+import { render } from '@/test/helpers/surface-ui';
 
 
 import ArtifactSurface, { type ArtifactSurfaceProps } from '../ArtifactSurface';
@@ -33,11 +34,11 @@ const surfaceProps: ArtifactSurfaceProps = {
 };
 
 describe('the artifact viewport boundary', () => {
-  it('gives the full artifact viewport to /raw, with no parent-page footer', () => {
+  it('uses document-owned page scrolling without a duplicate credit footer', () => {
     render(<ArtifactSurface {...surfaceProps} format="markup" source="<p>doc</p>" />);
 
-    expect(screen.getByLabelText('Artifact viewport')).toHaveClass('fixed', 'overflow-hidden');
-    expect(screen.getByTitle('artifact')).toHaveAttribute('src', '/a/story1/raw');
+    expect(screen.getByLabelText('Artifact viewport')).toHaveClass('relative', 'min-h-screen');
+    expect(screen.queryByTitle('artifact')).toBeNull();
     expect(screen.queryByLabelText('Artifact credits')).not.toBeInTheDocument();
   });
 

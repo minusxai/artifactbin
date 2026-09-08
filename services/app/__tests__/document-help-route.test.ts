@@ -37,7 +37,7 @@ describe('GET /a/:id (the document itself)', () => {
     const owner = await ensureUsername(await createUser({ email: 'pretty-help@example.com' }));
     const t = await mintToken('t', owner.id);
     const row = await createArtifact(t.id, owner.id, { format: 'markup', content: '', source: '<div>pretty</div>', meta: {}, title: 'Pretty help', description: null, visibility: 'public' });
-    const app = createAppServer({ indexHtml: async () => '<!doctype html><div id="root">SPA</div>' });
+    const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>SPA</title></head><body><div id="root">SPA</div></body></html>' });
     const res = await app.request(`${BASE}/@${owner.username}/${row.id}-pretty-help`);
     expect(res.status).toBe(200);
     expect(res.headers.get('link')).toBe(`<${BASE}/docs>; rel="help"`);

@@ -66,6 +66,56 @@ afterEach(() => {
 });
 
 describe('view-mode text selection actions', () => {
+  it.each(['empty sibling', 'next text at offset zero', 'selected outside text'])('owns only selected document text across an exterior endpoint: %s', async boundary => {
+    actions.dispose();
+    document.body.innerHTML = '<div id="story"><p data-mx-ast="0">select these words</p></div><div id="outside"></div>';
+    const root = document.getElementById('story')!;
+    const outside = document.getElementById('outside')!;
+    if (boundary !== 'empty sibling') outside.textContent = 'Outside';
+    actions = createFrameSelectionActions({win: window, root, onAction});
+    actions.setNodes(parsed.nodes);
+    actions.update({type: 'mx:selection-actions', edit: false, annotate: true});
+    const range = document.createRange();
+    range.setStart(root.querySelector('p')!.firstChild!, 0);
+    range.setEnd(outside.firstChild ?? outside, boundary === 'selected outside text' ? 1 : 0);
+    const rect = () => ({...rangeRect, toJSON: () => ({})});
+    Object.defineProperty(range, 'getBoundingClientRect', {value: rect});
+    const clone = range.cloneRange.bind(range);
+    vi.spyOn(range, 'cloneRange').mockImplementation(() => {
+      const clipped = clone();
+      Object.defineProperty(clipped, 'getBoundingClientRect', {value: rect});
+      return clipped;
+    });
+    const selection = window.getSelection()!;
+    selection.removeAllRanges(); selection.addRange(range);
+    root.querySelector('p')!.dispatchEvent(new MouseEvent('pointerup', {bubbles: true}));
+    await Promise.resolve();
+    if (boundary === 'selected outside text') {
+      expect(bubbleVisible()).toBe(false);
+      expect(onAction).not.toHaveBeenCalled();
+    } else {
+      expect(bubbleVisible()).toBe(true);
+      expect(document.querySelector('[aria-label="Edit selected text"]')).toBeNull();
+      document.querySelector<HTMLButtonElement>('[aria-label="Comment on selected text"]')!.click();
+      expect(onAction).toHaveBeenCalledWith('annotate', expect.objectContaining({path: '0', quote: 'select these words'}));
+    }
+  });
+  it('keeps the clicked shadow-portal button mounted between pointerup and click',async()=>{
+    actions.dispose();
+    const host=document.createElement('div');document.body.appendChild(host);
+    const shadow=host.attachShadow({mode:'open'});
+    const portal=document.createElement('div');shadow.appendChild(portal);
+    actions=createFrameSelectionActions({win:window,portal,onAction});actions.setNodes(parsed.nodes);
+    actions.update({type:'mx:selection-actions',edit:true,annotate:true});
+    await selectText();
+    const button=shadow.querySelector<HTMLButtonElement>('[aria-label="Comment on selected text"]')!;
+    expect(button).not.toBeNull();
+    button.dispatchEvent(new MouseEvent('pointerdown',{bubbles:true,composed:true}));
+    button.dispatchEvent(new MouseEvent('pointerup',{bubbles:true,composed:true}));
+    await Promise.resolve();
+    expect(button.isConnected).toBe(true);
+    button.click();expect(onAction).toHaveBeenCalledWith('annotate',expect.objectContaining({path:'0'}));
+  });
   /*
    * A triple-click, and a drag that ends at the end of a line, leave the Range
    * ENDING at offset 0 of the following block — a node the selection does not

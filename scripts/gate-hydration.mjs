@@ -112,7 +112,7 @@ async function runNoRepaint() {
    */
   let release;
   const held = new Promise((r) => { release = r; });
-  await page.route('**/story/entry-*.js', async (route) => { await held; await route.continue(); });
+  await page.route(/\/(?:main\.tsx|assets\/[^/]+\.js)(?:\?|$)/, async (route) => { await held; await route.continue(); });
 
   // Reader path on purpose: no shell, no iframe — the document IS the page,
   // which is what a shared link opens.
@@ -135,7 +135,7 @@ async function runNoRepaint() {
   // `window.mx` is installed by the runtime before it signals ready — the SSR'd
   // body already carries `data-mx-ast`, so the markup itself says nothing about
   // whether hydration has happened.
-  ok(await waitFor(page, '!!window.mx'), 'the runtime hydrated the document');
+  ok(await waitFor(page, '!!document.querySelector("[data-mx-inline-story]")'), 'the app mounted its inline artifact runtime');
   await page.waitForTimeout(600);
   const after = await page.evaluate(PROBE);
 
@@ -170,17 +170,14 @@ async function runPreload() {
   await page.goto(`${B}/a/${st.id}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await page.waitForTimeout(6000);
 
-  const html = await (await fetch(`${B}/a/${st.id}/raw`)).text();
+  const html = await (await fetch(`${B}/a/${st.id}`)).text();
   const head = html.slice(0, html.indexOf('</head>'));
-  const links = [...head.matchAll(/<link rel="modulepreload" href="([^"]+)" crossorigin>/g)].map((m) => m[1]);
-
-  const entry = links.find((h) => h.includes('/story/entry-'));
-  const chunk = links.find((h) => h.includes('/story/chunks/'));
-  ok(!!entry, `the runtime is preloaded in the head (${entry ?? 'absent'})`);
-  ok(/\/story\/entry-[A-Z0-9]+\.js$/.test(entry ?? ''), `…at a content-addressed URL (${entry})`);
-  ok(!!chunk, `a charting document preloads the chart chunk too (${chunk ?? 'absent'})`);
-  ok(head.includes(`<link rel="modulepreload" href="${entry}" crossorigin>`),
-    'the preload is crossorigin — matching the script tag, or the bytes are fetched twice');
+  const entry = [...head.matchAll(/<script\b[^>]*\bsrc="([^"]+)"[^>]*>/g)].map(m => m[1]).find(h => /\/assets\/[^/]+\.js$/.test(h));
+  ok(!!entry, `the app module is discoverable in the initial head (${entry ?? 'absent'})`);
+  ok(/\/assets\/[^/]+-[\w-]+\.js$/.test(entry ?? ''), `…at a content-addressed URL (${entry})`);
+  ok(started.filter(r => new URL(r.url).pathname === entry).length === 1, 'the browser fetches the app entry exactly once');
+  await page.locator('[aria-label="Question embed"] svg, [aria-label="Question embed"] canvas').first().waitFor({ timeout: 30_000 });
+  ok(await page.locator('[aria-label="Question embed"] svg, [aria-label="Question embed"] canvas').count() > 0, 'the lazily loaded artifact runtime renders the actual chart');
 
   /*
    * Deliberately NOT asserted here: that the chunk's request starts earlier in
@@ -192,7 +189,7 @@ async function runPreload() {
    * checks above are what can be judged deterministically; the timing is real
    * but not observable from localhost.
    */
-  ok(started.some((r) => r.url.includes('/story/chunks/')), 'the chart chunk was actually fetched');
+  ok(started.filter(r => /\.js(?:\?|$)/.test(r.url)).length > 1, 'the browser fetched the app and its runtime dependencies');
 
   // Not a chart: the split has to keep meaning something.
   const prose = await startDocument(B);

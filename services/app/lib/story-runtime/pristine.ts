@@ -39,13 +39,16 @@ function mintNonce(cryptoImpl: Crypto | undefined): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-export interface PristineChannel {
+export interface RuntimeChannel {
   /** This session's secret. Every frame → parent message carries it; it is never put on `window`. */
   readonly nonce: string;
   /** Post to the parent over the captured reference. */
   post(message: unknown): void;
   /** Read an element's innerHTML through the captured getter. */
   innerHtmlOf(el: Element): string;
+}
+
+export interface PristineChannel extends RuntimeChannel {
   /** True when a `MessageEvent.source` is the parent we captured. */
   isParent(source: unknown): boolean;
   /**

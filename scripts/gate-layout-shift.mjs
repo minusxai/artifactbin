@@ -1,3 +1,4 @@
+import { artifactDocument } from './lib/artifact-document.mjs';
 /**
  * Gate: a deck must not shove its own document sideways after it opens.
  *
@@ -110,10 +111,10 @@ async function watchCanvas(id, { edit = false, token, width = 1600 } = {}) {
    * exists now — entering edit is a message to the document already on screen
    * — so what is worth asserting is that the document itself does not move.
    */
-  const target = await (await page.waitForSelector('iframe[title="artifact"]', { timeout: 60_000 })).contentFrame();
+  const target = await artifactDocument(page, { timeout: 60_000 });
   // `attached`, not `visible`: the rail's previews are scaled to a few pixels,
   // so the first matching element is legitimately not "visible" to Playwright.
-  await target.waitForSelector('[data-mx-story-root]', { state: 'attached', timeout: 60_000 });
+  await target.waitForSelector('[data-mx-inline-story]', { state: 'attached', timeout: 60_000 });
 
   const samples = await target.evaluate(async () => {
     const seen = [];
@@ -122,7 +123,7 @@ async function watchCanvas(id, { edit = false, token, width = 1600 } = {}) {
       // comes first in the DOM, and the story root (the body) always would.
       const el = document.querySelector('.mx-doc')
 
-        ?? document.querySelector('[data-mx-story-root]');
+        ?? document.querySelector('[data-mx-inline-story]');
       if (el) {
         const x = Math.round(el.getBoundingClientRect().left);
         if (seen[seen.length - 1] !== x) seen.push(x);
@@ -194,7 +195,7 @@ async function measureBleed(id, token, width = 1600) {
   const page = await browser.newPage({ viewport: { width, height: 1000 } });
   await becomeOwner(page, B, token);
   await page.goto(`${B}/a/${id}`, { waitUntil: 'commit' });
-  const target = await (await page.waitForSelector('iframe[title="artifact"]', { timeout: 60_000 })).contentFrame();
+  const target = await artifactDocument(page, { timeout: 60_000 });
   await target.waitForSelector('.mx-doc', { state: 'attached', timeout: 60_000 });
   // Past every late arrival — a font landing can widen a line after first paint.
   await page.waitForTimeout(2500);
