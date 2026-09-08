@@ -10,7 +10,7 @@
  */
 import { wakeups } from './wakeup';
 import type { JsxNode } from '@/lib/jsx';
-import type { StoryIslandDataflow } from '@/lib/story-runtime/contract';
+import type { StoryIslandDataflow, StoryDocumentUpdate } from '@/lib/story-runtime/contract';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 
 /**
@@ -90,6 +90,8 @@ export interface ArtifactLiveEvent {
    * same door that builds the served document.
    */
   nodes?: JsxNode[];
+  /** Resolved by the server, never taken from authored SVG or props. */
+  glyphs?: StoryDocumentUpdate['glyphs'];
   /** The author's own <Helmet> <style>, on the same absent/null rule as compiledCss. */
   authorCss?: string | null;
   authorScript?: string | null;

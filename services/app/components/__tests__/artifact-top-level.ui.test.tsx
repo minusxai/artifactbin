@@ -3,6 +3,12 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import ArtifactShell from '../ArtifactShell';
 import ArtifactSurface, { type ArtifactSurfaceProps } from '../ArtifactSurface';
+import { storyBodyFor } from '@/lib/story/body';
+import type { ArtifactLiveEvent } from '@/lib/story/live';
+
+const liveState = vi.hoisted(() => ({frame: null as ArtifactLiveEvent | null}));
+vi.mock('@/lib/story/use-live-artifact', () => ({useLiveArtifact: () => liveState.frame}));
+afterEach(() => { liveState.frame = null; });
 
 afterEach(() => vi.unstubAllGlobals());
 const props: ArtifactSurfaceProps = {
@@ -35,4 +41,22 @@ it('does not let deferred disposal undo a replacement mount under StrictMode', a
   expect(document.documentElement).toHaveClass('dark');
   expect(document.head.querySelector('style[data-mx-tw]')).toHaveTextContent('.second{}');
   view.unmount();
+});
+
+it('propagates prepared and live glyph replacements into the actual mounted story', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({})));
+  const nodes = storyBodyFor('<Icon name="Heart" />')!.body;
+  const glyphs = {Heart: {cls: 'lucide-heart', inner: '<path d="M1 2 L3 4" />'}};
+  const prepared = {nodes, refData: {}, glyphs: {}, colorMode: 'light' as const, chrome: true};
+  const page = (map: typeof prepared.glyphs) => <ArtifactShell role="viewer"><ArtifactSurface {...props} preparedStory={{...prepared, glyphs: map}} /></ArtifactShell>;
+  const view = render(page({}));
+  const host = view.container.querySelector('[data-artifact-story-host]')!;
+  view.rerender(page(glyphs));
+  await waitFor(() => expect(host.querySelector('svg.lucide-heart path')).toHaveAttribute('d','M1 2 L3 4'));
+  liveState.frame = {editId:'edit_2',version:2,by:null,format:'markup',title:props.title,source:'<Icon name="Star" />',content:null,
+    theme:null,colorMode:'light',template:null,nodes:storyBodyFor('<Icon name="Star" />')!.body,
+    glyphs:{Star:{cls:'lucide-star',inner:'<path d="M5 6 L7 8" />'}}};
+  view.rerender(page(glyphs));
+  await waitFor(() => expect(host.querySelector('svg.lucide-star path')).toHaveAttribute('d','M5 6 L7 8'));
+  expect(view.container.querySelector('[data-artifact-story-host]')).toBe(host);
 });

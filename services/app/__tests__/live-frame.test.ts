@@ -61,11 +61,12 @@ async function publicDoc() {
 describe('GET /a/<id>/events/frame', () => {
   it('delivers the server-resolved glyphs for icons introduced by an edit', async () => {
     const { t, doc } = await publicDoc();
-    const edit = await editsRoute(jreq(`/api/artifacts/${doc.id}/edits`, 'POST', { edit_id: doc.edit_id, source: '<div><Icon name="Heart" /></div>' }, t.token), params(doc.id));
+    const edit = await editsRoute(jreq(`/api/artifacts/${doc.id}/edits`, 'POST', { edit_id: doc.edit_id, source: '<div><Icon name="Heart" inner="hostile-glyph" glyphs={{Heart:{cls:"hostile-glyph",inner:"hostile-glyph"}}} /></div>' }, t.token), params(doc.id));
     expect(edit.status).toBe(200);
     const frame = await (await frameRoute(jreq(`/a/${doc.id}/events/frame`), params(doc.id))).json();
     expect(frame.glyphs?.Heart?.cls).toContain('lucide-heart');
     expect(frame.glyphs?.Heart?.inner).toContain('<path');
+    expect(JSON.stringify(frame.glyphs)).not.toContain('hostile-glyph');
   });
   it('answers the COMPLETE frame: nodes, CSS (always), author CSS, design, the declarations signature — and never dataflow rows', async () => {
     const { doc, ds } = await publicDoc();

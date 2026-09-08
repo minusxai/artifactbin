@@ -223,6 +223,11 @@ function loadSsrBundle(): StorySsrBundle {
   return loaded;
 }
 
+/** Trusted server glyphs for live frames, from the same registry as SSR. */
+export function storyGlyphsForNodes(nodes: JsxNode[]): ReturnType<StorySsrBundle['glyphsForNodes']> {
+  return loadSsrBundle().glyphsForNodes(nodes);
+}
+
 /**
  * Does this document need the runtime at all?
  *

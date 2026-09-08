@@ -20,6 +20,32 @@ describe('reusable story runtime lifecycle', () => {
     await act(async () => mounted!.adopt({ type: STORY_DOCUMENT_MESSAGE, nodes: nodes('<Icon name="Heart" />'),
       glyphs: { Heart: { cls: 'lucide-heart', inner: '<path d="M1 2 L3 4" />' } } }));
     expect(host.querySelector('svg.lucide-heart path')).toHaveAttribute('d', 'M1 2 L3 4');
+    await act(async () => mounted!.adopt({type: STORY_DOCUMENT_MESSAGE, nodes: nodes('<Icon name="Heart" />')}));
+    expect(host.querySelector('svg.lucide-heart path')).toHaveAttribute('d', 'M1 2 L3 4');
+    await act(async () => mounted!.adopt({type: STORY_DOCUMENT_MESSAGE, nodes: nodes('<Icon name="Heart" />'), glyphs: {}}));
+    expect(host.querySelector('svg.lucide-heart')).toBeNull();
+  });
+  it('refuses glyph HTML delivered by an author child, a wrong origin or a synthetic event', async () => {
+    const listeners: EventListener[] = [];
+    const original = window.addEventListener.bind(window);
+    vi.spyOn(window, 'addEventListener').mockImplementation(((type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions) => {
+      if (type === 'message' && typeof listener === 'function') listeners.push(listener);
+      original(type, listener, options);
+    }) as Window['addEventListener']);
+    const host = document.createElement('div'); document.body.append(host);
+    const child = document.createElement('iframe'); document.body.append(child);
+    await act(async () => { mounted = mountStory({root: host, peer: window, peerOrigin: window.location.origin, renderMode:'render',
+      data:{nodes:nodes('<p>Safe</p>'),refData:{},colorMode:'light',chrome:true}}); });
+    const data = {type:STORY_DOCUMENT_MESSAGE,nodes:nodes('<Icon name="Heart" />'),glyphs:{Heart:{cls:'lucide-heart',inner:'<foreignObject id="hostile-glyph" />'}}};
+    await act(async () => {
+      for (const candidate of [
+        {source:child.contentWindow,origin:window.location.origin,isTrusted:true},
+        {source:window,origin:'https://attacker.invalid',isTrusted:true},
+        {source:window,origin:window.location.origin,isTrusted:false},
+      ]) for (const listener of listeners) listener({...candidate,data} as unknown as MessageEvent);
+    });
+    expect(host.textContent).toBe('Safe');
+    expect(host.querySelector('#hostile-glyph')).toBeNull();
   });
   it('renders into the explicit top-level host, adopts updates and disposes', async () => {
     const host = document.createElement('div');

@@ -520,7 +520,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     const mounted = mountStory({ root: mountRoot, data: prepared, renderMode: 'render', peer: window, peerOrigin: window.location.origin,
       authorScript: props.authorScript ?? split?.content.script ?? null });
     mountedStoryRef.current = mounted;
-    const initialUpdate: StoryDocumentUpdate = { type: STORY_DOCUMENT_MESSAGE, nodes: prepared.nodes, compiledCss, authorCss: props.authorCss ?? split?.content.style ?? null };
+    const initialUpdate: StoryDocumentUpdate = { type: STORY_DOCUMENT_MESSAGE, nodes: prepared.nodes, glyphs: prepared.glyphs, compiledCss, authorCss: props.authorCss ?? split?.content.style ?? null };
     mounted.adopt(initialUpdate);
     setFrameLoaded(true);
     return () => {
@@ -542,6 +542,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       type: STORY_DOCUMENT_MESSAGE,
       nodes,
       ...(props.preparedStory?.refData ? { refData: props.preparedStory.refData } : {}),
+      ...(props.preparedStory?.glyphs !== undefined ? {glyphs: props.preparedStory.glyphs} : {}),
       ...(dataflow ? { dataflow } : {}),
       compiledCss,
       authorCss: props.authorCss ?? split?.content.style ?? null,
@@ -839,6 +840,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     const update: StoryDocumentUpdate = {
       type: STORY_DOCUMENT_MESSAGE,
       nodes: live.nodes,
+      ...(live.glyphs !== undefined ? {glyphs: live.glyphs} : {}),
       ...(live.dataflow ? { dataflow: live.dataflow } : {}),
       ...(live.compiledCss !== undefined ? { compiledCss: live.compiledCss } : {}),
       ...(live.authorCss !== undefined ? { authorCss: live.authorCss } : {}),

@@ -23,6 +23,7 @@ import type { ArtifactLiveEvent } from './live';
 import { storyUpdateParts } from './update-parts';
 import { assetLookupFrom } from './asset-url';
 import { webAssetsForSource } from '@/lib/web-assets';
+import { storyGlyphsForNodes } from './document';
 
 export interface LiveFrame extends Omit<ArtifactLiveEvent, 'compiledCss' | 'authorCss' | 'dataflow'> {
   compiledCss: string | null;
@@ -75,7 +76,7 @@ async function build(row: ArtifactRow): Promise<LiveFrame> {
     compiledCss: css,
     authorCss: parts?.authorCss ?? null,
     authorScript: parts?.authorScript ?? null,
-    ...(parts ? { nodes: parts.nodes } : {}),
+    ...(parts ? { nodes: parts.nodes, glyphs: storyGlyphsForNodes(parts.nodes) } : {}),
     declarations: parts?.declarations ?? null,
     ...(parts && parts.flow.queries.length + parts.flow.values.length > 0 ? { dataflow: { flow: parts.flow } } : {}),
     datasets: row.format === 'markup' ? datasetsForDocument(row.source) : [],

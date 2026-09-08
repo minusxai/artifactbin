@@ -114,6 +114,7 @@ export function mountStory(_options: StoryMountOptions): MountedStory {
     current = {
       ...current,
       nodes: update.nodes,
+      ...(update.glyphs !== undefined ? {glyphs: update.glyphs} : {}),
       ...(update.refData ? { refData: { ...current.refData, ...update.refData } } : {}),
       ...(update.dataflow ? { dataflow: { flow: update.dataflow.flow, state: update.dataflow.state ?? current.dataflow?.state ?? { values: {}, tables: {}, errors: {} } } } : {}),
       ...(update.colorMode && !readerOverride ? { colorMode: update.colorMode } : {}),
