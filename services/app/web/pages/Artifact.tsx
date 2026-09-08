@@ -3,9 +3,8 @@
  * document, from /api/page/artifact/:id. A reader never reaches this — the
  * server hands them the document itself at the same URL.
  */
-import {appFetch as fetch} from '@/web/api-origin';
 import {isControlsClient,isFolderClient} from '@/web/api-origin';
-import { useEffect, useState } from 'react';
+import { useEffect, useReducer, useState } from 'react';
 import { takeBootstrap } from '../bootstrap';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import ArtifactShell from '@/components/ArtifactShell';
@@ -14,6 +13,8 @@ import type { AccountWorkspace } from '@/lib/workspace';
 import { ShellFrame } from '@/web/Shell';
 import { FolderPage } from './Folder';
 import { NotFoundPage } from './NotFound';
+import { PageStatus } from '../PageStatus';
+import { pageJson, PageRequestError } from '../page-data';
 
 /**
  * ONE ADDRESS, TWO PAGES, and `folder` is the discriminator.
@@ -36,24 +37,29 @@ export function ArtifactPage({ id: given }: { id?: string } = {}) {
   const id = given ?? params.id!;
   const requestKey = `${id}\n${search}`;
   // The server may have inlined this page's data (server/app): render from it at once.
-  const [loaded, setLoaded] = useState<{ key: string; page: Page | 'missing' | null }>(() => ({ key: requestKey, page: takeBootstrap<Page>(window.location.pathname, 'artifact') }));
+  const [retry, retryLoad] = useReducer((value: number) => value + 1, 0);
+  const [loaded, setLoaded] = useState<{ key: string; page: Page | 'missing' | Error | null }>(() => ({ key: requestKey, page: takeBootstrap<Page>(window.location.pathname, 'artifact') }));
   const page = loaded.key === requestKey ? loaded.page : null;
   useEffect(() => {
     if (loaded.key === requestKey && loaded.page) return; // served with its data
+    const controller = new AbortController();
     let alive = true;
-    void fetch(`/api/page/artifact/${id}${search}`, { credentials: 'same-origin' })
-      .then((r): Promise<Page | 'missing'> => (r.ok ? (r.json() as Promise<Page>) : Promise.resolve('missing' as const)))
+    void pageJson<Page>(`/api/page/artifact/${id}${search}`, controller.signal)
       .then((p) => { if (alive) setLoaded({ key: requestKey, page: p }); })
-      .catch(() => { if (alive) setLoaded({ key: requestKey, page: 'missing' }); });
-    return () => { alive = false; };
-  }, [id, search, requestKey, loaded]);
+      .catch((error: unknown) => {
+        if (!alive) return;
+        setLoaded({ key: requestKey, page: error instanceof PageRequestError && error.status === 404 ? 'missing' : error instanceof Error ? error : new Error('Could not load this page. Please retry.') });
+      });
+    return () => { alive = false; controller.abort(); };
+  }, [id, search, requestKey, loaded, retry]);
   useEffect(() => {
     // The address heals to the canonical one — after the ACL, which the fetch already passed.
     if(isFolderClient())return; // Main's server already owns canonicalization.
-    if (!isControlsClient() && page && page !== 'missing' && !page.surface?.captureKey && page.canonical !== window.location.pathname) navigate(page.canonical + search + window.location.hash, { replace: true });
+    if (!isControlsClient() && page && page !== 'missing' && !(page instanceof Error) && !page.surface?.captureKey && page.canonical !== window.location.pathname) navigate(page.canonical + search + window.location.hash, { replace: true });
   }, [navigate, page, search]);
-  if (page === null) return <div aria-label="Loading page" />;
+  if (page === null) return <PageStatus label="artifact" />;
   if (page === 'missing') return <NotFoundPage />;
+  if (page instanceof Error) return <PageStatus label="artifact" error={page.message} retry={() => { setLoaded({key: requestKey, page: null}); retryLoad(); }} />;
   // A type change after server admission must never turn this trusted frame
   // into an author surface. Only the dedicated artifact-controls path may do that.
   if(isFolderClient() && !page.folder)return <NotFoundPage />;

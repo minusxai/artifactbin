@@ -39,3 +39,20 @@ it('synchronizes a canonical path through the router', async () => {
   render(<MemoryRouter initialEntries={['/a/first']}><Harness /></MemoryRouter>);
   await waitFor(() => expect(screen.getByText('/@alice/first-title')).toBeVisible());
 });
+
+it('distinguishes a missing artifact from a retryable page failure', async () => {
+  const fetch = vi.fn()
+    .mockResolvedValueOnce(new Response('busy', {status: 503}))
+    .mockResolvedValueOnce(Response.json(page('first')));
+  vi.stubGlobal('fetch', fetch);
+  const view = render(<MemoryRouter initialEntries={['/a/first']}><Harness /></MemoryRouter>);
+  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not load this page'));
+  fireEvent.click(screen.getByLabelText('Retry loading artifact'));
+  await waitFor(() => expect(screen.getByLabelText('Mounted artifact')).toHaveTextContent('first'));
+  view.unmount();
+
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('missing', {status: 404})));
+  render(<MemoryRouter initialEntries={['/a/gone']}><Harness /></MemoryRouter>);
+  await waitFor(() => expect(screen.getByLabelText('Not found')).toBeVisible());
+  expect(screen.queryByLabelText('Retry loading artifact')).toBeNull();
+});

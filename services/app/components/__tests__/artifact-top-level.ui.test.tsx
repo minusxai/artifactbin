@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import ArtifactShell from '../ArtifactShell';
@@ -18,4 +19,16 @@ it('renders managed prose in the parent document and disposes it on route unmoun
   expect(screen.getByText('Top-level author text').ownerDocument).toBe(document);
   view.unmount();
   expect(screen.queryByText('Top-level author text')).toBeNull();
+});
+
+it('does not let deferred disposal undo a replacement mount under StrictMode', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({})));
+  const view = render(<StrictMode><ArtifactShell role="viewer"><ArtifactSurface {...props} compiledCss=".first{}" theme="modernist" /></ArtifactShell></StrictMode>);
+  view.rerender(<StrictMode><ArtifactShell role="viewer"><ArtifactSurface {...props} id="story2" source='<p id="n2">Replacement</p>' compiledCss=".second{}" theme="organic" colorMode="dark" /></ArtifactShell></StrictMode>);
+  await waitFor(() => expect(screen.getByText('Replacement')).toBeVisible());
+  await Promise.resolve();
+  expect(document.documentElement).toHaveAttribute('data-theme', 'organic');
+  expect(document.documentElement).toHaveClass('dark');
+  expect(document.head.querySelector('style[data-mx-tw]')).toHaveTextContent('.second{}');
+  view.unmount();
 });

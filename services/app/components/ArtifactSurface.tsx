@@ -495,6 +495,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const frameRef = useRef<DocumentPeer | null>(null);
   const storyHostRef = useRef<HTMLDivElement>(null);
   const mountedStoryRef = useRef<MountedStory | null>(null);
+  const mountedUpdateRef = useRef<StoryDocumentUpdate | null>(null);
   const directMarkup = format === 'markup' && !captureKey && !controlsOnly;
   if (controlsOnly && !frameRef.current) frameRef.current = {
     contentWindow: window.parent,
@@ -514,11 +515,18 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     } satisfies StoryIslandData : null);
     if (!prepared) { storyHostRef.current.textContent = source ?? ''; setFrameLoaded(true); return; }
     const host = storyHostRef.current;
+    // React StrictMode intentionally tears an effect down and starts it again.
+    // Give each nested React root its own node so the deferred unmount can
+    // never race createRoot on the replacement's container.
+    const mountRoot = host.ownerDocument.createElement('div');
+    host.replaceChildren(mountRoot);
     frameRef.current = { contentWindow: window, origin: window.location.origin, getBoundingClientRect: () => host.getBoundingClientRect() };
-    const mounted = mountStory({ root: host, data: prepared, renderMode: 'render', peer: window, peerOrigin: window.location.origin,
+    const mounted = mountStory({ root: mountRoot, data: prepared, renderMode: 'render', peer: window, peerOrigin: window.location.origin,
       authorScript: props.authorScript ?? split?.content.script ?? null });
     mountedStoryRef.current = mounted;
-    mounted.adopt({ type: STORY_DOCUMENT_MESSAGE, nodes: prepared.nodes, compiledCss, authorCss: props.authorCss ?? split?.content.style ?? null });
+    const initialUpdate: StoryDocumentUpdate = { type: STORY_DOCUMENT_MESSAGE, nodes: prepared.nodes, compiledCss, authorCss: props.authorCss ?? split?.content.style ?? null };
+    mountedUpdateRef.current = initialUpdate;
+    mounted.adopt(initialUpdate);
     setFrameLoaded(true);
     return () => {
       if (mountedStoryRef.current === mounted) mountedStoryRef.current = null;
@@ -527,7 +535,15 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       // forbids synchronously unmounting a second root while it is reconciling
       // the parent; the detached host is already gone, so disposal can safely
       // finish at the next microtask boundary.
-      queueMicrotask(() => mounted.dispose());
+      mountRoot.remove();
+      queueMicrotask(() => {
+        mounted.dispose();
+        const successor = mountedStoryRef.current;
+        const latest = mountedUpdateRef.current;
+        // dispose restores document-global theme/mode state. If a replacement
+        // already owns the document, immediately reassert its latest state.
+        if (successor && successor !== mounted && latest) successor.adopt(latest);
+      });
     };
   }, [directMarkup, id]);
   useLayoutEffect(() => {
@@ -536,7 +552,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     const split = props.preparedStory ? null : storyBodyFor(source ?? '');
     const nodes = props.preparedStory?.nodes ?? split?.body;
     if (!nodes) return;
-    mounted.adopt({
+    const update: StoryDocumentUpdate = {
       type: STORY_DOCUMENT_MESSAGE,
       nodes,
       ...(props.preparedStory?.refData ? { refData: props.preparedStory.refData } : {}),
@@ -546,7 +562,9 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       authorScript: props.authorScript ?? split?.content.script ?? null,
       colorMode: resolveStoryMode(theme, colorMode),
       theme,
-    });
+    };
+    mountedUpdateRef.current = update;
+    mounted.adopt(update);
   }, [directMarkup, props.preparedStory, props.authorScript, props.authorCss, source, dataflow, theme, colorMode, compiledCss]);
   /**
    * Bumped to throw away a frame whose document is gone (see the liveness
@@ -1504,7 +1522,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             threads on the page (which holds the content and the session).
             Mounted in EVERY mode — the `!editing` gate that used to be here is
             exactly what made commenting mid-edit a four-navigation detour. */}
-        {controlsOnly && accountSession && !canAnnotate && railOpen && <TrustedChrome><aside aria-label="Annotation sidebar" className="fixed right-0 top-11 bottom-0 z-50 w-80 max-w-full border-l border-edge bg-surface p-4">
+        {(controlsOnly || directMarkup) && accountSession && !canAnnotate && railOpen && <TrustedChrome><aside aria-label="Annotation sidebar" className="fixed right-0 top-11 bottom-0 z-50 w-80 max-w-full border-l border-edge bg-surface p-4">
           <div className="flex items-center justify-between"><h2 className="font-semibold">Comments</h2><button aria-label="Close comments" onClick={() => setRailOpen(false)} className="rounded px-2 py-1">Close</button></div>
           <p role="status" className="mt-4 text-sm text-muted">Commenting is not enabled for your access. Ask the owner for comment access.</p>
         </aside></TrustedChrome>}
