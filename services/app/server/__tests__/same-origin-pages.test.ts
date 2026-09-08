@@ -4,7 +4,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { createUser } from '@/lib/users';
 import { useAppHarness } from '@/__tests__/harness';
 
-vi.mock('@/lib/config', async original => ({ ...await original<typeof import('@/lib/config')>(), CONTROLS_ORIGIN: null, SSR_ENABLED: false }));
+const config = vi.hoisted(() => ({ ssr: false }));
+vi.mock('@/lib/config', async original => ({ ...await original<typeof import('@/lib/config')>(), CONTROLS_ORIGIN: null, get SSR_ENABLED() { return config.ssr; } }));
 import { createAppServer } from '../app';
 useAppHarness();
 const secret = 'same-origin-pages-fixture-secret';
@@ -19,6 +20,8 @@ describe('same-origin initial app responses with dynamic SSR disabled', () => {
     expect(html).toMatch(/<h1[\s>]/);
     expect(html).not.toContain('Loading artifactbin');
     expect(html).not.toMatch(/<iframe\b/);
+    expect(html).toContain('"presentation":"public"');
+    expect(html).toContain('"kind":"none"');
   });
 
   it('chooses the workspace skeleton before first paint for a valid session', async () => {
@@ -29,6 +32,8 @@ describe('same-origin initial app responses with dynamic SSR disabled', () => {
     expect(html).toContain('aria-label="Loading workspace"');
     expect(html).not.toMatch(/<iframe\b/);
     expect(html).not.toContain('Loading artifactbin');
+    expect(html).toContain('"presentation":"workspace"');
+    expect(html).toContain('"kind":"account"');
   });
 
   it('offers a themed account shell rather than blank or cross-origin frame HTML', async () => {
@@ -39,5 +44,20 @@ describe('same-origin initial app responses with dynamic SSR disabled', () => {
     expect(html).toContain('aria-label="Loading account"');
     expect(html).not.toMatch(/<iframe\b/);
     expect(html).not.toContain('Loading artifactbin');
+  });
+
+  it('keeps logged-out account shell private-cache-safe in either SSR mode', async () => {
+    for (const ssr of [false, true]) {
+      config.ssr = ssr;
+      try {
+        const response = await app.request('/account', { headers: headers({ credential: 'none' }) });
+        const html = await response.text();
+        expect(response.headers.get('cache-control')).toContain('no-store');
+        expect(html).not.toMatch(/<iframe\b/);
+        expect(html).not.toContain('Loading artifactbin');
+        expect(html).toContain('"kind":"none"');
+        expect(html).toContain('"presentation":"account"');
+      } finally { config.ssr = false; }
+    }
   });
 });
