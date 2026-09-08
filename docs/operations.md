@@ -104,6 +104,39 @@ until `ARTIFACTS__ALLOW_PUBLIC` and a `PROXY__RATE_LIMIT_CONFIG_FILE` whose
 `anon_mint` is not 0 explicitly open them. Retired or misspelled names are
 reported at boot but are not read.
 
+### Restored-authoring production cutover
+
+Treat this release as one app/proxy/browser cutover, not as independently
+deployable halves. Pin all three to the same build and give the app and proxy
+the same `AUTH__SECRET`, `AUTH__SCHEMA`, `APP__PUBLIC_BASE_URL` and
+`APP__ASSETS_ORIGIN`; keep the SQL/browser service URLs consistent with the
+chosen full or split topology. `APP__ASSETS_ORIGIN` must be a distinct hostname
+(for example `https://a.example.com`) routed to the same public server/proxy as
+the main origin. It is a credential-free byte host, not a second application.
+
+Provider consoles must register callbacks on the **main** origin, never the
+asset hostname:
+
+- Google: `<APP__PUBLIC_BASE_URL>/api/auth/callback/google`
+- Generic OIDC: `<APP__PUBLIC_BASE_URL>/api/auth/callback/<AUTH__OIDC_PROVIDER_ID>`
+
+The callback shape comes from the configured Better Auth base URL and its
+standard `callback/:id` endpoint; preserve the configured origin exactly
+(including scheme and any non-default port).
+
+Plan a user-visible authentication boundary. Account sessions should sign in
+again after cutover, and operators should restart MCP clients with requests in
+flight so they initialize and authorize against one release. Browser-held
+anonymous authority now includes a per-browser nonce backed by
+`AUTH__SCHEMA.credentials`; a legacy cookie without that nonce, or one whose
+row is expired/revoked, is deliberately rejected rather than upgraded from the
+cookie alone. Keep `AUTH__SECRET` stable across the deployment.
+
+If rollback is required, roll the app, proxy and browser images/config back as
+one unit, but **do not roll the database back**: writes accepted after cutover
+must remain, and the additive credential rows are safe for the previous code
+to ignore. Expect another account login and MCP-client restart at that boundary.
+
 **The rate limits are a file.** Every number lives in a policy file, and
 `PROXY__RATE_LIMIT_CONFIG_FILE` says which one — it and
 `RATE_LIMITER__TRUSTED_PROXY_HOPS` are the only rate-limit env names there are.
