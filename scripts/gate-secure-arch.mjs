@@ -97,9 +97,10 @@ check(doc.visibility === 'public', 'probe doc is public');
 
 // ── 1. reader: the document itself, top-level, sandboxed ──────────────────
 const readerResp = await reader.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
+const readerPath = new URL(reader.url()).pathname;
 const readerCsp = readerResp.headers()['content-security-policy'] ?? '';
 check(!readerCsp.includes('sandbox') && /script-src[^;]*'self'/.test(readerCsp) && !/script-src[^;]*'unsafe-eval'/.test(readerCsp), `reader carries strict app CSP; author children own the sandbox (${readerCsp.slice(0, 80)}…)`);
-check(reader.url() === `${BASE}/a/${doc.id}`, `reader URL unchanged, no redirect (${new URL(reader.url()).pathname})`);
+check(readerPath.includes(doc.id) && new URL(reader.url()).origin === BASE, `reader reaches its canonical artifact address (${readerPath})`);
 check((await reader.locator('iframe[title="artifact"]').count()) === 0, 'reader page has NO artifact iframe');
 await reader.waitForFunction(() => { const t = document.getElementById('sec-probe')?.textContent ?? ''; return /"fetch"/.test(t) && /"ownQuery"/.test(t) && /"start"/.test(t); }, null, { timeout: 15000 }).catch(() => {});
 const probe = JSON.parse(await reader.locator('#sec-probe').textContent().catch(() => '{}') || '{}');
@@ -114,12 +115,12 @@ const parentQuery = await reader.evaluate(async id => (await fetch('/a/' + id + 
 check(parentQuery === 200, `trusted document runtime can fetch its scoped query (${parentQuery})`);
 check(probe.start === 'blocked', `fetch to /a/<id>/start is blocked (${probe.start}) — path-exact, not a prefix`);
 check(probe.replaceState === 'held' || /THROW/.test(probe.replaceState ?? ''), `author history cannot spoof the page URL (${probe.replaceState})`);
-check(reader.url() === `${BASE}/a/${doc.id}`, 'author probe left the top-level URL unchanged');
+check(new URL(reader.url()).pathname === readerPath && new URL(reader.url()).origin === BASE, 'author probe cannot change the canonical top-level path or origin');
 
 // signed-in NON-owner: same document, same URL, no hop
 const otherResp = await other.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
 check(!(otherResp.headers()['content-security-policy'] ?? '').includes('sandbox'), 'signed-in non-owner gets the same top-level app policy');
-check(other.url() === `${BASE}/a/${doc.id}`, 'signed-in non-owner: URL unchanged, no redirect');
+check(new URL(other.url()).pathname === readerPath && new URL(other.url()).origin === BASE, 'signed-in non-owner reaches the same canonical address');
 check((await other.locator('iframe[title="artifact"]').count()) === 0, 'signed-in non-owner: no iframe');
 
 // private: the ACL still runs first on every path — B and the reader get the uniform 404

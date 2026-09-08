@@ -71,19 +71,19 @@ const run = async () => {
     // frame, because only the document can see a Selection at an opaque origin.
     // Clicked-until-it-takes for the same reason as the node click below — the
     // capability grant and the lazy chunk land a beat after the page does.
-    const bubble = frame.locator('[data-mx-selection-actions]');
+    const bubble = page.locator('[data-mx-selection-actions]');
     await until(async () => {
       await frame.locator('#figure').click({ clickCount: 3, timeout: 2000 }).catch(() => {});
       return bubble.isVisible().catch(() => false);
     }, (v) => v === true, 15000);
     ok(await bubble.isVisible(), 'selecting text in view mode raises the action bubble inside the document');
-    ok(await frame.locator('[aria-label="Edit selected text"]').count() === 1
-      && await frame.locator('[aria-label="Comment on selected text"]').count() === 1,
+    ok(await page.locator('[aria-label="Edit selected text"]').count() === 1
+      && await page.locator('[aria-label="Comment on selected text"]').count() === 1,
       'the owner is offered both edit and annotate');
 
     // Choosing Annotate opens the composer on those exact words — and enters
     // NOTHING. Commenting is a layer, so no hash moves and no mode opens.
-    await frame.locator('[aria-label="Comment on selected text"]').click();
+    await page.locator('[aria-label="Comment on selected text"]').click();
     const seeded = await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
     ok(seeded === 1, 'the composer opens on the selected words — no second click on the same text');
     ok(await page.evaluate(() => location.hash) === '', 'commenting enters no mode: the hash is untouched');
@@ -382,14 +382,14 @@ async function quoteLeg(browser) {
     await page.mouse.move(to.x, to.y, { steps: 20 });
     await page.mouse.up();
   };
-  const bubble = frame.locator('[data-mx-selection-actions]');
+  const bubble = page.locator('[data-mx-selection-actions]');
   await until(async () => {
     await dragAcross().catch(() => {});
     return bubble.isVisible().catch(() => false);
   }, (v) => v === true, 20000);
   ok(await bubble.isVisible(), 'a drag across two paragraphs raises the bubble');
 
-  await frame.locator('[aria-label="Comment on selected text"]').click();
+  await page.locator('[aria-label="Comment on selected text"]').click();
   await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
   await page.locator('[aria-label="Annotation comment"]').fill('does this hold for both?');
   await page.locator('[aria-label="Save annotation"]').click();
