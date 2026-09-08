@@ -1,9 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router';
 
 vi.mock('@/components/ArtifactSurface', () => ({
-  default: (props: { id: string }) => <p aria-label="Mounted artifact">{props.id}</p>,
+  default: (props: { id: string }) => { const [editing,setEditing]=useState(false); return <><header aria-label="Page bar"/><p aria-label="Mounted artifact">{props.id}</p><button onClick={()=>setEditing(true)}>edit fixture</button>{editing&&<p>draft fixture</p>}</>; },
 }));
 
 import { ArtifactPage } from '../pages/Artifact';
@@ -34,6 +35,17 @@ it('tears down the old artifact while a route switch is loading and ignores its 
   expect(screen.getByLabelText('Mounted artifact')).toHaveTextContent('second');
 });
 
+it('keys the surface by artifact so local edit state cannot cross documents',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>Response.json(page(String(input).includes('second')?'second':'first'))));
+ render(<MemoryRouter initialEntries={['/a/first']}><Harness /></MemoryRouter>);
+ await waitFor(()=>expect(screen.getByLabelText('Mounted artifact')).toHaveTextContent('first'));
+ fireEvent.click(screen.getByText('edit fixture'));expect(screen.getByText('draft fixture')).toBeVisible();
+ fireEvent.click(screen.getByText('next'));
+ await waitFor(()=>expect(screen.getByLabelText('Mounted artifact')).toHaveTextContent('second'));
+ expect(screen.queryByText('draft fixture')).toBeNull();
+ expect(screen.getAllByLabelText('Page bar')).toHaveLength(1);
+});
+
 it('synchronizes a canonical path through the router', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json(page('first', '/@alice/first-title'))));
   render(<MemoryRouter initialEntries={['/a/first']}><Harness /></MemoryRouter>);
@@ -47,6 +59,7 @@ it('distinguishes a missing artifact from a retryable page failure', async () =>
   vi.stubGlobal('fetch', fetch);
   const view = render(<MemoryRouter initialEntries={['/a/first']}><Harness /></MemoryRouter>);
   await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not load this page'));
+  expect(screen.getAllByLabelText('Page bar')).toHaveLength(1);
   fireEvent.click(screen.getByLabelText('Retry loading artifact'));
   await waitFor(() => expect(screen.getByLabelText('Mounted artifact')).toHaveTextContent('first'));
   view.unmount();

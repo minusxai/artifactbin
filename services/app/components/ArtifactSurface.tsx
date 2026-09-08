@@ -53,6 +53,7 @@ import { mountStory, type MountedStory } from '@/lib/story-runtime/mount';
 import { storyBodyFor } from '@/lib/story/body';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
 import { TrustedChrome } from '@/components/TrustedUi';
+import { Tooltip } from '@/components/Tooltip';
 
 const ArtifactEditor = dynamic(() => import('@/components/ArtifactEditor'), {
   ssr: false,
@@ -495,7 +496,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const frameRef = useRef<DocumentPeer | null>(null);
   const storyHostRef = useRef<HTMLDivElement>(null);
   const mountedStoryRef = useRef<MountedStory | null>(null);
-  const mountedUpdateRef = useRef<StoryDocumentUpdate | null>(null);
   const directMarkup = format === 'markup' && !captureKey && !controlsOnly;
   if (controlsOnly && !frameRef.current) frameRef.current = {
     contentWindow: window.parent,
@@ -525,25 +525,15 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       authorScript: props.authorScript ?? split?.content.script ?? null });
     mountedStoryRef.current = mounted;
     const initialUpdate: StoryDocumentUpdate = { type: STORY_DOCUMENT_MESSAGE, nodes: prepared.nodes, compiledCss, authorCss: props.authorCss ?? split?.content.style ?? null };
-    mountedUpdateRef.current = initialUpdate;
     mounted.adopt(initialUpdate);
     setFrameLoaded(true);
     return () => {
       if (mountedStoryRef.current === mounted) mountedStoryRef.current = null;
       frameRef.current = null;
-      // This lifecycle is nested beneath ArtifactSurface's React root. React
-      // forbids synchronously unmounting a second root while it is reconciling
-      // the parent; the detached host is already gone, so disposal can safely
-      // finish at the next microtask boundary.
+      // Runtime resources and globals release now; mountStory defers only its
+      // nested React-root unmount until parent reconciliation has completed.
       mountRoot.remove();
-      queueMicrotask(() => {
-        mounted.dispose();
-        const successor = mountedStoryRef.current;
-        const latest = mountedUpdateRef.current;
-        // dispose restores document-global theme/mode state. If a replacement
-        // already owns the document, immediately reassert its latest state.
-        if (successor && successor !== mounted && latest) successor.adopt(latest);
-      });
+      mounted.dispose();
     };
   }, [directMarkup, id]);
   useLayoutEffect(() => {
@@ -563,7 +553,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       colorMode: resolveStoryMode(theme, colorMode),
       theme,
     };
-    mountedUpdateRef.current = update;
     mounted.adopt(update);
   }, [directMarkup, props.preparedStory, props.authorScript, props.authorCss, source, dataflow, theme, colorMode, compiledCss]);
   /**
@@ -1391,8 +1380,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       <>
         {(controlsOnly || directMarkup) && <TrustedChrome><><AppBar fixed title={shownTitle} label="Artifact controls" />
           <div data-controls-region className="fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-xl border border-edge bg-surface p-2 shadow-lg">
-            <button aria-label="Like artifact" disabled={socialPending.current.like} aria-pressed={likeRef.current.liked} onClick={() => void toggleLike(null)} className="flex cursor-pointer items-center gap-2 rounded px-3 py-2 transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-60"><Heart size={18} fill={likeRef.current.liked ? 'currentColor' : 'none'} />{likeRef.current.count}</button>
-            <button aria-label="Toggle comments" onClick={() => {if (canAnnotate || accountSession) setRailOpen(open => !open);else appNavigate(artifactLoginUrl(id, 'comment'));}} className="flex cursor-pointer items-center gap-2 rounded px-3 py-2 transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-accent"><MessageSquare size={18} />{openAnnotationCount}</button>
+            <Tooltip content="Like artifact"><button aria-label="Like artifact" disabled={socialPending.current.like} aria-pressed={likeRef.current.liked} onClick={() => void toggleLike(null)} className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded px-3 py-2 transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-60"><Heart size={18} fill={likeRef.current.liked ? 'currentColor' : 'none'} />{likeRef.current.count}</button></Tooltip>
+            <Tooltip content="Comments"><button aria-label="Toggle comments" onClick={() => {if (canAnnotate || accountSession) setRailOpen(open => !open);else appNavigate(artifactLoginUrl(id, 'comment'));}} className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded px-3 py-2 transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-accent"><MessageSquare size={18} />{openAnnotationCount}</button></Tooltip>
           </div>
           {(props.authorUsername || followRef.current) && <div data-controls-region aria-label="Artifact author" className="fixed bottom-20 left-4 z-40 flex max-w-[calc(100vw-2rem)] items-center gap-1 rounded-xl border border-edge bg-surface p-2 shadow-lg sm:bottom-4 sm:max-w-[calc(100vw-13rem)]">
             {props.authorUsername && <a href={`/@${props.authorUsername}`} aria-label={`View @${props.authorUsername}'s profile`} className="min-w-0 truncate rounded px-2 py-2 font-mono text-xs text-accent hover:underline focus-visible:outline-2 focus-visible:outline-accent">@{props.authorUsername}</a>}

@@ -23,8 +23,8 @@ it('renders managed prose in the parent document and disposes it on route unmoun
 
 it('does not let deferred disposal undo a replacement mount under StrictMode', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({})));
-  const view = render(<StrictMode><ArtifactShell role="viewer"><ArtifactSurface {...props} compiledCss=".first{}" theme="modernist" /></ArtifactShell></StrictMode>);
-  view.rerender(<StrictMode><ArtifactShell role="viewer"><ArtifactSurface {...props} id="story2" source='<p id="n2">Replacement</p>' compiledCss=".second{}" theme="organic" colorMode="dark" /></ArtifactShell></StrictMode>);
+  const view = render(<StrictMode><ArtifactShell role="viewer"><ArtifactSurface key="story1" {...props} compiledCss=".first{}" theme="modernist" /></ArtifactShell></StrictMode>);
+  view.rerender(<StrictMode><ArtifactShell role="viewer"><ArtifactSurface key="story2" {...props} id="story2" source='<p id="n2">Replacement</p>' compiledCss=".second{}" theme="organic" colorMode="dark" /></ArtifactShell></StrictMode>);
   await waitFor(() => expect(screen.getByText('Replacement')).toBeVisible());
   await Promise.resolve();
   expect(document.documentElement).toHaveAttribute('data-theme', 'organic');

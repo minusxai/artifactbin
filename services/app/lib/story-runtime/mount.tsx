@@ -36,12 +36,29 @@ export interface MountedStory {
   dispose(): void;
 }
 
+const GLOBAL_HOOKS = [STORY_ADOPT_HOOK, STORY_DATA_HOOK, STORY_MODE_HOOK, STORY_VALUES_HOOK] as const;
+type GlobalBaseline = {
+  theme: string | null; dark: boolean; light: boolean; mx: Window['mx'];
+  hooks: Map<string, unknown>;
+};
+const globalLeases = new WeakMap<Window, {owner: symbol; baseline: GlobalBaseline}>();
+
 /** One lifecycle for the served document entry and SPA artifact routes. */
 export function mountStory(_options: StoryMountOptions): MountedStory {
   const options = _options;
   const doc = options.root.ownerDocument;
   const win = doc.defaultView;
   if (!win) throw new Error('mountStory: root has no window');
+  const owner = Symbol('mounted-story');
+  const inherited = globalLeases.get(win);
+  const baseline: GlobalBaseline = inherited?.baseline ?? {
+    theme: doc.documentElement.getAttribute('data-theme'),
+    dark: doc.documentElement.classList.contains('dark'),
+    light: doc.documentElement.classList.contains('light'),
+    mx: win.mx,
+    hooks: new Map(GLOBAL_HOOKS.map(name => [name, (win as unknown as Record<string, unknown>)[name]])),
+  };
+  globalLeases.set(win, {owner, baseline});
   let disposed = false;
   let current = options.data;
   let readerOverride = readerMode(win);
@@ -54,9 +71,6 @@ export function mountStory(_options: StoryMountOptions): MountedStory {
       author: doc.head.querySelector<HTMLStyleElement>('style[data-mx-author]'),
     }
     : { compiled: null, author: null };
-  const initialTheme = doc.documentElement.getAttribute('data-theme');
-  const initialDark = doc.documentElement.classList.contains('dark');
-  const initialLight = doc.documentElement.classList.contains('light');
   const transport = createDocumentTransport(
     win,
     current.queryUrl,
@@ -68,8 +82,7 @@ export function mountStory(_options: StoryMountOptions): MountedStory {
   const store = createDataflowStore(current.dataflow ?? { flow: EMPTY_DATAFLOW }, { transport });
   const author = createAuthorScriptSession(store, doc);
   const assetImport = transport?.importAsset ? { importAsset: transport.importAsset } : {};
-  const previousMx = win.mx;
-  const mountedMx = installMx(store);
+  installMx(store);
   const renderProps = () => ({ ...current, store, ...assetImport });
   const channel = options.peer ? capturePristine(win, options.peerOrigin, options.peer) : capturePristine(win, options.peerOrigin);
   let reactRoot: Root;
@@ -109,9 +122,7 @@ export function mountStory(_options: StoryMountOptions): MountedStory {
   };
 
   const hooks = win as unknown as Record<string, unknown>;
-  const previousHooks = new Map<string, unknown>();
-  const ownedHooks = new Map<string, unknown>();
-  const ownHook = (name: string, value: unknown) => { previousHooks.set(name, hooks[name]); ownedHooks.set(name, value); hooks[name] = value; };
+  const ownHook = (name: string, value: unknown) => { hooks[name] = value; };
   ownHook(STORY_ADOPT_HOOK, adopt);
   ownHook(STORY_DATA_HOOK, (datasets: string[]) => { if (!disposed) store.invalidateDatasets(datasets); });
   ownHook(STORY_MODE_HOOK, (mode: 'light' | 'dark') => {
@@ -214,14 +225,18 @@ export function mountStory(_options: StoryMountOptions): MountedStory {
       ownedStyles.compiled?.remove(); ownedStyles.author?.remove();
       author.dispose();
       store.dispose();
-      reactRoot.unmount();
-      if (win.mx === mountedMx) win.mx = previousMx;
-      if (initialTheme === null) doc.documentElement.removeAttribute('data-theme');
-      else doc.documentElement.setAttribute('data-theme', initialTheme);
-      doc.documentElement.classList.toggle('dark', initialDark);
-      doc.documentElement.classList.toggle('light', initialLight);
-      for (const [name, previous] of previousHooks) {
-        if (hooks[name] === ownedHooks.get(name)) {
+      // Everything observable is released synchronously. Only React's nested
+      // root teardown waits until the parent reconciliation has completed.
+      queueMicrotask(() => reactRoot.unmount());
+      const lease = globalLeases.get(win);
+      if (lease?.owner === owner) {
+        globalLeases.delete(win);
+        if (baseline.theme === null) doc.documentElement.removeAttribute('data-theme');
+        else doc.documentElement.setAttribute('data-theme', baseline.theme);
+        doc.documentElement.classList.toggle('dark', baseline.dark);
+        doc.documentElement.classList.toggle('light', baseline.light);
+        win.mx = baseline.mx;
+        for (const [name, previous] of baseline.hooks) {
           if (previous === undefined) delete hooks[name]; else hooks[name] = previous;
         }
       }

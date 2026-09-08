@@ -28,6 +28,20 @@ it('explains unavailable commenting to a signed-in direct-page viewer',()=>{
  expect(screen.getByRole('status')).toHaveTextContent('Commenting is not enabled for your access');
  expect(screen.getByLabelText('Annotation sidebar')).toBeVisible();
 });
+it('gives direct social controls touch-sized targets and accessible focus tooltips',async()=>{
+ mount('viewer');
+ const like=screen.getByLabelText('Like artifact');const comments=screen.getByLabelText('Toggle comments');
+ expect(like).toHaveClass('min-h-11','min-w-11');expect(comments).toHaveClass('min-h-11','min-w-11');
+ fireEvent.focus(comments);
+ expect(await screen.findByRole('tooltip')).toHaveTextContent('Comments');
+});
+it('overlays the direct document with a correctly inset annotation rail',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({annotations:[]})));
+ render(<ArtifactShell role="owner"><ArtifactSurface {...props}/></ArtifactShell>);fireEvent.click(screen.getByLabelText('Toggle comments'));
+ const rail=await screen.findByLabelText('Annotation sidebar');
+ expect(rail).toHaveStyle({top:'44px',right:'0px',width:'320px'});
+ expect(screen.getByLabelText('Artifact viewport')).toHaveStyle({right:'0px'});
+});
 
 const openFork=()=>{fireEvent.click(screen.getByLabelText('Open artifact controls'));fireEvent.click(screen.getByLabelText('Fork artifact'));};
 const forkResponse=(status:number,body:unknown)=>vi.fn(async(..._args:Parameters<typeof fetch>)=>({ok:status===201,status,json:async()=>body}));

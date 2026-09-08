@@ -4,7 +4,7 @@
  * server hands them the document itself at the same URL.
  */
 import {isControlsClient,isFolderClient} from '@/web/api-origin';
-import { useEffect, useReducer, useState } from 'react';
+import { useEffect, useReducer, useState, type ReactNode } from 'react';
 import { takeBootstrap } from '../bootstrap';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import ArtifactShell from '@/components/ArtifactShell';
@@ -15,6 +15,7 @@ import { FolderPage } from './Folder';
 import { NotFoundPage } from './NotFound';
 import { PageStatus } from '../PageStatus';
 import { pageJson, PageRequestError } from '../page-data';
+import PageChrome from '@/components/PageChrome';
 
 /**
  * ONE ADDRESS, TWO PAGES, and `folder` is the discriminator.
@@ -57,9 +58,10 @@ export function ArtifactPage({ id: given }: { id?: string } = {}) {
     if(isFolderClient())return; // Main's server already owns canonicalization.
     if (!isControlsClient() && page && page !== 'missing' && !(page instanceof Error) && !page.surface?.captureKey && page.canonical !== window.location.pathname) navigate(page.canonical + search + window.location.hash, { replace: true });
   }, [navigate, page, search]);
-  if (page === null) return <PageStatus label="artifact" />;
-  if (page === 'missing') return <NotFoundPage />;
-  if (page instanceof Error) return <PageStatus label="artifact" error={page.message} retry={() => { setLoaded({key: requestKey, page: null}); retryLoad(); }} />;
+  const withChrome = (content: ReactNode) => <><PageChrome authed={false} title={null} label="Artifact controls" />{content}</>;
+  if (page === null) return withChrome(<PageStatus label="artifact" />);
+  if (page === 'missing') return withChrome(<NotFoundPage />);
+  if (page instanceof Error) return withChrome(<PageStatus label="artifact" error={page.message} retry={() => { setLoaded({key: requestKey, page: null}); retryLoad(); }} />);
   // A type change after server admission must never turn this trusted frame
   // into an author surface. Only the dedicated artifact-controls path may do that.
   if(isFolderClient() && !page.folder)return <NotFoundPage />;
@@ -80,7 +82,7 @@ export function ArtifactPage({ id: given }: { id?: string } = {}) {
           props are what the DOCUMENT is, and this is what the viewer is to
           it — one fetch either way, and the export capture (which has no
           viewer) never carries it. */}
-      <ArtifactSurface {...page.surface} controlsOnly={isControlsClient()} search={search} {...(page.like ? { like: page.like } : {})} {...(page.follow !== undefined ? { follow: page.follow } : {})} />
+      <ArtifactSurface key={page.surface.id} {...page.surface} controlsOnly={isControlsClient()} search={search} {...(page.like ? { like: page.like } : {})} {...(page.follow !== undefined ? { follow: page.follow } : {})} />
     </ArtifactShell>
   );
 }
