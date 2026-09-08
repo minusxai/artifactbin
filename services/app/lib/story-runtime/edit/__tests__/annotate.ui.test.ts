@@ -58,6 +58,20 @@ afterEach(() => {
 });
 
 describe('view-mode annotation geometry', () => {
+  it('owns its stylesheet by reference and restricts picking to the inline artifact root', () => {
+    session.dispose();
+    const root=document.querySelector('main')!;
+    const unrelated=document.createElement('style');
+    unrelated.setAttribute('data-mx-annotate-css','');unrelated.textContent='.unrelated{color:red}';document.head.appendChild(unrelated);
+    session=createFrameAnnotateSession({win:window,root,channel:channel(),isEditing:()=>false});
+    try {
+      session.update({...state('on'),pick:'block'});
+      expect(unrelated.textContent).toBe('.unrelated{color:red}');
+      expect(root).toHaveAttribute('data-mx-annotate-picking','block');
+      expect(document.documentElement).not.toHaveAttribute('data-mx-annotate-picking');
+      session.dispose();expect(unrelated.isConnected).toBe(true);
+    } finally {unrelated.remove();}
+  });
   it('resolves persisted source IDs without requiring legacy anchor attributes', () => {
     const anchor = document.querySelector('main p')!;
     anchor.removeAttribute('data-annotation-anchor');

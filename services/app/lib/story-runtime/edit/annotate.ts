@@ -259,13 +259,14 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
    * name cannot be matched by a wildcard, so the rules ARE the state, and the
    * open/hovered thread simply gets a stronger fill in its own rule.
    */
+  let ownedStyle: HTMLStyleElement | null = null;
   const ensureCss = (on: boolean, highlightRules: string[] = []) => {
-    const existing = doc.head.querySelector(`style[${ANNOTATE_CSS_ATTR}]`);
-    if (!on) return void existing?.remove();
-    const style = existing ?? doc.createElement('style');
+    if (!on) { ownedStyle?.remove(); ownedStyle = null; return; }
+    const style = ownedStyle ?? doc.createElement('style');
     const next = [ANNOTATE_CSS, ...highlightRules].join('\n');
     if (style.textContent !== next) style.textContent = next;
-    if (!existing) {
+    if (!ownedStyle) {
+      ownedStyle = style;
       style.setAttribute(ANNOTATE_CSS_ATTR, '');
       doc.head.appendChild(style);
     }
@@ -542,8 +543,8 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
   /** Set the pick mode: the crosshair stamp on the root carries it, and the hover and any drag leave with it. Idempotent. */
   const setPick = (mode: 'block' | 'area' | null) => {
     pick = mode;
-    if (mode) doc.documentElement.setAttribute(ANNOTATE_PICKING_ATTR, mode);
-    else doc.documentElement.removeAttribute(ANNOTATE_PICKING_ATTR);
+    if (mode) (root ?? doc.documentElement).setAttribute(ANNOTATE_PICKING_ATTR, mode);
+    else (root ?? doc.documentElement).removeAttribute(ANNOTATE_PICKING_ATTR);
     if (mode !== 'block') setPickHovered(null);
     if (mode !== 'area' && drawing) { drawing = null; removeBand(); }
   };
