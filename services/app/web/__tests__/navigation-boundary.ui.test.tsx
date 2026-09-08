@@ -116,6 +116,54 @@ describe('navigation retains the editor until persistence finishes', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/account'));
   });
 
+  it('preserves destination state and REPLACE after a signal commit during save', async () => {
+    let finish!: (allow: boolean) => void;
+    const router = mount(() => new Promise(resolve => { finish = resolve; }), ['/chat', '/']);
+    await act(async () => { await router.navigate('/account', { replace: true, state: { selected: 12 } }); });
+    await act(async () => { await router.navigate('/?$count=2', { replace: true }); });
+    await act(async () => { finish(true); });
+    expect(router.state.location.pathname).toBe('/account');
+    expect(router.state.location.state).toEqual({ selected: 12 });
+    await act(async () => { await router.navigate(-1); });
+    expect(router.state.location.pathname).toBe('/chat');
+  });
+
+  it('preserves the POP history stack after a signal commit during a back save', async () => {
+    let finish!: (allow: boolean) => void;
+    const router = mount(() => new Promise(resolve => { finish = resolve; }), ['/chat', '/account', '/']);
+    await act(async () => { await router.navigate(-1); });
+    await act(async () => { await router.navigate('/?$count=2', { replace: true }); });
+    await act(async () => { finish(true); });
+    expect(router.state.location.pathname).toBe('/account');
+    await act(async () => { await router.navigate(-1); });
+    expect(router.state.location.pathname).toBe('/chat');
+  });
+
+  it('failed save retains the draft and applies a deferred same-document signal URL', async () => {
+    let finish!: (allow: boolean) => void;
+    const router = mount(() => new Promise(resolve => { finish = resolve; }));
+    const draft = screen.getByLabelText('Unsaved draft');
+    await act(async () => { await router.navigate('/account'); });
+    await act(async () => { await router.navigate('/?$count=2', { replace: true, state: { signal: 2 } }); });
+    await act(async () => { finish(false); });
+    expect(router.state.location.pathname).toBe('/');
+    expect(router.state.location.search).toBe('?$count=2');
+    expect(router.state.location.state).toEqual({ signal: 2 });
+    expect(screen.getByLabelText('Unsaved draft')).toBe(draft);
+  });
+
+  it('captures the latest deliberate continuation even when React batches a following signal update', async () => {
+    let finish!: (allow: boolean) => void;
+    const router = mount(() => new Promise(resolve => { finish = resolve; }));
+    await act(async () => { await router.navigate('/account'); });
+    await act(async () => {
+      void router.navigate('/chat');
+      void router.navigate('/?$count=2', { replace: true });
+    });
+    await act(async () => { finish(true); });
+    expect(router.state.location.pathname).toBe('/chat');
+  });
+
   it('intercepts a composed anchor from trusted shadow UI', async () => {
     const router = mount(async () => true);
     const host = document.createElement('div');

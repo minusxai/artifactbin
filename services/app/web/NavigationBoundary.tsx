@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, type ReactNode } from 'react';
-import { useBlocker, useLocation, useNavigate, useNavigationType, type Location, type BlockerFunction } from 'react-router';
+import { UNSAFE_DataRouterContext, useBlocker, useLocation, useNavigate, useNavigationType, type Location, type BlockerFunction } from 'react-router';
 import { parsePrettyPath } from '@/lib/urls';
 
 /** A leaving editor commits its DOM and flushes persistence; false retains its mounted draft. */
@@ -25,25 +25,43 @@ export function isClientRoute(url: URL): boolean {
 
 export function NavigationBoundary({ children }: { children: ReactNode }): ReactNode {
   const guards = useRef(new Set<NavigationGuard>()).current;
+  const dataRouter = useContext(UNSAFE_DataRouterContext)!.router;
   const navigate = useNavigate();
   const location = useLocation();
   const action = useNavigationType();
   const inFlight = useRef(false);
-  const bypass = useRef(false);
   const destination = useRef<Location | null>(null);
+  const intentProceed = useRef<(() => void) | null>(null);
+  const deferredLocal = useRef<Location | null>(null);
   const blocker = useBlocker(useCallback<BlockerFunction>(({ currentLocation, nextLocation }) => {
-    if (bypass.current) return false;
     // Signal changes and selection hashes are local state, not a document leave.
     const leaving = documentIdentity(currentLocation.pathname) !== documentIdentity(nextLocation.pathname)
       || (currentLocation.hash === '#edit' && nextLocation.hash !== '#edit');
-    if (!leaving || guards.size === 0) return false;
+    if (!leaving) {
+      // Do not let a signal URL replace reset the router's blocked POP/REPLACE
+      // transition. Its original proceed callback owns history/state semantics.
+      if (inFlight.current) { deferredLocal.current = nextLocation; return true; }
+      return false;
+    }
+    if (guards.size === 0) return false;
     destination.current = nextLocation;
     return true;
   }, [guards]));
   const latestBlocker = useRef(blocker);
   latestBlocker.current = blocker;
+  useEffect(() => dataRouter.subscribe(state => {
+    // React may batch an intentional navigation and its following signal URL
+    // update. Observe the router's transitions synchronously so the former's
+    // continuation is not lost before React renders the latter. The router
+    // itself still owns all history operations, including POP deltas.
+    for (const pending of state.blockers.values()) {
+      if (pending.state === 'blocked' && pending.location.key === destination.current?.key) intentProceed.current = pending.proceed;
+    }
+  }), [dataRouter]);
   useEffect(() => {
-    if (blocker.state !== 'blocked' || inFlight.current) return;
+    if (blocker.state !== 'blocked') return;
+    if (blocker.location.key === destination.current?.key) intentProceed.current = blocker.proceed;
+    if (inFlight.current) return;
     inFlight.current = true;
     void (async () => {
       let allowed = true;
@@ -51,14 +69,20 @@ export function NavigationBoundary({ children }: { children: ReactNode }): React
       catch { allowed = false; }
       inFlight.current = false;
       const current = latestBlocker.current;
-      if (!allowed) { if (current.state === 'blocked') current.reset(); return; }
-      if (current.state === 'blocked') current.proceed();
-      else if (destination.current) {
-        // A signal URL update during persistence must not cancel the requested leave.
-        bypass.current = true;
-        void Promise.resolve(navigate(destination.current)).finally(() => { bypass.current = false; });
+      if (!allowed) {
+        if (current.state === 'blocked') current.reset();
+        if (deferredLocal.current) {
+          const local = deferredLocal.current;
+          void navigate(local, { replace: true, state: local.state });
+        }
+      } else if (current.state === 'blocked') {
+        // Keep the router's actual continuation (especially its POP delta),
+        // rather than synthesizing a push from a location snapshot.
+        intentProceed.current?.();
       }
       destination.current = null;
+      deferredLocal.current = null;
+      intentProceed.current = null;
     })();
   }, [blocker, guards, navigate]);
 
