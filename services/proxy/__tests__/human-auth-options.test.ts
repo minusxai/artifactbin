@@ -17,6 +17,15 @@ beforeAll(async () => { pg = new PGlite(); });
 afterAll(async () => { await pg.close(); });
 
 describe('humanAuthOptions', () => {
+  it('keeps host-only full-session cookie protection without a controls origin', () => {
+    const db = new Kysely<Record<string, unknown>>({ dialect: pgliteDialect(pg) });
+    const options = humanAuthOptions({ secret: 'fixture'.padEnd(32, 'x'), baseURL: 'https://example.test', secure: true, mail: { send: async () => {} } }, db.withSchema('auth'));
+    expect(options.baseURL).toBe('https://example.test');
+    expect(options.advanced?.cookiePrefix).toBe('__Host-mx');
+    expect(options.advanced?.defaultCookieAttributes).toMatchObject({ path: '/', secure: true, httpOnly: true, sameSite: 'lax' });
+    expect(options.advanced?.defaultCookieAttributes?.domain).toBeUndefined();
+  });
+
   it('is pure: it opens no schema, runs no migration and fetches no discovery', async () => {
     const before = await pg.query<{ nspname: string }>("select nspname from pg_namespace where nspname not in ('pg_catalog','information_schema','pg_toast')");
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('humanAuthOptions must not fetch'));
