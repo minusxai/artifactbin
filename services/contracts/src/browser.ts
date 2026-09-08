@@ -33,6 +33,8 @@ export interface RenderRequest {
   sameOriginOnly?: boolean;
   /** Exact additional first-party origins allowed while `sameOriginOnly` remains enforced. */
   allowedOrigins?: string[];
+  /** Public cached-asset origin; approved byte requests are fulfilled through the render URL's internal origin, without credentials or redirects. */
+  assetOrigin?: string;
   /** Wait for every managed iframe under the capture surface to finish its existing author-ready handshake. */
   waitForManagedFrames?: boolean;
   /** Extra CSS applied before the shot (hide dev overlays, etc.). */
