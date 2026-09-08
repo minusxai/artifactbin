@@ -1,5 +1,8 @@
 import { StrictMode } from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, useLocation } from 'react-router';
+import { TrustedUiHost } from '../TrustedUi';
+import { AppNavigationBinding } from '@/web/AppNavigation';
 import { afterEach, expect, it, vi } from 'vitest';
 import ArtifactShell from '../ArtifactShell';
 import ArtifactSurface, { type ArtifactSurfaceProps } from '../ArtifactSurface';
@@ -16,6 +19,26 @@ const props: ArtifactSurfaceProps = {
   source: '<p id="n1">Top-level author text</p>', content: '<p id="n1">Top-level author text</p>',
   template: null, refs: [], version: 1, columns: [], compiledCss: null, theme: null, colorMode: 'light', liveEnabled: false,
 };
+
+it('routes artifact Home and author links without a native document navigation', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({})));
+  const roots: ShadowRoot[] = [];
+  const attach = Element.prototype.attachShadow;
+  const spy = vi.spyOn(Element.prototype, 'attachShadow').mockImplementation(function(this: Element, init: ShadowRootInit) {
+    const root = attach.call(this, init); roots.push(root); return root;
+  });
+  function Address() { return <p aria-label="Current route">{useLocation().pathname}</p>; }
+  try {
+    render(<MemoryRouter initialEntries={['/a/story1']}><AppNavigationBinding /><Address />
+      <TrustedUiHost styles="" mode="light"><ArtifactSurface {...props} authorUsername="writer" /></TrustedUiHost>
+    </MemoryRouter>);
+    await waitFor(() => expect(roots[0]?.querySelector('[aria-label="Home"]')).not.toBeNull());
+    fireEvent.click(roots[0].querySelector('[aria-label="Home"]')!);
+    await waitFor(() => expect(screen.getByLabelText('Current route')).toHaveTextContent(/^\/$/));
+    fireEvent.click(roots[0].querySelector('[aria-label="View @writer\'s profile"]')!);
+    await waitFor(() => expect(screen.getByLabelText('Current route')).toHaveTextContent('/@writer'));
+  } finally { spy.mockRestore(); }
+});
 
 it('renders managed prose in the parent document and disposes it on route unmount', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({})));
