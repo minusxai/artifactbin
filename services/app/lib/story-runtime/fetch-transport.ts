@@ -1,6 +1,6 @@
 /**
- * The served document's QueryTransport when it IS the page: a plain GET of
- * its own query endpoint (`<queryUrl>?q=<JSON QueryRequest>`), which answers
+ * The served document's QueryTransport when it IS the page: normally a plain
+ * GET of its own query endpoint (`<queryUrl>?q=<JSON QueryRequest>`), which answers
  * with the anonymous read ACL and `Access-Control-Allow-Origin: *` — the
  * sandboxed document has an opaque origin and sends no cookie, and the route
  * never reads one, so this can only ever return what anyone could fetch.
@@ -19,11 +19,14 @@ type QueryAnswer = Pick<DataflowState, 'tables' | 'errors' | 'mutationAccess'>;
 
 export function createFetchTransport(queryUrl: string, fetchFn: FetchLike = (i, init) => fetch(i, init), mutateUrl?: string): QueryTransport {
   const ask = async (request: Record<string, unknown>): Promise<QueryAnswer> => {
-    // A SIMPLE request on purpose — GET, no custom headers — so an opaque
-    // origin needs no preflight; `credentials: 'omit'` states what the
-    // sandbox already guarantees.
+    const localTables = request.localTables;
+    const carriesLocalTables = !!localTables && typeof localTables === 'object' && Object.keys(localTables).length > 0;
+    // Local table snapshots can be large, so they use a simple text/plain
+    // POST rather than a bounded URL. Ordinary queries remain GETs.
     const sep = queryUrl.includes('?') ? '&' : '?';
-    const res = await fetchFn(`${queryUrl}${sep}${QUERY_REQUEST_PARAM}=${encodeURIComponent(JSON.stringify(request))}`, { method: 'GET', credentials: 'omit' });
+    const res = carriesLocalTables
+      ? await fetchFn(queryUrl, { method: 'POST', credentials: 'omit', headers: {'Content-Type': 'text/plain'}, body: JSON.stringify(request) })
+      : await fetchFn(`${queryUrl}${sep}${QUERY_REQUEST_PARAM}=${encodeURIComponent(JSON.stringify(request))}`, { method: 'GET', credentials: 'omit' });
     if (!res.ok) throw new Error(`query failed (${res.status})`);
     const body = (await res.json()) as Partial<QueryAnswer>;
     return { tables: body.tables ?? {}, errors: body.errors ?? {}, ...(body.mutationAccess ? {mutationAccess:body.mutationAccess} : {}) };

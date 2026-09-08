@@ -29,11 +29,14 @@ describe('createFetchTransport', () => {
     expect(init?.credentials).toBe('omit');
   });
 
-  it('run(): carries local table snapshots used by dependent queries', async () => {
+  it('run(): POSTs local table snapshots instead of placing them in a bounded URL', async () => {
     const f = vi.fn(async () => ok({ tables: {}, errors: {} }));
     const t = createFetchTransport('/a/abc123/query', f);
     await t.run({}, ['total'], { cart: [{ id: 1 }] });
-    expect(requestOf(f).q).toEqual({ values: {}, only: ['total'], localTables: { cart: [{ id: 1 }] } });
+    const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/a/abc123/query');
+    expect(init).toMatchObject({method: 'POST', credentials: 'omit', headers: {'Content-Type': 'text/plain'}});
+    expect(JSON.parse(String(init.body))).toEqual({ values: {}, only: ['total'], localTables: { cart: [{ id: 1 }] } });
   });
 
   it('page(): sends {values, only:[name], page} and resolves with that table', async () => {
