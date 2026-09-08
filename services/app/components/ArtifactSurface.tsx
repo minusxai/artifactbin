@@ -18,7 +18,15 @@ import { DatasetCatalogView } from '@/components/DatasetCatalogView';
  */
 import dynamic from '@/lib/dynamic';
 import { FolderPlus, MessageSquare, Pencil } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { InlineStoryRuntime, type InlineStoryController } from '@/lib/story-runtime/InlineStoryRuntime';
+import { createAuthenticatedTransport } from '@/lib/story-runtime/authenticated-transport';
+import { subscribeDocument } from '@/lib/story-runtime/document-endpoint';
+import type { PreparedStoryRuntime } from '@/lib/story/prepared-runtime';
+import { storyUpdateParts } from '@/lib/story/update-parts';
+import { TrustedUi } from '@/components/TrustedUi';
+import { useLocation, useNavigate } from 'react-router';
+import { InlineReaderChrome } from '@/components/InlineReaderChrome';
 import { useArtifactOwner, useCanAnnotateArtifact, useCanEditArtifact } from '@/components/ArtifactShell';
 import AnnotationLayer from '@/components/AnnotationLayer';
 import CopyAgentPrompt from '@/components/CopyAgentPrompt';
@@ -56,6 +64,8 @@ const SocialPreviewDialog = dynamic(() => import('@/components/SocialPreviewDial
 });
 
 export interface ArtifactSurfaceProps {
+  runtime?: PreparedStoryRuntime;
+  author?: { username: string } | null;
   /**
    * The exporter's signed key, when this render IS a capture (server-parsed
    * from `?key=`). Null for every human render.
@@ -217,6 +227,9 @@ const selectionActionCapabilities = (canEdit: boolean, canAnnotate: boolean, inV
 });
 
 export default function ArtifactSurface(props: ArtifactSurfaceProps) {
+  const runtimeRef = useRef<InlineStoryController | null>(null);
+  const route = useLocation();
+  const navigate = useNavigate();
   const [copiedRef, setCopiedRef] = useState(false);
   const { id, editId, format, title, source, content, columns, bytes: fileBytes = 0, pages: filePages = null, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', accountSession = false, anonSession = false, version, captureKey = null, openAnnotations = 0, like = { liked: false, count: 0 }, follow = null } = props;
   const [editing, setEditing] = useState(false);
@@ -231,16 +244,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   /** The frame's scrollbar width, reported with its scroll samples, so the
    * editor toolbar can end where the document's own bar ends. */
   const [frameGutter, setFrameGutter] = useState(0);
-  useEffect(() => {
-    const onScroll = (event: MessageEvent) => {
-      const data = event.data as Partial<StoryScrollMessage> | undefined;
-      if (!data || data.type !== STORY_SCROLL_MESSAGE || typeof data.gutter !== 'number') return;
-      if (frameRef.current && event.source !== frameRef.current.contentWindow) return;
-      setFrameGutter(data.gutter);
-    };
-    window.addEventListener('message', onScroll);
-    return () => window.removeEventListener('message', onScroll);
-  }, []);
   /** `?intent=fork` asked for a copy; the dialog asks the person (lib/intent). */
   const [forkAsked, setForkAsked] = useState(false);
   /** Naming a new folder under THIS one — the shell's only folder-specific act. */
@@ -277,17 +280,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * FIRST announcement wins. A later one is author code trying to be the
    * runtime, and it is already too late.
    */
-  useEffect(() => {
-    const onSession = (e: MessageEvent) => {
-      if (!e.isTrusted) return;
-      if (frameRef.current && e.source !== frameRef.current.contentWindow) return;
-      if (!isSessionMessage(e.data)) return;
-      const announced = e.data.nonce;
-      setSessionNonce((held) => held ?? announced);
-    };
-    window.addEventListener('message', onSession);
-    return () => window.removeEventListener('message', onSession);
-  }, []);
   // The shell's role signal: the owner's affordances (share, dataset ref
   // copy) and the writer's (edit — an owner or a named editor) hang off it.
   const owner = useArtifactOwner();
@@ -347,11 +339,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     else if (intent === 'new-folder' && isFolder && canEdit) setNamingFolder(true);
     // The document's heart and pill can only ASK; a reader who pressed one
     // arrives here (via login, or straight back) and the shell performs it.
-    else if (intent === 'like') void toggleLike(frameRef.current?.contentWindow ?? null, true);
-    else if (intent === 'follow') void toggleFollow(frameRef.current?.contentWindow ?? null, true);
+    else if (intent === 'like') void toggleLike(true);
+    else if (intent === 'follow') void toggleFollow(true);
     const next = stripIntent(window.location.search);
     if (next !== window.location.search) {
-      window.history.replaceState(null, '', window.location.pathname + next + window.location.hash);
+      void navigate(window.location.pathname + next + window.location.hash, {replace:true, state:route.state});
     }
   }, [search, canAnnotate, canEdit, isFolder]);
 
@@ -361,10 +353,10 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   useEffect(() => {
     if (!sessionNonce || format !== 'markup') return;
     const capabilities = selectionActionCapabilities(canEdit, canAnnotate, !editing);
-    frameRef.current?.contentWindow?.postMessage({
+    runtimeRef.current?.send({
       type: STORY_SELECTION_ACTIONS_MESSAGE,
       ...capabilities,
-    } satisfies StorySelectionActionsMessage, '*');
+    } satisfies StorySelectionActionsMessage);
   }, [canAnnotate, canEdit, editing, format, sessionNonce]);
 
   // Live in BOTH modes: a reader watching an agent fill in a blank document is
@@ -379,9 +371,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * posted straight into the frame, which re-runs the queries reading it.
    */
   const onLiveData = useCallback((event: { datasets: string[] }) => {
-    frameRef.current?.contentWindow?.postMessage(
+    runtimeRef.current?.send(
       { type: STORY_DATA_MESSAGE, datasets: event.datasets } satisfies StoryDataUpdate,
-      '*',
     );
   }, []);
   const live = useLiveArtifact(id, editId, version, !editing, undefined, onLiveData, setLiveAnnotations);
@@ -463,406 +454,36 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   // so the browser refetches instead of showing a stale document.
   const rawKey = live?.editId ?? editId;
 
-  /**
-   * Whether the document's own frame has painted. Until it has, the frame is
-   * transparent over the document's ground with a loading indicator on it.
-   * The document renders in the frame and NOWHERE else on this page: the page
-   * used to carry a server-rendered copy of its markup to paint underneath,
-   * for crawlers — and crawlers stopped arriving here when readers started
-   * getting the document top-level (proxy.ts). Only an owner sees this shell,
-   * and an owner can watch a loader.
-   */
+  const transport = useMemo(() => createAuthenticatedTransport(id), [id]);
+  useEffect(() => () => transport.dispose(), [transport]);
   const [frameLoaded, setFrameLoaded] = useState(false);
-  const frameRef = useRef<HTMLIFrameElement | null>(null);
-  /**
-   * Bumped to throw away a frame whose document is gone (see the liveness
-   * check below). It rides in the iframe's `key` beside `rawKey`, so the only
-   * way to replace a frame is still to replace the element.
-   */
-  const [frameNonce, setFrameNonce] = useState(0);
-  /** Whether the frame has answered since we last asked. */
-  const frameAliveRef = useRef(false);
-
+  const onController = useCallback((controller: InlineStoryController | null) => {
+    runtimeRef.current = controller;
+    setSessionNonce(controller?.nonce ?? null);
+    setFrameLoaded(!!controller);
+  }, []);
   const readerMode = readerModeOverride ?? resolveStoryMode(shownTheme, shownColorMode);
   const setReaderMode = useCallback((mode: AppearanceMode) => {
     setReaderModeOverride(mode);
-    frameRef.current?.contentWindow?.postMessage({ type: STORY_READER_MODE_MESSAGE, mode }, '*');
+    runtimeRef.current?.send({ type: STORY_READER_MODE_MESSAGE, mode });
   }, []);
-
-  // A reclaimed/replaced frame starts as a fresh document. Re-apply the
-  // reader's preference when its new runtime announces itself.
   useEffect(() => {
-    if (!readerModeOverride || !sessionNonce) return;
-    frameRef.current?.contentWindow?.postMessage({ type: STORY_READER_MODE_MESSAGE, mode: readerModeOverride }, '*');
-  }, [frameNonce, readerModeOverride, sessionNonce]);
-
-  /**
-   * A REPLACED frame is a NEW DOCUMENT, and the nonce it announces is its own.
-   * FIRST-ANNOUNCEMENT-WINS is a rule about author code racing the runtime
-   * INSIDE one document — not about the page refusing to learn the successor's.
-   * Holding the dead frame's nonce made every signed message from the new one
-   * unreadable: its edits, its annotations and its selection actions all
-   * arrived correctly signed against a session the page had thrown away.
-   */
-  useEffect(() => {
-    if (frameNonce === 0) return;
-    setSessionNonce(null);
-  }, [frameNonce]);
-
-  /**
-   * The document tells us when it has PARSED, which is when it is visually
-   * ready. `load` is the wrong signal: it waits for every subresource, so the
-   * fallback stayed up until the whole runtime had downloaded.
-   *
-   * The frame is opaque-origin, so `event.origin` is "null" for every message
-   * it sends and cannot identify it — the identity check is the SOURCE window.
-   */
-  useEffect(() => {
-    const onMessage = (e: MessageEvent) => {
-      if (e.data !== STORY_PAINTED_MESSAGE) return;
-      if (frameRef.current && e.source !== frameRef.current.contentWindow) return;
-      // The same answer serves twice: it reveals the frame the first time, and
-      // afterwards it is the proof of life the check below is waiting for.
-      frameAliveRef.current = true;
-      setFrameLoaded(true);
-    };
-    window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, []);
-
-  /**
-   * The QUERY RELAY (lib/story-runtime/contract.ts): the document asks, the
-   * page — which holds the session — calls /a/<id>/query and answers. Same
-   * identity rule as above: the frame is known by its SOURCE window, never by
-   * origin ("null"). Every answer goes back to the window that asked, so a
-   * replaced frame cannot receive a stale one.
-   */
-  useEffect(() => {
-    const onQuery = async (e: MessageEvent) => {
-      const data = e.data as Partial<StoryQueryRequest> | undefined;
-      if (!data || typeof data !== 'object' || data.type !== STORY_QUERY_MESSAGE) return;
-      if (frameRef.current && e.source !== frameRef.current.contentWindow) return;
-      const reply = (msg: StoryQueryResult) => (e.source as Window | null)?.postMessage(msg, '*');
-      try {
-        const res = await fetch(`/a/${id}/query`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ values: data.values ?? {}, only: data.only ?? [], ...(data.page ? { page: data.page } : {}), ...(data.localTables ? { localTables: data.localTables } : {}) }),
-        });
-        if (!res.ok) { reply({ type: STORY_QUERY_RESULT_MESSAGE, id: data.id!, error: `query failed (${res.status})` }); return; }
-        const body = (await res.json()) as Pick<DataflowState,'tables'|'errors'|'mutationAccess'>;
-        reply({ type: STORY_QUERY_RESULT_MESSAGE, id: data.id!, ...body });
-      } catch (err) {
-        reply({ type: STORY_QUERY_RESULT_MESSAGE, id: data.id!, error: err instanceof Error ? err.message : 'query failed' });
-      }
-    };
-    window.addEventListener('message', onQuery);
-    return () => window.removeEventListener('message', onQuery);
-  }, [id]);
-
-  /**
-   * THE ASSET RELAY — the same shape and the same reason as the two around it:
-   * the frame is opaque-origin, so an `<img>` it loads carries no cookie, and
-   * `/a/<id>/assets` then sees an anonymous caller from inside every framed
-   * document. On a PRIVATE one — which is what a signed-in user's document is
-   * by default — that is the uniform 404, for its own owner as much as anyone.
-   *
-   * So the page asks, with its session, and posts back the ADDRESS of our copy.
-   * What crosses is `/assets/<hash>`, which needs no credential at all
-   * (content-addressed from the URL, serving nothing the source host does not):
-   * never bytes, and never a credential.
-   *
-   * The CAPTURE carries the export key instead of a session — the headless
-   * browser has none — on exactly the terms `raw` admits it. Without that a
-   * private document's og image photographs alt text.
-   */
-  useEffect(() => {
-    const onAsset = async (e: MessageEvent) => {
-      const data = e.data as Partial<StoryAssetRequest> | undefined;
-      if (!data || typeof data !== 'object' || data.type !== STORY_ASSET_MESSAGE || typeof data.url !== 'string' || (data.kind !== undefined && !['image','font','pdf','script','binary'].includes(data.kind))) return;
-      if (frameRef.current && e.source !== frameRef.current.contentWindow) return;
-      const reply = (msg: StoryAssetResult) => (e.source as Window | null)?.postMessage(msg, '*');
-      try {
-        const key = captureKey ? `&key=${encodeURIComponent(captureKey)}` : '';
-        const kind = data.kind ? `&kind=${encodeURIComponent(data.kind)}` : '';
-        const res = await fetch(`/a/${id}/assets?u=${encodeURIComponent(data.url)}${kind}${key}`, { headers: { Accept: 'application/json' } });
-        const body = (await res.json().catch(() => ({}))) as { url?: string; code?: string };
-        if (res.ok && body.url) reply({ type: STORY_ASSET_RESULT_MESSAGE, id: data.id!, url: body.url });
-        else reply({ type: STORY_ASSET_RESULT_MESSAGE, id: data.id!, refused: body.code ?? `http_${res.status}` });
-      } catch {
-        reply({ type: STORY_ASSET_RESULT_MESSAGE, id: data.id!, refused: 'fetch_failed' });
-      }
-    };
-    window.addEventListener('message', onAsset);
-    return () => window.removeEventListener('message', onAsset);
-  }, [id, captureKey]);
-
-  /**
-   * The WRITE RELAY — the same shape as the query relay above, and here for
-   * the same reason: the frame is opaque-origin and cannot present a session,
-   * so a PRIVATE document's writes can only happen through the page. A public
-   * document served top-level POSTs for itself and never reaches this.
-   *
-   * The frame is identified by its SOURCE window, never by origin ("null"),
-   * and the answer goes back to the window that asked.
-   */
-  useEffect(() => {
-    const onMutate = async (e: MessageEvent) => {
-      const data = e.data as Partial<StoryMutateRequest> | undefined;
-      if (!data || typeof data !== 'object' || data.type !== STORY_MUTATE_MESSAGE) return;
-      if (frameRef.current && e.source !== frameRef.current.contentWindow) return;
-      const reply = (msg: StoryMutateResult) => (e.source as Window | null)?.postMessage(msg, '*');
-      try {
-        const res = await fetch(`/a/${id}/mutate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mutation: data.mutation, values: data.values ?? {}, ...(data.row ? { row: data.row } : {}), ...(data.localTables ? { localTables: data.localTables } : {}) }),
-        });
-        const body = (await res.json().catch(() => ({}))) as { ok?: boolean; dataset?: string; version?: number; affected?: number; local?: import('@/lib/story/local-state').LocalMutationResult; error?: string; detail?: string };
-        if (!res.ok || !body.ok) {
-          reply({ type: STORY_MUTATE_RESULT_MESSAGE, id: data.id!, ok: false, error: body.detail ?? body.error ?? `write failed (${res.status})` });
-          return;
-        }
-        reply({ type: STORY_MUTATE_RESULT_MESSAGE, id: data.id!, ok: true, dataset: body.dataset ?? '', version: body.version ?? 0, affected: body.affected ?? 0, ...(body.local ? { local: body.local } : {}) });
-      } catch (err) {
-        reply({ type: STORY_MUTATE_RESULT_MESSAGE, id: data.id!, ok: false, error: err instanceof Error ? err.message : 'write failed' });
-      }
-    };
-    window.addEventListener('message', onMutate);
-    return () => window.removeEventListener('message', onMutate);
-  }, [id]);
-
-
-
-  /**
-   * The frame says which `<Value>`s the reader has chosen; this page writes the
-   * address so the link they copy is the document they are looking at.
-   *
-   * `replaceState`, never `pushState`: a pick is not a navigation, and a back
-   * button that walked a reader through every filter they tried is a worse
-   * document than one they cannot go back in at all.
-   */
-  useEffect(() => {
-    const onValues = (e: MessageEvent) => {
-      if (frameRef.current && e.source !== frameRef.current.contentWindow) return;
-      if (!sessionNonce || !isValuesMessage(e.data, sessionNonce)) return;
-      // The flow the PAGE holds — the served one, or the live version if an
-      // agent has since changed the declarations.
-      const flow = live?.dataflow?.flow ?? dataflow?.flow ?? null;
-      if (!flow) return;
-      const next = writeUrlValues(window.location.search, flow, e.data.values);
-      // What a REPLACED frame should be seeded with, if one ever is.
-      selectionRef.current = urlValuesSearch(next);
-      if (next === window.location.search) return;
-      window.history.replaceState(null, '', window.location.pathname + next + window.location.hash);
-    };
-    window.addEventListener('message', onValues);
-    return () => window.removeEventListener('message', onValues);
-  }, [sessionNonce, dataflow, live]);
-
-  // A new FRAME is hidden again until it has painted. Keyed on the nonce, not
-  // on the document: a live edit no longer replaces the frame (see below), and
-  // hiding a live document to announce an edit to it was the flash this whole
-  // path exists to remove.
-  useEffect(() => { setFrameLoaded(false); }, [frameNonce]);
-  /*
-   * A REPLACED frame is a new document load, so it is the one moment the seed
-   * may move — and must: a frame replaced after the reader has narrowed the
-   * document should come back narrowed. Every other render keeps `src` byte
-   * for byte, which is what stops a pick from reloading the document.
-   */
-  useEffect(() => { setFrameSearch(selectionRef.current); }, [frameNonce]);
-
-  /*
-   * Editing does NOT reset this, and that is the point.
-   *
-   * It used to: edit mode unmounted the frame, so coming back was a new frame
-   * that had painted nothing, and leaving the old reveal in force showed it
-   * opaque and empty. Now editing happens in the frame that is already there —
-   * so hiding it on the way in would blank the very document the user came to
-   * edit, for as long as they edited it.
-   */
-
-  /**
-   * A LIVE EDIT IS DELIVERED TO THE DOCUMENT, NOT AROUND IT.
-   *
-   * This page owns the stream (an opaque frame cannot hold an EventSource
-   * against our origin), and it used to deliver what it heard by replacing the
-   * frame: the document re-fetched, re-parsed and re-hydrated, every chart
-   * rebuilt, the reader's place on the page gone — once per agent write. The
-   * document can re-render itself, so it is handed the new version instead.
-   *
-   * It ACKS, and silence is meaningful: a document with no components ships no
-   * runtime, and one whose hydration failed is still on screen. Either way the
-   * reader must not be left on a version that has moved on, so an unanswered
-   * update falls back to replacing the frame — the old behaviour, now the
-   * exception rather than the rule.
-   */
-  /*
-   * THE READER'S PLACE NEEDS NO CARRYING ANY MORE.
-   *
-   * This page used to hold the reading position and hand it between the
-   * document's two renderings — the served frame and the edit canvas — because
-   * they were different documents at different widths and a pixel offset meant
-   * nothing across the boundary. There is one document now. Entering and
-   * leaving edit mode do not move it, so there is nothing to capture, nothing
-   * to restore, and no moment where the reader could be put back wrong.
-   */
-
-  /**
-   * Whether the document in the frame can take an update at all. A document
-   * with no components ships no runtime (lib/story/document needsRuntime), so
-   * for those the frame is still replaced — immediately, rather than after the
-   * ask loop below has given up on a document that was never listening.
-   */
-  const frameAdoptsRef = useRef(false);
-  useEffect(() => {
-    const onAdopts = (e: MessageEvent) => {
-      if (e.data !== STORY_ADOPTS_MESSAGE) return;
-      if (frameRef.current && e.source !== frameRef.current.contentWindow) return;
-      frameAdoptsRef.current = true;
-    };
-    window.addEventListener('message', onAdopts);
-    return () => window.removeEventListener('message', onAdopts);
-  }, []);
-  // A replaced frame is a different document until it says otherwise.
-  useEffect(() => { frameAdoptsRef.current = false; }, [frameNonce]);
-  /**
-   * When this frame painted, or when we started waiting for it to — the clock
-   * the announcement is judged against.
-   * A document that has just appeared may simply not have loaded its runtime
-   * yet (it is a ~1.3MB module, and the document announces itself only once it
-   * runs), and treating "has not said so YET" as "cannot" turns a slow link
-   * into a reload for every reader on one.
-   */
-  const paintedAtRef = useRef(Date.now());
-  useEffect(() => { if (frameLoaded) paintedAtRef.current = Date.now(); }, [frameLoaded]);
-
-  const adoptedRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (format !== 'markup' || !live || live.editId === adoptedRef.current) return;
-    adoptedRef.current = live.editId;
-    const win = frameRef.current?.contentWindow;
-    // Nothing to talk to, or a version we cannot describe (source that no longer
-    // parses): replace the frame and let the server render it.
-    //
-    // …and likewise a document that has been on screen long enough to have
-    // announced itself and has not: that one ships no runtime at all, and
-    // asking it repeatedly is a reader watching an edit that has already been
-    // made. Anything younger gets the benefit of the doubt.
-    const settled = Date.now() - paintedAtRef.current > ANNOUNCE_GRACE_MS;
-    if (!win || !live.nodes || (!frameAdoptsRef.current && settled)) { setFrameNonce((n) => n + 1); return; }
-
-    let acked = false;
-    const onAck = (e: MessageEvent) => {
-      if (e.data === STORY_DOCUMENT_ACK_MESSAGE && e.source === frameRef.current?.contentWindow) acked = true;
-    };
-    window.addEventListener('message', onAck);
-    const update: StoryDocumentUpdate = {
-      type: STORY_DOCUMENT_MESSAGE,
-      nodes: live.nodes,
-      ...(live.dataflow ? { dataflow: live.dataflow } : {}),
-      ...(live.compiledCss !== undefined ? { compiledCss: live.compiledCss } : {}),
-      ...(live.authorCss !== undefined ? { authorCss: live.authorCss } : {}),
-      ...(live.authorScript !== undefined ? { authorScript: live.authorScript } : {}),
-      theme: live.theme,
+    if (!live?.nodes || !runtimeRef.current) return;
+    runtimeRef.current.update({
+      type: STORY_DOCUMENT_MESSAGE, nodes: live.nodes,
+      ...(live.dataflow ? {dataflow: live.dataflow} : {}),
+      compiledCss: live.compiledCss, authorCss: live.authorCss,
+      authorScript: live.authorScript, theme: live.theme,
       ...(live.colorMode ? { colorMode: live.colorMode } : {}),
-    };
-    /*
-     * Asked repeatedly, for the same reason the position is: the runtime is a
-     * module that loads after the document says it has painted, so the first
-     * ask routinely lands before anything is listening. Replacing the frame is
-     * the answer to "this document cannot adopt updates", not to "it was still
-     * loading when we asked".
-     */
-    let asks = 0;
-    const ask = () => {
-      if (acked) { window.clearInterval(timer); return; }
-      if (++asks > DOCUMENT_ASKS) {
-        window.clearInterval(timer);
-        setFrameNonce((n) => n + 1);
-        return;
-      }
-      win.postMessage(update, '*');
-    };
-    ask();
-    const timer = window.setInterval(ask, DOCUMENT_ASK_INTERVAL_MS);
-    return () => { window.clearInterval(timer); window.removeEventListener('message', onAck); };
-  }, [live, format]);
-
-  /**
-   * The other half of that signal — ASKING, not only listening.
-   *
-   * Everything above is the document talking: a burst of posts that ends after
-   * ~3s, plus an `onLoad` belt that only catches a load happening after this
-   * component hydrated. A page that hydrates late misses both, and then keeps
-   * a live document transparent behind the loader indefinitely. So we ask
-   * until told, and
-   * if the frame never answers at all we reveal it anyway: a document we
-   * cannot hear is still a document, and hiding it is the worse failure.
-   */
-  useEffect(() => {
-    // Nothing to ask while the editor holds the page: the loop used to keep
-    // counting through an edit session and reveal a frame that did not exist.
-    if (frameLoaded || editing) return;
-    let asked = 0;
-    const ask = () => {
-      frameRef.current?.contentWindow?.postMessage(STORY_HELLO_MESSAGE, '*');
-      if (++asked >= 20) { clearInterval(timer); setFrameLoaded(true); }
-    };
-    const timer = setInterval(ask, 250);
-    ask();
-    return () => clearInterval(timer);
-  }, [frameLoaded, editing, frameNonce]);
-
-  /**
-   * ...and asking again on the way BACK IN, because revealing the frame is
-   * otherwise a one-way latch.
-   *
-   * Once the frame answers we unmount the page's own copy of the text and paint
-   * the frame opaque over the whole viewport — so from then on the frame IS the
-   * page. But this frame is sandboxed without `allow-same-origin`, which makes
-   * it opaque-origin, which makes Chrome site-isolate it into its own renderer:
-   * exactly the process a backgrounded tab loses first under memory pressure.
-   * The browser does not reload a frame it reclaimed, and we were no longer
-   * listening, so the reader came back to a white rectangle with no text and no
-   * way out but a refresh.
-   *
-   * The document answers `mx:hello` for as long as it is alive (lib/story/
-   * document.ts) — so asking is the liveness test, and silence is the answer.
-   * Deliberately only while VISIBLE: a hidden tab throttles timers to once a
-   * minute, so the grace window there measures nothing.
-   *
-   * A frame that fails it is REPLACED rather than reloaded (`frameNonce` in the
-   * key): whatever state a dead document's window is in, it is not ours to
-   * repair, and the fallback text goes back up while the new one loads.
-   */
-  useEffect(() => {
-    if (!frameLoaded) return;
-    let timer = 0;
-    const verify = () => {
-      const win = frameRef.current?.contentWindow;
-      if (!win) return;
-      frameAliveRef.current = false;
-      win.postMessage(STORY_HELLO_MESSAGE, '*');
-      window.clearTimeout(timer);
-      timer = window.setTimeout(() => {
-        if (frameAliveRef.current) return;
-        setFrameNonce((n) => n + 1);
-        setFrameLoaded(false);
-      }, FRAME_LIVENESS_GRACE_MS);
-    };
-    const onVisible = () => { if (document.visibilityState === 'visible') verify(); };
-    document.addEventListener('visibilitychange', onVisible);
-    // A bfcache restore is the same question through a different event: the
-    // page comes back whole, but nothing promises the frame's process did.
-    window.addEventListener('pageshow', verify);
-    return () => {
-      window.clearTimeout(timer);
-      document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('pageshow', verify);
-    };
-  }, [frameLoaded]);
+    });
+  }, [live, sessionNonce]);
+  useEffect(() => subscribeDocument({runtimeRef}, event => {
+    if (!sessionNonce || !isValuesMessage(event.data, sessionNonce)) return;
+    const flow = live?.dataflow?.flow ?? dataflow?.flow;
+    if (!flow) return;
+    const next = writeUrlValues(window.location.search, flow, event.data.values);
+    if (next !== window.location.search) void navigate(window.location.pathname + next + window.location.hash, {replace:true, state:route.state});
+  }), [sessionNonce, dataflow, live, navigate, route.state]);
 
   /*
    * The signed export key is the EXPORTER's fingerprint: it is the only caller
@@ -898,7 +519,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     sync();
     window.addEventListener('hashchange', sync);
     return () => window.removeEventListener('hashchange', sync);
-  }, []);
+  }, [route.hash]);
 
   /*
    * Fetch the editor bundle while the reader is still reading, so pressing edit
@@ -942,7 +563,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     // BACK from, and the browser's back button is the obvious way to do it. The
     // hashchange listener above turns that navigation into leaving edit mode.
     setInitialEditSelectionPath(selectionPath);
-    history.pushState(null, '', '#edit');
+    void navigate(window.location.pathname + window.location.search + '#edit', {state:route.state});
     pushedEdit.current = true;
     setEditing(true);
   }, []);
@@ -957,52 +578,34 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    */
   const likeRef = useRef(like);
   const followRef = useRef(follow);
-  const answer = useCallback((frame: Window | null, reply: Omit<StoryReaderActionResultMessage, 'type'>) => {
-    frame?.postMessage({ type: STORY_READER_ACTION_RESULT_MESSAGE, ...reply } satisfies StoryReaderActionResultMessage, '*');
-  }, []);
-  const toggleLike = useCallback(async (frame: Window | null, want?: boolean) => {
+  const [, redrawReactions] = useState(0);
+  const toggleLike = useCallback(async (want?: boolean) => {
     if (!accountSession) {
-      window.location.assign(`/login?callbackUrl=${encodeURIComponent(`${window.location.pathname}${withIntent('', 'like')}`)}`);
+      void navigate(`/login?callbackUrl=${encodeURIComponent(`${window.location.pathname}${withIntent('', 'like')}`)}`);
       return;
     }
     const next = want ?? !likeRef.current.liked;
-    if (next === likeRef.current.liked) { answer(frame, { kind: 'like', ok: true, ...likeRef.current }); return; }
+    if (next === likeRef.current.liked) return;
     const res = await fetch(`/api/my/artifacts/${id}/like`, { method: next ? 'POST' : 'DELETE', credentials: 'same-origin' }).catch(() => null);
     if (!res?.ok) return;
     likeRef.current = (await res.json()) as { liked: boolean; count: number };
-    answer(frame, { kind: 'like', ok: true, ...likeRef.current });
-  }, [accountSession, answer, id]);
-  const toggleFollow = useCallback(async (frame: Window | null, want?: boolean) => {
+    redrawReactions(n => n + 1);
+  }, [accountSession, id, navigate]);
+  const toggleFollow = useCallback(async (want?: boolean) => {
     const target = followRef.current;
     if (!target) return;
     if (!accountSession) {
-      window.location.assign(`/login?callbackUrl=${encodeURIComponent(`${window.location.pathname}${withIntent('', 'follow')}`)}`);
+      void navigate(`/login?callbackUrl=${encodeURIComponent(`${window.location.pathname}${withIntent('', 'follow')}`)}`);
       return;
     }
     const next = want ?? !target.following;
-    if (next === target.following) { answer(frame, { kind: 'follow', ok: true, following: target.following, count: target.count }); return; }
+    if (next === target.following) return;
     const res = await fetch(`/api/users/${target.userId}/follow`, { method: next ? 'POST' : 'DELETE', credentials: 'same-origin' }).catch(() => null);
     if (!res?.ok) return;
     const state = (await res.json()) as { following: boolean; count: number };
     followRef.current = { ...target, ...state };
-    answer(frame, { kind: 'follow', ok: true, ...state });
-  }, [accountSession, answer]);
-  // A frame that (re)announces itself is told what is true now — it may have
-  // been served before an intent-driven like landed, or been replaced since.
-  useEffect(() => {
-    if (!isDocumentFormat || !sessionNonce) return;
-    const frame = frameRef.current?.contentWindow ?? null;
-    answer(frame, { kind: 'like', ok: true, ...likeRef.current });
-    if (followRef.current) answer(frame, { kind: 'follow', ok: true, following: followRef.current.following, count: followRef.current.count });
-  }, [answer, format, frameNonce, sessionNonce]);
-  // The unresolved-comment count, kept live as threads open and resolve.
-  useEffect(() => {
-    if (!isDocumentFormat || !sessionNonce) return;
-    answer(frameRef.current?.contentWindow ?? null, { kind: 'comment', ok: true, count: openAnnotationCount });
-  }, [answer, format, frameNonce, openAnnotationCount, sessionNonce]);
-
-
-
+    redrawReactions(n => n + 1);
+  }, [accountSession, navigate]);
   /**
    * Empty the editor's buffer and wait for it to land. The buffer is a timer
    * living inside the editor, so anything that takes the editor away — or races
@@ -1035,7 +638,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       pushedEdit.current = false;
       history.back();
     } else {
-      history.pushState(null, '', location.pathname);
+      void navigate(window.location.pathname + window.location.search, {replace:true, state:route.state});
       setEditing(false);
     }
   }, []);
@@ -1043,9 +646,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   // A capability-gated selection bubble inside the opaque frame asks the page
   // to enter a mode. The nonce makes this a runtime request, not author code.
   useEffect(() => {
-    const onSelectionAction = (event: MessageEvent) => {
-      const frameWindow = frameRef.current?.contentWindow;
-      if (!frameWindow || event.source !== frameWindow || !sessionNonce) return;
+    const onSelectionAction = (event: {data: unknown}) => {
+      if (!sessionNonce) return;
       if (!isEditFrameMessage(event.data, sessionNonce) || event.data.type !== STORY_SELECTION_ACTION_MESSAGE) return;
       /*
        * Re-checked against the SAME rule that granted the bubble, the view-mode
@@ -1063,8 +665,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       // for the other mode's exit contract to be skipped by.
       setInitialAnnotationSelection(event.data.selection);
     };
-    window.addEventListener('message', onSelectionAction);
-    return () => window.removeEventListener('message', onSelectionAction);
+    return subscribeDocument({runtimeRef}, onSelectionAction);
   }, [beginEdit, canAnnotate, canEdit, editing, sessionNonce]);
 
   /**
@@ -1084,69 +685,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     exitEdit();
   }, [exitEdit]);
 
-  /*
-   * THE FRAMED CHROME'S ASKS. The document draws the rail (the same one a
-   * stranger gets) and posts what was pressed; this page holds the session,
-   * the editor and the real panels, so it is the one that acts. Like, follow
-   * and a non-commenter's comment just log — the backend is another phase.
-   */
-  useEffect(() => {
-    if (!isDocumentFormat) return;
-    const onAction = (event: MessageEvent) => {
-      const data = event.data as Partial<StoryReaderActionMessage> | undefined;
-      if (!data || data.type !== STORY_READER_ACTION_MESSAGE || typeof data.kind !== 'string') return;
-      if (frameRef.current && event.source !== frameRef.current.contentWindow) return;
-      const frame = event.source as Window | null;
-      switch (data.kind) {
-        case 'like':
-          void toggleLike(frame);
-          break;
-        case 'follow':
-          void toggleFollow(frame);
-          break;
-        case 'comment':
-          if (canAnnotate) setRailOpen((open) => !open);
-          else console.log('[artifactbin] comment', { artifact: id });
-          break;
-        case 'edit':
-          // The pencil is "done" while editing: the same drain-first exit the
-          // toolbar's own button takes.
-          if (!canEdit) break;
-          if (editing) void finishEdit();
-          else enterEdit();
-          break;
-        case 'share': {
-          // The PAGE's address is the shareable one; the frame's is internal.
-          const url = window.location.href;
-          const done = () => frame?.postMessage({ type: STORY_READER_ACTION_RESULT_MESSAGE, kind: 'share', ok: true }, '*');
-          const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> };
-          if (typeof nav.share === 'function') void nav.share({ title: shownTitle ?? undefined, url }).catch(() => {});
-          else void navigator.clipboard?.writeText(url).then(done, () => {});
-          break;
-        }
-        case 'controls':
-        case 'menu':
-          requestPageChrome(data.kind);
-          break;
-        default:
-          break;
-      }
-    };
-    window.addEventListener('message', onAction);
-    return () => window.removeEventListener('message', onAction);
-  }, [canAnnotate, canEdit, editing, enterEdit, finishEdit, format, id, shownTitle, toggleFollow, toggleLike]);
-
-  // EDIT MODE pins the document's bar at the top and sits the editor toolbar
-  // under it; the document insets itself by both, so nothing is covered. The
-  // COMMENT RAIL is the same story on the other axis: the frame stays
-  // full-width (so the bar drawn inside it never narrows and its controls
-  // never move), the rail sits under the bar, and the document leaves the
-  // rail its width.
   const railInset = railOpen && !phone ? RIGHT_RAIL_W : 0;
-  useEffect(() => {
-    if (!isDocumentFormat || !sessionNonce) return;
-    frameRef.current?.contentWindow?.postMessage({ type: STORY_READER_CHROME_MESSAGE, mode: editing ? 'pinned' : 'on', inset: EDIT_BAR_H, railInset }, '*');
-  }, [editing, format, frameNonce, railInset, sessionNonce]);
 
   /*
    * WHAT THE EDITOR IS GIVEN. Ownership is decided once, on the server, for
@@ -1278,6 +817,15 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   if (isDocumentFormat) {
     return (
       <>
+        <TrustedUi overlay>
+        <InlineReaderChrome input={{artifactId:id, title:shownTitle, author:props.author ?? null, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={action => {
+          if (action === 'like') void toggleLike();
+          else if (action === 'follow') void toggleFollow();
+          else if (action === 'edit' && canEdit) { if (editing) void finishEdit(); else enterEdit(); }
+          else if (action === 'comment') { if (canAnnotate) setRailOpen(value => !value); else void navigate(`/login?callbackUrl=${encodeURIComponent(window.location.pathname + withIntent('', 'comment'))}`); }
+          else if (action === 'controls' || action === 'menu') requestPageChrome(action);
+          else if (action === 'share') void navigator.clipboard?.writeText(window.location.href);
+        }} />
         {editing ? (
           /* EDIT MODE: the document's own bar stays, PINNED at the top, and the
              editor's toolbar sits under it. The panels drop below both. */
@@ -1306,9 +854,10 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             </PageControls>
           </>
         )}
+        </TrustedUi>
         <div
           aria-label="Artifact viewport"
-          className="fixed inset-x-0 bottom-0 overflow-hidden"
+          className="relative min-h-screen"
           /*
            * The ground a loading frame sits on. It belongs to the DOCUMENT, not
            * to the app: painting the app's ground (or white, which is what the
@@ -1331,7 +880,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             // the frame with it — every control shifting left the moment the
             // rail opened. Style-only either way: the frame must never
             // re-parent.
-            top: 0,
+            paddingTop: (phone ? 0 : APP_BAR_H) + (editing ? EDIT_BAR_H : 0),
+            paddingRight: railInset,
             right: 0,
             background: readerMode === 'dark' ? DOCUMENT_GROUND.dark : DOCUMENT_GROUND.light,
           }}
@@ -1348,62 +898,24 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
               loading…
             </div>
           )}
-          <iframe
-            /*
-             * NOT keyed on the document: a live edit is posted INTO this frame
-             * (above), and re-keying here is what made every agent write a full
-             * reload. The nonce is the deliberate replacement — a frame whose
-             * process was reclaimed, or one that could not adopt an update.
-             */
-            key={`${id}:${frameNonce}`}
-            ref={frameRef}
-            title="artifact"
-            // The frame's request is its OWN, and carries neither the page's
-            // session nor its query — so a capture has to hand the key down
-            // explicitly, or a private document photographs its own 404.
-            /*
-             * The WRITER's copy carries the runtime even when the document
-             * would not otherwise hydrate (?edit=1): editing happens INSIDE
-             * this frame, and a prose document ships no runtime to do it with.
-             * A COMMENTER needs it for the same reason — the annotate chunk is
-             * the runtime's, so pins and tints on a prose document depend on
-             * it. Asked for at load, so pressing edit is one message rather
-             * than a reload — and a reader's copy is untouched.
-             */
-            src={`/a/${id}/raw${appendSelection(
-              captureRender ? `?chrome=0&key=${encodeURIComponent(captureKey!)}`
-              // An EDITOR needs the runtime: editing happens inside this frame
-              // and a prose document ships none. A COMMENTER needs only the
-              // frame half of annotating — 13 KB against 384 KB — so they ask
-              // for that instead. Both are asked for at LOAD, so pressing the
-              // control is one message rather than a reload; a reader's copy
-              // is untouched by either.
-              : canEdit ? '?edit=1'
-              : canAnnotate ? '?comment=1'
-              : '',
-              frameSearch,
-            )}`}
-            // Belt: a document that somehow never posts still gets revealed.
-            onLoad={() => setFrameLoaded(true)}
-            // The attribute mirrors the /raw response header's sandbox
-            // directive — both apply (intersection), so they must stay the
-            // same set. The extra flags let outbound links and popups leave
-            // the frame; `allow` is what lets a deck present from inside it.
-            sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
-            allow="fullscreen"
-            className={`absolute inset-0 block h-full w-full border-0 transition-opacity ${
-              frameLoaded ? 'opacity-100' : 'opacity-0'
-            }`}
+          <InlineStoryRuntime
+            key={id}
+            data={props.runtime?.data ?? {nodes: storyUpdateParts(shownSource ?? '')?.nodes ?? [], refData: {}, dataflow: dataflow ?? undefined, colorMode: readerMode, template, chrome: true}}
+            transport={transport}
+            prepared={props.runtime}
+            authorScript={props.runtime?.authorScript}
+            onController={onController}
           />
         </div>
         {/* Annotations are chrome too: pins live IN the frame, markers and
             threads on the page (which holds the content and the session).
             Mounted in EVERY mode — the `!editing` gate that used to be here is
             exactly what made commenting mid-edit a four-navigation detour. */}
+        <TrustedUi overlay>
         {canAnnotate && (
           <AnnotationLayer
             id={id}
-            frameRef={frameRef}
+            runtimeRef={runtimeRef}
             sessionNonce={sessionNonce}
             railOpen={railOpen}
             liveAnnotations={liveAnnotations}
@@ -1426,7 +938,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             seed={editorSeed}
             onExit={finishEdit}
             flushRef={editorFlush}
-            frameRef={frameRef}
+            runtimeRef={runtimeRef}
             sessionNonce={sessionNonce}
             initialSelectionPath={initialEditSelectionPath}
             onComment={canEdit ? commentOnSelection : undefined}
@@ -1451,6 +963,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             onClose={() => setSocialPreviewOpen(false)}
           />
         )}
+        </TrustedUi>
       </>
     );
   }

@@ -14,6 +14,7 @@
  * box is added. That composes exactly, including while the document scrolls
  * itself — which it does, unlike the fixed-height canvas this replaces.
  */
+import { sendDocument, subscribeDocument, documentRect, documentReady, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -45,7 +46,8 @@ const SELECTION_GAP = 8;
 
 export interface StoryFormatToolbarProps {
   selection: StoryEditSelection | null;
-  frameRef: { current: HTMLIFrameElement | null };
+  frameRef?: { current: HTMLIFrameElement | null };
+  runtimeRef?: DocumentRuntimeRef;
   compiledCss?: string | null;
   onApply: (path: string, edit: ComposableFormatEdit) => void;
   onApplyLink: (path: string, href: string | null) => void;
@@ -66,7 +68,7 @@ export interface StoryFormatToolbarProps {
 }
 
 export default function StoryFormatToolbar({
-  selection, frameRef, onApply, onApplyLink, onSelect, onDelete, onComment,
+  selection, frameRef, runtimeRef, onApply, onApplyLink, onSelect, onDelete, onComment,
 }: StoryFormatToolbarProps) {
   const [linkDraft, setLinkDraft] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -112,7 +114,7 @@ export default function StoryFormatToolbar({
    */
   const plan = selectionToolbarPlan(selection);
 
-  const box = frameRef.current?.getBoundingClientRect();
+  const box = documentRect({ frameRef, runtimeRef });
   const top = (box?.top ?? 0) + selection.rect.y;
   const selectionLeft = (box?.left ?? 0) + selection.rect.x;
   const cls = selection.className;

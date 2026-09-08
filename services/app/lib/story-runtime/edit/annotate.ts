@@ -43,7 +43,7 @@
  */
 import type { JsxNode } from '@/lib/jsx';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
-import type { PristineChannel } from '../pristine';
+import type { RuntimeChannel } from '../pristine';
 import {
   STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE, STORY_SELECTION_MESSAGE,
   type StoryAnnotationsMessage,
@@ -190,7 +190,8 @@ export interface FrameAnnotateSession {
 
 export interface FrameAnnotateOptions {
   win: Window;
-  channel: PristineChannel;
+  channel: RuntimeChannel;
+  root?: HTMLElement;
   /**
    * Is the document editable right now? Read on every click, never cached: the
    * edit session comes and goes without the annotation layer hearing about it,
@@ -199,8 +200,9 @@ export interface FrameAnnotateOptions {
   isEditing: () => boolean;
 }
 
-export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnnotateOptions): FrameAnnotateSession {
+export function createFrameAnnotateSession({ win, channel, isEditing, root }: FrameAnnotateOptions): FrameAnnotateSession {
   const doc = win.document;
+  const scope = root ?? doc;
   let nodes: JsxNode[] = [];
   let state: StoryAnnotationsMessage | null = null;
   let selectedPath: string | null = null;
@@ -232,7 +234,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
    * main document copy, never its rail/presentation chrome.
    */
   const mainElementMatching = (selector: string): HTMLElement | null =>
-    [...doc.querySelectorAll<HTMLElement>(selector)]
+    [...scope.querySelectorAll<HTMLElement>(selector)]
       .find((el) => !el.closest('.mx-rail, .mx-present')) ?? null;
 
   const elementFor = (path: string): HTMLElement | null =>
@@ -276,7 +278,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
     registeredHighlights.clear();
     painted = new Map();
     paintedAreas = new Map();
-    for (const overlay of doc.querySelectorAll(`[${ANNOTATION_AREA_ATTR}]`)) overlay.remove();
+    for (const overlay of scope.querySelectorAll(`[${ANNOTATION_AREA_ATTR}]`)) overlay.remove();
   };
 
   // ── area overlays ─────────────────────────────────────────────────────────
@@ -312,7 +314,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
       overlay.style.background = AREA_FILL[emphasis].background;
       overlay.style.outline = AREA_FILL[emphasis].outline;
       overlay.style.outlineOffset = '1px';
-      doc.body.appendChild(overlay);
+      (root ?? doc.body).appendChild(overlay);
       paintedAreas.set(pin.id, rect);
       el.setAttribute(ANNOTATION_RANGED_ATTR, '');
     }
@@ -320,17 +322,17 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
 
   /** The band: while a drag is in progress, and then the drawn area while its comment is composed. */
   const bandElement = (): HTMLElement => {
-    let band = doc.querySelector<HTMLElement>(`[${ANNOTATE_BAND_ATTR}]`);
+    let band = scope.querySelector<HTMLElement>(`[${ANNOTATE_BAND_ATTR}]`);
     if (!band) {
       band = doc.createElement('div');
       band.setAttribute(ANNOTATE_BAND_ATTR, '');
       band.style.background = BAND_STYLE.background;
       band.style.outline = `2px dashed ${BAND_STYLE.outline}`;
-      doc.body.appendChild(band);
+      (root ?? doc.body).appendChild(band);
     }
     return band;
   };
-  const removeBand = () => doc.querySelector(`[${ANNOTATE_BAND_ATTR}]`)?.remove();
+  const removeBand = () => scope.querySelector(`[${ANNOTATE_BAND_ATTR}]`)?.remove();
 
   /** The composing area follows its anchor and leaves with the selection. */
   const paintComposingArea = () => {
@@ -404,7 +406,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
 
   /** Stamp idempotent state: all annotate-mode tints, or only the transient view-mode hover. */
   const applyState = () => {
-    for (const el of doc.querySelectorAll(`[${ANNOTATED_ATTR}], [${ANNOTATION_OPEN_ATTR}], [${ANNOTATION_HOVER_ATTR}], [${ANNOTATE_SELECTED_ATTR}], [${ANNOTATION_RANGED_ATTR}]`)) {
+    for (const el of scope.querySelectorAll(`[${ANNOTATED_ATTR}], [${ANNOTATION_OPEN_ATTR}], [${ANNOTATION_HOVER_ATTR}], [${ANNOTATE_SELECTED_ATTR}], [${ANNOTATION_RANGED_ATTR}]`)) {
       el.removeAttribute(ANNOTATED_ATTR);
       el.removeAttribute(ANNOTATION_OPEN_ATTR);
       el.removeAttribute(ANNOTATION_HOVER_ATTR);
@@ -470,6 +472,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
    * unselectable in the editor.
    */
   const onClick = (event: MouseEvent) => {
+    if (root && !root.contains(event.target as Node)) return;
     // While picking, a click is the window listener's (below): a selectable
     // target was already taken there, and anything else is nobody's business.
     if (!state || state.mode === 'off' || pick || isEditing()) return;
@@ -553,6 +556,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
    * still be able to DRAG across words for the selection bubble.
    */
   const onPickMouseDown = (event: MouseEvent) => {
+    if (root && !root.contains(event.target as Node)) return;
     if (pick !== 'block' || !isEditing() || !selectableAt(event.target)) return;
     event.preventDefault();
   };
@@ -565,6 +569,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
 
   /** The pick itself. On `win` in the capture phase: it runs BEFORE the edit session's document listener. */
   const onPickClick = (event: MouseEvent) => {
+    if (root && !root.contains(event.target as Node)) return;
     if (!pick) return;
     const el = selectableAt(event.target);
     if (!el) return;
@@ -581,6 +586,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
 
   /** Escape stands the pick down: a null selection, and NOT `reportSelection(null)` — a composer already open keeps its node. */
   const onPickKeyDown = (event: KeyboardEvent) => {
+    if (root && !root.contains(event.target as Node)) return;
     if (!pick || event.key !== 'Escape') return;
     event.preventDefault();
     event.stopPropagation();
@@ -603,11 +609,12 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
    * must anchor to the picture, not to a stroke of it.
    */
   const areaCandidates = (): Array<{ path: string; rect: AnnotationRect }> =>
-    [...doc.querySelectorAll<HTMLElement>(`[${AST_PATH_ATTR}]`)]
+    [...scope.querySelectorAll<HTMLElement>(`[${AST_PATH_ATTR}]`)]
       .filter((el) => !el.closest('.mx-rail, .mx-present') && !el.parentElement?.closest('svg') && describeSelection(el, nodes))
       .map((el) => ({ path: el.getAttribute(AST_PATH_ATTR)!, rect: el.getBoundingClientRect() }));
 
   const onAreaPointerDown = (event: PointerEvent) => {
+    if (root && !root.contains(event.target as Node)) return;
     if (pick !== 'area' || event.button !== 0) return;
     const target = event.target as Element | null;
     if (target?.closest?.('.mx-rail, .mx-present')) return;
@@ -620,7 +627,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing }: FrameAnn
     if (!drawing) return;
     const rect = bandRect(drawing, event);
     const real = rect.width >= ANNOTATION_AREA_MIN_PX || rect.height >= ANNOTATION_AREA_MIN_PX;
-    if (!real && !doc.querySelector(`[${ANNOTATE_BAND_ATTR}]`)) return;
+    if (!real && !scope.querySelector(`[${ANNOTATE_BAND_ATTR}]`)) return;
     const band = bandElement();
     band.style.outlineStyle = 'dashed';
     placeOverlay(band, rect);

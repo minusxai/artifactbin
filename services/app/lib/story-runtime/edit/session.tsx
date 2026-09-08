@@ -20,7 +20,7 @@ import type { JsxElement, JsxNode } from '@/lib/jsx';
 import { isEditableTextHost } from '@/lib/story-ui/host-classify';
 import { normalizeLinkHref } from '@/lib/data/story/link-edit';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
-import type { PristineChannel } from '../pristine';
+import type { RuntimeChannel } from '../pristine';
 import {
   STORY_EDIT_KEY_MESSAGE, STORY_EDIT_READY_MESSAGE, STORY_IMAGE_DROP_MESSAGE, STORY_SELECTION_MESSAGE,
   STORY_TEXT_EDIT_MESSAGE, STORY_TYPING_MESSAGE,
@@ -71,13 +71,15 @@ interface ActiveHost { path: string; el: HTMLElement; snapshot: string; userEdit
 
 export interface FrameEditSessionOptions {
   win: Window;
-  channel: PristineChannel;
+  channel: RuntimeChannel;
+  root?: HTMLElement;
   /** Ask the runtime to re-render (a new body epoch releases the focus guard). */
   requestRender: () => void;
 }
 
-export function createFrameEditSession({ win, channel, requestRender }: FrameEditSessionOptions): FrameEditSession {
+export function createFrameEditSession({ win, channel, requestRender, root }: FrameEditSessionOptions): FrameEditSession {
   const doc = win.document;
+  const scope = root ?? doc;
   let nodes: JsxNode[] = [];
   let active: ActiveHost | null = null;
   let selectedPath: string | null = null;
@@ -90,12 +92,12 @@ export function createFrameEditSession({ win, channel, requestRender }: FrameEdi
 
   // ── selection ─────────────────────────────────────────────────────────────
   const stampSelection = () => {
-    for (const el of doc.querySelectorAll(`[${EDIT_SELECTED_ATTR}], [${EDIT_EMBED_SELECTED_ATTR}]`)) {
+    for (const el of scope.querySelectorAll(`[${EDIT_SELECTED_ATTR}], [${EDIT_EMBED_SELECTED_ATTR}]`)) {
       el.removeAttribute(EDIT_SELECTED_ATTR);
       el.removeAttribute(EDIT_EMBED_SELECTED_ATTR);
     }
     if (!selectedPath) return;
-    const el = doc.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(selectedPath)}"]`);
+    const el = scope.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(selectedPath)}"]`);
     if (!el) return;
     const kind = describeSelection(el, nodes)?.kind;
     el.setAttribute(kind === 'embed' ? EDIT_EMBED_SELECTED_ATTR : EDIT_SELECTED_ATTR, '');
@@ -129,7 +131,7 @@ export function createFrameEditSession({ win, channel, requestRender }: FrameEdi
   const republishRect = () => {
     if (!selectedPath && !active) return;
     const path = active?.path ?? selectedPath!;
-    const el = doc.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(path)}"]`);
+    const el = scope.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(path)}"]`);
     const selection = el ? describeWithQuote(el) : null;
     post({ type: STORY_SELECTION_MESSAGE, selection });
   };
@@ -174,7 +176,7 @@ export function createFrameEditSession({ win, channel, requestRender }: FrameEdi
   /** Resolve the same selectable node a click would, excluding duplicate document chrome. */
   const selectableAt = (target: EventTarget | null): Element | null => {
     const element = target as Element | null;
-    if (!element?.closest || element.closest('.mx-rail, .mx-present')) return null;
+    if (!element?.closest || (root && !root.contains(element)) || element.closest('.mx-rail, .mx-present')) return null;
     const stamped = element.closest(`[${AST_PATH_ATTR}]`);
     return stamped && describeSelection(stamped, nodes) ? stamped : null;
   };
@@ -191,6 +193,7 @@ export function createFrameEditSession({ win, channel, requestRender }: FrameEdi
 
   const onClick = (event: Event) => {
     const target = event.target as Element | null;
+    if (root && (!target || !root.contains(target))) return;
     if (!target?.closest) return;
     // Chrome the document draws for itself (the deck rail and its slide
     // previews) re-renders the slide's own nodes, so ids and AST stamps appear
@@ -205,6 +208,7 @@ export function createFrameEditSession({ win, channel, requestRender }: FrameEdi
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
+    if (root && !root.contains(event.target as Node)) return;
     if (event.key === 'Escape') { post({ type: STORY_EDIT_KEY_MESSAGE, key: 'Escape' }); return; }
     if (event.key !== 'Delete' && event.key !== 'Backspace') return;
     // Inside a text host those keys belong to the text.
@@ -224,6 +228,7 @@ export function createFrameEditSession({ win, channel, requestRender }: FrameEdi
    * than silently eaten.
    */
   const onImageTransfer = (event: ClipboardEvent | DragEvent) => {
+    if (root && !root.contains(event.target as Node)) return;
     const data = 'clipboardData' in event ? event.clipboardData : event.dataTransfer;
     const file = imageFileFromTransfer(data);
     if (!file) return;
@@ -237,6 +242,7 @@ export function createFrameEditSession({ win, channel, requestRender }: FrameEdi
    * so it is prevented only while a FILE is being dragged.
    */
   const onDragOver = (event: DragEvent) => {
+    if (root && !root.contains(event.target as Node)) return;
     if (event.dataTransfer?.types?.includes('Files')) event.preventDefault();
   };
 
@@ -266,7 +272,7 @@ export function createFrameEditSession({ win, channel, requestRender }: FrameEdi
 
   // ── parent → frame ────────────────────────────────────────────────────────
   const applyFormat = (path: string, className?: string, style_?: string) => {
-    const el = doc.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(path)}"]`);
+    const el = scope.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(path)}"]`);
     if (!el) return;
     if (className !== undefined) {
       if (className.trim()) el.setAttribute('class', className);
@@ -285,7 +291,7 @@ export function createFrameEditSession({ win, channel, requestRender }: FrameEdi
    * through the ordinary text-edit channel.
    */
   const applyLink = (path: string, href: string | null) => {
-    const host = doc.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(path)}"]`) as HTMLElement | null;
+    const host = scope.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(path)}"]`) as HTMLElement | null;
     if (!host) return;
     const selection = win.getSelection();
     if (!selection || selection.rangeCount === 0) return;
@@ -361,7 +367,7 @@ export function createFrameEditSession({ win, channel, requestRender }: FrameEdi
       bodyEpoch += 1;   // a different document: focused hosts must reconcile
       // The selected node may not exist in the new document.
       if (selectedPath && !describeSelection(
-        doc.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(selectedPath)}"]`) ?? doc.createElement('div'), nodes,
+        scope.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(selectedPath)}"]`) ?? doc.createElement('div'), nodes,
       )) selectedPath = null;
       stampSelection();
     },
@@ -380,7 +386,7 @@ export function createFrameEditSession({ win, channel, requestRender }: FrameEdi
           break;
         case STORY_SELECT_MESSAGE: {
           if (!message.path) { reportSelection(null); break; }
-          const el = doc.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(message.path)}"]`);
+          const el = scope.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(message.path)}"]`);
           reportSelection(el ? describeWithQuote(el) : null);
           break;
         }
@@ -402,7 +408,7 @@ export function createFrameEditSession({ win, channel, requestRender }: FrameEdi
       doc.removeEventListener('dragover', onDragOver as EventListener, true);
       win.removeEventListener('scroll', onScroll);
       win.removeEventListener('resize', onScroll);
-      for (const el of doc.querySelectorAll(`[${EDIT_SELECTED_ATTR}], [${EDIT_EMBED_SELECTED_ATTR}]`)) {
+      for (const el of scope.querySelectorAll(`[${EDIT_SELECTED_ATTR}], [${EDIT_EMBED_SELECTED_ATTR}]`)) {
         el.removeAttribute(EDIT_SELECTED_ATTR);
         el.removeAttribute(EDIT_EMBED_SELECTED_ATTR);
       }

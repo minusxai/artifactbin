@@ -14,6 +14,7 @@
  * author's script exists (lib/story-runtime/pristine). Everything without it
  * is dropped — including a forgery posted through the unforgeable `top`.
  */
+import { sendDocument, subscribeDocument, documentRect, documentReady, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { isEditFrameMessage, STORY_APPLY_FORMAT_MESSAGE, STORY_APPLY_LINK_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_SELECT_MESSAGE, STORY_COMMIT_MESSAGE, STORY_DOCUMENT_MESSAGE, type StoryEditSelection, type StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { JsxNode } from '@/lib/jsx';
@@ -21,7 +22,8 @@ import { composeSource, type ComposableFormatEdit } from '@/lib/story/edit-compo
 
 export interface InPlaceEditOptions {
   /** The live document's iframe. Never remounted — that is the whole point. */
-  frameRef: { current: HTMLIFrameElement | null };
+  frameRef?: { current: HTMLIFrameElement | null };
+  runtimeRef?: DocumentRuntimeRef;
   /** True while the owner is in edit mode. */
   editing: boolean;
   /**
@@ -79,7 +81,7 @@ export interface InPlaceEditController {
 }
 
 export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditController {
-  const { frameRef, editing, sessionNonce, sourceRef, onSourceEdited, onEditKey, onSlideTitle, onImageDrop } = options;
+  const { frameRef, runtimeRef, editing, sessionNonce, sourceRef, onSourceEdited, onEditKey, onSlideTitle, onImageDrop } = options;
   const [selection, setSelection] = useState<StoryEditSelection | null>(null);
   const [ready, setReady] = useState(false);
   const nonceRef = useRef<string | null>(sessionNonce);
@@ -103,14 +105,12 @@ export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditControll
   const commitPendingRef = useRef<(() => Promise<void>) | null>(null);
 
   const postToFrame = useCallback((message: Record<string, unknown>) => {
-    frameRef.current?.contentWindow?.postMessage(message, '*');
-  }, [frameRef]);
+    sendDocument({ frameRef, runtimeRef }, message);
+  }, [frameRef, runtimeRef]);
 
   // ── listening ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    const onMessage = (event: MessageEvent) => {
-      const frameWindow = frameRef.current?.contentWindow;
-      if (!frameWindow || event.source !== frameWindow) return;
+    const onMessage = (event: { data: unknown }) => {
 
       const nonce = nonceRef.current;
       if (!nonce || !isEditFrameMessage(event.data, nonce)) return;
@@ -168,9 +168,8 @@ export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditControll
           break;
       }
     };
-    window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, [frameRef, sourceRef]);
+    return subscribeDocument({ frameRef, runtimeRef }, onMessage);
+  }, [frameRef, runtimeRef, sourceRef]);
 
   // ── entering and leaving ──────────────────────────────────────────────────
   useEffect(() => {
@@ -225,7 +224,7 @@ export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditControll
   }, [postToFrame]);
 
   const commitPending = useCallback(async (requireAcknowledgement = false): Promise<void> => {
-    if (!frameRef.current?.contentWindow) {
+    if (!documentReady({ frameRef, runtimeRef })) {
       if (requireAcknowledgement) throw new Error('editor is unavailable');
       return;
     }
@@ -246,7 +245,7 @@ export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditControll
     }
     const acknowledged = await commitRequestRef.current;
     if (requireAcknowledgement && !acknowledged) throw new Error('editor commit timed out');
-  }, [frameRef, postToFrame]);
+  }, [frameRef, runtimeRef, postToFrame]);
 
   commitPendingRef.current = commitPending;
 

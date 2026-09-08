@@ -89,8 +89,12 @@ export interface FrameSelectionActions {
 export function createFrameSelectionActions({
   win,
   onAction,
+  root,
+  portal,
 }: {
   win: Window;
+  root?: HTMLElement;
+  portal?: HTMLElement;
   onAction: (action: 'edit' | 'annotate', selection: StoryEditSelection) => void;
 }): FrameSelectionActions {
   const doc = win.document;
@@ -113,7 +117,7 @@ export function createFrameSelectionActions({
   const style = doc.createElement('style');
   style.setAttribute(SELECTION_ACTIONS_CSS_ATTR, '');
   style.textContent = SELECTION_ACTIONS_CSS;
-  doc.head.appendChild(style);
+  (portal ?? doc.head).appendChild(style);
 
   /** The pending touch settle, if a selection is still moving. */
   let settle = 0;
@@ -185,7 +189,7 @@ export function createFrameSelectionActions({
         hide();
         onAction(action, chosen);
       });
-      doc.body.appendChild(toolbar);
+      (portal ?? doc.body).appendChild(toolbar);
     }
     toolbar.replaceChildren();
     if (capabilities.edit) toolbar.appendChild(makeButton('edit'));
@@ -216,6 +220,7 @@ export function createFrameSelectionActions({
       return;
     }
     const range = nativeSelection.getRangeAt(0);
+    if (root && (!root.contains(range.startContainer) || !root.contains(range.endContainer))) { hide(); return; }
     const stampedAt = (node: Node): Element | null => {
       const element = node.nodeType === 1 ? node as Element : node.parentElement;
       return element?.closest(`[${AST_PATH_ATTR}]`) ?? null;

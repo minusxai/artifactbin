@@ -31,6 +31,7 @@
  * reader's document is top-level with no parent window, so nothing here can
  * even reach them.
  */
+import { sendDocument, subscribeDocument, documentRect, documentReady, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, EllipsisVertical, MessageSquare, MousePointerClick, SquareDashed, SquareDashedMousePointer, Trash2, X } from 'lucide-react';
 import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations';
@@ -52,7 +53,8 @@ export interface AnnotationLayerProps {
   /** Every change to the list this layer holds — creates, replies, resolves — so the page's count can follow it. */
   onAnnotationsChange?: (annotations: AnnotationWire[]) => void;
   id: string;
-  frameRef: { current: HTMLIFrameElement | null };
+  frameRef?: { current: HTMLIFrameElement | null };
+  runtimeRef?: DocumentRuntimeRef;
   sessionNonce: string | null;
   /** The thread rail is open — a panel, not a mode, and true in either mode. */
   railOpen: boolean;
@@ -755,7 +757,7 @@ function Thread({
 }
 
 export default function AnnotationLayer({
-  id, frameRef, sessionNonce, railOpen, liveAnnotations, showViewComments,
+  id, frameRef, runtimeRef, sessionNonce, railOpen, liveAnnotations, showViewComments,
   onRailOpenChange, initialSelection = null, topOffset, onAnnotationsChange, pickOnOpen = true, rightInset = 0,
 }: AnnotationLayerProps) {
   const [annotations, setAnnotations] = useState<AnnotationWire[]>([]);
@@ -822,8 +824,8 @@ export default function AnnotationLayer({
   const sheetAwayForPickRef = useRef(false);
 
   const postToFrame = useCallback((message: unknown) => {
-    frameRef.current?.contentWindow?.postMessage(message, '*');
-  }, [frameRef]);
+    sendDocument({ frameRef, runtimeRef }, message);
+  }, [frameRef, runtimeRef]);
 
   /*
    * OPENING A THREAD UNFOLDS IT. Somebody who clicks a pin, follows a message
@@ -969,16 +971,14 @@ export default function AnnotationLayer({
     if (!railOpen) { setOpenResolvedId(null); setOpenId(null); }
   }, [railOpen]);
   useEffect(() => () => {
-    frameRef.current?.contentWindow?.postMessage(
-      { type: STORY_ANNOTATIONS_MESSAGE, mode: 'off', pins: [], openId: null, hoverId: null } satisfies StoryAnnotationsMessage, '*',
+    sendDocument({ frameRef, runtimeRef }, 
+      { type: STORY_ANNOTATIONS_MESSAGE, mode: 'off', pins: [], openId: null, hoverId: null } satisfies StoryAnnotationsMessage,
     );
-  }, [frameRef]);
+  }, [frameRef, runtimeRef]);
 
   // What the document says: pin clicks always; selections only in annotate mode.
   useEffect(() => {
-    const onMessage = (event: MessageEvent) => {
-      const frameWindow = frameRef.current?.contentWindow;
-      if (!frameWindow || event.source !== frameWindow) return;
+    const onMessage = (event: { data: unknown }) => {
       const nonce = nonceRef.current;
       if (!nonce || !isEditFrameMessage(event.data, nonce)) return;
       if (event.data.type === STORY_ANNOTATION_LAYOUT_MESSAGE) {
@@ -1038,9 +1038,8 @@ export default function AnnotationLayer({
         if (reported) setOpenId(null);
       }
     };
-    window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, [frameRef, openThread]);
+    return subscribeDocument({ frameRef, runtimeRef }, onMessage);
+  }, [frameRef, runtimeRef, openThread]);
 
   const act = useCallback(async (annId: string, body: { reply?: string; resolve?: boolean; reopen?: boolean }) => {
     setBusy(true);
@@ -1196,7 +1195,7 @@ export default function AnnotationLayer({
   // The collapsed 36px identity mark is small enough for phones too; clicking
   // it opens the same rail as a bottom sheet, with no hover dependency.
   const floating = !railOpen && showViewComments && annotations.length > 0;
-  const markerRect = frameRef.current?.getBoundingClientRect()
+  const markerRect = documentRect({ frameRef, runtimeRef })
     ?? { top: topOffset, height: window.innerHeight - topOffset };
   const placed = floating ? positionedComments(annotations, anchorRects, markerRect, window.innerHeight) : [];
 
@@ -1206,7 +1205,7 @@ export default function AnnotationLayer({
   // edge below the bar), so what the composer and the pill may use is the
   // frame LESS the rail — never the frame's own width.
   const railWidth = railOpen && !phoneRail ? RIGHT_RAIL_W : 0;
-  const measured = frameRef.current?.getBoundingClientRect();
+  const measured = documentRect({ frameRef, runtimeRef });
   const frameRect = measured
     ? { left: measured.left, top: measured.top, width: Math.max(0, measured.width - railWidth) }
     : { left: 0, top: topOffset, width: window.innerWidth - railWidth };
