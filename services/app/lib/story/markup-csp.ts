@@ -53,7 +53,7 @@ const BEHAVIOUR_DIRECTIVES = [
    * The owner's shell and the exporter are both same-origin.
    */
   "frame-ancestors 'self'",
-  'sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation',
+  'sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation',
 ] as const;
 
 /** The path the document may fetch: its own query endpoint. */

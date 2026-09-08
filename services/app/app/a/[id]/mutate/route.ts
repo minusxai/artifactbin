@@ -34,7 +34,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const parsed = parseMutationRequest(body);
   if (parsed instanceof Response) return parsed;
 
-  const result = await runDocumentMutation(artifact, parsed.mutation, parsed.values ?? {}, parsed.row, {userId:actor.viewer?.userId ?? null,tokenId:actor.tokenId,email:actor.viewer?.email});
+  const result = await runDocumentMutation(artifact, parsed.mutation, parsed.values ?? {}, parsed.row, {userId:actor.viewer?.userId ?? null,tokenId:actor.tokenId,email:actor.viewer?.email}, parsed.localTables);
   if (!result.ok) {
     switch (result.reason) {
       case 'unknown_mutation':
@@ -56,6 +56,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
         return json({ error: 'dataset_read_only', detail: 'You need edit access to a writable dataset to make this change.' }, 403, CORS);
     }
   }
+  if ('local' in result) return json({ok: true, dataset: '', local: result.local}, 200, CORS);
   return json(
     { ok: true, dataset: result.dataset.id, version: result.dataset.version, affected: result.affected, rowCount: result.rowCount },
     200,

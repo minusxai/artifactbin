@@ -7,6 +7,7 @@
 
 /** The shadcn component tags a new-format (`format:'jsx'`) story may use. */
 export const STORY_UI_COMPONENT_NAME_LIST = [
+  'Dialog', 'DialogTrigger', 'DialogContent', 'DialogClose',
   'Card', 'CardHeader', 'CardTitle', 'CardDescription', 'CardContent', 'CardFooter', 'CardAction',
   'Badge', 'Button',
   'Alert', 'AlertTitle', 'AlertDescription',

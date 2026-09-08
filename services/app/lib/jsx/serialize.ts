@@ -12,6 +12,7 @@
  *   SQL/CSS keep `<`, `>`, `{` raw); other static expression child → `{<json>}`.
  */
 import type { JsxNode, JsxElement, JsxAttribute } from './types';
+import { reactiveSource } from './reactive';
 
 /**
  * Attribute-string escaping — the inverse of the parser's entity decoding, like {@link escapeText}
@@ -61,6 +62,12 @@ function nodeToSource(node: JsxNode): string {
     return `{${node.source}}`;
   }
   const el = node as JsxElement;
+  if (el.control?.kind === 'fragment') return `<>${el.children.map(nodeToSource).join('')}</>`;
+  if (el.control) {
+    const test = reactiveSource(el.control.test);
+    const yes = nodeToSource(el.children[0]);
+    return el.control.kind === 'and' ? `{${test} && (${yes})}` : `{${test} ? (${yes}) : (${nodeToSource(el.children[1])})}`;
+  }
   const attrs = el.attributes.map(attrToSource).join(' ');
   const open = attrs ? `${el.tag} ${attrs}` : el.tag;
   if (el.selfClosing && el.children.length === 0) return `<${open} />`;

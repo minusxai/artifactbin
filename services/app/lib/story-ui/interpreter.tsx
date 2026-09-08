@@ -12,6 +12,7 @@
  * stamped DOM is render output only; new-format stories persist JSX source, never DOM.
  */
 import React from 'react';
+import { evaluateReactive, isReactiveExpression, REACTIVE_BOOLEAN_PROPS } from '@/lib/jsx/reactive';
 import type { JsxNode, JsxElement } from '@/lib/jsx';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import { hasDangerousScheme, listHasDangerousScheme } from '@/lib/jsx/validate';
@@ -72,6 +73,7 @@ export interface BoundSourceProps {
 }
 
 export interface StoryInterpreterOptions {
+  values?: Record<string, unknown>;
   /** Component registry: shadcn components + embeds. Unknown component tags render nothing. */
   components: Record<string, React.ComponentType<Record<string, unknown>>>;
   /**
@@ -167,6 +169,10 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
   if (node.type === 'text') return options.row ? substituteRow(node.value, options.row) : node.value;
   if (node.type === 'expression') {
     if (!node.value.static) {
+      if (isReactiveExpression(node.value.reactive)) {
+        const value = evaluateReactive(node.value.reactive, options.values ?? {}, options.row);
+        return typeof value === 'string' || typeof value === 'number' ? value : null;
+      }
       const field = options.row ? /^\s*\$_row\.([A-Za-z_]\w*)\s*$/.exec(node.source)?.[1] : null;
       return field ? String(options.row?.[field] ?? '') : null;
     }
@@ -174,15 +180,26 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
     return typeof v === 'string' || typeof v === 'number' ? String(v) : null;
   }
 
+  if (node.control) {
+    if (node.control.kind === 'fragment') {
+      return React.createElement(React.Fragment, {key: path}, ...node.children.map((child, i) => renderNode(child, options, `${path}.${i}`)));
+    }
+    if (!isReactiveExpression(node.control.test) || node.children.length !== 2) return null;
+    const value = evaluateReactive(node.control.test, options.values ?? {}, options.row);
+    if (node.control.kind === 'and' && !value) return typeof value === 'number' ? value : null;
+    const index = value ? 0 : 1;
+    return renderNode(node.children[index], options, `${path}.${index}`);
+  }
+
   const isComponent = node.isComponent;
   const Component = isComponent ? options.components[node.tag] : null;
   if (isComponent && !Component) return null; // validator rejects these; render stays safe regardless
 
   if (node.tag === 'DataTable' && Component) {
-    const props = buildProps(node.attributes, true, node.tag, path, options.row);
+    const props = buildProps(node.attributes, true, node.tag, path, options.row, options.values);
     const templates: ColumnTemplate[] = node.children.flatMap((child, index) => {
       if (child.type !== 'element' || child.tag !== 'Column') return [];
-      const cp = buildProps(child.attributes, true, child.tag, `${path}.${index}`, options.row);
+      const cp = buildProps(child.attributes, true, child.tag, `${path}.${index}`, options.row, options.values);
       return typeof cp.col === 'string' ? [{ col: cp.col, title: typeof cp.title === 'string' ? cp.title : undefined, props: cp, nodes: child.children, path: `${path}.${index}` }] : [];
     });
     const renderCell = (template: ColumnTemplate, row: Record<string, unknown>) => template.nodes.map((child, i) => renderNode(child, {
@@ -194,7 +211,7 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
 
   const run = node.attributes.find((a) => a.name === 'run');
   if (options.row && options.cellControl && run?.value.static && typeof run.value.json === 'string' && refName(run.value.json)) {
-    const props = buildProps(node.attributes, isComponent, node.tag, path, options.row);
+    const props = buildProps(node.attributes, isComponent, node.tag, path, options.row, options.values);
     const children = node.children.map((c, i) => renderNode(c, options, `${path}.${i}`));
     return React.createElement(options.cellControl, { key: options.keyFor?.(path) ?? path, tag: node.tag, component: Component ?? undefined, props, row: options.row, identity: JSON.stringify([options.cellScope?.table, typeof options.cellScope?.key, options.cellScope?.key, options.cellScope?.column, path]), column: options.cellScope?.column ?? '', rowKey: options.cellScope?.key, tableName: options.cellScope?.tableName, valueField: node.attributes.flatMap((a) => a.name === 'value' && a.value.static ? [parseRowRef(a.value.json)] : [])[0] ?? undefined, children });
   }
@@ -204,7 +221,7 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
   // resolved value additionally has to be mapped to our copy of it.
   const source = isComponent ? null : boundSourceAttr(node);
   if (source) {
-    const props = buildProps(node.attributes.filter((a) => a !== source.attr), false, node.tag, path, options.row);
+    const props = buildProps(node.attributes.filter((a) => a !== source.attr), false, node.tag, path, options.row, options.values);
     const Source = options.boundSource ?? StaticBoundSource;
     const element = React.createElement(Source, {
       key: options.keyFor?.(path) ?? path, tag: 'img' as const, props, template: source.template,
@@ -218,7 +235,7 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
   const bound = isComponent ? null : boundAttrs(node);
   if (bound) {
     const rest = node.attributes.filter((a) => !bound.attrs.has(a));
-    const props = buildProps(rest, false, node.tag, path, options.row);
+    const props = buildProps(rest, false, node.tag, path, options.row, options.values);
     const children = node.children.map((c, i) => renderNode(c, options, `${path}.${i}`));
     const Control = options.boundControl ?? StaticBoundControl;
     const element = React.createElement(Control, {
@@ -227,7 +244,7 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
     return options.decorateElement ? options.decorateElement(element, node, path) : element;
   }
 
-  const props = buildProps(node.attributes, isComponent, node.tag, path, options.row);
+  const props = buildProps(node.attributes, isComponent, node.tag, path, options.row, options.values);
   const children = node.children.map((c, i) => renderNode(c, options, `${path}.${i}`));
   const type = (Component ?? SVG_TAG_CASE[node.tag.toLowerCase()] ?? node.tag.toLowerCase()) as React.ElementType;
   // Void HTML elements must not receive children (React throws).
@@ -290,17 +307,23 @@ function StaticBoundControl({ tag, props, bind, children }: BoundControlProps) {
 }
 
 function buildProps(
-  attributes: { name: string; value: { static: boolean; json?: unknown } }[],
+  attributes: JsxAttribute[],
   isComponent: boolean,
   tag: string,
   path: string,
   row?: Record<string, unknown>,
+  values: Record<string, unknown> = {},
 ): Record<string, unknown> {
   const props: Record<string, unknown> = { [AST_PATH_ATTR]: path };
   for (const a of attributes) {
-    if (!a.value.static) continue; // non-static values never render (validator rejects them too)
     const lower = a.name.toLowerCase();
     if (lower.startsWith('on') || DENIED_PROPS.has(lower)) continue;
+    if (!a.value.static) {
+      if (REACTIVE_BOOLEAN_PROPS.has(a.name) && isReactiveExpression(a.value.reactive)) {
+        props[a.name] = Boolean(evaluateReactive(a.value.reactive, values, row));
+      }
+      continue;
+    }
 
     let name = HTML_ATTR_TO_REACT[a.name] ?? SVG_ATTR_CASE[lower] ?? a.name;
     let value = row ? substituteRow(a.value.json, row) : a.value.json;

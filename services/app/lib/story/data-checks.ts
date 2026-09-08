@@ -13,6 +13,7 @@ import { analyzeRowScopes, mutationUsesRow } from './row-scope';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { dryRunMutations, dryRunQueries } from '@/lib/sql/engine';
 import { mutationsOf, queryOrder, refName, type Dataflow } from './dataflow';
+import { SIGNALS_TABLE } from './local-target';
 import type { DatasetColumn } from './dataset-shape';
 import { splitHelmet } from './helmet';
 import { refId, validateRecipeUse, validateRefs, validateVizAgainstColumns, type RefLoader } from './refs';
@@ -46,8 +47,10 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
 > {
   const tables: Record<string, { columns: DatasetColumn[] }> = {};
   for (const v of flow.values) if (v.kind === 'table') tables[v.name] = { columns: v.columns };
+  const signalColumns = flow.values.filter(v => v.kind === 'scalar').map(v => ({name: v.name, type: v.type}));
+  if (signalColumns.length) tables[SIGNALS_TABLE] = {columns: signalColumns};
   const mutations = mutationsOf(flow);
-  for (const id of new Set([...flow.queries.flatMap((q) => q.refs), ...mutations.map((m) => m.target)])) {
+  for (const id of new Set([...flow.queries.flatMap((q) => q.refs), ...mutations.filter(m => m.scope !== 'local').map((m) => m.target)])) {
     const r = await load(id);
     // A folder registers the FIXED shape of its children table (lib/folders
     // CHILDREN_COLUMNS), which `rowToResolvedRef` already put on the ref — so
@@ -94,7 +97,7 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
       for(const m of group){
         let sql=m.sql;
         if(m.source){try{const ref=await load(m.source);if(!ref?.catalog)throw new Error('Dataset source is unavailable');const compiled=compileStoredMutation(ref.catalog,sql,`ref_${m.target}`);sql=compiled.sql;inputTables[`ref_${m.target}`]={columns:compiled.table.columns};}catch(error){details.push(`<Mutation name="${m.name}">: ${error instanceof Error?error.message:'Invalid mutation'}`);continue;}}
-        prepared.push({...m,sql,...(rowSchemas[m.name]?{row:{columns:rowSchemas[m.name]}}:{})});
+        prepared.push({...m,sql,...(m.scope === 'local' ? {tableName: m.target} : {}),...(rowSchemas[m.name]?{row:{columns:rowSchemas[m.name]}}:{})});
       }
       if(prepared.length){const wet=await dryRunMutations({tables:inputTables,mutations:prepared,paramNames:[...paramNames,'_value']});details.push(...wet.errors.map(e=>`<Mutation name="${e.name}">: ${e.error}`));}
     }

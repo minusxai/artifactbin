@@ -94,6 +94,8 @@ export interface DryRunMutationsInput {
     name: string;
     sql: string;
     target: string;
+    /** Explicit local table name; absent preserves the existing ref_<target> convention. */
+    tableName?: string;
     /** Shape of `$_row`; dry runs bind a typed STRUCT whose fields are NULL. */
     row?: { columns: DatasetColumn[] };
   }>;
