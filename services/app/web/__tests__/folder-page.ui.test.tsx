@@ -205,9 +205,11 @@ describe('the shelf below the hairline', () => {
       ownerUsername: 'folderowner', folder: folder(),
     }), { status: 200 }));
     render(<MemoryRouter initialEntries={['/a/fold01']}><ArtifactPage id="fold01" /></MemoryRouter>);
-    expect(await screen.findByLabelText('Page bar')).toBeInTheDocument();
+    // Both the pending shell and the resolved folder have a bar; wait for
+    // destination content before inspecting the final chrome.
+    expect(await screen.findByRole('link', { name: '@folderowner' })).toHaveAttribute('href', '/@folderowner');
+    expect(screen.getByLabelText('Page bar')).toBeInTheDocument();
     expect(screen.getByLabelText('Current page')).toHaveTextContent('artifactbin·Google Docs for agents');
-    expect(screen.getByRole('link', { name: '@folderowner' })).toHaveAttribute('href', '/@folderowner');
     expect(screen.queryByLabelText('Dashboard rail')).not.toBeInTheDocument();
   });
 

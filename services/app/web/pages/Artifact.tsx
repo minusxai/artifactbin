@@ -1,7 +1,7 @@
 /**
- * The OWNER's/editor's page for a document: the shell around the served
- * document, from /api/page/artifact/:id. A reader never reaches this — the
- * server hands them the document itself at the same URL.
+ * Shared artifact route for readers, editors and owners. The page API supplies
+ * authorized content and role capabilities; markup renders inline in the SPA,
+ * while author scripts run only in managed sandboxed child frames.
  */
 import { useEffect, useRef, useState } from 'react';
 import { takeBootstrap } from '../bootstrap';
@@ -18,7 +18,7 @@ import { NotFoundPage } from './NotFound';
  * ONE ADDRESS, TWO PAGES, and `folder` is the discriminator.
  *
  * `/a/<id>` names any artifact, and a FOLDER has no document behind it — no
- * source, no sheet, no frame — so the endpoint answers it with a listing
+ * source or sheet — so the endpoint answers it with a listing
  * instead of a `surface`, and this page hands that to the folder page. The
  * discriminator is the block's PRESENCE rather than a `kind` field, because
  * `kind` here already means the browser credential (account | anon) and a
@@ -61,7 +61,7 @@ function ArtifactDocument({ id }: { id: string }) {
   if (page === null) return <PageLoading />;
   if (page === 'missing') return <NotFoundPage />;
   // A folder is a listing, not a document: no ArtifactShell and no surface
-  // (there is nothing to frame). Every folder gets the normal PAGE frame;
+  // (there is no inline story runtime). Every folder gets the normal PAGE frame;
   // account-wide dashboard data is still supplied only to its owner.
   if (page.folder) {
     const folder = <FolderPage folder={page.folder} role={page.role} workspace={page.workspace} ownerUsername={page.ownerUsername} />;
@@ -71,7 +71,7 @@ function ArtifactDocument({ id }: { id: string }) {
     <ArtifactShell role={page.role}>
       {/* The reader's `<Value>` selection travels in this page's own query
           string (`?$region=west`); the surface forwards its `$` params into
-          the document it frames. From the ROUTER, never `window.location` —
+          the inline document runtime. From the ROUTER, never `window.location` —
           nothing may read that during render. */}
       {/* `like` rides beside `surface` rather than inside it: the surface's own
           props are what the DOCUMENT is, and this is what the viewer is to
