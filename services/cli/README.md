@@ -82,7 +82,7 @@ const exitCode = await runRemote({
 });
 ```
 
-`interactive: false`, `onOutput`, and an AbortSignal support embedding in a process without a local TTY. The server relay is `services/app/lib/remote/registry.ts`; thin authenticated HTTP routes wrap its account-scoped interface. Wire types live in `services/contracts/src/remote.ts`.
+`onSession` is called again with the replacement URL after session recovery. `interactive: false`, `onOutput`, and an AbortSignal support embedding in a process without a local TTY. The server relay is `services/app/lib/remote/registry.ts`; thin authenticated HTTP routes wrap its account-scoped interface. Wire types live in `services/contracts/src/remote.ts`.
 
 ## Standalone executable
 
@@ -97,7 +97,7 @@ Build on each target OS/architecture using Node 22. The build creates a [Node si
 
 The relay uses authenticated HTTP polling (~200 ms runner / 250 ms viewer), so it works through the existing app proxy and a custom host without a separate WebSocket service. It forwards terminal bytes, including screen redraws and menus. It is a terminal mirror, with a convenient message box.
 
-Run **one app process**: sessions and bounded terminal scrollback live in memory. An app restart or multi-replica routing loses the connection. Brief network errors retry exchanges without duplicating input/output; auth failure or a missing session disables remote access and leaves the local command running. A long outage or excessive output disables the relay to keep local work available. Sessions become offline after 30 seconds without a heartbeat and expire after one hour without activity. Limits: 10 sessions per account, 200 total, 1 MiB replay per session plus 1,000 terminal scrollback lines, 128 KiB pending input. Closing the local terminal ends the process; this does not implement persistent background sessions.
+Run **one app process**: sessions and bounded terminal scrollback live in memory. Temporary relay failures retry with exponential backoff (0.5–10 seconds), preserving the pending exchange sequence. The CLI reports connection loss and successful reconnection. After an app restart or session expiry, it registers a new session without restarting the local command and prints the new browser link; previous links and mentions still target the old session. Multi-replica routing remains unsupported. During an outage, the CLI keeps up to 1 MiB of recent unsent output plus the pending exchange, discards older output if necessary, and keeps local work running. Skipped output is reported on reconnection; terminal history and screen state may be incomplete until the agent redraws. Authentication failures (401/403) stop retries and explain how to authenticate and restart remote access. Sessions become offline after 30 seconds without a heartbeat and expire after one hour without activity. Limits: 10 sessions per account, 200 total, 1 MiB replay per session plus 1,000 terminal scrollback lines, 128 KiB pending input. Closing the local terminal ends the process; this does not implement persistent background sessions.
 
 The account and the app server can access the terminal content and input. Keep this server within the trust boundary of the machine you are controlling. V0 does not provide end-to-end encryption, public session sharing, readiness detection, or guaranteed delivery after a server restart.
 

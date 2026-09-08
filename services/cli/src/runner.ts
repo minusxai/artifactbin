@@ -27,19 +27,13 @@ export async function runRemote(options: RunOptions): Promise<number> {
   let cols = Math.max(2, Math.min(300, process.stdout.columns || 80));
   let rows = Math.max(2, Math.min(120, process.stdout.rows || 24));
   const cwd = options.cwd ?? process.cwd();
-  const session = await api<{ id: string; runnerKey: string }>(
-    connection,
-    "",
-    "POST",
-    {
-      name: options.name ?? command,
-      harness: command,
-      cwd,
-      machine: hostname(),
-      cols,
-      rows,
-    },
+  const register = (signal?: AbortSignal) => api<{ id: string; runnerKey: string }>(
+    connection, "", "POST", {
+      name: options.name ?? command, harness: command, cwd,
+      machine: hostname(), cols, rows,
+    }, signal,
   );
+  let session = await register(signal);
   let child: import("node-pty").IPty;
   try {
     child = pty.spawn(command, args, {
@@ -58,8 +52,10 @@ export async function runRemote(options: RunOptions): Promise<number> {
     ack = 0,
     seq = 0,
     exitCode: number | undefined,
-    remote = true,
-    paused = false;
+    remote = true;
+  let needsRegistration = false;
+  let droppedOutput = false;
+  let failures = 0;
   let controller: "local" | "web" = "local";
   let batch: RemoteExchange | undefined;
   const out = child.onData((data) => {
@@ -67,9 +63,12 @@ export async function runRemote(options: RunOptions): Promise<number> {
     else if (interactive) process.stdout.write(data);
     if (remote) {
       buffer += data;
-      if (buffer.length > 1024 * 1024 && !paused) {
-        child.pause();
-        paused = true;
+      // Keep local output flowing even during a prolonged outage.
+      if (buffer.length > 1024 * 1024) {
+        let start = buffer.length - 1024 * 1024;
+        if (/[\uDC00-\uDFFF]/.test(buffer[start])) start++;
+        buffer = buffer.slice(start);
+        droppedOutput = true;
       }
     }
   });
@@ -133,24 +132,35 @@ export async function runRemote(options: RunOptions): Promise<number> {
   try {
     while (!shutdown.signal.aborted) {
       if (remote) {
-        if (!batch) {
-          // Never split a UTF-16 surrogate pair across JSON batches.
-          let length = Math.min(60000, buffer.length);
-          if (length && /[\uD800-\uDBFF]/.test(buffer[length - 1])) length--;
-          batch = {
-            runnerKey: session.runnerKey,
-            outputSeq: ++seq,
-            output: buffer.slice(0, length),
-            ack,
-            cols,
-            rows,
-            ...(exitCode !== undefined && length === buffer.length
-              ? { exitCode }
-              : {}),
-          };
-          buffer = buffer.slice(length);
-        }
         try {
+          if (needsRegistration) {
+            session = await register(shutdown.signal);
+            needsRegistration = false;
+            ack = 0;
+            seq = 0;
+            // The old batch may have reached the old server; the new session has no history.
+            if (batch) batch = { ...batch, runnerKey: session.runnerKey, ack: 0, outputSeq: ++seq };
+            options.onSession?.(`${connection.server}/chat?session=${session.id}`);
+            if (interactive)
+              process.stderr.write(`\r\n[afbin: Remote session restored with a new link: ${connection.server}/chat?session=${session.id}. Open it in your browser; previous mentions still point to the old session.]\r\n`);
+          }
+          if (!batch) {
+            // Never split a UTF-16 surrogate pair across JSON batches.
+            let length = Math.min(60000, buffer.length);
+            if (length && /[\uD800-\uDBFF]/.test(buffer[length - 1])) length--;
+            batch = {
+              runnerKey: session.runnerKey,
+              outputSeq: ++seq,
+              output: buffer.slice(0, length),
+              ack,
+              cols,
+              rows,
+              ...(exitCode !== undefined && length === buffer.length
+                ? { exitCode }
+                : {}),
+            };
+            buffer = buffer.slice(length);
+          }
           const result = await api<RemoteExchangeResult>(
             connection,
             `/${session.id}/exchange`,
@@ -181,39 +191,36 @@ export async function runRemote(options: RunOptions): Promise<number> {
           }
           const finished = batch.exitCode !== undefined;
           batch = undefined;
+          if (warned && interactive)
+            process.stderr.write(`\r\n[afbin: Reconnected.${droppedOutput ? " Some terminal output was skipped during the outage." : ""}]\r\n`);
           warned = false;
-          if (exitCode === undefined && paused && buffer.length < 512000) {
-            child.resume();
-            paused = false;
-          }
+          droppedOutput = false;
+          failures = 0;
           if (finished) break;
         } catch (error) {
           if (exitCode !== undefined) break;
-          if (!warned && interactive)
-            process.stderr.write(
-              `\r\n[afbin: remote access interrupted; ${command} is still running locally. Exit the agent to end this session]\r\n`,
-            );
-          warned = true;
-          if (
-            error instanceof ApiError &&
-            [401, 403, 404].includes(error.status)
-          )
+          const status = error instanceof ApiError ? error.status : undefined;
+          if (status === 401 || status === 403) {
             remote = false;
-          // A prolonged relay outage must not freeze the local harness or retain unbounded output.
-          if (paused) {
-            remote = false;
-            child.resume();
-            paused = false;
-          }
-          if (!remote) {
+            if (interactive)
+              process.stderr.write(`\r\n[afbin: Remote authentication failed (HTTP ${status}). ${command} is still running locally. Run afbin auth --server ${connection.server} in another terminal, then restart afbin remote to reconnect.]\r\n`);
             buffer = "";
             batch = undefined;
+          } else {
+            if (status === 404) needsRegistration = true;
+            failures++;
+            if (!warned && interactive)
+              process.stderr.write(`\r\n[afbin: Connection lost${status ? ` (HTTP ${status})` : ""}—reconnecting… ${command} is still running locally.]\r\n`);
+            warned = true;
           }
         }
       }
       if (exitCode !== undefined && !remote)
         break;
-      await delay(remote ? 200 : 100);
+      const wait = remote && failures ? Math.min(10000, 500 * 2 ** Math.min(failures - 1, 5)) : remote ? 200 : 100;
+      await delay(wait, undefined, { signal: shutdown.signal }).catch((error) => {
+        if (!shutdown.signal.aborted) throw error;
+      });
     }
     return exitCode ?? 1;
   } finally {

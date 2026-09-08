@@ -175,3 +175,107 @@ test("mobile dimensions survive local terminal replies and typing", async (t) =>
     assert.ok(!frame.localControl, "terminal replies must not reclaim dimensions");
   }
 });
+
+test("retries the same batch after a lost response and recreates a missing session without restarting the PTY", async (t) => {
+  let registrations = 0;
+  let calls = 0;
+  const urls: string[] = [];
+  let failedBatch: unknown;
+  let local = "";
+  t.mock.method(globalThis, "fetch", async (url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    if (!body.runnerKey) return Response.json({ id: `session-${++registrations}`, runnerKey: `key-${registrations}` });
+    calls++;
+    if (calls === 1) {
+      failedBatch = body;
+      throw new TypeError("fetch failed");
+    }
+    if (calls === 2) {
+      assert.deepEqual(body, failedBatch, "retry preserves output sequence and input acknowledgement");
+      return Response.json({ controller: "local", inputs: [{ id: 1, kind: "input", data: "first\r" }] });
+    }
+    if (calls === 3) return Response.json({ error: "Session not found" }, { status: 404 });
+    assert.match(String(url), /session-2\/exchange$/);
+    assert.equal(body.runnerKey, "key-2");
+    if (calls === 4) {
+      assert.equal(body.ack, 0);
+      assert.equal(body.outputSeq, 1);
+    }
+    return Response.json({ controller: "local", inputs: body.ack ? [] : [{ id: 1, kind: "input", data: "second\r" }] });
+  });
+  const code = await runRemote({
+    connection: { server: "https://example.com", token: "test" },
+    command: "/bin/sh", args: ["-c", 'read a; read b; printf "result:%s:%s\\n" "$a" "$b"'],
+    interactive: false, onOutput: data => { local += data; }, onSession: url => urls.push(url),
+    signal: AbortSignal.timeout(10000),
+  });
+  assert.equal(code, 0);
+  assert.equal(registrations, 2);
+  assert.equal(urls.length, 2);
+  assert.match(local, /result:first:second/);
+});
+
+test("output overflow keeps the local PTY running and the relay reconnecting", async (t) => {
+  let calls = 0;
+  let bytes = 0;
+  let recovered = false;
+  t.mock.method(globalThis, "fetch", async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    if (!body.runnerKey) return Response.json({ id: "overflow", runnerKey: "runner" });
+    calls++;
+    if (calls < 3) return Response.json({ error: "Unavailable" }, { status: 503 });
+    recovered = true;
+    assert.ok(body.output.length <= 60000);
+    return Response.json({ controller: "local", inputs: body.ack ? [] : [{ id: 1, kind: "input", data: "done\r" }] });
+  });
+  const code = await runRemote({
+    connection: { server: "https://example.com", token: "test" },
+    command: process.execPath,
+    args: ["-e", "process.stdout.write('x'.repeat(2 * 1024 * 1024)); process.stdin.once('data', () => process.exit(0));"],
+    interactive: false, onOutput: data => { bytes += data.length; },
+    signal: AbortSignal.timeout(10000),
+  });
+  assert.equal(code, 0);
+  assert.ok(bytes >= 2 * 1024 * 1024);
+  assert.ok(recovered);
+});
+
+for (const status of [401, 403]) test(`HTTP ${status} stops retries but lets the local child finish`, async (t) => {
+  let calls = 0;
+  let local = "";
+  t.mock.method(globalThis, "fetch", async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    if (!body.runnerKey) return Response.json({ id: "auth", runnerKey: "runner" });
+    calls++;
+    return Response.json({ error: "Unauthorized" }, { status });
+  });
+  const code = await runRemote({
+    connection: { server: "https://example.com", token: "test" },
+    command: "/bin/sh", args: ["-c", "sleep 0.3; echo still-local"],
+    interactive: false, onOutput: data => { local += data; },
+    signal: AbortSignal.timeout(5000),
+  });
+  assert.equal(code, 0);
+  assert.equal(calls, 1);
+  assert.match(local, /still-local/);
+});
+
+test("child exit interrupts reconnect backoff promptly", async (t) => {
+  let calls = 0;
+  t.mock.method(globalThis, "fetch", async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    if (!body.runnerKey) return Response.json({ id: "backoff", runnerKey: "runner" });
+    calls++;
+    return Response.json({ error: "Unavailable" }, { status: 503 });
+  });
+  const start = Date.now();
+  const code = await runRemote({
+    connection: { server: "https://example.com", token: "test" },
+    command: "/bin/sh", args: ["-c", "sleep 1.7; exit 0"],
+    interactive: false, onOutput: () => {},
+    signal: AbortSignal.timeout(6000),
+  });
+  assert.equal(code, 0);
+  assert.equal(calls, 3);
+  assert.ok(Date.now() - start < 3300, "shutdown must interrupt the two-second reconnect wait");
+});
