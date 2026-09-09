@@ -1,10 +1,29 @@
-import { useLayoutEffect,useMemo,useRef,type ReactNode } from 'react';
+import { useLayoutEffect,useRef,type ReactNode } from 'react';
 import { renderReaderChrome, READER_CHROME_HIDDEN_CLASS, type ReaderChromeInput } from '@/lib/story/reader-chrome';
 import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
 import { chromeAfterSample,type ChromeState } from '@/lib/story-runtime/reader-chrome-policy';
 import { subscribePageChrome } from './PageChrome';
 import { wireReaderSharing } from '@/lib/story-runtime/reader-share';
 import { wireGithubWidgetTheme } from '@/lib/github-star';
+
+/** Reconcile only our generated chrome, retaining live browser-owned state.
+ * Replacing innerHTML reloads the vendor iframe on every reaction/title update.
+ * The widget subtree owns its measured size and must never be overwritten. */
+function updateChrome(current: Element, next: Element) {
+  if (current.hasAttribute('data-mx-github-star')) return;
+  for (const attribute of [...current.attributes]) if (!next.hasAttribute(attribute.name)) current.removeAttribute(attribute.name);
+  for (const attribute of [...next.attributes]) if (current.getAttribute(attribute.name) !== attribute.value) current.setAttribute(attribute.name, attribute.value);
+  const oldChildren = [...current.childNodes], newChildren = [...next.childNodes];
+  for (let i = 0; i < Math.max(oldChildren.length, newChildren.length); i++) {
+    const old = oldChildren[i], fresh = newChildren[i];
+    if (!fresh) { old.remove(); continue; }
+    if (!old) { current.append(fresh); continue; }
+    if (old instanceof Element && fresh instanceof Element && old.tagName === fresh.tagName) updateChrome(old, fresh);
+    else if (old.nodeType === Node.TEXT_NODE && fresh.nodeType === Node.TEXT_NODE) {
+      if (old.textContent !== fresh.textContent) old.textContent = fresh.textContent;
+    } else old.replaceWith(fresh);
+  }
+}
 
 /** Identical desktop/mobile reader layout, with local handlers inside TrustedUi. */
 export function InlineReaderChrome({ input, onAction,pinned=false }: { input: ReaderChromeInput; onAction(action:string):void;pinned?:boolean }): ReactNode {
@@ -13,8 +32,14 @@ export function InlineReaderChrome({ input, onAction,pinned=false }: { input: Re
   const artifact=useRef(input.artifactId);
   const sharing=useRef<ReturnType<typeof wireReaderSharing>|null>(null);
   const html = renderReaderChrome({...input,panels:false}).replaceAll('target="_top"', 'target="_self"');
-  const markup=useMemo(()=>({__html:html}),[html]);
   useLayoutEffect(()=>{
+    const container=holder.current;
+    if(!container)return;
+    const template=document.createElement('template');template.innerHTML=html;
+    const next=template.content.firstElementChild;
+    if(!next)return;
+    if(container.firstElementChild)updateChrome(container.firstElementChild,next);
+    else container.append(next);
     if(artifact.current!==input.artifactId){state.current=null;artifact.current=input.artifactId;}
     const root=holder.current?.querySelector<HTMLElement>('[data-mx-reader-chrome]');
     if(!root)return;
@@ -50,6 +75,6 @@ export function InlineReaderChrome({ input, onAction,pinned=false }: { input: Re
       event.preventDefault();
       if(target.getAttribute('data-mx-reader-action')==='share'){sharing.current?.share();return;}
       onAction(target.getAttribute('data-mx-reader-action') ?? target.getAttribute('data-mx-reader-trigger') ?? '');
-    }} dangerouslySetInnerHTML={markup} />
+    }} />
   </>;
 }

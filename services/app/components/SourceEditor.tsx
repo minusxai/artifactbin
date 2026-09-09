@@ -36,6 +36,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
 import 'monaco-editor/esm/vs/basic-languages/html/html.contribution';
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
+import monacoStyles from 'monaco-editor/min/vs/style.css?inline';
 
 declare global {
   // Monaco reads this off the global to find its worker; it declares no type
@@ -111,6 +112,11 @@ export default function SourceEditor({ value, revision, onChange, initialSelecti
   }, [revision]);
 
   return (
+    <>
+    {/* Vite's extracted CSS lives in document.head, outside TrustedUi's shadow
+        tree. Install Monaco's own static rules beside the editor, lazily. Its
+        dynamic theme service already installs its rules in this same root. */}
+    <style data-source-editor-styles>{monacoStyles}</style>
     <Editor
       height="100%"
       defaultLanguage="html"
@@ -134,5 +140,6 @@ export default function SourceEditor({ value, revision, onChange, initialSelecti
         ariaLabel: 'Markup source',
       }}
     />
+    </>
   );
 }
