@@ -36,6 +36,7 @@ export function wireGithubWidgetTheme(root: HTMLElement): () => void {
       frame.style.visibility = 'visible';
       const fallback = frame.nextElementSibling as HTMLElement | null;
       if (fallback) fallback.style.display = 'none';
+      frame.contentWindow?.postMessage('github-widget-size-ack', '*');
     }
   };
   window.addEventListener('message', resize);

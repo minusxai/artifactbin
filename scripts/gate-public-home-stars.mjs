@@ -149,12 +149,14 @@ try {
   await zoomPage.goto(base, { waitUntil: 'domcontentloaded' });
   const zoomFrame = zoomPage.locator('header [data-mx-github-star]:visible iframe');
   await zoomPage.frameLocator('header [data-mx-github-star]:visible iframe').getByRole('link', { name: '1234 stargazers on GitHub' }).waitFor();
+  await zoomPage.waitForFunction(() => document.querySelector('header [data-mx-github-star] iframe')?.style.width === '113px');
   assert.equal(await zoomFrame.evaluate(e => e.style.width), '113px');
   assert.equal(await zoomFrame.evaluate(e => e.style.height), '29px');
   assert.equal(await zoomFrame.evaluate(e => e.parentElement.style.height), '29px');
   await zoomPage.setViewportSize({ width: 1100, height: 750 });
   await zoomPage.reload({ waitUntil: 'domcontentloaded' });
   await zoomPage.frameLocator('header [data-mx-github-star]:visible iframe').getByRole('link', { name: '1234 stargazers on GitHub' }).waitFor();
+  await zoomPage.waitForFunction(() => document.querySelector('header [data-mx-github-star] iframe')?.style.visibility === 'visible');
   assert.equal(await zoomFrame.evaluate(e => e.style.visibility), 'visible');
   await fractional.close();
   console.log('ok fractional zoom geometry survives initial load, viewport changes and reload without stuck fallback');
