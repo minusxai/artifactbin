@@ -118,6 +118,7 @@ const LOG_SERIES = `SELECT e.object_id AS artifact_id, to_char(date_trunc('day',
    JOIN artifacts a ON a.id = e.object_id
   WHERE a.user_id = $1 AND e.object_kind = 'artifact' AND e.verb = 'viewed' AND a.${LIVE_ARTIFACT_SQL}
     AND e.at > now() - ($2::int * interval '1 day')
+    AND ($3::text IS NULL OR a.format = $3)
   GROUP BY e.object_id, day`;
 
 const LOG_DAILY = `SELECT to_char(date_trunc('day', e.at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
@@ -140,6 +141,7 @@ const LEGACY_SERIES = `SELECT e.artifact_id, to_char(date_trunc('day', e.created
    JOIN artifacts a ON a.id = e.artifact_id
   WHERE a.user_id = $1 AND e.event = 'view' AND a.${LIVE_ARTIFACT_SQL}
     AND e.created_at > now() - ($2::int * interval '1 day')
+    AND ($3::text IS NULL OR a.format = $3)
   GROUP BY e.artifact_id, day`;
 
 const LEGACY_DAILY = `SELECT to_char(date_trunc('day', e.created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
@@ -170,11 +172,11 @@ const LEGACY_FORK_COUNT = `SELECT COUNT(*)::int AS n
  * the window are absent from the map. While `analytics_events` still exists
  * and the log's table does not, the legacy table answers instead.
  */
-export async function viewSeriesByUser(userId: string, days: number = VIEW_SERIES_DAYS): Promise<Map<string, number[]>> {
+export async function viewSeriesByUser(userId: string, days: number = VIEW_SERIES_DAYS, format: 'markup' | null = null): Promise<Map<string, number[]>> {
   const db = await getDb();
   const r = await db.query<{ artifact_id: string; day: string; n: number }>(
     (await eventsTablePresent()) ? LOG_SERIES : LEGACY_SERIES,
-    [userId, days],
+    [userId, days, format],
   );
   const today = Date.parse(new Date().toISOString().slice(0, 10));
   const series = new Map<string, number[]>();

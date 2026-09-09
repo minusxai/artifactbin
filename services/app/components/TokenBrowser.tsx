@@ -449,7 +449,6 @@ export function ArtifactTable({ artifacts, treeRows, includeAssets = true, folde
                         if (event.key === 'Escape') setRenamingId(null);
                       }} className="min-w-0 flex-1 bg-transparent font-semibold text-fg focus:outline-none" /> : <a
                         href={a.url}
-                        target="_blank"
                         rel="noreferrer"
                         className="min-w-0 flex-1 truncate font-semibold text-fg no-underline underline-offset-4 hover:underline"
                         aria-label={`Open ${a.format === 'folder' ? 'folder ' : ''}${a.title ?? a.id}`}
