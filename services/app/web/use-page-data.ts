@@ -36,5 +36,5 @@ export function usePageData<T>(key: string, options?: { seed?: () => T | null; e
   }, [refresh, options?.enabled, sessionError]);
   useEffect(() => { if (options?.pauseRevalidation && resource.snapshot().data !== null) resource.cancel(); }, [resource, options?.pauseRevalidation]);
   const snapshot: PageDataSnapshot<T> = pages && !session && sessionError ? { data: null, pending: false, error: sessionError } : state;
-  return { ...snapshot, refresh, seed: resource.seed, invalidate: resource.invalidate };
+  return { ...snapshot, refresh, seed: resource.seed, invalidate: resource.invalidate, snapshot: resource.snapshot };
 }

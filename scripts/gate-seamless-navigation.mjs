@@ -38,8 +38,8 @@ try {
   await artifactRefresh;
   await page.getByLabel('Artifact B', { exact: true }).waitFor();
   assert(heldArtifact.length > 0, 'artifact Back actually starts a refresh');
-  await page.unroute(`**/api/page/artifact/${second.id}`, holdArtifact);
   await Promise.all(heldArtifact.map((route) => route.continue()));
+  await page.unroute(`**/api/page/artifact/${second.id}`, holdArtifact);
   assert.equal(await page.evaluate(() => window.__navigationProbe), 'same-document', 'back app to artifact retains browser document');
   await page.goBack();
   await page.getByLabel('Artifact A', { exact: true }).waitFor();
@@ -75,8 +75,8 @@ try {
     await page.getByLabel('Open mxmx_test navigation A', { exact: true }).waitFor();
     // The response is still held: this is retained account state, not a fast
     // fetch mistaken for an immediate Back restoration.
-    await page.unroute('**/api/page/home?part=core', holdCore);
     await Promise.all(held.map((route) => route.continue()));
+    await page.unroute('**/api/page/home?part=core', holdCore);
     assert.equal(await page.evaluate(() => window.__navigationProbe), 'shelf-document', 'Back retains document');
   }
   await page.getByLabel('Open folder Navigation folder', { exact: true }).click();
@@ -90,8 +90,8 @@ try {
   await folderRefresh;
   await page.getByLabel('Folder trail').waitFor();
   assert(heldFolder.length > 0, 'folder Back actually starts a refresh');
-  await page.unroute(`**/api/page/artifact/${folder.id}`, holdFolder);
   await Promise.all(heldFolder.map((route) => route.continue()));
+  await page.unroute(`**/api/page/artifact/${folder.id}`, holdFolder);
   assert.equal(await page.evaluate(() => window.__navigationProbe), 'shelf-document', 'Back folder paints retained payload before refresh');
   const account = await (await page.request.get(`${base}/api/page/account`)).json();
   await page.goto(`${base}/@${account.username}`);
@@ -111,8 +111,8 @@ try {
   await profileRefresh;
   await page.getByLabel('Open mxmx_test navigation A', { exact: true }).waitFor();
   assert(heldProfile.length > 0, 'profile Back actually starts a refresh');
-  await page.unroute('**/api/page/profile/**', holdProfile);
   await Promise.all(heldProfile.map((route) => route.continue()));
+  await page.unroute('**/api/page/profile/**', holdProfile);
   assert.equal(await page.evaluate(() => window.__navigationProbe), 'profile-document', 'Back to profile retains document');
   await page.request.delete(`${base}/api/my/artifacts/${folder.id}`);
   console.log('PASS seamless app/artifact route matrix, top-level body, history and CSS disposal');
