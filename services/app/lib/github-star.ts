@@ -18,7 +18,7 @@ export function githubWidgetMarkup(showCount = true): string {
   // The vendor uses decodeURIComponent, not form encoding: spaces must be %20.
   const src = `${GITHUB_WIDGET_URL}?theme=light#${options}`.replaceAll('+', '%20').replaceAll('&', '&amp;');
   // This independent link remains available even when the vendor is blocked.
-  return `<iframe src="${src}" title="${GITHUB_WIDGET_TITLE}" sandbox="${GITHUB_WIDGET_SANDBOX}" referrerpolicy="no-referrer" loading="lazy" width="${showCount ? 150 : 80}" height="28" scrolling="no" style="display:block;flex:none;border:0;height:28px;width:${showCount ? 150 : 80}px;color-scheme:inherit"></iframe>`
+  return `<iframe src="${src}" title="${GITHUB_WIDGET_TITLE}" sandbox="${GITHUB_WIDGET_SANDBOX}" referrerpolicy="no-referrer" loading="lazy" width="${showCount ? 150 : 80}" height="28" scrolling="no" style="display:block;flex:none;border:0;height:28px;width:${showCount ? 150 : 80}px;color-scheme:normal"></iframe>`
     + `<a href="${REPO_URL}" target="_blank" rel="noopener noreferrer" aria-label="Open artifactbin on GitHub (fallback link)" style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;flex:none;color:inherit;text-decoration:none">↗</a>`;
 }
 
