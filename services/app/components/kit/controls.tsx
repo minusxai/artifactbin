@@ -29,6 +29,13 @@ import { cn } from './cn';
 
 export interface ControlOption { value: string; label: string }
 
+const SELECT_POPUP_TOKENS = [
+  '--background', '--foreground', '--popover', '--popover-foreground',
+  '--primary', '--primary-foreground', '--muted', '--muted-foreground',
+  '--accent', '--accent-foreground', '--border', '--input', '--ring',
+  '--radius', '--font-body', '--font-mono',
+] as const;
+
 /**
  * Authored `options` → a uniform list: a `$table` reference resolves through
  * the supplied table (column 1 the value, column 2 the label when present),
@@ -269,7 +276,24 @@ export function SelectControl({ appearance = 'field', children, multiple = false
     if (!open || inert) return;
     const root = rootRef.current!;
     const win = root.ownerDocument.defaultView!;
+    // The body portal escapes table clipping, but also leaves the artifact's
+    // token scope. Copy resolved values, including author overrides, rather
+    // than relying on data-theme to recreate an ancestor's CSS inheritance.
+    const syncTheme = () => {
+      const popup = popupRef.current;
+      if (!popup) return;
+      const style = win.getComputedStyle(root);
+      for (const token of SELECT_POPUP_TOKENS) {
+        const value = style.getPropertyValue(token);
+        if (value) popup.style.setProperty(token, value);
+        else popup.style.removeProperty(token);
+      }
+      popup.style.fontFamily = style.fontFamily;
+      popup.style.colorScheme = style.colorScheme;
+      popup.style.direction = style.direction;
+    };
     const place = () => {
+      syncTheme();
       const rect = root.getBoundingClientRect();
       const width = Math.min(Math.max(rect.width, 200), win.innerWidth - 16);
       const height = popupRef.current?.getBoundingClientRect().height ?? 0;
@@ -278,9 +302,13 @@ export function SelectControl({ appearance = 'field', children, multiple = false
       setPosition({position:'fixed', zIndex:50, width, left: Math.max(8, Math.min(rect.left, win.innerWidth - width - 8)), top: Math.max(8, Math.min(top, win.innerHeight - height - 8)), maxHeight: win.innerHeight - 16, overflowY:'auto'});
     };
     place();
+    const observer = new win.MutationObserver(syncTheme);
+    for (let ancestor: HTMLElement | null = root; ancestor; ancestor = ancestor.parentElement) {
+      observer.observe(ancestor, {attributes: true, attributeFilter: ['class', 'style', 'data-theme']});
+    }
     win.addEventListener('resize', place);
     root.ownerDocument.addEventListener('scroll', place, true);
-    return () => { win.removeEventListener('resize', place); root.ownerDocument.removeEventListener('scroll', place, true); };
+    return () => { observer.disconnect(); win.removeEventListener('resize', place); root.ownerDocument.removeEventListener('scroll', place, true); };
   }, [open, inert, query, draft.length]);
   const onTriggerKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelDraft(); return; }
