@@ -113,7 +113,7 @@ page.on('request', (r) => {
       return root instanceof ShadowRoot && root.host.matches('[data-trusted-ui]')
         && !!el.closest('[data-mx-reader-chrome] [data-mx-github-star]')
         && el.getAttribute('sandbox') === 'allow-scripts allow-popups allow-popups-to-escape-sandbox'
-        && new URL(el.getAttribute('src')).origin + new URL(el.getAttribute('src')).pathname === 'https://buttons.github.io/buttons.html';
+        && new URL(el.src).pathname === '/-/github-star';
     })).catch(() => false);
     if (!trustedWidget) external.push(u);
   })());
