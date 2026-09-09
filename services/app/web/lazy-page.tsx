@@ -7,7 +7,7 @@ class ChunkBoundary extends Component<{ children: ReactNode; retry: () => void; 
   render() {
     if (!this.state.failed) return this.props.children;
     const error = <main className="mx-auto max-w-5xl px-4 py-10" role="alert">Could not load this page. <button aria-label="Retry loading page" onClick={this.props.retry}>Retry</button> <button aria-label="Reload app" onClick={() => window.location.reload()}>Reload app</button></main>;
-    return this.props.framed ? <ShellFrame>{error}</ShellFrame> : error;
+    return this.props.framed ? <ShellFrame pending>{error}</ShellFrame> : error;
   }
 }
 
@@ -26,7 +26,7 @@ export function lazyPage<P extends object>(load: () => Promise<{ default: Compon
     const retry = () => { pending = undefined; Current = lazy(module); setAttempt(value => value + 1); };
     // Only pending/error UI needs a temporary frame. Resolved artifact/profile
     // modules own their chrome; app routes already sit inside the stable Shell.
-    const fallback = framed ? <ShellFrame><PendingPage /></ShellFrame> : <PendingPage />;
+    const fallback = framed ? <ShellFrame pending><PendingPage /></ShellFrame> : <PendingPage />;
     return <ChunkBoundary key={attempt} retry={retry} framed={framed}><Suspense fallback={fallback}><Current {...props} /></Suspense></ChunkBoundary>;
   };
   return Object.assign(Page, { preload: async () => { await module(); } });

@@ -44,6 +44,7 @@ const page = await browser.newPage();
 
 // ── Step one: ask for a code ────────────────────────────────────────────────
 await page.goto(`${BASE}/login`, { waitUntil: 'load' });
+await page.getByLabel('Email', { exact: true }).waitFor({ state: 'visible' });
 check(await page.locator('[aria-label="Email"]').isVisible(), 'the login page asks for an email');
 check((await page.locator('[aria-label="Password"]').count()) === 0, 'there is no password field anywhere');
 
