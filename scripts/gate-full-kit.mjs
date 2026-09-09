@@ -105,16 +105,13 @@ const requestChecks = [];
 page.on('request', (r) => {
   const u = r.url();
   requests.push(u);
-  // Only a frame owned by the protected first-party chrome is exempt. An
-  // author's request to the same vendor hostname still violates this gate.
+  // Only our fixed, response-sandboxed widget document is exempt. Inspect its
+  // URL synchronously: SSR hydration can detach its frame element before the
+  // asynchronous DOM inspection finishes. Other frames remain network-closed.
   if (!u.startsWith(origin) && !u.startsWith('data:') && !u.startsWith('blob:')) requestChecks.push((async () => {
-    const trustedWidget = await r.frame().frameElement().then(element => element.evaluate(el => {
-      const root = el.getRootNode();
-      return root instanceof ShadowRoot && root.host.matches('[data-trusted-ui]')
-        && !!el.closest('[data-mx-reader-chrome] [data-mx-github-star]')
-        && el.getAttribute('sandbox') === 'allow-scripts allow-popups allow-popups-to-escape-sandbox'
-        && new URL(el.getAttribute('src')).origin + new URL(el.getAttribute('src')).pathname === 'https://buttons.github.io/buttons.html';
-    })).catch(() => false);
+    const frameUrl = new URL(r.frame().url());
+    const trustedWidget = frameUrl.origin === origin && frameUrl.pathname === '/-/github-star'
+      && (u === 'https://buttons.github.io/buttons.js' || u === 'https://api.github.com/repos/minusxai/artifactbin');
     if (!trustedWidget) external.push(u);
   })());
 });

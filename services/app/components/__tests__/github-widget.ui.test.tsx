@@ -5,6 +5,28 @@ import { AppBar } from '../PageChrome';
 import { InlineReaderChrome } from '../InlineReaderChrome';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+it('sizes only from its own sandbox and swaps the fallback in-place', () => {
+  const view = render(<MemoryRouter><AppBar /></MemoryRouter>);
+  const frame = view.container.querySelector<HTMLIFrameElement>('header iframe')!;
+  const fallback = frame.parentElement!.querySelector<HTMLAnchorElement>('a')!;
+  const send = (source: Window | null, width: unknown) => window.dispatchEvent(new MessageEvent('message', {
+    origin: 'null', source, data: { type: 'github-widget-size', width, height: 28 },
+  }));
+  expect(fallback.style.display).not.toBe('none');
+  send(window, 99);
+  expect(frame.style.visibility).toBe('hidden');
+  send(frame.contentWindow, 99);
+  expect(frame.style.width).toBe('99px');
+  expect(frame.style.visibility).toBe('visible');
+  expect(fallback.style.display).toBe('none');
+  for (const width of [-1, 10000, '120', NaN]) send(frame.contentWindow, width);
+  expect(frame.style.width).toBe('99px');
+  send(frame.contentWindow, 128.5);
+  expect(frame.style.width).toBe('129px');
+  view.unmount();
+  send(frame.contentWindow, 150);
+  expect(frame.style.width).toBe('129px');
+});
 it('tracks actual app and reader palettes separately and stops watching after unmount', async () => {
   const style = document.createElement('style');
   style.textContent = 'header [data-mx-github-star]{color-scheme:light}:root[data-theme="dark"] header [data-mx-github-star]{color-scheme:dark}';
@@ -41,15 +63,13 @@ it('embeds the star-count vendor in sandboxed frames in both app and reader chro
   for (const host of [app, reader]) {
     const frame = host?.matches('iframe') ? host : host?.querySelector('iframe');
     expect(frame).toBeTruthy();
-    const url = new URL(frame!.getAttribute('src')!);
-    expect(url.origin + url.pathname).toBe('https://buttons.github.io/buttons.html');
+    const url = new URL((frame as HTMLIFrameElement).src);
+    expect(url.pathname).toBe('/-/github-star');
     const options = new URLSearchParams(url.hash.slice(1));
-    expect(options.get('href')).toBe('https://github.com/minusxai/artifactbin');
     expect(options.get('data-show-count')).toBe('true');
     // A white chrome surface must never inherit the visitor's dark OS theme.
     expect(options.get('data-color-scheme')).toBe('light');
     expect(url.hash).not.toContain('+');
-    expect(url.hash).toContain('Star%20artifactbin%20on%20GitHub');
     expect(frame!.getAttribute('sandbox')).toBe('allow-scripts allow-popups allow-popups-to-escape-sandbox');
     expect(frame!.getAttribute('referrerpolicy')).toBe('no-referrer');
     expect((frame as HTMLIFrameElement).style.colorScheme).toBe('normal');

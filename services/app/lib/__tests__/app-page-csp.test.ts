@@ -17,7 +17,7 @@ const app = createAppServer({ indexHtml: async () => '<!doctype html><div id="ro
 
 describe('the app CSP', () => {
   it('admits only the exact GitHub widget frame path without trusting its scripts or connections in the app', () => {
-    expect(APP_CSP.split('; ').find(d => d.startsWith('frame-src'))).toBe("frame-src 'self' https://buttons.github.io/buttons.html");
+    expect(APP_CSP.split('; ').find(d => d.startsWith('frame-src'))).toBe("frame-src 'self'");
     for (const directive of ['script-src', 'connect-src']) {
       expect(APP_CSP.split('; ').find(d => d.startsWith(directive))).not.toContain('buttons.github.io');
     }

@@ -36,7 +36,7 @@ const markupCspFor = (id: string) => [
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
   "media-src 'self' data: blob:",
-  "frame-src 'self' https://buttons.github.io/buttons.html",
+  "frame-src 'self'",
   `connect-src ${BASE}/a/${id}/query ${BASE}/a/${id}/events ${BASE}/a/${id}/events/frame ${BASE}/a/${id}/mutate ${BASE}/a/${id}/resolve ${BASE}/geojson/ blob: data:`,
   "form-action 'none'",
   "base-uri 'none'",

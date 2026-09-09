@@ -3,9 +3,9 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import GitHubStar from '../GitHubStar';
 
 describe('GitHub repository star button', () => {
-  it('renders the vendor iframe with a permanent direct-link fallback', () => {
+  it('renders the sandbox wrapper with an in-place direct-link fallback', () => {
     const html = renderToStaticMarkup(<GitHubStar placement="desktop-bar" />);
-    expect(html).toContain('https://buttons.github.io/buttons.html?theme=light#');
+    expect(html).toContain('/-/github-star?theme=light#');
     expect(html).toContain('Open artifactbin on GitHub (fallback link)');
   });
   it('has an in-flow desktop topbar placement, not a floating corner', () => {

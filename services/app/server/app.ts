@@ -15,6 +15,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { githubWidgetResponse } from '@/lib/github-widget-response';
 import { loadStorySsr } from '@/lib/story/ssr.server';
 import type { PreparedStoryRuntime } from '@/lib/story/prepared-runtime';
 import { isolateStoryCss, isolateStoryNodes } from '@/lib/story/inline-css';
@@ -92,7 +93,7 @@ export const APP_CSP = [
   // the landing page's pictures worked on the deployment and nowhere else.
   `img-src 'self' ${SHOWCASE_ORIGIN} data: blob:`, "font-src 'self' data:",
   "connect-src 'self' https://api-js.mixpanel.com https://api.mixpanel.com",
-  "manifest-src 'self'", `frame-src 'self' ${GITHUB_WIDGET_URL}`, "frame-ancestors 'self'",
+  "manifest-src 'self'", "frame-src 'self'", "frame-ancestors 'self'",
   // The source editor wires a Monaco worker (components/SourceEditor). It is
   // LAZY — measured: with only the HTML tokenizer loaded, nothing has yet asked
   // for it — so this is not what broke `code` mode (that was the CDN script,
@@ -186,6 +187,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     });
   }
   const webDir = opts.webDir ?? path.resolve('dist/web');
+  app.get(GITHUB_WIDGET_URL, () => githubWidgetResponse());
   const publicDir = opts.publicDir ?? path.resolve('public');
   let indexCache: string | null = null;
   const index = async (url: string): Promise<string> => {

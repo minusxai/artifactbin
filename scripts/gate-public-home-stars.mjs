@@ -7,7 +7,7 @@ const browser = await chromium.launch({ headless: true });
 // This browser-test fixture replaces the vendor document only here. It performs
 // a real sandboxed cross-origin fetch and popup navigation through the iframe.
 async function fixture(context) {
-  await context.route(/^https:\/\/buttons\.github\.io\/buttons\.html(?:\?|$)/, route => route.fulfill({ contentType: 'text/html', body: `<!doctype html><style>body{margin:0}a{color:CanvasText;background:Canvas;display:inline-block;height:28px}</style><a href="https://github.com/minusxai/artifactbin" target="_blank" rel="noopener">Star <span></span></a><script>const scheme=new URLSearchParams(location.hash.slice(1)).get('data-color-scheme');document.documentElement.style.colorScheme=scheme;document.body.style.backgroundColor=scheme==='dark'?'rgb(13,17,23)':'rgb(255,255,255)';fetch('https://api.github.com/repos/minusxai/artifactbin').then(r=>r.json()).then(d=>{document.querySelector('span').textContent=d.stargazers_count;document.querySelector('a').setAttribute('aria-label',d.stargazers_count+' stargazers on GitHub')})</script>` }));
+  await context.route('https://buttons.github.io/buttons.js', route => route.fulfill({ contentType: 'application/javascript', body: `const scheme=new URLSearchParams(location.hash.slice(1)).get('data-color-scheme');document.documentElement.style.colorScheme=scheme;document.body.style.backgroundColor=scheme==='dark'?'rgb(13,17,23)':'rgb(255,255,255)';fetch('https://api.github.com/repos/minusxai/artifactbin').then(r=>r.json()).then(d=>{const link=document.querySelector('a');const widget=document.createElement('span');widget.style.cssText='display:inline-block;width:112px;height:28px;font:12px/28px sans-serif';link.replaceWith(widget);widget.append(link);link.textContent='Star '+d.stargazers_count;link.target='_blank';link.setAttribute('aria-label',d.stargazers_count+' stargazers on GitHub')})` }));
   await context.route('https://api.github.com/repos/minusxai/artifactbin', route => route.fulfill({ headers: { 'access-control-allow-origin': '*' }, contentType: 'application/json', body: '{"stargazers_count":1234}' }));
   await context.route('https://github.com/minusxai/artifactbin', route => route.fulfill({ contentType: 'text/html', body: '<h1>Repository destination</h1>' }));
 }
@@ -58,6 +58,9 @@ try {
   assert.deepEqual(await page.evaluate(() => { window.__watchHome = false; return window.__homeFailures; }), []);
   const appStar = page.locator('header [data-mx-github-star]:visible');
   const appBox = await appStar.boundingBox();
+  await page.waitForFunction(() => document.querySelector('header [data-mx-github-star] iframe')?.style.width === '112px');
+  assert.equal((await appStar.boundingBox()).width, 112, 'slot hugs the measured vendor width, with no adjacent fallback');
+  assert.equal(await page.frameLocator('header [data-mx-github-star]:visible iframe').locator('body > span').evaluate(el => el.getBoundingClientRect().top), 0, 'widget begins at frame top, without inline-body baseline clipping');
   assert(appBox.y < 44 && appBox.x > 640);
   console.log('ok uninterrupted landing through slow JS/session/home; asynchronous count in app topbar');
   await page.goto(`${base}/privacy`, { waitUntil: 'domcontentloaded' });
@@ -94,7 +97,7 @@ try {
   for (const theme of ['light', 'dark']) {
     await page.evaluate(theme => document.documentElement.setAttribute('data-theme', theme), theme);
     const actualScheme = await star.evaluate(el => getComputedStyle(el.closest('[data-mx-reader-chrome]')).getPropertyValue('--mx-reader-scheme').trim());
-    assert.equal(new URLSearchParams(new URL(await star.locator('iframe').getAttribute('src')).hash.slice(1)).get('data-color-scheme'), actualScheme);
+    assert.equal(new URLSearchParams(new URL(await star.locator('iframe').getAttribute('src'), base).hash.slice(1)).get('data-color-scheme'), actualScheme);
     assert.equal(await widget.locator('body').evaluate(el => getComputedStyle(el).backgroundColor), actualScheme === 'dark' ? 'rgb(13, 17, 23)' : 'rgb(255, 255, 255)');
   }
   const starBox = await star.boundingBox();
