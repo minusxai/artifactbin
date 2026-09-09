@@ -4,8 +4,16 @@ import { startDocument } from './lib/start-doc.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:12001';
 const browser = await chromium.launch({ headless: true });
+// This browser-test fixture replaces the vendor document only here. It performs
+// a real sandboxed cross-origin fetch and popup navigation through the iframe.
+async function fixture(context) {
+  await context.route('https://buttons.github.io/buttons.html', route => route.fulfill({ contentType: 'text/html', body: `<!doctype html><style>body{margin:0;color-scheme:light dark}a{color:CanvasText;background:Canvas;display:inline-block;height:28px}</style><a href="https://github.com/minusxai/artifactbin" target="_blank" rel="noopener">Star <span></span></a><script>fetch('https://api.github.com/repos/minusxai/artifactbin').then(r=>r.json()).then(d=>{document.querySelector('span').textContent=d.stargazers_count;document.querySelector('a').setAttribute('aria-label',d.stargazers_count+' stargazers on GitHub')})</script>` }));
+  await context.route('https://api.github.com/repos/minusxai/artifactbin', route => route.fulfill({ headers: { 'access-control-allow-origin': '*' }, contentType: 'application/json', body: '{"stargazers_count":1234}' }));
+  await context.route('https://github.com/minusxai/artifactbin', route => route.fulfill({ contentType: 'text/html', body: '<h1>Repository destination</h1>' }));
+}
 try {
   const noJs = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1280, height: 800 } });
+  await fixture(noJs);
   const plain = await noJs.newPage();
   await plain.goto(base, { waitUntil: 'domcontentloaded' });
   await plain.locator('h1').waitFor();
@@ -15,6 +23,7 @@ try {
   console.log('ok public heading and shared topbar without JavaScript');
 
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await fixture(context);
   const page = await context.newPage();
   let releaseScripts;
   const scripts = new Promise(resolve => { releaseScripts = resolve; });
@@ -45,7 +54,7 @@ try {
   assert.equal(await page.getByLabel('Loading workspace', { exact: true }).count(), 0);
   releaseData();
   await page.waitForResponse(response => response.url().includes('/api/page/home'));
-  await page.getByRole('link', { name: /1,234 stars/ }).filter({ visible: true }).waitFor();
+  await page.frameLocator('header [data-mx-github-star]:visible iframe').getByRole('link', { name: '1234 stargazers on GitHub' }).waitFor();
   assert.deepEqual(await page.evaluate(() => { window.__watchHome = false; return window.__homeFailures; }), []);
   const appStar = page.locator('header [data-mx-github-star]:visible');
   const appBox = await appStar.boundingBox();
@@ -73,7 +82,19 @@ try {
   await page.goto(`${base}/a/${doc.id}`, { waitUntil: 'domcontentloaded' });
   const star = page.locator('[data-mx-reader-rail] [data-mx-github-star]:visible');
   await star.waitFor();
-  await page.getByRole('link', { name: /1,234 stars/ }).filter({ visible: true }).waitFor();
+  const widget = page.frameLocator('[data-mx-reader-rail] [data-mx-github-star]:visible iframe');
+  await widget.getByRole('link', { name: '1234 stargazers on GitHub' }).waitFor();
+  const parentUrl = page.url();
+  const popupPromise = page.waitForEvent('popup');
+  await widget.getByRole('link').click();
+  const popup = await popupPromise;
+  await popup.waitForURL('https://github.com/minusxai/artifactbin');
+  assert.equal(page.url(), parentUrl, 'vendor popup cannot navigate its parent');
+  await popup.close();
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(theme => document.documentElement.setAttribute('data-theme', theme), theme);
+    assert.equal(await star.locator('iframe').evaluate(el => getComputedStyle(el).colorScheme), theme);
+  }
   const starBox = await star.boundingBox();
   const likeBox = await page.locator('[data-mx-reader-action="like"]:visible').boundingBox();
   const commentBox = await page.locator('[data-mx-reader-action="comment"]:visible').boundingBox();
@@ -82,13 +103,14 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   const mobileBox = await star.boundingBox();
   assert(mobileBox.y < 30 && mobileBox.x + mobileBox.width <= 390 && mobileBox.x > 200);
-  assert.equal(await star.locator('[data-mx-github-count]').isVisible(), false);
+  assert.equal((await star.locator('iframe').boundingBox()).height, 28);
   console.log('ok anonymous drafts, Back, desktop Star/Like/Comment geometry, unchanged mobile corner');
   await context.close();
 
   // A gesture attempted during startup must wait for the working React control,
   // never succeed against the inert server copy and silently disappear.
   const early = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
+  await fixture(early);
   const earlyPage = await early.newPage();
   let releaseEarly;
   const earlyScripts = new Promise(resolve => { releaseEarly = resolve; });
@@ -103,6 +125,15 @@ try {
   assert((await created).ok(), 'the early click reaches the actual create handler');
   await early.close();
   console.log('ok early Create gesture waits for the interactive control and creates a document');
+  const blocked = await browser.newContext();
+  await blocked.route('https://buttons.github.io/buttons.html', route => route.abort());
+  const failurePage = await blocked.newPage();
+  await failurePage.goto(base, { waitUntil: 'domcontentloaded' });
+  const fallback = failurePage.getByRole('link', { name: 'Open artifactbin on GitHub (fallback link)' }).filter({ visible: true });
+  await fallback.waitFor();
+  assert.equal(await fallback.getAttribute('href'), 'https://github.com/minusxai/artifactbin');
+  await blocked.close();
+  console.log('ok sandboxed vendor fetch/popup, inherited themes, and available blocked-vendor fallback');
 } finally {
   await browser.close();
 }
