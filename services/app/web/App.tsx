@@ -3,6 +3,7 @@ import MixpanelClient from '@/components/MixpanelClient';
 import { SessionProvider, useSession } from './session';
 import { Shell } from './Shell';
 import { routePages } from './route-pages';
+import { NavigationPreloads } from './navigation-preloads';
 
 const { ChatPage, AccountPage, AssetsPage, DatasetEditorPage, DocsPage, HomePage, PrivacyPage, TermsPage, LoginPage, NotFoundPage, ProfilePage, TokensNewPage, TrashPage } = routePages;
 
@@ -15,6 +16,7 @@ export function App() {
   return (
     <SessionProvider>
       <Analytics />
+      <NavigationPreloads>
       <Routes>
         <Route element={<Shell />}>
           <Route path="/" element={<HomePage />} />
@@ -39,6 +41,7 @@ export function App() {
         <Route path="/a/:id" element={<ProfilePage />} />
         <Route path="/:user/*" element={<ProfilePage />} />
       </Routes>
+      </NavigationPreloads>
     </SessionProvider>
   );
 }

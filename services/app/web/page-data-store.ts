@@ -12,6 +12,8 @@ export interface PageDataStore {
   preload<T>(key: string, navigationId: string, loader: (signal: AbortSignal) => Promise<T>): Promise<void>;
   /** Consume only the preload belonging to this committed navigation. */
   adoptPreload(key: string, navigationId: string): boolean;
+  /** Cancel only unadopted work owned by the named navigation. */
+  cancelPreloads(navigationId: string): void;
   resource<T>(key: string): PageDataResource<T>;
   setScope(scope: string | null): void;
   clear(): void;
@@ -38,6 +40,7 @@ export function createPageDataStore(options?: { maxEntries?: number; maxBytes?: 
     }
   };
   return {
+    cancelPreloads(navigationId) { for (const entry of entries.values()) if (entry.preload?.navigationId === navigationId) entry.resource.cancel(); },
     preload(key, navigationId, loader) {
       for (const entry of entries.values()) if (entry.preload && entry.preload.navigationId !== navigationId) entry.resource.cancel();
       const resource = this.resource(key);

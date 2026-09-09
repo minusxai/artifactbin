@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPageDataStore, type PageDataSnapshot } from './page-data-store';
 import { useSession } from './session';
 import { useRefreshable } from '@/lib/navigation';
+import { NavigationPreloadContext } from './navigation-preload-context';
 
 export async function fetchPageData<T>(url: string, signal: AbortSignal): Promise<T> {
   const response = await fetch(url, { credentials: 'same-origin', signal });
@@ -16,6 +17,7 @@ export function usePageData<T>(key: string, options?: { seed?: () => T | null; e
   // shared session store. This is never a module-global anonymous cache.
   const [local] = useState(() => { const store = createPageDataStore(); store.setScope('isolated'); return store; });
   const store = pages ?? local;
+  const navigationId = useContext(NavigationPreloadContext);
   const revision = useSyncExternalStore(store.subscribe, store.revision, store.revision);
   const resource = useMemo(() => store.resource<T>(key), [store, key, revision]);
   const bootstrap = useRef<{ key: string; used: boolean } | null>(null);
@@ -32,8 +34,9 @@ export function usePageData<T>(key: string, options?: { seed?: () => T | null; e
     if (options?.enabled === false || sessionError) return;
     if (options?.pauseRevalidation && resource.snapshot().data !== null) return;
     if (bootstrap.current?.used) { bootstrap.current.used = false; return; }
+    if (navigationId && store.adoptPreload(key, navigationId)) return;
     void refresh();
-  }, [refresh, options?.enabled, sessionError]);
+  }, [refresh, options?.enabled, sessionError, store, key, navigationId]);
   useEffect(() => { if (options?.pauseRevalidation && resource.snapshot().data !== null) resource.cancel(); }, [resource, options?.pauseRevalidation]);
   const snapshot: PageDataSnapshot<T> = pages && !session && sessionError ? { data: null, pending: false, error: sessionError } : state;
   return { ...snapshot, refresh, seed: resource.seed, invalidate: resource.invalidate, snapshot: resource.snapshot };
