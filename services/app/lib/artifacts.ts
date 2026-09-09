@@ -32,6 +32,7 @@ import {
 } from './story/splice';
 import { rebaseEditBatch, resolveEditBatch, type BatchChange, type StringEdit } from './story/edit-batch';
 import { nodeIndex, stampNodeIds } from './story/node-ids';
+import { finalizeArtifactMetadata, readParsedArtifactMetadata } from './story/parsed-artifact-metadata';
 import { parseJsx } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/helmet';
 import { datasetRefsInDataflow, initialValues, isEmptyDataflow, mutationTargets, type Dataflow, type Row, type Scalar } from '@/lib/story/dataflow';
@@ -347,6 +348,7 @@ export async function createArtifact(
   if (input.format === 'markup' && input.source) {
     input = { ...input, source: stampNodeIds(input.source, { retireLegacyAliases: true }).source };
   }
+  input = { ...input, meta: finalizeArtifactMetadata(input.format, input.source, input.meta) };
   let sourceIds: string[] = [];
   if(input.format==='markup'&&input.source) {
     sourceIds=[...nodeIndex(input.source).keys()];
@@ -752,6 +754,7 @@ export async function commitNormalizedMarkup(
   current: ArtifactRow,
   normalized: { source: string; content: string; meta: Record<string, unknown>; ids: readonly string[]; aliases?: readonly { legacyKey: string; nodeId: string; path: string }[]; title?: string | null; description?: string | null; format?: ArtifactFormat },
 ): Promise<ArtifactRow> {
+  normalized = { ...normalized, meta: finalizeArtifactMetadata(normalized.format ?? current.format, normalized.source, normalized.meta) };
   await archiveVersion(tx, current);
   const editId = newEditId();
   const result = await tx.query<ArtifactRow>(
@@ -985,7 +988,7 @@ async function replaceScoped(
         input.format,
         input.content,
         replacementIdentity?.source ?? input.source,
-        JSON.stringify(input.meta),
+        JSON.stringify(finalizeArtifactMetadata(input.format, replacementIdentity?.source ?? input.source, input.meta)),
         input.title !== undefined ? input.title : current.title,
         input.description !== undefined ? input.description : current.description,
         newEditId(),
@@ -1342,7 +1345,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
        SELECT u.* FROM updated u WHERE EXISTS (SELECT 1 FROM logged)`,
       [
         id, scope.val,
-        published.content, storedText, JSON.stringify(published.meta), freshEditId, head.edit_id,
+        published.content, storedText, JSON.stringify(finalizeArtifactMetadata('markup', storedText, published.meta)), freshEditId, head.edit_id,
         head.version, head.title, head.description, head.format, head.content, head.source, JSON.stringify(head.meta),
         EDIT_SNAPSHOT_WINDOW_MS,
         storedSplice.start, storedSplice.removed, storedSplice.inserted, storedSpan.start, storedSpan.end,
@@ -2011,11 +2014,16 @@ async function mutationAccessFor(doc: ArtifactRow, flow: Dataflow, viewer: RoleA
  */
 export function declarationsForRow(row: ArtifactRow): StoryIslandDataflow | null {
   if (!row.source) return null;
-  const flow = declarationsOf(row.source);
-  return flow ? { flow } : null;
+  try {
+    const { flow } = readParsedArtifactMetadata(row.meta, row.source);
+    return isEmptyDataflow(flow) ? null : { flow };
+  } catch { return null; }
 }
 
 export interface DataflowRunOptions {
+  /** Request-owned admission, rerun before cache hits, after waits and SQL. */
+  authorize?: () => Promise<void>;
+  signal?: AbortSignal;
   localTables?: Record<string, Row[]>;
   /**
    * WHO IS READING. Only a folder's children table varies with it today, and
@@ -2113,7 +2121,11 @@ export async function runDocumentDataflow(
     sourceQuery:async(q,values,page)=>{
       const catalog=(datasets[q.source!] as RefTable|undefined)?.catalog;
       if(!catalog)throw new Error('Dataset source is unavailable');
-      return executeCatalog(catalog,q.sql,values,{datasetId:q.source!,limit:page?.limit,offset:page?.offset,sort:page?.sort,paramTypes:Object.fromEntries(flow.values.filter(v=>v.kind==='scalar').map(v=>[v.name,v.type]))});
+      return executeCatalog(catalog,q.sql,values,{datasetId:q.source!,limit:page?.limit,offset:page?.offset,sort:page?.sort,signal:opts.signal,paramTypes:Object.fromEntries(flow.values.filter(v=>v.kind==='scalar').map(v=>[v.name,v.type])),authorize:async()=>{
+        await opts.authorize?.();
+        const current=await resolve(q.source!);
+        if(!current || JSON.stringify((current as RefTable).catalog)!==JSON.stringify(catalog))throw new DatasetError('Dataset source is unavailable',404);
+      }});
     },
   });
   return { flow, state };

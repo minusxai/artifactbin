@@ -582,6 +582,31 @@ ALTER TABLE app.dataset_secrets ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ 
 
 CREATE INDEX IF NOT EXISTS idx_dataset_secrets_dataset ON app.dataset_secrets (dataset_id);
 
+CREATE TABLE IF NOT EXISTS app.dataset_result_cache (
+  cache_key TEXT NOT NULL,
+  result JSONB,
+  bytes INTEGER NOT NULL DEFAULT 0,
+  expires_at TIMESTAMPTZ,
+  owner_token TEXT,
+  lease_until TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (cache_key)
+);
+
+ALTER TABLE app.dataset_result_cache ADD COLUMN IF NOT EXISTS cache_key TEXT NOT NULL;
+
+ALTER TABLE app.dataset_result_cache ADD COLUMN IF NOT EXISTS result JSONB;
+
+ALTER TABLE app.dataset_result_cache ADD COLUMN IF NOT EXISTS bytes INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE app.dataset_result_cache ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+
+ALTER TABLE app.dataset_result_cache ADD COLUMN IF NOT EXISTS owner_token TEXT;
+
+ALTER TABLE app.dataset_result_cache ADD COLUMN IF NOT EXISTS lease_until TIMESTAMPTZ;
+
+ALTER TABLE app.dataset_result_cache ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
 -- schema "auth" — owned by the proxy role; tables declared by the proxy's schema module
 
 CREATE TABLE IF NOT EXISTS auth.clients (

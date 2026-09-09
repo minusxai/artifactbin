@@ -5,6 +5,8 @@ import { parseJsx } from '@/lib/jsx';
 import { validateHelmet } from '@/lib/story/helmet';
 import { parseQueryRequest } from '@/lib/story/query-request';
 import { resolveToken } from '@/lib/tokens';
+import {DatasetError} from '@/lib/datasets/errors';
+import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 
 /**
  * POST /api/query { markup, values?, only? } → { tables, errors }
@@ -42,6 +44,12 @@ export async function POST(request: Request) {
   const helmetErrors = validateHelmet(tree.nodes);
   if (helmetErrors.length) return json({ error: 'invalid_jsx', details: helmetErrors }, 400);
 
-  const flow = await runDocumentDataflow(body.markup, datasetResolverForActor(actor), parsed);
-  return json({ tables: flow?.state.tables ?? {}, errors: flow?.state.errors ?? {} });
+  const admittedActor=actor;
+  const authorize=async()=>{
+    const currentToken=presented?await resolveToken(presented):null;
+    const current=presented?(currentToken?{tokenId:currentToken.id,userId:currentToken.userId}:null):actorForArtifacts(await sessionActor(request));
+    if(!current||current.tokenId!==admittedActor.tokenId||current.userId!==admittedActor.userId)throw new DatasetError('Query access revoked',403);
+  };
+  const flow = await runDocumentDataflow(body.markup, datasetResolverForActor(actor), {...parsed,authorize,signal:request.signal});
+  return json({ tables: flow?.state.tables ?? {}, errors: flow?.state.errors ?? {} },200,{[REVALIDATE_ACTOR_HEADER]:'1'});
 }
