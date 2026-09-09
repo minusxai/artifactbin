@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import headless from "@xterm/headless";
 import serialize from "@xterm/addon-serialize";
 import type {
@@ -12,7 +12,7 @@ import type {
 export type Registration = Pick<
   RemoteSessionInfo,
   "name" | "harness" | "cwd" | "machine" | "cols" | "rows"
->;
+> & { recoveryKey?: string };
 export class RemoteError extends Error {
   constructor(
     message: string,
@@ -25,6 +25,7 @@ interface Session {
   info: RemoteSessionInfo;
   owner: string;
   key: string;
+  generation: string;
   seen: number;
   terminal: InstanceType<typeof headless.Terminal>;
   serializer: InstanceType<typeof serialize.SerializeAddon>;
@@ -50,8 +51,11 @@ export function dimensions(cols: number, rows: number) {
 /** Ephemeral single-process relay. All entry points enforce ownership and bounded retention. */
 export class RemoteRegistry {
   private sessions = new Map<string, Session>();
+  private removed = new Map<string, { owner: string; seen: number }>();
   constructor(readonly now: () => number = Date.now) {}
   private prune() {
+    for (const [id, entry] of this.removed)
+      if (this.now() - entry.seen > 60 * 60 * 1000) this.removed.delete(id);
     for (const [id, s] of this.sessions)
       if (this.now() - s.seen > 60 * 60 * 1000) {
         s.terminal.dispose();
@@ -61,6 +65,8 @@ export class RemoteRegistry {
   private get(owner: string, id: string): Session {
     this.prune();
     const s = this.sessions.get(id);
+    if (!s && this.removed.get(id)?.owner === owner)
+      throw new RemoteError("Session disconnected", 410);
     if (!s || s.owner !== owner)
       throw new RemoteError("Session not found", 404);
     return s;
@@ -98,7 +104,15 @@ export class RemoteRegistry {
         /[\x00-\x1f\x7f]/.test(value)
       )
         throw new RemoteError("Invalid session details");
+    const { recoveryKey, ...details } = registration;
+    if (recoveryKey !== undefined && !/^[a-f0-9]{64}$/.test(recoveryKey))
+      throw new RemoteError("Invalid recovery credential");
+    const id = recoveryKey === undefined ? randomUUID()
+      : createHash("sha256").update(JSON.stringify([userId, recoveryKey])).digest("hex");
     this.prune();
+    if (this.removed.has(id)) throw new RemoteError("Session disconnected", 410);
+    const existing = this.sessions.get(id);
+    if (existing) return { ...this.info(existing), runnerKey: existing.key };
     if (this.list(userId).length >= 10 || this.sessions.size >= 200)
       throw new RemoteError(
         "Session limit reached; disconnect an old session",
@@ -113,8 +127,8 @@ export class RemoteRegistry {
     const serializer = new serialize.SerializeAddon();
     terminal.loadAddon(serializer);
     const info: RemoteSessionInfo = {
-      ...registration,
-      id: randomUUID(),
+      ...details,
+      id,
       online: true,
       exitCode: null,
       controller: "local",
@@ -125,6 +139,7 @@ export class RemoteRegistry {
       info,
       owner: userId,
       key,
+      generation: randomUUID(),
       seen: this.now(),
       terminal,
       serializer,
@@ -203,6 +218,7 @@ export class RemoteRegistry {
       (s.frames.length > 0 && since < s.frames[0].seq - 1);
     return {
       session: this.info(s),
+      generation: s.generation,
       seq: s.seq,
       frames: reset ? [] : s.frames.filter((f) => f.seq > since),
       ...(reset ? { snapshot: s.serializer.serialize() } : {}),
@@ -261,10 +277,14 @@ export class RemoteRegistry {
     const s = this.get(userId, id);
     s.terminal.dispose();
     this.sessions.delete(id);
+    this.removed.set(id, { owner: userId, seen: this.now() });
+    // Bound disconnect tombstones as well as live sessions.
+    if (this.removed.size > 10000) this.removed.delete(this.removed.keys().next().value!);
   }
   clear(): void {
     for (const s of this.sessions.values()) s.terminal.dispose();
     this.sessions.clear();
+    this.removed.clear();
   }
 }
 export const remoteSessions = new RemoteRegistry();

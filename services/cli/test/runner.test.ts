@@ -184,7 +184,11 @@ test("retries the same batch after a lost response and recreates a missing sessi
   let local = "";
   t.mock.method(globalThis, "fetch", async (url: string, init: RequestInit) => {
     const body = JSON.parse(String(init.body));
-    if (!body.runnerKey) return Response.json({ id: `session-${++registrations}`, runnerKey: `key-${registrations}` });
+    if (!body.runnerKey) {
+      registrations++;
+      assert.match(body.recoveryKey, /^[a-f0-9]{64}$/);
+      return Response.json({ id: "session-1", runnerKey: `key-${registrations}` });
+    }
     calls++;
     if (calls === 1) {
       failedBatch = body;
@@ -195,7 +199,7 @@ test("retries the same batch after a lost response and recreates a missing sessi
       return Response.json({ controller: "local", inputs: [{ id: 1, kind: "input", data: "first\r" }] });
     }
     if (calls === 3) return Response.json({ error: "Session not found" }, { status: 404 });
-    assert.match(String(url), /session-2\/exchange$/);
+    assert.match(String(url), /session-1\/exchange$/);
     assert.equal(body.runnerKey, "key-2");
     if (calls === 4) {
       assert.equal(body.ack, 0);
@@ -212,6 +216,7 @@ test("retries the same batch after a lost response and recreates a missing sessi
   assert.equal(code, 0);
   assert.equal(registrations, 2);
   assert.equal(urls.length, 2);
+  assert.equal(urls[0], urls[1]);
   assert.match(local, /result:first:second/);
 });
 
@@ -240,7 +245,7 @@ test("output overflow keeps the local PTY running and the relay reconnecting", a
   assert.ok(recovered);
 });
 
-for (const status of [401, 403]) test(`HTTP ${status} stops retries but lets the local child finish`, async (t) => {
+for (const status of [401, 403, 410]) test(`HTTP ${status} stops retries but lets the local child finish`, async (t) => {
   let calls = 0;
   let local = "";
   t.mock.method(globalThis, "fetch", async (_url: string, init: RequestInit) => {
@@ -278,4 +283,50 @@ test("child exit interrupts reconnect backoff promptly", async (t) => {
   assert.equal(code, 0);
   assert.equal(calls, 3);
   assert.ok(Date.now() - start < 3300, "shutdown must interrupt the two-second reconnect wait");
+});
+
+test("relay restart restores acknowledged history at the original link, including a lost registration response", async (t) => {
+  const { RemoteRegistry } = await import("../../app/lib/remote/registry");
+  const registry = new RemoteRegistry();
+  t.after(() => registry.clear());
+  let registered = 0;
+  let restarted = false;
+  let restored = false;
+  let originalId = "";
+  t.mock.method(globalThis, "fetch", async (url: string, init: RequestInit) => {
+    const payload = JSON.parse(String(init.body));
+    if (!payload.runnerKey) {
+      const session = registry.create("owner", payload);
+      registered++;
+      if (!originalId) originalId = session.id;
+      assert.equal(session.id, originalId);
+      if (registered === 2) throw new TypeError("lost registration response");
+      return Response.json(session);
+    }
+    assert.ok(String(url).includes(originalId));
+    const before = await registry.view("owner", originalId, -1);
+    if (!restarted && before.snapshot?.includes("BEFORE-RESTART")) {
+      registry.clear();
+      restarted = true;
+      return Response.json({ error: "Session not found" }, { status: 404 });
+    }
+    await registry.exchange("owner", originalId, payload);
+    const view = await registry.view("owner", originalId, -1);
+    if (restarted && !restored && view.snapshot?.includes("BEFORE-RESTART")) {
+      restored = true;
+      registry.input("owner", originalId, "done\r");
+    }
+    return Response.json(await registry.exchange("owner", originalId, payload));
+  });
+  const code = await runRemote({
+    connection: { server: "https://example.com", token: "test" },
+    command: "/bin/sh", args: ["-c", 'printf "BEFORE-RESTART\\n"; read line; echo AFTER-RECOVERY'],
+    interactive: false, onOutput: () => {}, signal: AbortSignal.timeout(10000),
+  });
+  assert.equal(code, 0);
+  assert.equal(registered, 3);
+  assert.ok(restored);
+  const snapshot = (await registry.view("owner", originalId, -1)).snapshot!;
+  assert.equal(snapshot.split("BEFORE-RESTART").length, 2, "history is not duplicated");
+  assert.match(snapshot, /AFTER-RECOVERY/);
 });

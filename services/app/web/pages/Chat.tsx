@@ -10,19 +10,32 @@ import type {
   RemoteSessionInfo,
   RemoteView,
 } from "../../../contracts/src/remote";
+class RemoteRequestError extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
+}
+function connectionMessage(error: unknown) {
+  if (error instanceof RemoteRequestError && (error.status === 401 || error.status === 403))
+    return "Sign in to reconnect to your sessions.";
+  if (error instanceof RemoteRequestError && error.status === 410)
+    return "This remote session was disconnected.";
+  return "Reconnecting… Retrying automatically.";
+}
 async function request<T>(
   path: string,
   body?: unknown,
   method = body ? "POST" : "GET",
+  signal?: AbortSignal,
 ): Promise<T> {
   const r = await fetch(`/api/remote/sessions${path}`, {
     method,
     credentials: "same-origin",
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10000)]) : AbortSignal.timeout(10000),
     headers: body ? { "Content-Type": "application/json" } : {},
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
-  const data = await r.json();
-  if (!r.ok) throw new Error(data.error ?? "Remote session unavailable");
+  const data = await r.json().catch(() => null);
+  if (!r.ok) throw new RemoteRequestError(data?.error ?? "Remote session unavailable", r.status);
+  if (!data) throw new Error("Invalid relay response");
   return data;
 }
 function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
@@ -32,6 +45,7 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
   const [info, setInfo] = useState<RemoteSessionInfo | null>(null);
   const current = useRef<RemoteSessionInfo | null>(null);
   const [error, setError] = useState("");
+  const [connection, setConnection] = useState("Connecting…");
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [mobile, setMobile] = useState(false);
@@ -44,7 +58,7 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
         setError("");
       });
     queue.current = task.catch((e) => {
-      setError(e.message);
+      setError(`Could not confirm the action was delivered. Check the terminal before trying again. ${e.message}`);
     });
     return task;
   };
@@ -61,13 +75,21 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
     t.open(container.current!);
     terminal.current = t;
     fit.current = f;
+    const abort = new AbortController();
+    let failures = 0;
+    let generation: string | undefined;
     let stopped = false,
       timer: ReturnType<typeof setTimeout>,
       cursor = -1;
     const poll = async () => {
       try {
-        const view = await request<RemoteView>(`/${id}?since=${cursor}`);
+        let view = await request<RemoteView>(`/${id}?since=${cursor}`, undefined, "GET", abort.signal);
         if (stopped) return;
+        if (generation && view.generation !== generation && view.snapshot === undefined) {
+          view = await request<RemoteView>(`/${id}?since=-1`, undefined, "GET", abort.signal);
+          if (stopped) return;
+        }
+        generation = view.generation;
         current.current = view.session;
         setInfo(view.session);
         if (view.snapshot !== undefined) {
@@ -77,20 +99,49 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
             await new Promise<void>((r) => t.write(view.snapshot!, r));
         }
         for (const frame of view.frames) {
+          if (stopped) return;
           t.resize(frame.cols, frame.rows);
           if (frame.data)
             await new Promise<void>((r) => t.write(frame.data, r));
         }
+        if (stopped) return;
         cursor = view.seq;
+        failures = 0;
+        setConnection(view.session.online || view.session.exitCode !== null ? "" : "Reconnecting… Waiting for your local terminal.");
       } catch (e) {
-        if (!stopped) setError((e as Error).message);
+        if (!stopped) {
+          failures++;
+          if (e instanceof RemoteRequestError && e.status === 404) cursor = -1;
+          setConnection(connectionMessage(e));
+        }
       }
-      if (!stopped) timer = setTimeout(() => void poll(), 250);
+      if (!stopped) timer = setTimeout(() => void poll(), failures ? Math.min(10000, 500 * 2 ** Math.min(failures - 1, 5)) : 250);
     };
     const data = t.onData((data) => {
       if (current.current?.online)
         void send({ type: "input", data }).catch(() => {});
     });
+    // xterm's viewport handles wheel input; translate one-finger swipes into
+    // scrollback movement without sending arrow keys to the running command.
+    const element = container.current!;
+    let touchY: number | undefined;
+    const touchStart = (event: TouchEvent) => {
+      touchY = event.touches.length === 1 ? event.touches[0].clientY : undefined;
+    };
+    const touchMove = (event: TouchEvent) => {
+      if (touchY === undefined || event.touches.length !== 1) return;
+      // A desktop-sized screen can be taller than the mobile viewport.
+      // Let the outer scroller expose those rows; scroll buttons still reach history.
+      const viewport = element.parentElement;
+      if (viewport && viewport.scrollHeight > viewport.clientHeight + 1) return;
+      const y = event.touches[0].clientY;
+      const lines = Math.trunc((touchY - y) / 16);
+      if (lines) { t.scrollLines(lines); touchY -= lines * 16; }
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    element.addEventListener("touchstart", touchStart, { passive: true });
+    element.addEventListener("touchmove", touchMove, { passive: false, capture: true });
     const observer = new ResizeObserver(() => {
       if (current.current?.controller === "web") {
         const size = f.proposeDimensions();
@@ -107,6 +158,9 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
     void poll();
     return () => {
       stopped = true;
+      abort.abort();
+      element.removeEventListener("touchstart", touchStart);
+      element.removeEventListener("touchmove", touchMove, true);
       clearTimeout(timer);
       observer.disconnect();
       data.dispose();
@@ -137,7 +191,7 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
     });
   };
   const online = info?.online ?? false;
-  const canType = online;
+  const canType = online && !connection;
   const ended = info?.exitCode !== null && info?.exitCode !== undefined;
   return (
     <section className="min-w-0 flex-1">
@@ -146,11 +200,11 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
           <h2 className="font-semibold">{info?.name ?? "Connecting…"}</h2>
           <p className="text-xs text-muted">
             {info?.harness} · {info?.machine} ·{" "}
-            {online
+            {connection || (online
               ? "Online"
               : info?.exitCode !== null && info?.exitCode !== undefined
                 ? `Exited (${info.exitCode})`
-                : "Offline"}
+                : "Offline")}
           </p>
         </div>
         {!ended && <button
@@ -173,6 +227,7 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
           {ended ? "Remove session" : "Disconnect"}
         </button>
       </div>
+      {connection && <p role="status" className="mb-2 text-sm text-muted">{connection}</p>}
       {error && (
         <p role="alert" className="mb-2 text-sm text-red-500">
           {error}
@@ -188,6 +243,11 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
           aria-label="Remote terminal"
           style={{ height: "min(58dvh, 650px)", minHeight: 240 }}
         />
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2" aria-label="Terminal scroll controls" hidden={ended}>
+        <button className="rounded border border-edge px-3 py-2 text-xs" onClick={() => terminal.current?.scrollPages(-1)}>Scroll up</button>
+        <button className="rounded border border-edge px-3 py-2 text-xs" onClick={() => terminal.current?.scrollPages(1)}>Scroll down</button>
+        <button className="rounded border border-edge px-3 py-2 text-xs" onClick={() => terminal.current?.scrollToBottom()}>Latest output</button>
       </div>
       {!ended && <form
         className="mt-3 flex gap-2"
@@ -244,7 +304,8 @@ function SessionTerminal({ id, onClose }: { id: string; onClose: () => void }) {
         ))}
       </div>}
       <p className="mt-3 text-xs text-muted" hidden={ended}>
-        Type directly in the terminal or use the message box. The selected terminal size stays in effect
+        Swipe up or down in the terminal to scroll its history, or use the scroll buttons.
+        Full-screen agents may manage their own history. Type directly in the terminal or use the message box. The selected terminal size stays in effect
         until you switch views. Disconnect removes
         remote access; your local process keeps running.
       </p>
@@ -294,7 +355,7 @@ function InstallInstructions() {
     <div className="mt-4 space-y-4">
       <CopyCommand label="Install CLI" command={'curl -fsSL https://artifactbin.dev/chat/install.sh | sh\nexport PATH="$HOME/.local/bin:$PATH"'} />
       <p className="text-xs text-muted">macOS and Linux · Intel and ARM. Windows: use WSL.</p>
-      <CopyCommand label="Connect your account" command="afbin auth" />
+      <p className="text-xs text-muted">Run afbin to sign in and choose an installed agent, or use the explicit command below.</p>
       <div>
         <label htmlFor="remote-harness" className="mb-2 block text-sm">Choose your agent</label>
         <select id="remote-harness" value={harness} onChange={(event) => setHarness(event.target.value)} className="w-full rounded border border-edge bg-surface p-2 text-sm">
@@ -313,13 +374,26 @@ export function ChatPage() {
   const [setupExpanded, setSetupExpanded] = useState(false);
   const [params, setParams] = useSearchParams();
   const id = params.get("session");
-  const { data, error: listError, refresh, seed } = usePageData<{ sessions: RemoteSessionInfo[] }>('/api/remote/sessions');
+  const { data, error: listError, refresh, seed, snapshot } = usePageData<{ sessions: RemoteSessionInfo[] }>('/api/remote/sessions', {
+    loader: (signal) => request('', undefined, 'GET', signal),
+  });
   const sessions = data?.sessions ?? [];
-  const error = listError?.message ?? '';
+  const error = listError ? connectionMessage(listError) : '';
   useEffect(() => {
-    const timer = setInterval(() => { void refresh(); }, 3000);
-    return () => clearInterval(timer);
-  }, [refresh]);
+    let failures = 0;
+    let stopped = false,
+      timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      await refresh();
+      failures = snapshot().error ? failures + 1 : 0;
+      if (!stopped) timer = setTimeout(() => void poll(), failures ? Math.min(10000, 3000 * 2 ** Math.min(failures - 1, 2)) : 3000);
+    };
+    void poll();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [refresh, snapshot]);
   return (
     <main className="mx-auto max-w-7xl px-4 py-6">
       <h1 className="mb-1 text-xl font-semibold">Remote sessions</h1>
@@ -329,9 +403,7 @@ export function ChatPage() {
       {error && (
         <p role="alert" className="mb-4 text-sm">
           {error}{" "}
-          <a href="/login?callbackUrl=/chat" className="underline">
-            Sign in
-          </a>
+          {error.startsWith("Sign in") && <a href={`/login?callbackUrl=${encodeURIComponent(`/chat${id ? `?session=${id}` : ""}`)}`} className="underline">Sign in</a>}
         </p>
       )}
       <div className="flex flex-col gap-6 md:flex-row">
