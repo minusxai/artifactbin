@@ -5,6 +5,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createWorkspace } from '../lib/workspace';
 import { BASELINE_FLOW, BASELINE_PROMPT, BASELINE_ROWS_ID, measureBaseline } from '../lib/baseline';
 import { planMode } from '../lib/mode';
 import { RunRecorder } from '../lib/rows';
@@ -39,6 +40,20 @@ describe('measureBaseline', () => {
     expect(b.tokensIn).toBe(20 + 2169 + 18000);
     expect(b.tokensOut).toBe(5);
     expect(b.costUsd).toBe(0.0031);
+  });
+
+  it.skipIf(process.platform !== 'darwin')('runs its probe outside protected result records', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'baseline-protected-'));
+    const workspace = createWorkspace('test', 'baseline');
+    try {
+      const b = await measureBaseline({ leg, adapter: fake('{}'), apiKey: 'k', dir, workspace, checkoutRoots: [dir], timeoutMs: 20_000 });
+      expect(b.ok).toBe(true);
+      expect(fs.readFileSync(path.join(dir, 'transcript.jsonl'), 'utf8')).toBe('{}');
+      expect(fs.existsSync(path.join(dir, 'home'))).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(workspace.root, { recursive: true, force: true });
+    }
   });
 
   it('asks for nothing that could do work — no tools, no files', () => {

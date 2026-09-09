@@ -66,6 +66,31 @@ describe('runInvocation', () => {
     expect(fs.readFileSync(path.join(cwd, 'output.csv'), 'utf8')).toBe('value\n1');
   });
 
+  it.skipIf(process.platform !== 'darwin')('hides eval records and the real connection while the staged plugin and task connection remain readable', async () => {
+    const records = path.join(dir, 'records');
+    const workspace = path.join(dir, 'workspace');
+    const connection = path.join(dir, '.artifactbin.env');
+    fs.mkdirSync(records); fs.mkdirSync(workspace);
+    fs.writeFileSync(path.join(records, 'other-transcript.jsonl'), 'other task evidence');
+    fs.writeFileSync(connection, 'real account');
+    fs.writeFileSync(path.join(workspace, 'SKILL.md'), 'installed skill');
+    fs.writeFileSync(path.join(workspace, '.artifactbin.env'), 'task account');
+    const script = `
+      const fs = require('node:fs');
+      for (const p of ${JSON.stringify([connection, path.join(records, 'other-transcript.jsonl')])}) {
+        try { fs.readFileSync(p); process.exit(10); } catch (e) { if (!['EPERM','EACCES'].includes(e.code)) throw e; }
+      }
+      console.log(fs.readFileSync('SKILL.md','utf8'), fs.readFileSync('.artifactbin.env','utf8'));
+    `;
+    const result = await runInvocation(node(script), {
+      cwd: workspace, checkoutRoots: [records, connection], baseEnv: process.env, timeoutMs: 20_000,
+      stdoutPath: path.join(records, 'transcript.jsonl'), stderrPath: path.join(records, 'stderr.log'),
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe('installed skill task account\n');
+    expect(fs.readFileSync(path.join(records, 'transcript.jsonl'), 'utf8')).toBe(result.stdout);
+  });
+
   it('captures stdout to the transcript and returns it', async () => {
     const r = await runInvocation(node('console.log("a");console.log("b")'), { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
     expect(r.exitCode).toBe(0);

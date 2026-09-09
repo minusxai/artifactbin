@@ -59,6 +59,8 @@ export interface Args {
    * it macOS uses sandbox-exec; other platforms refuse unisolated runs (`lib/spawn`).
    */
   runAs?: string;
+  /** Additional evidence or credential paths hidden from local agents (repeatable). */
+  protectPaths?: string[];
 }
 
 const EVALS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -124,6 +126,7 @@ export function parseArgs(argv: string[]): Args {
       case '--port-base': args.portBase = portBase(value()); break;
       case '--concurrency': args.concurrency = concurrency(value()); break;
       case '--run-as': args.runAs = value(); break;
+      case '--protect-path': (args.protectPaths ??= []).push(path.resolve(value())); break;
       case '--out': args.out = path.resolve(value()); break;
       case '--ci': args.ci = true; break;
       case '--no-retry': args.retry = false; break;

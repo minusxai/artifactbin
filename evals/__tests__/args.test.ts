@@ -19,6 +19,7 @@ describe('parseArgs', () => {
     expect(parseArgs(['--run-as=agent']).runAs).toBe('agent');
     expect(parseArgs(['--run-as', 'agent']).runAs).toBe('agent');
     expect(parseArgs([]).runAs).toBeUndefined();
+    expect(parseArgs(['--protect-path=/tmp/records', '--protect-path', '/tmp/old-records']).protectPaths).toEqual(['/tmp/records', '/tmp/old-records']);
   });
 
   it('handles the flags with no value', () => {

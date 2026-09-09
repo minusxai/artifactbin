@@ -46,6 +46,8 @@ export interface BaselineOptions {
   apiKey: string;
   /** A directory of its own: the probe must not see a task's files or reuse its config. */
   dir: string;
+  /** Workspace outside the protected run records. */
+  workspace?: { root: string; cwd: string; homeDir: string };
   /** Present in installed_skill modes — the baseline includes what those skills cost to have. */
   plugin?: PluginKit;
   timeoutMs: number;
@@ -55,8 +57,9 @@ export interface BaselineOptions {
 }
 
 export async function measureBaseline(opts: BaselineOptions): Promise<Baseline> {
-  const cwd = path.join(opts.dir, 'cwd');
-  const homeDir = path.join(opts.dir, 'home');
+  const cwd = opts.workspace?.cwd ?? path.join(opts.dir, 'cwd');
+  const homeDir = opts.workspace?.homeDir ?? path.join(opts.dir, 'home');
+  fs.mkdirSync(opts.dir, { recursive: true });
   fs.mkdirSync(cwd, { recursive: true });
   fs.mkdirSync(homeDir, { recursive: true });
 
@@ -80,7 +83,7 @@ export async function measureBaseline(opts: BaselineOptions): Promise<Baseline> 
     // Same home and same hand-over as a task's run: the probe measured the floor under `--run-as` and
     // died on `EACCES … mkdir '<out>/baseline/home'` because only the directories BELOW its root changed hands.
     homeDir,
-    workspaceRoot: opts.dir,
+    workspaceRoot: opts.workspace?.root ?? opts.dir,
     checkoutRoots: opts.checkoutRoots,
     ...(opts.runAs ? { runAs: opts.runAs } : {}),
   });
