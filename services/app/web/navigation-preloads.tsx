@@ -11,7 +11,7 @@ export { NavigationPreloadContext } from './navigation-preload-context';
 export function NavigationPreloads({ children }: { children: ReactNode }): ReactNode {
   const location = useLocation();
   const { pages, sessionError } = useSession();
-  const route = routeLoading(new URL(location.pathname + location.search, window.location.origin));
+  const route = routeLoading(location);
   const identity = route?.identity ?? location.pathname;
   // Aliases, signals and hashes retain the request/token, just as the mounted
   // artifact runtime retains its initial URL. No fetch or mutation in render.

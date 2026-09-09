@@ -3,7 +3,7 @@ import { isClientRoute } from './NavigationBoundary';
 import { routePages } from './route-pages';
 
 /** Browser-only route knowledge; no page implementations or second data cache. */
-export function routeLoading(url: URL): { identity: string; code: Array<{ preload(): Promise<void> }>; key?: string } | null {
+export function routeLoading(url: Pick<URL, 'pathname' | 'search'>): { identity: string; code: Array<{ preload(): Promise<void> }>; key?: string } | null {
   if (!isClientRoute(url)) return null;
   const path = url.pathname.replace(/\/$/, '') || '/';
   const direct = /^\/a\/([^/]+)$/.exec(path);
