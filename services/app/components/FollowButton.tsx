@@ -7,6 +7,7 @@
  * The answer is the state, and a refusal leaves the current state intact.
  */
 import { useCallback, useRef, useState } from 'react';
+import { pageDataChanged } from '@/web/page-data-events';
 
 const PILL = 'inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-edge bg-surface px-3 py-1 font-mono text-xs text-muted no-underline transition-colors hover:border-accent hover:text-fg disabled:cursor-default disabled:opacity-60';
 
@@ -31,7 +32,7 @@ export function FollowButton({ userId, following, count, signedIn }: {
           method: state.following ? 'DELETE' : 'POST',
           credentials: 'same-origin',
         });
-        if (res.ok) setState((await res.json()) as { following: boolean; count: number });
+        if (res.ok) { pageDataChanged(); setState((await res.json()) as { following: boolean; count: number }); }
       } catch {
         // A network that is not there has not changed who follows whom.
       } finally {

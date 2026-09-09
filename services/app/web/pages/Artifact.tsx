@@ -3,7 +3,8 @@
  * authorized content and role capabilities; markup renders inline in the SPA,
  * while author scripts run only in managed sandboxed child frames.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
+import { usePageData } from '../use-page-data';
 import { takeBootstrap } from '../bootstrap';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import ArtifactShell from '@/components/ArtifactShell';
@@ -40,26 +41,15 @@ function ArtifactDocument({ id }: { id: string }) {
   const { search } = location;
   const navigate = useNavigate();
   // The server may have inlined this page's data (server/app): render from it at once.
-  const [page, setPage] = useState<Page | 'missing' | null>(() => takeBootstrap<Page>(window.location.pathname, 'artifact'));
   const initialSearch = useRef(search).current;
-  const bootstrapped = useRef(page !== null).current;
-  useEffect(() => {
-    if (bootstrapped) return;
-    const controller = new AbortController();
-    void fetch(`/api/page/artifact/${id}${initialSearch}`, { credentials: 'same-origin', signal: controller.signal })
-      .then((r): Promise<Page | 'missing'> => (r.ok ? (r.json() as Promise<Page>) : Promise.resolve('missing' as const)))
-      .then((p) => { if (!controller.signal.aborted) setPage(p); })
-      .catch(() => { if (!controller.signal.aborted) setPage('missing'); });
-    return () => { controller.abort(); };
-  }, [id, initialSearch, bootstrapped]);
+  const { data: page, error } = usePageData<Page>(`/api/page/artifact/${id}${initialSearch}`, { refreshMounted: false, pauseRevalidation: location.hash === '#edit', seed: () => takeBootstrap<Page>(window.location.pathname, 'artifact') });
   useEffect(() => {
     // The address heals to the canonical one — after the ACL, which the fetch already passed.
-    if (page && page !== 'missing' && !page.surface?.captureKey && page.canonical !== location.pathname) {
+    if (page && !page.surface?.captureKey && page.canonical !== location.pathname) {
       void navigate(page.canonical + search + location.hash, { replace: true, state: location.state });
     }
   }, [page, search, location.pathname, location.hash, location.state, navigate]);
-  if (page === null) return <PageLoading />;
-  if (page === 'missing') return <NotFoundPage />;
+  if (page === null) return error ? <NotFoundPage /> : <PageLoading />;
   // A folder is a listing, not a document: no ArtifactShell and no surface
   // (there is no inline story runtime). Every folder gets the normal PAGE frame;
   // account-wide dashboard data is still supplied only to its owner.

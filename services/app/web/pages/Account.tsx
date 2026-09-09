@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useRefreshable } from '@/lib/navigation';
+import { usePageData } from '../use-page-data';
 import { Navigate } from 'react-router';
 import ClaimForm from '@/components/ClaimForm';
 import DatasetUpload from '@/components/DatasetUpload';
@@ -9,14 +8,12 @@ import { useSession } from '../session';
 
 export function AccountPage() {
   const { session } = useSession();
-  const [data, setData] = useState<{ username: string | null } | null>(null);
-  const load = useCallback(() => { void fetch('/api/page/account', { credentials: 'same-origin' }).then((r) => (r.ok ? r.json() : null)).then(setData).catch(() => null); }, []);
-  useEffect(load, [load]);
-  useRefreshable(load);
+  const { data, error, refresh } = usePageData<{ username: string | null }>('/api/page/account');
   if (session && !session.user) return <Navigate to="/login?callbackUrl=/account" replace />;
   return (
     <main className="mx-auto mt-8 max-w-3xl px-6 pb-24">
       <h1 className="text-base font-semibold"><span className="text-accent">&gt;</span> account</h1>
+      {error && <button aria-label="Retry account" onClick={() => void refresh(true)}>Could not refresh account. Retry</button>}
       {/*
         * KEYED ON THE ANSWER. The card seeds its input from this prop once, at
         * mount — and this page renders before it has fetched anything, so an

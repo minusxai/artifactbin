@@ -27,6 +27,7 @@ import { Tooltip } from '@/components/Tooltip';
 import { dateStamp, MicroLabel, PANEL, timeAgo, VISIBILITY_TIPS, VisibilityPill } from '@/components/ui';
 import { ViewsMark } from '@/components/ViewsMark';
 import { buildShelf, groupShelfByRecency, parentOfRow, type ShelfRow } from '@/lib/shelf';
+import { pageDataChanged } from '@/web/page-data-events';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
 
 const FOLDER_PREVIEW_LIMIT = 5;
@@ -104,6 +105,7 @@ function NewFolder({ parentId, onMade }: { parentId: string | null; onMade: (row
     if (!response?.ok) return;
     const body = (await response.json().catch(() => null)) as (Partial<ShelfRow> & { id?: string }) | null;
     if (!body?.id) return;
+    pageDataChanged();
     onMade({
       ...body,
       id: body.id,
@@ -232,7 +234,7 @@ function FolderTile({ row, count, level, folders, onDeleted, documents, gallery,
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: next }),
-    }).catch(() => { /* the next load reads the server's answer */ });
+    }).then((response) => { if (response.ok) pageDataChanged(); }).catch(() => { /* the next load reads the server's answer */ });
   };
   if (renaming) {
     return (
@@ -453,7 +455,7 @@ export default function Shelf({ rows, actions = 'none', showVisibility = true, a
    * filters and the scroll, exactly as creating one would.
    */
   const [trashed, setTrashed] = useState<string[]>([]);
-  const trash = (id: string) => setTrashed((t) => [...t, id]);
+  const trash = (id: string) => { pageDataChanged(); setTrashed((t) => [...t, id]); };
   const [view, setView] = useState<'grid' | 'list'>('grid');
   useEffect(() => {
     try {

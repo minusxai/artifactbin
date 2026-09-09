@@ -16,9 +16,11 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 it('starts the core request without waiting for session and offers retry if session fails', async () => {
   const pending = deferred(); const calls: string[] = [];
-  vi.stubGlobal('fetch', vi.fn((url: string) => {
+  const coreSignal: { current: AbortSignal | null } = { current: null };
+  vi.stubGlobal('fetch', vi.fn((url: string, options: RequestInit) => {
     calls.push(url);
     if (url.includes('/session')) return pending.promise;
+    coreSignal.current = options.signal ?? null;
     return Promise.resolve(response(core));
   }));
   render(tree(true));
@@ -26,9 +28,18 @@ it('starts the core request without waiting for session and offers retry if sess
   expect(screen.queryByLabelText('Open Private document')).toBeNull();
   await act(async () => { pending.resolve(new Response('{}', { status: 500 })); });
   await screen.findByLabelText('Retry workspace');
+  expect(coreSignal.current?.aborted).toBe(true);
   vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? core : { signedIn: true, accountId: 'one', sparklines: {}, feed: { mine: [], following: [] } }))));
   fireEvent.click(screen.getByLabelText('Retry workspace'));
   await screen.findByLabelText('Open Private document');
+});
+
+it.each(['core', 'insights'])('refuses a mismatched account stamp on %s', async (part) => {
+  vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(response(url.includes('/session') ? session
+    : url.includes('part=core') ? { ...core, accountId: part === 'core' ? 'other' : 'one' }
+      : { signedIn: true, accountId: 'other', sparklines: {}, feed: { mine: [], following: [] } }))));
+  render(tree(true)); await screen.findByLabelText('Retry workspace');
+  expect(screen.queryByLabelText('Open Private document')).toBeNull();
 });
 
 it('paints core before deferred insights and restores it immediately on remount', async () => {
@@ -54,7 +65,7 @@ it('shows a retryable failure instead of an endless empty page', async () => {
   vi.stubGlobal('fetch', vi.fn((url: string) => {
     if (url.includes('/session')) return Promise.resolve(response(session));
     if (url.includes('/home') && fail) return Promise.resolve(new Response('{}', { status: 500 }));
-    return Promise.resolve(response(url.includes('part=core') ? core : {}));
+    return Promise.resolve(response(url.includes('part=core') ? core : { signedIn: true, accountId: 'one', sparklines: {}, feed: { mine: [], following: [] } }));
   }));
   render(tree(true));
   await screen.findByLabelText('Retry workspace');

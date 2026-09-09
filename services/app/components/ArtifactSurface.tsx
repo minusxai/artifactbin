@@ -44,6 +44,7 @@ import { useIsPhoneViewport } from '@/components/MobileSheet';
 import { APP_BAR_H, EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
 import type { ArtifactFormat } from '@/lib/story/input';
 import { useLiveArtifact } from '@/lib/story/use-live-artifact';
+import { pageDataChanged } from '@/web/page-data-events';
 import { STORY_DATA_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_READER_MODE_MESSAGE, type StoryDataUpdate, isEditFrameMessage, isValuesMessage, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, type StoryEditSelection, type StorySelectionActionsMessage } from '@/lib/story-runtime/contract';
 import { readUrlValues, writeUrlValues } from '@/lib/story/url-values';
 import { displayTitle } from '@/lib/story/title';
@@ -376,6 +377,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     );
   }, []);
   const live = useLiveArtifact(id, editId, version, !editing, undefined, onLiveData, setLiveAnnotations);
+  useEffect(() => { if (live || editing) pageDataChanged(); }, [live, editing]);
   const [liveCatalog, setLiveCatalog] = useState<{ id: string; version: number; catalog: DatasetCatalog } | null>(null);
   // Dataset version frames carry rows, not catalog definitions. Re-read the
   // authorized page metadata on this existing stream's wakeup; the viewer
@@ -574,6 +576,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     const res = await fetch(`/api/my/artifacts/${id}/like`, { method: next ? 'POST' : 'DELETE', credentials: 'same-origin' }).catch(() => null);
     if (!res?.ok) return;
     likeRef.current = (await res.json()) as { liked: boolean; count: number };
+    pageDataChanged();
     redrawReactions(n => n + 1);
   }, [accountSession, id, navigate]);
   const toggleFollow = useCallback(async (want?: boolean) => {
@@ -589,6 +592,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     if (!res?.ok) return;
     const state = (await res.json()) as { following: boolean; count: number };
     followRef.current = { ...target, ...state };
+    pageDataChanged();
     redrawReactions(n => n + 1);
   }, [accountSession, navigate]);
   /**

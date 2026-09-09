@@ -22,7 +22,7 @@ type Session = { user: { id: string; email: string | null } | null; kind: 'accou
 let session: Session;
 vi.mock('@/web/session', async (original) => {
   const actual = await original<typeof import('@/web/session')>();
-  return { ...actual, useSession: () => { const value = actual.useSession(); return value.home ? value : { ...value, session, reload: () => {} }; } };
+  return { ...actual, useSession: () => { const value = actual.useSession(); return value.pages ? value : { ...value, session, reload: () => {} }; } };
 });
 
 let mints: Array<Record<string, unknown>>;

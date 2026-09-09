@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useSyncExternalStore } from 'react';
-import { useRefreshable } from '@/lib/navigation';
+import { useCallback } from 'react';
+import { usePageData } from '@/web/use-page-data';
+import type { HomeCore, HomeInsights } from '@/web/home-resource';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import ClaimBanner from '@/components/ClaimBanner';
 import GetStarted from '@/components/GetStarted';
@@ -50,16 +51,13 @@ function FirstArtifact() {
 }
 
 export function HomePage() {
-  const { home: resource, session, reload } = useSession();
-  if (!resource) throw new Error('HomePage requires SessionProvider');
-  const state = useSyncExternalStore(resource.subscribe, resource.snapshot, resource.snapshot);
-  const load = useCallback(() => { void resource.refresh(); }, [resource]);
-  useEffect(load, [load]);
-  // An explicit identity reload revokes the snapshot while this page stays
-  // mounted. A first identity already has a concurrent core request waiting.
-  useEffect(() => { if (session && !resource.snapshot().pending && !resource.snapshot().core) load(); }, [load, session, resource]);
-  // A claim adds artifacts to this library; re-read rather than reload.
-  useRefreshable(load);
+  const { session, reload } = useSession();
+  const core = usePageData<HomeCore>('/api/page/home?part=core');
+  const insights = usePageData<HomeInsights>('/api/page/home?part=insights', { enabled: !!core.data?.signedIn });
+  const load = useCallback(() => { void core.refresh(true); void insights.refresh(true); }, [core.refresh, insights.refresh]);
+  const wrongAccount = (core.data?.signedIn && core.data.accountId !== session?.user?.id)
+    || (insights.data && (!insights.data.signedIn || insights.data.accountId !== session?.user?.id));
+  const state = { core: wrongAccount ? null : core.data, insights: wrongAccount ? null : insights.data, error: wrongAccount ? new Error('Account changed') : core.error, insightsError: !!insights.error };
   const home = state.core;
   if (!home) return <main className={`${HOME_WORKSPACE_COLUMN} mt-8 pb-24`}>
     {state.error ? <div role="alert"><p>Could not load your workspace.</p><button aria-label="Retry workspace" onClick={session ? load : reload}>Try again</button></div> : <WorkspaceSkeleton />}

@@ -16,6 +16,7 @@
 import { Ellipsis } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Tooltip } from '@/components/Tooltip';
+import { pageDataChanged } from '@/web/page-data-events';
 
 export interface RowMenuItem {
   /** Reads as an aria-label, so it names the row: `Delete My doc`. */
@@ -113,5 +114,6 @@ export async function confirmDeleteArtifact(id: string, name: string, inside = 0
     : `Delete "${name}"? The link stops working. It goes to the trash, where you can restore it any time.`;
   if (!confirm(message)) return false;
   const res = await fetch(`/api/my/artifacts/${id}`, { method: 'DELETE' });
+  if (res.ok) pageDataChanged();
   return res.ok;
 }

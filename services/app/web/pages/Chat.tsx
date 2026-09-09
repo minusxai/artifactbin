@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { usePageData } from '@/web/use-page-data';
 import { CopyIcon } from "@/components/CopyIcon";
 import { Button } from "@/components/ui";
 import { useSearchParams } from "react-router";
@@ -312,29 +313,13 @@ export function ChatPage() {
   const [setupExpanded, setSetupExpanded] = useState(false);
   const [params, setParams] = useSearchParams();
   const id = params.get("session");
-  const [sessions, setSessions] = useState<RemoteSessionInfo[]>([]);
-  const [error, setError] = useState("");
+  const { data, error: listError, refresh, seed } = usePageData<{ sessions: RemoteSessionInfo[] }>('/api/remote/sessions');
+  const sessions = data?.sessions ?? [];
+  const error = listError?.message ?? '';
   useEffect(() => {
-    let stopped = false,
-      timer: ReturnType<typeof setTimeout>;
-    const poll = async () => {
-      try {
-        const data = await request<{ sessions: RemoteSessionInfo[] }>("");
-        if (!stopped) {
-          setSessions(data.sessions);
-          setError("");
-        }
-      } catch (e) {
-        if (!stopped) setError((e as Error).message);
-      }
-      if (!stopped) timer = setTimeout(() => void poll(), 3000);
-    };
-    void poll();
-    return () => {
-      stopped = true;
-      clearTimeout(timer);
-    };
-  }, []);
+    const timer = setInterval(() => { void refresh(); }, 3000);
+    return () => clearInterval(timer);
+  }, [refresh]);
   return (
     <main className="mx-auto max-w-7xl px-4 py-6">
       <h1 className="mb-1 text-xl font-semibold">Remote sessions</h1>
@@ -384,7 +369,7 @@ export function ChatPage() {
             id={id}
             onClose={() => {
               setParams({});
-              setSessions((list) => list.filter((s) => s.id !== id));
+              seed({ sessions: sessions.filter((s) => s.id !== id) });
             }}
           />
         ) : (

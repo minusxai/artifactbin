@@ -12,6 +12,7 @@ import { parentOfRow } from '@/lib/shelf';
 import { adoptToken } from '@/lib/browser-session';
 import type { Visibility } from '@/lib/artifacts';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
+import { pageDataChanged } from '@/web/page-data-events';
 
 interface ArtifactSummary {
   id: string;
@@ -253,7 +254,7 @@ export function ArtifactTable({ artifacts, treeRows, includeAssets = true, folde
     const response = await fetch(`/api/my/artifacts/${a.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }),
     }).catch(() => null);
-    if (response?.ok) setTitles((current) => ({ ...current, [a.id]: title }));
+    if (response?.ok) { pageDataChanged(); setTitles((current) => ({ ...current, [a.id]: title })); }
   };
   const [movingId, setMovingId] = useState<string | null>(null);
   const [sharingId, setSharingId] = useState<string | null>(null);
