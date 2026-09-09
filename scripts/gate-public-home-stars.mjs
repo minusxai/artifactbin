@@ -25,6 +25,7 @@ try {
   await page.goto(base, { waitUntil: 'commit' });
   await page.locator('[data-mx-initial-home] h1').waitFor();
   assert(await page.locator('[data-mx-initial-home] h1').isVisible());
+  assert(await page.getByRole('button', { name: 'Create a live document for my agent', exact: true }).first().isDisabled(), 'server presentation must not accept a Create gesture before JavaScript commits');
   // Observe rendered frames across both the JS and data release boundaries.
   await page.evaluate(() => {
     window.__homeFailures = [];
@@ -39,6 +40,7 @@ try {
   });
   releaseScripts();
   await page.locator('[data-mx-initial-home]').waitFor({ state: 'detached' });
+  assert(await page.getByRole('button', { name: 'Create a live document for my agent', exact: true }).first().isEnabled(), 'interactive Create becomes enabled at handoff');
   assert(await page.locator('h1').isVisible());
   assert.equal(await page.getByLabel('Loading workspace', { exact: true }).count(), 0);
   releaseData();
@@ -83,6 +85,24 @@ try {
   assert.equal(await star.locator('[data-mx-github-count]').isVisible(), false);
   console.log('ok anonymous drafts, Back, desktop Star/Like/Comment geometry, unchanged mobile corner');
   await context.close();
+
+  // A gesture attempted during startup must wait for the working React control,
+  // never succeed against the inert server copy and silently disappear.
+  const early = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
+  const earlyPage = await early.newPage();
+  let releaseEarly;
+  const earlyScripts = new Promise(resolve => { releaseEarly = resolve; });
+  await earlyPage.route('**/assets/*.js', async route => { await earlyScripts; await route.continue(); });
+  await earlyPage.goto(base, { waitUntil: 'commit' });
+  const earlyCreate = earlyPage.getByRole('button', { name: 'Create a live document for my agent', exact: true }).first();
+  await earlyCreate.waitFor();
+  const created = earlyPage.waitForResponse(response => response.url().endsWith('/api/start') && response.request().method() === 'POST');
+  const click = earlyCreate.click();
+  releaseEarly();
+  await click;
+  assert((await created).ok(), 'the early click reaches the actual create handler');
+  await early.close();
+  console.log('ok early Create gesture waits for the interactive control and creates a document');
 } finally {
   await browser.close();
 }
