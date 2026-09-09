@@ -8,7 +8,7 @@ order: 5
 
 artifactbin: publish self-contained documents (reports, dashboards, slides, datasets, charts, images) and share the returned URL with your user — that url is the deliverable.
 
-Publish before you polish: make your FIRST create_artifact a SKELETON — the real title, the theme and template you picked, the document's section headings, stubbed — and hand your user that url at once, saying it is live and still filling in. It is: an edit reaches an open reader in seconds, so they watch the sections land. Only then read the docs below, and fill each section with edit_artifact as you go. The reading path never precedes the first publish. (Rows, images and viz recipes are the one thing that goes up before the skeleton that binds them.)
+Use the supplied document ID: read and edit it, and never create a replacement to recover from an error. If no document was supplied, create a titled skeleton with your chosen theme, template and section headings, then fill it. Dataset, image and recipe assets are separate creations. Follow the user's URL-sharing instructions. Edits reach an open reader in seconds.
 
 Quick rules:
 - Every artifact takes exactly ONE content field: markup | dataset | viz | image.
@@ -16,7 +16,7 @@ Quick rules:
 - Create dataset/viz/image artifacts first. A dataset is read by SQL — <Query name="q">{`select … from ref_<id>`}</Query> in <Helmet>, bound as data="$q"; images and recipes bind as ref:<id>.
 - update_artifact fully replaces content at a stable URL; every save is versioned and revertible; edit_artifact changes one node and needs the edit_id from your last read.
 
-With the skeleton up, read the docs over plain HTTP (no auth needed) — small files, critical content at the top of each:
+Read the docs over plain HTTP (no auth needed) — small files, critical content at the top of each:
 - [[ base ]]/docs/artifactbin/SKILL.md — the brief: everything a straightforward document needs. Read it first.
 - [[ base ]]/docs/artifactbin/references/markup.md — the document vocabulary; markup-data.md beside it is the data grammar in full.
 - [[ base ]]/docs/artifactbin/references/templates-<name>.md and …/themes-<name>.md — AFTER picking a template and a theme, the chosen one in full.

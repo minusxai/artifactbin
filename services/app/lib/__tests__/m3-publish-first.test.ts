@@ -1,13 +1,3 @@
-/**
- * M3 — publish before you polish.
- *
- * Measured on the last real eval run: the first successful publish landed 87 s into a 161 s run, and 50 s
- * into a 285 s one. For most of that the human had nothing — while the brief told the agent to read four
- * reference files before writing anything. "Be quick" on top of that is a contradiction it resolves by
- * ignoring one; the fix is the ORDER, and one rule that settles it.
- *
- * Seeded RED by the orchestrator; make it green without changing an expectation.
- */
 import { describe, it, expect } from 'vitest';
 import { buildQuickSheet, buildMcpInstructions, QUICK_SHEET_MAX_BYTES } from '@/lib/skills';
 
@@ -23,21 +13,22 @@ const before = (text: string, first: RegExp, second: RegExp) => {
   return a < b;
 };
 
-describe('the brief tells the agent to publish first', () => {
-  it('says to publish a skeleton before reading the references', () => {
-    expect(sheet()).toMatch(/publish[^.]*\b(skeleton|first)\b/i);
+describe('the brief distinguishes existing documents from new work', () => {
+  it('creates a skeleton only when no document was supplied', () => {
+    expect(sheet()).toMatch(/With no supplied document, create a titled skeleton/i);
   });
 
-  it('names edit_artifact as how the sections get filled in', () => {
-    expect(sheet()).toMatch(/edit_artifact/);
+  it('provides the HTTP edit route for filling sections', () => {
+    expect(sheet()).toContain('/api/artifacts/<id>/edits');
   });
 
-  it('states the rule that resolves the contradiction — reading never precedes the first publish', () => {
-    expect(sheet()).toMatch(/never precedes the first publish|before you read|publish .* then read/i);
+  it('puts supplied-document reuse before the new-document example', () => {
+    expect(before(sheet(), /Use the supplied document ID/i, /For a NEW document only/i)).toBe(true);
+    expect(sheet()).toMatch(/never create a replacement\s+to recover from an error/i);
   });
 
-  it('puts the publish-first instruction AHEAD of the reading path', () => {
-    expect(before(sheet(), /publish/i, /design\.md/)).toBe(true);
+  it('puts the reuse instruction ahead of the reading path', () => {
+    expect(before(sheet(), /Use the supplied document ID/i, /design\.md/)).toBe(true);
   });
 
   it('still sends the agent to the design and markup references', () => {
@@ -56,8 +47,10 @@ describe('the brief tells the agent to publish first', () => {
 });
 
 describe('the MCP instructions teach the same order', () => {
-  it('tells a tool-calling agent to publish before reading too', () => {
-    expect(buildMcpInstructions(BASE)).toMatch(/publish[^.]*\b(skeleton|first)\b/i);
+  it('gives tool-calling agents the same reuse-first rule', () => {
+    const text = buildMcpInstructions(BASE);
+    expect(before(text, /Use the supplied document ID/i, /If no document was supplied, create a titled skeleton/i)).toBe(true);
+    expect(text).toMatch(/never create a replacement to recover from an error/i);
   });
 
   /** Extended: and names the fill-in move, in the same order the brief teaches. */
