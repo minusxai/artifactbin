@@ -76,6 +76,7 @@ export const STORY_UI_RECIPE_CLASSES: readonly string[] = [
   "@/lib/story/dataflow",
   "@/lib/story/dataset-shape",
   "@/lib/story/managed-iframe",
+  "@/lib/story/number-aggregation",
   "@/lib/story/number-format",
   "@/lib/story/ref-data",
   "@/lib/validation/atlas-schemas",

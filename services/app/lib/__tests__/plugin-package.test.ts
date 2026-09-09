@@ -75,9 +75,9 @@ describe('buildPluginFiles', () => {
     const other = buildPluginFiles('https://self.example.org');
     expect(other['.mcp.json']).toContain('https://self.example.org/mcp');
     for (const [p, text] of Object.entries(other)) expect(text, p).not.toContain(PLUGIN_BASE_URL);
-    // The mcp rendering publishes by tool call, so the base rides the
-    // deliverable URL rather than an /api address.
-    expect(other['skills/artifactbin/SKILL.md']).toContain('https://self.example.org/a/');
+    // The MCP quick sheet uses tool calls and relative reference links.
+    // HTTP URLs still need the configured base in the publishing reference.
+    expect(other['skills/artifactbin/references/publishing.md']).toContain('https://self.example.org');
   });
 });
 

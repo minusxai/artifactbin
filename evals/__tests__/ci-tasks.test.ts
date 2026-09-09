@@ -20,7 +20,7 @@ import { actionTransport, installsSkills, type EvalMode } from '../lib/mode';
 
 const ROOT = path.resolve(__dirname, '../..');
 const ci = yaml.parse(fs.readFileSync(path.join(ROOT, '.github/workflows/ci.yml'), 'utf8')) as {
-  jobs: Record<string, { strategy?: { matrix?: { include?: Array<{ mode: string; tasks: string }> } } }>;
+  jobs: Record<string, { steps?: Array<{ name?: string; run?: string; with?: Record<string, unknown> }>; strategy?: { matrix?: { include?: Array<{ mode: string; tasks: string }> } } }>;
 };
 const ROWS = ci.jobs['agent-smoke'].strategy?.matrix?.include ?? [];
 const tasksOf = (row: { tasks: string }) => row.tasks.split(',').map((s) => s.trim());
@@ -30,6 +30,19 @@ const CI_SET = selectTasks(discoverTasks(path.join(ROOT, 'evals/tasks')), { set:
 const byId = new Map(CI_SET.map((t) => [t.id, t.task]));
 
 describe('the agent-smoke matrix', () => {
+  it('runs Linux agents under a separate account with evidence outside the denied checkout', () => {
+    const steps = ci.jobs['agent-smoke'].steps ?? [];
+    const prepare = steps.find((step) => step.name === 'Prepare isolated eval account')?.run ?? '';
+    expect(prepare).toContain('useradd --create-home --shell /bin/bash eval-agent');
+    expect(prepare).toContain('chmod 700 "$GITHUB_WORKSPACE"');
+    expect(prepare).toContain('sudo -n -u eval-agent test -r "$GITHUB_WORKSPACE/package.json"');
+    const launch = steps.find((step) => step.run?.includes('npm run eval'))?.run ?? '';
+    expect(launch).toContain('--run-as=eval-agent');
+    expect(launch).toContain('--out="$RUNNER_TEMP/agent-smoke-metrics"');
+    expect(launch).toContain('umask 077');
+    expect(steps.some((step) => step.with?.path === '${{ runner.temp }}/agent-smoke-metrics/')).toBe(true);
+  });
+
   it('has the four two-axis treatments and names tasks for each', () => {
     expect(ROWS.map((r) => r.mode)).toEqual([
       'fetched_skill+api_action', 'fetched_skill+mcp_action', 'installed_skill+api_action', 'installed_skill+mcp_action',

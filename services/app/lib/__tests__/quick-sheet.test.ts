@@ -136,7 +136,7 @@ describe('the quick sheet', () => {
    * and then say plainly where the rest is.
    */
   it('says the sheet is usually enough WITHOUT forbidding the fetch', () => {
-    expect(sheet).toMatch(/fully covered|usually the whole job/i);
+    expect(sheet).toMatch(/everything a straightforward document needs/i);
     expect(sheet).not.toMatch(/do not fetch|don't fetch|never fetch/i);
   });
 
@@ -153,7 +153,7 @@ describe('the quick sheet', () => {
   it('names the work it does not cover, so an agent knows when to go to the docs', () => {
     // The refusal to fetch and its EXCEPTION must live in the same breath — an
     // agent reads the instruction, not the page.
-    const para = sheet.split(/\n\s*\n/).find((p) => /each ask has ONE file/i.test(p)) ?? '';
+    const para = sheet.slice(sheet.indexOf('More under `references/`'));
     expect(para).toMatch(/data|dataset|chart/i);
     expect(para).toContain('/docs');
     // And it must not CLAIM to cover a document that reads data: that claim is

@@ -48,7 +48,7 @@ describe('materializePlugin', () => {
   });
 
   it('bakes the base it was given into the skill, so a task\'s traffic reaches its own proxy', () => {
-    const skill = fs.readFileSync(path.join(kit.pluginDir, 'skills', 'artifactbin', 'SKILL.md'), 'utf8');
+    const skill = fs.readFileSync(path.join(kit.pluginDir, 'skills', 'artifactbin', 'references', 'publishing.md'), 'utf8');
     expect(skill).toContain('https://example.test');
     expect(skill).not.toContain('artifactbin.dev');
   });
