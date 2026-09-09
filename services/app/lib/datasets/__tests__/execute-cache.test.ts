@@ -1,4 +1,6 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
+import {useAppHarness} from '@/__tests__/harness';
+import {getDb} from '@/lib/db';
 import type { DatasetCatalog } from '../types';
 const fixture = vi.hoisted(() => ({ query: vi.fn() }));
 vi.mock('../postgres', () => ({ queryPostgres: fixture.query }));
@@ -7,13 +9,11 @@ vi.mock('../catalog', () => ({ storedTables: vi.fn() }));
 vi.mock('@/lib/sql/engine', () => ({ runQueries: vi.fn(), isQueryFailure: () => false }));
 import { executeCatalog } from '../execute';
 const catalog: DatasetCatalog = { kind: 'postgres', connection:{host:'db.example.com',port:5432,database:'app',username:'reader',ssl:true,passwordSecretId:'secret'}, refreshSeconds: 60, defaultSchema: 'public', tables: [{ schema: 'public', name: 'rows', source: { schema: 'public', table: 'rows' }, columns: [{ name: 'payload', type: 'string' }] }] };
-const run = (key: number, refresh = false) => executeCatalog(catalog, 'select payload from rows where $key > 0', { key }, { refresh });
-let clock = Date.now();
+const run = (key: number, refresh = false) => executeCatalog(catalog, 'select payload from rows where $key > 0', { key }, { refresh,authorize:async()=>{} });
+useAppHarness();
 beforeEach(() => {
-  vi.useFakeTimers(); clock += 120000; vi.setSystemTime(clock);
   fixture.query.mockReset().mockImplementation(async () => ({ rows: [{ payload: 'x'.repeat(7 * 1024 * 1024) }], columns: catalog.tables[0].columns }));
 });
-afterEach(() => vi.useRealTimers());
 it('evicts oldest results to keep total retained cache bytes within 32 MiB', async () => {
   for (let key = 1; key <= 5; key++) await run(key);
   expect(fixture.query).toHaveBeenCalledTimes(5);
@@ -31,6 +31,6 @@ it('retains the existing entry-count bound and expires cached results', async ()
   for (let key = 100; key < 201; key++) await run(key);
   await run(100); expect(fixture.query).toHaveBeenCalledTimes(102);
   await run(100); expect(fixture.query).toHaveBeenCalledTimes(102);
-  vi.setSystemTime(clock + 61000);
+  await (await getDb()).query("UPDATE dataset_result_cache SET expires_at=clock_timestamp()-interval '1 second'");
   await run(100); expect(fixture.query).toHaveBeenCalledTimes(103);
 });

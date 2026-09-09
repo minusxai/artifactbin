@@ -501,6 +501,21 @@ const DATASET_SECRETS: Table = {
   indexes: [{ name: 'idx_dataset_secrets_dataset', columns: ['dataset_id'] }],
 };
 
+/** Disposable derived results and fenced leases; no upstream credentials. */
+const DATASET_RESULT_CACHE: Table = {
+  name: 'dataset_result_cache',
+  columns: [
+    { name: 'cache_key', type: 'TEXT', notNull: true },
+    { name: 'result', type: 'JSONB' },
+    { name: 'bytes', type: 'INTEGER', notNull: true, default: '0' },
+    { name: 'expires_at', type: 'TIMESTAMPTZ' },
+    { name: 'owner_token', type: 'TEXT' },
+    { name: 'lease_until', type: 'TIMESTAMPTZ' },
+    { name: 'updated_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
+  ],
+  primaryKey: ['cache_key'],
+};
+
 /**
  * The app's tables, in the order boot applies them — and the shape
  * scripts/render-schema.mjs prefers, so `SCHEMA.sql` is rendered by the SAME
@@ -509,7 +524,7 @@ const DATASET_SECRETS: Table = {
  * re-qualify (a rename's DO block names its own schema twice) is exactly what
  * that indirection could not survive.
  */
-export const TABLES: Table[] = [USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS];
+export const TABLES: Table[] = [USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);
