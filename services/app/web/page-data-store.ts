@@ -9,6 +9,9 @@ export interface PageDataResource<T> {
   cancel(): void;
 }
 export interface PageDataStore {
+  preload<T>(key: string, navigationId: string, loader: (signal: AbortSignal) => Promise<T>): Promise<void>;
+  /** Consume only the preload belonging to this committed navigation. */
+  adoptPreload(key: string, navigationId: string): boolean;
   resource<T>(key: string): PageDataResource<T>;
   setScope(scope: string | null): void;
   clear(): void;
@@ -33,6 +36,8 @@ export function createPageDataStore(options?: { maxEntries?: number; maxBytes?: 
     }
   };
   return {
+    preload() { throw new Error('M0: implement navigation preload ownership'); },
+    adoptPreload() { throw new Error('M0: implement one-use preload adoption'); },
     clear,
     expire() { for (const [key, entry] of entries) { if (entry.listeners.size) entry.expired = true; else { entries.delete(key); entry.revoke(); } } changed(); },
     setScope(next) { if (scope !== next) { scope = next; if (firstScope && next !== null) firstScope = false; else clear(); waiting.forEach((done) => done()); waiting.clear(); } },
