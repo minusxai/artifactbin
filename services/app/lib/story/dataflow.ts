@@ -706,6 +706,11 @@ export function queryOrder(flow: Dataflow): string[] | null {
   return cyclic.length ? null : order;
 }
 
+/** Requested queries in dependency order; null preserves the existing global-cycle refusal. */
+export function selectedQueries(flow: Dataflow, selection: { only?: Iterable<string>; page?: { name: string } } = {}): QueryDecl[] | null {
+  throw new Error('M2: implement shared query selection');
+}
+
 /** Every dataset id any query reads, deduped — what `meta.refs` needs. */
 export function datasetRefsInDataflow(flow: Dataflow): string[] {
   return dedupe(flow.queries.flatMap((q) => q.refs));
