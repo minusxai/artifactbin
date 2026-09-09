@@ -706,6 +706,24 @@ export function queryOrder(flow: Dataflow): string[] | null {
   return cyclic.length ? null : order;
 }
 
+/** Requested queries in dependency order; null preserves the existing global-cycle refusal. */
+export function selectedQueries(flow: Dataflow, selection: { only?: Iterable<string>; page?: { name: string } } = {}): QueryDecl[] | null {
+  const order = queryOrder(flow);
+  if (!order) return null;
+  const byName = new Map(flow.queries.map(q => [q.name, q]));
+  const roots = selection.page ? [selection.page.name] : selection.only;
+  if (!roots) return order.map(name => byName.get(name)!);
+  const graph = depGraph(flow);
+  const wanted = new Set<string>();
+  const visit = (name: string) => {
+    if (!byName.has(name) || wanted.has(name)) return;
+    wanted.add(name);
+    for (const dependency of graph.get(name) ?? []) visit(dependency);
+  };
+  for (const name of roots) visit(name);
+  return order.filter(name => wanted.has(name)).map(name => byName.get(name)!);
+}
+
 /** Every dataset id any query reads, deduped — what `meta.refs` needs. */
 export function datasetRefsInDataflow(flow: Dataflow): string[] {
   return dedupe(flow.queries.flatMap((q) => q.refs));

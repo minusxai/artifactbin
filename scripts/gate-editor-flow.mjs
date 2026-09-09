@@ -142,9 +142,27 @@ page.on('console', (m) => { if (m.type() === 'error' && /violates the following 
 await page.goto(`${BASE}/a/${doc.id}#edit`, { waitUntil: 'load' });
 await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 90_000 });
 await page.waitForTimeout(2500);
+let releaseRichEditor;
+const richEditorDownload = new Promise(resolve => { releaseRichEditor = resolve; });
+await page.route('**/assets/SourceEditor-*.js', async route => { await richEditorDownload; await route.continue(); });
 await page.click('[aria-label="Edit the source"]');
-const mounted = await page.waitForSelector('[aria-label="Markup source"]', { timeout: 30_000 }).then(() => true).catch(() => false);
+const plainSource = page.locator('textarea[aria-label="Markup source"]');
+await plainSource.waitFor();
+const initialSource = await plainSource.inputValue();
+check(initialSource.includes('Edited by the gate'), 'slow rich-editor download still presents the complete source');
+await plainSource.fill(initialSource.replace('Edited by the gate', 'Edited while rich editor loads'));
+releaseRichEditor();
+const mounted = await page.waitForSelector('.monaco-editor [aria-label="Markup source"]', { timeout: 30_000 }).then(() => true).catch(() => false);
 check(mounted, 'the source pane mounts a real editor, not a permanent "Loading…"');
+const focusTransferred = await page.locator('.monaco-editor').evaluate(editor => new Promise(resolve => {
+  // TrustedUi has its own focus scope. Modern Monaco uses EditContext's div,
+  // not its compatibility textarea, for keyboard input on Chromium.
+  if (editor.contains(editor.getRootNode().activeElement)) return resolve(true);
+  const done = () => { clearTimeout(timer); editor.removeEventListener('focusin', done); resolve(true); };
+  const timer = setTimeout(() => { editor.removeEventListener('focusin', done); resolve(false); }, 5000);
+  editor.addEventListener('focusin', done);
+}));
+check(focusTransferred, 'rich-editor handoff preserves keyboard focus');
 check((await page.locator('[aria-label="Source pane"]').getByText('Loading...').count()) === 0,
   'and the loading placeholder is gone');
 /*
@@ -176,12 +194,12 @@ check(cspErrors.length === 0, `and trips no CSP directive (${cspErrors.slice(0, 
  * have found it. So this types with NO delay, and compares exactly.
  */
 const typed = ' plus fast typing';
-await page.click('[aria-label="Source pane"] .view-lines');
-await page.keyboard.press('End');
+// Continue directly from the plain editor's end-of-buffer caret: no extra click.
 await page.keyboard.type(typed);            // no `delay`: the race needs speed
 await page.waitForTimeout(4000);
 const afterTyping = (await api(`/api/artifacts/${doc.id}`, {}, token)).markup;
 check(afterTyping.endsWith(typed), `fast typing in the code pane loses nothing (…${JSON.stringify(afterTyping.slice(-24))})`);
+check(afterTyping.includes('Edited while rich editor loads'), 'edits made during the download survive handoff and reach storage');
 
 // The other half of the same contract: local typing must not move the model,
 // but a replacement from OUTSIDE still must. Monaco paints U+00A0 for spaces.

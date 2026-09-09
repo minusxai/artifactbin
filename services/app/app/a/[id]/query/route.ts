@@ -5,6 +5,8 @@ import { sessionActor } from '@/lib/viewer';
 import { parseQueryRequest, type QueryRequest } from '@/lib/story/query-request';
 import { QUERY_REQUEST_PARAM } from '@/lib/story-runtime/contract';
 import { LocalStateInputError } from '@/lib/story/local-tables';
+import {DatasetError} from '@/lib/datasets/errors';
+import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 
 /**
  * GET  /a/<id>/query?q=<JSON {values?, only?, page?}> → { tables, errors }
@@ -47,7 +49,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const parsed = parseQueryRequest(body as Record<string, unknown>);
   if (parsed instanceof Response) return parsed;
   // no-store: an edit changes the answer, and the document asks again anyway.
-  return answer(artifact, parsed, null, { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' });
+  return answer(artifact, parsed, null, { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' }, async()=>{
+    const current=await getArtifactById(id);
+    if(!current||current.edit_id!==artifact.edit_id||!await canReadArtifact(current,null))throw new DatasetError('Document is unavailable',404);
+  },request.signal);
 }
 
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -75,7 +80,10 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
    * every artifact belongs to an unclaimed token.
    */
   const cors: Record<string, string> = !actor.viewer && !actor.tokenId ? {'Access-Control-Allow-Origin': '*'} : {};
-  return answer(artifact, parsed, { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null }, cors);
+  return answer(artifact, parsed, { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: actor.viewer?.email ?? null }, cors,async()=>{
+    const current=await getArtifactById(id),currentActor=await sessionActor(request);
+    if(!current||current.edit_id!==artifact.edit_id||!await canReadArtifact(current,currentActor.viewer))throw new DatasetError('Document is unavailable',404);
+  },request.signal);
 }
 
 /**
@@ -89,13 +97,17 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
  * document's own (its <Query> may name only what its owner may read); this is
  * WHICH ROWS come back.
  */
-async function answer(artifact: ArtifactRow, parsed: QueryRequest, viewer: RoleActor | null, extra: Record<string, string> = {}): Promise<Response> {
+async function answer(artifact: ArtifactRow, parsed: QueryRequest, viewer: RoleActor | null, extra: Record<string, string> = {}, authorize?:()=>Promise<void>,signal?:AbortSignal): Promise<Response> {
   if (artifact.format !== 'markup' && artifact.format !== 'folder') return json({ tables: {}, errors: {} }, 200, extra);
   let flow;
-  try { flow = await dataflowForRow(artifact, { ...parsed, viewer }); }
+  try {
+    flow = await dataflowForRow(artifact, { ...parsed, viewer,authorize,signal });
+    await authorize?.();
+  }
   catch (error) {
     if (error instanceof LocalStateInputError) return json({error: 'invalid_local_state', detail: error.message}, 400, extra);
+    if (error instanceof DatasetError) return json({error:'not_found'},404,{...extra,'Cache-Control':'no-store'});
     throw error;
   }
-  return json({ tables: flow?.state.tables ?? {}, errors: flow?.state.errors ?? {}, ...(flow?.flow.mutations?.length ? {mutationAccess:flow.state.mutationAccess ?? {}} : {}) }, 200, {...extra,'Cache-Control':'no-store'});
+  return json({ tables: flow?.state.tables ?? {}, errors: flow?.state.errors ?? {}, ...(flow?.flow.mutations?.length ? {mutationAccess:flow.state.mutationAccess ?? {}} : {}) }, 200, {...extra,'Cache-Control':'no-store',[REVALIDATE_ACTOR_HEADER]:'1'});
 }

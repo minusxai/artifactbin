@@ -32,9 +32,10 @@ import {
 } from './story/splice';
 import { rebaseEditBatch, resolveEditBatch, type BatchChange, type StringEdit } from './story/edit-batch';
 import { nodeIndex, stampNodeIds } from './story/node-ids';
+import { finalizeArtifactMetadata, readParsedArtifactMetadata } from './story/parsed-artifact-metadata';
 import { parseJsx } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/helmet';
-import { datasetRefsInDataflow, initialValues, isEmptyDataflow, mutationTargets, type Dataflow, type Row, type Scalar } from '@/lib/story/dataflow';
+import { datasetRefsInDataflow, initialValues, isEmptyDataflow, mutationTargets, selectedQueries, type Dataflow, type Row, type Scalar } from '@/lib/story/dataflow';
 import { dryRunDataflow } from '@/lib/story/data-checks';
 import { mutationUsesRow } from '@/lib/story/row-scope';
 import { isMutationRefused, mutateDataset } from '@/lib/story/dataset-mutate';
@@ -347,6 +348,7 @@ export async function createArtifact(
   if (input.format === 'markup' && input.source) {
     input = { ...input, source: stampNodeIds(input.source, { retireLegacyAliases: true }).source };
   }
+  input = { ...input, meta: finalizeArtifactMetadata(input.format, input.source, input.meta) };
   let sourceIds: string[] = [];
   if(input.format==='markup'&&input.source) {
     sourceIds=[...nodeIndex(input.source).keys()];
@@ -752,6 +754,7 @@ export async function commitNormalizedMarkup(
   current: ArtifactRow,
   normalized: { source: string; content: string; meta: Record<string, unknown>; ids: readonly string[]; aliases?: readonly { legacyKey: string; nodeId: string; path: string }[]; title?: string | null; description?: string | null; format?: ArtifactFormat },
 ): Promise<ArtifactRow> {
+  normalized = { ...normalized, meta: finalizeArtifactMetadata(normalized.format ?? current.format, normalized.source, normalized.meta) };
   await archiveVersion(tx, current);
   const editId = newEditId();
   const result = await tx.query<ArtifactRow>(
@@ -985,7 +988,7 @@ async function replaceScoped(
         input.format,
         input.content,
         replacementIdentity?.source ?? input.source,
-        JSON.stringify(input.meta),
+        JSON.stringify(finalizeArtifactMetadata(input.format, replacementIdentity?.source ?? input.source, input.meta)),
         input.title !== undefined ? input.title : current.title,
         input.description !== undefined ? input.description : current.description,
         newEditId(),
@@ -1342,7 +1345,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
        SELECT u.* FROM updated u WHERE EXISTS (SELECT 1 FROM logged)`,
       [
         id, scope.val,
-        published.content, storedText, JSON.stringify(published.meta), freshEditId, head.edit_id,
+        published.content, storedText, JSON.stringify(finalizeArtifactMetadata('markup', storedText, published.meta)), freshEditId, head.edit_id,
         head.version, head.title, head.description, head.format, head.content, head.source, JSON.stringify(head.meta),
         EDIT_SNAPSHOT_WINDOW_MS,
         storedSplice.start, storedSplice.removed, storedSplice.inserted, storedSpan.start, storedSpan.end,
@@ -1916,9 +1919,7 @@ async function findWritersFor(actor: TokenActor, datasetId: string): Promise<Arr
   const out: Array<{ id: string; title: string | null; mutations: string[] }> = [];
   for (const dep of dependents) {
     if (!dep.source) continue;
-    const parsed = parseJsx(dep.source);
-    if (!parsed.ok) continue;
-    const names = splitHelmet(parsed.nodes).content.mutations.filter((m) => m.target === datasetId).map((m) => m.name);
+    const names = (declarationsForRow(dep)?.flow.mutations ?? []).filter((m) => m.target === datasetId).map((m) => m.name);
     if (names.length) out.push({ id: dep.id, title: dep.title, mutations: names });
   }
   return out;
@@ -1983,7 +1984,8 @@ export async function dataflowForRow(
   // `viewer` absent is ANONYMOUS, deliberately — that is what the document's own
   // GET transport is, and it is the safe default for every caller that has no
   // session to hand over.
-  const result = await runDocumentDataflow(row.source, datasetResolverForRow(row, opts.viewer ?? null), opts);
+  const flow = declarationsForRow(row)?.flow;
+  const result = flow ? await runDeclaredDataflow(flow, datasetResolverForRow(row, opts.viewer ?? null), opts) : null;
   if (result?.flow.mutations?.length) result.state.mutationAccess = await mutationAccessFor(row, result.flow, opts.viewer ?? null);
   return result;
 }
@@ -2009,13 +2011,18 @@ async function mutationAccessFor(doc: ArtifactRow, flow: Dataflow, viewer: RoleA
  * names. On a production dashboard this was the difference between a ~100ms
  * render and an ~8ms one, and 231 KB of a 365 KB page.
  */
-export function declarationsForRow(row: ArtifactRow): StoryIslandDataflow | null {
+export function declarationsForRow(row: Pick<ArtifactRow, 'source'> & Partial<Pick<ArtifactRow, 'meta'>>): StoryIslandDataflow | null {
   if (!row.source) return null;
-  const flow = declarationsOf(row.source);
-  return flow ? { flow } : null;
+  try {
+    const { flow } = readParsedArtifactMetadata(row.meta, row.source);
+    return isEmptyDataflow(flow) ? null : { flow };
+  } catch { return null; }
 }
 
 export interface DataflowRunOptions {
+  /** Request-owned admission, rerun before cache hits, after waits and SQL. */
+  authorize?: () => Promise<void>;
+  signal?: AbortSignal;
   localTables?: Record<string, Row[]>;
   /**
    * WHO IS READING. Only a folder's children table varies with it today, and
@@ -2101,21 +2108,41 @@ export async function runDocumentDataflow(
 ): Promise<RanDataflow | null> {
   const flow = declarationsOf(source);
   if (!flow) return null;
+  return runDeclaredDataflow(flow, resolve, opts);
+}
+
+async function runDeclaredDataflow(flow: Dataflow, resolve: DatasetResolver, opts: DataflowRunOptions): Promise<RanDataflow> {
+  // Materialize a one-shot iterable once; selection and execution share it.
+  opts = { ...opts, ...(opts.only ? { only: [...opts.only] } : {}) };
 
   const datasets: DatasetTables = {};
-  for (const id of datasetRefsInDataflow(flow)) {
+  for (const id of datasetRefsInDataflow({ ...flow, queries: selectedQueries(flow, opts) ?? [] })) {
     // Unresolvable, or a kind that is not a table → the query reports the
     // missing table, which is a query error rather than a render failure.
     const table = await resolve(id);
     if (table) datasets[id] = table;
   }
+  const usedSources = new Map<string, string>();
   const state = await runDataflow(flow, datasets, { values: opts.values, only: opts.only, page: opts.page, localTables: opts.localTables,
     sourceQuery:async(q,values,page)=>{
       const catalog=(datasets[q.source!] as RefTable|undefined)?.catalog;
       if(!catalog)throw new Error('Dataset source is unavailable');
-      return executeCatalog(catalog,q.sql,values,{datasetId:q.source!,limit:page?.limit,offset:page?.offset,sort:page?.sort,paramTypes:Object.fromEntries(flow.values.filter(v=>v.kind==='scalar').map(v=>[v.name,v.type]))});
+      usedSources.set(q.source!, JSON.stringify(catalog));
+      return executeCatalog(catalog,q.sql,values,{datasetId:q.source!,limit:page?.limit,offset:page?.offset,sort:page?.sort,signal:opts.signal,paramTypes:Object.fromEntries(flow.values.filter(v=>v.kind==='scalar').map(v=>[v.name,v.type])),authorize:async()=>{
+        await opts.authorize?.();
+        const current=await resolve(q.source!);
+        if(!current || JSON.stringify((current as RefTable).catalog)!==JSON.stringify(catalog))throw new DatasetError('Dataset source is unavailable',404);
+      }});
     },
   });
+  // Per-query failures are deliberately isolated by runDataflow. Admission is
+  // not a query error: q1's rows must not escape if access changes while q2
+  // waits. Recheck every used source, not merely the last query to finish.
+  for (const [id, snapshot] of usedSources) {
+    const current = await resolve(id);
+    if (!current || JSON.stringify((current as RefTable).catalog) !== snapshot) throw new DatasetError('Dataset source is unavailable',404);
+  }
+  await opts.authorize?.();
   return { flow, state };
 }
 
@@ -2123,15 +2150,17 @@ export async function runDocumentDataflow(
  * The dataset ids a document's DATA depends on — everything its queries read
  * plus everything its mutations write. What the live stream subscribes to, so
  * a write anywhere in that set wakes this document's readers
- * (app/a/[id]/events). Derived from the source on every read, because an edit
- * can change what a document reads.
+ * (app/a/[id]/events). Validated against the current source on every read,
+ * because an edit can change what a document reads. Selection never narrows
+ * these subscriptions, and mutation targets remain included.
  */
-export function datasetsForDocument(source: string | null | undefined): string[] {
+export function datasetsForDocument(document: string | (Pick<ArtifactRow, 'source'> & Partial<Pick<ArtifactRow, 'meta'>>) | null | undefined): string[] {
+  const source = typeof document === 'string' ? document : document?.source;
   if (!source) return [];
-  const parsed = parseJsx(source);
-  if (!parsed.ok) return [];
-  const { content } = splitHelmet(parsed.nodes);
-  const flow: Dataflow = { values: content.values, queries: content.queries, mutations: content.mutations };
+  let flow: Dataflow | null;
+  try { flow = typeof document === 'string' ? declarationsOf(source) : readParsedArtifactMetadata(document!.meta, source).flow; }
+  catch { return []; }
+  if (!flow) return [];
   return [...new Set([...datasetRefsInDataflow(flow), ...mutationTargets(flow)])];
 }
 

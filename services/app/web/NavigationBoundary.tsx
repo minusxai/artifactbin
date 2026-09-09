@@ -19,7 +19,7 @@ function documentIdentity(path: string): string {
 }
 
 /** Explicit app routes only. Files, API, auth callbacks and docs retain native navigation. */
-export function isClientRoute(url: URL): boolean {
+export function isClientRoute(url: Pick<URL, 'pathname'>): boolean {
   return /^\/(?:$|(?:account|assets|chat|login|privacy|terms|trash|docs-human)\/?$|tokens(?:\/new)?\/?$|datasets\/(?:new|[^/]+\/edit)\/?$|a\/[^/]+\/?$|@[^/]+(?:\/[^/]+)?\/?$)/.test(url.pathname);
 }
 

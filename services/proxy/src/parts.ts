@@ -18,7 +18,7 @@
  * is no prefix list to drift.
  */
 import {
-  ACTOR_HEADER, AGENT_HEADER, ANONYMOUS, declaredAgentSlug, denyResponse, FORWARDED_FOR, FORWARDED_HOST, FORWARDED_PROTO,
+  ACTOR_HEADER, REVALIDATE_ACTOR_HEADER, AGENT_HEADER, ANONYMOUS, declaredAgentSlug, denyResponse, FORWARDED_FOR, FORWARDED_HOST, FORWARDED_PROTO,
   type Actor, type EventsService, type Part, type Queryable, type TokenReader, type Upstream,
 } from '@artifactbin/contracts';
 import type { RateLimiter } from '@artifactbin/contracts/rate-limits';
@@ -220,8 +220,33 @@ export function session(o: ProxyOptions): Part<ProxyEnv> {
     name: 'session',
     mount: (app) => app.use('*', async (c, next) => {
       c.set('limiter', limiterFor(o));
-      c.set('actor', await resolveActor(c.req.raw, o));
+      const admitted=await resolveActor(c.req.raw, o);
+      c.set('actor', admitted);
       await next();
+      if(c.res.headers.has(REVALIDATE_ACTOR_HEADER)) {
+        const headers=new Headers(c.res.headers);headers.delete(REVALIDATE_ACTOR_HEADER);
+        c.res=new Response(c.res.body,{status:c.res.status,statusText:c.res.statusText,headers});
+        // Hono's response setter merges prior headers into the replacement.
+        c.res.headers.delete(REVALIDATE_ACTOR_HEADER);
+        if(admitted.credential!=='none') {
+          // The app receives an actor snapshot, not our session cookie store.
+          // Revalidate here, AFTER SQL/cache waits and before releasing rows,
+          // identically for in-process and HTTP upstreams. Never query auth
+          // tables from the app or pretend its attached snapshot is live.
+          let current:Actor=ANONYMOUS;
+          try {if(admitted.tokenId)o.tokens.invalidate(admitted.tokenId);current=await resolveActor(c.req.raw,o);} catch { /* fail closed */ }
+          const identity=(actor:Actor)=>[actor.credential,actor.userId,actor.tokenId,actor.email,actor.emailVerified];
+          if(JSON.stringify(identity(current))!==JSON.stringify(identity(admitted))) {
+            await c.res.body?.cancel().catch(()=>{});
+            c.res=new Response(JSON.stringify({error:'unauthorized'}),{status:401,headers:{'content-type':'application/json','cache-control':'no-store'}});
+            // Hono merges old headers into replacements. These describe the
+            // discarded upstream body, not this uncompressed JSON refusal.
+            c.res.headers.delete('content-length');
+            c.res.headers.delete('content-encoding');
+            c.res.headers.delete(REVALIDATE_ACTOR_HEADER);
+          }
+        }
+      }
       const browser=agentBrowserOf(o);
       if(!browser)return;
       const name=cookieName(o.secure??false);

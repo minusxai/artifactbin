@@ -1,11 +1,11 @@
 /**
  * REVEALING THE READER'S CHROME, for gates that click one of its controls.
  *
- * A served document now opens with NOTHING but the artifact: the chrome is
- * rendered hidden and a scroll UP is what brings it back
+ * A served document opens with visible chrome; scrolling down hides it and
+ * a scroll UP brings it back
  * (lib/story-runtime/reader-chrome-policy). Every gate that clicks `Open
  * artifact controls`, `Open menu` or a rail action on a TOP-LEVEL document has
- * to make that gesture first — a click on a `visibility: hidden` button is a
+ * to ensure it is revealed — a click on a `visibility: hidden` button is a
  * click Playwright rightly refuses.
  *
  * The gesture, not a class flip: down 160, a beat, then up 120, so the policy
@@ -40,7 +40,11 @@ export async function revealReaderChrome(target) {
     const shown = await chrome.evaluate(element =>
       element.classList.contains('mx-reader-chrome--hidden') === false,
     ).catch(() => false);
-    if (shown) return true;
+    // The initial server markup is visible before hydration/history scroll
+    // restoration finishes. Always make one real reveal gesture before
+    // accepting that state; otherwise the helper can return just before a
+    // queued downward scroll hides the controls it promised to reveal.
+    if (shown && attempt > 0) return true;
     /*
      * TWO SAMPLES, SEPARATED IN TIME. The policy batches through one animation
      * frame, so scrolling down and back inside a single frame is one NET move
@@ -76,6 +80,11 @@ async function chromeHost(page, timeout = 30_000) {
     '[data-mx-reader-chrome], [aria-label="Open artifact controls"], [aria-label="Open page controls"], [aria-label="Open menu"]',
     { state: 'attached', timeout },
   ).catch(() => {});
+  // A lazy route's provisional page bar is not the destination's controls.
+  // Wait for the actual handoff before deciding whether to reveal reader
+  // chrome or click page chrome; otherwise a click can target a disappearing
+  // skeleton (or classify hidden reader controls as ordinary page controls).
+  await page.locator('[data-mx-page-pending]').waitFor({ state: 'detached', timeout });
   // A document served top-level IS the page, and its chrome carries "Open menu"
   // too — so this is asked before the page-button question, or a hidden
   // trigger gets clicked as if it were a bar button.

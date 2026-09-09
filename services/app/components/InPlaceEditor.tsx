@@ -23,7 +23,7 @@
  */
 import { sendDocument, subscribeDocument, documentRect, documentReady, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import dynamic from '@/lib/dynamic';
+import SourceEditor from '@/components/LazySourceEditor';
 import { Check, Code, History, Image as ImageIcon, MessageSquare, Paintbrush } from 'lucide-react';
 
 import ThemePicker, { ModeChip, TemplateChip } from '@/components/ThemePicker';
@@ -68,10 +68,6 @@ import type { StoryEditSelection, StoryIslandDataflow } from '@/lib/story-runtim
  */
 const HELD_ASSETS = isWebUrl;
 
-
-// Monaco is multiple megabytes and belongs to `code` mode alone; the module
-// behind this import also self-hosts it (components/SourceEditor).
-const SourceEditor = dynamic(() => import('@/components/SourceEditor'), { ssr: false });
 
 export interface EditorArtifact {
   id: string;

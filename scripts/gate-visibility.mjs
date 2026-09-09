@@ -216,6 +216,7 @@ check(strangerVault.status() === 404, 'a private folder is the uniform 404 for a
 // The profile ROOT is public surface (public docs list there; an all-private
 // profile renders EMPTY, never 404 — an existence oracle otherwise).
 const strangerList = await stranger.goto(`${BASE}/@${username}`, { waitUntil: 'load' });
+await stranger.getByLabel('Open folder Shelf', { exact: true }).waitFor({ state: 'visible' });
 check(strangerList.status() === 200 && !(await stranger.textContent('body')).includes('Cookie Proof'),
   'a stranger sees no private document on the profile');
 // Public folders belong on the public index; private folders stay absent.

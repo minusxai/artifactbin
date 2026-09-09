@@ -79,7 +79,7 @@ async function build(row: ArtifactRow): Promise<LiveFrame> {
     ...(parts ? { nodes: parts.nodes } : {}),
     declarations: parts?.declarations ?? null,
     ...(parts && parts.flow.queries.length + parts.flow.values.length > 0 ? { dataflow: { flow: parts.flow } } : {}),
-    datasets: row.format === 'markup' ? datasetsForDocument(row.source) : [],
+    datasets: row.format === 'markup' ? datasetsForDocument(row) : [],
     theme: design.theme,
     colorMode: design.colorMode,
     template: meta.template ?? null,

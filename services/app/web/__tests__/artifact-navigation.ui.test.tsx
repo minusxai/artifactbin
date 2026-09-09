@@ -12,13 +12,13 @@ vi.mock('../Shell', () => ({ ShellFrame: ({children}: {children: React.ReactNode
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 const response = (id: string, canonical = `/a/${id}`) => ({ ok: true, json: async () => ({ canonical, role: 'viewer', kind: 'none', surface: { id } }) });
 
-it('uses bootstrapped document data immediately without a duplicate loading shell or fetch', () => {
+it('uses bootstrapped document data after the route chunk loads without a duplicate loading shell or fetch', async () => {
   vi.mocked(takeBootstrap).mockReturnValueOnce({canonical: '/a/abc123', role: 'viewer', kind: 'none', surface: {id: 'abc123'}});
   const fetchMock = vi.fn();
   vi.stubGlobal('fetch', fetchMock);
   const router = createMemoryRouter([{path:'/a/:id',element:<ProfilePage/>}], {initialEntries:['/a/abc123']});
   render(<RouterProvider router={router}/>);
-  expect(screen.getByLabelText('surface')).toHaveTextContent('abc123');
+  expect(await screen.findByLabelText('surface')).toHaveTextContent('abc123');
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
   expect(screen.queryByRole('banner', {name: 'Page bar'})).not.toBeInTheDocument();
   expect(fetchMock).not.toHaveBeenCalled();

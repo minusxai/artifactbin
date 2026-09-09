@@ -130,11 +130,11 @@ for (const [name, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
   await page.waitForSelector('[data-mx-reader-chrome]', { state: 'attached', timeout: 30_000 });
   await settle(page);
 
-  // 1. nothing but the artifact
+  // 1. useful controls immediately, without requiring a scroll gesture
   let s = await chromeState(page);
-  check(s?.hidden === true && s.state === 'hidden', `${name}: on load the chrome is hidden (${s?.state})`);
-  check(s?.visibility === 'hidden', `${name}: …really hidden, not merely transparent (visibility ${s?.visibility})`);
-  check(!(await page.locator('[aria-label="Like"]').isVisible()), `${name}: and the rail cannot be pressed`);
+  check(s?.hidden === false && s.state === 'shown', `${name}: on load the chrome is shown (${s?.state})`);
+  check(s?.visibility === 'visible', `${name}: controls are visible (${s?.visibility})`);
+  check(await page.locator('[aria-label="Like"]').isVisible(), `${name}: Like is immediately available`);
   check(s?.artifact === long.id, `${name}: the chrome is stamped with the artifact id (${s?.artifact})`);
 
   // 2. down keeps it away, up brings it back
@@ -234,7 +234,7 @@ for (const [name, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
 
   // 10. HOVER TIPS, on a desktop — a phone has no hover, its words sit under the glyphs
   if (viewport === DESKTOP) {
-    // The doors above reloaded the document; its chrome arrives hidden again.
+    // The doors above reloaded the document; sample its scroll behavior again.
     await revealReaderChrome(page);
     const tip = async (sel) => {
       await page.hover(sel);

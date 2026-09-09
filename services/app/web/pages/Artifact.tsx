@@ -3,8 +3,9 @@
  * authorized content and role capabilities; markup renders inline in the SPA,
  * while author scripts run only in managed sandboxed child frames.
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { usePageData } from '../use-page-data';
+import { expandSurface, type CompactSurface } from '@/lib/story/page-transport';
 import { takeBootstrap } from '../bootstrap';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import ArtifactShell from '@/components/ArtifactShell';
@@ -29,6 +30,11 @@ type Page =
   | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; folder: Parameters<typeof FolderPage>[0]['folder']; workspace?: AccountWorkspace; ownerUsername?: string | null; surface?: undefined }
   | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; like?: { liked: boolean; count: number }; follow?: { userId: string; following: boolean; count: number } | null; surface: Parameters<typeof ArtifactSurface>[0]; folder?: undefined };
 
+type TransportPage = Extract<Page, { folder: unknown }> | (Omit<Extract<Page, { surface: object }>, 'surface'> & { surface: CompactSurface<Parameters<typeof ArtifactSurface>[0]> });
+function decodePage(page: TransportPage): Page {
+  return page.surface ? { ...page, surface: expandSurface<Parameters<typeof ArtifactSurface>[0]>(page.surface) } : page;
+}
+
 export function ArtifactPage({ id: given }: { id?: string } = {}) {
   const params = useParams();
   const id = given ?? params.id!;
@@ -42,7 +48,11 @@ function ArtifactDocument({ id }: { id: string }) {
   const navigate = useNavigate();
   // The server may have inlined this page's data (server/app): render from it at once.
   const initialSearch = useRef(search).current;
-  const { data: page, error, refresh } = usePageData<Page>(`/api/page/artifact/${id}${initialSearch}`, { refreshMounted: false, pauseRevalidation: location.hash === '#edit', seed: () => takeBootstrap<Page>(window.location.pathname, 'artifact') });
+  const url = `/api/page/artifact/${id}${initialSearch}`;
+  const { data: transport, error, refresh } = usePageData<TransportPage>(url, { refreshMounted: false, pauseRevalidation: location.hash === '#edit', seed: () => takeBootstrap<TransportPage>(window.location.pathname, 'artifact') });
+  // Decode once at consumption, regardless of whether JSON came from SSR,
+  // a cached navigation, or a network read. The cache keeps the compact shape.
+  const page = useMemo(() => transport ? decodePage(transport) : null, [transport]);
   useEffect(() => {
     // The address heals to the canonical one — after the ACL, which the fetch already passed.
     if (page && !page.surface?.captureKey && page.canonical !== location.pathname) {

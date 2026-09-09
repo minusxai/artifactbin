@@ -11,13 +11,18 @@ import { useSession } from './session';
  * Document artifacts deliberately stay outside it; an owned folder is a
  * workspace location and should be visually indistinguishable from Home.
  */
-export function ShellFrame({ children, hideBreadcrumb = false }: { children: ReactNode; hideBreadcrumb?: boolean }) {
+export function ShellFrame({ children, hideBreadcrumb = false, pending = false }: { children: ReactNode; hideBreadcrumb?: boolean; pending?: boolean }) {
   const { session } = useSession();
+  const chrome = <PageChrome hideBreadcrumb={hideBreadcrumb} authed={!!session?.user} anon={session?.kind === 'anon'} />;
+  // A provisional frame is presentation only. Its controls cannot act for a
+  // destination that has not mounted, and its short lifetime must not start
+  // credential migration or account side effects.
+  if (pending) return <div data-mx-page-pending><div inert>{chrome}</div>{children}</div>;
   return (
     <>
       <AdoptLegacyToken />
       {session?.user && <MixpanelIdentify userId={session.user.id} email={session.user.email} />}
-      <PageChrome hideBreadcrumb={hideBreadcrumb} authed={!!session?.user} anon={session?.kind === 'anon'} />
+      {chrome}
       {children}
     </>
   );
