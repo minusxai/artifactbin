@@ -694,7 +694,12 @@ export async function respondToEdit(
     case 'doc_changed':
       return json({ error: outcome.reason, edit_id: outcome.head.editId, source: outcome.head.source, version: outcome.head.version }, 409);
     case 'bad_diff':
-      return json({ error: 'bad_diff', detail: outcome.detail, ...(outcome.editIndex === undefined ? {} : { edit_index: outcome.editIndex }) }, 400);
+      return json({
+        error: 'bad_diff', detail: outcome.detail,
+        ...(outcome.detail === 'no_match' ? { recovery: 'Read the artifact again and copy old_string from its current stored markup. A rejected write changed nothing; do not match against the rejected proposal.' } : {}),
+        ...(outcome.detail === 'multiple_matches' ? { recovery: 'Include surrounding stored text so old_string matches exactly once.' } : {}),
+        ...(outcome.editIndex === undefined ? {} : { edit_index: outcome.editIndex }),
+      }, 400);
     case 'not_editable':
       return json({ error: 'not_editable' }, 400);
   }

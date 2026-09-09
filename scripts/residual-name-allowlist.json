@@ -12,6 +12,12 @@
     "reason": "Historical captured agent fixture"
   },
   {
+    "path": "evals/main.ts",
+    "value": "artifact-bin",
+    "count": 1,
+    "reason": "Deny eval agents access to the persisted local authentication configuration path"
+  },
+  {
     "path": "services/app/lib/__tests__/agent-contract.test.ts",
     "value": "artifact-bin",
     "count": 1,

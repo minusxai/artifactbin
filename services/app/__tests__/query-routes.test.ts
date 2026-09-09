@@ -32,6 +32,20 @@ const DOC = (ds: string) =>
   '</Helmet><div><select value="$region" options="$regions" /><Question data="$sales" viz={{"kind":"table"}} /></div>';
 
 describe('POST /a/<id>/query (reader path)', () => {
+  it('rejects guessed query selectors rather than silently running every query', async () => {
+    const t = await mintToken('t');
+    const ds = (await create(t.token, { dataset: ROWS })).id;
+    const doc = (await create(t.token, { markup: DOC(ds) })).id;
+    for (const selector of [{ name: 'sales' }, { query: 'sales' }, { sql: 'select 1' }]) {
+      const post = await queryRoute(request(`/a/${doc}/query`, { method: 'POST', json: selector }), params({ id: doc }));
+      const get = await queryGet(request(`/a/${doc}/query?q=${encodeURIComponent(JSON.stringify(selector))}`), params({ id: doc }));
+      for (const res of [post, get]) {
+        expect(res.status).toBe(400);
+        expect(await res.json()).toMatchObject({ error: 'unknown_query_fields', details: [expect.stringContaining('"only"')] });
+      }
+    }
+  });
+
   it('re-runs the requested queries with the given values over a public document', async () => {
     const t = await mintToken('t');
     const ds = (await create(t.token, { dataset: ROWS })).id;
@@ -235,4 +249,14 @@ describe('GET /a/<id>/query?q= (the document fetches for itself)', () => {
     expect(bad.status).toBe(400);
     expect((await bad.json()).error).toBe('invalid_values');
   });
+});
+
+it('draft validation gives the same actionable JSX diagnostics as publishing', async () => {
+  const t = await mintToken('draft-syntax');
+  const res = await draftQueryRoute(request('/api/query', {method:'POST',token:t.token,json:{markup:'<Question viz={"kind":"vega-lite","spec":{"mark":"bar"}} />'}}));
+  expect(res.status).toBe(400);
+  const body = await res.json();
+  expect(body.error).toBe('invalid_jsx');
+  expect(body.details[0].message).toContain('missing its object opening brace');
+  expect(body.details[0].snippet).toContain('▶');
 });

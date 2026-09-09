@@ -45,8 +45,9 @@ describe('the paste', () => {
     const s = await start();
     expect(s.prompt).toBe(anonymousPaste(BASE, s.id, s.token));
     expect(s.prompt).toContain(s.token);
+    expect(s.prompt).toContain(`${BASE}/docs/artifactbin/SKILL.md`);
     expect(s.prompt.split('\n')).toHaveLength(1);
-    expect(s.prompt.length).toBeLessThan(160); // a line, not an essay
+    expect(s.prompt.length).toBeLessThan(320); // a line, not an essay
     expect(s.token).toMatch(/^mx_/);
   });
 

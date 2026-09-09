@@ -86,15 +86,17 @@ describe('the `publish` kind reproduces today\'s behaviour', () => {
   it('scores kept_untouched_text off the served document, exactly as the conditional did', async () => {
     const html = '<html><body><p>median first response of 3 hours</p></body></html>';
     expect(await publish.checks(checkCtx({ task: task({ seedKeepText: 'median first response of 3 hours' }), served: { status: 200, html } }))).toEqual({
+      june_resolution_correct: null,
       kept_untouched_text: true,
     });
     expect(await publish.checks(checkCtx({ task: task({ seedKeepText: 'gone' }), served: { status: 200, html } }))).toEqual({
+      june_resolution_correct: null,
       kept_untouched_text: false,
     });
   });
 
   it('answers null — never false — for a task that seeds nothing', async () => {
-    expect(await publish.checks(checkCtx())).toEqual({ kept_untouched_text: null });
+    expect(await publish.checks(checkCtx())).toEqual({ kept_untouched_text: null, june_resolution_correct: null });
   });
 
   it('prepares nothing: a publish task\'s setup makes no call at all', async () => {

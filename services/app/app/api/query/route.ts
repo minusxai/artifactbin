@@ -2,6 +2,7 @@ import { datasetResolverForActor, runDocumentDataflow } from '@/lib/artifacts';
 import { actorForArtifacts, sessionActor } from '@/lib/viewer';
 import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
 import { parseJsx } from '@/lib/jsx';
+import { syntaxErrorDetail } from '@/lib/jsx/syntax-error';
 import { validateHelmet } from '@/lib/story/helmet';
 import { parseQueryRequest } from '@/lib/story/query-request';
 import { resolveToken } from '@/lib/tokens';
@@ -35,12 +36,13 @@ export async function POST(request: Request) {
   const body = await readJson(request);
   if (!body) return json({ error: 'invalid_json' }, 400);
   if (typeof body.markup !== 'string') return json({ error: 'markup_required' }, 400);
-  const parsed = parseQueryRequest(body);
+  const { markup, ...queryRequest } = body;
+  const parsed = parseQueryRequest(queryRequest);
   if (parsed instanceof Response) return parsed;
 
   // A malformed Helmet cannot be run: report the grammar, as publish would.
-  const tree = parseJsx(body.markup);
-  if (!tree.ok) return json({ error: 'invalid_jsx', details: [{ message: `JSX syntax error: ${tree.error}` }] }, 400);
+  const tree = parseJsx(markup);
+  if (!tree.ok) return json({ error: 'invalid_jsx', details: [syntaxErrorDetail(markup, tree)] }, 400);
   const helmetErrors = validateHelmet(tree.nodes);
   if (helmetErrors.length) return json({ error: 'invalid_jsx', details: helmetErrors }, 400);
 
@@ -51,7 +53,7 @@ export async function POST(request: Request) {
     if(!current||current.tokenId!==admittedActor.tokenId||current.userId!==admittedActor.userId)throw new DatasetError('Query access revoked',403);
   };
   try {
-    const flow = await runDocumentDataflow(body.markup, datasetResolverForActor(actor), {...parsed,authorize,signal:request.signal});
+    const flow = await runDocumentDataflow(markup, datasetResolverForActor(actor), {...parsed,authorize,signal:request.signal});
     await authorize();
     return json({ tables: flow?.state.tables ?? {}, errors: flow?.state.errors ?? {} },200,{[REVALIDATE_ACTOR_HEADER]:'1'});
   } catch (error) {

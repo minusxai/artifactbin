@@ -10,7 +10,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { chownArgv, handOverRunAsDirs, prepareRunAsDirs, readableForAgent, reclaimRunAsDirs, runInvocation, wrapRunAs } from '../lib/spawn';
+import { spawnSync } from 'node:child_process';
+import { chownArgv, handOverRunAsDirs, prepareRunAsDirs, readableForAgent, reclaimRunAsDirs, runInvocation, wrapRunAs, wrapCheckoutSandbox, checkoutIsolationRoots } from '../lib/spawn';
 
 let dir: string;
 const paths = () => ({ stdoutPath: path.join(dir, 'transcript.jsonl'), stderrPath: path.join(dir, 'stderr.log') });
@@ -20,6 +21,84 @@ afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
 const node = (script: string) => ({ argv: ['node', '-e', script], env: {}, unsetEnv: [] });
 
 describe('runInvocation', () => {
+  it('records a process launch failure in stderr', async () => {
+    const result = await runInvocation({ argv: ['/nonexistent/eval-command'], env: {}, unsetEnv: [] }, {
+      cwd: dir, baseEnv: {}, timeoutMs: 1000, ...paths(),
+    });
+    expect(result.exitCode).toBeNull();
+    expect(fs.readFileSync(paths().stderrPath, 'utf8')).toMatch(/Process launch failed:.*ENOENT/);
+  });
+
+  it('protects the primary checkout and sibling worktrees, including paths with spaces', () => {
+    const repo = path.join(dir, 'repo');
+    const sibling = path.join(dir, 'sibling worktree');
+    fs.mkdirSync(repo);
+    const git = (...args: string[]) => {
+      const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8' });
+      expect(result.status, result.stderr).toBe(0);
+    };
+    git('init');
+    git('-c', 'user.name=Eval test', '-c', 'user.email=eval@example.test', '-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-m', 'test');
+    git('worktree', 'add', '--detach', sibling);
+    const roots = checkoutIsolationRoots(sibling).map((p) => fs.realpathSync(p));
+    expect(roots).toContain(fs.realpathSync(repo));
+    expect(roots).toContain(fs.realpathSync(sibling));
+  });
+
+  it('refuses an unisolated platform when checkout protection was requested', () => {
+    expect(() => wrapCheckoutSandbox(['node'], [dir], 'linux')).toThrow(/refusing an unisolated eval/);
+  });
+
+  it.skipIf(process.platform !== 'darwin')('blocks checkout reads and writes in descendants and through symlinks, while task files work', async () => {
+    const checkout = path.join(dir, 'checkout with spaces');
+    const cwd = path.join(dir, 'task');
+    fs.mkdirSync(checkout); fs.mkdirSync(cwd);
+    fs.writeFileSync(path.join(checkout, 'private.txt'), 'must not reach the agent');
+    fs.symlinkSync(checkout, path.join(cwd, 'alias'));
+    fs.writeFileSync(path.join(cwd, 'input.csv'), 'value\n1');
+    const script = `
+      const fs = require('node:fs'), cp = require('node:child_process');
+      for (const p of ${JSON.stringify([path.join(checkout, 'private.txt'), path.join(cwd, 'alias/private.txt')])}) {
+        try { fs.readFileSync(p); process.exit(10); } catch (e) { if (!['EPERM','EACCES'].includes(e.code)) throw e; }
+        const child = cp.spawnSync('/bin/cat', [p]);
+        if (child.status === 0) process.exit(11);
+      }
+      try { fs.writeFileSync(${JSON.stringify(path.join(checkout, 'new.txt'))}, 'bad'); process.exit(12); }
+      catch (e) { if (!['EPERM','EACCES'].includes(e.code)) throw e; }
+      fs.writeFileSync('output.csv', fs.readFileSync('input.csv'));
+      console.log('isolated');
+    `;
+    const result = await runInvocation(node(script), { cwd, checkoutRoots: [checkout], baseEnv: process.env, timeoutMs: 20_000, ...paths() });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe('isolated\n');
+    expect(fs.readFileSync(path.join(cwd, 'output.csv'), 'utf8')).toBe('value\n1');
+  });
+
+  it.skipIf(process.platform !== 'darwin')('hides eval records and the real connection while the staged plugin and task connection remain readable', async () => {
+    const records = path.join(dir, 'records');
+    const workspace = path.join(dir, 'workspace');
+    const connection = path.join(dir, '.artifactbin.env');
+    fs.mkdirSync(records); fs.mkdirSync(workspace);
+    fs.writeFileSync(path.join(records, 'other-transcript.jsonl'), 'other task evidence');
+    fs.writeFileSync(connection, 'real account');
+    fs.writeFileSync(path.join(workspace, 'SKILL.md'), 'installed skill');
+    fs.writeFileSync(path.join(workspace, '.artifactbin.env'), 'task account');
+    const script = `
+      const fs = require('node:fs');
+      for (const p of ${JSON.stringify([connection, path.join(records, 'other-transcript.jsonl')])}) {
+        try { fs.readFileSync(p); process.exit(10); } catch (e) { if (!['EPERM','EACCES'].includes(e.code)) throw e; }
+      }
+      console.log(fs.readFileSync('SKILL.md','utf8'), fs.readFileSync('.artifactbin.env','utf8'));
+    `;
+    const result = await runInvocation(node(script), {
+      cwd: workspace, checkoutRoots: [records, connection], baseEnv: process.env, timeoutMs: 20_000,
+      stdoutPath: path.join(records, 'transcript.jsonl'), stderrPath: path.join(records, 'stderr.log'),
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe('installed skill task account\n');
+    expect(fs.readFileSync(path.join(records, 'transcript.jsonl'), 'utf8')).toBe(result.stdout);
+  });
+
   it('captures stdout to the transcript and returns it', async () => {
     const r = await runInvocation(node('console.log("a");console.log("b")'), { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
     expect(r.exitCode).toBe(0);
@@ -196,12 +275,14 @@ describe('run-as hands over only what the agent owns', () => {
  * of it STILL owned by the driver (that is the transcript bug) and merely traversable.
  */
 describe('handOverRunAsDirs', () => {
-  it('chowns exactly the cwd and the home, and only chmods the root', () => {
+  it('hands over private cwd/home while retaining driver traversal', () => {
     const root = path.join(dir, 'ws');
     const cwd = path.join(root, 'cwd');
     const homeDir = path.join(root, 'home');
     const plan = prepareRunAsDirs({ workspaceRoot: root, cwd, homeDir });
     fs.chmodSync(root, 0o700); // what mkdtemp leaves behind, and what locked the agent out
+    fs.chmodSync(cwd, 0o700);
+    fs.chmodSync(homeDir, 0o700);
     const before = fs.statSync(root);
 
     const ran: string[][] = [];
@@ -210,6 +291,8 @@ describe('handOverRunAsDirs', () => {
     expect(ran).toEqual([['sudo', '-n', 'chown', '-R', 'agent', cwd, homeDir]]);
     const after = fs.statSync(root);
     expect(after.mode & 0o777).toBe(0o711);
+    expect(fs.statSync(cwd).mode & 0o777).toBe(0o710);
+    expect(fs.statSync(homeDir).mode & 0o777).toBe(0o710);
     expect(after.uid).toBe(before.uid); // the driver keeps the root: it still writes transcript/stderr/result there
   });
 
@@ -226,6 +309,23 @@ describe('handOverRunAsDirs', () => {
  * and both harnesses could not read the proxy CA the environment pointed them at. Seeded RED by the orchestrator.
  */
 describe("the child's environment describes its own workspace", () => {
+  it('removes npm checkout breadcrumbs while preserving runtime binaries', async () => {
+    const checkout = path.join(dir, 'checkout');
+    fs.mkdirSync(checkout);
+    const script = 'console.log(JSON.stringify({init:process.env.INIT_CWD,npm:process.env.npm_package_json,nodePath:process.env.NODE_PATH,path:process.env.PATH}))';
+    const r = await runInvocation(node(script), {
+      cwd: dir, checkoutRoots: process.platform === 'darwin' ? [checkout] : [],
+      baseEnv: { ...process.env, INIT_CWD: checkout, npm_package_json: `${checkout}/package.json`, NODE_PATH: checkout,
+        PATH: `${checkout}/node_modules/.bin${path.delimiter}${process.env.PATH}` },
+      timeoutMs: 20_000, ...paths(),
+    });
+    const output = JSON.parse(r.stdout.trim());
+    expect(output.init).toBeUndefined();
+    expect(output.npm).toBeUndefined();
+    expect(output.nodePath).toBeUndefined();
+    if (process.platform === 'darwin') expect(output.path).not.toContain(checkout);
+    expect(r.exitCode).toBe(0);
+  });
   it('PWD is the cwd and OLDPWD is gone', async () => {
     const r = await runInvocation(node('console.log(JSON.stringify([process.env.PWD, process.env.OLDPWD ?? null]))'), { cwd: dir, baseEnv: { ...process.env, PWD: '/somewhere/else', OLDPWD: '/elsewhere' }, timeoutMs: 20_000, ...paths() });
     expect(JSON.parse(r.stdout.trim())).toEqual([dir, null]);

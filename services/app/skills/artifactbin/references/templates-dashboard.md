@@ -1,7 +1,6 @@
 ---
 name: templates-dashboard
-description: >-
-  The dashboard genre in full: beats, layout grammar, a copyable skeleton, Do/Don't. Read only for a long or intricate dashboard — the brief's sketch is enough for a short, plain one.
+description: Dashboard layout, skeleton and rules.
 read_first_max: 6144
 order: 4
 ---
@@ -13,9 +12,11 @@ order: 4
 
 Beats: [[ template.beats | join(' → ') ]]
 
-PROSE BUDGET: the kicker, ONE quiet verdict sentence, tile labels of three words or
-fewer, the status footer — nothing else. A sentence explaining what a chart shows
-becomes that tile's ≤3-word label instead.
+Keep prose brief. Statistical qualifiers override label length: "average of
+monthly medians" must not become "median resolution".
+
+Trend `compareMode`: use `last`; use `previous` only to exclude an incomplete
+current period, and label it.
 
 SKELETON (adapt cols/rows to the data; 12 columns × 86px rows):
 
@@ -42,7 +43,7 @@ SKELETON (adapt cols/rows to the data; 12 columns × 86px rows):
     </div>
     <Grid>
       <GridItem x={0} y={0} w={6} h={3} className="rounded-md border border-border bg-card/50">
-        <Question data="$rev_by_week" viz={{"kind":"recipe","recipe":"minusx/trend@1","bindings":{"date":"period","value":["revenue"]},"params":{"compareMode":"previous"},"columnFormats":{"revenue":{"format":"$,.0f","alias":"Revenue"}}}} />
+        <Question data="$rev_by_week" viz={{"kind":"recipe","recipe":"minusx/trend@1","bindings":{"date":"period","value":["revenue"]},"params":{"compareMode":"last"},"columnFormats":{"revenue":{"format":"$,.0f","alias":"Revenue"}}}} />
       </GridItem>
       <GridItem x={6} y={0} w={3} h={3} className="rounded-md border border-border bg-card/50">
         <Question data="$orders_by_week" viz={{"kind":"recipe","recipe":"minusx/trend@1","bindings":{"date":"period","value":["orders"]},"columnFormats":{"orders":{"format":",.0f","alias":"Orders"}}}} />

@@ -41,7 +41,8 @@ const prompt = await page.evaluate(() => navigator.clipboard.readText()).catch((
 const paste = /\/a\/([A-Za-z0-9]+) using this token: (mx_[A-Za-z0-9_-]+)/.exec(prompt);
 ok(!!paste, 'the copied paste carries the bearer token inline');
 ok(!/\/start\?k=/.test(prompt), 'and carries no start link');
-ok(prompt.length < 160 && !prompt.includes('\n'), `and is one short line (${prompt.length} chars)`);
+ok(prompt.length < 300 && !prompt.includes('\n'), `and is one short line (${prompt.length} chars)`);
+ok(prompt.includes(`${B}/docs/artifactbin/SKILL.md`), 'the paste points to the exact HTTP API instructions');
 if (!paste) { console.log('cannot continue without the inline token'); process.exit(1); }
 const [, id, pasteToken] = paste;
 

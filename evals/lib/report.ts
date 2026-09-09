@@ -137,7 +137,7 @@ export function renderSummaryMarkdown(report: MergedReport): string {
     `| **Total** | ${rows.reduce((n, r) => n + r.passed, 0)}/${rows.reduce((n, r) => n + r.total, 0)} | ${known.length ? total.toFixed(4) : 'unknown'} | |`,
   ];
   if (known.length !== rows.length) {
-    lines.push('', `_${rows.length - known.length} of ${rows.length} legs reported no token usage; the total covers the rest._`);
+    lines.push('', `_${rows.length - known.length} of ${rows.length} legs have unknown cost (missing usage, rates or a reported cost); the total covers the rest._`);
   }
   lines.push('', '_Cost is the figure each harness reports for itself where it does, else its tokens × the rates the run was given (Codex, which also pays a per-call web-search fee); it excludes GitHub Actions minutes. Check the provider console for billed spend._');
   return lines.join('\n');

@@ -6,16 +6,19 @@ read_first_max: 8192
 ---
 ## Read first — everything a straightforward document needs
 
-**Publish before you read** — FIRST create a SKELETON: real title, theme,
-template and stubbed section headings. Share its `[[ base ]]/a/<id>` URL immediately,
-labelled as still filling in. Then read the references and fill sections using
-targeted `edit_artifact` calls. Edits reach open readers live.
+**Use the supplied document ID.** Read and edit it; never create a replacement
+to recover from an error. With no supplied document, create a titled skeleton,
+then fill it. Datasets are separate. Follow the user's URL-sharing instructions.
+
+Use task-local scratch files or `mktemp -d`; after permission errors, change the
+parent directory. No local SDK or CLI is needed.
+
+For a NEW document only:
 
 [[ publishExample ]]
 
 Writes return `markup_changed` and canonical markup when formatting changed;
-edit against that source. A 400 names the fix. Always set `title`: browser tabs
-and link previews use it, not the on-page heading.
+edit against that source. A 400 names the fix. Set `title` for browser tabs and link previews.
 
 [[ authRule ]]
 
@@ -24,16 +27,16 @@ change, not the whole file:
 
 [[ editExample ]]
 
-`old_string` must appear EXACTLY ONCE; preserve concurrent human edits.
+`old_string` must match stored markup EXACTLY ONCE. Rejected writes changed
+nothing. After `bad_diff`, read again; never match against a rejected proposal.
 
 **markup** is JSX data, not Markdown: HTML prose and inline SVG, plus kit
 components (`Card`, `Tabs`, `Grid`, `SlideDeck`, `Icon`) and data embeds
 (`Question`, `DataTable`, `Number`). Style parent elements with Tailwind
 `className`; inline `style=` is rejected.
 
-**Guess rather than look up.** An unknown HTML tag is refused with a 400
-carrying the allowed set (`allowed_html_tags`), an unknown component the
-registry: a wrong guess costs one round trip. One exception:
+**HTML/component names only: guess rather than look up.** Unknown tags return
+400 with `allowed_html_tags`; unknown components return the registry. Exception:
 `[[ refusedTags | join(' ') ]]` are refused with NO list — never guess them
 (`<form>` and raw `<iframe>` most often). Parent CSS and declarations live
 in ONE `<Helmet>`, which also holds `<title>`:
@@ -42,12 +45,9 @@ in ONE `<Helmet>`, which also holds `<title>`:
 <Helmet><title>What the tab shows</title><style>{`:root { --primary: #ff6a1f }`}</style></Helmet>
 ```
 
-**A document is a CONTAINER, and a reader may be on a phone (390px).** Use
-container prefixes — `@2xl:`, `@3xl:` — never the viewport ones
-(`sm:`/`md:`/`lg:` do not apply). Multi-column layouts start at
-one column and widen: `grid-cols-1 @2xl:grid-cols-3`, and so does display
-type — `text-4xl @2xl:text-6xl`, never a bare `text-6xl` (60px type breaks a
-phone). Never a fixed pixel width.
+**Design for a 390px CONTAINER.** Use `@2xl:`, `@3xl:`, not viewport
+`sm:`/`md:`/`lg:`. Start with `grid-cols-1 @2xl:grid-cols-3` and
+`text-4xl @2xl:text-6xl`; no fixed pixel widths or bare `text-6xl`.
 
 Parent markup is self-contained: no CDN scripts or external stylesheets.
 For custom DOM/canvas/JS, use managed `<Iframe>` ([markup-iframe](references/markup-iframe.md));
@@ -94,7 +94,7 @@ first-class:
   whole page commits to, chapter bands, evidence revealed on scroll. The
   strongest default when nothing above fits.
 
-**The reading path — the skeleton is published; before writing its content, read
+**The reading path — before writing its content, read
 in order:** `references/design.md` (craft), `references/markup.md` (vocabulary),
 then the `references/templates-<name>.md` and `references/themes-<name>.md` you
 picked — their frame is what makes it come out right (a deck without it ships
@@ -102,10 +102,13 @@ text flush to the viewport edge).
 
 [[ checkWork ]]
 
-**Prose and a one-dataset chart are fully covered above**. Each ask has ONE file under
-`references/` ([[ docsIndexHint ]]):
+For optional result checks, read `references/publishing-query.md`. Never guess
+HTTP routes; test one request before batching. After 404s, check the route first.
+
+More under `references/` ([[ docsIndexHint ]]):
 | when the ask involves | read |
 |---|---|
+| optional query result verification | `publishing-query.md` |
 | API — replace, `expectedVersion`, visibility, folders, trash/restore, errors | `publishing.md` |
 | tokens — expiry, saved config, claiming, a 401 | `publishing-auth.md` |
 | Postgres connections, multi-table datasets, SQL models | `databases.md` |
@@ -115,7 +118,8 @@ text flush to the viewport edge).
 | history — versions, revert, the trash, export options | `publishing-versions.md` |
 | design craft — hierarchy, type, spacing, color, motifs | `design.md` |
 | tag/component allowlists, `<Helmet>`, layout | `markup.md` |
-| charts (vega specs), controls, `<Mutation>`, data formats | `markup-data.md` |
+| charts, controls, data formats | `markup-data.md` |
+| chart serialization and statistical meaning | `markup-data-authoring.md` |
 | conditions, Dialog and local SQL state | `markup-state.md` |
 | isolated DOM/canvas, bundled scripts and cached assets | `markup-iframe.md` |
 | script signal subscriptions and mutation bridge | `markup-scripts.md` |

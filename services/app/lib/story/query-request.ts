@@ -22,6 +22,14 @@ const isScalar = (v: unknown): v is Scalar =>
   v === null || typeof v === 'string' || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v));
 
 export function parseQueryRequest(body: Record<string, unknown>): QueryRequest | Response {
+  const allowed = ['values', 'only', 'page', 'localTables'];
+  const unknown = Object.keys(body).filter((key) => !allowed.includes(key));
+  if (unknown.length) {
+    return json({
+      error: 'unknown_query_fields',
+      details: [`Unknown fields: ${unknown.join(', ')}. Expected ${allowed.join(', ')}. Select declared queries with {"only":["query_name"]}; this endpoint does not accept SQL.`],
+    }, 400);
+  }
   const out: QueryRequest = {};
   if (body.localTables !== undefined) {
     try { out.localTables = parseLocalTables(body.localTables); }

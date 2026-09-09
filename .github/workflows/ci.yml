@@ -298,11 +298,23 @@ jobs:
         run: npx playwright install --with-deps chromium
       - if: steps.playwright.outputs.cache-hit == 'true'
         run: npx playwright install chromium
+      # The agent runs as a non-sudo account; evidence stays outside the checkout
+      # so granting access to the dev-mail outbox cannot reopen source access.
+      - name: Prepare isolated eval account
+        run: |
+          sudo useradd --create-home --shell /bin/bash eval-agent
+          chmod 700 "$GITHUB_WORKSPACE"
+          if sudo -n -u eval-agent test -r "$GITHUB_WORKSPACE/package.json"; then
+            echo "Eval account can read the checkout" >&2
+            exit 1
+          fi
       # The harness this job drives — one global npm package, no login.
       - run: npm i -g opencode-ai
       - run: npm run build
       - run: |
-          npm run eval -- --ci --tasks=${{ matrix.tasks }} --mode=${{ matrix.mode }} \
+          umask 077
+          npm run eval -- --ci --run-as=eval-agent --out="$RUNNER_TEMP/agent-smoke-metrics" \
+            --tasks=${{ matrix.tasks }} --mode=${{ matrix.mode }} \
             --harness=opencode \
             --model=fireworks-ai/accounts/fireworks/models/minimax-m3 \
             --api-key-env=FIREWORKS_API_KEY \
@@ -314,7 +326,7 @@ jobs:
         if: ${{ !cancelled() }}
         with:
           name: agent-smoke-metrics-${{ matrix.mode }}
-          path: evals/.metrics/
+          path: ${{ runner.temp }}/agent-smoke-metrics/
           include-hidden-files: true
           retention-days: 14
 

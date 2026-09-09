@@ -127,7 +127,9 @@ export function forwardExchange(
     (up) => {
       res.writeHead(up.statusCode ?? 502, up.headers);
       // A response body is retained for a failure (its `error` code) or a write (its echo + the artifact id).
-      const keepRes = isJson(up.headers) && ((up.statusCode ?? 0) >= 400 || keepReq);
+      const isMcp = url.split('?')[0] === '/mcp';
+      const isSse = String(up.headers['content-type'] ?? '').includes('text/event-stream');
+      const keepRes = (isJson(up.headers) || (isMcp && isSse)) && ((up.statusCode ?? 0) >= 400 || keepReq);
       const resChunks: Buffer[] = [];
       let resSize = 0;
       // Counted for EVERY response (the docs-cost metric reads it); retained only per keepRes.
@@ -149,8 +151,12 @@ export function forwardExchange(
         const pathId = idFromPath(url);
         if (pathId) entry.artifactId = pathId;
         if (keepRes) {
-          const body = parseJson(Buffer.concat(resChunks));
+          const bytes = Buffer.concat(resChunks);
+          const body = isSse ? bytes.toString().split(/\r?\n/).filter((l) => l.startsWith('data:')).map((l) => parseJson(Buffer.from(l.slice(5).trim()))).find((v) => v && ('result' in v || 'error' in v)) ?? null : parseJson(bytes);
           const output = operationOutput(body, url);
+          if (isMcp && (objectValue(body?.result)?.isError === true || objectValue(body?.error))) {
+            entry.mcpError = typeof output?.error === 'string' ? output.error : objectValue(body?.error) ? 'mcp_protocol_error' : 'mcp_tool_error';
+          }
           if (status >= 400 && body && typeof body.error === 'string') entry.error = body.error;
           if (keepReq && output && typeof output.markup === 'string') entry.resMarkup = output.markup;
           if (keepReq && output && typeof output.markup_changed === 'boolean') entry.markupUnchanged = !output.markup_changed;
@@ -162,6 +168,11 @@ export function forwardExchange(
         if (keepReq) {
           const body = parseJson(Buffer.concat(reqChunks));
           const input = operationInput(body, url);
+          if (isMcp && body) {
+            entry.mcpMethod = typeof body.method === 'string' ? body.method : 'unknown';
+            const params = objectValue(body.params);
+            if (typeof params?.name === 'string') entry.mcpTool = params.name;
+          }
           if (input && typeof input.markup === 'string') entry.reqMarkup = input.markup;
           const format = CONTENT_TIERS.find((k) => input && input[k] !== undefined);
           if (format) entry.reqFormat = format;

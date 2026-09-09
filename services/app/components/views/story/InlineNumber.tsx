@@ -13,7 +13,8 @@
 import { numberFormatter } from '@/lib/story/number-format';
 import { refName, type TableResult } from '@/lib/story/dataflow';
 
-export type NumberAgg = 'sum' | 'avg' | 'min' | 'max' | 'count' | 'first';
+import type { NumberAgg } from '@/lib/story/number-aggregation';
+export type { NumberAgg } from '@/lib/story/number-aggregation';
 
 export interface InlineNumberProps {
   /** `"$name"` — a table declared in the document. */

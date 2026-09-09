@@ -304,3 +304,22 @@ describe('writtenArtifactIds', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 });
+
+describe('MCP operation-aware metrics', () => {
+  it('counts a tool error despite HTTP 200 and excludes it from successful writes', () => {
+    const base = {t:1,ms:1,method:'POST',path:'/mcp',status:200,ua:null,auth:null,error:null} as const;
+    const entries = [
+      {...base,mcpMethod:'initialize'},
+      {...base,mcpMethod:'tools/call',mcpTool:'get_artifact'},
+      {...base,mcpMethod:'tools/call',mcpTool:'edit_artifact',mcpError:'invalid_jsx',reqMarkup:'bad'},
+      {...base,mcpMethod:'tools/call',mcpTool:'edit_artifact',reqMarkup:'<h1>Good</h1>'},
+    ];
+    const metrics = ledgerMetrics(entries);
+    expect(metrics.writeAttempts).toBe(2);
+    expect(metrics.firstError).toBe('invalid_jsx');
+    expect(metrics.publishedFirstTry).toBe(false);
+    expect(documentWrites(entries)).toBe(1);
+    expect(ledgerRows(entries)).toContainEqual({metric:'mcp_errors',value:1});
+    expect(ledgerRows(entries)).toContainEqual({metric:'operation_errors',value:1});
+  });
+});

@@ -68,6 +68,21 @@ export function wrapRunAs(inv: HarnessInvocation, user: string, resolve: (cmd: s
   return { ...inv, argv: ['sudo', '-n', '-u', user, '-E', '--', exe, ...rest] };
 }
 
+/** macOS children inherit this kernel-enforced denial, including shell tools and symlink reads. */
+export function wrapCheckoutSandbox(argv: string[], roots: string[], platform = process.platform): string[] {
+  if (platform !== 'darwin') throw new Error('Checkout isolation requires --run-as on this platform; refusing an unisolated eval.');
+  const paths = [...new Set(roots.flatMap((root) => [path.resolve(root), fs.realpathSync(root)]))];
+  const profile = `(version 1) (allow default) (deny file-read* file-write* ${paths.map((p) => `(subpath ${JSON.stringify(p)})`).join(' ')})`;
+  return ['/usr/bin/sandbox-exec', '-p', profile, ...argv];
+}
+
+/** Sibling worktrees contain the same implementation and must be hidden too. */
+export function checkoutIsolationRoots(repoRoot: string): string[] {
+  const result = spawnSync('git', ['worktree', 'list', '--porcelain', '-z'], { cwd: repoRoot, encoding: 'utf8' });
+  if (result.status !== 0) throw new Error('Cannot enumerate checkout worktrees; refusing an unisolated eval.');
+  return [...new Set([repoRoot, ...result.stdout.split('\0').filter((line) => line.startsWith('worktree ')).map((line) => line.slice(9))])].filter((root) => fs.existsSync(root));
+}
+
 /**
  * Hand the other user the directories it must WRITE: its workspace and its
  * config home. The driver prepares both as ITSELF (a harness's login file is
@@ -179,6 +194,9 @@ export function prepareRunAsDirs(opts: { workspaceRoot?: string; cwd: string; ho
 export function handOverRunAsDirs(user: string, dirs: RunAsDirs, exec: (argv: string[]) => void): void {
   for (const dir of dirs.traverse) grantMode(dir, 0o011);
   for (const file of dirs.read ?? []) grantMode(file, 0o004);
+  // chown keeps the driver's group. The driver must still chdir into the
+  // cwd before execing sudo, even when the workspace was created under umask 077.
+  for (const dir of dirs.chown) grantMode(dir, 0o010);
   if (dirs.chown.length > 0) exec(chownArgv(user, dirs.chown));
 }
 
@@ -196,7 +214,7 @@ function resolveOnPath(cmd: string, PATH: string | undefined): string {
   throw new Error(`--run-as: cannot find "${cmd}" on PATH`);
 }
 
-export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string; baseEnv: Record<string, string | undefined>; timeoutMs: number; stdoutPath: string; stderrPath: string; maxStdoutBytes?: number; runAs?: string; homeDir?: string; workspaceRoot?: string; exec?: (argv: string[]) => void }): Promise<SpawnResult> {
+export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string; baseEnv: Record<string, string | undefined>; timeoutMs: number; stdoutPath: string; stderrPath: string; maxStdoutBytes?: number; runAs?: string; homeDir?: string; workspaceRoot?: string; checkoutRoots?: string[]; exec?: (argv: string[]) => void }): Promise<SpawnResult> {
   const cap = opts.maxStdoutBytes ?? DEFAULT_MAX_STDOUT_BYTES;
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(opts.baseEnv)) if (v !== undefined && !inv.unsetEnv.includes(k)) env[k] = v;
@@ -213,6 +231,19 @@ export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string;
   // 33778294018). Unconditional: it is the right environment with or without the switch.
   env.PWD = opts.cwd;
   delete env.OLDPWD;
+  // npm injects the driver's package and checkout paths even after cwd/HOME change.
+  // They are irrelevant to a staged task and prompt configuration-hunting agents
+  // to search the protected checkout. Keep runtime binaries, drop npm metadata
+  // and PATH entries underneath the denied roots.
+  for (const key of Object.keys(env)) {
+    if (/^npm_/i.test(key) || key === 'INIT_CWD' || key === 'NODE_PATH') delete env[key];
+  }
+  if (env.PATH && opts.checkoutRoots?.length) {
+    env.PATH = env.PATH.split(path.delimiter).filter((entry) => !opts.checkoutRoots!.some((root) => {
+      const relative = path.relative(path.resolve(root), path.resolve(entry));
+      return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+    })).join(path.delimiter);
+  }
 
   // The privileged half of the switch — the one step that needs a sudoer. Injectable so the hand-over and
   // the reclaim can be asserted as argv, with no sudo anywhere in the suite.
@@ -221,8 +252,7 @@ export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string;
     if (done.status !== 0) throw new Error(`--run-as ${opts.runAs}: \`${argv.join(' ')}\` exited ${String(done.status ?? done.signal ?? done.error?.message)}`);
   });
 
-  // No `--run-as`, no sudo: a laptop run is untouched by any of this. Only argv changes —
-  // the line filter, the redaction list and the environment are the same launch either way.
+  // CI uses a separate account; local macOS runs deny checkout access with Seatbelt.
   let argv = inv.argv;
   // What the driver has LENT the agent, and therefore owes itself back once the child is done.
   let lent: RunAsDirs | undefined;
@@ -236,6 +266,7 @@ export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string;
 
   try {
     if (opts.runAs) argv = wrapRunAs(inv, opts.runAs, (cmd) => resolveOnPath(cmd, env.PATH)).argv;
+    else if (opts.checkoutRoots?.length) argv = wrapCheckoutSandbox(argv, opts.checkoutRoots);
 
     const secrets = (inv.redact ?? []).filter((s) => s.length > 0);
     const scrub = (text: string) => scrubSecrets(text, secrets);
@@ -296,7 +327,10 @@ export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string;
     }, opts.timeoutMs);
 
     const exitCode = await new Promise<number | null>((resolve) => {
-      child.on('error', () => resolve(null));
+      child.on('error', (error) => {
+        errOut.write(scrub(`Process launch failed: ${error.message}\n`));
+        resolve(null);
+      });
       child.on('exit', (code: number | null) => resolve(code));
     });
     clearTimeout(timer);

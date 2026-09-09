@@ -1,7 +1,7 @@
 ---
 name: publishing
 description: >-
-  The HTTP API beyond the brief: replace, the edit_id protocol, folders, fork, read back, list, errors. Read when a call is refused or a human may be editing the same page.
+  HTTP edits, folders and errors. Read after a refused call or concurrent human edit.
 ---
 ## Read first
 
@@ -15,10 +15,11 @@ description: >-
 - Datasets, images and chart recipes are their own artifacts, created first:
   [datasets](publishing-datasets.md). Also [annotations](publishing-annotations.md)
   and [mcp](publishing-mcp.md).
+- Optional computed-result checks: [query verification](publishing-query.md).
 
 ## Contents
 
-Rules · Endpoints · Errors.
+Endpoints · Errors.
 
 ## Rules every document lives by
 
@@ -29,9 +30,8 @@ writes), `/a/<id>/resolve` (files), `/geojson/`, `blob:` and `data:`. A CDN `<sc
 other `fetch`/XHR is a 400 at publish. CSS and JS live in `<Helmet>` only.
 Max [[ maxContentBytes ]] bytes.
 
-Every BODY element has a persistent `id`; storing generates omitted IDs.
-Preserve this lifetime identity in edits/replacements; move
-the node with the same ID and never reuse a removed ID for different content.
+Every BODY element has a persistent `id`; omitted IDs are generated.
+Move nodes with the same id for their lifetime; never reuse removed IDs.
 
 ## Endpoints
 
@@ -144,8 +144,7 @@ GET [[ base ]]/api/artifacts/<id>
 GET [[ base ]]/api/artifacts → 200 { "artifacts": [ { "id", "url", "title", "format", ... } ] }
 ```
 
-EVERYTHING you own — datasets, images, recipes and folders are artifacts too;
-no separate datasets endpoint.
+Lists all owned artifacts, including datasets; no separate datasets endpoint.
 
 ## Errors
 
@@ -156,7 +155,7 @@ no separate datasets endpoint.
 | 400 | `invalid_parent` / `folder_retired` / `not_forkable` | `parent_id` is the id of a FOLDER you own, outside what you are moving, under 6 deep — one code, since naming which would say whether an id exists. `folder` paths are gone; a folder is not forkable |
 | 401 | `unauthorized` | Token wrong/revoked — ask your user, don't retry |
 | 403 | `quota_exceeded` | At its cap — deleting frees nothing; use another token |
-| 404 | `not_found` | No artifact with that id is reachable by your token |
+| 404 | `not_found` | Unknown route or inaccessible artifact; check the route and `docs` hint first |
 | 409 | `version_conflict` | `expectedVersion` is stale — re-read, merge, retry (`400 invalid_expected_version`: it must be a number) |
 | 400 | `not_editable` | A data tier — PUT it whole; a folder has no content |
 | 400 | `image_fetch_failed` | An `https://` image would not import (unreachable, not an image, private address, over the cap) — `details` names it |

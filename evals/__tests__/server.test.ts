@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import net from 'node:net';
 import { describe, it, expect } from 'vitest';
 import { devOutboxPath, serverDataDir, serverEnv, serverPorts, startServer } from '../lib/server';
 
@@ -93,6 +94,22 @@ describe('serverEnv', () => {
  * its dependencies, so there are no partially-traced packages to symlink over.
  */
 describe('the build a leg boots', () => {
+  it('refuses an occupied port instead of treating a leftover server as the new build', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eval-server-'));
+    fs.mkdirSync(path.join(root, 'dist'));
+    fs.writeFileSync(path.join(root, 'dist/proxy-server.mjs'), 'throw new Error("must not spawn")');
+    const occupied = net.createServer();
+    await new Promise<void>((resolve) => occupied.listen(0, '127.0.0.1', resolve));
+    try {
+      const port = (occupied.address() as net.AddressInfo).port;
+      await expect(startServer({ repoRoot: root, env: { APP__PORT: String(port) }, logPath: path.join(root, 'log') })).rejects.toThrow(/refusing to reuse an existing server/);
+      expect(fs.existsSync(path.join(root, 'log'))).toBe(false);
+    } finally {
+      await new Promise<void>((resolve) => occupied.close(() => resolve()));
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('names the bundled server, and says so when it is not built', async () => {
     const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'eval-server-'));
     await expect(
