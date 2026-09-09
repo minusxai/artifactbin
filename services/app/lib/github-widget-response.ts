@@ -8,7 +8,7 @@ const bootstrap = `const options=new URLSearchParams(location.hash.slice(1));
 const link=document.querySelector('a');
 link.setAttribute('data-show-count',options.get('data-show-count')==='true'?'true':'false');
 link.setAttribute('data-color-scheme',options.get('data-color-scheme')==='dark'?'dark':'light');
-const report=()=>{const widget=document.body.querySelector('span');if(!widget)return;const r=widget.getBoundingClientRect();if(r.width>0&&r.height===28)parent.postMessage({type:'github-widget-size',width:r.width,height:r.height},'*');};
+const report=()=>{const widget=document.body.querySelector('span');if(!widget)return;const r=widget.getBoundingClientRect();if(r.width>0&&r.height>0)parent.postMessage({type:'github-widget-size',width:r.width,height:r.height},'*');};
 const observer=new ResizeObserver(report);observer.observe(document.body);
 new MutationObserver(()=>{const widget=document.body.querySelector('span');if(widget)observer.observe(widget);report();}).observe(document.body,{childList:true});
 addEventListener('message',event=>{if(event.source===parent&&event.data==='github-widget-measure')report();});`;

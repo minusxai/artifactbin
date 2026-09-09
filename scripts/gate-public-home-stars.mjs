@@ -130,10 +130,40 @@ try {
   assert((await created).ok(), 'the early click reaches the actual create handler');
   await early.close();
   console.log('ok early Create gesture waits for the interactive control and creates a document');
+  // Exercise the actual wrapper/parent handshake with fractional layout metrics,
+  // independently of the host runner's display scaling or browser defaults.
+  const fractional = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await fixture(fractional);
+  await fractional.addInitScript(() => {
+    if (location.pathname !== '/-/github-star') return;
+    const measure = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function () {
+      const rect = measure.call(this);
+      if (this.tagName === 'SPAN' && this.parentElement === document.body) {
+        return new DOMRect(rect.x, rect.y, rect.width + 0.25, 28.000002);
+      }
+      return rect;
+    };
+  });
+  const zoomPage = await fractional.newPage();
+  await zoomPage.goto(base, { waitUntil: 'domcontentloaded' });
+  const zoomFrame = zoomPage.locator('header [data-mx-github-star]:visible iframe');
+  await zoomPage.frameLocator('header [data-mx-github-star]:visible iframe').getByRole('link', { name: '1234 stargazers on GitHub' }).waitFor();
+  assert.equal(await zoomFrame.evaluate(e => e.style.width), '113px');
+  assert.equal(await zoomFrame.evaluate(e => e.style.height), '29px');
+  assert.equal(await zoomFrame.evaluate(e => e.parentElement.style.height), '29px');
+  await zoomPage.setViewportSize({ width: 1100, height: 750 });
+  await zoomPage.reload({ waitUntil: 'domcontentloaded' });
+  await zoomPage.frameLocator('header [data-mx-github-star]:visible iframe').getByRole('link', { name: '1234 stargazers on GitHub' }).waitFor();
+  assert.equal(await zoomFrame.evaluate(e => e.style.visibility), 'visible');
+  await fractional.close();
+  console.log('ok fractional zoom geometry survives initial load, viewport changes and reload without stuck fallback');
   const blocked = await browser.newContext();
-  await blocked.route(/^https:\/\/buttons\.github\.io\/buttons\.html(?:\?|$)/, route => route.abort());
+  await blocked.route('https://buttons.github.io/buttons.js', route => route.abort());
   const failurePage = await blocked.newPage();
+  const vendorFailed = failurePage.waitForEvent('requestfailed', request => request.url() === 'https://buttons.github.io/buttons.js');
   await failurePage.goto(base, { waitUntil: 'domcontentloaded' });
+  await vendorFailed;
   const fallback = failurePage.getByRole('link', { name: 'Open artifactbin on GitHub (fallback link)' }).filter({ visible: true });
   await fallback.waitFor();
   assert.equal(await fallback.getAttribute('href'), 'https://github.com/minusxai/artifactbin');

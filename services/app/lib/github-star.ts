@@ -24,10 +24,15 @@ export function wireGithubWidgetTheme(root: HTMLElement): () => void {
   const resize = (event: MessageEvent) => {
     if (event.origin !== 'null' || event.data?.type !== 'github-widget-size') return;
     const { width, height } = event.data;
-    if (typeof width !== 'number' || !Number.isFinite(width) || width < 40 || width > 300 || height !== 28) return;
+    // Browser zoom rounds CSS geometry to fractional values. Validate a bounded
+    // rectangle, not an exact nominal pixel height, and round UP to avoid clipping.
+    if (typeof width !== 'number' || !Number.isFinite(width) || width < 40 || width > 300
+      || typeof height !== 'number' || !Number.isFinite(height) || height < 16 || height > 40) return;
     for (const frame of root.querySelectorAll<HTMLIFrameElement>('iframe')) {
       if (new URL(frame.src).pathname !== GITHUB_WIDGET_URL || event.source !== frame.contentWindow) continue;
       frame.style.width = `${Math.ceil(width)}px`;
+      frame.style.height = `${Math.ceil(height)}px`;
+      frame.parentElement!.style.height = `${Math.ceil(height)}px`;
       frame.style.visibility = 'visible';
       const fallback = frame.nextElementSibling as HTMLElement | null;
       if (fallback) fallback.style.display = 'none';
@@ -37,6 +42,8 @@ export function wireGithubWidgetTheme(root: HTMLElement): () => void {
   const frames = [...root.querySelectorAll<HTMLIFrameElement>('iframe')].filter(frame => new URL(frame.src).pathname === GITHUB_WIDGET_URL);
   const measure = () => { for (const frame of frames) frame.contentWindow?.postMessage('github-widget-measure', '*'); };
   for (const frame of frames) frame.addEventListener('load', measure);
+  window.addEventListener('resize', measure);
+  window.addEventListener('pageshow', measure);
   measure();
   const sync = () => {
     for (const frame of root.querySelectorAll<HTMLIFrameElement>('iframe')) {
@@ -59,6 +66,7 @@ export function wireGithubWidgetTheme(root: HTMLElement): () => void {
       if (fallback) fallback.style.display = 'inline-flex';
       frame.setAttribute('src', url.href);
     }
+    measure();
   };
   const observer = new MutationObserver(sync);
   let ancestor: HTMLElement | null = root;
@@ -71,5 +79,7 @@ export function wireGithubWidgetTheme(root: HTMLElement): () => void {
   return () => {
     observer.disconnect(); window.removeEventListener('message', resize);
     for (const frame of frames) frame.removeEventListener('load', measure);
+    window.removeEventListener('resize', measure);
+    window.removeEventListener('pageshow', measure);
   };
 }
