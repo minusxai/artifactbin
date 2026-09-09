@@ -35,9 +35,8 @@ components (`Card`, `Tabs`, `Grid`, `SlideDeck`, `Icon`) and data embeds
 (`Question`, `DataTable`, `Number`). Style parent elements with Tailwind
 `className`; inline `style=` is rejected.
 
-**HTML/component names only: guess rather than look up.** An unknown HTML tag is refused with a 400
-carrying the allowed set (`allowed_html_tags`), an unknown component the
-registry: a wrong guess costs one round trip. One exception:
+**HTML/component names only: guess rather than look up.** Unknown tags return
+400 with `allowed_html_tags`; unknown components return the registry. Exception:
 `[[ refusedTags | join(' ') ]]` are refused with NO list — never guess them
 (`<form>` and raw `<iframe>` most often). Parent CSS and declarations live
 in ONE `<Helmet>`, which also holds `<title>`:

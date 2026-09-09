@@ -19,7 +19,7 @@ description: >-
 
 ## Contents
 
-Rules · Endpoints · Errors.
+Endpoints · Errors.
 
 ## Rules every document lives by
 
@@ -31,7 +31,7 @@ other `fetch`/XHR is a 400 at publish. CSS and JS live in `<Helmet>` only.
 Max [[ maxContentBytes ]] bytes.
 
 Every BODY element has a persistent `id`; omitted IDs are generated.
-Preserve IDs when editing or moving nodes; never reuse removed IDs.
+Move nodes with the same id for their lifetime; never reuse removed IDs.
 
 ## Endpoints
 
@@ -144,8 +144,7 @@ GET [[ base ]]/api/artifacts/<id>
 GET [[ base ]]/api/artifacts → 200 { "artifacts": [ { "id", "url", "title", "format", ... } ] }
 ```
 
-EVERYTHING you own — datasets, images, recipes and folders are artifacts too;
-no separate datasets endpoint.
+Lists all owned artifacts, including datasets; no separate datasets endpoint.
 
 ## Errors
 
