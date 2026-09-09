@@ -56,7 +56,7 @@ export interface Args {
   /**
    * Run every harness process as this unix user instead of the driver's own —
    * the CI runner's isolation account, which cannot read this checkout. Without
-   * it no sudo is ever invoked, so a laptop run is unchanged (`lib/spawn`).
+   * it macOS uses sandbox-exec; other platforms refuse unisolated runs (`lib/spawn`).
    */
   runAs?: string;
 }

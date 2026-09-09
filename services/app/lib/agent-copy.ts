@@ -12,13 +12,13 @@
  *                   publish, so the orphaned document is recoverable. The docs' `[[ claim ]]` renders from it.
  */
 export function anonymousPaste(base: string, artifactId: string, token: string): string {
-  return `Help me edit my artifact at ${artifactUrl(base, artifactId)} using this token: ${token}`;
+  return `Help me edit my artifact at ${artifactUrl(base, artifactId)} using this token: ${token}. ${docsHint(base)}`;
 }
 export function ownedPaste(base: string, artifactId: string): string {
-  return `Help me edit my artifact at ${artifactUrl(base, artifactId)} using your token`;
+  return `Help me edit my artifact at ${artifactUrl(base, artifactId)} using your token. ${docsHint(base)}`;
 }
 export function existingPaste(base: string, artifactId: string): string {
-  return `Help me edit my artifact at ${artifactUrl(base, artifactId)}`;
+  return `Help me edit my artifact at ${artifactUrl(base, artifactId)}. ${docsHint(base)}`;
 }
 export function startLinkPaste(base: string, artifactId: string, secret: string): string {
   return `Help me edit my artifact. Follow instructions at ${artifactUrl(base, artifactId)}/start?k=${secret}`;
@@ -36,3 +36,6 @@ export function anonymousClaimRelay(base: string, artifactId: string): string {
 
 const artifactUrl = (base: string, artifactId: string): string =>
   `${base.replace(/\/$/, '')}/a/${artifactId}`;
+
+const docsHint = (base: string): string =>
+  `Read ${base.replace(/\/$/, '')}/docs/artifactbin/SKILL.md for the HTTP API. No local SDK or CLI is needed.`;

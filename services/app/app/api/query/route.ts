@@ -33,15 +33,16 @@ export async function POST(request: Request) {
   const body = await readJson(request);
   if (!body) return json({ error: 'invalid_json' }, 400);
   if (typeof body.markup !== 'string') return json({ error: 'markup_required' }, 400);
-  const parsed = parseQueryRequest(body);
+  const { markup, ...queryRequest } = body;
+  const parsed = parseQueryRequest(queryRequest);
   if (parsed instanceof Response) return parsed;
 
   // A malformed Helmet cannot be run: report the grammar, as publish would.
-  const tree = parseJsx(body.markup);
+  const tree = parseJsx(markup);
   if (!tree.ok) return json({ error: 'invalid_jsx', details: [{ message: `JSX syntax error: ${tree.error}` }] }, 400);
   const helmetErrors = validateHelmet(tree.nodes);
   if (helmetErrors.length) return json({ error: 'invalid_jsx', details: helmetErrors }, 400);
 
-  const flow = await runDocumentDataflow(body.markup, datasetResolverForActor(actor), parsed);
+  const flow = await runDocumentDataflow(markup, datasetResolverForActor(actor), parsed);
   return json({ tables: flow?.state.tables ?? {}, errors: flow?.state.errors ?? {} });
 }

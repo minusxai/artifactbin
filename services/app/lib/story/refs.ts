@@ -18,6 +18,7 @@ import { MUTATION_TAG, QUERY_TAG, carriesRef, parseMutationDecl, parseQueryDecl,
 import type { DatasetColumn } from './data-tiers';
 import type { VizRecipeBinding, VizRecipeContent } from '@/lib/validation/atlas-schemas';
 import { isNumberFormat, NUMBER_FORMAT_HINT } from './number-format';
+import { NUMBER_AGGS } from './number-aggregation';
 
 export interface RefUse {
   id: string;
@@ -416,6 +417,16 @@ export function findBrokenEmbeds(source: string): ValidationError[] {
   walk(parsed.nodes, (el) => {
     const rule = EMBED_DATA_PROP[el.tag];
     if (!rule) return;
+    if (el.tag === 'Number') {
+      const agg = el.attributes.find((a) => a.name === 'agg');
+      const aggValue = agg?.value.static ? agg.value.json : undefined;
+      if (agg && !NUMBER_AGGS.some((value) => value === aggValue)) {
+        errors.push({
+          message: `<Number agg>: expected one of ${NUMBER_AGGS.join(', ')}. To display the latest row, order the Query by date descending and LIMIT 1, then use agg="first".`,
+          tag: el.tag, attr: 'agg', start: agg.start, end: agg.end,
+        });
+      }
+    }
     // A number format spec d3 cannot parse THROWS at render — inside SSR that is a 500 for every
     // render of the document, from a publish that succeeded. Pi wrote format=",0" on production.
     for (const bad of invalidNumberFormats(el)) {

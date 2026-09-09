@@ -14,6 +14,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import net from 'node:net';
 
 export interface Ports { server: number; proxy: number }
 
@@ -93,6 +94,14 @@ export interface RunningServer { url: string; stop(): Promise<void> }
 export async function startServer(opts: { repoRoot: string; env: Record<string, string>; logPath: string; readyTimeoutMs?: number }): Promise<RunningServer> {
   const serverJs = path.join(opts.repoRoot, 'dist', 'proxy-server.mjs');
   if (!fs.existsSync(serverJs)) throw new Error(`no prod build at ${path.join('dist', 'proxy-server.mjs')} (${serverJs}) — run \`npm run build\` first`);
+
+  // A leftover server can answer /docs before the new child's EADDRINUSE exit
+  // arrives. Never mistake that process (and its old build/database) for this leg.
+  await new Promise<void>((resolve, reject) => {
+    const probe = net.createServer();
+    probe.once('error', () => reject(new Error(`eval server port ${opts.env.APP__PORT} is unavailable; refusing to reuse an existing server`)));
+    probe.listen(Number(opts.env.APP__PORT), '127.0.0.1', () => probe.close((err) => err ? reject(err) : resolve()));
+  });
 
   const log = fs.openSync(opts.logPath, 'a');
   const stdio: ['ignore', number, number] = ['ignore', log, log];

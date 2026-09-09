@@ -11,6 +11,9 @@ template and stubbed section headings. Share its `[[ base ]]/a/<id>` URL immedia
 labelled as still filling in. Then read the references and fill sections using
 targeted `edit_artifact` calls. Edits reach open readers live.
 
+Use task-local scratch files or `mktemp -d`; after permission errors, change the
+parent directory. No local SDK or CLI is needed.
+
 [[ publishExample ]]
 
 Writes return `markup_changed` and canonical markup when formatting changed;
@@ -31,7 +34,7 @@ components (`Card`, `Tabs`, `Grid`, `SlideDeck`, `Icon`) and data embeds
 (`Question`, `DataTable`, `Number`). Style parent elements with Tailwind
 `className`; inline `style=` is rejected.
 
-**Guess rather than look up.** An unknown HTML tag is refused with a 400
+**HTML/component names only: guess rather than look up.** An unknown HTML tag is refused with a 400
 carrying the allowed set (`allowed_html_tags`), an unknown component the
 registry: a wrong guess costs one round trip. One exception:
 `[[ refusedTags | join(' ') ]]` are refused with NO list — never guess them
@@ -42,12 +45,9 @@ in ONE `<Helmet>`, which also holds `<title>`:
 <Helmet><title>What the tab shows</title><style>{`:root { --primary: #ff6a1f }`}</style></Helmet>
 ```
 
-**A document is a CONTAINER, and a reader may be on a phone (390px).** Use
-container prefixes — `@2xl:`, `@3xl:` — never the viewport ones
-(`sm:`/`md:`/`lg:` do not apply). Multi-column layouts start at
-one column and widen: `grid-cols-1 @2xl:grid-cols-3`, and so does display
-type — `text-4xl @2xl:text-6xl`, never a bare `text-6xl` (60px type breaks a
-phone). Never a fixed pixel width.
+**Design for a 390px CONTAINER.** Use `@2xl:`, `@3xl:`, not viewport
+`sm:`/`md:`/`lg:`. Start with `grid-cols-1 @2xl:grid-cols-3` and
+`text-4xl @2xl:text-6xl`; no fixed pixel widths or bare `text-6xl`.
 
 Parent markup is self-contained: no CDN scripts or external stylesheets.
 For custom DOM/canvas/JS, use managed `<Iframe>` ([markup-iframe](references/markup-iframe.md));
@@ -102,10 +102,13 @@ text flush to the viewport edge).
 
 [[ checkWork ]]
 
-**Prose and a one-dataset chart are fully covered above**. Each ask has ONE file under
-`references/` ([[ docsIndexHint ]]):
+For optional result checks, read `references/publishing-query.md`. Never guess
+HTTP routes; test one request before batching. After 404s, check the route first.
+
+More under `references/` ([[ docsIndexHint ]]):
 | when the ask involves | read |
 |---|---|
+| optional query result verification | `publishing-query.md` |
 | API — replace, `expectedVersion`, visibility, folders, trash/restore, errors | `publishing.md` |
 | tokens — expiry, saved config, claiming, a 401 | `publishing-auth.md` |
 | Postgres connections, multi-table datasets, SQL models | `databases.md` |

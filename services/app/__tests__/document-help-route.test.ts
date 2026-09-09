@@ -17,6 +17,18 @@ const BASE = 'http://localhost:3000';
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 describe('GET /a/:id (the document itself)', () => {
+  it('gives route-specific guidance for a guessed query API without claiming the document exists', async () => {
+    const app = createAppServer();
+    for (const method of ['GET', 'POST']) {
+      const res = await app.request(`${BASE}/api/artifacts/zzzzzz/query`, { method });
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({
+        error: 'not_found', docs: `${BASE}/docs/artifactbin/references/publishing-query.md`,
+        details: [expect.stringContaining('/a/<documentId>/query')],
+      });
+    }
+  });
+
   it('carries Link: <base>/docs; rel="help" and the head pointer, on the request base', async () => {
     const t = await mintToken('t');
     const row = await createArtifact(t.id, null, { format: 'markup', content: '', source: '<div>hi</div>', meta: {}, title: 'hi', description: null });

@@ -38,7 +38,7 @@ import { taskCost } from './lib/price';
 import { BASELINE_FLOW, BASELINE_PROMPT, BASELINE_ROWS_ID, measureBaseline } from './lib/baseline';
 import { ledgerMetrics, ledgerRows, parseLedger, scoredArtifactId, writtenArtifactIds } from './lib/ledger';
 import { adapterFor } from './lib/harness';
-import { runInvocation } from './lib/spawn';
+import { runInvocation, checkoutIsolationRoots } from './lib/spawn';
 import { countCheckoutReads } from './lib/local-reads';
 import { RunRecorder } from './lib/rows';
 import { devOutboxPath, serverDataDir, serverEnv, serverPorts, startServer } from './lib/server';
@@ -63,6 +63,7 @@ import { VIEWPORT_WIDTH_PX } from './lib/image-variants';
 
 const EVALS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(EVALS_DIR, '..');
+const CHECKOUT_ROOTS = checkoutIsolationRoots(REPO_ROOT);
 
 
 function loadJson<T>(file: string, parse: (v: unknown) => T): T {
@@ -191,7 +192,7 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
       ? materializePlugin(path.join(baseDir, 'plugin'), config.deployment ?? productUrl, actionTransport(leg.mode.run) === 'api' ? 'curl' : 'mcp')
       : undefined;
     const baseline = await measureBaseline({
-      leg, adapter: adapterFor(leg.harness), apiKey, dir: baseDir, plugin: basePlugin, timeoutMs: config.run.timeoutMs, runAs,
+      leg, adapter: adapterFor(leg.harness), apiKey, dir: baseDir, plugin: basePlugin, timeoutMs: config.run.timeoutMs, runAs, checkoutRoots: CHECKOUT_ROOTS,
     });
     const brec = new RunRecorder(legDir, { label: leg.label, target: productUrl, harness: leg.harness, model: leg.model, startedAt, mode: leg.mode.run }, BASELINE_ROWS_ID);
     brec.flow(BASELINE_FLOW, `${BASELINE_PROMPT} — the harness's fixed context, paid again on EVERY turn of every task below.`, { graded: false });
@@ -365,6 +366,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     // goes with it: it is a 0700 mkdtemp directory the other user could not otherwise traverse.
     homeDir,
     workspaceRoot: wsRoot,
+    checkoutRoots: CHECKOUT_ROOTS,
     ...(r.runAs ? { runAs: r.runAs } : {}),
   });
   const result = adapter.reduce(spawned.stdout);
@@ -445,7 +447,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // Turns spent reading THIS CHECKOUT — the skills a fetched_skill run is meant to discover over the
   // wire, and the task's own grading rubric. Anything above zero invalidates the column (`lib/local-reads`).
   // Null, like `docsReadCalls`, when the harness emitted no tool telemetry: nothing was observed either way.
-  const checkoutReads = result.docsReadCalls === null ? null : countCheckoutReads(result.invocations, [REPO_ROOT]);
+  const checkoutReads = result.docsReadCalls === null ? null : countCheckoutReads(result.invocations, CHECKOUT_ROOTS);
   rec.record(task.id, 'checkout_reads', checkoutReads);
   rec.record(task.id, 'tokens_in', result.tokens ? result.tokens.input + result.tokens.cacheRead + result.tokens.cacheWrite : null);
   rec.record(task.id, 'tokens_out', result.tokens ? result.tokens.output : null);

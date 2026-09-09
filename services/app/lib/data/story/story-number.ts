@@ -8,7 +8,7 @@ import { parseJsx } from '@/lib/jsx';
 import { questionTable } from './story-viz';
 
 /** The aggregations InlineNumber computes; 'first' is its default when the attr is absent. */
-export const NUMBER_AGGS = ['first', 'sum', 'avg', 'min', 'max', 'count'] as const;
+export { NUMBER_AGGS } from '@/lib/story/number-aggregation';
 
 /** What the Number panel renders from: the `<Number>` at `astPath`, or null if there is none. */
 export interface NumberEmbedBinding {

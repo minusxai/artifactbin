@@ -154,8 +154,15 @@ const SPA_PATHS = /^(\/|\/login|\/account|\/chat|\/assets|\/trash|\/tokens|\/doc
  * (`page()` below): measured on production, `/.well-known/deepseek` and
  * `/help` handed a fetch tool the 891-byte SPA shell and no way on.
  */
-const apiNotFound = (c: { req: { raw: Request } }) =>
-  json({ error: 'not_found', docs: `${baseUrl(c.req.raw)}/docs` }, 404, { 'Cache-Control': 'no-store' });
+const apiNotFound = (c: { req: { raw: Request } }) => {
+  const base = baseUrl(c.req.raw);
+  const guessedQuery = /^\/api\/artifacts\/[^/]+\/query\/?$/.test(new URL(c.req.raw.url).pathname);
+  return json({
+    error: 'not_found',
+    docs: `${base}/docs${guessedQuery ? '/artifactbin/references/publishing-query.md' : ''}`,
+    ...(guessedQuery ? { details: ['This route does not exist. Stored document queries use /a/<documentId>/query and select declared queries with {"only":["query_name"]}; they do not accept SQL. See docs for methods and access rules.'] } : {}),
+  }, 404, { 'Cache-Control': 'no-store' });
+};
 
 export function createAppServer(opts: AppServerOptions = {}): Hono {
   const app = new Hono();

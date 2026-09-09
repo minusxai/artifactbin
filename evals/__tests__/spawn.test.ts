@@ -10,7 +10,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { chownArgv, handOverRunAsDirs, prepareRunAsDirs, readableForAgent, reclaimRunAsDirs, runInvocation, wrapRunAs } from '../lib/spawn';
+import { spawnSync } from 'node:child_process';
+import { chownArgv, handOverRunAsDirs, prepareRunAsDirs, readableForAgent, reclaimRunAsDirs, runInvocation, wrapRunAs, wrapCheckoutSandbox, checkoutIsolationRoots } from '../lib/spawn';
 
 let dir: string;
 const paths = () => ({ stdoutPath: path.join(dir, 'transcript.jsonl'), stderrPath: path.join(dir, 'stderr.log') });
@@ -20,6 +21,51 @@ afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
 const node = (script: string) => ({ argv: ['node', '-e', script], env: {}, unsetEnv: [] });
 
 describe('runInvocation', () => {
+  it('protects the primary checkout and sibling worktrees, including paths with spaces', () => {
+    const repo = path.join(dir, 'repo');
+    const sibling = path.join(dir, 'sibling worktree');
+    fs.mkdirSync(repo);
+    const git = (...args: string[]) => {
+      const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8' });
+      expect(result.status, result.stderr).toBe(0);
+    };
+    git('init');
+    git('-c', 'user.name=Eval test', '-c', 'user.email=eval@example.test', '-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-m', 'test');
+    git('worktree', 'add', '--detach', sibling);
+    const roots = checkoutIsolationRoots(sibling).map((p) => fs.realpathSync(p));
+    expect(roots).toContain(fs.realpathSync(repo));
+    expect(roots).toContain(fs.realpathSync(sibling));
+  });
+
+  it('refuses an unisolated platform when checkout protection was requested', () => {
+    expect(() => wrapCheckoutSandbox(['node'], [dir], 'linux')).toThrow(/refusing an unisolated eval/);
+  });
+
+  it.skipIf(process.platform !== 'darwin')('blocks checkout reads and writes in descendants and through symlinks, while task files work', async () => {
+    const checkout = path.join(dir, 'checkout with spaces');
+    const cwd = path.join(dir, 'task');
+    fs.mkdirSync(checkout); fs.mkdirSync(cwd);
+    fs.writeFileSync(path.join(checkout, 'private.txt'), 'must not reach the agent');
+    fs.symlinkSync(checkout, path.join(cwd, 'alias'));
+    fs.writeFileSync(path.join(cwd, 'input.csv'), 'value\n1');
+    const script = `
+      const fs = require('node:fs'), cp = require('node:child_process');
+      for (const p of ${JSON.stringify([path.join(checkout, 'private.txt'), path.join(cwd, 'alias/private.txt')])}) {
+        try { fs.readFileSync(p); process.exit(10); } catch (e) { if (!['EPERM','EACCES'].includes(e.code)) throw e; }
+        const child = cp.spawnSync('/bin/cat', [p]);
+        if (child.status === 0) process.exit(11);
+      }
+      try { fs.writeFileSync(${JSON.stringify(path.join(checkout, 'new.txt'))}, 'bad'); process.exit(12); }
+      catch (e) { if (!['EPERM','EACCES'].includes(e.code)) throw e; }
+      fs.writeFileSync('output.csv', fs.readFileSync('input.csv'));
+      console.log('isolated');
+    `;
+    const result = await runInvocation(node(script), { cwd, checkoutRoots: [checkout], baseEnv: process.env, timeoutMs: 20_000, ...paths() });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe('isolated\n');
+    expect(fs.readFileSync(path.join(cwd, 'output.csv'), 'utf8')).toBe('value\n1');
+  });
+
   it('captures stdout to the transcript and returns it', async () => {
     const r = await runInvocation(node('console.log("a");console.log("b")'), { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
     expect(r.exitCode).toBe(0);

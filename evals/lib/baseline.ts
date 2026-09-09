@@ -51,6 +51,7 @@ export interface BaselineOptions {
   timeoutMs: number;
   /** Run the probe as this unix user — the same isolation the tasks get, so the floor is measured under it too. */
   runAs?: string;
+  checkoutRoots?: string[];
 }
 
 export async function measureBaseline(opts: BaselineOptions): Promise<Baseline> {
@@ -80,6 +81,7 @@ export async function measureBaseline(opts: BaselineOptions): Promise<Baseline> 
     // died on `EACCES … mkdir '<out>/baseline/home'` because only the directories BELOW its root changed hands.
     homeDir,
     workspaceRoot: opts.dir,
+    checkoutRoots: opts.checkoutRoots,
     ...(opts.runAs ? { runAs: opts.runAs } : {}),
   });
   const result = opts.adapter.reduce(spawned.stdout);
