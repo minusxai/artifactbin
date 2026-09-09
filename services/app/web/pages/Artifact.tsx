@@ -42,7 +42,7 @@ function ArtifactDocument({ id }: { id: string }) {
   const navigate = useNavigate();
   // The server may have inlined this page's data (server/app): render from it at once.
   const initialSearch = useRef(search).current;
-  const { data: page, error } = usePageData<Page>(`/api/page/artifact/${id}${initialSearch}`, { refreshMounted: false, pauseRevalidation: location.hash === '#edit', seed: () => takeBootstrap<Page>(window.location.pathname, 'artifact') });
+  const { data: page, error, refresh } = usePageData<Page>(`/api/page/artifact/${id}${initialSearch}`, { refreshMounted: false, pauseRevalidation: location.hash === '#edit', seed: () => takeBootstrap<Page>(window.location.pathname, 'artifact') });
   useEffect(() => {
     // The address heals to the canonical one — after the ACL, which the fetch already passed.
     if (page && !page.surface?.captureKey && page.canonical !== location.pathname) {
@@ -59,6 +59,7 @@ function ArtifactDocument({ id }: { id: string }) {
   }
   return (
     <ArtifactShell role={page.role}>
+      {error && <button aria-label="Retry artifact" disabled={location.hash === '#edit'} onClick={() => void refresh(true)}>Could not refresh artifact. {location.hash === '#edit' ? 'Finish editing to retry.' : 'Retry'}</button>}
       {/* The reader's `<Value>` selection travels in this page's own query
           string (`?$region=west`); the surface forwards its `$` params into
           the inline document runtime. From the ROUTER, never `window.location` —
