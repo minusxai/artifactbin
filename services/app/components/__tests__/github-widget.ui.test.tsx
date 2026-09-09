@@ -1,10 +1,36 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { cleanup, render } from '@testing-library/react';
+import { act, cleanup, render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { AppBar } from '../PageChrome';
 import { InlineReaderChrome } from '../InlineReaderChrome';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+it('tracks actual app and reader palettes separately and stops watching after unmount', async () => {
+  const style = document.createElement('style');
+  style.textContent = 'header [data-mx-github-star]{color-scheme:light}:root[data-theme="dark"] header [data-mx-github-star]{color-scheme:dark}';
+  document.head.append(style);
+  document.documentElement.dataset.theme = 'dark';
+  try {
+    const view = render(<MemoryRouter><AppBar /><InlineReaderChrome input={{ artifactId: null, title: null, author: null }} onAction={() => {}} /></MemoryRouter>);
+    const app = view.container.querySelector<HTMLIFrameElement>('header iframe')!;
+    const reader = view.container.querySelector<HTMLIFrameElement>('[data-mx-reader-chrome] iframe')!;
+    const chrome = reader.closest<HTMLElement>('[data-mx-reader-chrome]')!;
+    const scheme = (frame: HTMLIFrameElement) => new URLSearchParams(new URL(frame.src).hash.slice(1)).get('data-color-scheme');
+    expect(scheme(app)).toBe('dark');
+    expect(new URL(app.src).searchParams.get('theme')).toBe('dark');
+    expect(scheme(reader)).toBe('light'); // The actual reader bar is white despite the app's root theme.
+    await act(async () => { chrome.style.setProperty('--mx-reader-scheme', 'dark'); document.documentElement.dataset.theme = 'light'; });
+    expect(scheme(app)).toBe('light');
+    expect(scheme(reader)).toBe('dark');
+    expect(new URL(reader.src).searchParams.get('theme')).toBe('dark');
+    const write = vi.spyOn(reader, 'setAttribute');
+    await act(async () => { chrome.classList.add('unrelated-state'); });
+    expect(write).not.toHaveBeenCalled();
+    view.unmount();
+    await act(async () => { chrome.style.setProperty('--mx-reader-scheme', 'light'); });
+    expect(write).not.toHaveBeenCalled();
+  } finally { style.remove(); delete document.documentElement.dataset.theme; }
+});
 it('embeds the star-count vendor in sandboxed frames in both app and reader chrome without parent count requests', () => {
   const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ count: 3 })));
   vi.stubGlobal('fetch', fetch);

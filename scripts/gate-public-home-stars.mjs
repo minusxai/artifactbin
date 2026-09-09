@@ -7,7 +7,7 @@ const browser = await chromium.launch({ headless: true });
 // This browser-test fixture replaces the vendor document only here. It performs
 // a real sandboxed cross-origin fetch and popup navigation through the iframe.
 async function fixture(context) {
-  await context.route('https://buttons.github.io/buttons.html', route => route.fulfill({ contentType: 'text/html', body: `<!doctype html><style>body{margin:0;color-scheme:light dark}a{color:CanvasText;background:Canvas;display:inline-block;height:28px}</style><a href="https://github.com/minusxai/artifactbin" target="_blank" rel="noopener">Star <span></span></a><script>fetch('https://api.github.com/repos/minusxai/artifactbin').then(r=>r.json()).then(d=>{document.querySelector('span').textContent=d.stargazers_count;document.querySelector('a').setAttribute('aria-label',d.stargazers_count+' stargazers on GitHub')})</script>` }));
+  await context.route(/^https:\/\/buttons\.github\.io\/buttons\.html(?:\?|$)/, route => route.fulfill({ contentType: 'text/html', body: `<!doctype html><style>body{margin:0}a{color:CanvasText;background:Canvas;display:inline-block;height:28px}</style><a href="https://github.com/minusxai/artifactbin" target="_blank" rel="noopener">Star <span></span></a><script>const scheme=new URLSearchParams(location.hash.slice(1)).get('data-color-scheme');document.documentElement.style.colorScheme=scheme;document.body.style.backgroundColor=scheme==='dark'?'rgb(13,17,23)':'rgb(255,255,255)';fetch('https://api.github.com/repos/minusxai/artifactbin').then(r=>r.json()).then(d=>{document.querySelector('span').textContent=d.stargazers_count;document.querySelector('a').setAttribute('aria-label',d.stargazers_count+' stargazers on GitHub')})</script>` }));
   await context.route('https://api.github.com/repos/minusxai/artifactbin', route => route.fulfill({ headers: { 'access-control-allow-origin': '*' }, contentType: 'application/json', body: '{"stargazers_count":1234}' }));
   await context.route('https://github.com/minusxai/artifactbin', route => route.fulfill({ contentType: 'text/html', body: '<h1>Repository destination</h1>' }));
 }
@@ -93,7 +93,9 @@ try {
   await popup.close();
   for (const theme of ['light', 'dark']) {
     await page.evaluate(theme => document.documentElement.setAttribute('data-theme', theme), theme);
-    assert.equal(await star.locator('iframe').evaluate(el => getComputedStyle(el).colorScheme), theme);
+    const actualScheme = await star.evaluate(el => getComputedStyle(el.closest('[data-mx-reader-chrome]')).getPropertyValue('--mx-reader-scheme').trim());
+    assert.equal(new URLSearchParams(new URL(await star.locator('iframe').getAttribute('src')).hash.slice(1)).get('data-color-scheme'), actualScheme);
+    assert.equal(await widget.locator('body').evaluate(el => getComputedStyle(el).backgroundColor), actualScheme === 'dark' ? 'rgb(13, 17, 23)' : 'rgb(255, 255, 255)');
   }
   const starBox = await star.boundingBox();
   const likeBox = await page.locator('[data-mx-reader-action="like"]:visible').boundingBox();
@@ -126,7 +128,7 @@ try {
   await early.close();
   console.log('ok early Create gesture waits for the interactive control and creates a document');
   const blocked = await browser.newContext();
-  await blocked.route('https://buttons.github.io/buttons.html', route => route.abort());
+  await blocked.route(/^https:\/\/buttons\.github\.io\/buttons\.html(?:\?|$)/, route => route.abort());
   const failurePage = await blocked.newPage();
   await failurePage.goto(base, { waitUntil: 'domcontentloaded' });
   const fallback = failurePage.getByRole('link', { name: 'Open artifactbin on GitHub (fallback link)' }).filter({ visible: true });
