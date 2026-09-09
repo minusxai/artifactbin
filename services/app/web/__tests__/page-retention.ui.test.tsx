@@ -64,3 +64,14 @@ it('entering edit cancels a held background artifact refresh without replacing t
   await act(async () => { done(response(payload('Late remote source'))); });
   expect(screen.getByText('Editing baseline')).toBeInTheDocument(); expect(screen.queryByText('Late remote source')).toBeNull();
 });
+
+it('shows retry beside retained artifact data after a transient refresh error', async () => {
+  let reads = 0;
+  vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(url.includes('/session') ? response(session)
+    : ++reads === 2 ? new Response('{}', { status: 503 }) : response({ canonical: '/a/ABC123', role: 'owner', kind: 'account', surface: { title: 'Retained artifact' } }))));
+  const tree = (shown: boolean) => <MemoryRouter initialEntries={['/a/ABC123']}><SessionProvider><EditButton />{shown && <ArtifactPage id="ABC123" />}</SessionProvider></MemoryRouter>;
+  const view = render(tree(true)); await screen.findByText('Retained artifact');
+  view.rerender(tree(false)); view.rerender(tree(true));
+  await screen.findByLabelText('Retry artifact'); expect(screen.getByText('Retained artifact')).toBeInTheDocument();
+  fireEvent.click(screen.getByLabelText('Enter edit')); expect(screen.getByLabelText('Retry artifact')).toBeDisabled();
+});
