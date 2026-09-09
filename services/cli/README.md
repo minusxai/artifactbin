@@ -9,8 +9,8 @@ Once the `afbin-v0.1.1` GitHub Release is published and the app is deployed:
 ```sh
 curl -fsSL https://artifactbin.dev/chat/install.sh | sh
 export PATH="$HOME/.local/bin:$PATH"
-afbin remote claude --chrome
-# Or: afbin remote codex
+afbin
+# Or, skip the picker: afbin remote codex --yolo
 ```
 
 Sign into artifactbin.dev, follow the auth prompt to generate and paste an account token, then open
@@ -39,9 +39,11 @@ Use `npm link -w services/cli` to install the `afbin` command locally, then:
 afbin remote --name Backend codex
 afbin remote pi
 afbin remote opencode
-afbin auth --server http://localhost:6401
+afbin --server http://localhost:6401
 afbin remote --server http://localhost:6401 claude --chrome
 ```
+
+The flags prompt accepts quoted arguments (for example `--model "my model"`) without shell expansion. If no supported harness is installed, afbin explains how to install one or run an explicit executable.
 
 Put afbin options **before** the command; everything after the command goes to the harness unchanged. Your working directory, environment, installed skills, MCP configuration, and local input/output remain available. The CLI starts the executable directly, without constructing a shell command string. You can explicitly run a shell too: `afbin remote bash`.
 
@@ -58,7 +60,7 @@ ARTIFACTBIN_URL=https://artifactbin.dev
 ARTIFACTBIN_TOKEN=your_token
 ```
 
-Location: `~/.artifactbin.env`. `afbin remote` reuses a valid saved token without another login. Missing or expired credentials enter the sign-in flow directly; a specified command starts after sign-in. Bare commands show how to start an agent once authenticated. `afbin auth` remains an optional way to replace credentials. Legacy `~/.config/artifact-bin/config.json` (`url`, `token`) is read as a fallback. An anonymous token must first be claimed by an account.
+Location: `~/.artifactbin.env`. `afbin remote` reuses a valid saved token without another login. Missing or expired credentials enter the sign-in flow directly; a specified command starts after sign-in. Bare commands offer an arrow-key picker of Claude Code, Codex, Pi, and OpenCode executables found on PATH, then an optional flags prompt for the selected agent. Enter keeps the harness defaults; Esc or Ctrl+C cancels. There is no separate auth command. Legacy `~/.config/artifact-bin/config.json` (`url`, `token`) is read as a fallback. An anonymous token must first be claimed by an account.
 
 `ARTIFACTBIN_URL` and `ARTIFACTBIN_TOKEN` can explicitly supply a connection. Saved credentials are used only for their matching server origin; changing a host does not send the saved production token to it. Authentication sends a bearer header, never a token in the session URL. HTTP is allowed only for localhost development; other hosts require HTTPS. The paste-token flow replaces the most recent connection, consistent with the existing skills.
 
@@ -75,7 +77,7 @@ The CLI exports the same PTY lifecycle for another TypeScript/JavaScript CLI:
 ```ts
 import { loadConnection, runRemote } from '@artifactbin/cli';
 const connection = await loadConnection();
-if (!connection) throw new Error('Run afbin auth first');
+if (!connection) throw new Error('Run afbin to sign in first');
 const exitCode = await runRemote({
   connection, command: 'claude', args: ['--chrome'],
   onSession: url => console.error(url),

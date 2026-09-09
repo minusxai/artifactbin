@@ -354,7 +354,7 @@ function InstallInstructions() {
     <div className="mt-4 space-y-4">
       <CopyCommand label="Install CLI" command={'curl -fsSL https://artifactbin.dev/chat/install.sh | sh\nexport PATH="$HOME/.local/bin:$PATH"'} />
       <p className="text-xs text-muted">macOS and Linux · Intel and ARM. Windows: use WSL.</p>
-      <p className="text-xs text-muted">afbin asks you to sign in automatically when needed.</p>
+      <p className="text-xs text-muted">Run afbin to sign in and choose an installed agent, or use the explicit command below.</p>
       <div>
         <label htmlFor="remote-harness" className="mb-2 block text-sm">Choose your agent</label>
         <select id="remote-harness" value={harness} onChange={(event) => setHarness(event.target.value)} className="w-full rounded border border-edge bg-surface p-2 text-sm">

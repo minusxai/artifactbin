@@ -14,7 +14,7 @@ export async function remoteRoute(
       actor.credential === "none" ||
       (request.headers.has("authorization") && actor.credential !== "bearer")
     )
-      return json({ error: "Authentication required. Run afbin auth." }, 401);
+      return json({ error: "Authentication required. Run afbin to sign in." }, 401);
     if (!actor.viewer?.userId)
       return json(
         { error: "Use a token claimed by your artifactbin account." },

@@ -224,7 +224,7 @@ export async function runRemote(options: RunOptions): Promise<number> {
           } else if (status === 401 || status === 403) {
             remote = false;
             if (interactive)
-              process.stderr.write(`\r\n[afbin: Remote authentication failed (HTTP ${status}). ${command} is still running locally. Run afbin auth --server ${connection.server} in another terminal, then restart afbin remote to reconnect.]\r\n`);
+              process.stderr.write(`\r\n[afbin: Remote authentication failed (HTTP ${status}). ${command} is still running locally. Start afbin remote --server ${connection.server} in another terminal to sign in and launch a new remote session.]\r\n`);
             buffer = "";
             replay = "";
             batch = undefined;

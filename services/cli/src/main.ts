@@ -1,3 +1,4 @@
+import { chooseLaunch, LaunchCancelled } from "./launcher";
 import { ensureConnection } from "./auth";
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
@@ -5,15 +6,16 @@ import {
   loadConnection,
   saveConnection,
   parseArgs,
-  normalizeServer,
 } from "./config";
 import { api, ApiError } from "./client";
 import { runRemote } from "./runner";
 const help = `afbin — your local agent terminal, available in your browser
 
-  afbin                         Sign in or check your connection
-  afbin auth [--server URL]      Replace saved credentials (optional)
-  afbin remote [--server URL] [--name NAME] <command> [command flags...]
+  afbin [--server URL] [--name NAME]
+  afbin remote [--server URL] [--name NAME] [<command> [command flags...]]
+
+Sign in when needed, then choose an installed agent and optional flags.
+Provide a command to skip the picker; its flags are passed through unchanged.
 
 Examples:
   afbin remote claude --chrome
@@ -67,31 +69,27 @@ async function main() {
     process.stdout.write(help);
     return;
   }
-  if (args.command !== "remote" && args.command !== "auth") throw new Error(help);
+  if (args.command !== "remote") throw new Error(help);
   const saved = await loadConnection(args.server);
-  const connection = args.command === "auth"
-    ? await authenticate(normalizeServer(args.server ?? saved?.server ?? process.env.ARTIFACTBIN_URL ?? "https://artifactbin.dev"))
-    : await ensureConnection(saved, args.server, {
-        authenticate,
-        validate: (connection) => api(connection, ""),
-        notify: (message) => process.stdout.write(`${message}\n`),
-      });
-  if (args.command === "auth") return;
-  if (!args.harness) {
-    process.stdout.write("Choose a command to start a session, for example: afbin remote claude (or codex, pi, opencode).\n");
-    return;
-  }
+  const connection = await ensureConnection(saved, args.server, {
+    authenticate,
+    validate: (connection) => api(connection, ""),
+    notify: (message) => process.stdout.write(`${message}\n`),
+  });
+  const launch = args.harness
+    ? { command: args.harness, args: args.args }
+    : await chooseLaunch();
   process.exitCode = await runRemote({
     connection,
-    command: args.harness!,
-    args: args.args,
+    ...launch,
     name: args.name,
     onSession: (url) => process.stderr.write(`Remote session: ${url}\r\n`),
   });
 }
 main().catch((error) => {
+  if (error instanceof LaunchCancelled) { process.stdout.write("Cancelled.\n"); return; }
   process.stderr.write(
-    `${error instanceof ApiError && error.status === 401 ? "Token expired or invalid. Run afbin auth." : error instanceof Error ? error.message : "afbin failed"}\n`,
+    `${error instanceof ApiError && error.status === 401 ? "Token expired or invalid. Run afbin to sign in again." : error instanceof Error ? error.message : "afbin failed"}\n`,
   );
   process.exitCode = 1;
 });

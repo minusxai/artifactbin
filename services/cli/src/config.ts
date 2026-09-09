@@ -85,7 +85,8 @@ export function parseArgs(argv: string[]): {
   harness?: string;
   args: string[];
 } {
-  const [command = "remote", ...args] = argv;
+  const implicitRemote = !argv.length || (argv[0].startsWith("--") && argv[0] !== "--help");
+  const [command = "remote", ...args] = implicitRemote ? ["remote", ...argv] : argv;
   const result: {
     command: string;
     server?: string;
