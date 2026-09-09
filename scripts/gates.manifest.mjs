@@ -24,6 +24,7 @@
 
 /** @type {readonly GateSpec[]} */
 export const GATE_SPECS = Object.freeze([
+  { name: 'public-home-stars', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 90_000 },
   { name: 'seamless-navigation', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 120_000 },
   { name: 'managed-iframe', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 120_000 },
   { name: 'author-script-isolation', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 90_000 },
