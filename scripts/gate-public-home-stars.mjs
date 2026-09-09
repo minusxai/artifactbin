@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
-import { startDocument, becomeOwner } from './lib/start-doc.mjs';
+import { startDocument } from './lib/start-doc.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:12001';
 const browser = await chromium.launch({ headless: true });
 try {
   const noJs = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1280, height: 800 } });
   const plain = await noJs.newPage();
-  await plain.goto(base);
+  await plain.goto(base, { waitUntil: 'domcontentloaded' });
+  await plain.locator('h1').waitFor();
   assert.match(await plain.locator('h1').innerText(), /Your agents/);
   assert(await plain.getByRole('link', { name: 'Home', exact: true }).isVisible());
   await noJs.close();
@@ -48,10 +49,10 @@ try {
   const appBox = await appStar.boundingBox();
   assert(appBox.y < 44 && appBox.x > 640);
   console.log('ok uninterrupted landing through slow JS/session/home; asynchronous count in app topbar');
-  await page.goto(`${base}/privacy`);
+  await page.goto(`${base}/privacy`, { waitUntil: 'domcontentloaded' });
   await page.locator('header [data-mx-github-star]:visible').waitFor();
   assert.equal(await page.locator('[data-mx-initial-home]').count(), 0);
-  await page.goBack();
+  await page.goBack({ waitUntil: 'domcontentloaded' });
   await page.locator('h1').filter({ hasText: 'Your agents' }).waitFor();
 
   const doc = await startDocument(base);
@@ -60,11 +61,14 @@ try {
     body: JSON.stringify({ title: 'mxmx_test public home stars', markup: '<h1>Star layout fixture</h1>' }),
   });
   assert(published.ok, `publish fixture: ${published.status}`);
-  await becomeOwner(page, base, doc.token);
-  await page.goto(base);
+  const adopted = await page.evaluate(async token => (await fetch('/api/session/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }),
+  })).status, doc.token);
+  assert.equal(adopted, 204);
+  await page.goto(base, { waitUntil: 'domcontentloaded' });
   assert.equal(await page.locator('[data-mx-initial-home]').count(), 0);
   await page.getByText('Drafts held by this browser', { exact: false }).waitFor();
-  await page.goto(`${base}/a/${doc.id}`);
+  await page.goto(`${base}/a/${doc.id}`, { waitUntil: 'domcontentloaded' });
   const star = page.locator('[data-mx-reader-rail] [data-mx-github-star]:visible');
   await star.waitFor();
   await page.getByRole('link', { name: /1,234 stars/ }).filter({ visible: true }).waitFor();
