@@ -5,7 +5,7 @@ import TokensPanel from '@/components/TokensPanel';
 import { anonymousPaste } from '@/lib/agent-copy';
 
 const push = vi.fn();
-vi.mock('@/lib/navigation', () => ({ useRouter: () => ({ push }) }));
+vi.mock('@/lib/navigation', async (original) => ({ ...(await original<typeof import('@/lib/navigation')>()), useRouter: () => ({ push }) }));
 
 vi.mock('@/components/GetStarted', () => ({
   default: () => <div>anonymous start</div>,

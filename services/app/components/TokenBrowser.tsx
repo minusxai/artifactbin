@@ -12,6 +12,7 @@ import { parentOfRow } from '@/lib/shelf';
 import { adoptToken } from '@/lib/browser-session';
 import type { Visibility } from '@/lib/artifacts';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
+import { pageDataChanged } from '@/web/page-data-events';
 
 interface ArtifactSummary {
   id: string;
@@ -253,7 +254,7 @@ export function ArtifactTable({ artifacts, treeRows, includeAssets = true, folde
     const response = await fetch(`/api/my/artifacts/${a.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }),
     }).catch(() => null);
-    if (response?.ok) setTitles((current) => ({ ...current, [a.id]: title }));
+    if (response?.ok) { pageDataChanged(); setTitles((current) => ({ ...current, [a.id]: title })); }
   };
   const [movingId, setMovingId] = useState<string | null>(null);
   const [sharingId, setSharingId] = useState<string | null>(null);
@@ -449,7 +450,6 @@ export function ArtifactTable({ artifacts, treeRows, includeAssets = true, folde
                         if (event.key === 'Escape') setRenamingId(null);
                       }} className="min-w-0 flex-1 bg-transparent font-semibold text-fg focus:outline-none" /> : <a
                         href={a.url}
-                        target="_blank"
                         rel="noreferrer"
                         className="min-w-0 flex-1 truncate font-semibold text-fg no-underline underline-offset-4 hover:underline"
                         aria-label={`Open ${a.format === 'folder' ? 'folder ' : ''}${a.title ?? a.id}`}

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useRefreshable } from '@/lib/navigation';
+import { useCallback } from 'react';
+import { usePageData } from '@/web/use-page-data';
+import type { HomeCore, HomeInsights } from '@/web/home-resource';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import ClaimBanner from '@/components/ClaimBanner';
 import GetStarted from '@/components/GetStarted';
@@ -8,14 +9,9 @@ import LoginForm from '@/components/LoginForm';
 import SharedWithYou from '@/components/SharedWithYou';
 import Shelf from '@/components/Shelf';
 import UseCarousel from '@/components/UseCarousel';
-import WorkspaceLayout, { HOME_WORKSPACE_COLUMN } from '@/components/WorkspaceLayout';
-import type { AccountWorkspace } from '@/lib/workspace';
+import WorkspaceLayout, { HOME_WORKSPACE_COLUMN, WorkspaceSkeleton } from '@/components/WorkspaceLayout';
 import { PAGE_COLUMN } from '@/components/ui';
 import { useSession } from '@/web/session';
-
-type Home =
-  | { signedIn: false; drafts?: Parameters<typeof Shelf>[0]['rows'] }
-  | ({ signedIn: true } & AccountWorkspace);
 
 /**
  * THE EMPTY LIBRARY IS THE ONLY PAGE THAT SAYS WHAT TO DO FIRST.
@@ -55,12 +51,17 @@ function FirstArtifact() {
 }
 
 export function HomePage() {
-  const [home, setHome] = useState<Home | null>(null);
-  const load = useCallback(() => { void fetch('/api/page/home', { credentials: 'same-origin' }).then((r) => r.json()).then(setHome).catch(() => null); }, []);
-  useEffect(load, [load]);
-  // A claim adds artifacts to this library; re-read rather than reload.
-  useRefreshable(load);
-  if (!home) return <main className={`${PAGE_COLUMN} mt-8 pb-24`} aria-busy="true" />;
+  const { session, reload } = useSession();
+  const core = usePageData<HomeCore>('/api/page/home?part=core');
+  const insights = usePageData<HomeInsights>('/api/page/home?part=insights', { enabled: !!core.data?.signedIn });
+  const load = useCallback(() => { void core.refresh(true); void insights.refresh(true); }, [core.refresh, insights.refresh]);
+  const wrongAccount = (core.data?.signedIn && core.data.accountId !== session?.user?.id)
+    || (insights.data && (!insights.data.signedIn || insights.data.accountId !== session?.user?.id));
+  const state = { core: wrongAccount ? null : core.data, insights: wrongAccount ? null : insights.data, error: wrongAccount ? new Error('Account changed') : core.error, insightsError: !!insights.error };
+  const home = state.core;
+  if (!home) return <main className={`${HOME_WORKSPACE_COLUMN} mt-8 pb-24`}>
+    {state.error ? <div role="alert"><p>Could not load your workspace.</p><button aria-label="Retry workspace" onClick={session ? load : reload}>Try again</button></div> : <WorkspaceSkeleton />}
+  </main>;
   if (!home.signedIn) {
     if (home.drafts?.length) {
       return (
@@ -96,6 +97,7 @@ export function HomePage() {
       {/* Kept outside the empty/full branch so a successful claim can report
         * its result while the page refreshes into the dashboard. */}
       <ClaimBanner />
+      {state.error && <div role="alert">Could not refresh your workspace. <button aria-label="Retry workspace" onClick={load}>Try again</button></div>}
       {empty && <div className="mb-4 flex justify-end"><a href="/datasets/new" aria-label="Create dataset" className="rounded border border-edge-bright px-3 py-1.5 font-mono text-xs text-accent hover:border-accent">Create dataset</a></div>}
       {empty ? (
         /* Inspiration, not decoration: an empty library has no examples of its
@@ -106,8 +108,8 @@ export function HomePage() {
           <UseCarousel label="Inspiration Zone" wheel={false} />
         </div>
       ) : (
-        <WorkspaceLayout workspace={home} onCreated={load}>
-          {home.artifacts.length > 0 && <Shelf actions="full" assets={false} scopeParentId={null} rows={home.artifacts as never} />}
+        <WorkspaceLayout workspace={home} insights={state.insights} insightsError={state.insightsError} onCreated={load}>
+          {home.artifacts.length > 0 && <Shelf actions="full" assets={false} scopeParentId={null} rows={home.artifacts.map((row) => ({ ...row, sparkline: state.insights?.sparklines[row.id] ?? null })) as never} />}
           <SharedWithYou items={home.shared} />
         </WorkspaceLayout>
       )}
@@ -116,7 +118,7 @@ export function HomePage() {
         * surfaces reachable until the workspace—and its rail—exists. */}
       {empty && (
         <>
-          <ActivityFeed mine={home.feed?.mine ?? []} following={home.feed?.following ?? []} />
+          {state.insights && <ActivityFeed mine={state.insights.feed.mine} following={state.insights.feed.following} />}
           <p className="mt-8">
             <a
               href="/trash"

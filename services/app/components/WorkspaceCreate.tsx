@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Database, FilePlus2, FolderPlus, Plus, Trash2, X } from 'lucide-react';
 import GetStarted from '@/components/GetStarted';
+import { pageDataChanged } from '@/web/page-data-events';
 
 type CreateKind = 'artifact' | 'folder';
 
@@ -64,6 +65,7 @@ function CreateDialog({
       setError('Could not create the folder. Try again.');
       return;
     }
+    pageDataChanged();
     onClose();
     onCreated();
   };

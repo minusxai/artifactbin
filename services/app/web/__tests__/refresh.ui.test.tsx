@@ -15,7 +15,7 @@ import { HomePage } from '@/web/pages/Home';
 let fetches: string[] = [];
 const answer = (url: string) => {
   if (url.includes('/api/page/session')) return { user: { id: 'usr_1', email: 'a@example.com' }, kind: 'account', stats: null, mixpanel: { token: null, host: '' } };
-  if (url.includes('/api/page/home')) return { signedIn: true, artifacts: [], shared: [] };
+  if (url.includes('/api/page/home')) return { signedIn: true, accountId: 'usr_1', artifacts: [], shared: [], sparklines: {}, feed: { mine: [], following: [] } };
   return {};
 };
 

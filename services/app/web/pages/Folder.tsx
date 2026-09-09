@@ -36,6 +36,7 @@ import { canEdit } from '@/lib/share-roles';
 import type { FolderPage as FolderPageData } from '@/lib/folders';
 import { STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
 import type { AccountWorkspace } from '@/lib/workspace';
+import { pageDataChanged } from '@/web/page-data-events';
 
 export interface FolderPageProps {
   folder: FolderPageData;
@@ -166,6 +167,7 @@ export function FolderPage({ folder: given, role, workspace: givenWorkspace, own
    */
   const id = folder.id;
   const reread = useCallback(() => {
+    pageDataChanged();
     void fetch(`/api/page/artifact/${id}`, { credentials: 'same-origin' })
       .then((r) => (r.ok ? (r.json() as Promise<{ folder?: FolderPageData; workspace?: AccountWorkspace }>) : null))
       .then((page) => {
@@ -201,7 +203,7 @@ export function FolderPage({ folder: given, role, workspace: givenWorkspace, own
             ))}
             <ChevronRight size={14} aria-hidden="true" className="shrink-0 self-center text-faint" />
             <h1 aria-current="page" className="m-0 min-w-0 break-words">
-              <Name id={folder.id} title={folder.title} mayRename={mayWrite} onRenamed={(title) => setFolder((f) => ({ ...f, title }))} />
+              <Name id={folder.id} title={folder.title} mayRename={mayWrite} onRenamed={(title) => { pageDataChanged(); setFolder((f) => ({ ...f, title })); }} />
             </h1>
           </nav>
           {summary && <p className="m-0 shrink-0 font-sans text-sm text-muted">{summary}</p>}

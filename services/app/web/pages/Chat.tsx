@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { usePageData } from '@/web/use-page-data';
 import { CopyIcon } from "@/components/CopyIcon";
 import { Button } from "@/components/ui";
 import { useSearchParams } from "react-router";
@@ -373,33 +374,26 @@ export function ChatPage() {
   const [setupExpanded, setSetupExpanded] = useState(false);
   const [params, setParams] = useSearchParams();
   const id = params.get("session");
-  const [sessions, setSessions] = useState<RemoteSessionInfo[]>([]);
-  const [error, setError] = useState("");
+  const { data, error: listError, refresh, seed, snapshot } = usePageData<{ sessions: RemoteSessionInfo[] }>('/api/remote/sessions', {
+    loader: (signal) => request('', undefined, 'GET', signal),
+  });
+  const sessions = data?.sessions ?? [];
+  const error = listError ? connectionMessage(listError) : '';
   useEffect(() => {
-    const abort = new AbortController();
     let failures = 0;
     let stopped = false,
       timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
-      try {
-        const data = await request<{ sessions: RemoteSessionInfo[] }>("", undefined, "GET", abort.signal);
-        if (!stopped) {
-          failures = 0;
-          setSessions(data.sessions);
-          setError("");
-        }
-      } catch (e) {
-        if (!stopped) { failures++; setError(connectionMessage(e)); }
-      }
+      await refresh();
+      failures = snapshot().error ? failures + 1 : 0;
       if (!stopped) timer = setTimeout(() => void poll(), failures ? Math.min(10000, 3000 * 2 ** Math.min(failures - 1, 2)) : 3000);
     };
     void poll();
     return () => {
       stopped = true;
-      abort.abort();
       clearTimeout(timer);
     };
-  }, []);
+  }, [refresh, snapshot]);
   return (
     <main className="mx-auto max-w-7xl px-4 py-6">
       <h1 className="mb-1 text-xl font-semibold">Remote sessions</h1>
@@ -447,7 +441,7 @@ export function ChatPage() {
             id={id}
             onClose={() => {
               setParams({});
-              setSessions((list) => list.filter((s) => s.id !== id));
+              seed({ sessions: sessions.filter((s) => s.id !== id) });
             }}
           />
         ) : (

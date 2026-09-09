@@ -1,5 +1,5 @@
 /** The pretty URLs: an id-anchored artifact or the owner's public index. */
-import { useEffect, useRef, useState } from 'react';
+import { usePageData } from '../use-page-data';
 import { takeBootstrap } from '../bootstrap';
 import { PageLoading } from '../PageLoading';
 import { Navigate, useLocation, useParams } from 'react-router';
@@ -25,31 +25,17 @@ export function ProfilePage() {
 
 function ResolvedProfile({ user, rest }: { user: string | undefined; rest: string | undefined }) {
   const { pathname } = useLocation();
-  const [page, setPage] = useState<Resolved | 'missing' | null>(() => takeBootstrap<Resolved>(window.location.pathname, 'profile'));
-  const served = useRef<string | null>(page ? window.location.pathname : null);
   // A handle is `@name`; anything else here is a root typo — the 404, with no
   // profile fetch to ask about an address that could never resolve.
   const typo = !user?.startsWith('@');
-  useEffect(() => {
-    if (typo) return;
-    // Served with its data (server/app inlines it): nothing to fetch for THIS address.
-    if (served.current === pathname) return;
-    served.current = null;
-    const controller = new AbortController();
-    setPage(null);
-    void fetch(`/api/page/profile/${encodeURIComponent(user ?? '')}${rest ? '/' + rest : ''}`, { credentials: 'same-origin', signal: controller.signal })
-      .then((r): Promise<Resolved | 'missing'> => (r.ok ? (r.json() as Promise<Resolved>) : Promise.resolve('missing' as const)))
-      .then((p) => { if (!controller.signal.aborted) setPage(p); })
-      .catch(() => { if (!controller.signal.aborted) setPage('missing'); });
-    return () => { controller.abort(); };
-  }, [user, rest, pathname, typo]);
+  const { data: page, error, refresh } = usePageData<Resolved>(`/api/page/profile/${encodeURIComponent(user ?? '')}${rest ? '/' + rest : ''}`, { enabled: !typo, seed: () => takeBootstrap<Resolved>(pathname, 'profile') });
   if (typo) return <NotFoundPage />;
-  if (page === null) return <PageLoading />;
-  if (page === 'missing') return <NotFoundPage />;
+  if (page === null) return error ? <NotFoundPage /> : <PageLoading />;
   if (page.kind === 'redirect') return <Navigate to={page.to} replace />;
   if (page.kind === 'artifact') return <ArtifactPage id={page.id} />;
   return (
     <ListingShell authed={page.authed} anon={page.anon}>
+      {error && <button aria-label="Retry profile" onClick={() => void refresh(true)}>Could not refresh profile. Retry</button>}
       <ProfileListing data={page} />
     </ListingShell>
   );

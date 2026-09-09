@@ -9,6 +9,7 @@
  */
 import { useState } from 'react';
 import { Button, Input, MicroLabel, PANEL } from '@/components/ui';
+import { pageDataChanged } from '@/web/page-data-events';
 
 const REFUSALS: Record<string, string> = {
   username_taken: 'that handle is taken — pick another',
@@ -32,6 +33,7 @@ export default function UsernameCard({ username }: { username: string | null }) 
     if (!res) return setStatus('could not reach the server');
     const body = (await res.json().catch(() => ({}))) as { username?: string; error?: string };
     if (res.ok && body.username) {
+      pageDataChanged();
       // Show what the server STORED (it lowercases and trims), not what was typed.
       setValue(body.username);
       setStatus('saved');

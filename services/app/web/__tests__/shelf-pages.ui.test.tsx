@@ -16,10 +16,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { REFRESH_EVENT } from '@/lib/navigation';
 import { router as routerDouble, resetRouter } from '@/test/setup/router';
-import { HomePage } from '@/web/pages/Home';
+import { HomePage as ActualHomePage } from '@/web/pages/Home';
+import { SessionProvider } from '@/web/session';
 import { ProfilePage } from '@/web/pages/Profile';
 
-vi.mock('@/web/session', () => ({ useSession: () => ({ session: { user: { id: 'usr_c', email: 'c@x.io' } } }) }));
+const HomePage = () => <SessionProvider><ActualHomePage /></SessionProvider>;
+const homeResponse = () => ({ accountId: 'usr_c', sparklines: {}, feed: { mine: [], following: [] }, ...(home as object) });
+const sessionResponse = () => ({ kind: 'account', user: { id: 'usr_c', email: 'c@x.io' } });
 vi.mock('@/components/viz/VegaChart', () => ({
   VegaChart: ({ ariaLabel }: { ariaLabel?: string }) => <div aria-label={ariaLabel ?? 'Vega chart'} />,
 }));
@@ -38,7 +41,8 @@ let profile: unknown;
 
 beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-    if (String(url).includes('/api/page/home')) return new Response(JSON.stringify(home), { status: 200 });
+    if (String(url).includes('/api/page/session')) return new Response(JSON.stringify(sessionResponse()), { status: 200 });
+    if (String(url).includes('/api/page/home')) return new Response(JSON.stringify(homeResponse()), { status: 200 });
     if (String(url).includes('/api/page/profile')) return new Response(JSON.stringify(profile), { status: 200 });
     return new Response('{}', { status: 200 });
   }));
@@ -250,7 +254,8 @@ describe('claiming across the empty \u2192 full flip', () => {
     home = { signedIn: true, artifacts: [], shared: [] };
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       const u = String(url);
-      if (u.includes('/api/page/home')) return new Response(JSON.stringify(home), { status: 200 });
+      if (u.includes('/api/page/session')) return new Response(JSON.stringify(sessionResponse()), { status: 200 });
+      if (u.includes('/api/page/home')) return new Response(JSON.stringify(homeResponse()), { status: 200 });
       if (u.includes('/api/tokens/claimable')) {
         return new Response(JSON.stringify({ claimable: [{ tokenId: 'tok_1', titles: ['Quarterly Review'], artifacts: 1 }] }), { status: 200 });
       }
