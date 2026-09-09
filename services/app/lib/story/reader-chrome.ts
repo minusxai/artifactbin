@@ -39,7 +39,7 @@
 
 import { REPO_URL } from '@/lib/repo';
 import { GITHUB_MARK_PATH, GITHUB_MARK_VIEWBOX } from '@/lib/github-mark';
-import { githubCountMarkup, githubStarLabel } from '@/lib/github-star';
+import { githubWidgetMarkup } from '@/lib/github-star';
 
 /** The login door, when a link grants more than the anonymous ceiling lets a guest use. */
 export interface ReaderSignIn {
@@ -130,7 +130,6 @@ const ICON = (paths: string, size = 20): string =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor"`
   + ` stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
 
-const ICON_STAR = ICON('<path d="m12 3 2.8 5.7 6.3.9-4.5 4.4 1.1 6.2L12 17.3l-5.7 3 1.1-6.2L2.9 9.6l6.3-.9z"/>', 13);
 const ICON_CHEVRON = ICON('<path d="m9 18 6-6-6-6"/>', 14);
 const ICON_GITHUB = `<svg viewBox="${GITHUB_MARK_VIEWBOX}" preserveAspectRatio="xMidYMid meet" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="${GITHUB_MARK_PATH}"/></svg>`;
 const ICON_HEART = ICON('<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21.2l7.7-7.7 1.1-1.1a5.5 5.5 0 0 0 0-7.8z"/>');
@@ -235,7 +234,7 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
     + '<a class="mx-reader-home" href="/" target="_top" aria-label="Home" data-mx-reader-logo data-mx-tip="Home">'
     + '<img src="/logo-128.png" alt=""></a>'
     + '<div class="mx-reader-rail" data-mx-reader-rail>'
-    + `<a data-mx-github-star class="mx-reader-github" href="${REPO_URL}" target="_blank" rel="noopener noreferrer" aria-label="${githubStarLabel(null)}">${ICON_GITHUB}<span>STAR</span>${ICON_STAR}${githubCountMarkup()}</a>`
+    + `<span data-mx-github-star class="mx-reader-github">${githubWidgetMarkup()}</span>`
     + action(
       'like',
       reactions?.like.liked ? 'Unlike' : 'Like',

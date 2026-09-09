@@ -3,10 +3,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import GitHubStar from '../GitHubStar';
 
 describe('GitHub repository star button', () => {
-  it('renders the current official Invertocat geometry from GitHub’s brand toolkit', () => {
+  it('renders the vendor iframe with a permanent direct-link fallback', () => {
     const html = renderToStaticMarkup(<GitHubStar placement="desktop-bar" />);
-    expect(html).toContain('viewBox="0 0 98 96"');
-    expect(html).toContain('M41.4395 69.3848C28.8066 67.8535');
+    expect(html).toContain('https://buttons.github.io/buttons.html#');
+    expect(html).toContain('Open artifactbin on GitHub (fallback link)');
   });
   it('has an in-flow desktop topbar placement, not a floating corner', () => {
     const html = renderToStaticMarkup(<GitHubStar placement={'desktop-bar' as never} />);

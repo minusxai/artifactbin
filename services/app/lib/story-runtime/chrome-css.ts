@@ -239,17 +239,13 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
 .mx-reader-action:active, .mx-reader-trigger:active:active { transform: scale(.94) !important; }
 .mx-reader-home img { display: block !important; width: 22px !important; height: 22px !important; margin: 0 !important; border: 0 !important; }
 .mx-reader-github {
-  order: 2 !important; display: inline-flex !important; align-items: center !important; gap: 6px !important;
-  flex: 0 0 auto !important; box-sizing: border-box !important; height: 36px !important; padding: 0 10px !important;
-  border: 1px solid var(--mx-reader-border) !important; border-radius: 5px !important;
-  background: var(--mx-reader-bg) !important; color: var(--mx-reader-fg) !important;
+  order: 2 !important; display: inline-flex !important; align-items: center !important;
+  flex: 0 0 auto !important; box-sizing: border-box !important; height: 28px !important; padding: 0 !important;
+  color: var(--mx-reader-fg) !important;
   font: 10px var(--font-mono, ui-monospace, monospace) !important; letter-spacing: .04em !important; text-decoration: none !important; white-space: nowrap !important;
   transition: color 120ms ease, border-color 120ms ease !important;
 }
-.mx-reader-github:hover { color: var(--mx-reader-accent) !important; border-color: var(--mx-reader-muted) !important; }
-.mx-reader-github:focus-visible { outline: 2px solid var(--mx-reader-accent) !important; outline-offset: 2px !important; }
-.mx-reader-github svg { width: 13px !important; height: 13px !important; flex-shrink: 0 !important; }
-.mx-reader-github svg:nth-of-type(2) { color: #efb000 !important; fill: currentColor !important; }
+.mx-reader-github a:focus-visible { outline: 2px solid var(--mx-reader-accent) !important; outline-offset: 2px !important; }
 .mx-reader-trigger .mx-rc-close { display: none !important; }
 .mx-reader-trigger[aria-expanded="true"] .mx-rc-open { display: none !important; }
 .mx-reader-trigger[aria-expanded="true"] .mx-rc-close { display: block !important; }
@@ -400,8 +396,6 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
     position: static !important;
     order: -1 !important;
   }
-  .mx-reader-github { height: 28px !important; padding: 0 10px !important;
-  }
   .mx-reader-chrome {
     inset: 0 0 auto 0 !important; display: flex !important; align-items: center !important;
     gap: 10px !important; box-sizing: border-box !important; height: 44px !important;
@@ -454,7 +448,6 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
     position: fixed !important; top: max(10px, env(safe-area-inset-top)) !important;
     right: max(10px, env(safe-area-inset-right)) !important;
   }
-  .mx-reader-github [data-mx-github-count] { display: none !important; }
   .mx-reader-chrome > * { pointer-events: auto !important; }
   .mx-reader-home {
     position: absolute !important; top: max(10px, env(safe-area-inset-top)) !important;

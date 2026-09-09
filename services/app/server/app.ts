@@ -41,7 +41,7 @@ import { ROUTES } from './routes.generated';
 import { authorFrameResponse } from './author-frame';
 import { AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
 import { withInitialHome } from './public-home';
-import { createGitHubStarsCache } from '@/lib/github-stars.server';
+import { GITHUB_WIDGET_URL } from '@/lib/github-star';
 
 /** Where the server hands the SPA a page's data so its FIRST paint is its final one. */
 export const BOOTSTRAP_ID = 'mx-page-data';
@@ -92,7 +92,7 @@ export const APP_CSP = [
   // the landing page's pictures worked on the deployment and nowhere else.
   `img-src 'self' ${SHOWCASE_ORIGIN} data: blob:`, "font-src 'self' data:",
   "connect-src 'self' https://api-js.mixpanel.com https://api.mixpanel.com",
-  "manifest-src 'self'", "frame-src 'self'", "frame-ancestors 'self'",
+  "manifest-src 'self'", `frame-src 'self' ${GITHUB_WIDGET_URL}`, "frame-ancestors 'self'",
   // The source editor wires a Monaco worker (components/SourceEditor). It is
   // LAZY — measured: with only the HTML tokenizer loaded, nothing has yet asked
   // for it — so this is not what broke `code` mode (that was the CDN script,
@@ -316,8 +316,6 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // (`/tokens/new` otherwise looks like user "tokens", path "new").
   app.get('/tokens/new', (c) => page(c));
   // The app's API and document handlers.
-  const githubStars = createGitHubStarsCache();
-  app.get('/api/github-stars', async c => c.json({ count: await githubStars.get() }, 200, { 'cache-control': 'public, max-age=60' }));
   mountRoutes(app);
 
   app.all('/api', apiNotFound);

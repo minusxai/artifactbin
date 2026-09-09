@@ -1,37 +1,22 @@
-/** Shared presentation for React chrome and the document chrome bridge. */
-export const githubStarLabel = (count: number | null) => `Star artifactbin on GitHub${count === null ? '' : ` · ${count.toLocaleString('en-US')} stars`} (opens in a new tab)`;
-export const githubCountText = (count: number | null) => count === null ? '—' : new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(count);
-export const GITHUB_COUNT_STYLE = 'display:inline-block;width:6ch;text-align:right;font-variant-numeric:tabular-nums';
-export const githubCountMarkup = () => `<span data-mx-github-count aria-hidden="true" style="${GITHUB_COUNT_STYLE}">—</span>`;
+import { REPO_URL } from './repo';
 
-let count: number | null = null;
-let nextAttempt = 0;
-let pending: Promise<void> | null = null;
-const listeners = new Set<(value: number | null) => void>();
-/** One same-origin request shared across chrome mounts; failure keeps the link. */
-export function subscribeGithubStars(listener: (value: number | null) => void): () => void {
-  listeners.add(listener);
-  listener(count);
-  if (!pending && Date.now() >= nextAttempt) {
-    pending = fetch('/api/github-stars', { credentials: 'omit', signal: AbortSignal.timeout(4000) })
-      .then(async response => {
-        if (!response.ok) throw new Error('count unavailable');
-        const data = await response.json();
-        if (!Number.isSafeInteger(data.count) || data.count < 0) throw new Error('invalid count');
-        count = data.count;
-        nextAttempt = Date.now() + 60_000;
-        for (const notify of listeners) notify(count);
-      }).catch(() => { nextAttempt = Date.now() + 60_000; })
-      .finally(() => { pending = null; });
-  }
-  return () => { listeners.delete(listener); };
-}
-export function wireGithubStars(root: ParentNode): () => void {
-  return subscribeGithubStars(value => {
-    for (const link of root.querySelectorAll('[data-mx-github-star]')) {
-      link.setAttribute('aria-label', githubStarLabel(value));
-      const counter = link.querySelector('[data-mx-github-count]');
-      if (counter) counter.textContent = githubCountText(value);
-    }
+/** Only this fixed vendor document is admitted by the page's frame-src policy. */
+export const GITHUB_WIDGET_URL = 'https://buttons.github.io/buttons.html';
+export const GITHUB_WIDGET_SANDBOX = 'allow-scripts allow-popups allow-popups-to-escape-sandbox';
+export const GITHUB_WIDGET_TITLE = 'Star artifactbin on GitHub';
+
+/** Shared by React and document chrome; vendor code runs only inside its sandbox. */
+export function githubWidgetMarkup(showCount = true): string {
+  const options = new URLSearchParams({
+    href: REPO_URL,
+    'data-show-count': String(showCount),
+    'data-size': 'large',
+    'data-text': 'Star',
+    'data-color-scheme': '',
+    'aria-label': GITHUB_WIDGET_TITLE,
   });
+  const src = `${GITHUB_WIDGET_URL}#${options}`.replaceAll('&', '&amp;');
+  // This independent link remains available even when the vendor is blocked.
+  return `<iframe src="${src}" title="${GITHUB_WIDGET_TITLE}" sandbox="${GITHUB_WIDGET_SANDBOX}" referrerpolicy="no-referrer" loading="lazy" width="${showCount ? 150 : 80}" height="28" scrolling="no" style="display:block;flex:none;border:0;height:28px;width:${showCount ? 150 : 80}px;color-scheme:inherit"></iframe>`
+    + `<a href="${REPO_URL}" target="_blank" rel="noopener noreferrer" aria-label="Open artifactbin on GitHub (fallback link)" style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;flex:none;color:inherit;text-decoration:none">↗</a>`;
 }

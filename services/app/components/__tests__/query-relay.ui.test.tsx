@@ -22,8 +22,8 @@ it('surfaces query refusal and revokes requests when the document is disposed',a
  expect(fetcher).toHaveBeenCalledTimes(1);
 });
 it('does not expose a query relay to any window, even one forging the previous protocol',async()=>{
- const fetcher=vi.fn(async()=>new Response(JSON.stringify({count:null})));vi.stubGlobal('fetch',fetcher);
+ const fetcher=vi.fn();vi.stubGlobal('fetch',fetcher);
  render(<ArtifactSurface {...surfaceProps()} />);await screen.findByText('Document body');
  await act(async()=>{for(const source of [null,window])window.dispatchEvent(new MessageEvent('message',{source,data:{type:'mx:query',id:7,values:{},only:['private']}}));});
- expect(fetcher.mock.calls.filter(call => (call as unknown[])[0] !== '/api/github-stars')).toHaveLength(0);
+ expect(fetcher).not.toHaveBeenCalled();
 });
