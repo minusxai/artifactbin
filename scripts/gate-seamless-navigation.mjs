@@ -60,8 +60,15 @@ try {
     await page.waitForURL((url) => url.pathname.includes(id));
     assert.equal(page.context().pages().length, pageCount, 'shelf click opens no tab');
     assert.equal(await page.evaluate(() => window.__navigationProbe), 'shelf-document', 'shelf click retains document');
+    const held = [];
+    const holdCore = (route) => { held.push(route); };
+    await page.route('**/api/page/home?part=core', holdCore);
     await page.goBack();
     await page.getByLabel('Open mxmx_test navigation A', { exact: true }).waitFor();
+    // The response is still held: this is retained account state, not a fast
+    // fetch mistaken for an immediate Back restoration.
+    await page.unroute('**/api/page/home?part=core', holdCore);
+    await Promise.all(held.map((route) => route.continue()));
     assert.equal(await page.evaluate(() => window.__navigationProbe), 'shelf-document', 'Back retains document');
   }
   const account = await (await page.request.get(`${base}/api/page/account`)).json();

@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
 import { HomePage } from '@/web/pages/Home';
 import { SessionProvider, useSession } from '@/web/session';
+import { REFRESH_EVENT } from '@/lib/navigation';
 
 vi.mock('@/components/viz/VegaChart', () => ({ VegaChart: () => <div /> }));
 const session = { kind: 'account', user: { id: 'one', email: 'one@example.com' } };
@@ -25,6 +26,9 @@ it('starts the core request without waiting for session and offers retry if sess
   expect(screen.queryByLabelText('Open Private document')).toBeNull();
   await act(async () => { pending.resolve(new Response('{}', { status: 500 })); });
   await screen.findByLabelText('Retry workspace');
+  vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(response(url.includes('/session') ? session : url.includes('part=core') ? core : { signedIn: true, accountId: 'one', sparklines: {}, feed: { mine: [], following: [] } }))));
+  fireEvent.click(screen.getByLabelText('Retry workspace'));
+  await screen.findByLabelText('Open Private document');
 });
 
 it('paints core before deferred insights and restores it immediately on remount', async () => {
@@ -92,4 +96,39 @@ it('retains shelf and offers retry when only insights fail', async () => {
   await screen.findByLabelText('Retry workspace insights');
   expect(screen.getByLabelText('Open Private document')).toBeInTheDocument();
   expect(screen.queryByLabelText('Dashboard metrics')).toBeNull();
+});
+
+it('an account switch rejects late prior-account core and insights', async () => {
+  const oldCore = deferred(); const oldInsights = deferred(); let owner = 'one'; let calls = 0;
+  const next = { ...core, accountId: 'two', artifacts: [{ ...core.artifacts[0], title: 'Next account document' }] };
+  vi.stubGlobal('fetch', vi.fn((url: string) => {
+    if (url.includes('/session')) return Promise.resolve(response({ ...session, user: { id: owner, email: `${owner}@example.com` } }));
+    if (url.includes('part=insights')) return owner === 'one' ? oldInsights.promise : Promise.resolve(response({ signedIn: true, accountId: 'two', sparklines: {}, feed: { mine: [], following: [] } }));
+    if (url.includes('/home')) return owner === 'two' ? Promise.resolve(response(next)) : ++calls === 1 ? Promise.resolve(response(core)) : oldCore.promise;
+    return Promise.resolve(response({}));
+  }));
+  const view = render(tree(true)); await screen.findByLabelText('Open Private document');
+  view.rerender(tree(false)); view.rerender(tree(true));
+  owner = 'two'; fireEvent.click(screen.getByLabelText('Reload identity'));
+  await screen.findByLabelText('Open Next account document');
+  await act(async () => { oldCore.resolve(response(core)); oldInsights.resolve(response({ signedIn: true, accountId: 'one', sparklines: {}, feed: { mine: [], following: [] } })); });
+  expect(screen.getByLabelText('Open Next account document')).toBeInTheDocument();
+  expect(screen.queryByLabelText('Open Private document')).toBeNull();
+});
+
+it('an older same-account refresh cannot overwrite the newer shelf', async () => {
+  const old = deferred(); let calls = 0;
+  vi.stubGlobal('fetch', vi.fn((url: string) => {
+    if (url.includes('/session')) return Promise.resolve(response(session));
+    if (url.includes('part=insights')) return Promise.resolve(response({ signedIn: true, accountId: 'one', sparklines: {}, feed: { mine: [], following: [] } }));
+    if (url.includes('/home')) return ++calls === 2 ? old.promise : Promise.resolve(response(calls === 1 ? core : { ...core, artifacts: [{ ...core.artifacts[0], title: 'Newest document' }] }));
+    return Promise.resolve(response({}));
+  }));
+  render(tree(true)); await screen.findByLabelText('Open Private document');
+  await act(async () => { window.dispatchEvent(new Event(REFRESH_EVENT)); });
+  await act(async () => { window.dispatchEvent(new Event(REFRESH_EVENT)); });
+  await screen.findByLabelText('Open Newest document');
+  await act(async () => { old.resolve(response(core)); });
+  expect(screen.getByLabelText('Open Newest document')).toBeInTheDocument();
+  expect(screen.queryByLabelText('Open Private document')).toBeNull();
 });
