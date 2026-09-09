@@ -4,6 +4,7 @@ import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
 import { chromeAfterSample,type ChromeState } from '@/lib/story-runtime/reader-chrome-policy';
 import { subscribePageChrome } from './PageChrome';
 import { wireReaderSharing } from '@/lib/story-runtime/reader-share';
+import { wireGithubStars } from '@/lib/github-star';
 
 /** Identical desktop/mobile reader layout, with local handlers inside TrustedUi. */
 export function InlineReaderChrome({ input, onAction,pinned=false }: { input: ReaderChromeInput; onAction(action:string):void;pinned?:boolean }): ReactNode {
@@ -16,6 +17,7 @@ export function InlineReaderChrome({ input, onAction,pinned=false }: { input: Re
     const root=holder.current?.querySelector<HTMLElement>('[data-mx-reader-chrome]');
     if(!root)return;
     sharing.current=wireReaderSharing(window,document,root);
+    const stopStars=wireGithubStars(root);
     let queued=false;let raf=0;const panels=new Set<string>();
     const paint=(visible:boolean)=>{
       root.classList.toggle(READER_CHROME_HIDDEN_CLASS,!visible);
@@ -36,7 +38,7 @@ export function InlineReaderChrome({ input, onAction,pinned=false }: { input: Re
     });
     window.addEventListener('scroll',schedule,{passive:true});window.addEventListener('resize',schedule);
     sample();
-    return ()=>{stop();sharing.current?.dispose();sharing.current=null;window.cancelAnimationFrame(raf);window.removeEventListener('scroll',schedule);window.removeEventListener('resize',schedule);};
+    return ()=>{stopStars();stop();sharing.current?.dispose();sharing.current=null;window.cancelAnimationFrame(raf);window.removeEventListener('scroll',schedule);window.removeEventListener('resize',schedule);};
   },[html,pinned]);
   return <>
     <style>{STORY_CHROME_CSS}</style>

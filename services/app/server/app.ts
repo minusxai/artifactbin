@@ -40,6 +40,8 @@ import { mountRoutes } from './api';
 import { ROUTES } from './routes.generated';
 import { authorFrameResponse } from './author-frame';
 import { AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
+import { withInitialHome } from './public-home';
+import { createGitHubStarsCache } from '@/lib/github-stars.server';
 
 /** Where the server hands the SPA a page's data so its FIRST paint is its final one. */
 export const BOOTSTRAP_ID = 'mx-page-data';
@@ -212,9 +214,13 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // gets the refusal that names the way on.
     if (code === 404 && !(c.req.raw.headers.get('accept') ?? '').includes('text/html')) return apiNotFound(c);
     const surface = (data?.artifact as { surface?: { id: string; runtime?: PreparedStoryRuntime }; description?: string | null } | undefined);
+    const publicHome = new URL(c.req.url).pathname === '/' && await runWithRequest(c.req.raw, async () => {
+      const actor = await sessionActor(c.req.raw);
+      return actor.credential === 'none';
+    });
     const shell = surface?.surface?.runtime
       ? withInitialStory(html, surface.surface.runtime, surface.surface.id, surface.description, baseUrl(c.req.raw))
-      : html;
+      : publicHome ? withInitialHome(html) : html;
     return new Response(data ? withBootstrap(shell, data) : shell, { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
       ...(surface?.surface?.runtime ? { Link: `<${baseUrl(c.req.raw)}/docs>; rel="help"` } : {}),
@@ -310,6 +316,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // (`/tokens/new` otherwise looks like user "tokens", path "new").
   app.get('/tokens/new', (c) => page(c));
   // The app's API and document handlers.
+  const githubStars = createGitHubStarsCache();
+  app.get('/api/github-stars', async c => c.json({ count: await githubStars.get() }, 200, { 'cache-control': 'public, max-age=60' }));
   mountRoutes(app);
 
   app.all('/api', apiNotFound);

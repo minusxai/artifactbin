@@ -249,7 +249,7 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
 .mx-reader-github:hover { color: var(--mx-reader-accent) !important; border-color: var(--mx-reader-muted) !important; }
 .mx-reader-github:focus-visible { outline: 2px solid var(--mx-reader-accent) !important; outline-offset: 2px !important; }
 .mx-reader-github svg { width: 13px !important; height: 13px !important; flex-shrink: 0 !important; }
-.mx-reader-github svg:last-child { color: #efb000 !important; fill: currentColor !important; }
+.mx-reader-github svg:nth-of-type(2) { color: #efb000 !important; fill: currentColor !important; }
 .mx-reader-trigger .mx-rc-close { display: none !important; }
 .mx-reader-trigger[aria-expanded="true"] .mx-rc-open { display: none !important; }
 .mx-reader-trigger[aria-expanded="true"] .mx-rc-close { display: block !important; }
@@ -398,8 +398,8 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
   /* Clear of the page's comment rail too: the frame stays full-width under
      it, so a corner at the frame's edge is a corner under the rail. */
   .mx-reader-github {
-    position: fixed !important; right: calc(max(20px, env(safe-area-inset-right)) + var(--mx-rail-inset, 0px)) !important;
-    bottom: max(20px, env(safe-area-inset-bottom)) !important;
+    position: static !important;
+    order: -1 !important;
   }
   .mx-reader-github { height: 28px !important; padding: 0 10px !important;
   }
@@ -452,9 +452,10 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
 @media (max-width: 639px) {
   .mx-reader-chrome { inset: 0 !important; pointer-events: none !important; }
   .mx-reader-github {
-    position: absolute !important; top: max(10px, env(safe-area-inset-top)) !important;
+    position: fixed !important; top: max(10px, env(safe-area-inset-top)) !important;
     right: max(10px, env(safe-area-inset-right)) !important;
   }
+  .mx-reader-github [data-mx-github-count] { display: none !important; }
   .mx-reader-chrome > * { pointer-events: auto !important; }
   .mx-reader-home {
     position: absolute !important; top: max(10px, env(safe-area-inset-top)) !important;

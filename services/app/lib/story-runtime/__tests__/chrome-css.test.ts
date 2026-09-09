@@ -32,7 +32,8 @@ describe('the reader chrome stylesheet', () => {
 
   it('insets the document by the page\'s rail through a variable, beside the bars\' inset', () => {
     expect(STORY_CHROME_CSS).toMatch(/body\[data-mx-story-root\]\s*\{[^}]*padding-right:\s*var\(--mx-rail-inset,\s*0px\)/);
-    // The star is fixed at the frame's corner, and the frame's corner is under the rail: it moves with the inset.
-    expect(STORY_CHROME_CSS).toMatch(/\.mx-reader-github\s*\{[^}]*right:\s*calc\(max\([^;]*\+\s*var\(--mx-rail-inset,\s*0px\)\)/);
+    // Desktop star participates in the action rail instead of floating.
+    const desktop = STORY_CHROME_CSS.split('@media (min-width: 640px)')[1].split('@media (max-width: 639px)')[0];
+    expect(desktop).toMatch(/\.mx-reader-github\s*\{[^}]*position:\s*static/);
   });
 });
