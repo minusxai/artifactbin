@@ -1,8 +1,8 @@
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
 import { HomePage } from '../pages/Home';
-import { SessionProvider } from '../session';
+import { SessionProvider, useSession } from '../session';
 import { captureInitialStory, clearInitialStory, clearInitialStoryOnRoute } from '../initial-story';
 
 vi.mock('@/components/viz/VegaChart', () => ({ VegaChart: () => <div /> }));
@@ -34,5 +34,19 @@ it('clears the server sibling on navigation before Home ever loads', () => {
   expect(initial.isConnected).toBe(false);
   vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
   render(<MemoryRouter><SessionProvider><HomePage /></SessionProvider></MemoryRouter>);
+  expect(screen.getByLabelText('Loading workspace')).toBeInTheDocument();
+});
+it('never reuses initial public eligibility after an account has replaced it', async () => {
+  markInitial();
+  let answer = true;
+  vi.stubGlobal('fetch', vi.fn((url: string) => url.includes('/session') && answer
+    ? Promise.resolve(new Response(JSON.stringify({ kind: 'account', user: { id: 'one', email: null } })))
+    : new Promise<Response>(() => {})));
+  function Reload() { const { reload } = useSession(); return <button onClick={reload}>Reload identity</button>; }
+  render(<MemoryRouter><SessionProvider><Reload /><HomePage /></SessionProvider></MemoryRouter>);
+  await screen.findByLabelText('Loading workspace');
+  answer = false;
+  fireEvent.click(screen.getByText('Reload identity'));
+  expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
   expect(screen.getByLabelText('Loading workspace')).toBeInTheDocument();
 });

@@ -52,7 +52,7 @@ function FirstArtifact() {
 }
 
 export function HomePage() {
-  const [publicInitial] = useState(takeInitialHome);
+  const [publicInitial, setPublicInitial] = useState(takeInitialHome);
   const { session, reload } = useSession();
   const core = usePageData<HomeCore>('/api/page/home?part=core');
   const insights = usePageData<HomeInsights>('/api/page/home?part=insights', { enabled: !!core.data?.signedIn });
@@ -62,6 +62,9 @@ export function HomePage() {
   const state = { core: wrongAccount ? null : core.data, insights: wrongAccount ? null : insights.data, error: wrongAccount ? new Error('Account changed') : core.error, insightsError: !!insights.error };
   const home = state.core;
   useLayoutEffect(() => { clearInitialStory(); }, []);
+  useLayoutEffect(() => {
+    if (home || (session && session.kind !== 'none')) setPublicInitial(false);
+  }, [home, session]);
   // Preserve the server's real landing across startup fetches. Any resolved
   // account/anonymous identity supersedes that one-use eligibility verdict.
   if (!home && publicInitial && (!session || session.kind === 'none')) return <Landing />;
