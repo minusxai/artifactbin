@@ -76,6 +76,11 @@ async function chromeHost(page, timeout = 30_000) {
     '[data-mx-reader-chrome], [aria-label="Open artifact controls"], [aria-label="Open page controls"], [aria-label="Open menu"]',
     { state: 'attached', timeout },
   ).catch(() => {});
+  // A lazy route's provisional page bar is not the destination's controls.
+  // Wait for the actual handoff before deciding whether to reveal reader
+  // chrome or click page chrome; otherwise a click can target a disappearing
+  // skeleton (or classify hidden reader controls as ordinary page controls).
+  await page.locator('[data-mx-page-pending]').waitFor({ state: 'detached', timeout });
   // A document served top-level IS the page, and its chrome carries "Open menu"
   // too — so this is asked before the page-button question, or a hidden
   // trigger gets clicked as if it were a bar button.

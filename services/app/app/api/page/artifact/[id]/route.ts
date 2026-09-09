@@ -1,4 +1,5 @@
 import {catalogOf,publicCatalogOf} from '@/lib/datasets/catalog';
+import { compactSurface } from '@/lib/story/page-transport';
 /**
  * The owner/editor SHELL's props for one document — everything ArtifactDocument
  * used to compute on the server: the ACL (uniform 404), the exporter's signed
@@ -18,7 +19,6 @@ import { prepareStoryRuntime } from '@/lib/story/prepare-runtime.server';
 import { forkedFromCredit } from '@/lib/story/fork-credit.server';
 import { webAssetsForSource } from '@/lib/web-assets';
 import { assetsPath, mutatePath, queryPath } from '@/lib/story/markup-csp';
-import { declaresMutations } from '@/lib/story/helmet';
 import { readUrlValues } from '@/lib/story/url-values';
 import { ID_RE } from '@/lib/ids';
 import { count, has } from '@/lib/relations';
@@ -45,7 +45,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   if (!ARTIFACT_FORMATS.includes(artifact.format as ArtifactFormat)) return notFound();
 
   const role = await roleFor(artifact, actor);
-  const kind = await browserSessionKind(request);
+  const kind = await browserSessionKind(request, actor);
 
   /*
    * A FOLDER IS A LISTING, NOT A DOCUMENT — so its page is answered HERE and
@@ -96,16 +96,28 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // anonymous reader still gets the count — it is the number, not the button,
   // that everyone can see.
   const viewerId = actor.viewer?.userId ?? null;
-  const [authorUsername, forkedFrom] = await Promise.all([ownerUsername(artifact.user_id), forkedFromCredit(artifact.forked_from)]);
-  const compiledCss = isDoc ? await currentStoryCss(meta, artifact.source) : meta.compiledCss ?? null;
+  // Independent reads begin only after ACL admission. These values belong to
+  // this request; no identity or permission answer is retained across requests.
+  const [authorUsername, forkedFrom, compiledCss, refData, assetUrls, liked, likeCount, following, followCount, openAnnotations, content] = await Promise.all([
+    ownerUsername(artifact.user_id), forkedFromCredit(artifact.forked_from),
+    isDoc ? currentStoryCss(meta, artifact.source) : Promise.resolve(meta.compiledCss ?? null),
+    isDoc ? refDataForRow(artifact) : Promise.resolve({}),
+    isDoc ? webAssetsForSource(artifact.source) : Promise.resolve(undefined),
+    viewerId ? has(viewerId, 'like', artifact.id) : Promise.resolve(false),
+    count('like', artifact.id),
+    artifact.user_id && artifact.user_id !== viewerId && viewerId ? has(viewerId, 'follow', artifact.user_id) : Promise.resolve(false),
+    artifact.user_id && artifact.user_id !== viewerId ? count('follow', artifact.user_id) : Promise.resolve(0),
+    canAnnotate(role) && isDoc ? countOpenAnnotations(artifact.id) : Promise.resolve(0),
+    artifact.format === 'dataset' ? loadDatasetRows(artifact).then(rows => JSON.stringify(rows)) : Promise.resolve(isDoc ? '' : artifact.content),
+  ]);
   const declared = isDoc && artifact.source ? declarationsForRow(artifact) : null;
   const dataflow = declared ? { ...declared, values: readUrlValues(new URL(request.url).search, declared.flow) } : null;
   const runtime = isDoc ? await prepareStoryRuntime({
     source: artifact.source ?? '', compiledCss, theme: design.theme,
     colorMode: design.colorMode, title: artifact.title, template: meta.template ?? null,
-    refData: await refDataForRow(artifact), assetUrls: await webAssetsForSource(artifact.source), dataflow,
+    refData, assetUrls, dataflow,
     queryUrl: queryPath(artifact.id), assetsUrl: assetsPath(artifact.id),
-    ...(declaresMutations(artifact.source) ? { mutateUrl: mutatePath(artifact.id) } : {}),
+    ...(declared?.flow.mutations?.length ? { mutateUrl: mutatePath(artifact.id) } : {}),
     ...(ASSETS_ORIGIN ? { managedAssets: { origin: ASSETS_ORIGIN, resolveUrl: `${baseUrl(request)}${assetsPath(artifact.id)}` } } : {}),
   }) : undefined;
   return json({
@@ -113,13 +125,13 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     description: artifact.description,
     role,
     kind,
-    like: { liked: viewerId ? await has(viewerId, 'like', artifact.id) : false, count: await count('like', artifact.id) },
+    like: { liked, count: likeCount },
     // The follow control is keyed by the AUTHOR's id. Null for an anonymous
     // document, and for the owner, who has nobody here to follow.
     follow: artifact.user_id && artifact.user_id !== viewerId
-      ? { userId: artifact.user_id, following: viewerId ? await has(viewerId, 'follow', artifact.user_id) : false, count: await count('follow', artifact.user_id) }
+      ? { userId: artifact.user_id, following, count: followCount }
       : null,
-    surface: {
+    surface: compactSurface({
       captureKey: exporting ? key : null,
       id: artifact.id,
       editId: artifact.edit_id,
@@ -128,7 +140,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       author: { username: authorUsername, forkedFrom },
       ...(runtime ? { runtime } : {}),
       source: artifact.format==='dataset'&&role!=='owner'&&role!=='editor'?null:artifact.source,
-      content: isDoc ? '' : artifact.format === 'dataset' ? JSON.stringify(await loadDatasetRows(artifact)) : artifact.content,
+      content,
       columns: meta.columns ?? [],
       ...(artifact.format==='dataset' && (artifact.meta as Record<string,unknown>).catalog ? {catalog:publicCatalogOf(artifact)!}:{}),
       // A stored FILE is not a document the app can render, so its view is the
@@ -150,7 +162,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // Anyone who may COMMENT has a comment badge to fill: computing this
       // for the owner alone left an editor's and a commenter's count at 0
       // forever, on a control they were being shown.
-      openAnnotations: canAnnotate(role) && isDoc ? await countOpenAnnotations(artifact.id) : 0,
-    },
+      openAnnotations,
+    }),
   }, 200, { 'Cache-Control': 'no-store' });
 }

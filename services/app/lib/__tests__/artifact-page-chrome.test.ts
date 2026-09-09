@@ -4,7 +4,7 @@
  * document surface without it.
  */
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderToReadableStream } from 'react-dom/server';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GET as docs } from '@/app/docs/[[...path]]/route';
@@ -32,36 +32,38 @@ afterEach(() => vi.unstubAllGlobals());
 /** The shell masthead. The tagline beside the brand belongs to the home page alone, so the bar is the mark. */
 const MASTHEAD = 'aria-label="Page bar"';
 
-const renderPath = (path: string) => {
+const renderPath = async (path: string) => {
   const url = new URL(path, 'https://example.test');
   vi.stubGlobal('window', {
     innerWidth: 1024,
     location: { pathname: url.pathname, search: url.search, hash: url.hash },
     history: { replaceState: vi.fn(), pushState: vi.fn(), back: vi.fn() },
   });
-  return renderToStaticMarkup(
+  const stream = await renderToReadableStream(
     createElement(MemoryRouter, { initialEntries: [path] }, createElement(App)),
   );
+  await stream.allReady;
+  return new Response(stream).text();
 };
 
 describe('artifact pages carry no app chrome', () => {
-  it('the chrome lives in the SPA shell, and only there', () => {
-    expect(renderPath('/login')).toContain(MASTHEAD);
-    expect(renderPath('/a/abc123')).not.toContain(MASTHEAD);
-    expect(renderPath('/@owner/abc123-document')).not.toContain(MASTHEAD);
+  it('the chrome lives in the SPA shell, and only there', async () => {
+    expect(await renderPath('/login')).toContain(MASTHEAD);
+    expect(await renderPath('/a/abc123')).not.toContain(MASTHEAD);
+    expect(await renderPath('/@owner/abc123-document')).not.toContain(MASTHEAD);
   });
 
-  it('the artifact page is the shell around the document, and nothing else', () => {
-    const html = renderPath('/a/abc123');
+  it('the artifact page is the shell around the document, and nothing else', async () => {
+    const html = await renderPath('/a/abc123');
     expect(html).toContain('aria-label="Artifact viewport"');
     expect(html).not.toContain('<iframe');
     expect(html).not.toContain('/a/abc123/raw');
     expect(html).not.toContain(MASTHEAD);
   });
 
-  it('both artifact addresses render through that ONE page', () => {
+  it('both artifact addresses render through that ONE page', async () => {
     for (const path of ['/a/abc123', '/@owner/abc123-document']) {
-      const html = renderPath(path);
+      const html = await renderPath(path);
       expect(html, path).toContain('aria-label="Artifact viewport"');
       expect(html, path).not.toContain('/a/abc123/raw');
     }
@@ -74,6 +76,6 @@ describe('artifact pages carry no app chrome', () => {
     );
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('text/plain');
-    expect(renderPath('/docs-human')).toContain(MASTHEAD);
+    expect(await renderPath('/docs-human')).toContain(MASTHEAD);
   });
 });

@@ -153,7 +153,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
    */
   const followDatasets = async (row: { format: string; id: string; source: string | null }) => {
     if (closed) return;
-    const wanted = new Set(row.format === 'folder' ? [row.id] : datasetsForDocument(isDocumentFormat(row.format) ? row.source : null));
+    const wanted = new Set(row.format === 'folder' ? [row.id] : datasetsForDocument(isDocumentFormat(row.format) ? row : null));
     for (const [datasetId, drop] of datasetUnsubs) {
       if (wanted.has(datasetId)) continue;
       datasetUnsubs.delete(datasetId);

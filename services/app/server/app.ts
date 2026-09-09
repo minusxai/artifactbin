@@ -204,7 +204,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // 404 as a STATUS (the rule documents already live by) — the SPA is still
     // the body, so the person sees the app's own 404 page rather than a
     // default. Only derived when the caller did not already decide (the
-    // document handlers pass documentStatus's 404 explicitly).
+    // document handlers pass their admission's 404 explicitly).
     const miss = data === null && new URL(c.req.url).pathname.split('/').filter(Boolean)[0]?.startsWith('@');
     const code = status ?? (miss ? 404 : 200);
     // A dead end is answered in the language the caller asked in: a browser
@@ -266,31 +266,20 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
    * through a redirect target; and only for the page, since a READER is served
    * the document AT the address they were given (the shared link is canonical).
    */
-  const healTo = async (request: Request): Promise<string | null> => {
+  const documentPreparation = async (request: Request): Promise<{ status: 200 | 404; redirect?: string }> => {
     const url = new URL(request.url);
     const found = candidateDocument(url.pathname);
-    if (!found || url.searchParams.has('key')) return null;
+    if (!found) return { status: 200 };
     const row = await getArtifactById(found.id);
-    if (!row) return null;
+    if (!row) return { status: 404 };
+    // A key skips canonical healing, but only a valid key admits the page.
+    const key = url.searchParams.get('key');
+    if (key && verifyExportKey(row.id, key)) return { status: 200 };
     const actor = await sessionActor(request).catch(() => null);
-    if (!(await canReadArtifact(row, actor?.viewer ?? null))) return null;
+    if (!(await canReadArtifact(row, actor?.viewer ?? null))) return { status: 404 };
+    if (url.searchParams.has('key')) return { status: 200 };
     const canonical = canonicalArtifactPath(row, await ownerUsername(row.user_id));
-    return canonical === url.pathname ? null : canonical + url.search;
-  };
-
-  const documentStatus = async (request: Request): Promise<200 | 404> => {
-    const found = candidateDocument(new URL(request.url).pathname);
-    if (!found) return 200;
-    const row = await getArtifactById(found.id);
-    if (!row) return 404;
-    // The exporter's key is the one credential a session-less browser can
-    // hold, so it is CHECKED here. Trusting its mere presence made the status
-    // an existence oracle for every private document — and `edit_id`, which
-    // the page hands to every viewer, was the obvious thing to try in it.
-    const key = new URL(request.url).searchParams.get('key');
-    if (key && verifyExportKey(row.id, key)) return 200;
-    const actor = await sessionActor(request).catch(() => null);
-    return (await canReadArtifact(row, actor?.viewer ?? null)) ? 200 : 404;
+    return { status: 200, ...(canonical !== url.pathname ? { redirect: canonical + url.search } : {}) };
   };
 
   // Static: content-addressed trees are immutable; everything else is served plainly.
@@ -333,12 +322,11 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // Canonical readers share the app document so its router can transition
     // without changing security policy. Only /raw and exports retain the
     // standalone top-level sandbox; authored scripts still run in Iframes.
-    const to = await runWithRequest(c.req.raw, () => healTo(c.req.raw));
-    if (to) return new Response(null, { status: 302, headers: { location: to, 'cache-control': 'no-store' } });
-    // documentStatus's 404 is final; its 200 only means "not a document
+    const { status, redirect } = await runWithRequest(c.req.raw, () => documentPreparation(c.req.raw));
+    if (redirect) return new Response(null, { status: 302, headers: { location: redirect, 'cache-control': 'no-store' } });
+    // Admission's 404 is final; its 200 can mean "not a document
     // address" — a pretty path under an unknown handle still misses, and
     // page() derives that from the profile resolution it already ran.
-    const status = await runWithRequest(c.req.raw, () => documentStatus(c.req.raw));
     return page(c, status === 404 ? 404 : undefined);
   };
 

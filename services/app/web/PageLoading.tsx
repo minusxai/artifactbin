@@ -4,7 +4,7 @@ import { ShellFrame } from './Shell';
 /** App identity and a quiet skeleton while a destination page's data arrives. */
 export function PageLoading(): ReactNode {
   return (
-    <ShellFrame hideBreadcrumb>
+    <ShellFrame hideBreadcrumb pending>
       <main role="status" aria-label="Loading page" aria-busy="true" className="mx-auto w-full max-w-5xl px-4 py-10">
         <span className="sr-only">Loading page…</span>
         <div aria-hidden="true" className="space-y-6">

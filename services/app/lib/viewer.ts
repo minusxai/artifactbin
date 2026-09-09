@@ -190,7 +190,10 @@ export function roleFor(row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | '
  * no NextAuth session to sign out of, and the thing to clear is the cookie.
  * Fails to 'none' if resolution throws off-request (same as sessionActor).
  */
-export async function browserSessionKind(request?: Request): Promise<'account' | 'anon' | 'none'> {
+export async function browserSessionKind(request?: Request, admitted?: RequestActor): Promise<'account' | 'anon' | 'none'> {
+  // A page already resolved this exact request for admission. This optional
+  // snapshot is display-only; live authorization always resolves afresh.
+  if (admitted) return admitted.credential === 'session' ? 'account' : admitted.tokenId ? 'anon' : 'none';
   if (await sessionViewer()) return 'account';
   const actor = await sessionActor(request);
   return actor.tokenId ? 'anon' : 'none';

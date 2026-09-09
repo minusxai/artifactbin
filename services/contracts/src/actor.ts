@@ -4,6 +4,8 @@
  * across a network hop as a signed header (utils signActor). The app reads it with actorOf().
  */
 export const ACTOR_HEADER = 'x-mx-actor';
+/** Internal response marker: the proxy rechecks credentials before delivering delayed query rows. */
+export const REVALIDATE_ACTOR_HEADER = 'x-mx-revalidate-actor';
 export const CREDENTIALS = ['bearer', 'session', 'agent-cookie', 'none'] as const;
 export type Credential = (typeof CREDENTIALS)[number];
 

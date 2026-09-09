@@ -6,8 +6,11 @@ import { Navigate, useLocation, useParams } from 'react-router';
 import { ListingHero, ListingShell, NothingHere } from '@/components/Listing';
 import Shelf from '@/components/Shelf';
 import { canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
-import { ArtifactPage } from './Artifact';
+import { routePages } from '../route-pages';
 import { NotFoundPage } from './NotFound';
+
+// A profile listing does not need the artifact renderer/editor bundle.
+const { ArtifactPage } = routePages;
 
 type Resolved =
   | { kind: 'redirect'; to: string }
