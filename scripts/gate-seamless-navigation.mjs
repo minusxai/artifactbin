@@ -1,7 +1,8 @@
 /** Route boundaries, not timing benchmarks: one browser document across app and artifact navigation. */
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
-import { startDocument } from './lib/start-doc.mjs';
+import { becomeOwner, startDocument } from './lib/start-doc.mjs';
+import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:3030';
 const first = await startDocument(base);
@@ -38,6 +39,45 @@ try {
   await page.goForward();
   await page.getByLabel('Artifact B', { exact: true }).waitFor();
   assert.equal(await page.evaluate(() => window.__navigationProbe), 'same-document', 'forward retains browser document');
+  // The real shared shelf's LIST links used to force target=_blank. Checking
+  // hand-authored links above alone could never catch that regression.
+  await becomeOwner(page, base, first.token);
+  const sink = await startMailSink();
+  await loginViaEmail(page, base, sink, `mxmx_test_navigation_${Date.now()}@example.com`);
+  await page.getByLabel('Add to my account', { exact: true }).click();
+  await page.getByLabel('Open mxmx_test navigation A', { exact: true }).waitFor();
+  const folderResponse = await page.request.post(`${base}/api/my/artifacts`, { data: { format: 'folder', title: 'Navigation folder' } });
+  assert(folderResponse.ok(), 'create owned folder');
+  const folder = await folderResponse.json();
+  await page.reload();
+  await page.getByLabel('List view', { exact: true }).click();
+  await page.evaluate(() => { window.__navigationProbe = 'shelf-document'; });
+  const pageCount = page.context().pages().length;
+  for (const [label, id] of [['Open mxmx_test navigation A', first.id], ['Open folder Navigation folder', folder.id]]) {
+    const link = page.getByLabel(label, { exact: true });
+    assert.notEqual(await link.getAttribute('target'), '_blank', `${label} does not force a new tab`);
+    await link.click();
+    await page.waitForURL((url) => url.pathname.includes(id));
+    assert.equal(page.context().pages().length, pageCount, 'shelf click opens no tab');
+    assert.equal(await page.evaluate(() => window.__navigationProbe), 'shelf-document', 'shelf click retains document');
+    await page.goBack();
+    await page.getByLabel('Open mxmx_test navigation A', { exact: true }).waitFor();
+    assert.equal(await page.evaluate(() => window.__navigationProbe), 'shelf-document', 'Back retains document');
+  }
+  const account = await (await page.request.get(`${base}/api/page/account`)).json();
+  await page.goto(`${base}/@${account.username}`);
+  await page.getByLabel('List view', { exact: true }).click();
+  await page.evaluate(() => { window.__navigationProbe = 'profile-document'; });
+  const profileLink = page.getByLabel('Open mxmx_test navigation A', { exact: true });
+  assert.notEqual(await profileLink.getAttribute('target'), '_blank', 'profile list does not force a new tab');
+  await profileLink.click();
+  await page.getByLabel('Artifact A', { exact: true }).waitFor();
+  assert.equal(page.context().pages().length, pageCount, 'profile click opens no tab');
+  assert.equal(await page.evaluate(() => window.__navigationProbe), 'profile-document', 'profile to artifact retains document');
+  await page.goBack();
+  await page.getByLabel('Open mxmx_test navigation A', { exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => window.__navigationProbe), 'profile-document', 'Back to profile retains document');
+  await page.request.delete(`${base}/api/my/artifacts/${folder.id}`);
   console.log('PASS seamless app/artifact route matrix, top-level body, history and CSS disposal');
 } finally {
   await browser.close();

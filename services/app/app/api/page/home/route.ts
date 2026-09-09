@@ -11,12 +11,14 @@ import { liveAgentSession } from '@/lib/agent-session';
 import { json } from '@/lib/http';
 import { listDraftsByTokenIds } from '@/lib/users';
 import { sessionActor } from '@/lib/viewer';
-import { accountWorkspaceFor } from '@/lib/workspace';
+import { accountWorkspaceFor, accountWorkspaceCoreFor, accountWorkspaceInsightsFor } from '@/lib/workspace';
 
 export async function GET(request: Request) {
   const actor = await sessionActor(request);
   const user = actor.credential === 'session' && actor.viewer?.userId ? actor.viewer : null;
+  const part = new URL(request.url).searchParams.get('part');
   if (!user?.userId) {
+    if (part === 'insights') return json({ signedIn: false }, 200, { 'Cache-Control': 'no-store' });
     const cookie = actor.heldTokenIds
       ? null
       : await liveAgentSession(request);
@@ -30,6 +32,11 @@ export async function GET(request: Request) {
         version: draft.version, updated_at: draft.updated_at, visibility: draft.visibility,
       })),
     }, 200, { 'Cache-Control': 'no-store' });
+  }
+  if (part === 'core' || part === 'insights') {
+    return json({ signedIn: true, accountId: user.userId, ...(await (part === 'core'
+      ? accountWorkspaceCoreFor(user.userId, user.email)
+      : accountWorkspaceInsightsFor(user.userId))) }, 200, { 'Cache-Control': 'no-store' });
   }
   return json({
     signedIn: true,

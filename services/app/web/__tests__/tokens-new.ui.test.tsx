@@ -14,12 +14,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
 import { HomePage } from '@/web/pages/Home';
 import { TokensNewPage } from '@/web/pages/TokensNew';
+import { SessionProvider } from '@/web/session';
 
 const SECRET = 'mx_' + 'a'.repeat(43);
 const EXPIRES = '2026-09-01T00:00:00.000Z';
 type Session = { user: { id: string; email: string | null } | null; kind: 'account' | 'anon' | 'none'; stats: null; mixpanel: { token: null; host: string } };
 let session: Session;
-vi.mock('@/web/session', () => ({ useSession: () => ({ session, reload: () => {} }) }));
+vi.mock('@/web/session', async (original) => {
+  const actual = await original<typeof import('@/web/session')>();
+  return { ...actual, useSession: () => { const value = actual.useSession(); return value.home ? value : { ...value, session, reload: () => {} }; } };
+});
 
 let mints: Array<Record<string, unknown>>;
 let exchanges: Array<Record<string, unknown>>;
@@ -112,14 +116,14 @@ describe('/tokens/new', () => {
 
 describe('anonymous home drafts', () => {
   it('renders the held-browser shelf and login nudge', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(url.includes('/session') ? { kind: 'anon', user: null } : {
       signedIn: false,
       drafts: [{
         id: 'art_draft', url: '/a/art_draft', title: 'Browser draft', format: 'markup',
         version: 1, updated_at: '2026-08-31T00:00:00.000Z', visibility: 'unlisted',
       }],
     }), { status: 200 })));
-    render(<MemoryRouter><HomePage /></MemoryRouter>);
+    render(<MemoryRouter><SessionProvider><HomePage /></SessionProvider></MemoryRouter>);
     expect(await screen.findByText(/held by this browser/i)).toBeTruthy();
     expect(screen.getByText('Browser draft')).toBeTruthy();
     expect(screen.getByRole('link', { name: /log in to keep them/i })).toHaveAttribute('href', '/login');
