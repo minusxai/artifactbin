@@ -55,17 +55,10 @@ export function wireGithubWidgetTheme(root: HTMLElement): () => void {
       const palette = getComputedStyle(host);
       const actual = reader ? palette.getPropertyValue('--mx-reader-scheme').trim() : palette.colorScheme;
       const scheme = actual === 'dark' ? 'dark' : 'light';
-      const options = new URLSearchParams(url.hash.slice(1));
-      if (options.get('data-color-scheme') === scheme) continue;
-      options.set('data-color-scheme', scheme);
-      // The vendor parses its hash only at startup. A query change performs
-      // a document navigation; a fragment-only change would leave old paint.
-      url.searchParams.set('theme', scheme);
-      url.hash = options.toString().replaceAll('+', '%20');
-      frame.style.visibility = 'hidden';
-      const fallback = frame.nextElementSibling as HTMLElement | null;
-      if (fallback) fallback.style.display = 'inline-flex';
-      frame.setAttribute('src', url.href);
+      // Embedded documents inherit prefers-color-scheme from their iframe's
+      // color-scheme. The vendor's media rules repaint without navigating,
+      // refetching the count, or ever restoring the initial fallback.
+      if (frame.style.colorScheme !== scheme) frame.style.colorScheme = scheme;
     }
     measure();
   };

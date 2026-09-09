@@ -154,6 +154,16 @@ await plainSource.fill(initialSource.replace('Edited by the gate', 'Edited while
 releaseRichEditor();
 const mounted = await page.waitForSelector('.monaco-editor [aria-label="Markup source"]', { timeout: 30_000 }).then(() => true).catch(() => false);
 check(mounted, 'the source pane mounts a real editor, not a permanent "Loading…"');
+const editorPaint = await page.locator('.monaco-editor').evaluate(editor => {
+  const input = editor.querySelector('textarea');
+  return { background: getComputedStyle(editor).backgroundColor,
+    inputPosition: input && getComputedStyle(input).position,
+    localStyles: !!editor.getRootNode().querySelector('[data-source-editor-styles]'),
+    height: editor.getBoundingClientRect().height };
+});
+check(editorPaint.localStyles && editorPaint.background !== 'rgba(0, 0, 0, 0)'
+  && editorPaint.inputPosition === 'absolute' && editorPaint.height > 200,
+  'rich editor has shadow-local styles, opaque paint, clipped input and usable height');
 const focusTransferred = await page.locator('.monaco-editor').evaluate(editor => new Promise(resolve => {
   // TrustedUi has its own focus scope. Modern Monaco uses EditContext's div,
   // not its compatibility textarea, for keyboard input on Chromium.

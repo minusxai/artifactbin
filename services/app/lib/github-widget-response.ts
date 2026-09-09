@@ -7,7 +7,7 @@ import { GITHUB_WIDGET_SANDBOX } from './github-star';
 const bootstrap = `const options=new URLSearchParams(location.hash.slice(1));
 const link=document.querySelector('a');
 link.setAttribute('data-show-count',options.get('data-show-count')==='true'?'true':'false');
-link.setAttribute('data-color-scheme',options.get('data-color-scheme')==='dark'?'dark':'light');
+link.setAttribute('data-color-scheme','no-preference: light; light: light; dark: dark;');
 let acknowledged=false,retry,attempts=0;
 const report=()=>{clearTimeout(retry);const widget=document.body.querySelector('span');if(!widget)return;const r=widget.getBoundingClientRect();if(r.width>0&&r.height>0){parent.postMessage({type:'github-widget-size',width:r.width,height:r.height},'*');if(!acknowledged&&attempts++<40)retry=setTimeout(report,250);}};
 const observer=new ResizeObserver(report);observer.observe(document.body);

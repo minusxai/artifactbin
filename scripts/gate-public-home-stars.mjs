@@ -7,7 +7,7 @@ const browser = await chromium.launch({ headless: true });
 // This browser-test fixture replaces the vendor document only here. It performs
 // a real sandboxed cross-origin fetch and popup navigation through the iframe.
 async function fixture(context) {
-  await context.route('https://buttons.github.io/buttons.js', route => route.fulfill({ contentType: 'application/javascript', body: `const scheme=new URLSearchParams(location.hash.slice(1)).get('data-color-scheme');document.documentElement.style.colorScheme=scheme;document.body.style.backgroundColor=scheme==='dark'?'rgb(13,17,23)':'rgb(255,255,255)';fetch('https://api.github.com/repos/minusxai/artifactbin').then(r=>r.json()).then(d=>{const link=document.querySelector('a');const widget=document.createElement('span');widget.style.cssText='display:inline-block;width:112px;height:28px;font:12px/28px sans-serif';link.replaceWith(widget);widget.append(link);link.textContent='Star '+d.stargazers_count;link.target='_blank';link.setAttribute('aria-label',d.stargazers_count+' stargazers on GitHub')})` }));
+  await context.route('https://buttons.github.io/buttons.js', route => route.fulfill({ contentType: 'application/javascript', body: `const style=document.createElement('style');style.textContent='body{background:rgb(255,255,255)}@media(prefers-color-scheme:dark){body{background:rgb(13,17,23)}}';document.head.append(style);fetch('https://api.github.com/repos/minusxai/artifactbin').then(r=>r.json()).then(d=>{const link=document.querySelector('a');const widget=document.createElement('span');widget.style.cssText='display:inline-block;width:112px;height:28px;font:12px/28px sans-serif';link.replaceWith(widget);widget.append(link);link.textContent='Star '+d.stargazers_count;link.target='_blank';link.setAttribute('aria-label',d.stargazers_count+' stargazers on GitHub')})` }));
   await context.route('https://api.github.com/repos/minusxai/artifactbin', route => route.fulfill({ headers: { 'access-control-allow-origin': '*' }, contentType: 'application/json', body: '{"stargazers_count":1234}' }));
   await context.route('https://github.com/minusxai/artifactbin', route => route.fulfill({ contentType: 'text/html', body: '<h1>Repository destination</h1>' }));
 }
@@ -22,7 +22,8 @@ try {
   await noJs.close();
   console.log('ok public heading and shared topbar without JavaScript');
 
-  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  // Playwright's default forced light emulation overrides embedded inheritance.
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, colorScheme: null });
   await fixture(context);
   const page = await context.newPage();
   let releaseScripts;
@@ -92,6 +93,16 @@ try {
   await star.waitFor();
   const widget = page.frameLocator('[data-mx-reader-rail] [data-mx-github-star]:visible iframe');
   await widget.getByRole('link', { name: '1234 stargazers on GitHub' }).waitFor();
+  await star.locator('iframe').evaluate(frame => { window.__readerStar = frame; });
+  await widget.locator('body').evaluate(() => { window.__vendorInstance = 'retained'; });
+  const titleUpdate = await fetch(`${base}/api/artifacts/${doc.id}`, {
+    method: 'PUT', headers: { Authorization: `Bearer ${doc.token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: 'mxmx_test updated star title', markup: '<h1>Star layout fixture</h1>' }),
+  });
+  assert(titleUpdate.ok);
+  await page.getByText('mxmx_test updated star title', { exact: true }).first().waitFor();
+  assert(await star.locator('iframe').evaluate(frame => frame === window.__readerStar && frame.style.visibility === 'visible'), 'live title update preserves the ready frame element');
+  assert.equal(await widget.locator('body').evaluate(() => window.__vendorInstance), 'retained', 'live update also preserves the iframe document, not only its DOM element');
   const parentUrl = page.url();
   const popupPromise = page.waitForEvent('popup');
   await widget.getByRole('link').click();
@@ -99,11 +110,20 @@ try {
   await popup.waitForURL('https://github.com/minusxai/artifactbin');
   assert.equal(page.url(), parentUrl, 'vendor popup cannot navigate its parent');
   await popup.close();
-  for (const theme of ['light', 'dark']) {
-    await page.evaluate(theme => document.documentElement.setAttribute('data-theme', theme), theme);
+  const widgetSrc = await star.locator('iframe').getAttribute('src');
+  for (const theme of ['light', 'dark', 'light']) {
+    await star.evaluate((el, theme) => el.closest('[data-mx-reader-chrome]').style.setProperty('--mx-reader-scheme', theme), theme);
     const actualScheme = await star.evaluate(el => getComputedStyle(el.closest('[data-mx-reader-chrome]')).getPropertyValue('--mx-reader-scheme').trim());
-    assert.equal(new URLSearchParams(new URL(await star.locator('iframe').getAttribute('src'), base).hash.slice(1)).get('data-color-scheme'), actualScheme);
-    assert.equal(await widget.locator('body').evaluate(el => getComputedStyle(el).backgroundColor), actualScheme === 'dark' ? 'rgb(13, 17, 23)' : 'rgb(255, 255, 255)');
+    assert.equal(await star.locator('iframe').getAttribute('src'), widgetSrc);
+    assert(await star.locator('iframe').evaluate(frame => frame === window.__readerStar && frame.style.visibility === 'visible'));
+    assert.equal(await star.locator('iframe').evaluate(frame => frame.style.colorScheme), actualScheme);
+    const expectedBackground = actualScheme === 'dark' ? 'rgb(13, 17, 23)' : 'rgb(255, 255, 255)';
+    assert(await widget.locator('body').evaluate((el, expected) => new Promise(resolve => {
+      const deadline = performance.now() + 3000;
+      const sample = () => getComputedStyle(el).backgroundColor === expected ? resolve(true)
+        : performance.now() > deadline ? resolve(false) : requestAnimationFrame(sample);
+      sample();
+    }), expectedBackground), `embedded theme repaints to ${actualScheme} without reloading`);
   }
   const starBox = await star.boundingBox();
   const likeBox = await page.locator('[data-mx-reader-action="like"]:visible').boundingBox();

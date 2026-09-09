@@ -64,14 +64,15 @@ it('tracks actual app and reader palettes separately and stops watching after un
     const app = view.container.querySelector<HTMLIFrameElement>('header iframe')!;
     const reader = view.container.querySelector<HTMLIFrameElement>('[data-mx-reader-chrome] iframe')!;
     const chrome = reader.closest<HTMLElement>('[data-mx-reader-chrome]')!;
-    const scheme = (frame: HTMLIFrameElement) => new URLSearchParams(new URL(frame.src).hash.slice(1)).get('data-color-scheme');
+    const scheme = (frame: HTMLIFrameElement) => frame.style.colorScheme;
+    const initialAppSrc = app.src, initialReaderSrc = reader.src;
     expect(scheme(app)).toBe('dark');
-    expect(new URL(app.src).searchParams.get('theme')).toBe('dark');
     expect(scheme(reader)).toBe('light'); // The actual reader bar is white despite the app's root theme.
     await act(async () => { chrome.style.setProperty('--mx-reader-scheme', 'dark'); document.documentElement.dataset.theme = 'light'; });
     expect(scheme(app)).toBe('light');
     expect(scheme(reader)).toBe('dark');
-    expect(new URL(reader.src).searchParams.get('theme')).toBe('dark');
+    expect(app.src).toBe(initialAppSrc);
+    expect(reader.src).toBe(initialReaderSrc);
     const write = vi.spyOn(reader, 'setAttribute');
     await act(async () => { chrome.classList.add('unrelated-state'); });
     expect(write).not.toHaveBeenCalled();
@@ -99,9 +100,29 @@ it('embeds the star-count vendor in sandboxed frames in both app and reader chro
     expect(url.hash).not.toContain('+');
     expect(frame!.getAttribute('sandbox')).toBe('allow-scripts allow-popups allow-popups-to-escape-sandbox');
     expect(frame!.getAttribute('referrerpolicy')).toBe('no-referrer');
-    expect((frame as HTMLIFrameElement).style.colorScheme).toBe('normal');
+    expect((frame as HTMLIFrameElement).style.colorScheme).toBe('light');
     expect(frame!.getAttribute('title')).toBeTruthy();
   }
   expect(rail.children[1].getAttribute('data-mx-reader-action')).toBe('like');
   expect(fetch).not.toHaveBeenCalled();
+});
+it('never reloads a ready reader widget when reactions, title, controls or theme change', async () => {
+  const input = { artifactId: 'abcdef', title: 'Before', author: null };
+  const view = render(<InlineReaderChrome input={input} onAction={() => {}} />);
+  const frame = view.container.querySelector('iframe')!;
+  const src = frame.src;
+  window.dispatchEvent(new MessageEvent('message', { origin: 'null', source: frame.contentWindow,
+    data: { type: 'github-widget-size', width: 112, height: 28 } }));
+  const writes = vi.spyOn(frame, 'setAttribute');
+  view.rerender(<InlineReaderChrome input={{ ...input, title: 'After' }} pinned onAction={() => {}} />);
+  await act(async () => {
+    view.container.querySelector<HTMLElement>('[data-mx-reader-chrome]')!.style.setProperty('--mx-reader-scheme', 'dark');
+  });
+  expect(view.container.querySelector('iframe')).toBe(frame);
+  expect(frame.src).toBe(src);
+  expect(frame.style.visibility).toBe('visible');
+  expect((frame.nextElementSibling as HTMLElement).style.display).toBe('none');
+  expect(frame.style.colorScheme).toBe('dark');
+  expect(writes.mock.calls.some(([name]) => name === 'src')).toBe(false);
+  expect(view.container.textContent).toContain('After');
 });
