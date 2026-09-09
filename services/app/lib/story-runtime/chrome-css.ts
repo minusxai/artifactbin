@@ -246,6 +246,8 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
   transition: color 120ms ease, border-color 120ms ease !important;
 }
 .mx-reader-github a:focus-visible { outline: 2px solid var(--mx-reader-accent) !important; outline-offset: 2px !important; }
+[data-theme='light'] .mx-reader-github { color-scheme: light !important; }
+[data-theme='dark'] .mx-reader-github { color-scheme: dark !important; }
 .mx-reader-trigger .mx-rc-close { display: none !important; }
 .mx-reader-trigger[aria-expanded="true"] .mx-rc-open { display: none !important; }
 .mx-reader-trigger[aria-expanded="true"] .mx-rc-close { display: block !important; }
