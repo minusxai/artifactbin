@@ -194,6 +194,9 @@ export function prepareRunAsDirs(opts: { workspaceRoot?: string; cwd: string; ho
 export function handOverRunAsDirs(user: string, dirs: RunAsDirs, exec: (argv: string[]) => void): void {
   for (const dir of dirs.traverse) grantMode(dir, 0o011);
   for (const file of dirs.read ?? []) grantMode(file, 0o004);
+  // chown keeps the driver's group. The driver must still chdir into the
+  // cwd before execing sudo, even when the workspace was created under umask 077.
+  for (const dir of dirs.chown) grantMode(dir, 0o010);
   if (dirs.chown.length > 0) exec(chownArgv(user, dirs.chown));
 }
 
@@ -324,7 +327,10 @@ export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string;
     }, opts.timeoutMs);
 
     const exitCode = await new Promise<number | null>((resolve) => {
-      child.on('error', () => resolve(null));
+      child.on('error', (error) => {
+        errOut.write(scrub(`Process launch failed: ${error.message}\n`));
+        resolve(null);
+      });
       child.on('exit', (code: number | null) => resolve(code));
     });
     clearTimeout(timer);

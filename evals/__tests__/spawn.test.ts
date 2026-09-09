@@ -21,6 +21,14 @@ afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
 const node = (script: string) => ({ argv: ['node', '-e', script], env: {}, unsetEnv: [] });
 
 describe('runInvocation', () => {
+  it('records a process launch failure in stderr', async () => {
+    const result = await runInvocation({ argv: ['/nonexistent/eval-command'], env: {}, unsetEnv: [] }, {
+      cwd: dir, baseEnv: {}, timeoutMs: 1000, ...paths(),
+    });
+    expect(result.exitCode).toBeNull();
+    expect(fs.readFileSync(paths().stderrPath, 'utf8')).toMatch(/Process launch failed:.*ENOENT/);
+  });
+
   it('protects the primary checkout and sibling worktrees, including paths with spaces', () => {
     const repo = path.join(dir, 'repo');
     const sibling = path.join(dir, 'sibling worktree');
@@ -267,12 +275,14 @@ describe('run-as hands over only what the agent owns', () => {
  * of it STILL owned by the driver (that is the transcript bug) and merely traversable.
  */
 describe('handOverRunAsDirs', () => {
-  it('chowns exactly the cwd and the home, and only chmods the root', () => {
+  it('hands over private cwd/home while retaining driver traversal', () => {
     const root = path.join(dir, 'ws');
     const cwd = path.join(root, 'cwd');
     const homeDir = path.join(root, 'home');
     const plan = prepareRunAsDirs({ workspaceRoot: root, cwd, homeDir });
     fs.chmodSync(root, 0o700); // what mkdtemp leaves behind, and what locked the agent out
+    fs.chmodSync(cwd, 0o700);
+    fs.chmodSync(homeDir, 0o700);
     const before = fs.statSync(root);
 
     const ran: string[][] = [];
@@ -281,6 +291,8 @@ describe('handOverRunAsDirs', () => {
     expect(ran).toEqual([['sudo', '-n', 'chown', '-R', 'agent', cwd, homeDir]]);
     const after = fs.statSync(root);
     expect(after.mode & 0o777).toBe(0o711);
+    expect(fs.statSync(cwd).mode & 0o777).toBe(0o710);
+    expect(fs.statSync(homeDir).mode & 0o777).toBe(0o710);
     expect(after.uid).toBe(before.uid); // the driver keeps the root: it still writes transcript/stderr/result there
   });
 
