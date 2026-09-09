@@ -23,7 +23,7 @@ import { loadImage } from './story/image-store';
 import { createHash } from 'node:crypto';
 import { ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN } from '@/lib/config';
 import { services } from '@/lib/services';
-import { ArtifactRow, declarationsOf, getArtifactById, referencedArtifactForRow } from './artifacts';
+import { ArtifactRow, declarationsForRow, getArtifactById, referencedArtifactForRow } from './artifacts';
 import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from './export-card';
 import { mintExportKey } from './export-key';
 import { json } from './http';
@@ -430,7 +430,7 @@ export async function exportImageResponse(
    * document for one of them and not the others is a card of the wrong thing.
    */
   const isDocument = artifact.format === 'markup';
-  const flow = isDocument && artifact.source ? declarationsOf(artifact.source) : null;
+  const flow = isDocument ? declarationsForRow(artifact)?.flow ?? null : null;
   const imageOverview = capture === 'preview' && q.image === '1';
   const imageId = isDocument && (capture === 'card' || imageOverview) ? socialPreviewImage(artifact.source ?? '') : null;
   if (imageId) {

@@ -11,7 +11,7 @@
  */
 import { runQueries, isQueryFailure, type QueryPage } from './engine';
 import {
-  initialValues, queryDeps, queryOrder, type Dataflow, type DataflowState, type Row, type Scalar,
+  initialValues, selectedQueries, type Dataflow, type DataflowState, type Row, type Scalar,
 } from '@/lib/story/dataflow';
 import type { DatasetColumn } from '@/lib/story/dataset-shape';
 import { localTableOverrides } from '@/lib/story/local-tables';
@@ -56,27 +56,11 @@ export async function runDataflow(flow: Dataflow, datasets: DatasetTables, opts:
   if (signalColumns.length) inputs[SIGNALS_TABLE] = {columns: signalColumns, rows: [values]};
   for (const [id, t] of Object.entries(datasets)) inputs[`ref_${id}`] = t;
 
-  const order = queryOrder(flow);
-  if (order === null) {
+  const queries = selectedQueries(flow, opts);
+  if (queries === null) {
     for (const q of flow.queries) errors[q.name] = 'the document\'s queries form a dependency cycle';
     return { values, tables, errors };
   }
-  // A partial run still needs everything upstream of what it was asked for.
-  let wanted: Set<string> | null = null;
-  const only = opts.page ? [opts.page.name] : opts.only ? [...opts.only] : null;
-  if (only) {
-    wanted = new Set<string>();
-    const byName = new Map(flow.queries.map((q) => [q.name, q]));
-    const tableNames = [...flow.values.filter((v) => v.kind === 'table').map((v) => v.name), ...flow.queries.map((q) => q.name)];
-    const visit = (name: string) => {
-      const q = byName.get(name);
-      if (!q || wanted!.has(name)) return;
-      wanted!.add(name);
-      for (const d of q.source ? [] : queryDeps(q.sql, tableNames)) visit(d);
-    };
-    for (const name of only) visit(name);
-  }
-  const queries = order.map((n) => flow.queries.find((q) => q.name === n)!).filter((q) => !wanted || wanted.has(q.name));
   if (queries.length === 0) return { values, tables, errors };
 
   await Promise.all(queries.filter(q=>q.source).map(async q=>{
