@@ -7,7 +7,9 @@ vi.mock('@/lib/datasets/postgres',()=>({
 import {useAppHarness,request} from './harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {GET as queryDocument,POST as queryPrivateDocument} from '@/app/a/[id]/query/route';
-import {attachActor} from '@artifactbin/utils';
+import {attachActor,createTokenReader,encodeAgentSession,AGENT_COOKIE} from '@artifactbin/utils';
+import {createProxy} from '../../proxy/src/parts';
+import {RELAXED_POLICY_FILE} from '../../proxy/__tests__/helpers';
 import {createDatasetSecret} from '@/lib/datasets/secrets';
 import {mintToken} from '@/lib/tokens';
 import {createUser,claimToken} from '@/lib/users';
@@ -46,14 +48,16 @@ it.each(['private','deleted'] as const)('does not return source rows when a publ
   expect(await response.text()).not.toContain('314159265');pg.hold=null;
 });
 
-it.each(['bearer','agent-cookie'] as const)('revalidates a proxy-attached %s token after upstream SQL',async(credential)=>{
-  const {id,user,token}=await fixture();const db=await harness.db();
+it.each(['bearer','agent-cookie'] as const)('revalidates a forwarded %s token through the real proxy after upstream SQL',async(credential)=>{
+  const {id,token}=await fixture();const db=await harness.db();
   await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1",[id]);
   if((await db.query("SELECT to_regclass('dataset_result_cache') AS table_name")).rows[0].table_name)await db.query('DELETE FROM dataset_result_cache');
   const started=deferred<void>(),release=deferred<{rows:Array<{n:number}>,columns:Array<{name:string,type:'number'}>}>();
   pg.hold=()=>{started.resolve();return release.promise;};
-  const req=attachActor(request(`/a/${id}/query`,{method:'POST',json:{}}),{credential,userId:user.id,email:user.email,tokenId:token.id});
-  const pending=queryPrivateDocument(req,{params:Promise.resolve({id})});
+  const cookieSecret='speedup-proxy-test-only';
+  const proxy=createProxy({env:{PROXY__RATE_LIMIT_CONFIG_FILE:RELAXED_POLICY_FILE},cookieSecret,tokens:createTokenReader({db}),sessions:{resolve:async()=>null},upstream:(incoming,actor)=>queryPrivateDocument(attachActor(incoming,actor),{params:Promise.resolve({id})})});
+  const req=request(`/a/${id}/query`,{method:'POST',json:{},...(credential==='bearer'?{token:token.token}:{cookie:`${AGENT_COOKIE}=${encodeAgentSession({tokenIds:[token.id]},cookieSecret)}`})});
+  const pending=proxy.fetch(req);
   await started.promise;
   await db.query('UPDATE tokens SET deleted_at=now() WHERE id=$1',[token.id]);
   release.resolve({rows:[{n:314159265}],columns:[{name:'n',type:'number'}]});
