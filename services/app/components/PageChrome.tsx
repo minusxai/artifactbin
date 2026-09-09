@@ -1,10 +1,8 @@
 'use client';
 
 /**
- * Quiet page chrome. Desktop keeps two independent corner controls rather
- * than reserving a header; phones get one full-width bottom rail with Menu,
- * Home, and the current page's controls. A page may scroll the chrome away
- * with its content, while a full-viewport artifact overlays it.
+ * Shared page chrome. The app topbar holds Home, repository stars and page
+ * controls; document chrome uses the same panels through its existing bridge.
  */
 import {
   BookOpen, CircleUser, Braces, ChevronRight, FileText, LogIn, LogOut, Menu, Moon,
@@ -461,7 +459,6 @@ export function AppBar({
   };
   return (
     <>
-    <GitHubStar placement="desktop-corner" />
     <header aria-label="Page bar" className={`${fixed ? 'fixed inset-x-0 top-0' : 'sticky top-0'} z-40 flex h-11 items-center gap-2 sm:gap-3 border-b border-edge bg-surface/85 px-3 backdrop-blur-md`}>
       {center && <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">{center}</div>}
       <a href="/" aria-label="Home" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] no-underline transition-colors hover:bg-raised">
@@ -490,6 +487,7 @@ export function AppBar({
         ))}
       </nav>
       <div className="ml-auto flex shrink-0 items-center gap-1">
+        <GitHubStar placement="desktop-bar" />
         <GitHubStar placement="mobile-bar" />
         {/* The document bar's glyphs, at its size and stroke, so the two bars read as one. */}
         {control('controls', label.toLowerCase(), <SlidersVertical size={20} strokeWidth={1.3} />)}

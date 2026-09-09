@@ -5,6 +5,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import { renderReaderChrome, type ReaderChromeInput } from '@/lib/story/reader-chrome';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { GitHubIcon } from '@/components/brand-icons';
 
 const chrome = (over: Partial<ReaderChromeInput> = {}): string =>
   renderReaderChrome({
@@ -15,6 +18,13 @@ const chrome = (over: Partial<ReaderChromeInput> = {}): string =>
   });
 
 describe('renderReaderChrome', () => {
+  it('uses the same current official Invertocat geometry as the React button', () => {
+    const react = renderToStaticMarkup(createElement(GitHubIcon));
+    const reader = chrome().match(/<a href="https:\/\/github.com\/minusxai\/artifactbin"[^>]*><svg.*?Support artifactbin<\/a>/)?.[0] ?? '';
+    expect(reader).toContain('viewBox="0 0 98 96"');
+    expect(reader).toContain('M41.4395 69.3848C28.8066 67.8535');
+    expect(reader.match(/<path d="([^"]+)"/)?.[1]).toBe(react.match(/<path d="([^"]+)"/)?.[1]);
+  });
   it('marks the owner byline as a breadcrumb and escapes the artifact name', () => {
     const html = chrome({ ownerBreadcrumb: true, title: 'Report <2026>' });
     expect(html).toContain('data-mx-owner-breadcrumb');

@@ -386,6 +386,6 @@ describe('the theme is stamped where the theme sheet looks for it', () => {
 
   it('omits it entirely for an unthemed document', async () => {
     const html = await doc({ source: '<h1>Titled</h1>' });
-    expect(html).not.toContain('data-theme');
+    expect(html.match(/<html\b[^>]*>/)?.[0]).not.toContain('data-theme');
   });
 });

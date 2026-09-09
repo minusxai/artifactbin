@@ -239,17 +239,13 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
 .mx-reader-action:active, .mx-reader-trigger:active:active { transform: scale(.94) !important; }
 .mx-reader-home img { display: block !important; width: 22px !important; height: 22px !important; margin: 0 !important; border: 0 !important; }
 .mx-reader-github {
-  order: 2 !important; display: inline-flex !important; align-items: center !important; gap: 6px !important;
-  flex: 0 0 auto !important; box-sizing: border-box !important; height: 36px !important; padding: 0 10px !important;
-  border: 1px solid var(--mx-reader-border) !important; border-radius: 5px !important;
-  background: var(--mx-reader-bg) !important; color: var(--mx-reader-fg) !important;
+  order: 2 !important; display: inline-flex !important; align-items: center !important;
+  flex: 0 0 auto !important; box-sizing: border-box !important; height: 28px !important; padding: 0 !important;
+  color: var(--mx-reader-fg) !important;
   font: 10px var(--font-mono, ui-monospace, monospace) !important; letter-spacing: .04em !important; text-decoration: none !important; white-space: nowrap !important;
   transition: color 120ms ease, border-color 120ms ease !important;
 }
-.mx-reader-github:hover { color: var(--mx-reader-accent) !important; border-color: var(--mx-reader-muted) !important; }
-.mx-reader-github:focus-visible { outline: 2px solid var(--mx-reader-accent) !important; outline-offset: 2px !important; }
-.mx-reader-github svg { width: 13px !important; height: 13px !important; flex-shrink: 0 !important; }
-.mx-reader-github svg:last-child { color: #efb000 !important; fill: currentColor !important; }
+.mx-reader-github a:focus-visible { outline: 2px solid var(--mx-reader-accent) !important; outline-offset: 2px !important; }
 .mx-reader-trigger .mx-rc-close { display: none !important; }
 .mx-reader-trigger[aria-expanded="true"] .mx-rc-open { display: none !important; }
 .mx-reader-trigger[aria-expanded="true"] .mx-rc-close { display: block !important; }
@@ -395,13 +391,10 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
 
 /* DESKTOP — one bar across the top. */
 @media (min-width: 640px) {
-  /* Clear of the page's comment rail too: the frame stays full-width under
-     it, so a corner at the frame's edge is a corner under the rail. */
+  /* The desktop star participates in the action rail, immediately before Like. */
   .mx-reader-github {
-    position: fixed !important; right: calc(max(20px, env(safe-area-inset-right)) + var(--mx-rail-inset, 0px)) !important;
-    bottom: max(20px, env(safe-area-inset-bottom)) !important;
-  }
-  .mx-reader-github { height: 28px !important; padding: 0 10px !important;
+    position: static !important;
+    order: -1 !important;
   }
   .mx-reader-chrome {
     inset: 0 0 auto 0 !important; display: flex !important; align-items: center !important;
@@ -452,7 +445,7 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
 @media (max-width: 639px) {
   .mx-reader-chrome { inset: 0 !important; pointer-events: none !important; }
   .mx-reader-github {
-    position: absolute !important; top: max(10px, env(safe-area-inset-top)) !important;
+    position: fixed !important; top: max(10px, env(safe-area-inset-top)) !important;
     right: max(10px, env(safe-area-inset-right)) !important;
   }
   .mx-reader-chrome > * { pointer-events: auto !important; }
