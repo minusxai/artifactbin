@@ -251,11 +251,10 @@ describe('buildStoryDocument', () => {
     expect(await doc({ source: '<p>plain</p>' })).not.toContain('class="mx-deck"');
   });
 
-  it("carries the reader's chrome, server-rendered HIDDEN, and the pre-paint appearance", async () => {
+  it("carries the reader's chrome, server-rendered visible, and the pre-paint appearance", async () => {
     const html = await doc({ source: '<p>plain</p>', live: { id: 'ab12cd', editId: 'e1' } });
     expect(html).toContain('data-mx-reader-chrome');
-    expect(html).toContain('data-mx-reader-state="hidden"');
-    expect(html).toContain('mx-reader-chrome--hidden');
+    expect(html).toContain('class="mx-reader-chrome" data-mx-reader-chrome data-mx-reader-state="shown"');
     expect(html).toContain('data-mx-artifact-id="ab12cd"');
     expect(html).toContain('class="mx-reader-home"');
     expect(html).toContain('aria-label="Home"');

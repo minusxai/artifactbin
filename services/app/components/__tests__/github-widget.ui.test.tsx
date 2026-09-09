@@ -3,8 +3,35 @@ import { act, cleanup, render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { AppBar } from '../PageChrome';
 import { InlineReaderChrome } from '../InlineReaderChrome';
+import GitHubStar from '../GitHubStar';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+it('preserves the live iframe across parent rerenders instead of restoring hidden markup', () => {
+  const view = render(<GitHubStar placement="desktop-bar" />);
+  const frame = view.container.querySelector('iframe')!;
+  frame.style.visibility = 'visible';
+  view.rerender(<GitHubStar placement="desktop-bar" />);
+  expect(view.container.querySelector('iframe')).toBe(frame);
+  expect(frame.style.visibility).toBe('visible');
+});
+it('accepts fractional zoom dimensions and rounds both axes without accepting malformed or oversized messages', () => {
+  const view = render(<MemoryRouter><AppBar /></MemoryRouter>);
+  const frame = view.container.querySelector<HTMLIFrameElement>('header iframe')!;
+  const send = (width: unknown, height: unknown, origin = 'null') => window.dispatchEvent(new MessageEvent('message', {
+    origin, source: frame.contentWindow, data: { type: 'github-widget-size', width, height },
+  }));
+  for (const height of [27.999998, 28.000002, 27.5, 28.5]) {
+    send(94.68, height);
+    expect(frame.style.visibility).toBe('visible');
+    expect(frame.style.width).toBe('95px');
+    expect(frame.style.height).toBe(`${Math.ceil(height)}px`);
+    expect(frame.parentElement!.style.height).toBe(`${Math.ceil(height)}px`);
+    expect((frame.nextElementSibling as HTMLElement).style.display).toBe('none');
+  }
+  for (const height of [null, '28', NaN, Infinity, 0, -1, 10000]) send(130, height);
+  send(130, 28, 'https://evil.example');
+  expect(frame.style.width).toBe('95px');
+});
 it('sizes only from its own sandbox and swaps the fallback in-place', () => {
   const view = render(<MemoryRouter><AppBar /></MemoryRouter>);
   const frame = view.container.querySelector<HTMLIFrameElement>('header iframe')!;

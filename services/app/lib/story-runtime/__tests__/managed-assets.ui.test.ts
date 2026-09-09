@@ -2,6 +2,25 @@ import {afterEach,describe,it,expect,vi} from 'vitest';
 import {createManagedAssetResolver,prepareManagedContent} from '../managed-assets';
 afterEach(()=>vi.unstubAllGlobals());
 describe('managed asset adapter',()=>{
+  it('prepares a bookshelf with bounded parallel requests, preserving document and script order',async()=>{
+    vi.useFakeTimers();
+    let active=0,peak=0;
+    const resolver={dispose:vi.fn(),resolve:vi.fn(async(url:string)=>{
+      active++;peak=Math.max(peak,active);
+      await new Promise(resolve=>setTimeout(resolve,10));active--;
+      return 'https://assets.example/'+encodeURIComponent(url);
+    })};
+    try {
+      const html=Array.from({length:58},(_,i)=>`<img src="https://cdn.example/${i}.png">`).join('');
+      const prepared=prepareManagedContent({html,scripts:[{type:'classic',src:'https://cdn.example/first.js'},{type:'classic',src:'https://cdn.example/second.js'}]},resolver,document);
+      await vi.runAllTimersAsync();
+      const result=await prepared;
+      expect(peak).toBeGreaterThan(1);expect(peak).toBeLessThanOrEqual(8);
+      expect(result.html.indexOf('0.png')).toBeLessThan(result.html.indexOf('57.png'));
+      expect(result.scripts.map(s=>s.src)).toEqual(['https://assets.example/https%3A%2F%2Fcdn.example%2Ffirst.js','https://assets.example/https%3A%2F%2Fcdn.example%2Fsecond.js']);
+      expect(resolver.resolve).toHaveBeenCalledTimes(60);
+    } finally {vi.useRealTimers();}
+  });
   it('uses trusted relay for private previews without exposing export key or fetching directly',async()=>{
     const fetch=vi.fn();vi.stubGlobal('fetch',fetch);
     const relay=vi.fn(async()=>({url:'https://assets.example/assets/'+'a'.repeat(64)}));

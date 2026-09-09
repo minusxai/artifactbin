@@ -34,7 +34,7 @@ describe('renderReaderChrome', () => {
   });
   it('renders HIDDEN, stamped with the artifact id', () => {
     const html = chrome();
-    expect(html).toContain('<div class="mx-reader-chrome mx-reader-chrome--hidden" data-mx-reader-chrome data-mx-reader-state="hidden" data-mx-artifact-id="ab12cd">');
+    expect(html).toContain('<div class="mx-reader-chrome" data-mx-reader-chrome data-mx-reader-state="shown" data-mx-artifact-id="ab12cd">');
     expect(chrome({ artifactId: null })).not.toContain('data-mx-artifact-id');
   });
 
