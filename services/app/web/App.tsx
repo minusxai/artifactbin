@@ -1,19 +1,10 @@
-import { ChatPage } from './pages/Chat';
 import { Navigate, Route, Routes } from 'react-router';
 import MixpanelClient from '@/components/MixpanelClient';
 import { SessionProvider, useSession } from './session';
 import { Shell } from './Shell';
-import { AccountPage } from './pages/Account';
-import { AssetsPage } from './pages/Assets';
-import { DatasetEditorPage } from './pages/DatasetEditor';
-import { DocsPage } from './pages/Docs';
-import { HomePage } from './pages/Home';
-import { PrivacyPage, TermsPage } from './pages/Legal';
-import { LoginPage } from './pages/Login';
-import { NotFoundPage } from './pages/NotFound';
-import { ProfilePage } from './pages/Profile';
-import { TokensNewPage } from './pages/TokensNew';
-import { TrashPage } from './pages/Trash';
+import { routePages } from './route-pages';
+
+const { ChatPage, AccountPage, AssetsPage, DatasetEditorPage, DocsPage, HomePage, PrivacyPage, TermsPage, LoginPage, NotFoundPage, ProfilePage, TokensNewPage, TrashPage } = routePages;
 
 function Analytics() {
   const { session } = useSession();

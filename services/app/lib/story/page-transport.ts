@@ -5,8 +5,10 @@ export interface CssSurface {
 }
 export type CompactSurface<T extends CssSurface> = Omit<T, 'compiledCss'> & { compiledCss?: string | null };
 export function compactSurface<T extends CssSurface>(surface: T): CompactSurface<T> {
-  throw new Error('M1: implement compact surface transport');
+  if (!surface.runtime || surface.runtime.compiledCss !== surface.compiledCss) return surface;
+  const { compiledCss: _css, ...compact } = surface;
+  return compact;
 }
 export function expandSurface<T extends CssSurface>(surface: CompactSurface<T>): T {
-  throw new Error('M1: implement surface transport decoding');
+  return { ...surface, compiledCss: surface.compiledCss !== undefined ? surface.compiledCss : surface.runtime?.compiledCss ?? null } as T;
 }

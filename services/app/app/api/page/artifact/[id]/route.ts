@@ -1,4 +1,5 @@
 import {catalogOf,publicCatalogOf} from '@/lib/datasets/catalog';
+import { compactSurface } from '@/lib/story/page-transport';
 /**
  * The owner/editor SHELL's props for one document — everything ArtifactDocument
  * used to compute on the server: the ACL (uniform 404), the exporter's signed
@@ -119,7 +120,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     follow: artifact.user_id && artifact.user_id !== viewerId
       ? { userId: artifact.user_id, following: viewerId ? await has(viewerId, 'follow', artifact.user_id) : false, count: await count('follow', artifact.user_id) }
       : null,
-    surface: {
+    surface: compactSurface({
       captureKey: exporting ? key : null,
       id: artifact.id,
       editId: artifact.edit_id,
@@ -151,6 +152,6 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // for the owner alone left an editor's and a commenter's count at 0
       // forever, on a control they were being shown.
       openAnnotations: canAnnotate(role) && isDoc ? await countOpenAnnotations(artifact.id) : 0,
-    },
+    }),
   }, 200, { 'Cache-Control': 'no-store' });
 }
