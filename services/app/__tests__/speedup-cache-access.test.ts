@@ -6,7 +6,8 @@ vi.mock('@/lib/datasets/postgres',()=>({
 }));
 import {useAppHarness,request} from './harness';
 import {POST as create} from '@/app/api/artifacts/route';
-import {GET as queryDocument} from '@/app/a/[id]/query/route';
+import {GET as queryDocument,POST as queryPrivateDocument} from '@/app/a/[id]/query/route';
+import {attachActor} from '@artifactbin/utils';
 import {createDatasetSecret} from '@/lib/datasets/secrets';
 import {mintToken} from '@/lib/tokens';
 import {createUser,claimToken} from '@/lib/users';
@@ -23,14 +24,14 @@ async function fixture(){
   expect(ds.status,await ds.clone().text()).toBe(201);const dataset=(await ds.json()).id;
   const made=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',markup:`<Helmet><Query name="q" source="${dataset}">{\`select n from numbers\`}</Query></Helmet><DataTable data="$q"/>`}}));
   expect(made.status,await made.clone().text()).toBe(201);const id=(await made.json()).id;
-  return {id,dataset};
+  return {id,dataset,user,token};
 }
 it('keeps public-document access to owner-private source queries',async()=>{
   const {id}=await fixture();
   const response=await queryDocument(request(`/a/${id}/query?q=%7B%7D`),{params:Promise.resolve({id})});
   expect(response.status).toBe(200);expect((await response.json()).tables.q.rows).toEqual([{n:314159265}]);
 });
-it('does not return source rows when a public document becomes private during a fill',async()=>{
+it.each(['private','deleted'] as const)('does not return source rows when a public document becomes %s during a fill',async(change)=>{
   const {id}=await fixture();const db=await harness.db();
   // The implementation cache may have been populated during publish. Empty only
   // its disposable result table to force this request through the held SQL.
@@ -39,8 +40,22 @@ it('does not return source rows when a public document becomes private during a 
   pg.hold=()=>{started.resolve();return release.promise;};
   const pending=queryDocument(request(`/a/${id}/query?q=%7B%7D`),{params:Promise.resolve({id})});
   await started.promise;
-  await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1",[id]);
+  await db.query(change==='private'?"UPDATE artifacts SET visibility='private' WHERE id=$1":"UPDATE artifacts SET deleted_at=now() WHERE id=$1",[id]);
   release.resolve({rows:[{n:314159265}],columns:[{name:'n',type:'number'}]});
   const response=await pending;
   expect(await response.text()).not.toContain('314159265');pg.hold=null;
+});
+
+it.each(['bearer','agent-cookie'] as const)('revalidates a proxy-attached %s token after upstream SQL',async(credential)=>{
+  const {id,user,token}=await fixture();const db=await harness.db();
+  await db.query("UPDATE artifacts SET visibility='private' WHERE id=$1",[id]);
+  if((await db.query("SELECT to_regclass('dataset_result_cache') AS table_name")).rows[0].table_name)await db.query('DELETE FROM dataset_result_cache');
+  const started=deferred<void>(),release=deferred<{rows:Array<{n:number}>,columns:Array<{name:string,type:'number'}>}>();
+  pg.hold=()=>{started.resolve();return release.promise;};
+  const req=attachActor(request(`/a/${id}/query`,{method:'POST',json:{}}),{credential,userId:user.id,email:user.email,tokenId:token.id});
+  const pending=queryPrivateDocument(req,{params:Promise.resolve({id})});
+  await started.promise;
+  await db.query('UPDATE tokens SET deleted_at=now() WHERE id=$1',[token.id]);
+  release.resolve({rows:[{n:314159265}],columns:[{name:'n',type:'number'}]});
+  expect(await (await pending).text()).not.toContain('314159265');pg.hold=null;
 });
