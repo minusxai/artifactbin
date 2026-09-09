@@ -154,7 +154,15 @@ await plainSource.fill(initialSource.replace('Edited by the gate', 'Edited while
 releaseRichEditor();
 const mounted = await page.waitForSelector('.monaco-editor [aria-label="Markup source"]', { timeout: 30_000 }).then(() => true).catch(() => false);
 check(mounted, 'the source pane mounts a real editor, not a permanent "Loading…"');
-check(await page.locator('.monaco-editor textarea').evaluate(el => el === document.activeElement), 'rich-editor handoff preserves keyboard focus');
+const focusTransferred = await page.locator('.monaco-editor').evaluate(editor => new Promise(resolve => {
+  // TrustedUi has its own focus scope. Modern Monaco uses EditContext's div,
+  // not its compatibility textarea, for keyboard input on Chromium.
+  if (editor.contains(editor.getRootNode().activeElement)) return resolve(true);
+  const done = () => { clearTimeout(timer); editor.removeEventListener('focusin', done); resolve(true); };
+  const timer = setTimeout(() => { editor.removeEventListener('focusin', done); resolve(false); }, 5000);
+  editor.addEventListener('focusin', done);
+}));
+check(focusTransferred, 'rich-editor handoff preserves keyboard focus');
 check((await page.locator('[aria-label="Source pane"]').getByText('Loading...').count()) === 0,
   'and the loading placeholder is gone');
 /*
@@ -186,8 +194,7 @@ check(cspErrors.length === 0, `and trips no CSP directive (${cspErrors.slice(0, 
  * have found it. So this types with NO delay, and compares exactly.
  */
 const typed = ' plus fast typing';
-await page.click('[aria-label="Source pane"] .view-lines');
-await page.keyboard.press('End');
+// Continue directly from the plain editor's end-of-buffer caret: no extra click.
 await page.keyboard.type(typed);            // no `delay`: the race needs speed
 await page.waitForTimeout(4000);
 const afterTyping = (await api(`/api/artifacts/${doc.id}`, {}, token)).markup;
