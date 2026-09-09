@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createAppServer } from '../app';
 import { request, useAppHarness } from '@/__tests__/harness';
+import { AGENT_COOKIE } from '@/lib/agent-session';
 
 useAppHarness();
 const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>artifactbin</title></head><body><div id="root"></div></body></html>' });
@@ -19,7 +20,16 @@ describe('public homepage first response', () => {
     expect(html).toContain('data-mx-initial-home');
   });
   it('treats an invalid cookie as a public visitor', async () => {
-    expect(await (await app.request(request('/', { cookie: 'session=expired; mx_agent_session=invalid' }))).text()).toContain('Your agents');
+    expect(await (await app.request(request('/', { cookie: `session=expired; ${AGENT_COOKIE}=invalid` }))).text()).toContain('Your agents');
+  });
+  it('does not start or await GitHub while serving homepage HTML', async () => {
+    const upstream = vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise<Response>(() => {}));
+    try {
+      const local = createAppServer({ indexHtml: async () => '<html><head></head><body><div id="root"></div></body></html>' });
+      const response = await local.request('/');
+      expect(await response.text()).toContain('Your agents');
+      expect(upstream).not.toHaveBeenCalled();
+    } finally { upstream.mockRestore(); }
   });
   it.each([
     { credential: 'session' as const, userId: 'public-home-user', email: 'private@example.com' },
