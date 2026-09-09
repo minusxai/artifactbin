@@ -228,6 +228,19 @@ export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string;
   // 33778294018). Unconditional: it is the right environment with or without the switch.
   env.PWD = opts.cwd;
   delete env.OLDPWD;
+  // npm injects the driver's package and checkout paths even after cwd/HOME change.
+  // They are irrelevant to a staged task and prompt configuration-hunting agents
+  // to search the protected checkout. Keep runtime binaries, drop npm metadata
+  // and PATH entries underneath the denied roots.
+  for (const key of Object.keys(env)) {
+    if (/^npm_/i.test(key) || key === 'INIT_CWD' || key === 'NODE_PATH') delete env[key];
+  }
+  if (env.PATH && opts.checkoutRoots?.length) {
+    env.PATH = env.PATH.split(path.delimiter).filter((entry) => !opts.checkoutRoots!.some((root) => {
+      const relative = path.relative(path.resolve(root), path.resolve(entry));
+      return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+    })).join(path.delimiter);
+  }
 
   // The privileged half of the switch — the one step that needs a sudoer. Injectable so the hand-over and
   // the reclaim can be asserted as argv, with no sudo anywhere in the suite.

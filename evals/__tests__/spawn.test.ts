@@ -297,6 +297,23 @@ describe('handOverRunAsDirs', () => {
  * and both harnesses could not read the proxy CA the environment pointed them at. Seeded RED by the orchestrator.
  */
 describe("the child's environment describes its own workspace", () => {
+  it('removes npm checkout breadcrumbs while preserving runtime binaries', async () => {
+    const checkout = path.join(dir, 'checkout');
+    fs.mkdirSync(checkout);
+    const script = 'console.log(JSON.stringify({init:process.env.INIT_CWD,npm:process.env.npm_package_json,nodePath:process.env.NODE_PATH,path:process.env.PATH}))';
+    const r = await runInvocation(node(script), {
+      cwd: dir, checkoutRoots: process.platform === 'darwin' ? [checkout] : [],
+      baseEnv: { ...process.env, INIT_CWD: checkout, npm_package_json: `${checkout}/package.json`, NODE_PATH: checkout,
+        PATH: `${checkout}/node_modules/.bin${path.delimiter}${process.env.PATH}` },
+      timeoutMs: 20_000, ...paths(),
+    });
+    const output = JSON.parse(r.stdout.trim());
+    expect(output.init).toBeUndefined();
+    expect(output.npm).toBeUndefined();
+    expect(output.nodePath).toBeUndefined();
+    if (process.platform === 'darwin') expect(output.path).not.toContain(checkout);
+    expect(r.exitCode).toBe(0);
+  });
   it('PWD is the cwd and OLDPWD is gone', async () => {
     const r = await runInvocation(node('console.log(JSON.stringify([process.env.PWD, process.env.OLDPWD ?? null]))'), { cwd: dir, baseEnv: { ...process.env, PWD: '/somewhere/else', OLDPWD: '/elsewhere' }, timeoutMs: 20_000, ...paths() });
     expect(JSON.parse(r.stdout.trim())).toEqual([dir, null]);
