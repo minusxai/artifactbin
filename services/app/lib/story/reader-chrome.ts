@@ -229,7 +229,7 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
   // document; each of the three arrives independently of the others.
   const aboutThis = signIn || fork || forkedFrom;
 
-  return `<div class="mx-reader-chrome ${READER_CHROME_HIDDEN_CLASS}" data-mx-reader-chrome data-mx-reader-state="hidden"`
+  return `<div class="mx-reader-chrome" data-mx-reader-chrome data-mx-reader-state="shown"`
     + `${artifactId ? ` data-mx-artifact-id="${escapeHtml(artifactId)}"` : ''}>`
     + '<a class="mx-reader-home" href="/" target="_top" aria-label="Home" data-mx-reader-logo data-mx-tip="Home">'
     + '<img src="/logo-128.png" alt=""></a>'

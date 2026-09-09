@@ -10,10 +10,12 @@ import { wireGithubWidgetTheme } from '@/lib/github-star';
 export function InlineReaderChrome({ input, onAction,pinned=false }: { input: ReaderChromeInput; onAction(action:string):void;pinned?:boolean }): ReactNode {
   const holder=useRef<HTMLDivElement>(null);
   const state=useRef<ChromeState|null>(null);
+  const artifact=useRef(input.artifactId);
   const sharing=useRef<ReturnType<typeof wireReaderSharing>|null>(null);
   const html = renderReaderChrome({...input,panels:false}).replaceAll('target="_top"', 'target="_self"');
   const markup=useMemo(()=>({__html:html}),[html]);
   useLayoutEffect(()=>{
+    if(artifact.current!==input.artifactId){state.current=null;artifact.current=input.artifactId;}
     const root=holder.current?.querySelector<HTMLElement>('[data-mx-reader-chrome]');
     if(!root)return;
     sharing.current=wireReaderSharing(window,document,root);
@@ -39,7 +41,7 @@ export function InlineReaderChrome({ input, onAction,pinned=false }: { input: Re
     window.addEventListener('scroll',schedule,{passive:true});window.addEventListener('resize',schedule);
     sample();
     return ()=>{stopWidgetTheme();stop();sharing.current?.dispose();sharing.current=null;window.cancelAnimationFrame(raf);window.removeEventListener('scroll',schedule);window.removeEventListener('resize',schedule);};
-  },[html,pinned]);
+  },[html,pinned,input.artifactId]);
   return <>
     <style>{STORY_CHROME_CSS}</style>
     <div ref={holder} onClick={event => {

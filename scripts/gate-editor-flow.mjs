@@ -142,9 +142,19 @@ page.on('console', (m) => { if (m.type() === 'error' && /violates the following 
 await page.goto(`${BASE}/a/${doc.id}#edit`, { waitUntil: 'load' });
 await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 90_000 });
 await page.waitForTimeout(2500);
+let releaseRichEditor;
+const richEditorDownload = new Promise(resolve => { releaseRichEditor = resolve; });
+await page.route('**/assets/SourceEditor-*.js', async route => { await richEditorDownload; await route.continue(); });
 await page.click('[aria-label="Edit the source"]');
-const mounted = await page.waitForSelector('[aria-label="Markup source"]', { timeout: 30_000 }).then(() => true).catch(() => false);
+const plainSource = page.locator('textarea[aria-label="Markup source"]');
+await plainSource.waitFor();
+const initialSource = await plainSource.inputValue();
+check(initialSource.includes('Edited by the gate'), 'slow rich-editor download still presents the complete source');
+await plainSource.fill(initialSource.replace('Edited by the gate', 'Edited while rich editor loads'));
+releaseRichEditor();
+const mounted = await page.waitForSelector('.monaco-editor [aria-label="Markup source"]', { timeout: 30_000 }).then(() => true).catch(() => false);
 check(mounted, 'the source pane mounts a real editor, not a permanent "Loading…"');
+check(await page.locator('.monaco-editor textarea').evaluate(el => el === document.activeElement), 'rich-editor handoff preserves keyboard focus');
 check((await page.locator('[aria-label="Source pane"]').getByText('Loading...').count()) === 0,
   'and the loading placeholder is gone');
 /*
@@ -182,6 +192,7 @@ await page.keyboard.type(typed);            // no `delay`: the race needs speed
 await page.waitForTimeout(4000);
 const afterTyping = (await api(`/api/artifacts/${doc.id}`, {}, token)).markup;
 check(afterTyping.endsWith(typed), `fast typing in the code pane loses nothing (…${JSON.stringify(afterTyping.slice(-24))})`);
+check(afterTyping.includes('Edited while rich editor loads'), 'edits made during the download survive handoff and reach storage');
 
 // The other half of the same contract: local typing must not move the model,
 // but a replacement from OUTSIDE still must. Monaco paints U+00A0 for spaces.

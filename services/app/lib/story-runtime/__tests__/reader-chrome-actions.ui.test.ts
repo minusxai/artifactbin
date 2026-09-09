@@ -44,10 +44,10 @@ afterEach(() => {
 });
 
 describe('wireReaderChrome — visibility', () => {
-  it('keeps the chrome hidden on load, reveals it on a scroll up, hides it on a scroll down', () => {
+  it('shows the chrome on load, reveals it on a scroll up, hides it on a scroll down', () => {
     const { root } = mount();
-    expect(hidden(root)).toBe(true);
-    expect(root.getAttribute('data-mx-reader-state')).toBe('hidden');
+    expect(hidden(root)).toBe(false);
+    expect(root.getAttribute('data-mx-reader-state')).toBe('shown');
     scrollTo(600);
     expect(hidden(root)).toBe(true);
     scrollTo(560);
@@ -103,7 +103,7 @@ describe('wireReaderChrome — visibility', () => {
     handle?.destroy();
     scrollTo(600);
     scrollTo(560);
-    expect(hidden(root)).toBe(true);
+    expect(hidden(root)).toBe(false);
   });
 
   it('returns null when the document carries no chrome', () => {

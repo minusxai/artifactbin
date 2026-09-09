@@ -3,9 +3,7 @@
  * can be pinned by a unit test and the entry module only has to sample.
  *
  * The rule the product owner asked for, in full:
- *  - on load, NOTHING but the artifact — unless the document cannot scroll at
- *    all (then no gesture could ever reveal the chrome) or the reader has
- *    landed at its END (a restored position; the footer rule below applies);
+ *  - on load, show the controls immediately; never leave an empty topbar slot;
  *  - a scroll UP reveals it, a scroll DOWN hides it;
  *  - the END of the document shows it: the reader has stopped looking for
  *    more page and started looking for the controls, and there is no further
@@ -34,18 +32,14 @@ export const CHROME_DEAD_ZONE_PX = 4;
 
 /**
  * The next state after a sample. `state === null` is the FIRST sample (load):
- * hidden on a scrollable document, shown on one that fits or is already at
- * its end.
+ * shown immediately, regardless of document length or restored position.
  */
 export function chromeAfterSample(state: ChromeState | null, sample: ChromeSample): ChromeState {
   const scrollY = sample.scrollY;
   const scrollable = sample.documentHeight > sample.viewportHeight + CHROME_SLACK_PX;
   const atEnd = scrollY + sample.viewportHeight >= sample.documentHeight - CHROME_SLACK_PX;
 
-  // LOAD. Nothing but the artifact — unless there is no gesture that could
-  // ever bring the chrome back (a document that fits) or the reader is already
-  // where the downward gesture runs out (its end).
-  if (state === null) return { visible: !scrollable || atEnd, lastScrollY: scrollY };
+  if (state === null) return { visible: true, lastScrollY: scrollY };
 
   const delta = scrollY - state.lastScrollY;
   // The baseline HOLDS through jitter, so a finger's noise cannot accumulate

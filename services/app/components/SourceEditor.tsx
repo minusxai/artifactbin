@@ -77,7 +77,7 @@ loader.config({ monaco });
  * "this `value` came from somewhere else". Local typing therefore never writes
  * to the model at all, and a live edit or a 409 rebase still lands.
  */
-export default function SourceEditor({ value, revision, onChange }: {
+export interface SourceEditorProps {
   value: string;
   /**
    * Bumped by the caller whenever `value` was replaced from OUTSIDE this editor
@@ -88,7 +88,10 @@ export default function SourceEditor({ value, revision, onChange }: {
   revision: number;
   /** Every keystroke; the caller owns debouncing it into a save. */
   onChange: (next: string) => void;
-}) {
+  /** Preserve focus/caret when upgrading the immediately available plain editor. */
+  initialSelection?: () => { start: number; end: number } | null;
+}
+export default function SourceEditor({ value, revision, onChange, initialSelection }: SourceEditorProps) {
   const editorRef = useRef<Parameters<NonNullable<React.ComponentProps<typeof Editor>['onMount']>>[0] | null>(null);
   /** Read at replacement time, so a stale render cannot supply the text. */
   const latest = useRef(value);
@@ -112,7 +115,15 @@ export default function SourceEditor({ value, revision, onChange }: {
       height="100%"
       defaultLanguage="html"
       defaultValue={value}
-      onMount={(editor) => { editorRef.current = editor; }}
+      onMount={(editor) => {
+        editorRef.current = editor;
+        const selection = initialSelection?.(), model = editor.getModel();
+        if (selection && model) {
+          const start = model.getPositionAt(selection.start), end = model.getPositionAt(selection.end);
+          editor.setSelection(new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column));
+          editor.focus();
+        }
+      }}
       onChange={emit}
       theme="vs-dark"
       options={{

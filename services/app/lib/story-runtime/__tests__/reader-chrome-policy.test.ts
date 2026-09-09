@@ -1,5 +1,5 @@
 /**
- * THE VISIBILITY RULE, pinned: hidden on load, up reveals, down hides, the
+ * THE VISIBILITY RULE, pinned: visible on load, up reveals, down hides, the
  * end and an unscrollable document show. Numbers are the ones the phone dock
  * already used (4px slack, 4px dead zone), so the two cannot drift.
  */
@@ -10,22 +10,22 @@ const long = (scrollY: number): ChromeSample => ({ scrollY, viewportHeight: 800,
 const short = (scrollY = 0): ChromeSample => ({ scrollY, viewportHeight: 800, documentHeight: 600 });
 
 describe('chromeAfterSample', () => {
-  it('starts HIDDEN on a document that scrolls', () => {
-    expect(chromeAfterSample(null, long(0))).toEqual({ visible: false, lastScrollY: 0 });
+  it('starts SHOWN on a document that scrolls', () => {
+    expect(chromeAfterSample(null, long(0))).toEqual({ visible: true, lastScrollY: 0 });
   });
 
   it('starts SHOWN on a document that cannot scroll — no gesture could reveal it', () => {
     expect(chromeAfterSample(null, short())).toEqual({ visible: true, lastScrollY: 0 });
     // Exactly the slack: 804 tall in an 800 viewport is "does not scroll"; 805 is a document.
     expect(chromeAfterSample(null, { scrollY: 0, viewportHeight: 800, documentHeight: 804 }).visible).toBe(true);
-    expect(chromeAfterSample(null, { scrollY: 0, viewportHeight: 800, documentHeight: 805 }).visible).toBe(false);
+    expect(chromeAfterSample(null, { scrollY: 0, viewportHeight: 800, documentHeight: 805 }).visible).toBe(true);
   });
 
   it('starts SHOWN when the reader lands at the end (a restored position)', () => {
     expect(chromeAfterSample(null, long(3200)).visible).toBe(true);
     // 3196 + 800 = 3996 = 4000 - 4: the last scrollable pixel, with the slack.
     expect(chromeAfterSample(null, long(3196)).visible).toBe(true);
-    expect(chromeAfterSample(null, long(3195)).visible).toBe(false);
+    expect(chromeAfterSample(null, long(3195)).visible).toBe(true);
   });
 
   it('a scroll down keeps it hidden and a scroll up reveals it', () => {

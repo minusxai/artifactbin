@@ -63,6 +63,11 @@ try {
   assert.equal(await page.frameLocator('header [data-mx-github-star]:visible iframe').locator('body > span').evaluate(el => el.getBoundingClientRect().top), 0, 'widget begins at frame top, without inline-body baseline clipping');
   assert(appBox.y < 44 && appBox.x > 640);
   console.log('ok uninterrupted landing through slow JS/session/home; asynchronous count in app topbar');
+  await appStar.locator('iframe').evaluate(frame => { window.__starBeforeControls = frame; });
+  for (let i = 0; i < 4; i++) {
+    await page.getByRole('button', { name: i % 2 === 0 ? 'Open page controls' : 'Dismiss page controls', exact: true }).click();
+    assert(await appStar.locator('iframe').evaluate(frame => frame === window.__starBeforeControls && frame.style.visibility === 'visible'), 'Page Controls preserves the visible widget without a fallback flash');
+  }
   await page.goto(`${base}/privacy`, { waitUntil: 'domcontentloaded' });
   await page.locator('header [data-mx-github-star]:visible').waitFor();
   assert.equal(await page.locator('[data-mx-initial-home]').count(), 0);

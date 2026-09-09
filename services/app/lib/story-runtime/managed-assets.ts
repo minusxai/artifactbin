@@ -61,6 +61,10 @@ export function createManagedAssetResolver(config?:ManagedAssetsConfig,relay?:Ma
 }
 export async function prepareManagedContent(content:ManagedIframeContent,resolver:ManagedAssetResolver,doc:Document):Promise<ManagedIframeContent> {
   const template=doc.createElement('template');template.innerHTML=content.html;
+  // Resolve independent declarations together, below the resolver's 16-request
+  // ceiling. Only the inert template is modified; nothing mounts until all jobs
+  // succeed. Scripts keep their source order regardless of completion order.
+  const jobs:Array<()=>Promise<void>>=[];
   let count=0;
   const resolve=async(url:string,kind:ManagedAssetKind)=>{
     if(url.startsWith('#')||/^data:image\//i.test(url))return url;
@@ -74,7 +78,7 @@ export async function prepareManagedContent(content:ManagedIframeContent,resolve
     for(const match of matches){const url=match[1]??match[2]??match[3];result+=source.slice(cursor,match.index)+`url("${await resolve(url,'binary')}")`;cursor=match.index!+match[0].length;}
     return result+source.slice(cursor);
   };
-  for(const element of template.content.querySelectorAll('*')) {
+  for(const element of template.content.querySelectorAll('*')) jobs.push(async()=>{
     for(const attr of [...element.attributes]) {
       if(attr.name==='cite'||(attr.name==='href'&&['A','AREA'].includes(element.tagName)))continue;
       if(URL_LIST_ATTRS.has(attr.name)) {
@@ -87,8 +91,17 @@ export async function prepareManagedContent(content:ManagedIframeContent,resolve
       else if(attr.name==='style'||SVG_PAINT_ATTRS.has(attr.name))element.setAttribute(attr.name,await css(attr.value));
     }
     if(element.tagName==='STYLE')element.textContent=await css(element.textContent??'');
-  }
-  const scripts=[];
-  for(const script of content.scripts)scripts.push(script.src?{...script,src:await resolve(script.src,'script')}:script);
+  });
+  const scripts=[...content.scripts];
+  content.scripts.forEach((script,index)=>{
+    if(script.src)jobs.push(async()=>{scripts[index]={...script,src:await resolve(script.src!,'script')};});
+  });
+  let next=0,failed=false;
+  await Promise.all(Array.from({length:Math.min(8,jobs.length)},async()=>{
+    while(!failed&&next<jobs.length){
+      const job=jobs[next++];
+      try {await job();} catch(error){failed=true;throw error;}
+    }
+  }));
   return {html:template.innerHTML,scripts};
 }

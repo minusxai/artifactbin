@@ -34,3 +34,17 @@ it('uses the shared reader bar without obsolete standalone controls panels',()=>
  expect(view.container.querySelector('[data-mx-reader-panel]')).toBeNull();
  expect(screen.getByLabelText("View @author's profile")).toHaveAttribute('target','_self');
 });
+it('shows controls immediately when navigating from a scrolled artifact to another',()=>{
+ vi.spyOn(document.documentElement,'scrollHeight','get').mockReturnValue(3000);
+ vi.spyOn(window,'requestAnimationFrame').mockImplementation(fn=>{fn(0);return 1;});
+ const original=Object.getOwnPropertyDescriptor(window,'scrollY');
+ try {
+   Object.defineProperty(window,'scrollY',{value:0,configurable:true});
+   const view=render(<InlineReaderChrome input={{artifactId:'story1',title:'One',author:null}} onAction={vi.fn()} />);
+   expect(view.container.querySelector('[data-mx-reader-chrome]')).toHaveAttribute('data-mx-reader-state','shown');
+   act(()=>{Object.defineProperty(window,'scrollY',{value:300,configurable:true});window.dispatchEvent(new Event('scroll'));});
+   expect(view.container.querySelector('[data-mx-reader-chrome]')).toHaveAttribute('data-mx-reader-state','hidden');
+   view.rerender(<InlineReaderChrome input={{artifactId:'story2',title:'Two',author:null}} onAction={vi.fn()} />);
+   expect(view.container.querySelector('[data-mx-reader-chrome]')).toHaveAttribute('data-mx-reader-state','shown');
+ } finally {if(original)Object.defineProperty(window,'scrollY',original);}
+});
