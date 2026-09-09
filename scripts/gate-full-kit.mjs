@@ -92,18 +92,31 @@ console.log(`   doc: ${BASE}/a/${doc.id}`);
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
+// The vendor document is deterministic here; the separate widget gate exercises
+// its sandboxed fetch and popup behavior. No fixture enters the running app.
+await page.route('https://buttons.github.io/buttons.html', route => route.fulfill({ contentType: 'text/html', body: '<a href="https://github.com/minusxai/artifactbin" target="_blank">Star</a>' }));
 // The shell (and its frame) belongs to the owner; readers get the document.
 await becomeOwner(page, BASE, mint.token);
 
 const external = [];
 const requests = [];
 const pageErrors = [];
+const requestChecks = [];
 page.on('request', (r) => {
   const u = r.url();
   requests.push(u);
-  // <Video> is a click-to-open card now — the document loads NOTHING
-  // third-party, so every external request is a stray.
-  if (!u.startsWith(origin) && !u.startsWith('data:') && !u.startsWith('blob:')) external.push(u);
+  // Only a frame owned by the protected first-party chrome is exempt. An
+  // author's request to the same vendor hostname still violates this gate.
+  if (!u.startsWith(origin) && !u.startsWith('data:') && !u.startsWith('blob:')) requestChecks.push((async () => {
+    const trustedWidget = await r.frame().frameElement().then(element => element.evaluate(el => {
+      const root = el.getRootNode();
+      return root instanceof ShadowRoot && root.host.matches('[data-trusted-ui]')
+        && !!el.closest('[data-mx-reader-chrome] [data-mx-github-star]')
+        && el.getAttribute('sandbox') === 'allow-scripts allow-popups allow-popups-to-escape-sandbox'
+        && new URL(el.getAttribute('src')).origin + new URL(el.getAttribute('src')).pathname === 'https://buttons.github.io/buttons.html';
+    })).catch(() => false);
+    if (!trustedWidget) external.push(u);
+  })());
 });
 page.on('pageerror', (e) => pageErrors.push(String(e)));
 await page.addInitScript(() => {
@@ -171,13 +184,14 @@ check(await frame.evaluate("!!document.querySelector('[data-slot=\"video\"] a[hr
 check(await frame.evaluate("(document.querySelector('[data-slot=\"video-thumb\"]')?.getAttribute('src') ?? '').startsWith('/a/')"), 'Video poster resolved to the hosted image ref');
 const managed = frame.locator('iframe[title="Isolated gallery region"]');
 await frame.waitForSelector('iframe[title="Isolated gallery region"][data-mx-author-ready]');
-check(await frame.locator('iframe').count() === 1
+check(await frame.locator('[data-mx-inline-story] iframe').count() === 1
   && await managed.getAttribute('sandbox') === 'allow-scripts'
   && await managed.getAttribute('src') === `${origin}/story/author-frame`,
   'only the managed opaque gallery wrapper is framed; Video remains a link');
 
 // 3. isolation
 const csp = await frame.evaluate('window.__csp || []');
+await Promise.all(requestChecks);
 check(csp.length === 0, `no CSP violations${csp.length ? `: ${csp.join(', ')}` : ''}`);
 check(external.length === 0, `no external requests${external.length ? `: ${external.slice(0, 3).join(', ')}` : ''}`);
 check(pageErrors.length === 0, `no page errors${pageErrors.length ? `: ${pageErrors[0]}` : ''}`);
