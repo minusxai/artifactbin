@@ -52,6 +52,7 @@ it('embeds the star-count vendor in sandboxed frames in both app and reader chro
     expect(url.hash).toContain('Star%20artifactbin%20on%20GitHub');
     expect(frame!.getAttribute('sandbox')).toBe('allow-scripts allow-popups allow-popups-to-escape-sandbox');
     expect(frame!.getAttribute('referrerpolicy')).toBe('no-referrer');
+    expect((frame as HTMLIFrameElement).style.colorScheme).toBe('normal');
     expect(frame!.getAttribute('title')).toBeTruthy();
   }
   expect(rail.children[1].getAttribute('data-mx-reader-action')).toBe('like');
