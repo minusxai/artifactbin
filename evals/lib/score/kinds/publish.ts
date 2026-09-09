@@ -12,6 +12,7 @@
  * read from the served document. Null — never false — for a task that seeds
  * nothing, so an inapplicable check reads "—" rather than as a failure.
  */
+import { juneResolutionCorrect } from '../june-resolution';
 import type { CheckContext, TaskScorer } from './contract';
 
 /**
@@ -20,7 +21,7 @@ import type { CheckContext, TaskScorer } from './contract';
  * `TaskScorer` — whose `validate` takes a `Task` — would make the task type
  * reference itself through the enum it defines.
  */
-export const PUBLISH_CHECKS = ['kept_untouched_text'] as const;
+export const PUBLISH_CHECKS = ['kept_untouched_text', 'june_resolution_correct'] as const;
 
 export const publishScorer = {
   kind: 'publish',
@@ -28,6 +29,7 @@ export const publishScorer = {
   async setup() {},
   async checks(ctx: CheckContext) {
     return {
+      june_resolution_correct: ctx.task.checks.includes('june_resolution_correct') ? juneResolutionCorrect(ctx.served.html) : null,
       kept_untouched_text: ctx.task.seedKeepText ? ctx.served.html.includes(ctx.task.seedKeepText) : null,
     };
   },

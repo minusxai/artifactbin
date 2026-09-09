@@ -22,6 +22,12 @@ beforeAll(async () => {
     req.on('data', (c) => (body += c));
     req.on('end', () => {
       if (req.url === '/api/artifacts' && req.method === 'POST') { res.writeHead(201, { 'content-type': 'application/json' }); res.end(JSON.stringify({ id: 'madeUp', markup: '<h1>x</h1>' })); return; }
+      if (req.url === '/mcp' && body.includes('reject-me')) {
+        const sse = body.includes('sse');
+        res.writeHead(200, { 'content-type': sse ? 'text/event-stream' : 'application/json' });
+        const reply = JSON.stringify({jsonrpc:'2.0',id:1,result:{isError:true,content:[{type:'text',text:JSON.stringify({error:'invalid_jsx'})}]}});
+        res.end(sse ? `event: message\ndata: ${reply}\n\n` : reply); return;
+      }
       if (req.url === '/mcp' && req.method === 'POST') {
         const call = JSON.parse(body) as { id?: unknown; params?: { arguments?: { markup?: string } } };
         res.writeHead(200, { 'content-type': 'application/json' });
@@ -219,5 +225,17 @@ describe('the conditional echo', () => {
     const entry = parseLedger(fs.readFileSync(p, 'utf8'))[0];
     expect(entry.markupUnchanged).toBe(true);
     expect(entry.reqMarkup).toBe('<div>same</div>');
+  });
+});
+
+describe('MCP operation failures', () => {
+  it.each(['json','sse'])('records %s tool errors inside HTTP 200 without retaining credentials', async (format) => {
+    const ledger = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-errors-')), 'ledger.jsonl');
+    const px = await startProxy({port:0,target:`http://127.0.0.1:${targetPort}`,ledgerPath:ledger});
+    try {
+      const response = await fetch(`${px.url}/mcp`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'edit_artifact',arguments:{markup:`reject-me ${format}`}}})});
+      await response.text();
+      expect(parseLedger(fs.readFileSync(ledger,'utf8'))[0]).toMatchObject({status:200,mcpMethod:'tools/call',mcpTool:'edit_artifact',mcpError:'invalid_jsx'});
+    } finally { await px.stop(); }
   });
 });

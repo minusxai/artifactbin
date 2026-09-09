@@ -82,7 +82,7 @@ export function syntaxErrorDetail(source: string, parsed: Extract<ParseResult, {
     ? ` The \`${unclosed.attr}={\` opened on line ${unclosed.line} is never closed — it needs ${unclosed.missing} more \`}\`.`
     : '';
   return {
-    message: `JSX syntax error at line ${line}, column ${column}: ${bare} — see \`snippet\`, where ▶ marks the character.${brace}`,
+    message: `JSX syntax error at line ${line}, column ${column}: ${bare} — see \`snippet\`, where ▶ marks the character.${brace}${unclosed?.attr === 'viz' ? ' Build the viz object separately, then serialize it with JSON.stringify/json.dumps inside one JSX expression; do not hand-count closing braces. See markup-data.md.' : ''}`,
     start: parsed.pos,
     end: parsed.pos,
     snippet,

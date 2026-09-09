@@ -6,8 +6,7 @@ order: 1
 ---
 ## Read first
 
-Declare data in `<Helmet>`; bind by name. TABLEs are Queries/table Values; SCALARs are Values.
-Typos return `400` at publish.
+Declare Queries/table Values and scalar Values in `<Helmet>`; bind by name.
 
 ```jsx
 <Helmet>
@@ -79,6 +78,8 @@ A Mutation targeting `_signals` or an inline table is local; it never changes
 datasets or permissions. Dataset Mutations require
 `access: readwrite`. See [composable state](markup-state.md).
 
+First read [chart authoring](markup-data-authoring.md).
+
 ## Bindings: embeds (body)
 
 - `<Button run="$add">Add</Button>` — runs the named `<Mutation>`; busy while
@@ -116,8 +117,7 @@ datasets or permissions. Dataset Mutations require
   row's cell), so a total needs `agg="sum"` written out; `avg`, `min`, `max`,
   `count` are the rest. [[ computedFigureRule ]]
 - `<DataTable data="$table" columns={[…]} sort={{"col":…,"dir":"desc"}} height="420px" />`
-  — THE way to show many rows: virtualised, sortable, honest about a cut
-  result ("5,000 of 80,000", more on scroll). `columns` picks and orders:
+  — virtualised, sortable, with more rows on scroll. `columns` picks and orders:
   `{col, title, fmt, align, bar: true (a bar behind a number), colorScale:
   "sequential" | "diverging", width, kind: "image"}`; absent = every column.
   `kind: "image"` draws each cell's URL as a picture from our own copy of it,

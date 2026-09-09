@@ -1,7 +1,6 @@
 ---
 name: templates-dashboard
-description: >-
-  The dashboard genre in full: beats, layout grammar, a copyable skeleton, Do/Don't. Read only for a long or intricate dashboard — the brief's sketch is enough for a short, plain one.
+description: Dashboard layout, skeleton and rules.
 read_first_max: 6144
 order: 4
 ---
@@ -13,9 +12,8 @@ order: 4
 
 Beats: [[ template.beats | join(' → ') ]]
 
-PROSE BUDGET: the kicker, ONE quiet verdict sentence, tile labels of three words or
-fewer, the status footer — nothing else. A sentence explaining what a chart shows
-becomes that tile's ≤3-word label instead.
+Keep prose brief. Statistical qualifiers override label length: "average of
+monthly medians" must not become "median resolution".
 
 Trend `compareMode`: use `last`; use `previous` only to exclude an incomplete
 current period, and label it.

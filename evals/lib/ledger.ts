@@ -64,10 +64,10 @@ function isKnownRoute(path: string): boolean {
   return KNOWN_ROUTES.some((re) => re.test(pathOnly(path)));
 }
 
-/** A request that changes a document: REST create/replace/edit, or any MCP call (its method is in the body). */
+/** REST document writes or named MCP write tools; old ledgers retain their legacy fallback. */
 function isWrite(e: LedgerEntry): boolean {
   const p = pathOnly(e.path);
-  if (p === '/mcp') return e.method === 'POST';
+  if (p === '/mcp') return e.method === 'POST' && (e.mcpMethod === undefined || (e.mcpMethod === 'tools/call' && ['create_artifact', 'update_artifact', 'edit_artifact', 'revert_artifact'].includes(e.mcpTool ?? '')));
   if (p === '/api/artifacts') return e.method === 'POST';
   if (/^\/api\/artifacts\/[A-Za-z0-9]+$/.test(p)) return e.method === 'PUT';
   if (/^\/api\/artifacts\/[A-Za-z0-9]+\/(edits|revert)$/.test(p)) return e.method === 'POST';
@@ -83,12 +83,11 @@ function isWrite(e: LedgerEntry): boolean {
  * `POST /api/artifacts/<id>/annotations/<annId>` and reported answering a
  * comment as a new version of the document.
  *
- * Honest limit: an MCP call is a POST to `/mcp` with its method in a body the
- * ledger does not keep, so an `annotate` tool call is indistinguishable from a
- * document write and is still counted. A REST run is exact.
+ * New MCP ledgers identify write tools and exclude operation failures. Old
+ * ledgers lack that metadata and retain the broad POST fallback.
  */
 export function documentWrites(entries: LedgerEntry[]): number {
-  return entries.filter((e) => e.status < 300 && isWrite(e)).length;
+  return entries.filter((e) => e.status < 300 && !e.mcpError && isWrite(e)).length;
 }
 
 /** One numeric row, as the driver records it. */
@@ -114,6 +113,8 @@ export function ledgerRows(entries: LedgerEntry[]): LedgerRow[] {
     { metric: 'http_calls', value: m.httpCalls },
     { metric: 'write_attempts', value: m.writeAttempts },
     { metric: 'four_xx', value: m.fourXx },
+    { metric: 'mcp_errors', value: entries.some((e) => pathOnly(e.path) === '/mcp' && e.mcpMethod === undefined) ? null : entries.filter((e) => e.mcpError).length },
+    { metric: 'operation_errors', value: entries.some((e) => pathOnly(e.path) === '/mcp' && e.mcpMethod === undefined) ? null : entries.filter((e) => e.status >= 400 || e.mcpError).length },
     { metric: 'invented_endpoints', value: m.inventedEndpoints },
     { metric: 'docs_fetches', value: m.docsFetches },
     { metric: 'docs_bytes', value: m.docsBytes },
@@ -155,8 +156,8 @@ export function targetArtifactId(entries: LedgerEntry[]): string | null {
 
 /** The successful writes whose artifact still exists — an agent's own scratch document is deleted again. */
 function survivingWrites(entries: LedgerEntry[]): LedgerEntry[] {
-  const deleted = new Set(entries.filter((e) => e.method === 'DELETE' && e.status < 300 && e.artifactId).map((e) => e.artifactId));
-  return entries.filter((e) => isWrite(e) && e.status < 300 && e.artifactId && !deleted.has(e.artifactId));
+  const deleted = new Set(entries.filter((e) => e.method === 'DELETE' && e.status < 300 && !e.mcpError && e.artifactId).map((e) => e.artifactId));
+  return entries.filter((e) => isWrite(e) && e.status < 300 && !e.mcpError && e.artifactId && !deleted.has(e.artifactId));
 }
 
 /**
@@ -261,8 +262,8 @@ const HEADING_TAG = /<h[123][\s/>]/gi;
 export function ledgerMetrics(entries: LedgerEntry[], opts: LedgerMetricsOptions = {}): LedgerMetrics {
   const writes = entries.filter(isWrite);
   const firstWriteIdx = entries.findIndex(isWrite);
-  const firstErr = entries.find((e) => e.status >= 400);
-  const lastGoodWithMarkup = [...writes].reverse().find((w) => w.status < 300 && w.reqMarkup !== undefined);
+  const firstErr = entries.find((e) => e.status >= 400 || e.mcpError);
+  const lastGoodWithMarkup = [...writes].reverse().find((w) => w.status < 300 && !w.mcpError && w.reqMarkup !== undefined);
   // Nothing seen, nothing known. The COUNTS stay — they are literally what was observed — but every
   // judgement about the agent becomes null rather than a false that reads as an accusation.
   const observed = entries.length > 0;
@@ -279,8 +280,8 @@ export function ledgerMetrics(entries: LedgerEntry[], opts: LedgerMetricsOptions
   // first 2xx write of any kind, because a dataset upload is already a URL, while the CONTENT is read off
   // the first 2xx write that carried markup — a dataset-first task writes its rows before its document,
   // and grading the rows upload would leave the guardrail blank on exactly those tasks.
-  const firstGoodWrite = writes.find((w) => w.status < 300);
-  const firstGoodMarkupWrite = writes.find((w) => w.status < 300 && w.reqMarkup !== undefined);
+  const firstGoodWrite = writes.find((w) => w.status < 300 && !w.mcpError);
+  const firstGoodMarkupWrite = writes.find((w) => w.status < 300 && !w.mcpError && w.reqMarkup !== undefined);
   // The anchor is the caller's — process spawn — because agent boot is part of the wait. Falling back to
   // the ledger's own first entry measures from the agent's first HTTP call instead, which is a FLOOR.
   const anchor = opts.startedAtMs ?? entries[0]?.t;
@@ -291,17 +292,17 @@ export function ledgerMetrics(entries: LedgerEntry[], opts: LedgerMetricsOptions
     writeAttempts: writes.length,
     fourXx: entries.filter((e) => e.status >= 400 && e.status < 500).length,
     inventedEndpoints: entries.filter((e) => e.status === 404 && !isKnownRoute(e.path)).length,
-    firstError: firstErr ? (firstErr.error ?? `http_${firstErr.status}`) : null,
+    firstError: firstErr ? (firstErr.mcpError ?? firstErr.error ?? `http_${firstErr.status}`) : null,
     readDocsBeforeWrite: judged(entries.some((e, i) => isDocsRead(e) && (firstWriteIdx === -1 || i < firstWriteIdx))),
-    publishedFirstTry: judged(writes.length > 0 && writes[0].status < 300),
+    publishedFirstTry: judged(writes.length > 0 && writes[0].status < 300 && !writes[0].mcpError),
     // `markup_changed:false` IS the answer: the product skips echoing a document
     // it stored verbatim, so a missing echo there means agreement, not silence.
     canonicalStable: lastGoodWithMarkup
       ? (lastGoodWithMarkup.markupUnchanged === true || lastGoodWithMarkup.reqMarkup === lastGoodWithMarkup.resMarkup)
       : null,
-    datasetCreated: judged(entries.some((e) => e.status < 300 && e.reqFormat === 'dataset')),
-    usedEditsEndpoint: judged(entries.some((e) => e.status < 300 && /^\/api\/artifacts\/[A-Za-z0-9]+\/edits/.test(pathOnly(e.path)))),
-    usedMcp: judged(entries.some((e) => e.status < 300 && pathOnly(e.path) === '/mcp' && e.method === 'POST')),
+    datasetCreated: judged(entries.some((e) => e.status < 300 && !e.mcpError && e.reqFormat === 'dataset')),
+    usedEditsEndpoint: judged(entries.some((e) => e.status < 300 && !e.mcpError && /^\/api\/artifacts\/[A-Za-z0-9]+\/edits/.test(pathOnly(e.path)))),
+    usedMcp: judged(entries.some((e) => e.status < 300 && !e.mcpError && pathOnly(e.path) === '/mcp' && e.method === 'POST')),
     docsFetches: judged(docsGets.length),
     docsBytes,
     // The ATTEMPT is the behaviour, not the grant: the OSS default caps anonymous minting at 0/hour, so

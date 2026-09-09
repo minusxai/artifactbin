@@ -389,6 +389,10 @@ export interface LedgerEntry {
   error: string | null;
   /** Response body size in bytes — counted for every response, never retained. Absent on ledgers written before it existed. */
   bytes?: number;
+  /** MCP operation metadata; absent in older ledgers. */
+  mcpMethod?: string;
+  mcpTool?: string;
+  mcpError?: string;
   /** Which content tier a write declared (`markup` | `dataset` | `viz` | `image`) — how a dataset upload is told from a document. */
   reqFormat?: string;
   /** For document writes: the markup sent and the markup echoed back. */

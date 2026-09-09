@@ -155,6 +155,7 @@ describe('rejects', () => {
       const body = await res.json();
       expect(body.error).toBe('bad_diff');
       expect(body.detail).toBe(detail);
+      if (detail === 'no_match') expect(body.recovery).toContain('A rejected write changed nothing');
     }
   });
 
