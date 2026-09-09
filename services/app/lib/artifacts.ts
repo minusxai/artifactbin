@@ -2117,10 +2117,12 @@ export async function runDocumentDataflow(
     const table = await resolve(id);
     if (table) datasets[id] = table;
   }
+  const usedSources = new Map<string, string>();
   const state = await runDataflow(flow, datasets, { values: opts.values, only: opts.only, page: opts.page, localTables: opts.localTables,
     sourceQuery:async(q,values,page)=>{
       const catalog=(datasets[q.source!] as RefTable|undefined)?.catalog;
       if(!catalog)throw new Error('Dataset source is unavailable');
+      usedSources.set(q.source!, JSON.stringify(catalog));
       return executeCatalog(catalog,q.sql,values,{datasetId:q.source!,limit:page?.limit,offset:page?.offset,sort:page?.sort,signal:opts.signal,paramTypes:Object.fromEntries(flow.values.filter(v=>v.kind==='scalar').map(v=>[v.name,v.type])),authorize:async()=>{
         await opts.authorize?.();
         const current=await resolve(q.source!);
@@ -2128,6 +2130,14 @@ export async function runDocumentDataflow(
       }});
     },
   });
+  // Per-query failures are deliberately isolated by runDataflow. Admission is
+  // not a query error: q1's rows must not escape if access changes while q2
+  // waits. Recheck every used source, not merely the last query to finish.
+  for (const [id, snapshot] of usedSources) {
+    const current = await resolve(id);
+    if (!current || JSON.stringify((current as RefTable).catalog) !== snapshot) throw new DatasetError('Dataset source is unavailable',404);
+  }
+  await opts.authorize?.();
   return { flow, state };
 }
 

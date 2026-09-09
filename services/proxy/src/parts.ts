@@ -239,6 +239,11 @@ export function session(o: ProxyOptions): Part<ProxyEnv> {
           if(JSON.stringify(identity(current))!==JSON.stringify(identity(admitted))) {
             await c.res.body?.cancel().catch(()=>{});
             c.res=new Response(JSON.stringify({error:'unauthorized'}),{status:401,headers:{'content-type':'application/json','cache-control':'no-store'}});
+            // Hono merges old headers into replacements. These describe the
+            // discarded upstream body, not this uncompressed JSON refusal.
+            c.res.headers.delete('content-length');
+            c.res.headers.delete('content-encoding');
+            c.res.headers.delete(REVALIDATE_ACTOR_HEADER);
           }
         }
       }

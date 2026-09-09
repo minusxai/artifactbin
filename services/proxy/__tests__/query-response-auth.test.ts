@@ -1,8 +1,36 @@
 import {expect,it,vi} from 'vitest';
 import {createProxy,type ProxyOptions} from '../src/parts';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
+import {PGlite} from '@electric-sql/pglite';
+import {createHumanAuth} from '../src/auth/human';
 const marker=REVALIDATE_ACTOR_HEADER;
 const hold=<T,>()=>{let resolve!:(v:T)=>void;const promise=new Promise<T>(r=>{resolve=r;});return {promise,resolve};};
+it.each(['delete','expire','unchanged'] as const)('revalidates a real database-backed session (%s) and replaces response headers safely',async(change)=>{
+ const db=new PGlite(),baseURL='http://localhost:9401';let otp='';
+ try {
+  const auth=await createHumanAuth({pglite:db,baseURL,secret:'query-response-test-secret'.padEnd(32,'0'),mail:{send:async message=>{otp=message.otp??'';}}});
+  const call=(path:string,body:unknown)=>auth.handler(new Request(baseURL+'/api/auth'+path,{method:'POST',headers:{'content-type':'application/json',origin:baseURL},body:JSON.stringify(body)}));
+  const email='mxmx_test_query_boundary@example.com';
+  expect((await call('/email-otp/send-verification-otp',{email,type:'sign-in'})).status).toBe(200);
+  const login=await call('/sign-in/email-otp',{email,otp});expect(login.status).toBe(200);
+  const cookie=login.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ');
+  expect(await auth.sessions.resolve(new Request(baseURL,{headers:{cookie}}))).not.toBeNull();
+  const started=hold<void>(),release=hold<void>();
+  const proxy=createProxy({env:{},cookieSecret:'test',tokens:{byToken:async()=>null,byId:async()=>null,invalidate:()=>{}},sessions:auth.sessions,upstream:async()=>{started.resolve();await release.promise;return new Response('private-result',{headers:{[marker]:'1','content-length':'14','content-encoding':'gzip'}});}});
+  const pending=proxy.request(baseURL+'/a/abcdef/query',{headers:{cookie}});await started.promise;
+  if(change==='delete')await db.exec('DELETE FROM auth.session');
+  if(change==='expire')await db.exec('UPDATE auth.session SET "expiresAt"=now()-interval \'1 second\'');
+  release.resolve();const response=await pending;
+  expect(response.status).toBe(change==='unchanged'?200:401);
+  expect(response.headers.has(marker)).toBe(false);
+  if(change==='unchanged')expect(await response.text()).toBe('private-result');
+  else {
+   expect(await response.text()).not.toContain('private-result');
+   expect(response.headers.has('content-length')).toBe(false);
+   expect(response.headers.has('content-encoding')).toBe(false);
+  }
+ } finally {await db.close();}
+});
 it('withholds a completed query when its Better Auth session was revoked in flight',async()=>{
  const started=hold<void>(),release=hold<void>();let loggedIn=true;
  const options:ProxyOptions={env:{},cookieSecret:'test',tokens:{byToken:async()=>null,byId:async()=>null,invalidate:()=>{}},sessions:{resolve:async()=>loggedIn?{userId:'user',email:'user@example.com',emailVerified:true}:null},upstream:async()=>{started.resolve();await release.promise;return new Response('private-result',{headers:{[marker]:'1'}});}};

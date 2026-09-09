@@ -100,9 +100,13 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
 async function answer(artifact: ArtifactRow, parsed: QueryRequest, viewer: RoleActor | null, extra: Record<string, string> = {}, authorize?:()=>Promise<void>,signal?:AbortSignal): Promise<Response> {
   if (artifact.format !== 'markup' && artifact.format !== 'folder') return json({ tables: {}, errors: {} }, 200, extra);
   let flow;
-  try { flow = await dataflowForRow(artifact, { ...parsed, viewer,authorize,signal }); }
+  try {
+    flow = await dataflowForRow(artifact, { ...parsed, viewer,authorize,signal });
+    await authorize?.();
+  }
   catch (error) {
     if (error instanceof LocalStateInputError) return json({error: 'invalid_local_state', detail: error.message}, 400, extra);
+    if (error instanceof DatasetError) return json({error:'not_found'},404,{...extra,'Cache-Control':'no-store'});
     throw error;
   }
   return json({ tables: flow?.state.tables ?? {}, errors: flow?.state.errors ?? {}, ...(flow?.flow.mutations?.length ? {mutationAccess:flow.state.mutationAccess ?? {}} : {}) }, 200, {...extra,'Cache-Control':'no-store',[REVALIDATE_ACTOR_HEADER]:'1'});
