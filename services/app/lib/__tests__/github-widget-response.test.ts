@@ -3,7 +3,7 @@ import { expect, it } from 'vitest';
 import { githubWidgetResponse } from '../github-widget-response';
 
 it('retries readiness until its parent acknowledges, then stops; retries are bounded', async () => {
-  const script = (await githubWidgetResponse().text()).match(/<script>([\s\S]*?)<\/script>/)![1];
+  const script = (await githubWidgetResponse().text()).match(/<script>([\s\S]*?)<\/script>/i)![1];
   let resize = () => {};
   let message = (_event: { source: unknown; data: string }) => {};
   let retry: (() => void) | undefined;
@@ -35,7 +35,7 @@ it('retries readiness until its parent acknowledges, then stops; retries are bou
 
 it.each([27.999998, 28.000002, 27.5, 28.5])('reports real widget dimensions at fractional height %s', async height => {
   const html = await githubWidgetResponse().text();
-  const script = html.match(/<script>([\s\S]*?)<\/script>/)![1];
+  const script = html.match(/<script>([\s\S]*?)<\/script>/i)![1];
   const messages: unknown[] = [];
   const callbacks: Array<() => void> = [];
   class Observer { constructor(callback: () => void) { callbacks.push(callback); } observe() {} }
