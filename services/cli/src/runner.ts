@@ -1,3 +1,6 @@
+import { randomBytes } from "node:crypto";
+import headless from "@xterm/headless";
+import serialize from "@xterm/addon-serialize";
 import { hostname } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { pty } from "./pty";
@@ -27,10 +30,11 @@ export async function runRemote(options: RunOptions): Promise<number> {
   let cols = Math.max(2, Math.min(300, process.stdout.columns || 80));
   let rows = Math.max(2, Math.min(120, process.stdout.rows || 24));
   const cwd = options.cwd ?? process.cwd();
+  const recoveryKey = randomBytes(32).toString("hex");
   const register = (signal?: AbortSignal) => api<{ id: string; runnerKey: string }>(
     connection, "", "POST", {
       name: options.name ?? command, harness: command, cwd,
-      machine: hostname(), cols, rows,
+      machine: hostname(), cols, rows, recoveryKey,
     }, signal,
   );
   let session = await register(signal);
@@ -47,7 +51,11 @@ export async function runRemote(options: RunOptions): Promise<number> {
     await api(connection, `/${session.id}`, "DELETE").catch(() => {});
     throw error;
   }
+  const history = new headless.Terminal({ cols, rows, scrollback: 1000, allowProposedApi: true });
+  const serializer = new serialize.SerializeAddon();
+  history.loadAddon(serializer);
   options.onSession?.(`${connection.server}/chat?session=${session.id}`);
+  let replay = "";
   let buffer = "",
     ack = 0,
     seq = 0,
@@ -138,28 +146,33 @@ export async function runRemote(options: RunOptions): Promise<number> {
             needsRegistration = false;
             ack = 0;
             seq = 0;
-            // The old batch may have reached the old server; the new session has no history.
-            if (batch) batch = { ...batch, runnerKey: session.runnerKey, ack: 0, outputSeq: ++seq };
+            // Restore acknowledged terminal state, then retry pending and unsent output.
+            // Do not include new PTY bytes in the snapshot: they are already in buffer.
+            replay = serializer.serialize() + (batch?.output ?? "") + replay;
+            batch = undefined;
+            history.reset();
             options.onSession?.(`${connection.server}/chat?session=${session.id}`);
             if (interactive)
-              process.stderr.write(`\r\n[afbin: Remote session restored with a new link: ${connection.server}/chat?session=${session.id}. Open it in your browser; previous mentions still point to the old session.]\r\n`);
+              process.stderr.write(`\r\n[afbin: Restoring remote session at ${connection.server}/chat?session=${session.id}]\r\n`);
           }
           if (!batch) {
             // Never split a UTF-16 surrogate pair across JSON batches.
-            let length = Math.min(60000, buffer.length);
-            if (length && /[\uD800-\uDBFF]/.test(buffer[length - 1])) length--;
+            const source = replay || buffer;
+            let length = Math.min(60000, source.length);
+            if (length && /[\uD800-\uDBFF]/.test(source[length - 1])) length--;
             batch = {
               runnerKey: session.runnerKey,
               outputSeq: ++seq,
-              output: buffer.slice(0, length),
+              output: source.slice(0, length),
               ack,
               cols,
               rows,
-              ...(exitCode !== undefined && length === buffer.length
+              ...(exitCode !== undefined && !replay && length === buffer.length
                 ? { exitCode }
                 : {}),
             };
-            buffer = buffer.slice(length);
+            if (replay) replay = replay.slice(length);
+            else buffer = buffer.slice(length);
           }
           const result = await api<RemoteExchangeResult>(
             connection,
@@ -189,6 +202,8 @@ export async function runRemote(options: RunOptions): Promise<number> {
             }
             ack = item.id;
           }
+          history.resize(batch.cols, batch.rows);
+          if (batch.output) await new Promise<void>(resolve => history.write(batch!.output, resolve));
           const finished = batch.exitCode !== undefined;
           batch = undefined;
           if (warned && interactive)
@@ -200,11 +215,18 @@ export async function runRemote(options: RunOptions): Promise<number> {
         } catch (error) {
           if (exitCode !== undefined) break;
           const status = error instanceof ApiError ? error.status : undefined;
-          if (status === 401 || status === 403) {
+          if (status === 410) {
+            remote = false;
+            buffer = "";
+            replay = "";
+            batch = undefined;
+            if (interactive) process.stderr.write("\r\n[afbin: Remote session disconnected. Your command is still running locally.]\r\n");
+          } else if (status === 401 || status === 403) {
             remote = false;
             if (interactive)
               process.stderr.write(`\r\n[afbin: Remote authentication failed (HTTP ${status}). ${command} is still running locally. Run afbin auth --server ${connection.server} in another terminal, then restart afbin remote to reconnect.]\r\n`);
             buffer = "";
+            replay = "";
             batch = undefined;
           } else {
             if (status === 404) needsRegistration = true;
@@ -227,6 +249,7 @@ export async function runRemote(options: RunOptions): Promise<number> {
     clearTimeout(shutdownTimer);
     shutdown.abort();
     if (exitCode === undefined) child.kill();
+    history.dispose();
     out.dispose();
     exited.dispose();
     signal?.removeEventListener("abort", abort);

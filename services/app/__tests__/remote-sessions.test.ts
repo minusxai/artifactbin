@@ -223,3 +223,23 @@ it("the real comment and reply routes notify the selected session after saving",
   );
   expect(exchange.inputs).toHaveLength(2);
 });
+
+it("recovers the same account-scoped session after relay restart and respects disconnect", async () => {
+  const r = new RemoteRegistry();
+  const recovery = { ...registration, recoveryKey: "ab".repeat(32) };
+  try {
+    const first = r.create("a", recovery);
+    expect(r.create("a", recovery)).toEqual(first);
+    expect(r.create("b", recovery).id).not.toBe(first.id);
+    expect(JSON.stringify(r.list("a"))).not.toContain(recovery.recoveryKey);
+    r.clear();
+    const restored = r.create("a", recovery);
+    expect(restored.id).toBe(first.id);
+    await r.exchange("a", restored.id, body(restored.runnerKey, 1, "restored history"));
+    expect((await r.view("a", first.id, -1)).snapshot).toContain("restored history");
+    r.remove("a", first.id);
+    expect(() => r.create("a", recovery)).toThrow("Session disconnected");
+    await expect(r.exchange("a", first.id, body(restored.runnerKey))).rejects.toMatchObject({ status: 410 });
+    expect(() => r.create("a", { ...registration, recoveryKey: "short" })).toThrow();
+  } finally { r.clear(); }
+});

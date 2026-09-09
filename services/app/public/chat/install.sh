@@ -2,7 +2,7 @@
 set -eu
 
 main() {
-  version=0.1.3
+  version=0.1.4
   install_dir="${HOME}/.local/bin"
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -11,7 +11,7 @@ main() {
         case "$1" in --version) version=$2;; --dir) install_dir=$2;; esac
         shift 2;;
       --help|-h)
-        echo 'Install afbin: sh install.sh [--version 0.1.3] [--dir PATH]'
+        echo 'Install afbin: sh install.sh [--version 0.1.4] [--dir PATH]'
         return 0;;
       *) echo "Unknown option: $1" >&2; return 1;;
     esac

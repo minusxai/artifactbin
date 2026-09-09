@@ -9,7 +9,6 @@ Once the `afbin-v0.1.1` GitHub Release is published and the app is deployed:
 ```sh
 curl -fsSL https://artifactbin.dev/chat/install.sh | sh
 export PATH="$HOME/.local/bin:$PATH"
-afbin auth
 afbin remote claude --chrome
 # Or: afbin remote codex
 ```
@@ -31,7 +30,6 @@ From the repository root (Node 22+, plus Python/make/C++ on Linux for node-pty):
 ```sh
 npm ci
 npm run build -w services/cli
-node services/cli/dist/afbin.mjs auth
 node services/cli/dist/afbin.mjs remote claude --chrome
 ```
 
@@ -47,18 +45,20 @@ afbin remote --server http://localhost:6401 claude --chrome
 
 Put afbin options **before** the command; everything after the command goes to the harness unchanged. Your working directory, environment, installed skills, MCP configuration, and local input/output remain available. The CLI starts the executable directly, without constructing a shell command string. You can explicitly run a shell too: `afbin remote bash`.
 
-Open the printed session link, or `/chat` on the selected server, and sign into the same artifactbin account. Select a session and use the terminal directly, the message box, or the Enter/Escape/arrow buttons. **Switch to mobile** and **Switch to desktop** resize the shared terminal. The selected size stays in effect even when the local terminal sends input or automatic replies. **Disconnect** removes remote access and leaves the local command running; Ctrl+C goes to the command as usual.
+Open the printed session link, or `/chat` on the selected server, and sign into the same artifactbin account. Select a session, swipe up/down to scroll terminal history (or use Scroll up, Scroll down, and Latest output), and use the terminal directly, the message box, or the Enter/Escape/arrow buttons. **Switch to mobile** and **Switch to desktop** resize the shared terminal. The selected size stays in effect even when the local terminal sends input or automatic replies. **Disconnect** removes remote access and leaves the local command running; Ctrl+C goes to the command as usual.
+
+The browser retries temporary failures indefinitely with capped backoff and a “Reconnecting…” status, preserving the visible terminal. Successful polls clear that status. Full-screen agents may manage their own history separately from terminal scrollback. Disconnect stops relay retries; bounded in-memory disconnect records last up to one hour.
 
 ## Auth
 
-`afbin auth` asks you to open the server's `/tokens/new` page while signed in and paste its token (hidden input). It validates that the token belongs to an account and saves it with owner-only permissions in the same file used by artifactbin skills:
+`afbin`, `afbin remote`, and `afbin remote <command>` automatically ask you to open the server's `/tokens/new` page while signed in and paste its token (hidden input). It validates that the token belongs to an account and saves it with owner-only permissions in the same file used by artifactbin skills:
 
 ```dotenv
 ARTIFACTBIN_URL=https://artifactbin.dev
 ARTIFACTBIN_TOKEN=your_token
 ```
 
-Location: `~/.artifactbin.env`. `afbin remote` reuses a valid saved token without another login. Missing or expired credentials direct you to `afbin auth`. Legacy `~/.config/artifact-bin/config.json` (`url`, `token`) is read as a fallback. An anonymous token must first be claimed by an account.
+Location: `~/.artifactbin.env`. `afbin remote` reuses a valid saved token without another login. Missing or expired credentials enter the sign-in flow directly; a specified command starts after sign-in. Bare commands show how to start an agent once authenticated. `afbin auth` remains an optional way to replace credentials. Legacy `~/.config/artifact-bin/config.json` (`url`, `token`) is read as a fallback. An anonymous token must first be claimed by an account.
 
 `ARTIFACTBIN_URL` and `ARTIFACTBIN_TOKEN` can explicitly supply a connection. Saved credentials are used only for their matching server origin; changing a host does not send the saved production token to it. Authentication sends a bearer header, never a token in the session URL. HTTP is allowed only for localhost development; other hosts require HTTPS. The paste-token flow replaces the most recent connection, consistent with the existing skills.
 
@@ -82,7 +82,7 @@ const exitCode = await runRemote({
 });
 ```
 
-`onSession` is called again with the replacement URL after session recovery. `interactive: false`, `onOutput`, and an AbortSignal support embedding in a process without a local TTY. The server relay is `services/app/lib/remote/registry.ts`; thin authenticated HTTP routes wrap its account-scoped interface. Wire types live in `services/contracts/src/remote.ts`.
+`onSession` is called again after session recovery, with the same URL when the server supports recovery. `interactive: false`, `onOutput`, and an AbortSignal support embedding in a process without a local TTY. The server relay is `services/app/lib/remote/registry.ts`; thin authenticated HTTP routes wrap its account-scoped interface. Wire types live in `services/contracts/src/remote.ts`.
 
 ## Standalone executable
 
@@ -97,7 +97,7 @@ Build on each target OS/architecture using Node 22. The build creates a [Node si
 
 The relay uses authenticated HTTP polling (~200 ms runner / 250 ms viewer), so it works through the existing app proxy and a custom host without a separate WebSocket service. It forwards terminal bytes, including screen redraws and menus. It is a terminal mirror, with a convenient message box.
 
-Run **one app process**: sessions and bounded terminal scrollback live in memory. Temporary relay failures retry with exponential backoff (0.5–10 seconds), preserving the pending exchange sequence. The CLI reports connection loss and successful reconnection. After an app restart or session expiry, it registers a new session without restarting the local command and prints the new browser link; previous links and mentions still target the old session. Multi-replica routing remains unsupported. During an outage, the CLI keeps up to 1 MiB of recent unsent output plus the pending exchange, discards older output if necessary, and keeps local work running. Skipped output is reported on reconnection; terminal history and screen state may be incomplete until the agent redraws. Authentication failures (401/403) stop retries and explain how to authenticate and restart remote access. Sessions become offline after 30 seconds without a heartbeat and expire after one hour without activity. Limits: 10 sessions per account, 200 total, 1 MiB replay per session plus 1,000 terminal scrollback lines, 128 KiB pending input. Closing the local terminal ends the process; this does not implement persistent background sessions.
+Run **one app process**: sessions and bounded terminal scrollback live in memory. Temporary relay failures retry with exponential backoff (0.5–10 seconds), preserving the pending exchange sequence. The CLI reports connection loss and successful reconnection. After an app restart or session expiry, it restores the same session link and replays a local terminal snapshot without restarting the command. Registration is idempotent and uses an account-scoped recovery credential that is never exposed to viewers. Open browsers detect a new relay generation and reload the snapshot. Multi-replica routing remains unsupported. During an outage, the CLI keeps up to 1 MiB of recent unsent output plus the pending exchange, discards older output if necessary, and keeps local work running. The CLI also retains an in-memory terminal snapshot with 1,000 scrollback lines of acknowledged output. Skipped outage output is reported on reconnection; screen state may be incomplete until the agent redraws if the unsent buffer overflows. Authentication failures (401/403) stop retries and explain how to authenticate and restart remote access. Sessions become offline after 30 seconds without a heartbeat and expire after one hour without activity. Limits: 10 sessions per account, 200 total, 1 MiB replay per session plus 1,000 terminal scrollback lines, 128 KiB pending input. Closing the local terminal ends the process; this does not implement persistent background sessions.
 
 The account and the app server can access the terminal content and input. Keep this server within the trust boundary of the machine you are controlling. V0 does not provide end-to-end encryption, public session sharing, readiness detection, or guaranteed delivery after a server restart.
 
