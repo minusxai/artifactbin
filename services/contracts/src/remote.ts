@@ -41,6 +41,8 @@ export interface RemoteFrame {
   rows: number;
 }
 export interface RemoteView {
+  /** Changes whenever the relay rebuilds this session. */
+  generation?: string;
   session: RemoteSessionInfo;
   seq: number;
   frames: RemoteFrame[];

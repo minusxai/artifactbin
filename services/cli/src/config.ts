@@ -85,7 +85,8 @@ export function parseArgs(argv: string[]): {
   harness?: string;
   args: string[];
 } {
-  const [command = "help", ...args] = argv;
+  const implicitRemote = !argv.length || (argv[0].startsWith("--") && argv[0] !== "--help");
+  const [command = "remote", ...args] = implicitRemote ? ["remote", ...argv] : argv;
   const result: {
     command: string;
     server?: string;
@@ -108,10 +109,6 @@ export function parseArgs(argv: string[]): {
   }
   if (command === "remote") {
     result.harness = args[i++];
-    if (!result.harness)
-      throw new Error(
-        "Usage: afbin remote [--server URL] [--name NAME] claude [--chrome]",
-      );
     result.args = args.slice(i);
   } else if (i < args.length) throw new Error("Unexpected arguments");
   return result;
