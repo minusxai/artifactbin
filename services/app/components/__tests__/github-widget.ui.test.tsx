@@ -20,6 +20,8 @@ it('embeds the star-count vendor in sandboxed frames in both app and reader chro
     const options = new URLSearchParams(url.hash.slice(1));
     expect(options.get('href')).toBe('https://github.com/minusxai/artifactbin');
     expect(options.get('data-show-count')).toBe('true');
+    // A white chrome surface must never inherit the visitor's dark OS theme.
+    expect(options.get('data-color-scheme')).toBe('light');
     expect(url.hash).not.toContain('+');
     expect(url.hash).toContain('Star%20artifactbin%20on%20GitHub');
     expect(frame!.getAttribute('sandbox')).toBe('allow-scripts allow-popups allow-popups-to-escape-sandbox');
