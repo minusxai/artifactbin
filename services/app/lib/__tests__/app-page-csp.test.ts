@@ -16,6 +16,12 @@ import { APP_CSP, APP_INLINE_SCRIPT_HASHES, createAppServer } from '@/server/app
 const app = createAppServer({ indexHtml: async () => '<!doctype html><div id="root">SPA</div>' });
 
 describe('the app CSP', () => {
+  it('admits only the exact GitHub widget frame path without trusting its scripts or connections in the app', () => {
+    expect(APP_CSP.split('; ').find(d => d.startsWith('frame-src'))).toBe("frame-src 'self' https://buttons.github.io/buttons.html");
+    for (const directive of ['script-src', 'connect-src']) {
+      expect(APP_CSP.split('; ').find(d => d.startsWith(directive))).not.toContain('buttons.github.io');
+    }
+  });
   it('locks framing and plugins on the app pages', async () => {
     expect(APP_CSP).toContain("default-src 'none'");
     expect(APP_CSP).toContain("script-src 'self'");

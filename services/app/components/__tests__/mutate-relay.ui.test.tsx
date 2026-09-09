@@ -17,8 +17,8 @@ it('reports the server ACL refusal instead of pretending the write succeeded',as
  await expect(transport.mutate!({},'vote')).rejects.toThrow('not open for writes');transport.dispose();
 });
 it('ignores mutation and asset messages from unrelated or author windows',async()=>{
- const fetcher=vi.fn(async()=>new Response(JSON.stringify({count:null})));vi.stubGlobal('fetch',fetcher);
+ const fetcher=vi.fn();vi.stubGlobal('fetch',fetcher);
  render(<ArtifactSurface {...surfaceProps()} />);await screen.findByText('Document body');
  await act(async()=>{for(const type of ['mx:mutate','mx:asset'])window.dispatchEvent(new MessageEvent('message',{source:window,data:{type,id:1,mutation:'vote',values:{},url:'https://example.com'}}));});
- expect(fetcher.mock.calls.filter(call => (call as unknown[])[0] !== '/api/github-stars')).toHaveLength(0);
+ expect(fetcher).not.toHaveBeenCalled();
 });

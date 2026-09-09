@@ -18,6 +18,7 @@
  * (`sandbox` without allow-same-origin), no form navigation, no base, no third-party
  * destinations of any kind. Guarded by __tests__/raw-document.test.ts.
  */
+import { GITHUB_WIDGET_URL } from '@/lib/github-star';
 /** Where each kind of subresource may come from — content-independent. */
 const SOURCE_DIRECTIVES = [
   "default-src 'none'",
@@ -27,7 +28,7 @@ const SOURCE_DIRECTIVES = [
   "font-src 'self' data:",
   "media-src 'self' data: blob:",
   // The runtime's fixed same-origin HTTP wrapper; authored raw frames remain invalid JSX.
-  "frame-src 'self'",
+  `frame-src 'self' ${GITHUB_WIDGET_URL}`,
   // Raw <iframe> remains invalid markup. The trusted runtime owns this HTTP
   // wrapper; its own frame-src 'none' prevents the inner author navigating.
 ] as const;

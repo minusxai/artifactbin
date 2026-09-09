@@ -173,7 +173,7 @@ async function bootServer(index, mailOutbox, authSecret) {
       // The gate's Google sheet is answered locally (scripts/lib/sheets-stub.mjs):
       // same URL, no third party on a merge gate. APPENDED rather than set, so a
       // NODE_OPTIONS the caller already has survives.
-      NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import ${pathToFileURL(path.join(HERE, 'lib/sheets-stub.mjs')).href} --import ${pathToFileURL(path.join(HERE, 'lib/github-stars-stub.mjs')).href}`.trim(),
+      NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import ${pathToFileURL(path.join(HERE, 'lib/sheets-stub.mjs')).href}`.trim(),
       APP__PORT: String(port),
       APP__PUBLIC_BASE_URL: base,
       // Managed iframe assets are served by the same disposable app through a
