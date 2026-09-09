@@ -250,3 +250,13 @@ describe('GET /a/<id>/query?q= (the document fetches for itself)', () => {
     expect((await bad.json()).error).toBe('invalid_values');
   });
 });
+
+it('draft validation gives the same actionable JSX diagnostics as publishing', async () => {
+  const t = await mintToken('draft-syntax');
+  const res = await draftQueryRoute(request('/api/query', {method:'POST',token:t.token,json:{markup:'<Question viz={"kind":"vega-lite","spec":{"mark":"bar"}} />'}}));
+  expect(res.status).toBe(400);
+  const body = await res.json();
+  expect(body.error).toBe('invalid_jsx');
+  expect(body.details[0].message).toContain('missing its object opening brace');
+  expect(body.details[0].snippet).toContain('▶');
+});

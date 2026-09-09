@@ -55,3 +55,10 @@ describe('an unclosed expression is named where it OPENS', () => {
     expect(d.message).toMatch(/JSX syntax error/);
   });
 });
+
+it('explains a missing object opening brace, rather than suggesting more closing braces', () => {
+  const d = detail('<Question viz={"kind":"vega-lite","spec":{"mark":"bar"}} />');
+  expect(d.message).toContain('missing its object opening brace');
+  expect(d.message).toContain('viz={{...}}');
+  expect(d.snippet).toContain('▶');
+});

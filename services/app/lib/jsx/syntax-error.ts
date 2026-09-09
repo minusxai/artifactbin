@@ -78,11 +78,13 @@ export function syntaxErrorDetail(source: string, parsed: Extract<ParseResult, {
   // Name the OPENING when the fault is an expression that never closed — the
   // parser's position is where it noticed, which is somewhere else entirely.
   const unclosed = unclosedExpression(source);
+  const missingObject = /([A-Za-z_][\w-]*)=\{\s*["'][^"']+["']\s*:/.exec(source);
+  const objectHint = missingObject ? ` The ${missingObject[1]} attribute is missing its object opening brace: JSX needs ${missingObject[1]}={{...}}, one expression wrapper around the complete JSON object.` : '';
   const brace = unclosed
     ? ` The \`${unclosed.attr}={\` opened on line ${unclosed.line} is never closed — it needs ${unclosed.missing} more \`}\`.`
     : '';
   return {
-    message: `JSX syntax error at line ${line}, column ${column}: ${bare} — see \`snippet\`, where ▶ marks the character.${brace}${unclosed?.attr === 'viz' ? ' Build the viz object separately, then serialize it with JSON.stringify/json.dumps inside one JSX expression; do not hand-count closing braces. See markup-data.md.' : ''}`,
+    message: `JSX syntax error at line ${line}, column ${column}: ${bare} — see \`snippet\`, where ▶ marks the character.${brace}${objectHint}${(unclosed?.attr === 'viz' || missingObject?.[1] === 'viz') ? ' Build the viz object separately, then serialize it with JSON.stringify/json.dumps inside one JSX expression; do not hand-count closing braces. See markup-data.md.' : ''}`,
     start: parsed.pos,
     end: parsed.pos,
     snippet,

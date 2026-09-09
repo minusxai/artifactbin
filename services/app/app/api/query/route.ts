@@ -2,6 +2,7 @@ import { datasetResolverForActor, runDocumentDataflow } from '@/lib/artifacts';
 import { actorForArtifacts, sessionActor } from '@/lib/viewer';
 import { isCrossSiteRequest, json, readJson, unauthorized } from '@/lib/http';
 import { parseJsx } from '@/lib/jsx';
+import { syntaxErrorDetail } from '@/lib/jsx/syntax-error';
 import { validateHelmet } from '@/lib/story/helmet';
 import { parseQueryRequest } from '@/lib/story/query-request';
 import { resolveToken } from '@/lib/tokens';
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
 
   // A malformed Helmet cannot be run: report the grammar, as publish would.
   const tree = parseJsx(markup);
-  if (!tree.ok) return json({ error: 'invalid_jsx', details: [{ message: `JSX syntax error: ${tree.error}` }] }, 400);
+  if (!tree.ok) return json({ error: 'invalid_jsx', details: [syntaxErrorDetail(markup, tree)] }, 400);
   const helmetErrors = validateHelmet(tree.nodes);
   if (helmetErrors.length) return json({ error: 'invalid_jsx', details: helmetErrors }, 400);
 
