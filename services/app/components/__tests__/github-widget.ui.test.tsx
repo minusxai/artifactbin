@@ -6,7 +6,7 @@ import { InlineReaderChrome } from '../InlineReaderChrome';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 it('embeds the star-count vendor in sandboxed frames in both app and reader chrome without parent count requests', () => {
-  const fetch = vi.fn();
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ count: 3 })));
   vi.stubGlobal('fetch', fetch);
   const { container } = render(<MemoryRouter><AppBar /><InlineReaderChrome input={{ artifactId: null, title: null, author: null }} onAction={() => {}} /></MemoryRouter>);
   const app = container.querySelector('header [data-mx-github-star]');
