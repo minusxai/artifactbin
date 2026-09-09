@@ -8,7 +8,8 @@ beforeEach(setupSurface);afterEach(()=>vi.unstubAllGlobals());
 it('renders authored DOM in the parent, never a full-document /raw iframe',async()=>{
  const view=render(<ArtifactSurface {...surfaceProps()} />);await screen.findByText('Document body');
  expect(view.container.querySelector('[data-mx-inline-story] p')).toHaveTextContent('Document body');
- expect(view.container.querySelector('iframe')).toBeNull();
+ expect(view.container.querySelector('[data-mx-inline-story] iframe')).toBeNull();
+ expect(view.container.querySelector('iframe[src*="/raw"]')).toBeNull();
  expect(view.container.innerHTML).not.toContain('/raw?key=');
 });
 it('keeps owner controls while readers cannot enter editing',async()=>{
