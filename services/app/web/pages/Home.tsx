@@ -1,4 +1,5 @@
-import { useCallback } from 'react';
+import { useCallback, useLayoutEffect, useState } from 'react';
+import { clearInitialStory, takeInitialHome } from '@/web/initial-story';
 import { usePageData } from '@/web/use-page-data';
 import type { HomeCore, HomeInsights } from '@/web/home-resource';
 import { ActivityFeed } from '@/components/ActivityFeed';
@@ -51,6 +52,7 @@ function FirstArtifact() {
 }
 
 export function HomePage() {
+  const [publicInitial] = useState(takeInitialHome);
   const { session, reload } = useSession();
   const core = usePageData<HomeCore>('/api/page/home?part=core');
   const insights = usePageData<HomeInsights>('/api/page/home?part=insights', { enabled: !!core.data?.signedIn });
@@ -59,6 +61,10 @@ export function HomePage() {
     || (insights.data && (!insights.data.signedIn || insights.data.accountId !== session?.user?.id));
   const state = { core: wrongAccount ? null : core.data, insights: wrongAccount ? null : insights.data, error: wrongAccount ? new Error('Account changed') : core.error, insightsError: !!insights.error };
   const home = state.core;
+  useLayoutEffect(() => { clearInitialStory(); }, []);
+  // Preserve the server's real landing across startup fetches. Any resolved
+  // account/anonymous identity supersedes that one-use eligibility verdict.
+  if (!home && publicInitial && (!session || session.kind === 'none')) return <Landing />;
   if (!home) return <main className={`${HOME_WORKSPACE_COLUMN} mt-8 pb-24`}>
     {state.error ? <div role="alert"><p>Could not load your workspace.</p><button aria-label="Retry workspace" onClick={session ? load : reload}>Try again</button></div> : <WorkspaceSkeleton />}
   </main>;

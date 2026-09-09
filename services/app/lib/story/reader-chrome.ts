@@ -38,6 +38,7 @@
  */
 
 import { REPO_URL } from '@/lib/repo';
+import { githubCountMarkup, githubStarLabel } from '@/lib/github-star';
 
 /** The login door, when a link grants more than the anonymous ceiling lets a guest use. */
 export interface ReaderSignIn {
@@ -232,8 +233,8 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
     + `${artifactId ? ` data-mx-artifact-id="${escapeHtml(artifactId)}"` : ''}>`
     + '<a class="mx-reader-home" href="/" target="_top" aria-label="Home" data-mx-reader-logo data-mx-tip="Home">'
     + '<img src="/logo-128.png" alt=""></a>'
-    + `<a class="mx-reader-github" href="${REPO_URL}" target="_blank" rel="noopener noreferrer" aria-label="Star artifactbin on GitHub (opens in a new tab)">${ICON_GITHUB}<span>STAR</span>${ICON_STAR}</a>`
     + '<div class="mx-reader-rail" data-mx-reader-rail>'
+    + `<a data-mx-github-star class="mx-reader-github" href="${REPO_URL}" target="_blank" rel="noopener noreferrer" aria-label="${githubStarLabel(null)}">${ICON_GITHUB}<span>STAR</span>${ICON_STAR}${githubCountMarkup()}</a>`
     + action(
       'like',
       reactions?.like.liked ? 'Unlike' : 'Like',
