@@ -1,10 +1,8 @@
 'use client';
 
 /**
- * Quiet page chrome. Desktop keeps two independent corner controls rather
- * than reserving a header; phones get one full-width bottom rail with Menu,
- * Home, and the current page's controls. A page may scroll the chrome away
- * with its content, while a full-viewport artifact overlays it.
+ * Shared page chrome. The app topbar holds Home, repository stars and page
+ * controls; document chrome uses the same panels through its existing bridge.
  */
 import {
   BookOpen, CircleUser, Braces, ChevronRight, FileText, LogIn, LogOut, Menu, Moon,

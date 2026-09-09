@@ -395,8 +395,7 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
 
 /* DESKTOP — one bar across the top. */
 @media (min-width: 640px) {
-  /* Clear of the page's comment rail too: the frame stays full-width under
-     it, so a corner at the frame's edge is a corner under the rail. */
+  /* The desktop star participates in the action rail, immediately before Like. */
   .mx-reader-github {
     position: static !important;
     order: -1 !important;
