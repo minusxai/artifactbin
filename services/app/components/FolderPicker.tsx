@@ -1,4 +1,5 @@
 "use client"
+import { pageDataChanged } from '@/web/page-data-events';
 /**
  * THE MOVE PICKER — the account's folders as an indented tree built from
  * `ancestor_ids`, root first, the current location marked, a filter input, and
@@ -234,6 +235,7 @@ export function MoveMenu({ row, folders, onMoved, onClose }: {
     // open on the choice that was refused rather than closing over a move that
     // did not happen.
     if (!res?.ok) return;
+    pageDataChanged();
     const body = (await res.json().catch(() => ({}))) as { parent_id?: string | null };
     onMoved(body.parent_id ?? null);
     onClose();

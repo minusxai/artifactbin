@@ -1,10 +1,11 @@
 import { ChevronLeft, ChevronRight, RotateCcw, Search } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
+import { usePageData } from '../use-page-data';
 import { Navigate } from 'react-router';
 import RowMenu from '@/components/RowMenu';
 import { Tooltip } from '@/components/Tooltip';
 import { Badge, FormatBadge, formatLabel, MicroLabel, PANEL, TABLE_ROW, timeAgo } from '@/components/ui';
-import { useRefreshable } from '@/lib/navigation';
+import { pageDataChanged } from '@/web/page-data-events';
 import { useSession } from '../session';
 
 interface TrashFile { id: string; title: string | null; format: string; version: number; deleted_at: string }
@@ -43,25 +44,17 @@ function TypeFilter({ format, active, onToggle }: { format: string; active: bool
  */
 export function TrashPage() {
   const { session } = useSession();
-  const [data, setData] = useState<{ files: TrashFile[] } | null>(null);
+  const { data, seed, error, refresh } = usePageData<{ files: TrashFile[] }>('/api/page/trash');
   const [busy, setBusy] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [formatPicks, setFormatPicks] = useState<string[]>([]);
   const [page, setPage] = useState(0);
-  const load = useCallback(() => {
-    void fetch('/api/page/trash', { credentials: 'same-origin' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then(setData)
-      .catch(() => null);
-  }, []);
-  useEffect(load, [load]);
-  useRefreshable(load);
 
   const restore = async (id: string) => {
     setBusy(id);
     try {
       const response = await fetch(`/api/my/artifacts/${id}/restore`, { method: 'POST', credentials: 'same-origin' });
-      if (response.ok) setData((current) => current ? { files: current.files.filter((file) => file.id !== id) } : current);
+      if (response.ok) { if (data) seed({ files: data.files.filter((file) => file.id !== id) }); pageDataChanged(); }
     } finally {
       setBusy(null);
     }
@@ -94,6 +87,7 @@ export function TrashPage() {
       </div>
 
       <section aria-label="Trash" className={PANEL}>
+        {error && <button aria-label="Retry trash" onClick={() => void refresh(true)}>Could not refresh trash. Retry</button>}
         <div className="flex flex-wrap items-center gap-2 border-b border-edge px-4 py-2">
           <Search size={13} className="shrink-0 text-faint" />
           <input

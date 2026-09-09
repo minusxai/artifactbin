@@ -4,7 +4,8 @@
  */
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useRefreshable } from '@/lib/navigation';
-import { createHomeResource } from '@/web/home-resource';
+import { createPageDataStore, type PageDataStore } from '@/web/page-data-store';
+import { PAGE_DATA_CHANGED } from '@/web/page-data-events';
 
 export interface SessionState {
   user: { id: string; email: string | null } | null;
@@ -12,22 +13,24 @@ export interface SessionState {
   mixpanel: { token: string | null; host: string };
 }
 
-const Ctx = createContext<{ session: SessionState | null; reload: () => void; home: ReturnType<typeof createHomeResource> | null }>({ session: null, reload: () => {}, home: null });
+const Ctx = createContext<{ session: SessionState | null; reload: () => void; pages: PageDataStore | null; sessionError: Error | null }>({ session: null, reload: () => {}, pages: null, sessionError: null });
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<SessionState | null>(null);
   const [nonce, setNonce] = useState(0);
-  const [home] = useState(createHomeResource);
-  const reload = useCallback(() => { home.identity(null); setSession(null); setNonce((n) => n + 1); }, [home]);
+  const [pages] = useState(createPageDataStore);
+  const [sessionError, setSessionError] = useState<Error | null>(null);
+  const reload = useCallback(() => { pages.setScope(null); pages.clear(); setSession(null); setSessionError(null); setNonce((n) => n + 1); }, [pages]);
   // Something changed who this browser is (a claim, a token adopted): re-read.
-  useRefreshable(useCallback(() => setNonce((n) => n + 1), []));
+  useRefreshable(useCallback(() => { pages.expire(); setNonce((n) => n + 1); }, [pages]));
   useEffect(() => {
     let alive = true;
-    void fetch('/api/page/session', { credentials: 'same-origin' }).then((r) => { if (!r.ok) throw new Error('session unavailable'); return r.json(); }).then((s: SessionState) => { if (alive) { home.identity(s); setSession(s); } }).catch(() => { if (alive) { home.identity(null); home.sessionFailed(); setSession(null); } });
+    void fetch('/api/page/session', { credentials: 'same-origin' }).then((r) => { if (!r.ok) throw new Error('session unavailable'); return r.json(); }).then((s: SessionState) => { if (alive) { pages.setScope(s.user?.id ?? s.kind); setSessionError(null); setSession(s); } }).catch(() => { if (alive) { pages.setScope(null); pages.clear(); setSessionError(new Error('Could not load session')); setSession(null); } });
     return () => { alive = false; };
-  }, [nonce, home]);
-  useEffect(() => () => home.reset(), [home]);
-  return <Ctx.Provider value={{ session, reload, home }}>{children}</Ctx.Provider>;
+  }, [nonce, pages]);
+  useEffect(() => () => pages.clear(), [pages]);
+  useEffect(() => { const expire = () => pages.expire(); window.addEventListener(PAGE_DATA_CHANGED, expire); return () => window.removeEventListener(PAGE_DATA_CHANGED, expire); }, [pages]);
+  return <Ctx.Provider value={{ session, reload, pages, sessionError }}>{children}</Ctx.Provider>;
 }
 
 export const useSession = () => useContext(Ctx);

@@ -1,12 +1,11 @@
 import { Database } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { usePageData, fetchPageData } from '../use-page-data';
 import { Navigate } from 'react-router';
 import type { PickerFolder } from '@/components/FolderPicker';
 import type { ShelfRow } from '@/components/Shelf';
 import { SHELF_LIST_PER_PAGE } from '@/components/Shelf';
 import { ArtifactTable } from '@/components/TokenBrowser';
 import { MicroLabel, PANEL } from '@/components/ui';
-import { useRefreshable } from '@/lib/navigation';
 import { useSession } from '@/web/session';
 
 interface AssetsData {
@@ -17,21 +16,16 @@ interface AssetsData {
 /** The data/image files that support documents, on their own management page. */
 export function AssetsPage() {
   const { session } = useSession();
-  const [data, setData] = useState<AssetsData | null>(null);
-  const [failed, setFailed] = useState(false);
-  const load = useCallback(() => {
-    setFailed(false);
-    void (async () => {
-      const response = await fetch('/api/page/assets', { credentials: 'same-origin' });
+  const { data, error: failed, refresh } = usePageData<AssetsData>('/api/page/assets', { loader: async (signal) => {
+      const response = await fetch('/api/page/assets', { credentials: 'same-origin', signal });
       if (response.ok) return response.json() as Promise<AssetsData>;
       // During Vite development the SPA hot-reloads, while Hono's generated
       // route table is mounted only at process boot. Let a newly-added page
       // work before that one required restart by reading the already-mounted
       // Home payload; production and every subsequent boot use the focused API.
       if (response.status === 404) {
-        const fallback = await fetch('/api/page/home', { credentials: 'same-origin' });
-        if (fallback.ok) {
-          const home = await fallback.json() as { signedIn: boolean; artifacts?: ShelfRow[] };
+          const home = await fetchPageData<{ signedIn: boolean; artifacts?: ShelfRow[] }>('/api/page/home', signal);
+        if (home.signedIn) {
           const rows = home.artifacts ?? [];
           return {
             assets: rows.filter((row) => row.format !== 'markup' && row.format !== 'folder'),
@@ -39,11 +33,9 @@ export function AssetsPage() {
           };
         }
       }
-      throw new Error('assets unavailable');
-    })().then(setData).catch(() => setFailed(true));
-  }, []);
-  useEffect(load, [load]);
-  useRefreshable(load);
+      throw Object.assign(new Error('assets unavailable'), { status: response.status });
+  } });
+  const load = () => { void refresh(true); };
 
   if (session && !session.user) return <Navigate to="/login?callbackUrl=/assets" replace />;
   const folders: PickerFolder[] = (data?.folders ?? []).map((folder) => ({
@@ -61,10 +53,10 @@ export function AssetsPage() {
         <a href="/datasets/new" aria-label="Create dataset" className="ml-auto rounded border border-edge-bright px-3 py-1.5 font-mono text-xs text-accent hover:border-accent">Create dataset</a>
       </div>
 
-      {failed ? (
+      {failed && !data ? (
         <section aria-label="Assets unavailable" className={`${PANEL} flex h-24 items-center justify-center gap-3 px-4 font-mono text-xs text-faint`}>
           <span>could not load assets</span>
-          <button type="button" onClick={load} className="cursor-pointer text-accent underline underline-offset-4">retry</button>
+          <button type="button" aria-label="Retry assets" onClick={load} className="cursor-pointer text-accent underline underline-offset-4">retry</button>
         </section>
       ) : !data ? (
         <section aria-label="Loading assets" aria-busy="true" className={`${PANEL} flex h-24 items-center justify-center font-mono text-xs text-faint`}>
@@ -76,6 +68,7 @@ export function AssetsPage() {
         </section>
       ) : (
         <section aria-label="Assets">
+          {failed && <button aria-label="Retry assets" onClick={load}>Could not refresh assets. Retry</button>}
           <ArtifactTable
             artifacts={data.assets}
             folders={folders}

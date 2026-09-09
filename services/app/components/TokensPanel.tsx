@@ -1,7 +1,8 @@
 'use client';
 
 import { Ban } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { usePageData } from '@/web/use-page-data';
 import { Button, MicroLabel, PANEL, TABLE_ROW } from '@/components/ui';
 
 export interface UserTokenView {
@@ -32,12 +33,8 @@ const statusDot = (status: UserTokenView['status']): string =>
 
 /** The user's machines: every token minted for/claimed by this account, with revoke. */
 export default function TokensPanel({ tokens: initial = [] }: { tokens?: UserTokenView[] }) {
-  const [tokens, setTokens] = useState<UserTokenView[]>(initial);
-  useEffect(() => {
-    void fetch('/api/my/tokens').then((r) => (r.ok ? r.json() : null)).then((body) => {
-      if (body && Array.isArray(body.tokens)) setTokens(body.tokens as UserTokenView[]);
-    }).catch(() => null);
-  }, []);
+  const { data } = usePageData<{ tokens: UserTokenView[] }>('/api/my/tokens');
+  const tokens = data?.tokens ?? initial;
   const [error, setError] = useState<string | null>(null);
 
   if (tokens.length === 0) return null;

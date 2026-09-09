@@ -1,6 +1,38 @@
 import { expect, it } from 'vitest';
 import { createPageDataStore } from '../page-data-store';
 
+it('old subscription cleanup never deletes the replacement account resource', () => {
+  const store = createPageDataStore(); store.setScope('A'); const old = store.resource<string>('x');
+  const stop = old.subscribe(() => {}); store.expire(); store.clear();
+  const replacement = store.resource<string>('x'); replacement.seed('new'); stop();
+  expect(store.resource('x')).toBe(replacement); expect(replacement.snapshot().data).toBe('new');
+});
+
+it('evicts unused entries but keeps an active resource consistent', async () => {
+  const store = createPageDataStore({ maxEntries: 1, maxBytes: 30 }); store.setScope('A');
+  const active = store.resource<string>('active'); const stop = active.subscribe(() => {});
+  active.seed('visible'); store.resource<string>('other').seed('x'.repeat(40));
+  expect(store.resource('active')).toBe(active); expect(active.snapshot().data).toBe('visible');
+  stop(); store.resource<string>('third').seed('new');
+  expect(store.resource('active').snapshot().data).toBeNull();
+});
+
+it('purges permission failures but retains transient failures and can retry', async () => {
+  const store = createPageDataStore(); store.setScope('A'); const r = store.resource<string>('a'); r.seed('old');
+  await r.load(async () => { throw new Error('offline'); }); expect(r.snapshot().data).toBe('old');
+  await r.load(async () => { throw Object.assign(new Error('forbidden'), { status: 403 }); }); expect(r.snapshot().data).toBeNull();
+  await r.load(async () => 'new'); expect(r.snapshot().data).toBe('new');
+});
+
+it('a forced refresh supersedes an older completion and clear revokes held references', async () => {
+  const store = createPageDataStore(); store.setScope('A'); const r = store.resource<string>('a');
+  let done!: (x: string) => void;
+  const old = r.load(() => new Promise<string>((resolve) => { done = resolve; }));
+  await r.load(async () => 'new', { force: true }); done('old'); await old;
+  expect(r.snapshot().data).toBe('new'); store.clear(); expect(r.snapshot().data).toBeNull();
+  await r.load(async () => 'cannot resurrect old handle'); expect(store.resource('a').snapshot().data).toBeNull();
+});
+
 it('retains independent route data and clears existing resource references on account changes', async () => {
   const store = createPageDataStore(); store.setScope('account:A');
   const home = store.resource<string>('/home'); const profile = store.resource<string>('/profile/alice');
