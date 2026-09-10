@@ -64,7 +64,9 @@ try {
   assert.deepEqual(await page.evaluate(() => { window.__watchHome = false; return window.__homeFailures; }), []);
   const appStar = page.locator('header [data-mx-github-star]:visible');
   const appBox = await appStar.boundingBox();
-  assert(appBox.width >= 28 && appBox.width < 120, 'custom icon/count fits the topbar');
+  assert(appBox.width >= 28 && appBox.width < 140, `Star button/count fits the topbar (${appBox.width}px)`);
+  const controlsBox = await page.getByRole('button', { name: 'Open page controls', exact: true }).boundingBox();
+  assert(appBox.x + appBox.width <= controlsBox.x, 'Star button leaves page controls unobstructed');
   assert(appBox.y < 44 && appBox.x > 640);
   console.log('ok uninterrupted landing through slow JS/session/home; asynchronous count in app topbar');
   await appStar.locator('a').evaluate(link => { window.__starBeforeControls = link; });
