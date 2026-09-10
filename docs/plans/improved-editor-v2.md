@@ -93,7 +93,7 @@ from model tests. The original planning-only probes are historical evidence.
 | Grid and interactions | Narrow reader/edit parity, flow intrinsic sizing, paired spans, empty-column placeholders, keyboard movement and cancellation, persistent positioned tile keys and flow-island lifetime checks. |
 | Integrated browser | `editor-v2` passed cross-paragraph replace/range restoration; semantic toolbar formatting; real HTML/Markdown/code paste and one-step Undo; ×; keyboard resize/move/divider; pointer preview and one-commit resize; pointer cancellation; two-column keyboard fallback and backward three-column deletion; mobile flow/positioned stacking; IME composition including an in-flight save response; unrelated remote update + Undo; single-cell editing/cross-cell refusal; persistence/reload. |
 | Input and performance | Optional Firefox, WebKit and Chromium-touch probes passed cross-paragraph replacement, Undo and persistence; touch also passed stacking and ×/Undo. Chromium CDP composition committed Japanese text intact. A 300-paragraph fixture became editable in 852ms including navigation and showed an input change in 27ms in the recorded run. These are bounded observations, not universal latency guarantees or physical-device/keyboard claims. |
-| Broad verification | Full suite passed: 1,355 API, 3,907 Node, 1,367 UI and 25 CLI tests; one existing Node skip. The all-gates run passed 52/53; the remaining SVG layout shift was traced to missing reserved dimensions and fixed with a failing-then-passing regression. All six affected-flow reruns passed across two runs, including `web-assets` with CLS 0.0000 and the final `app-flows` / `editor-v2` rerun. |
+| Broad verification | Full suite passed: 1,355 API, 3,907 Node, 1,371 UI and 25 CLI tests; one existing Node skip. The initial all-gates run passed every gate except SVG asset sizing; the remaining SVG layout shift was traced to missing reserved dimensions and fixed with a failing-then-passing regression. All affected-flow reruns passed, including `web-assets` with CLS 0.0000 and the final `app-flows` / `editor-v2` rerun. |
 | Delivery | One empty-body review PR. GitHub checks on the submitted revision are the CI delivery record; no merge or deployment. |
 
 ## Reproduce
@@ -165,3 +165,36 @@ in the SVG sizing helper; a regression demonstrated that malformed tag text coul
 be joined into a false root. The helper now consumes only complete leading
 preamble items, leaving tag contents untouched. The regression passes. Current
 CI results are attached to the PR revision rather than frozen in this document.
+
+
+## Review refinements: selection and resizing
+
+- Native text highlighting continues through separate edit regions. While the
+  cross-region block fallback owns input, mounted prose regions temporarily
+  release their contenteditable selection boundaries. Escape or a new caret
+  placement restores editing; source and engine identities stay intact. The
+  agreed whole-block Delete and refusal of cross-region text replacement remain.
+- Finishing a text drag no longer selects its common layout container. Text
+  selections hide resize controls. Node boundaries are faint, with no filled
+  backgrounds; resize points and the compact × are circular. Touch hit targets
+  retain their larger accessible size.
+- Resize previews now reflow content through a scoped temporary stylesheet,
+  coalesced to animation frames. The preview overrides existing width utilities
+  without writing authored style attributes. It remains through the source/CSS
+  acknowledgement and is then removed. Cancel restores the original layout;
+  release still produces one source transaction and one Undo action.
+- Observed regression failures covered accidental container selection, scroll
+  resetting active preview geometry, and existing important width utilities
+  preventing live reflow. The updated Chromium gate checks the exact native text
+  range, no background fill/container handles, shrinking before release, source
+  persistence and Undo. Cross-engine probes also exercise a real pointer range.
+
+
+The refined local suite passed 1,355 API, 3,907 Node, 1,371 UI and 25 CLI tests,
+with the existing Node skip. Focused UI tests, type checks and the production
+build passed. Firefox, WebKit and Chromium touch passed actual pointer selection
+across regions, Escape restoring editing, replacement, Undo and persistence.
+Native text HTML dragging is prevented so adjusting an existing selection cannot
+move content between engines; block movement remains owned by the dedicated grip.
+Firefox pointer-release range collapse is handled by restoring the exact native
+endpoints before paint. No physical-device claim is made.

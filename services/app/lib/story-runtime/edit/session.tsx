@@ -71,12 +71,11 @@ export const EDIT_HOVER_ATTR = 'data-mx-edit-hover';
  * or apply editor chrome.
  */
 export const EDIT_MODE_CSS = [
-  `[${EDIT_HOVER_ATTR}] { outline: 1px solid rgba(20, 184, 166, 0.52); outline-offset: 2px; border-radius: 2px; }`,
-  `[${EDIT_SELECTED_ATTR}] { outline: 2px dashed #14b8a6; outline-offset: 2px; }`,
-  `[${EDIT_EMBED_SELECTED_ATTR}] { outline: 2px solid #14b8a6; outline-offset: 2px; }`,
-  '[data-mx-block-selected] { outline: 2px solid #14b8a6; background: rgba(20,184,166,.12); }',
+  `[${EDIT_HOVER_ATTR}] { outline: 1px solid rgba(100, 116, 139, 0.16); outline-offset: 2px; }`,
+  `[${EDIT_SELECTED_ATTR}], [${EDIT_EMBED_SELECTED_ATTR}] { outline: 1px solid rgba(100, 116, 139, 0.3); outline-offset: 2px; }`,
+  '[data-mx-block-selected] { outline: 1px solid rgba(100,116,139,.18); outline-offset: 2px; }',
   '.ProseMirror { outline: none; white-space: pre-wrap; overflow-wrap: break-word; }',
-  '[contenteditable="true"]:focus { outline: 2px solid rgba(20, 184, 166, 0.55); outline-offset: 2px; }',
+  '[contenteditable="true"]:focus { outline: none; }',
 ].join('\n');
 
 const EDIT_CSS_ATTR = 'data-mx-edit-css';
@@ -157,7 +156,8 @@ export function createFrameEditSession({
       el.removeAttribute(EDIT_SELECTED_ATTR);
       el.removeAttribute(EDIT_EMBED_SELECTED_ATTR);
     }
-    if (!selectedPath) {
+    const range = win.getSelection();
+    if (!selectedPath || blockSelection.paths().length || (range && !range.isCollapsed && scope.contains(range.anchorNode))) {
       chrome.select(null, null);
       return;
     }
@@ -316,6 +316,13 @@ export function createFrameEditSession({
     // twice — a click there must never select the preview copy.
     if (target.closest('.mx-rail, .mx-present, [data-mx-node-chrome]')) return;
     if (target.closest('.ProseMirror') && target.closest('a')) event.preventDefault();
+    // A drag ends with a click on the common ancestor. It is still a text
+    // selection, never an instruction to resize that entire container.
+    const native = win.getSelection();
+    if (native && !native.isCollapsed && scope.contains(native.anchorNode)) {
+      stampSelection();
+      return;
+    }
     const stamped = target.closest(`[${AST_PATH_ATTR}]`);
     if (!stamped) {
       reportSelection(null);

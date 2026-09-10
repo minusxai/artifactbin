@@ -43,6 +43,42 @@ for (const [name, engine, mobile] of [
     await page.keyboard.press(`${mod}+z`);
     await page.waitForFunction(() => document.getElementById('second')?.textContent === 'bravo paragraph');
     assert.equal(await page.locator('#first').textContent(), 'alpha paragraph');
+    const endpoints = await page.evaluate(() => {
+      const point = (el, offset) => {
+        const r = document.createRange();
+        r.setStart(el.firstChild, offset);
+        r.setEnd(el.firstChild, offset + 1);
+        const box = r.getBoundingClientRect();
+        return { x: box.x, y: box.y + box.height / 2 };
+      };
+      return {
+        start: point(document.getElementById('second'), 2),
+        end: point(document.querySelector('#left p'), 5),
+      };
+    });
+    await page.mouse.move(endpoints.start.x, endpoints.start.y);
+    await page.mouse.down();
+    await page.mouse.move(endpoints.end.x, endpoints.end.y, { steps: 12 });
+    await page.mouse.up();
+    await page
+      .waitForFunction(() => getSelection().toString().includes('Left'), undefined, { timeout: 5000 })
+      .catch(async (error) => {
+        console.error(name, {
+          errors,
+          selection: await page.evaluate(() => ({
+            text: getSelection().toString(),
+            anchor: getSelection().anchorNode?.textContent,
+            focus: getSelection().focusNode?.textContent,
+            selected: [...document.querySelectorAll('[data-mx-block-selected]')].map((el) => el.textContent),
+            editable: [...document.querySelectorAll('.ProseMirror')].map((el) => el.contentEditable),
+          })),
+        });
+        throw error;
+      });
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll('.ProseMirror')].every((el) => el.contentEditable === 'true'),
+    );
     if (mobile) {
       const a = await page.locator('#left').boundingBox(),
         b = await page.locator('#right').boundingBox();
@@ -62,7 +98,7 @@ for (const [name, engine, mobile] of [
     assert.ok(stored.markup.includes('alpha paragraph') && stored.markup.includes('bravo paragraph'));
     assert.deepEqual(errors, []);
     console.log(
-      `${name}: cross-paragraph replace, Undo, save${mobile ? ', phone stacking and touch delete/Undo' : ''} passed`,
+      `${name}: cross-paragraph replace, native cross-region highlight, Undo, save${mobile ? ', phone stacking and touch delete/Undo' : ''} passed`,
     );
   } finally {
     await browser.close();

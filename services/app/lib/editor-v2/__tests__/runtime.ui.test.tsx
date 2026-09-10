@@ -126,3 +126,38 @@ it('retains live islands inside flow columns when entering editing', () => {
   expect(view.getByRole('textbox')).toHaveTextContent('Text');
   session.dispose();
 });
+
+it('keeps a dragged text range from selecting its common layout ancestor', () => {
+  const parsed = parseJsx(
+    '<div id="root"><p id="a">first paragraph</p><Grid mode="flow"><GridItem><h2 id="b">column heading</h2></GridItem></Grid></div>',
+  );
+  if (!parsed.ok) throw Error(parsed.error);
+  const session = createFrameEditSession({
+    win: window,
+    requestRender: () => {},
+    channel: { nonce: 'x'.repeat(32), post: () => {}, innerHtmlOf: (el) => el.innerHTML },
+  });
+  session.setNodes(parsed.nodes);
+  const view = render(
+    <>
+      {renderStoryNodes(parsed.nodes, {
+        components: { Grid, GridItem },
+        decorateElement: session.decorate,
+        decorateChildren: session.decorateChildren,
+      })}
+    </>,
+  );
+  const a = view.container.querySelector('#a')!,
+    b = view.container.querySelector('#b')!;
+  const range = document.createRange();
+  range.setStart(a.firstChild!, 3);
+  range.setEnd(b.firstChild!, 6);
+  window.getSelection()!.removeAllRanges();
+  window.getSelection()!.addRange(range);
+  fireEvent(document, new Event('selectionchange'));
+  fireEvent.click(view.container.querySelector('#root')!);
+  expect(window.getSelection()!.toString()).toContain('column');
+  expect(view.queryByRole('button', { name: 'Resize selected block' })).toBeNull();
+  expect(document.querySelector('[data-mx-node-chrome]')).toHaveStyle({ display: 'none' });
+  session.dispose();
+});

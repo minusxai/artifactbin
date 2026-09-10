@@ -84,3 +84,28 @@ it('resize preview does not mutate editor-owned DOM and Escape cancels the gestu
   );
   expect(commit).not.toHaveBeenCalled();
 });
+
+it('keeps an in-progress resize anchored when the viewport scrolls', () => {
+  const commit = vi.fn();
+  chrome = createNodeChrome(document, commit);
+  const p = document.createElement('p');
+  document.body.append(p);
+  p.getBoundingClientRect = () => ({
+    x: 20,
+    y: 30,
+    left: 20,
+    top: 30,
+    right: 320,
+    bottom: 130,
+    width: 300,
+    height: 100,
+    toJSON: () => ({}),
+  });
+  chrome.select(p, '0');
+  fireEvent.keyDown(screen.getByRole('button', { name: 'Resize block width' }), { key: 'ArrowLeft' });
+  const overlay = document.querySelector('[data-mx-node-chrome]') as HTMLElement;
+  expect(overlay.style.width).toBe('290px');
+  fireEvent.scroll(window);
+  expect(overlay.style.width).toBe('290px');
+  expect(commit).not.toHaveBeenCalled();
+});

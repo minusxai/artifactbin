@@ -107,7 +107,9 @@ export function FlowEditor({ nodes, path, onChange, onView, onError, onBusy, can
         'aria-multiline': 'true',
         class: 'ProseMirror mx-prose-editor',
       },
+      editable: () => latest.current.canEdit?.() !== false,
       dispatchTransaction(transaction) {
+        if (!transaction.docChanged && latest.current.canEdit?.() === false) return;
         if (transaction.docChanged && latest.current.canEdit?.() === false) {
           view.updateState(view.state);
           return;
@@ -147,6 +149,12 @@ export function FlowEditor({ nodes, path, onChange, onView, onError, onBusy, can
           );
       },
       handleDOMEvents: {
+        dragstart(_view, event) {
+          // Text drags must not become cross-engine HTML moves. Source blocks
+          // move only through the dedicated grip and its checked transaction.
+          event.preventDefault();
+          return true;
+        },
         compositionstart() {
           composing.current = true;
           latest.current.onBusy?.(true);

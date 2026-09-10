@@ -178,6 +178,9 @@ try {
   await page.mouse.move(corner.x+corner.width/2,corner.y+corner.height/2);await page.mouse.down();
   await page.mouse.move(corner.x+corner.width/2+80,corner.y+corner.height/2+60,{steps:6});
   assert.equal((await head()).markup,beforeResize.markup,'pointer preview does not save intermediate dimensions');
+  await page.waitForFunction(() => Math.abs(document.getElementById('first').getBoundingClientRect().width-680)<2, undefined, {timeout:3000});
+
+  assert.ok(Math.abs((await page.locator('#first').boundingBox()).width-680)<2,'content reflows during the resize preview');
   await page.mouse.up();
   const resized=await stored(s=>/id="first"[^>]*w-\[680px\]/.test(s)&&/id="first"[^>]*min-h-\[/.test(s),'pointer drag changes width and height');
   assert.equal(resized.version,beforeResize.version+1,'one resize gesture creates one saved version');
@@ -192,6 +195,23 @@ try {
     'dedicated grip moves a block without changing identity',
   );
   await undo((s) => s.indexOf('id="first"') < s.indexOf('id="second"'), 'move undo restores source order');
+  await range('second', 4, 'lp', 5);
+  await page.waitForFunction(() => getSelection().toString().includes('Left '));
+  assert.equal(await page.locator('[data-mx-node-chrome]').isVisible(), false, 'text selection has no container resize controls');
+  assert.equal(await page.locator('#second').evaluate(el => getComputedStyle(el).backgroundColor), 'rgba(0, 0, 0, 0)', 'block selection does not flood the text background');
+  await page.keyboard.press('Escape');
+  await range('first', 2);
+  const narrowHandle = await page.getByRole('button', {name:'Resize block width',exact:true}).boundingBox();
+  await page.mouse.move(narrowHandle.x+narrowHandle.width/2,narrowHandle.y+narrowHandle.height/2);
+  await page.mouse.down();
+  await page.mouse.move(narrowHandle.x+narrowHandle.width/2-180,narrowHandle.y+narrowHandle.height/2,{steps:8});
+  await page.waitForFunction(() => Math.abs(document.getElementById('first').getBoundingClientRect().width-420)<2, undefined, {timeout:3000});
+  assert.ok(Math.abs((await page.locator('#first').boundingBox()).width-420)<2, 'shrinking reflows text before release');
+  await page.evaluate(() => window.scrollBy(0,20));
+  assert.ok(Math.abs((await page.locator('#first').boundingBox()).width-420)<2, 'scroll does not reset the active preview');
+  await page.mouse.up();
+  await stored(s=>/id="first"[^>]*w-\[420px\]/.test(s),'shrinking saves the previewed width');
+  await undo(s=>/id="first"[^>]*w-\[600px\]/.test(s),'shrinking remains one undo action');
   await range('lp', 2);
   await page.getByRole('button', { name: 'Select GridItem', exact: true }).click();
   const divider = page.getByRole('button', { name: 'Resize adjacent columns', exact: true });
@@ -273,7 +293,6 @@ try {
   const cdp = await context.newCDPSession(page);
   await cdp.send('Input.imeSetComposition', { text: '日本語', selectionStart: 3, selectionEnd: 3 });
   releaseResponse();
-  await page.waitForTimeout(80);
   assert.equal(
     await page.locator('#remote').textContent(),
     'Remote marker',

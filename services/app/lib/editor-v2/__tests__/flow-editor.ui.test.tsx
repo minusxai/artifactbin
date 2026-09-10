@@ -113,3 +113,10 @@ it('pairs view disposal with its registration when callback props change', () =>
   v.unmount();
   expect(registered).toHaveBeenLastCalledWith(null);
 });
+
+it('does not start a native HTML drag when adjusting selected text', () => {
+  const onChange = vi.fn();
+  const view = render(<FlowEditor nodes={nodes('<p id="a">alpha</p>')} path="0" onChange={onChange} />);
+  expect(fireEvent.dragStart(view.container.querySelector('p')!)).toBe(false);
+  expect(onChange).not.toHaveBeenCalled();
+});

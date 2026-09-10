@@ -60,3 +60,21 @@ it('extends a keyboard selection across the boundary with Shift+ArrowRight', () 
   fireEvent.keyDown(p, { key: 'ArrowRight', shiftKey: true });
   expect(selection.paths()).toEqual(['0', '1']);
 });
+
+it('temporarily releases native selection boundaries and restores editing on Escape', () => {
+  document.body.innerHTML =
+    '<div class="ProseMirror" contenteditable="true"><p data-mx-ast="0">alpha</p></div><div class="ProseMirror" contenteditable="true"><p data-mx-ast="1">bravo</p></div>';
+  const selection = createBlockSelection(document, document.body, vi.fn());
+  dispose = selection.dispose;
+  const blocks = document.querySelectorAll('p');
+  window.getSelection()!.setBaseAndExtent(blocks[0].firstChild!, 2, blocks[1].firstChild!, 3);
+  fireEvent(document, new Event('selectionchange'));
+  expect(
+    [...document.querySelectorAll('.ProseMirror')].map((el) => el.getAttribute('contenteditable')),
+  ).toEqual(['false', 'false']);
+  fireEvent.keyDown(document.body, { key: 'Escape' });
+  expect(selection.paths()).toEqual([]);
+  expect(
+    [...document.querySelectorAll('.ProseMirror')].map((el) => el.getAttribute('contenteditable')),
+  ).toEqual(['true', 'true']);
+});
