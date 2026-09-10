@@ -9,7 +9,7 @@ describe('slug', () => {
 
   it('handles the labels a run actually carries', () => {
     expect(slug('claude-code · claude-opus-5')).toBe('claude-code-claude-opus-5');
-    expect(slug('opencode · minimax-m3')).toBe('opencode-minimax-m3');
+    expect(slug('opencode · glm-5p3-flash')).toBe('opencode-glm-5p3-flash');
   });
 
   it('truncates when asked, so a long label cannot make an unusable path', () => {

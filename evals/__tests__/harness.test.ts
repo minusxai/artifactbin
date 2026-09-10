@@ -235,7 +235,7 @@ describe('pi', () => {
 });
 
 describe('opencode', () => {
-  const c = ctx({ harness: 'opencode', model: 'fireworks-ai/accounts/fireworks/models/minimax-m3', envVar: 'FIREWORKS_API_KEY' });
+  const c = ctx({ harness: 'opencode', model: 'fireworks-ai/accounts/fireworks/models/glm-5p3-flash', envVar: 'FIREWORKS_API_KEY' });
 
   it('runs headless json with auto-approval, config and data dirs inside the run home, key under the provider variable', () => {
     const inv = opencode.invocation(c);
