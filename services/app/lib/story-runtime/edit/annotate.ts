@@ -461,7 +461,13 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
 
   /** Keep the page-level draft popover attached while the document moves. */
   const reportSelectedGeometry = () => {
-    if (!state || state.mode === 'off' || !selectedPath || managedSelection || isTargetRange(state.selected?.range)) return;
+    if (!state || state.mode === 'off' || !selectedPath || managedSelection) return;
+    if (isTargetRange(state.selected?.range)) {
+      const selected = state.selected!;
+      const target = elementForPin({path:selected.path,key:null,nodeId:selected.nodeId,range:selected.range});
+      if (target) {const r=target.getBoundingClientRect();post({type:STORY_SELECTION_MESSAGE,selection:{...selected,rect:{x:r.x,y:r.y,width:r.width,height:r.height}}});}
+      return;
+    }
     const el = elementFor(selectedPath);
     if (!el) return;
     const selection = describeSelection(el, nodes);
@@ -733,8 +739,8 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
         const selection = event.selection ? {...owner,rect:event.selection.rect,quote:event.selection.quote,range:{v:1 as const,kind:'target' as const,target:{kind:'iframe' as const,node:event.selection.target},...(event.selection.range ? {range:event.selection.range}:{})}} : null;
         post({type:STORY_SELECTION_MESSAGE,selection});
       } else if (event.type === 'comment-layout') {
-        if (managedSelection?.host === host && event.selectionRect) {
-          managedSelection.selection.rect = event.selectionRect;
+        if (managedSelection?.host === host && event.selectionRect !== undefined) {
+          managedSelection.selection.rect = event.selectionRect ?? owner.rect;
           const selected = managedSelection.selection;
           post({type:STORY_SELECTION_MESSAGE,selection:{...owner,rect:selected.rect,quote:selected.quote,range:{v:1,kind:'target',target:{kind:'iframe',node:selected.target},...(selected.range ? {range:selected.range}:{})}}});
         }

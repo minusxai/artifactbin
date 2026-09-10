@@ -1,3 +1,4 @@
+import { parseAnnotationRange } from '../annotation-range';
 import { describe, expect, it } from 'vitest';
 import { parseCommentTarget } from '../comment-target';
 
@@ -28,5 +29,17 @@ describe('strict identity boundaries', () => {
       {kind:'iframe',node:{kind:'key',path:Array(17).fill('x')}},
       {kind:'repeat',templateNodeId:'x',scopes:[{nodeId:'a',key:1},{nodeId:'a',key:2}]},
     ]) expect(parseCommentTarget(target)).toBeNull();
+  });
+});
+
+describe('target range envelope', () => {
+  it('preserves legacy ranges and refuses recursive envelopes or invalid refinements', () => {
+    const target={kind:'iframe',node:{kind:'key',path:['stable']}};
+    const text={v:1,parts:[{rel:'',start:0,end:5,text:'Alice'}]};
+    expect(parseAnnotationRange(text)).toEqual(text);
+    expect(parseAnnotationRange({v:1,kind:'target',target,range:text})).toEqual({v:1,kind:'target',target,range:text});
+    for (const range of [null,{v:1,kind:'target',target},{v:1,parts:[]},{v:1,kind:'area',box:{x:0,y:0,w:2,h:1}}]) {
+      expect(parseAnnotationRange({v:1,kind:'target',target,range})).toBeNull();
+    }
   });
 });

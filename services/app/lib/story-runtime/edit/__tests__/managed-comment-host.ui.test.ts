@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { bindManagedComments, connectManagedComments } from '../../managed-comment-host';
+import { bindManagedComments, connectManagedComments, translateManagedRect, localManagedRect } from '../../managed-comment-host';
 import type { ManagedCommentState } from '../../managed-comment-contract';
 
 afterEach(() => {document.body.innerHTML='';});
@@ -32,4 +32,13 @@ describe('managed comment host boundary', () => {
     connection.receive({type:'comment-selection',generation,selection});expect(receive).toHaveBeenCalledOnce();
     binding.dispose();connection.dispose();
   });
+});
+
+it('clips child coordinates to the content viewport and reverses scale for state replay', () => {
+  const host=document.createElement('div');document.body.append(host);
+  vi.spyOn(host,'getBoundingClientRect').mockReturnValue({x:100,y:200,width:400,height:300} as DOMRect);
+  Object.defineProperties(host,{offsetWidth:{value:200},offsetHeight:{value:150},clientWidth:{value:200},clientHeight:{value:150}});
+  expect(translateManagedRect(host,{x:-10,y:-20,width:10000,height:10000})).toEqual({x:100,y:200,width:400,height:300});
+  const rect={x:5,y:10,width:20,height:30};
+  expect(localManagedRect(host,translateManagedRect(host,rect))).toEqual(rect);
 });
