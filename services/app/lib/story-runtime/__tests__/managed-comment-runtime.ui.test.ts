@@ -189,3 +189,16 @@ it('clears the parent comment hover when the pointer leaves the iframe',()=>{
   expect(send).toHaveBeenLastCalledWith({type:'comment-hover',generation:'a',id:null});
   runtime.dispose();
 });
+
+
+it('leaves a commented node click native so a double click can select other words',()=>{
+  document.body.innerHTML='<p id="saved">Previously commented words and new words</p>';
+  const send=vi.fn(),runtime=createManagedCommentRuntime(window,send,COMMENT_PRESENTATION);
+  runtime.update({type:'comment-state',generation:'a',enabled:true,picking:false,canComment:true,pins:[{id:'comment',target:{kind:'source',id:'saved'}}],openId:null,hoverId:null,selection:null});
+  const click=new MouseEvent('click',{bubbles:true,cancelable:true,detail:1});
+  document.querySelector('p')!.dispatchEvent(click);
+  expect(click.defaultPrevented).toBe(false);
+  expect(send.mock.calls.some(c=>c[0].type==='comment-pin')).toBe(false);
+  expect(COMMENT_PRESENTATION.annotationCss).not.toContain('cursor: pointer');
+  runtime.dispose();
+});

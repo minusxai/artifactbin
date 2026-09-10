@@ -220,8 +220,7 @@ export function createManagedCommentRuntime(win: Window, send: (message: Managed
     if(suppressClick){suppressClick=false;e.preventDefault();e.stopPropagation();return;}
     if(draggedWords()&&!active())return;
     if(selecting()){e.preventDefault();e.stopPropagation();emit(node);return;}
-    const pin=state?.enabled?pinAt(node):null;
-    if(pin&&state){e.preventDefault();e.stopPropagation();send({type:'comment-pin',generation:state.generation,id:pin.id,rect:rect(node)});}
+    // Existing threads open from parent markers; content clicks remain native.
   });
   listen('contextmenu',e=>{const n=element(e);if(!state?.enabled||!state.canComment||!n)return;e.preventDefault();const p=e as MouseEvent;showAction(p.clientX,p.clientY,()=>emit(n),false);});
   const showTextActions=(event?:Event)=>{

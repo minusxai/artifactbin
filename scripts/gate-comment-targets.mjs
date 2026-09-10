@@ -102,6 +102,15 @@ try {
   await page.locator('td[data-mx-comment-owner="order-table"][data-mx-annotated]').filter({hasText:'Alice Chen'}).waitFor();
   assert.equal((await annotations()).length,3);
   console.log('PASS persisted comments reconnect after a fresh launch');
+  // A saved markup comment must not steal the first click of a word selection.
+  await cardText.click();
+  await expect(page.getByLabel('Reply to annotation',{exact:true})).toHaveCount(0);
+  await expect(cardText).not.toHaveCSS('cursor','pointer');
+  await cardText.dblclick({position:{x:15,y:8}});
+  await expect(page.getByLabel('Reply to annotation',{exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'Comment on selected text',exact:true}).click();
+  await save('Different words on an already commented markup node');
+  await cardText.evaluate(node=>node.ownerDocument.defaultView.getSelection().removeAllRanges());
 
   // Text selection is captured in the opaque child; only the app composes it.
   const prose=realm.locator('#static-iframe-text');
@@ -133,8 +142,18 @@ try {
   // Keep using the same loaded iframe and sidebar: the first saved draft must
   // never lock out a new node or replace it with stale layout from the old one.
   assert.equal(await realm.getByRole('button',{name:'Open comment',exact:true}).count(),0);
+  // Saving intentionally leaves that thread open; close it before checking
+  // that a subsequent content click does not reopen it.
+  await page.getByRole('button',{name:'Close comments',exact:true}).click();
   await prose.click();
-  await page.getByLabel('Reply to annotation',{exact:true}).waitFor();
+  await expect(page.getByLabel('Reply to annotation',{exact:true})).toHaveCount(0);
+  await expect(page.getByLabel('Annotation composer',{exact:true})).toHaveCount(0);
+  await expect(prose).not.toHaveCSS('cursor','pointer');
+  await prose.dblclick({position:{x:20,y:8}});
+  assert((await prose.evaluate(node=>node.ownerDocument.defaultView.getSelection().toString())).trim().length>0);
+  await expect(page.getByLabel('Reply to annotation',{exact:true})).toHaveCount(0);
+  await realm.getByRole('button',{name:'Comment on selected text',exact:true}).click();
+  await save('Different words on an already commented iframe node');
   await select();
   const bob=realm.locator('[data-comment-key="order-102"] [data-comment-key="customer"]');
   await bob.click();await save('A second iframe node without reloading');

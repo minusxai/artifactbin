@@ -12,15 +12,10 @@ import type { ManagedCommentSelection } from '../managed-comment-contract';
  * nothing. It is a LAYER, not a mode: whenever it is on, commented nodes carry
  * a soft highlight TINT and their geometry is reported upward so the page can
  * float comment cards at their anchors — in view mode and while editing alike.
- * Clicking a highlight focuses its thread (`mx:annotation-pin`); the page holds
- * the annotation content, the session and the network, and ids + BODY paths are
- * the only annotation data that ever enters this realm.
- *
- * ONE thing varies with edit mode, and this module decides it rather than
- * being told: while an edit session exists a click belongs to the CARET, so
- * the layer never swallows one. That is why `isEditing` is a predicate the
- * caller owns — the frame already knows whether it is editable, and asking the
- * page to restate it on the wire is what made this a mode to begin with.
+ * Existing threads open from the parent comment markers or sidebar. Content
+ * clicks remain native, so commenting does not interfere with text selection.
+ * The page owns annotation content, session and network; this realm receives
+ * target identities, refinements and presentation state.
  *
  * THE PICK is the one exception, and it is one-shot. The rail's pick tool
  * (`picking` on the state message) is the edit-mode move for a comment: the
@@ -173,7 +168,7 @@ export interface FrameAnnotateOptions {
   /**
    * Is the document editable right now? Read on every click, never cached: the
    * edit session comes and goes without the annotation layer hearing about it,
-   * and a stale answer would either steal the caret or lose the thread click.
+   * and a stale answer would let editor mouse handling swallow a block pick.
    */
   isEditing: () => boolean;
 }
@@ -479,37 +474,8 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     post({ type: STORY_SELECTION_MESSAGE, selection });
   };
 
-  /**
-   * A click on a highlighted node focuses its thread — the Docs
-   * click-the-highlight move. Never a rect update: `mx:annotation-pin` means
-   * "someone asked for this thread" and nothing else.
-   *
-   * WHILE EDITING THIS DOES NOTHING. The click belongs to the caret, and a
-   * capture-phase `preventDefault` here would make every commented paragraph
-   * unselectable in the editor.
-   */
-  const onClick = (event: MouseEvent) => {
-    if (root && !root.contains(event.target as Node)) return;
-    // While picking, a click is the window listener's (below): a selectable
-    // target was already taken there, and anything else is nobody's business.
-    if (!state || state.mode === 'off' || pick || isEditing()) return;
-    const target = event.target as HTMLElement | null;
-    if (!target) return;
-    // Preview copies (deck rail, present mode) render the same paths; never select through them.
-    if (target.closest('.mx-rail, .mx-present')) return;
-    const el = target.closest(`[${AST_PATH_ATTR}]`);
-    if (!el) return;
-    const annotated = target.closest(`[${ANNOTATED_ATTR}]`);
-    if (annotated) {
-      event.preventDefault();
-      const pin = state.pins.find((p) => elementForPin(p) === annotated);
-      if (pin) {
-        const r = annotated.getBoundingClientRect();
-        post({ type: STORY_ANNOTATION_PIN_MESSAGE, id: pin.id, rect: { x: r.x, y: r.y, width: r.width, height: r.height } });
-        return;
-      }
-    }
-  };
+  // Saved comments never consume content clicks: the first click of a native
+  // word/paragraph selection must not open a thread. Parent markers own that action.
 
   /** Resolve a pointer target through annotated ancestors without stamping every view-mode pin. */
   const pinAt = (target: EventTarget | null) => {
@@ -739,7 +705,6 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     },
   });
 
-  doc.addEventListener('click', onClick, true);
   doc.addEventListener('pointerover', onPointerOver, true);
   doc.addEventListener('pointerout', onPointerOut, true);
   win.addEventListener('mousedown', onPickMouseDown, true);
@@ -820,7 +785,6 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       clearHighlights();
       ensureCss(false);
       applyState();
-      doc.removeEventListener('click', onClick, true);
       doc.removeEventListener('pointerover', onPointerOver, true);
       doc.removeEventListener('pointerout', onPointerOut, true);
       win.removeEventListener('mousedown', onPickMouseDown, true);

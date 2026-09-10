@@ -147,18 +147,15 @@ describe('view-mode annotation geometry', () => {
     expect(layouts().at(-1)).toMatchObject({ positions: [{ id: 'ann_1', rect: { y: 44 } }] });
   });
 
-  /*
-   * A click on a commented node focuses its thread — but never while editing,
-   * where that click belongs to the caret.
-   */
-  it('focuses a thread on click, and yields the click to the editor while editing', () => {
+  it('leaves commented text clicks to native selection in view and edit modes', () => {
     session.update(state('on'));
-    document.querySelector('main p')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    expect(posted.filter((m) => m.type === 'mx:annotation-pin').length).toBe(1);
-
-    editing = true;
-    document.querySelector('main p')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    expect(posted.filter((m) => m.type === 'mx:annotation-pin').length).toBe(1);
+    for (const edit of [false, true]) {
+      editing = edit;
+      const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+      document.querySelector('main p')!.dispatchEvent(click);
+      expect(click.defaultPrevented).toBe(false);
+    }
+    expect(posted.filter((m) => m.type === 'mx:annotation-pin')).toHaveLength(0);
   });
 
   it('outlines only the main anchor named by a card hover', () => {
@@ -236,8 +233,8 @@ describe('painting the exact words', () => {
 
     expect(registry.has('mx-annotation-ann_1')).toBe(true);
     expect(registry.get('mx-annotation-ann_1')!.ranges.map((r) => r.toString())).toEqual(['Revenue']);
-    // The node keeps its behaviour attributes — a click on it still opens the
-    // thread — but its own background steps aside for the words' highlight.
+    // The node keeps its annotation attributes for geometry and highlighting,
+    // but its own background steps aside for the words' highlight.
     expect(anchorNode().hasAttribute('data-mx-annotated')).toBe(true);
     expect(anchorNode().hasAttribute('data-mx-annotation-ranged')).toBe(true);
     expect(document.head.querySelector('style[data-mx-annotate-css]')!.textContent)
