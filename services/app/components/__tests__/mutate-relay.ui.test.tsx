@@ -17,8 +17,10 @@ it('reports the server ACL refusal instead of pretending the write succeeded',as
  await expect(transport.mutate!({},'vote')).rejects.toThrow('not open for writes');transport.dispose();
 });
 it('ignores mutation and asset messages from unrelated or author windows',async()=>{
- const fetcher=vi.fn();vi.stubGlobal('fetch',fetcher);
+ const fetcher=vi.fn(async()=>Response.json({stars:null}));vi.stubGlobal('fetch',fetcher);
  render(<ArtifactSurface {...surfaceProps()} />);await screen.findByText('Document body');
+ // The chrome may fetch its GitHub count on mount; forged messages must make no further requests.
+ fetcher.mockClear();
  await act(async()=>{for(const type of ['mx:mutate','mx:asset'])window.dispatchEvent(new MessageEvent('message',{source:window,data:{type,id:1,mutation:'vote',values:{},url:'https://example.com'}}));});
  expect(fetcher).not.toHaveBeenCalled();
 });

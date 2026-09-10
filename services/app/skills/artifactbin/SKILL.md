@@ -35,10 +35,9 @@ components (`Card`, `Tabs`, `Grid`, `SlideDeck`, `Icon`) and data embeds
 (`Question`, `DataTable`, `Number`). Style parent elements with Tailwind
 `className`; inline `style=` is rejected.
 
-**Prefer native JSX**, including kit controls, conditions and Dialog. Keep content
-native for themes, layout, block comments and editing. Reserve `<Iframe>` for
-isolated widgets needing DOM scripts or canvas/library APIs the kit cannot provide;
-never frame the whole document merely for unrestricted HTML/CSS/JS.
+**Prefer native JSX** and kit controls, conditions and Dialog for themes, layout,
+comments and editing. Reserve `<Iframe>` for isolated DOM-script/canvas widgets
+the kit cannot provide; never frame a document merely for unrestricted HTML/CSS/JS.
 
 **HTML/component names only: guess rather than look up.** Unknown tags return
 400 with `allowed_html_tags`; unknown components return the registry. Exception:
@@ -100,7 +99,8 @@ first-class:
   strongest default when nothing above fits.
 
 **Before writing, read in order:** `references/design.md` (craft), `references/markup.md` (vocabulary),
-then the `references/templates-<name>.md` and `references/themes-<name>.md` you picked.
+then `references/templates-<name>.md` and `references/themes-<name>.md`.
+Skipping the template leaves a deck flush to the viewport edge.
 
 [[ checkWork ]]
 

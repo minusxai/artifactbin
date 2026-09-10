@@ -203,13 +203,14 @@ for (const [name, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
     check(await page.locator('[aria-label="Like"]').isVisible(), `${name}: …while the rest of the rail is still there`);
   }
 
-  // 8. the settings panel: appearance + fork, and provenance on a copy
+  // 8. Fork is a direct action; settings holds appearance and provenance.
   await revealReaderChrome(page);
+  check(await page.locator('[data-mx-reader-rail] [aria-label="Fork artifact"]').isVisible(), `${name}: the action rail offers fork directly`);
   await page.locator('[data-mx-reader-trigger="controls"]').click();
   await page.waitForSelector('[aria-label="Artifact controls"]', { timeout: 10_000 });
   check(await page.getByLabel('Light mode', {exact: true}).isVisible(), `${name}: the settings panel offers light`);
   check(await page.getByLabel('Dark mode', {exact: true}).isVisible(), `${name}: …and dark`);
-  check(await page.locator('[aria-label="Fork artifact"]').isVisible(), `${name}: …and fork`);
+  check(await page.locator('[aria-label="Artifact controls"] [aria-label="Fork artifact"]').count() === 0, `${name}: settings does not duplicate fork`);
   check((await page.locator('[data-mx-forked-from]').count()) === 0, `${name}: a document nobody forked says nothing about provenance`);
   await page.keyboard.press('Escape');
 

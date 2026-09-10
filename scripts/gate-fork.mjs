@@ -96,10 +96,9 @@ check(strangerHtml.includes('id="root"'), 'the shared SPA supplies the authentic
 await forker.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
 await forker.waitForSelector('[data-mx-reader-chrome]', { state: 'attached', timeout: 20000 });
 check((await forker.locator('iframe[title="artifact"]').count()) === 0, 'a logged-out reader is served the document TOP-LEVEL, not the shell');
-await openArtifactControls(forker);
 const forkAnchor = forker.locator('[aria-label="Fork artifact"]');
 await forkAnchor.waitFor({ state: 'visible', timeout: 10000 });
-check(true, 'the reader controls offer Fork');
+check(true, 'the reader action bar offers Fork directly');
 
 // ── 4. the ask survives the top navigation into /login ────────────────────
 await forkAnchor.click();

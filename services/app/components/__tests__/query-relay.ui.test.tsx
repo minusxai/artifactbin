@@ -22,8 +22,10 @@ it('surfaces query refusal and revokes requests when the document is disposed',a
  expect(fetcher).toHaveBeenCalledTimes(1);
 });
 it('does not expose a query relay to any window, even one forging the previous protocol',async()=>{
- const fetcher=vi.fn();vi.stubGlobal('fetch',fetcher);
+ const fetcher=vi.fn(async()=>Response.json({stars:null}));vi.stubGlobal('fetch',fetcher);
  render(<ArtifactSurface {...surfaceProps()} />);await screen.findByText('Document body');
+ // The chrome may fetch its GitHub count on mount; forged messages must make no further requests.
+ fetcher.mockClear();
  await act(async()=>{for(const source of [null,window])window.dispatchEvent(new MessageEvent('message',{source,data:{type:'mx:query',id:7,values:{},only:['private']}}));});
  expect(fetcher).not.toHaveBeenCalled();
 });
