@@ -89,10 +89,8 @@ export const pdfRawUrl = (id: string, version: number): string => `/a/${id}/raw?
  * URL, or null when it does not resolve (deleted ref, wrong kind, plain URL).
  *
  * Render-output only: the AST keeps the `ref:` string as its source of truth,
- * so every write-back still round-trips the reference. Shared by BOTH render
- * paths — the WYSIWYG canvas (components/views/shared/StoryJsxBody) and the
- * served document's runtime (lib/story-runtime) — because an image that
- * resolves in one and not the other is exactly the drift this prevents.
+ * so every write-back still round-trips the reference. SSR, hydration and
+ * editing share this resolver through the document runtime.
  */
 export function resolveRefImageSrc(src: unknown, refData: RefDataMap | undefined): string | null {
   if (typeof src !== 'string' || !src.startsWith('ref:')) return null;

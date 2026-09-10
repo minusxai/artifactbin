@@ -4,7 +4,6 @@ import {reactiveNames} from '@/lib/jsx/reactive';
 
 const ROW_REF = /^\$_row\.([A-Za-z_]\w*)$/;
 const ROW_TEMPLATE = /\{\s*\$_row\.([A-Za-z_]\w*)\s*\}/g;
-export const isReservedName = (name: string): boolean => name.startsWith('_');
 export const parseRowRef = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
   return ROW_REF.exec(value)?.[1] ?? null;

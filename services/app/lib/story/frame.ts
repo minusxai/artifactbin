@@ -13,7 +13,7 @@
  * build per version, not two hundred (it used to be built per connection).
  */
 import type { ArtifactRow } from '@/lib/artifacts';
-import { dataflowForRow, datasetsForDocument } from '@/lib/artifacts';
+import { datasetsForDocument } from '@/lib/artifacts';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
 import { authorHandle } from '@/lib/users';

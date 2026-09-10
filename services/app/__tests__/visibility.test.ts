@@ -21,7 +21,6 @@ import { resetLiveSubscriptions } from '@/lib/story/live';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser } from '@/lib/users';
 
-const BASE = 'http://localhost:3000';
 useAppHarness();
 
 // Owns the session mock for this file: id + email, settable per test.

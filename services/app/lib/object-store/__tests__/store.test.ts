@@ -8,7 +8,7 @@
  * ever diverge, the app behaves differently on a laptop than in production.
  */
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
-import { mkdtemp, rm, readFile } from 'fs/promises';
+import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
 import { ObjectUnavailable, cachedReads, objectKey, resetReadCache, uniqueObjectKey, createLocalStore, createS3Store, parseS3Url, storageKeyFor, type ObjectStore } from '../index';

@@ -177,7 +177,7 @@ export function createS3Store(config: S3Config): ObjectStore {
   // local fallback — the sanctioned exception pattern lib/db.ts documents.
   // `createRequire` rather than a bare `require`: this package is ESM, so the
   // synchronous escape hatch has to be asked for by name.
-  const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, NoSuchKey } = nodeRequire('@aws-sdk/client-s3');
+  const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = nodeRequire('@aws-sdk/client-s3');
   const client = new S3Client({
     region: config.region,
     endpoint: config.endpoint,

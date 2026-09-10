@@ -8,7 +8,6 @@
  * the current section is marked as the reader scrolls; and a capture render
  * (what /export screenshots) has none of it.
  */
-import React from 'react';
 import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
 import { renderToString } from 'react-dom/server';

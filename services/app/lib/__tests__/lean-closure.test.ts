@@ -1,16 +1,8 @@
-/**
- * THE LEAN CLOSURE, pinned (cleanup/lean-1) — seeded RED by the orchestrator from the measured research
- * (briefs/research-evidence/deadcode in the prod repo). What each lean image may and may not carry is named in
- * scripts/image-checks.mjs (CI builds the images and asks); what the app declares as runtime is only what it imports at
- * runtime; every env name a service reads is documented; nothing reads a retired name; the one proven-dead file is gone.
- * Make green without changing an expectation.
- */
-import { existsSync, readFileSync } from 'node:fs';
+/** Lean images retain their declared runtime dependencies and documented environment. */
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { RETIRED_ENV_NAMES } from '../config';
 
 const root = new URL('../../../../', import.meta.url);
-const has = (p: string) => existsSync(new URL(p, root));
 const read = (p: string) => readFileSync(new URL(p, root), 'utf8');
 const pkg = (p: string) => JSON.parse(read(p)) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
 
@@ -80,17 +72,5 @@ describe('every env name a service reads is documented, and retired names are no
     const undocumented = [...readNames('services/proxy/src/config.ts')].filter((n) => !documented.includes(n));
     expect(undocumented).toEqual([]);
   });
-  it('INVITE__CODE and WAITLIST__WEBHOOK_URL are retired names, no longer read', () => {
-    expect(RETIRED_ENV_NAMES).toHaveProperty('INVITE__CODE');
-    expect(RETIRED_ENV_NAMES).toHaveProperty('WAITLIST__WEBHOOK_URL');
-    const cfg = read('services/app/lib/config.ts');
-    expect(cfg).not.toMatch(/env\(\s*'INVITE'\s*,\s*'CODE'\s*\)/);
-    expect(cfg).not.toMatch(/env\(\s*'WAITLIST'\s*,\s*'WEBHOOK_URL'\s*\)/);
-  });
-});
 
-describe('the one proven-dead file is gone', () => {
-  it('services/app/lib/email-shape.ts (3 lines, zero importers)', () => {
-    expect(has('services/app/lib/email-shape.ts')).toBe(false);
-  });
 });

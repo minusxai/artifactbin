@@ -14,7 +14,7 @@
  * author's script exists (lib/story-runtime/pristine). Everything without it
  * is dropped — including a forgery posted through the unforgeable `top`.
  */
-import { sendDocument, subscribeDocument, documentRect, documentReady, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
+import { sendDocument, subscribeDocument, documentReady, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { isEditFrameMessage, STORY_APPLY_FORMAT_MESSAGE, STORY_APPLY_LINK_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_SELECT_MESSAGE, STORY_COMMIT_MESSAGE, STORY_DOCUMENT_MESSAGE, type StoryEditSelection, type StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { JsxNode } from '@/lib/jsx';

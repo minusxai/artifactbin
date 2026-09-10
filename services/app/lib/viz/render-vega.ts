@@ -27,7 +27,6 @@ import { annotationSplit } from './encoding-edit';
 import { getVegaLiteConfig, getVegaParserConfig, getSurfaceColor } from './theme';
 import { createVegaTooltipHandler } from './vega-tooltip-handler';
 import { materializeRecipe } from './viz-templates';
-import { inferVizColumnsFromRows } from './query-data';
 import type { VizResultColumn } from './types';
 import { VIZ_DATASET_MAIN } from './types';
 import { loadGeoFeatures } from './geo-assets';

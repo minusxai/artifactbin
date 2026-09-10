@@ -11,8 +11,7 @@
  * a refusal is SHOWN rather than swallowed — a button that silently does
  * nothing is the failure the whole publish-time validation exists to avoid.
  */
-import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { fireEvent, render, waitFor } from '@testing-library/react';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { renderStoryNodes } from '@/lib/story-ui/interpreter';

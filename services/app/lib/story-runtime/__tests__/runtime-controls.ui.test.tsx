@@ -6,7 +6,6 @@
  * searchable combobox/listbox (no portal), so the SSR string is deterministic
  * (closed) and the whole thing lives happily inside the sandboxed document.
  */
-import React from 'react';
 import { act } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render } from '@testing-library/react';

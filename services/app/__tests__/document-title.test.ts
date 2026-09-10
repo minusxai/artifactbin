@@ -15,7 +15,6 @@ useAppHarness();
 
 
 
-const BASE = 'http://localhost:3000';
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
@@ -42,8 +41,6 @@ const retitle = async (doc: Start, heading: string) => {
   return (await res.json()) as { edit_id: string };
 };
 
-/** The page's PageProps: the id from the path, and no query string. */
-const pageProps = (id: string) => ({ ...params({ id }), searchParams: Promise.resolve({}) });
 
 const pageTitle = async (id: string) => {
   const meta = await artifactMetadata(id);

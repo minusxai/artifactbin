@@ -7,17 +7,8 @@
 import { describe, it, expect } from 'vitest';
 import { materializeRecipe, getTemplate, VIZ_TEMPLATES } from '@/lib/viz/viz-templates';
 import { renderVegaLiteToSvg } from '@/lib/viz/render-vega';
-import type { VizResultColumn } from '@/lib/viz/types';
 
-const COLUMNS: VizResultColumn[] = [
-  { name: 'stage', kind: 'nominal' },
-  { name: 'users', kind: 'quantitative' },
-];
 
-const recipeEnvelope = (recipe: string, bindings: Record<string, string>) => ({
-  version: 2,
-  source: { kind: 'recipe', recipe, bindings },
-});
 
 const FUNNEL_ROWS = [
   { stage: 'Visited', users: 1000 },

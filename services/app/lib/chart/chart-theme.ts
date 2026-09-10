@@ -75,7 +75,6 @@ export const COLOR_PALETTE = [
   CHART_COLORS.steel,       // 24. Steel
 ]
 
-const HEX_COLOR_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
 
 // Light mode colors (matching theme.ts)
 export const LIGHT_THEME = {

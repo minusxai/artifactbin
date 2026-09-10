@@ -1,19 +1,13 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { startDocument } from './lib/start-doc.mjs';
+import { githubWidgetFixture } from './lib/github-widget-fixture.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:12001';
 const browser = await chromium.launch({ headless: true });
-// This browser-test fixture replaces the vendor document only here. It performs
-// a real sandboxed cross-origin fetch and popup navigation through the iframe.
-async function fixture(context) {
-  await context.route('https://buttons.github.io/buttons.js', route => route.fulfill({ contentType: 'application/javascript', body: `const style=document.createElement('style');style.textContent='body{background:rgb(255,255,255)}@media(prefers-color-scheme:dark){body{background:rgb(13,17,23)}}';document.head.append(style);fetch('https://api.github.com/repos/minusxai/artifactbin').then(r=>r.json()).then(d=>{const link=document.querySelector('a');const widget=document.createElement('span');widget.style.cssText='display:inline-block;width:112px;height:28px;font:12px/28px sans-serif';link.replaceWith(widget);widget.append(link);link.textContent='Star '+d.stargazers_count;link.target='_blank';link.setAttribute('aria-label',d.stargazers_count+' stargazers on GitHub')})` }));
-  await context.route('https://api.github.com/repos/minusxai/artifactbin', route => route.fulfill({ headers: { 'access-control-allow-origin': '*' }, contentType: 'application/json', body: '{"stargazers_count":1234}' }));
-  await context.route('https://github.com/minusxai/artifactbin', route => route.fulfill({ contentType: 'text/html', body: '<h1>Repository destination</h1>' }));
-}
 try {
   const noJs = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1280, height: 800 } });
-  await fixture(noJs);
+  await githubWidgetFixture(noJs);
   const plain = await noJs.newPage();
   await plain.goto(base, { waitUntil: 'domcontentloaded' });
   await plain.locator('h1').waitFor();
@@ -24,7 +18,7 @@ try {
 
   // Playwright's default forced light emulation overrides embedded inheritance.
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, colorScheme: null });
-  await fixture(context);
+  await githubWidgetFixture(context);
   const page = await context.newPage();
   let releaseScripts;
   const scripts = new Promise(resolve => { releaseScripts = resolve; });
@@ -140,7 +134,7 @@ try {
   // A gesture attempted during startup must wait for the working React control,
   // never succeed against the inert server copy and silently disappear.
   const early = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
-  await fixture(early);
+  await githubWidgetFixture(early);
   const earlyPage = await early.newPage();
   let releaseEarly;
   const earlyScripts = new Promise(resolve => { releaseEarly = resolve; });
@@ -158,7 +152,7 @@ try {
   // Exercise the actual wrapper/parent handshake with fractional layout metrics,
   // independently of the host runner's display scaling or browser defaults.
   const fractional = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-  await fixture(fractional);
+  await githubWidgetFixture(fractional);
   await fractional.addInitScript(() => {
     if (location.pathname !== '/-/github-star') return;
     const measure = Element.prototype.getBoundingClientRect;

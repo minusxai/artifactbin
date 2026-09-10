@@ -27,7 +27,6 @@ import { useAppHarness, request } from '@/__tests__/harness';
 
 const harness = useAppHarness();
 
-const BASE = 'http://localhost:3000';
 const params = (p: Record<string, string>) => ({ params: Promise.resolve(p) });
 
 /** The shape as it is STORED on production today — a `<p>` holding divs. */

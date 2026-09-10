@@ -160,7 +160,6 @@ describe('dependency security', () => {
 
 describe('ci.yml: the image job proves what ships', () => {
   const steps = ci.jobs.image?.steps ?? [];
-  const runs = steps.map((s) => String(s.run ?? ''));
   it('boots the FULL image built from the root Dockerfile', () => {
     const fullBuild = steps.find((s) => s.uses?.startsWith('docker/build-push-action'));
     expect(fullBuild?.with?.file).toBe('Dockerfile');

@@ -6,7 +6,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
-import { artifactMetadata, artifactPage as ArtifactPage, profilePage as UserPage } from '@/test/helpers/pages';
+import { artifactMetadata, profilePage as UserPage } from '@/test/helpers/pages';
 import { POST as mcp } from '@/app/mcp/route';
 import { DELETE as deleteArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { GET as listArtifactsRoute, POST as createArtifactRoute } from '@/app/api/artifacts/route';

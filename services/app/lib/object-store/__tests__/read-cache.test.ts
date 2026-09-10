@@ -15,7 +15,7 @@
  * The bound is BYTES, not entries: these range from a 2 KB webfont to a 27 MB
  * sheet, so counting entries bounds nothing.
  */
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach } from 'vitest';
 import { cachedReads, resetReadCache } from '../index';
 
 const backing = (bytes: Record<string, Buffer>, calls: string[]) => ({

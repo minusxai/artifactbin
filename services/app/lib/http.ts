@@ -14,15 +14,8 @@ export function baseUrl(request: Request): string {
   return `${proto}://${host}`;
 }
 
-/**
- * The public origin, read from the incoming request's own headers — for the
- * places that have no Request to hand (Next's `generateMetadata`).
- *
- * Same forwarding rules as `baseUrl`, because it is the same question. Next
- * would otherwise resolve a relative `og:image` against `metadataBase`, which
- * defaults to the origin THIS PROCESS listens on: behind the proxy that is the
- * container's address, and every shared link unfurled with an image pointing
- * at `http://localhost:3000`.
+/** Public origin from request-context forwarding headers, for callers without a Request.
+ * Falls back to the configured public URL outside a request.
  */
 export async function publicOrigin(): Promise<string> {
   const h = await currentHeaders();

@@ -12,7 +12,7 @@
  * The adapters wire the same components the parent-page view uses
  * (QuestionEmbed / InlineNumber / StoryParamControl — chart rendering is never
  * reimplemented) to a local param-state context, seeded `{}` exactly like
- * StoryJsxBody's view mode. Embeds consume `refData` from props — no network
+ * the server render. Embeds consume `refData` from props — no network
  * from inside the document, which is what lets it live in an opaque-origin
  * sandbox.
  */
@@ -546,7 +546,7 @@ function runtimeTargetIdentity(props: Record<string, unknown>): { id?: string; [
 
 function QuestionAdapter(props: Record<string, unknown>) {
   const ctx = useContext(RuntimeEmbedContext);
-  // The SAME sizing contract as the editor canvas (StoryJsxBody) — a chart
+  // The shared question sizing contract — a chart
   // must not change height between editing and reading, and inside a GridItem
   // the CELL is the single source of height: a fixed default here is what
   // clipped every tall recipe (the trend card's sparkline) at the tile edge.

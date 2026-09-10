@@ -25,7 +25,9 @@
     "types": [
       "vitest/globals",
       "node"
-    ]
+    ],
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
   },
   "include": [
     "**/*.ts",

@@ -5,7 +5,6 @@
  * page. (Publish-time validation is jsx-tier.test.ts; this pins the VIEW-time
  * contract.)
  */
-import React from 'react';
 import { describe, expect, it } from 'vitest';
 import { screen } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';

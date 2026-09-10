@@ -13,8 +13,7 @@
  * reach the client with the app's headers untouched — the per-row CSP on
  * `/raw` IS the sandbox — and with nothing added, `Set-Cookie` included.
  *
- * Moved from packages/contract/src/routes.ts (verbatim); that file re-exports
- * this one until the package dissolves. The OAuth breadcrumb
+ * The OAuth breadcrumb
  * (`wwwAuthenticate`, `PROTECTED_RESOURCE_PATH`) lives in @artifactbin/utils.
  */
 const DOCUMENT_PATH = /^\/a\/[A-Za-z0-9]{6,12}(\/|$|\?)/;

@@ -24,7 +24,6 @@ import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
 
-const BASE = 'http://localhost:3000';
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 const DOC = '<p>An intro paragraph here.</p><div>Revenue grew 40% in Q3.</div>';

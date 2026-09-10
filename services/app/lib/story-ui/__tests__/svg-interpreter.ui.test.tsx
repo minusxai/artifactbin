@@ -8,7 +8,6 @@
  * on an unvalidated AST.
  */
 import { describe, it, expect } from 'vitest';
-import React from 'react';
 import { render } from '@testing-library/react';
 import { parseJsx } from '@/lib/jsx';
 import { renderStoryNodes } from '../interpreter';

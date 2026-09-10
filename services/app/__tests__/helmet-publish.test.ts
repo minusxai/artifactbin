@@ -15,7 +15,6 @@ import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
 
-const BASE = 'http://localhost:3000';
 
 const create = async (token: string, body: Record<string, unknown>) =>
   createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));

@@ -14,7 +14,6 @@
  *  - a refused URL is MARKED (`data-mx-asset="refused"`) and left without a
  *    src, which is how the browser draws the alt text.
  */
-import React from 'react';
 import { act } from 'react';
 import { describe, expect, it } from 'vitest';
 import { fireEvent, render } from '@testing-library/react';

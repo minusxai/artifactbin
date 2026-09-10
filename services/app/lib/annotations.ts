@@ -2,20 +2,10 @@
  * ANNOTATIONS — human/agent comments pinned to nodes of a document. The ONLY reader/writer of the
  * `annotations` table.
  *
- * THE ANCHOR IS IN THE DOCUMENT: the first comment on a node stamps a
- * `data-annotation-anchor="<key>"` attribute into its opening tag — as a REAL
- * EDIT through `applyEditFor`, so the concurrent-edit CAS, the conflict check (the touched
- * span is the node, so it collides only with a concurrent edit of that same
- * node), version bumping, the live stream and revert all treat it as the
- * ordinary write it is. The thread rows stay SIDECAR (replying and resolving
- * never touch the document); only the anchor lives in the source, where an
- * agent editing the markup can see it, keep it, and move it with the content.
- *
- * RESOLUTION is a lookup, not a replay: parse the CURRENT source, find the
- * element whose annotation-anchor key matches. Present → anchored (path and
- * span derived fresh, in whatever version the document is at). Absent → orphaned — and
- * orphaned is COMPUTED PER READ, never a tombstone: a revert that brings the
- * text back re-anchors the thread by itself.
+ * Comments store relations to source nodes; creating, replying to or resolving a
+ * thread does not edit the document. Current node IDs and legacy anchor keys
+ * are resolved against the current source. Missing targets are orphaned for
+ * that read; restoring the target can re-anchor the thread.
  *
  * COORDINATE NOTE (the Helmet-offset lesson): the wire and the frame speak
  * BODY paths; the source counts from the top. Capture translates body → source
@@ -23,8 +13,8 @@
  * back (`sourcePathToBodyPath`). Nothing in between converts.
  */
 import {
-  annotationScope, applyEditFor, effectiveRole,
-  type ArtifactRow, type Scope, type TokenActor,
+  annotationScope, effectiveRole,
+  type ArtifactRow, type Scope, type TokenActor
 } from '@/lib/artifacts';
 import { canGovern } from '@/lib/share-roles';
 import { ANNOTATION_ANCHOR_ATTR } from '@/lib/annotation-anchors';
@@ -222,19 +212,7 @@ function anchorIndex(source: string): Map<string, AnchorEntry> {
   return out;
 }
 
-/** The source with ` data-annotation-anchor="<key>"` spliced into the node's opening tag. */
-const sourceWithAnchor = (source: string, node: JsxElement, anchorKey: string): string => {
-  const at = node.start + 1 + node.tag.length;
-  return source.slice(0, at) + ` ${ANNOTATION_ANCHOR_ATTR}="${anchorKey}"` + source.slice(at);
-};
 
-/** The source with one anchor attribute removed (including its leading space). */
-const sourceWithoutAnchor = (source: string, node: JsxElement): string => {
-  const attr = node.attributes.find((a) => a.name === ANNOTATION_ANCHOR_ATTR);
-  if (!attr) return source;
-  const from = source[attr.start - 1] === ' ' ? attr.start - 1 : attr.start;
-  return source.slice(0, from) + source.slice(attr.end);
-};
 
 // ── the quote and its range, answered against the CURRENT source ────────────
 

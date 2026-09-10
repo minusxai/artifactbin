@@ -2,7 +2,7 @@
 import { PGlite } from '@electric-sql/pglite';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { assemble, createTokenReader, hashToken } from '@artifactbin/utils';
-import { createHumanAuth, type HumanAuth } from '../src/auth/human';
+import { createHumanAuth } from '../src/auth/human';
 import { consumeAuthCode, createAuthCode, createOAuthStore, isAllowedRedirectUri, sameRedirectTarget, s256 } from '../src/identity/oauth';
 import { proxyParts, type ProxyOptions } from '../src/parts';
 import { ensureProxySchema } from '../src/schema';
@@ -14,7 +14,6 @@ const REGISTERED_REDIRECT = 'http://127.0.0.1/callback';
 const REDIRECT = 'http://127.0.0.1:9987/callback';
 const verifier = 'v'.repeat(43);
 let pg: PGlite;
-let auth: HumanAuth;
 let app: ReturnType<typeof assemble<any>>;
 let session: { userId: string; email: string } | null = null;
 let mintedCount = 0;
@@ -45,7 +44,7 @@ beforeAll(async () => {
   pg = testDb().pg();
   const { query } = testDb();
   await ensureProxySchema({ query }, 'auth');
-  auth = await createHumanAuth({ pglite: pg, secret: 'oauth-routes-secret'.padEnd(32, '0'), baseURL: BASE, mail: { send: async () => {} } });
+  await createHumanAuth({ pglite: pg, secret: 'oauth-routes-secret'.padEnd(32, '0'), baseURL: BASE, mail: { send: async () => {} } });
   app = assemble(proxyParts(await optionsOf()));
 });
 afterAll(async () => { await pg.close(); });

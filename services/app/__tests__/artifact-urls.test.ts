@@ -31,7 +31,6 @@ import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
 
-const BASE = 'http://localhost:3000';
 const EXPORT_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x55, 0x52, 0x4c]);
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 

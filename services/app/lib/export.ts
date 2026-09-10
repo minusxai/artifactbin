@@ -237,9 +237,6 @@ async function renderOnce(
     sameOriginOnly: true,
     ...(ASSETS_ORIGIN ? { assetOrigin: ASSETS_ORIGIN } : {}),
     waitForManagedFrames: true,
-    // The Next dev overlay ("N issues") is fixed to the corner and lands in
-    // page-level shots on dev servers; the element doesn't exist in prod.
-    injectCss: 'nextjs-portal{display:none !important}',
     settleMs: PAGE_SETTLE_MS,
     timeoutMs: RENDER_TIMEOUT_MS,
   });

@@ -10,7 +10,7 @@
  */
 import { Parser } from 'acorn';
 import jsxPlugin from 'acorn-jsx';
-import type { JsxNode, JsxElement, JsxAttribute, JsxExpression, StaticValue, JsonValue, ParseResult } from './types';
+import type { JsxNode, JsxElement, JsxAttribute, StaticValue, JsonValue, ParseResult } from './types';
 import { reactiveExpression } from './reactive';
 
 const JsxParser = Parser.extend(jsxPlugin());

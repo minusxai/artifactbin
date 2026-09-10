@@ -261,7 +261,7 @@ export interface ClaimableToken {
  * (there is none to echo), which is the point: after the exchange nothing
  * hands a token back to the page.
  */
-export async function claimableTokensById(userId: string, ids: string[]): Promise<ClaimableToken[]> {
+export async function claimableTokensById(ids: string[]): Promise<ClaimableToken[]> {
   if (ids.length === 0) return [];
   const rows = await offerableTokens('t.id', ids);
   return rows.map((row) => ({ tokenId: row.id, titles: row.titles, artifacts: row.artifacts }));

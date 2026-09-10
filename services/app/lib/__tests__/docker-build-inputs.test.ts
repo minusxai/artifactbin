@@ -1,16 +1,5 @@
-/**
- * Everything `npm run build` reads must be COPIED into the image.
- *
- * The Dockerfile copies a curated list, not the repo, and `npm run build`
- * grew a first step when the story runtime became a build artifact:
- * `node scripts/build-story-runtime.mjs && next build`. The image copied only
- * `scripts/copy-assets.mjs`, so the merge to master failed at
- * `Cannot find module '/app/scripts/build-story-runtime.mjs'` — after CI was
- * fully green, because CI's `next build` runs on a whole checkout and the
- * image does not.
- *
- * So the rule is checked rather than remembered: any `scripts/…` file the
- * build script names has to be reachable in the builder stage.
+/** Every script named by the production build must reach the Docker builder.
+ * A build in a full checkout cannot prove that the image copied all its inputs.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';

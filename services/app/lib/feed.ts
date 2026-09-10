@@ -1,3 +1,4 @@
+import { dailySeries } from './daily-series';
 /**
  * THE READER — every query the app makes against the events schema, and the
  * only module that names it. All of them are SELECTs joining the app's own
@@ -178,17 +179,7 @@ export async function viewSeriesByUser(userId: string, days: number = VIEW_SERIE
     (await eventsTablePresent()) ? LOG_SERIES : LEGACY_SERIES,
     [userId, days, format],
   );
-  const today = Date.parse(new Date().toISOString().slice(0, 10));
-  const series = new Map<string, number[]>();
-  for (const row of r.rows) {
-    const age = Math.round((today - Date.parse(row.day)) / 86_400_000);
-    const idx = days - 1 - age;
-    if (idx < 0 || idx >= days) continue;
-    const buckets = series.get(row.artifact_id) ?? new Array<number>(days).fill(0);
-    buckets[idx] = row.n;
-    series.set(row.artifact_id, buckets);
-  }
-  return series;
+  return dailySeries(r.rows, days);
 }
 
 export interface LikeSummary {

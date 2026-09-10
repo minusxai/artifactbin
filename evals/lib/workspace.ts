@@ -6,7 +6,7 @@
  * that looks for a project root walks UP until it finds one, and from
  * `evals/.metrics/…` that root is artifactbin itself. OpenCode did exactly
  * that — it never saw the CSV staged beside it ("sales.csv isn't in the working
- * directory") and had the product's source, and CLAUDE.md, in reach, which
+ * directory") and had the product's source, and repository instructions, in reach, which
  * would quietly turn an eval of the DOCS into an eval of reading the source.
  */
 import fs from 'node:fs';

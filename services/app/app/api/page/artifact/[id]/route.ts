@@ -1,4 +1,4 @@
-import {catalogOf,publicCatalogOf} from '@/lib/datasets/catalog';
+import { publicCatalogOf } from '@/lib/datasets/catalog';
 import { compactSurface } from '@/lib/story/page-transport';
 /**
  * The owner/editor SHELL's props for one document — everything ArtifactDocument

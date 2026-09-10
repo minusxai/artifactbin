@@ -52,4 +52,4 @@ This is model-generated edit validation, not autonomous MCP task completion or a
 
 Production routes must integrate the reservation ledger/alias mapping, versioned backfill, normalizing revert, relation-only comment actions, adapter forwarding and preview namespace transformation. Test actual archives/events/ACL and rollout/rollback using the future compatibility build. Old pre-compatibility binaries are not valid rollback targets after migration. Apply every prototype's cases to integrated routes before release.
 
-The files node-ids.ts and node-ids.acceptance.ts in this directory are older UNIMPLEMENTED contract sketches. They are kept outside production and automatic test discovery; their assumptions are superseded by the canonical plan. They are not passing tests or completed feature code.
+The superseded throw-only node ID contract and acceptance sketch were removed. The implementation and executable regression coverage live in `services/app/lib/story/node-ids.ts` and its adjacent `__tests__` directory.

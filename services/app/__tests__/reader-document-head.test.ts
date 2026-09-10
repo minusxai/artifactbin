@@ -15,7 +15,6 @@ import { createArtifact } from '@/lib/artifacts';
 
 import { mintToken } from '@/lib/tokens';
 import { mintExportKey } from '@/lib/export-key';
-import { getDb } from '@/lib/db';
 import { useAppHarness } from '@/__tests__/harness';
 
 const harness = useAppHarness();

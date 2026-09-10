@@ -29,7 +29,6 @@ import { request } from '@/__tests__/harness';
 // harness-exempt: reset builds fresh PGlite databases to test schema replay and upgrade behavior
 // harness-exempt: wipe clears the deliberately hand-built schema between upgrade scenarios
 
-const BASE = 'http://localhost:3000';
 const SECRET = 'test-secret';
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });

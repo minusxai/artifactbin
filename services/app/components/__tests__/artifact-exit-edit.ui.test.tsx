@@ -36,7 +36,6 @@ vi.mock('@/components/AnnotationLayer', () => ({
 
 import ArtifactSurface, { type ArtifactSurfaceProps } from '../ArtifactSurface';
 import ArtifactShell from '../ArtifactShell';
-import { STORY_PAINTED_MESSAGE } from '@/lib/story-runtime/contract';
 
 class FakeEventSource {
   /** The named `data` channel (a dataset under the document changed). */

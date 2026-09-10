@@ -297,9 +297,7 @@ async function createDb(): Promise<Db> {
   // real server, whatever the ambient DATABASE_URL says.
   const target = IS_TEST ? ({ engine: 'pglite', dataDir: null } as const) : databaseTargetForRuntime(DATABASE_URL);
 
-  // Dynamic imports (the one sanctioned exception to top-level-imports): only
-  // the selected engine's package is ever loaded, and Next never tries to
-  // resolve `pg` in a PGLite-only deployment or vice versa.
+  // Intentional dynamic imports load only the selected database engine.
   if (target.engine === 'pg') {
     const pg = await import('pg');
     pg.types.setTypeParser(TIMESTAMPTZ_OID, toIso);
@@ -327,11 +325,8 @@ async function createDb(): Promise<Db> {
 }
 
 /**
- * The Db instance is cached on `global` — NOT a module-level variable — because
- * Turbopack evaluates modules in separate bundles; a per-bundle singleton would
- * create MULTIPLE PGLite instances on the SAME data directory, corrupting its
- * wire protocol. We cache the in-flight Promise (not the resolved value) so a
- * burst of concurrent first-callers awaits the same creation.
+ * Cache the in-flight adapter promise on the process global so concurrent calls
+ * and module reloads share one connection to the database directory.
  */
 declare global {
   // eslint-disable-next-line no-var

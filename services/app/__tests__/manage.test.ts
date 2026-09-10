@@ -17,7 +17,6 @@ import { isVersionNotArchived, listVersionsFor, revertArtifactFor } from '@/lib/
 import { mintToken } from '@/lib/tokens';
 import { createUser, listAccountTokenRows, revokeUserToken } from '@/lib/users';
 
-const BASE = 'http://localhost:3000';
 const harness = useAppHarness();
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });

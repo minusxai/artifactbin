@@ -14,7 +14,7 @@
  * box is added. That composes exactly, including while the document scrolls
  * itself — which it does, unlike the fixed-height canvas this replaces.
  */
-import { sendDocument, subscribeDocument, documentRect, documentReady, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
+import { documentRect, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useTrustedPortalContainer } from '@/components/TrustedUi';

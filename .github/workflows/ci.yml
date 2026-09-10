@@ -14,7 +14,7 @@ permissions:
 # which npm test was 5m — ~330s of aggregate api-suite work meeting 4 shared
 # vCPUs). The suite now fans out: fast checks + the two lighter vitest
 # projects in one job, the production build in another, and the heavy api project
-# SHARDED across three. Each shard is its own PGLite process, so the
+# SHARDED across the matrix below. Each shard is its own PGLite process, so the
 # no-parallel-projects rule (one embedded connection per process) still holds
 # within every job.
 jobs:
@@ -167,10 +167,7 @@ jobs:
         run: npm ci
       - if: steps.node-modules.outputs.cache-hit == 'true'
         run: node services/app/scripts/copy-assets.mjs
-      # Deliberately NO build-cache step: measured cold 50s vs warm 55s — the
-      # 16 builds with Turbopack, whose persistent cache is off by default, so
-      # .next/cache stays empty (the 1s save of a would-be-huge archive is the
-      # tell). Re-add only if turbopack persistent caching lands, with numbers.
+      # Build the Vite SPA, document runtime and bundled Hono server.
       - run: npm run build
 
   api:

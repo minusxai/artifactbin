@@ -8,7 +8,7 @@
  * authenticated, so a browser is by definition the caller and Origin is
  * present and unforgeable.
  */
-import { artifactToWire, artifactToWireWithAnnotations, parseAccessValue, parseParentField, replaceArtifactFromRequest } from '@/lib/artifact-wire';
+import { artifactToWireWithAnnotations, parseAccessValue, parseParentField, replaceArtifactFromRequest } from '@/lib/artifact-wire';
 import { getArtifactFor, setMetadataFor, writerFor, type MetadataPatch } from '@/lib/artifacts';
 import { isParentRefusal, parentOf, resolveParent } from '@/lib/folders';
 import { browserActor } from '@/lib/auth';

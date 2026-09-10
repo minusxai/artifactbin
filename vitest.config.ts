@@ -3,11 +3,8 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import yaml from '@rollup/plugin-yaml';
 
-// Three projects:
-//  - api:  artifactbin's original suite (root __tests__, PGLite + route handlers)
-//  - node: the ported minusx engine's pure tests (lib/**/__tests__)
-//         + scripts/**/__tests__ (CLI scripts driven as child processes)
-//  - ui:   the ported *.ui.test.* files (jsdom) — mirrors minusx vitest.config.ts
+// API exercises route handlers and persistence; Node covers libraries, services,
+// scripts and eval harnesses; UI uses jsdom. The CLI has its own Node test runner.
 export default defineConfig({
   root: import.meta.dirname,
   plugins: [react(), yaml()],

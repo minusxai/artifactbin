@@ -11,7 +11,7 @@
  * own state in the store, and — the part positional keys got wrong — the nodes
  * that merely SHIFTED because something above them was removed.
  */
-import React, { act } from 'react';
+import { act } from 'react';
 import { describe, expect, it } from 'vitest';
 import { createRoot } from 'react-dom/client';
 import { parseJsx, type JsxNode } from '@/lib/jsx';

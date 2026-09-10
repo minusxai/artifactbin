@@ -1,3 +1,4 @@
+import { dailySeries } from './daily-series';
 /**
  * FOLDERS — the one module that knows the hierarchy.
  *
@@ -439,17 +440,7 @@ async function viewSeries(ids: string[], days = SPARKLINE_DAYS): Promise<Map<str
      GROUP BY e.artifact_id, day`,
     [ids, days],
   );
-  const today = Date.parse(new Date().toISOString().slice(0, 10));
-  const series = new Map<string, number[]>();
-  for (const row of r.rows) {
-    const age = Math.round((today - Date.parse(row.day)) / 86_400_000);
-    const idx = days - 1 - age;
-    if (idx < 0 || idx >= days) continue;
-    const buckets = series.get(row.artifact_id) ?? new Array<number>(days).fill(0);
-    buckets[idx] = row.n;
-    series.set(row.artifact_id, buckets);
-  }
-  return series;
+  return dailySeries(r.rows, days);
 }
 
 /**

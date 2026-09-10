@@ -16,7 +16,6 @@
  * proportional bar behind a numeric cell; `colorScale` tints it (`sequential`
  * from the theme's chart color, `diverging` red↔green around zero).
  */
-import { format as d3format } from 'd3-format';
 import { numberFormatter } from './number-format';
 import type { DatasetColumn } from './dataset-shape';
 import type { Row } from './dataflow';
@@ -259,4 +258,3 @@ export function gridGeometry(columns: ResolvedColumn[], measured: number[] | nul
 }
 
 // re-exported so the kit does not import d3 twice
-const d3 = { format: d3format };

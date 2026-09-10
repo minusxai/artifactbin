@@ -6,7 +6,6 @@
  * reserving 420px — production eval run 33702277600. The wrapper must carry no
  * height outside a grid cell, and the cap must be the TABLE parser's (no chart floor).
  */
-import React from 'react';
 import { describe, expect, it } from 'vitest';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import { parseJsx, type JsxNode } from '@/lib/jsx';

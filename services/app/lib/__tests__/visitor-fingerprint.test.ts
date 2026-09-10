@@ -8,7 +8,7 @@
  * visitor present as unlimited distinct ones just by varying a header, which
  * inflates every view count on the platform.
  *
- * Nothing GATES on analytics (see the root CLAUDE.md), so this is not a
+ * Nothing GATES on analytics, so this is not a
  * security boundary — it is a correctness one, and it is the reason the hop
  * selection lives in one shared place (`lib/client-identity` forwardedFor)
  * rather than being spelled out twice.
