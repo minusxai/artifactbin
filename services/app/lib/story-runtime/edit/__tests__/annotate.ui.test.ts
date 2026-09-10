@@ -665,3 +665,24 @@ it('opens a composer for an iframe text Comment action outside Select mode witho
   expect(actions()).toHaveLength(1);
   host.dispose();
 });
+
+it('delegates exact iframe pin paint to the child and restores owner paint when missing', () => {
+  document.body.innerHTML='<div id="frame" data-mx-ast="0" data-mx-managed-frame=""></div>';
+  const owner=document.getElementById('frame')!;
+  vi.spyOn(owner,'getBoundingClientRect').mockReturnValue({x:100,y:200,width:400,height:300} as DOMRect);
+  const parsed=parseJsx('<Iframe id="frame"><p id="static">Static</p></Iframe>');if (!parsed.ok) throw Error('parse');session.setNodes(parsed.nodes);
+  const message:StoryAnnotationsMessage={...state('on'),pins:[{id:'inside',path:'0',key:'frame',nodeId:'frame',range:{v:1,kind:'target',target:{kind:'iframe',node:{kind:'source',id:'static'}}}}],openId:'inside',hoverId:'inside'};
+  session.update(message);
+  let generation='';const host=connectManagedComments(owner,(state)=>{generation=state.generation;});
+  expect(owner).toHaveAttribute('data-mx-annotated');
+  host.receive({type:'comment-layout',generation,positions:[{id:'inside',status:'exact',rect:{x:10,y:20,width:50,height:30}}]});
+  expect(owner).not.toHaveAttribute('data-mx-annotated');
+  expect(owner).not.toHaveAttribute('data-mx-annotation-open');
+  expect(owner).not.toHaveAttribute('data-mx-annotation-hover');
+  expect(layouts().at(-1)).toMatchObject({positions:[{id:'inside',status:'exact',rect:{x:110,y:220}}]});
+  host.receive({type:'comment-layout',generation,positions:[{id:'inside',status:'missing',rect:{x:0,y:0,width:0,height:0}}]});
+  expect(owner).toHaveAttribute('data-mx-annotated');
+  expect(owner).toHaveAttribute('data-mx-annotation-open');
+  expect(owner).toHaveAttribute('data-mx-annotation-hover');
+  host.dispose();
+});

@@ -431,6 +431,10 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     post({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions });
   };
 
+  /** Exact inner targets paint in their own realm; owner paint is only fallback. */
+  const paintsInChild = (pin: StoryAnnotationsMessage['pins'][number]): boolean =>
+    isTargetRange(pin.range) && pin.range.target.kind === 'iframe' && managedRects.has(pin.id);
+
   /** Stamp idempotent state: all annotate-mode tints, or only the transient view-mode hover. */
   const applyState = () => {
     for (const el of scope.querySelectorAll(`[${ANNOTATED_ATTR}], [${ANNOTATION_OPEN_ATTR}], [${ANNOTATION_HOVER_ATTR}], [${ANNOTATE_SELECTED_ATTR}], [${ANNOTATION_RANGED_ATTR}]`)) {
@@ -445,6 +449,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       return;
     }
     for (const pin of state.pins) {
+      if (paintsInChild(pin)) continue;
       const el = elementForPin(pin);
       if (!el) continue;
       el.setAttribute(ANNOTATED_ATTR, '');
@@ -452,7 +457,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     }
     if (selectedPath) elementFor(selectedPath)?.setAttribute(ANNOTATE_SELECTED_ATTR, '');
     const hovered = state.hoverId ? state.pins.find((pin) => pin.id === state!.hoverId) : null;
-    if (hovered) elementForPin(hovered)?.setAttribute(ANNOTATION_HOVER_ATTR, '');
+    if (hovered && !paintsInChild(hovered)) elementForPin(hovered)?.setAttribute(ANNOTATION_HOVER_ATTR, '');
     // The words last, so their rules follow the state that was just stamped.
     ensureCss(true, paintRanges());
     paintAreas();
@@ -534,7 +539,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     if (!start || typeof start.closest !== 'function' || start.closest('.mx-rail, .mx-present')) return null;
     let el: HTMLElement | null = start;
     while (el) {
-      const pin = state?.pins.find((candidate) => elementForPin(candidate) === el);
+      const pin = state?.pins.find((candidate) => !paintsInChild(candidate) && elementForPin(candidate) === el);
       if (pin) return pin;
       el = el.parentElement;
     }
@@ -748,6 +753,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
           post({type:STORY_SELECTION_MESSAGE,selection:{...owner,rect:selected.rect,quote:selected.quote,range:{v:1,kind:'target',target:{kind:'iframe',node:selected.target},...(selected.range ? {range:selected.range}:{})}}});
         }
         for (const position of event.positions) {if (position.status === 'exact') managedRects.set(position.id,position.rect);else managedRects.delete(position.id);}
+        applyState();
         reportLayout();
       } else if (event.type === 'comment-pin') post({type:STORY_ANNOTATION_PIN_MESSAGE,id:event.id,rect:event.rect});
       else if (event.type === 'comment-hover') post({type:STORY_ANNOTATION_HOVER_MESSAGE,id:event.id});
