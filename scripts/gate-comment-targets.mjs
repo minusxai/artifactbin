@@ -97,5 +97,34 @@ try {
   await page.locator('td[data-mx-comment-owner="order-table"][data-mx-annotated]').filter({hasText:'Alice Chen'}).waitFor();
   assert.equal((await annotations()).length,3);
   console.log('PASS persisted comments reconnect after a fresh launch');
+
+  // Text selection is captured in the opaque child; only the app composes it.
+  const prose=realm.locator('#static-iframe-text');
+  await prose.scrollIntoViewIfNeeded();
+  await prose.evaluate(node=>{
+    const range=node.ownerDocument.createRange();range.selectNodeContents(node);
+    const selection=node.ownerDocument.defaultView.getSelection();selection.removeAllRanges();selection.addRange(range);
+  });
+  await realm.getByRole('button',{name:'Comment',exact:true}).click();
+  await save('A precise iframe text comment');
+  const textComment=(await annotations()).find(item=>item.thread[0].body==='A precise iframe text comment');
+  assert.equal(textComment.range.target.node.id,'static-iframe-text');
+  assert(textComment.quote.includes('persistent source ID'));
+  assert(textComment.range.range.parts.length>0);
+  await prose.evaluate(node=>node.ownerDocument.defaultView.getSelection().removeAllRanges());
+
+  // Real pointer drag, then ensure the composer remains above app content.
+  await select();
+  await prose.scrollIntoViewIfNeeded();
+  const bounds=await prose.boundingBox();assert(bounds);
+  await page.mouse.move(bounds.x+4,bounds.y+4);await page.mouse.down();
+  await page.mouse.move(bounds.x+Math.min(120,bounds.width-4),bounds.y+Math.min(20,bounds.height-2),{steps:8});
+  await page.mouse.up();
+  const composer=page.getByLabel('Annotation composer',{exact:true});await composer.waitFor();
+  assert(await composer.evaluate(el=>{const r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));}));
+  await save('A drawn iframe area');
+  const areaComment=(await annotations()).find(item=>item.thread[0].body==='A drawn iframe area');
+  assert.equal(areaComment.range.range.kind,'area');
+  console.log('PASS iframe text and area selection with parent composer layering');
   await context.close();
 } finally { await browser.close(); }

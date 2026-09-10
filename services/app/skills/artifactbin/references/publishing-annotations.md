@@ -28,6 +28,10 @@ POST [[ base ]]/api/artifacts/<id>/annotations/<annotation_id>
 → 200 { "id", "status": "resolved", "thread": [ ... ] }
 ```
 
+## Contents
+
+The inline shape · Comments on dynamic content · Reply, resolve, reopen.
+
 ## The inline shape
 
 ```
