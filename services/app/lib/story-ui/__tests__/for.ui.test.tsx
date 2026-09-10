@@ -57,3 +57,27 @@ it('gives a missing-item fallback a real owner surface and refuses shared bindin
  expect((view.container.querySelector('#orders') as HTMLElement).style.display).not.toBe('contents');
  expect((view.container.querySelector('#orders') as HTMLElement).style.minHeight).toBe('1px');
 });
+
+
+it('renders unkeyed rows by index with scoped DOM references and only an owner comment surface',()=>{
+ const parsed=parseJsx('<For id="orders" each={$orders}><label id="label" for="field">{$_row.name}</label><input id="field" aria-labelledby="label"/></For>');
+ if(!parsed.ok)throw new Error(parsed.error);
+ const tree=(orders:unknown[]) => <>{renderStoryNodes(parsed.nodes,{components:{},values:{orders}})}</>;
+ const view=render(tree([{name:'Alice'},{name:'Bob'}]));
+ const alice=screen.getByText('Alice');
+ const labels=[...view.container.querySelectorAll('label')],fields=[...view.container.querySelectorAll('input')];
+ expect(labels[0].id).not.toBe(labels[1].id);
+ labels.forEach((label,i)=>{expect(label.htmlFor).toBe(fields[i].id);expect(fields[i].getAttribute('aria-labelledby')).toBe(label.id)});
+ expect(view.container.querySelector('[data-mx-comment-target]')).toBeNull();
+ expect(alice.closest('[data-mx-ast]')?.id).toBe('orders');
+ view.rerender(tree([{name:'Bob'},{name:'Alice'}]));
+ expect(screen.getByText('Bob')).toBe(alice);
+ expect(view.container.querySelector('[data-mx-comment-target]')).toBeNull();
+ view.rerender(tree([]));expect(view.container.querySelector('#orders')).not.toBeNull();
+});
+
+it.each(['keyBy=""','keyBy={12}','keyBy={$field}'])('rejects an explicitly malformed optional key: %s',(key)=>{
+ const parsed=parseJsx(`<For each={$orders} ${key}><p>{$_row.name}</p></For>`);if(!parsed.ok)throw new Error(parsed.error);
+ render(<>{renderStoryNodes(parsed.nodes,{components:{},values:{orders:[{name:'Alice'}]}})}</>);
+ expect(screen.getByRole('alert').textContent).toContain('keyBy');
+});

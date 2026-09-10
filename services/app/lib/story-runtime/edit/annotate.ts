@@ -468,7 +468,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
   const reportSelection = (el: Element | null, extra: { range?: AnnotationRangeOnWire } = {}) => {
     managedSelection = null;
     const selection = el ? describeCommentSelection(el, nodes) : null;
-    if (selection && extra.range) selection.range = isTargetRange(selection.range) && !isTargetRange(extra.range) ? {...selection.range, range:extra.range} : extra.range;
+    if (selection && extra.range && (selection.tag !== 'For' || isTargetRange(selection.range))) selection.range = isTargetRange(selection.range) && !isTargetRange(extra.range) ? {...selection.range, range:extra.range} : extra.range;
     selectedPath = selection?.path ?? null;
     applyState();
     post({ type: STORY_SELECTION_MESSAGE, selection });

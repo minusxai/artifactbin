@@ -109,7 +109,8 @@ function walk(
     const eachValue = node.attributes.find(a => a.name === 'each')?.value;
     const each = eachValue && !eachValue.static ? eachValue.reactive : undefined;
     if (inColumn) errors.push({message:'Nested For is not supported',start:node.start,end:node.end});
-    if (!key?.static || typeof key.json !== 'string' || !key.json || each?.kind !== 'signal') errors.push({message:'For requires each={$table} and a nonempty keyBy',start:node.start,end:node.end});
+    if (each?.kind !== 'signal') errors.push({message:'For requires each={$table}',start:node.start,end:node.end});
+    if (key && (!key.static || typeof key.json !== 'string' || !key.json)) errors.push({message:'For keyBy must be a nonempty field name when supplied',start:node.start,end:node.end});
   }
   validateElement(node, components, allowedHtml, stylePolicy, errors, inSvg);
   for (const attr of node.attributes) if (!inColumn && !attr.value.static && isReactiveExpression(attr.value.reactive) && reactiveNames(attr.value.reactive).fields.length) {

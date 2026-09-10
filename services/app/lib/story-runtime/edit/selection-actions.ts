@@ -284,7 +284,9 @@ export function createFrameSelectionActions({
     if (annotated && anchor) {
       const captured = describeRange(range, anchor);
       annotated.quote = captured.quote;
-      annotated.range = isTargetRange(annotated.range) ? {...annotated.range,range:captured.range} : captured.range;
+      // Owner-only repeats have no durable item identity. Keep the quote as
+      // feedback, but never persist offsets that could highlight another item.
+      if (annotated.tag !== 'For' || isTargetRange(annotated.range)) annotated.range = isTargetRange(annotated.range) ? {...annotated.range,range:captured.range} : captured.range;
     }
     activeAnnotation = annotated;
     const surface = ensureToolbar();

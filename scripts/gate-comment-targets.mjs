@@ -23,6 +23,7 @@ const browser = await chromium.launch();
 try {
   const context=await browser.newContext({viewport:{width:1280,height:960}});
   const page=await context.newPage();
+  page.on('response',async response=>{if(response.status()>=400&&response.url().includes('/annotations'))console.error('Annotation request failed:',response.status(),await response.text());});
   await becomeOwner(page,base,seed.token);
   await page.goto(`${base}/a/${seed.id}`);
   const realm=page.frameLocator('iframe[title="Dynamic comment playground"]').frameLocator('iframe');
@@ -180,6 +181,33 @@ try {
   const insideStyle=await menu.evaluate(el=>({font:getComputedStyle(el).font,borderRadius:getComputedStyle(el).borderRadius,background:getComputedStyle(el).backgroundColor}));
   assert.deepEqual(insideStyle,outsideStyle);
   console.log('PASS repeated iframe node/text commenting, native selection and shared menu appearance');
+
+  await outside.evaluate(node=>node.ownerDocument.defaultView.getSelection().removeAllRanges());
+  await prose.evaluate(node=>node.ownerDocument.defaultView.getSelection().removeAllRanges());
+  await expect(outsideMenu).toBeHidden();
+  const unkeyed=page.locator('#index-cards');
+  const unkeyedAlice=unkeyed.locator('p').filter({hasText:'Alice Chen'}).first();
+  await select();await unkeyedAlice.click();await save('Unkeyed list owner comment');
+  let ownerComment=(await annotations()).find(item=>item.thread[0].body==='Unkeyed list owner comment');
+  assert.equal(ownerComment.anchor.nodeId,'index-cards');assert.equal(ownerComment.range,null);
+  await page.getByRole('button',{name:'Reverse JSX rows',exact:true}).click();
+  await expect(unkeyed).toHaveAttribute('data-mx-annotated','');
+  await expect(unkeyed.locator('[data-mx-comment-target], [data-mx-annotated]')).toHaveCount(0);
+  await unkeyedAlice.dblclick({position:{x:25,y:20}});
+  await page.getByRole('button',{name:'Comment on selected text',exact:true}).click();
+  await save('Unkeyed words retain only their list owner');
+  ownerComment=(await annotations()).find(item=>item.thread[0].body==='Unkeyed words retain only their list owner');
+  assert.equal(ownerComment.anchor.nodeId,'index-cards');assert.equal(ownerComment.range,null);assert(ownerComment.quote);
+  await select();await unkeyedAlice.scrollIntoViewIfNeeded();
+  const unkeyedBox=await unkeyedAlice.boundingBox();assert(unkeyedBox);
+  await page.mouse.move(unkeyedBox.x+3,unkeyedBox.y+3);await page.mouse.down();
+  await page.mouse.move(unkeyedBox.x+80,unkeyedBox.y+25,{steps:8});await page.mouse.up();
+  await save('Unkeyed area retains only its list owner');
+  ownerComment=(await annotations()).find(item=>item.thread[0].body==='Unkeyed area retains only its list owner');
+  assert.equal(ownerComment.anchor.nodeId,'index-cards');assert.equal(ownerComment.range,null);
+  await page.reload();await expect(page.locator('#index-cards')).toHaveAttribute('data-mx-annotated','');
+  await expect(page.locator('#index-cards [data-mx-comment-target], #index-cards [data-mx-annotated]')).toHaveCount(0);
+  console.log('PASS optional For keys render by index and persist only owner-level comments across reorder/reload');
 
   await context.close();
 

@@ -13,7 +13,9 @@ it('validates For as inert table dependency and preserves source identity throug
  expect(loaded.source).toBe(saved.source);expect(loaded.ids).toEqual(saved.ids);
 });
 it.each([
- '<For each={$orders} />',
+ '<For each={$orders} keyBy="" />',
+ '<For each={$orders} keyBy={12} />',
+ '<For each={$orders} keyBy={$field} />',
  '<For each={$orders.map(x=>x)} keyBy="id"/>',
  '<For each={$orders} keyBy="id"><For each={$orders} keyBy="id"/></For>',
  '<For each={$orders} keyBy="id"><button onClick="bad"/></For>',
@@ -37,4 +39,12 @@ it('uses the persistence key grammar for render-time validation, including empty
    expect(validRowKey(key)).toBe(false);
    expect(keyedRowsError([{id:key}],'id')).not.toBeNull();
  }
+});
+
+it('publishes an unkeyed For and preserves its table dependency',async()=>{
+ const source='<For id="orders" each={$orders}><p id="name">{$_row.name}</p></For>';
+ expect(validateJsx(nodes(source),{components:['For']})).toEqual([]);
+ expect(collectRefNameUses(nodes(source))).toMatchObject([{name:'orders',expects:'table'}]);
+ const published=await publishJsx({},'<Helmet><Value name="orders" type="table" value={[{name:"Alice"}]}/></Helmet>'+source);
+ if(published instanceof Response)throw new Error(await published.text());
 });

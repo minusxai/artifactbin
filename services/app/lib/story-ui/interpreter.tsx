@@ -79,7 +79,7 @@ export interface BoundSourceProps {
 export interface StoryInterpreterOptions {
   values?: Record<string, unknown>;
   tables?: Record<string, { rows: Record<string, unknown>[] }>;
-  repeatScope?: { owner: string; key: string | number; ids: Set<string> };
+  repeatScope?: { owner: string; key: string | number; durable: boolean; ids: Set<string> };
   tableCommentScope?: { owner: string; rowKey?: string | number; index: number; columnKey: string; ids: Set<string> };
   /** Component registry: shadcn components + embeds. Unknown component tags render nothing. */
   components: Record<string, React.ComponentType<Record<string, unknown>>>;
@@ -206,17 +206,19 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
     const owner = node.attributes.find(a => a.name === 'id')?.value;
     const expr = each && !each.value.static ? each.value.reactive : undefined;
     const name = expr?.kind === 'signal' ? expr.name : null;
-    if (!name || !keyBy?.static || typeof keyBy.json !== 'string' || !keyBy.json) return React.createElement('div', {role: 'alert', key:path}, 'For requires each={$table} and keyBy');
+    if (!name) return React.createElement('div', {role: 'alert', key:path}, 'For requires each={$table}');
+    if (keyBy && (!keyBy.static || typeof keyBy.json !== 'string' || !keyBy.json)) return React.createElement('div', {role:'alert',key:path}, 'For keyBy must be a nonempty field name when supplied');
+    const keyField = keyBy?.static ? keyBy.json as string : undefined;
     const source = options.tables?.[name]?.rows ?? options.values?.[name] ?? [];
     if (!Array.isArray(source) || source.some(row => !row || typeof row !== 'object' || Array.isArray(row))) return React.createElement('div', {role:'alert', key:path}, 'For requires table rows');
-    const error = source.length > 1000 ? 'For supports at most 1000 rows' : source.length * templateSize(node.children) > 50000 ? 'For expansion exceeds 50000 nodes' : keyedRowsError(source, keyBy.json, 'keyBy');
+    const error = source.length > 1000 ? 'For supports at most 1000 rows' : source.length * templateSize(node.children) > 50000 ? 'For expansion exceeds 50000 nodes' : keyField === undefined ? null : keyedRowsError(source, keyField, 'keyBy');
     if (error) return React.createElement('div', {role:'alert', key:path}, error);
     const ownerId = owner?.static && typeof owner.json === 'string' ? owner.json : '';
     const ids = templateIds(node.children);
     const wrapper = buildProps(node.attributes.filter(a=>a.name !== 'each' && a.name !== 'keyBy'),true,node.tag,path,undefined,options.values);
-    return React.createElement('div', {...wrapper,id: ownerId || undefined, key:options.keyFor?.(path) ?? path, style:{minHeight:1,...(wrapper.style as object ?? {})}}, ...source.map(row => {
-      const key = row[keyBy.json as string] as string | number;
-      return React.createElement(React.Fragment, {key:JSON.stringify([typeof key,key])}, ...node.children.map((child,i) => renderNode(child, {...options,row,repeatScope:{owner:ownerId,key,ids}}, `${path}.${i}`)));
+    return React.createElement('div', {...wrapper,id: ownerId || undefined, key:options.keyFor?.(path) ?? path, style:{minHeight:1,...(wrapper.style as object ?? {})}}, ...source.map((row,index) => {
+      const key = keyField === undefined ? index : row[keyField] as string | number;
+      return React.createElement(React.Fragment, {key:JSON.stringify([keyField === undefined ? 'index' : 'key',typeof key,key])}, ...node.children.map((child,i) => renderNode(child, {...options,row,repeatScope:{owner:ownerId,key,durable:keyField !== undefined,ids}}, `${path}.${i}`)));
     }));
   }
   if (options.repeatScope && node.attributes.some(a=>['run','value','checked','options'].includes(a.name) && a.value.static && refName(a.value.json))) return React.createElement('div', {role:'alert',key:path}, 'Bound controls inside For are not supported; use editable DataTable columns');
@@ -446,12 +448,14 @@ function scopeProps(props: Record<string,unknown>, options: StoryInterpreterOpti
   const repeat = options.repeatScope, table = options.tableCommentScope;
   if (!repeat && !table) return props;
   const owner = repeat?.owner ?? table!.owner;
-  const scope = repeat ? ['repeat',owner,typeof repeat.key,repeat.key] : ['table',owner,typeof table!.rowKey,table!.rowKey ?? ['index',table!.index],table!.columnKey];
+  // Index-scoped DOM IDs support labels, but are not durable comment targets.
+  if (repeat && !repeat.durable) delete props[AST_PATH_ATTR];
+  const scope = repeat ? ['repeat',owner,repeat.durable ? typeof repeat.key : 'index',repeat.key] : ['table',owner,typeof table!.rowKey,table!.rowKey ?? ['index',table!.index],table!.columnKey];
   const ids = repeat?.ids ?? table!.ids;
   const sourceId = typeof props.id === 'string' ? props.id : undefined;
   if(sourceId) {
     const target: CommentTarget = repeat ? {kind:'repeat',scopes:[{nodeId:owner,key:repeat.key}],templateNodeId:sourceId} : {kind:'table',rowKey:table!.rowKey ?? table!.index,columnKey:table!.columnKey,templateNodeId:sourceId};
-    if (repeat || table?.rowKey !== undefined) Object.assign(props, commentMetadata(owner,target));
+    if (repeat?.durable || table?.rowKey !== undefined) Object.assign(props, commentMetadata(owner,target));
     props.id = instanceDomId(scope,sourceId);
   }
   for(const attr of ['htmlFor','aria-labelledby','aria-describedby','aria-controls','aria-owns','aria-activedescendant','aria-details','aria-errormessage','aria-flowto','headers','list','form']) if(typeof props[attr] === 'string') props[attr] = (props[attr] as string).split(/\s+/).map(id=>ids.has(id)?instanceDomId(scope,id):id).join(' ');

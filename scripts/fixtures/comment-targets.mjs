@@ -93,4 +93,11 @@ export const commentTargetsMarkup = `<Helmet>
       <li>On mobile, try text selection, Select mode, and a long press inside the iframe.</li>
     </ol>
   </section>
+  <section className="space-y-3">
+    <h2 className="text-2xl font-semibold">4. A list without keyBy</h2>
+    <p>This list renders by position. Comments stay on the whole list when rows move; add keyBy to make comments follow individual items.</p>
+    <For id="index-cards" each={$ordered} className="space-y-2">
+      <p id="index-customer" className="rounded border p-3">{$_row.customer}</p>
+    </For>
+  </section>
 </main>`;

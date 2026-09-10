@@ -88,8 +88,10 @@ so seeding the link does not suppress the initial query run.
 `lib/story/comment-target.ts` defines refinements under an independently validated
 source owner. DataTable targets retain the table node ID plus typed `rowKey` and
 column identity. For targets retain the source owner, typed item key and template
-node ID. `keyBy` is required; nested For, DataTable and Iframe inside For templates
-are currently rejected even though the target format can represent nested scopes.
+node ID when `keyBy` is supplied. Without `keyBy`, rendering and local DOM references
+use index keys; comments retain only the For owner and optional quote, without
+positional item/text/area refinements. Explicit invalid keys still fail. Nested For,
+DataTable and Iframe inside For templates are currently rejected even though the target format can represent nested scopes.
 
 Managed Iframe targets use a static source ID, hierarchical `data-comment-key`
 path, or generation-scoped session handle. Missing or ambiguous targets retain

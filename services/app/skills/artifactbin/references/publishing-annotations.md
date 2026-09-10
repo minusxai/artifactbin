@@ -86,7 +86,9 @@ lives in `range`:
 
 Here the owner is the DataTable node, independently of the row and column keys.
 Iframe targets carry a source ID, hierarchical `data-comment-key` path, or a
-session-only handle. For targets carry typed item keys and a template source ID.
+session-only handle. Keyed For targets carry typed item keys and a template source
+ID. Without `keyBy`, a For comment retains only its source owner and optional quote;
+index-based item/text/area targets are not persisted.
 An optional nested `range` contains the selected text or area inside that target.
 
 Preserve both the owner ID and the item's semantic key when fixing feedback.
