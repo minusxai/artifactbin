@@ -117,6 +117,7 @@ export function createFrameEditSession({
   const doc = win.document;
   const scope = root ?? doc;
   let nodes: JsxNode[] = [];
+  let nodesContent = JSON.stringify(nodes);
   let active: ActiveHost | null = null;
   let selectedPath: string | null = null;
   let hovered: Element | null = null;
@@ -680,6 +681,14 @@ export function createFrameEditSession({
     },
     setNodes(next: JsxNode[]) {
       if (next === nodes) return;
+      // A refetch can deserialize the same document into fresh objects. It is
+      // not an edit and must not cancel a selection or an active resize.
+      const nextContent = JSON.stringify(next);
+      if (nextContent === nodesContent) {
+        nodes = next;
+        return;
+      }
+      nodesContent = nextContent;
       chrome.cancel();
       blockSelection.clear();
       nodes = next;

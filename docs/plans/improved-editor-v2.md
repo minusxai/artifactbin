@@ -198,3 +198,10 @@ Native text HTML dragging is prevented so adjusting an existing selection cannot
 move content between engines; block movement remains owned by the dedicated grip.
 Firefox pointer-release range collapse is handled by restoring the exact native
 endpoints before paint. No physical-device claim is made.
+
+Final CI exposed a cleared three-column selection during document refresh.
+A regression test demonstrated that deserializing identical nodes canceled the
+selection. The edit-session boundary now treats identical node content as a
+no-op, preserving selection and active resizing; changed content still resets
+them. The regression failed before the fix, then all 64 focused UI tests,
+validation, production build and the Editor V2 browser gate passed.
