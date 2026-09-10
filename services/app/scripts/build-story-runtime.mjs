@@ -26,9 +26,6 @@ const shared = {
   define: { 'process.env.NODE_ENV': dev ? '"development"' : '"production"' },
   alias: {
     '@': root,
-    // Not a Next app: the real next/dynamic never resolves outside Next's
-    // runtime (see lib/story-runtime/next-dynamic-shim).
-    'next/dynamic': path.join(root, 'lib/story-runtime/next-dynamic-shim.tsx'),
   },
   logLevel: 'info',
 };
@@ -177,15 +174,9 @@ for (const url of [manifest.entry, manifest.anchor, manifest.comment, ...manifes
 
 fs.writeFileSync(path.join(outdir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
 
-// Server half: the SSR renderer, required dynamically by lib/story/document.ts
-// OUTSIDE the Next module graph (route handlers compile under the react-server
-// condition, which forbids client-React APIs). Self-contained: carries its own
-// full React so the condition never applies.
-// cjs so document.ts can load it with createRequire (the one loader neither
-// Turbopack nor Vitest intercepts). The vega stack stays EXTERNAL: its esm
-// node build carries a top-level await (cjs-fatal), it is already in
-// serverExternalPackages, and SSR never draws a chart anyway — the requires
-// resolve from node_modules at runtime.
+// Server renderer loaded by lib/story/ssr.server.ts through createRequire.
+// The CJS bundle carries React. Vega stays external because its Node ESM
+// build uses top-level await; SSR renders chart placeholders, not charts.
 await esbuild.build({
   ...shared,
   entryPoints: [path.join(root, 'lib/story-runtime/ssr-entry.tsx')],

@@ -12,7 +12,7 @@
  * So the equality asserted here is byte-for-byte against lucide, not "looks the
  * same": a differing attribute order or class list is a hydration mismatch, and
  * React answers #418 by discarding the whole server tree and repainting the root
- * (see CLAUDE.md). This is the test that lets the icon set leave the bundle.
+ *. This is the test that lets the icon set leave the bundle.
  */
 import { describe, it, expect } from 'vitest';
 import { createElement } from 'react';

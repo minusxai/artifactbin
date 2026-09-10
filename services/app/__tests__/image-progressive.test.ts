@@ -24,7 +24,6 @@ import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
 
-const BASE = 'http://localhost:3000';
 /*
  * A VALID 48×32 PNG. Deliberately not the 2×2 pixel that other suites use:
  * that fixture is malformed — sharp reads its header but a full decode fails

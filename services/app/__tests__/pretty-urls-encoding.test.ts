@@ -22,7 +22,6 @@ vi.mock('@/auth', () => ({
   auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null),
 }));
 
-const props = (user: string, path?: string[]) => ({ params: Promise.resolve({ user, path }) });
 
 async function outcome(p: Promise<unknown>): Promise<{ kind: 'render' | 'redirect' | 'notFound'; to?: string }> {
   try {

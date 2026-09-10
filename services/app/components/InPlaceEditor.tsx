@@ -21,10 +21,10 @@
  *          save-less protocol as before, and pushes structural changes back
  *          down as `mx:document`, which the runtime re-renders in place.
  */
-import { sendDocument, subscribeDocument, documentRect, documentReady, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
+import { sendDocument, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import SourceEditor from '@/components/SourceEditorPane';
-import { Check, Code, History, Image as ImageIcon, MessageSquare, Paintbrush } from 'lucide-react';
+import { Check, Code, History, Image as ImageIcon, Paintbrush } from 'lucide-react';
 
 import ThemePicker, { ModeChip, TemplateChip } from '@/components/ThemePicker';
 import { Tooltip } from '@/components/Tooltip';
@@ -102,7 +102,7 @@ const refDataFor = (created: { id: string; rawUrl?: string }): { refData: RefDat
 });
 
 export default function InPlaceEditor({
-  art, frameRef, runtimeRef, sessionNonce, flushRef, initialSelectionPath = null, onComment, onToggleComments, commentsOpen = false, commentCount = 0, rightInset = 0, onDone = () => {},
+  art, frameRef, runtimeRef, sessionNonce, flushRef, initialSelectionPath = null, onComment, rightInset = 0, onDone = () => {},
 }: {
   art: EditorArtifact;
   /** The live document. Never remounted — that is the whole point. */
@@ -119,11 +119,8 @@ export default function InPlaceEditor({
    * not comment, and then neither the toolbar control nor the shortcut exists.
    */
   onComment?: (selection: StoryEditSelection) => void;
-  onToggleComments?: () => void;
   /** How far the toolbar stops short of the viewport's right edge: the comments rail plus the frame's scrollbar. */
   rightInset?: number;
-  commentsOpen?: boolean;
-  commentCount?: number;
   /** Drain-and-exit belongs to the page, because browser back uses the same contract. */
   onDone?: () => void | Promise<void>;
 }) {

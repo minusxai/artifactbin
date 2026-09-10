@@ -1,3 +1,4 @@
+import { useDialogKeyboard } from './use-dialog-keyboard';
 /**
  * THE DASHBOARD'S ACTIVITY: two short lists read off the log — what happened
  * on your artifacts, and what the people you follow did in public. One line
@@ -11,7 +12,7 @@
  * catalogue grows and this page must not have to grow with it to stay
  * legible.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Activity as ActivityIcon, Maximize2, X } from 'lucide-react';
 import { Tooltip } from '@/components/Tooltip';
@@ -142,30 +143,7 @@ function ActivitySection({ mine, following, compact, hidden = 0, onExpand, expan
 function ActivityDialog({ mine, following, onClose }: { mine: FeedItem[]; following: FeedItem[]; onClose: () => void }) {
   const panel = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-      if (event.key !== 'Tab' || !panel.current) return;
-      const stops = [...panel.current.querySelectorAll<HTMLElement>('button:not([disabled]), a[href]')];
-      if (stops.length === 0) return;
-      const first = stops[0];
-      const last = stops[stops.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [onClose]);
+  useDialogKeyboard(panel, onClose, 'button:not([disabled]), a[href]');
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden p-3 sm:p-8">

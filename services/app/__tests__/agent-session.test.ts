@@ -185,7 +185,7 @@ describe('claiming what the browser holds', () => {
     const second = await mintToken('two');
     const made = (await (await createArtifact(request('/api/artifacts', { method: 'POST', token: first.token, json: { title: 'Held Doc', markup: '<h1>held</h1>' } }))).json()) as { id: string };
 
-    const offers = await claimableTokensById(user.id, [first.id, second.id]);
+    const offers = await claimableTokensById([first.id, second.id]);
     expect(offers.map((o) => o.tokenId).sort()).toEqual([first.id, second.id].sort());
     expect(offers.find((o) => o.tokenId === first.id)?.titles).toEqual(['Held Doc']);
 
@@ -195,7 +195,7 @@ describe('claiming what the browser holds', () => {
     // The artifact now belongs to the account, and the token is no longer on offer.
     const row = await getArtifactFor({ tokenId: '', userId: user.id }, made.id);
     expect(row?.id).toBe(made.id);
-    expect((await claimableTokensById(user.id, [first.id])).length).toBe(0);
+    expect((await claimableTokensById([first.id])).length).toBe(0);
   });
 
   it('never claims a token owned by someone else', async () => {

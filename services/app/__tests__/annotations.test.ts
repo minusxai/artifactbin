@@ -24,7 +24,6 @@ import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, setUsername } from '@/lib/users';
 import { countOpenAnnotations } from '@/lib/annotations';
 
-const BASE = 'http://localhost:3000';
 const harness = useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 

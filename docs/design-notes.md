@@ -1,0 +1,84 @@
+# Design notes
+
+These notes retain the reasons behind constraints that are easy to lose during refactoring.
+They describe current boundaries; old incident timelines and retired implementations are in Git history.
+Paths below are relative to `services/app` unless they start with `services/` or `scripts/`.
+
+## Services and request ownership
+
+The OSS-root `server.ts` composes the proxy, Hono app, SQL, browser and events implementations for the full image.
+Split images use the same contracts over HTTP. `services/proxy/src/parts.ts` orders session resolution,
+rate limits, login/OAuth, forwarded headers and the final upstream forwarder. Deployment policy belongs
+in configuration or a downstream composition, never an app special case.
+
+Proxy rate limits come from policy files. Signing belongs to HTTP actor transport; in-process callers
+carry the resolved actor on the request. The app owns live document streams, so a proxy does not need
+another database subscription layer. Construct fresh response headers: the Node adapter may add headers.
+
+The app shell is Vite/React (`web/`), served by `server/app.ts`; there is no Next runtime.
+`web/NavigationBoundary.tsx` coordinates navigation with pending edits. Reader documents use the
+shared story runtime for SSR and hydration. Author scripts do not run in the app's origin.
+
+## Persistence and access
+
+`lib/db.ts` owns the app database adapter. PGLite queries are serialized because it has one connection;
+transactions must retain that serialization. Dataset PostgreSQL connections are a separate concern in
+`lib/datasets/postgres.ts`; the proxy and events services also own their database connections.
+
+Schema declarations generate additive DDL and deployment SQL. A table addition is incomplete without
+ownership checks and regenerated SQL. Treat startup migrations as concurrent and idempotent.
+
+Artifact access distinguishes owner, editor, commenter, viewer and anonymous link access. Sharing,
+visibility, and writable dataset access answer different questions. Defaults in `createArtifact` depend
+on both ownership and format: owned documents are private, owned assets are unlisted, and anonymous
+visibility follows the deployment's public-visibility setting. Always consult the current policy functions.
+
+`lib/object-store` hides local files and S3. The database is the index: missing or unreadable bytes raise
+`ObjectUnavailable`, never a successful empty result. Immutable keys enable caching; large files use
+streams/ranges so one download does not occupy the entire read cache.
+
+`lib/analytics.ts` currently dual-writes legacy analytics and the events log independently. `lib/feed.ts`
+can read the events log or fall back when its table is absent. Do not remove the legacy path just because
+one reader uses the new log: folders and other readers must migrate together. Daily visitor bucketing is
+UTC and deduplicates daily visitor fingerprints; raw IP addresses and user agents are not stored.
+
+Folders use `ancestor_ids` and app chrome (`web/pages/Folder.tsx`, page data `kind: 'folder'`), not stored
+listing markup. Child writes notify the parent channel so listings refresh. Trash uses `deleted_at` and
+`LIVE_ARTIFACT_SQL`; retention and purge belong to `lib/trash`.
+
+## Documents, edits and data
+
+`lib/story/document.ts` renders the same `StoryRuntimeApp` composition hydrated by the runtime entry.
+The shell must not render a second hidden copy of document markup. The document runtime owns editing,
+selection and geometry; the parent owns persistence. Node IDs identify source nodes across edits;
+AST paths are transient positions, not durable identities. An annotation is a relation to a node and
+must not rewrite document source merely to attach a comment.
+
+Edits must preserve optimistic version checks, rebasing, history and atomic batches. Generated DOM
+attributes must not become authored content. Author HTML, scripts and static JSX are separate paths
+with different validation rules; consult the scoped markup instructions before changing any of them.
+
+Reader rendering starts with declarations rather than waiting for SQL rows. `lib/story-runtime/store.ts`
+owns query state, cancellation, debounce and stale-result suppression. Reader URL values seed typed
+scalar choices through `lib/story/url-values.ts`; do not parse those parameters independently elsewhere.
+Mutations run as the document's permitted writer and retain dataset access and row-scope checks.
+
+## Builds and tests
+
+The runtime is a gitignored build input required by SSR. Vitest global setup builds it, so invoking a
+project directly does not rely on a developer's previous build. Build cost changes over time; do not
+encode historical timings as guarantees. `lib/dynamic.ts` preserves client-only mounting semantics so
+SSR and the first hydration pass agree while charts and editors remain lazy chunks.
+
+The CSS candidate list is generated from source text, including comments, in kit and selected embed
+files. Run `npm run generate-story-ui-classes` after editing those inputs. Font assets and manifests are
+created by the asset-copy script; restored dependency caches still need that step.
+
+Use deterministic fixture servers for third-party imports in merge gates. The Sheets fetch stub is
+scoped to Sheets requests and must not bypass the SSRF-guarded fetcher's DNS checks. Real provider
+availability is a separate canary concern. Browser gates use disposable servers, accounts and data.
+A retry is reported evidence of an intermittent failure, not proof that the original failure was harmless.
+
+Do not adopt remote document updates while local typing is uncommitted; an empty edit buffer is not
+proof that the document is clean. Reader URL choices seed island `values`, not precomputed `state`,
+so seeding the link does not suppress the initial query run.

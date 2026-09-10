@@ -1,7 +1,7 @@
 /**
  * The auth() → Viewer bridge, in its own module ON PURPOSE: the serving
  * routes need "who is looking" but lib/artifacts must stay importable
- * without dragging NextAuth into every test and client bundle that touches
+ * without dragging account authentication into every test and client bundle that touches
  * artifact SQL. This is the only non-route file that imports @/auth.
  */
 import { currentRequest } from './request-context';
@@ -91,7 +91,7 @@ async function proxyActor(request: Request | undefined): Promise<RequestActor | 
 /**
  * Who is asking, for a request that carries BROWSER credentials.
  *
- * Two envelopes, one answer. A NextAuth session is an ACCOUNT (userId, and
+ * Two envelopes, one answer. A account authentication session is an ACCOUNT (userId, and
  * account-wide reach). The agent-session cookie is a browser holding token ids
  * — an anonymous owner, whose reach is exactly what its token created. An
  * account wins when both are present: it is the wider, named identity, and it
@@ -181,13 +181,13 @@ export function roleFor(row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | '
  * How a browser is authenticated, for the top bar's session control. Three
  * outcomes, because there are three ways to hold (or not hold) a credential:
  *
- *  - 'account' — a NextAuth session. Offers "Sign out".
+ *  - 'account' — a account authentication session. Offers "Sign out".
  *  - 'anon'    — no account, but the agent-session cookie resolves to a live
  *                token (lib/agent-session). Offers "Disconnect this browser".
  *  - 'none'    — neither. Offers "Log in".
  *
  * A CLAIMED token held only in the cookie is 'anon', not 'account': there is
- * no NextAuth session to sign out of, and the thing to clear is the cookie.
+ * no account authentication session to sign out of, and the thing to clear is the cookie.
  * Fails to 'none' if resolution throws off-request (same as sessionActor).
  */
 export async function browserSessionKind(request?: Request, admitted?: RequestActor): Promise<'account' | 'anon' | 'none'> {

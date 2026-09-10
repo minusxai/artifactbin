@@ -1,8 +1,8 @@
 /**
  * The served document: a stored markup row → ONE complete standalone HTML
- * page. This is what /a/<id>/raw returns for markup — served TOP-LEVEL to a
- * reader (proxy.ts) and as the owner's sandboxed iframe src — and the response
- * headers on that route are the security policy; this module is the bytes.
+ * page. This is what /a/<id>/raw returns for standalone rendering and export.
+ * The app editor mounts the shared runtime inline. Route response headers own
+ * the security policy; this module produces the bytes.
  *
  * Assembly:
  *   <head>  charset · <title> (Helmet title ▸ stored title) · compiled Tailwind
@@ -14,8 +14,8 @@
  *           data island · the runtime <script type=module src> (crossorigin,
  *           so its lazy chunks resolve from an opaque origin) · the author's
  *           Helmet <script>, parked inert (AUTHOR_SCRIPT_TYPE) for the runtime
- *           to re-inject after hydration — or run inline when there is no
- *           runtime, since the document is already complete.
+ *           to pass into its separate sandboxed author frame after hydration.
+ *           Without a runtime, author script stays inert.
  *
  * Render trusts canonical stored source (validation happened at the door), with
  * two belts mirroring the interpreter's defense-in-depth stance: source that no
@@ -23,11 +23,10 @@
  * somehow carries `</script` is DROPPED — emitting it would let text escape the
  * script element, and mutating code silently is worse than omitting it.
  */
-import { libraryUrls } from '@/lib/libraries';
 import { prepareStoryParts } from './prepare-runtime.server';
 import { loadStorySsr } from './ssr.server';
 import type { WebAssetBox } from '@/lib/story/asset-url';
-import { AUTHOR_SCRIPT_TYPE, STORY_HELLO_MESSAGE, STORY_VALUES_HOOK, STORY_ISLAND_ID, STORY_PAINTED_MESSAGE, STORY_ROOT_ID, type StoryIslandData, type StoryIslandDataflow, type StorySsrBundle } from '@/lib/story-runtime/contract';
+import { AUTHOR_SCRIPT_TYPE, STORY_HELLO_MESSAGE, STORY_VALUES_HOOK, STORY_ISLAND_ID, STORY_PAINTED_MESSAGE, STORY_ROOT_ID, type StoryIslandData, type StoryIslandDataflow } from '@/lib/story-runtime/contract';
 import type { JsxNode } from '@/lib/jsx';
 import type { RefDataMap } from '@/lib/story/ref-data';
 import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
@@ -35,9 +34,7 @@ import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
 import { STORY_ROOT_ATTR } from '@/lib/story-surface';
 import { escapeHtml, renderReaderChrome, type ReaderForkedFrom, type ReaderReactions } from '@/lib/story/reader-chrome';
 import { getStoryFontCss, storyFontFaceCss, STORY_FONTS_ATTR } from '@/lib/data/story/story-fonts';
-import { documentFonts, documentFontCss } from './document-fonts';
-import { webFontAssets } from '@/lib/webfonts';
-import { resolveStoryMode } from '@/lib/data/story/story-themes';
+import { documentFontCss } from './document-fonts';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 
 export interface StoryDocumentInput {
@@ -194,18 +191,6 @@ export interface StoryDocumentInput {
 }
 
 /**
- * The SSR renderer is a PREBUILT esbuild bundle (scripts/build-story-runtime.mjs
- * → lib/story-runtime/dist/story-ssr.cjs), required dynamically so the Next
- * compiler never walks into it: route handlers compile under the react-server
- * condition, which forbids the client-React APIs the kit uses. The bundle
- * carries its own full React and speaks plain data across the boundary
- * (nodes + refData in, an HTML string out).
- */
-// createRequire is the one loader neither Turbopack nor Vitest intercepts —
-// the specifier resolves at runtime, from disk, on the server. (Sanctioned
-// dynamic import, like lib/db.ts's engine pick.)
-
-/**
  * Does this document need the runtime at all?
  *
  * Only components hydrate — tabs open, charts draw, a rail navigates. A
@@ -345,7 +330,7 @@ const styleTag = (attr: string, css: string): string =>
   `<style ${attr}>${css.replace(/<\/style/gi, '')}</style>`;
 
 export async function buildStoryDocument(input: StoryDocumentInput): Promise<string> {
-  const { source, compiledCss, theme, template = null, colorMode, refData, runtimeSrc, anchorSrc, commentSrc, live = null, chrome = true, social = null, help = null, signIn = null, fork = null } = input;
+  const { source, compiledCss, theme, runtimeSrc, anchorSrc, commentSrc, live = null, chrome = true, social = null, help = null, signIn = null, fork = null } = input;
   const dataflow = input.dataflow ?? null;
 
   /*
@@ -361,7 +346,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
    * reason: a reader watching an agent write must be adopting the document a
    * reload would give them.
    */
-  const { runtime: prepared, split, helmet, mode, title, glyphs, docFonts, importedFaces } = await prepareStoryParts(input);
+  const { runtime: prepared, split, helmet, mode, title, docFonts, importedFaces } = await prepareStoryParts(input);
   const bodyHtml = split ? loadStorySsr().renderStoryBody(prepared.data) : `<pre>${escapeHtml(source)}</pre>`;
 
   // Mode resolution lives HERE, for every reader: a theme is designed for

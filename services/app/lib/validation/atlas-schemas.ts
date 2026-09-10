@@ -282,7 +282,7 @@ export const VizSettings = Type.Object({
 export type VizSettings = Static<typeof VizSettings>;
 
 // ============================================================================
-// Viz V2 envelope (CLAUDE.md "Visualization")
+// Viz V2 envelope
 //
 // Only the MinusX envelope lives in TypeBox. Native Vega-Lite/Vega spec bodies are
 // deliberately opaque here (open records) — the grammar is not re-validated.

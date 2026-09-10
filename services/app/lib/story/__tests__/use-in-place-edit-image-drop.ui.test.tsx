@@ -7,7 +7,7 @@
  * its guards — a forged nonce or a message from another window must not be
  * able to make the page upload something.
  */
-import React, { useRef } from 'react';
+import { useRef } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { act, render } from '@testing-library/react';
 

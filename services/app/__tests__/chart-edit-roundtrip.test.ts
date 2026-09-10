@@ -36,7 +36,6 @@ import { useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
 
-const BASE = 'http://localhost:3000';
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 const BAR = { kind: 'vega-lite', spec: { mark: 'bar', encoding: { x: { field: 'region', type: 'nominal' }, y: { field: 'revenue', type: 'quantitative' } } } };

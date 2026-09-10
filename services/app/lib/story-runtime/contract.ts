@@ -13,7 +13,6 @@ import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 import type { RefDataMap } from '@/lib/story/ref-data';
 import type { Dataflow, DataflowState, Row, Scalar } from '@/lib/story/dataflow';
 import type { LocalMutationResult } from '@/lib/story/local-state';
-import type { ScrollAnchor } from '@/lib/story/scroll-anchor';
 import type { ManagedAssetsConfig, ManagedAssetKind } from './managed-assets';
 
 /** The document's data as the island carries it: what is declared, and its state at render. */
@@ -226,23 +225,6 @@ export const STORY_DOCUMENT_ACK_MESSAGE = 'mx:document-ack';
  * edit that has already been made.
  */
 export const STORY_ADOPTS_MESSAGE = 'mx:adopts';
-
-/**
- * WHERE THE READER IS, so it survives the trip between the document's two
- * renderings (lib/story/scroll-anchor).
- *
- * The document PUSHES this as it scrolls rather than answering a request:
- * pressing edit unmounts the frame in the same commit that flips the mode, so
- * an ask has nothing left to answer it, and awaiting one would tax exactly the
- * transition this exists to make feel instant. The page simply always holds a
- * current position.
- *
- * The other direction is a request, because it can be: the page tells a freshly
- * painted document where to sit and waits for the ack before revealing it —
- * otherwise the reader watches it jump.
- */
-export const STORY_ANCHOR_MESSAGE = 'mx:anchor';
-export const STORY_ANCHOR_APPLY_MESSAGE = 'mx:anchor-apply';
 
 /**
  * The runtime's private hook for adopting a new version of this document,

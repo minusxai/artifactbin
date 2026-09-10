@@ -177,24 +177,6 @@ export function writeUrlValues(search: string, flow: Dataflow, values: Record<st
   return query ? `?${query}` : '';
 }
 
-/**
- * Just the `$` params of a search string, in a canonical order — the SELECTION
- * as an opaque token, for a caller with no flow in hand.
- *
- * ONE caller is left: the owner's page seeding the frame it is about to load
- * (components/ArtifactSurface). Junk is harmless there — the raw route parses
- * it against the flow and ignores what the document does not declare, and
- * nothing is stored. A caller that KEYS anything on the selection must use
- * `urlSelection` below instead; see its header for what that difference cost.
- */
-export function urlValuesSearch(search: string): string {
-  return pairsOf(search)
-    .filter((p) => p.ours)
-    .map((p) => p.raw)
-    .sort()
-    .join('&');
-}
-
 /** A link's selection, as the two different things a caller needs it to be. */
 export interface UrlSelection {
   /**

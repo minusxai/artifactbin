@@ -1,4 +1,3 @@
-import React from 'react';
 import {expect, it, vi, beforeEach} from 'vitest';
 import {render, fireEvent, screen, waitFor} from '@testing-library/react';
 import {Dialog, DialogTrigger, DialogContent, DialogClose, ArtifactDialogScope} from '@/components/kit/dialog';

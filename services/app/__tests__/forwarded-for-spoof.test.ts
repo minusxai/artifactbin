@@ -21,7 +21,6 @@ import { request, useAppHarness } from '@/__tests__/harness';
 useAppHarness();
 
 
-const BASE = 'http://localhost:3000';
 
 /** A request whose forwarded chain the CALLER wrote the head of. */
 const forwardedRequest = (path: string, forwardedFor: string) =>

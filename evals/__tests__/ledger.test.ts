@@ -21,7 +21,7 @@ describe('parseLedger', () => {
 });
 
 describe('ledgerMetrics', () => {
-  const entries = parseLedger(text).map((e, i) => (e.status === 400 ? { ...e, error: 'invalid_jsx' } : e));
+  const entries = parseLedger(text).map((e, _i) => (e.status === 400 ? { ...e, error: 'invalid_jsx' } : e));
 
   it('counts calls, write attempts, 4xx, and names the first error code', () => {
     const m = ledgerMetrics(entries);

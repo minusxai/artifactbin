@@ -12,7 +12,6 @@ import { useAppHarness, request } from '@/__tests__/harness';
 
 const harness = useAppHarness();
 
-const BASE = 'http://localhost:3000';
 
 async function anonMint(ip = '10.0.0.1'): Promise<{ id: string; token: string }> {
   const res = await anonymousMintRoute(request('/api/tokens/anonymous', { method: 'POST', headers: { ...(ip ? { 'x-forwarded-for': ip } : {}) } }));

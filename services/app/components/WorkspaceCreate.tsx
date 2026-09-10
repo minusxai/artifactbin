@@ -1,5 +1,7 @@
 'use client';
 
+import { useDialogKeyboard } from './use-dialog-keyboard';
+
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Database, FilePlus2, FolderPlus, Plus, Trash2, X } from 'lucide-react';
@@ -24,30 +26,7 @@ function CreateDialog({
   const [error, setError] = useState('');
   const panel = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-      if (event.key !== 'Tab' || !panel.current) return;
-      const stops = [...panel.current.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled])')];
-      if (stops.length === 0) return;
-      const first = stops[0];
-      const last = stops[stops.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [onClose]);
+  useDialogKeyboard(panel, onClose, 'button:not([disabled]), input:not([disabled])');
 
   const createFolder = async (event: React.FormEvent) => {
     event.preventDefault();

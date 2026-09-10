@@ -16,7 +16,7 @@
  * actionable 400s naming the URL — an agent can fix "404" and cannot fix
  * silence.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { withHttpServer, type RunningServer } from '@/__tests__/net';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
@@ -29,7 +29,6 @@ import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { assetUrlFor } from '@/lib/story/asset-url';
 import { getDb } from '@/lib/db';
 
-const BASE = 'http://localhost:3000';
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 9, 9, 9]);
 const JPG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
 const CSV = 'region,units\nnorth,42\nsouth,17\n';

@@ -228,7 +228,7 @@ describe('the preview table', () => {
   });
 
   it('still shows the summary when the preview cannot be fetched', async () => {
-    vi.stubGlobal('fetch', (async (url: string, init: RequestInit) => {
+    vi.stubGlobal('fetch', (async (url: string, _init: RequestInit) => {
       if (String(url).includes('/api/tokens/anonymous')) return new Response(JSON.stringify({ token: 'mx_t' }), { status: 201 });
       if (String(url).includes('/raw')) return new Response('nope', { status: 500 });
       return new Response(JSON.stringify(reply.body), { status: 201 });

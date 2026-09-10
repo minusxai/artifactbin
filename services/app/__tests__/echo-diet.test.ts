@@ -24,7 +24,6 @@ useAppHarness();
 
 
 
-const BASE = 'http://localhost:3000';
 const SECRET = 'test-secret';
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 

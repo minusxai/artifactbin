@@ -18,7 +18,6 @@ import { POST as mintTokenRoute } from '@/app/api/tokens/route';
 import { MAX_LIVE_CHANNELS, liveChannelCount, resetLiveSubscriptions, subscribeToArtifact } from '@/lib/story/live';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 
-const BASE = 'http://localhost:3000';
 const SECRET = 'test-secret';
 useAppHarness();
 

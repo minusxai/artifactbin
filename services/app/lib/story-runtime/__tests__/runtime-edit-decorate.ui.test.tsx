@@ -12,7 +12,6 @@
  * resolution reads, so the two currently commute. This pins the outcome, which
  * is the thing that must hold either way.)
  */
-import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from '@testing-library/react';
 import { parseJsx, type JsxNode } from '@/lib/jsx';

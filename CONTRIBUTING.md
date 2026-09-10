@@ -1,13 +1,13 @@
 # Contributing
 
-Read `CLAUDE.md` first — it is the project's design record, and every rule in it was learned by breaking it.
+Read [AGENTS.md](AGENTS.md) first for working rules and links to subsystem design notes.
 
 - **Test-driven, in that order**: contracts and types first, a failing test second, the implementation third, then
   the full suite. A test that was never red is decoration.
-- `npm run validate` type-checks; `npm test` runs the API suite against in-memory PGLite; `npm run test:gates`
+- `npm run validate` type-checks; `npm test` runs the API, Node, UI and CLI suites; `npm run test:gates`
   drives the browser gates against a running dev server (`npm run dev`).
 - Keep modules deep: a feature's complexity lives in one `lib/` module with a narrow interface; route handlers
-  only translate results into HTTP. No `process.env` outside `lib/config.ts`; no inline imports.
+  only translate results into HTTP. Use the owning service’s config module; preserve documented lazy browser imports.
 - Open pull requests against `main`. Small, focused PRs land fastest.
 
 ## The dev flow

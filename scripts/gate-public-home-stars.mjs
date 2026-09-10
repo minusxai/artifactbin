@@ -1,19 +1,10 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { startDocument } from './lib/start-doc.mjs';
+import { githubWidgetFixture } from './lib/github-widget-fixture.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:12001';
 const browser = await chromium.launch({ headless: true });
-// Keep the production SVG/hydration path; only replace first-party metadata.
-async function fixture(context) {
-  await context.route('**/api/external/github', route => route.fulfill({
-    headers: { 'cache-control': 'public, max-age=60' },
-    contentType: 'application/json', body: '{"stars":1234}',
-  }));
-  await context.route('https://buttons.github.io/**', () => { throw new Error('unexpected vendor script request'); });
-  await context.route('https://api.github.com/**', () => { throw new Error('browser must use the first-party GitHub endpoint'); });
-  await context.route('https://github.com/minusxai/artifactbin', route => route.fulfill({ contentType: 'text/html', body: '<h1>Repository destination</h1>' }));
-}
 async function readyStar(star) {
   await star.locator('[data-mx-github-count]').filter({ hasText: '1,234' }).waitFor();
   assert(await star.locator('a svg').isVisible());
@@ -24,7 +15,7 @@ async function readyStar(star) {
 
 try {
   const noJs = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1280, height: 800 } });
-  await fixture(noJs);
+  await githubWidgetFixture(noJs);
   const plain = await noJs.newPage();
   await plain.goto(base, { waitUntil: 'domcontentloaded' });
   await plain.locator('h1').waitFor();
@@ -37,7 +28,7 @@ try {
   console.log('ok public heading and shared topbar without JavaScript');
 
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, colorScheme: null });
-  await fixture(context);
+  await githubWidgetFixture(context);
   const page = await context.newPage();
   let releaseScripts;
   const scripts = new Promise(resolve => { releaseScripts = resolve; });
@@ -151,7 +142,7 @@ try {
   // A gesture attempted during startup must wait for the working React control,
   // never succeed against the inert server copy and silently disappear.
   const early = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
-  await fixture(early);
+  await githubWidgetFixture(early);
   const earlyPage = await early.newPage();
   let releaseEarly;
   const earlyScripts = new Promise(resolve => { releaseEarly = resolve; });
@@ -168,7 +159,7 @@ try {
   console.log('ok early Create gesture waits for the interactive control and creates a document');
   // A blocked metadata endpoint must not hide or replace the repository link.
   const blocked = await browser.newContext();
-  await fixture(blocked);
+  await githubWidgetFixture(blocked);
   await blocked.route('**/api/external/github', route => route.abort());
   const failurePage = await blocked.newPage();
   const countFailed = failurePage.waitForEvent('requestfailed', request => request.url().endsWith('/api/external/github'));

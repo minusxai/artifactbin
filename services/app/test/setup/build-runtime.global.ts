@@ -2,9 +2,8 @@
  * The suite builds the story runtime before it runs — ONCE, for the whole
  * vitest process, whatever invoked it.
  *
- * The document is SERVED, not re-rendered in the app (lib/story/document.ts):
- * SSR loads a prebuilt CJS bundle through `createRequire`, deliberately
- * outside the Next graph. That bundle is a build artifact and is gitignored,
+ * Standalone document rendering (lib/story/document.ts) loads a prebuilt CJS
+ * bundle through `createRequire`, outside the web bundle. That bundle is a build artifact and is gitignored,
  * so a fresh checkout does not have one — and a suite that assumes it exists
  * fails with `Cannot find module .../story-ssr.cjs` on every document test.
  *

@@ -155,7 +155,7 @@ describe('secret redaction', () => {
 
   it('redacts from stderr too — a crash dump is where an environment usually lands', async () => {
     const script = 'console.error("FATAL: env FIREWORKS_API_KEY=fw-abc-987 rejected")';
-    const r = await runInvocation({ ...node(script), redact: ['fw-abc-987'] }, { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
+    await runInvocation({ ...node(script), redact: ['fw-abc-987'] }, { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
     expect(fs.readFileSync(paths().stderrPath, 'utf8')).not.toContain('fw-abc-987');
   });
 

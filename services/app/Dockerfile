@@ -54,6 +54,7 @@ RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --omit=dev --legacy-p
     && test ! -e node_modules/tailwindcss \
     && test ! -e node_modules/lightningcss \
     && test ! -e node_modules/vite \
+    && test ! -e node_modules/monaco-editor \
     && test -d node_modules/react \
     && test -d node_modules/@artifactbin/utils
 

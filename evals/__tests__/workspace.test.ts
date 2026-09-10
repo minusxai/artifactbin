@@ -5,7 +5,7 @@
  * and a harness that looks for a project root walks up until it finds one. Given
  * a cwd in `evals/.metrics/…`, OpenCode took the REPO as its workspace: it never
  * saw the CSV staged for it ("sales.csv isn't in the working directory") and had
- * the product's own source, and CLAUDE.md, in reach. The workspace is therefore
+ * the product's own source, and repository instructions, in reach. The workspace is therefore
  * a temp directory, and only the record of the run stays in the repo.
  */
 import { describe, it, expect, afterEach } from 'vitest';

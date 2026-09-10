@@ -16,7 +16,6 @@ import { getArtifactById } from '@/lib/artifacts';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser } from '@/lib/users';
 
-const BASE = 'http://localhost:3000';
 useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 

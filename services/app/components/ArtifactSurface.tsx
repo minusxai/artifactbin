@@ -94,7 +94,7 @@ export interface ArtifactSurfaceProps {
    * document's, and is deliberately left behind.
    */
   search?: string;
-  /** An ACCOUNT session (NextAuth) holds this browser — the bar offers Sign out. */
+  /** An ACCOUNT session (account authentication) holds this browser — the bar offers Sign out. */
   accountSession?: boolean;
   /** An ANONYMOUS session (agent cookie, no account) — the bar offers Disconnect. */
   anonSession?: boolean;
@@ -163,23 +163,7 @@ function NewFolderPrompt({ parentId, onClose }: { parentId: string; onClose: () 
   );
 }
 
-/**
- * How long a revealed frame has to answer `mx:hello` before we call it dead.
- * Generous on purpose: the cost of waiting is a moment of a page that is
- * probably fine, and the cost of being wrong is throwing away a live document.
- */
-const FRAME_LIVENESS_GRACE_MS = 1500;
 
-/**
- * How long a document has to say it adopted a new version before we conclude
- * it cannot, and replace the frame instead. Generous: the cost of waiting is a
- * moment of a document one edit behind, and the cost of being early is the
- * reload this path exists to avoid.
- */
-/** How long a freshly painted document has to load its runtime and say so. */
-const ANNOUNCE_GRACE_MS = 2500;
-const DOCUMENT_ASK_INTERVAL_MS = 300;
-const DOCUMENT_ASKS = 10;   // ~3s before concluding this document cannot adopt
 
 /**
  * What a document's own page is standing on while its frame loads. Neutral by
@@ -191,9 +175,6 @@ const DOCUMENT_GROUND = { light: '#ffffff', dark: '#0b0b0c' } as const;
 
 const CONTROL_ROW = 'flex w-full cursor-pointer items-center gap-2 rounded-[5px] border-0 bg-transparent px-2 py-2 text-left font-mono text-xs text-muted transition-colors hover:bg-raised hover:text-fg';
 
-/** The frame's own url with the reader's `$` selection on the end (or unchanged). */
-const appendSelection = (query: string, selection: string): string =>
-  (selection ? `${query}${query ? '&' : '?'}${selection}` : query);
 
 const safeRows = (content: string): Array<Record<string, unknown>> => {
   try {
@@ -232,7 +213,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const route = useLocation();
   const navigate = useNavigate();
   const [copiedRef, setCopiedRef] = useState(false);
-  const { id, editId, format, title, source, content, columns, bytes: fileBytes = 0, pages: filePages = null, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', accountSession = false, anonSession = false, version, captureKey = null, openAnnotations = 0, like = { liked: false, count: 0 }, follow = null } = props;
+  const { id, editId, format, title, source, content, columns, bytes: fileBytes = 0, pages: filePages = null, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', accountSession = false, anonSession = false, version, openAnnotations = 0, like = { liked: false, count: 0 }, follow = null } = props;
   const [editing, setEditing] = useState(false);
   /** A view-mode text selection asks edit mode to open on its containing node. */
   const [initialEditSelectionPath, setInitialEditSelectionPath] = useState<string | null>(null);
@@ -242,9 +223,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * the hash is precisely the mistake this replaced.
    */
   const [railOpen, setRailOpen] = useState(false);
-  /** The frame's scrollbar width, reported with its scroll samples, so the
-   * editor toolbar can end where the document's own bar ends. */
-  const [frameGutter, setFrameGutter] = useState(0);
   /** `?intent=fork` asked for a copy; the dialog asks the person (lib/intent). */
   const [forkAsked, setForkAsked] = useState(false);
   const forkAction = useForkArtifact(id);
@@ -473,20 +451,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     if (next !== window.location.search) void navigate(window.location.pathname + next + window.location.hash, {replace:true, state:route.state});
   }), [sessionNonce, dataflow, live, navigate, route.state]);
 
-  /*
-   * The signed export key is the EXPORTER's fingerprint: it is the only caller
-   * that loads this page with `?key=` (lib/export-key.ts), and it screenshots
-   * the document frame — so that frame comes without its own navigation
-   * chrome, and must carry the key onward.
-   *
-   * It arrives as a PROP, from the server that already parsed the query. Read
-   * from `window` instead, it was necessarily null during SSR, so the frame's
-   * src was rendered unkeyed and the browser began loading THAT — one request,
-   * made before hydration could correct it. For a private document that
-   * request is a 404, and the export then photographed a transparent frame
-   * over the page's ground: a blank card that looked like a successful shot.
-   */
-  const captureRender = !!captureKey;
 
   // `#edit` is the only URL state: readable on load (dashboard deep-links), and
   // kept in sync without a navigation so the shared link never changes. This
@@ -886,8 +850,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             // Under the document's bar (44px on desktop; a phone draws no bar
             // and gets a sheet anyway), and under the editor toolbar too.
             topOffset={(phone ? 0 : APP_BAR_H) + (editing ? EDIT_BAR_H : 0)}
-            // Short of the frame's own scrollbar, which stays at the window's edge.
-            rightInset={frameGutter}
             onAnnotationsChange={setLayerAnnotations}
           />
         )}
@@ -902,12 +864,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             sessionNonce={sessionNonce}
             initialSelectionPath={initialEditSelectionPath}
             onComment={canEdit ? commentOnSelection : undefined}
-            onToggleComments={canAnnotate ? () => setRailOpen((open) => !open) : undefined}
-            commentsOpen={railOpen}
-            commentCount={openAnnotationCount}
-            // The rail sits UNDER the toolbar, so the toolbar keeps the width
-            // the document's own bar has: short of the frame's scrollbar only.
-            rightInset={frameGutter}
           />
         )}
         {forkAction.refusal && <div className="fixed right-3 top-14 z-50 w-72"><ForkRefusal lines={forkAction.refusal} onDismiss={forkAction.dismiss} /></div>}

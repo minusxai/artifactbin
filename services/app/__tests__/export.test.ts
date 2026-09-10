@@ -15,16 +15,14 @@ import { GET as serveRaw } from '@/app/a/[id]/raw/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as docsRoute } from '@/app/docs/[[...path]]/route';
 import { createAppServer } from '@/server/app';
-const getDoc = (r: Request) => docsRoute(r, { params: Promise.resolve({ path: 'artifactbin/references/publishing-versions.md' }) });
 import { POST as mintTokenRoute } from '@/app/api/tokens/route';
 import { EXPORT_RENDER_GENERATION, exportStoreKey, parseExportCapture, parseExportFormat, parseExportSlide, resetExportRenderer } from '@/lib/export';
 import { objectStore } from '@/lib/object-store';
 import { setServices } from '@/lib/services';
-import { DEFAULT_SOCIAL_PREVIEW_CROP } from '@/lib/story/social-preview';
 import { CARD_HEIGHT, CARD_WIDTH } from '@/lib/export-card';
 import { mintExportKey } from '@/lib/export-key';
+const getDoc = (r: Request) => docsRoute(r, { params: Promise.resolve({ path: 'artifactbin/references/publishing-versions.md' }) });
 
-const BASE = 'http://localhost:3000';
 const SECRET = 'test-secret';
 const EXPORT_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x45, 0x58, 0x50, 0x4f, 0x52, 0x54]);
 useAppHarness();

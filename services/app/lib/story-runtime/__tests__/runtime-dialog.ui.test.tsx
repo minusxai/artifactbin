@@ -1,4 +1,3 @@
-import React from 'react';
 import {expect, it, vi, beforeEach} from 'vitest';
 import {render, fireEvent, waitFor} from '@testing-library/react';
 import {parseJsx} from '@/lib/jsx';

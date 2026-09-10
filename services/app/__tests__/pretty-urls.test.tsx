@@ -21,7 +21,6 @@ import { mintExportKey } from '@/lib/export-key';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/users';
 
-const BASE = 'http://localhost:3000';
 const harness = useAppHarness();
 
 const sessionUser = { id: '', email: '' };
@@ -31,10 +30,6 @@ vi.mock('@/auth', () => ({
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
-const shortPageProps = (id: string, key?: string) => ({
-  params: Promise.resolve({ id }),
-  searchParams: Promise.resolve(key ? { key } : {}),
-});
 /**
  * The pretty URL's RESOLUTION is now an endpoint (/api/page/profile): the same
  * three outcomes the page used to express as Next control flow — render the

@@ -8,13 +8,9 @@
  * read and keep, so the browser holds a SIGNED COOKIE NAMING the token ids;
  * the secret itself never returns to the page after the exchange.
  *
- * Deliberately NOT a second NextAuth provider. A provider's session lands in
- * `session.user.id`, and every existing `auth()` guard is `if
- * (!session?.user?.id) return 401` — an anonymous session would start passing
- * them, and `POST /api/tokens/claim` would then write a TOKEN id into
- * `tokens.user_id`. A separate cookie is invisible to those guards by
- * construction: they fail closed, unchanged. (Same signing primitive, same
- * AUTH_SECRET — only the envelope differs.)
+ * Anonymous token ownership uses a separate signed cookie, not an account
+ * session. Account-only guards must never accept a token id as a user id.
+ * The cookie is signed with the configured AUTH__SECRET.
  *
  * The payload is a LIST, oldest first, because the browser genuinely holds
  * more than one: a person who published anonymously twice must be able to
@@ -39,24 +35,22 @@ import { getDb } from '@/lib/db';
  * http, so the name has to follow the SCHEME, not the environment.
  *
  * It used to follow `NODE_ENV`, while the proxy that SETS this cookie followed
- * the base URL's scheme (packages/proxy/src/agent-cookie `cookieName`). Over
+ * the base URL's scheme (services/proxy/src/agent-cookie `cookieName`). Over
  * https they agree; over HTTP IN PRODUCTION — the self-host default this
  * project ships, `http://localhost:3030` — the proxy wrote `mx-agent-session`
  * and the app read `__Host-mx-agent-session`, so the browser held a session
  * neither side could see. It cost the whole claim flow, silently: a person
  * published anonymously, signed up, and was never offered their drafts.
  *
- * Deliberately a NEW cookie rather than a rename of NextAuth's: renaming that
- * one signs out every existing user on deploy.
+ * Keep this separate from the account session cookie so the two kinds of
+ * authentication retain distinct lifecycles.
  */
 const SECURE_COOKIE = PUBLIC_BASE_URL.startsWith('https://');
 export const AGENT_COOKIE = SECURE_COOKIE ? '__Host-mx-agent-session' : 'mx-agent-session';
 
-/** Same 30 days as the NextAuth session — the two expire together. */
+/** Anonymous browser session lifetime: 30 days. */
 export const AGENT_COOKIE_MAX_AGE = 30 * 24 * 60 * 60;
 
-/** The cookie's own salt (auth.js binds a JWE to the cookie name it lives in). */
-const SALT = AGENT_COOKIE;
 
 /** What the cookie carries: the token ids this browser holds, oldest first. */
 export interface AgentSession {

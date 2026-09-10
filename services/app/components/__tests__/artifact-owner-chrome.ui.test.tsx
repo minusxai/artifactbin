@@ -40,10 +40,9 @@ vi.mock('@/components/AnnotationLayer', () => ({
   default: (props: Record<string, unknown>) => { layerProps.push(props); return null; },
 }));
 vi.mock('@/components/ArtifactEditor', () => ({
-  default: (props: { onExit: () => void; onToggleComments?: () => void }) => (
+  default: (props: { onExit: () => void }) => (
     <header aria-label="Editor toolbar">
       <input aria-label="Title" />
-      {props.onToggleComments && <button aria-label="Toggle comments" onClick={props.onToggleComments}><span className="lucide-message-square" /></button>}
       <button aria-label="Exit edit mode" className="text-accent" onClick={props.onExit}><span className="lucide-check" />done</button>
     </header>
   ),
@@ -169,8 +168,11 @@ describe('the surface header buttons are owner chrome', () => {
     fireEvent.click(screen.getByLabelText('Edit artifact'));
 
     // The whole point: commenting is a layer, so it survives entering a mode.
-    await waitFor(() => expect(screen.getByLabelText('Toggle comments')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText('Exit edit mode')).toBeInTheDocument());
     expect(screen.queryByLabelText('Edit artifact')).not.toBeInTheDocument();
+    openDocumentControls();
+    fireEvent.click(screen.getByLabelText('Toggle comments'));
+    expect(layerProps.at(-1)).toMatchObject({ railOpen: true, topOffset: 92 });
     expect(screen.getByLabelText('Exit edit mode')).toHaveClass('text-accent');
     expect(screen.getByLabelText('Exit edit mode').querySelector('.lucide-check')).toBeTruthy();
     expect(screen.getByLabelText('Exit edit mode')).toHaveTextContent('done');
@@ -346,9 +348,10 @@ describe('the view-mode selection bubble is granted, and re-checked, by the page
     fireEvent.click(screen.getByLabelText('Edit artifact'));
     await waitFor(() => expect(screen.getByLabelText('Exit edit mode')).toBeInTheDocument());
     expect(viewport).toHaveStyle({paddingTop: '92px', paddingRight: '320px'});
-    expect(layerProps.at(-1)).toMatchObject({ railOpen: true, topOffset: 92, rightInset: 0 });
+    expect(layerProps.at(-1)).toMatchObject({ railOpen: true, topOffset: 92 });
 
-    fireEvent.click(within(screen.getByLabelText('Editor toolbar')).getByLabelText('Toggle comments'));
+    openDocumentControls();
+    fireEvent.click(screen.getByLabelText('Toggle comments'));
     expect(viewport).toHaveStyle({paddingTop: '92px', paddingRight: '0px'});
     expect(currentRuntime()).toBe(win);
   });
@@ -575,7 +578,7 @@ describe('the fork row', () => {
   it('forks ONCE however fast it is pressed — a double click is not two copies', async () => {
     const fetchMock = forkResponse(201, { id: 'copy01', url: 'http://localhost:3000/@me/copy01-doc' });
     vi.stubGlobal('fetch', fetchMock);
-    await withLocation(async (assign) => {
+    await withLocation(async (_assign) => {
       render(
         <ArtifactShell role="owner">
           <ArtifactSurface {...surfaceProps({})} />
