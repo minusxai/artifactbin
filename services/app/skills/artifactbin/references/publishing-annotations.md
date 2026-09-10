@@ -58,6 +58,32 @@ read `snippet` for what it covers. An
 `"orphaned": true` annotation's node is not in the current version — the
 snippet still says what it pointed at.
 
+## Comments on dynamic content
+
+A comment on a DataTable cell, a repeated For instance, or an Iframe internal
+element keeps the persistent owner in `anchor.nodeId`. The more specific target
+lives in `range`:
+
+```json
+{
+  "v": 1,
+  "kind": "target",
+  "target": { "kind": "table", "rowKey": "order-101", "columnKey": "customer" }
+}
+```
+
+Here the owner is the DataTable node, independently of the row and column keys.
+Iframe targets carry a source ID, hierarchical `data-comment-key` path, or a
+session-only handle. For targets carry typed item keys and a template source ID.
+An optional nested `range` contains the selected text or area inside that target.
+
+Preserve both the owner ID and the item's semantic key when fixing feedback.
+Sorting must not change identity. A missing runtime target falls back to its owner;
+it does not make `orphaned` true while that owner survives. The stored refinement
+remains available for reconnection. Dynamic text is not reliably discoverable by
+searching static source, so `quote_found` may be null pending runtime resolution.
+See [iframe comments](markup-iframe.md) for script-created element identity.
+
 ## Reply, resolve, reopen
 
 A comment body is plain TEXT on the wire, and your user reads it through a

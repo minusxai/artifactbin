@@ -9,8 +9,8 @@ ordinary interactions. Use `<Iframe>` only for an isolated widget that requires
 its own DOM scripts or canvas/library APIs, such as Three.js, a game or a simulation.
 Keep headings, prose, controls and charts outside the frame when the kit supports
 them; unrestricted HTML/CSS/JS alone is not a reason to frame the entire document.
-The child has its own styles and DOM, so parent theme styling, block selection
-and inline editing do not reach its internal elements.
+The child has its own styles and DOM. Parent theme styling and inline editing
+do not reach its internal elements; commenting uses the managed selection bridge.
 Write its HTML, CSS and scripts directly as static JSX children; the platform
 packages them into an opaque sandboxed `srcdoc` child inside a protective
 wrapper. Its script can use **its own DOM/canvas**, never the parent artifact,
@@ -28,7 +28,7 @@ from author code. A local canvas with no external assets needs no CDN.
 
 ## Contents
 
-Counter and canvas · Libraries and assets · State and compatibility.
+Counter and canvas · Libraries and assets · Comments and dynamic elements · State and compatibility.
 
 ## Counter and canvas
 
@@ -92,6 +92,41 @@ another application origin. Unsupported/unrewritten requests are blocked.
 The inner sandbox and protective wrapper restrict navigation; do not remove the wrapper
 or weaken its policies to make a library load. WebRTC peer-connection constructors
 are disabled before author code and cannot be restored by it.
+
+## Comments and dynamic elements
+
+The platform supplies comment selection and highlighting inside managed frames.
+Authors do not install a second comment UI or message listener. The parent sends
+Select mode and active comment state; the child captures blocks, words and areas,
+paints highlights, and reports geometry. The comment composer stays in the app.
+This bridge grants no new data-write or account permissions.
+
+Static JSX elements already receive persistent source IDs. Preserve those IDs
+when editing source. For elements your script creates or rebuilds, provide stable
+`data-comment-key` values:
+
+```js
+const row = document.createElement('article');
+row.dataset.commentKey = 'order:' + order.order_id;
+const customer = document.createElement('p');
+customer.dataset.commentKey = 'customer';
+customer.textContent = order.customer;
+row.append(customer);
+```
+
+The target is the key path `order:123 → customer`, scoped to this Iframe's source
+ID. Rebuilding with the same key path reconnects comments. Keys must identify
+logical items, not row positions, current text or random values. Do not reuse a
+removed item's key for an unrelated item. Duplicate paths are ambiguous and must
+not highlight an arbitrary match.
+
+Unkeyed script-created elements can still be selected, but their automatic handles
+last only for that iframe session. Replacement/reload cannot reliably reconnect
+them. Comments always retain the Iframe's source ID as a fallback when an internal
+target disappears. The exact target is retained so a keyed element can reconnect
+when it returns. A text quote or area is a refinement, not a substitute for stable
+identity. Canvas pixels and closed shadow-root internals need an explicit author
+adapter to expose semantic nodes; otherwise select the containing element or area.
 
 ## State and compatibility
 
