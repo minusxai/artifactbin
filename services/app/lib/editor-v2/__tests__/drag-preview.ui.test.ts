@@ -38,7 +38,7 @@ it("shows a text-only shadow preview and the actual insertion edge before commit
   ).toContain("Move me");
   expect(
     document.querySelector("[data-mx-drag-preview]")?.textContent,
-  ).toContain("Drop after");
+  ).toBe("Move me");
   expect(
     document.querySelector<HTMLElement>("[data-mx-drop-marker]")!.style.top,
   ).toBe("140px");
@@ -49,7 +49,7 @@ it("shows a text-only shadow preview and the actual insertion edge before commit
   expect(preview.update(30, 20)).toBe("0.0");
   expect(
     document.querySelector("[data-mx-drag-preview]")?.textContent,
-  ).toContain("Drop before");
+  ).toBe("Destination");
 });
 it("rejects self and other parents, and resolves nested hits to the sibling container", () => {
   const { source } = fixture();
@@ -58,7 +58,7 @@ it("rejects self and other parents, and resolves nested hits to the sibling cont
     expect(preview.update(30, 110)).toBeUndefined();
     expect(
       document.querySelector("[data-mx-drag-preview]")?.textContent,
-    ).toContain("Can’t drop here");
+    ).toBe("Move me");
     expect(
       document.querySelector<HTMLElement>("[data-mx-drop-marker]")!.style
         .display,

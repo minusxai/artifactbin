@@ -10,7 +10,6 @@ export function createDragPreview(doc: Document): DragPreview {
   const ghost = doc.createElement("div");
   ghost.setAttribute("data-mx-drag-preview", "");
   ghost.setAttribute("aria-hidden", "true");
-  const caption = doc.createElement("div");
   const summary = doc.createElement("div");
   Object.assign(ghost.style, {
     position: "fixed",
@@ -27,17 +26,12 @@ export function createDragPreview(doc: Document): DragPreview {
     boxShadow: "0 12px 32px rgba(15,23,42,.18)",
     font: "13px/1.5 system-ui",
   });
-  Object.assign(caption.style, {
-    fontSize: "11px",
-    fontWeight: "600",
-    marginBottom: "4px",
-  });
   Object.assign(summary.style, {
     maxHeight: "58px",
     overflow: "hidden",
     overflowWrap: "anywhere",
   });
-  ghost.append(caption, summary);
+  ghost.append(summary);
   const marker = doc.createElement("div");
   marker.setAttribute("data-mx-drop-marker", "");
   Object.assign(marker.style, {
@@ -97,12 +91,6 @@ export function createDragPreview(doc: Document): DragPreview {
       const after =
         valid &&
         Number(path!.split(".").at(-1)) > Number(sourcePath.split(".").at(-1));
-      caption.textContent = valid
-        ? after
-          ? "Drop after"
-          : "Drop before"
-        : "Can’t drop here";
-      caption.style.color = valid ? "#15803d" : "#b91c1c";
       ghost.style.borderColor = valid
         ? "rgba(22,163,74,.4)"
         : "rgba(220,38,38,.4)";
