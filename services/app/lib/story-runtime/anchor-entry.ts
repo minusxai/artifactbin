@@ -46,12 +46,10 @@ import { wireOutline } from './outline-nav';
  * (lib/story-runtime/reader-chrome-actions), wired once from here because this
  * entry is what every served document loads, prose or not.
  *
- * FRAMED, none of that applies — the visible chrome belongs to the trusted
- * parent, which hides this document's own by CSS. What the frame owes the
- * parent instead is the two things the parent cannot measure or decide for
- * itself: where the reader has scrolled to (the page cannot read an opaque
- * frame's offsets, so the sample carries the end-of-document answer, not the
- * ingredients) and, in the other direction, the appearance the parent chose.
+ * FRAMED, the document still wires its chrome and relays actions to the
+ * trusted parent. It also sends scroll samples (including the end-of-document
+ * answer, since the parent cannot read opaque-frame offsets) and receives the
+ * parent's appearance choice.
  */
 if (typeof window !== 'undefined') {
   const framed = window.parent !== window;

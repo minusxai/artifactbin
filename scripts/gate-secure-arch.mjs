@@ -2,19 +2,19 @@
  * Gate: security architecture v2 — the browser/HTTP seams that no in-process
  * test can answer (see ~/projects/secure-arch-v2.md).
  *
- *   1. READER: /a/<id> answers a viewer with no session with the DOCUMENT
- *      ITSELF — top-level, no iframe, same URL — under the sandbox CSP; inside
- *      it the origin is opaque (no cookie, no storage, no fetch, no service
- *      worker) and the history prelude holds (replaceState cannot spoof the
- *      URL bar). A signed-in NON-owner gets the same document, no redirect.
- *   2. OWNER: the app page (page controls + `iframe[title="artifact"]`), and edit
- *      mode still mounts the canvas — whose document carries its own CSP.
+ *   1. READER: /a/<id> answers a viewer with no session with the app document
+ *      and its story runtime inline — same URL, no artifact iframe — under the
+ *      document CSP; authored child realms remain opaque to app credentials and
+ *      storage, with network limited to declared hosts, and the history prelude holds. A signed-in
+ *      NON-owner gets the same document, no redirect.
+ *   2. OWNER: the app page (page controls + inline story runtime), and edit
+ *      mode retains that document runtime; authored child realms retain their CSP.
  *   3. EXPORT still yields a PNG for a reader after the reader path changed.
  *   4. `/raw` is an internal address: absent from the docs.
  *   5. App pages carry a CSP with frame-ancestors.
- *   6. ANONYMOUS OWNER: a minted token is exchanged for an httpOnly session
- *      (POST /api/session/token); the browser then holds NO token in
- *      localStorage and /a/<id> shows the owner shell.
+ *   6. ANONYMOUS OWNER: a minted token is exchanged for an httpOnly agent
+ *      session (POST /api/session/token); the browser then holds NO token in
+ *      localStorage and /a/<id> shows owner chrome around the inline runtime.
  *   7. Cookie-authenticated mutations reject a cross-site Origin.
  *
  * Runs against a dev server started with the mail sink:
@@ -131,7 +131,7 @@ check((await reader.goto(`${BASE}/a/${priv.id}`, { waitUntil: 'load' })).status(
 await owner.goto(`${BASE}/a/${priv.id}`, { waitUntil: 'load' });
 check((await owner.locator('[data-mx-inline-story]').locator('h1').first().textContent({ timeout: 20000 }).catch(() => null)) === 'SEC-PRIVATE', 'private: owner sees it in the shell');
 
-// ── 2. owner: app shell + iframe; EDITING DOES NOT WEAKEN THE SANDBOX ──────
+// ── 2. owner: app shell + inline runtime; EDITING DOES NOT WEAKEN CHILD SANDBOXES ──────
 await owner.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
 const ownerFrame = owner.locator('[data-mx-inline-story]');
 const ownerText = await ownerFrame.locator('h1').first().textContent({ timeout: 20000 }).catch(() => null);
@@ -233,18 +233,16 @@ await Promise.all([
 ]);
 await anonPage.waitForTimeout(1500);
 check(!(await anonCtx.cookies(BASE)).some((c) => /mx-agent-session/.test(c.name)), 'disconnecting cleared the agent-session cookie');
-// …and the browser is a plain reader again: the same document, now with no shell.
+// …and the browser is a plain reader again: the same document, now without owner chrome.
 await anonPage.goto(`${BASE}/a/${anonDoc.id}`, { waitUntil: 'load' });
 check((await anonPage.locator('iframe[title="artifact"]').count()) === 0, 'after disconnect: the browser is a reader — the document, no iframe');
 
 // ── 6c. the SPLIT-VIEWER case, in a real browser ──────────────────────────
-// A browser can hold a CLAIMED token in its cookie while carrying no NextAuth
-// session (the account signed out, or never signed in on this profile). It IS
-// an owner — the cookie resolves to the account — so the proxy hands it the
-// shell. But the document arrives through a SEPARATE request for /a/<id>/raw,
-// and while that route resolved the viewer NextAuth-only it saw no session and
-// 404'd: the shell rendered around a not-found frame, for the owner's OWN
-// PRIVATE document. This drives exactly that browser.
+// A browser can hold a CLAIMED token in its agent cookie while carrying no
+// account session (the account signed out, or never signed in on this profile).
+// The old implementation treated those as separate shell and /raw requests;
+// this case now verifies that the shared app document resolves the agent cookie
+// and renders the owner's PRIVATE document inline.
 //
 // `owner` (signed in above) already claimed `anon.token`, so it is now
 // account-owned; a private doc published under it belongs to the account.
@@ -252,7 +250,7 @@ const claimedPriv = await api('/api/artifacts', { title: 'Claimed Private', mark
 check(claimedPriv.visibility === 'private', 'a claimed token publishes a private doc owned by the account');
 const splitCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
 const splitPage = await splitCtx.newPage();
-// A brand-new context: it has NO NextAuth session. It exchanges the claimed
+// A brand-new context: it has NO account session. It exchanges the claimed
 // token for the agent cookie, and nothing else.
 await splitPage.goto(`${BASE}/`, { waitUntil: 'load' });
 const splitExchange = await splitPage.evaluate(async (t) => (await fetch('/api/session/token', {
@@ -324,8 +322,8 @@ check(after.length === listBefore, `the victim's artifact count is unchanged (${
 check(!after.some((a) => /PWNED/.test(a.title ?? '')), 'and no artifact was forged on their account (fetch AND form both dead)');
 
 // ── 6e. the reader gets the document TOP-LEVEL, and it can load nothing remote ─
-// Two things at once: a non-owner's page is the document ITSELF (no iframe,
-// window.top === window), and the CSP that document ships lets it fetch NOTHING
+// Two things at once: a non-owner's page is the inline document runtime (no
+// artifact iframe, window.top === window), and the top-level document CSP lets it fetch NOTHING
 // off-origin — remote script, image, font, or connect are all refused. The
 // browser's own CSP-violation console messages are the deterministic signal
 // (they fire whether or not the test host has internet).

@@ -3,23 +3,23 @@
 /**
  * EDITING, IN THE DOCUMENT THE READER IS ALREADY LOOKING AT.
  *
- * There is no editor canvas. The document — the served, sandboxed frame the
- * page mounted when it loaded — becomes editable where it stands, and this
- * component is the chrome around it plus the half of the protocol that holds
- * truth: the source, the compile, the flush, the history.
+ * The page's mounted InlineStoryRuntime becomes editable in place. This
+ * component owns the editing chrome, source composition, persistence and history.
  *
  * What that buys is the whole point of the rewrite. Pressing edit does not
- * unmount a frame, build a second document, boot a second React root, re-run
- * the dataflow and re-mount every chart; it posts one message. The scroll
+ * unmount the runtime, build a second document, boot a second React root, re-run
+ * the dataflow and re-mount every chart; it sends a runtime command. The scroll
  * position is not restored because nothing moved it. Nothing flashes because
  * nothing was replaced.
  *
  * Division of labour:
- *   frame  (lib/story-runtime/edit/session) — makes hosts editable, says what
+ *   runtime (lib/story-runtime/edit/session) — makes hosts editable, says what
  *          is selected, stages what was typed, applies a format instantly.
  *   here   — composes every edit into the source, persists through the same
  *          save-less protocol as before, and pushes structural changes back
  *          down as `mx:document`, which the runtime re-renders in place.
+ * runtimeRef carries commands on the app page; frameRef preserves the standalone
+ * framed-document compatibility path through the same endpoint contract.
  */
 import { sendDocument, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -105,7 +105,7 @@ export default function InPlaceEditor({
   art, frameRef, runtimeRef, sessionNonce, flushRef, initialSelectionPath = null, onComment, rightInset = 0, onDone = () => {},
 }: {
   art: EditorArtifact;
-  /** The live document. Never remounted — that is the whole point. */
+  /** Optional standalone document frame compatibility ref; the active page uses runtimeRef. */
   frameRef?: { current: HTMLIFrameElement | null };
   runtimeRef?: DocumentRuntimeRef;
   /** Learned by the page when the document announced itself, long before this mounted. */
@@ -119,7 +119,7 @@ export default function InPlaceEditor({
    * not comment, and then neither the toolbar control nor the shortcut exists.
    */
   onComment?: (selection: StoryEditSelection) => void;
-  /** How far the toolbar stops short of the viewport's right edge: the comments rail plus the frame's scrollbar. */
+  /** How far the toolbar stops short of the viewport's right edge: the comments rail plus the document scrollbar. */
   rightInset?: number;
   /** Drain-and-exit belongs to the page, because browser back uses the same contract. */
   onDone?: () => void | Promise<void>;
@@ -142,8 +142,8 @@ export default function InPlaceEditor({
    * ⌘⌥M — the shortcut Docs taught everyone's fingers. It reads the SAME
    * selection the toolbar's button does, so there is one path into the
    * composer and no way for the two to disagree about what is being commented
-   * on. Bound on the page (not in the frame) because the page is where the
-   * composer lives; the frame's own keydowns bubble here through the runtime's
+   * on. Bound on the page (not in the document runtime) because the page is where the
+   * composer lives; the document runtime's own keydowns bubble here through the
    * edit session, and a caret in a text host still gets its keystroke first.
    */
   useEffect(() => {
@@ -184,7 +184,7 @@ export default function InPlaceEditor({
 
   // ── the document's own copy ───────────────────────────────────────────────
   /**
-   * Show a version of the document in the frame WITHOUT replacing it.
+   * Show a version of the document in the mounted runtime WITHOUT replacing it.
    *
    * The runtime ships no JSX parser, so the nodes are made here — through the
    * same door the served document and the live stream use, so a pushed version
@@ -276,7 +276,7 @@ export default function InPlaceEditor({
     sourceRef,
     onSourceEdited: useCallback((next: string) => {
       // A text or format edit the DOCUMENT already shows: persist it, but do
-      // not push it back — the frame's DOM is ahead of us and re-rendering
+      // not push it back — the document runtime's DOM is ahead of us and re-rendering
       // would take the caret with it.
       setSource(next);
       queueRef.current?.({ source: next });
@@ -507,7 +507,7 @@ export default function InPlaceEditor({
   const history = useArtifactVersions({ id: art.id, currentVersion: live.version });
 
   /**
-   * Looking at an older version shows it IN the document — same frame, same
+   * Looking at an older version shows it IN the document — same runtime, same
    * engine that renders the real thing. Editing is off while it is up: this
    * editor has no save button, so typing into an old version would quietly
    * publish it.

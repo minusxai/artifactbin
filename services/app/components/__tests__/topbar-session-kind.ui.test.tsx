@@ -2,9 +2,9 @@
  * The menu's session control has THREE states, because a browser can hold a
  * credential three ways:
  *
- *  - an account session  → "Sign out" (NextAuth)
+ *  - an account session  → "Sign out" (Better Auth)
  *  - an anonymous session → "Disconnect this browser" (clears the agent cookie;
- *    NextAuth's signOut is a no-op here — there is no account — and would leave
+ *    account sign-out is not involved when there is no account, and would leave
  *    the cookie in place, which is exactly the bug this pins)
  *  - neither              → "Log in"
  */
@@ -42,7 +42,7 @@ describe('the session control', () => {
     expect(screen.queryByLabelText('Sign out')).toBeNull();
   });
 
-  it('Disconnect clears the agent cookie and does NOT call NextAuth', async () => {
+  it('Disconnect clears the agent cookie and does NOT sign out an account', async () => {
     render(<PageMenu authed={false} anon />);
     openMenu();
     fireEvent.click(screen.getByLabelText('Disconnect this browser'));
@@ -51,7 +51,7 @@ describe('the session control', () => {
   });
 
   it('an account session that ALSO holds an anon cookie still gets account Sign out', () => {
-    // Account wins — it is the wider identity, and NextAuth owns its cookie.
+    // Account wins — it is the wider identity, and Better Auth owns its cookie.
     render(<PageMenu authed anon />);
     openMenu();
     expect(screen.getByLabelText('Sign out')).toBeInTheDocument();

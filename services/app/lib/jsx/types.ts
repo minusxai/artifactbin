@@ -1,9 +1,9 @@
 /**
  * Static-JSX-as-data: shared types for the isomorphic parse → validate → render
- * pipeline (File Architecture v2). A file's `jsx` field is a STATIC JSX document —
- * no functions, expressions, or handlers — that we parse to this normalized AST,
- * validate against an allowlist, and render via our own component map. It is data,
- * never executed.
+ * pipeline. Markup is parsed to a normalized AST, validated against an allowlist,
+ * and rendered via our component map. JSON literals and allowlisted reactive
+ * expressions are data interpreted by the runtime; arbitrary JavaScript,
+ * functions and event handlers are not allowed.
  */
 import type { ReactiveExpression } from './reactive';
 
@@ -13,7 +13,8 @@ export type JsonValue = string | number | boolean | null | JsonValue[] | { [key:
 /**
  * The resolved value of an attribute or an expression child. `static: true` carries
  * a JSON literal; `static: false` records a non-static expression (a call, identifier,
- * arithmetic, spread, …) so the validator can reject it with a precise message.
+ * arithmetic, spread, …). The validator accepts only supported reactive or row
+ * expressions in their permitted scopes and rejects the rest with source spans.
  */
 export type StaticValue =
   | { static: true; json: JsonValue }
@@ -48,7 +49,7 @@ export interface JsxText {
   end: number;
 }
 
-/** A `{…}` expression used as a child. Static literals are allowed; anything else is rejected. */
+/** A `{…}` child: a static literal or an allowlisted reactive/row expression in a valid scope. */
 export interface JsxExpression {
   type: 'expression';
   value: StaticValue;

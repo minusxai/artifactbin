@@ -12,6 +12,7 @@
  * Dependents warnings on dataset/viz refresh re-run the same checks.
  */
 import { parseJsx, type JsxAttribute, type JsxNode, type JsxElement, type ValidationError } from '@/lib/jsx';
+import { urlListUrls } from '@/lib/jsx/url-attrs';
 import { videoEmbedUrl } from '@/lib/story-ui/video-embed';
 import { collectFieldRefs, collectDerivedFieldNames, hasUnverifiableTransform } from '@/lib/viz/field-refs';
 import { MUTATION_TAG, QUERY_TAG, carriesRef, parseMutationDecl, parseQueryDecl, refName } from './dataflow';
@@ -127,7 +128,7 @@ export function collectRefUses(source: string): RefUse[] | null {
  * link is navigation the reader chooses, not a subresource the page pulls.
  */
 const SUBRESOURCE_ATTRS = new Set(['src', 'poster', 'background']);
-/** Same, but the value is a comma-separated list ("url descriptor, …"). */
+/** List-valued subresources: srcset candidates or whitespace-separated ping URLs. */
 const SUBRESOURCE_LIST_ATTRS = new Set(['srcset', 'ping']);
 
 /** Self-contained sources: one of the owner's artifacts, or bytes inlined here. */
@@ -165,9 +166,8 @@ export function findExternalSubresources(source: string): ValidationError[] {
       const name = a.name.toLowerCase();
       const value = a.value.json;
       if (SUBRESOURCE_LIST_ATTRS.has(name)) {
-        for (const entry of value.split(',')) {
-          const url = entry.trim().split(/\s+/)[0];
-          if (url && !isSelfContained(url)) reject(url, a, el.tag);
+        for (const url of urlListUrls(value, name)) {
+          if (!isSelfContained(url)) reject(url, a, el.tag);
         }
       } else if (SUBRESOURCE_ATTRS.has(name) && !isSelfContained(value)) {
         // <Video src> is the ONE sanctioned external subresource: an embed is

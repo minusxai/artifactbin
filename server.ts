@@ -10,7 +10,8 @@
  *
  *   dev:  scripts/dev.mjs  → `tsx server.ts`          (proxy + app; Vite in middleware mode, HMR on APP__PORT + 1)
  *   dev:  scripts/dev-app.mjs → `tsx server.ts --app-only`  (the app ALONE — see below)
- *   prod: node proxy-server.mjs               (bundled by scripts/build-server.mjs; the SPA from dist/web)
+ *   prod (local npm): node dist/proxy-server.mjs (bundled by scripts/build-server.mjs; the SPA from dist/web)
+ *   prod (Docker): node server.mjs            (Dockerfile's bundled entry; the SPA from dist/web)
  *
  * `--app-only` is the ONE deviation, and it is a flag rather than a second
  * entry file on purpose: two entries is one more place the Vite chain and

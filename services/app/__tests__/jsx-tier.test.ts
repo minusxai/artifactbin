@@ -115,6 +115,7 @@ describe('jsx tier publish', () => {
       '<div data-design="tw"><img srcSet="https://evil.test/a.png 1x, https://evil.test/b.png 2x" /></div>',
       '<div data-design="tw"><video poster="https://evil.test/p.jpg" /></div>',
       '<div data-design="tw"><a href="#x" ping="https://evil.test/track">x</a></div>',
+      '<div data-design="tw"><a href="#x" ping="ref:abc123 https://evil.test/track">x</a></div>',
     ];
     for (const markup of cases) {
       const res = await createArtifactRoute(

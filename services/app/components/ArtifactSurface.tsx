@@ -89,8 +89,8 @@ export interface ArtifactSurfaceProps {
   /**
    * The page's own query string, from the router (never `window.location` in
    * render — that is a hydration mismatch waiting to happen). Its `$` params
-   * are the reader's `<Value>` selection and are forwarded into the framed
-   * document; everything else in it is the page's business, not the
+   * are the reader's `<Value>` selection and are forwarded into the mounted
+   * document runtime; everything else in it is the page's business, not the
    * document's, and is deliberately left behind.
    */
   search?: string;
@@ -99,7 +99,7 @@ export interface ArtifactSurfaceProps {
   /** An ANONYMOUS session (agent cookie, no account) — the bar offers Disconnect. */
   anonSession?: boolean;
   version: number;
-  /** Open-annotation count at render time (owners only) — seeds the annotate button's badge; live frames keep it current. */
+  /** Open-annotation count at render time (viewers who may annotate) — seeds the annotate button's badge; live updates keep it current. */
   openAnnotations?: number;
   /**
    * The viewer's like state and the document's like count, from the page's own
@@ -166,10 +166,9 @@ function NewFolderPrompt({ parentId, onClose }: { parentId: string; onClose: () 
 
 
 /**
- * What a document's own page is standing on while its frame loads. Neutral by
- * mode rather than themed: the document's real background lives in its own
- * stylesheet, which the page has not got, and any colour is better than the
- * white the revealed frame used to flash under every dark document.
+ * Neutral fallback ground while the mounted runtime applies the document's
+ * compiled and author styles. It is selected by reading mode so a slow runtime
+ * does not reveal a contrasting blank surface.
  */
 const DOCUMENT_GROUND = { light: '#ffffff', dark: '#0b0b0c' } as const;
 
@@ -188,7 +187,8 @@ const safeRows = (content: string): Array<Record<string, unknown>> => {
 /**
  * The view-mode selection bubble exposes only actions this role may take. ONE
  * rule, consulted twice: once to grant the bubble, and again before acting on
- * what it sends back — the frame is sandboxed markup and never an authority.
+ * what it sends back — the mounted runtime and any author child realm are
+ * never an authority.
  *
  * `inViewMode` is now only about EDIT MODE, because annotate is not a mode any
  * more. It still gates BOTH actions: inside the editor the document's own
@@ -298,8 +298,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    *    their place in the document is in the hash.
    */
   /**
-   * The two formats the shell serves as a DOCUMENT — the frame, its live
-   * stream and the editor — rather than as a value the app draws itself.
+   * Markup and legacy folder surfaces use the document runtime and live stream.
+   * Current folder page data goes directly to FolderPage without this surface.
    */
   const isDocumentFormat = format === 'markup' || format === 'folder';
   const isFolder = format === 'folder';
@@ -348,7 +348,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * (see useLiveArtifact's onData): the document has not changed, so this must
    * never re-render the page or take the document-replacement path — that
    * would rebuild every chart to announce that one of them has new rows. It is
-   * posted straight into the frame, which re-runs the queries reading it.
+   * sent straight to the mounted runtime, which re-runs the queries reading it.
    */
   const onLiveData = useCallback((event: { datasets: string[] }) => {
     runtimeRef.current?.send(
@@ -522,8 +522,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const enterEdit = useCallback(() => beginEdit(null), [beginEdit]);
 
   /*
-   * LIKE AND FOLLOW, performed here. The framed document draws the heart and
-   * the pill and ASKS; this page holds the session, calls the door, and hands
+   * LIKE AND FOLLOW, performed here. InlineReaderChrome draws the heart and the
+   * pill and ASKS; this page holds the session, calls the door, and hands
    * the door's own answer back down so the chrome shows what is true rather
    * than what was hoped. A page with no account walks through login and back
    * with the ask, the way a stranger's document does.
@@ -597,7 +597,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     }
   }, []);
 
-  // A capability-gated selection bubble inside the opaque frame asks the page
+  // A capability-gated selection bubble inside the document runtime asks the page
   // to enter a mode. The nonce makes this a runtime request, not author code.
   useEffect(() => {
     const onSelectionAction = (event: {data: unknown}) => {
@@ -780,8 +780,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             </PageControls>
           </>
         ) : (
-          /* The framed document draws the chrome (logo, rail, byline) — the
-             same one a stranger sees — and asks this page to open these. */
+          /* InlineReaderChrome draws the chrome (logo, rail, byline) — the same
+             one a stranger sees — and asks this page to open these. */
           <>
             <PageMenu authed={accountSession} anon={anonSession} title={shownTitle} fixed triggerless />
             <PageControls
@@ -810,9 +810,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             background: readerMode === 'dark' ? DOCUMENT_GROUND.dark : DOCUMENT_GROUND.light,
           }}
         >
-          {/* On the document's ground, in a colour that reads on either mode:
-              the page has none of the document's tokens, and the app's own
-              faint ink is tuned for the app's ground, not this one. */}
+          {/* Loading ink must read on both fallback grounds before the runtime is ready. */}
           {!frameLoaded && (
             <div
               aria-label="Loading document"
@@ -831,7 +829,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             onController={onController}
           />
         </div>
-        {/* Annotations are chrome too: pins live IN the frame, markers and
+        {/* Annotations are chrome too: pins live IN the document runtime, markers and
             threads on the page (which holds the content and the session).
             Mounted in EVERY mode — the `!editing` gate that used to be here is
             exactly what made commenting mid-edit a four-navigation detour. */}

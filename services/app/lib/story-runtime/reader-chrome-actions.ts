@@ -1,11 +1,10 @@
 /**
- * THE READER CHROME'S BEHAVIOUR, in the every-document entry (anchor-entry) —
- * react-free and small, because a document of pure prose ships nothing else
- * and still has a reader in it.
+ * Reader chrome behavior for standalone documents loaded through anchor-entry.
+ * The canonical app page uses InlineReaderChrome around its inline runtime.
  *
- * One owner for everything the chrome does, wired once per document on the
- * TOP-LEVEL path only (a framed copy hides the chrome and relays its scroll
- * samples to the parent instead — that stays in anchor-entry):
+ * One owner for everything the chrome does, wired once per document. Top-level
+ * documents handle panels locally; framed copies relay actions to the trusted
+ * parent (see anchor-entry):
  *
  *  - VISIBILITY: sample `scroll` and `resize` through one animation frame and
  *    run lib/story-runtime/reader-chrome-policy; write the answer as the
@@ -14,12 +13,13 @@
  *  - PANELS: the two triggers, the scrim, Escape, and the light/dark choice
  *    (lib/story-runtime/reader-mode + the runtime's private mode hook) — moved
  *    here from anchor-entry, unchanged in behaviour.
- *  - LIKE / COMMENT: `console.log('[artifactbin] like', { artifact })` (and
- *    `comment`). UI only; a colleague wires the backend.
+ *  - LIKE / COMMENT / FOLLOW: relay to the parent when framed, otherwise
+ *    navigate through the supplied action URL. Fixtures without a URL only log.
  *  - SHARE: `navigator.share({ title, url })` when the platform has a sheet;
  *    else `navigator.clipboard.writeText(url)`; else select the hidden copy
  *    field and `document.execCommand('copy')`. Then the toast, ~1.5s. `url` is
- *    `location.href` — the reader's document is top-level, so it is real.
+ *    `location.href` — framed copies relay the action while top-level documents
+ *    use their own address.
  *  - LOGO: a plain link home (`href="/"`); nothing to wire.
  */
 
@@ -36,16 +36,9 @@ export interface ReaderChromeHandle {
 }
 
 /**
- * Wire the chrome found in `doc` (rendered by lib/story/reader-chrome).
- * Returns null when the document carries no chrome (a capture, a framed copy
- * with it hidden — nothing to do).
- */
-/**
- * THE READER'S APPEARANCE CHOICE, applied — one owner for a decision that
- * arrives two ways. Top-level it is a click in the settings panel; FRAMED it
- * is the trusted parent saying so over the reader-mode message, and the framed
- * document has no chrome to click. Both change only local reading state and
- * re-ink the hydrated charts through the runtime's private hook.
+ * Apply a reading choice from the local settings panel or the trusted parent's
+ * reader-mode message. Both update reading state and re-ink hydrated charts
+ * through the runtime's private hook.
  */
 export function applyReaderChoice(win: Window, doc: Document, mode: 'light' | 'dark'): void {
   applyReaderMode(doc, mode);
@@ -61,8 +54,8 @@ export function applyReaderChoice(win: Window, doc: Document, mode: 'light' | 'd
 
 /**
  * Wire the chrome found in `doc` (rendered by lib/story/reader-chrome).
- * Returns null when the document carries no chrome (a capture, a framed copy
- * with it hidden — nothing to do).
+ * Returns null only when the document carries no chrome (for example a
+ * capture). Framed chrome is still wired so it can relay actions.
  */
 export function wireReaderChrome(win: Window, doc: Document): ReaderChromeHandle | null {
   const root = doc.querySelector<HTMLElement>('[data-mx-reader-chrome]');
@@ -75,8 +68,7 @@ export function wireReaderChrome(win: Window, doc: Document): ReaderChromeHandle
   };
 
   /*
-   * FRAMED — the owner's, an editor's or a commenter's copy inside the app
-   * page. The chrome is drawn here so it is the same chrome everyone sees, but
+   * Standalone framed compatibility path. The chrome is drawn here, but
    * this document holds no session and its panels would be the wrong panels
    * (the page's carry share, history, the agent prompt). So every control
    * posts UP, and the page acts: it holds the session and the real panels.
@@ -209,12 +201,8 @@ export function wireReaderChrome(win: Window, doc: Document): ReaderChromeHandle
         return;
       }
       if (kind === 'share') { share(); return; }
-      // Like and comment are UI ONLY: the backend is somebody else's phase, and
-      // a button that pretends to have saved something is worse than one that
-      // says plainly where it got to.
-      // TOP-LEVEL, the document holds no session: like, comment and follow are
-      // doors it walks through (login and back, or straight back with the ask
-      // for a viewer). Without a door — a preview, a test — they only say so.
+      // Top-level action URLs lead through login or back to the app with the
+      // requested action. A fixture without an action URL only logs the intent.
       const door = button.dataset.mxHref;
       if (door) { win.location.assign(door); return; }
       if (kind === 'like' || kind === 'comment') console.log(`[artifactbin] ${kind}`, { artifact });

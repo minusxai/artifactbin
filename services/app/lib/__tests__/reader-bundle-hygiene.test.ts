@@ -138,9 +138,9 @@ describe('reader bundle hygiene', () => {
 
   it('sanity: the walker actually descends through the reader graph', () => {
     // Guards the guard: if import parsing breaks, the forbidden check would
-    // pass vacuously. The story ENGINE is out of the reader graph entirely
-    // (view mode is the sandboxed /raw iframe; the engine ships only in the
-    // iframe's own runtime bundle and the on-demand editor) — the deepest
+    // pass vacuously. The story ENGINE is dynamically imported by the
+    // artifact surface and rendered inline in view mode; the standalone /raw
+    // route and authored child frames are separate runtime paths. The deepest
     // static reader file is the live-sync hook.
     expect([...reach.files].map((f) => path.relative(ROOT, f))).toContain(
       'lib/story/use-live-artifact.ts',
@@ -148,7 +148,7 @@ describe('reader bundle hygiene', () => {
     expect([...reach.packages.keys()]).toContain('react');
   });
 
-  it('the story component layer stays out of the reader graph (view = iframe, editor = dynamic)', () => {
+  it('the story component layer stays out of the static reader graph through dynamic imports', () => {
     // The interpreter module itself may ride along (snapshot.ts's CSS
     // extraction lives beside it — no heavy deps); the COMPONENT layer —
     // embeds, kit, charts — must not.

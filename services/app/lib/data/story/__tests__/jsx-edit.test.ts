@@ -58,6 +58,18 @@ describe('applyDomEditsToJsx — text edits', () => {
 });
 
 describe('applyDomEditsToJsx — hostile paste sanitization', () => {
+  it('drops pasted ping lists with a later dangerous URL while preserving safe lists', () => {
+    const safe = 'https://safe.example/p,javascript:literal https://other.example/p';
+    const { source, errors } = applyDomEditsToJsx('<p>x</p>', [{
+      astPath: '0',
+      innerHtml: `<a href="/" ping="https://safe.example/p javascript:alert(1)">unsafe</a><a href="/" ping="${safe}">safe</a>`,
+    }]);
+    expect(source).toContain('<a href="/">unsafe</a>');
+    expect(source).toContain(`ping="${safe}"`);
+    expect(errors).toEqual(expect.arrayContaining([expect.objectContaining({ attr: 'ping' })]));
+    expectValidStoryJsx(source);
+  });
+
   it('strips onclick attributes, <iframe> elements and javascript: hrefs out of the result', () => {
     const src = '<p>safe</p>';
     const { source } = applyDomEditsToJsx(src, [{

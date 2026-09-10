@@ -175,7 +175,7 @@ describe('bundled font assets are subset WOFF2, and safe to serve immutable', ()
   });
 
   /**
-   * next.config.ts serves /fonts/* as `immutable`, which is a promise that the
+   * The server serves /fonts/* as `immutable`, which is a promise that the
    * bytes at a URL never change. The content hash in the filename is what
    * makes that true; if a file is replaced without renaming it, the promise
    * breaks and readers keep a stale font forever.

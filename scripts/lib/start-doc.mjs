@@ -6,10 +6,10 @@
  *  1. `POST /api/start` returns the anonymous agent token once, both as a
  *     `token` field and inline in the one-line paste. Gates take the field and
  *     assert the paste carries the same credential; no start link is spent.
- *  2. `/a/<id>` serves the DOCUMENT ITSELF to anyone who is not its owner.
- *     There is no `iframe[title="artifact"]` on a reader's page, because there
- *     is no page — so a gate that drives the app shell must first make its
- *     browser the owner, which is what `becomeOwner` does.
+ *  2. `/a/<id>` serves the app document with its story runtime inline to every
+ *     viewer. Owner authority still controls the surrounding editing chrome,
+ *     so the owner-focused gates make their browser the owner, which is what
+ *     `becomeOwner` does.
  *
  * Both are the product working as designed, so they belong in one helper
  * rather than in thirteen copies of the old assumptions.
@@ -42,13 +42,13 @@ export async function startDocument(base) {
 }
 
 /**
- * Make this browser the document's owner, so `/a/<id>` serves it the app shell
- * (top bar, the document in its sandboxed frame, the editor) instead of the
- * bare document. Exchanges the token for the httpOnly session cookie — the
- * same call the app's own UI makes.
+ * Make this browser the document's owner, so `/a/<id>` grants it owner chrome
+ * (top bar and owner controls) around the inline story runtime. Exchanges the
+ * token for the httpOnly session cookie — the same call the app's own UI makes.
  *
- * Must run from a page on the app's origin: the document itself is
- * opaque-origin and cannot fetch anything at all.
+ * Must run from a page on the app's origin so `page.evaluate` can make the
+ * same-origin cookie exchange; the canonical artifact page uses the inline
+ * runtime and is not an opaque child frame.
  */
 export async function becomeOwner(page, base, token) {
   await page.goto(`${base}/`, { waitUntil: 'load' });

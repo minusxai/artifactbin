@@ -31,8 +31,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const initial = await getArtifactById(id);
   if (!initial) return new Response('not found', { status: 404 });
   // Same uniform 404 as ./raw — and the same VIEWER as ./raw and the proxy
-  // (sessionActor: NextAuth, then the agent cookie), or an anonymous owner's
-  // live stream would drop the moment their doc went beyond public.
+  // (sessionActor uses the proxy-attached actor first, then direct compatibility
+  // and the agent cookie). This shared resolution prevents the former bug where
+  // an anonymous owner's live stream dropped when their document went private.
   const actor = await sessionActor(request);
   const viewer = actor.viewer;
   if (!(await canReadArtifact(initial, viewer))) return new Response('not found', { status: 404 });
@@ -209,8 +210,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       // write already travels.
       await followDatasets(row);
       await send(frame);
-      // An edit shifts anchors; the owner's pins must follow the document
-      // frame that moved them. No-op on every non-owner connection.
+      // An edit shifts anchors; annotator connections' pins must follow the document
+      // frame that moved them. Plain reader connections are no-ops.
       void pushAnnotations();
     }).catch(() => { /* client gone */ });
   };
