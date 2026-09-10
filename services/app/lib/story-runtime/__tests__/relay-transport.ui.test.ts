@@ -19,7 +19,7 @@ const deliver = (source: Window, data: unknown, origin = APP) =>
 
 describe('createRelayTransport', () => {
   it('posts a request and resolves with the matching result', async () => {
-    const { target, posted, messages } = fakeParent();
+    const { target, messages } = fakeParent();
     const t = createRelayTransport(target, APP, window);
     const p = t.run({ region: 'EU' }, ['sales']);
     expect(messages()[0]).toEqual({ type: STORY_QUERY_MESSAGE, id: 1, values: { region: 'EU' }, only: ['sales'] });
@@ -38,7 +38,7 @@ describe('createRelayTransport', () => {
   });
 
   it('page() sends a window request and resolves with that table', async () => {
-    const { target, posted, messages } = fakeParent();
+    const { target, messages } = fakeParent();
     const t = createRelayTransport(target, APP, window);
     const p = t.page({ region: 'EU' }, 'sales', { offset: 50, limit: 25, sort: { col: 'a', dir: 'asc' } });
     expect(messages()[0]).toEqual({ type: STORY_QUERY_MESSAGE, id: 1, values: { region: 'EU' }, only: ['sales'], page: { name: 'sales', offset: 50, limit: 25, sort: { col: 'a', dir: 'asc' } } });

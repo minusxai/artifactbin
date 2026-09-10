@@ -78,7 +78,7 @@ function hourlyAttemptsExhausted(key: string, max: number, now: number): boolean
  * Keyed on the document rather than on a caller, because the caller is
  * whichever stranger happens to be reading and the thing being protected is
  * this server's outbound fetching. It is an APP quota and not a proxy policy for
- * the reason CLAUDE.md gives — the proxy's verdicts are per client IP and it
+ * the proxy's verdicts are per client IP and it
  * cannot see which document an address names, so "this document has done
  * enough importing for one hour" is a question only the app can ask.
  *

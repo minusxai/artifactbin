@@ -1,5 +1,5 @@
 // The worktree handoff script's --harness option: after seeding a tree it
-// prints the exact launch line for that harness, with every CLAUDE.md
+// prints the exact launch line for that harness, with every AGENTS.md
 // "Coding agent lessons" rule baked in (codex's </dev/null and no `-s`, pi's
 // --no-session and never a key value, claude's Agent-tool note). Driven as a
 // CHILD PROCESS against a throwaway worktree of this repo — the script's
@@ -33,7 +33,7 @@ function teardown() {
 // Seed the throwaway tree with a harness, assert inside, tear down either way.
 const withTree = (harness, fn) => {
   teardown();
-  // --base HEAD: CI checkouts have no local simple-split branch, and the handoff mechanics are branch-agnostic.
+  // --base HEAD: CI checkouts have no local main branch, and the handoff mechanics are branch-agnostic.
   const res = run(['--phase', PHASE, '--dir', DIR, '--brief', BRIEF_SRC, '--harness', harness, '--base', 'HEAD']);
   try {
     return fn(res);

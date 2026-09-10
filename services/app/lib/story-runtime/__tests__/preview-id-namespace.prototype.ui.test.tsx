@@ -11,7 +11,7 @@
  * prototype characterizes that interface against the real interpreter; it is
  * intentionally not imported by production code.
  */
-import React, { cloneElement } from 'react';
+import { cloneElement } from 'react';
 import type { ReactElement } from 'react';
 import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';

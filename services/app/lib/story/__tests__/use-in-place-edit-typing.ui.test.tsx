@@ -12,7 +12,7 @@
  * breaks: typing raises the flag, and a parked cursor does NOT — a caret left
  * in a paragraph must never block a live update indefinitely.
  */
-import React, { useRef } from 'react';
+import { useRef } from 'react';
 import { describe, expect, it } from 'vitest';
 import { act, render } from '@testing-library/react';
 

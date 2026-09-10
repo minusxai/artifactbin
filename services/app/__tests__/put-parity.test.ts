@@ -23,7 +23,6 @@ import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
 
-const BASE = 'http://localhost:3000';
 
 // The browser route reads auth(); this suite drives the anonymous cookie, so
 // there is no account session. The handlers are the real ones.

@@ -26,8 +26,8 @@ import {DATASET_OPERATIONS} from '@/lib/datasets/operations';
  */
 import { z } from 'zod';
 import {
-  applyEditFor, canReadArtifact, findDependentsFor, forkArtifact, getArtifactById, getArtifactFor, getOwnedArtifactFor, getVersionFor, listArtifactsFor, listVersionsFor,
-  revertArtifactFor, isVersionNotArchived, type ForkOverrides, type TokenActor,
+  applyEditFor, canReadArtifact, findDependentsFor, forkArtifact, getArtifactById, getArtifactFor, getVersionFor, listArtifactsFor, listVersionsFor,
+  revertArtifactFor, isVersionNotArchived, type ForkOverrides, type TokenActor
 } from '@/lib/artifacts';
 import { isParentRefusal, resolveParent } from '@/lib/folders';
 import { restoreArtifactFor, trashArtifactFor } from '@/lib/trash';
@@ -186,7 +186,7 @@ const createArtifactOp: Operation = {
     ...CONTENT_ERRORS,
   ],
   async run(ctx, input) {
-    return fromResponse(await createArtifactFromBody(input, ctx.actor, ctx.base, ctx.request));
+    return fromResponse(await createArtifactFromBody(input, ctx.actor, ctx.base));
   },
 };
 
@@ -212,7 +212,7 @@ const updateArtifactOp: Operation = {
     ...CONTENT_ERRORS,
   ],
   async run(ctx, input) {
-    return fromResponse(await replaceArtifactWithBody(input, ctx.actor, String(input.id), ctx.base, ctx.request));
+    return fromResponse(await replaceArtifactWithBody(input, ctx.actor, String(input.id), ctx.base));
   },
 };
 

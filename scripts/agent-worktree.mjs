@@ -11,11 +11,11 @@
  *   node scripts/agent-worktree.mjs --phase p4 --brief b.md --pin-submodule services/artifactbin=<commit>
  *   node scripts/agent-worktree.mjs --phase p2 --remove                          # tear it down (branch kept)
  *
- * Options: --base <branch> (default simple-split) · --dir <path> (default ../<repo>-<phase>) · --install (npm install there)
+ * Options: --base <branch> (default main) · --dir <path> (default ../<repo>-<phase>) · --install (npm install there)
  *          --from <port> (first block to try) · --secrets (append fresh AUTH__SECRET / CONTRACT__ACTOR_SECRET)
  *          --harness claude|codex|pi (print the exact launch line for that coding agent, lessons baked in)
  *
- * The launch lines ARE the CLAUDE.md "Coding agent lessons": codex needs
+ * Harness launch and handoff guidance lives in docs/agent-workflows.md: codex needs
  * `< /dev/null` (it blocks on "Reading additional input from stdin"
  * otherwise) and `--approve-for-me` (implies workspace-write; `-s` cannot be
  * combined with it); pi takes the key by indirection so no value is ever
@@ -38,7 +38,7 @@ if (!phase) { console.error('--phase <name> is required'); process.exit(2); }
 // on the seeded tree. One table: adding a harness is adding an entry, never
 // new control flow. `FIREWORKS_API_KEY=$FIREWORKS_API_KEY` is indirection — a
 // key VALUE is never printed; the orchestrator's environment supplies it.
-const PROMPT = 'You are the delegated implementer for this worktree. Read CLAUDE.md, then .agent/BRIEF.md, and do exactly what the brief says, in its order. Finish by writing .agent/REPORT.md and then stop.';
+const PROMPT = 'You are the delegated implementer for this worktree. Read AGENTS.md, then .agent/BRIEF.md, and do exactly what the brief says, in its order. Finish by writing .agent/REPORT.md and then stop.';
 const HARNESS_LAUNCH = {
   codex: (dir) => `codex exec -C ${dir} --approve-for-me "${PROMPT}" < /dev/null > ${dir}/.agent/RUN.log 2>&1; echo "exit=$?"`,
   pi: (dir) => `cd ${dir} && FIREWORKS_API_KEY=$FIREWORKS_API_KEY pi -p --no-session --model fireworks/accounts/fireworks/models/glm-5p3 "${PROMPT}" < /dev/null > .agent/RUN.log 2>&1; echo "exit=$?"`,
@@ -65,7 +65,7 @@ if (flag('--remove')) {
 
 const brief = arg('--brief');
 if (!brief || !fs.existsSync(brief)) { console.error('--brief <file> is required and must exist'); process.exit(2); }
-const base = arg('--base', 'simple-split');
+const base = arg('--base', 'main');
 
 // 1. the tree
 const exists = git(['branch', '--list', branch], root) !== '';

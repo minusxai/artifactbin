@@ -5,8 +5,7 @@
  * From `@artifactbin/utils/shape`, never the package root: the root also carries
  * HTTP clients and reaches `node:http` — and this
  * module is in the READER's graph, where that is not a size regression but a
- * build failure ("Could not resolve node:http", see CLAUDE.md on the browser
- * bundle holding no server config). The subpath is the pure half.
+ * build failure ("Could not resolve node:http"). The subpath is the pure half.
  */
 export type { ColumnType, DatasetColumn } from '@artifactbin/contracts';
 export { inferColumns } from '@artifactbin/utils/shape';

@@ -13,7 +13,6 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { publishJsx } from '@/lib/story/jsx-tier';
 import { mintToken } from '@/lib/tokens';
 
-const BASE = 'http://localhost:3000';
 useAppHarness();
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });

@@ -24,13 +24,11 @@
  *  - Any other `{{token}}` is a hard error naming the token.
  */
 import {
-  VIZ_GRAMMAR_VEGA,
-  VIZ_GRAMMAR_VEGA_LITE,
   type ColumnFormatConfig,
   type VizRecipeBinding,
   type VizRecipeContent,
   type VizSourceVega,
-  type VizSourceVegaLite,
+  type VizSourceVegaLite
 } from '@/lib/validation/atlas-schemas';
 import type { VizResultColumn } from './types';
 
@@ -164,21 +162,3 @@ export function materializeFileRecipe(
     return { ok: false, error: (e as Error).message };
   }
 }
-
-/**
- * Synthesize placeholder bindings + matching columns from the declared slots, so
- * save-time validation can materialize a recipe with no real query in hand.
- */
-/** Deterministic sample values per kind — previews must render identically everywhere. */
-/**
- * One vocabulary PER nominal slot, never the same list twice: a recipe that
- * groups (radar's spokes × series, a combo's x × colour, a heatmap's two axes)
- * degenerates into one row per cell when both slots draw from the same labels.
- * Later vocabularies are deliberately shorter so the grouping reads at a glance.
- */
-const SAMPLE_LABEL_SETS = [
-  ['North', 'South', 'East', 'West', 'Central', 'Coastal'],
-  ['Retail', 'Wholesale'],
-  ['2024', '2025'],
-];
-const SAMPLE_NUMBERS = [820, 640, 560, 470, 390, 310];

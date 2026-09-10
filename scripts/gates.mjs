@@ -12,7 +12,7 @@
  * individually they were run — but nothing ever ran them all, nothing listed
  * them, and nine of the twenty-seven were referenced by no script, no CI job
  * and no doc. A gate nobody can enumerate is a gate nobody runs, and several
- * guard invariants CLAUDE.md describes as load-bearing.
+ * guard the behavioral contracts exercised by their user flows.
  *
  * So the list is DISCOVERED from disk rather than written down: a new
  * `scripts/gate-*.mjs` joins the set by existing, and cannot go missing from a

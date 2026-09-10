@@ -11,7 +11,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { assemble } from '@artifactbin/utils';
 import { createHumanAuth, sessionStoreOf, type HumanAuth } from '../src/index';
-import { proxyParts, type ProxyOptions } from '../src/parts';
+import { proxyParts } from '../src/parts';
 import { RELAXED_POLICY_FILE, testProxyOptions } from './helpers';
 
 const BASE = 'http://localhost:4794';

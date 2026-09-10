@@ -29,7 +29,7 @@ import { validateJsx, hasDangerousScheme, listHasDangerousScheme } from '@/lib/j
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
 import { immutableSet } from '@/lib/utils/immutable-collections';
-import { isEditableTextHost, resolveJsxNodeAtPath, TEXT_HOST_INLINE_EMBEDS } from '@/lib/story-ui/host-classify';
+import { isEditableTextHost, resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
 
 /*
  * Classification lives in a leaf module (lib/story-ui/host-classify) so the

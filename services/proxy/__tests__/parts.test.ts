@@ -1,7 +1,7 @@
 /** THE PARTS ORDER IS THE CONTRACT: a literal, forward last; a downstream overrides by name and never guesses position. */
 import { describe, expect, it } from 'vitest';
 import { assemble } from '@artifactbin/utils';
-import { proxyParts, type ProxyOptions } from '../src/parts';
+import { proxyParts } from '../src/parts';
 import { BROWSER_MINT_HEADERS, policyFile, testProxyOptions } from './helpers';
 
 describe('proxyParts', () => {

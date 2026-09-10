@@ -360,7 +360,7 @@ export async function replaceArtifactFromRequest(
   base: string,
 ): Promise<Response> {
   const body = await readJson(request);
-  return replaceArtifactWithBody(body, actor, id, base, request);
+  return replaceArtifactWithBody(body, actor, id, base);
 }
 
 /** The same pipeline with the body already in hand — what the operations registry calls. */
@@ -369,7 +369,6 @@ export async function replaceArtifactWithBody(
   actor: TokenActor,
   id: string,
   base: string,
-  request: Request,
 ): Promise<Response> {
   if (!body) return json({ error: 'invalid_json' }, 400);
   // The row FIRST: refs and imports resolve as the DOCUMENT's owner, never as
@@ -555,7 +554,6 @@ export async function createArtifactFromBody(
   body: Record<string, unknown>,
   actor: TokenActor,
   base: string,
-  request: Request,
 ): Promise<Response> {
   if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
   const sentMarkup=body.markup;

@@ -58,7 +58,7 @@ export function useLiveArtifact(
   onAnnotations?: (annotations: AnnotationWire[]) => void,
 ): ArtifactLiveEvent | null {
   // Keep the artifact id beside the frame: this component can be reused by
-  // Next navigation, and a high version from the previous id must never win.
+  // SPA navigation, and a high version from the previous id must never win.
   const [live, setLive] = useState<{ id: string; frame: ArtifactLiveEvent } | null>(null);
   const onDataRef = useRef(onData);
   onDataRef.current = onData;

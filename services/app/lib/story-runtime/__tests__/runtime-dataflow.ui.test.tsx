@@ -4,7 +4,6 @@
  * reaches the same store through `window.mx`, and the SSR'd tree hydrates
  * against the SAME store state without a mismatch.
  */
-import React from 'react';
 import { act } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, waitFor } from '@testing-library/react';

@@ -1,11 +1,5 @@
-/**
- * THE WAKEUP TRANSPORT — how "something changed" reaches whoever holds a
- * live stream. An interface with one implementation today (Postgres
- * LISTEN/NOTIFY through the app's own db handle — in-process, which is what a
- * co-hosted proxy+app uses, and the only thing PGLite can do) and room for a
- * second (a proxy holding its own LISTEN connection, M4). Every subscriber
- * gets a blind wakeup: the channel and whatever tiny payload the writer put
- * in the NOTIFY — never content. What to do about it is a catch-up read.
+/** App-owned LISTEN/NOTIFY subscriptions. A notification carries a channel and
+ * a small payload; subscribers fetch current state rather than treating it as content.
  */
 import { getDb } from '@/lib/db';
 
@@ -27,11 +21,7 @@ function dbWakeups(): WakeupTransport {
 }
 
 let current: WakeupTransport | null = null;
-/** The transport in use (in-process unless something installs another). */
+/** The shared transport over the app database. */
 export function wakeups(): WakeupTransport {
   return current ?? (current = dbWakeups());
-}
-/** Install another transport (a proxy-held LISTEN, a test double). */
-function setWakeupTransport(next: WakeupTransport | null): void {
-  current = next;
 }

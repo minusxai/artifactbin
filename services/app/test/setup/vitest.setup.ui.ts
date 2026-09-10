@@ -34,31 +34,7 @@ Object.defineProperties(HTMLElement.prototype, {
   hidePopover: { configurable:true, writable:true, value:function(this:HTMLElement) { this.removeAttribute('data-test-popover-open'); } },
 });
 
-// Next.js navigation (AgentHtml's link bridge grabs a router)
-
-/**
- * Drain deferred unmounts BEFORE vitest tears the jsdom environment down.
- *
- * AgentHtml mounts a second React root for the in-iframe embeds and unmounts it
- * from a `setTimeout(…, 0)` — deliberately, because unmounting another root
- * synchronously during the parent's commit makes React warn. Nothing in the app
- * is wrong with that. But at the end of a test FILE the sequence becomes:
- * RTL cleanup unmounts the parent → the deferred unmount is queued → vitest
- * disposes the jsdom window → the timer finally fires and React reaches for
- * `window`, which no longer exists:
- *
- *   ReferenceError: window is not defined
- *     ❯ react-dom-client.development.js
- *     ❯ Immediate.performWorkUntilDeadline (scheduler)
- *
- * Every test still PASSES; vitest counts the unhandled error and exits 1, so it
- * reads as "main is broken" while the summary says 254 passed. It is timing
- * dependent — it shows up on CI runners and not on a fast laptop.
- *
- * Unmounting explicitly and then yielding one macrotask lets that timer land
- * while the window is still alive. `cleanup()` is idempotent, so calling it
- * here as well as through RTL's own hook is harmless.
- */
+// Let deferred React-root unmounts finish while the jsdom window is alive.
 afterEach(async () => {
   cleanup();
   await new Promise((resolve) => setTimeout(resolve, 0));

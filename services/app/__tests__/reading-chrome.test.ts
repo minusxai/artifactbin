@@ -15,7 +15,6 @@ import { agentCookie, request, useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
 
-const BASE = 'http://localhost:3000';
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 const create = async (token: string, markup: string, template: 'editorial' | 'scrolly' = 'editorial') => {
   const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token, json: { markup, template } }));

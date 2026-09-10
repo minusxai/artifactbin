@@ -101,12 +101,6 @@ export function FormatBadge({ format }: { format?: string }) {
 
 /** Visibility is one accent status family. Dense and over-image placements
  * use only the glyph; the tooltip and accessible label carry the full state. */
-const VISIBILITY_COLOR = 'var(--color-accent)';
-export const VISIBILITY_COLORS: Record<string, string> = {
-  public: VISIBILITY_COLOR,
-  unlisted: VISIBILITY_COLOR,
-  private: VISIBILITY_COLOR,
-};
 
 export const VISIBILITY_TIPS: Record<string, string> = {
   public: 'anyone with the link · listed on your public profile',

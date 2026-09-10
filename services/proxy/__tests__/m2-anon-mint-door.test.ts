@@ -10,7 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import { assemble } from '@artifactbin/utils';
 import { isBrowserContext, proxyParts } from '../src/parts';
-import { BROWSER_MINT_HEADERS, policyFile, RELAXED_POLICY_FILE, testProxyOptions } from './helpers';
+import { policyFile, RELAXED_POLICY_FILE, testProxyOptions } from './helpers';
 
 const BROWSER = { 'content-type': 'application/json', origin: 'http://localhost', 'sec-fetch-site': 'same-origin' };
 

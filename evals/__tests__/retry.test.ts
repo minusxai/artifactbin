@@ -56,7 +56,7 @@ describe('withRetry', () => {
 describe('mintStartDocument against a genuinely failing server', () => {
   it('rides out the 502s production actually returned, and comes back with the document', async () => {
     let hits = 0;
-    const server = http.createServer((req, res) => {
+    const server = http.createServer((_req, res) => {
       hits++;
       if (hits <= 2) { res.writeHead(502); res.end('Bad Gateway'); return; }
       res.writeHead(200, { 'content-type': 'application/json' });

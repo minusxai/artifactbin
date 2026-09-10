@@ -46,7 +46,6 @@ import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
 
-const BASE = 'http://localhost:3000';
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 /** Read SSE `data:` frames until `count` arrive or the budget runs out. */

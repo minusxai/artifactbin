@@ -267,7 +267,7 @@ export async function importForDocument(doc: DocumentAssetTarget, url: string, k
   if (docAssetImportRateLimited(doc.id)) {
     throw new WebAssetRefused('rate_limited', 'too many asset imports for this document this hour', url);
   }
-  const row=await importWebAsset(url, { tokenId: doc.token_id, userId: doc.user_id },kind);
+  await importWebAsset(url, { tokenId: doc.token_id, userId: doc.user_id },kind);
   return assetUrlFor(url);
 }
 

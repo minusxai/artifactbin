@@ -16,7 +16,6 @@ import { POST as mintTokenRoute } from '@/app/api/tokens/route';
 import { resetRateLimit } from '@/lib/auth';
 import { MAX_STALE_EDITS } from '@/lib/artifacts';
 
-const BASE = 'http://localhost:3000';
 const SECRET = 'test-secret';
 const harness = useAppHarness();
 

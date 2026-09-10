@@ -13,7 +13,6 @@
  * stating beside the published document that is an example of it.
  */
 
-import { STORY_TEMPLATE_NAMES, STORY_THEME_NAMES } from '@/lib/validation/atlas-schemas';
 
 /**
  * THE TWO RENDERINGS OF THE ART. Every illustration exists as a solid felt-craft

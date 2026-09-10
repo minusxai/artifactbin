@@ -8,7 +8,7 @@
  * one set of declarations. Each package declares its own tables; the shapes
  * (Column/Index/Table) are the contract's.
  */
-import type { Column, Index, Table } from '@artifactbin/contracts';
+import type { Table } from '@artifactbin/contracts';
 import { renderSchema } from '@artifactbin/utils';
 
 const USERS: Table = {

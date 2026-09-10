@@ -27,7 +27,6 @@ import { withHttpServer, type RunningServer } from '@/__tests__/net';
 
 useAppHarness();
 
-const BASE = 'http://localhost:3000';
 const WOFF2 = Buffer.concat([Buffer.from('wOF2'), Buffer.from([1, 2, 3, 4, 5, 6])]);
 
 let server: RunningServer;

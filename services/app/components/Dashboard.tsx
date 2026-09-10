@@ -1,5 +1,7 @@
 'use client';
 
+import { useDialogKeyboard } from './use-dialog-keyboard';
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Activity, Database, Eye, FileText, GitFork, Heart, LayoutDashboard, Maximize2, Users, X, type LucideIcon } from 'lucide-react';
@@ -289,30 +291,7 @@ export function DashboardContent({
 function DashboardDialog({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   const panel = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-      if (event.key !== 'Tab' || !panel.current) return;
-      const stops = [...panel.current.querySelectorAll<HTMLElement>('button:not([disabled])')];
-      if (stops.length === 0) return;
-      const first = stops[0];
-      const last = stops[stops.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [onClose]);
+  useDialogKeyboard(panel, onClose, 'button:not([disabled])');
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden p-3 sm:p-8">

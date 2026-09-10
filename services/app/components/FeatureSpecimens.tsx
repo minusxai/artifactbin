@@ -64,7 +64,6 @@ const SHEET = 'mx-auto w-full max-w-5xl px-4 sm:px-6';
  * dark on anything mounted on paper, so these serve both surfaces.
  */
 const INK_BODY = 'color-mix(in srgb, var(--ink) 85%, transparent)';
-const INK_QUIET = 'color-mix(in srgb, var(--ink) 64%, transparent)';
 const INK_FAINT = 'color-mix(in srgb, var(--ink) 45%, transparent)';
 
 /**

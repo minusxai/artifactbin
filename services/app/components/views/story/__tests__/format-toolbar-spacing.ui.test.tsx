@@ -5,7 +5,6 @@
  * so these tests are pure props-in / onApply-out, over the same class
  * algebra the document applies (lib/data/story/typography).
  */
-import React from 'react';
 import { screen, fireEvent, render } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 

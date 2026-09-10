@@ -98,7 +98,7 @@ export async function trackEvent(
         .slice(0, 32);
     }
   } catch {
-    // Outside a Next request scope (tests, detached work) — no UA to read.
+    // Outside a request scope (tests, detached work) — no UA to read.
   }
   try {
     const db = await getDb();

@@ -30,6 +30,7 @@
  */
 import { chromium } from 'playwright';
 import { startDocument } from './lib/start-doc.mjs';
+import { githubWidgetFixture } from './lib/github-widget-fixture.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
 let failures = 0;
@@ -100,9 +101,10 @@ async function runNoRepaint() {
   await publish(st.id, st.token, PROSE, 'hydration gate');
 
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+  await githubWidgetFixture(page.context());
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(`${m.text()} (${m.location().url})`); });
 
   /*
    * Hold the runtime. Without this the window between the document's own paint
@@ -158,6 +160,7 @@ async function runPreload() {
   await publish(st.id, st.token, CHART, 'preload gate');
 
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+  await githubWidgetFixture(page.context());
   const started = [];
   page.on('request', (r) => started.push({ url: r.url() }));
 

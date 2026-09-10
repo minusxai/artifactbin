@@ -27,7 +27,7 @@ export const TILE_UPSTREAM_ORIGIN = 'https://basemaps.cartocdn.com';
 
 /**
  * The browser-facing `{z}/{x}/{y}` template for a style — root-relative, so it
- * resolves against whatever origin serves the document (prod nginx, dev Next).
+ * resolves against whatever origin serves the document (prod nginx, dev server).
  */
 export function tileUrlTemplate(style: TileStyle): string {
   return `/tiles/${style}/{z}/{x}/{y}.png`;

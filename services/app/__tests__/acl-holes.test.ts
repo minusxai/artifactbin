@@ -29,16 +29,11 @@ import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
 
-const BASE = 'http://localhost:3000';
 const sessionUser = { id: '', email: '' };
 vi.mock('@/auth', () => ({
   auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null),
 }));
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
-const pageProps = (id: string, key?: string) => ({
-  params: Promise.resolve({ id }),
-  searchParams: Promise.resolve(key ? { key } : {}),
-});
 
 async function outcome(p: Promise<unknown>): Promise<'render' | 'redirect' | 'notFound'> {
   try {

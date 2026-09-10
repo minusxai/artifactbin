@@ -12,7 +12,7 @@ import { testProxyOptions } from './helpers';
 
 const echo = new Hono();
 echo.get('/echo', (c) => c.json({ host: c.req.header('x-forwarded-host') ?? null, proto: c.req.header('x-forwarded-proto') ?? null, xff: c.req.header('x-forwarded-for') ?? null, actor: c.req.header(ACTOR_HEADER) ?? null }));
-echo.get('/events', (c) => { let n = 0; let t: ReturnType<typeof setInterval>; const body = new ReadableStream({ start(ctrl) { t = setInterval(() => ctrl.enqueue(new TextEncoder().encode(`data: ${n++}\n\n`)), 10); }, cancel() { clearInterval(t); cancelled.push(1); } }); return new Response(body, { headers: { 'content-type': 'text/event-stream' } }); });
+echo.get('/events', (_c) => { let n = 0; let t: ReturnType<typeof setInterval>; const body = new ReadableStream({ start(ctrl) { t = setInterval(() => ctrl.enqueue(new TextEncoder().encode(`data: ${n++}\n\n`)), 10); }, cancel() { clearInterval(t); cancelled.push(1); } }); return new Response(body, { headers: { 'content-type': 'text/event-stream' } }); });
 const cancelled: number[] = [];
 
 describe('forward', () => {

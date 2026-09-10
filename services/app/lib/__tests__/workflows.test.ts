@@ -137,30 +137,21 @@ describe('workflow supply-chain pins', () => {
 });
 
 describe('dependency security', () => {
-  /*
-   * THE PIN ONLY MEANS SOMETHING IF THE PINNED COPY IS THE ONE THAT RUNS. It
-   * was a devDependency while nothing imported it, and `@monaco-editor/react`
-   * fetched its own Monaco — 0.55.1, off jsdelivr, at runtime — so the version
-   * this asserted was never the version in the browser. (It never reached the
-   * browser either: `script-src 'self'` refused the CDN and `code` mode showed
-   * "Loading…" forever.) components/SourceEditor now bundles this copy and
-   * hands it to the loader, which is what makes the pin load-bearing: assert it
-   * where it ships, and that nothing has quietly re-added a second declaration.
-   */
+  // SourceEditor bundles the pinned editor and worker at build time. The
+  // browser loads those local assets; the Node image needs no second copy.
   it('pins Monaco — the copy that SHIPS — outside the vulnerable DOMPurify advisory range', () => {
     for (const file of ['package.json', 'services/app/package.json']) {
       const pkg = JSON.parse(readFileSync(path.join(root, file), 'utf8')) as {
         dependencies?: Record<string, string>; devDependencies?: Record<string, string>;
       };
-      expect(pkg.dependencies?.['monaco-editor'], file).toBe('0.53.0');
-      expect(pkg.devDependencies?.['monaco-editor'], file).toBeUndefined();
+      expect(pkg.devDependencies?.['monaco-editor'], file).toBe('0.53.0');
+      expect(pkg.dependencies?.['monaco-editor'], file).toBeUndefined();
     }
   });
 });
 
 describe('ci.yml: the image job proves what ships', () => {
   const steps = ci.jobs.image?.steps ?? [];
-  const runs = steps.map((s) => String(s.run ?? ''));
   it('boots the FULL image built from the root Dockerfile', () => {
     const fullBuild = steps.find((s) => s.uses?.startsWith('docker/build-push-action'));
     expect(fullBuild?.with?.file).toBe('Dockerfile');

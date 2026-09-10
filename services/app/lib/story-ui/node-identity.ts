@@ -158,8 +158,8 @@ function alignBySignature(prev: JsxNode[], next: JsxNode[]): Map<number, number>
   }
 
   // Pass 2 — LCS over what the anchors left behind, in document order.
-  const prevRest = prev.map((n, i) => i).filter((i) => !takenPrev.has(i));
-  const nextRest = next.map((n, j) => j).filter((j) => !pairs.has(j));
+  const prevRest = prev.map((_n, i) => i).filter((i) => !takenPrev.has(i));
+  const nextRest = next.map((_n, j) => j).filter((j) => !pairs.has(j));
   const n = prevRest.length;
   const m = nextRest.length;
   if (n === 0 || m === 0) return pairs;

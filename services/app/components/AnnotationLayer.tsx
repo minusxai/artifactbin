@@ -31,7 +31,7 @@
  * reader's document is top-level with no parent window, so nothing here can
  * even reach them.
  */
-import { sendDocument, subscribeDocument, documentRect, documentReady, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
+import { sendDocument, subscribeDocument, documentRect, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, EllipsisVertical, MessageSquare, MousePointerClick, SquareDashed, SquareDashedMousePointer, Trash2, X } from 'lucide-react';
 import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations';

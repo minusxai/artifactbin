@@ -21,7 +21,7 @@
  *
  * Every runtime → parent message goes through `post`, not only edits: a
  * shadowed `window.parent` was measured swallowing 45 of the runtime's own
- * posts (`mx:painted`, `mx:anchor`, `mx:query`). Nothing privileged crossed,
+ * posts (`mx:painted`, `mx:query`). Nothing privileged crossed,
  * but a channel that works only sometimes is not a channel.
  *
  * What this does NOT stop, deliberately: a script can still puppet the editor

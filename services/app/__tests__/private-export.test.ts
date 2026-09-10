@@ -18,7 +18,6 @@ import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
 
-const BASE = 'http://localhost:3000';
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const rawResponse = (path: string) => rawRoute(request(path), params(path.split('/')[2]));
 

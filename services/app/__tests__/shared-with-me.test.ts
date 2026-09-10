@@ -26,7 +26,6 @@ import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
 
-const BASE = 'http://localhost:3000';
 const sessionUser = { id: '', email: '' };
 vi.mock('@/auth', () => ({
   auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null),

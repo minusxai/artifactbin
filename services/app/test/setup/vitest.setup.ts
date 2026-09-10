@@ -7,7 +7,6 @@ process.chdir(process.env.APP_PACKAGE_ROOT ?? path.resolve(import.meta.dirname, 
 
 // Trimmed from minusx test/setup/vitest.setup.ts — the engine has no DB or
 // orchestrator here.
-import { vi } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
 

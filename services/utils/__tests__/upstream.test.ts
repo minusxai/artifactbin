@@ -16,7 +16,7 @@ const alice: Actor = { credential: 'bearer', userId: 'usr_alice', tokenId: 'tok_
 function createApp(): Hono {
   const app = new Hono();
   app.get('/whoami', (c) => c.json({ actor: actorOf(c.req.raw) }));
-  app.get('/events', (c) => {
+  app.get('/events', (_c) => {
     let n = 0; let timer: ReturnType<typeof setInterval>;
     const body = new ReadableStream({
       start(ctrl) { timer = setInterval(() => ctrl.enqueue(new TextEncoder().encode(`data: ping ${n++}\n\n`)), 10); },

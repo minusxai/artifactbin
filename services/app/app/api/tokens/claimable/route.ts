@@ -25,5 +25,5 @@ export async function POST(request: Request) {
   if (isCrossSiteRequest(request)) return json({ error: 'forbidden' }, 403);
   const held = await liveAgentSession(request);
   if (!held) return json({ claimable: [] });
-  return json({ claimable: await claimableTokensById(session.user.id, held.tokenIds.slice(-MAX_TOKENS)) });
+  return json({ claimable: await claimableTokensById(held.tokenIds.slice(-MAX_TOKENS)) });
 }

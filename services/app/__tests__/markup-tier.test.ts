@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
-import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
+import { GET as getArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 
@@ -17,19 +17,9 @@ import { useAppHarness, request } from '@/__tests__/harness';
 
 const harness = useAppHarness();
 
-const BASE = 'http://localhost:3000';
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
-const MD_DOC = `# Q3 in review
-
-Revenue was **up 40%**, driven by the EU expansion.
-
-## What moved
-
-- New logos: 14
-- Churn: 0.8%
-`;
 
 describe('markup — the one document tier', () => {
   it('POST {markup} publishes through the story engine as public format "markup"', async () => {

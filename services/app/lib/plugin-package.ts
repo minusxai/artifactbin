@@ -4,13 +4,9 @@
  */
 import { renderTree, skillFileWithFrontmatter, skillTree } from './skills';
 import {
-  MARKETPLACE_NAME,
-  PLUGIN_BASE_URL,
-  PLUGIN_INSTALL,
-  PLUGIN_NAME,
-  type PluginChannel,
+  PLUGIN_BASE_URL, type PluginChannel,
   pluginChannel,
-  pluginInstall,
+  pluginInstall
 } from './plugin-id';
 
 export const PLUGIN_VERSION = '0.6.0';

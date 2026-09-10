@@ -86,7 +86,7 @@ describe('insert image from a URL', () => {
     fireEvent.change(screen.getByLabelText('Image URL'), { target: { value: 'https://example.com/logo.png' } });
     await act(async () => { fireEvent.click(screen.getByLabelText('Import image from URL')); });
 
-    const create = fetchSpy.mock.calls.find(([u, i]) => (i as RequestInit)?.method === 'POST') as [string, RequestInit];
+    const create = fetchSpy.mock.calls.find(([, i]) => (i as RequestInit)?.method === 'POST') as [string, RequestInit];
     expect(create[0]).toContain('/api/my/artifacts');
     expect(JSON.parse(String(create[1].body))).toEqual({ imageUrl: 'https://example.com/logo.png' });
 

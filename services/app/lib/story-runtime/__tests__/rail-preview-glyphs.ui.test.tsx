@@ -11,7 +11,6 @@
  * So the assertion is on the drawn GLYPH, in the RAIL specifically, and it
  * lives in vitest rather than a browser gate because that is what CI runs.
  */
-import React from 'react';
 import { describe, expect, it } from 'vitest';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 

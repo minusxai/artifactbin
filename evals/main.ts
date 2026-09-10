@@ -656,7 +656,6 @@ async function main(): Promise<void> {
   } finally {
     await settleWithin(browser.close(), TEARDOWN_MS);
   }
-  const verdicts = merged.verdicts;
 
   if (args.report) {
     const html = writeReport([{ dir: args.out }], path.join(args.out, 'report'));

@@ -23,8 +23,8 @@
  */
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import {
-  canonicalQuote, findNearest, formatRel, parseRel,
-  type AnnotationRange, type AnnotationRangePart, type RelAddress, type AnnotationTextRange } from '@/lib/story/annotation-range';
+  canonicalQuote, findNearest, formatRel, parseRel, type AnnotationRangePart, type RelAddress, type AnnotationTextRange
+} from '@/lib/story/annotation-range';
 
 /**
  * The text-holding elements. A selection anchors on one of these and never on

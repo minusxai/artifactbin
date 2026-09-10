@@ -24,7 +24,7 @@ import RowMenu, { confirmDeleteArtifact } from '@/components/RowMenu';
 import { MoveMenu, type PickerFolder } from '@/components/FolderPicker';
 import { ArtifactTable } from '@/components/TokenBrowser';
 import { Tooltip } from '@/components/Tooltip';
-import { dateStamp, MicroLabel, PANEL, timeAgo, VISIBILITY_TIPS, VisibilityPill } from '@/components/ui';
+import { MicroLabel, PANEL, VISIBILITY_TIPS, VisibilityPill } from '@/components/ui';
 import { ViewsMark } from '@/components/ViewsMark';
 import { buildShelf, groupShelfByRecency, parentOfRow, type ShelfRow } from '@/lib/shelf';
 import { pageDataChanged } from '@/web/page-data-events';

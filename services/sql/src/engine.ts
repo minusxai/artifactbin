@@ -40,6 +40,9 @@
 import type { DuckDBConnection, DuckDBInstance, DuckDBPreparedStatement, DuckDBValue, DuckDBTypeId as DuckDBTypeIdT } from '@duckdb/node-api';
 import type { SqlCaps } from './caps';
 import { queryBounds } from './bounds';
+import { inferColumns } from './dataset-shape';
+import { isQueryFailure } from '@artifactbin/contracts';
+import type { ColumnType, DatasetColumn, DryRunInput, DryRunMutationsInput, DryRunMutationsResult, DryRunResult, MutationInput, MutationOutcome, QueryOutcome, QueryPage, Row, RunInput, Scalar, SqlQuery } from '@artifactbin/contracts';
 
 /**
  * The native module is loaded LAZILY, on the first query — a sanctioned
@@ -53,9 +56,6 @@ import { queryBounds } from './bounds';
 type DuckDBModule = typeof import('@duckdb/node-api');
 let duckdbModule: Promise<DuckDBModule> | null = null;
 const duckdb = (): Promise<DuckDBModule> => (duckdbModule ??= import('@duckdb/node-api'));
-import { inferColumns } from './dataset-shape';
-import { isQueryFailure } from '@artifactbin/contracts';
-import type { ColumnType, DatasetColumn, DryRunInput, DryRunMutationsInput, DryRunMutationsResult, DryRunResult, MutationInput, MutationOutcome, QueryFailure, QueryOutcome, QueryPage, Row, RunInput, Scalar, SqlQuery, TableResult } from '@artifactbin/contracts';
 
 
 

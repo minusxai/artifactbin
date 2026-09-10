@@ -17,7 +17,7 @@
  * protocol shortly after they stop arriving, and every way OUT drains first
  * (the flush ref below, published up to the page).
  */
-import { sendDocument, subscribeDocument, documentRect, documentReady, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
+import { type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { Home, Lock } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import InPlaceEditor from '@/components/InPlaceEditor';
@@ -73,7 +73,7 @@ export interface EditorSeed {
   dataflow?: StoryIslandDataflow | null;
 }
 
-export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, runtimeRef, sessionNonce, initialSelectionPath = null, onComment, onToggleComments, commentsOpen = false, commentCount = 0, rightInset = 0 }: {
+export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, runtimeRef, sessionNonce, initialSelectionPath = null, onComment, rightInset = 0 }: {
   id: string;
   seed?: EditorSeed;
   onExit: () => void;
@@ -89,10 +89,7 @@ export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, r
   initialSelectionPath?: string | null;
   /** Comment on the selected node — the page owns the composer and the drain. */
   onComment?: (selection: StoryEditSelection) => void;
-  onToggleComments?: () => void;
-  commentsOpen?: boolean;
   rightInset?: number;
-  commentCount?: number;
   /** Where they are NOW, for the document they go back to. */
   /**
    * Where the mounted editor publishes its drain, so the page can empty it
@@ -240,10 +237,7 @@ export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, r
       flushRef={childFlush}
       initialSelectionPath={initialSelectionPath}
       onComment={onComment}
-      onToggleComments={onToggleComments}
-      commentsOpen={commentsOpen}
       rightInset={rightInset}
-      commentCount={commentCount}
       onDone={onExit}
     />
   );
