@@ -26,10 +26,12 @@ document.getElementById('rename').addEventListener('click',()=>{const row=rows.f
 document.getElementById('remove').addEventListener('click',()=>{rows=rows.filter(row=>row.id!=='order-101');render();});
 document.getElementById('restore').addEventListener('click',()=>{rows=initial.map(row=>({...row}));render();});
 document.getElementById('duplicate').addEventListener('click',()=>{rows.push({...initial[0]});render();});
-document.getElementById('replace-temporary').addEventListener('click',()=>{
+function replaceTemporary(){
   const node=document.createElement('p');node.textContent='Temporary note: this element has no stable key.';
   document.getElementById('temporary-host').replaceChildren(node);
-});
+}
+document.getElementById('replace-temporary').addEventListener('click',replaceTemporary);
+replaceTemporary();
 render();
 `;
 
@@ -61,7 +63,7 @@ export const commentTargetsMarkup = `<Helmet>
       </nav>
       <small id="revision" aria-live="polite">Starting</small>
       <div id="dynamic-orders"></div>
-      <div id="temporary-host"><p>Temporary note: this element has no stable key.</p></div>
+      <div id="temporary-host"></div>
       <button id="replace-temporary">Replace temporary note</button>
       <script>{${JSON.stringify(iframeScript)}}</script>
     </Iframe>

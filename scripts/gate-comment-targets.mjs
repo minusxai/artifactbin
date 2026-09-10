@@ -31,6 +31,10 @@ try {
   await page.getByRole('button',{name:'Toggle comments',exact:true}).click();
   await page.getByLabel('Annotation sidebar',{exact:true}).waitFor();
   const select=async()=>{
+    if(await page.getByRole('button',{name:'Select',exact:true}).count()===0){
+      await openArtifactControls(page);
+      await page.getByRole('button',{name:'Toggle comments',exact:true}).click();
+    }
     const button=page.getByRole('button',{name:'Select',exact:true});
     if(await button.getAttribute('aria-pressed')!=='true')await button.click();
   };
@@ -121,10 +125,37 @@ try {
   await page.mouse.move(bounds.x+Math.min(120,bounds.width-4),bounds.y+Math.min(20,bounds.height-2),{steps:8});
   await page.mouse.up();
   const composer=page.getByLabel('Annotation composer',{exact:true});await composer.waitFor();
-  assert(await composer.evaluate(el=>{const r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));}));
+  assert(await composer.evaluate(el=>{const r=el.getBoundingClientRect();return el.contains(el.getRootNode().elementFromPoint(r.x+r.width/2,r.y+r.height/2));}));
   await save('A drawn iframe area');
   const areaComment=(await annotations()).find(item=>item.thread[0].body==='A drawn iframe area');
   assert.equal(areaComment.range.range.kind,'area');
   console.log('PASS iframe text and area selection with parent composer layering');
   await context.close();
+
+  const mobile=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+  const phone=await mobile.newPage();await becomeOwner(phone,base,seed.token);await phone.goto(`${base}/a/${seed.id}`);
+  const phoneRealm=phone.frameLocator('iframe[title="Dynamic comment playground"]').frameLocator('iframe');
+  const heading=phoneRealm.locator('#static-iframe-heading');await heading.waitFor();
+  await openArtifactControls(phone);await phone.getByRole('button',{name:'Toggle comments',exact:true}).tap();
+  await phone.getByRole('button',{name:'Select',exact:true}).tap();
+  await phone.getByLabel('Annotation sidebar',{exact:true}).waitFor({state:'hidden'});
+  await heading.tap();
+  await phone.getByLabel('Annotation comment',{exact:true}).fill('An iframe block selected by touch');
+  await phone.getByRole('button',{name:'Save annotation',exact:true}).tap();
+  await phone.getByLabel('Annotation composer',{exact:true}).waitFor({state:'hidden'});
+  const mobileComment=(await annotations()).find(item=>item.thread[0].body==='An iframe block selected by touch');
+  assert.equal(mobileComment.range.target.node.id,'static-iframe-heading');
+  if(await phone.getByRole('button',{name:'Close comments',exact:true}).isVisible())await phone.getByRole('button',{name:'Close comments',exact:true}).tap();
+  await heading.scrollIntoViewIfNeeded();
+  const touchBox=await heading.boundingBox();assert(touchBox);
+  const session=await mobile.newCDPSession(phone);
+  await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:touchBox.x+20,y:touchBox.y+10}]});
+  await phoneRealm.getByRole('button',{name:'Select',exact:true}).waitFor();
+  await session.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  await phoneRealm.getByRole('button',{name:'Select',exact:true}).tap();
+  await phone.getByLabel('Select tool active',{exact:true}).waitFor();
+  await phone.getByRole('button',{name:'Cancel picking',exact:true}).tap();
+  await phone.getByLabel('Select tool active',{exact:true}).waitFor({state:'hidden'});
+  console.log('PASS mobile iframe tap, long-press Select and cancellation');
+  await mobile.close();
 } finally { await browser.close(); }
