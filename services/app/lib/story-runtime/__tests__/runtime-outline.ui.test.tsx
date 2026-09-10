@@ -33,6 +33,12 @@ describe('the outline rail', () => {
     expect(html).toContain('class="mx-doc"');
   });
 
+  it('gives a sectioned plan the same contents rail, excluding captures', () => {
+    const props = { nodes: nodes(DOC), refData: {}, colorMode: 'light' as const, template: 'plan' as const };
+    expect(renderToString(<StoryRuntimeApp {...props} />)).toContain('aria-label="Contents"');
+    expect(renderToString(<StoryRuntimeApp {...props} chrome={false} />)).not.toContain('mx-outline');
+  });
+
   it('renders nothing for a two-heading page, and nothing for a capture', () => {
     expect(renderToString(<StoryRuntimeApp nodes={nodes(PAGE)} refData={{}} colorMode="light" template="editorial" />)).not.toContain('mx-outline');
     expect(renderToString(<StoryRuntimeApp nodes={nodes(DOC)} refData={{}} colorMode="light" template="editorial" chrome={false} />)).not.toContain('mx-outline');

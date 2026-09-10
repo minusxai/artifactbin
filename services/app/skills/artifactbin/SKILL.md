@@ -89,6 +89,7 @@ the kit adds theme palettes, tooltips, responsive sizing and live re-runs.
 **template** — the genre. Pick by the ask; deviating deliberately is
 first-class:
 
+- `plan` — wireframes/flows, decisions, milestones.
 - `deck` — slides for PRESENTING: one idea per slide, ~40% empty space.
 - `dashboard` — an operating view: `<Grid>` tiles wall to wall, KPI numbers as
   the only big type, almost no prose.
@@ -118,7 +119,7 @@ More under `references/` ([[ docsIndexHint ]]):
 | pinned human feedback — reply, resolve, the anchor attribute | `publishing-annotations.md` |
 | connecting an MCP client — OAuth or bearer, the tool list | `publishing-mcp.md` |
 | history — versions, revert, the trash, export options | `publishing-versions.md` |
-| design craft — hierarchy, type, spacing, color, motifs | `design.md` |
+| design craft | `design.md` |
 | tag/component allowlists, `<Helmet>`, layout | `markup.md` |
 | data and keyed templates | `markup-data.md`, `markup-repeat.md` |
 | chart serialization and statistical meaning | `markup-data-authoring.md` |
@@ -128,7 +129,7 @@ More under `references/` ([[ docsIndexHint ]]):
 | editable cells, tags and reference pickers | `markup-editing.md` |
 | scroll reveals and ambient motion classes | `markup-motion.md` |
 | Video embeds | `markup-video.md` |
-| SVG motifs and allowed tags | `markup-svg.md` |
+| Mermaid diagrams and SVG | `markup-svg.md` |
 | Libraries, GLBs, files | `markup-libraries.md` |
 | genre structure and full skeleton | `templates-<name>.md` (index: `templates.md`) |
 | theme tokens, accents, chart palette | `themes-<name>.md` (index: `themes.md`) |

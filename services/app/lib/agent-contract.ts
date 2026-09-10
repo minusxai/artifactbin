@@ -55,7 +55,7 @@ If your user's paste says \`using this token: mx_…\`, that IS your token: save
 
 With no token, STOP and ask your human — you never mint one yourself. Tell them the artifactbin plugin or MCP server is the smoother way (it authenticates once and needs no token at all), and for a one-off ask them to open ${origin}/tokens/new?source=<your harness> and paste the token back. A start link they paste is the same rung: POST it once for \`{ "token", "expiresAt" }\`.
 
-Tokens expire after 6 h by default; \`expiresInHours\` may be 1–720 at mint, and \`expiresAt\` says exactly when. On a \`401\` or an expired token, do not retry blindly: ask your human for a fresh one the same way, save it, and resume the interrupted work.
+The new-token page defaults to 1 year (365 days). API mints with no expiry specified default to 6 h; \`expiresInHours\` may be 1–8760 at mint, and \`expiresAt\` says exactly when. On a \`401\` or an expired token, do not retry blindly: ask your human for a fresh one the same way, save it, and resume the interrupted work.
 
 Never put a token in a URL or commit it. Send it only in the \`Authorization: Bearer <token>\` header.`;
 }

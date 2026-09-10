@@ -37,10 +37,17 @@ export async function inspectDocument(browser: Browser, url: string, width: numb
     const m = await page.evaluate(() => ({
       scrollWidth: document.documentElement.scrollWidth,
       innerWidth: window.innerWidth,
+      // The viewer clips its document surface. Page scrollWidth alone can
+      // therefore report a fit while an implicit grid column is cut off.
+      // Measure the surface, not every descendant: bounded diagram/table
+      // scrollers are intentional and must remain allowed.
+      surfaceFits: [...document.querySelectorAll('.mx-doc')].every(
+        (surface) => surface.scrollWidth <= surface.clientWidth + 1,
+      ),
       h1: document.querySelector('h1')?.textContent?.trim() ?? null,
       marks: document.querySelectorAll('svg [class*="mark-"] path, svg [class*="mark-"] rect, canvas').length,
     }));
-    return { consoleErrors, failedResponses, ...m, fits: m.scrollWidth <= m.innerWidth };
+    return { consoleErrors, failedResponses, ...m, fits: m.scrollWidth <= m.innerWidth && m.surfaceFits };
   } finally {
     await page.close();
   }

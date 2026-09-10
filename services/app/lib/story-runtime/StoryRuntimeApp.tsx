@@ -1,3 +1,4 @@
+import { Mermaid } from '@/components/kit/mermaid';
 /**
  * The ONE view composition for a served markup document. The registry and
  * adapters are shared by server rendering and the browser runtime, while
@@ -714,6 +715,10 @@ const RUNTIME_REGISTRY: Record<string, ComponentType<Record<string, unknown>>> =
   ...STORY_UI_COMPONENTS,
   Dialog: DialogAdapter,
   DialogContent: DialogContentAdapter,
+  Mermaid: props => {
+    const { colorMode } = useContext(RuntimeEmbedContext);
+    return <Mermaid {...props} code={props.code as string} colorMode={colorMode} />;
+  },
   Iframe: props => {
     const { store, managedAssets, importManagedAsset } = useContext(RuntimeEmbedContext);
     return store ? <ManagedIframeView {...props} compiled={props.compiled as ManagedIframeContent} store={store} assets={managedAssets} importAsset={importManagedAsset} /> : null;
@@ -1052,8 +1057,8 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, t
   const slides = useMemo(() => (chrome ? discoverSlides(nodes) : []), [nodes, chrome]);
   const deck = slides.length >= MIN_SLIDES_FOR_RAIL;
   const { active, go } = useSlideChrome(deck ? slides.length : 0);
-  // A sectioned editorial gets its outline — never scrolly, a deck or a capture.
-  const outline = useMemo(() => (chrome && !deck && template === 'editorial' && hasOutline(nodes) ? discoverOutline(nodes) : []), [nodes, template, chrome, deck]);
+  // Sectioned reports and plans share the contents rail; captures omit it.
+  const outline = useMemo(() => (chrome && !deck && (template === 'editorial' || template === 'plan') && hasOutline(nodes) ? discoverOutline(nodes) : []), [nodes, template, chrome, deck]);
 
   // `<img src="ref:<id>">` / `<Video poster="ref:<id>">` → the referenced
   // artifact's URL, through the SAME table the editor uses
@@ -1109,7 +1114,7 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, t
     // document without a rail must not be measured against something else.
     if (outline.length === 0) return withGlyphs(<div className="mx-doc">{body}</div>);
     return withGlyphs(
-      <div className="mx-reading">
+      <div className={template === 'plan' ? 'mx-reading mx-reading--plan' : 'mx-reading'}>
         <OutlineRail entries={outline} />
         <div className="mx-doc">{body}</div>
       </div>,

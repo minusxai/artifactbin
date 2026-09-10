@@ -5,8 +5,8 @@ description: >-
 ---
 ## Read first
 
-`markup` is **static JSX data**, interpreted over a fixed component registry.
-Use native JSX and kit interactions. Reserve Iframe for DOM scripts or canvas.
+`markup` is **static JSX data** over the component registry.
+Keep content and interactions native; use Iframe for isolated DOM scripts or canvas.
 
 Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with exact spans.
 

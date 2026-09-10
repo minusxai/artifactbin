@@ -2,7 +2,7 @@
  * WHAT WE TELL THE LLM — ONE canonical "agent contract", the SAME words everywhere (tok-p3, plan §4b).
  *
  * lib/agent-contract exports `agentContract(base, surface)`: a markdown block that names where the token lives
- * (~/.artifactbin.env), that tokens expire (6 h default; expiresInHours 1–720 at mint), what to do on
+ * (~/.artifactbin.env), that tokens expire (6 h default; expiresInHours 1–8760 at mint), what to do on
  * 401/expired (ask the human, save, resume — never a blind retry), and header-only auth. The `'http'`
  * rendering is VERBATIM the skill reference publishing-auth.md (= llms.txt's auth section; the file uses the
  * `[[ base ]]` placeholder) and the start-link brief.

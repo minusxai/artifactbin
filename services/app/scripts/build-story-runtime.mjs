@@ -108,10 +108,11 @@ const dynamicChunks = (browser.metafile.outputs[entryOut[0]].imports ?? [])
  * need: the chart module. Edit mode is also a dynamic import, but it is loaded
  * on demand by an owner who has pressed Edit — preloading it would make every
  * reader of every charted document download an editor they will never open.
- * It needs no entry at all: the runtime resolves it from its own URL.
+ * Mermaid likewise loads only for a Mermaid component, not every chart.
+ * These need no preload entry: the runtime resolves them from their own URLs.
  */
 const lazy = dynamicChunks
-  .filter((c) => !c.from.some((f) => f.includes('lib/story-runtime/edit/')))
+  .filter((c) => !c.from.some((f) => f.includes('lib/story-runtime/edit/') || f.endsWith('components/kit/mermaid-render.ts')))
   .map((c) => c.url);
 
 /*

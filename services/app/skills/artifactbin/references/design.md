@@ -29,6 +29,10 @@ Helmet CSS adds, you carry yourself:
   specificity (don't let two classes fight over section spacing) and give
   keyboard focus a visible state.
 
+**Plans:** UI plans use [templates-plan.md](templates-plan.md); other workflows use
+useful visuals. Todos use plain lists or tables, without checkboxes. Strike
+completed labels (`<s>`), preserving context. Save progress by editing.
+
 ## Contents
 
 Calibrate the treatment · Ground it in the subject · Plan before you build ·

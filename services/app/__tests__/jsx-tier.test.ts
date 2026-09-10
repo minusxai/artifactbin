@@ -24,6 +24,19 @@ const JSX_DOC = `<div data-design="tw" className="@container w-full p-8" id="roo
 </div>`;
 
 describe('jsx tier publish', () => {
+  it('publishes and reads back the plan template', async () => {
+    const t = await mintToken('plan-template');
+    const res = await createArtifactRoute(request('/api/artifacts', {
+      method: 'POST', token: t.token,
+      json: { title: 'Scheduling UI plan', markup: JSX_DOC, template: 'plan' },
+    }));
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    const got = await getArtifactRoute(request(`/api/artifacts/${body.id}`, { token: t.token }), params({ id: body.id }));
+    expect(got.status).toBe(200);
+    expect(await got.json()).toMatchObject({ template: 'plan', markup: JSX_DOC });
+  });
+
   it('stores source + compiled CSS, with theme/colorMode in meta', async () => {
     const t = await mintToken('t');
     const res = await createArtifactRoute(
