@@ -1,3 +1,4 @@
+import { Mermaid } from '@/components/kit/mermaid';
 /**
  * The ONE view composition for a served markup document. The registry and
  * adapters are shared by server rendering and the browser runtime, while
@@ -10,7 +11,7 @@
  */
 import { cloneElement, createContext, useContext, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { CSSProperties, ReactElement, ReactNode } from 'react';
-import type { JsxElement } from '@/lib/jsx';
+import type { JsxElement, JsxNode } from '@/lib/jsx';
 import type { ComponentType } from 'react';
 import { renderStoryNodes, type BoundControlProps, type BoundSourceProps, type CellControlProps } from '@/lib/story-ui/interpreter';
 import {Dialog, DialogContent} from '@/components/kit/dialog';
@@ -714,6 +715,10 @@ const RUNTIME_REGISTRY: Record<string, ComponentType<Record<string, unknown>>> =
   ...STORY_UI_COMPONENTS,
   Dialog: DialogAdapter,
   DialogContent: DialogContentAdapter,
+  Mermaid: props => {
+    const { colorMode } = useContext(RuntimeEmbedContext);
+    return <Mermaid {...props} code={props.code as string} colorMode={colorMode} />;
+  },
   Iframe: props => {
     const { store, managedAssets, importManagedAsset } = useContext(RuntimeEmbedContext);
     return store ? <ManagedIframeView {...props} compiled={props.compiled as ManagedIframeContent} store={store} assets={managedAssets} importAsset={importManagedAsset} /> : null;
@@ -1004,6 +1009,7 @@ export type StoryRuntimeAppProps = StoryIslandData & {
    * same mounted charts. Absent for every reader, and the chunk that provides
    * it is loaded only on demand.
    */
+  editChildren?: (children: ReactNode[], nodes: JsxNode[], parentPath: string) => ReactNode;
   editDecorate?: (element: ReactElement, node: JsxElement, path: string) => ReactNode;
   /**
    * Rename a slide from the deck's own rail. The rail is the DOCUMENT's chrome
@@ -1033,7 +1039,7 @@ const EMPTY_GLYPHS: GlyphMap = {};
 /** A store-less subscribe (a Button rendered outside a document): nothing ever changes. */
 const NO_SUBSCRIBE = () => () => {};
 
-export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, template = null, chrome = true, assetsUrl = null, managedAssets, importAsset, store: givenStore, onMounted, editDecorate, onSlideRename }: StoryRuntimeAppProps) {
+export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, template = null, chrome = true, assetsUrl = null, managedAssets, importAsset, store: givenStore, onMounted, editDecorate, editChildren, onSlideRename }: StoryRuntimeAppProps) {
   const [localStore] = useState<DataflowStore>(() => givenStore ?? createDataflowStore(dataflow ?? { flow: EMPTY_DATAFLOW }));
   const store = givenStore ?? localStore;
   const mountedRef = useRef(onMounted);
@@ -1051,8 +1057,8 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, t
   const slides = useMemo(() => (chrome ? discoverSlides(nodes) : []), [nodes, chrome]);
   const deck = slides.length >= MIN_SLIDES_FOR_RAIL;
   const { active, go } = useSlideChrome(deck ? slides.length : 0);
-  // A sectioned editorial gets its outline — never scrolly, a deck or a capture.
-  const outline = useMemo(() => (chrome && !deck && template === 'editorial' && hasOutline(nodes) ? discoverOutline(nodes) : []), [nodes, template, chrome, deck]);
+  // Sectioned reports and plans share the contents rail; captures omit it.
+  const outline = useMemo(() => (chrome && !deck && (template === 'editorial' || template === 'plan') && hasOutline(nodes) ? discoverOutline(nodes) : []), [nodes, template, chrome, deck]);
 
   // `<img src="ref:<id>">` / `<Video poster="ref:<id>">` → the referenced
   // artifact's URL, through the SAME table the editor uses
@@ -1085,6 +1091,7 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, t
           boundSource: RuntimeBoundSource,
           cellControl: RuntimeCellControl,
           decorateElement,
+          decorateChildren: editChildren,
         })}
       </RuntimeEmbedContext.Provider>
     </RuntimeAssetContext.Provider>
@@ -1107,7 +1114,7 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, t
     // document without a rail must not be measured against something else.
     if (outline.length === 0) return withGlyphs(<div className="mx-doc">{body}</div>);
     return withGlyphs(
-      <div className="mx-reading">
+      <div className={template === 'plan' ? 'mx-reading mx-reading--plan' : 'mx-reading'}>
         <OutlineRail entries={outline} />
         <div className="mx-doc">{body}</div>
       </div>,

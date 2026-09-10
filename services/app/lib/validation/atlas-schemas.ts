@@ -30,7 +30,7 @@ export type StoryThemeName = (typeof STORY_THEME_NAMES)[number];
  * The story templates — the document's structural GENRE (beat structure +
  * layout grammar), orthogonal to the design theme.
  */
-export const STORY_TEMPLATE_NAMES = ['editorial', 'deck', 'scrolly', 'dashboard'] as const;
+export const STORY_TEMPLATE_NAMES = ['editorial', 'deck', 'scrolly', 'dashboard', 'plan'] as const;
 export type StoryTemplateName = (typeof STORY_TEMPLATE_NAMES)[number];
 
 export const StoryContent = Type.Object({
@@ -43,7 +43,10 @@ export const StoryContent = Type.Object({
     'CONTAINER-QUERY variants (`@lg:`, `@2xl:` — NEVER viewport `md:`/`lg:`). COMPONENTS: the ' +
     'body is STATIC JSX — plain HTML content tags styled with Tailwind (`className=`) plus the ' +
     'registered shadcn/ui component set: ' + STORY_UI_COMPONENT_NAME_LIST.join(', ') + '. ' +
-    'These are the ONLY Capitalized tags allowed. GRID LAYOUT — ' +
+    'These are the ONLY Capitalized tags allowed. For prose columns/sidebars, prefer ' +
+    '<Grid mode="flow"><GridItem w={8}>…</GridItem><GridItem w={4}>…</GridItem></Grid>. ' +
+    'Flow stacks on phones, grows with content, and supports direct column manipulation. ' +
+    'Use w and optional minHeight (pixels), never x/y/h, in flow. POSITIONED DASHBOARDS — ' +
     '<Grid><GridItem x={0} y={0} w={8} h={5}>…</GridItem>…</Grid>: 12 columns × 86px rows.'),
   format: Type.Optional(Type.Union([Type.Literal('jsx'), Type.Null()], { description:
     "'jsx' = the story field holds shadcn JSX source rendered by the story interpreter" })),
@@ -55,7 +58,8 @@ export const StoryContent = Type.Object({
   template: Type.Optional(Nullable(StringEnum(STORY_TEMPLATE_NAMES,
     "Story template (format:'jsx' only) — the document's structural genre: 'editorial' (long-read magazine " +
     "feature), 'deck' (slide-section presentation), 'scrolly' (playful scrollytelling), 'dashboard' " +
-    '(a Grid of draggable KPI/chart tiles with minimal prose). METADATA ONLY: it records intent and drives ' +
+    '(a Grid of draggable KPI/chart tiles with minimal prose), plan (visual proposals, flows and milestones). ' +
+    'METADATA ONLY: it records intent and drives ' +
     'the structure YOU write; no automatic CSS or layout is applied.'))),
   colorMode: Type.Optional(Nullable(StringEnum(['light', 'dark'],
     "The AUTHOR'S DEFAULT mode for the story surface. Every theme carries both a light and a dark " +

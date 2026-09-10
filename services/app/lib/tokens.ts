@@ -50,8 +50,8 @@ export interface MintedToken {
 
 /** Default lifetime of a minted token: six hours (tok-p1). */
 export const DEFAULT_TOKEN_TTL_MS = 6 * 60 * 60 * 1000;
-/** The longest lifetime a caller may ask for at mint — the agent cookie's own max age (30 days). */
-export const MAX_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+/** Longest explicit bearer lifetime: 365 days, independent of browser session expiry. */
+export const MAX_TOKEN_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 /** The shortest: one hour. */
 export const MIN_TOKEN_TTL_MS = 60 * 60 * 1000;
 

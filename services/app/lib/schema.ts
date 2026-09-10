@@ -198,6 +198,7 @@ const ARTIFACT_EDITS: Table = {
     { name: 'span_start', type: 'INTEGER', notNull: true },
     { name: 'span_end', type: 'INTEGER', notNull: true },
     { name: 'changes', type: 'JSONB' },
+    { name: 'annotation_changes', type: 'JSONB' },
     // Who made the splice — NULL on rows that predate attribution.
     { name: 'actor_user_id', type: 'TEXT' },
     { name: 'actor_token_id', type: 'TEXT' },

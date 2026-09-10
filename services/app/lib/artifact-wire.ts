@@ -2,6 +2,7 @@ import type {RefLoader} from '@/lib/story/refs';
 import {creationOperation,lookupCreation,CreationReplay} from '@/lib/creation-ledger';
 import {artifactState} from '@/lib/artifact-state';
 import {prepareContentInput,applyPreparedContent,type PreparedContent} from '@/lib/story/prepare-content';
+import {parseAnnotationOperations} from './story/annotation-edits';
 import { notifyRemoteComment } from './remote/mentions';
 import {prepareCatalog,catalogOf} from '@/lib/datasets/catalog';
 import {DatasetError} from '@/lib/datasets/errors';
@@ -660,6 +661,8 @@ export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: 
 
 /** Body → EditInput; null = malformed (both content forms, neither change nor meta, wrong types). */
 function parseEditBody(body: Record<string, unknown>): EditInput | null {
+  const annotationOps=body.annotation_ops===undefined?[]:parseAnnotationOperations(body.annotation_ops);
+  if(!annotationOps)return null;
   const editId = body.edit_id;
   if (typeof editId !== 'string' || editId.length === 0) return null;
 
@@ -683,7 +686,7 @@ function parseEditBody(body: Record<string, unknown>): EditInput | null {
         : undefined;
 
   if (!change) return null;
-  return {baseEditId: editId, change};
+  return {baseEditId: editId, change, ...(annotationOps.length ? {annotationOps} : {})};
 }
 
 /**

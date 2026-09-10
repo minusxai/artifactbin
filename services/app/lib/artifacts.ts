@@ -1,6 +1,8 @@
 import {reserveCreation,completeCreation,type CreationOperation} from './creation-ledger';
 import {artifactState} from './artifact-state';
 import {channelFor} from './story/live';
+import { annotationEffects, type AnnotationRecord, type AnnotationReceipt } from './story/annotation-edits';
+import type { AnnotationOperation } from './editor-v2/annotation-map';
 import {catalogOf} from '@/lib/datasets/catalog';
 import {executeCatalog} from '@/lib/datasets/execute';
 import {claimPendingDatasetSecret,resolveDatasetConnection} from '@/lib/datasets/secrets';
@@ -1081,6 +1083,7 @@ function sayMoved(actor: TokenActor, id: string, moved: { from: string | null; t
  * prefix/suffix diff — sound because stored source is canonical).
  */
 export interface EditInput {
+  annotationOps?: AnnotationOperation[];
   baseEditId: string;
   /** The content change, if this edit has one. */
   change?: { oldString: string; newString: string } | { newSource: string } | { edits: StringEdit[] };
@@ -1323,6 +1326,27 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
       ? batchChanges
       : null;
 
+    const operations = input.annotationOps ?? [];
+    const annotationRows = operations.length
+      ? (await db.query<AnnotationRecord>(
+          'SELECT id,anchor_key,range FROM annotations WHERE artifact_id=$1 AND root_id IS NULL AND deleted_at IS NULL',
+          [id],
+        )).rows
+      : [];
+    const storedReceipts = operations.length
+      ? (await db.query<{ annotation_changes: AnnotationReceipt[] }>(
+          `SELECT annotation_changes FROM artifact_edits WHERE artifact_id=$1 AND EXISTS (
+             SELECT 1 FROM jsonb_array_elements(annotation_changes) receipt
+             WHERE receipt->>'operationId'=ANY($2::text[])
+           )`,
+          [id, operations.map((op) => op.id)],
+        )).rows.flatMap((r) => r.annotation_changes ?? [])
+      : [];
+    if (operations.some((op) => op.kind === 'undo' && !storedReceipts.some((r) => r.operationId === op.id && r.direction === 'map')))
+      return { applied: false, reason: 'doc_changed', head: headOf(head) };
+    const sideEffects = operations.length
+      ? annotationEffects(headSource, storedText, operations, annotationRows, storedReceipts)
+      : { updates: [], receipts: [] };
     const freshEditId = newEditId();
     const updated = await db.query<ArtifactRow>(
       `WITH updated AS (
@@ -1343,9 +1367,17 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
              WHERE artifact_id = $1 AND created_at > now() - ($15::int * interval '1 millisecond')
            )
          ON CONFLICT DO NOTHING
+       ), moved_annotations AS (
+         UPDATE annotations a SET anchor_key=x->'after'->>'anchor', range=x->'after'->>'range'
+         FROM jsonb_array_elements($30::jsonb) x
+         WHERE a.artifact_id=$1 AND a.id=x->>'annotationId' AND a.root_id IS NULL AND a.deleted_at IS NULL
+           AND a.anchor_key=x->'before'->>'anchor' AND a.range IS NOT DISTINCT FROM (x->'before'->>'range')
+           AND EXISTS (SELECT 1 FROM updated)
+         RETURNING a.id
        ), logged AS (
-         INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, changes, actor_user_id, actor_token_id)
-         SELECT id, $6, $16, $17, $18, $19, $20, $26::jsonb, $22, $23 FROM updated
+         INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, changes, actor_user_id, actor_token_id, annotation_changes)
+         SELECT id, $6, $16, $17, $18, $19, $20, $26::jsonb, $22, $23,
+           (SELECT jsonb_agg(receipt) FROM jsonb_array_elements($31::jsonb) receipt WHERE receipt->>'annotationId'='' OR receipt->>'annotationId' IN (SELECT id FROM moved_annotations)) FROM updated
          RETURNING pg_notify('artifact_' || lower(artifact_id), $6)
        ), reserved_ids AS (
          INSERT INTO artifact_source_ids (artifact_id, source_id, provenance, first_version)
@@ -1382,6 +1414,8 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
         JSON.stringify(identity.ids),
         JSON.stringify(identity.aliases),
         identity.ids,
+        JSON.stringify(sideEffects.updates),
+        JSON.stringify(sideEffects.receipts),
       ],
     );
     if (updated.rows[0]) {

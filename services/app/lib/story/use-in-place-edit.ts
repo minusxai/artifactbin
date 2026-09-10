@@ -14,13 +14,33 @@
  * author's script exists (lib/story-runtime/pristine). Everything without it
  * is dropped — including a forgery posted through the unforgeable `top`.
  */
-import { sendDocument, subscribeDocument, documentReady, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
+import {
+  sendDocument,
+  subscribeDocument,
+  documentReady,
+  type DocumentRuntimeRef,
+} from '@/lib/story-runtime/document-endpoint';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { isEditFrameMessage, STORY_APPLY_FORMAT_MESSAGE, STORY_APPLY_LINK_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_SELECT_MESSAGE, STORY_COMMIT_MESSAGE, STORY_DOCUMENT_MESSAGE, type StoryEditSelection, type StoryIslandDataflow } from '@/lib/story-runtime/contract';
+import {
+  isEditFrameMessage,
+  STORY_APPLY_FORMAT_MESSAGE,
+  STORY_APPLY_LINK_MESSAGE,
+  STORY_EDIT_MODE_MESSAGE,
+  STORY_SELECT_MESSAGE,
+  STORY_COMMIT_MESSAGE,
+  STORY_DOCUMENT_MESSAGE,
+  type StoryEditSelection,
+  type StoryIslandDataflow,
+} from '@/lib/story-runtime/contract';
+import type { EditorBookmark, EditorSelectionChange } from '@/lib/editor-v2/bookmark';
 import type { JsxNode } from '@/lib/jsx';
+import { editBlock } from '@/lib/editor-v2/block-edit';
+import { replaceProseRegion } from '@/lib/editor-v2/source-edit';
 import { composeSource, type ComposableFormatEdit } from '@/lib/story/edit-compose';
 
 export interface InPlaceEditOptions {
+  onError?: (message: string) => void;
+  onRejectedEdit?: (fragment: string) => void;
   /** The live document's iframe. Never remounted — that is the whole point. */
   frameRef?: { current: HTMLIFrameElement | null };
   runtimeRef?: DocumentRuntimeRef;
@@ -35,10 +55,11 @@ export interface InPlaceEditOptions {
   /** The current source, read at the moment an edit arrives. */
   sourceRef: { current: string };
   /** A frame-originated edit, already composed into the source. */
-  onSourceEdited: (next: string) => void;
+  onSourceEdited: (next: string, render?: boolean, group?: string, selection?: EditorSelectionChange) => void;
   /** Delete/Backspace pressed with a selection, or Escape. */
   onEditKey?: (key: 'Delete' | 'Backspace' | 'Escape', selection: StoryEditSelection | null) => void;
   /** A slide was renamed from the deck's own rail. */
+  onHistory?: (direction: 'undo' | 'redo') => void;
   onSlideTitle?: (path: string, title: string) => void;
   /**
    * An image was pasted or dropped INTO the document. The listeners live in the
@@ -49,6 +70,7 @@ export interface InPlaceEditOptions {
 }
 
 export interface InPlaceEditController {
+  discardRejectedEdit: () => void;
   /** What the user has selected in the document, as the document described it. */
   selection: StoryEditSelection | null;
   /** True once the frame has edit mode running. */
@@ -59,6 +81,9 @@ export interface InPlaceEditController {
   applyFormat: (path: string, edit: ComposableFormatEdit) => void;
   /** Ask the frame to link the live text selection; it answers with a text edit. */
   applyLink: (path: string, href: string | null) => void;
+  applyInline: (tag: 'strong' | 'em' | 'u') => void;
+  pasteMarkdown: (value: string) => void;
+  restoreSelection: (bookmark: EditorBookmark) => void;
   /** Select a node by path (a breadcrumb click, a panel opening) or clear it. */
   select: (path: string | null) => void;
   /**
@@ -81,12 +106,25 @@ export interface InPlaceEditController {
 }
 
 export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditController {
-  const { frameRef, runtimeRef, editing, sessionNonce, sourceRef, onSourceEdited, onEditKey, onSlideTitle, onImageDrop } = options;
+  const {
+    frameRef,
+    runtimeRef,
+    editing,
+    sessionNonce,
+    sourceRef,
+    onSourceEdited,
+    onEditKey,
+    onSlideTitle,
+    onImageDrop,
+  } = options;
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
   const [selection, setSelection] = useState<StoryEditSelection | null>(null);
   const [ready, setReady] = useState(false);
   const nonceRef = useRef<string | null>(sessionNonce);
   nonceRef.current = sessionNonce;
   const typingRef = useRef(false);
+  const rejectedRef = useRef(false);
   /** Resolves the in-flight commitPending, if there is one. */
   const committedRef = useRef<((acknowledged?: boolean) => void) | null>(null);
   const commitRequestRef = useRef<Promise<boolean> | null>(null);
@@ -104,18 +142,34 @@ export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditControll
   /** commitPending is defined below; the listener reaches it through this. */
   const commitPendingRef = useRef<(() => Promise<void>) | null>(null);
 
-  const postToFrame = useCallback((message: Record<string, unknown>) => {
-    sendDocument({ frameRef, runtimeRef }, message);
-  }, [frameRef, runtimeRef]);
+  const postToFrame = useCallback(
+    (message: Record<string, unknown>) => {
+      sendDocument({ frameRef, runtimeRef }, message);
+    },
+    [frameRef, runtimeRef],
+  );
 
   // ── listening ─────────────────────────────────────────────────────────────
   useEffect(() => {
     const onMessage = (event: { data: unknown }) => {
-
       const nonce = nonceRef.current;
       if (!nonce || !isEditFrameMessage(event.data, nonce)) return;
 
       switch (event.data.type) {
+        case 'mx:history':
+          optionsRef.current.onHistory?.(event.data.direction);
+          break;
+        case 'mx:block-edit': {
+          const next = editBlock(sourceRef.current, event.data.command);
+          if (next !== sourceRef.current) {
+            onSourceEditedRef.current(next, true);
+            sourceRef.current = next;
+          }
+          break;
+        }
+        case 'mx:edit-error':
+          optionsRef.current.onError?.(event.data.message);
+          break;
         case 'mx:edit-ready':
           setReady(true);
           break;
@@ -125,6 +179,18 @@ export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditControll
         case 'mx:selection':
           setSelection(event.data.selection);
           break;
+        case 'mx:flow-edit': {
+          const { path, expected, replacement } = event.data;
+          const next = replaceProseRegion(sourceRef.current, path, expected, replacement);
+          if (next !== sourceRef.current) {
+            onSourceEditedRef.current(next, true, event.data.group, event.data.selection);
+            sourceRef.current = next;
+          } else if (expected !== replacement) {
+            rejectedRef.current = true;
+            optionsRef.current.onRejectedEdit?.(replacement);
+          }
+          break;
+        }
         case 'mx:text-edit': {
           const next = composeSource(sourceRef.current, {
             text: new Map([[event.data.path, event.data.innerHtml]]),
@@ -174,7 +240,11 @@ export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditControll
   // ── entering and leaving ──────────────────────────────────────────────────
   useEffect(() => {
     postToFrame({ type: STORY_EDIT_MODE_MESSAGE, on: editing });
-    if (!editing) { setReady(false); setSelection(null); typingRef.current = false; }
+    if (!editing) {
+      setReady(false);
+      setSelection(null);
+      typingRef.current = false;
+    }
     return () => {
       // Leaving unmounts this; the document must not stay editable.
       if (editing) postToFrame({ type: STORY_EDIT_MODE_MESSAGE, on: false });
@@ -193,74 +263,104 @@ export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditControll
     return () => window.clearInterval(timer);
   }, [editing, ready, postToFrame]);
 
-  const applyFormat = useCallback((path: string, edit: ComposableFormatEdit) => {
-    // Locally first, so the change is on screen in the same frame the user
-    // clicked; then folded into the source, which is what actually persists.
-    postToFrame({ type: STORY_APPLY_FORMAT_MESSAGE, path, ...edit });
-    const next = composeSource(sourceRef.current, {
-      text: new Map(),
-      format: new Map([[path, edit]]),
-      layout: new Map(),
-    });
-    if (next !== sourceRef.current) onSourceEditedRef.current(next);
-  }, [postToFrame, sourceRef]);
-
-  const applyLink = useCallback((path: string, href: string | null) => {
-    // Only the document holds a live Selection; it answers with a text edit.
-    postToFrame({ type: STORY_APPLY_LINK_MESSAGE, path, href });
-  }, [postToFrame]);
-
-  const select = useCallback((path: string | null) => {
-    /*
-     * DESELECTING NEEDS NO ANSWER. Selecting does — only the document can
-     * describe what is at a path (its rect, its classes, its ancestors), so
-     * that waits for `mx:selection`. Clearing is the page's own decision, and
-     * routing it through the frame meant `close` landed a message round-trip
-     * after the click: the panel visibly outlived the button that shut it.
-     * The document is still told, so it drops its own selected stamp.
-     */
-    if (path === null) setSelection(null);
-    postToFrame({ type: STORY_SELECT_MESSAGE, path });
-  }, [postToFrame]);
-
-  const commitPending = useCallback(async (requireAcknowledgement = false): Promise<void> => {
-    if (!documentReady({ frameRef, runtimeRef })) {
-      if (requireAcknowledgement) throw new Error('editor is unavailable');
-      return;
-    }
-    // Visibility, navigation and image insertion can request the same commit.
-    // Share its acknowledgement rather than overwriting a caller's resolver.
-    if (!commitRequestRef.current) {
-      commitRequestRef.current = new Promise<boolean>(resolve => {
-        const timer = window.setTimeout(() => finish(false), 1200);
-        function finish(acknowledged = true) {
-          window.clearTimeout(timer);
-          committedRef.current = null;
-          commitRequestRef.current = null;
-          resolve(acknowledged);
-        }
-        committedRef.current = finish;
-        postToFrame({ type: STORY_COMMIT_MESSAGE });
+  const applyFormat = useCallback(
+    (path: string, edit: ComposableFormatEdit) => {
+      // The engine publishes its checked source transaction. Legacy hosts still
+      // need the parent to compose their class/style change. Never do both.
+      const engineOwns = selectionRef.current?.path === path && selectionRef.current.editor === 'prose';
+      postToFrame({ type: STORY_APPLY_FORMAT_MESSAGE, path, ...edit });
+      if (engineOwns) return;
+      const next = composeSource(sourceRef.current, {
+        text: new Map(),
+        format: new Map([[path, edit]]),
+        layout: new Map(),
       });
-    }
-    const acknowledged = await commitRequestRef.current;
-    if (requireAcknowledgement && !acknowledged) throw new Error('editor commit timed out');
-  }, [frameRef, runtimeRef, postToFrame]);
+      if (next !== sourceRef.current) onSourceEditedRef.current(next);
+    },
+    [postToFrame, sourceRef],
+  );
+
+  const applyLink = useCallback(
+    (path: string, href: string | null) => {
+      // Only the document holds a live Selection; it answers with a text edit.
+      postToFrame({ type: STORY_APPLY_LINK_MESSAGE, path, href });
+    },
+    [postToFrame],
+  );
+
+  const select = useCallback(
+    (path: string | null) => {
+      /*
+       * DESELECTING NEEDS NO ANSWER. Selecting does — only the document can
+       * describe what is at a path (its rect, its classes, its ancestors), so
+       * that waits for `mx:selection`. Clearing is the page's own decision, and
+       * routing it through the frame meant `close` landed a message round-trip
+       * after the click: the panel visibly outlived the button that shut it.
+       * The document is still told, so it drops its own selected stamp.
+       */
+      if (path === null) setSelection(null);
+      postToFrame({ type: STORY_SELECT_MESSAGE, path });
+    },
+    [postToFrame],
+  );
+
+  const commitPending = useCallback(
+    async (requireAcknowledgement = false): Promise<void> => {
+      if (rejectedRef.current) throw new Error('Recover the uncommitted text before leaving the editor.');
+      if (!documentReady({ frameRef, runtimeRef })) {
+        if (requireAcknowledgement) throw new Error('editor is unavailable');
+        return;
+      }
+      // Visibility, navigation and image insertion can request the same commit.
+      // Share its acknowledgement rather than overwriting a caller's resolver.
+      if (!commitRequestRef.current) {
+        commitRequestRef.current = new Promise<boolean>((resolve) => {
+          const timer = window.setTimeout(() => finish(false), 1200);
+          function finish(acknowledged = true) {
+            window.clearTimeout(timer);
+            committedRef.current = null;
+            commitRequestRef.current = null;
+            resolve(acknowledged);
+          }
+          committedRef.current = finish;
+          postToFrame({ type: STORY_COMMIT_MESSAGE });
+        });
+      }
+      const acknowledged = await commitRequestRef.current;
+      if (requireAcknowledgement && !acknowledged) throw new Error('editor commit timed out');
+    },
+    [frameRef, runtimeRef, postToFrame],
+  );
 
   commitPendingRef.current = commitPending;
 
-  const pushDocument = useCallback((update: Parameters<InPlaceEditController['pushDocument']>[0]) => {
-    postToFrame({ type: STORY_DOCUMENT_MESSAGE, ...update });
-  }, [postToFrame]);
+  const pushDocument = useCallback(
+    (update: Parameters<InPlaceEditController['pushDocument']>[0]) => {
+      postToFrame({ type: STORY_DOCUMENT_MESSAGE, ...update });
+    },
+    [postToFrame],
+  );
 
   return {
     selection,
     ready,
-    isUserEditing: useCallback(() => typingRef.current, []),
+    discardRejectedEdit: useCallback(() => {
+      rejectedRef.current = false;
+    }, []),
+    isUserEditing: useCallback(() => typingRef.current || rejectedRef.current, []),
     applyFormat,
     applyLink,
+    applyInline: useCallback((tag: 'strong' | 'em' | 'u') => postToFrame({ type: 'mx:inline', tag }), [postToFrame]),
+    pasteMarkdown: useCallback(
+      (value: string) => postToFrame({ type: 'mx:paste', kind: 'markdown', value }),
+      [postToFrame],
+    ),
     select,
     commitPending,
     pushDocument,
+    restoreSelection: useCallback(
+      (restore: EditorBookmark) => postToFrame({ type: STORY_COMMIT_MESSAGE, restore }),
+      [postToFrame],
+    ),
   };
 }

@@ -6,11 +6,12 @@
  */
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {resolveEditBatch} from '@/lib/story/edit-batch';
 import { useLiveEdits } from '@/lib/story/use-live-edits';
 
 const ID = 'live01';
 
-function setup(opts: { isUserEditing?: () => boolean } = {}) {
+function setup(opts: { isUserEditing?: () => boolean; initialSource?:string } = {}) {
   const adopted: string[] = [];
   const hook = renderHook(() =>
     useLiveEdits({
@@ -185,7 +186,7 @@ describe('adopting a remote document', () => {
     expect(adopted).toEqual(['<p>remote</p>']);
   });
 
-  it('takes the server document on doc_changed rather than diverging silently', async () => {
+  it('retains the local draft on doc_changed and blocks navigation until resolved', async () => {
     fetchMock.mockResolvedValueOnce(
       errResponse(409, { error: 'doc_changed', edit_id: 'edit-head', source: '<p>theirs</p>', version: 7 }),
     );
@@ -193,9 +194,9 @@ describe('adopting a remote document', () => {
     act(() => { hook.result.current.queue({ source: '<p>mine</p>' }); });
     await act(async () => { await vi.advanceTimersByTimeAsync(600); });
 
-    expect(adopted).toEqual(['<p>theirs</p>']);
-    expect(hook.result.current.state.editId).toBe('edit-head');
-    expect(hook.result.current.state.status).toMatch(/elsewhere/);
+    expect(adopted).toEqual([]);
+    expect(hook.result.current.state.editId).toBe('edit-1');
+    expect(hook.result.current.state.status).toMatch(/not saved/);
   });
 
   it('treats an identical no-op flush as success, not an error', async () => {
@@ -280,4 +281,102 @@ describe('flushNow drains EVERYTHING owed, not just what is idle', () => {
     expect(JSON.parse(fetchMock.mock.calls[1][1].body as string)).toMatchObject({ edit_id: 'edit-2', source: '<p>ab</p>' });
     expect(hook.result.current.state.editId).toBe('edit-3');
   });
+});
+
+
+describe('V2 atomic source queue',()=> {
+  const initial='<p id="a">one</p><p id="b">two</p><p id="c">three</p>';
+  it('sends disjoint node edits through the existing batch protocol',async()=> {
+    const next=initial.replace('one','long one').replace('three','3');
+    const {hook}=setup({initialSource:initial});
+    act(()=>hook.result.current.queue({source:next}));
+    await act(async()=>{await vi.advanceTimersByTimeAsync(600);});
+    const body=JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.source).toBeUndefined();
+    expect(body.edits).toHaveLength(2);
+    expect(body.edits[0]).toEqual({old_string:expect.any(String),new_string:expect.any(String)});
+    expect(resolveEditBatch(initial,body.edits.map((e:{old_string:string;new_string:string})=>({oldString:e.old_string,newString:e.new_string})))).toMatchObject({ok:true,source:next});
+  });
+  it('undo before the first save produces no source request',async()=> {
+    const {hook}=setup({initialSource:initial});
+    act(()=>{hook.result.current.queue({source:initial.replace('one','changed')});hook.result.current.queue({source:initial});});
+    await act(async()=>{await vi.advanceTimersByTimeAsync(600);});
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it('undo queued during a save is based on the accepted head',async()=> {
+    const changed=initial.replace('one','changed');
+    let accept!:(r:Response)=>void;
+    fetchMock.mockReturnValueOnce(new Promise<Response>(resolve=>{accept=resolve;}));
+    const {hook}=setup({initialSource:initial});
+    act(()=>hook.result.current.queue({source:changed}));
+    await act(async()=>{await vi.advanceTimersByTimeAsync(600);});
+    act(()=>hook.result.current.queue({source:initial}));
+    accept(okResponse({edit_id:'edit-2',version:2,markup:changed}));
+    await act(async()=>{await hook.result.current.flushNow();});
+    const body=JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(body.edit_id).toBe('edit-2');
+    expect(resolveEditBatch(changed,body.edits.map((e:{old_string:string;new_string:string})=>({oldString:e.old_string,newString:e.new_string})))).toMatchObject({ok:true,source:initial});
+  });
+});
+
+
+it('rebases a pending undo over an unrelated edit included in the save response',async()=> {
+  const base='<p id="a">one</p><p id="b">two</p>';
+  const submitted=base.replace('one','changed');
+  let accept!:(r:Response)=>void;
+  fetchMock.mockReturnValueOnce(new Promise<Response>(resolve=>{accept=resolve;}));
+  const {hook,adopted}=setup({initialSource:base});
+  act(()=>hook.result.current.queue({source:submitted}));
+  await act(async()=>{await vi.advanceTimersByTimeAsync(600);});
+  act(()=>hook.result.current.queue({source:base}));
+  const accepted=submitted.replace('two','remote two');
+  accept(okResponse({edit_id:'edit-2',version:2,markup:accepted}));
+  await act(async()=>{await hook.result.current.flushNow();});
+  const next=JSON.parse(fetchMock.mock.calls[1][1].body);
+  expect(resolveEditBatch(accepted,next.edits.map((e:{old_string:string;new_string:string})=>({oldString:e.old_string,newString:e.new_string})))).toMatchObject({ok:true,source:base.replace('two','remote two')});
+  expect(adopted[0]).toBe(base.replace('two','remote two'));
+});
+
+it('retries a preserved draft against a fresh head without overwriting unrelated remote text',async()=>{
+ const base='<p id="a">one</p><p id="b">two</p>',draft=base.replace('one','local'),remote=base.replace('two','remote');
+ fetchMock.mockResolvedValueOnce(errResponse(409,{error:'doc_changed'}));
+ const {hook,adopted}=setup({initialSource:base});act(()=>hook.result.current.queue({source:draft}));
+ await act(async()=>{await hook.result.current.flushNow();});
+ fetchMock.mockResolvedValueOnce(okResponse({edit_id:'remote-head',version:2,markup:remote}));
+ fetchMock.mockResolvedValueOnce(okResponse({edit_id:'merged-head',version:3,markup:draft.replace('two','remote')}));
+ await act(async()=>{await hook.result.current.recover('retry');});
+ const body=JSON.parse(fetchMock.mock.calls.at(-1)![1].body);
+ expect(body.edit_id).toBe('remote-head');expect(body.edits).toEqual([{old_string:'<p id="a">one</p>',new_string:'<p id="a">local</p>'}]);
+ expect(adopted.at(-1)).toBe(draft.replace('two','remote'));expect(hook.result.current.state.status).toBe('');
+});
+
+it('retains annotation operations when newer source is queued during a failed save',async()=>{
+ let reject!:(e:Error)=>void;
+ fetchMock.mockImplementationOnce(()=>new Promise((_resolve,r)=>{reject=r;}));
+ const {hook}=setup();const operation={id:'12345678-1234-1234-1234-123456789012',kind:'map' as const,maps:[]};
+ act(()=>hook.result.current.queue({source:'<p>merged</p>',annotationOps:[operation]}));
+ await act(async()=>{await vi.advanceTimersByTimeAsync(1);});
+ act(()=>hook.result.current.queue({source:'<p>merged and typed</p>'}));
+ await act(async()=>{reject(new Error('offline'));await Promise.resolve();});
+ fetchMock.mockResolvedValue(okResponse({edit_id:'edit-2',version:2,markup:'<p>merged and typed</p>'}));
+ await act(async()=>{await hook.result.current.flushForNavigation(async()=>{});});
+ const body=JSON.parse(fetchMock.mock.calls.at(-1)![1].body);
+ expect(body.source).toBe('<p>merged and typed</p>');
+ expect(body.annotation_ops).toEqual([operation]);
+});
+
+it('defers an accepted remote rebase until composition finishes, preserving both changes',async()=>{
+ const base='<p id="a">one</p><p id="b">two</p>',sent=base.replace('one','one!'),accepted=sent.replace('two','remote');
+ let composing=false;let respond!:(r:Response)=>void;
+ fetchMock.mockImplementationOnce(()=>new Promise(r=>{respond=r;}));
+ const {hook,adopted}=setup({initialSource:base,isUserEditing:()=>composing});
+ act(()=>hook.result.current.queue({source:sent}));
+ await act(async()=>{await vi.advanceTimersByTimeAsync(500);});
+ composing=true;
+ act(()=>hook.result.current.queue({source:sent.replace('one!','one!日本語')}));
+ await act(async()=>{respond(okResponse({edit_id:'edit-2',version:2,markup:accepted}));await Promise.resolve();});
+ expect(adopted).toEqual([]);
+ composing=false;
+ await act(async()=>{await vi.advanceTimersByTimeAsync(50);});
+ expect(adopted).toContain(accepted.replace('one!','one!日本語'));
 });

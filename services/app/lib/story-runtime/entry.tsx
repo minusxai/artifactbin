@@ -179,6 +179,7 @@ if (island?.textContent && root) {
         ...assetImport,
         ...(edit ? {
           editDecorate: edit.decorate,
+          editChildren: edit.decorateChildren,
           onSlideRename: (path: string, title: string) => edit?.renameSlide(path, title),
         } : {}),
       }));

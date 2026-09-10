@@ -18,9 +18,41 @@ permissions:
 # no-parallel-projects rule (one embedded connection per process) still holds
 # within every job.
 jobs:
+  plan:
+    name: affected modules
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      plan: ${{ steps.select.outputs.plan }}
+      checks: ${{ steps.select.outputs.checks }}
+      node: ${{ steps.select.outputs.node }}
+      ui: ${{ steps.select.outputs.ui }}
+      build: ${{ steps.select.outputs.build }}
+      api: ${{ steps.select.outputs.api }}
+      gates: ${{ steps.select.outputs.gates }}
+      image: ${{ steps.select.outputs.image }}
+      compose: ${{ steps.select.outputs.compose }}
+      cli: ${{ steps.select.outputs.cli }}
+      agent-smoke: ${{ steps.select.outputs.agent-smoke }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - id: select
+        env:
+          CI__EVENT: ${{ github.event_name }}
+          CI__BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CI__HEAD_SHA: ${{ github.sha }}
+        run: node scripts/ci.mjs plan
+
   # THE TYPE CHECK ANSWERS ON ITS OWN, because it is the fastest signal on the
   # commonest mistake and it was sharing a job with something 5x its length.
   checks:
+    needs: [plan]
+    if: needs.plan.outputs.checks == 'true'
     name: validate
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -57,6 +89,8 @@ jobs:
   # each extra shard approaches that 36s floor while still paying a runner's
   # startup. Measured locally, 2026-09-04.
   node:
+    needs: [plan]
+    if: needs.plan.outputs.node == 'true'
     name: node tests (${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -104,11 +138,15 @@ jobs:
         run: npx playwright install chromium
       - run: docker pull postgres:17-alpine
       - run: npm run build -w services/cli
-      - run: npx vitest run --project=node --shard=${{ matrix.shard }}/3
+      - env:
+          CI__PLAN: ${{ needs.plan.outputs.plan }}
+        run: node scripts/ci.mjs node ${{ matrix.shard }}/3
 
   # jsdom setup dominates the ui project (~110s serial on a 4-vCPU runner —
   # the environment boots per test file), so it shards like api does.
   ui:
+    needs: [plan]
+    if: needs.plan.outputs.ui == 'true'
     name: ui tests (${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -145,6 +183,8 @@ jobs:
   # shipped a broken build once because CI never ran it: the image build did,
   # and deploys silently stopped.
   build:
+    needs: [plan]
+    if: needs.plan.outputs.build == 'true'
     name: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -172,6 +212,8 @@ jobs:
       - run: npm run build
 
   api:
+    needs: [plan]
+    if: needs.plan.outputs.api == 'true'
     name: api tests (${{ matrix.shard }}/5)
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -223,6 +265,7 @@ jobs:
   # The paid regression uses the shipped CLI and installed local skills only.
   # Credentials remain limited to trusted repository runs; the agent cannot read the checkout.
   agent-smoke:
+    needs: [plan]
     name: agent smoke (${{ matrix.mode }})
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -232,7 +275,7 @@ jobs:
         include:
           - mode: cli
             tasks: comment,data,edit,cli,no-token
-    if: vars.AGENT_SMOKE_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    if: needs.plan.outputs.agent-smoke == 'true' && vars.AGENT_SMOKE_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -287,7 +330,7 @@ jobs:
             --model=fireworks-ai/accounts/fireworks/models/glm-5p3-flash \
             --api-key-env=FIREWORKS_API_KEY \
             --label='opencode · glm-5p3-flash · ${{ matrix.mode }}' \
-            --price-in=0.15 --price-out=0.5
+            --price-in=0.15 --price-out=0.5 --price-cache-read=0.03
         env:
           FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -311,6 +354,8 @@ jobs:
   # catching production-only faults: the app's stylesheet once compiled to zero
   # rules in the build alone, and every page-measuring gate would have said so.
   gates:
+    needs: [plan]
+    if: needs.plan.outputs.gates == 'true'
     name: browser gates (${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -372,6 +417,8 @@ jobs:
   # the image's own layout. Building it here means the publish workflow is
   # never the first to try.
   image:
+    needs: [plan]
+    if: needs.plan.outputs.image == 'true'
     name: image
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -469,6 +516,8 @@ jobs:
   # Build each lean image once, check its contents/size/standalone behavior,
   # then boot those exact images together and walk the service boundaries.
   compose:
+    needs: [plan]
+    if: needs.plan.outputs.compose == 'true'
     name: compose (the split shape)
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -519,21 +568,21 @@ jobs:
     name: test
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [checks, node, ui, build, api, gates, image, compose]
+    needs: [plan, checks, node, ui, build, api, gates, image, compose, cli]
     if: always()
     steps:
-      - name: All jobs green
-        run: |
-          [ "${{ needs.checks.result }}" = "success" ] && \
-          [ "${{ needs.node.result }}" = "success" ] && \
-          [ "${{ needs.ui.result }}" = "success" ] && \
-          [ "${{ needs.build.result }}" = "success" ] && \
-          [ "${{ needs.api.result }}" = "success" ] && \
-          [ "${{ needs.gates.result }}" = "success" ] && \
-          [ "${{ needs.image.result }}" = "success" ] && \
-          [ "${{ needs.compose.result }}" = "success" ]
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - name: All selected jobs green
+        env:
+          CI__NEEDS: ${{ toJSON(needs) }}
+        run: node scripts/ci.mjs check
 
   cli:
+    needs: [plan]
+    if: needs.plan.outputs.cli == 'true'
     name: CLI (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10

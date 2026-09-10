@@ -1,7 +1,7 @@
 ---
 name: templates-editorial
 description: >-
-  The editorial genre in full: beats, layout grammar, a copyable skeleton, Do/Don't. Read only for a long or intricate editorial — the brief's sketch is enough for a short, plain one.
+  Editorial skeleton and rules. Read for long or intricate reports; the brief covers short ones.
 read_first_max: 6144
 order: 1
 ---

@@ -36,6 +36,7 @@ const TEMPLATES = [
   { name: 'deck', blurb: 'A presentation that scrolls. Full-viewport slides in acts, with solid-accent act dividers, arrow-key paging and a present mode.' },
   { name: 'scrolly', blurb: 'Scrollytelling. A data story with a conceit, ticker bands and chapter breaks.' },
   { name: 'dashboard', blurb: 'An operating view. KPI and chart tiles on a 12-column canvas you can drag and resize in the editor, written back to the source.' },
+  { name: 'plan', blurb: 'A visual working plan. Screen wireframes and user flows, or process diagrams, alongside decisions and milestones tracked through completion.' },
 ];
 
 export default function DocsHuman() {
@@ -175,7 +176,7 @@ export default function DocsHuman() {
         </h2>
         <p className={PROSE}>
           A <code className="text-accent">template</code> names the document&apos;s genre. It sets
-          the beats and the layout grammar the agent writes to, and all four are built from the same
+          the beats and the layout grammar the agent writes to, and all are built from the same
           components.
         </p>
         <ul className="mt-3 flex flex-col gap-2.5 font-sans text-sm leading-relaxed text-muted">
