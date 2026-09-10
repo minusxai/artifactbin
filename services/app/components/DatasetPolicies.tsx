@@ -166,18 +166,32 @@ function DatasetPolicyEditor({ artifactId }: { artifactId: string }) {
       ...draft!,
       tables: draft!.tables.map((t, i) => (i === tableIndex ? next : t)),
     });
-  const permission = (op: DatasetOperation) =>
-    selected?.[`${op}_permissions`]?.find((e) => e.role === role)?.permission;
+  const permission = (op: DatasetOperation) => {
+    const stored = selected?.[`${op}_permissions`]?.find(
+      (e) => e.role === role,
+    )?.permission;
+    return stored && op === 'insert'
+      ? {
+          ...stored,
+          columns:
+            ('columns' in stored ? stored.columns : undefined) ??
+            ('*' as const),
+        }
+      : stored;
+  };
   const setPermission = (
     op: DatasetOperation,
     value: InsertPermission | UpdatePermission | DeletePermission | null,
   ) => {
     if (!selected) return;
     const field = `${op}_permissions` as const;
+    const existing = selected[field]?.find((e) => e.role === role);
     const entries = (selected[field] ?? []).filter((e) => e.role !== role);
     updateTable({
       ...selected,
-      [field]: value ? [...entries, { role, permission: value }] : entries,
+      [field]: value
+        ? [...entries, { ...existing, role, permission: value }]
+        : entries,
     });
   };
   return (

@@ -100,3 +100,61 @@ it('reports unsupported DSL fields before saving', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Apply policy source' }));
   expect(screen.getByRole('alert')).toHaveTextContent('select_permissions');
 });
+it('edits Hasura insert defaults without losing permission comments', async () => {
+  const policy = {
+    version: 1,
+    enforcement: 'enabled',
+    tables: [
+      {
+        table: { schema: 'public', name: 'rows' },
+        insert_permissions: [
+          {
+            role: 'visitor',
+            comment: 'Public append',
+            permission: { check: {} },
+          },
+        ],
+      },
+    ],
+  };
+  const fetch = vi.fn(
+    async (_url: string, options?: RequestInit) =>
+      new Response(
+        JSON.stringify(
+          options?.method === 'PUT'
+            ? { revision: 1, policy: JSON.parse(String(options.body)).policy }
+            : {
+                policy,
+                revision: 0,
+                tables: [
+                  {
+                    schema: 'public',
+                    name: 'rows',
+                    columns: [{ name: 'body' }],
+                  },
+                ],
+                writtenBy: [],
+              },
+        ),
+      ),
+  );
+  vi.stubGlobal('fetch', fetch);
+  render(<DatasetPolicies artifactId="ds123" />);
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Manage access policies' }),
+  );
+  const all = await screen.findByLabelText('insert all columns');
+  expect(all).toBeChecked();
+  fireEvent.click(all);
+  fireEvent.click(screen.getByRole('button', { name: 'Save access policies' }));
+  await waitFor(() =>
+    expect(fetch.mock.calls.some(([, o]) => o?.method === 'PUT')).toBe(true),
+  );
+  const saved = JSON.parse(
+    String(fetch.mock.calls.find(([, o]) => o?.method === 'PUT')![1]!.body),
+  ).policy;
+  expect(saved.tables[0].insert_permissions[0]).toMatchObject({
+    comment: 'Public append',
+    permission: { columns: [] },
+  });
+});
