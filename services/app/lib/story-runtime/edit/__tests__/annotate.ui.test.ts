@@ -696,3 +696,18 @@ it('retains ordinary area refinement in geometry reports for the same owner', ()
   session.update({...state('on'),pins:[],selectedPath:'0',selected:{kind:'element',path:'0',nodeId:'section',tag:'section',rect:{x:0,y:0,width:200,height:100},className:'',style:'',ancestors:[],range}});
   expect(posted.filter((message)=>message.type===STORY_SELECTION_MESSAGE).at(-1)).toMatchObject({selection:{nodeId:'section',range,rect:{x:20,y:40}}});
 });
+
+it('keeps sidebar block picking distinct from explicit iframe Select mode', () => {
+  document.body.innerHTML='<div id="frame" data-mx-ast="0" data-mx-managed-frame=""></div>';
+  const parsed=parseJsx('<Iframe id="frame"><p id="static">Static</p></Iframe>');
+  if(!parsed.ok) throw Error('parse'); session.setNodes(parsed.nodes);
+  const states:ManagedCommentState[]=[];
+  const host=connectManagedComments(document.getElementById('frame')!,next=>states.push(next));
+  session.update({...state('on'),pins:[],pick:'block'});
+  expect(states.at(-1)).toMatchObject({picking:false,blockPicking:true});
+  session.update({...state('on'),pins:[],pick:'select'});
+  expect(states.at(-1)).toMatchObject({picking:true,blockPicking:false});
+  session.update({...state('on'),pins:[],pick:null});
+  expect(states.at(-1)).toMatchObject({picking:false,blockPicking:false,selection:null});
+  host.dispose();
+});

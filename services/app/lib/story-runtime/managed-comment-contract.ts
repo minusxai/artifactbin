@@ -12,7 +12,10 @@ export interface ManagedCommentState {
   type: 'comment-state';
   generation: string;
   enabled: boolean;
+  /** Explicit Select/area tool; suppresses native text selection. */
   picking: boolean;
+  /** Sidebar block picking preserves native text selection and scrolling. */
+  blockPicking?: boolean;
   canComment: boolean;
   pins: Array<{ id: string; target: IframeNodeTarget; range?: ManagedCommentRefinement | null }>;
   openId: string | null;
