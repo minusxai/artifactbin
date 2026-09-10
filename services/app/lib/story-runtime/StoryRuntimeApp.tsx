@@ -1112,7 +1112,7 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, t
     // document without a rail must not be measured against something else.
     if (outline.length === 0) return withGlyphs(<div className="mx-doc">{body}</div>);
     return withGlyphs(
-      <div className="mx-reading">
+      <div className={template === 'plan' ? 'mx-reading mx-reading--plan' : 'mx-reading'}>
         <OutlineRail entries={outline} />
         <div className="mx-doc">{body}</div>
       </div>,

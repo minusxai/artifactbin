@@ -675,6 +675,7 @@ export const STORY_UI_RECIPE_CLASSES: readonly string[] = [
   "mx-rail-thumb",
   "mx-rail-title",
   "mx-reading",
+  "mx-reading--plan",
   "mx-write-error",
   "mx:reveal-comment-target",
   "mxGuideFacet",

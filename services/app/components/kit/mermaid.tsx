@@ -59,7 +59,7 @@ export function Mermaid({ code, title = 'Diagram', colorMode = 'light', classNam
   return <figure {...props} ref={host} className={cn('my-4 min-w-0', className)} data-mx-mermaid-state={error ? 'error' : current?.loaded ? 'ready' : 'pending'} data-mermaid-type={current?.image?.type}>
     <figcaption className="mb-2 text-sm font-medium">{title}</figcaption>
     {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : current?.image ?
-      <img src={current.image.src} alt={title} className="block h-auto max-w-full" onLoad={() => setResult(value => value && value.image === current.image ? { ...value, loaded: true } : value)} onError={() => setResult({ code, error: 'Could not display this diagram.' })} /> :
+      <img width={current.image.width} height={current.image.height} style={{ width: current.image.width, maxWidth: '100%', height: 'auto' }} src={current.image.src} alt={title} className="block h-auto max-w-full" onLoad={() => setResult(value => value && value.image === current.image ? { ...value, loaded: true } : value)} onError={() => setResult({ code, error: 'Could not display this diagram.' })} /> :
       <p role="status" className="text-sm text-muted-foreground">Rendering diagram…</p>}
     <details className="mt-2 text-xs text-muted-foreground"><summary>Diagram source</summary><pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words">{typeof code === 'string' ? code : ''}</pre></details>
   </figure>;

@@ -4,7 +4,7 @@ import mermaid from 'mermaid';
 import { mermaidSourceError } from '@/lib/story-ui/mermaid-source';
 
 export interface MermaidPalette { background: string; foreground: string; primary: string; border: string; dark: boolean }
-export interface MermaidImage { src: string; type: string }
+export interface MermaidImage { src: string; type: string; width?: number; height?: number }
 
 // initialize changes Mermaid's global config. Serialize initialize + render
 // so diagrams in different documents/themes cannot borrow each other's config.
@@ -29,9 +29,13 @@ export function renderMermaid(code: string, palette: MermaidPalette): Promise<Me
       },
     });
     const result = await mermaid.render(`mx-mermaid-${++nextId}`, code);
+    const svg = new DOMParser().parseFromString(result.svg, 'image/svg+xml').documentElement;
+    const box = svg.getAttribute('viewBox')?.trim().split(/[\s,]+/).map(Number);
+    const dimensions = box?.length === 4 && box.every(Number.isFinite) && box[2] > 0 && box[3] > 0
+      ? { width: box[2], height: box[3] } : {};
     // SVG is displayed as an image, never inserted as active parent DOM.
     // Source remains in the JSX code prop for future type-specific editors.
-    return { src: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(result.svg)}`, type: result.diagramType };
+    return { src: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(result.svg)}`, type: result.diagramType, ...dimensions };
   };
   const result = queue.then(render);
   queue = result.catch(() => undefined);
