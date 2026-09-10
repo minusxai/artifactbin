@@ -221,12 +221,12 @@ jobs:
   # pre-merge hole the gates leave. It runs the CI-ONLY tasks (comment, data,
   # edit, mcp, no-token), never the creative comparison briefs, which are not a
   # per-PR question. `comment` is on the fetched api_action row only: it was measured on THIS
-  # harness and model first (opencode × minimax-m3, PASS, $0.021 a leg), because
+  # harness first (opencode × minimax-m3, PASS, $0.021 a leg; the leg now runs GLM 5.3 Flash), because
   # a gate no weak model has passed becomes a red check on every PR.
   #
   # The harness and model are named HERE rather than in the repo: `evals/` knows
   # how to run one leg, not which legs exist (see evals/lib/leg.ts). OpenCode ×
-  # MiniMax M3 is the choice because it is cents per run AND speaks MCP — the
+  # GLM 5.3 Flash is the choice because it is cents per run AND speaks MCP — the
   # mcp task would silently skip on a harness that does not.
   #
   # Toggle: the repository VARIABLE `AGENT_SMOKE_ENABLED` (Settings → Secrets
@@ -313,10 +313,10 @@ jobs:
           npm run eval -- --ci --run-as=eval-agent --out="$RUNNER_TEMP/agent-smoke-metrics" \
             --tasks=${{ matrix.tasks }} --mode=${{ matrix.mode }} \
             --harness=opencode \
-            --model=fireworks-ai/accounts/fireworks/models/minimax-m3 \
+            --model=fireworks-ai/accounts/fireworks/models/glm-5p3-flash \
             --api-key-env=FIREWORKS_API_KEY \
-            --label='opencode · minimax-m3 · ${{ matrix.mode }}' \
-            --price-in=0.3 --price-out=1.2
+            --label='opencode · glm-5p3-flash · ${{ matrix.mode }}' \
+            --price-in=0.15 --price-out=0.5
         env:
           FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
