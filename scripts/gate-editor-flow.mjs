@@ -6,15 +6,15 @@
  *   1. anonymous mint → publish a document with live embeds
  *   2. /a/<id> shows it → its Edit button switches to edit mode in place
  *   3. adopting the anonymous token unlocks the editor; embeds render inside it
- *   4. type into a heading → ONE click on Save persists it (the regression
+ *   4. type into a heading → blur persists it automatically (the regression
  *      this gate exists for: the engine commits text edits on BLUR, so a
  *      Save gated on a dirty flag stayed disabled and swallowed the click)
- *   5. embeds still render after the save; the source really changed
+ *   5. embeds still render after persistence; the source really changed
  *   6. signup → claim the token on /account → the artifact appears on the
  *      dashboard → the editor opens with NO stored token (session auth) and
  *      saves through /api/my
  *
- * jsdom cannot model same-origin iframe focus/blur, so this browser gate is
+ * jsdom cannot model the browser focus/blur behavior of the mounted story runtime, so this browser gate is
  * the only place these contracts can be checked. Exits non-zero on failure.
  */
 import { chromium } from 'playwright';

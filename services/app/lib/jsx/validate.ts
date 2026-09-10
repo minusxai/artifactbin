@@ -1,9 +1,9 @@
 /**
  * Static-subset + security validator for a parsed `jsx` AST. Returns a list of
  * {@link ValidationError} (empty = valid). This is the boundary that makes `jsx`
- * inert DATA: only JSON-literal attributes, only registered components / allowed
- * HTML tags, no event handlers, no dangerous URL schemes. A JSX parser does NOT
- * give the "static" guarantee for free — this pass enforces it.
+ * DATA: JSON literals and allowlisted reactive/row expressions in permitted
+ * scopes, registered components / allowed HTML tags, no event handlers, and no
+ * dangerous URL schemes. Parsing alone does not enforce these constraints.
  */
 import { parseRowRef } from '@/lib/story/row-scope';
 import { isReactiveExpression, reactiveNames, REACTIVE_BOOLEAN_PROPS } from './reactive';

@@ -1,8 +1,8 @@
 /**
- * questionEmbedHeightPx — the ONE <Question> sizing contract, shared by the editor canvas
- * (StoryJsxBody) and the served view document (StoryRuntimeApp). Before it was shared each
- * renderer had its own defaults (430 vs 320) and only one parsed string heights — the same
- * chart changed size between editing and reading.
+ * questionEmbedHeightPx — the ONE <Question> sizing contract, used when both the inline
+ * editor and view render StoryRuntimeApp. Before it was shared, the two paths had defaults
+ * (430 vs 320), and only one renderer parsed string heights — the same chart
+ * changed size between editing and reading.
  */
 import {
   questionEmbedHeightPx, MIN_CHART_H, DEFAULT_CHART_H, SINGLE_VALUE_MIN_H, SINGLE_VALUE_DEFAULT_H,

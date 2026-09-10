@@ -6,8 +6,8 @@ export const TOKEN_RE = /^mx_[A-Za-z0-9_-]{40,50}$/;
 export const hashToken = (presented: string): string => createHash('sha256').update(presented).digest('hex');
 
 /**
- * SELECT id, user_id, audience, scope, expires_at FROM <schema>.tokens WHERE token_hash = $1 AND deleted_at IS NULL   -- byToken
- * SELECT id, user_id, audience, scope, expires_at FROM <schema>.tokens WHERE id = $1        AND deleted_at IS NULL     -- byId
+ * SELECT id, user_id, audience, scope, expires_at FROM <schema>.tokens WHERE token_hash = $1 AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > now()) -- byToken
+ * SELECT id, user_id, audience, scope, expires_at FROM <schema>.tokens WHERE id = $1        AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > now()) -- byId
  * Only ever SELECT: the caller's role has that grant and no other. Cached by hash and by id with a positive
  * TTL (5 s) and a shorter negative one (1 s); insertion-ordered eviction past maxEntries (5 000).
  */

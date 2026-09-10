@@ -47,8 +47,7 @@ const UserPage = async ({ user, path }: { user: string; path?: string[] }): Prom
 };
 const userPageProps = (user: string, path?: string[]) => ({ user, path });
 
-/** Runs a page and reports what Next control-flow it threw, if any. */
-/** `/a/<id>` is still a Next page for now; the profile helper above answers directly. */
+/** Normalizes a page result to the render, redirect, and not-found outcomes. */
 async function outcome(p: Promise<unknown>): Promise<{ kind: 'render' | 'redirect' | 'notFound'; to?: string }> {
   try {
     const value = await p;

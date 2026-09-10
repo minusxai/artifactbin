@@ -87,11 +87,11 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
    * way.
    */
   const key = new URL(request.url).searchParams.get('key');
-  // The SAME viewer the proxy and the page decide ownership with (sessionActor:
-  // NextAuth first, then the agent cookie). Anything narrower splits the
-  // document from its shell — a signed-out browser whose cookie names a
-  // CLAIMED token would be an owner upstairs and a stranger here, its own
-  // private document 404ing inside the frame the shell just rendered.
+  // The SAME viewer the proxy and the page decide ownership with: sessionActor
+  // uses the proxy-attached actor first, then direct compatibility and the
+  // agent cookie. The former split-viewer bug occurred when a serving surface
+  // used only the account session: a claimed-token browser was an owner in
+  // the shell and a stranger in its own private document.
   const actor = await sessionActor(request);
   const viewer = actor.viewer;
   const byExportKey = verifyExportKey(artifact.id, key ?? undefined);

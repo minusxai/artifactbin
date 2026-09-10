@@ -70,8 +70,8 @@ project directly does not rely on a developer's previous build. Build cost chang
 encode historical timings as guarantees. `lib/dynamic.ts` preserves client-only mounting semantics so
 SSR and the first hydration pass agree while charts and editors remain lazy chunks.
 
-The CSS candidate list is generated from source text, including comments, in kit and selected embed
-files. Run `npm run generate-story-ui-classes` after editing those inputs. Font assets and manifests are
+The CSS candidate list is extracted from string literals in kit and selected embed files after comments
+are stripped. Run `npm run generate-story-ui-classes` after editing those inputs. Font assets and manifests are
 created by the asset-copy script; restored dependency caches still need that step.
 
 Use deterministic fixture servers for third-party imports in merge gates. The Sheets fetch stub is

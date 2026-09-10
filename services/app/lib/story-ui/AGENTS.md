@@ -3,8 +3,9 @@
 These rules cover `lib/story-ui` and the parser in `lib/jsx`. Read the root
 [AGENTS.md](../../../../AGENTS.md) and [design notes](../../../../docs/design-notes.md) for shared rules.
 
-- Static JSX is data. `lib/jsx/parse.ts` uses acorn/acorn-jsx and records non-static expressions so
-  validation can reject them with useful spans. Do not replace this with an executable JSX/MDX compiler.
+- Static JSX is data. `lib/jsx/parse.ts` uses acorn/acorn-jsx and records non-static expressions.
+  Validation accepts only allowlisted reactive/row expressions in permitted scopes and rejects the
+  rest with useful spans. Do not replace this with an executable JSX/MDX compiler.
 - Keep publish validation (`lib/jsx/validate.ts`) and renderer filtering (`interpreter.tsx`) independent.
   Stored content may predate current validation. Update both sides when changing denied attributes,
   URL schemes or component vocabulary; account for authored versus React attribute spellings.
@@ -26,8 +27,8 @@ These rules cover `lib/story-ui` and the parser in `lib/jsx`. Read the root
   `lib/story-runtime/slides.ts`; previews must not introduce a second live data subscription.
 - Floating UI must remain in the document's correct DOM/window. App chrome uses the shared
   `components/Tooltip.tsx`. Do not reintroduce obsolete SVG/foreignObject positioning workarounds.
-- `recipe-classes.ts` is generated from kit and embed source text, including comments. After touching
-  those inputs, run `npm run generate-story-ui-classes`. `lib/data/story/typography.ts` supplies the
+- `recipe-classes.ts` is generated from string literals in kit and embed source after stripping comments.
+  After touching those inputs, run `npm run generate-story-ui-classes`. `lib/data/story/typography.ts` supplies the
   editor's class vocabulary; the CSS union/version must change together so saved documents recompile.
 - Verify parser/serialization, publish rejection, renderer defense, SSR/hydration and affected editing
   behavior. Use existing browser gates for geometry and real browser isolation, not DOM mocks alone.

@@ -163,9 +163,9 @@ export const STORY_UI_COMPONENTS: Record<string, React.ComponentType<any>> = {
   Video,
   File,
   Icon,
-  // The data-bound table. Registered bare for completeness; the three render
-  // paths override it with an adapter that supplies the rows from the store
-  // (StoryRuntimeApp / StoryJsxBody) or a placeholder (preview/inert).
+  // The data-bound table. Registered bare for completeness; StoryRuntimeApp
+  // supplies rows through its store adapter, while preview/inert rendering
+  // uses a placeholder.
   DataTable: DataTable as unknown as React.ComponentType<any>, // eslint-disable-line @typescript-eslint/no-explicit-any
   Column: (() => null) as React.ComponentType<any>, // template-only; DataTable's interpreter seam consumes it
   // A folder's listing. Registered bare, like DataTable, and overridden by the

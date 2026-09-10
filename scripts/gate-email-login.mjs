@@ -3,7 +3,7 @@
  *
  * The unit tests cover the code store and the form's state machine separately.
  * What neither can see is the seam between them — the request-code route, the
- * NextAuth credentials round trip, the session cookie actually landing, and the
+ * Better Auth email-OTP round trip, the session cookie actually landing, and the
  * OAuth consent screen recognising that session. That seam is the feature.
  *
  * The code is read from the development mail outbox written by the real send
