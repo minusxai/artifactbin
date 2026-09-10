@@ -148,10 +148,13 @@ async function narrowVariant(buffer: Buffer, sourceWidth: number, mainBytes: num
 
 /** Read only explicit root pixel dimensions; never decode SVG or resolve XML resources. */
 function svgBox(buffer: Buffer): [number | null, number | null] {
-  const prefix = buffer
-    .toString('utf8', 0, 8192)
-    .replace(/^\s*<\?xml[\s\S]*?\?>/, '')
-    .replace(/<!--[\s\S]*?-->/g, '');
+  let prefix = buffer.toString('utf8', 0, 8192);
+  // Consume complete leading preamble items; never splice comments out of tags.
+  for (;;) {
+    const preamble = prefix.match(/^\s*(?:<\?xml[\s\S]*?\?>|<!--[\s\S]*?-->)/)?.[0];
+    if (!preamble) break;
+    prefix = prefix.slice(preamble.length);
+  }
   const root = prefix.match(/^\s*<svg\b(?:[^"'>]|"[^"]*"|'[^']*')*>/i)?.[0];
   if (!root) return [null, null];
   const attrs = new Map(

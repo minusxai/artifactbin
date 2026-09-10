@@ -79,6 +79,12 @@ try {
     (s) => s.includes('alXvo second paragraph') && !s.includes('id="second"'),
     'cross-paragraph replacement persists with survivor ID',
   );
+  const originalClass = await page.locator('#first').getAttribute('class');
+  await page.getByRole('button', { name: 'Increase font size', exact: true }).click();
+  await stored((s) => /id="first"[^>]*text-/.test(s), 'block formatting after replacement');
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await page.waitForFunction((cls) => document.getElementById('first')?.getAttribute('class') === cls, originalClass);
+  await stored((s) => s.includes('alXvo second paragraph') && !/id="first"[^>]*text-/.test(s), 'button Undo removes only formatting');
   await undo(
     (s) => s.includes('alpha first paragraph') && s.includes('bravo second paragraph'),
     'Undo restores both paragraph identities',
@@ -95,6 +101,13 @@ try {
     }),
     { anchor: 'first', head: 'second', from: 2, to: 3 },
   );
+  await range('first', 0);
+  await page.keyboard.type('!');
+  await stored((s) => s.includes('!alpha first paragraph'), 'typing before rapid Undo');
+  await page.getByRole('button', { name: 'Increase font size', exact: true }).click();
+  await stored((s) => /id="first"[^>]*text-/.test(s), 'formatting before rapid Undo');
+  await page.getByRole('button', { name: 'Undo', exact: true }).dblclick();
+  await stored((s) => !s.includes('!alpha') && !/id="first"[^>]*text-/.test(s), 'rapid button Undo restores both actions');
   await range('first', 0, 'first', 5);
   await page.getByRole('button', { name: 'Toggle bold' }).click();
   await stored((s) => /<strong[^>]*>alpha<\/strong>/.test(s), 'top-bar formatting preserves range');

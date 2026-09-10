@@ -185,7 +185,7 @@ describe('optimiseImage', () => {
 });
 
 it('does not invent SVG boxes from percentage units, comments or child elements',async()=>{
- for(const svg of ['<svg width="100%" height="50"><rect width="40" height="40"/></svg>','<!-- <svg width="40" height="40"> --><svg><rect width="40" height="40"/></svg>','<!DOCTYPE svg SYSTEM "https://example.com/external"><svg width="40" height="40"/>']) {
+ for(const svg of ['<s<!-- comment -->vg width="40" height="20"/>','<svg width="100%" height="50"><rect width="40" height="40"/></svg>','<!-- <svg width="40" height="40"> --><svg><rect width="40" height="40"/></svg>','<!DOCTYPE svg SYSTEM "https://example.com/external"><svg width="40" height="40"/>']) {
   const result=await optimiseImage(Buffer.from(svg),'image/svg+xml');expect([result.width,result.height]).toEqual([null,null]);expect(result.buffer.toString()).toBe(svg);
  }
  const result=await optimiseImage(Buffer.from('<?xml version="1.0"?><svg width="40px" height="20px"/>'),'image/svg+xml');expect([result.width,result.height]).toEqual([40,20]);

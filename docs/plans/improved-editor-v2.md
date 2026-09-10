@@ -3,6 +3,7 @@
 One branch and one PR, including the narrow-width Grid fix. Public layout
 vocabulary remains **Grid / GridItem**. No reviewer polling, separate Grid PR,
 merge or deployment. Proposal: https://artifactbin.dev/a/haPmQt.
+Review PR: https://github.com/minusxai/artifactbin/pull/89.
 
 ## Boundaries and final contracts
 
@@ -153,3 +154,14 @@ passed `editor-exit`, `inplace-edit`, `real-paste`, `web-assets` and `editor-v2`
 Together with the full all-gates run, every gate has a passing result; this is
 not represented as one uninterrupted all-green full run. PR CI runs the complete
 matrix again against the submitted revision.
+
+
+Final cross-engine probes also passed against the submitted production build:
+Firefox, WebKit and Chromium touch (replace, Undo and save; touch stacking and
+×/Undo). Additional production assertions cover block formatting after a text
+replacement, button Undo and two-action rapid Undo. CI's full browser matrix
+passed on the initial submission. CodeQL identified global XML-comment stripping
+in the SVG sizing helper; a regression demonstrated that malformed tag text could
+be joined into a false root. The helper now consumes only complete leading
+preamble items, leaving tag contents untouched. The regression passes. Current
+CI results are attached to the PR revision rather than frozen in this document.
