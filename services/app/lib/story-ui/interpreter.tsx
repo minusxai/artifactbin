@@ -104,6 +104,7 @@ export interface StoryInterpreterOptions {
    * the element in the tree — implementations must keep `element`'s key (identity across
    * re-renders, see `keyFor`) on whatever they return.
    */
+  decorateChildren?: (children: React.ReactNode[], nodes: JsxNode[], parentPath: string) => React.ReactNode;
   decorateElement?: (element: React.ReactElement, node: JsxElement, path: string) => React.ReactNode;
   /**
    * The React key for the node at a path (lib/story-ui/node-identity). Absent,
@@ -169,7 +170,8 @@ import { AST_PATH_ATTR } from './ast-path';
 export { AST_PATH_ATTR } from './ast-path';
 
 export function renderStoryNodes(nodes: JsxNode[], options: StoryInterpreterOptions): React.ReactNode {
-  return nodes.map((n, i) => renderNode(n, options, String(i)));
+  const children = nodes.map((n, i) => renderNode(n, options, String(i)));
+  return options.decorateChildren ? options.decorateChildren(children, nodes, '') : children;
 }
 
 function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: string): React.ReactNode {
@@ -286,7 +288,9 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
   }
 
   const props = buildProps(node.attributes, isComponent, node.tag, path, options.row, options.values);
-  const children = node.children.map((c, i) => renderNode(c, options, `${path}.${i}`));
+  const rendered = node.children.map((c, i) => renderNode(c, options, `${path}.${i}`));
+  const children = options.decorateChildren && !options.row && node.children.length > 0 && (!node.isComponent || ['GridItem','Slide'].includes(node.tag))
+    ? [options.decorateChildren(rendered, node.children, path)] : rendered;
   const type = (Component ?? SVG_TAG_CASE[node.tag.toLowerCase()] ?? node.tag.toLowerCase()) as React.ElementType;
   // Void HTML elements must not receive children (React throws).
   const kids = children.length > 0 ? children : undefined;

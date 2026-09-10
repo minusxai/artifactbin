@@ -48,10 +48,10 @@ Skeleton (one pass of the beats; the costume here is a traffic monitor — wear 
         <em className="text-muted-foreground">the italic aside</em>
       </div>
       <h2 className="reveal-up mt-6 text-4xl font-bold uppercase tracking-tight @2xl:text-6xl">Nobody <span className="text-primary">turned around.</span></h2>
-      <div className="mt-6 grid gap-8 @3xl:grid-cols-2">
-        <p className="leading-relaxed">Three sentences, no more: the prose sets up the evidence.</p>
-        <p className="leading-relaxed text-muted-foreground">The second column carries the counter-intuition, not a summary.</p>
-      </div>
+      <Grid mode="flow" className="mt-6">
+        <GridItem w={6} className="pr-4"><p className="leading-relaxed">Three sentences, no more: the prose sets up the evidence.</p></GridItem>
+        <GridItem w={6} className="pl-4"><p className="leading-relaxed text-muted-foreground">The second column carries the counter-intuition, not a summary.</p></GridItem>
+      </Grid>
       <div className="reveal-up mt-10 border-2 border-foreground p-4 shadow-[8px_8px_0_0_var(--primary)]">
         <Question data="$daily" viz={{"kind":"vega-lite","spec":{}}} height="380px" />
         <p className="mt-3 border-t border-dashed border-foreground/60 pt-2 font-mono text-xs uppercase tracking-widest text-muted-foreground">Fig.02 · What it shows <span className="text-primary">— Feb onward: the gap</span></p>

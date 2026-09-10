@@ -274,8 +274,10 @@ const cls = async () => surface().locator('h1').first().getAttribute('class');
 const c0 = await cls();
 await p.click('[aria-label="Increase font size"]'); await p.waitForTimeout(500);
 ok((await cls()) !== c0, 'font-size step applies');
+await surface().locator('h1').first().evaluate(el=>{const range=document.createRange();range.selectNodeContents(el);const selection=getSelection();selection.removeAllRanges();selection.addRange(range);});
 await p.click('[aria-label="Toggle italic"]'); await p.waitForTimeout(500);
 await p.click('[aria-label="Align center"]'); await p.waitForTimeout(500);
+await p.getByRole('button',{name:'Document options',exact:true}).click();
 await p.fill('[aria-label="Title"]', 'Gate doc renamed');
 // Colour mode FIRST: a theme that pins its mode hides this toggle entirely
 // (JsxArtifactEditor renders it only when storyThemeMode(theme) is null), so
@@ -293,7 +295,7 @@ ok((await p.locator('[aria-label="Toggle color mode"]').count()) === 0, 'a theme
 ok((await p.locator('[aria-label="Save"]').count()) === 0, 'there is no Save button');
 await p.waitForTimeout(3000);
 const saved = (await J(`/api/artifacts/${dataDoc.id}`, {}, T)).body;
-ok(saved.markup.includes('italic') && saved.markup.includes('text-center'), 'toolbar edits persist with no save');
+ok(/<em[^>]*>/.test(saved.markup) && saved.markup.includes('text-center'), 'toolbar edits persist with no save');
 // colorMode is no longer asserted here: a pinning theme owns the surface mode
 // (storyThemeMode), so the stored field is not what the reader sees and the
 // toggle that used to set it is hidden for such themes.
@@ -302,9 +304,9 @@ ok(saved.title === 'Gate doc renamed' && saved.theme === 'organic', 'title and t
 // advancing is the same claim, anchored on the server.
 ok(saved.version > dataDoc.version, `persistence advanced the version (v${dataDoc.version} → v${saved.version})`);
 await unlock(gridDoc.id);
-const box = await surface().locator('.react-grid-item').first().boundingBox().catch(() => null);
+const box = await surface().locator('.mx-grid-grip').first().boundingBox().catch(() => null);
 if (box) {
-  await p.mouse.move(box.x + box.width / 2, box.y + 20);
+  await p.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await p.mouse.down();
   await p.mouse.move(box.x + box.width / 2 + 260, box.y + 200, { steps: 12 });
   await p.mouse.up();

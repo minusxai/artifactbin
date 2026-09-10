@@ -114,6 +114,16 @@ function walk(
     if (key && (!key.static || typeof key.json !== 'string' || !key.json)) errors.push({message:'For keyBy must be a nonempty field name when supplied',start:node.start,end:node.end});
   }
   validateElement(node, components, allowedHtml, stylePolicy, errors, inSvg);
+  if(node.tag==='Grid') {
+    const mode=node.attributes.find(a=>a.name==='mode')?.value;
+    if(mode?.static && mode.json!=='flow' && mode.json!=='positioned') errors.push({message:'Grid mode must be flow or positioned',start:node.start,end:node.end});
+    if(mode?.static && mode.json==='flow') for(const item of node.children) {
+      if(item.type!=='element'||item.tag!=='GridItem')continue;
+      if(item.attributes.some(a=>['x','y','h'].includes(a.name))) errors.push({message:'Flow GridItem uses w and optional minHeight, not positioned x/y/h',start:item.start,end:item.end});
+      const height=item.attributes.find(a=>a.name==='minHeight')?.value;
+      if(height?.static && (typeof height.json!=='number'||!Number.isFinite(height.json)||height.json<0||height.json>10000)) errors.push({message:'Flow GridItem minHeight must be a number from 0 to 10000 pixels',start:item.start,end:item.end});
+    }
+  }
   for (const attr of node.attributes) if (!inColumn && !attr.value.static && isReactiveExpression(attr.value.reactive) && reactiveNames(attr.value.reactive).fields.length) {
     errors.push({message: 'Row expressions belong inside a DataTable Column', start: attr.start, end: attr.end});
   }

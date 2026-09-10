@@ -25,6 +25,10 @@
  */
 export const STORY_GRID_EDIT_CSS = `
 .react-grid-layout { position: relative; }
+.mx-grid-grip { position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; z-index: 4; border: 1px solid rgba(100,116,139,.3); border-radius: 50%; background: white; color: #64748b; cursor: grab; touch-action: none; opacity: 0; }
+.react-grid-item:hover > .mx-grid-grip, .react-grid-item:focus-within > .mx-grid-grip, .mx-grid-grip:focus { opacity: 1; }
+@media (hover: none) { .mx-grid-grip { opacity: 1; } }
+@media (pointer: coarse) { .mx-grid-grip, .react-grid-item > .react-resizable-handle { min-width: 44px; min-height: 44px; } }
 .react-grid-item { transition: none !important; }
 .react-grid-item img { pointer-events: none; user-select: none; }
 .react-grid-item a { -webkit-user-drag: none; }
@@ -50,8 +54,10 @@ export const STORY_GRID_EDIT_CSS = `
   bottom: 3px;
   width: 5px;
   height: 5px;
-  border-right: 2px solid rgba(127, 127, 127, 0.6);
-  border-bottom: 2px solid rgba(127, 127, 127, 0.6);
+  border: 1px solid rgba(100, 116, 139, 0.4);
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 3px rgba(15,23,42,.08);
 }
 .react-grid-item > .react-resizable-handle.react-resizable-handle-se {
   bottom: 0;

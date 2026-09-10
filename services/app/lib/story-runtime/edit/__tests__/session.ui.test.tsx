@@ -78,6 +78,23 @@ afterEach(() => {
 });
 
 describe('createFrameEditSession — going in', () => {
+  it('preserves cross-region selection when refreshed nodes have identical content', () => {
+    const source = '<div><p>first</p></div><div><p>second</p></div>';
+    const { session, at } = mount(source);
+    at('0').classList.add('ProseMirror');
+    at('1').classList.add('ProseMirror');
+    const selection = window.getSelection()!;
+    selection.setBaseAndExtent(at('0.0').firstChild!, 1, at('1.0').firstChild!, 3);
+    fireEvent(document, new Event('selectionchange'));
+    expect(document.querySelectorAll('[data-mx-block-selected]')).toHaveLength(2);
+    session.setNodes(nodesOf(source));
+    expect(document.querySelectorAll('[data-mx-block-selected]')).toHaveLength(2);
+    expect(document.querySelector<HTMLElement>('[data-mx-block-status]')!.style.display).toBe('block');
+    session.setNodes(nodesOf('<p>different document</p>'));
+    expect(document.querySelectorAll('[data-mx-block-selected]')).toHaveLength(0);
+    selection.removeAllRanges();
+  });
+
   it('announces that edit mode is live', () => {
     mount();
     expect(last(STORY_EDIT_READY_MESSAGE)).toMatchObject({ nonce: NONCE });

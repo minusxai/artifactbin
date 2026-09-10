@@ -29,10 +29,13 @@ export const GridItemContext = React.createContext(false)
 
 /** The grid's resolved column count, inherited by GridItems for rect clamping. */
 const GridColsContext = React.createContext(12)
+const GridFlowContext = React.createContext(false)
 
 export interface GridProps extends React.ComponentProps<"div"> {
   /** Column count, default 12 (clamped 1–24). */
   cols?: number
+  /** Flow is for prose columns; positioned remains the dashboard default. */
+  mode?: "flow" | "positioned"
   /** Row height in px, default 86 (clamped 20–400). */
   rowHeight?: number
 }
@@ -42,6 +45,8 @@ export interface GridItemProps extends React.ComponentProps<"div"> {
   y?: number
   w?: number
   h?: number
+  /** Flow-only explicit minimum in pixels; omitted means automatic height. */
+  minHeight?: number
   /** Internal (edit-mode adapter only): the RGL wrapper positions; the item fills it. */
   editing?: boolean
 }
@@ -58,7 +63,7 @@ export function gridItemChildren(children: React.ReactNode): React.ReactElement<
   return out
 }
 
-function Grid({ cols, rowHeight, className, style, children, ...props }: GridProps) {
+function Grid({ cols, rowHeight, mode, className, style, children, ...props }: GridProps) {
   const nCols = gridCols(cols)
   const rh = gridRowHeight(rowHeight)
   const items = gridItemChildren(children)
@@ -74,29 +79,33 @@ function Grid({ cols, rowHeight, className, style, children, ...props }: GridPro
       } as React.CSSProperties}
       {...props}
     >
+      <GridFlowContext.Provider value={mode === "flow"}>
       <GridColsContext.Provider value={nCols}>
-        <div className="relative w-full h-[calc(var(--g-rows)*var(--g-rh))] @max-2xl:h-auto">
+        <div className={mode === "flow" ? "grid w-full grid-cols-[repeat(var(--g-cols),minmax(0,1fr))] items-start @max-2xl:grid-cols-1" : "relative w-full h-[calc(var(--g-rows)*var(--g-rh))] @max-2xl:h-auto"}>
           {items}
         </div>
       </GridColsContext.Provider>
+      </GridFlowContext.Provider>
     </div>
   )
 }
 
-function GridItem({ x, y, w, h, editing, className, style, children, ...props }: GridItemProps) {
+function GridItem({ x, y, w, h, minHeight, editing, className, style, children, ...props }: GridItemProps) {
   const cols = React.useContext(GridColsContext)
+  const flow = React.useContext(GridFlowContext)
   const rect = gridItemRect({ x, y, w, h }, cols)
   return (
     <div
       className={cn(
-        "overflow-hidden p-[3px]",
-        editing
+        flow ? "min-w-0 p-[3px] col-span-[var(--gi-w)] min-h-[var(--gi-min-h)] @max-2xl:col-span-1" : "overflow-hidden p-[3px]",
+        flow ? "relative" : editing
           ? "size-full"
           : "absolute left-[calc(var(--gi-x)/var(--g-cols)*100%)] top-[calc(var(--gi-y)*var(--g-rh))] w-[calc(var(--gi-w)/var(--g-cols)*100%)] h-[calc(var(--gi-h)*var(--g-rh))] @max-2xl:static @max-2xl:w-full",
         className
       )}
       style={{
         ...style,
+        "--gi-min-h": `${flow && typeof minHeight === "number" && Number.isFinite(minHeight) ? Math.max(0,Math.min(10000,minHeight)) : 0}px`,
         "--gi-x": String(rect.x),
         "--gi-y": String(rect.y),
         "--gi-w": String(rect.w),
@@ -104,7 +113,7 @@ function GridItem({ x, y, w, h, editing, className, style, children, ...props }:
       } as React.CSSProperties}
       {...props}
     >
-      <GridItemContext.Provider value={true}>{children}</GridItemContext.Provider>
+      <GridItemContext.Provider value={!flow}>{children}</GridItemContext.Provider>
     </div>
   )
 }

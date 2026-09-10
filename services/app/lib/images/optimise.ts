@@ -88,9 +88,6 @@ const VARIANT_MIN_SOURCE_WIDTH = 1536;
 /** Roughly the width of a fingernail — enough for colour and shape, nothing more. */
 const PLACEHOLDER_EDGE = 16;
 
-/** Formats where re-encoding would lose something the reader wanted. */
-const LEAVE_ALONE = new Set(['image/svg+xml']);
-
 export interface OptimisedImage {
   /** The bytes to store and serve — the conversion, or the original when that was better. */
   buffer: Buffer;
@@ -118,8 +115,12 @@ export interface ImageVariant {
 }
 
 /** Hand back exactly what we were given — the answer whenever we cannot do better. */
-const untouched = (buffer: Buffer, contentType: string, width: number | null = null, height: number | null = null): OptimisedImage =>
-  ({ buffer, contentType, width, height, placeholder: null, variant: null });
+const untouched = (
+  buffer: Buffer,
+  contentType: string,
+  width: number | null = null,
+  height: number | null = null,
+): OptimisedImage => ({ buffer, contentType, width, height, placeholder: null, variant: null });
 
 /**
  * The narrow copy, or null when it would not be an improvement.
@@ -131,7 +132,8 @@ const untouched = (buffer: Buffer, contentType: string, width: number | null = n
 async function narrowVariant(buffer: Buffer, sourceWidth: number, mainBytes: number): Promise<ImageVariant | null> {
   if (sourceWidth <= VARIANT_MIN_SOURCE_WIDTH) return null;
   try {
-    const out = await sharp(buffer).rotate()
+    const out = await sharp(buffer)
+      .rotate()
       .resize({ width: VARIANT_WIDTH, withoutEnlargement: true })
       .webp({ quality: 78, effort: 4 })
       .toBuffer({ resolveWithObject: true });
@@ -144,8 +146,33 @@ async function narrowVariant(buffer: Buffer, sourceWidth: number, mainBytes: num
   }
 }
 
+/** Read only explicit root pixel dimensions; never decode SVG or resolve XML resources. */
+function svgBox(buffer: Buffer): [number | null, number | null] {
+  let prefix = buffer.toString('utf8', 0, 8192);
+  // Consume complete leading preamble items; never splice comments out of tags.
+  for (;;) {
+    const preamble = prefix.match(/^\s*(?:<\?xml[\s\S]*?\?>|<!--[\s\S]*?-->)/)?.[0];
+    if (!preamble) break;
+    prefix = prefix.slice(preamble.length);
+  }
+  const root = prefix.match(/^\s*<svg\b(?:[^"'>]|"[^"]*"|'[^']*')*>/i)?.[0];
+  if (!root) return [null, null];
+  const attrs = new Map(
+    [...root.matchAll(/\s([A-Za-z_:][\w:.-]*)\s*=\s*("[^"]*"|'[^']*')/g)].map((m) => [m[1], m[2].slice(1, -1)]),
+  );
+  const dimension = (name: string) => {
+    const value = attrs.get(name);
+    if (!value || !/^\d+(?:\.\d+)?(?:px)?$/.test(value)) return null;
+    const n = Number(value.replace(/px$/, ''));
+    return Number.isFinite(n) && n > 0 && n <= 100000 ? n : null;
+  };
+  const width = dimension('width'),
+    height = dimension('height');
+  return width !== null && height !== null ? [width, height] : [null, null];
+}
+
 export async function optimiseImage(buffer: Buffer, contentType: string): Promise<OptimisedImage> {
-  if (LEAVE_ALONE.has(contentType)) return untouched(buffer, contentType);
+  if (contentType === 'image/svg+xml') return untouched(buffer, contentType, ...svgBox(buffer));
 
   let meta: Metadata;
   try {
@@ -165,8 +192,10 @@ export async function optimiseImage(buffer: Buffer, contentType: string): Promis
   // `withoutEnlargement` is what keeps a small image its own size; the cap only
   // ever removes pixels nobody was going to see.
   const pipeline = sharp(buffer).rotate().resize({
-    width: MAX_IMAGE_EDGE, height: MAX_IMAGE_EDGE,
-    fit: 'inside', withoutEnlargement: true,
+    width: MAX_IMAGE_EDGE,
+    height: MAX_IMAGE_EDGE,
+    fit: 'inside',
+    withoutEnlargement: true,
   });
 
   let converted: { data: Buffer; info: OutputInfo };
@@ -176,7 +205,10 @@ export async function optimiseImage(buffer: Buffer, contentType: string): Promis
     const lossless = contentType === 'image/png';
     // 78 rather than 82: measured at twice the saving on a real photograph
     // (21% against 11%) for a difference nobody looking at a document sees.
-    converted = await pipeline.clone().webp(lossless ? { lossless: true, effort: 4 } : { quality: 78, effort: 4 }).toBuffer({ resolveWithObject: true });
+    converted = await pipeline
+      .clone()
+      .webp(lossless ? { lossless: true, effort: 4 } : { quality: 78, effort: 4 })
+      .toBuffer({ resolveWithObject: true });
   } catch {
     return untouched(buffer, contentType, width, height);
   }
@@ -189,11 +221,15 @@ export async function optimiseImage(buffer: Buffer, contentType: string): Promis
 
   let placeholder: string | null = null;
   try {
-    const tiny = await sharp(buffer).rotate()
+    const tiny = await sharp(buffer)
+      .rotate()
       .resize({ width: PLACEHOLDER_EDGE, height: PLACEHOLDER_EDGE, fit: 'inside' })
-      .webp({ quality: 40 }).toBuffer();
+      .webp({ quality: 40 })
+      .toBuffer();
     placeholder = `data:image/webp;base64,${tiny.toString('base64')}`;
-  } catch { /* a document without a blur is fine; one that failed to publish is not */ }
+  } catch {
+    /* a document without a blur is fine; one that failed to publish is not */
+  }
 
   const mainBuffer = smaller ? converted.data : buffer;
   return {

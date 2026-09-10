@@ -43,7 +43,10 @@ export const StoryContent = Type.Object({
     'CONTAINER-QUERY variants (`@lg:`, `@2xl:` — NEVER viewport `md:`/`lg:`). COMPONENTS: the ' +
     'body is STATIC JSX — plain HTML content tags styled with Tailwind (`className=`) plus the ' +
     'registered shadcn/ui component set: ' + STORY_UI_COMPONENT_NAME_LIST.join(', ') + '. ' +
-    'These are the ONLY Capitalized tags allowed. GRID LAYOUT — ' +
+    'These are the ONLY Capitalized tags allowed. For prose columns/sidebars, prefer ' +
+    '<Grid mode="flow"><GridItem w={8}>…</GridItem><GridItem w={4}>…</GridItem></Grid>. ' +
+    'Flow stacks on phones, grows with content, and supports direct column manipulation. ' +
+    'Use w and optional minHeight (pixels), never x/y/h, in flow. POSITIONED DASHBOARDS — ' +
     '<Grid><GridItem x={0} y={0} w={8} h={5}>…</GridItem>…</Grid>: 12 columns × 86px rows.'),
   format: Type.Optional(Type.Union([Type.Literal('jsx'), Type.Null()], { description:
     "'jsx' = the story field holds shadcn JSX source rendered by the story interpreter" })),

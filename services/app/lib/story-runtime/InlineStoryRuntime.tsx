@@ -199,6 +199,6 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
   const nodes = useMemo(() => isolateStoryNodes(current.nodes, combinedCss), [current.nodes,combinedCss]);
   return <><TrustedUi overlay layer="selection"><SelectionPortal ready={portalReady} /></TrustedUi><div ref={root} data-mx-inline-story="" data-mx-story-root="" data-theme={styles.theme ?? undefined} className={current.colorMode}>
     <style>{css}</style>
-    <ArtifactDialogScope><StoryRuntimeApp {...current} nodes={nodes} store={store} importAsset={lifetime.transport?.importAsset} editDecorate={editRef.current?.decorate} onSlideRename={editRef.current ? (path,title) => editRef.current?.renameSlide(path,title) : undefined} /></ArtifactDialogScope>
+    <ArtifactDialogScope><StoryRuntimeApp {...current} nodes={nodes} store={store} importAsset={lifetime.transport?.importAsset} editDecorate={editRef.current?.decorate} editChildren={editRef.current?.decorateChildren} onSlideRename={editRef.current ? (path,title) => editRef.current?.renameSlide(path,title) : undefined} /></ArtifactDialogScope>
   </div></>;
 }
