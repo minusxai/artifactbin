@@ -4,11 +4,10 @@ import { STORY_CHROME_CSS } from '@/lib/story-runtime/chrome-css';
 import { chromeAfterSample,type ChromeState } from '@/lib/story-runtime/reader-chrome-policy';
 import { subscribePageChrome } from './PageChrome';
 import { wireReaderSharing } from '@/lib/story-runtime/reader-share';
-import { wireGithubWidgetTheme } from '@/lib/github-star';
+import { wireGithubStar } from '@/lib/github-star';
 
 /** Reconcile only our generated chrome, retaining live browser-owned state.
- * Replacing innerHTML reloads the vendor iframe on every reaction/title update.
- * The widget subtree owns its measured size and must never be overwritten. */
+ * Preserve the fetched GitHub count across reaction/title updates. */
 function updateChrome(current: Element, next: Element) {
   if (current.hasAttribute('data-mx-github-star')) return;
   for (const attribute of [...current.attributes]) if (!next.hasAttribute(attribute.name)) current.removeAttribute(attribute.name);
@@ -44,7 +43,7 @@ export function InlineReaderChrome({ input, onAction,pinned=false }: { input: Re
     const root=holder.current?.querySelector<HTMLElement>('[data-mx-reader-chrome]');
     if(!root)return;
     sharing.current=wireReaderSharing(window,document,root);
-    const stopWidgetTheme=wireGithubWidgetTheme(root);
+    const stopGithubStar=wireGithubStar(root);
     let queued=false;let raf=0;const panels=new Set<string>();
     const paint=(visible:boolean)=>{
       root.classList.toggle(READER_CHROME_HIDDEN_CLASS,!visible);
@@ -65,7 +64,7 @@ export function InlineReaderChrome({ input, onAction,pinned=false }: { input: Re
     });
     window.addEventListener('scroll',schedule,{passive:true});window.addEventListener('resize',schedule);
     sample();
-    return ()=>{stopWidgetTheme();stop();sharing.current?.dispose();sharing.current=null;window.cancelAnimationFrame(raf);window.removeEventListener('scroll',schedule);window.removeEventListener('resize',schedule);};
+    return ()=>{stopGithubStar();stop();sharing.current?.dispose();sharing.current=null;window.cancelAnimationFrame(raf);window.removeEventListener('scroll',schedule);window.removeEventListener('resize',schedule);};
   },[html,pinned,input.artifactId]);
   return <>
     <style>{STORY_CHROME_CSS}</style>

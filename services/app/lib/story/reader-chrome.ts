@@ -39,7 +39,7 @@
 
 import { REPO_URL } from '@/lib/repo';
 import { GITHUB_MARK_PATH, GITHUB_MARK_VIEWBOX } from '@/lib/github-mark';
-import { githubWidgetMarkup } from '@/lib/github-star';
+import { githubStarMarkup } from '@/lib/github-star';
 
 /** The login door, when a link grants more than the anonymous ceiling lets a guest use. */
 export interface ReaderSignIn {
@@ -234,7 +234,7 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
     + '<a class="mx-reader-home" href="/" target="_top" aria-label="Home" data-mx-reader-logo data-mx-tip="Home">'
     + '<img src="/logo-128.png" alt=""></a>'
     + '<div class="mx-reader-rail" data-mx-reader-rail>'
-    + `<span data-mx-github-star class="mx-reader-github">${githubWidgetMarkup()}</span>`
+    + `<span data-mx-github-star class="mx-reader-github">${githubStarMarkup()}</span>`
     + action(
       'like',
       reactions?.like.liked ? 'Unlike' : 'Like',
