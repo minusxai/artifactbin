@@ -123,7 +123,6 @@ More under `references/` ([[ docsIndexHint ]]):
 | data and keyed templates | `markup-data.md`, `markup-repeat.md` |
 | chart serialization and statistical meaning | `markup-data-authoring.md` |
 | conditions, Dialog and local SQL state | `markup-state.md` |
-| LLM mutations | `markup-generation.md` |
 | isolated DOM/canvas, bundled scripts and cached assets | `markup-iframe.md` |
 | script signal subscriptions and mutation bridge | `markup-scripts.md` |
 | editable cells, tags and reference pickers | `markup-editing.md` |
