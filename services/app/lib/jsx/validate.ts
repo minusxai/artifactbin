@@ -11,7 +11,7 @@ import { compileManagedIframe } from '@/lib/story/managed-iframe';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 // Shared with the render-time gate in lib/story-ui/interpreter.tsx — see
 // lib/jsx/url-attrs.ts for why these must not be maintained separately.
-import { URL_ATTRS, URL_LIST_ATTRS, SVG_PAINT_ATTRS, paintHasExternalUrl } from './url-attrs';
+import { URL_ATTRS, URL_LIST_ATTRS, SVG_PAINT_ATTRS, paintHasExternalUrl, urlListUrls } from './url-attrs';
 import { DANGEROUS_TAGS } from './dangerous-tags';
 import { DENIED_JSX_ATTRS } from './denied-attrs';
 import { STORY_COMPONENT_NAMES } from '@/lib/data/story/story-components';
@@ -55,13 +55,7 @@ export function hasDangerousScheme(url: string): boolean {
 
 /** Check ping's ASCII-whitespace-separated URLs or srcset's comma-separated URL/descriptor entries. */
 export function listHasDangerousScheme(value: string, lowerAttributeName: string): boolean {
-  if (lowerAttributeName === 'ping') {
-    return value.split(/[\t\n\f\r ]+/).some(hasDangerousScheme);
-  }
-  return value.split(',').some(entry => {
-    const url = entry.trim().split(/\s+/)[0];
-    return !!url && hasDangerousScheme(url);
-  });
+  return urlListUrls(value, lowerAttributeName).some(hasDangerousScheme);
 }
 
 export function validateJsx(nodes: JsxNode[], options: ValidateOptions): ValidationError[] {

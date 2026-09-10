@@ -35,6 +35,12 @@ export const URL_ATTRS = immutableSet([
 /** srcset uses comma-separated URL/descriptor entries; ping uses ASCII-whitespace-separated URLs. */
 export const URL_LIST_ATTRS = immutableSet(['srcset', 'ping']);
 
+/** Extract URLs for policy checks, preserving commas within a ping URL. */
+export function urlListUrls(value: string, lowerAttributeName: string): string[] {
+  if (lowerAttributeName === 'ping') return value.split(/[\t\n\f\r ]+/).filter(Boolean);
+  return value.split(',').map(entry => entry.trim().split(/\s+/)[0]).filter(Boolean);
+}
+
 /**
  * SVG paint/reference attributes that accept `url(…)` values. A paint server
  * reference may only be LOCAL (`url(#id)`): an external target is a fetch fired
