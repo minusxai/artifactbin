@@ -1261,7 +1261,7 @@ export default function AnnotationLayer({
       {pick && (
         <div
           role="status"
-          aria-label="Picking a block"
+          aria-label="Select tool active"
           className={`${cardClass} fixed z-30 flex items-center gap-2 border-edge-bright px-3 py-1.5 font-mono text-[11px] text-muted shadow-xl`}
           style={{ left: frameRect.left + frameRect.width / 2, top: frameRect.top + VIEW_COMMENT_INSET, transform: 'translateX(-50%)' }}
         >

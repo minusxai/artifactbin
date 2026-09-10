@@ -177,7 +177,6 @@ export function createFrameSelectionActions({
       toolbar = doc.createElement('div');
       toolbar.setAttribute(SELECTION_ACTIONS_ATTR, '');
       toolbar.setAttribute('role', 'toolbar');
-      toolbar.setAttribute('aria-label', 'Text selection actions');
       toolbar.hidden = true;
       // Preserve the document Selection when a toolbar button takes the click.
       toolbar.addEventListener('pointerdown', (event) => event.preventDefault());
@@ -194,6 +193,7 @@ export function createFrameSelectionActions({
       });
       (portal ?? doc.body).appendChild(toolbar);
     }
+    toolbar.setAttribute('aria-label', context ? 'Document actions' : 'Text selection actions');
     toolbar.replaceChildren();
     if (capabilities.edit) toolbar.appendChild(makeButton('edit'));
     if (capabilities.annotate && !context) toolbar.appendChild(makeButton('annotate'));
@@ -448,7 +448,6 @@ export function createFrameSelectionActions({
     activeSelection = described;
     contextOpen = true;
     const surface = ensureToolbar(true);
-    surface.setAttribute('aria-label', 'Document actions');
     surface.querySelector('[data-mx-selection-action="edit"]')?.setAttribute('aria-label', 'Edit');
     surface.hidden = false;
     const rect = surface.getBoundingClientRect();

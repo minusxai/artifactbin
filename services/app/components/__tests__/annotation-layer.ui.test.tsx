@@ -796,7 +796,7 @@ describe('picking a block from the rail', () => {
   };
   const annotationsMessages = (postMessage: ReturnType<typeof vi.fn>) =>
     postMessage.mock.calls.map((call) => call[0]).filter((message) => message?.type === STORY_ANNOTATIONS_MESSAGE);
-  const pill = () => screen.queryByRole('status', { name: 'Picking a block' });
+  const pill = () => screen.queryByRole('status', { name: 'Select tool active' });
 
   it('the context/selection action activates Select with the rail closed', async () => {
     const { frame, postMessage, contentWindow } = makeFrame();
@@ -915,7 +915,7 @@ describe('picking a block from the rail', () => {
  * route (the selection bubble, the editor toolbar) ends it too.
  */
 describe('opening the rail opens a pick', () => {
-  const pill = () => screen.queryByRole('status', { name: 'Picking a block' });
+  const pill = () => screen.queryByRole('status', { name: 'Select tool active' });
   const picks = (postMessage: ReturnType<typeof vi.fn>) =>
     postMessage.mock.calls.map((call) => call[0]).filter((message) => message?.type === STORY_ANNOTATIONS_MESSAGE).map((message) => message.pick);
 
@@ -989,7 +989,7 @@ describe('opening the rail opens a pick', () => {
  * a text range is. Same column, same field, tagged by kind.
  */
 describe('drawing an area from the rail', () => {
-  const pill = () => screen.queryByRole('status', { name: 'Picking a block' });
+  const pill = () => screen.queryByRole('status', { name: 'Select tool active' });
   const last = (postMessage: ReturnType<typeof vi.fn>) =>
     postMessage.mock.calls.map((call) => call[0]).filter((message) => message?.type === STORY_ANNOTATIONS_MESSAGE).at(-1);
   const AREA = { v: 1 as const, kind: 'area' as const, box: { x: 0.2, y: 0.05, w: 0.5, h: 0.4 } };
