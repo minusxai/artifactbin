@@ -9,7 +9,7 @@ async function readyStar(star) {
   await star.locator('[data-mx-github-count]').filter({ hasText: '1,234' }).waitFor();
   assert(await star.locator('a svg').isVisible());
   assert(await star.getByText('Star', { exact: true }).isVisible());
-  assert.equal(await star.locator('svg').getAttribute('fill'), 'currentColor');
+  assert.equal(await star.locator('svg').getAttribute('fill'), '#eac54f');
   assert.equal(await star.locator('iframe').count(), 0);
   assert.equal(await star.locator('a').getAttribute('href'), 'https://github.com/minusxai/artifactbin');
 }
@@ -122,10 +122,10 @@ try {
     }, { theme, color });
     assert(await star.locator('svg').evaluate((svg, expected) => new Promise(resolve => {
       const deadline = performance.now() + 3_000;
-      const sample = () => getComputedStyle(svg).fill === expected ? resolve(true)
+      const sample = () => getComputedStyle(svg).fill === 'rgb(234, 197, 79)' && getComputedStyle(svg.closest('a')).color === expected ? resolve(true)
         : performance.now() > deadline ? resolve(false) : requestAnimationFrame(sample);
       sample();
-    }), color), `GitHub icon inherits the ${theme} reader palette`);
+    }), color), `GitHub star stays yellow while its label inherits the ${theme} reader palette`);
     assert(await star.locator('a').evaluate(link => link === window.__readerStar), 'palette changes preserve the link');
     await readyStar(star);
   }

@@ -17,7 +17,7 @@ it('always shows theme-inheriting icons, shares the count request, and preserves
   const icons = view.container.querySelectorAll('[data-mx-github-star] svg');
   expect(icons.length).toBeGreaterThanOrEqual(3);
   for (const icon of icons) {
-    expect(icon.getAttribute('fill')).toBe('currentColor');
+    expect(icon.getAttribute('fill')).toBe('#eac54f');
     expect(icon.closest('a')?.textContent).toContain('Star');
     expect(icon.closest('a')?.getAttribute('href')).toBe('https://github.com/minusxai/artifactbin');
   }
