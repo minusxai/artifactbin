@@ -316,7 +316,7 @@ jobs:
             --model=fireworks-ai/accounts/fireworks/models/glm-5p3-flash \
             --api-key-env=FIREWORKS_API_KEY \
             --label='opencode · glm-5p3-flash · ${{ matrix.mode }}' \
-            --price-in=0.15 --price-out=0.5
+            --price-in=0.15 --price-out=0.5 --price-cache-read=0.03
         env:
           FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
