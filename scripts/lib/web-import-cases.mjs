@@ -8,6 +8,20 @@ export async function checkWebImport(B, browser, WEB, ok) {
   page.on('request', (r) => { if (/gstatic|googleapis/.test(r.url())) gstatic.push(r.url()); });
 
   const fontDoc = await startDocument(B);
+  // The combined asset fixture also exercises normalization. Check the
+  // no-rewrite response on the original simple image shape, then reuse this
+  // document for the font case; an unrelated normalization must not fail it.
+  const sourcePut = await fetch(`${B}/api/artifacts/${fontDoc.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${fontDoc.token}` },
+    body: JSON.stringify({
+      title: 'source-preserving import',
+      markup: `<div id="root" className="p-8"><h1 id="heading" className="text-2xl font-bold">Imported</h1><img id="shot" src="${WEB}/photo.png" alt="imported" /></div>`,
+    }),
+  });
+  const sourceBody = await sourcePut.json();
+  ok(sourcePut.status === 200 && sourceBody.markup_changed === false,
+    'a simple URL import preserves source without a markup rewrite');
   const fontPut = await fetch(`${B}/api/artifacts/${fontDoc.id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${fontDoc.token}` },

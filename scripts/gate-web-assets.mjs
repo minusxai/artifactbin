@@ -109,7 +109,6 @@ if (put.status !== 200) {
 ok(Array.isArray(wrote.warnings) === false || wrote.warnings.length === 0, `publish imported everything (${JSON.stringify(wrote.warnings ?? [])})`);
 
 // The STORED markup keeps the author's URLs — the half of the design an agent sees.
-ok(wrote.markup_changed === false, 'URL import preserves source without a markup rewrite');
 const stored = await (await fetch(`${B}/api/artifacts/${owner.id}`, { headers: auth })).json();
 ok(stored.markup.includes(`${WEB}/photo.png${RUN}`), 'the stored markup still carries the source URL');
 ok(stored.markup.includes(`${WEB}/face.woff2${RUN}`), 'the stored markup still carries the @font-face url');

@@ -179,7 +179,7 @@ await plainSource.waitFor();
 const initialSource = await plainSource.inputValue();
 check(initialSource.includes('Edited by the gate'), 'slow rich-editor download still presents the complete source');
 const plainPaint = await plainSource.evaluate(el => ({ background: getComputedStyle(el).backgroundColor, color: getComputedStyle(el).color }));
-check(plainPaint.background === 'rgb(30, 30, 30)' && plainPaint.color === 'rgb(212, 212, 212)', 'the immediately editable fallback uses Monaco’s dark palette');
+check(plainPaint.background === 'rgb(30, 30, 30)' && plainPaint.color === 'rgb(212, 212, 212)', `the immediately editable fallback uses Monaco’s dark palette (${JSON.stringify(plainPaint)})`);
 await plainSource.fill(initialSource.replace('Edited by the gate', 'Edited while rich editor loads'));
 releaseRichEditor();
 const mounted = await page.waitForSelector('.monaco-editor [aria-label="Markup source"]', { timeout: 30_000 }).then(() => true).catch(() => false);
