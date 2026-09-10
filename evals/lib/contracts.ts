@@ -392,7 +392,7 @@ export interface LedgerEntry {
   markupUnchanged?: boolean;
   /**
    * The artifact this request wrote to — from the URL, or from the response body
-   * when the agent CREATED one (`POST /api/artifacts`) or wrote through `/mcp`.
+   * when the agent CREATED one (`POST /api/artifacts`).
    * An agent need not use the document the start link named, and one that does not
    * must still be scored on what it actually made.
    */

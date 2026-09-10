@@ -121,12 +121,8 @@ export function ledgerRows(entries: LedgerEntry[]): LedgerRow[] {
   ];
 }
 
-/**
- * An address that serves the protocol docs: the listing `/docs`, the tarball
- * `/docs?download=true`, any page under `/docs/`, and `/llms.txt`. These are
- * the product's own entry points, so a run that read any of them read the
- * docs — scoring only `/docs/<file>` called a real docs-first run docs-blind.
- * The query is stripped, so the tarball counts as the listing does.
+/** Attempted remote guidance reads, including retired routes that now return 404.
+ * Kept as telemetry so obsolete agent behavior remains visible, not supported.
  */
 export function isDocsAddress(path: string): boolean {
   const p = pathOnly(path);

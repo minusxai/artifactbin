@@ -1,28 +1,16 @@
 /**
- * Turns spent READING documentation — the cost the HTTP ledger cannot see.
- *
- * `docs_fetches` counts requests. Measured on a Claude Code dashboard run: ONE
- * request turn (`curl …/llms.txt -o llms.txt && curl …/docs/markup -o markup.txt`)
- * and then FOURTEEN turns of `sed -n '100,420p' llms.txt` — 42% of the run,
- * each re-sending ~50k tokens of context, with the ledger reading `1`. An agent
- * fetches once and reads the file over many turns, so what the docs cost is a
- * property of the TOOL CALLS, and only the harness transcript carries those.
- *
- * Pure: adapters hand over the tool invocations their event stream carries
- * (name + input, whatever shape) and get a count back. A call counts when it
- * fetches a docs URL, reads a docs URL, or reads a LOCAL FILE that an earlier
- * call saved a docs URL into (`-o file`, `--output file`, `> file`) — or, in
- * installed_skill mode, reads a skill file under `skills/`, greps across that
- * directory, or invokes Claude Code's `Skill` tool. Writes to
- * the product (`-X POST/PUT`, `--data`) never count, even when their body
- * mentions `/docs` — publishing is the work, not the reading.
+ * Turns spent reading guidance, including local CLI help and installed skills.
+ * The HTTP ledger cannot see local reads or repeated paging of a saved file.
+ * Retired documentation URLs remain recognizable as attempted reads in a
+ * transcript; this metric does not serve them or enable a remote-skill mode.
+ * Pure: adapters supply tool invocations, and publication writes do not count.
  */
 export interface ToolInvocation {
   name: string;
   input: unknown;
 }
 
-/** A docs page of this product: `/docs/...` or `/llms.txt`, on any host. */
+/** Recognize attempted reads of retired docs and the CLI discovery page. */
 const DOCS_URL = /https?:\/\/[^\s'"]+\/(?:docs(?:\/[^\s'"]*)?|llms\.txt)\b/;
 /**
  * The same docs as FILES — the plugin's `skills/<skill>/…/<file>.md`, wherever

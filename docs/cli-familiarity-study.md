@@ -1,5 +1,8 @@
 # Planning command-selection study — 10 September 2026
 
+For the final distinct-model, executable release acceptance, see
+[cli-implementation-progress.md](cli-implementation-progress.md). This earlier study measured planning choices only.
+
 This study used pi 0.77.0 and OpenCode 1.18.23 with the same Fireworks model,
 `accounts/fireworks/models/deepseek-v4-flash-0731`, in fresh temporary working directories.
 The user authorized the Fireworks credential source. Only that key was parsed from the supplied

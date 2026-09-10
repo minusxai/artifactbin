@@ -1,16 +1,15 @@
-# CLI implementation and planning evidence
+# Historical CLI planning evidence
 
 Authoritative product contract: https://artifactbin.dev/@ppsreejith/cVcRIp (10 September 2026; live artifact is authoritative).
 Planning base: OSS `6feb7140`; isolated branch `plan/cli-validation`.
 
-## Decision
+## Status
 
-Implementation awaits user approval of the artifact. Preserve `remote`, HTTP operations and
-the shared operation registry; remove MCP and runtime remote-skill dependencies at cutover. The CLI owns filesystem state and orchestration, not a
-second publication engine. This planning branch contains probes, not the implemented CLI.
-
-The previous review overstated strict replacement: normal body pushes can use the existing
-source/edit_id protocol today. Metadata and restore need different concurrency conditions.
+The user approved implementation after this planning study. The full implementation and current
+validation record are in [cli-implementation-progress.md](cli-implementation-progress.md).
+This file preserves the planning sequence and measurements against the stated baseline; descriptions
+of missing behavior, blocked harnesses, or pending authorization below are historical observations.
+They are not the current product contract or remaining implementation work.
 
 ## Reproduced evidence
 

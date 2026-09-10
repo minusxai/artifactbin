@@ -114,7 +114,7 @@ def run(leg):
   for name,path in [('pi',work/'pi-state/skills/artifactbin'),('opencode',work/'opencode-config/skills/artifactbin')]:
    try:checks['updated_'+name+'_skill']=json.loads((path/'.afbin-skill.json').read_text())['version']==release.version
    except (FileNotFoundError,json.JSONDecodeError):checks['updated_'+name+'_skill']=False
-  checks['unattended_approval']=any(x['path']=='/oauth/device/token' for x in requests) and not (work/'home/.artifactbin/.env').exists()
+  checks['unattended_approval']=any(x['path']=='/oauth/device/token' and x['status']==400 for x in requests) and not (work/'home/.artifactbin/.env').exists()
   before=len(proxy.calls);validation=cli('validate',allow_error=True);status=cli('status');cli('diff');clean=all(x['status']=='unchanged' for x in status['files']);noop=cli('push',allow_error=True) if clean else {'error':'dirty_workspace'};checks['offline_finish']=validation.get('valid') is True and 'error' not in noop and len(proxy.calls)==before
   checks['no_destructive_mistakes']=not any(x['method']=='DELETE' for x in requests) and checks['fork'] and checks['conflict_preserved']
   commands=[];tool_outputs=[]
@@ -123,6 +123,7 @@ def run(leg):
    elif event.get('type') in ['tool','tool_use']:
     commands.append(str(event.get('part',{}).get('state',{}).get('input',{}).get('command','')));tool_outputs.append(str(event.get('part',{}).get('state',{}).get('output','')))
    if event.get('type')=='tool_execution_end':tool_outputs.extend(x.get('text','') for x in event.get('result',{}).get('content',[]) if isinstance(x,dict))
+  checks['unattended_approval']=checks['unattended_approval'] and any(re.search(r'"code"\s*:\s*"approval_required"',output) and '"verification_url"' in output for output in tool_outputs)
   commands=[x for x in commands if x]
   result={'harness':harness,'model':model,'repetition':rep,'seconds':round(elapsed,2),'exit':proc.returncode,'timed_out':timed_out,'workspace':str(work),'checks':checks,'requests':requests,'metrics':{'command_calls':len(commands),'help_lookups':sum(bool(re.search(r'afbin\s+(?:help\b|[^\n]*(?:--help| -h))',x)) for x in commands),'wrong_flag_or_command_diagnostics':sum(len(re.findall(r'"code"\s*:\s*"(?:unknown_flag|unsupported_flag|unknown_command|invalid_arguments)"',output)) for output in tool_outputs),'provider_cost':None},'events':events,'stderr':''.join(errors)}
   text=json.dumps(result,indent=2).replace(key,'[REDACTED]').replace(token,'[REDACTED]');(DEST/f'{harness}-{rep}.json').write_text(text)

@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {runCli} from '../src/dispatch';
 import {localSkillFiles,manPage} from '../src/teaching';
+import {roffLiteral} from '../src/man';
 test('bundled skill links resolve locally and every template example validates offline',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-teaching-'));
  try{
@@ -25,4 +26,9 @@ test('bundled guidance never teaches removed transports or reference spellings',
  const corpus=Object.values(localSkillFiles).join('\n');
  assert.doesNotMatch(corpus,/\bMCP\b|\/docs\/|source="<datasetId>"|from ref_<id>/);
  assert.match(corpus,/source="ref:<id>"/);
+});
+
+test('man literals preserve text without allowing roff requests or escapes',()=>{
+ assert.equal(roffLiteral(".request\n'control\ntext \\escape - flag\nmid.line isn't a request"),
+  "\\&.request\n\\&'control\ntext \\eescape \\- flag\nmid.line isn't a request");
 });
