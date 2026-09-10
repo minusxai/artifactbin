@@ -31,6 +31,7 @@ import { Tooltip } from '@/components/Tooltip';
 import { APP_BAR_H, EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
 import { useIsPhoneViewport } from '@/components/MobileSheet';
 import VersionHistory from '@/components/VersionHistory';
+import { TrustedUi } from '@/components/TrustedUi';
 import VizEditorPanel from '@/components/views/story/VizEditorPanel';
 import NumberEditorPanel from '@/components/views/story/NumberEditorPanel';
 import StoryFormatToolbar from '@/components/views/story/StoryFormatToolbar';
@@ -787,7 +788,10 @@ export default function InPlaceEditor({
       )}
 
       {historyOpen && (
+        // The open history panel must receive clicks above the reader's navigation rail.
+        <TrustedUi overlay layer="navigation">
         <VersionHistory
+          topOffset={barTop + EDIT_BAR_H}
           versions={history.versions}
           currentVersion={live.version}
           previewing={preview?.version ?? null}
@@ -797,6 +801,7 @@ export default function InPlaceEditor({
           onClose={() => setHistoryOpen(false)}
           busy={history.busy}
         />
+        </TrustedUi>
       )}
     </div>
   );

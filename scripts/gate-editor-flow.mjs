@@ -103,6 +103,34 @@ check(readBack.markup.includes('Edited by the gate'), 'the typed text reached th
 frame = page.mainFrame();
 check((await frame.locator('svg.marks, canvas').count()) > 0, 'embeds still render after persisting');
 
+// History must start below both fixed bars, including after a viewport resize.
+await page.getByRole('button', { name: 'Open version history', exact: true }).click();
+for (const viewport of [{ width: 1400, height: 950 }, { width: 900, height: 700 }]) {
+  await page.setViewportSize(viewport);
+  const history = page.getByRole('complementary', { name: 'Version history' });
+  const toolbar = await page.getByRole('banner', { name: 'Editor toolbar' }).boundingBox();
+  const drawer = await history.boundingBox();
+  const current = await history.getByRole('button', { name: 'Show the current version' }).boundingBox();
+  check(!!toolbar && !!drawer && drawer.y >= toolbar.y + toolbar.height,
+    `history clears both toolbars at ${viewport.width}px`);
+  check(!!current && !!drawer && current.y >= drawer.y && drawer.y + drawer.height <= viewport.height + 1,
+    `current version and drawer fit below the bars at ${viewport.width}px`);
+  const close = history.getByRole('button', { name: 'Close version history' });
+  const reachable = await close.click({ trial: true, timeout: 2000 }).then(() => true, () => false);
+  check(reachable, `history close button is not covered at ${viewport.width}px`);
+}
+await page.setViewportSize({ width: 390, height: 844 });
+const historySheet = page.getByRole('dialog', { name: 'Version history' });
+await historySheet.waitFor({ state: 'visible' });
+check(await historySheet.getByRole('button', { name: 'Show the current version' }).isVisible(),
+  'phone history keeps the current version visible in its bottom sheet');
+await historySheet.getByRole('button', { name: 'Close version history' }).click();
+check(await page.getByRole('button', { name: 'Open version history' }).getAttribute('aria-expanded') === 'false',
+  'phone history close button remains usable');
+// Escape also works on the broken layout, so a failed geometry assertion does not stall the gate.
+await page.keyboard.press('Escape');
+await page.setViewportSize({ width: 1400, height: 950 });
+
 // Idle must not spend versions: nothing typed ⇒ nothing written.
 const quiet = (await api(`/api/artifacts/${doc.id}`, {}, token)).version;
 await page.waitForTimeout(2000);

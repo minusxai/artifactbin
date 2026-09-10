@@ -29,6 +29,8 @@ export interface VersionHistoryProps {
   onBackToCurrent: () => void;
   onClose: () => void;
   busy: boolean;
+  /** Space reserved above the desktop drawer by the caller's toolbars. */
+  topOffset?: number;
 }
 
 /**
@@ -42,7 +44,7 @@ const ROW = (selected: boolean) =>
   }`;
 
 export default function VersionHistory({
-  versions, currentVersion, previewing, onPreview, onRestore, onBackToCurrent, onClose, busy,
+  versions, currentVersion, previewing, onPreview, onRestore, onBackToCurrent, onClose, busy, topOffset = 0,
 }: VersionHistoryProps) {
   const phone = useIsPhoneViewport();
   // Escape closes, like any transient panel.
@@ -186,7 +188,8 @@ export default function VersionHistory({
   return (
     <aside
       aria-label="Version history"
-      className="absolute right-0 top-0 z-20 flex h-full w-64 flex-col border-l border-edge bg-surface shadow-xl"
+      className="fixed right-0 bottom-0 z-20 flex w-64 flex-col border-l border-edge bg-surface shadow-xl"
+      style={{ top: topOffset }}
     >
       {head}
       {content}
