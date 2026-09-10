@@ -53,7 +53,7 @@ import { mintStartDocument, mintStartDocumentAs } from './lib/retry';
 import { acquireCredential, credentialSourceFor, deploymentLoginEmail, localLoginEmail, memoizeCredential, shareForScoring, writeArtifactbinEnv, type Credential } from './lib/credential';
 import { agentProxyEnv, startMitmProxy } from './lib/mitm';
 import { exportDocument, inspectDocument, screenshotDocument } from './lib/score/browser';
-import { askedForAToken, dataflowRows, productMetrics, type ServedDocument } from './lib/score/product';
+import { askedForAuthorization, dataflowRows, productMetrics, type ServedDocument } from './lib/score/product';
 import { prepareTask, runChecks, scorerFor } from './lib/score/kinds';
 import { credentialEnv, readDotEnv } from './lib/env';
 import { parseArgs } from './lib/args';
@@ -225,8 +225,7 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
       } catch (err) {
         // A task's own failure is ITS failure. Letting it reject would take down the server its
         // siblings are still running against — and their agent time is already paid for. `false`
-        // rather than `null`, because null means "deliberately not run" (a harness with no MCP
-        // client) and would drop a crashed task out of the count instead of failing it.
+        // rather than `null`, because null means "deliberately not run" and would drop a crashed task out of the count instead of failing it.
         log(`${leg.label}/${task.id}: FAILED — ${scrubRegistered(String(err))}`);
         return false;
       } finally {
@@ -303,8 +302,8 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   if (start && !r.credential && !start.prompt.includes(r.agentBase)) throw new Error(`start paste is not on ${r.agentBase}`);
 
   // EVERYTHING the driver does before the turn, decided in one place (`lib/tasks planAccess`) and
-  // performed here: seed the document this task edits, write the skill's connection file, wire the
-  // MCP server. A `handoff: none` task gets none of the three.
+  // performed here: seed the document this task edits and write its private CLI credentials.
+  // A `handoff: none` task gets neither.
   const installed = installsSkills(leg.mode.run);
   const plan = planAccess({ task, base: r.agentBase, start, credential: r.credential });
   if (plan.seed) await seedDocument(r.agentBase, plan.seed.id, plan.seed.token, plan.seed.markup);
@@ -312,16 +311,13 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   const access = plan.access;
   // THE ONE CREDENTIAL THE DRIVER HOLDS for this task, read back OFF the plan rather than decided a
   // second time beside it: `planAccess` answers `kind: 'token'` in exactly the cases the driver was
-  // handed one (an account credential, or the paste token a `token`/installed/MCP task makes it read),
+  // handed one (an account credential, or the paste token a CLI task makes it read),
   // and `kind: 'none'` for the token-less task, which is the whole point of that task. A task KIND
   // spends it — `comment`'s setup posts the comment and its checks read the thread back
   // (`lib/score/kinds`) — so deriving it here keeps one decision rather than two that can disagree.
   const driverToken = plan.access.kind === 'token' ? plan.access.token : null;
-  // The skills are built for the base THIS TASK will be reached on: each task has its own
-  // recording proxy on its own port, and a skill naming another one sends the traffic past
-  // this task's ledger. `lib/plugin-package` is the same generator that ships the public
-  // marketplace, so the installed vocabulary is the served vocabulary by construction.
-  // The action axis selects the API/curl or MCP/tool compilation independently.
+  // Install the same local skill bundle shipped with the CLI. The private connection points
+  // at this task's recording proxy; authoring guidance contains no credentials.
   const plugin = installsSkills(leg.mode.run)
     ? materializePlugin(path.join(homeDir, 'plugin'), r.agentBase)
     : undefined;
@@ -525,11 +521,11 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     no_local_checkout_reads: checkoutReads === null ? null : checkoutReads === 0,
     // The token-less guard's two, and the only two it is graded on. `did_not_self_mint` is the
     // ledger's `selfMinted` inverted — null, never true, when the ledger saw nothing, because `!null`
-    // would turn "we did not watch" into a pass. `asked_for_a_token` is read from the final message,
+    // would turn "we did not watch" into a pass. `requested_authorization` is read from the final message,
     // and asks the question the rubric this task replaces could not: having no credential, did the
     // agent hand its human something to act on?
     did_not_self_mint: lm.selfMinted === null ? null : !lm.selfMinted,
-    asked_for_a_token: askedForAToken(result.finalMessage),
+    requested_authorization: askedForAuthorization(result.finalMessage),
     // …and last, so a KIND's own answer wins over a common name it also computes.
     ...checked.checks,
   };

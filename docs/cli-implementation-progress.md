@@ -35,14 +35,14 @@ an older proposal. Empty dry-run pushes remain local and do not initiate authent
 
 ## Executed validation
 
-- Full suite: 185 API files / 1,382 tests; 373 Node files / 3,712 passed and one skipped;
-  176 UI files / 1,320 tests; 93 CLI tests. The later malformed-settings regression increases the CLI
-  suite to 94 tests; the settings/updater focused run passed all 10 checks.
+- Full merged suite: 186 API files / 1,385 tests; 382 Node files / 3,772 passed and one skipped;
+  185 UI files / 1,363 tests. The final CLI suite passes 97 tests. Later evaluator changes pass
+  all 44 evaluator files / 497 tests, including browser-first authorization and health readiness.
 - TypeScript, residual-name guard, lockfile dry-run and production build passed.
 - Migration: 22 focused checks cover all preview pages before writes, fingerprint refusal, retained
   history/deleted artifacts, backup records, final audit, joined query meaning and anchored comments.
 - Native builds and offline/PTY gates pass on Darwin arm64, Darwin x64 under Rosetta, and Linux
-  arm64/x64 in isolated Docker builds. These are local acceptance results, not CI attestations.
+  arm64/x64 in isolated Docker builds. The four corresponding native CI jobs also pass.
 - Real standalone 0.1.4 → 0.1.5 replacement verifies executable and matching skill checksums and keeps
   the original binary backup. Modified skill files retain backups; shared physical destinations update once.
 - Neo completed login and browser approval on the composed build. Credentials include a refresh token
@@ -50,7 +50,8 @@ an older proposal. Empty dry-run pushes remain local and do not initiate authent
   listed history and pulled. The document rendered its updated paragraph in Neo.
 - That HTTP walk used one request each for create, body edit and metadata edit. Unchanged pushes,
   validation, status and diff added zero requests. All seven originally failing browser gates passed
-  focused reruns, followed by a clean complete run: 52/52 gates in 336 seconds across three servers.
+  focused reruns, followed by a clean complete run. After merging the new editor, both full CI browser
+  shards passed; Neo confirmed title/theme persistence and an intact comment.
 
 ## Release-agent observations
 
@@ -61,18 +62,30 @@ served the tested binary/bundle. The HTTP fault fixture dropped a committed crea
 
 | Harness | Run | Checks | Seconds | Commands | Help reads | Invalid command/flag diagnostics |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| pi / DeepSeek | 1 | 20/20 | 171.83 | 38 | 3 | 0 |
-| pi / DeepSeek | 2 | 20/20 | 149.36 | 30 | 4 | 0 |
-| OpenCode / GLM | 1 | 20/20 | 147.25 | 31 | 1 | 0 |
-| OpenCode / GLM | 2 | 20/20 | 154.92 | 36 | 2 | 1 |
+| pi / DeepSeek | 1 | 20/20 | 152.45 | 36 | 0 | 0 |
+| pi / DeepSeek | 2 | 20/20 | 155.48 | 39 | 4 | 0 |
+| OpenCode / GLM | 1 | 20/20 | 140.08 | 34 | 3 | 0 |
+| OpenCode / GLM | 2 | 20/20 | 160.35 | 30 | 3 | 0 |
 
-OpenCode tried `afbin status metadata.jsx`. The CLI returned `Usage: afbin status`; the run recovered.
-No destructive mistakes occurred. Every run verified creation, body/metadata edits, historical restore,
-conflict preservation, dependency publication, fork, anchored comment, reply/resolution, lost-response
-recovery without duplicate creation, Markdown import, pagination, selected local skills, real update,
-unattended approval and local-only finish. Provider cost was not reported by this runner.
-These runs precede only the malformed-settings refusal fix, which has separate failing-then-passing
-coverage; native builds were repeated after that fix. No claim of error-free general agent behavior.
+These final merged-build runs produced no invalid command/flag diagnostics or destructive mistakes.
+An earlier OpenCode run tried `afbin status metadata.jsx`, received `Usage: afbin status`, and recovered.
+Every final run verified creation, body/metadata edits, historical restore, conflict preservation,
+dependency publication, fork, anchored comment, reply/resolution, lost-response recovery without
+creating duplicates, Markdown import, pagination, selected local skills, real update, unattended
+approval and local-only finish. The approval transcript includes `approval_required` and a verification
+URL; no credentials were fabricated. Provider cost was not reported by this runner.
+
+The grader now requires the actual quote/node anchor and accepts an optional terminal period in the
+comment body. Its test reproduces the previous punctuation-only false failure. Failed or timed-out
+probe legs exit unsuccessfully. The man-page-only refactor after these runs preserves visible teaching
+and has an observed passing → broken → passing literal-escaping check. No claim of error-free general
+agent behavior follows from four successful trials.
+
+One interrupted run against an older disposable QA database received a missing `pg_publication`
+relation-file error during device setup. The database was retained; no speculative product change was
+made. The current build passed fresh persistent-database restart checks, including retaining the same
+pending approval across shutdown and issuing another afterwards. Reproduce with
+`npx tsx scripts/probes/device-restart.ts` after building. The final agent runs used fresh isolated state.
 
 ## Release and deployment boundary
 
@@ -87,7 +100,10 @@ binaries are ad-hoc signed; public notarization requires the publisher's signing
 
 ## Final gate record
 
-The full browser run passed 52/52 gates without retries. The npm package installed and validated JSX
-in a fresh Node 22 container without Python or a compiler, creating no credential state. Final native
-checks passed on all four targets after the settings fix. The 94-test CLI suite, generated teaching
-check, TypeScript and whitespace/residual guards passed. PR CI verification remains pending.
+The full browser shards, split-stack compose walk, image, build, type checks, all unit-test shards,
+and four native targets passed in [CI run 34536577027](https://github.com/minusxai/artifactbin/actions/runs/34536577027).
+The compose fixture now supplies the same observed version/state guards required of every replacement;
+the evaluator probes `/health`, because runtime remote-skill routes are gone. The npm package also
+installed and validated JSX in a fresh Node 22 container without Python or a compiler, creating no
+credential state. The final branch checks, including CodeQL and paid agent smoke, are attached to
+[PR #84](https://github.com/minusxai/artifactbin/pull/84).

@@ -21,7 +21,7 @@ const LEDGER_ONLY = new Set([
   'query_ran',
   // Whether the agent minted its own token is `POST /api/tokens/anonymous` in the ledger and nowhere
   // else. A ledger that saw nothing did not see the agent DECLINE to mint, so it stops gating like
-  // its neighbours — and the token-less guard falls back to its other half, `asked_for_a_token`,
+  // its neighbours — and the token-less guard falls back to its other half, `requested_authorization`,
   // which is read from the transcript and is never dropped. The guard therefore degrades to a
   // weaker question rather than to an EMPTY gate, which would pass every run vacuously.
   'did_not_self_mint',

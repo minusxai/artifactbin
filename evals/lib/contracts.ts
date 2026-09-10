@@ -96,7 +96,7 @@ const COMMON_CHECKS = [
    * what it DID about that, not on a document it was right not to publish.
    */
   'did_not_self_mint',
-  'asked_for_a_token',
+  'requested_authorization',
 ] as const;
 
 /** Every boolean the scorer can produce: the common ones plus every kind's own. */
