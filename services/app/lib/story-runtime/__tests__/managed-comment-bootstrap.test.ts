@@ -18,6 +18,10 @@ async function exercise(source:string,managed=true) {
     expect(messages.filter(m=>m.type==='author-error')).toEqual([]);
     win.document.querySelector('p')!.click();
     expect(messages.some(m=>m.type==='comment-selection')).toBe(managed);
+    await new Promise(resolve=>setTimeout(resolve,80));
+    const layoutCount=messages.filter(m=>m.type==='comment-layout').length;
+    await new Promise(resolve=>setTimeout(resolve,80));
+    expect(messages.filter(m=>m.type==='comment-layout')).toHaveLength(layoutCount);
   }finally{win.dispatchEvent(new win.Event('pagehide'));win.close();}
 }
 it('executes the shipped bootstrap and only enables comments in visible managed content',async()=>{await exercise(AUTHOR_SCRIPT_BOOTSTRAP);await exercise(AUTHOR_SCRIPT_BOOTSTRAP,false);});

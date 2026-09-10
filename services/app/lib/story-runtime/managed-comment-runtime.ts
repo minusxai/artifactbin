@@ -11,6 +11,13 @@ export function createManagedCommentRuntime(win: Window, send: (message: Managed
   const doc = win.document;
   let state: ManagedCommentState | null = null;
   let disposed = false;
+  const sourceIds=new Set(Array.from(doc.body.querySelectorAll('[id]')).map(node=>node.id));
+  let savedStyles:Array<{node:HTMLElement;name:string;value:string;priority:string}>|null=null;
+  const touchMode=(enabled:boolean)=>{
+    if(enabled&&!savedStyles){
+      savedStyles=[];for(const node of [doc.documentElement,doc.body])for(const name of ['touch-action','user-select','-webkit-user-select']){savedStyles.push({node,name,value:node.style.getPropertyValue(name),priority:node.style.getPropertyPriority(name)});node.style.setProperty(name,'none','important');}
+    }else if(!enabled&&savedStyles){for(const {node,name,value,priority} of savedStyles){if(value)node.style.setProperty(name,value,priority);else node.style.removeProperty(name);}savedStyles=null;}
+  };
   let sequence = 0;
   const sessions = new WeakMap<Element, string>();
   const listeners: Array<() => void> = [];
@@ -38,9 +45,9 @@ export function createManagedCommentRuntime(win: Window, send: (message: Managed
         const key = node.getAttribute('data-comment-key');
         if (key) path.unshift(key);
       }
-      if (path.length && path.length <= 32 && path.every(k => k.length <= 256)) return {kind:'key',path};
+      if (path.length && path.length <= 16 && path.every(k => k.length <= 256)) return {kind:'key',path};
     }
-    if (el.id) return {kind:'source',id:el.id};
+    if (el.id && sourceIds.has(el.id)) return {kind:'source',id:el.id};
     let id = sessions.get(el);
     if (!id) { id = String(++sequence); sessions.set(el,id); }
     return {kind:'session',generation:state!.generation,id};
@@ -91,9 +98,9 @@ export function createManagedCommentRuntime(win: Window, send: (message: Managed
         // Canonical offsets mapped back to original text, including collapsed whitespace.
         let text='';const offsets:number[]=[];
         for(let i=0;i<raw.length;i++) {if(/\s/.test(raw[i])) {if(text && !text.endsWith(' ')){text+=' ';offsets.push(i);}} else {text+=raw[i];offsets.push(i);}}
-        text=text.trimEnd();let at=-1;
-        for(let i=text.indexOf(part.text);i>=0;i=text.indexOf(part.text,i+1)) if(at<0||Math.abs(i-part.start)<Math.abs(at-part.start)) at=i;
-        if(at<0) continue;
+        text=text.trimEnd();const at=text.indexOf(part.text);
+        // A repeated quote cannot be disambiguated by a stale positional hint.
+        if(at<0 || text.indexOf(part.text,at+1)>=0) continue;
         const locate=(offset:number):[Text,number]|null=>{for(const n of nodes){if(offset<=n.length)return[n,offset];offset-=n.length;}return null;};
         const a=locate(offsets[at]),b=locate(offsets[at+part.text.length-1]+1);
         if(a&&b){const domRange=doc.createRange();domRange.setStart(...a);domRange.setEnd(...b);if(domRange.getClientRects)for(const q of domRange.getClientRects())out.push({x:q.x,y:q.y,width:q.width,height:q.height});}
@@ -108,7 +115,7 @@ export function createManagedCommentRuntime(win: Window, send: (message: Managed
   const clearMarks=()=>{for(const node of marked)for(const name of marks)node.removeAttribute(name);marked.clear();};
   const repaint = () => {
     if(disposed||!state)return;
-    overlay?.replaceChildren();clearMarks();
+    overlay?.replaceChildren();clearMarks();touchMode(state.enabled&&state.picking&&state.canComment);
     if(!state.enabled) {overlay?.remove();return;}
     const positions:Extract<ManagedCommentEvent,{type:'comment-layout'}>['positions']=[];
     for(const pin of state.pins) {
@@ -149,6 +156,8 @@ export function createManagedCommentRuntime(win: Window, send: (message: Managed
     button('Select',()=>{send({type:'comment-select-mode',generation:state!.generation});state={...state!,picking:true};repaint();});
     doc.documentElement.append(action);
   };
+  const leave=(e:Event)=>{if(!(e as MouseEvent).relatedTarget){hovered=null;schedule();}};
+  listen('mouseout',leave);listen('pointerout',leave);
   listen('mouseover',e=>{if(active()){hovered=element(e);schedule();}});
   listen('pointerdown',e=>{
     const p=e as PointerEvent,n=element(e);if(!n||p.button>0)return;
@@ -169,7 +178,7 @@ export function createManagedCommentRuntime(win: Window, send: (message: Managed
     const right=Math.min(a.x+a.width,Math.max(p.clientX,start.x)),bottom=Math.min(a.y+a.height,Math.max(p.clientY,start.y));
     if(a.width>0&&a.height>0&&right>x&&bottom>y)emit(node,{v:1,kind:'area',box:{x:(x-a.x)/a.width,y:(y-a.y)/a.height,w:(right-x)/a.width,h:(bottom-y)/a.height}});
   });
-  listen('pointercancel',()=>{down=null;if(longPress!==null)win.clearTimeout(longPress);longPress=null;});
+  listen('pointercancel',()=>{down=null;hovered=null;schedule();if(longPress!==null)win.clearTimeout(longPress);longPress=null;});
   listen('click',e=>{if(internal((e.target as Element)))return;if(suppressClick){suppressClick=false;e.preventDefault();e.stopPropagation();return;}if(active()){const n=element(e);e.preventDefault();e.stopPropagation();if(n)emit(n);}});
   listen('contextmenu',e=>{const n=element(e);if(!state?.enabled||!state.canComment||!n)return;e.preventDefault();const p=e as MouseEvent;showAction(p.clientX,p.clientY,()=>emit(n),true);});
   listen('selectionchange',()=>{
@@ -190,6 +199,6 @@ export function createManagedCommentRuntime(win: Window, send: (message: Managed
   const resize=typeof ResizeObserver!=='undefined'?new ResizeObserver(schedule):null;resize?.observe(doc.body);
   return {
     update(next){if(disposed)return;state=next;if(!next.enabled||!next.picking)hovered=null;if(!next.enabled)clearAction();repaint();},
-    dispose(){if(disposed)return;disposed=true;clearMarks();for(const stop of listeners)stop();observer.disconnect();resize?.disconnect();if(timer!==null)win.clearTimeout(timer);if(longPress!==null)win.clearTimeout(longPress);overlay?.remove();clearAction();}
+    dispose(){if(disposed)return;disposed=true;touchMode(false);clearMarks();for(const stop of listeners)stop();observer.disconnect();resize?.disconnect();if(timer!==null)win.clearTimeout(timer);if(longPress!==null)win.clearTimeout(longPress);overlay?.remove();clearAction();}
   };
 }

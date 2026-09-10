@@ -69,3 +69,39 @@ it('offers comment actions on touch long press and cancels on movement',()=>{
   expect(Array.from(document.querySelectorAll('button')).map(b=>b.textContent)).toEqual(['Comment','Select']);
   node.dispatchEvent(down);node.dispatchEvent(new MouseEvent('pointermove',{bubbles:true,clientX:50,clientY:10}));vi.advanceTimersByTime(550);expect(document.querySelector('button')).toBeNull();runtime.dispose();vi.useRealTimers();
 });
+it('restores touch styles, clears hover on leaving and cancels an in-progress gesture',()=>{
+  document.body.innerHTML='<p>Touch</p>';document.body.style.setProperty('touch-action','pan-y');
+  const node=document.querySelector('p')!,send=vi.fn(),runtime=createManagedCommentRuntime(window,send);
+  const state={type:'comment-state' as const,generation:'a',enabled:true,picking:true,canComment:true,pins:[],openId:null,hoverId:null,selection:null};runtime.update(state);
+  expect(document.body.style.getPropertyValue('touch-action')).toBe('none');
+  node.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}));runtime.update(state);expect(node).toHaveAttribute('data-mx-annotate-pick-hover');
+  node.dispatchEvent(new MouseEvent('mouseout',{bubbles:true,relatedTarget:null}));runtime.update(state);expect(node).not.toHaveAttribute('data-mx-annotate-pick-hover');
+  node.dispatchEvent(new MouseEvent('pointerdown',{bubbles:true,clientX:10,clientY:10}));node.dispatchEvent(new Event('pointercancel',{bubbles:true}));node.dispatchEvent(new MouseEvent('pointerup',{bubbles:true,clientX:50,clientY:50}));
+  expect(send.mock.calls.some(c=>c[0].type==='comment-selection')).toBe(false);
+  runtime.update({...state,picking:false});expect(document.body.style.getPropertyValue('touch-action')).toBe('pan-y');
+  runtime.update(state);runtime.dispose();expect(document.body.style.getPropertyValue('touch-action')).toBe('pan-y');document.body.removeAttribute('style');
+});
+it('does not claim script-created IDs as saved source IDs',()=>{
+  document.body.innerHTML='<p id="saved">Static</p>';const send=vi.fn(),runtime=createManagedCommentRuntime(window,send);
+  runtime.update({type:'comment-state',generation:'a',enabled:true,picking:true,canComment:true,pins:[],openId:null,hoverId:null,selection:null});
+  document.body.insertAdjacentHTML('beforeend','<p id="dynamic">New</p>');document.getElementById('dynamic')!.click();
+  expect(send.mock.calls.find(c=>c[0].type==='comment-selection')![0].selection.target).toMatchObject({kind:'session'});runtime.dispose();
+});
+it('falls back to the node for duplicate quotes instead of guessing a text occurrence',()=>{
+  document.body.innerHTML='<p id="saved">Alice Alice</p>';const node=document.querySelector('p')!;
+  vi.spyOn(node,'getBoundingClientRect').mockReturnValue({x:0,y:0,width:100,height:40,top:0,left:0,right:100,bottom:40,toJSON(){}});
+  const original=Object.getOwnPropertyDescriptor(Range.prototype,'getClientRects');
+  Object.defineProperty(Range.prototype,'getClientRects',{configurable:true,value:()=>[{x:20,y:0,width:10,height:20}]});
+  const runtime=createManagedCommentRuntime(window,vi.fn());
+  const state={type:'comment-state' as const,generation:'a',enabled:true,picking:false,canComment:true,pins:[{id:'pin',target:{kind:'source' as const,id:'saved'},range:{v:1 as const,parts:[{rel:'',start:0,end:5,text:'Alice'}]}}],openId:'pin',hoverId:null,selection:null};
+  try {
+    runtime.update(state);expect((document.querySelector('[data-mx-comment-ui] > div') as HTMLElement).style.width).toBe('100px');
+    node.textContent='Alice';runtime.update(state);expect((document.querySelector('[data-mx-comment-ui] > div') as HTMLElement).style.width).toBe('10px');
+  }finally{runtime.dispose();if(original)Object.defineProperty(Range.prototype,'getClientRects',original);else delete (Range.prototype as unknown as Record<string,unknown>).getClientRects;}
+});
+it('coalesces DOM layout notifications and cancels touch long press on pointercancel',()=>{
+  vi.useFakeTimers();document.body.innerHTML='<p>Touch target</p>';const send=vi.fn(),runtime=createManagedCommentRuntime(window,send),node=document.querySelector('p')!;
+  runtime.update({type:'comment-state',generation:'a',enabled:true,picking:false,canComment:true,pins:[],openId:null,hoverId:null,selection:null});
+  const down=new MouseEvent('pointerdown',{bubbles:true,clientX:10,clientY:10});Object.defineProperty(down,'pointerType',{value:'touch'});node.dispatchEvent(down);node.dispatchEvent(new Event('pointercancel',{bubbles:true}));vi.advanceTimersByTime(1000);
+  expect(document.querySelector('button')).toBeNull();expect(send.mock.calls.filter(c=>c[0].type==='comment-layout').length).toBeLessThanOrEqual(2);runtime.dispose();vi.useRealTimers();
+});
