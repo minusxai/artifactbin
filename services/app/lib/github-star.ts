@@ -1,12 +1,11 @@
 import { REPO_URL } from './repo';
-import { GITHUB_MARK_PATH, GITHUB_MARK_VIEWBOX } from './github-mark';
 
 export const GITHUB_EXTERNAL_URL = '/api/external/github';
 
 /** Always available, including before hydration or when GitHub is unavailable.
  * currentColor follows the app or reader palette without scripting. */
 export function githubStarMarkup(showCount = true): string {
-  return `<a href="${REPO_URL}" target="_blank" rel="noopener noreferrer" aria-label="Star artifactbin on GitHub" title="Star artifactbin on GitHub" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;min-width:28px;height:28px;color:inherit;text-decoration:none;font:600 12px system-ui"><svg xmlns="http://www.w3.org/2000/svg" viewBox="${GITHUB_MARK_VIEWBOX}" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="${GITHUB_MARK_PATH}"></path></svg>${showCount ? '<span data-mx-github-count hidden></span>' : ''}</a>`;
+  return `<a href="${REPO_URL}" target="_blank" rel="noopener noreferrer" aria-label="Star artifactbin on GitHub" style="display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;height:28px;overflow:hidden;border:1px solid color-mix(in srgb,currentColor 25%,transparent);border-radius:5px;background:var(--mx-reader-bg,var(--color-surface,#fff));color:inherit;text-decoration:none;font:600 12px system-ui;letter-spacing:normal;white-space:nowrap"><span style="display:inline-flex;align-items:center;gap:4px;height:100%;padding:0 8px;background:linear-gradient(transparent,color-mix(in srgb,currentColor 7%,transparent))"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="m12 2.5 2.94 5.96 6.58.96-4.76 4.64 1.12 6.55L12 17.52l-5.88 3.09 1.12-6.55L2.48 9.42l6.58-.96Z"></path></svg><span>Star</span></span>${showCount ? '<span data-mx-github-count hidden style="align-self:stretch;align-content:center;padding:0 8px;border-left:1px solid color-mix(in srgb,currentColor 25%,transparent);font-variant-numeric:tabular-nums"></span>' : ''}</a>`;
 }
 
 let cached: { stars: number | null; expires: number } | undefined;

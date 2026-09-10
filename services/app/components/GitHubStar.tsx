@@ -10,7 +10,7 @@ export default function GitHubStar({ placement }: { placement: 'mobile-bar' | 'd
   return <span
     ref={root}
     data-mx-github-star=""
-    className={`${mobile ? 'inline-flex sm:hidden' : 'hidden sm:inline-flex'} h-7 shrink-0 items-center text-muted print:hidden`}
+    className={`${mobile ? 'inline-flex sm:hidden' : 'hidden sm:inline-flex'} h-7 shrink-0 items-center text-fg print:hidden`}
     dangerouslySetInnerHTML={markup}
   />;
 }

@@ -8,6 +8,7 @@ const browser = await chromium.launch({ headless: true });
 async function readyStar(star) {
   await star.locator('[data-mx-github-count]').filter({ hasText: '1,234' }).waitFor();
   assert(await star.locator('a svg').isVisible());
+  assert(await star.getByText('Star', { exact: true }).isVisible());
   assert.equal(await star.locator('svg').getAttribute('fill'), 'currentColor');
   assert.equal(await star.locator('iframe').count(), 0);
   assert.equal(await star.locator('a').getAttribute('href'), 'https://github.com/minusxai/artifactbin');

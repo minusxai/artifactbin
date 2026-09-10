@@ -18,6 +18,7 @@ it('always shows theme-inheriting icons, shares the count request, and preserves
   expect(icons.length).toBeGreaterThanOrEqual(3);
   for (const icon of icons) {
     expect(icon.getAttribute('fill')).toBe('currentColor');
+    expect(icon.closest('a')?.textContent).toContain('Star');
     expect(icon.closest('a')?.getAttribute('href')).toBe('https://github.com/minusxai/artifactbin');
   }
   expect(view.container.querySelector('[data-mx-github-star] iframe')).toBeNull();
