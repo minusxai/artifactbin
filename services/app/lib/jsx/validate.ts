@@ -28,7 +28,7 @@ const LEGACY_STORY_COMPONENT_NAMES = immutableSet(STORY_COMPONENT_NAMES);
 // no-second-copy rule as URL_ATTRS above it.
 
 // Attributes whose value is a URL — checked against dangerous schemes. `srcset` and `ping`
-// carry URL LISTS (comma/space separated) and are checked per entry.
+// carry URL lists with different separators and are checked per URL.
 
 // Attributes rejected by NAME on every tag: HTML injection (dangerouslySetInnerHTML, srcdoc),
 // React internals (ref/key — never serializable data), and customized built-ins (is).
@@ -53,8 +53,11 @@ export function hasDangerousScheme(url: string): boolean {
   return DANGEROUS_URL.test(normalized) && !SAFE_DATA_URL.test(normalized);
 }
 
-/** Scheme-check every URL in a srcset/ping-style list ("url descriptor, url descriptor"). */
-export function listHasDangerousScheme(value: string): boolean {
+/** Check ping's ASCII-whitespace-separated URLs or srcset's comma-separated URL/descriptor entries. */
+export function listHasDangerousScheme(value: string, lowerAttributeName: string): boolean {
+  if (lowerAttributeName === 'ping') {
+    return value.split(/[\t\n\f\r ]+/).some(hasDangerousScheme);
+  }
   return value.split(',').some(entry => {
     const url = entry.trim().split(/\s+/)[0];
     return !!url && hasDangerousScheme(url);
@@ -247,7 +250,7 @@ function validateElement(
     if (typeof a.value.json === 'string') {
       const lower = a.name.toLowerCase();
       const dangerous = URL_LIST_ATTRS.has(lower)
-        ? listHasDangerousScheme(a.value.json)
+        ? listHasDangerousScheme(a.value.json, lower)
         : URL_ATTRS.has(lower) && hasDangerousScheme(a.value.json);
       if (dangerous) {
         errors.push({ message: `Attribute "${a.name}" has a disallowed URL scheme`, attr: a.name, tag: el.tag, start: a.start, end: a.end });

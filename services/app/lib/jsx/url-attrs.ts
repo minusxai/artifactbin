@@ -17,7 +17,7 @@
  */
 import { immutableSet } from '@/lib/utils/immutable-collections';
 
-/** Attributes whose whole value is a single URL. */
+/** URL-bearing attributes; URL_LIST_ATTRS takes precedence for list-valued ones. */
 export const URL_ATTRS = immutableSet([
   'href',
   'src',
@@ -32,7 +32,7 @@ export const URL_ATTRS = immutableSet([
   'ping',
 ]);
 
-/** Attributes whose value is a comma/space-separated LIST of URLs. */
+/** srcset uses comma-separated URL/descriptor entries; ping uses ASCII-whitespace-separated URLs. */
 export const URL_LIST_ATTRS = immutableSet(['srcset', 'ping']);
 
 /**
