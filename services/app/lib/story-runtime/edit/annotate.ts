@@ -737,7 +737,10 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
         managedSelection = event.selection ? {host,selection:event.selection}:null;
         selectedPath = event.selection ? owner.path:null;
         const selection = event.selection ? {...owner,rect:event.selection.rect,quote:event.selection.quote,range:{v:1 as const,kind:'target' as const,target:{kind:'iframe' as const,node:event.selection.target},...(event.selection.range ? {range:event.selection.range}:{})}} : null;
-        post({type:STORY_SELECTION_MESSAGE,selection});
+        // Outside the pick, this is an explicit child Comment action, not a
+        // geometry update. The app opens the composer through its action door.
+        if (selection && !pick) post({type:STORY_SELECTION_ACTION_MESSAGE,action:'annotate',selection});
+        else post({type:STORY_SELECTION_MESSAGE,selection});
       } else if (event.type === 'comment-layout') {
         if (managedSelection?.host === host && event.selectionRect !== undefined) {
           managedSelection.selection.rect = event.selectionRect ?? owner.rect;

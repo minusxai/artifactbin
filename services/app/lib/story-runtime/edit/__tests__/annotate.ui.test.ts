@@ -643,3 +643,25 @@ it('replays iframe selection and preserves inner geometry when composer state re
   expect(posted.filter((message)=>message.type===STORY_SELECTION_MESSAGE)).toHaveLength(count);
   host.dispose();
 });
+
+it('opens a composer for an iframe text Comment action outside Select mode without reopening on layout', () => {
+  document.body.innerHTML='<div id="frame" data-mx-ast="0" data-mx-managed-frame=""></div>';
+  const owner=document.getElementById('frame')!;
+  vi.spyOn(owner,'getBoundingClientRect').mockReturnValue({x:100,y:200,width:400,height:300} as DOMRect);
+  const parsed=parseJsx('<Iframe id="frame"><p id="static">Static</p></Iframe>');if (!parsed.ok) throw Error('parse');session.setNodes(parsed.nodes);
+  session.update({...state('on'),pins:[],pick:null,canComment:true});
+  const states:ManagedCommentState[]=[];const host=connectManagedComments(owner,(state)=>states.push(state));
+  const generation=states.at(-1)!.generation;
+  const range={v:1,parts:[{rel:'',start:0,end:6,text:'Static'}]};
+  host.receive({type:'comment-selection',generation,selection:{target:{kind:'source',id:'static'},quote:'Static',range,rect:{x:10,y:20,width:50,height:30}}});
+  const actions=()=>posted.filter((message)=>message.type==='mx:selection-action');
+  expect(actions()).toHaveLength(1);
+  expect(actions()[0]).toMatchObject({action:'annotate',selection:{nodeId:'frame',quote:'Static',range:{kind:'target',range}}});
+  host.receive({type:'comment-layout',generation,positions:[],selectionRect:{x:20,y:30,width:50,height:30}});
+  expect(actions()).toHaveLength(1);
+  expect(posted.filter((message)=>message.type===STORY_SELECTION_MESSAGE).at(-1)).toMatchObject({selection:{rect:{x:120,y:230}}});
+  session.update({...state('on'),pins:[],canComment:false});
+  host.receive({type:'comment-selection',generation,selection:{target:{kind:'source',id:'static'},rect:{x:10,y:20,width:50,height:30}}});
+  expect(actions()).toHaveLength(1);
+  host.dispose();
+});
