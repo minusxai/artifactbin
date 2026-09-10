@@ -1,3 +1,4 @@
+import { COMMENT_PRESENTATION } from './comment-presentation';
 import {createManagedCommentRuntime} from './managed-comment-runtime';
 import {MANAGED_FETCH_BOOTSTRAP} from './managed-fetch-bootstrap';
 import {AUTHOR_REALM_LOCKDOWN} from './author-realm-lockdown';
@@ -110,7 +111,7 @@ ${AUTHOR_REALM_LOCKDOWN}
           // Only the isolated realm receives prepared author HTML. Scripts are
           // separate data, inserted with textContent, never HTML interpolation.
           if (typeof message.html === 'string') document.body.insertAdjacentHTML('afterbegin', message.html);
-          if (message.managed) { comments = createComments(window, send); if(commentState) comments.update(commentState); }
+          if (message.managed) { comments = createComments(window, send, ${JSON.stringify(COMMENT_PRESENTATION)}); if(commentState) comments.update(commentState); }
           const scripts = message.scripts || [{type:'classic',source:message.source}];
           for (const item of scripts) {
             const script = document.createElement('script');

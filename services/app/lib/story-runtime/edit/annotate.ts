@@ -1,5 +1,6 @@
 'use client';
 
+import { COMMENT_PRESENTATION } from '../comment-presentation';
 import { resolveJsxNodeAtPath as nodesAtPath } from '@/lib/story-ui/host-classify';
 import { bindManagedComments, localManagedRect } from '../managed-comment-host';
 import { COMMENT_TARGET_ATTR, COMMENT_OWNER_ATTR, parseCommentTarget } from '@/lib/story/comment-target';
@@ -96,46 +97,18 @@ export const ANNOTATION_AREA_ATTR = 'data-mx-annotation-area';
 // the hover and the composing states, which are the ones a person is currently
 // pointing at. `cursor: pointer` is not part of the base rule for the same
 // reason: over an editable host the caret must still read as a caret.
-export const ANNOTATE_CSS = [
-  `[${ANNOTATED_ATTR}] { background: rgba(245, 158, 11, 0.10); border-radius: 3px; transition: background 120ms; }`,
-  `[${ANNOTATED_ATTR}]:not([contenteditable]) { cursor: pointer; }`,
-  `[${ANNOTATED_ATTR}]:hover { background: rgba(245, 158, 11, 0.20); }`,
-  `[${ANNOTATION_OPEN_ATTR}] { background: rgba(245, 158, 11, 0.26); border-radius: 3px; }`,
-  `[${ANNOTATION_HOVER_ATTR}] { background: rgba(245, 158, 11, 0.18); outline: 2px solid rgba(245, 158, 11, 0.82); outline-offset: 3px; border-radius: 3px; }`,
-  `[${ANNOTATE_SELECTED_ATTR}] { outline: 2px solid rgba(245, 158, 11, 0.85); outline-offset: 3px; border-radius: 3px; }`,
-  // The pick: a crosshair everywhere, and an outline on the block under it. The
-  // doubled attribute is deliberate — it out-specifies the edit session's own
-  // `[data-mx-edit-hover]` when both stamp the same node while editing.
-  `[${ANNOTATE_PICKING_ATTR}], [${ANNOTATE_PICKING_ATTR}] * { cursor: crosshair !important; }`,
-  // A finger drawing an area must draw, not scroll; and nothing under a band selects.
-  `[${ANNOTATE_PICKING_ATTR}="area"], [${ANNOTATE_PICKING_ATTR}="area"] *, [${ANNOTATE_PICKING_ATTR}="select"], [${ANNOTATE_PICKING_ATTR}="select"] * { touch-action: none !important; user-select: none !important; }`,
-  `[${ANNOTATE_PICK_HOVER_ATTR}][${ANNOTATE_PICK_HOVER_ATTR}] { outline: 2px solid rgba(245, 158, 11, 0.9); outline-offset: 3px; border-radius: 3px; background: rgba(245, 158, 11, 0.08); }`,
-  // A node whose words are painted gives up its own background — the tint is
-  // what a comment looks like when we cannot find the words, not as well as.
-  `[${ANNOTATED_ATTR}][${ANNOTATION_RANGED_ATTR}],`
-    + `[${ANNOTATED_ATTR}][${ANNOTATION_RANGED_ATTR}]:hover,`
-    + `[${ANNOTATION_OPEN_ATTR}][${ANNOTATION_RANGED_ATTR}],`
-    + `[${ANNOTATION_HOVER_ATTR}][${ANNOTATION_RANGED_ATTR}] { background: transparent; }`,
-].join('\n');
+export const ANNOTATE_CSS = COMMENT_PRESENTATION.annotationCss;
 
 /** What a thread's own words look like, by the state the page put it in. */
-const HIGHLIGHT_FILL = {
-  base: 'rgba(245, 158, 11, 0.28)',
-  hover: 'rgba(245, 158, 11, 0.42)',
-  open: 'rgba(245, 158, 11, 0.52)',
-};
+const HIGHLIGHT_FILL = COMMENT_PRESENTATION.highlightFill;
 /**
  * The band being DRAWN, and the drawn area while its comment is composed:
  * blue, so it reads apart from the amber outline of the anchor node around
  * it — two rectangles in one colour were one rectangle to the eye.
  */
-const BAND_STYLE = { background: 'rgba(59, 130, 246, 0.10)', outline: 'rgba(59, 130, 246, 0.9)' };
+const BAND_STYLE = COMMENT_PRESENTATION.bandStyle;
 /** A SAVED area box is amber like every other mark of a comment, an OUTLINE first: it may cover a chart, and a fill as strong as the words' would hide it. */
-const AREA_FILL = {
-  base: { background: 'rgba(245, 158, 11, 0.12)', outline: '2px solid rgba(245, 158, 11, 0.6)' },
-  hover: { background: 'rgba(245, 158, 11, 0.2)', outline: '2px solid rgba(245, 158, 11, 0.9)' },
-  open: { background: 'rgba(245, 158, 11, 0.26)', outline: '2px solid rgba(245, 158, 11, 0.9)' },
-};
+const AREA_FILL = COMMENT_PRESENTATION.areaFill;
 
 /**
  * THE CSS CUSTOM HIGHLIGHT API, or nothing. It paints a live Range without

@@ -1,14 +1,17 @@
+import type { CommentPresentation } from './comment-presentation';
 import type { ManagedCommentEvent, ManagedCommentState, ManagedCommentSelection } from './managed-comment-contract';
 import type { IframeNodeTarget } from '@/lib/story/comment-target';
 import type { AnnotationRect } from '@/lib/story/annotation-range';
 
 /** Self-contained child-realm installer. Keep all runtime dependencies inside this function:
  * its source is embedded in the opaque frame's classic bootstrap, never executed in the host. */
-export function createManagedCommentRuntime(win: Window, send: (message: ManagedCommentEvent) => void): {
+export function createManagedCommentRuntime(win: Window, send: (message: ManagedCommentEvent) => void, presentation: CommentPresentation): {
   update(state: ManagedCommentState): void;
   dispose(): void;
 } {
   const doc = win.document;
+  const style=doc.createElement('style');style.setAttribute('data-mx-comment-ui','');
+  style.textContent=presentation.actionsCss+'\n'+presentation.annotationCss;doc.head.append(style);
   let state: ManagedCommentState | null = null;
   let disposed = false;
   const sourceIds=new Set(Array.from(doc.body.querySelectorAll('[id]')).map(node=>node.id));
@@ -72,9 +75,11 @@ export function createManagedCommentRuntime(win: Window, send: (message: Managed
     }
     return overlay;
   };
-  const draw = (r:AnnotationRect, active:boolean) => {
-    const box=doc.createElement('div');box.style.cssText=`position:absolute;left:${r.x}px;top:${r.y}px;width:${r.width}px;height:${r.height}px;box-sizing:border-box;border:2px solid #e3b341;background:${active?'rgba(227,179,65,.22)':'rgba(227,179,65,.06)'};border-radius:3px;pointer-events:none;`;
-    layer().append(box);
+  const draw = (r:AnnotationRect, paint:{background:string;outline?:string}, attr?:string) => {
+    const box=doc.createElement('div');
+    box.style.cssText=`position:absolute;left:${r.x}px;top:${r.y}px;width:${r.width}px;height:${r.height}px;box-sizing:border-box;border-radius:3px;pointer-events:none;`;
+    box.style.background=paint.background;if(paint.outline)box.style.outline=paint.outline;
+    if(attr)box.setAttribute(attr,'');layer().append(box);
   };
   const rangeRects = (node:Element, range:ManagedCommentSelection['range']):AnnotationRect[] => {
     const r=rect(node);
@@ -105,17 +110,19 @@ export function createManagedCommentRuntime(win: Window, send: (message: Managed
         const a=locate(offsets[at]),b=locate(offsets[at+part.text.length-1]+1);
         if(a&&b){const domRange=doc.createRange();domRange.setStart(...a);domRange.setEnd(...b);if(domRange.getClientRects)for(const q of domRange.getClientRects())out.push({x:q.x,y:q.y,width:q.width,height:q.height});}
       }
-      if(out.length)return out;
+      return out;
     }
     return [r];
   };
-  const marks=['data-mx-annotated','data-mx-annotation-open','data-mx-annotation-hover','data-mx-annotate-selected','data-mx-annotate-pick-hover'];
+  const marks=['data-mx-annotated','data-mx-annotation-open','data-mx-annotation-hover','data-mx-annotate-selected','data-mx-annotate-pick-hover','data-mx-annotation-ranged'];
   const marked=new Set<Element>();
   const mark=(node:Element,name:string)=>{node.setAttribute(name,'');marked.add(node);};
   const clearMarks=()=>{for(const node of marked)for(const name of marks)node.removeAttribute(name);marked.clear();};
   const repaint = () => {
     if(disposed||!state)return;
     overlay?.replaceChildren();clearMarks();touchMode(state.enabled&&state.picking&&state.canComment);
+    doc.documentElement.removeAttribute('data-mx-annotate-picking');
+    if(state.enabled&&(state.picking||state.blockPicking))doc.documentElement.setAttribute('data-mx-annotate-picking',state.picking?'select':'block');
     if(!state.enabled) {overlay?.remove();return;}
     const positions:Extract<ManagedCommentEvent,{type:'comment-layout'}>['positions']=[];
     for(const pin of state.pins) {
@@ -123,26 +130,32 @@ export function createManagedCommentRuntime(win: Window, send: (message: Managed
       if(found.node){
         mark(found.node,'data-mx-annotated');if(state.openId===pin.id)mark(found.node,'data-mx-annotation-open');if(state.hoverId===pin.id)mark(found.node,'data-mx-annotation-hover');
         if(state.openId===pin.id && (lastOpen!==pin.id || revealed!==found.node)) {found.node.scrollIntoView?.({block:'nearest',inline:'nearest'});revealed=found.node;}
-        const rs=rangeRects(found.node,pin.range??undefined);r=rs[0];
-        for(const box of rs)draw(box,state.openId===pin.id||state.hoverId===pin.id);
-        const button=doc.createElement('button');button.type='button';button.textContent='●';button.setAttribute('aria-label','Open comment');
-        button.style.cssText=`position:absolute;left:${Math.max(0,r.x+r.width-12)}px;top:${Math.max(0,r.y)}px;pointer-events:auto;background:#e3b341;color:#181818;border:0;border-radius:50%;width:24px;height:24px;cursor:pointer;`;
-        button.onclick=()=>send({type:'comment-pin',generation:state!.generation,id:pin.id,rect:r});
-        button.onmouseenter=()=>send({type:'comment-hover',generation:state!.generation,id:pin.id});
-        button.onmouseleave=()=>send({type:'comment-hover',generation:state!.generation,id:null});layer().append(button);
+        const rs=rangeRects(found.node,pin.range??undefined);r=rs[0]??rect(found.node);
+        const active=state.openId===pin.id?'open':state.hoverId===pin.id?'hover':'base';
+        if(pin.range?.kind==='area') {
+          for(const box of rs)draw(box,presentation.areaFill[active],'data-mx-annotation-area');
+        } else if(pin.range && rs.length) {
+          mark(found.node,'data-mx-annotation-ranged');
+          for(const box of rs)draw(box,{background:presentation.highlightFill[active]});
+        }
+
       }
       positions.push({id:pin.id,rect:r,status:found.status});
     }
     lastOpen=state.openId;if(!lastOpen)revealed=null;
     let selectionRect:AnnotationRect|null=null;
-    if(state.selection){const found=resolve(state.selection.target);if(found.node){mark(found.node,'data-mx-annotate-selected');selectionRect=rangeRects(found.node,state.selection.range)[0];for(const r of rangeRects(found.node,state.selection.range))draw(r,true);}}
-    if(state.picking&&hovered?.isConnected){mark(hovered,'data-mx-annotate-pick-hover');draw(rect(hovered),true);}
-    send({type:'comment-layout',generation:state.generation,positions,selectionRect});
+    if(state.selection){const found=resolve(state.selection.target);if(found.node){
+      mark(found.node,'data-mx-annotate-selected');selectionRect=rangeRects(found.node,state.selection.range)[0]??rect(found.node);
+      if(state.selection.range?.kind==='area')draw(selectionRect,{background:presentation.bandStyle.background,outline:'1px dashed '+presentation.bandStyle.outline},'data-mx-annotate-band');
+    }}
+    if((state.picking||state.blockPicking)&&hovered?.isConnected)mark(hovered,'data-mx-annotate-pick-hover');
+    send({type:'comment-layout',generation:state.generation,positions,selectionRect,selectionTarget:state.selection?.target??null});
   };
+
   const schedule = () => {if(timer===null&&!disposed)timer=win.setTimeout(()=>{timer=null;repaint();},32);};
   const emit = (node:Element, range?:ManagedCommentSelection['range'],quote?:string) => {
     if(!state?.enabled||!state.canComment)return;
-    const selection={target:target(node),rect:rangeRects(node,range)[0],...(range?{range}:{}),...(quote?{quote}:{})};
+    const selection={target:target(node),rect:rangeRects(node,range)[0]??rect(node),...(range?{range}:{}),...(quote?{quote}:{})};
     state={...state,selection};clearAction();send({type:'comment-selection',generation:state.generation,selection});repaint();
   };
   const element = (e:Event) => {const n=e.target as Node|null;const el=n?.nodeType===1?n as Element:n?.parentElement;return el&&eligible(el)?el:null;};
@@ -150,22 +163,40 @@ export function createManagedCommentRuntime(win: Window, send: (message: Managed
   const listen = (name:string,handler:(event:Event)=>void) => {doc.addEventListener(name,handler,true);listeners.push(()=>doc.removeEventListener(name,handler,true));};
   const showAction = (x:number,y:number,select:()=>void,withComment:boolean) => {
     clearAction();action=doc.createElement('div');action.setAttribute('data-mx-comment-ui','');
-    action.style.cssText=`position:fixed;left:${Math.max(4,Math.min(x,win.innerWidth-160))}px;top:${Math.max(4,Math.min(y,win.innerHeight-44))}px;z-index:2147483647;display:flex;gap:4px;background:#242424;padding:4px;border-radius:6px;color:white;`;
-    const button=(label:string,fn:()=>void)=>{const b=doc.createElement('button');b.type='button';b.textContent=label;b.style.cssText='font:14px sans-serif;background:transparent;color:inherit;border:0;padding:8px;cursor:pointer;';b.onpointerdown=e=>e.preventDefault();b.onclick=e=>{e.stopPropagation();fn();clearAction();};action!.append(b);};
-    if(withComment)button('Comment',select);
-    button('Select',()=>{send({type:'comment-select-mode',generation:state!.generation});state={...state!,picking:true};repaint();});
+    action.setAttribute('data-mx-selection-actions','');action.setAttribute('role','toolbar');
+    action.setAttribute('aria-label',withComment?'Text selection actions':'Document actions');
+    const coarse=win.matchMedia?.('(pointer: coarse)')?.matches===true;
+    action.addEventListener('pointerdown',e=>e.preventDefault());
+    const button=(kind:'annotate'|'select',fn:()=>void)=>{
+      const b=doc.createElement('button');b.type='button';b.setAttribute('data-mx-selection-action',kind);
+      b.setAttribute('aria-label',kind==='select'?'Select':'Comment on selected text');
+      if(coarse)b.className='mx-selection-action--coarse';
+      const svg=doc.createElementNS('http://www.w3.org/2000/svg','svg');
+      for(const [name,value] of Object.entries({viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'2','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true',class:'lucide lucide-'+(kind==='select'?'square-dashed-mouse-pointer':'message-square')}))svg.setAttribute(name,value);
+      for(const d of presentation.icons[kind]){const path=doc.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',d);svg.append(path);}
+      b.append(svg,doc.createTextNode(kind==='select'?'Select':'comment'));
+      b.onclick=e=>{e.preventDefault();e.stopPropagation();fn();clearAction();};action!.append(b);
+    };
+    if(withComment)button('annotate',select);
+    button('select',()=>{win.getSelection()?.removeAllRanges();send({type:'comment-select-mode',generation:state!.generation});state={...state!,picking:true,blockPicking:false,selection:null};repaint();});
     doc.documentElement.append(action);
+    const bounds=action.getBoundingClientRect();
+    action.style.left=Math.max(8,Math.min(x,win.innerWidth-bounds.width-8))+'px';
+    action.style.top=Math.max(8,Math.min(y,win.innerHeight-bounds.height-8))+'px';
   };
+  const selecting = () => !!(state?.enabled&&state.canComment&&(state.picking||state.blockPicking));
+  const draggedWords = () => {const selection=win.getSelection();return !!selection&&!selection.isCollapsed&&!!selection.toString();};
+  const pinAt = (node:Element|null) => {for(let el=node;el;el=el.parentElement){const pin=state?.pins.find(pin=>resolve(pin.target).node===el);if(pin)return pin;}return null;};
   const leave=(e:Event)=>{if(!(e as MouseEvent).relatedTarget){hovered=null;schedule();}};
   listen('mouseout',leave);listen('pointerout',leave);
-  listen('mouseover',e=>{if(active()){hovered=element(e);schedule();}});
+  listen('mouseover',e=>{if(selecting()){hovered=element(e);schedule();}else if(state?.enabled){send({type:'comment-hover',generation:state.generation,id:pinAt(element(e))?.id??null});}});
   listen('pointerdown',e=>{
     const p=e as PointerEvent,n=element(e);if(!n||p.button>0)return;
     clearAction();down={x:p.clientX,y:p.clientY,node:n};
     if(active()){e.preventDefault();e.stopPropagation();}
-    else if(state?.enabled&&state.canComment&&p.pointerType==='touch')longPress=win.setTimeout(()=>{longPress=null;suppressClick=true;showAction(p.clientX,p.clientY,()=>emit(n),true);},550);
+    else if(state?.enabled&&state.canComment&&p.pointerType==='touch')longPress=win.setTimeout(()=>{longPress=null;suppressClick=true;showAction(p.clientX,p.clientY,()=>emit(n),false);},550);
   });
-  listen('pointermove',e=>{const p=e as PointerEvent;if(down&&(Math.abs(p.clientX-down.x)>6||Math.abs(p.clientY-down.y)>6)){if(longPress!==null){win.clearTimeout(longPress);longPress=null;}if(active()){overlay?.replaceChildren();draw({x:Math.min(p.clientX,down.x),y:Math.min(p.clientY,down.y),width:Math.abs(p.clientX-down.x),height:Math.abs(p.clientY-down.y)},true);}}});
+  listen('pointermove',e=>{const p=e as PointerEvent;if(down&&(Math.abs(p.clientX-down.x)>6||Math.abs(p.clientY-down.y)>6)){if(longPress!==null){win.clearTimeout(longPress);longPress=null;}if(active()){overlay?.replaceChildren();draw({x:Math.min(p.clientX,down.x),y:Math.min(p.clientY,down.y),width:Math.abs(p.clientX-down.x),height:Math.abs(p.clientY-down.y)},{background:presentation.bandStyle.background,outline:'1px dashed '+presentation.bandStyle.outline},'data-mx-annotate-band');}}});
   listen('pointerup',e=>{
     if(longPress!==null){win.clearTimeout(longPress);longPress=null;}
     const p=e as PointerEvent,start=down;down=null;
@@ -179,8 +210,15 @@ export function createManagedCommentRuntime(win: Window, send: (message: Managed
     if(a.width>0&&a.height>0&&right>x&&bottom>y)emit(node,{v:1,kind:'area',box:{x:(x-a.x)/a.width,y:(y-a.y)/a.height,w:(right-x)/a.width,h:(bottom-y)/a.height}});
   });
   listen('pointercancel',()=>{down=null;hovered=null;schedule();if(longPress!==null)win.clearTimeout(longPress);longPress=null;});
-  listen('click',e=>{if(internal((e.target as Element)))return;if(suppressClick){suppressClick=false;e.preventDefault();e.stopPropagation();return;}if(active()){const n=element(e);e.preventDefault();e.stopPropagation();if(n)emit(n);}});
-  listen('contextmenu',e=>{const n=element(e);if(!state?.enabled||!state.canComment||!n)return;e.preventDefault();const p=e as MouseEvent;showAction(p.clientX,p.clientY,()=>emit(n),true);});
+  listen('click',e=>{
+    const node=element(e);if(!node)return;
+    if(suppressClick){suppressClick=false;e.preventDefault();e.stopPropagation();return;}
+    if(draggedWords()&&!active())return;
+    if(selecting()){e.preventDefault();e.stopPropagation();emit(node);return;}
+    const pin=state?.enabled?pinAt(node):null;
+    if(pin&&state){e.preventDefault();e.stopPropagation();send({type:'comment-pin',generation:state.generation,id:pin.id,rect:rect(node)});}
+  });
+  listen('contextmenu',e=>{const n=element(e);if(!state?.enabled||!state.canComment||!n)return;e.preventDefault();const p=e as MouseEvent;showAction(p.clientX,p.clientY,()=>emit(n),false);});
   listen('selectionchange',()=>{
     if(!state?.enabled||!state.canComment||active())return;
     const s=win.getSelection();if(!s||s.isCollapsed||!s.rangeCount){clearAction();return;}
@@ -190,15 +228,15 @@ export function createManagedCommentRuntime(win: Window, send: (message: Managed
     const before=r.cloneRange();before.selectNodeContents(node);before.setEnd(r.startContainer,r.startOffset);
     const start=canonical(before.toString()).length;const full=canonical(node.textContent??'');const at=full.indexOf(quote,Math.max(0,start-1));
     const range:ManagedCommentSelection['range']={v:1,parts:[{rel:'',start:Math.max(0,at),end:Math.max(0,at)+quote.length,text:quote}]};
-    const box=r.getBoundingClientRect?.()??rect(node);showAction(box.x,box.y+box.height+4,()=>emit(node,range,quote),true);
+    const box=r.getBoundingClientRect?.()??rect(node);showAction(box.x,win.matchMedia?.('(pointer: coarse)')?.matches?box.y+box.height+8:box.y-36,()=>emit(node,range,quote),true);
   });
-  listen('keydown',e=>{if((e as KeyboardEvent).key==='Escape'){clearAction();if(state){state={...state,selection:null};send({type:'comment-selection',generation:state.generation,selection:null});repaint();}}});
+  listen('keydown',e=>{if((e as KeyboardEvent).key==='Escape'){clearAction();if(state){state={...state,picking:false,blockPicking:false,selection:null};send({type:'comment-selection',generation:state.generation,selection:null});repaint();}}});
   listen('scroll',schedule);win.addEventListener('resize',schedule);listeners.push(()=>win.removeEventListener('resize',schedule));
   const observer=new MutationObserver(records=>{if(records.some(r=>!marks.includes(r.attributeName??'')&&!(r.target.nodeType===1&&internal(r.target as Element))))schedule();});
   observer.observe(doc.body,{childList:true,subtree:true,characterData:true,attributes:true});
   const resize=typeof ResizeObserver!=='undefined'?new ResizeObserver(schedule):null;resize?.observe(doc.body);
   return {
-    update(next){if(disposed)return;state=next;if(!next.enabled||!next.picking)hovered=null;if(!next.enabled)clearAction();repaint();},
-    dispose(){if(disposed)return;disposed=true;touchMode(false);clearMarks();for(const stop of listeners)stop();observer.disconnect();resize?.disconnect();if(timer!==null)win.clearTimeout(timer);if(longPress!==null)win.clearTimeout(longPress);overlay?.remove();clearAction();}
+    update(next){if(disposed)return;state=next;if(!next.enabled||(!next.picking&&!next.blockPicking))hovered=null;if(!next.picking){down=null;suppressClick=false;}if(!next.enabled)clearAction();repaint();},
+    dispose(){if(disposed)return;disposed=true;touchMode(false);clearMarks();style.remove();doc.documentElement.removeAttribute('data-mx-annotate-picking');for(const stop of listeners)stop();observer.disconnect();resize?.disconnect();if(timer!==null)win.clearTimeout(timer);if(longPress!==null)win.clearTimeout(longPress);overlay?.remove();clearAction();}
   };
 }

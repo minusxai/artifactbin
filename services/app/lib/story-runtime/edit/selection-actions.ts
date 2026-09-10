@@ -1,5 +1,7 @@
 'use client';
 
+import { COMMENT_PRESENTATION } from '../comment-presentation';
+
 import { COMMENT_TARGET_ATTR } from '@/lib/story/comment-target';
 import { isTargetRange } from '@/lib/story/annotation-range';
 
@@ -36,33 +38,7 @@ const READER_CHROME_ATTR = 'data-mx-reader-chrome';
  */
 const TOUCH_SETTLE_MS = 200;
 
-const SELECTION_ACTIONS_CSS = `
-[${SELECTION_ACTIONS_ATTR}] {
-  all: initial; box-sizing: border-box; position: fixed; z-index: 2147483646;
-  display: flex; align-items: center; overflow: hidden;
-  border: 1px solid rgba(148, 163, 184, .48); border-radius: 7px;
-  background: #fff; color: #344054;
-  box-shadow: 0 7px 20px rgba(15, 23, 42, .16);
-  font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  white-space: nowrap; animation: mx-selection-actions-in 90ms ease-out;
-}
-[${SELECTION_ACTIONS_ATTR}][hidden] { display: none !important; }
-:root.dark [${SELECTION_ACTIONS_ATTR}] {
-  border-color: rgba(148, 163, 184, .34); background: #17191d; color: #e5e7eb;
-  box-shadow: 0 7px 22px rgba(0, 0, 0, .42);
-}
-[${SELECTION_ACTIONS_ATTR}] button {
-  all: unset; box-sizing: border-box; display: inline-flex; align-items: center;
-  gap: 5px; min-height: 28px; padding: 0 9px; cursor: pointer; color: inherit;
-}
-[${SELECTION_ACTIONS_ATTR}] button.${SELECTION_ACTION_COARSE_CLASS} { min-height: 44px; padding: 0 14px; gap: 7px; }
-[${SELECTION_ACTIONS_ATTR}] svg { display: block; width: 13px; height: 13px; flex: none; }
-[${SELECTION_ACTIONS_ATTR}] button + button { border-left: 1px solid rgba(148, 163, 184, .32); }
-[${SELECTION_ACTIONS_ATTR}] button:hover,
-[${SELECTION_ACTIONS_ATTR}] button:focus-visible { background: rgba(34, 197, 94, .11); color: #16a34a; outline: none; }
-@keyframes mx-selection-actions-in { from { opacity: 0; } to { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { [${SELECTION_ACTIONS_ATTR}] { animation: none; } }
-`;
+const SELECTION_ACTIONS_CSS = COMMENT_PRESENTATION.actionsCss;
 
 /**
  * Selecting with the keyboard is Shift+motion or select-all. Any OTHER keyup
@@ -160,12 +136,7 @@ export function createFrameSelectionActions({
     svg.setAttribute('stroke-linejoin', 'round');
     svg.setAttribute('aria-hidden', 'true');
     svg.setAttribute('class', `lucide lucide-${action === 'select' ? 'square-dashed-mouse-pointer' : action === 'edit' ? 'pencil' : 'message-square'}`);
-    const paths = action === 'select' ? ['M5 3a2 2 0 0 0-2 2', 'M19 3a2 2 0 0 1 2 2', 'M21 9V7', 'M3 9V7', 'M3 13v2', 'M3 19a2 2 0 0 0 2 2', 'M7 3h2', 'M13 3h2', 'M7 21h2', 'm12 12 4 10 1.7-4.3L22 16Z'] : action === 'edit'
-      ? [
-          'M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z',
-          'm15 5 4 4',
-        ]
-      : ['M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z'];
+    const paths = COMMENT_PRESENTATION.icons[action];
     for (const d of paths) {
       const path = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
       path.setAttribute('d', d);
