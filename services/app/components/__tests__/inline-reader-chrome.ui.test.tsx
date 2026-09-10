@@ -48,3 +48,10 @@ it('shows controls immediately when navigating from a scrolled artifact to anoth
    expect(view.container.querySelector('[data-mx-reader-chrome]')).toHaveAttribute('data-mx-reader-state','shown');
  } finally {if(original)Object.defineProperty(window,'scrollY',original);}
 });
+
+it('offers fork directly in the shared desktop and mobile rail', () => {
+ const action=vi.fn();const view=render(<InlineReaderChrome input={{artifactId:'story1',title:'Title',author:null}} onAction={action} />);
+ fireEvent.click(screen.getByLabelText('Fork artifact'));
+ expect(action).toHaveBeenCalledWith('fork');
+ expect(view.container.querySelector('.mx-reader-rail [data-mx-reader-action="fork"]')).not.toBeNull();
+});

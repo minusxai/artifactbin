@@ -15,7 +15,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { githubWidgetResponse } from '@/lib/github-widget-response';
+import { createGithubResponse } from './external/github';
 import { loadStorySsr } from '@/lib/story/ssr.server';
 import type { PreparedStoryRuntime } from '@/lib/story/prepared-runtime';
 import { isolateStoryCss, isolateStoryNodes } from '@/lib/story/inline-css';
@@ -42,7 +42,7 @@ import { ROUTES } from './routes.generated';
 import { authorFrameResponse } from './author-frame';
 import { AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
 import { withInitialHome } from './public-home';
-import { GITHUB_WIDGET_URL } from '@/lib/github-star';
+import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
 
 /** Where the server hands the SPA a page's data so its FIRST paint is its final one. */
 export const BOOTSTRAP_ID = 'mx-page-data';
@@ -194,7 +194,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     });
   }
   const webDir = opts.webDir ?? path.resolve('dist/web');
-  app.get(GITHUB_WIDGET_URL, () => githubWidgetResponse());
+  app.get(GITHUB_EXTERNAL_URL, createGithubResponse());
   const publicDir = opts.publicDir ?? path.resolve('public');
   let indexCache: string | null = null;
   const index = async (url: string): Promise<string> => {

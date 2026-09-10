@@ -421,6 +421,7 @@ export function AppBar({
   label = 'Page controls',
   fixed = false,
   center,
+  actions,
 }: {
   title?: string | null;
   hideBreadcrumb?: boolean;
@@ -429,6 +430,7 @@ export function AppBar({
   fixed?: boolean;
   /** Something to say in the middle — "edit mode". */
   center?: React.ReactNode;
+  actions?: React.ReactNode;
 }) {
   const pathname = usePathname() ?? '';
   const trail = hideBreadcrumb ? [] : crumbsFor(pathname, title);
@@ -489,6 +491,7 @@ export function AppBar({
       <div className="ml-auto flex shrink-0 items-center gap-1">
         <GitHubStar placement="desktop-bar" />
         <GitHubStar placement="mobile-bar" />
+        {actions}
         {/* The document bar's glyphs, at its size and stroke, so the two bars read as one. */}
         {control('controls', label.toLowerCase(), <SlidersVertical size={20} strokeWidth={1.3} />)}
         {control('menu', 'menu', <CircleUser size={20} strokeWidth={1.3} />)}
@@ -505,6 +508,7 @@ export default function PageChrome({
   hideBreadcrumb = false,
   label = 'Page controls',
   children,
+  actions,
 }: {
   authed: boolean;
   anon?: boolean;
@@ -512,12 +516,13 @@ export default function PageChrome({
   hideBreadcrumb?: boolean;
   /** The controls panel's name — "Artifact controls" on an artifact page. */
   label?: string;
+  actions?: React.ReactNode;
   /** Extra rows for the controls panel (an artifact's own actions). */
   children?: React.ReactNode | ((close: () => void) => React.ReactNode);
 }) {
   return (
     <>
-      <AppBar title={title} label={label} hideBreadcrumb={hideBreadcrumb} />
+      <AppBar title={title} label={label} hideBreadcrumb={hideBreadcrumb} actions={actions} />
       <PageMenu authed={authed} anon={anon} title={title} fixed triggerless />
       <PageControls fixed triggerless label={label}>{children}</PageControls>
     </>

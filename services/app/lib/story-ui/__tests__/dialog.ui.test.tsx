@@ -1,8 +1,9 @@
 import {expect, it, vi, beforeEach} from 'vitest';
 import {render, fireEvent, screen, waitFor} from '@testing-library/react';
-import {Dialog, DialogTrigger, DialogContent, DialogClose} from '@/components/kit/dialog';
+import {Dialog, DialogTrigger, DialogContent, DialogClose, ArtifactDialogScope} from '@/components/kit/dialog';
 
 beforeEach(() => {
+  HTMLDialogElement.prototype.show = function () {this.open = true;};
   HTMLDialogElement.prototype.showModal = function () {this.open = true;};
   HTMLDialogElement.prototype.close = function () {this.open = false; this.dispatchEvent(new Event('close'));};
 });
@@ -53,4 +54,40 @@ it('returns focus to the trigger after a successful submission', async () => {
   fireEvent.submit(screen.getByRole('dialog').querySelector('form')!);
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   await waitFor(() => expect(trigger).toHaveFocus());
+});
+
+
+it('keeps artifact dialogs out of the global modal layer, with keyboard and backdrop dismissal', async () => {
+  const show = vi.spyOn(HTMLDialogElement.prototype, 'show').mockImplementation(function(this: HTMLDialogElement) {this.open = true;});
+  const modal = vi.spyOn(HTMLDialogElement.prototype, 'showModal');
+  try {
+    const view = render(<ArtifactDialogScope><Dialog><DialogTrigger>Open scoped</DialogTrigger><DialogContent aria-label="Scoped"><input aria-label="First" /><DialogClose>Last</DialogClose></DialogContent></Dialog></ArtifactDialogScope>);
+    fireEvent.click(screen.getByText('Open scoped'));
+    expect(show).toHaveBeenCalledOnce();
+    expect(modal).not.toHaveBeenCalled();
+    const dialog = screen.getByRole('dialog', {name:'Scoped'});
+    screen.getByText('Last').focus();
+    fireEvent.keyDown(dialog, {key:'Tab'});
+    expect(screen.getByLabelText('First')).toHaveFocus();
+    fireEvent.keyDown(dialog, {key:'Escape'});
+    await waitFor(() => expect(screen.queryByRole('dialog', {name:'Scoped'})).toBeNull());
+    fireEvent.click(screen.getByText('Open scoped'));
+    fireEvent.click(view.container.querySelector('[data-artifact-dialog-backdrop]')!);
+    await waitFor(() => expect(screen.queryByRole('dialog', {name:'Scoped'})).toBeNull());
+    expect(screen.getByText('Open scoped')).toHaveFocus();
+  } finally {show.mockRestore(); modal.mockRestore();}
+});
+
+
+it('preserves the field focus chosen by native show for an artifact dialog', () => {
+  const show = vi.spyOn(HTMLDialogElement.prototype, 'show').mockImplementation(function(this: HTMLDialogElement) {
+    this.open = true;
+    this.querySelector<HTMLInputElement>('input')?.focus();
+  });
+  try {
+    render(<ArtifactDialogScope><Dialog><DialogTrigger>Open focused</DialogTrigger><DialogContent aria-label="Focused"><input aria-label="Draft" autoFocus /><DialogClose>Close focused</DialogClose></DialogContent></Dialog></ArtifactDialogScope>);
+    fireEvent.click(screen.getByText('Open focused'));
+    expect(screen.getByLabelText('Draft')).not.toHaveAttribute('autofocus');
+    expect(screen.getByLabelText('Draft')).toHaveFocus();
+  } finally {show.mockRestore();}
 });

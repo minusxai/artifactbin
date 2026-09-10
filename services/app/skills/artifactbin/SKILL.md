@@ -35,6 +35,10 @@ components (`Card`, `Tabs`, `Grid`, `SlideDeck`, `Icon`) and data embeds
 (`Question`, `DataTable`, `Number`). Style parent elements with Tailwind
 `className`; inline `style=` is rejected.
 
+**Prefer native JSX** and kit controls, conditions and Dialog for themes, layout,
+comments and editing. Reserve `<Iframe>` for isolated DOM-script/canvas widgets
+the kit cannot provide; never frame a document merely for unrestricted HTML/CSS/JS.
+
 **HTML/component names only: guess rather than look up.** Unknown tags return
 400 with `allowed_html_tags`; unknown components return the registry. Exception:
 `[[ refusedTags | join(' ') ]]` are refused with NO list — never guess them
@@ -50,9 +54,9 @@ in ONE `<Helmet>`, which also holds `<title>`:
 `text-4xl @2xl:text-6xl`; no fixed pixel widths or bare `text-6xl`.
 
 Parent markup is self-contained: no CDN scripts or external stylesheets.
-For custom DOM/canvas/JS, use managed `<Iframe>` ([markup-iframe](references/markup-iframe.md));
-its declared bundled script URLs and runtime fetches use cached assets.
-One legacy Helmet script runs in a hidden isolated realm, not the parent DOM.
+For those widgets, read [markup-iframe](references/markup-iframe.md): bundled
+scripts and fetches use cached assets. A legacy Helmet script runs in a hidden
+realm without parent DOM access.
 Parent images are a `data:` URI or
 any `https://` URL (publish copies it, your URL stays); web fonts: a Google family via
 `<meta name="font-display" content="Lobster" />`.
@@ -94,16 +98,14 @@ first-class:
   whole page commits to, chapter bands, evidence revealed on scroll. The
   strongest default when nothing above fits.
 
-**The reading path — before writing its content, read
-in order:** `references/design.md` (craft), `references/markup.md` (vocabulary),
-then the `references/templates-<name>.md` and `references/themes-<name>.md` you
-picked — their frame is what makes it come out right (a deck without it ships
-text flush to the viewport edge).
+**Before writing, read in order:** `references/design.md` (craft), `references/markup.md` (vocabulary),
+then `references/templates-<name>.md` and `references/themes-<name>.md`.
+Skipping the template leaves a deck flush to the viewport edge.
 
 [[ checkWork ]]
 
-For optional result checks, read `references/publishing-query.md`. Never guess
-HTTP routes; test one request before batching. After 404s, check the route first.
+For result checks: `references/publishing-query.md`. Never guess HTTP routes;
+test one request before batching.
 
 More under `references/` ([[ docsIndexHint ]]):
 | when the ask involves | read |

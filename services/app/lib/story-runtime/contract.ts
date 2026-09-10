@@ -569,7 +569,7 @@ export const STORY_SELECTION_ACTION_MESSAGE = 'mx:selection-action';
 export interface StorySelectionActionMessage {
   type: typeof STORY_SELECTION_ACTION_MESSAGE;
   nonce: string;
-  action: 'edit' | 'annotate';
+  action: 'edit' | 'annotate' | 'select';
   selection: StoryEditSelection;
 }
 
@@ -710,7 +710,8 @@ export interface StoryAnnotationsMessage {
   /** The node the owner is composing on; replayed so lazy annotation startup cannot lose it. */
   selectedPath?: string | null;
   /**
-   * The person is choosing WHAT to comment on (the rail's tools), and how:
+   * The Select tool (`select`) combines block hover/click and area drag.
+   * Legacy modes remain accepted for existing runtime callers:
    * `block` — the selectable node under the pointer carries an outline and a
    * click takes it; `area` — a dragged rectangle, whose anchor is the lowest
    * common ancestor of the blocks it touched and whose box rides the
@@ -719,7 +720,7 @@ export interface StoryAnnotationsMessage {
    * null selection on escape. Null/absent is off. One-shot: the page clears
    * it the moment a selection arrives.
    */
-  pick?: 'block' | 'area' | null;
+  pick?: 'block' | 'area' | 'select' | null;
 }
 
 /** Frame → parent: the owner clicked an annotated node to open its thread. */

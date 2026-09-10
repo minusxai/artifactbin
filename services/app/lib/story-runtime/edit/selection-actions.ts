@@ -95,7 +95,7 @@ export function createFrameSelectionActions({
   win: Window;
   root?: HTMLElement;
   portal?: HTMLElement;
-  onAction: (action: 'edit' | 'annotate', selection: StoryEditSelection) => void;
+  onAction: (action: 'edit' | 'annotate' | 'select', selection: StoryEditSelection) => void;
 }): FrameSelectionActions {
   const doc = win.document;
   let nodes: JsxNode[] = [];
@@ -112,6 +112,7 @@ export function createFrameSelectionActions({
   let activeSelection: StoryEditSelection | null = null;
   let activeAnnotation: StoryEditSelection | null = null;
   let toolbar: HTMLDivElement | null = null;
+  let contextOpen = false;
   let receivedCapabilities = false;
 
   const style = doc.createElement('style');
@@ -129,18 +130,19 @@ export function createFrameSelectionActions({
 
   const hide = () => {
     cancelSettle();
+    contextOpen = false;
     activeSelection = null;
     activeAnnotation = null;
     if (toolbar) toolbar.hidden = true;
   };
 
-  const makeButton = (action: 'edit' | 'annotate') => {
+  const makeButton = (action: 'edit' | 'annotate' | 'select') => {
     const button = doc.createElement('button');
     button.type = 'button';
     button.setAttribute(SELECTION_ACTION_ATTR, action);
     // The word people see and hear is COMMENT; `annotate` stays the wire's and
     // the capability's name, since that is what the server and the tests speak.
-    button.setAttribute('aria-label', action === 'edit' ? 'Edit selected text' : 'Comment on selected text');
+    button.setAttribute('aria-label', action === 'select' ? 'Select' : action === 'edit' ? 'Edit selected text' : 'Comment on selected text');
     // A 28px row is under every touch-target floor there is; a thumb gets 44.
     if (isCoarsePointer(win)) button.classList.add(SELECTION_ACTION_COARSE_CLASS);
     // These are Lucide's Pencil and MessageSquare glyphs. Build their tiny SVG
@@ -154,8 +156,8 @@ export function createFrameSelectionActions({
     svg.setAttribute('stroke-linecap', 'round');
     svg.setAttribute('stroke-linejoin', 'round');
     svg.setAttribute('aria-hidden', 'true');
-    svg.setAttribute('class', `lucide lucide-${action === 'edit' ? 'pencil' : 'message-square'}`);
-    const paths = action === 'edit'
+    svg.setAttribute('class', `lucide lucide-${action === 'select' ? 'square-dashed-mouse-pointer' : action === 'edit' ? 'pencil' : 'message-square'}`);
+    const paths = action === 'select' ? ['M5 3a2 2 0 0 0-2 2', 'M19 3a2 2 0 0 1 2 2', 'M21 9V7', 'M3 9V7', 'M3 13v2', 'M3 19a2 2 0 0 0 2 2', 'M7 3h2', 'M13 3h2', 'M7 21h2', 'm12 12 4 10 1.7-4.3L22 16Z'] : action === 'edit'
       ? [
           'M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z',
           'm15 5 4 4',
@@ -166,34 +168,36 @@ export function createFrameSelectionActions({
       path.setAttribute('d', d);
       svg.appendChild(path);
     }
-    button.append(svg, doc.createTextNode(action === 'edit' ? 'edit' : 'comment'));
+    button.append(svg, doc.createTextNode(action === 'select' ? 'Select' : action === 'edit' ? 'edit' : 'comment'));
     return button;
   };
 
-  const ensureToolbar = () => {
+  const ensureToolbar = (context = false) => {
     if (!toolbar) {
       toolbar = doc.createElement('div');
       toolbar.setAttribute(SELECTION_ACTIONS_ATTR, '');
       toolbar.setAttribute('role', 'toolbar');
-      toolbar.setAttribute('aria-label', 'Text selection actions');
       toolbar.hidden = true;
       // Preserve the document Selection when a toolbar button takes the click.
       toolbar.addEventListener('pointerdown', (event) => event.preventDefault());
       toolbar.addEventListener('click', (event) => {
         const button = (event.target as Element | null)?.closest<HTMLButtonElement>(`[${SELECTION_ACTION_ATTR}]`);
         const action = button?.getAttribute(SELECTION_ACTION_ATTR);
-        if (!activeSelection || (action !== 'edit' && action !== 'annotate')) return;
+        if (!activeSelection || (action !== 'edit' && action !== 'annotate' && action !== 'select')) return;
         event.preventDefault();
         event.stopPropagation();
         const chosen = (action === 'annotate' ? activeAnnotation : null) ?? activeSelection;
         hide();
+        if (action === 'select') win.getSelection()?.removeAllRanges();
         onAction(action, chosen);
       });
       (portal ?? doc.body).appendChild(toolbar);
     }
+    toolbar.setAttribute('aria-label', context ? 'Document actions' : 'Text selection actions');
     toolbar.replaceChildren();
     if (capabilities.edit) toolbar.appendChild(makeButton('edit'));
-    if (capabilities.annotate) toolbar.appendChild(makeButton('annotate'));
+    if (capabilities.annotate && !context) toolbar.appendChild(makeButton('annotate'));
+    if (capabilities.annotate) toolbar.appendChild(makeButton('select'));
     return toolbar;
   };
 
@@ -213,6 +217,7 @@ export function createFrameSelectionActions({
   };
 
   const showForSelection = () => {
+    if (contextOpen) return;
     if (!capabilities.edit && !capabilities.annotate) { hide(); return; }
     const nativeSelection = win.getSelection();
     if (!nativeSelection || nativeSelection.isCollapsed || nativeSelection.rangeCount === 0 || !nativeSelection.toString().trim()) {
@@ -346,10 +351,33 @@ export function createFrameSelectionActions({
    * false until a `pointerdown` arrives, and a touch keeps the settle anyway.
    */
   let buttonHeld = false;
-  const onPointerDown = () => { buttonHeld = true; };
-  const releaseButton = () => { buttonHeld = false; };
+  let longPress = 0;
+  let pressOrigin: { x: number; y: number } | null = null;
+  const cancelLongPress = () => { win.clearTimeout(longPress); longPress = 0; pressOrigin = null; };
+  const onPointerDown = (event: PointerEvent) => {
+    buttonHeld = true;
+    if (toolbar && event.composedPath().includes(toolbar)) return;
+    if (contextOpen) hide();
+    cancelLongPress();
+    const target = event.target as Element | null;
+    // Let the platform own long-press text selection. Blank blocks and graphics
+    // need their own hold timer: iOS does not always dispatch contextmenu there.
+    if (event.pointerType === 'touch' && target?.closest && !target.textContent?.trim()
+      && !target.closest('a, button, input, textarea, select, [contenteditable="true"]')) {
+      pressOrigin = { x: event.clientX, y: event.clientY };
+      longPress = win.setTimeout(() => {
+        longPress = 0;
+        target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: event.clientX, clientY: event.clientY }));
+      }, 550);
+    }
+  };
+  const releaseButton = () => { buttonHeld = false; cancelLongPress(); };
+  const onPointerMove = (event: PointerEvent) => {
+    if (pressOrigin && Math.hypot(event.clientX - pressOrigin.x, event.clientY - pressOrigin.y) > 8) cancelLongPress();
+  };
   const onPointerUp = (event: PointerEvent) => {
     buttonHeld = false;
+    cancelLongPress();
     // Shadow DOM retargets event.target to the host. Rebuilding the toolbar
     // on this pointerup would detach the button before its click can arrive.
     if (toolbar && event.composedPath().includes(toolbar)) return;
@@ -372,6 +400,7 @@ export function createFrameSelectionActions({
     // is the cost the keyup filter above exists to avoid paying per keystroke.
     if (!capabilities.edit && !capabilities.annotate) return;
     const selection = win.getSelection();
+    if (contextOpen) return;
     if (!selection || selection.isCollapsed) { hide(); return; }
     if (!selection.toString().trim()) return;
     // A drag still in progress: the release that ends it is the event to answer.
@@ -394,6 +423,8 @@ export function createFrameSelectionActions({
    */
   let scheduled = 0;
   const reposition = () => {
+    cancelLongPress();
+    if (contextOpen) { hide(); return; }
     if (!activeSelection || scheduled) return;
     scheduled = win.requestAnimationFrame(() => {
       scheduled = 0;
@@ -401,7 +432,32 @@ export function createFrameSelectionActions({
     });
   };
 
+  // Native text selection, links, inputs and Shift+right-click retain the browser menu.
+  // A touch long-press on text gets the ordinary selection bubble (including Select).
+  const onContextMenu = (event: MouseEvent) => {
+    if ((!capabilities.edit && !capabilities.annotate) || event.shiftKey) return;
+    const target = event.target as Element | null;
+    if (!target?.closest || (root && !root.contains(target))) return;
+    if (target.closest('a, input, textarea, select, [contenteditable="true"], .mx-rail, .mx-present')) return;
+    if (win.getSelection()?.toString().trim()) { showForSelection(); return; }
+    const element = target.closest(`[${AST_PATH_ATTR}]`);
+    const described = element && describeSelection(element, nodes);
+    if (!described) return;
+    event.preventDefault();
+    hide();
+    activeSelection = described;
+    contextOpen = true;
+    const surface = ensureToolbar(true);
+    surface.querySelector('[data-mx-selection-action="edit"]')?.setAttribute('aria-label', 'Edit');
+    surface.hidden = false;
+    const rect = surface.getBoundingClientRect();
+    surface.style.left = `${Math.max(8, Math.min(event.clientX, win.innerWidth - rect.width - 8))}px`;
+    surface.style.top = `${clampToTouchSpace(event.clientY + 7, rect.height)}px`;
+    surface.style.transform = 'none';
+  };
+  doc.addEventListener('contextmenu', onContextMenu);
   doc.addEventListener('pointerdown', onPointerDown);
+  doc.addEventListener('pointermove', onPointerMove);
   doc.addEventListener('pointerup', onPointerUp);
   // A drag can also end where no `pointerup` is delivered: the browser taking
   // the gesture over, or the window losing focus mid-drag.
@@ -436,6 +492,9 @@ export function createFrameSelectionActions({
       if (scheduled) win.cancelAnimationFrame(scheduled);
       toolbar?.remove();
       style.remove();
+      doc.removeEventListener('contextmenu', onContextMenu);
+      cancelLongPress();
+      doc.removeEventListener('pointermove', onPointerMove);
       doc.removeEventListener('pointerdown', onPointerDown);
       doc.removeEventListener('pointerup', onPointerUp);
       doc.removeEventListener('pointercancel', releaseButton);

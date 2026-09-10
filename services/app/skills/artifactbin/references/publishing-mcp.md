@@ -13,6 +13,7 @@ Use the supplied document ID: read and edit it, and never create a replacement t
 Quick rules:
 - Every artifact takes exactly ONE content field: markup | dataset | viz | image.
 - markup is THE document format: static JSX over the component kit, plain HTML tags for everything else (prose included), and ONE top-level <Helmet> for <title>/<style>/<script>. There is no separate markdown or html tier.
+- Prefer native JSX and kit components for layouts, charts and interactions. Reserve <Iframe> for isolated widgets requiring DOM scripts or canvas/library APIs the kit cannot provide; keep surrounding document content native for themes, comments and editing.
 - Create dataset/viz/image artifacts first. A dataset is read by SQL — <Query name="q">{`select … from ref_<id>`}</Query> in <Helmet>, bound as data="$q"; images and recipes bind as ref:<id>.
 - update_artifact fully replaces content at a stable URL; every save is versioned and revertible; edit_artifact changes one node and needs the edit_id from your last read.
 

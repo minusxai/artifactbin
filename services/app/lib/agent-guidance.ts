@@ -95,13 +95,12 @@ export const CSV_URL_FIELD_GUIDANCE =
   'Types are inferred per column, same as the dataset field.';
 
 export const MARKUP_FIELD_GUIDANCE = [
-  'THE document tier: story JSX over the shadcn kit; data is declared in <Helmet>, bound by $name.',
-  `STYLING IS NOT OPTIONAL. ${MARKUP_STYLE_RULE}`,
-  'Open with <div data-design="tw" className="@container …"> and style every child (spacing, type, colour).',
-  'Inline style=/onClick= rejected: ONE <Helmet> carries <style> (theme vars on :root) and <script>, which RUNS — use addEventListener.',
-  'Prefer theme tokens (text-muted-foreground, bg-muted) over hex so themes apply.',
-  `Read ${PUBLIC_BASE_URL}/docs/artifactbin/references/markup.md for the vocabulary first.`,
-  'Data: <Helmet><Query name="q">{`select … from ref_<datasetId>`}</Query></Helmet>, then <Question data="$q" viz={{"kind":"vega-lite","spec":{…}}} />.',
-  'Filters: <Value name="x" /> in Helmet, <select value="$x" options="$q" /> in the body, $x in SQL. data="ref:…" and Param are RETIRED.',
+  'Static JSX document. Prefer native kit layouts, charts, controls, conditions and Dialog; reserve <Iframe> for isolated DOM-script/canvas widgets.',
+  MARKUP_STYLE_RULE,
+  'Start with <div data-design="tw" className="@container …">. Use theme tokens, e.g. bg-muted.',
+  'Inline style=/onClick= rejected. ONE <Helmet> holds <style>; its <script> runs without parent DOM access.',
+  `Read ${PUBLIC_BASE_URL}/docs/artifactbin/references/markup.md first.`,
+  'Data: <Query name="q">{`select … from ref_<id>`}</Query> in Helmet, then <Question data="$q" viz={{kind:"vega-lite",spec:{…}}} />.',
+  'Filters: <Value name="x" /> in Helmet, <select value="$x" options="$q" /> in the body; $x in SQL.',
   COMPUTED_FIGURE_RULE,
 ].join(' ');

@@ -32,7 +32,7 @@ import { useArtifactOwner, useCanAnnotateArtifact, useCanEditArtifact } from '@/
 import AnnotationLayer from '@/components/AnnotationLayer';
 import CopyAgentPrompt from '@/components/CopyAgentPrompt';
 import RefreshAssets from '@/components/RefreshAssets';
-import ForkArtifact, { ForkConfirm } from '@/components/ForkArtifact';
+import ForkArtifact, { ForkConfirm, ForkRefusal, useForkArtifact } from '@/components/ForkArtifact';
 import ShareLink from '@/components/ShareLink';
 import type { AnnotationWire } from '@/lib/annotations';
 import { readIntent, stripIntent, withIntent } from '@/lib/intent';
@@ -225,6 +225,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const [railOpen, setRailOpen] = useState(false);
   /** `?intent=fork` asked for a copy; the dialog asks the person (lib/intent). */
   const [forkAsked, setForkAsked] = useState(false);
+  const forkAction = useForkArtifact(id);
   /** Naming a new folder under THIS one — the shell's only folder-specific act. */
   const [namingFolder, setNamingFolder] = useState(false);
   const [socialPreviewOpen, setSocialPreviewOpen] = useState(false);
@@ -609,6 +610,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
        * would push the other mode's hash while the editor stays mounted — the
        * page in both modes at once, with the editor's drain contract skipped.
        */
+      if (event.data.action === 'select') return; // AnnotationLayer owns the Select tool.
       if (!selectionActionCapabilities(canEdit, canAnnotate, !editing)[event.data.action]) return;
       if (event.data.action === 'edit') {
         beginEdit(event.data.selection.path);
@@ -659,24 +661,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     dataflow,
   } : undefined;
 
-  /** Everything about THIS document lives behind one control. Navigation is
-   * separate on the left; appearance, discussion, editing and owner handoff
-   * are grouped here and capability-gated exactly as their old buttons were.
-   *
-   * There is no longer a "does this viewer have any document action at all"
-   * question either — `fork` is offered to everyone this page is served to, on
-   * every format, so the sheet always has contents and the old
-   * `hasDocumentControls` gate went with the answer it used to compute. */
+  /** Appearance, discussion and owner actions live in settings; fork is a
+   * direct action in the reader bar (and the mobile action rail). */
   const documentControls = (close: () => void) => (
     <div className="space-y-4">
-      {/* UNCONDITIONAL, and `fork` is why. Every other row here is capability
-          chrome — edit needs write, comments need annotate, both need a markup
-          document — but forking needs only the right to READ, which is exactly
-          what everyone holding this page already has (the door decides on the
-          read ACL, not on ownership). So the guards moved down onto the rows
-          that still need them, and a DATASET gets an Artifact section for the
-          first time. */}
-      <section aria-label="Document actions">
+      {(props.author?.forkedFrom || (canAnnotate && format === 'markup') || (canEdit && isDocumentFormat)) && <section aria-label="Document actions">
         <h2 className="mb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">Artifact</h2>
         {props.author?.forkedFrom && <p data-mx-forked-from className="px-2 py-2 font-mono text-xs text-muted">
           forked from {props.author.forkedFrom.href
@@ -696,9 +685,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             {openAnnotationCount > 0 && <span className="text-accent">{openAnnotationCount}</span>}
           </button>
         )}
-        {/* Everyone the shell is served to — owner, editor, commenter — may
-            take a copy of what they can read. */}
-        <ForkArtifact id={id} variant="menu" />
         {/* EDIT IS ALSO RENAME, which is why a folder is offered it: the
             editor's Title field writes `title` through the edit protocol like
             any other change, so a folder needs no rename door of its own — and
@@ -738,13 +724,13 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             new folder
           </button>
         )}
-      </section>
+      </section>}
 
       {owner && (
         <section aria-label="Owner actions">
           <h2 className="mb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">owner</h2>
           <CopyAgentPrompt id={id} variant="menu" />
-          {/* Owner chrome, unlike the fork row above: a refresh re-fetches
+          {/* Owner chrome: a refresh re-fetches
               bytes that every reader of every document naming those URLs is
               then served. Only for a markup document — it is the only format
               that can name an external url at all. */}
@@ -775,10 +761,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   if (isDocumentFormat) {
     return (
       <>
-        <TrustedUi overlay>
-        <InlineReaderChrome pinned={editing} input={{artifactId:id, title:shownTitle, author:props.author ?? null, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={action => {
+        <TrustedUi overlay layer="navigation">
+        <InlineReaderChrome pinned={editing} input={{artifactId:id, title:shownTitle, forkBusy:forkAction.busy, author:props.author ?? null, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={action => {
           if (action === 'like') void toggleLike();
           else if (action === 'follow') void toggleFollow();
+          else if (action === 'fork') forkAction.fork();
           else if (action === 'edit' && canEdit) { if (editing) void finishEdit(); else enterEdit(); }
           else if (action === 'comment') { if (canAnnotate) setRailOpen(value => !value); else void navigate(`/login?callbackUrl=${encodeURIComponent(window.location.pathname + withIntent('', 'comment'))}`); }
           else if (action === 'controls' || action === 'menu') requestPageChrome(action);
@@ -879,6 +866,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             onComment={canEdit ? commentOnSelection : undefined}
           />
         )}
+        {forkAction.refusal && <div className="fixed right-3 top-14 z-50 w-72"><ForkRefusal lines={forkAction.refusal} onDismiss={forkAction.dismiss} /></div>}
         {forkAsked && <ForkConfirm id={id} title={shownTitle} onClose={() => setForkAsked(false)} />}
         {namingFolder && canEdit && isFolder && (
           <NewFolderPrompt parentId={id} onClose={() => setNamingFolder(false)} />
@@ -901,7 +889,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   // or an image inside the app's own measure.
   return (
     <>
-      <PageChrome authed={accountSession} anon={anonSession} title={shownTitle} label="Artifact controls">
+      <PageChrome authed={accountSession} anon={anonSession} title={shownTitle} label="Artifact controls" actions={<ForkArtifact id={id} variant="bar" />}>
         {documentControls}
       </PageChrome>
       <main className="mx-auto w-full max-w-5xl px-4 pt-6 pb-6">

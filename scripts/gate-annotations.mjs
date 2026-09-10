@@ -769,10 +769,12 @@ async function pickLeg(browser) {
   await page.locator('[aria-label="Annotation sidebar"]').waitFor({ timeout: 8000 });
 
   // Opening the rail opened the pick: nothing to press before the first click.
-  const tool = page.locator('[aria-label="Pick a block to comment on"]');
+  const tool = page.locator('[aria-label="Select"]');
   ok(await tool.count() === 1, 'the rail header offers the pick tool');
   ok(await tool.getAttribute('aria-pressed') === 'true', 'opening the rail put the pick on: the tool reads as pressed');
-  ok(await page.locator('[aria-label="Picking a block"]').isVisible(), 'a pill over the document says what to do next');
+  ok(await page.locator('[aria-label="Select tool active"]').isVisible(), 'a pill over the document says what to do next');
+  const promptBox = await page.locator('[aria-label="Select tool active"]').boundingBox();
+  ok(promptBox.y >= 44, 'the Select prompt sits below the app topbar');
 
   const intro = frame.locator('#intro');
   await intro.hover();
@@ -786,7 +788,7 @@ async function pickLeg(browser) {
   await intro.click();
   const composer = await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
   ok(composer === 1, 'clicking the block opens the composer on it');
-  ok(await page.locator('[aria-label="Picking a block"]').count() === 0, 'the pick is one-shot: the pill is gone');
+  ok(await page.locator('[aria-label="Select tool active"]').count() === 0, 'the pick is one-shot: the pill is gone');
   ok(await tool.getAttribute('aria-pressed') === 'false', '…and the tool is released');
   ok(await frame.locator('#intro[data-mx-annotate-selected]').count() === 1, 'the picked block is marked as the subject');
   ok(await frame.locator('[data-mx-annotate-pick-hover]').count() === 0, 'and the hover outline went with the pick');
@@ -809,17 +811,17 @@ async function pickLeg(browser) {
   await frame.locator('#figure').hover();
   await until(() => frame.locator('#figure[data-mx-annotate-pick-hover]').count(), (n) => n === 1, 5000);
   await page.keyboard.press('Escape');
-  const stoodDown = await until(() => page.locator('[aria-label="Picking a block"]').count(), (n) => n === 0, 5000);
+  const stoodDown = await until(() => page.locator('[aria-label="Select tool active"]').count(), (n) => n === 0, 5000);
   ok(stoodDown === 0, 'escape cancels a pick');
   const cleared = await until(() => frame.locator('[data-mx-annotate-pick-hover]').count(), (n) => n === 0, 5000);
   ok(cleared === 0, '…and clears the outline');
 
   // ── a DRAWN AREA ──────────────────────────────────────────────────────
-  // The second tool: a real drag from inside the figure paragraph into the
+  // The same Select tool: a real drag from inside the figure paragraph into the
   // list below it. Neither is what was drawn — their SECTION is — and the
   // rectangle rides the comment as its range, painted back as an overlay.
-  await page.locator('[aria-label="Draw an area to comment on"]').click();
-  ok(await page.locator('[aria-label="Picking a block"]').textContent().then((t) => /drag/i.test(t ?? '')), 'the pill says to drag');
+  await page.locator('[aria-label="Select"]').click();
+  ok(await page.locator('[aria-label="Select tool active"]').textContent().then((t) => /drag/i.test(t ?? '')), 'the pill says to drag');
   const from = await frame.locator('#figure').boundingBox();
   const to = await frame.locator('#list li').last().boundingBox();
   await page.mouse.move(from.x + 8, from.y + 4);

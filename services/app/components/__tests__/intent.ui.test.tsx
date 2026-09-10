@@ -94,7 +94,7 @@ describe('?intent=fork asks before it writes', () => {
     expect(dialog).toHaveTextContent('Quarterly report');
 
     fireEvent.click(screen.getByLabelText('Confirm fork'));
-    await waitFor(() => expect((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe('/api/my/artifacts/story1/fork'));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/my/artifacts/story1/fork', expect.objectContaining({ method: 'POST' })));
   });
 
   it('cancel closes it and forks nothing', async () => {
@@ -102,7 +102,7 @@ describe('?intent=fork asks before it writes', () => {
     await screen.findByRole('dialog');
     fireEvent.click(screen.getByLabelText('Cancel fork'));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.length).toBe(0);
+    expect(fetch).not.toHaveBeenCalledWith('/api/my/artifacts/story1/fork', expect.anything());
   });
 
   it('Escape cancels it too, and the confirm holds focus', async () => {

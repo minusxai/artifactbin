@@ -432,12 +432,15 @@ describe('bounded staleness', () => {
 describe('version history is CHECKPOINTS, and says so', () => {
   it('a version that exists but was never archived is refused distinguishably, not as a bare 404', async () => {
     const t = await mint();
-    const doc = await createMarkup(t.token);
+    // Keep a deterministic ID collision: tiny text anchors may also occur in
+    // generated node IDs, so each edit must include its paragraph context.
+    const doc = await createMarkup(t.token, MARKUP.replace('<section', '<section id="n0ab"'));
     let editId = doc.edit_id;
     for (let i = 0; i < 4; i++) {
-      const res = await edit(t.token, doc.id, { edit_id: editId, old_string: i === 0 ? 'alpha text' : `n${i - 1}`, new_string: `n${i}` });
-      expect(res.status).toBe(200);
-      editId = ((await res.json()) as Wire).edit_id;
+      const res = await edit(t.token, doc.id, { edit_id: editId, old_string: `>${i === 0 ? 'alpha text' : `n${i - 1}`}</p>`, new_string: `>n${i}</p>` });
+      const body = await res.json();
+      expect(res.status, `edit ${i}: ${JSON.stringify(body)}`).toBe(200);
+      editId = (body as Wire).edit_id;
     }
     const head = await read(t.token, doc.id);
     const listed = (await (await listVersionsRoute(request(`/api/artifacts/${doc.id}/versions`), params({ id: doc.id }))).json()) as never;

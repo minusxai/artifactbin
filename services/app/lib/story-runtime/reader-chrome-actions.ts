@@ -28,7 +28,7 @@ import { STORY_MODE_HOOK, STORY_READER_ACTION_MESSAGE, STORY_READER_ACTION_RESUL
 import { applyReaderMode, persistReaderMode } from './reader-mode';
 import { chromeAfterSample, type ChromeState } from './reader-chrome-policy';
 import { wireReaderSharing } from './reader-share';
-import { wireGithubWidgetTheme } from '@/lib/github-star';
+import { wireGithubStar } from '@/lib/github-star';
 
 export interface ReaderChromeHandle {
   /** Remove every listener this wiring installed. */
@@ -68,7 +68,7 @@ export function wireReaderChrome(win: Window, doc: Document): ReaderChromeHandle
   const root = doc.querySelector<HTMLElement>('[data-mx-reader-chrome]');
   if (!root) return null;
 
-  const cleanups: Array<() => void> = [wireGithubWidgetTheme(root)];
+  const cleanups: Array<() => void> = [wireGithubStar(root)];
   const on = <T extends EventTarget>(target: T, type: string, handler: EventListener, options?: AddEventListenerOptions) => {
     target.addEventListener(type, handler, options);
     cleanups.push(() => target.removeEventListener(type, handler, options));

@@ -6,14 +6,17 @@ description: >-
 ## Read first
 
 `markup` is **static JSX data**, interpreted over a fixed component registry.
+Prefer native JSX and kit interactions. Reserve Iframe for isolated widgets
+requiring DOM scripts or canvas APIs; keep surrounding content native.
+
 Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with exact spans.
 
 - **Static JSX only**: literal props (strings, numbers, booleans, arrays,
   `{{…}}` objects), plus safe signal conditions; no arbitrary expressions,
   spreads or inline handlers (`onClick=` is
   rejected). In JSX, every tag closes (`<br />`); use `{/* … */}` comments; omit
-  `<html>`/`<head>`/`<body>`. Custom DOM/JS belongs inside managed
-  [Iframe](markup-iframe.md), never in the parent page.
+  `<html>`/`<head>`/`<body>`. Widget DOM scripts belong inside managed
+  [Iframe](markup-iframe.md).
 - **Style with Tailwind classes via `className`**, starting from a
   `<div data-design="tw" className="@container …">` wrapper with `@2xl:`
   container variants for responsive layout.
@@ -56,8 +59,7 @@ at publish.
 
 **HTML tags: write the ordinary tag you mean** — [[ tags | length ]] are allowed
 (prose, headings, lists, tables, links, media, the bare controls `input`
-`select` `textarea` `button`, inline SVG): an unlisted tag answers `400`
-carrying the whole set in `allowed_html_tags`. Only these are refused
+`select` `textarea` `button`, inline SVG): an unlisted tag returns `400` with `allowed_html_tags`. Only these are refused
 outright, with no list: [% for t in refusedTags %]`[[ t ]]` [% endfor %].
 
 ## `<Helmet>` — the document's own head

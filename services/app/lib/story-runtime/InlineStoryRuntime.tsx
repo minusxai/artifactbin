@@ -16,6 +16,7 @@ import { TrustedUi, useTrustedPortalContainer } from '@/components/TrustedUi';
 import { isolateStoryCss, isolateStoryNodes } from '@/lib/story/inline-css';
 import { clearInitialStory } from '@/web/initial-story';
 import { wireOutline } from './outline-nav';
+import { ArtifactDialogScope } from '@/components/kit/dialog';
 import { markScrollableTables } from './table-scroll';
 import { syncValuesToUrl } from './url-values-sync';
 
@@ -196,8 +197,8 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
   const combinedCss = useMemo(() => [styles.baseCss,styles.compiledCss,styles.authorCss].filter(Boolean).join('\n'), [styles.baseCss,styles.compiledCss,styles.authorCss]);
   const css = useMemo(() => isolateStoryCss(combinedCss), [combinedCss]);
   const nodes = useMemo(() => isolateStoryNodes(current.nodes, combinedCss), [current.nodes,combinedCss]);
-  return <><TrustedUi overlay><SelectionPortal ready={portalReady} /></TrustedUi><div ref={root} data-mx-inline-story="" data-mx-story-root="" data-theme={styles.theme ?? undefined} className={current.colorMode}>
+  return <><TrustedUi overlay layer="selection"><SelectionPortal ready={portalReady} /></TrustedUi><div ref={root} data-mx-inline-story="" data-mx-story-root="" data-theme={styles.theme ?? undefined} className={current.colorMode}>
     <style>{css}</style>
-    <StoryRuntimeApp {...current} nodes={nodes} store={store} importAsset={lifetime.transport?.importAsset} editDecorate={editRef.current?.decorate} onSlideRename={editRef.current ? (path,title) => editRef.current?.renameSlide(path,title) : undefined} />
+    <ArtifactDialogScope><StoryRuntimeApp {...current} nodes={nodes} store={store} importAsset={lifetime.transport?.importAsset} editDecorate={editRef.current?.decorate} onSlideRename={editRef.current ? (path,title) => editRef.current?.renameSlide(path,title) : undefined} /></ArtifactDialogScope>
   </div></>;
 }

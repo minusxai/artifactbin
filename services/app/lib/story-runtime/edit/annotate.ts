@@ -103,7 +103,7 @@ export const ANNOTATE_CSS = [
   // `[data-mx-edit-hover]` when both stamp the same node while editing.
   `[${ANNOTATE_PICKING_ATTR}], [${ANNOTATE_PICKING_ATTR}] * { cursor: crosshair !important; }`,
   // A finger drawing an area must draw, not scroll; and nothing under a band selects.
-  `[${ANNOTATE_PICKING_ATTR}="area"], [${ANNOTATE_PICKING_ATTR}="area"] * { touch-action: none !important; user-select: none !important; }`,
+  `[${ANNOTATE_PICKING_ATTR}="area"], [${ANNOTATE_PICKING_ATTR}="area"] *, [${ANNOTATE_PICKING_ATTR}="select"], [${ANNOTATE_PICKING_ATTR}="select"] * { touch-action: none !important; user-select: none !important; }`,
   `[${ANNOTATE_PICK_HOVER_ATTR}][${ANNOTATE_PICK_HOVER_ATTR}] { outline: 2px solid rgba(245, 158, 11, 0.9); outline-offset: 3px; border-radius: 3px; background: rgba(245, 158, 11, 0.08); }`,
   // A node whose words are painted gives up its own background — the tint is
   // what a comment looks like when we cannot find the words, not as well as.
@@ -213,7 +213,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
   /** The ranges currently painted for each thread — the layout rect follows the WORDS when there are any. */
   let painted = new Map<string, Range[]>();
   /** The pick mode (the rail's tools). Read from the state message; never inferred. */
-  let pick: 'block' | 'area' | null = null;
+  let pick: 'block' | 'area' | 'select' | null = null;
   /** The selectable node under the pointer while block-picking — one at a time. */
   let pickHovered: Element | null = null;
   /** An area being drawn: where the press landed. The band element exists once the drag is real. */
@@ -541,12 +541,14 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
   };
 
   /** Set the pick mode: the crosshair stamp on the root carries it, and the hover and any drag leave with it. Idempotent. */
-  const setPick = (mode: 'block' | 'area' | null) => {
+  let swallowSelectionClick = false;
+  const setPick = (mode: 'block' | 'area' | 'select' | null) => {
+    if (mode === 'select' && pick !== mode) win.getSelection()?.removeAllRanges();
     pick = mode;
     if (mode) (root ?? doc.documentElement).setAttribute(ANNOTATE_PICKING_ATTR, mode);
     else (root ?? doc.documentElement).removeAttribute(ANNOTATE_PICKING_ATTR);
-    if (mode !== 'block') setPickHovered(null);
-    if (mode !== 'area' && drawing) { drawing = null; removeBand(); }
+    if (mode !== 'block' && mode !== 'select') setPickHovered(null);
+    if (mode !== 'area' && mode !== 'select' && drawing) { drawing = null; removeBand(); }
   };
 
   /**
@@ -571,13 +573,19 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
   /** The pick itself. On `win` in the capture phase: it runs BEFORE the edit session's document listener. */
   const onPickClick = (event: MouseEvent) => {
     if (root && !root.contains(event.target as Node)) return;
+    if (swallowSelectionClick) {
+      swallowSelectionClick = false;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     if (!pick) return;
     const el = selectableAt(event.target);
     if (!el) return;
     // In area mode the release already decided (a drawn area, or a block for
     // a bare click); the click that follows is swallowed so it can neither
     // focus a thread nor follow a link.
-    if (pick === 'area') { event.preventDefault(); event.stopPropagation(); return; }
+    if (pick === 'area' || pick === 'select') { event.preventDefault(); event.stopPropagation(); return; }
     if (draggedWords()) return;
     event.preventDefault();
     event.stopPropagation();
@@ -616,11 +624,13 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
 
   const onAreaPointerDown = (event: PointerEvent) => {
     if (root && !root.contains(event.target as Node)) return;
-    if (pick !== 'area' || event.button !== 0) return;
+    swallowSelectionClick = false;
+    if ((pick !== 'area' && pick !== 'select') || event.button !== 0) return;
     const target = event.target as Element | null;
     if (target?.closest?.('.mx-rail, .mx-present')) return;
     // Nothing selects and no host focuses under a band.
     event.preventDefault();
+    swallowSelectionClick = true;
     drawing = { startX: event.clientX, startY: event.clientY, target: event.target };
   };
 
@@ -629,6 +639,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     const rect = bandRect(drawing, event);
     const real = rect.width >= ANNOTATION_AREA_MIN_PX || rect.height >= ANNOTATION_AREA_MIN_PX;
     if (!real && !scope.querySelector(`[${ANNOTATE_BAND_ATTR}]`)) return;
+    setPickHovered(null);
     const band = bandElement();
     band.style.outlineStyle = 'dashed';
     placeOverlay(band, rect);
@@ -660,13 +671,15 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     reportSelection(el, { range: { v: 1, kind: 'area', box } });
   };
 
+  const cancelDrawing = () => { if (!drawing) return; swallowSelectionClick = false; drawing = null; removeBand(); setPickHovered(null); };
+
   const onPointerOver = (event: PointerEvent) => {
     reportHover(event.target);
-    if (pick === 'block') setPickHovered(selectableAt(event.target));
+    if ((pick === 'block' || pick === 'select') && !drawing) setPickHovered(selectableAt(event.target));
   };
   const onPointerOut = (event: PointerEvent) => {
     reportHover(event.relatedTarget);
-    if (pick === 'block') setPickHovered(selectableAt(event.relatedTarget));
+    if ((pick === 'block' || pick === 'select') && !drawing) setPickHovered(selectableAt(event.relatedTarget));
   };
 
   doc.addEventListener('click', onClick, true);
@@ -678,6 +691,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
   win.addEventListener('pointerdown', onAreaPointerDown, true);
   win.addEventListener('pointermove', onAreaPointerMove, true);
   win.addEventListener('pointerup', onAreaPointerUp, true);
+  win.addEventListener('pointercancel', cancelDrawing, true);
   win.addEventListener('scroll', scheduleSync, { passive: true });
   win.addEventListener('resize', scheduleSync, { passive: true });
   /*
@@ -743,6 +757,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       win.removeEventListener('pointerdown', onAreaPointerDown, true);
       win.removeEventListener('pointermove', onAreaPointerMove, true);
       win.removeEventListener('pointerup', onAreaPointerUp, true);
+      win.removeEventListener('pointercancel', cancelDrawing, true);
       doc.removeEventListener('input', scheduleSync, true);
       win.removeEventListener('scroll', scheduleSync);
       win.removeEventListener('resize', scheduleSync);
