@@ -118,7 +118,7 @@ More under `references/` ([[ docsIndexHint ]]):
 | pinned human feedback — reply, resolve, the anchor attribute | `publishing-annotations.md` |
 | connecting an MCP client — OAuth or bearer, the tool list | `publishing-mcp.md` |
 | history — versions, revert, the trash, export options | `publishing-versions.md` |
-| design craft — hierarchy, type, spacing, color, motifs | `design.md` |
+| design craft, plans — hierarchy, type, spacing, color, motifs | `design.md` |
 | tag/component allowlists, `<Helmet>`, layout | `markup.md` |
 | data and keyed templates | `markup-data.md`, `markup-repeat.md` |
 | chart serialization and statistical meaning | `markup-data-authoring.md` |

@@ -1,6 +1,6 @@
 /**
  * /tokens/new — the credential is a link (tok-p2, plan §3b). ONE page for logged-in and logged-out:
- * confirm ("Generate a token", with an "Expires in" picker: 1 h · 6 h (default) · 24 h · 7 d · 30 d) →
+ * confirm ("Generate a token", with an "Expires in" picker: 1 h · 6 h · 24 h · 7 d · 30 d · 1 year (default)) →
  * POST /api/tokens/anonymous { expiresInHours } → the secret shown ONCE with "Copy token" and its expiry →
  * logged-out only: POST /api/session/token { token } so the id lands in the agent cookie. Never a GET that
  * mints; nothing is stored; a fresh render shows the confirm step.
@@ -16,6 +16,7 @@ const EXPIRIES = [
   { hours: 24, label: '24 h' },
   { hours: 7 * 24, label: '7 d' },
   { hours: 30 * 24, label: '30 d' },
+  { hours: 365 * 24, label: '1 year' },
 ] as const;
 
 interface MintedToken {
@@ -25,7 +26,7 @@ interface MintedToken {
 
 export function TokensNewPage() {
   const { session } = useSession();
-  const [expiresInHours, setExpiresInHours] = useState(6);
+  const [expiresInHours, setExpiresInHours] = useState(365 * 24);
   const [minted, setMinted] = useState<MintedToken | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);

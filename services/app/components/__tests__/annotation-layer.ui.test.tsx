@@ -142,6 +142,21 @@ const layer = (frame: HTMLIFrameElement, over: Partial<Parameters<typeof Annotat
 };
 
 describe('AnnotationLayer', () => {
+  it('shows distinct local times for a comment and reply on the same day', async () => {
+    const { frame, contentWindow } = makeFrame();
+    const view = render(layer(frame, { railOpen: true }));
+    await screen.findByText('is this right?');
+    fromFrame(contentWindow, { type: STORY_ANNOTATION_PIN_MESSAGE, nonce: NONCE, id: ANN.id });
+    await screen.findByText('one more thought');
+    const times = [...view.container.querySelectorAll('time')];
+    const first = times.find((time) => time.dateTime === ANN.thread[0].created_at);
+    const reply = times.find((time) => time.dateTime === ANN.thread[1].created_at);
+    expect(first).toBeDefined();
+    expect(reply).toBeDefined();
+    expect(first!.textContent).not.toBe(reply!.textContent);
+    expect(first!.textContent).toMatch(/27 Aug.*\d+:\d{2}/);
+    expect(first).toHaveAttribute('aria-label', expect.stringMatching(/2026/));
+  });
   it('scrolls the newest reply in its own shadow-root rail',async()=>{
     const {frame,contentWindow}=makeFrame();
     const view=render(<TrustedUi overlay>{layer(frame,{railOpen:true})}</TrustedUi>);

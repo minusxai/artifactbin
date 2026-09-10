@@ -29,6 +29,11 @@ Helmet CSS adds, you carry yourself:
   specificity (don't let two classes fight over section spacing) and give
   keyboard focus a visible state.
 
+**Plans/workflows:** use visuals when useful; todos/milestones need checkboxes
+or tables. Check completed items and strike task labels (`<s>`), keeping
+context. Persist progress by editing the document; reader-local toggles do
+not save it.
+
 ## Contents
 
 Calibrate the treatment · Ground it in the subject · Plan before you build ·
