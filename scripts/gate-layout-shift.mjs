@@ -1,3 +1,4 @@
+import { checkViewportGeometry } from './lib/viewport-geometry.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
 /**
  * Gate: a deck must not shove its own document sideways after it opens.
@@ -250,6 +251,7 @@ const mm = await measureBleed(mismatch.id, mismatch.token);
 ok(mm.bleedLeft !== null, 'mismatch: the overshooting element is there — otherwise this proves nothing');
 ok(mm.overflow === 0, `mismatch: the document still does not scroll sideways (${mm.overflow}px of horizontal overflow)`);
 
+await checkViewportGeometry(B, browser, ok);
 await browser.close();
 
 const failed = out.filter((l) => l.startsWith('FAIL')).length;

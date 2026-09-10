@@ -332,7 +332,7 @@ check(!after.some((a) => /PWNED/.test(a.title ?? '')), 'and no artifact was forg
 //   • an <img src> is IMPORTED at publish (lib/web-assets) and the URL is KEPT
 //     in the stored document — what changes is the SERVED copy, which is
 //     pointed at /assets/<hash> on this origin. That, not the stored bytes, is
-//     the property that matters; the network-level proof is in gate-web-import.
+//     the property that matters; the network-level proof is in gate-web-assets.
 //   • every OTHER external subresource position is still refused outright.
 const declImg = await fetch(`${BASE}/api/artifacts`, {
   method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${anon.token}` },

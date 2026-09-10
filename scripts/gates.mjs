@@ -62,7 +62,7 @@ import { spawn } from 'node:child_process';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { GATE_SPECS, checkManifest, specFor } from './gates.manifest.mjs';
 import { resolveServers, runSecret } from './gates.servers.mjs';
 import { parseShard, shardOf } from './gates.shard.mjs';
@@ -170,10 +170,6 @@ async function bootServer(index, mailOutbox, authSecret) {
     env: {
       ...process.env,
       NODE_ENV: 'production',
-      // The gate's Google sheet is answered locally (scripts/lib/sheets-stub.mjs):
-      // same URL, no third party on a merge gate. APPENDED rather than set, so a
-      // NODE_OPTIONS the caller already has survives.
-      NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import ${pathToFileURL(path.join(HERE, 'lib/sheets-stub.mjs')).href}`.trim(),
       APP__PORT: String(port),
       APP__PUBLIC_BASE_URL: base,
       // Managed iframe assets are served by the same disposable app through a

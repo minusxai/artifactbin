@@ -517,11 +517,15 @@ describe('deletion', () => {
 describe('version coalescing and the edits log', () => {
   it('rapid edits bump version each time but archive at most one snapshot', async () => {
     const t = await mint();
-    const doc = await createMarkup(t.token);
+    // Short text can also occur in generated IDs or attributes. Keep an
+    // explicit collision so the version test cannot rely on random markup.
+    const doc = await createMarkup(t.token, MARKUP.replace('wrap', 'wrap-A1'));
     const e1 = await edit(t.token, doc.id, { edit_id: doc.edit_id, old_string: 'alpha text', new_string: 'A1' });
+    expect(e1.status).toBe(200);
     const w1 = (await e1.json()) as Wire;
-    const e2 = await edit(t.token, doc.id, { edit_id: w1.edit_id, old_string: 'A1', new_string: 'A2' });
+    const e2 = await edit(t.token, doc.id, { edit_id: w1.edit_id, old_string: '>A1</p>', new_string: '>A2</p>' });
     const w2 = (await e2.json()) as Wire;
+    expect(e2.status, JSON.stringify(w2)).toBe(200);
     expect(w2.version).toBe(doc.version + 2);
 
     const versions = await listVersionsRoute(request(`/api/artifacts/${doc.id}/versions`, { token: t.token }), params({ id: doc.id }));

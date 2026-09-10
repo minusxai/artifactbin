@@ -49,8 +49,6 @@ export const GATE_SPECS = Object.freeze([
   { name: 'concurrent-edit', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 165_000 },
   // measured: implementer 8s; orchestrator 10s
   { name: 'data-ingest', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
-  // measured: implementer 4s (1s warm); orchestrator pending
-  { name: 'data-table-height', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
   // measured: implementer 6s; orchestrator 7s
   { name: 'data-ux', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
   // measured: implementer 4s; orchestrator 83s
@@ -103,7 +101,7 @@ export const GATE_SPECS = Object.freeze([
   // measured: implementer 36s; orchestrator 36s
   { name: 'inplace-edit', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 108_000 },
   // measured: implementer 39s; orchestrator 39s
-  { name: 'layout-shift', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 117_000 },
+  { name: 'layout-shift', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 180_000 },
   // measured: implementer 2s; orchestrator 2s
   {
     name: 'link-access', start: 'custom',
@@ -145,7 +143,7 @@ export const GATE_SPECS = Object.freeze([
   { name: 'ref-image', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
   // measured: implementer 10s
   { name: 'bound-assets', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 60_000 },
-  { name: 'web-assets', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 90_000 },
+  { name: 'web-assets', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 120_000 },
   // measured: implementer 20s; orchestrator pending
   {
     name: 'pdf', start: 'shared',
@@ -170,8 +168,6 @@ export const GATE_SPECS = Object.freeze([
     needsMail: false, needsClipboard: true, serialGroup: 'clipboard', timeoutMs: 60_000,
   },
   // measured: implementer 4s; orchestrator 4s
-  { name: 'viewport-units', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
-  // measured: implementer 4s; orchestrator 4s
   {
     name: 'visibility', start: 'custom',
     why: 'Logs in an owner through the mail sink to prove private iframe delivery, canonical URL healing, and sharing UI changes.',
@@ -179,8 +175,6 @@ export const GATE_SPECS = Object.freeze([
   },
   // measured: implementer 41s; orchestrator 43s
   { name: 'viz-editor', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 129_000 },
-  // measured: implementer 6s; orchestrator 8s
-  { name: 'web-import', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
 ]);
 
 /**

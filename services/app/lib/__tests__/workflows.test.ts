@@ -15,12 +15,9 @@
  * the staging box's arch, and is tagged like every other image this repo
  * publishes.
  *
- * The CI side of the same contract: the `image` job builds the FULL image and
- * runs the four lean ones through `image-checks.mjs` (contents + boot + size
- * — a runtime dep that sneaks into a lean closure fails THERE, not at 3am on
- * a box), and the `compose` job boots `docker-compose.lean.yml` and walks it
- * (`test-compose-lean.mjs`) — the split shape the plan's P5 deploys, proven
- * on every PR rather than discovered at the cutover.
+ * CI builds the full image separately. The compose job builds each lean image
+ * once, checks contents, standalone behavior and size, then boots those same
+ * images together and walks the service boundaries.
  */
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -157,26 +154,15 @@ describe('ci.yml: the image job proves what ships', () => {
     expect(fullBuild?.with?.file).toBe('Dockerfile');
     expect(fullBuild?.with?.context).toBe('.');
   });
-  /**
-   * The lean pass used to be four more steps of THIS job, and this assertion
-   * used to say so. It moved to a job of its own because the two share no
-   * state and running them together only added their times: the `image` job
-   * could not fit its budget while also building four more images.
-   *
-   * WHICH job hosts it is not the contract. The contract is that all four lean
-   * images are built from THIS commit and each goes through image-checks.mjs,
-   * in a job the roll-up actually waits on — so this asks the workflow where
-   * the pass lives rather than assuming, and then checks `test` gates it. A
-   * lean pass in a job nobody needs is a check that cannot fail a merge.
-   */
-  it('runs the LEAN pass: all four lean images through image-checks.mjs, in a job the roll-up gates', () => {
+  it('runs the LEAN pass: all five lean images through image-checks.mjs, in a job the roll-up gates', () => {
     const hosting = Object.entries(ci.jobs).filter(([, job]) =>
       (job?.steps ?? []).some((s) => String(s.run ?? '').includes('image-checks.mjs')),
     );
     expect(hosting.length, 'no job in ci.yml runs image-checks.mjs').toBeGreaterThan(0);
     const leanRuns = hosting.flatMap(([, job]) => (job.steps ?? []).map((s) => String(s.run ?? '')));
-    for (const kind of ['app', 'proxy', 'sql', 'browser']) {
-      expect(leanRuns.some((r) => r.includes(`services/${kind}/Dockerfile`)), `no lean ${kind} build`).toBe(true);
+    for (const kind of ['app', 'proxy', 'sql', 'browser', 'events']) {
+      const composition = yaml.parse(readFileSync(path.join(root, 'docker-compose.lean.yml'), 'utf8'));
+      expect(composition.services[kind].build.dockerfile).toBe(`services/${kind}/Dockerfile`);
       expect(leanRuns.some((r) => r.includes(`image-checks.mjs ${kind}`)), `image-checks never checks the ${kind} image`).toBe(true);
     }
     const gated = ci.jobs.test?.needs ?? [];
@@ -192,6 +178,20 @@ describe('ci.yml: the compose job walks the split shape', () => {
     const runs = (job?.steps ?? []).map((s) => String(s.run ?? ''));
     expect(runs.some((r) => r.includes('docker-compose.lean.yml')), 'the compose job never boots docker-compose.lean.yml').toBe(true);
     expect(runs.some((r) => r.includes('test-compose-lean.mjs')), 'the compose job never runs the walk').toBe(true);
+  });
+  it('builds the lean images once and checks the same images before the composition walk', () => {
+    expect(ci.jobs).not.toHaveProperty('lean');
+    const runs = (ci.jobs.compose?.steps ?? []).map((s) => String(s.run ?? ''));
+    const build = runs.findIndex((r) => r.includes('docker compose build'));
+    const checks = runs.findIndex((r) => r.includes('image-checks.mjs'));
+    const boot = runs.findIndex((r) => r.includes('docker compose up'));
+    expect(build).toBeGreaterThanOrEqual(0);
+    expect(checks).toBeGreaterThan(build);
+    expect(boot).toBeGreaterThan(checks);
+    expect(runs[boot]).toContain('--no-build');
+    for (const kind of ['app', 'proxy', 'sql', 'browser', 'events']) {
+      expect(runs[checks]).toContain(`image-checks.mjs ${kind} artifactbin-lean-${kind}`);
+    }
   });
   it('is given the ~30 minutes the plan budgets for it', () => {
     expect(Number(ci.jobs.compose?.['timeout-minutes'] ?? 0)).toBeGreaterThanOrEqual(30);
