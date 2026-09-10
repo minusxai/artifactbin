@@ -5,8 +5,7 @@
  *
  * Everything a user or agent actually does, checked in one pass and seeded by
  * the script itself:
- *   API      — the four content tiers create + serve, exports, versions/revert,
- *              cross-token isolation, refs + delete protection, MCP's 8 tools
+ *   API      — content-tier pages, missing-reference reads and MCP create/get
  *   AUTH     — signup, duplicate refusal, claim, revoke, login/logout, nav
  *   VIEWER   — themes flip live, a bound select re-runs queries, deck rail + present
  *   EDITOR   — toolbar, title/theme/colorMode, grid drag, slide rename
@@ -47,7 +46,6 @@ const mint = async () => {
 // ───────────────────────────── API ─────────────────────────────
 console.log('█ API');
 const T = process.env.GATE_TOKEN || (await mint());
-const T2 = await mint();
 const made = {};
 const tiers = {
   markup: { markup: '<Helmet><script>{`void 0`}</script></Helmet><div data-design="tw" className="p-8"><h1 className="text-3xl font-bold">Tier markup</h1></div>' },
@@ -69,30 +67,13 @@ for (const k of ['markup', 'prose', 'dataset', 'viz', 'image']) {
   const h = await head(`/a/${made[k].id}`);
   ok(h.status === 200 && h.ct?.includes('text/html'), `${k} /a/<id> IS the page (200 html, no redirect)`);
 }
-ok((await head(`/a/${made.markup.id}/raw`)).ct?.includes('text/html'), 'a document ./raw serves the served page');
-ok((await head(`/a/${made.dataset.id}/raw`)).ct?.includes('json'), 'dataset ./raw serves JSON');
-ok((await head(`/a/${made.viz.id}/raw`)).ct?.includes('json'), 'viz ./raw serves JSON');
-ok((await head(`/a/${made.image.id}/raw`)).ct?.includes('svg'), 'image ./raw serves bytes');
-{
-  const csp = (await head(`/a/${made.markup.id}/raw`)).r.headers.get('content-security-policy') ?? '';
-  ok(csp.includes("default-src 'none'") && csp.includes('sandbox allow-scripts'), 'a document ./raw keeps the sandboxing CSP');
-}
-for (const k of ['markup', 'prose']) {
-  const r = await fetch(`${B}/a/${made[k].id}/export`);
-  ok(r.status === 200 && (await r.arrayBuffer()).byteLength > 2000, `${k} exports a PNG`);
-}
-await J(`/api/artifacts/${made.markup.id}`, { method: 'PUT', body: JSON.stringify({ markup: '<div data-design="tw" className="p-8"><h1 className="text-3xl font-bold">v2</h1></div>' }) }, T);
-ok((await J(`/api/artifacts/${made.markup.id}/versions`, {}, T)).body.versions.length === 1, 'versions archives the previous state');
-ok((await J(`/api/artifacts/${made.markup.id}/revert`, { method: 'POST', body: JSON.stringify({ version: 1 }) }, T)).body.version === 3, 'revert creates a new head');
-ok((await J(`/api/artifacts/${made.markup.id}`, {}, T2)).status === 404, 'another token gets a uniform 404');
-ok((await J('/api/artifacts', {}, null)).status === 401, 'no token → 401');
-const conflict = await J(`/api/artifacts/${made.markup.id}`, { method: 'PUT', body: JSON.stringify({ markup: '<p className="p-1">x</p>', expectedVersion: 1 }) }, T);
-ok(conflict.status === 409 && conflict.body.error === 'version_conflict', 'stale expectedVersion → 409');
+// Raw formats, export renders, versions and permission/error matrices live in
+// artifact-urls, export, manage, version-conflict and delete-protection tests.
+// Keep the assembled server's top-level tier pages and missing-reference read.
 const doc = (await J('/api/artifacts', { method: 'POST', body: JSON.stringify({ title: 'refdoc', markup: `<Helmet><Query name="rows">{\`select * from ref_${made.dataset.id}\`}</Query></Helmet><div data-design="tw" className="p-8"><Question data="$rows" viz={{kind:"table"}} /></div>` }) }, T)).body;
 ok((await J(`/api/artifacts/${made.dataset.id}`, { method: 'DELETE' }, T)).status === 409, 'referenced dataset delete → 409');
 ok((await J(`/api/artifacts/${made.dataset.id}?force=true`, { method: 'DELETE' }, T)).status === 200, 'force delete breaks the link knowingly');
 ok((await fetch(`${B}/a/${doc.id}`)).status === 200, 'a document whose ref died still serves');
-ok((await J('/api/artifacts', { method: 'POST', body: JSON.stringify({ markup: '<Nope />' }) }, T)).status === 400, 'unknown component → 400');
 const mcp = async (name, args) => {
   const r = await fetch(`${B}/mcp`, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', Authorization: `Bearer ${T}` }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) });
   const b = await r.json();
@@ -101,12 +82,8 @@ const mcp = async (name, args) => {
 const m = await mcp('create_artifact', { title: 'mcp doc', markup: '<div data-design="tw" className="p-6"><h1 className="text-2xl font-bold">mcp</h1></div>' });
 ok(!m.isError && m.data.format === 'markup', 'mcp create_artifact');
 ok((await mcp('get_artifact', { id: m.data.id })).data.markup.includes('mcp'), 'mcp get_artifact');
-ok((await mcp('update_artifact', { id: m.data.id, markup: '<div data-design="tw" className="p-6"><h1 className="text-2xl font-bold">mcp2</h1></div>' })).data.version === 2, 'mcp update_artifact');
-ok((await mcp('list_artifacts', {})).data.artifacts.length > 0, 'mcp list_artifacts');
-ok((await mcp('list_versions', { id: m.data.id })).data.versions.length === 1, 'mcp list_versions');
-ok(!(await mcp('get_version', { id: m.data.id, version: 1 })).isError, 'mcp get_version');
-ok((await mcp('revert_artifact', { id: m.data.id, version: 1 })).data.version === 3, 'mcp revert_artifact');
-ok((await mcp('delete_artifact', { id: m.data.id })).data.ok === true, 'mcp delete_artifact');
+// The full MCP CRUD/version sequence is owned by mcp.test.ts; create/get here
+// retains a small check of the built server's transport and authentication.
 
 // seed the documents the UI sections drive
 const ds = (await J('/api/artifacts', { method: 'POST', body: JSON.stringify({ title: 'Gate data', dataset: tiers.dataset.dataset }) }, T)).body;

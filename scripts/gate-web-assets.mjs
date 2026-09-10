@@ -1,3 +1,4 @@
+import { checkWebImport } from './lib/web-import-cases.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
 /**
  * Gate: an external URL in a document is OURS by the time a reader sees it.
@@ -77,9 +78,9 @@ const web = createServer((req, res) => {
   if (path === '/face.woff2') { res.writeHead(200, { 'Content-Type': 'font/woff2' }); res.end(WOFF2); return; }
   res.writeHead(404); res.end();
 });
-// 6220–6229 is this agent's throwaway-server range.
-await new Promise((resolve) => web.listen(6223, '127.0.0.1', resolve));
-const WEB = 'http://127.0.0.1:6223';
+// An ephemeral fixture port avoids collisions with other local services.
+await new Promise((resolve) => web.listen(0, '127.0.0.1', resolve));
+const WEB = `http://127.0.0.1:${web.address().port}`;
 /*
  * A per-run nonce on every URL. The cache is GLOBAL and keyed by the url, so a
  * second run of this gate against the same database would import nothing and
@@ -108,6 +109,7 @@ if (put.status !== 200) {
 ok(Array.isArray(wrote.warnings) === false || wrote.warnings.length === 0, `publish imported everything (${JSON.stringify(wrote.warnings ?? [])})`);
 
 // The STORED markup keeps the author's URLs — the half of the design an agent sees.
+ok(wrote.markup_changed === false, 'URL import preserves source without a markup rewrite');
 const stored = await (await fetch(`${B}/api/artifacts/${owner.id}`, { headers: auth })).json();
 ok(stored.markup.includes(`${WEB}/photo.png${RUN}`), 'the stored markup still carries the source URL');
 ok(stored.markup.includes(`${WEB}/face.woff2${RUN}`), 'the stored markup still carries the @font-face url');
@@ -305,6 +307,7 @@ ok(headers.get('content-disposition') === 'attachment', 'the asset carries Conte
 ok(headers.get('x-content-type-options') === 'nosniff', 'the asset carries nosniff');
 ok((headers.get('cache-control') ?? '').includes('immutable'), 'the asset is immutable');
 
+await checkWebImport(B, browser, WEB, ok);
 await browser.close();
 web.close();
 

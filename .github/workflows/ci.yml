@@ -495,49 +495,8 @@ jobs:
       - if: always()
         run: docker rm -f ab || true
 
-  # THE LEAN PASS (P3 CORE TESTS 1–2): the five lean images the split shape
-  # composes, each through scripts/image-checks.mjs — contents (the package an
-  # image exists to carry resolves; the other images' natives THROW),
-  # boots-and-serves, and the du -sb size budget. A filtered install that grows
-  # the wrong package fails HERE, on the PR — not at 3am on a box. Built from
-  # the same commit as the full image, which is the whole point: a service
-  # image built elsewhere is a second dependency tree.
-  #
-  # Its own job rather than four more steps of `image`: the two share no state
-  # (different Dockerfiles, different tags, and the full image is never an input
-  # here), so running them in one job only added their times together — 85s of
-  # builds and 13s of checks on top of a job already at 4m54s. Apart, both fit
-  # the 180s budget and the wall clock is the longer of the two, not the sum.
-  lean:
-    name: lean images
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - name: the five lean images build
-        run: |
-          docker build -f services/app/Dockerfile -t lean-app:ci .
-          docker build -f services/proxy/Dockerfile -t lean-proxy:ci .
-          docker build -f services/sql/Dockerfile -t lean-sql:ci .
-          docker build -f services/browser/Dockerfile -t lean-browser:ci .
-          docker build -f services/events/Dockerfile -t lean-events:ci .
-      - name: the five lean images carry what they should and nothing else
-        run: |
-          node scripts/image-checks.mjs app lean-app:ci
-          node scripts/image-checks.mjs proxy lean-proxy:ci
-          node scripts/image-checks.mjs sql lean-sql:ci
-          node scripts/image-checks.mjs browser lean-browser:ci
-          node scripts/image-checks.mjs events lean-events:ci
-
-  # THE COMPOSE OF THE FIVE LEAN IMAGES (P3 CORE TEST 4) — the split shape
-  # the plan's P5 deploys, booted exactly as a deployment composes it and
-  # walked over HTTP: the proxy's own /health, an anonymous start through the
-  # ANON_MINT door, a publish whose <Query> dry-run crosses the app→sql seam,
-  # the served document IS the document through the proxy, and the document's
-  # own query URL answers real DuckDB rows from the sql container, and the
-  # events container stores an envelope in the schema it owns. It is
-  # expensive (five docker builds + a seven-container boot) and it is the
-  # point: this is the only job that proves the halves were shipped together.
+  # Build each lean image once, check its contents/size/standalone behavior,
+  # then boot those exact images together and walk the service boundaries.
   compose:
     name: compose (the split shape)
     runs-on: ubuntu-latest
@@ -549,20 +508,25 @@ jobs:
       POSTGRES_PASSWORD: compose-ci-${{ github.run_id }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      # The lean images are built here a SECOND time — the `image` job already built the same four
-      # Dockerfiles — and this job starts with a cold daemon, so it pays in full. Reading main's layer
-      # cache turns that into a restore for every service that has not changed. Publishing the cache is
-      # left to main (see the write override): a PR that exported these layers would pay the export on
-      # every run and evict, from the repo's shared 10 GB budget, the entries the `image` job depends on.
+      # Reuse main's layers; only main writes the shared cache.
       - name: read main's layer cache; publish it only from main
         run: |
           echo "COMPOSE_FILE=docker-compose.lean.yml:docker-compose.lean.ci.yml" >> "$GITHUB_ENV"
           if [ "$GITHUB_REF" = refs/heads/main ]; then
             echo "COMPOSE_FILE=docker-compose.lean.yml:docker-compose.lean.ci.yml:docker-compose.lean.ci-write.yml" >> "$GITHUB_ENV"
           fi
+      - name: build the five lean images once
+        run: docker compose build
+      - name: check the exact images the composition will run
+        run: |
+          node scripts/image-checks.mjs app artifactbin-lean-app
+          node scripts/image-checks.mjs proxy artifactbin-lean-proxy
+          node scripts/image-checks.mjs sql artifactbin-lean-sql
+          node scripts/image-checks.mjs browser artifactbin-lean-browser
+          node scripts/image-checks.mjs events artifactbin-lean-events
       - name: boot the five lean images as one host
         run: |
-          docker compose up -d --build
+          docker compose up -d --no-build
           for i in $(seq 1 90); do
             code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5440/health || true)
             [ "$code" = "200" ] && echo "proxy serving after ${i}s" && exit 0
@@ -584,7 +548,7 @@ jobs:
     name: test
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [checks, node, ui, build, api, gates, image, lean, compose]
+    needs: [checks, node, ui, build, api, gates, image, compose]
     if: always()
     steps:
       - name: All jobs green
@@ -596,7 +560,6 @@ jobs:
           [ "${{ needs.api.result }}" = "success" ] && \
           [ "${{ needs.gates.result }}" = "success" ] && \
           [ "${{ needs.image.result }}" = "success" ] && \
-          [ "${{ needs.lean.result }}" = "success" ] && \
           [ "${{ needs.compose.result }}" = "success" ]
 
   cli:
@@ -614,7 +577,12 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm test -w services/cli
+      # Pure auth/client cases run once; filesystem, executable discovery and PTY
+      # behavior still run on every OS/architecture, followed by the real binary smoke.
+      - if: matrix.os == 'ubuntu-24.04'
+        run: npm test -w services/cli
+      - if: matrix.os != 'ubuntu-24.04'
+        run: node --import tsx --test services/cli/test/config.test.ts services/cli/test/launcher.test.ts services/cli/test/runner.test.ts
       - run: npm run build -w services/cli
       - run: npm run build:binary -w services/cli
       - run: npm run test:binary -w services/cli

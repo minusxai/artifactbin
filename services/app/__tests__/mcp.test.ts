@@ -180,10 +180,28 @@ describe('MCP server', () => {
     expect(updated.isError).toBe(false);
     expect(updated.data.version).toBe(2);
 
+    // Protocol permutations formerly repeated in the broad browser smoke.
+    const id = story.data.id as string;
+    const listed = await mcpCall(t.token, 'list_artifacts', {});
+    expect(listed.isError).toBe(false);
+    expect(listed.data.artifacts).toEqual(expect.arrayContaining([expect.objectContaining({ id })]));
+    const versions = await mcpCall(t.token, 'list_versions', { id });
+    expect(versions.isError).toBe(false);
+    expect(versions.data.versions).toHaveLength(1);
+    const original = await mcpCall(t.token, 'get_version', { id, version: 1 });
+    expect(original.isError).toBe(false);
+    const reverted = await mcpCall(t.token, 'revert_artifact', { id, version: 1 });
+    expect(reverted.isError).toBe(false);
+    expect(reverted.data.version).toBe(3);
+
     // Another token cannot see it (uniform not-found).
     const other = await mintToken('other');
     const denied = await mcpCall(other.token, 'get_artifact', { id: story.data.id as string });
     expect(denied.isError).toBe(true);
+    const deleted = await mcpCall(t.token, 'delete_artifact', { id });
+    expect(deleted.isError).toBe(false);
+    expect(deleted.data.ok).toBe(true);
+    expect((await mcpCall(t.token, 'get_artifact', { id })).isError).toBe(true);
   });
 
   /**

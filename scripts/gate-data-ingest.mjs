@@ -44,11 +44,7 @@ const made = await api('/api/artifacts', { method: 'POST', body: JSON.stringify(
 const datasetId = made.body.id ?? null;
 check(!!datasetId, `the upload returns a usable reference (${made.body.ref})`);
 
-// The coercion contract: revenue is a number, zip is not.
-const columns = (made.body.columns ?? []).map((c) => `${c.name}:${c.type}`).join(' ');
-check(/revenue:number/.test(columns), `revenue was coerced to a number (${columns})`);
-check(/zip:string/.test(columns), 'zip kept its leading zero as text');
-
+// Type inference and leading-zero storage cases live in data-ingest-routes.test.ts.
 // The create response must TELL the agent how to consume the dataset — a bare
 // id is not usable, and omitting the ref: prefix is exactly the mistake that
 // shipped a blank chart.
@@ -61,7 +57,6 @@ check(/vega-lite/.test(made.body.usage ?? ''), 'with a viz spec bound to the rea
 // ── 2. EDIT a story to reference the uploaded dataset ───────────────────────
 // The editor writes through the same /edits protocol a human's typing does, so
 // driving it by API here exercises the identical write path the UI uses.
-const head = await api(`/api/artifacts/${start.id}`, {}, token);
 const markup =
   `<Helmet><Query name="rows" source="${datasetId}">{\`select * from public.rows\`}</Query></Helmet>` +
   `<div data-design="tw" className="@container p-10">` +
@@ -91,29 +86,9 @@ check(/revenue/i.test(text), 'the y axis is labelled from the CSV header');
 // scale, so assert a tick only a numeric domain would produce.
 check(/\b(150|190|200)\b/.test(text), 'the y scale is numeric — coercion survived into Vega');
 
-// ── 3b. The rows are NOT in the database column ────────────────────────────
-// The reason this feature exists: a large dataset must not sit in a column that
-// every render and every /edits write reads and parses.
-const stored = await api(`/api/artifacts/${datasetId}`, {}, token);
-check(stored.status === 200, 'the dataset reads back through the API');
-const rawRows = await (await fetch(`${BASE}/a/${(stored.body.url ?? '').split('/a/')[1] ?? ''}/raw`)).json().catch(() => null);
-check(Array.isArray(rawRows) && rawRows.length === 3, `rows are served from wherever they live (${Array.isArray(rawRows) ? rawRows.length : 'none'} rows)`);
-check(rawRows?.[0]?.zip === '01234', 'and the leading zero survived the round trip through storage');
-
-// ── 4. The same, from a PUBLIC GOOGLE SHEET ────────────────────────────────
-const sheet = await api('/api/artifacts', {
-  method: 'POST',
-  body: JSON.stringify({ title: 'From sheet', sheetUrl: 'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit#gid=0' }),
-}, token);
-check(sheet.status === 201, `a public sheet imports as a dataset (${sheet.status})`);
-check((sheet.body.columns ?? []).length > 0, `with inferred columns (${(sheet.body.columns ?? []).map((c) => c.name).slice(0, 3).join(', ')})`);
-
-// ── 5. A private sheet fails CLEANLY, never storing an HTML page ───────────
-const priv = await api('/api/artifacts', {
-  method: 'POST',
-  body: JSON.stringify({ title: 'nope', sheetUrl: 'https://docs.google.com/spreadsheets/d/1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/edit' }),
-}, token);
-check(priv.status === 400 && priv.body.code === 'sheet_not_public', `a non-public sheet is refused (${priv.status} ${priv.body.code})`);
+// CSV storage and public/private Sheets protocol cases are owned by
+// data-ingest-routes.test.ts and lib/data-ingest/__tests__/ingest.test.ts.
+// This gate keeps the distinct browser proof: those values produce a chart.
 
 await browser.close();
 console.log(failures.length ? `\n${failures.length} FAILED` : '\nall good');
