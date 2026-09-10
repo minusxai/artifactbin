@@ -4,7 +4,13 @@ description: "Managed frames."
 ---
 ## Read first
 
-Use `<Iframe>` for new scripted canvas, Three.js or other DOM interfaces.
+Prefer native JSX and kit components for document content, layouts, charts and
+ordinary interactions. Use `<Iframe>` only for an isolated widget that requires
+its own DOM scripts or canvas/library APIs, such as Three.js, a game or a simulation.
+Keep headings, prose, controls and charts outside the frame when the kit supports
+them; unrestricted HTML/CSS/JS alone is not a reason to frame the entire document.
+The child has its own styles and DOM, so parent theme styling, block selection
+and inline editing do not reach its internal elements.
 Write its HTML, CSS and scripts directly as static JSX children; the platform
 packages them into an opaque sandboxed `srcdoc` child inside a protective
 wrapper. Its script can use **its own DOM/canvas**, never the parent artifact,
