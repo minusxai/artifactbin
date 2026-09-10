@@ -1,3 +1,4 @@
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 /** Editor V2 production acceptance: native input, source persistence and reversible layout. */
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';

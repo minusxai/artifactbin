@@ -940,7 +940,7 @@ async function revertScoped(actor: TokenActor, id: string, version: number, opts
  * 404, and report the head version so the caller can read → merge → replay.
  */
 export interface VersionConflict {
-  reason?: 'state_conflict';
+  reason?: 'state_conflict' | 'doc_changed';
   currentState?: string;
   conflict: true;
   currentVersion: number;
@@ -950,6 +950,7 @@ export function isVersionConflict(r: ArtifactRow | null | VersionConflict): r is
 }
 
 export interface ReplaceOpts {
+  annotationOps?: AnnotationOperation[];
   expectedState?: string;
   /** When set, the replace applies only if it still names the head version. */
   expectedVersion?: number;
@@ -994,6 +995,11 @@ async function replaceScoped(
       }
     }
 
+    const operations=opts.annotationOps??[];
+    const annotationRows=operations.length?(await tx.query<AnnotationRecord>('SELECT id,anchor_key,range FROM annotations WHERE artifact_id=$1 AND root_id IS NULL AND deleted_at IS NULL FOR UPDATE',[id])).rows:[];
+    const receipts=operations.length?(await tx.query<{annotation_changes:AnnotationReceipt[]}>(`SELECT annotation_changes FROM artifact_edits WHERE artifact_id=$1 AND EXISTS (SELECT 1 FROM jsonb_array_elements(annotation_changes) receipt WHERE receipt->>'operationId'=ANY($2::text[]))`,[id,operations.map(op=>op.id)])).rows.flatMap(row=>row.annotation_changes??[]):[];
+    if(operations.some(op=>op.kind==='undo'&&!receipts.some(receipt=>receipt.operationId===op.id&&receipt.direction==='map')))return {conflict:true,reason:'doc_changed',currentVersion:current.version};
+    const effects=operations.length?annotationEffects(current.source??'',replacementIdentity?.source??input.source??'',operations,annotationRows,receipts):{updates:[],receipts:[]};
     await archiveVersion(tx, current);
 
     const updated = await tx.query<ArtifactRow>(
@@ -1028,6 +1034,12 @@ async function replaceScoped(
       await tx.query(swap.sql, swap.params);
     }
     await logWholeDocumentWrite(tx, current, updated.rows[0]);
+    const movedAnnotations=new Set<string>();
+    for(const change of effects.updates){
+      const applied=await tx.query<{id:string}>('UPDATE annotations SET anchor_key=$3,range=$4 WHERE artifact_id=$1 AND id=$2 AND anchor_key=$5 AND range IS NOT DISTINCT FROM $6 RETURNING id',[id,change.annotationId,change.after.anchor,change.after.range,change.before.anchor,change.before.range]);
+      for(const row of applied.rows)movedAnnotations.add(row.id);
+    }
+    if(effects.receipts.length)await tx.query('UPDATE artifact_edits SET annotation_changes=$3::jsonb WHERE artifact_id=$1 AND edit_id=$2',[id,updated.rows[0].edit_id,JSON.stringify(effects.receipts.filter(receipt=>!receipt.annotationId||movedAnnotations.has(receipt.annotationId)))]);
     if (updated.rows[0].format === 'markup' && updated.rows[0].source) {
       const ids = [...nodeIndex(updated.rows[0].source).keys()];
       await tx.query(`INSERT INTO artifact_source_ids (artifact_id,source_id,provenance,first_version)

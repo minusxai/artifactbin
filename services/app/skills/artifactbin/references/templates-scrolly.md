@@ -16,7 +16,7 @@ Beats: [[ template.beats | join(' → ') ]]
 Voice, second person: "you'd expect X — that's not what happened". The humor is in the
 telling, never at the data's expense.
 
-THE CONCEIT (the biggest lever): invent the fiction the data lives inside and
+THE CONCEIT: invent the fiction the data lives inside and
 commit EVERY element to it — the console's name, chapter labels in its voice, figure
 numbers, status chips, timestamps. One conceit, total commitment.
 

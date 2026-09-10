@@ -408,6 +408,8 @@ export async function replaceArtifactWithBody(
   if (governs && !owned) return json({ error: 'owner_only' }, 403);
   const owner = writerFor(current);
   const sentMarkup = body.markup;
+  const annotationOps=body.annotation_ops===undefined?[]:parseAnnotationOperations(body.annotation_ops);
+  if(!annotationOps||annotationOps.length&&typeof sentMarkup!=='string')return json({error:'invalid_annotation_operations'},400);
   const expected = parseExpectedVersion(body);
   if (expected instanceof Response) return expected;
   let normalizeMarkup: ((source: string) => string) | undefined;
@@ -531,7 +533,7 @@ export async function replaceArtifactWithBody(
       ...(visibility ? { visibility } : {}),
       ...(placement ? { ancestor_ids: placement.ancestor_ids } : {}),
     }, expected)
-    : await replaceArtifactFor(actor, id, input, expected);
+    : await replaceArtifactFor(actor, id, input, {...expected,annotationOps});
   if (isVersionConflict(row)) return json({ error: row.reason ?? 'version_conflict', currentVersion: row.currentVersion, ...(row.currentState ? {currentState:row.currentState} : {}) }, 409);
   if (!row) return json({ error: 'not_found' }, 404);
 
