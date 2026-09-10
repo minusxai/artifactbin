@@ -645,6 +645,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
        * would push the other mode's hash while the editor stays mounted — the
        * page in both modes at once, with the editor's drain contract skipped.
        */
+      if (event.data.action === 'select') return; // AnnotationLayer owns the Select tool.
       if (!selectionActionCapabilities(canEdit, canAnnotate, !editing)[event.data.action]) return;
       if (event.data.action === 'edit') {
         beginEdit(event.data.selection.path);

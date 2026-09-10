@@ -487,7 +487,7 @@ describe('view-mode text selection actions', () => {
     expect(toolbar.style.transform).toBe('translate(-50%, 0)');
     expect(toolbar.style.left).toBe('140px');
     const buttons = [...toolbar.querySelectorAll('button')];
-    expect(buttons).toHaveLength(2);
+    expect(buttons).toHaveLength(3);
     expect(buttons.every((button) => button.classList.contains(SELECTION_ACTION_COARSE_CLASS))).toBe(true);
   });
 
@@ -517,4 +517,55 @@ describe('view-mode text selection actions', () => {
     document.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowRight', shiftKey: true, bubbles: true }));
     expect(look).toHaveBeenCalled();
   });
+});
+
+
+describe('document context actions', () => {
+  it('opens Edit and Select on right-click and activates Select without a comment', () => {
+    actions.update({ type: 'mx:selection-actions', edit: true, annotate: true });
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 90 });
+    document.querySelector('p')!.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    const toolbar = document.querySelector(`[${SELECTION_ACTIONS_ATTR}]`)!;
+    expect(toolbar.querySelectorAll('button')).toHaveLength(2);
+    (toolbar.querySelector('[data-mx-selection-action="select"]') as HTMLElement).click();
+    expect(onAction).toHaveBeenCalledWith('select', expect.objectContaining({ path: '0' }));
+  });
+
+  it('preserves native link and Shift+right-click menus and reader permissions', () => {
+    actions.update({ type: 'mx:selection-actions', edit: false, annotate: true });
+    const p = document.querySelector('p')!;
+    p.innerHTML = '<a href="/">link</a>';
+    for (const [target, shiftKey] of [[p.querySelector('a')!, false], [p, true]] as const) {
+      const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, shiftKey });
+      target.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+    }
+    p.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    expect(document.querySelector('[data-mx-selection-action="edit"]')).toBeNull();
+    expect(document.querySelector('[data-mx-selection-action="select"]')).not.toBeNull();
+  });
+});
+
+
+it('long-presses a graphic on touch and cancels a moving gesture', () => {
+  vi.useFakeTimers();
+  try {
+    actions.update({ type: 'mx:selection-actions', edit: true, annotate: true });
+    const p = document.querySelector('p')!;
+    p.innerHTML = '<svg></svg>';
+    const touch = () => {
+      const event = new MouseEvent('pointerdown', { bubbles: true, clientX: 100, clientY: 80 });
+      Object.defineProperty(event, 'pointerType', { value: 'touch' });
+      p.querySelector('svg')!.dispatchEvent(event);
+    };
+    touch();
+    p.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientX: 150, clientY: 80 }));
+    vi.advanceTimersByTime(600);
+    expect(bubbleVisible()).toBe(false);
+    touch();
+    vi.advanceTimersByTime(600);
+    expect(bubbleVisible()).toBe(true);
+    expect(document.querySelector('[data-mx-selection-action="select"]')).not.toBeNull();
+  } finally { vi.useRealTimers(); }
 });

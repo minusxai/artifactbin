@@ -33,7 +33,7 @@
  */
 import { sendDocument, subscribeDocument, documentRect, documentReady, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, ChevronRight, EllipsisVertical, MessageSquare, MousePointerClick, SquareDashed, SquareDashedMousePointer, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, EllipsisVertical, MessageSquare, SquareDashedMousePointer, Trash2, X } from 'lucide-react';
 import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations';
 import { ChatGPTIcon, ClaudeAIIcon, ClaudeCodeIcon, CodexIcon } from '@/components/brand-icons';
 import { foldFromMeasure, isFolded, readFolds, toggleFold, unfold, type FoldKind, type Folds } from '@/lib/comment-folds';
@@ -45,7 +45,7 @@ import { parseMarkdownLite, plainText } from '@/lib/markdown-lite';
 import { RIGHT_RAIL_W } from '@/lib/story/edit-bar';
 import {
   isEditFrameMessage, STORY_ANNOTATIONS_MESSAGE, STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE,
-  STORY_SELECTION_MESSAGE, STORY_SELECT_MESSAGE,
+  STORY_SELECTION_MESSAGE, STORY_SELECT_MESSAGE, STORY_SELECTION_ACTION_MESSAGE,
   type StoryAnnotationsMessage, type StoryEditRect, type StoryEditSelection,
 } from '@/lib/story-runtime/contract';
 
@@ -795,13 +795,12 @@ export default function AnnotationLayer({
   const threadsRoot = useRef<HTMLDivElement>(null);
   const [selection, setSelection] = useState<StoryEditSelection | null>(null);
   /**
-   * A PICK is on, and how: `block` (the frame outlines blocks under the
-   * pointer, a click takes one) or `area` (a dragged rectangle, anchored to
-   * the blocks' common ancestor). Its next `mx:selection` is the composer's
+   * Select outlines blocks under the pointer: a tap takes one, while a
+   * drag draws an area anchored to the blocks' common ancestor. Its next `mx:selection` is the composer's
    * subject. Page state, never the URL — a fact about what someone is doing
    * right now, like a fold or the theme.
    */
-  const [pick, setPick] = useState<'block' | 'area' | null>(null);
+  const [pick, setPick] = useState<'select' | null>(null);
   /** On a phone the rail is a bottom sheet — a 320px rail over a 390px screen
       is the whole document covered, with a strip too narrow to read. */
   const phoneRail = useIsPhoneViewport();
@@ -935,7 +934,7 @@ export default function AnnotationLayer({
     if (railOpen) {
       const forThread = openedForThreadRef.current;
       openedForThreadRef.current = false;
-      if (!forThread && !composingRef.current && pickOnOpen && !phoneRail) setPick('block');
+      if (!forThread && !composingRef.current && pickOnOpen && !phoneRail) setPick('select');
       return;
     }
     if (sheetAwayForPickRef.current) { sheetAwayForPickRef.current = false; return; }
@@ -995,6 +994,16 @@ export default function AnnotationLayer({
     const onMessage = (event: { data: unknown }) => {
       const nonce = nonceRef.current;
       if (!nonce || !isEditFrameMessage(event.data, nonce)) return;
+      if (event.data.type === STORY_SELECTION_ACTION_MESSAGE && event.data.action === 'select') {
+        if (!pickOnOpen) return;
+        setPick('select');
+        setOpenId(null);
+        if (phoneRail && railOpenRef.current) {
+          sheetAwayForPickRef.current = true;
+          onRailOpenChangeRef.current(false);
+        }
+        return;
+      }
       if (event.data.type === STORY_ANNOTATION_LAYOUT_MESSAGE) {
         const next: Record<string, StoryEditRect> = {};
         for (const position of event.data.positions) next[position.id] = position.rect;
@@ -1053,7 +1062,7 @@ export default function AnnotationLayer({
       }
     };
     return subscribeDocument({ frameRef, runtimeRef }, onMessage);
-  }, [frameRef, runtimeRef, sessionNonce, openThread]);
+  }, [frameRef, runtimeRef, sessionNonce, openThread, phoneRail, pickOnOpen]);
 
   const act = useCallback(async (annId: string, body: { reply?: string; resolve?: boolean; reopen?: boolean }) => {
     setBusy(true);
@@ -1194,7 +1203,7 @@ export default function AnnotationLayer({
    * then the only chrome, and carries the way out. On desktop the rail stays;
    * closing it does not cancel a pick for the same reason.
    */
-  const beginPick = (mode: 'block' | 'area') => {
+  const beginPick = (mode: 'select') => {
     setPick(mode);
     setOpenId(null);
     if (phoneRail && railOpenRef.current) {
@@ -1204,7 +1213,7 @@ export default function AnnotationLayer({
   };
   const endPick = () => setPick(null);
   /** The header tools: pressing the active one is the way out; pressing the other switches. */
-  const toggleTool = (mode: 'block' | 'area') => (pick === mode ? endPick() : beginPick(mode));
+  const toggleTool = (mode: 'select') => (pick === mode ? endPick() : beginPick(mode));
 
   // The collapsed 36px identity mark is small enough for phones too; clicking
   // it opens the same rail as a bottom sheet, with no hover dependency.
@@ -1256,12 +1265,8 @@ export default function AnnotationLayer({
           className={`${cardClass} fixed z-30 flex items-center gap-2 border-edge-bright px-3 py-1.5 font-mono text-[11px] text-muted shadow-xl`}
           style={{ left: frameRect.left + frameRect.width / 2, top: frameRect.top + VIEW_COMMENT_INSET, transform: 'translateX(-50%)' }}
         >
-          {pick === 'area'
-            ? <SquareDashed size={12} strokeWidth={1.8} className="shrink-0 text-accent" />
-            : <MousePointerClick size={12} strokeWidth={1.8} className="shrink-0 text-accent" />}
-          <span className="whitespace-nowrap">
-            {pick === 'area' ? 'drag a rectangle to comment on it' : 'click a block or select text to comment'}
-          </span>
+          <SquareDashedMousePointer size={12} strokeWidth={1.8} className="shrink-0 text-accent" />
+          <span className="whitespace-nowrap">tap a block or drag an area to comment</span>
           <button
             type="button"
             aria-label="Cancel picking"
@@ -1372,26 +1377,12 @@ export default function AnnotationLayer({
         header={
           <div className="flex items-center gap-2 px-1">
             <h2 className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-faint">comments</h2>
-            <Tooltip content="Pick a block to comment on">
-              <button
-                type="button"
-                aria-label="Pick a block to comment on"
-                aria-pressed={pick === 'block'}
-                onClick={() => toggleTool('block')}
-                className={`ml-auto inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[3px] hover:bg-surface hover:text-fg ${pick === 'block' ? 'bg-accent-soft text-accent' : 'text-muted'}`}
-              >
+            <Tooltip content="Select a block or drag an area to comment">
+              <button type="button" aria-label="Select" aria-pressed={pick === 'select'}
+                onClick={() => toggleTool('select')}
+                className={`ml-auto inline-flex h-7 cursor-pointer items-center justify-center gap-1 rounded-[3px] px-1.5 hover:bg-surface hover:text-fg ${pick ? 'bg-accent-soft text-accent' : 'text-muted'}`}>
                 <SquareDashedMousePointer size={14} strokeWidth={1.8} />
-              </button>
-            </Tooltip>
-            <Tooltip content="Draw an area to comment on">
-              <button
-                type="button"
-                aria-label="Draw an area to comment on"
-                aria-pressed={pick === 'area'}
-                onClick={() => toggleTool('area')}
-                className={`inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[3px] hover:bg-surface hover:text-fg ${pick === 'area' ? 'bg-accent-soft text-accent' : 'text-muted'}`}
-              >
-                <SquareDashed size={14} strokeWidth={1.8} />
+                <span className="text-xs">Select</span>
               </button>
             </Tooltip>
             <button

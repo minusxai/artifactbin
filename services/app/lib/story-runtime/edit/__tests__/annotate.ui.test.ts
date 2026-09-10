@@ -490,6 +490,25 @@ describe('drawing an area to comment on', () => {
   const selections = () => posted.filter((message) => message.type === STORY_SELECTION_MESSAGE);
   const band = () => document.querySelector('[data-mx-annotate-band]');
 
+  it('Select previews blocks, taps a block, and drags an area with the same tool', () => {
+    const { pa, pb } = mount();
+    session.update({ ...state('on'), pins: [], pick: 'select' });
+    mouse('pointerover', pa, 100, 110);
+    expect(pa).toHaveAttribute('data-mx-annotate-pick-hover');
+    mouse('pointerdown', pa, 100, 110);
+    mouse('pointerup', pa, 100, 110);
+    expect(selections().at(-1)!.selection).toMatchObject({ path: '0.0' });
+    mouse('pointerdown', pa, 100, 110);
+    mouse('pointermove', pb, 300, 190);
+    expect(pa).not.toHaveAttribute('data-mx-annotate-pick-hover');
+    mouse('pointerup', pb, 300, 190);
+    expect(selections().at(-1)!.selection).toMatchObject({ path: '0', range: { kind: 'area' } });
+    mouse('pointerdown', pa, 100, 110);
+    mouse('pointermove', pb, 300, 190);
+    mouse('pointercancel', pb, 300, 190);
+    expect(band()).toBeNull();
+  });
+
   it('a drag across two paragraphs picks their section, with the band as fractions of it', () => {
     const { pa, pb } = mount();
     drawing();
