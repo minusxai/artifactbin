@@ -193,6 +193,7 @@ try {
   await page.mouse.down();
   await page.mouse.move(5, 5, {steps:4});
   await page.locator('[data-mx-drag-preview][data-mx-drop-valid="false"]').waitFor({state:'visible'});
+  assert.equal(await page.locator('[data-mx-drag-preview]').textContent(), '', 'invalid drag feedback contains no text');
   assert.equal(await page.locator('[data-mx-drop-marker]').isVisible(), false);
   await page.mouse.up();
   assert.equal((await head()).markup, beforeMove.markup, 'invalid drop does not edit source');
@@ -200,6 +201,7 @@ try {
   await page.mouse.down();
   await page.mouse.move(destination.x + 20, destination.y + destination.height / 2, {steps:6});
   await page.locator('[data-mx-drag-preview][data-mx-drop-valid="true"]').waitFor({state:'visible'});
+  assert.equal(await page.locator('[data-mx-drag-preview]').textContent(), '', 'valid drag feedback contains no text');
   await page.locator('[data-mx-drop-marker]').waitFor({state:'visible'});
   assert.equal((await head()).markup, beforeMove.markup, 'drag feedback does not edit source');
   await page.mouse.up();

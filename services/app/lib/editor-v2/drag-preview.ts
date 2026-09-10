@@ -7,31 +7,19 @@ export interface DragPreview {
   dispose(): void;
 }
 export function createDragPreview(doc: Document): DragPreview {
-  const ghost = doc.createElement("div");
-  ghost.setAttribute("data-mx-drag-preview", "");
-  ghost.setAttribute("aria-hidden", "true");
-  const summary = doc.createElement("div");
-  Object.assign(ghost.style, {
+  const indicator = doc.createElement("div");
+  indicator.setAttribute("data-mx-drag-preview", "");
+  indicator.setAttribute("aria-hidden", "true");
+  Object.assign(indicator.style, {
     position: "fixed",
     zIndex: "48",
     pointerEvents: "none",
     display: "none",
-    width: "240px",
-    maxWidth: "calc(100vw - 32px)",
-    padding: "10px 14px",
-    border: "1px solid rgba(100,116,139,.25)",
-    borderRadius: "10px",
-    background: "rgba(255,255,255,.96)",
-    color: "#334155",
-    boxShadow: "0 12px 32px rgba(15,23,42,.18)",
-    font: "13px/1.5 system-ui",
+    width: "8px",
+    height: "8px",
+    borderRadius: "50%",
+    background: "#dc2626",
   });
-  Object.assign(summary.style, {
-    maxHeight: "58px",
-    overflow: "hidden",
-    overflowWrap: "anywhere",
-  });
-  ghost.append(summary);
   const marker = doc.createElement("div");
   marker.setAttribute("data-mx-drop-marker", "");
   Object.assign(marker.style, {
@@ -44,7 +32,7 @@ export function createDragPreview(doc: Document): DragPreview {
     background: "#16a34a",
     boxShadow: "0 0 0 2px rgba(22,163,74,.12)",
   });
-  doc.body.append(ghost, marker);
+  doc.body.append(indicator, marker);
   let source: HTMLElement | null = null;
   let sourcePath = "";
   const parentPath = (path: string) => path.split(".").slice(0, -1).join(".");
@@ -52,17 +40,12 @@ export function createDragPreview(doc: Document): DragPreview {
     el.parentElement?.closest("[data-mx-ast]");
   const clear = () => {
     source = null;
-    ghost.style.display = marker.style.display = "none";
+    indicator.style.display = marker.style.display = "none";
   };
   return {
     start(element, path) {
       source = element;
       sourcePath = path;
-      // Never clone authored DOM: previews must not duplicate IDs, interactive
-      // embeds, scripts, subscriptions or ProseMirror's owned nodes.
-      summary.textContent =
-        element.textContent?.trim().replace(/\s+/g, " ").slice(0, 160) ||
-        element.tagName.toLowerCase();
     },
     update(x, y, keyboardTarget) {
       if (!source?.isConnected) {
@@ -91,14 +74,12 @@ export function createDragPreview(doc: Document): DragPreview {
       const after =
         valid &&
         Number(path!.split(".").at(-1)) > Number(sourcePath.split(".").at(-1));
-      ghost.style.borderColor = valid
-        ? "rgba(22,163,74,.4)"
-        : "rgba(220,38,38,.4)";
-      ghost.setAttribute("data-mx-drop-valid", String(valid));
-      Object.assign(ghost.style, {
+      indicator.style.background = valid ? "#16a34a" : "#dc2626";
+      indicator.setAttribute("data-mx-drop-valid", String(valid));
+      Object.assign(indicator.style, {
         display: "block",
-        left: `${Math.max(8, Math.min(x + 18, (doc.defaultView?.innerWidth ?? 1000) - 280))}px`,
-        top: `${Math.max(8, Math.min(y + 18, (doc.defaultView?.innerHeight ?? 800) - 110))}px`,
+        left: `${Math.max(8, Math.min(x + 12, (doc.defaultView?.innerWidth ?? 1000) - 16))}px`,
+        top: `${Math.max(8, Math.min(y + 12, (doc.defaultView?.innerHeight ?? 800) - 16))}px`,
       });
       marker.style.display = valid ? "block" : "none";
       if (!valid) return;
@@ -135,7 +116,7 @@ export function createDragPreview(doc: Document): DragPreview {
     clear,
     dispose() {
       clear();
-      ghost.remove();
+      indicator.remove();
       marker.remove();
     },
   };

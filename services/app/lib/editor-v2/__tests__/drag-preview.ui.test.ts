@@ -30,15 +30,13 @@ function fixture() {
   preview.start(source, "0.0");
   return { source, target };
 }
-it("shows a text-only shadow preview and the actual insertion edge before committing", () => {
+it("shows only colour feedback and the actual insertion edge before committing", () => {
   const { source, target } = fixture();
   expect(preview.update(30, 110)).toBe("0.1");
+  expect(document.querySelector<HTMLElement>("[data-mx-drag-preview]")!.style.width).toBe("8px");
   expect(
     document.querySelector("[data-mx-drag-preview]")?.textContent,
-  ).toContain("Move me");
-  expect(
-    document.querySelector("[data-mx-drag-preview]")?.textContent,
-  ).toBe("Move me");
+  ).toBe("");
   expect(
     document.querySelector<HTMLElement>("[data-mx-drop-marker]")!.style.top,
   ).toBe("140px");
@@ -49,7 +47,7 @@ it("shows a text-only shadow preview and the actual insertion edge before commit
   expect(preview.update(30, 20)).toBe("0.0");
   expect(
     document.querySelector("[data-mx-drag-preview]")?.textContent,
-  ).toBe("Destination");
+  ).toBe("");
 });
 it("rejects self and other parents, and resolves nested hits to the sibling container", () => {
   const { source } = fixture();
@@ -58,7 +56,7 @@ it("rejects self and other parents, and resolves nested hits to the sibling cont
     expect(preview.update(30, 110)).toBeUndefined();
     expect(
       document.querySelector("[data-mx-drag-preview]")?.textContent,
-    ).toBe("Move me");
+    ).toBe("");
     expect(
       document.querySelector<HTMLElement>("[data-mx-drop-marker]")!.style
         .display,
