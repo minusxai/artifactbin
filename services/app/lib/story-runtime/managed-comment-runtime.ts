@@ -192,7 +192,7 @@ export function createManagedCommentRuntime(win: Window, send: (message: Managed
   const selecting = () => !!(state?.enabled&&state.canComment&&(state.picking||state.blockPicking));
   const draggedWords = () => {const selection=win.getSelection();return !!selection&&!selection.isCollapsed&&!!selection.toString();};
   const pinAt = (node:Element|null) => {for(let el=node;el;el=el.parentElement){const pin=state?.pins.find(pin=>resolve(pin.target).node===el);if(pin)return pin;}return null;};
-  const leave=(e:Event)=>{if(!(e as MouseEvent).relatedTarget){hovered=null;schedule();}};
+  const leave=(e:Event)=>{if(!(e as MouseEvent).relatedTarget){hovered=null;if(state?.enabled)send({type:'comment-hover',generation:state.generation,id:null});schedule();}};
   listen('mouseout',leave);listen('pointerout',leave);
   listen('mouseover',e=>{if(selecting()){hovered=element(e);schedule();}else if(state?.enabled){send({type:'comment-hover',generation:state.generation,id:pinAt(element(e))?.id??null});}});
   listen('pointerdown',e=>{

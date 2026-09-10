@@ -177,3 +177,15 @@ it('keeps the context Select menu through the release of a long press', () => {
   expect(document.querySelector('[aria-label="Document actions"] [aria-label="Select"]')).not.toBeNull();
   runtime.dispose();
 });
+
+it('clears the parent comment hover when the pointer leaves the iframe',()=>{
+  document.body.innerHTML='<p id="saved">Annotated words</p>';
+  const send=vi.fn(),runtime=createManagedCommentRuntime(window,send,COMMENT_PRESENTATION);
+  runtime.update({type:'comment-state',generation:'a',enabled:true,picking:false,canComment:true,pins:[{id:'comment',target:{kind:'source',id:'saved'}}],openId:null,hoverId:null,selection:null});
+  const node=document.querySelector('p')!;
+  node.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}));
+  expect(send).toHaveBeenLastCalledWith({type:'comment-hover',generation:'a',id:'comment'});
+  node.dispatchEvent(new MouseEvent('mouseout',{bubbles:true,relatedTarget:null}));
+  expect(send).toHaveBeenLastCalledWith({type:'comment-hover',generation:'a',id:null});
+  runtime.dispose();
+});
