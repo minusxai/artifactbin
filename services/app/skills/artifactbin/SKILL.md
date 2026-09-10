@@ -34,8 +34,8 @@ components (`Card`, `Tabs`, `Grid`, `SlideDeck`, `Icon`) and data embeds
 (`Question`, `DataTable`, `Number`). Style parent elements with Tailwind
 `className`; inline `style=` is rejected.
 
-**Prefer native JSX**, kit controls, conditions and Dialog. Reserve `<Iframe>`
-for isolated DOM-script/canvas widgets; never frame an entire document.
+**Prefer native JSX**, kit controls, conditions and Dialog. Use `<Iframe>`
+only for isolated DOM-script/canvas widgets.
 
 **HTML/component names only: guess rather than look up.** Unknown tags return
 400 with `allowed_html_tags`; unknown components return the registry. Exception:
@@ -49,7 +49,7 @@ in ONE `<Helmet>`, which also holds `<title>`:
 
 **Design for a 390px CONTAINER.** Use `@2xl:`, `@3xl:`, not viewport
 `sm:`/`md:`/`lg:`. Prefer `Grid mode="flow"` / `GridItem w={6}` for columns
-and sidebars; keep simple prose unwrapped. Flow stacks on phones. For CSS grids,
+and sidebars; leave prose unwrapped. Flow stacks on phones. For CSS grids,
 start `grid-cols-1 @2xl:grid-cols-3`; type `text-4xl @2xl:text-6xl`.
 No fixed pixel widths or bare `text-6xl`.
 
