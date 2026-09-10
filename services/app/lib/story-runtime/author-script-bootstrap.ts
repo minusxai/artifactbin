@@ -1,3 +1,4 @@
+import {createManagedCommentRuntime} from './managed-comment-runtime';
 import {MANAGED_FETCH_BOOTSTRAP} from './managed-fetch-bootstrap';
 import {AUTHOR_REALM_LOCKDOWN} from './author-realm-lockdown';
 /**
@@ -8,12 +9,16 @@ import {AUTHOR_REALM_LOCKDOWN} from './author-realm-lockdown';
 export const AUTHOR_SCRIPT_BOOTSTRAP = `
 ${AUTHOR_REALM_LOCKDOWN}
 (() => {
+  // esbuild keepNames may annotate inner functions; supply its name helper in this realm.
+  const __name = (fn, name) => Object.defineProperty(fn, 'name', {value:name, configurable:true});
+  const createComments = ${createManagedCommentRuntime.toString()};
   let initialized = false;
   addEventListener('message', event => {
     if (initialized || event.source !== parent || event.data !== 'mx:author:init' || event.ports.length !== 1) return;
     initialized = true;
     const port = event.ports[0];
     const send = port.postMessage.bind(port);
+    let comments = null, commentState = null;
     let state = { values: {}, tables: {}, errors: {} }, pending = [], sequence = 0, started = false;
     const waiting = new Map(), valuesListeners = new Set(), dataListeners = new Set();
     const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key) ? object[key] : undefined;
@@ -29,6 +34,7 @@ ${AUTHOR_REALM_LOCKDOWN}
     addEventListener('error', event => send({type:'author-error',error:event.message || 'Iframe script failed'}));
     addEventListener('unhandledrejection', event => send({type:'author-error',error:String(event.reason?.message || event.reason || 'Iframe script failed')}));
     addEventListener('pagehide', () => {
+      comments?.dispose();
       assetAbort?.abort(); valuesListeners.clear(); dataListeners.clear();
       for (const task of waiting.values()) { clearTimeout(task.timer); task.reject(new Error('Iframe disposed')); }
       waiting.clear(); port.close();
@@ -61,7 +67,9 @@ ${AUTHOR_REALM_LOCKDOWN}
     Object.defineProperty(window, 'mx', { value: mx, writable: false, configurable: false });
     port.onmessage = async event => {
       const message = event.data;
-      if (message.type === 'state') {
+      if (message.type === 'comment-state') {
+        commentState = message; comments?.update(message);
+      } else if (message.type === 'state') {
         if (message.reset) state = { values: {}, tables: {}, errors: {} };
         const changed = { values: [], tables: [], errors: [] };
         for (const field of ['values', 'tables', 'errors']) {
@@ -102,6 +110,7 @@ ${AUTHOR_REALM_LOCKDOWN}
           // Only the isolated realm receives prepared author HTML. Scripts are
           // separate data, inserted with textContent, never HTML interpolation.
           if (typeof message.html === 'string') document.body.insertAdjacentHTML('afterbegin', message.html);
+          if (message.managed) { comments = createComments(window, send); if(commentState) comments.update(commentState); }
           const scripts = message.scripts || [{type:'classic',source:message.source}];
           for (const item of scripts) {
             const script = document.createElement('script');
