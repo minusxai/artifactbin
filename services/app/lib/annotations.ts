@@ -1,3 +1,4 @@
+import type { CommentTarget } from '@/lib/story/comment-target';
 /**
  * ANNOTATIONS — human/agent comments pinned to nodes of a document. The ONLY reader/writer of the
  * `annotations` table.
@@ -25,7 +26,7 @@ import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import {
   canonicalQuote, canonicalText, parseAnnotationRange, parseRel,
   type AnnotationRange,
- isAreaRange } from '@/lib/story/annotation-range';
+ isAreaRange, isTargetRange } from '@/lib/story/annotation-range';
 import { bodyPathToSourcePath, sourcePathToBodyPath } from '@/lib/story/edit-compose';
 import { channelForAnnotations } from '@/lib/story/live';
 import { resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
@@ -270,6 +271,7 @@ function storedRange(raw: string | null): AnnotationRange | null {
 function quoteFound(entry: AnchorEntry | undefined, quote: string | null, range: AnnotationRange | null): boolean | null {
   if (quote === null) return null;
   if (!entry) return false;
+  if (isTargetRange(range)) return null;
   // An area names no words — the door refuses a quote beside one — so with
   // the anchor still here there is nothing more to look for.
   if (!range || isAreaRange(range)) return true;
@@ -277,6 +279,16 @@ function quoteFound(entry: AnchorEntry | undefined, quote: string | null, range:
     const node = nodeForRel(entry, part.rel);
     return !!node && canonicalTextOf(node).includes(part.text);
   });
+}
+
+/** Validate source-owned identity while leaving dynamic identity to runtime resolution. */
+function targetBelongsTo(owner: JsxElement, target: CommentTarget): boolean {
+  const entries = new Map<string, JsxElement>();
+  const walk = (node: JsxNode) => { if (node.type !== 'element') return; const id = anchorKeyOf(node); if (id) entries.set(id, node); node.children.forEach(walk); };
+  walk(owner);
+  if (target.kind === 'iframe') return owner.tag === 'Iframe' && (target.node.kind !== 'source' || (entries.has(target.node.id) && target.node.id !== anchorKeyOf(owner)));
+  if (target.kind === 'table') return owner.tag === 'DataTable' && (!target.templateNodeId || entries.has(target.templateNodeId));
+  return owner.tag === 'For' && target.scopes[0].nodeId === anchorKeyOf(owner) && target.scopes.every((scope) => entries.get(scope.nodeId)?.tag === 'For') && entries.has(target.templateNodeId);
 }
 
 /**
@@ -310,6 +322,7 @@ export async function createAnnotationFor(
     if (!node || node.type !== 'element') return { refused: 'bad_path' };
     const anchorKey = anchorKeyOf(node);
     if (!anchorKey) return { refused: 'bad_path' };
+    if (isTargetRange(input.range) && !targetBelongsTo(node, input.range.target)) return { refused: 'bad_path' };
     const inserted = await tx.query<AnnotationRowDb>(
     `INSERT INTO annotations
        (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport,

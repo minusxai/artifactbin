@@ -1,3 +1,4 @@
+import { COMMENT_OWNER_ATTR, COMMENT_TARGET_ATTR, parseCommentTarget } from '@/lib/story/comment-target';
 /**
  * WHAT THE USER SELECTED, DESCRIBED RATHER THAN REFERENCED.
  *
@@ -82,4 +83,19 @@ export function describeSelection(el: Element, nodes: JsxNode[]): StoryEditSelec
     style: el.getAttribute('style') ?? '',
     ancestors: ancestorCrumbs(el, nodes),
   };
+}
+
+/** Runtime instance selection always keeps its verified source owner separately. */
+export function describeCommentSelection(el: Element, nodes: JsxNode[]): StoryEditSelection | null {
+  const marked = el.closest(`[${COMMENT_TARGET_ATTR}]`);
+  if (!marked) return describeSelection(el, nodes);
+  let target;
+  try { target = parseCommentTarget(JSON.parse(marked.getAttribute(COMMENT_TARGET_ATTR) ?? 'null')); } catch { return null; }
+  const ownerId = marked.getAttribute(COMMENT_OWNER_ATTR);
+  if (!target || !ownerId) return null;
+  const owner = [...el.ownerDocument.querySelectorAll(`[${AST_PATH_ATTR}]`)].find((candidate) => candidate.id === ownerId && candidate.contains(marked));
+  const description = owner ? describeSelection(owner, nodes) : null;
+  if (!description || description.nodeId !== ownerId || !['For', 'DataTable'].includes(description.tag)) return null;
+  const rect = marked.getBoundingClientRect();
+  return {...description, rect:{x:rect.x,y:rect.y,width:rect.width,height:rect.height},range:{v:1,kind:'target',target}};
 }

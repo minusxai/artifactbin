@@ -1,3 +1,6 @@
+import { connectManagedComments } from '../../managed-comment-host';
+import type { ManagedCommentState } from '../../managed-comment-contract';
+import type { StoryEditSelection } from '../../contract';
 /**
  * The frame owns annotation geometry: the parent cannot inspect a sandboxed
  * document, so view-mode comment cards follow a signed, scroll-live layout
@@ -601,4 +604,42 @@ describe('drawing an area to comment on', () => {
     document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     expect(selections().at(-1)).toMatchObject({ selection: null });
   });
+});
+
+describe('runtime instance targeting', () => {
+  it('resolves the exact typed row and falls back to owner after removal', () => {
+    document.body.innerHTML='<div id="table" data-mx-ast="0"><table><tbody><tr><td id="cell">Alice</td><td id="other">Bob</td></tr></tbody></table></div>';
+    const target={kind:'table' as const,rowKey:1,columnKey:'name'};
+    const cell=document.getElementById('cell')!;cell.setAttribute('data-mx-comment-owner','table');cell.setAttribute('data-mx-comment-target',JSON.stringify(target));
+    const other=document.getElementById('other')!;other.setAttribute('data-mx-comment-owner','table');other.setAttribute('data-mx-comment-target',JSON.stringify({...target,rowKey:'1'}));
+    vi.spyOn(cell,'getBoundingClientRect').mockReturnValue({x:10,y:20,width:30,height:40} as DOMRect);
+    const parsed=parseJsx('<DataTable id="table" rows={[]} />');if(!parsed.ok) throw Error('parse');session.setNodes(parsed.nodes);
+    const message:StoryAnnotationsMessage={...state('on'),pins:[{id:'cell-comment',path:'0',key:'table',nodeId:'table',range:{v:1,kind:'target',target}}]};
+    session.update(message);
+    expect(layouts().at(-1)).toMatchObject({positions:[{id:'cell-comment',status:'exact',rect:{x:10,y:20}}]});
+    expect(cell).toHaveAttribute('data-mx-annotated');expect(other).not.toHaveAttribute('data-mx-annotated');
+    cell.remove();session.update(message);
+    expect(layouts().at(-1)).toMatchObject({positions:[{id:'cell-comment',status:'missing'}]});
+    expect(document.getElementById('table')).toHaveAttribute('data-mx-annotated');expect(other).not.toHaveAttribute('data-mx-annotated');
+  });
+});
+
+it('replays iframe selection and preserves inner geometry when composer state returns', () => {
+  document.body.innerHTML='<div id="frame" data-mx-ast="0" data-mx-managed-frame=""><div id="inner"></div></div>';
+  const owner=document.getElementById('frame')!;
+  vi.spyOn(owner,'getBoundingClientRect').mockReturnValue({x:100,y:200,width:400,height:300} as DOMRect);
+  const parsed=parseJsx('<Iframe id="frame"><p id="static">Static</p></Iframe>');if (!parsed.ok) throw Error('parse');session.setNodes(parsed.nodes);
+  session.update({...state('on'),pins:[],pick:'select'});
+  const states:ManagedCommentState[]=[];
+  const host=connectManagedComments(document.getElementById('inner')!, (state)=>states.push(state));
+  const generation=states.at(-1)!.generation;
+  host.receive({type:'comment-selection',generation,selection:{target:{kind:'key',path:['row']},rect:{x:10,y:20,width:50,height:30}}});
+  const selected=posted.filter((message)=>message.type===STORY_SELECTION_MESSAGE).at(-1)!.selection as StoryEditSelection;
+  expect(selected).toMatchObject({nodeId:'frame',rect:{x:110,y:220},range:{kind:'target',target:{kind:'iframe',node:{kind:'key',path:['row']}}}});
+  session.update({...state('on'),pins:[],selectedPath:'0',selected});
+  expect(states.at(-1)?.selection).toMatchObject({target:{kind:'key',path:['row']},rect:{x:10,y:20}});
+  const count=posted.filter((message)=>message.type===STORY_SELECTION_MESSAGE).length;
+  host.receive({type:'comment-selection',generation,selection:{target:{kind:'source',id:'foreign'},rect:{x:0,y:0,width:10,height:10}}});
+  expect(posted.filter((message)=>message.type===STORY_SELECTION_MESSAGE)).toHaveLength(count);
+  host.dispose();
 });

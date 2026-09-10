@@ -18,3 +18,15 @@ describe('durable comment refinements', () => {
     ]) expect(parseCommentTarget(target)).toBeNull();
   });
 });
+
+describe('strict identity boundaries', () => {
+  it('rejects unknown fields, excessive nesting and invalid identity characters', () => {
+    for (const target of [
+      {kind:'table',rowKey:'ok',owner:'forged'},
+      {kind:'iframe',node:{kind:'source',id:'x\u0000'}},
+      {kind:'iframe',node:{kind:'session',id:'x',generation:''}},
+      {kind:'iframe',node:{kind:'key',path:Array(17).fill('x')}},
+      {kind:'repeat',templateNodeId:'x',scopes:[{nodeId:'a',key:1},{nodeId:'a',key:2}]},
+    ]) expect(parseCommentTarget(target)).toBeNull();
+  });
+});

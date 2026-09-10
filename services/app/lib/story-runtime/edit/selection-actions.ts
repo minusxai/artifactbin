@@ -1,5 +1,8 @@
 'use client';
 
+import { COMMENT_TARGET_ATTR } from '@/lib/story/comment-target';
+import { isTargetRange } from '@/lib/story/annotation-range';
+
 /**
  * THE VIEW-MODE TEXT-SELECTION BUBBLE, inside the sandboxed document.
  *
@@ -11,7 +14,7 @@
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import type { JsxNode } from '@/lib/jsx';
 import type { StoryEditSelection, StorySelectionActionsMessage } from '../contract';
-import { describeSelection } from './describe-selection';
+import { describeSelection, describeCommentSelection } from './describe-selection';
 import { anchorFor, describeRange } from './selection-range';
 
 export const SELECTION_ACTIONS_ATTR = 'data-mx-selection-actions';
@@ -195,7 +198,7 @@ export function createFrameSelectionActions({
     }
     toolbar.setAttribute('aria-label', context ? 'Document actions' : 'Text selection actions');
     toolbar.replaceChildren();
-    if (capabilities.edit) toolbar.appendChild(makeButton('edit'));
+    if (capabilities.edit && !isTargetRange(activeSelection?.range)) toolbar.appendChild(makeButton('edit'));
     if (capabilities.annotate && !context) toolbar.appendChild(makeButton('annotate'));
     if (capabilities.annotate) toolbar.appendChild(makeButton('select'));
     return toolbar;
@@ -242,7 +245,7 @@ export function createFrameSelectionActions({
     }
     const stampedAt = (node: Node): Element | null => {
       const element = node.nodeType === 1 ? node as Element : node.parentElement;
-      return element?.closest(`[${AST_PATH_ATTR}]`) ?? null;
+      return element?.closest(`[${COMMENT_TARGET_ATTR}], [${AST_PATH_ATTR}]`) ?? null;
     };
     /*
      * An endpoint the selection does not actually COVER is not a candidate.
@@ -292,7 +295,7 @@ export function createFrameSelectionActions({
       hide();
       return;
     }
-    const described = describeSelection(element, nodes);
+    const described = element.closest(`[${COMMENT_TARGET_ATTR}]`) ? describeCommentSelection(element, nodes) : describeSelection(element, nodes);
     if (!described) { hide(); return; }
     const rect = range.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) { hide(); return; }
@@ -306,11 +309,11 @@ export function createFrameSelectionActions({
      * offering nothing.
      */
     const anchor = anchorFor(range);
-    const annotated = anchor && !anchor.closest('.mx-rail, .mx-present') ? describeSelection(anchor, nodes) : null;
+    const annotated = anchor && !anchor.closest('.mx-rail, .mx-present') ? describeCommentSelection(anchor, nodes) : null;
     if (annotated && anchor) {
       const captured = describeRange(range, anchor);
       annotated.quote = captured.quote;
-      annotated.range = captured.range;
+      annotated.range = isTargetRange(annotated.range) ? {...annotated.range,range:captured.range} : captured.range;
     }
     activeAnnotation = annotated;
     const surface = ensureToolbar();
@@ -440,8 +443,8 @@ export function createFrameSelectionActions({
     if (!target?.closest || (root && !root.contains(target))) return;
     if (target.closest('a, input, textarea, select, [contenteditable="true"], .mx-rail, .mx-present')) return;
     if (win.getSelection()?.toString().trim()) { showForSelection(); return; }
-    const element = target.closest(`[${AST_PATH_ATTR}]`);
-    const described = element && describeSelection(element, nodes);
+    const element = target.closest(`[${COMMENT_TARGET_ATTR}], [${AST_PATH_ATTR}]`);
+    const described = element && (element.closest(`[${COMMENT_TARGET_ATTR}]`) ? describeCommentSelection(element, nodes) : describeSelection(element, nodes));
     if (!described) return;
     event.preventDefault();
     hide();

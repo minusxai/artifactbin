@@ -480,12 +480,13 @@ function ThreadFoldControl({ folded, onToggle }: { folded: boolean; onToggle: ()
 }
 
 function Thread({
-  a, open, resolved, hovered, busy, folded, justOpened, isCommentFolded,
+  a, open, resolved, hovered, busy, folded, justOpened, isCommentFolded, targetMissing,
   onOpen, onHover, onReply, onResolve, onReopen, onDelete, onToggleFold, onToggleComment,
 }: {
   a: AnnotationWire;
   open: boolean;
   resolved?: boolean;
+  targetMissing?: boolean;
   hovered: boolean;
   busy: boolean;
   /** This viewer folded the whole conversation away. */
@@ -574,6 +575,11 @@ function Thread({
             </>
           )}
         </div>
+      )}
+      {!folded && targetMissing && !a.orphaned && (
+        <p className="border-b border-edge bg-surface/60 px-3 py-1.5 font-mono text-[10px] text-faint">
+          Exact target is unavailable. This comment remains attached to its containing block.
+        </p>
       )}
       {!folded && a.orphaned && (
         <p className="border-b border-edge bg-surface/60 px-3 py-1.5 font-mono text-[10px] text-faint">
@@ -791,6 +797,7 @@ export default function AnnotationLayer({
   const [hoverId, setHoverId] = useState<string | null>(null);
   const uiHoverId = useRef<string | null>(null);
   const hoverUi = (id:string|null) => { uiHoverId.current=id; setHoverId(id); };
+  const [missingTargets, setMissingTargets] = useState<Set<string>>(new Set());
   const [anchorRects, setAnchorRects] = useState<Record<string, StoryEditRect>>({});
   const threadsRoot = useRef<HTMLDivElement>(null);
   const [selection, setSelection] = useState<StoryEditSelection | null>(null);
@@ -975,10 +982,12 @@ export default function AnnotationLayer({
       openId,
       hoverId,
       selectedPath: selection?.path ?? null,
+      selected: selection,
+      canComment: true,
       pick,
     };
     postToFrame(message);
-  }, [annotations, hoverId, openId, pick, selection?.path, sessionNonce, postToFrame]);
+  }, [annotations, hoverId, openId, pick, selection, sessionNonce, postToFrame]);
   // Closing the rail drops what only the rail was showing; the pins stay.
   useEffect(() => {
     if (!railOpen) { setOpenResolvedId(null); setOpenId(null); }
@@ -1007,6 +1016,7 @@ export default function AnnotationLayer({
       if (event.data.type === STORY_ANNOTATION_LAYOUT_MESSAGE) {
         const next: Record<string, StoryEditRect> = {};
         for (const position of event.data.positions) next[position.id] = position.rect;
+        setMissingTargets(new Set(event.data.positions.filter((p) => p.status === 'missing' || p.status === 'ambiguous').map((p) => p.id)));
         setAnchorRects(next);
         return;
       }
@@ -1048,8 +1058,9 @@ export default function AnnotationLayer({
          * anchor would not describe it.
          */
         setSelection((previous) => {
+          if (JSON.stringify(previous) === JSON.stringify(reported)) return previous;
           const sameIdentity = reported?.nodeId && previous?.nodeId && reported.nodeId === previous.nodeId;
-          if (!sameIdentity) return reported;
+          if (!sameIdentity || reported?.range) return reported;
           // The words, or the drawn area — whichever this comment is about.
           return {
             ...reported,
@@ -1402,6 +1413,7 @@ export default function AnnotationLayer({
         )}
         {annotations.map((a) => (
           <Thread
+            targetMissing={missingTargets.has(a.id)}
             key={a.id}
             a={a}
             open={openId === a.id}
@@ -1433,6 +1445,7 @@ export default function AnnotationLayer({
         </div>
         {(resolvedList ?? []).map((a) => (
           <Thread
+            targetMissing={missingTargets.has(a.id)}
             key={a.id}
             a={a}
             open={openResolvedId === a.id}

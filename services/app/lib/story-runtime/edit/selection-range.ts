@@ -1,3 +1,4 @@
+import { COMMENT_TARGET_ATTR } from '@/lib/story/comment-target';
 /**
  * THE SELECTION, DESCRIBED FROM ITS ANCHOR — the frame half of a comment's quote.
  *
@@ -46,14 +47,14 @@ function isBlock(el: Element): boolean {
   const tag = el.tagName.toLowerCase();
   if (BLOCK_TAGS.has(tag)) return true;
   const parentTag = el.parentElement?.tagName.toLowerCase() ?? '';
-  return el.hasAttribute(AST_PATH_ATTR) && !BLOCK_TAGS.has(parentTag);
+  return (el.hasAttribute(AST_PATH_ATTR) || el.hasAttribute(COMMENT_TARGET_ATTR)) && !BLOCK_TAGS.has(parentTag);
 }
 
 /** The nearest addressable block at or above `node` — null when nothing above it is one. */
 function blockAt(node: Node | null): Element | null {
   let el = node?.nodeType === Node.ELEMENT_NODE ? node as Element : node?.parentElement ?? null;
   for (; el; el = el.parentElement) {
-    if (isBlock(el) && el.hasAttribute(AST_PATH_ATTR)) return el;
+    if (isBlock(el) && (el.hasAttribute(AST_PATH_ATTR) || el.hasAttribute(COMMENT_TARGET_ATTR))) return el;
   }
   return null;
 }
