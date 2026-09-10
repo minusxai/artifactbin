@@ -81,4 +81,19 @@ templates:
       - KPI band (3-4 trend cards — value + delta + sparkline — in one Grid row)
       - Evidence tiles (charts/tables on the same Grid, every query bound to the controls)
       - Status footer (sources · window · refresh cadence)
+  plan:
+    label: Plan
+    description: Visual working plan — screen designs or process diagrams, decisions, and milestones tracked through completion.
+    personality: >-
+      A carefully composed working board: generous space for the proposed design, compact
+      notes beside the evidence, and a crisp execution ledger. A restrained accent connects
+      screen IDs, flow arrows and status; the drawings carry the proposal. UI plans show
+      spatial wireframes and screen transitions; operational plans show dependencies and
+      decision branches. Beautiful because the next decision and next action are clear.
+    beats:
+      - Brief (outcome, scope, constraints, current status)
+      - Visual proposal (UI wireframes or process/dependency diagrams)
+      - Flows and states (actions, branches, failures and recovery)
+      - Decisions (tradeoffs, open questions and acceptance criteria)
+      - Execution ledger (owners, dependencies, checkboxes and completion)
 themes: {}
