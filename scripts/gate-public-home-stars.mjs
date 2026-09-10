@@ -8,7 +8,8 @@ const browser = await chromium.launch({ headless: true });
 async function readyStar(star) {
   await star.locator('[data-mx-github-count]').filter({ hasText: '1,234' }).waitFor();
   assert(await star.locator('a svg').isVisible());
-  assert.equal(await star.locator('svg').getAttribute('fill'), 'currentColor');
+  assert(await star.getByText('Star', { exact: true }).isVisible());
+  assert.equal(await star.locator('svg').getAttribute('fill'), 'light-dark(#eac54f, #e3b341)');
   assert.equal(await star.locator('iframe').count(), 0);
   assert.equal(await star.locator('a').getAttribute('href'), 'https://github.com/minusxai/artifactbin');
 }
@@ -63,7 +64,9 @@ try {
   assert.deepEqual(await page.evaluate(() => { window.__watchHome = false; return window.__homeFailures; }), []);
   const appStar = page.locator('header [data-mx-github-star]:visible');
   const appBox = await appStar.boundingBox();
-  assert(appBox.width >= 28 && appBox.width < 120, 'custom icon/count fits the topbar');
+  assert(appBox.width >= 28 && appBox.width < 140, `Star button/count fits the topbar (${appBox.width}px)`);
+  const controlsBox = await page.getByRole('button', { name: 'Open page controls', exact: true }).boundingBox();
+  assert(appBox.x + appBox.width <= controlsBox.x, 'Star button leaves page controls unobstructed');
   assert(appBox.y < 44 && appBox.x > 640);
   console.log('ok uninterrupted landing through slow JS/session/home; asynchronous count in app topbar');
   await appStar.locator('a').evaluate(link => { window.__starBeforeControls = link; });
@@ -117,12 +120,12 @@ try {
       chrome.style.setProperty('--mx-reader-scheme', theme);
       chrome.style.setProperty('--mx-reader-fg', color);
     }, { theme, color });
-    assert(await star.locator('svg').evaluate((svg, expected) => new Promise(resolve => {
+    assert(await star.locator('svg').evaluate((svg, { color, theme }) => new Promise(resolve => {
       const deadline = performance.now() + 3_000;
-      const sample = () => getComputedStyle(svg).fill === expected ? resolve(true)
+      const sample = () => getComputedStyle(svg).fill === (theme === 'dark' ? 'rgb(227, 179, 65)' : 'rgb(234, 197, 79)') && getComputedStyle(svg.closest('a')).color === color ? resolve(true)
         : performance.now() > deadline ? resolve(false) : requestAnimationFrame(sample);
       sample();
-    }), color), `GitHub icon inherits the ${theme} reader palette`);
+    }), { color, theme }), `GitHub star stays yellow while its label inherits the ${theme} reader palette`);
     assert(await star.locator('a').evaluate(link => link === window.__readerStar), 'palette changes preserve the link');
     await readyStar(star);
   }
