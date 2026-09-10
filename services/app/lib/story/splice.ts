@@ -22,7 +22,6 @@
  * string coordinates) into the STORED source, which is canonical serialize
  * form — see publishJsx — so parser spans index into it exactly.
  */
-import { randomBytes } from 'crypto';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
 
 /** Replace `[start, start+removed.length)` with `inserted`, in base-version coords. */
@@ -291,5 +290,5 @@ export function reconstructBaseSource(head: string, intervening: EditRecord[]): 
 
 /** Unguessable 128-bit edit id — a read-proof, not a sequence number. */
 export function newEditId(): string {
-  return randomBytes(16).toString('hex');
+  return Array.from(globalThis.crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
 }

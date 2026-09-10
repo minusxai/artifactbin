@@ -1,3 +1,4 @@
+import {parseAnnotationOperations} from './story/annotation-edits';
 import { notifyRemoteComment } from './remote/mentions';
 import {prepareCatalog,catalogOf} from '@/lib/datasets/catalog';
 import {DatasetError} from '@/lib/datasets/errors';
@@ -632,6 +633,8 @@ export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: 
 
 /** Body → EditInput; null = malformed (both content forms, neither change nor meta, wrong types). */
 function parseEditBody(body: Record<string, unknown>): EditInput | null {
+  const annotationOps=body.annotation_ops===undefined?[]:parseAnnotationOperations(body.annotation_ops);
+  if(!annotationOps)return null;
   const editId = body.edit_id;
   if (typeof editId !== 'string' || editId.length === 0) return null;
 
@@ -663,7 +666,7 @@ function parseEditBody(body: Record<string, unknown>): EditInput | null {
   const hasMeta = Object.keys(meta).length > 0;
 
   if (!change && !hasMeta) return null; // an edit that changes nothing is malformed
-  return { baseEditId: editId, ...(change ? { change } : {}), ...(hasMeta ? { meta } : {}) };
+  return { baseEditId: editId, ...(annotationOps.length?{annotationOps}:{}), ...(change ? { change } : {}), ...(hasMeta ? { meta } : {}) };
 }
 
 /**

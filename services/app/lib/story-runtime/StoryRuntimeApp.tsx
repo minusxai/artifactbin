@@ -10,7 +10,7 @@
  */
 import { cloneElement, createContext, useContext, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { CSSProperties, ReactElement, ReactNode } from 'react';
-import type { JsxElement } from '@/lib/jsx';
+import type { JsxElement, JsxNode } from '@/lib/jsx';
 import type { ComponentType } from 'react';
 import { renderStoryNodes, type BoundControlProps, type BoundSourceProps, type CellControlProps } from '@/lib/story-ui/interpreter';
 import {Dialog, DialogContent} from '@/components/kit/dialog';
@@ -1004,6 +1004,7 @@ export type StoryRuntimeAppProps = StoryIslandData & {
    * same mounted charts. Absent for every reader, and the chunk that provides
    * it is loaded only on demand.
    */
+  editChildren?: (children: ReactNode[], nodes: JsxNode[], parentPath: string) => ReactNode;
   editDecorate?: (element: ReactElement, node: JsxElement, path: string) => ReactNode;
   /**
    * Rename a slide from the deck's own rail. The rail is the DOCUMENT's chrome
@@ -1033,7 +1034,7 @@ const EMPTY_GLYPHS: GlyphMap = {};
 /** A store-less subscribe (a Button rendered outside a document): nothing ever changes. */
 const NO_SUBSCRIBE = () => () => {};
 
-export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, template = null, chrome = true, assetsUrl = null, managedAssets, importAsset, store: givenStore, onMounted, editDecorate, onSlideRename }: StoryRuntimeAppProps) {
+export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, template = null, chrome = true, assetsUrl = null, managedAssets, importAsset, store: givenStore, onMounted, editDecorate, editChildren, onSlideRename }: StoryRuntimeAppProps) {
   const [localStore] = useState<DataflowStore>(() => givenStore ?? createDataflowStore(dataflow ?? { flow: EMPTY_DATAFLOW }));
   const store = givenStore ?? localStore;
   const mountedRef = useRef(onMounted);
@@ -1085,6 +1086,7 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, t
           boundSource: RuntimeBoundSource,
           cellControl: RuntimeCellControl,
           decorateElement,
+          decorateChildren: editChildren,
         })}
       </RuntimeEmbedContext.Provider>
     </RuntimeAssetContext.Provider>

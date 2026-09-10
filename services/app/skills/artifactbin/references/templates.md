@@ -31,3 +31,17 @@ derived from the subject itself beats any of them. Deviate deliberately, or
 omit the `template` field and go bespoke — that is a first-class choice, not
 a fallback. The component vocabulary every genre is built from:
 [markup.md](markup.md).
+
+## Editable columns
+
+For prose columns, sidebars, comparisons and mixed text/evidence layouts, prefer
+`<Grid mode="flow"><GridItem w={8}>…</GridItem><GridItem w={4}>…</GridItem></Grid>`.
+Use it liberally when a layout has columns; keep ordinary single-column prose
+as ordinary HTML. Public components remain Grid / GridItem in both modes.
+Flow follows source order, stacks below 42rem of container width and grows
+with content. Widths use the same 12-column default (`cols` can change it).
+A divider changes adjacent spans together; the editor's dedicated grip moves
+source blocks. Never author x/y/h in flow mode. A deliberate vertical resize
+sets `minHeight` in pixels; omit it for automatic height. Content always grows
+past that minimum, and Auto height clears it. Default positioned Grid keeps
+x/y/w/h geometry for dashboards whose embeds fill fixed tiles.

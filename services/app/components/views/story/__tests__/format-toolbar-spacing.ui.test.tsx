@@ -48,7 +48,7 @@ describe('StoryFormatToolbar spacing row', () => {
     expect(screen.getByLabelText('Align left')).not.toHaveAttribute('data-tip');
     expect(screen.queryByLabelText('Decrease space above')).toBeNull();
     showMore();
-    expect(screen.getByLabelText('Spacing and width controls')).toBeTruthy();
+    expect(screen.getByLabelText('Spacing controls')).toBeTruthy();
     fireEvent.click(screen.getByLabelText('Increase space above'));
     expect(lastClass(onApply)).toBe('mt-6');
     fireEvent.click(screen.getByLabelText('Increase space below'));
@@ -59,49 +59,23 @@ describe('StoryFormatToolbar spacing row', () => {
     expect(lastClass(onApply)).toBe('mt-4 pr-1');
   });
 
-  it('steps width along the max-w scale; unconstrained reads full and narrows from 7xl', () => {
-    const { onApply } = renderToolbar('max-w-prose');
-    showMore();
-    fireEvent.click(screen.getByLabelText('Increase width'));
-    expect(lastClass(onApply)).toBe('max-w-2xl');
-    fireEvent.click(screen.getByLabelText('Decrease width'));
-    expect(lastClass(onApply)).toBe('max-w-xl');
-
-    const bare = renderToolbar('');
-    showMore(1);
-    fireEvent.click(screen.getAllByLabelText('Decrease width')[1]);
-    expect(lastClass(bare.onApply)).toBe('max-w-7xl');
-  });
-
   it('shows the readouts (px for edges, the max-w tail or full for width)', () => {
     renderToolbar('mt-4 pl-2 max-w-prose');
     showMore();
     const toolbar = screen.getByLabelText('Typography toolbar');
     expect(toolbar.textContent).toContain('16px'); // mt-4
     expect(toolbar.textContent).toContain('8px'); // pl-2
-    expect(toolbar.textContent).toContain('prose');
+    expect(screen.queryByLabelText('Increase width')).toBeNull();
+    expect(screen.queryByLabelText('Decrease width')).toBeNull();
   });
 });
 
 describe('StoryFormatToolbar placement', () => {
-  const toolbarTop = () => parseFloat((screen.getAllByLabelText('Typography toolbar').at(-1) as HTMLElement).style.top);
-  const toolbarLeft = () => parseFloat((screen.getAllByLabelText('Typography toolbar').at(-1) as HTMLElement).style.left);
-
-  it('centers above the selection when there is room below the edit bars', () => {
-    renderToolbar('', { x: 40, y: 300, width: 600, height: 80 });
-    expect(toolbarTop()).toBeLessThan(300); // above the element's top edge
-    expect(toolbarTop()).toBeGreaterThan(81); // and clear of topbar + edit bar
-    expect(toolbarLeft()).toBe(40 + 600 / 2 - 408 / 2);
-  });
-
-  it('flips BELOW the selection when above would land on the fixed bars or the text', () => {
-    renderToolbar('', { x: 40, y: 60, width: 600, height: 80 });
-    // Never over the element: below its bottom edge, plus the 8px gap.
-    expect(toolbarTop()).toBe(60 + 80 + 8);
-  });
-
-  it('clamps horizontally when a centered toolbar would leave the viewport', () => {
-    renderToolbar('', { x: 980, y: 300, width: 80, height: 40 });
-    expect(toolbarLeft()).toBe(window.innerWidth - 408 - 8);
+  it('stays in its toolbar slot independently of selection geometry', () => {
+    renderToolbar('', {x:980,y:900,width:80,height:40});
+    const toolbar=screen.getByLabelText('Typography toolbar');
+    expect(toolbar.style.top).toBe('');
+    expect(toolbar.style.left).toBe('');
+    expect(toolbar.classList.contains('fixed')).toBe(false);
   });
 });

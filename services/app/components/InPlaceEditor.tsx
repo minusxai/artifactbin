@@ -1,5 +1,7 @@
 'use client';
 
+import type { EditorSelectionChange } from '@/lib/editor-v2/bookmark';
+
 /**
  * EDITING, IN THE DOCUMENT THE READER IS ALREADY LOOKING AT.
  *
@@ -24,7 +26,9 @@
 import { sendDocument, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import SourceEditor from '@/components/SourceEditorPane';
-import { Check, Code, History, Image as ImageIcon, Paintbrush } from 'lucide-react';
+import { editBlock } from '@/lib/editor-v2/block-edit';
+import { SourceHistory } from '@/lib/editor-v2/history';
+import { Check, Code, History, Undo2, Redo2, Image as ImageIcon, Paintbrush } from 'lucide-react';
 
 import ThemePicker, { ModeChip, TemplateChip } from '@/components/ThemePicker';
 import { Tooltip } from '@/components/Tooltip';
@@ -35,6 +39,7 @@ import { TrustedUi } from '@/components/TrustedUi';
 import VizEditorPanel from '@/components/views/story/VizEditorPanel';
 import NumberEditorPanel from '@/components/views/story/NumberEditorPanel';
 import StoryFormatToolbar from '@/components/views/story/StoryFormatToolbar';
+import MarkdownPasteDialog from '@/components/views/story/MarkdownPasteDialog';
 import { useLiveEdits, type EditorFlushRef } from '@/lib/story/use-live-edits';
 import { useNavigationGuard } from '@/web/NavigationBoundary';
 import { useLiveArtifact } from '@/lib/story/use-live-artifact';
@@ -45,7 +50,12 @@ import { isWebUrl } from '@/lib/story/asset-url';
 import { imageRawUrl, type RefDataMap } from '@/lib/story/ref-data';
 import { bodyPathToSourcePath } from '@/lib/story/edit-compose';
 import { insertImageInJsx, removeJsxNodeAtPath } from '@/lib/data/story/jsx-edit';
-import { readQuestionChart, updateQuestionChartInJsx, updateQuestionTitleInJsx, type VizEnvelopeValue } from '@/lib/data/story/story-viz';
+import {
+  readQuestionChart,
+  updateQuestionChartInJsx,
+  updateQuestionTitleInJsx,
+  type VizEnvelopeValue,
+} from '@/lib/data/story/story-viz';
 import { readNumberEmbed, updateNumberEmbedInJsx, type NumberEmbedEdit } from '@/lib/data/story/story-number';
 import { updateSlideTitleInJsx } from '@/lib/data/story/story-slides';
 import { tableChoices } from '@/lib/story/table-catalog';
@@ -69,7 +79,6 @@ import type { StoryEditSelection, StoryIslandDataflow } from '@/lib/story-runtim
  */
 const HELD_ASSETS = isWebUrl;
 
-
 export interface EditorArtifact {
   id: string;
   version: number;
@@ -91,8 +100,6 @@ export interface EditorArtifact {
   dataflow?: StoryIslandDataflow | null;
 }
 
-
-
 /**
  * The ref entry a just-created image needs. `rawUrl` comes from the create
  * echo (lib/story/ref-data owns the shape); the fallback covers a deployment
@@ -103,7 +110,15 @@ const refDataFor = (created: { id: string; rawUrl?: string }): { refData: RefDat
 });
 
 export default function InPlaceEditor({
-  art, frameRef, runtimeRef, sessionNonce, flushRef, initialSelectionPath = null, onComment, rightInset = 0, onDone = () => {},
+  art,
+  frameRef,
+  runtimeRef,
+  sessionNonce,
+  flushRef,
+  initialSelectionPath = null,
+  onComment,
+  rightInset = 0,
+  onDone = () => {},
 }: {
   art: EditorArtifact;
   /** Optional standalone document frame compatibility ref; the active page uses runtimeRef. */
@@ -166,6 +181,11 @@ export default function InPlaceEditor({
 
   /** Read by callbacks that run after an await, when `source` may have moved on. */
   const sourceRef = useRef(source);
+  const sourceHistory = useRef(new SourceHistory());
+  const [markdownDraft, setMarkdownDraft] = useState<string | null>(null);
+  const [discardDraft, setDiscardDraft] = useState(false);
+  const [rejectedFragment, setRejectedFragment] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   // The document's bar is 44px on a desktop; a phone draws none, so the toolbar takes the top there.
   const phone = useIsPhoneViewport();
   const barTop = phone ? 0 : APP_BAR_H;
@@ -191,53 +211,64 @@ export default function InPlaceEditor({
    * same door the served document and the live stream use, so a pushed version
    * can never describe a different tree than a reload of the same source would.
    */
-  const showInDocument = useCallback((next: string, over?: { compiledCss?: string | null; colorMode?: 'light' | 'dark'; refData?: RefDataMap }) => {
-    const parts = storyUpdateParts(next, HELD_ASSETS);
-    if (!parts) return;   // mid-keystroke source that does not parse yet
-    const declarationsChanged = parts.declarations !== pushedDeclarations.current;
-    sendDocument({ frameRef, runtimeRef }, {
-      type: 'mx:document',
-      nodes: parts.nodes,
-      ...(parts.authorCss !== null ? { authorCss: parts.authorCss } : {}),
-      /*
-       * Absent means "unchanged"; NULL means "this document has no stylesheet".
-       * Sending null because we happen not to hold one yet strips the sheet
-       * off a styled document — it collapses to unstyled text, and the reader's
-       * scroll position collapses with it.
-       */
-      ...(typeof (over?.compiledCss ?? cssRef.current) === 'string'
-        ? { compiledCss: over?.compiledCss ?? cssRef.current }
-        : {}),
-      colorMode: over?.colorMode ?? colorModeRef.current,
-      // Refs the served document could not know: an image inserted just now is
-      // a brand-new artifact, and without its entry the interpreter renders
-      // the literal `ref:<id>` into src — a broken image until a full reload.
-      ...(over?.refData ? { refData: over.refData } : {}),
-      /*
-       * DATA ONLY WHEN THE DECLARATIONS CHANGED — the live stream's own rule
-       * (app/a/[id]/events), and load-bearing for two separate reasons.
-       *
-       * Absent means "the data is as you have it": sending a flow with EMPTY
-       * state replaces every table the document is showing, so the chart loses
-       * its rows and the page collapses under the reader. And sending the SAME
-       * data again is not free either — the store re-runs the queries it
-       * describes, and the chart is rebuilt to draw the answer. A prose edit
-       * must cost neither.
-       */
-      ...(dataflowRef.current && declarationsChanged
-        ? { dataflow: { flow: parts.flow, state: dataflowRef.current } satisfies StoryIslandDataflow }
-        : {}),
-    });
-    pushedDeclarations.current = parts.declarations;
-  }, [frameRef, runtimeRef]);
+  const showInDocument = useCallback(
+    (next: string, over?: { compiledCss?: string | null; colorMode?: 'light' | 'dark'; refData?: RefDataMap }) => {
+      const parts = storyUpdateParts(next, HELD_ASSETS);
+      if (!parts) return; // mid-keystroke source that does not parse yet
+      const declarationsChanged = parts.declarations !== pushedDeclarations.current;
+      sendDocument(
+        { frameRef, runtimeRef },
+        {
+          type: 'mx:document',
+          nodes: parts.nodes,
+          ...(parts.authorCss !== null ? { authorCss: parts.authorCss } : {}),
+          /*
+           * Absent means "unchanged"; NULL means "this document has no stylesheet".
+           * Sending null because we happen not to hold one yet strips the sheet
+           * off a styled document — it collapses to unstyled text, and the reader's
+           * scroll position collapses with it.
+           */
+          ...(typeof (over?.compiledCss ?? cssRef.current) === 'string'
+            ? { compiledCss: over?.compiledCss ?? cssRef.current }
+            : {}),
+          colorMode: over?.colorMode ?? colorModeRef.current,
+          // Refs the served document could not know: an image inserted just now is
+          // a brand-new artifact, and without its entry the interpreter renders
+          // the literal `ref:<id>` into src — a broken image until a full reload.
+          ...(over?.refData ? { refData: over.refData } : {}),
+          /*
+           * DATA ONLY WHEN THE DECLARATIONS CHANGED — the live stream's own rule
+           * (app/a/[id]/events), and load-bearing for two separate reasons.
+           *
+           * Absent means "the data is as you have it": sending a flow with EMPTY
+           * state replaces every table the document is showing, so the chart loses
+           * its rows and the page collapses under the reader. And sending the SAME
+           * data again is not free either — the store re-runs the queries it
+           * describes, and the chart is rebuilt to draw the answer. A prose edit
+           * must cost neither.
+           */
+          ...(dataflowRef.current && declarationsChanged
+            ? { dataflow: { flow: parts.flow, state: dataflowRef.current } satisfies StoryIslandDataflow }
+            : {}),
+        },
+      );
+      pushedDeclarations.current = parts.declarations;
+    },
+    [frameRef, runtimeRef],
+  );
 
   /** A structural change: source, persistence and the document, in one act. */
-  const commitStructural = useCallback((next: string, over?: { refData?: RefDataMap }) => {
-    if (next === sourceRef.current) return;   // stale path / no-op — never dirty the document
-    setSource(next);
-    queueRef.current?.({ source: next });
-    showInDocument(next, over);
-  }, [showInDocument]);
+  const commitStructural = useCallback(
+    (next: string, over?: { refData?: RefDataMap }) => {
+      if (next === sourceRef.current) return; // stale path / no-op — never dirty the document
+      sourceHistory.current.record(sourceRef.current, next);
+      sourceRef.current = next;
+      setSource(next);
+      queueRef.current?.({ source: next });
+      showInDocument(next, over);
+    },
+    [showInDocument],
+  );
 
   // ── persistence (unchanged protocol) ──────────────────────────────────────
   /*
@@ -247,19 +278,32 @@ export default function InPlaceEditor({
    * it is told, and this counter is the telling.
    */
   const [sourceRevision, setSourceRevision] = useState(0);
-  const onRemoteDocument = useCallback((next: string) => {
-    setSource(next);
-    setSourceRevision((n) => n + 1);
-    showInDocument(next);
-  }, [showInDocument]);
+  const onRemoteDocument = useCallback(
+    (next: string) => {
+      sourceRef.current = next;
+      setSource(next);
+      setSourceRevision((n) => n + 1);
+      showInDocument(next);
+    },
+    [showInDocument],
+  );
 
   const editRef = useRef<ReturnType<typeof useInPlaceEdit> | null>(null);
   const isUserEditing = useCallback(() => editRef.current?.isUserEditing() ?? false, []);
 
-  const { state: live, queue, flushNow, flushForNavigation, adoptRemote, isOwnEdit } = useLiveEdits({
+  const {
+    state: live,
+    queue,
+    recover,
+    flushNow,
+    flushForNavigation,
+    adoptRemote,
+    isOwnEdit,
+  } = useLiveEdits({
     id: art.id,
     initialEditId: art.edit_id,
     initialVersion: art.version,
+    initialSource: art.markup ?? '',
     onRemoteDocument,
     isUserEditing,
   });
@@ -268,28 +312,104 @@ export default function InPlaceEditor({
 
   // insertImage is defined below (it needs commitStructural); the paste/drop
   // door reaches it through this ref so all three insert doors stay ONE path.
+  const applyHistory = useCallback(
+    async (direction: 'undo' | 'redo') => {
+      try {
+        await editRef.current?.commitPending();
+      } catch (error) {
+        setHistoryError(error instanceof Error ? error.message : 'Editor is unavailable.');
+        return;
+      }
+      const result = sourceHistory.current[direction](sourceRef.current);
+      if (!result.ok) {
+        if (result.reason === 'conflict')
+          setHistoryError(
+            'Undo is blocked because this content changed elsewhere. Your current document is preserved.',
+          );
+        return;
+      }
+      setHistoryError(null);
+      sourceRef.current = result.source;
+      setSource(result.source);
+      setSourceRevision((n) => n + 1);
+      queueRef.current({ source: result.source, annotationOps: result.annotationOps });
+      showInDocument(result.source);
+      if (result.bookmark) editRef.current?.restoreSelection(result.bookmark);
+    },
+    [showInDocument],
+  );
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !(event.ctrlKey || event.metaKey) || !['z', 'y'].includes(event.key.toLowerCase()))
+        return;
+      const target = (event.composedPath()[0] ?? event.target) as HTMLElement;
+      if (target.closest('input,textarea') && !target.closest('.monaco-editor')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      void applyHistory(event.shiftKey || event.key.toLowerCase() === 'y' ? 'redo' : 'undo');
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [applyHistory]);
   const insertImageRef = useRef<((file: File) => void) | null>(null);
   const edit = useInPlaceEdit({
-    frameRef, runtimeRef,
+    frameRef,
+    runtimeRef,
     sessionNonce,
-    onImageDrop: useCallback((file: File) => { insertImageRef.current?.(file); }, []),
+    onError: setHistoryError,
+    onRejectedEdit: setRejectedFragment,
+    onHistory: (direction) => {
+      void applyHistory(direction);
+    },
+    onImageDrop: useCallback((file: File) => {
+      insertImageRef.current?.(file);
+    }, []),
     editing: mode === 'design' && !preview,
     sourceRef,
-    onSourceEdited: useCallback((next: string) => {
-      // A text or format edit the DOCUMENT already shows: persist it, but do
-      // not push it back — the document runtime's DOM is ahead of us and re-rendering
-      // would take the caret with it.
-      setSource(next);
-      queueRef.current?.({ source: next });
-    }, []),
-    onSlideTitle: useCallback((path: string, title: string) => {
-      commitStructural(updateSlideTitleInJsx(sourceRef.current, bodyPathToSourcePath(sourceRef.current, path), title));
-    }, [commitStructural]),
-    onEditKey: useCallback((key: 'Delete' | 'Backspace' | 'Escape', selection: StoryEditSelection | null) => {
-      if (key === 'Escape') { edit?.select(null); return; }
-      if (!selection) return;
-      commitStructural(removeJsxNodeAtPath(sourceRef.current, bodyPathToSourcePath(sourceRef.current, selection.path)));
-    }, [commitStructural]),  // eslint-disable-line react-hooks/exhaustive-deps
+    onSourceEdited: useCallback(
+      (next: string, render = false, group?: string, selection?: EditorSelectionChange) => {
+        // A text or format edit the DOCUMENT already shows: persist it, but do
+        // not push it back — the document runtime's DOM is ahead of us and re-rendering
+        // would take the caret with it.
+        sourceHistory.current.record(
+          sourceRef.current,
+          next,
+          group,
+          selection?.before,
+          selection?.after,
+          selection?.annotationOperation ? [selection.annotationOperation] : [],
+        );
+        sourceRef.current = next;
+        setSource(next);
+        queueRef.current?.({
+          source: next,
+          annotationOps: selection?.annotationOperation ? [selection.annotationOperation] : undefined,
+        });
+        if (render) showInDocument(next);
+      },
+      [showInDocument],
+    ),
+    onSlideTitle: useCallback(
+      (path: string, title: string) => {
+        commitStructural(
+          updateSlideTitleInJsx(sourceRef.current, bodyPathToSourcePath(sourceRef.current, path), title),
+        );
+      },
+      [commitStructural],
+    ),
+    onEditKey: useCallback(
+      (key: 'Delete' | 'Backspace' | 'Escape', selection: StoryEditSelection | null) => {
+        if (key === 'Escape') {
+          edit?.select(null);
+          return;
+        }
+        if (!selection) return;
+        commitStructural(
+          removeJsxNodeAtPath(sourceRef.current, bodyPathToSourcePath(sourceRef.current, selection.path)),
+        );
+      },
+      [commitStructural],
+    ), // eslint-disable-line react-hooks/exhaustive-deps
   });
   editRef.current = edit;
 
@@ -326,10 +446,15 @@ export default function InPlaceEditor({
     const key = source;
     if (lastCompiled.current === key) return;
     const cached = cssCache.current.get(key);
-    if (cached !== undefined) { setCss(cached); showInDocument(key, { compiledCss: cached }); return; }
+    if (cached !== undefined) {
+      setCss(cached);
+      showInDocument(key, { compiledCss: cached });
+      return;
+    }
     const run = async () => {
       const res = await fetch('/api/preview', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ markup: key }),
       }).catch(() => null);
       if (!res?.ok) return;
@@ -346,7 +471,9 @@ export default function InPlaceEditor({
       if (sourceRef.current === key) showInDocument(key, { compiledCss: body.css });
     };
     window.clearTimeout(compileTimer.current);
-    compileTimer.current = window.setTimeout(() => { void run(); }, 300);
+    compileTimer.current = window.setTimeout(() => {
+      void run();
+    }, 300);
     return () => window.clearTimeout(compileTimer.current);
   }, [source, showInDocument]);
 
@@ -367,7 +494,8 @@ export default function InPlaceEditor({
     const timer = window.setTimeout(() => {
       ranSignature.current = flowSignature;
       void fetch('/api/query', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ markup: sourceRef.current }),
       })
         .then((r) => (r.ok ? r.json() : null))
@@ -380,7 +508,10 @@ export default function InPlaceEditor({
         })
         .catch(() => {});
     }, 400);
-    return () => { alive = false; window.clearTimeout(timer); };
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
   }, [flowSignature, showInDocument]);
 
   // ── leaving ───────────────────────────────────────────────────────────────
@@ -392,23 +523,38 @@ export default function InPlaceEditor({
    * empty buffer and loses exactly the edit the reader made last.
    */
   const leave = useCallback(async () => {
-    await editRef.current?.commitPending();
+    try {
+      await editRef.current?.commitPending();
+    } catch (error) {
+      setHistoryError(error instanceof Error ? error.message : 'Editor is unavailable.');
+      return;
+    }
     await flushNow();
   }, [flushNow]);
-  useNavigationGuard(useCallback(() => flushForNavigation(async () => {
-    if (!editRef.current) throw new Error('editor is unavailable');
-    await editRef.current.commitPending(true);
-  }), [flushForNavigation]));
+  useNavigationGuard(
+    useCallback(
+      () =>
+        flushForNavigation(async () => {
+          if (!editRef.current) throw new Error('editor is unavailable');
+          await editRef.current.commitPending(true);
+        }),
+      [flushForNavigation],
+    ),
+  );
 
   useEffect(() => {
     if (!flushRef) return;
     flushRef.current = () => leave();
-    return () => { flushRef.current = null; };
+    return () => {
+      flushRef.current = null;
+    };
   }, [flushRef, leave]);
 
   /** A hiding tab may never come back. */
   useEffect(() => {
-    const onHide = () => { if (document.visibilityState === 'hidden') void leave(); };
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') void leave();
+    };
     document.addEventListener('visibilitychange', onHide);
     return () => document.removeEventListener('visibilitychange', onHide);
   }, [leave]);
@@ -428,22 +574,34 @@ export default function InPlaceEditor({
   const numberEmbed = embedPath && selection?.tag === 'Number' ? readNumberEmbed(source, embedPath) : null;
   const tables = useMemo(() => tableChoices(source, dataflowState), [source, dataflowState]);
 
-  const onChartChange = useCallback((next: { viz: unknown; table: string | null }) => {
-    if (!embedPath) return;
-    commitStructural(updateQuestionChartInJsx(sourceRef.current, embedPath, {
-      viz: next.viz as VizEnvelopeValue | undefined, table: next.table,
-    }));
-  }, [embedPath, commitStructural]);
+  const onChartChange = useCallback(
+    (next: { viz: unknown; table: string | null }) => {
+      if (!embedPath) return;
+      commitStructural(
+        updateQuestionChartInJsx(sourceRef.current, embedPath, {
+          viz: next.viz as VizEnvelopeValue | undefined,
+          table: next.table,
+        }),
+      );
+    },
+    [embedPath, commitStructural],
+  );
 
-  const onChartTitleChange = useCallback((next: string | null) => {
-    if (!embedPath) return;
-    commitStructural(updateQuestionTitleInJsx(sourceRef.current, embedPath, next));
-  }, [embedPath, commitStructural]);
+  const onChartTitleChange = useCallback(
+    (next: string | null) => {
+      if (!embedPath) return;
+      commitStructural(updateQuestionTitleInJsx(sourceRef.current, embedPath, next));
+    },
+    [embedPath, commitStructural],
+  );
 
-  const onNumberChange = useCallback((next: NumberEmbedEdit) => {
-    if (!embedPath) return;
-    commitStructural(updateNumberEmbedInJsx(sourceRef.current, embedPath, next));
-  }, [embedPath, commitStructural]);
+  const onNumberChange = useCallback(
+    (next: NumberEmbedEdit) => {
+      if (!embedPath) return;
+      commitStructural(updateNumberEmbedInJsx(sourceRef.current, embedPath, next));
+    },
+    [embedPath, commitStructural],
+  );
 
   const deleteSelected = useCallback(() => {
     if (!selection) return;
@@ -465,14 +623,19 @@ export default function InPlaceEditor({
     if (!url) return;
     setImageError(null);
     const res = await fetch('/api/my/artifacts?visibility=unlisted', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageUrl: url }),
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageUrl: url }),
     }).catch(() => null);
-    if (!res) { setImageError('Import failed — check your connection and try again.'); return; }
+    if (!res) {
+      setImageError('Import failed — check your connection and try again.');
+      return;
+    }
     if (!res.ok) {
-      const body = await res.json().catch(() => null) as { error?: string; details?: string[] } | null;
+      const body = (await res.json().catch(() => null)) as { error?: string; details?: string[] } | null;
       setImageError(
-        body?.details?.[0]
-        ?? (res.status === 403 ? 'You have reached your artifact limit.' : 'Could not import that image.'),
+        body?.details?.[0] ??
+          (res.status === 403 ? 'You have reached your artifact limit.' : 'Could not import that image.'),
       );
       return;
     }
@@ -482,26 +645,40 @@ export default function InPlaceEditor({
     setImageMenuOpen(false);
   }, [imageUrlDraft, commitStructural]);
 
-  const insertImage = useCallback(async (file: File) => {
-    if (!file.type.startsWith('image/')) return;
-    setImageError(null);
-    const res = await fetch('/api/my/artifacts?visibility=unlisted', {
-      method: 'POST', headers: { 'Content-Type': file.type }, body: file,
-    }).catch(() => null);
-    if (!res) { setImageError('Upload failed — check your connection and try again.'); return; }
-    if (!res.ok) {
-      const code = await res.json().then((b) => b?.error).catch(() => null);
-      setImageError(
-        res.status === 413 ? 'That image is too large to upload.'
-        : res.status === 403 ? 'You have reached your artifact limit.'
-        : code === 'invalid_image' ? 'That image type is not supported (png, jpeg, webp, gif, svg).'
-        : 'Could not upload that image.',
-      );
-      return;
-    }
-    const created = (await res.json()) as { id: string; rawUrl?: string };
-    commitStructural(insertImageInJsx(sourceRef.current, created.id), refDataFor(created));
-  }, [commitStructural]);
+  const insertImage = useCallback(
+    async (file: File) => {
+      if (!file.type.startsWith('image/')) return;
+      setImageError(null);
+      const res = await fetch('/api/my/artifacts?visibility=unlisted', {
+        method: 'POST',
+        headers: { 'Content-Type': file.type },
+        body: file,
+      }).catch(() => null);
+      if (!res) {
+        setImageError('Upload failed — check your connection and try again.');
+        return;
+      }
+      if (!res.ok) {
+        const code = await res
+          .json()
+          .then((b) => b?.error)
+          .catch(() => null);
+        setImageError(
+          res.status === 413
+            ? 'That image is too large to upload.'
+            : res.status === 403
+              ? 'You have reached your artifact limit.'
+              : code === 'invalid_image'
+                ? 'That image type is not supported (png, jpeg, webp, gif, svg).'
+                : 'Could not upload that image.',
+        );
+        return;
+      }
+      const created = (await res.json()) as { id: string; rawUrl?: string };
+      commitStructural(insertImageInJsx(sourceRef.current, created.id), refDataFor(created));
+    },
+    [commitStructural],
+  );
   insertImageRef.current = insertImage;
 
   // ── version history ───────────────────────────────────────────────────────
@@ -513,34 +690,138 @@ export default function InPlaceEditor({
    * editor has no save button, so typing into an old version would quietly
    * publish it.
    */
-  const previewVersion = useCallback(async (v: number) => {
-    const snapshot = await history.fetchVersion(v);
-    if (!snapshot) return;
-    setPreview(snapshot);
-    edit.select(null);
-    showInDocument(snapshot.markup ?? '', {
-      compiledCss: snapshot.meta.compiledCss ?? cssRef.current,
-      colorMode: snapshot.meta.colorMode ?? colorModeRef.current,
-    });
-  }, [history, showInDocument, edit]);
+  const previewVersion = useCallback(
+    async (v: number) => {
+      const snapshot = await history.fetchVersion(v);
+      if (!snapshot) return;
+      setPreview(snapshot);
+      edit.select(null);
+      showInDocument(snapshot.markup ?? '', {
+        compiledCss: snapshot.meta.compiledCss ?? cssRef.current,
+        colorMode: snapshot.meta.colorMode ?? colorModeRef.current,
+      });
+    },
+    [history, showInDocument, edit],
+  );
 
   const backToCurrent = useCallback(() => {
     setPreview(null);
     showInDocument(sourceRef.current);
   }, [showInDocument]);
 
-  const restoreVersion = useCallback(async (v: number) => {
-    const next = await history.restore(v);
-    if (next === null) return;
-    // The restored state IS the document now; the live stream delivers it on
-    // the same path an agent's edit arrives on.
-    setPreview(null);
-    setHistoryOpen(false);
-    await history.refresh();
-  }, [history]);
+  const restoreVersion = useCallback(
+    async (v: number) => {
+      const next = await history.restore(v);
+      if (next === null) return;
+      // The restored state IS the document now; the live stream delivers it on
+      // the same path an agent's edit arrives on.
+      setPreview(null);
+      setHistoryOpen(false);
+      await history.refresh();
+    },
+    [history],
+  );
 
   return (
     <div className="contents" data-app-appearance={surfaceMode}>
+      {markdownDraft !== null && (
+        <MarkdownPasteDialog
+          value={markdownDraft}
+          onChange={setMarkdownDraft}
+          onClose={() => setMarkdownDraft(null)}
+          onInsert={() => {
+            edit.pasteMarkdown(markdownDraft);
+            setMarkdownDraft(null);
+          }}
+        />
+      )}
+      {live.status.startsWith('not saved') && (
+        <div
+          role="alert"
+          className="fixed bottom-4 right-4 z-50 max-w-md rounded border border-edge bg-surface p-3 text-sm"
+        >
+          <p>{live.status}</p>
+          <div className="mt-2 flex flex-wrap gap-3">
+            <button type="button" onClick={() => void recover('retry')}>
+              Retry save
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                void navigator.clipboard
+                  .writeText(sourceRef.current)
+                  .catch(() => setHistoryError('Could not copy. Open the source editor to select and copy your draft.'))
+              }
+            >
+              Copy draft
+            </button>
+            <button type="button" onClick={() => setDiscardDraft(true)}>
+              Use server version
+            </button>
+          </div>
+          {discardDraft && (
+            <div role="alertdialog" aria-label="Discard unsaved draft" className="mt-3 border-t border-edge pt-3">
+              <p>Replace your unsaved draft with the server version? Copy your draft first if you want to keep it.</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setDiscardDraft(false);
+                  void recover('server');
+                }}
+              >
+                Discard draft and load server
+              </button>
+              <button type="button" onClick={() => setDiscardDraft(false)}>
+                Keep editing
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      {rejectedFragment !== null && (
+        <div
+          role="alertdialog"
+          aria-label="Recover uncommitted text"
+          className="fixed inset-x-4 top-28 z-50 mx-auto max-w-xl rounded border border-edge bg-surface p-4 shadow-xl"
+        >
+          <p>This text could not be applied to the current document. Copy it before restoring the document.</p>
+          <textarea
+            aria-label="Uncommitted text"
+            readOnly
+            value={rejectedFragment}
+            className="mt-2 h-32 w-full font-mono text-sm"
+          />
+          <button
+            type="button"
+            onClick={() =>
+              void navigator.clipboard
+                .writeText(rejectedFragment)
+                .catch(() => setHistoryError('Select and copy the text from the field.'))
+            }
+          >
+            Copy uncommitted text
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              edit.discardRejectedEdit();
+              setRejectedFragment(null);
+              showInDocument(sourceRef.current);
+            }}
+          >
+            Discard this text and restore document
+          </button>
+        </div>
+      )}
+      {historyError && (
+        <div role="alert" className="fixed bottom-4 left-4 z-50 rounded border border-edge bg-surface p-3 text-sm">
+          {historyError}
+          <button type="button" onClick={() => setHistoryError(null)} aria-label="Dismiss undo message">
+            {' '}
+            ×
+          </button>
+        </div>
+      )}
       <header
         aria-label="Editor toolbar"
         className="fixed left-0 z-30 flex items-center gap-2 border-y border-edge bg-surface/95 px-3 backdrop-blur"
@@ -554,52 +835,108 @@ export default function InPlaceEditor({
             the mode are what someone edits on a phone FOR. Guarded by the
             editor leg of scripts/gate-mobile.mjs. */}
         <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
-        <input
-          aria-label="Title"
-          value={title}
-          onChange={(e) => { setTitle(e.target.value); queue({ title: e.target.value }); }}
-          placeholder="untitled"
-          className="w-36 shrink-0 rounded-[4px] border border-transparent bg-transparent px-1.5 py-1 font-mono text-xs font-semibold text-fg hover:border-edge focus:border-edge-bright focus:outline-none sm:w-48"
-        />
-        <ThemePicker
-          value={theme}
-          colorMode={colorMode}
-          onPick={(t) => {
-            setTheme(t);
-            queue({ theme: t });
-            // The document carries its own design attributes; tell it directly
-            // rather than making it wait for the save to come back around. With
-            // no author pick the MODE follows the new theme's declared default.
-            sendDocument({ frameRef, runtimeRef }, { type: 'mx:document', nodes: storyUpdateParts(sourceRef.current, HELD_ASSETS)?.nodes ?? [], theme: t, colorMode: colorMode ?? storyThemeDefaultMode(t) ?? 'light' });
-          }}
-        />
-        <TemplateChip template={art.template} />
-        {/* The AUTHOR'S DEFAULT mode, beside the theme it composes with. Every
+          {selection && mode === 'design' ? (
+            <StoryFormatToolbar
+              selection={selection}
+              onApply={edit.applyFormat}
+              onApplyLink={edit.applyLink}
+              onApplyInline={edit.applyInline}
+              onAutoHeight={() =>
+                commitStructural(editBlock(sourceRef.current, { kind: 'auto-height', path: selection.path }))
+              }
+              onPasteMarkdown={() => setMarkdownDraft('')}
+              onSelect={edit.select}
+              onDelete={deleteSelected}
+              onComment={onComment}
+            />
+          ) : (
+            <>
+              <input
+                aria-label="Title"
+                value={title}
+                onChange={(e) => {
+                  setTitle(e.target.value);
+                  queue({ title: e.target.value });
+                }}
+                placeholder="untitled"
+                className="w-36 shrink-0 rounded-[4px] border border-transparent bg-transparent px-1.5 py-1 font-mono text-xs font-semibold text-fg hover:border-edge focus:border-edge-bright focus:outline-none sm:w-48"
+              />
+              <ThemePicker
+                value={theme}
+                colorMode={colorMode}
+                onPick={(t) => {
+                  setTheme(t);
+                  queue({ theme: t });
+                  // The document carries its own design attributes; tell it directly
+                  // rather than making it wait for the save to come back around. With
+                  // no author pick the MODE follows the new theme's declared default.
+                  sendDocument(
+                    { frameRef, runtimeRef },
+                    {
+                      type: 'mx:document',
+                      nodes: storyUpdateParts(sourceRef.current, HELD_ASSETS)?.nodes ?? [],
+                      theme: t,
+                      colorMode: colorMode ?? storyThemeDefaultMode(t) ?? 'light',
+                    },
+                  );
+                }}
+              />
+              <TemplateChip template={art.template} />
+              {/* The AUTHOR'S DEFAULT mode, beside the theme it composes with. Every
             theme carries both palettes, so this is meaningful for every
             document; "theme default" stores an explicit null so the mode
             follows a later theme switch. Readers can still flip their own view. */}
-        <ModeChip
-          mode={colorMode}
-          themeDefault={storyThemeDefaultMode(theme) ?? 'light'}
-          onPick={(next) => {
-            setColorMode(next);
-            const effective = next ?? storyThemeDefaultMode(theme) ?? 'light';
-            colorModeRef.current = effective;
-            queue({ colorMode: next });
-            showInDocument(sourceRef.current, { colorMode: effective });
-          }}
-        />
-
+              <ModeChip
+                mode={colorMode}
+                themeDefault={storyThemeDefaultMode(theme) ?? 'light'}
+                onPick={(next) => {
+                  setColorMode(next);
+                  const effective = next ?? storyThemeDefaultMode(theme) ?? 'light';
+                  colorModeRef.current = effective;
+                  queue({ colorMode: next });
+                  showInDocument(sourceRef.current, { colorMode: effective });
+                }}
+              />
+            </>
+          )}
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
+          <Tooltip content="Undo (Ctrl/Cmd Z)">
+            <button
+              type="button"
+              aria-label="Undo"
+              disabled={!sourceHistory.current.canUndo}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => void applyHistory('undo')}
+              className="inline-flex h-6 w-6 items-center justify-center rounded text-fg disabled:opacity-30"
+            >
+              <Undo2 size={14} />
+            </button>
+          </Tooltip>
+          <Tooltip content="Redo (Ctrl/Cmd Shift Z)">
+            <button
+              type="button"
+              aria-label="Redo"
+              disabled={!sourceHistory.current.canRedo}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => void applyHistory('redo')}
+              className="inline-flex h-6 w-6 items-center justify-center rounded text-fg disabled:opacity-30"
+            >
+              <Redo2 size={14} />
+            </button>
+          </Tooltip>
           <input
             ref={imageInputRef}
             type="file"
             accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
             aria-label="Upload image file"
             className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) void insertImage(f); e.target.value = ''; }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void insertImage(f);
+              e.target.value = '';
+            }}
           />
           <div className="relative">
             <Tooltip content="insert image">
@@ -618,7 +955,10 @@ export default function InPlaceEditor({
                 <button
                   type="button"
                   aria-label="Upload image from file"
-                  onClick={() => { setImageMenuOpen(false); imageInputRef.current?.click(); }}
+                  onClick={() => {
+                    setImageMenuOpen(false);
+                    imageInputRef.current?.click();
+                  }}
                   className="w-full cursor-pointer rounded-[4px] border border-edge px-2 py-1 text-left font-mono text-[11px] text-fg hover:border-edge-bright hover:bg-raised"
                 >
                   upload a file…
@@ -629,7 +969,12 @@ export default function InPlaceEditor({
                     value={imageUrlDraft}
                     placeholder="or paste an image URL (https://…)"
                     onChange={(e) => setImageUrlDraft(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void insertImageFromUrl(); } }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        void insertImageFromUrl();
+                      }
+                    }}
                     className="min-w-0 flex-1 rounded-[4px] border border-edge bg-transparent px-1.5 py-1 font-mono text-[11px] text-fg focus:border-edge-bright focus:outline-none"
                   />
                   <button
@@ -644,8 +989,17 @@ export default function InPlaceEditor({
               </div>
             )}
           </div>
-          <div className="flex h-6 items-center overflow-hidden rounded-[4px] border border-edge" role="group" aria-label="View">
-            {([['design', 'Edit on the page'], ['code', 'Edit the source']] as const).map(([m, label]) => (
+          <div
+            className="flex h-6 items-center overflow-hidden rounded-[4px] border border-edge"
+            role="group"
+            aria-label="View"
+          >
+            {(
+              [
+                ['design', 'Edit on the page'],
+                ['code', 'Edit the source'],
+              ] as const
+            ).map(([m, label]) => (
               <button
                 key={m}
                 type="button"
@@ -669,7 +1023,9 @@ export default function InPlaceEditor({
               aria-expanded={historyOpen}
               onClick={() => setHistoryOpen((v) => !v)}
               className={`inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-[4px] border px-1.5 font-mono text-[11px] ${
-                historyOpen ? 'border-accent/40 bg-accent-soft text-accent' : 'border-edge text-muted hover:border-edge-bright hover:text-fg'
+                historyOpen
+                  ? 'border-accent/40 bg-accent-soft text-accent'
+                  : 'border-edge text-muted hover:border-edge-bright hover:text-fg'
               }`}
             >
               <History size={12} className="shrink-0" />
@@ -682,7 +1038,10 @@ export default function InPlaceEditor({
             <button
               type="button"
               aria-label="Exit edit mode"
-              onClick={() => void onDone()}
+              onClick={(event) => {
+                event.currentTarget.blur();
+                void onDone();
+              }}
               className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-[4px] border border-accent/40 bg-accent-soft px-2 font-mono text-[11px] text-accent hover:border-accent"
             >
               <Check size={13} />
@@ -713,35 +1072,18 @@ export default function InPlaceEditor({
       {/* Editing the source: an overlay over the document, not a second pane —
           the document IS the preview, and one click away is close enough. */}
       {mode === 'code' && (
-        <div
-          className="fixed inset-x-0 bottom-0 z-20"
-          style={{ top: barTop + EDIT_BAR_H }}
-          aria-label="Source pane"
-        >
+        <div className="fixed inset-x-0 bottom-0 z-20" style={{ top: barTop + EDIT_BAR_H }} aria-label="Source pane">
           <SourceEditor
             value={source}
             revision={sourceRevision}
             onChange={(text) => {
+              sourceHistory.current.record(sourceRef.current, text);
+              sourceRef.current = text;
               setSource(text);
               queue({ source: text });
             }}
           />
         </div>
-      )}
-
-      {/* The floating format controls, anchored from the rect the document
-          reported — it is a different document, so there is no element here. */}
-      {mode === 'design' && (
-        <StoryFormatToolbar
-          selection={selection}
-          frameRef={frameRef} runtimeRef={runtimeRef}
-          compiledCss={css}
-          onApply={edit.applyFormat}
-          onApplyLink={edit.applyLink}
-          onSelect={edit.select}
-          onDelete={deleteSelected}
-          onComment={onComment}
-        />
       )}
 
       {/* The embed inspector: a fixed panel, since the thing it edits lives in
@@ -762,7 +1104,9 @@ export default function InPlaceEditor({
               second trash an inch from `close` was the one people hit by
               mistake. The inspector inspects; the toolbar acts on the node. */}
           <div className="mb-3 flex items-center justify-between">
-            <span className="font-mono text-[11px] uppercase tracking-wide text-faint">{chart ? 'chart' : 'number'}</span>
+            <span className="font-mono text-[11px] uppercase tracking-wide text-faint">
+              {chart ? 'chart' : 'number'}
+            </span>
             <button
               type="button"
               aria-label={chart ? 'Close chart inspector' : 'Close number inspector'}
@@ -790,17 +1134,17 @@ export default function InPlaceEditor({
       {historyOpen && (
         // The open history panel must receive clicks above the reader's navigation rail.
         <TrustedUi overlay layer="navigation">
-        <VersionHistory
-          topOffset={barTop + EDIT_BAR_H}
-          versions={history.versions}
-          currentVersion={live.version}
-          previewing={preview?.version ?? null}
-          onPreview={(v: number) => void previewVersion(v)}
-          onRestore={(v: number) => void restoreVersion(v)}
-          onBackToCurrent={backToCurrent}
-          onClose={() => setHistoryOpen(false)}
-          busy={history.busy}
-        />
+          <VersionHistory
+            topOffset={barTop + EDIT_BAR_H}
+            versions={history.versions}
+            currentVersion={live.version}
+            previewing={preview?.version ?? null}
+            onPreview={(v: number) => void previewVersion(v)}
+            onRestore={(v: number) => void restoreVersion(v)}
+            onBackToCurrent={backToCurrent}
+            onClose={() => setHistoryOpen(false)}
+            busy={history.busy}
+          />
         </TrustedUi>
       )}
     </div>

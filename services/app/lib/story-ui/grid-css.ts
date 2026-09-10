@@ -25,6 +25,10 @@
  */
 export const STORY_GRID_EDIT_CSS = `
 .react-grid-layout { position: relative; }
+.mx-grid-grip { position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; z-index: 4; border: 1px solid #14b8a6; border-radius: 4px; background: white; color: #115e59; cursor: grab; touch-action: none; opacity: 0; }
+.react-grid-item:hover > .mx-grid-grip, .react-grid-item:focus-within > .mx-grid-grip, .mx-grid-grip:focus { opacity: 1; }
+@media (hover: none) { .mx-grid-grip { opacity: 1; } }
+@media (pointer: coarse) { .mx-grid-grip, .react-grid-item > .react-resizable-handle { min-width: 44px; min-height: 44px; } }
 .react-grid-item { transition: none !important; }
 .react-grid-item img { pointer-events: none; user-select: none; }
 .react-grid-item a { -webkit-user-drag: none; }
