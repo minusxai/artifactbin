@@ -12,7 +12,7 @@ export default defineConfig({
   root: path.resolve(import.meta.dirname, 'services/app/web'),
   plugins: [react(), tailwindcss()],
   resolve: { alias: { '@': path.resolve(import.meta.dirname, 'services/app') } },
-  build: { outDir: path.resolve(import.meta.dirname, 'services/app/dist/web'), emptyOutDir: true, sourcemap: false },
+  build: { outDir: path.resolve(import.meta.dirname, 'services/app/dist/web'), emptyOutDir: true, sourcemap: false, manifest: true },
   server: { middlewareMode: true },
   appType: 'custom',
 });

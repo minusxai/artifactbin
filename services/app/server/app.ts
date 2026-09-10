@@ -43,6 +43,7 @@ import { authorFrameResponse } from './author-frame';
 import { AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
 import { withInitialHome } from './public-home';
 import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
+import { createReaderPreloader } from './reader-preloads';
 
 /** Where the server hands the SPA a page's data so its FIRST paint is its final one. */
 export const BOOTSTRAP_ID = 'mx-page-data';
@@ -194,6 +195,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     });
   }
   const webDir = opts.webDir ?? path.resolve('dist/web');
+  const preloadReader = opts.indexHtml ? (html: string) => html : createReaderPreloader(webDir);
   app.get(GITHUB_EXTERNAL_URL, createGithubResponse());
   const publicDir = opts.publicDir ?? path.resolve('public');
   let indexCache: string | null = null;
@@ -228,7 +230,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
       return actor.credential === 'none';
     });
     const shell = surface?.surface?.runtime
-      ? withInitialStory(html, surface.surface.runtime, surface.surface.id, surface.description, baseUrl(c.req.raw))
+      ? withInitialStory(preloadReader(html), surface.surface.runtime, surface.surface.id, surface.description, baseUrl(c.req.raw))
       : publicHome ? withInitialHome(html) : html;
     return new Response(data ? withBootstrap(shell, data) : shell, { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,

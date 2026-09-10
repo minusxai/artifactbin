@@ -70,6 +70,12 @@ project directly does not rely on a developer's previous build. Build cost chang
 encode historical timings as guarantees. `lib/dynamic.ts` preserves client-only mounting semantics so
 SSR and the first hydration pass agree while charts and editors remain lazy chunks.
 
+For authorized markup pages, `server/reader-preloads.ts` reads Vite's production manifest once per
+server and advertises Profile, Artifact and InlineStoryRuntime plus their static dependencies before
+the bootstrap JSON. This overlaps downloads without executing the modules or changing the SSR handoff.
+Dynamic descendants stay lazy. Development uses Vite's own HTML; missing production hints fall back to
+lazy discovery. The managed-iframe gate holds the app entry and verifies reader requests start anyway.
+
 The CSS candidate list is extracted from string literals in kit and selected embed files after comments
 are stripped. Run `npm run generate-story-ui-classes` after editing those inputs. Font assets and manifests are
 created by the asset-copy script; restored dependency caches still need that step.

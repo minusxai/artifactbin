@@ -82,6 +82,26 @@ try {
   const staticContext=await browser.newContext({ignoreHTTPSErrors:true,javaScriptEnabled:false}),staticPage=await staticContext.newPage();
   await staticPage.goto(base+'/a/'+seed.id);
   assert(Math.abs((await staticPage.getByLabel('Managed demo',{exact:true}).boundingBox()).height-200)<0.1,'SSR reserves frame height');await staticContext.close();
+  // A cold reader must discover every startup stage from HTML, while the
+  // application entry is held. This tests request ordering, not wall-clock
+  // speed, and keeps unrelated lazy editor/chart bundles out of the preload.
+  const coldContext=await browser.newContext({ignoreHTTPSErrors:true}),cold=await coldContext.newPage();
+  const shell=await mainFetch(backend+'/a/'+seed.id).then(response=>response.text());
+  const entry=/<script[^>]+src="([^"]+)"/.exec(shell)?.[1];assert(entry,'built app entry exists');
+  let releaseEntry;
+  const entryHeld=new Promise(resolve=>{releaseEntry=resolve;});
+  await cold.route(base+entry,async route=>{await entryHeld;await route.continue();});
+  const requested=new Set();cold.on('request',request=>requested.add(new URL(request.url()).pathname));
+  try {
+    await cold.goto(base+'/a/'+seed.id,{waitUntil:'commit'});
+    for(const name of ['Profile','Artifact','InlineStoryRuntime']) {
+      const loaded=()=>[...requested].some(url=>new RegExp('/assets/'+name+'-[^/]+\\.js$').test(url));
+      for(let attempt=0;attempt<100&&!loaded();attempt++)await new Promise(resolve=>setTimeout(resolve,20));
+      assert(loaded(),name+' requested before app entry executes');
+    }
+    assert(![...requested].some(url=>/\/(?:ArtifactEditor|VegaChart)-/.test(url)),'editor and chart remain lazy');
+    console.log('Reader Profile, Artifact and InlineStoryRuntime discovered before app execution');
+  } finally {releaseEntry();await cold.unrouteAll({behavior:'wait'});await coldContext.close();}
   const context=await browser.newContext({ignoreHTTPSErrors:true,viewport:{width:900,height:700}}),page=await context.newPage();
   await becomeOwner(page,base,seed.token);
   page.on('pageerror',error=>console.error('PAGE',error.message));
