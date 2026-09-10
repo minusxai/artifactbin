@@ -89,6 +89,7 @@ export interface ReaderChromeInput {
   author: { username: string | null; forkedFrom?: ReaderForkedFrom | null } | null;
   signIn?: ReaderSignIn | null;
   fork?: ReaderFork | null;
+  forkBusy?: boolean;
   /** A "Sign in" entry in the profile menu, for a reader with no session. Null when signed in. */
   login?: { href: string } | null;
   /** This viewer may WRITE (the owner's or an editor's framed copy): the rail offers Edit. */
@@ -152,7 +153,7 @@ const label = (text: string): string =>
  * A rail ACTION — like, comment, share. A button, never a link: none of the
  * three navigates, and two of them do not even reach the network yet.
  */
-const action = (name: 'like' | 'comment' | 'share' | 'edit', aria: string, icon: string, extra = '', inner = ''): string =>
+const action = (name: 'like' | 'comment' | 'share' | 'edit' | 'fork', aria: string, icon: string, extra = '', inner = ''): string =>
   `<button type="button" class="mx-reader-action" data-mx-reader-action="${name}" aria-label="${aria}" data-mx-tip="${aria}"${extra}>`
   + `${icon}${inner}${label(name)}</button>`;
 
@@ -177,8 +178,8 @@ const renderSignIn = (signIn: ReaderSignIn): string =>
 
 /** "make this mine" — the ASK; the shell on the other side performs the POST. */
 const renderFork = (fork: ReaderFork): string =>
-  `<a class="mx-reader-signin" data-mx-fork href="${escapeHtml(fork.href)}"`
-  + ` target="_top" aria-label="Fork artifact">${ICON_FORK}fork</a>`;
+  `<a class="mx-reader-action" data-mx-fork href="${escapeHtml(fork.href)}"`
+  + ` target="_top" aria-label="Fork artifact" data-mx-tip="Fork artifact">${ICON_FORK}${label('fork')}</a>`;
 
 /**
  * PROVENANCE. Two shapes, and the second is the load-bearing one: with an href
@@ -252,6 +253,7 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
       `<span class="mx-reader-count" data-mx-reader-count="comment">${reactions && reactions.comment.count > 0 ? reactions.comment.count : ''}</span>`,
     )
     + action('share', 'Share', ICON_SEND)
+    + (input.panels === false ? action('fork', 'Fork artifact', ICON_FORK, input.forkBusy ? ' disabled aria-busy="true"' : '') : fork ? renderFork(fork) : '')
     + (edit ? action('edit', 'Edit', ICON_PENCIL) : '')
     + trigger('controls', 'Open artifact controls', ICON_SLIDERS, 'settings', 'Artifact settings')
     + trigger('menu', 'Open menu', ICON_PROFILE, 'profile', 'Profile')
@@ -275,7 +277,6 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
     + '</div>'
     + (aboutThis ? '<h3>this document</h3>' : '')
     + (signIn ? renderSignIn(signIn) : '')
-    + (fork ? renderFork(fork) : '')
     + (forkedFrom ? renderForkedFrom(forkedFrom) : '')
     + '</section>') + '</div>';
 }

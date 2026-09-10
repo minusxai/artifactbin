@@ -39,6 +39,18 @@ describe('trusted UI CSS boundary', () => {
     }
   });
 
+  it('keeps navigation and composers above a selection portal mounted later', () => {
+    const order: HTMLElement[] = [];
+    const show = vi.spyOn(HTMLElement.prototype, 'showPopover').mockImplementation(function(this: HTMLElement) { order.push(this); });
+    const hide = vi.spyOn(HTMLElement.prototype, 'hidePopover').mockImplementation(function(this: HTMLElement) { const index = order.indexOf(this); if (index >= 0) order.splice(index, 1); });
+    try {
+      const result = render(<><TrustedUi overlay layer="navigation"><button>Navigation</button></TrustedUi><TrustedUi overlay><button>Composer</button></TrustedUi><TrustedUi overlay layer="selection"><button>Selection</button></TrustedUi></>);
+      expect(order.map(root => root.textContent?.match(/Navigation|Composer|Selection/)?.[0])).toEqual(['Selection', 'Composer', 'Navigation']);
+      result.unmount();
+      expect(order).toEqual([]);
+    } finally { show.mockRestore(); hide.mockRestore(); }
+  });
+
   it('fails closed for overlay controls when the browser has no top-layer API', () => {
     const original = HTMLElement.prototype.showPopover;
     delete (HTMLElement.prototype as Partial<HTMLElement>).showPopover;

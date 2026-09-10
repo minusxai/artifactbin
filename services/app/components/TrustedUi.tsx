@@ -17,12 +17,23 @@ ${ROOT}[popover] > div { pointer-events: auto; }
 `;
 let trustedCss = BOUNDARY_CSS;
 const installedStyles = new Set<HTMLStyleElement>();
+// Top-layer paint order ignores z-index. Keep selection beneath discussions,
+// and navigation above both, even when a lazy runtime mounts its portal later.
+const overlays = new Map<HTMLElement, number>();
+function openOverlay(root: HTMLElement, priority: number) {
+  overlays.set(root, priority);
+  root.showPopover();
+  for (const [higher, order] of [...overlays].sort((a, b) => a[1] - b[1])) {
+    if (higher !== root && order > priority) { higher.hidePopover(); higher.showPopover(); }
+  }
+}
 
 /** CSS boundary for first-party UI. Author content must never be mounted inside it. */
 export interface TrustedUiProps {
   children: ReactNode;
   /** Artifact chrome only: protects its paint order from author sibling overlays. */
   overlay?: boolean;
+  layer?: 'selection' | 'discussion' | 'navigation';
 }
 
 /** Register only the app's compiled CSS, imported explicitly by its entrypoint. */
@@ -44,7 +55,7 @@ export function configureTrustedUiStyles(cssText: string): void {
 }
 
 /** Owns the protected root and its portal destination; no extra document or auth origin. */
-export function TrustedUi({ children, overlay = false }: TrustedUiProps): ReactNode {
+export function TrustedUi({ children, overlay = false, layer = 'discussion' }: TrustedUiProps): ReactNode {
   const [mount, setMount] = useState<{ root: HTMLElement; portal: HTMLElement } | null>(null);
   const owned = useRef<{ host: HTMLElement; style: HTMLStyleElement; root: HTMLElement; content: HTMLElement; portal: HTMLElement } | null>(null);
   const attach = useCallback((host: HTMLDivElement | null) => {
@@ -72,7 +83,7 @@ export function TrustedUi({ children, overlay = false }: TrustedUiProps): ReactN
     style.textContent = trustedCss;
     if (overlay) {
       root.setAttribute('popover', 'manual');
-      root.showPopover();
+      openOverlay(root, { selection: 0, discussion: 1, navigation: 2 }[layer]);
     } else root.removeAttribute('popover');
     installedStyles.add(style);
     setMount(previous => previous?.root === content ? previous : { root: content, portal });
@@ -85,11 +96,12 @@ export function TrustedUi({ children, overlay = false }: TrustedUiProps): ReactN
     return () => {
       observer.disconnect();
       installedStyles.delete(style);
+      overlays.delete(root);
       if (overlay) root.hidePopover();
       // React owns the portal children and removes them during unmount. Do
       // not clear them before React's deletion pass.
     };
-  }, [overlay]);
+  }, [overlay, layer]);
   // The host is deliberately not a security boundary against JS. Author JS
   // remains in its opaque sandbox; Shadow DOM prevents author CSS selectors
   // from reaching controls. No slots or parts expose those controls outside.

@@ -112,7 +112,7 @@ export function useForkArtifact(id: string): ForkState {
 }
 
 /** The refusal, said where the act was asked for. */
-function Refusal({ lines, onDismiss }: { lines: string[]; onDismiss: () => void }) {
+export function ForkRefusal({ lines, onDismiss }: { lines: string[]; onDismiss: () => void }) {
   return (
     <div aria-label="Fork refused" role="status" className="mt-1 rounded-[5px] border border-edge bg-raised px-2 py-2 font-mono text-[11px] text-muted">
       {lines.map((line) => <p key={line} className="whitespace-pre-wrap">{line}</p>)}
@@ -128,38 +128,30 @@ function Refusal({ lines, onDismiss }: { lines: string[]; onDismiss: () => void 
   );
 }
 
-/**
- * The artifact-controls row. Offered to EVERYONE the shell is served to — a
- * fork needs only the right to READ, and the door agrees (it decides on the
- * read ACL there, not on ownership).
- *
- * Unlike every other row here it does NOT close the sheet on click, and that
- * is deliberate: two of the three outcomes navigate away (the copy, or the
- * login door), so closing buys nothing, and the third — a refusal naming what
- * the forker would have to change — has to be READ. Closing first would put
- * the answer behind a panel that shut a moment earlier.
- */
-export default function ForkArtifact({ id }: {
+/** Fork is offered to every reader; the server decides the read ACL.
+ * The bar variant keeps refusals visible beside the initiating control. */
+export default function ForkArtifact({ id, variant = 'menu' }: {
   id: string;
-  /** `menu` renders as a full-width document-control row (CopyAgentPrompt's precedent). */
-  variant?: 'menu';
+  /** Settings row or compact app-bar button. */
+  variant?: 'menu' | 'bar';
 }) {
   const { busy, refusal, fork, dismiss } = useForkArtifact(id);
   return (
-    <>
+    <div className="relative">
       <button
         type="button"
         aria-label="Fork artifact"
         aria-live="polite"
         disabled={busy}
         onClick={fork}
-        className={CONTROL_ROW}
+        title="Fork artifact"
+        className={variant === 'bar' ? 'flex h-9 w-9 cursor-pointer items-center justify-center rounded-[8px] border-0 bg-transparent text-muted hover:bg-raised hover:text-fg disabled:opacity-60' : CONTROL_ROW}
       >
         <GitFork size={14} strokeWidth={1.75} />
-        <span className="flex-1">{busy ? 'forking…' : 'fork'}</span>
+        <span className={variant === 'bar' ? 'sr-only' : 'flex-1'}>{busy ? 'forking…' : 'fork'}</span>
       </button>
-      {refusal && <Refusal lines={refusal} onDismiss={dismiss} />}
-    </>
+      {refusal && <div className={variant === 'bar' ? 'absolute right-0 top-full z-50 w-72' : ''}><ForkRefusal lines={refusal} onDismiss={dismiss} /></div>}
+    </div>
   );
 }
 
@@ -214,7 +206,7 @@ export function ForkConfirm({ id, title, onClose }: { id: string; title: string 
         <p className="mt-2 text-[11px] text-muted">
           {`A copy of “${title ?? 'this artifact'}” is added to your artifacts. Comments, history and sharing stay with the original.`}
         </p>
-        {refusal && <Refusal lines={refusal} onDismiss={dismiss} />}
+        {refusal && <ForkRefusal lines={refusal} onDismiss={dismiss} />}
         <div className="mt-4 flex justify-end gap-2">
           <button
             type="button"

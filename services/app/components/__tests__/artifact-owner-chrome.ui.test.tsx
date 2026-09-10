@@ -522,13 +522,12 @@ describe('the fork row', () => {
       );
       openDocumentControls();
       expect(screen.getByLabelText('Fork artifact'), role).toBeInTheDocument();
-      expect(screen.getByLabelText('Fork artifact').querySelector('.lucide-git-fork'), role).toBeTruthy();
+      expect(screen.getByLabelText('Fork artifact').querySelector('svg'), role).toBeTruthy();
       expect(screen.getByLabelText('Fork artifact')).toHaveTextContent('fork');
       unmount();
     }
 
-    // A dataset had no "Artifact" section at all — the row widens it rather
-    // than living in a second place.
+    // Data artifacts expose the same action directly in their app bar.
     render(
       <ArtifactShell role="owner">
         <ArtifactSurface {...surfaceProps({ format: 'dataset', content: '[]', columns: [] })} />
@@ -538,7 +537,7 @@ describe('the fork row', () => {
     expect(screen.getByLabelText('Fork artifact')).toBeInTheDocument();
   });
 
-  it('sits directly under the comments row', () => {
+  it('sits in the action rail outside artifact settings', () => {
     render(
       <ArtifactShell role="owner">
         <ArtifactSurface {...surfaceProps({})} />
@@ -547,7 +546,8 @@ describe('the fork row', () => {
     openDocumentControls();
     const section = screen.getByLabelText('Document actions');
     const labels = [...section.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'));
-    expect(labels.indexOf('Fork artifact')).toBe(labels.indexOf('Toggle comments') + 1);
+    expect(labels).not.toContain('Fork artifact');
+    expect(screen.getByLabelText('Fork artifact').closest('[data-mx-reader-rail]')).not.toBeNull();
   });
 
   it('POSTs the fork and goes to the copy', async () => {
