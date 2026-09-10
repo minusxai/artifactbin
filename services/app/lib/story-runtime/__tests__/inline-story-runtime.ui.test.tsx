@@ -70,15 +70,15 @@ describe('inline artifact runtime lifetime', () => {
     const messages: unknown[] = [];
     session!.subscribe(message => messages.push(message));
     await act(async () => session!.send({type:STORY_EDIT_MODE_MESSAGE,on:true}));
-    await waitFor(() => expect(screen.getByLabelText('Artifact heading')).toHaveAttribute('contenteditable','true'));
+    await waitFor(() => expect(screen.getByLabelText('Artifact heading').closest('.ProseMirror')).toHaveAttribute('contenteditable','true'));
     const heading = screen.getByLabelText('Artifact heading');
     await act(async () => session!.send({type:STORY_SELECT_MESSAGE,path:'0'}));
     expect(document.getElementById('outside')).not.toHaveAttribute('data-mx-selected');
-    fireEvent.focus(heading);
-    heading.innerHTML = 'Typed draft';
-    fireEvent.input(heading);
+    const editor=heading.closest('.ProseMirror')!;
+    fireEvent.focus(editor);
+    fireEvent.paste(editor,{clipboardData:{files:[],getData:(type:string)=>type==='text/html'?'<p>Typed draft</p>':'Typed draft'}});
     await act(async () => session!.send({type:STORY_COMMIT_MESSAGE}));
-    expect(messages).toEqual(expect.arrayContaining([expect.objectContaining({type:'mx:text-edit',innerHtml:'Typed draft'}),expect.objectContaining({type:'mx:committed'})]));
+    expect(messages).toEqual(expect.arrayContaining([expect.objectContaining({type:'mx:flow-edit',replacement:expect.stringContaining('Typed draft')}),expect.objectContaining({type:'mx:committed'})]));
     view.unmount();
   });
 
@@ -100,7 +100,7 @@ describe('inline artifact runtime lifetime', () => {
     await act(async () => { window.dispatchEvent(new MessageEvent('message', { data: { type: STORY_EDIT_MODE_MESSAGE, on: true }, source: window })); });
     expect(screen.getByLabelText('Artifact heading')).not.toHaveAttribute('contenteditable', 'true');
     await act(async () => { session!.send({ type: STORY_EDIT_MODE_MESSAGE, on: true }); });
-    await waitFor(() => expect(screen.getByLabelText('Artifact heading')).toHaveAttribute('contenteditable', 'true'));
+    await waitFor(() => expect(screen.getByLabelText('Artifact heading').closest('.ProseMirror')).toHaveAttribute('contenteditable', 'true'));
     const old = session!;
     const listener = vi.fn();
     old.subscribe(listener);

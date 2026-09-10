@@ -26,6 +26,7 @@ import {DATASET_OPERATIONS} from '@/lib/datasets/operations';
  * MCP schema and the docs.
  */
 import { z } from 'zod';
+import { STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import {
   applyEditFor, canReadArtifact, findDependentsFor, forkArtifact, getArtifactById, getArtifactFor, getVersionFor, listArtifactsFor, listVersionsFor,
   revertArtifactFor, isVersionNotArchived, type ForkOverrides, type TokenActor
@@ -125,7 +126,7 @@ const CONTENT_FIELDS = {
   // name, the successor hint for a retired one). A zod enum would swallow both
   // into a generic schema error.
   theme: z.string().optional().describe('design personality (fonts, radius, light+dark palettes): modernist | organic | industry | terminal | manuscript | pop; a retired name (classical/broadsheet/nocturne) is rejected with a hint naming its successor'),
-  template: z.enum(['editorial', 'deck', 'scrolly', 'dashboard']).optional(),
+  template: z.enum(STORY_TEMPLATE_NAMES).optional(),
   colorMode: z.enum(['light', 'dark']).optional().describe("the AUTHOR's default mode; every theme has both palettes and readers can flip at view time"),
   // A FOLDER IS AN ARTIFACT, so the create door's `format` takes exactly one
   // value: everything else is named by its content field, and only a folder

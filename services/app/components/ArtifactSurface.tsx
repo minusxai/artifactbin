@@ -696,7 +696,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             <button
               type="button"
               aria-label="Edit artifact"
-              onClick={() => { close(); enterEdit(); }}
+              onClick={event => { event.currentTarget.blur(); close(); enterEdit(); }}
               className={CONTROL_ROW}
             >
               <Pencil size={14} strokeWidth={1.75} />

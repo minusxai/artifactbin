@@ -83,6 +83,27 @@ Do not adopt remote document updates while local typing is uncommitted; an empty
 proof that the document is clean. Reader URL choices seed island `values`, not precomputed `state`,
 so seeding the link does not suppress the initial query run.
 
+### Selecting CI work
+
+`scripts/lib/ci-plan.mjs` maps changed paths to service modules and expands
+transitive dependents, including app composition tests and eval consumers.
+The GitHub adapter (`scripts/ci.mjs`) diffs the PR merge base with renames
+expanded into both paths. Node shards receive selected module roots; API,
+UI and browser gates remain whole integration suites when the app is affected.
+Script contract tests run with every code change because they read across modules.
+
+Workspace manifests, shared contracts/utils, build and CI configuration,
+unclassified paths or unavailable history select the full suite. Only explicitly
+classified repository prose skips runtime checks; shipped skill markdown belongs
+to the app. Pushes to main always run everything. Keep dependency edges current
+when adding cross-module consumers; the planner tests also check workspace edges.
+The required `test` job accepts a skipped job only when the plan did not select it,
+and includes CLI results. The live-provider agent smoke remains optional/advisory.
+
+Run `npx vitest run --project=node scripts/__tests__/ci-plan.test.mjs` for path,
+rename, dependency, workflow wiring and required-result checks. The CI plan is
+printed in the Actions summary so each skipped job is reviewable.
+
 ## Dynamic comment identity and interaction
 
 `lib/story/comment-target.ts` defines refinements under an independently validated

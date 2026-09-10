@@ -275,6 +275,7 @@ CREATE TABLE IF NOT EXISTS app.artifact_edits (
   span_start INTEGER NOT NULL,
   span_end INTEGER NOT NULL,
   changes JSONB,
+  annotation_changes JSONB,
   actor_user_id TEXT,
   actor_token_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -299,6 +300,8 @@ ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS span_start INTEGER NOT N
 ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS span_end INTEGER NOT NULL;
 
 ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS changes JSONB;
+
+ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS annotation_changes JSONB;
 
 ALTER TABLE app.artifact_edits ADD COLUMN IF NOT EXISTS actor_user_id TEXT;
 

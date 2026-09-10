@@ -16,17 +16,41 @@
  */
 import type { ReactElement, ReactNode } from 'react';
 import { cloneElement, createElement } from 'react';
-import type { JsxElement, JsxNode } from '@/lib/jsx';
+import { serializeJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
+import { restoreBookmark, type EditorBookmark, type EditorSelectionChange } from '@/lib/editor-v2/bookmark';
+import { FlowEditor } from '@/lib/editor-v2/flow-editor';
+import { createNodeChrome } from '@/lib/editor-v2/node-chrome';
+import { createBlockSelection } from '@/lib/editor-v2/block-selection';
+import { gridCols, gridRowHeight } from '@/lib/story-ui/grid-layout';
+import { resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
+import { isProseTree, inlineStates, toggleInline, pasteFragment, editorSchema } from '@/lib/editor-v2/model';
+import { clipboardAst } from '@/lib/editor-v2/clipboard';
+import type { EditorView } from 'prosemirror-view';
 import { isEditableTextHost } from '@/lib/story-ui/host-classify';
 import { normalizeLinkHref } from '@/lib/data/story/link-edit';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import type { RuntimeChannel } from '../pristine';
 import {
-  STORY_EDIT_KEY_MESSAGE, STORY_EDIT_READY_MESSAGE, STORY_IMAGE_DROP_MESSAGE, STORY_SELECTION_MESSAGE,
-  STORY_TEXT_EDIT_MESSAGE, STORY_TYPING_MESSAGE,
-  STORY_APPLY_FORMAT_MESSAGE, STORY_APPLY_LINK_MESSAGE, STORY_SELECT_MESSAGE,
-  STORY_COMMIT_MESSAGE, STORY_COMMITTED_MESSAGE, STORY_LAYOUT_EDIT_MESSAGE, STORY_SLIDE_TITLE_MESSAGE,
-  type StoryEditParentMessage, type StoryEditSelection,
+  STORY_EDIT_KEY_MESSAGE,
+  STORY_EDIT_READY_MESSAGE,
+  STORY_IMAGE_DROP_MESSAGE,
+  STORY_SELECTION_MESSAGE,
+  STORY_INLINE_MESSAGE,
+  STORY_PASTE_MESSAGE,
+  STORY_BLOCK_EDIT_MESSAGE,
+  STORY_HISTORY_MESSAGE,
+  STORY_FLOW_EDIT_MESSAGE,
+  STORY_TEXT_EDIT_MESSAGE,
+  STORY_TYPING_MESSAGE,
+  STORY_APPLY_FORMAT_MESSAGE,
+  STORY_APPLY_LINK_MESSAGE,
+  STORY_SELECT_MESSAGE,
+  STORY_COMMIT_MESSAGE,
+  STORY_COMMITTED_MESSAGE,
+  STORY_LAYOUT_EDIT_MESSAGE,
+  STORY_SLIDE_TITLE_MESSAGE,
+  type StoryEditParentMessage,
+  type StoryEditSelection,
 } from '../contract';
 import { describeSelection } from './describe-selection';
 import { captureSelection } from './selection-range';
@@ -47,16 +71,18 @@ export const EDIT_HOVER_ATTR = 'data-mx-edit-hover';
  * or apply editor chrome.
  */
 export const EDIT_MODE_CSS = [
-  `[${EDIT_HOVER_ATTR}] { outline: 1px solid rgba(20, 184, 166, 0.52); outline-offset: 2px; border-radius: 2px; }`,
-  `[${EDIT_SELECTED_ATTR}] { outline: 2px dashed #14b8a6; outline-offset: 2px; }`,
-  `[${EDIT_EMBED_SELECTED_ATTR}] { outline: 2px solid #14b8a6; outline-offset: 2px; }`,
-  '[contenteditable="true"]:focus { outline: 2px solid rgba(20, 184, 166, 0.55); outline-offset: 2px; }',
+  `[${EDIT_HOVER_ATTR}] { outline: 1px solid rgba(100, 116, 139, 0.16); outline-offset: 2px; }`,
+  `[${EDIT_SELECTED_ATTR}], [${EDIT_EMBED_SELECTED_ATTR}] { outline: 1px solid rgba(100, 116, 139, 0.3); outline-offset: 2px; }`,
+  '[data-mx-block-selected] { outline: 1px solid rgba(100,116,139,.18); outline-offset: 2px; }',
+  '.ProseMirror { outline: none; white-space: pre-wrap; overflow-wrap: break-word; }',
+  '[contenteditable="true"]:focus { outline: none; }',
 ].join('\n');
 
 const EDIT_CSS_ATTR = 'data-mx-edit-css';
 
 export interface FrameEditSession {
   /** Wrap a rendered element for edit mode. Chained after the runtime's own decorator. */
+  decorateChildren(children: ReactNode[], nodes: JsxNode[], parentPath: string): ReactNode;
   decorate(element: ReactElement, node: JsxElement, path: string): ReactNode;
   /** The nodes currently rendered — selection is classified against the SOURCE, not the DOM. */
   setNodes(nodes: JsxNode[]): void;
@@ -67,7 +93,12 @@ export interface FrameEditSession {
   dispose(): void;
 }
 
-interface ActiveHost { path: string; el: HTMLElement; snapshot: string; userEdited: boolean }
+interface ActiveHost {
+  path: string;
+  el: HTMLElement;
+  snapshot: string;
+  userEdited: boolean;
+}
 
 export interface FrameEditSessionOptions {
   win: Window;
@@ -77,18 +108,48 @@ export interface FrameEditSessionOptions {
   requestRender: () => void;
 }
 
-export function createFrameEditSession({ win, channel, requestRender, root }: FrameEditSessionOptions): FrameEditSession {
+export function createFrameEditSession({
+  win,
+  channel,
+  requestRender,
+  root,
+}: FrameEditSessionOptions): FrameEditSession {
   const doc = win.document;
   const scope = root ?? doc;
   let nodes: JsxNode[] = [];
+  let nodesContent = JSON.stringify(nodes);
   let active: ActiveHost | null = null;
   let selectedPath: string | null = null;
   let hovered: Element | null = null;
   let typingReported = false;
   let bodyEpoch = 0;
   let disposed = false;
+  let entering = true;
+  const entryScroll = { x: win.scrollX, y: win.scrollY };
+  const restoreScroll = (position: { x: number; y: number }) => {
+    if (win.scrollX !== position.x || win.scrollY !== position.y) win.scrollTo(position.x, position.y);
+  };
+  const views = new Set<EditorView>();
+  let pendingBookmark: EditorBookmark | undefined;
+  const restorePending = () => {
+    if (pendingBookmark)
+      for (const view of views)
+        if (restoreBookmark(view, pendingBookmark)) {
+          pendingBookmark = undefined;
+          break;
+        }
+  };
+  let lastView: EditorView | null = null;
 
   const post = (message: Record<string, unknown>) => channel.post({ ...message, nonce: channel.nonce });
+
+  const blockSelection = createBlockSelection(doc, scope, (command) =>
+    post({ type: STORY_BLOCK_EDIT_MESSAGE, command }),
+  );
+  const chrome = createNodeChrome(doc, (command) => {
+    commitHost(active);
+    post({ type: STORY_BLOCK_EDIT_MESSAGE, command });
+  });
 
   // ── selection ─────────────────────────────────────────────────────────────
   const stampSelection = () => {
@@ -96,11 +157,40 @@ export function createFrameEditSession({ win, channel, requestRender, root }: Fr
       el.removeAttribute(EDIT_SELECTED_ATTR);
       el.removeAttribute(EDIT_EMBED_SELECTED_ATTR);
     }
-    if (!selectedPath) return;
+    const range = win.getSelection();
+    if (!selectedPath || blockSelection.paths().length || (range && !range.isCollapsed && scope.contains(range.anchorNode))) {
+      chrome.select(null, null);
+      return;
+    }
     const el = scope.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(selectedPath)}"]`);
-    if (!el) return;
+    if (!el) {
+      chrome.select(null, null);
+      return;
+    }
     const kind = describeSelection(el, nodes)?.kind;
     el.setAttribute(kind === 'embed' ? EDIT_EMBED_SELECTED_ATTR : EDIT_SELECTED_ATTR, '');
+    const node = resolveJsxNodeAtPath(nodes, selectedPath);
+    const parent = resolveJsxNodeAtPath(nodes, selectedPath.split('.').slice(0, -1).join('.'));
+    const props =
+      parent?.type === 'element'
+        ? Object.fromEntries(parent.attributes.flatMap((a) => (a.value.static ? [[a.name, a.value.json]] : [])))
+        : {};
+    const grid =
+      node?.type === 'element' && node.tag === 'GridItem'
+        ? {
+            cols: gridCols(props.cols),
+            rowHeight: gridRowHeight(props.rowHeight),
+            width: el.parentElement?.getBoundingClientRect().width ?? el.getBoundingClientRect().width,
+            positioned: props.mode !== 'flow',
+          }
+        : undefined;
+    const inlineOrDrawingPart =
+      node?.type === 'element' &&
+      (['span', 'strong', 'b', 'em', 'i', 'a', 'code', 'br', 'small', 'sup', 'sub', 's', 'del', 'u'].includes(
+        node.tag,
+      ) ||
+        (el.namespaceURI === 'http://www.w3.org/2000/svg' && node.tag !== 'svg'));
+    chrome.select(inlineOrDrawingPart ? null : (el as HTMLElement), inlineOrDrawingPart ? null : selectedPath, grid);
   };
 
   /**
@@ -113,6 +203,11 @@ export function createFrameEditSession({ win, channel, requestRender, root }: Fr
   const describeWithQuote = (el: Element): StoryEditSelection | null => {
     const selection = describeSelection(el, nodes);
     if (!selection) return null;
+    for (const view of views)
+      if (view.dom.contains(el)) {
+        selection.inline = inlineStates(view.state);
+        break;
+      }
     const captured = captureSelection(win, el);
     if (captured) {
       selection.quote = captured.quote;
@@ -150,12 +245,14 @@ export function createFrameEditSession({ win, channel, requestRender, root }: Fr
     if (innerHtml === host.snapshot) return;
     host.snapshot = innerHtml;
     host.userEdited = false;
+    reportTyping(false);
     post({ type: STORY_TEXT_EDIT_MESSAGE, path: host.path, innerHtml });
   };
 
   const hostSession = {
     isEditing: (path: string) => active?.path === path,
     onFocus(path: string, el: HTMLElement) {
+      lastView = null;
       active = { path, el, snapshot: channel.innerHtmlOf(el), userEdited: false };
       reportSelection(describeWithQuote(el));
     },
@@ -168,7 +265,7 @@ export function createFrameEditSession({ win, channel, requestRender, root }: Fr
       active = null;
       commitHost(host);
       reportTyping(false);
-      requestRender();   // the focus guard is released; let React reconcile again
+      requestRender(); // the focus guard is released; let React reconcile again
     },
   };
 
@@ -176,7 +273,12 @@ export function createFrameEditSession({ win, channel, requestRender, root }: Fr
   /** Resolve the same selectable node a click would, excluding duplicate document chrome. */
   const selectableAt = (target: EventTarget | null): Element | null => {
     const element = target as Element | null;
-    if (!element?.closest || (root && !root.contains(element)) || element.closest('.mx-rail, .mx-present')) return null;
+    if (
+      !element?.closest ||
+      (root && !root.contains(element)) ||
+      element.closest('.mx-rail, .mx-present, [data-mx-node-chrome]')
+    )
+      return null;
     const stamped = element.closest(`[${AST_PATH_ATTR}]`);
     return stamped && describeSelection(stamped, nodes) ? stamped : null;
   };
@@ -188,6 +290,21 @@ export function createFrameEditSession({ win, channel, requestRender, root }: Fr
     hovered?.setAttribute(EDIT_HOVER_ATTR, '');
   };
 
+  const onFocusIn = (event: FocusEvent) => {
+    const target = event.target as Node;
+    lastView = [...views].find((view) => view.dom.contains(target)) ?? lastView;
+  };
+  doc.addEventListener('focusin', onFocusIn);
+  const onSelectionChange = () => {
+    const selection = win.getSelection();
+    const target = selection?.anchorNode?.parentElement;
+    if (!target?.closest('.ProseMirror') || (root && !root.contains(target))) return;
+    lastView = [...views].find((view) => view.dom.contains(target)) ?? lastView;
+    const el = target.closest(`[${AST_PATH_ATTR}]`);
+    if (el) reportSelection(describeWithQuote(el));
+  };
+  doc.addEventListener('selectionchange', onSelectionChange);
+
   const onPointerOver = (event: PointerEvent) => setHovered(selectableAt(event.target));
   const onPointerOut = (event: PointerEvent) => setHovered(selectableAt(event.relatedTarget));
 
@@ -198,9 +315,20 @@ export function createFrameEditSession({ win, channel, requestRender, root }: Fr
     // Chrome the document draws for itself (the deck rail and its slide
     // previews) re-renders the slide's own nodes, so ids and AST stamps appear
     // twice — a click there must never select the preview copy.
-    if (target.closest('.mx-rail, .mx-present')) return;
+    if (target.closest('.mx-rail, .mx-present, [data-mx-node-chrome]')) return;
+    if (target.closest('.ProseMirror') && target.closest('a')) event.preventDefault();
+    // A drag ends with a click on the common ancestor. It is still a text
+    // selection, never an instruction to resize that entire container.
+    const native = win.getSelection();
+    if (native && !native.isCollapsed && scope.contains(native.anchorNode)) {
+      stampSelection();
+      return;
+    }
     const stamped = target.closest(`[${AST_PATH_ATTR}]`);
-    if (!stamped) { reportSelection(null); return; }
+    if (!stamped) {
+      reportSelection(null);
+      return;
+    }
     const selection = describeWithQuote(stamped);
     // A focused text host owns its own selection (reported on focus).
     if (selection?.kind === 'text' && active?.path === selection.path) return;
@@ -209,7 +337,19 @@ export function createFrameEditSession({ win, channel, requestRender, root }: Fr
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (root && !root.contains(event.target as Node)) return;
-    if (event.key === 'Escape') { post({ type: STORY_EDIT_KEY_MESSAGE, key: 'Escape' }); return; }
+    if ((event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase())) {
+      event.preventDefault();
+      commitHost(active);
+      post({
+        type: STORY_HISTORY_MESSAGE,
+        direction: event.shiftKey || event.key.toLowerCase() === 'y' ? 'redo' : 'undo',
+      });
+      return;
+    }
+    if (event.key === 'Escape') {
+      post({ type: STORY_EDIT_KEY_MESSAGE, key: 'Escape' });
+      return;
+    }
     if (event.key !== 'Delete' && event.key !== 'Backspace') return;
     // Inside a text host those keys belong to the text.
     if (active) return;
@@ -250,14 +390,31 @@ export function createFrameEditSession({ win, channel, requestRender, root }: Fr
   const onScroll = () => {
     if (scrollQueued) return;
     scrollQueued = true;
-    win.requestAnimationFrame(() => { scrollQueued = false; if (!disposed) republishRect(); });
+    win.requestAnimationFrame(() => {
+      scrollQueued = false;
+      if (!disposed) republishRect();
+    });
   };
 
   doc.addEventListener('click', onClick, true);
   doc.addEventListener('pointerover', onPointerOver, true);
   doc.addEventListener('pointerout', onPointerOut, true);
   doc.addEventListener('keydown', onKeyDown, true);
+  const onLegacyPaste = (event: ClipboardEvent) => {
+    if (
+      event.defaultPrevented ||
+      !active?.el.contains(event.target as Node) ||
+      !event.clipboardData?.getData('text/html')
+    )
+      return;
+    event.preventDefault();
+    post({
+      type: 'mx:edit-error',
+      message: 'This element supports typing and plain-text paste. Use a regular paragraph for formatted paste.',
+    });
+  };
   doc.addEventListener('paste', onImageTransfer as EventListener, true);
+  doc.addEventListener('paste', onLegacyPaste, true);
   doc.addEventListener('drop', onImageTransfer as EventListener, true);
   doc.addEventListener('dragover', onDragOver as EventListener, true);
   win.addEventListener('scroll', onScroll, { passive: true });
@@ -274,6 +431,27 @@ export function createFrameEditSession({ win, channel, requestRender, root }: Fr
   const applyFormat = (path: string, className?: string, style_?: string) => {
     const el = scope.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(path)}"]`);
     if (!el) return;
+    const editor = [...views].find((view) => view.dom.contains(el));
+    if (editor && className !== undefined) {
+      let position: number | null = null;
+      editor.state.doc.descendants((_node, pos) => {
+        if (editor.nodeDOM(pos) === el) position = pos;
+      });
+      if (position !== null) {
+        const node = editor.state.doc.nodeAt(position)!;
+        const original = node.attrs.source as JsxElement | null;
+        const attributes = (original?.attributes ?? []).filter((a) => !['class', 'className'].includes(a.name));
+        if (className)
+          attributes.push({ name: 'className', value: { static: true, json: className }, start: 0, end: 0 });
+        editor.dispatch(
+          editor.state.tr
+            .setNodeMarkup(position, undefined, { ...node.attrs, source: { ...original, attributes } })
+            .setMeta('mx-command', true),
+        );
+        republishRect();
+        return;
+      }
+    }
     if (className !== undefined) {
       if (className.trim()) el.setAttribute('class', className);
       else el.removeAttribute('class');
@@ -291,6 +469,37 @@ export function createFrameEditSession({ win, channel, requestRender, root }: Fr
    * through the ordinary text-edit channel.
    */
   const applyLink = (path: string, href: string | null) => {
+    if (lastView && views.has(lastView)) {
+      const view = lastView,
+        { from, to } = view.state.selection,
+        tr = view.state.tr;
+      const safe = href ? normalizeLinkHref(href) : null;
+      if (href && !safe) return;
+      view.state.doc.nodesBetween(from, to, (node) => {
+        for (const mark of node.marks) if (mark.attrs.tag === 'a') tr.removeMark(from, to, mark);
+      });
+      if (safe)
+        tr.addMark(
+          from,
+          to,
+          editorSchema.marks.inline.create({
+            tag: 'a',
+            source: {
+              type: 'element',
+              tag: 'a',
+              isComponent: false,
+              attributes: [{ name: 'href', value: { static: true, json: safe }, start: 0, end: 0 }],
+              children: [],
+              selfClosing: false,
+              start: 0,
+              end: 0,
+            },
+          }),
+        );
+      view.dispatch(tr.setMeta('mx-command', true));
+      view.focus();
+      return;
+    }
     const host = scope.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(path)}"]`) as HTMLElement | null;
     if (!host) return;
     const selection = win.getSelection();
@@ -313,17 +522,28 @@ export function createFrameEditSession({ win, channel, requestRender, root }: Fr
       // Restated at the sink against literal prefixes. `normalizeLinkHref` is
       // the door and it is tested; this line is what a reader (and a scanner)
       // can check WITHOUT leaving the function that writes the attribute.
-      if (!(safe.startsWith('https://') || safe.startsWith('http://')
-        || safe.startsWith('mailto:') || safe.startsWith('tel:')
-        || safe.startsWith('/') || safe.startsWith('#'))) return;
+      if (!(
+        safe.startsWith('https://') ||
+        safe.startsWith('http://') ||
+        safe.startsWith('mailto:') ||
+        safe.startsWith('tel:') ||
+        safe.startsWith('/') ||
+        safe.startsWith('#')
+      ))
+        return;
       const anchor = doc.createElement('a');
       anchor.setAttribute('href', safe);
       anchor.setAttribute('target', '_blank');
       anchor.setAttribute('rel', 'noopener noreferrer');
-      try { range.surroundContents(anchor); } catch { return; } // a partial selection across elements
+      try {
+        range.surroundContents(anchor);
+      } catch {
+        return;
+      } // a partial selection across elements
     } else {
-      const anchor = (range.commonAncestorContainer as Element).parentElement?.closest?.('a')
-        ?? (range.commonAncestorContainer as Element).closest?.('a');
+      const anchor =
+        (range.commonAncestorContainer as Element).parentElement?.closest?.('a') ??
+        (range.commonAncestorContainer as Element).closest?.('a');
       if (!anchor) return;
       anchor.replaceWith(...Array.from(anchor.childNodes));
     }
@@ -331,10 +551,108 @@ export function createFrameEditSession({ win, channel, requestRender, root }: Fr
   };
 
   return {
+    decorateChildren(children: ReactNode[], source: JsxNode[], parentPath: string): ReactNode {
+      const result: ReactNode[] = [];
+      for (let index = 0; index < source.length;) {
+        const start = index;
+        // Inline children belong to their parent textblock, never nested editors.
+        const isBlock = (n: JsxNode) =>
+          n.type === 'element' &&
+          ![
+            'thead',
+            'tbody',
+            'tfoot',
+            'tr',
+            'td',
+            'th',
+            'span',
+            'strong',
+            'b',
+            'em',
+            'i',
+            'a',
+            'code',
+            'br',
+            'small',
+            'sup',
+            'sub',
+            's',
+            'del',
+            'u',
+          ].includes(n.tag) &&
+          isProseTree(n);
+        if (!isBlock(source[index])) {
+          result.push(children[index++]);
+          continue;
+        }
+        index++;
+        while (
+          index < source.length &&
+          (isBlock(source[index]) ||
+            (source[index].type === 'text' && !(source[index] as { value: string }).value.trim()))
+        )
+          index++;
+        let previous = source.slice(start, index);
+        const path = [parentPath, String(start)].filter(Boolean).join('.');
+        const first = previous[0];
+        const id = first.type === 'element' ? first.attributes.find((a) => a.name === 'id')?.value : null;
+        let regionView: EditorView | null = null;
+        result.push(
+          createElement(FlowEditor, {
+            key: id?.static ? String(id.json) : path,
+            nodes: previous,
+            path,
+            onError(message: string) {
+              post({ type: 'mx:edit-error', message });
+            },
+            onBusy: reportTyping,
+            canEdit: () => blockSelection.paths().length === 0,
+            onView(view: EditorView | null) {
+              if (regionView) views.delete(regionView);
+              regionView = view;
+              if (view) {
+                views.add(view);
+                win.requestAnimationFrame(restorePending);
+                if (view.hasFocus()) {
+                  lastView = view;
+                  win.queueMicrotask(() => {
+                    const anchor = doc.getSelection()?.anchorNode;
+                    const el = (anchor?.nodeType === 1 ? (anchor as Element) : anchor?.parentElement)?.closest(
+                      '[data-mx-ast]',
+                    );
+                    if (el && view.dom.contains(el)) reportSelection(describeWithQuote(el));
+                  });
+                }
+              }
+              if (view && entering)
+                win.requestAnimationFrame(() => {
+                  restoreScroll(entryScroll);
+                  entering = false;
+                });
+            },
+            onChange(next: JsxNode[], group?: string, selection?: EditorSelectionChange) {
+              post({
+                type: STORY_FLOW_EDIT_MESSAGE,
+                path,
+                expected: serializeJsx(previous),
+                replacement: serializeJsx(next),
+                group,
+                selection,
+              });
+              previous = next;
+            },
+          }),
+        );
+      }
+      return result;
+    },
     decorate(element: ReactElement, node: JsxElement, path: string): ReactNode {
       // A grid becomes draggable: only the document knows how wide its columns
       // are, so the drag happens here and the rects travel (edit/grid-edit).
       if (node.isComponent && node.tag === 'Grid') {
+        // Flow uses the reader tree unchanged; overlay handles own its layout gestures.
+        if (node.attributes.some((a) => a.name === 'mode' && a.value?.static && a.value.json === 'flow'))
+          return element;
         return createElement(GridEdit, {
           key: (element as ReactElement).key ?? path,
           props: (element as ReactElement<Record<string, unknown>>).props,
@@ -363,16 +681,57 @@ export function createFrameEditSession({ win, channel, requestRender, root }: Fr
     },
     setNodes(next: JsxNode[]) {
       if (next === nodes) return;
+      // A refetch can deserialize the same document into fresh objects. It is
+      // not an edit and must not cancel a selection or an active resize.
+      const nextContent = JSON.stringify(next);
+      if (nextContent === nodesContent) {
+        nodes = next;
+        return;
+      }
+      nodesContent = nextContent;
+      chrome.cancel();
+      blockSelection.clear();
       nodes = next;
-      bodyEpoch += 1;   // a different document: focused hosts must reconcile
+      bodyEpoch += 1; // a different document: focused hosts must reconcile
       // The selected node may not exist in the new document.
-      if (selectedPath && !describeSelection(
-        scope.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(selectedPath)}"]`) ?? doc.createElement('div'), nodes,
-      )) selectedPath = null;
+      if (
+        selectedPath &&
+        !describeSelection(
+          scope.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(selectedPath)}"]`) ?? doc.createElement('div'),
+          nodes,
+        )
+      )
+        selectedPath = null;
       stampSelection();
     },
     onParentMessage(message: StoryEditParentMessage) {
       switch (message.type) {
+        case STORY_INLINE_MESSAGE:
+          if (lastView && views.has(lastView)) {
+            lastView.dispatch(toggleInline(lastView.state, message.tag).setMeta('mx-command', true));
+            lastView.focus();
+          }
+          break;
+        case STORY_PASTE_MESSAGE:
+          if (lastView && views.has(lastView)) {
+            try {
+              const ast = clipboardAst(message.kind, message.value);
+              const tr = lastView.state.tr;
+              lastView.dispatch(
+                (lastView.state.selection.$from.parent.attrs.tag === 'pre'
+                  ? tr.insertText(message.value)
+                  : tr.replaceSelection(pasteFragment(ast))
+                ).setMeta('uiEvent', 'paste'),
+              );
+              lastView.focus();
+            } catch (error) {
+              post({
+                type: 'mx:edit-error',
+                message: error instanceof Error ? error.message : 'Paste could not be inserted.',
+              });
+            }
+          } else post({ type: 'mx:edit-error', message: 'Select a regular text paragraph before inserting Markdown.' });
+          break;
         case STORY_APPLY_FORMAT_MESSAGE:
           applyFormat(message.path, message.className, message.style);
           break;
@@ -380,12 +739,20 @@ export function createFrameEditSession({ win, channel, requestRender, root }: Fr
           applyLink(message.path, message.href);
           break;
         case STORY_COMMIT_MESSAGE:
+          if (message.restore) {
+            pendingBookmark = message.restore;
+            win.requestAnimationFrame(restorePending);
+            break;
+          }
           // Whatever is half-typed, hand it over — the page is leaving.
           commitHost(active);
           post({ type: STORY_COMMITTED_MESSAGE });
           break;
         case STORY_SELECT_MESSAGE: {
-          if (!message.path) { reportSelection(null); break; }
+          if (!message.path) {
+            reportSelection(null);
+            break;
+          }
           const el = scope.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(message.path)}"]`);
           reportSelection(el ? describeWithQuote(el) : null);
           break;
@@ -395,7 +762,13 @@ export function createFrameEditSession({ win, channel, requestRender, root }: Fr
       }
     },
     dispose() {
+      const leavingScroll = { x: win.scrollX, y: win.scrollY };
+      win.requestAnimationFrame(() => restoreScroll(leavingScroll));
       disposed = true;
+      chrome.dispose();
+      blockSelection.dispose();
+      doc.removeEventListener('selectionchange', onSelectionChange);
+      doc.removeEventListener('focusin', onFocusIn);
       commitHost(active);
       active = null;
       reportTyping(false);
@@ -404,6 +777,7 @@ export function createFrameEditSession({ win, channel, requestRender, root }: Fr
       doc.removeEventListener('pointerout', onPointerOut, true);
       doc.removeEventListener('keydown', onKeyDown, true);
       doc.removeEventListener('paste', onImageTransfer as EventListener, true);
+      doc.removeEventListener('paste', onLegacyPaste, true);
       doc.removeEventListener('drop', onImageTransfer as EventListener, true);
       doc.removeEventListener('dragover', onDragOver as EventListener, true);
       win.removeEventListener('scroll', onScroll);

@@ -1,3 +1,5 @@
+import type {EditorBookmark,EditorSelectionChange} from '@/lib/editor-v2/bookmark';
+import type { BlockEdit } from '@/lib/editor-v2/block-edit';
 /**
  * The react-free contract between the document builder (server), the SSR
  * bundle, and the in-iframe hydration runtime. This file is importable from
@@ -515,6 +517,20 @@ export interface StoryEditReadyMessage { type: typeof STORY_EDIT_READY_MESSAGE; 
  * output — rich inline HTML, possibly hostile; the parent composes it through
  * the same sanitizing write-back the canvas used (lib/data/story/jsx-edit).
  */
+export const STORY_INLINE_MESSAGE = 'mx:inline';
+export interface StoryInlineMessage {type:typeof STORY_INLINE_MESSAGE;tag:'strong'|'em'|'u'}
+export const STORY_PASTE_MESSAGE = 'mx:paste';
+export interface StoryPasteMessage {type:typeof STORY_PASTE_MESSAGE;value:string;kind:'markdown'|'text'}
+
+export const STORY_BLOCK_EDIT_MESSAGE = 'mx:block-edit';
+export interface StoryBlockEditMessage {type:typeof STORY_BLOCK_EDIT_MESSAGE;nonce:string;command:BlockEdit}
+export const STORY_HISTORY_MESSAGE = 'mx:history';
+export interface StoryHistoryMessage {type:typeof STORY_HISTORY_MESSAGE;nonce:string;direction:'undo'|'redo'}
+
+export interface StoryEditErrorMessage {type:'mx:edit-error';nonce:string;message:string}
+export const STORY_FLOW_EDIT_MESSAGE = 'mx:flow-edit';
+export interface StoryFlowEditMessage { selection?:EditorSelectionChange; type: typeof STORY_FLOW_EDIT_MESSAGE; nonce: string; path: string; expected: string; replacement: string; group?:string }
+
 export const STORY_TEXT_EDIT_MESSAGE = 'mx:text-edit';
 export interface StoryTextEditMessage { type: typeof STORY_TEXT_EDIT_MESSAGE; nonce: string; path: string; innerHtml: string }
 
@@ -534,6 +550,10 @@ export interface StoryEditRect { x: number; y: number; width: number; height: nu
  * attribute values, which is what the typography toolbar reasons over.
  */
 export interface StoryEditSelection {
+  /** The prose engine owns formatting transactions and their source write-back. */
+  editor?: 'prose';
+  customHeight?:boolean;
+  inline?:Record<'strong'|'em'|'u',boolean|'mixed'>;
   /** 'text': a focused editable host · 'element': a click-selected container · 'embed': a component. */
   kind: 'text' | 'element' | 'embed';
   path: string;
@@ -654,7 +674,7 @@ export interface StorySlideTitleMessage {
  */
 export const STORY_COMMIT_MESSAGE = 'mx:commit';
 export const STORY_COMMITTED_MESSAGE = 'mx:committed';
-export interface StoryCommitMessage { type: typeof STORY_COMMIT_MESSAGE }
+export interface StoryCommitMessage { type: typeof STORY_COMMIT_MESSAGE; restore?:EditorBookmark }
 export interface StoryCommittedMessage { type: typeof STORY_COMMITTED_MESSAGE; nonce: string }
 
 /** Parent → frame: select an element by path (a breadcrumb click, a panel opening), or clear with null. */
@@ -759,23 +779,23 @@ export interface StoryAnnotationLayoutMessage {
 export const STORY_ANNOTATIONS_EVENT = 'annotations';
 
 export type StoryEditFrameMessage =
-  | StoryEditReadyMessage | StoryTextEditMessage | StoryTypingMessage | StorySelectionMessage
+  | StoryEditErrorMessage | StoryBlockEditMessage | StoryHistoryMessage | StoryFlowEditMessage | StoryEditReadyMessage | StoryTextEditMessage | StoryTypingMessage | StorySelectionMessage
   | StorySelectionActionMessage
   | StoryEditKeyMessage | StoryCommittedMessage | StoryLayoutEditMessage | StorySlideTitleMessage
   | StoryImageDropMessage | StoryAnnotationPinMessage | StoryAnnotationHoverMessage | StoryAnnotationLayoutMessage;
 export type StoryEditParentMessage =
-  | StoryEditModeMessage | StoryApplyFormatMessage | StoryApplyLinkMessage | StorySelectMessage | StoryCommitMessage
+  | StoryInlineMessage | StoryPasteMessage | StoryEditModeMessage | StoryApplyFormatMessage | StoryApplyLinkMessage | StorySelectMessage | StoryCommitMessage
   | StoryAnnotationsMessage | StorySelectionActionsMessage;
 
 const EDIT_FRAME_TYPES: ReadonlySet<string> = new Set([
-  STORY_EDIT_READY_MESSAGE, STORY_TEXT_EDIT_MESSAGE, STORY_TYPING_MESSAGE, STORY_SELECTION_MESSAGE,
+  'mx:edit-error', STORY_BLOCK_EDIT_MESSAGE, STORY_HISTORY_MESSAGE, STORY_FLOW_EDIT_MESSAGE, STORY_EDIT_READY_MESSAGE, STORY_TEXT_EDIT_MESSAGE, STORY_TYPING_MESSAGE, STORY_SELECTION_MESSAGE,
   STORY_SELECTION_ACTION_MESSAGE,
   STORY_EDIT_KEY_MESSAGE, STORY_COMMITTED_MESSAGE,
   STORY_LAYOUT_EDIT_MESSAGE, STORY_SLIDE_TITLE_MESSAGE, STORY_IMAGE_DROP_MESSAGE,
   STORY_ANNOTATION_PIN_MESSAGE, STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE,
 ]);
 const EDIT_PARENT_TYPES: ReadonlySet<string> = new Set([
-  STORY_EDIT_MODE_MESSAGE, STORY_APPLY_FORMAT_MESSAGE, STORY_APPLY_LINK_MESSAGE, STORY_SELECT_MESSAGE,
+  STORY_INLINE_MESSAGE, STORY_PASTE_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_APPLY_FORMAT_MESSAGE, STORY_APPLY_LINK_MESSAGE, STORY_SELECT_MESSAGE,
   STORY_COMMIT_MESSAGE, STORY_ANNOTATIONS_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE,
 ]);
 

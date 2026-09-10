@@ -37,7 +37,7 @@ export function selectionKindAt(nodes: JsxNode[], path: string): StoryEditSelect
 function isSelectableAncestor(path: string, node: JsxNode | null): node is JsxElement {
   return !!node
     && node.type === 'element'
-    && !node.isComponent
+    && (!node.isComponent || ['Grid','GridItem','Slide'].includes(node.tag))
     && !isEditableTextHost(node)
     && path.includes('.');
 }
@@ -75,6 +75,8 @@ export function describeSelection(el: Element, nodes: JsxNode[]): StoryEditSelec
   const r = el.getBoundingClientRect();
   return {
     kind,
+    ...(el.closest('.ProseMirror') ? { editor: 'prose' as const } : {}),
+    customHeight:node.attributes.some(a=>a.name==='minHeight'&&a.value.static&&typeof a.value.json==='number')||/\bmin-h-\[\d+px\]/.test(el.getAttribute('class')??''),
     path,
     ...(nodeId ? { nodeId } : {}),
     tag: node.tag,

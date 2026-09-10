@@ -5,9 +5,8 @@ description: >-
 ---
 ## Read first
 
-`markup` is **static JSX data**, interpreted over a fixed component registry.
-Prefer native JSX and kit interactions. Reserve Iframe for isolated widgets
-requiring DOM scripts or canvas APIs; keep surrounding content native.
+`markup` is **static JSX data** over the component registry.
+Keep content and interactions native; use Iframe for isolated DOM scripts or canvas.
 
 Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with exact spans.
 
@@ -129,6 +128,8 @@ Social preview: [upload and crop](publishing-versions.md).
 `<SlideDeck><Slide title="…">…</Slide></SlideDeck>` — a presentation, each
 slide filling the viewport (`deck`). `<Grid><GridItem x={0} y={0} w={6}
 h={3}>…</GridItem></Grid>` — the 12-column canvas (`dashboard`).
+
+Flow columns: [Grid](templates.md).
 
 ## Do / Don't
 

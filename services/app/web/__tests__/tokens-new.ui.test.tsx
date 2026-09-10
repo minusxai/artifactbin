@@ -1,7 +1,7 @@
 /**
  * /tokens/new — the credential is a link (tok-p2, plan §3b).
  *
- * ONE page for both states: a confirm step with an expiry picker ("Expires in", default 6 h) → POST
+ * ONE page for both states: a confirm step with an expiry picker ("Expires in", default 1 year) → POST
  * /api/tokens/anonymous { expiresInHours } → the secret shown ONCE with "Copy token" → logged-out ONLY, the page
  * exchanges the secret for the agent cookie (POST /api/session/token); logged-in, the route already bound the token
  * to the account and no exchange happens. Never a GET that mints: nothing is fetched on render, and a fresh render
@@ -59,7 +59,8 @@ describe('/tokens/new', () => {
     expect(generate()).toBeTruthy();
     expect(mints).toEqual([]);
     const picker = screen.getByLabelText('Expires in') as HTMLSelectElement;
-    expect(picker.value).toBe('6');
+    expect(picker.value).toBe('8760');
+    expect(screen.getByRole('option', { name: '1 year' })).toBeTruthy();
     fireEvent.change(picker, { target: { value: '24' } });
     fireEvent.click(generate());
     await screen.findByText(SECRET);
@@ -71,6 +72,7 @@ describe('/tokens/new', () => {
     fireEvent.click(generate());
     await screen.findByText(SECRET);
     await waitFor(() => expect(exchanges).toEqual([{ token: SECRET }]));
+    expect(mints).toEqual([{ expiresInHours: 8760 }]);
     expect(localStorage.length).toBe(0);
     expect(sessionStorage.length).toBe(0);
   });

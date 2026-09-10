@@ -76,3 +76,8 @@ describe('table ownership', () => {
     expect(names.filter((n) => n.endsWith('.rate_limit_hits'))).toEqual([]);
   });
 });
+
+it('keeps editor annotation receipts beside app-owned atomic source edits',()=>{
+ expect(declared()['app.artifact_edits']).toBe('app');
+ expect(renderedSchema().schema).toContain('annotation_changes');
+});

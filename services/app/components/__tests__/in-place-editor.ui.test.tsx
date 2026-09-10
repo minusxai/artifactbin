@@ -284,13 +284,26 @@ describe('the chrome the selection drives', () => {
     expect(screen.queryByLabelText('More formatting controls')).toBeNull();
   });
 
-  it('applies a format to the live element AND to the source', async () => {
+  it('sends semantic inline formatting to the live editor transaction', async () => {
     mount();
     await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: selection() });
     posted.length = 0;
     fireEvent.click(screen.getByLabelText('Toggle bold'));
-    await waitFor(() => expect(lastQueued()?.source).toContain('font-bold'));
-    expect(sentToFrame('mx:apply-format')).toHaveLength(1);   // instant, no re-render
+    expect(sentToFrame('mx:inline')).toEqual([expect.objectContaining({tag:'strong'})]);
+  });
+
+  it('lets the prose engine own block formatting without a duplicate source save', async () => {
+    mount();
+    await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: { ...selection(), editor: 'prose' } });
+    queue.mockClear();
+    fireEvent.click(screen.getByLabelText('Increase font size'));
+    expect(sentToFrame('mx:apply-format').length).toBeGreaterThan(0);
+    expect(queue).not.toHaveBeenCalled();
+    const replacement = '<p id="lede" className="lede text-lg">hello</p>';
+    await fromFrame({ type: 'mx:flow-edit', path: '0.1', expected: '<p id="lede" className="lede">hello</p>', replacement });
+    expect(queue).toHaveBeenCalledTimes(1);
+    expect(lastQueued()?.source).toContain(replacement);
+    expect(screen.queryByRole('alertdialog', { name: 'Recover uncommitted text' })).toBeNull();
   });
 
   it('deletes from the toolbar too', async () => {
@@ -412,4 +425,14 @@ describe('drafts', () => {
         .some((c) => String(c[0]).includes('/api/preview'))).toBe(true);
     }, { timeout: 2000 });
   });
+});
+
+it('keeps a refused engine fragment available for explicit recovery',async()=>{
+ mount();const fragment='<p id="draft">Unsaved local words</p>';
+ await fromFrame({type:'mx:flow-edit',path:'0.1',expected:'<p id="lede">stale base</p>',replacement:fragment});
+ expect(screen.getByRole('alertdialog',{name:'Recover uncommitted text'})).toBeTruthy();
+ expect(screen.getByRole('textbox',{name:'Uncommitted text'})).toHaveValue(fragment);
+ fireEvent.click(screen.getByRole('button',{name:'Discard this text and restore document'}));
+ expect(screen.queryByRole('alertdialog',{name:'Recover uncommitted text'})).toBeNull();
+ expect(sentToFrame(STORY_DOCUMENT_MESSAGE).length).toBeGreaterThan(0);
 });

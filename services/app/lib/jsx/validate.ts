@@ -5,6 +5,7 @@
  * scopes, registered components / allowed HTML tags, no event handlers, and no
  * dangerous URL schemes. Parsing alone does not enforce these constraints.
  */
+import { mermaidSourceError } from '@/lib/story-ui/mermaid-source';
 import { parseRowRef } from '@/lib/story/row-scope';
 import { isReactiveExpression, reactiveNames, REACTIVE_BOOLEAN_PROPS } from './reactive';
 import { compileManagedIframe } from '@/lib/story/managed-iframe';
@@ -113,8 +114,23 @@ function walk(
     if (key && (!key.static || typeof key.json !== 'string' || !key.json)) errors.push({message:'For keyBy must be a nonempty field name when supplied',start:node.start,end:node.end});
   }
   validateElement(node, components, allowedHtml, stylePolicy, errors, inSvg);
+  if(node.tag==='Grid') {
+    const mode=node.attributes.find(a=>a.name==='mode')?.value;
+    if(mode?.static && mode.json!=='flow' && mode.json!=='positioned') errors.push({message:'Grid mode must be flow or positioned',start:node.start,end:node.end});
+    if(mode?.static && mode.json==='flow') for(const item of node.children) {
+      if(item.type!=='element'||item.tag!=='GridItem')continue;
+      if(item.attributes.some(a=>['x','y','h'].includes(a.name))) errors.push({message:'Flow GridItem uses w and optional minHeight, not positioned x/y/h',start:item.start,end:item.end});
+      const height=item.attributes.find(a=>a.name==='minHeight')?.value;
+      if(height?.static && (typeof height.json!=='number'||!Number.isFinite(height.json)||height.json<0||height.json>10000)) errors.push({message:'Flow GridItem minHeight must be a number from 0 to 10000 pixels',start:item.start,end:item.end});
+    }
+  }
   for (const attr of node.attributes) if (!inColumn && !attr.value.static && isReactiveExpression(attr.value.reactive) && reactiveNames(attr.value.reactive).fields.length) {
     errors.push({message: 'Row expressions belong inside a DataTable Column', start: attr.start, end: attr.end});
+  }
+  if (node.tag === 'Mermaid') {
+    const code = node.attributes.find(a => a.name === 'code')?.value;
+    const error = mermaidSourceError(code?.static ? code.json : undefined);
+    if (error) errors.push({ message: error, tag: node.tag, start: node.start, end: node.end });
   }
   if (node.tag === 'Iframe') {
     try { compileManagedIframe(node); }

@@ -31,6 +31,7 @@
  * reader's document is top-level with no parent window, so nothing here can
  * even reach them.
  */
+import { CommentTimestamp } from './CommentTimestamp';
 import { sendDocument, subscribeDocument, documentRect, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, EllipsisVertical, MessageSquare, SquareDashedMousePointer, Trash2, X } from 'lucide-react';
@@ -217,12 +218,6 @@ function FoldingBody({ text, foldable }: { text: string; foldable: boolean }) {
     </div>
   );
 }
-
-/** "27 Aug" — enough to place a comment in time without a second line. */
-const shortDate = (iso: string) => {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-};
 
 const authorLabel = (author: AnnotationCommentWire['author']) =>
   author.label?.trim() || (author.kind === 'human' ? 'You' : 'Agent');
@@ -420,7 +415,7 @@ function ThreadPreview({ a, top, hovered, onOpen, onHover }: {
         <span className="pointer-events-none relative z-10 flex h-full animate-[rise_.12s_ease-out] flex-col">
           <span className="flex items-center justify-between gap-2">
             <AuthorIdentity author={first.author} />
-            <span className="font-mono text-[10px] text-faint">{shortDate(first.created_at)}</span>
+            <CommentTimestamp iso={first.created_at} className="font-mono text-[10px] text-faint" />
           </span>
           <span className="mt-1.5 line-clamp-2 block font-sans text-sm leading-snug text-fg/90">{previewText(first.body)}</span>
           <span className="mt-auto flex items-center justify-between font-mono text-[10px] text-faint">
@@ -631,7 +626,7 @@ function Thread({
                 className={`flex min-w-0 flex-1 items-center gap-2 rounded-[3px] ${open ? 'cursor-pointer' : ''}`}
               >
                 <AuthorIdentity author={c.author} />
-                <span className="ml-auto shrink-0 font-mono text-[10px] text-faint">{shortDate(c.created_at)}</span>
+                <CommentTimestamp iso={c.created_at} className="ml-auto shrink-0 font-mono text-[10px] text-faint" />
               </span>
               {index === 0 && resolved && (
                 <Tooltip content="resolved">

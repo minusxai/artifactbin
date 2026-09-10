@@ -11,7 +11,6 @@ to recover from an error. With no supplied document, create a titled skeleton,
 then fill it. Datasets are separate. Follow the user's URL-sharing instructions.
 
 Use `mktemp -d` for scratch files; change its parent on permission errors.
-No SDK or CLI is needed.
 
 For a NEW document only:
 
@@ -35,9 +34,8 @@ components (`Card`, `Tabs`, `Grid`, `SlideDeck`, `Icon`) and data embeds
 (`Question`, `DataTable`, `Number`). Style parent elements with Tailwind
 `className`; inline `style=` is rejected.
 
-**Prefer native JSX** and kit controls, conditions and Dialog for themes, layout,
-comments and editing. Reserve `<Iframe>` for isolated DOM-script/canvas widgets
-the kit cannot provide; never frame a document merely for unrestricted HTML/CSS/JS.
+**Prefer native JSX**, kit controls, conditions and Dialog. Use `<Iframe>`
+only for isolated DOM-script/canvas widgets.
 
 **HTML/component names only: guess rather than look up.** Unknown tags return
 400 with `allowed_html_tags`; unknown components return the registry. Exception:
@@ -50,8 +48,10 @@ in ONE `<Helmet>`, which also holds `<title>`:
 ```
 
 **Design for a 390px CONTAINER.** Use `@2xl:`, `@3xl:`, not viewport
-`sm:`/`md:`/`lg:`. Start with `grid-cols-1 @2xl:grid-cols-3` and
-`text-4xl @2xl:text-6xl`; no fixed pixel widths or bare `text-6xl`.
+`sm:`/`md:`/`lg:`. Prefer `Grid mode="flow"` / `GridItem w={6}` for columns
+and sidebars; leave prose unwrapped. Flow stacks on phones. For CSS grids,
+start `grid-cols-1 @2xl:grid-cols-3`; type `text-4xl @2xl:text-6xl`.
+No fixed pixel widths or bare `text-6xl`.
 
 Parent markup is self-contained: no CDN scripts or external stylesheets.
 For those widgets, read [markup-iframe](references/markup-iframe.md): bundled
@@ -89,6 +89,7 @@ the kit adds theme palettes, tooltips, responsive sizing and live re-runs.
 **template** — the genre. Pick by the ask; deviating deliberately is
 first-class:
 
+- `plan` — wireframes/flows, decisions, milestones.
 - `deck` — slides for PRESENTING: one idea per slide, ~40% empty space.
 - `dashboard` — an operating view: `<Grid>` tiles wall to wall, KPI numbers as
   the only big type, almost no prose.
@@ -118,7 +119,7 @@ More under `references/` ([[ docsIndexHint ]]):
 | pinned human feedback — reply, resolve, the anchor attribute | `publishing-annotations.md` |
 | connecting an MCP client — OAuth or bearer, the tool list | `publishing-mcp.md` |
 | history — versions, revert, the trash, export options | `publishing-versions.md` |
-| design craft — hierarchy, type, spacing, color, motifs | `design.md` |
+| design craft | `design.md` |
 | tag/component allowlists, `<Helmet>`, layout | `markup.md` |
 | data and keyed templates | `markup-data.md`, `markup-repeat.md` |
 | chart serialization and statistical meaning | `markup-data-authoring.md` |
@@ -128,7 +129,7 @@ More under `references/` ([[ docsIndexHint ]]):
 | editable cells, tags and reference pickers | `markup-editing.md` |
 | scroll reveals and ambient motion classes | `markup-motion.md` |
 | Video embeds | `markup-video.md` |
-| SVG motifs and allowed tags | `markup-svg.md` |
+| Mermaid diagrams and SVG | `markup-svg.md` |
 | Libraries, GLBs, files | `markup-libraries.md` |
 | genre structure and full skeleton | `templates-<name>.md` (index: `templates.md`) |
 | theme tokens, accents, chart palette | `themes-<name>.md` (index: `themes.md`) |
