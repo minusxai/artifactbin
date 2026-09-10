@@ -18,7 +18,11 @@ export function createManagedCommentRuntime(win: Window, send: (message: Managed
   let savedStyles:Array<{node:HTMLElement;name:string;value:string;priority:string}>|null=null;
   const touchMode=(enabled:boolean)=>{
     if(enabled&&!savedStyles){
-      savedStyles=[];for(const node of [doc.documentElement,doc.body])for(const name of ['touch-action','user-select','-webkit-user-select']){savedStyles.push({node,name,value:node.style.getPropertyValue(name),priority:node.style.getPropertyPriority(name)});node.style.setProperty(name,'none','important');}
+      // Chromium aliases -webkit-user-select to user-select. Snapshot ALL values
+      // before setting either spelling, or the second snapshot records our own
+      // 'none' and leaves text permanently unselectable after the first comment.
+      savedStyles=[doc.documentElement,doc.body].flatMap(node=>['touch-action','user-select','-webkit-user-select'].map(name=>({node,name,value:node.style.getPropertyValue(name),priority:node.style.getPropertyPriority(name)})));
+      for(const {node,name} of savedStyles)node.style.setProperty(name,'none','important');
     }else if(!enabled&&savedStyles){for(const {node,name,value,priority} of savedStyles){if(value)node.style.setProperty(name,value,priority);else node.style.removeProperty(name);}savedStyles=null;}
   };
   let sequence = 0;
@@ -30,6 +34,7 @@ export function createManagedCommentRuntime(win: Window, send: (message: Managed
   let suppressClick = false;
   let hovered: Element | null = null;
   let action: HTMLElement | null = null;
+  let contextOpen = false;
   let overlay: HTMLElement | null = null;
   let lastOpen: string | null = null;
   let revealed: Element | null = null;
@@ -66,7 +71,7 @@ export function createManagedCommentRuntime(win: Window, send: (message: Managed
     });
     return matches.length===1 ? {node:matches[0],status:'exact'} : {status:matches.length?'ambiguous':'missing'};
   };
-  const clearAction = () => { action?.remove(); action=null; };
+  const clearAction = () => { action?.remove(); action=null; contextOpen=false; };
   const layer = () => {
     if(!overlay?.isConnected) {
       overlay=doc.createElement('div');overlay.setAttribute('data-mx-comment-ui','');
@@ -162,7 +167,7 @@ export function createManagedCommentRuntime(win: Window, send: (message: Managed
   const active = () => !!(state?.enabled&&state.canComment&&state.picking);
   const listen = (name:string,handler:(event:Event)=>void) => {doc.addEventListener(name,handler,true);listeners.push(()=>doc.removeEventListener(name,handler,true));};
   const showAction = (x:number,y:number,select:()=>void,withComment:boolean) => {
-    clearAction();action=doc.createElement('div');action.setAttribute('data-mx-comment-ui','');
+    clearAction();contextOpen=!withComment;action=doc.createElement('div');action.setAttribute('data-mx-comment-ui','');
     action.setAttribute('data-mx-selection-actions','');action.setAttribute('role','toolbar');
     action.setAttribute('aria-label',withComment?'Text selection actions':'Document actions');
     const coarse=win.matchMedia?.('(pointer: coarse)')?.matches===true;
@@ -219,24 +224,38 @@ export function createManagedCommentRuntime(win: Window, send: (message: Managed
     if(pin&&state){e.preventDefault();e.stopPropagation();send({type:'comment-pin',generation:state.generation,id:pin.id,rect:rect(node)});}
   });
   listen('contextmenu',e=>{const n=element(e);if(!state?.enabled||!state.canComment||!n)return;e.preventDefault();const p=e as MouseEvent;showAction(p.clientX,p.clientY,()=>emit(n),false);});
-  listen('selectionchange',()=>{
+  const showTextActions=(event?:Event)=>{
+    if(contextOpen)return;
+    if(event?.target && (event.target as Node).nodeType===1 && internal(event.target as Element))return;
     if(!state?.enabled||!state.canComment||active())return;
     const s=win.getSelection();if(!s||s.isCollapsed||!s.rangeCount){clearAction();return;}
-    const r=s.getRangeAt(0),n=r.commonAncestorContainer,node=n.nodeType===1?n as Element:n.parentElement;
+    let r=s.getRangeAt(0);const n=r.commonAncestorContainer;
+    let node=n.nodeType===1?n as Element:n.parentElement;
+    // Native line/paragraph selections may end at offset zero of the following
+    // element. Keep the block that owns all selected words, like markup does.
+    const startElement=r.startContainer.nodeType===1?r.startContainer as Element:r.startContainer.parentElement;
+    const block=startElement?.closest('p,h1,h2,h3,h4,h5,h6,li,blockquote,td,th,figcaption,dd,dt,pre');
+    if(block&&!block.contains(r.endContainer)){
+      const clipped=r.cloneRange();clipped.setEnd(block,block.childNodes.length);
+      if(canonical(clipped.toString())===canonical(s.toString())){node=block;r=clipped;}
+    }
     if(!node||!eligible(node))return;
     const quote=canonical(s.toString()).slice(0,2000);if(!quote)return;
     const before=r.cloneRange();before.selectNodeContents(node);before.setEnd(r.startContainer,r.startOffset);
     const start=canonical(before.toString()).length;const full=canonical(node.textContent??'');const at=full.indexOf(quote,Math.max(0,start-1));
     const range:ManagedCommentSelection['range']={v:1,parts:[{rel:'',start:Math.max(0,at),end:Math.max(0,at)+quote.length,text:quote}]};
     const box=r.getBoundingClientRect?.()??rect(node);showAction(box.x,win.matchMedia?.('(pointer: coarse)')?.matches?box.y+box.height+8:box.y-36,()=>emit(node,range,quote),true);
-  });
+  };
+  listen('selectionchange',showTextActions);
+  listen('mouseup',showTextActions);
+  listen('keyup',e=>{if((e as KeyboardEvent).key==='Shift'||(e as KeyboardEvent).shiftKey)showTextActions();});
   listen('keydown',e=>{if((e as KeyboardEvent).key==='Escape'){clearAction();if(state){state={...state,picking:false,blockPicking:false,selection:null};send({type:'comment-selection',generation:state.generation,selection:null});repaint();}}});
   listen('scroll',schedule);win.addEventListener('resize',schedule);listeners.push(()=>win.removeEventListener('resize',schedule));
   const observer=new MutationObserver(records=>{if(records.some(r=>!marks.includes(r.attributeName??'')&&!(r.target.nodeType===1&&internal(r.target as Element))))schedule();});
   observer.observe(doc.body,{childList:true,subtree:true,characterData:true,attributes:true});
   const resize=typeof ResizeObserver!=='undefined'?new ResizeObserver(schedule):null;resize?.observe(doc.body);
   return {
-    update(next){if(disposed)return;state=next;if(!next.enabled||(!next.picking&&!next.blockPicking))hovered=null;if(!next.picking){down=null;suppressClick=false;}if(!next.enabled)clearAction();repaint();},
+    update(next){if(disposed)return;if(next.picking&&!state?.picking){win.getSelection()?.removeAllRanges();clearAction();}state=next;if(!next.enabled||(!next.picking&&!next.blockPicking))hovered=null;if(!next.picking){down=null;suppressClick=false;}if(!next.enabled)clearAction();repaint();},
     dispose(){if(disposed)return;disposed=true;touchMode(false);clearMarks();style.remove();doc.documentElement.removeAttribute('data-mx-annotate-picking');for(const stop of listeners)stop();observer.disconnect();resize?.disconnect();if(timer!==null)win.clearTimeout(timer);if(longPress!==null)win.clearTimeout(longPress);overlay?.remove();clearAction();}
   };
 }

@@ -142,3 +142,38 @@ it('allows a native text drag and a second block comment with the sidebar open',
   expect(send.mock.calls.some(c=>c[0].type==='comment-selection')).toBe(false);
   runtime.dispose();window.getSelection()!.removeAllRanges();
 });
+
+it('anchors a native paragraph selection before the next empty endpoint to its source node', () => {
+  document.body.innerHTML='<p id="first">First paragraph</p><p id="next">Next paragraph</p>';
+  const send=vi.fn(),runtime=createManagedCommentRuntime(window,send,COMMENT_PRESENTATION);
+  runtime.update({type:'comment-state',generation:'a',enabled:true,picking:false,canComment:true,pins:[],openId:null,hoverId:null,selection:null});
+  const range=document.createRange();range.setStart(document.getElementById('first')!.firstChild!,0);range.setEnd(document.getElementById('next')!.firstChild!,0);
+  window.getSelection()!.removeAllRanges();window.getSelection()!.addRange(range);document.dispatchEvent(new Event('selectionchange'));
+  (document.querySelector('[aria-label="Comment on selected text"]') as HTMLButtonElement).click();
+  expect(send).toHaveBeenCalledWith(expect.objectContaining({type:'comment-selection',selection:expect.objectContaining({target:{kind:'source',id:'first'},quote:'First paragraph'})}));
+  runtime.dispose();window.getSelection()!.removeAllRanges();
+});
+
+it('clears old native text when Select starts and offers an unchanged text selection again', () => {
+  document.body.innerHTML='<p id="text">Select these words</p>';
+  const runtime=createManagedCommentRuntime(window,vi.fn(),COMMENT_PRESENTATION);
+  const state={type:'comment-state' as const,generation:'a',enabled:true,picking:false,canComment:true,pins:[],openId:null,hoverId:null,selection:null};
+  runtime.update(state);const node=document.querySelector('p')!,range=document.createRange();range.selectNodeContents(node);
+  window.getSelection()!.removeAllRanges();window.getSelection()!.addRange(range);document.dispatchEvent(new Event('selectionchange'));
+  node.dispatchEvent(new MouseEvent('pointerdown',{bubbles:true}));node.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+  expect(document.querySelector('[aria-label="Comment on selected text"]')).not.toBeNull();
+  runtime.update({...state,picking:true});
+  expect(window.getSelection()!.isCollapsed).toBe(true);
+  expect(document.querySelector('[aria-label="Comment on selected text"]')).toBeNull();
+  runtime.dispose();
+});
+
+it('keeps the context Select menu through the release of a long press', () => {
+  document.body.innerHTML='<p>Touch target</p>';const node=document.querySelector('p')!;
+  const runtime=createManagedCommentRuntime(window,vi.fn(),COMMENT_PRESENTATION);
+  runtime.update({type:'comment-state',generation:'a',enabled:true,picking:false,canComment:true,pins:[],openId:null,hoverId:null,selection:null});
+  node.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}));
+  node.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+  expect(document.querySelector('[aria-label="Document actions"] [aria-label="Select"]')).not.toBeNull();
+  runtime.dispose();
+});

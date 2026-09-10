@@ -1,6 +1,7 @@
 /** Real app acceptance for durable targets across managed and declarative content. */
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
+import { expect } from 'playwright/test';
 import { startDocument, becomeOwner } from './lib/start-doc.mjs';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { commentTargetsMarkup } from './fixtures/comment-targets.mjs';
@@ -105,11 +106,10 @@ try {
   // Text selection is captured in the opaque child; only the app composes it.
   const prose=realm.locator('#static-iframe-text');
   await prose.scrollIntoViewIfNeeded();
-  await prose.evaluate(node=>{
-    const range=node.ownerDocument.createRange();range.selectNodeContents(node);
-    const selection=node.ownerDocument.defaultView.getSelection();selection.removeAllRanges();selection.addRange(range);
-  });
-  await realm.getByRole('button',{name:'Comment',exact:true}).click();
+  // Use an actual native text gesture, so disabled user-select cannot be hidden
+  // by programmatically assigning a DOM Range.
+  await prose.click({clickCount:3});
+  await realm.getByRole('button',{name:'Comment on selected text',exact:true}).click();
   await save('A precise iframe text comment');
   const textComment=(await annotations()).find(item=>item.thread[0].body==='A precise iframe text comment');
   assert.equal(textComment.range.target.node.id,'static-iframe-text');
@@ -130,6 +130,38 @@ try {
   const areaComment=(await annotations()).find(item=>item.thread[0].body==='A drawn iframe area');
   assert.equal(areaComment.range.range.kind,'area');
   console.log('PASS iframe text and area selection with parent composer layering');
+  // Keep using the same loaded iframe and sidebar: the first saved draft must
+  // never lock out a new node or replace it with stale layout from the old one.
+  assert.equal(await realm.getByRole('button',{name:'Open comment',exact:true}).count(),0);
+  await prose.click();
+  await page.getByLabel('Reply to annotation',{exact:true}).waitFor();
+  await select();
+  const bob=realm.locator('[data-comment-key="order-102"] [data-comment-key="customer"]');
+  await bob.click();await save('A second iframe node without reloading');
+  const second=(await annotations()).find(item=>item.thread[0].body==='A second iframe node without reloading');
+  assert.deepEqual(second.range.target.node,{kind:'key',path:['order-102','customer']});
+  await prose.click({clickCount:3});
+  await expect(prose).not.toHaveCSS('user-select','none');
+  const menu=realm.getByRole('toolbar',{name:'Text selection actions',exact:true});
+  await expect(menu.locator('.lucide-message-square')).toHaveCount(1);
+  await expect(menu.locator('.lucide-square-dashed-mouse-pointer')).toHaveCount(1);
+  await menu.getByRole('button',{name:'Comment on selected text',exact:true}).click();
+  await save('Another native text comment without reloading');
+  const repeated=(await annotations()).find(item=>item.thread[0].body==='Another native text comment without reloading');
+  assert(repeated.quote.includes('persistent source ID'));
+  assert.equal(repeated.range.target.node.id,'static-iframe-text');
+  await prose.evaluate(node=>node.ownerDocument.defaultView.getSelection().removeAllRanges());
+  // Same menu styling and target size as the regular markup selection toolbar.
+  const outside=page.locator('p[data-mx-comment-owner="order-cards"]').filter({hasText:'Bob Singh'}).first();
+  await outside.click({clickCount:3});
+  const outsideMenu=page.getByRole('toolbar',{name:'Text selection actions',exact:true});
+  await outsideMenu.waitFor();
+  const outsideStyle=await outsideMenu.evaluate(el=>({font:getComputedStyle(el).font,borderRadius:getComputedStyle(el).borderRadius,background:getComputedStyle(el).backgroundColor}));
+  await prose.click({clickCount:3});await menu.waitFor();
+  const insideStyle=await menu.evaluate(el=>({font:getComputedStyle(el).font,borderRadius:getComputedStyle(el).borderRadius,background:getComputedStyle(el).backgroundColor}));
+  assert.deepEqual(insideStyle,outsideStyle);
+  console.log('PASS repeated iframe node/text commenting, native selection and shared menu appearance');
+
   await context.close();
 
   const mobile=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
