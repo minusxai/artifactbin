@@ -370,7 +370,7 @@ function rawBuildProps(
     // Dangerous URL schemes dropped (browser-normalized check — see lib/jsx/validate.ts).
     if (typeof value === 'string') {
       const dangerous = URL_LIST_PROPS.has(lower)
-        ? listHasDangerousScheme(value)
+        ? listHasDangerousScheme(value, lower)
         : URL_PROPS.has(lower) && hasDangerousScheme(value);
       if (dangerous) continue;
       // SVG paint references must stay local — url(#id) only (see url-attrs.ts).

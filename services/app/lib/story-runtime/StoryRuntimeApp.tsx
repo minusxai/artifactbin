@@ -1,20 +1,12 @@
 /**
- * The ONE view composition for a served markup document, rendered by BOTH
- * ends of the wire — the server (`renderToString`
- * inside lib/story/document.ts) and the in-iframe hydration entry
- * (lib/story-runtime/entry.tsx). One module on both sides is what makes
- * hydration match by construction: any divergence would be a hydration
- * mismatch, so there is deliberately nowhere to diverge.
+ * The ONE view composition for a served markup document. The registry and
+ * adapters are shared by server rendering and the browser runtime, while
+ * live query/page data comes from the runtime store and its transport.
  *
- * Composition: the kit registry as-is (the view-mode Grid/Video/Slide
- * components are already the right ones in a REAL document — no svg surface,
- * no foreignObject workarounds) plus lean adapters for the three data embeds.
- * The adapters wire the same components the parent-page view uses
- * (QuestionEmbed / InlineNumber / StoryParamControl — chart rendering is never
- * reimplemented) to a local param-state context, seeded `{}` exactly like
- * the server render. Embeds consume `refData` from props — no network
- * from inside the document, which is what lets it live in an opaque-origin
- * sandbox.
+ * Composition: the kit registry plus adapters for the current document
+ * embeds (Question, Number, DataTable, Files and bound controls). The same
+ * components render in the document and receive live query/page data from
+ * the runtime store and its transport; refData resolution remains local.
  */
 import { cloneElement, createContext, useContext, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { CSSProperties, ReactElement, ReactNode } from 'react';
@@ -197,13 +189,10 @@ interface RuntimeAssetContextValue {
   endpoint: string | null;
   seen: Set<string>;
   /**
-   * The document's transport, when it has one that can import (the RELAY —
-   * lib/story-runtime/document-transport). Present means FRAMED, and framed
-   * means the element cannot do this for itself: the frame is opaque-origin, so
-   * its `<img>` carries no cookie and a private document's endpoint answers the
-   * uniform 404 — for its OWNER's copy as much as for a stranger. When it is
-   * here it is the AUTHORITY: the element's own load and error are ignored,
-   * because the load that fails is the one we already know cannot succeed.
+   * An optional asset importer supplied by the caller. When present, the
+   * importer is authoritative and the element's own load/error bookkeeping is
+   * skipped; a document transport relay is one caller, especially for opaque
+   * framed child realms.
    */
   importAsset?: (url: string) => Promise<{ url: string } | { refused: string }>;
 }
@@ -1031,11 +1020,10 @@ export type StoryRuntimeAppProps = StoryIslandData & {
    */
   onMounted?: () => void;
   /**
-   * Import one web URL through the PAGE — the document's transport verb
-   * (lib/story-runtime/store QueryTransport.importAsset), threaded here by the
-   * entry. Present only for a FRAMED document, and its presence is what makes
-   * the page the authority over a bound `<img>`'s source; absent, the element
-   * loads the endpoint for itself.
+   * Optionally import one web URL through the caller's transport
+   * (lib/story-runtime/store QueryTransport.importAsset). When supplied, this
+   * caller relay is authoritative for a bound `<img>` source; when absent,
+   * the element loads the endpoint for itself.
    */
   importAsset?: ManagedAssetRelay;
 };

@@ -418,7 +418,7 @@ function sanitizeAttrs(el: TmpElement, errors: ValidationError[]): JsxAttribute[
     }
     if (typeof a.value === 'string') {
       const dangerous = URL_LIST_ATTRS.has(lower)
-        ? listHasDangerousScheme(a.value)
+        ? listHasDangerousScheme(a.value, lower)
         : URL_ATTRS.has(lower) && hasDangerousScheme(a.value);
       if (dangerous) {
         errors.push({ message: `Dropped attribute "${a.name}" with a disallowed URL scheme on <${el.tag}>`, attr: a.name, tag: el.tag });

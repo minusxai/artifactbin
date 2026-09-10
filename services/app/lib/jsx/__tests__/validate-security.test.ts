@@ -50,6 +50,15 @@ describe('URL-bearing attributes: srcset and ping', () => {
   it('still allows normal image srcset', () => {
     ok('<img src="https://a/x.png" srcset="https://a/x.png 1x, https://a/y.png 2x" />');
   });
+  it.each([' ', '\t', '\n', '\r', '\f'])('checks every ping URL separated by %j', separator => {
+    for (const scheme of ['javascript:alert(1)', 'VbScRiPt:x', 'data:text/html,x']) {
+      const errors = bad(`<a href="/" ping="https://safe.example/p${separator}${scheme}">x</a>`);
+      expect(errors).toEqual(expect.arrayContaining([expect.objectContaining({ attr: 'ping' })]));
+    }
+  });
+  it('keeps multiple safe ping URLs, including commas within a URL', () => {
+    ok('<a href="/" ping="https://safe.example/p,javascript:literal https://other.example/p">x</a>');
+  });
 });
 
 describe('scheme-filter obfuscation (fuzz shapes)', () => {

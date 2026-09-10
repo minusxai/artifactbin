@@ -152,7 +152,8 @@ describe('artifact id capture', () => {
 
 describe('pointing at a deployment', () => {
   it('presents the TARGET\'s host when asked, instead of the one the agent addressed', async () => {
-    // A real deployment 307s to a login page if it sees a foreign Host (NextAuth derives URLs from it).
+    // The deployment path must present its configured target Host upstream; this
+    // test verifies the rewritten Host value directly.
     const p = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'eval-proxy-')), 'ledger.jsonl');
     const px = await startProxy({ port: 0, target: `http://127.0.0.1:${targetPort}`, ledgerPath: p, rewriteHost: true });
     const res = await fetch(`${px.url}/docs/llm`);

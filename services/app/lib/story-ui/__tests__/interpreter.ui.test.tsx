@@ -114,6 +114,25 @@ describe('prop deny list (defense in depth — even on an unvalidated AST)', () 
     expect(container.querySelector('a')!.getAttribute('href')).toBe('https://example.com');
   });
 
+  it.each([' ', '\t', '\n', '\r', '\f'])('drops an unvalidated ping with a later dangerous URL after %j', separator => {
+    const { container } = mount(`<a href="/" ping="https://safe.example/p${separator}javascript:alert(1)">x</a>`);
+    expect(container.querySelector('a')!.getAttribute('ping')).toBeNull();
+    expect(container.querySelector('a')!.getAttribute('href')).toBe('/');
+  });
+
+  it('preserves safe ping lists and image srcset descriptors', () => {
+    const ping = 'https://safe.example/p,javascript:literal https://other.example/p';
+    const srcset = 'https://a/x.png 1x, https://a/y.png 2x';
+    const { container } = mount(`<a href="/" ping="${ping}">x</a><img srcset="${srcset}" />`);
+    expect(container.querySelector('a')!.getAttribute('ping')).toBe(ping);
+    expect(container.querySelector('img')!.getAttribute('srcset')).toBe(srcset);
+  });
+
+  it('drops a srcset containing a later dangerous URL', () => {
+    const { container } = mount('<img srcset="https://a/x.png 1x, javascript:alert(1) 2x" />');
+    expect(container.querySelector('img')!.getAttribute('srcset')).toBeNull();
+  });
+
   it('drops object props on HTML tags (except style) but passes them to components', () => {
     const { container } = mount('<div data-x={{ a: 1 }}>x</div>');
     expect(container.querySelector('div')!.getAttribute('data-x')).toBeNull();

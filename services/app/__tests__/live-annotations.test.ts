@@ -1,7 +1,7 @@
 /**
- * ANNOTATIONS ARE LIVE, FOR THE OWNER ONLY. The events stream serves readers
- * too, and annotations are owner-state — so the named `annotations` frame is
- * sent only on owner-credentialed connections (a third subscription beside
+ * ANNOTATIONS ARE LIVE FOR ANNOTATORS. The events stream serves readers too,
+ * and the named `annotations` frame is sent only on connections that can
+ * annotate (owner, editor or commenter; a third subscription beside
  * the document and its datasets, on the annotations' own NOTIFY channel).
  * An owner connection gets one at CONNECT (self-syncing stream: the first
  * frame is current state) and one per change; an anonymous reader of the

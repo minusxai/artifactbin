@@ -116,8 +116,8 @@ async function runNoRepaint() {
   const held = new Promise((r) => { release = r; });
   await page.route(/\/(?:main\.tsx|assets\/[^/]+\.js)(?:\?|$)/, async (route) => { await held; await route.continue(); });
 
-  // Reader path on purpose: no shell, no iframe — the document IS the page,
-  // which is what a shared link opens.
+  // Reader path on purpose: the canonical app document mounts the story inline;
+  // the document remains the page reached by a shared link.
   /*
    * `commit`, not `domcontentloaded`: a module script is deferred, and
    * DOMContentLoaded waits for deferred scripts — so the very hold that makes

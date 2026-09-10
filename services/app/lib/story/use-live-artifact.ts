@@ -4,11 +4,9 @@
  * Subscribe a mounted page to its artifact's live document
  * (`GET /a/<id>/events`).
  *
- * The server's first frame is always the current state, so this needs no
- * cursor and no reconciliation: whatever arrives IS the document. `EventSource`
- * reconnects on its own, and because reconnecting re-sends the current state,
- * a dropped connection self-heals — the same "durable rows are the truth,
- * wakeups are only pointers" contract the server side is built on.
+ * The server's stream carries a current head ping; the complete document is
+ * fetched from /events/frame after a newer ping. EventSource reconnects and
+ * the ping plus frame fetch self-heal a dropped connection.
  *
  * The hook returns null until a frame arrives that differs from what the page
  * was server-rendered with, so the first paint is never disturbed.
@@ -46,7 +44,7 @@ export function useLiveArtifact(
    * app/a/[id]/events). A CALLBACK rather than returned state, and held in a
    * ref like `isOwnFrame`: nothing about the document has changed, so this
    * must not become React state that re-renders the page — the one consumer
-   * forwards it into the frame, which re-runs the affected queries in place.
+   * forwards it into the mounted runtime, which re-runs the affected queries in place.
    */
   onData?: (event: ArtifactDataEvent) => void,
   /**

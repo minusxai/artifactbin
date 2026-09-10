@@ -32,7 +32,7 @@ import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
 
 const BASE = 'http://localhost:3000';
 
-/** A stand-in NextAuth session, so the account path can be exercised too. */
+/** A stand-in account session, so the account path can be exercised too. */
 const sessionUser = { id: '' };
 vi.mock('@/auth', () => ({ auth: async () => (sessionUser.id ? { user: { id: sessionUser.id } } : null) }));
 
@@ -254,12 +254,11 @@ describe('handing the document to another agent', () => {
 
 describe('one viewer, every surface', () => {
   /*
-   * Ownership and serving must resolve the SAME viewer. The proxy and the page
-   * decide "owner" through sessionActor — NextAuth first, then the agent
-   * cookie — so if a serving surface consults only NextAuth, a browser whose
-   * cookie names a CLAIMED token (signed out, cookie still held) is an owner
-   * upstairs and a stranger downstairs: the shell renders, and the private
-   * document 404s inside its own frame.
+   * Ownership and serving must resolve the SAME viewer. sessionActor uses the
+   * proxy-attached actor first, then the direct account-session compatibility
+   * path and the agent cookie. A surface consulting only the account session
+   * would reject a signed-out browser holding a claimed token. Historically,
+   * this rendered the owner's shell around a private-document 404 frame.
    */
   it('a claimed token in the cookie reads its account-private document on every serving surface', async () => {
     const user = await createUser({ email: 'split@example.com' });

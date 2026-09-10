@@ -1,10 +1,11 @@
 // The <Question> sizing contract — ONE for every renderer.
 //
-// The editor canvas (StoryJsxBody) and the served view document (StoryRuntimeApp)
-// render the same stored source through different adapters; before this contract
-// was shared they each carried their own defaults (430 vs 320), so a chart
-// without an authored height changed size between editing and reading. The
-// skill documents "Missing height defaults to 430px" — this is that number.
+// The inline editor and view both render StoryRuntimeApp from the same stored
+// source through this shared contract. Before it was shared, the two paths had
+// their own defaults (430 vs 320), and only one renderer parsed string heights,
+// so a chart without an authored height changed size between editing and
+// reading. The skill documents "Missing height defaults to 430px" — this is
+// that number.
 //
 // It lives in its OWN leaf module, importing nothing, because the served
 // document's runtime needs exactly this and nothing else from the <Question>

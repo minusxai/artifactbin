@@ -1,9 +1,9 @@
 /**
  * Static-subset + security validator for a parsed `jsx` AST. Returns a list of
  * {@link ValidationError} (empty = valid). This is the boundary that makes `jsx`
- * inert DATA: only JSON-literal attributes, only registered components / allowed
- * HTML tags, no event handlers, no dangerous URL schemes. A JSX parser does NOT
- * give the "static" guarantee for free — this pass enforces it.
+ * DATA: JSON literals and allowlisted reactive/row expressions in permitted
+ * scopes, registered components / allowed HTML tags, no event handlers, and no
+ * dangerous URL schemes. Parsing alone does not enforce these constraints.
  */
 import { parseRowRef } from '@/lib/story/row-scope';
 import { isReactiveExpression, reactiveNames, REACTIVE_BOOLEAN_PROPS } from './reactive';
@@ -11,7 +11,7 @@ import { compileManagedIframe } from '@/lib/story/managed-iframe';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 // Shared with the render-time gate in lib/story-ui/interpreter.tsx — see
 // lib/jsx/url-attrs.ts for why these must not be maintained separately.
-import { URL_ATTRS, URL_LIST_ATTRS, SVG_PAINT_ATTRS, paintHasExternalUrl } from './url-attrs';
+import { URL_ATTRS, URL_LIST_ATTRS, SVG_PAINT_ATTRS, paintHasExternalUrl, urlListUrls } from './url-attrs';
 import { DANGEROUS_TAGS } from './dangerous-tags';
 import { DENIED_JSX_ATTRS } from './denied-attrs';
 import { STORY_COMPONENT_NAMES } from '@/lib/data/story/story-components';
@@ -28,7 +28,7 @@ const LEGACY_STORY_COMPONENT_NAMES = immutableSet(STORY_COMPONENT_NAMES);
 // no-second-copy rule as URL_ATTRS above it.
 
 // Attributes whose value is a URL — checked against dangerous schemes. `srcset` and `ping`
-// carry URL LISTS (comma/space separated) and are checked per entry.
+// carry URL lists with different separators and are checked per URL.
 
 // Attributes rejected by NAME on every tag: HTML injection (dangerouslySetInnerHTML, srcdoc),
 // React internals (ref/key — never serializable data), and customized built-ins (is).
@@ -53,12 +53,9 @@ export function hasDangerousScheme(url: string): boolean {
   return DANGEROUS_URL.test(normalized) && !SAFE_DATA_URL.test(normalized);
 }
 
-/** Scheme-check every URL in a srcset/ping-style list ("url descriptor, url descriptor"). */
-export function listHasDangerousScheme(value: string): boolean {
-  return value.split(',').some(entry => {
-    const url = entry.trim().split(/\s+/)[0];
-    return !!url && hasDangerousScheme(url);
-  });
+/** Check ping's ASCII-whitespace-separated URLs or srcset's comma-separated URL/descriptor entries. */
+export function listHasDangerousScheme(value: string, lowerAttributeName: string): boolean {
+  return urlListUrls(value, lowerAttributeName).some(hasDangerousScheme);
 }
 
 export function validateJsx(nodes: JsxNode[], options: ValidateOptions): ValidationError[] {
@@ -258,7 +255,7 @@ function validateElement(
     if (typeof a.value.json === 'string') {
       const lower = a.name.toLowerCase();
       const dangerous = URL_LIST_ATTRS.has(lower)
-        ? listHasDangerousScheme(a.value.json)
+        ? listHasDangerousScheme(a.value.json, lower)
         : URL_ATTRS.has(lower) && hasDangerousScheme(a.value.json);
       if (dangerous) {
         errors.push({ message: `Attribute "${a.name}" has a disallowed URL scheme`, attr: a.name, tag: el.tag, start: a.start, end: a.end });

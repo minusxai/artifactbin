@@ -6,15 +6,15 @@
  *   1. anonymous mint → publish a document with live embeds
  *   2. /a/<id> shows it → its Edit button switches to edit mode in place
  *   3. adopting the anonymous token unlocks the editor; embeds render inside it
- *   4. type into a heading → ONE click on Save persists it (the regression
+ *   4. type into a heading → blur persists it automatically (the regression
  *      this gate exists for: the engine commits text edits on BLUR, so a
  *      Save gated on a dirty flag stayed disabled and swallowed the click)
- *   5. embeds still render after the save; the source really changed
+ *   5. embeds still render after persistence; the source really changed
  *   6. signup → claim the token on /account → the artifact appears on the
  *      dashboard → the editor opens with NO stored token (session auth) and
  *      saves through /api/my
  *
- * jsdom cannot model same-origin iframe focus/blur, so this browser gate is
+ * jsdom cannot model the browser focus/blur behavior of the mounted story runtime, so this browser gate is
  * the only place these contracts can be checked. Exits non-zero on failure.
  */
 import { chromium } from 'playwright';
@@ -102,6 +102,34 @@ check(readBack.version > beforeTyping, `typing persists with no save (v${beforeT
 check(readBack.markup.includes('Edited by the gate'), 'the typed text reached the stored source');
 frame = page.mainFrame();
 check((await frame.locator('svg.marks, canvas').count()) > 0, 'embeds still render after persisting');
+
+// History must start below both fixed bars, including after a viewport resize.
+await page.getByRole('button', { name: 'Open version history', exact: true }).click();
+for (const viewport of [{ width: 1400, height: 950 }, { width: 900, height: 700 }]) {
+  await page.setViewportSize(viewport);
+  const history = page.getByRole('complementary', { name: 'Version history' });
+  const toolbar = await page.getByRole('banner', { name: 'Editor toolbar' }).boundingBox();
+  const drawer = await history.boundingBox();
+  const current = await history.getByRole('button', { name: 'Show the current version' }).boundingBox();
+  check(!!toolbar && !!drawer && drawer.y >= toolbar.y + toolbar.height,
+    `history clears both toolbars at ${viewport.width}px`);
+  check(!!current && !!drawer && current.y >= drawer.y && drawer.y + drawer.height <= viewport.height + 1,
+    `current version and drawer fit below the bars at ${viewport.width}px`);
+  const close = history.getByRole('button', { name: 'Close version history' });
+  const reachable = await close.click({ trial: true, timeout: 2000 }).then(() => true, () => false);
+  check(reachable, `history close button is not covered at ${viewport.width}px`);
+}
+await page.setViewportSize({ width: 390, height: 844 });
+const historySheet = page.getByRole('dialog', { name: 'Version history' });
+await historySheet.waitFor({ state: 'visible' });
+check(await historySheet.getByRole('button', { name: 'Show the current version' }).isVisible(),
+  'phone history keeps the current version visible in its bottom sheet');
+await historySheet.getByRole('button', { name: 'Close version history' }).click();
+check(await page.getByRole('button', { name: 'Open version history' }).getAttribute('aria-expanded') === 'false',
+  'phone history close button remains usable');
+// Escape also works on the broken layout, so a failed geometry assertion does not stall the gate.
+await page.keyboard.press('Escape');
+await page.setViewportSize({ width: 1400, height: 950 });
 
 // Idle must not spend versions: nothing typed ⇒ nothing written.
 const quiet = (await api(`/api/artifacts/${doc.id}`, {}, token)).version;

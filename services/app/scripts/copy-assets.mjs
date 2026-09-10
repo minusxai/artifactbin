@@ -20,7 +20,7 @@ const packageDir = (pkg) => path.dirname(require.resolve(`${pkg}/package.json`))
  * STORY FONTS — from @fontsource packages (the Google Fonts binaries,
  * versioned through package-lock) into content-hashed files under
  * public/fonts, plus a manifest lib/data/story/story-fonts reads. The hash in
- * the filename is what makes next.config's `immutable` on /fonts/* honest;
+ * the filename is what makes the app server's `immutable` cache rule on /fonts/* honest;
  * the manifest is generated (gitignored) so the registry can never name a
  * file that does not exist.
  *
