@@ -1,20 +1,21 @@
 'use client';
 
+import { COMMENT_PRESENTATION } from '../comment-presentation';
+import { resolveJsxNodeAtPath as nodesAtPath } from '@/lib/story-ui/host-classify';
+import { bindManagedComments, localManagedRect } from '../managed-comment-host';
+import { COMMENT_TARGET_ATTR, COMMENT_OWNER_ATTR, parseCommentTarget } from '@/lib/story/comment-target';
+import type { ManagedCommentSelection } from '../managed-comment-contract';
+
 /**
  * THE ANNOTATION LAYER, INSIDE THE DOCUMENT — the frame half of annotations,
  * and even thinner than edit mode: it never makes anything editable and stages
  * nothing. It is a LAYER, not a mode: whenever it is on, commented nodes carry
  * a soft highlight TINT and their geometry is reported upward so the page can
  * float comment cards at their anchors — in view mode and while editing alike.
- * Clicking a highlight focuses its thread (`mx:annotation-pin`); the page holds
- * the annotation content, the session and the network, and ids + BODY paths are
- * the only annotation data that ever enters this realm.
- *
- * ONE thing varies with edit mode, and this module decides it rather than
- * being told: while an edit session exists a click belongs to the CARET, so
- * the layer never swallows one. That is why `isEditing` is a predicate the
- * caller owns — the frame already knows whether it is editable, and asking the
- * page to restate it on the wire is what made this a mode to begin with.
+ * Existing threads open from the parent comment markers or sidebar. Content
+ * clicks remain native, so commenting does not interfere with text selection.
+ * The page owns annotation content, session and network; this realm receives
+ * target identities, refinements and presentation state.
  *
  * THE PICK is the one exception, and it is one-shot. The rail's pick tool
  * (`picking` on the state message) is the edit-mode move for a comment: the
@@ -45,14 +46,14 @@ import type { JsxNode } from '@/lib/jsx';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import type { RuntimeChannel } from '../pristine';
 import {
-  STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE, STORY_SELECTION_MESSAGE,
+  STORY_SELECTION_ACTION_MESSAGE, STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE, STORY_SELECTION_MESSAGE,
   type StoryAnnotationsMessage,
 } from '../contract';
-import { describeSelection } from './describe-selection';
+import { describeSelection, describeCommentSelection } from './describe-selection';
 type AnnotationRangeOnWire = NonNullable<StoryAnnotationsMessage['pins'][number]['range']>;
 import { resolveParts } from './selection-range';
 import {
-  ANNOTATION_AREA_MIN_PX, areaTarget, boxFromRects, isAreaRange, rectFromBox,
+  ANNOTATION_AREA_MIN_PX, areaTarget, boxFromRects, isAreaRange, isTargetRange, refinementRange, rectFromBox,
   type AnnotationBox, type AnnotationRect,
 } from '@/lib/story/annotation-range';
 
@@ -91,46 +92,18 @@ export const ANNOTATION_AREA_ATTR = 'data-mx-annotation-area';
 // the hover and the composing states, which are the ones a person is currently
 // pointing at. `cursor: pointer` is not part of the base rule for the same
 // reason: over an editable host the caret must still read as a caret.
-export const ANNOTATE_CSS = [
-  `[${ANNOTATED_ATTR}] { background: rgba(245, 158, 11, 0.10); border-radius: 3px; transition: background 120ms; }`,
-  `[${ANNOTATED_ATTR}]:not([contenteditable]) { cursor: pointer; }`,
-  `[${ANNOTATED_ATTR}]:hover { background: rgba(245, 158, 11, 0.20); }`,
-  `[${ANNOTATION_OPEN_ATTR}] { background: rgba(245, 158, 11, 0.26); border-radius: 3px; }`,
-  `[${ANNOTATION_HOVER_ATTR}] { background: rgba(245, 158, 11, 0.18); outline: 2px solid rgba(245, 158, 11, 0.82); outline-offset: 3px; border-radius: 3px; }`,
-  `[${ANNOTATE_SELECTED_ATTR}] { outline: 2px solid rgba(245, 158, 11, 0.85); outline-offset: 3px; border-radius: 3px; }`,
-  // The pick: a crosshair everywhere, and an outline on the block under it. The
-  // doubled attribute is deliberate — it out-specifies the edit session's own
-  // `[data-mx-edit-hover]` when both stamp the same node while editing.
-  `[${ANNOTATE_PICKING_ATTR}], [${ANNOTATE_PICKING_ATTR}] * { cursor: crosshair !important; }`,
-  // A finger drawing an area must draw, not scroll; and nothing under a band selects.
-  `[${ANNOTATE_PICKING_ATTR}="area"], [${ANNOTATE_PICKING_ATTR}="area"] *, [${ANNOTATE_PICKING_ATTR}="select"], [${ANNOTATE_PICKING_ATTR}="select"] * { touch-action: none !important; user-select: none !important; }`,
-  `[${ANNOTATE_PICK_HOVER_ATTR}][${ANNOTATE_PICK_HOVER_ATTR}] { outline: 2px solid rgba(245, 158, 11, 0.9); outline-offset: 3px; border-radius: 3px; background: rgba(245, 158, 11, 0.08); }`,
-  // A node whose words are painted gives up its own background — the tint is
-  // what a comment looks like when we cannot find the words, not as well as.
-  `[${ANNOTATED_ATTR}][${ANNOTATION_RANGED_ATTR}],`
-    + `[${ANNOTATED_ATTR}][${ANNOTATION_RANGED_ATTR}]:hover,`
-    + `[${ANNOTATION_OPEN_ATTR}][${ANNOTATION_RANGED_ATTR}],`
-    + `[${ANNOTATION_HOVER_ATTR}][${ANNOTATION_RANGED_ATTR}] { background: transparent; }`,
-].join('\n');
+export const ANNOTATE_CSS = COMMENT_PRESENTATION.annotationCss;
 
 /** What a thread's own words look like, by the state the page put it in. */
-const HIGHLIGHT_FILL = {
-  base: 'rgba(245, 158, 11, 0.28)',
-  hover: 'rgba(245, 158, 11, 0.42)',
-  open: 'rgba(245, 158, 11, 0.52)',
-};
+const HIGHLIGHT_FILL = COMMENT_PRESENTATION.highlightFill;
 /**
  * The band being DRAWN, and the drawn area while its comment is composed:
  * blue, so it reads apart from the amber outline of the anchor node around
  * it — two rectangles in one colour were one rectangle to the eye.
  */
-const BAND_STYLE = { background: 'rgba(59, 130, 246, 0.10)', outline: 'rgba(59, 130, 246, 0.9)' };
+const BAND_STYLE = COMMENT_PRESENTATION.bandStyle;
 /** A SAVED area box is amber like every other mark of a comment, an OUTLINE first: it may cover a chart, and a fill as strong as the words' would hide it. */
-const AREA_FILL = {
-  base: { background: 'rgba(245, 158, 11, 0.12)', outline: '2px solid rgba(245, 158, 11, 0.6)' },
-  hover: { background: 'rgba(245, 158, 11, 0.2)', outline: '2px solid rgba(245, 158, 11, 0.9)' },
-  open: { background: 'rgba(245, 158, 11, 0.26)', outline: '2px solid rgba(245, 158, 11, 0.9)' },
-};
+const AREA_FILL = COMMENT_PRESENTATION.areaFill;
 
 /**
  * THE CSS CUSTOM HIGHLIGHT API, or nothing. It paints a live Range without
@@ -195,7 +168,7 @@ export interface FrameAnnotateOptions {
   /**
    * Is the document editable right now? Read on every click, never cached: the
    * edit session comes and goes without the annotation layer hearing about it,
-   * and a stale answer would either steal the caret or lose the thread click.
+   * and a stale answer would let editor mouse handling swallow a block pick.
    */
   isEditing: () => boolean;
 }
@@ -225,6 +198,8 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
   /** Highlight names this session registered, so it can take back exactly its own. */
   const registeredHighlights = new Set<string>();
   let rafPending = false;
+  let managedSelection: {host: HTMLElement; selection: ManagedCommentSelection} | null = null;
+  const managedRects = new Map<string, AnnotationRect>();
 
   const post = (message: Record<string, unknown>) => channel.post({ ...message, nonce: channel.nonce });
 
@@ -245,7 +220,17 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
    * source-anchor attribute. A durable identity that no longer resolves is an
    * orphan; only old payloads with neither identity may use their path.
    */
-  const elementForPin = (pin: { path: string; key: string | null; nodeId?: string | null }): HTMLElement | null => {
+  const elementForPin = (pin: { path: string; key: string | null; nodeId?: string | null; range?: AnnotationRangeOnWire | null }): HTMLElement | null => {
+    if (isTargetRange(pin.range) && pin.range.target.kind !== 'iframe' && pin.nodeId) {
+      const owner = mainElementMatching(`#${CSS.escape(pin.nodeId)}`);
+      if (!owner) return null;
+      const key = JSON.stringify(pin.range.target);
+      const matches = [...owner.querySelectorAll<HTMLElement>(`[${COMMENT_TARGET_ATTR}]`)].filter((el) => {
+        if (el.getAttribute(COMMENT_OWNER_ATTR) !== pin.nodeId) return false;
+        try {return JSON.stringify(parseCommentTarget(JSON.parse(el.getAttribute(COMMENT_TARGET_ATTR)!))) === key;} catch {return false;}
+      });
+      return matches.length === 1 ? matches[0] : owner;
+    }
     if (pin.nodeId) return mainElementMatching(`#${CSS.escape(pin.nodeId)}`);
     if (pin.key) return mainElementMatching(`[data-annotation-anchor="${CSS.escape(pin.key)}"]`);
     // Only genuinely keyless historical payloads may use a positional address.
@@ -304,10 +289,12 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
   const paintAreas = () => {
     if (!state || state.mode === 'off') return;
     for (const pin of state.pins) {
-      if (!isAreaRange(pin.range)) continue;
+      const range = refinementRange(pin.range);
+      if (!isAreaRange(range) || (isTargetRange(pin.range) && pin.range.target.kind === 'iframe')) continue;
       const el = elementForPin(pin);
       if (!el) continue;
-      const rect = rectFromBox(el.getBoundingClientRect(), pin.range.box);
+      if (isTargetRange(pin.range) && !el.hasAttribute(COMMENT_TARGET_ATTR)) continue;
+      const rect = rectFromBox(el.getBoundingClientRect(), range.box);
       const overlay = doc.createElement('div');
       overlay.setAttribute(ANNOTATION_AREA_ATTR, pin.id);
       placeOverlay(overlay, rect);
@@ -362,16 +349,18 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     if (!api || !state || state.mode === 'off') return [];
     const rules: string[] = [];
     for (const pin of state.pins) {
-      if (!pin.range || isAreaRange(pin.range)) continue;   // areas are painted as boxes below
+      const range = refinementRange(pin.range);
+      if (!range || isAreaRange(range) || (isTargetRange(pin.range) && pin.range.target.kind === 'iframe')) continue;   // areas are painted as boxes below
       const el = elementForPin(pin);
       if (!el) continue;
-      const ranges = resolveParts(el, pin.range.parts);
+      if (isTargetRange(pin.range) && !el.hasAttribute(COMMENT_TARGET_ATTR)) continue;
+      const ranges = resolveParts(el, range.parts);
       // EVERY part or none — the same rule the wire's `quote_found` answers by.
       // Not found is not an error: the words were edited away, and the node
       // tint says "there is a comment here" just as it always did, while a
       // highlight over the surviving half would point at a fragment nobody
       // commented on.
-      if (ranges.length !== pin.range.parts.length) continue;
+      if (ranges.length !== range.parts.length) continue;
       const name = highlightNameFor(pin.id);
       api.registry.set(name, new api.Highlight(...ranges));
       registeredHighlights.add(name);
@@ -399,11 +388,20 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       // drawn AREA; the node is what a comment is about only when we could not.
       const words = painted.get(pin.id);
       const union = words ? unionRect(words) : null;
-      const rect = paintedAreas.get(pin.id) ?? union ?? el.getBoundingClientRect();
-      return [{ id: pin.id, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } }];
+      let rect = managedRects.get(pin.id) ?? paintedAreas.get(pin.id) ?? union ?? el.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0 && isTargetRange(pin.range)) {
+        const children = [...el.querySelectorAll<HTMLElement>(`[${COMMENT_TARGET_ATTR}]`)].map((child) => child.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
+        if (children.length) {const x=Math.min(...children.map((r)=>r.x));const y=Math.min(...children.map((r)=>r.y));rect={x,y,width:Math.max(...children.map((r)=>r.right))-x,height:Math.max(...children.map((r)=>r.bottom))-y};}
+      }
+      const status = isTargetRange(pin.range) ? (pin.range.target.kind === 'iframe' ? (managedRects.has(pin.id) ? 'exact' : 'missing') : (el.getAttribute(COMMENT_TARGET_ATTR) ? 'exact' : 'missing')) : undefined;
+      return [{ id: pin.id, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, ...(status ? {status}:{}) }];
     });
     post({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions });
   };
+
+  /** Exact inner targets paint in their own realm; owner paint is only fallback. */
+  const paintsInChild = (pin: StoryAnnotationsMessage['pins'][number]): boolean =>
+    isTargetRange(pin.range) && pin.range.target.kind === 'iframe' && managedRects.has(pin.id);
 
   /** Stamp idempotent state: all annotate-mode tints, or only the transient view-mode hover. */
   const applyState = () => {
@@ -419,6 +417,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       return;
     }
     for (const pin of state.pins) {
+      if (paintsInChild(pin)) continue;
       const el = elementForPin(pin);
       if (!el) continue;
       el.setAttribute(ANNOTATED_ATTR, '');
@@ -426,7 +425,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     }
     if (selectedPath) elementFor(selectedPath)?.setAttribute(ANNOTATE_SELECTED_ATTR, '');
     const hovered = state.hoverId ? state.pins.find((pin) => pin.id === state!.hoverId) : null;
-    if (hovered) elementForPin(hovered)?.setAttribute(ANNOTATION_HOVER_ATTR, '');
+    if (hovered && !paintsInChild(hovered)) elementForPin(hovered)?.setAttribute(ANNOTATION_HOVER_ATTR, '');
     // The words last, so their rules follow the state that was just stamped.
     ensureCss(true, paintRanges());
     paintAreas();
@@ -435,11 +434,22 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
 
   /** Keep the page-level draft popover attached while the document moves. */
   const reportSelectedGeometry = () => {
-    if (!state || state.mode === 'off' || !selectedPath) return;
+    if (!state || state.mode === 'off' || !selectedPath || managedSelection || pick) return;
+    if (isTargetRange(state.selected?.range)) {
+      const selected = state.selected!;
+      const target = elementForPin({path:selected.path,key:null,nodeId:selected.nodeId,range:selected.range});
+      if (target) {const r=target.getBoundingClientRect();post({type:STORY_SELECTION_MESSAGE,selection:{...selected,rect:{x:r.x,y:r.y,width:r.width,height:r.height}}});}
+      return;
+    }
     const el = elementFor(selectedPath);
     if (!el) return;
     const selection = describeSelection(el, nodes);
     if (!selection) return;
+    const previous = state.selected;
+    if (previous?.nodeId && previous.nodeId === selection.nodeId) {
+      if (previous.quote !== undefined) selection.quote = previous.quote;
+      if (previous.range) selection.range = previous.range;
+    }
     post({ type: STORY_SELECTION_MESSAGE, selection });
   };
 
@@ -456,62 +466,26 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
 
   /** Report a selection: stamp the node so the owner sees what they picked, tell the page. */
   const reportSelection = (el: Element | null, extra: { range?: AnnotationRangeOnWire } = {}) => {
-    const selection = el ? describeSelection(el, nodes) : null;
-    if (selection && extra.range) selection.range = extra.range;
+    managedSelection = null;
+    const selection = el ? describeCommentSelection(el, nodes) : null;
+    if (selection && extra.range && (selection.tag !== 'For' || isTargetRange(selection.range))) selection.range = isTargetRange(selection.range) && !isTargetRange(extra.range) ? {...selection.range, range:extra.range} : extra.range;
     selectedPath = selection?.path ?? null;
     applyState();
     post({ type: STORY_SELECTION_MESSAGE, selection });
   };
 
-  /**
-   * A click on a highlighted node focuses its thread — the Docs
-   * click-the-highlight move. Never a rect update: `mx:annotation-pin` means
-   * "someone asked for this thread" and nothing else.
-   *
-   * WHILE EDITING THIS DOES NOTHING. The click belongs to the caret, and a
-   * capture-phase `preventDefault` here would make every commented paragraph
-   * unselectable in the editor.
-   */
-  const onClick = (event: MouseEvent) => {
-    if (root && !root.contains(event.target as Node)) return;
-    // While picking, a click is the window listener's (below): a selectable
-    // target was already taken there, and anything else is nobody's business.
-    if (!state || state.mode === 'off' || pick || isEditing()) return;
-    const target = event.target as HTMLElement | null;
-    if (!target) return;
-    // Preview copies (deck rail, present mode) render the same paths; never select through them.
-    if (target.closest('.mx-rail, .mx-present')) return;
-    const el = target.closest(`[${AST_PATH_ATTR}]`);
-    if (!el) return;
-    const annotated = target.closest(`[${ANNOTATED_ATTR}]`);
-    if (annotated) {
-      event.preventDefault();
-      const nodeId = annotated.id || null;
-      const key = annotated.getAttribute('data-annotation-anchor');
-      const path = annotated.getAttribute(AST_PATH_ATTR);
-      const pin = state.pins.find((p) =>
-        (p.nodeId ? p.nodeId === nodeId : p.key ? p.key === key : p.path === path));
-      if (pin) {
-        const r = annotated.getBoundingClientRect();
-        post({ type: STORY_ANNOTATION_PIN_MESSAGE, id: pin.id, rect: { x: r.x, y: r.y, width: r.width, height: r.height } });
-        return;
-      }
-    }
-  };
+  // Saved comments never consume content clicks: the first click of a native
+  // word/paragraph selection must not open a thread. Parent markers own that action.
 
   /** Resolve a pointer target through annotated ancestors without stamping every view-mode pin. */
   const pinAt = (target: EventTarget | null) => {
     const start = target as HTMLElement | null;
     if (!start || typeof start.closest !== 'function' || start.closest('.mx-rail, .mx-present')) return null;
-    let el = start.closest<HTMLElement>(`[${AST_PATH_ATTR}]`);
+    let el: HTMLElement | null = start;
     while (el) {
-      const key = el.getAttribute('data-annotation-anchor');
-      const nodeId = el.id || null;
-      const path = el.getAttribute(AST_PATH_ATTR);
-      const pin = state?.pins.find((candidate) =>
-        (candidate.nodeId ? candidate.nodeId === nodeId : candidate.key ? candidate.key === key : candidate.path === path));
+      const pin = state?.pins.find((candidate) => !paintsInChild(candidate) && elementForPin(candidate) === el);
       if (pin) return pin;
-      el = el.parentElement?.closest<HTMLElement>(`[${AST_PATH_ATTR}]`) ?? null;
+      el = el.parentElement;
     }
     return null;
   };
@@ -529,8 +503,8 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
   const selectableAt = (target: EventTarget | null): Element | null => {
     const element = target as Element | null;
     if (!element?.closest || element.closest('.mx-rail, .mx-present')) return null;
-    const stamped = element.closest(`[${AST_PATH_ATTR}]`);
-    return stamped && describeSelection(stamped, nodes) ? stamped : null;
+    const stamped = element.closest(`[${COMMENT_TARGET_ATTR}], [${AST_PATH_ATTR}]`);
+    return stamped && describeCommentSelection(stamped, nodes) ? stamped : null;
   };
 
   const setPickHovered = (next: Element | null) => {
@@ -662,6 +636,14 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       if (el) reportSelection(el);
       return;
     }
+    const runtime = (from.target as Element | null)?.closest?.(`[${COMMENT_TARGET_ATTR}]`);
+    if (runtime) {
+      const bounds = runtime.getBoundingClientRect();
+      if (rect.x >= bounds.x && rect.y >= bounds.y && rect.x+rect.width <= bounds.right && rect.y+rect.height <= bounds.bottom) {
+        const box = boxFromRects(bounds,rect);
+        if (box) {reportSelection(runtime,{range:{v:1,kind:'area',box}});return;}
+      }
+    }
     const path = areaTarget(areaCandidates(), rect);
     const el = path ? elementFor(path) : null;
     if (!el || !path) return;
@@ -682,7 +664,47 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     if ((pick === 'block' || pick === 'select') && !drawing) setPickHovered(selectableAt(event.relatedTarget));
   };
 
-  doc.addEventListener('click', onClick, true);
+  const managed = bindManagedComments(doc, {
+    state(host) {
+      const owner = describeSelection(host, nodes);
+      const ownerId = owner?.nodeId;
+      return {enabled:!!state && state.mode !== 'off',canComment:!!state && state.mode !== 'off' && state.canComment !== false,picking:pick === 'select' || pick === 'area',blockPicking:pick === 'block',
+        pins: (state?.pins ?? []).flatMap((pin) => pin.nodeId === ownerId && isTargetRange(pin.range) && pin.range.target.kind === 'iframe' ? [{id:pin.id,target:pin.range.target.node,range:pin.range.range}]:[]),
+        openId:state?.openId ?? null,hoverId:state?.hoverId ?? null,
+        selection:managedSelection?.host === host ? {...managedSelection.selection,rect:localManagedRect(host,managedSelection.selection.rect)} : null};
+    },
+    receive(host, event) {
+      const owner = describeSelection(host,nodes);
+      if (!owner || owner.tag !== 'Iframe' || !owner.nodeId) return;
+      if (event.type === 'comment-selection') {
+        if (event.selection?.target.kind === 'source') {
+          const sourceId = event.selection.target.id;
+          const contains = (list: JsxNode[]): boolean => list.some((node) => node.type === 'element' && ((node.attributes.some((attr) => attr.name === 'id' && attr.value.static && attr.value.json === sourceId) && node.tag !== 'Iframe') || contains(node.children)));
+          const node = nodesAtPath(nodes, owner.path);
+          if (!node || node.type !== 'element' || !contains(node.children)) return;
+        }
+        managedSelection = event.selection ? {host,selection:event.selection}:null;
+        selectedPath = event.selection ? owner.path:null;
+        const selection = event.selection ? {...owner,rect:event.selection.rect,quote:event.selection.quote,range:{v:1 as const,kind:'target' as const,target:{kind:'iframe' as const,node:event.selection.target},...(event.selection.range ? {range:event.selection.range}:{})}} : null;
+        // Outside the pick, this is an explicit child Comment action, not a
+        // geometry update. The app opens the composer through its action door.
+        if (selection && !pick) post({type:STORY_SELECTION_ACTION_MESSAGE,action:'annotate',selection});
+        else post({type:STORY_SELECTION_MESSAGE,selection});
+      } else if (event.type === 'comment-layout') {
+        if (!pick && managedSelection?.host === host && event.selectionRect !== undefined && JSON.stringify(event.selectionTarget) === JSON.stringify(managedSelection.selection.target)) {
+          managedSelection.selection.rect = event.selectionRect ?? owner.rect;
+          const selected = managedSelection.selection;
+          post({type:STORY_SELECTION_MESSAGE,selection:{...owner,rect:selected.rect,quote:selected.quote,range:{v:1,kind:'target',target:{kind:'iframe',node:selected.target},...(selected.range ? {range:selected.range}:{})}}});
+        }
+        for (const position of event.positions) {if (position.status === 'exact') managedRects.set(position.id,position.rect);else managedRects.delete(position.id);}
+        applyState();
+        reportLayout();
+      } else if (event.type === 'comment-pin') post({type:STORY_ANNOTATION_PIN_MESSAGE,id:event.id,rect:event.rect});
+      else if (event.type === 'comment-hover') post({type:STORY_ANNOTATION_HOVER_MESSAGE,id:event.id});
+      else if (event.type === 'comment-select-mode') post({type:STORY_SELECTION_ACTION_MESSAGE,action:'select',selection:owner});
+    },
+  });
+
   doc.addEventListener('pointerover', onPointerOver, true);
   doc.addEventListener('pointerout', onPointerOut, true);
   win.addEventListener('mousedown', onPickMouseDown, true);
@@ -702,14 +724,25 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
    * on while editing. Coalesced into the same frame as scroll and resize.
    */
   doc.addEventListener('input', scheduleSync, true);
+  const mutations = new MutationObserver((entries) => {
+    if (entries.some((entry) => [...entry.addedNodes,...entry.removedNodes].some((node) => node.nodeType === 3 || (node.nodeType === 1 && !(node as Element).matches(`style, [${ANNOTATION_AREA_ATTR}], [${ANNOTATE_BAND_ATTR}], [data-mx-selection-actions]`))))) scheduleSync();
+  });
+  mutations.observe(root ?? doc.body,{childList:true,subtree:true});
+
 
   return {
     update(message) {
       state = message;
-      setPick(message.mode === 'off' ? null : message.pick ?? null);
+      setPick(message.mode === 'off' || message.canComment === false ? null : message.pick ?? null);
       if (message.mode === 'off') selectedPath = null;
       else if (message.selectedPath !== undefined) selectedPath = message.selectedPath;
       if (message.mode === 'off') ensureCss(false);
+      if (!message.selectedPath || message.mode === 'off' || pick || message.canComment === false) managedSelection = null;
+      else if (isTargetRange(message.selected?.range) && message.selected.range.target.kind === 'iframe') {
+        const host = elementFor(message.selectedPath);
+        if (host) managedSelection = {host,selection:{target:message.selected.range.target.node,rect:message.selected.rect,quote:message.selected.quote,range:message.selected.range.range}};
+      }
+      managed.sync();
       applyState();
       if (message.mode === 'off') post({ type: STORY_ANNOTATION_LAYOUT_MESSAGE, positions: [] });
       else reportLayout();
@@ -720,6 +753,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       // page sideways the moment the sidebar narrowed the viewport.
       if (message.mode !== 'off' && message.openId && message.openId !== scrolledTo) {
         const pin = message.pins.find((p) => p.id === message.openId);
+        if (pin?.nodeId && isTargetRange(pin.range) && pin.range.target.kind === 'table') doc.dispatchEvent(new CustomEvent('mx:reveal-comment-target',{detail:{owner:pin.nodeId,target:pin.range.target}}));
         const el = pin ? elementForPin(pin) : null;
         if (el) {
           const words = pin ? painted.get(pin.id) : undefined;
@@ -731,6 +765,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     },
     setNodes(next) {
       nodes = next;
+      managed.sync();
       // A re-render may have replaced every host — re-stamp.
       scheduleSync();
     },
@@ -739,6 +774,8 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       reportSelection(path ? elementFor(path) : null);
     },
     dispose() {
+      mutations.disconnect();
+      managed.dispose();
       state = null;
       selectedPath = null;
       reportedHoverId = null;
@@ -748,7 +785,6 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       clearHighlights();
       ensureCss(false);
       applyState();
-      doc.removeEventListener('click', onClick, true);
       doc.removeEventListener('pointerover', onPointerOver, true);
       doc.removeEventListener('pointerout', onPointerOut, true);
       win.removeEventListener('mousedown', onPickMouseDown, true);

@@ -13,7 +13,7 @@ import { notifyRemoteComment } from '@/lib/remote/mentions';
  */
 import { respondToAnnotationList } from '@/app/api/artifacts/[id]/annotations/route';
 import { createAnnotationFor, type CreateAnnotationInput } from '@/lib/annotations';
-import { isAreaRange, parseAnnotationRange } from '@/lib/story/annotation-range';
+import { isAreaRange, refinementRange, parseAnnotationRange } from '@/lib/story/annotation-range';
 import { browserActor } from '@/lib/auth';
 import { json, readJson, unauthorized } from '@/lib/http';
 import { ownerUsername } from '@/lib/users';
@@ -52,7 +52,7 @@ function parseCreateBody(body: Record<string, unknown>): CreateBodyResult {
     // An area has no words: a quote beside one is a contradiction, refused
     // rather than silently dropped — the page never sends it, so a body that
     // does was not made by the page.
-    if (isAreaRange(range) && typeof body.quote === 'string') return { error: 'bad_range' };
+    if (isAreaRange(refinementRange(range)) && typeof body.quote === 'string') return { error: 'bad_range' };
     input.range = range;
   }
   return { input };

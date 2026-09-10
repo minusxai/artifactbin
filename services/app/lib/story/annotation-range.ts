@@ -1,3 +1,4 @@
+import { parseCommentTarget, type CommentTarget } from './comment-target';
 /**
  * WHAT A COMMENT WAS ABOUT, BESIDE THE NODE IT IS ON — the quote and the
  * anchor-relative range.
@@ -62,7 +63,10 @@ export interface AnnotationAreaRange {
  * about a node, and this says which part of it, in whichever way the person
  * showed it.
  */
-export type AnnotationRange = AnnotationTextRange | AnnotationAreaRange;
+export interface AnnotationTargetRange { v: 1; kind: 'target'; target: CommentTarget; range?: AnnotationTextRange | AnnotationAreaRange }
+export type AnnotationRange = AnnotationTextRange | AnnotationAreaRange | AnnotationTargetRange;
+export const isTargetRange = (range: AnnotationRange | null | undefined): range is AnnotationTargetRange => !!range && range.kind === 'target';
+export const refinementRange = (range: AnnotationRange | null | undefined): AnnotationTextRange | AnnotationAreaRange | null => isTargetRange(range) ? range.range ?? null : range ?? null;
 
 export const isAreaRange = (range: AnnotationRange | null | undefined): range is AnnotationAreaRange =>
   !!range && range.kind === 'area';
@@ -227,8 +231,15 @@ const isIndex = (value: unknown): value is number =>
  */
 export function parseAnnotationRange(value: unknown): AnnotationRange | null {
   if (!value || typeof value !== 'object') return null;
-  const raw = value as { v?: unknown; kind?: unknown; parts?: unknown; box?: unknown };
+  const raw = value as { v?: unknown; kind?: unknown; parts?: unknown; box?: unknown; target?: unknown; range?: unknown };
   if (raw.v !== 1) return null;
+  if (raw.kind === 'target') {
+    const target = parseCommentTarget(raw.target);
+    if (!target || (raw.range && typeof raw.range === 'object' && (raw.range as {kind?: unknown}).kind === 'target')) return null;
+    const range = raw.range === undefined ? undefined : parseAnnotationRange(raw.range);
+    if (raw.range !== undefined && (!range || isTargetRange(range))) return null;
+    return {v: 1, kind: 'target', target, ...(range ? {range: range as AnnotationTextRange | AnnotationAreaRange} : {})};
+  }
   if (raw.kind === 'area') {
     const box = parseAnnotationBox(raw.box);
     return box ? { v: 1, kind: 'area', box } : null;

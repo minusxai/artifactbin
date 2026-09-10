@@ -682,6 +682,7 @@ export interface StorySelectMessage { type: typeof STORY_SELECT_MESSAGE; path: s
  */
 export const STORY_ANNOTATIONS_MESSAGE = 'mx:annotations';
 export interface StoryAnnotationsMessage {
+  canComment?: boolean;
   type: typeof STORY_ANNOTATIONS_MESSAGE;
   mode: 'off' | 'on';
   /**
@@ -709,6 +710,7 @@ export interface StoryAnnotationsMessage {
   hoverId: string | null;
   /** The node the owner is composing on; replayed so lazy annotation startup cannot lose it. */
   selectedPath?: string | null;
+  selected?: StoryEditSelection | null;
   /**
    * The Select tool (`select`) combines block hover/click and area drag.
    * Legacy modes remain accepted for existing runtime callers:
@@ -745,7 +747,7 @@ export const STORY_ANNOTATION_LAYOUT_MESSAGE = 'mx:annotation-layout';
 export interface StoryAnnotationLayoutMessage {
   type: typeof STORY_ANNOTATION_LAYOUT_MESSAGE;
   nonce: string;
-  positions: Array<{ id: string; rect: StoryEditRect }>;
+  positions: Array<{ id: string; rect: StoryEditRect; status?: 'exact' | 'missing' | 'ambiguous' }>;
 }
 
 /**

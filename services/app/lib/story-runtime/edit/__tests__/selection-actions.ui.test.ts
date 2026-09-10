@@ -569,3 +569,13 @@ it('long-presses a graphic on touch and cancels a moving gesture', () => {
     expect(document.querySelector('[data-mx-selection-action="select"]')).not.toBeNull();
   } finally { vi.useRealTimers(); }
 });
+
+it('keeps unkeyed repeat text feedback on the owner without a positional text range',async()=>{
+ const source=parseJsx('<For id="orders" each={$orders}><p id="name">{$_row.name}</p></For>');if(!source.ok)throw new Error(source.error);
+ document.body.innerHTML='<div id="orders" data-mx-ast="0"><p>Alice</p><p>Bob</p></div>';
+ actions.setNodes(source.nodes);actions.update({type:'mx:selection-actions',edit:false,annotate:true});
+ await selectText();
+ document.querySelector<HTMLButtonElement>('[aria-label="Comment on selected text"]')!.click();
+ expect(onAction).toHaveBeenCalledWith('annotate',expect.objectContaining({nodeId:'orders',tag:'For',quote:'Alice'}));
+ expect(onAction.mock.calls[0][1].range).toBeUndefined();
+});

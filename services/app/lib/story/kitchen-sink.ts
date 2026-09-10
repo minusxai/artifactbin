@@ -49,6 +49,10 @@ export function kitchenSinkMarkup(refs: KitchenSinkRefs): string {
   </BreadcrumbList></Breadcrumb>
 </header>
 
+<For each={$regions} keyBy="region" className="mt-6 flex flex-wrap gap-2">
+  <Badge variant="outline">{$_row.region}</Badge>
+</For>
+
 <Separator className="my-10" />
 
 <section>

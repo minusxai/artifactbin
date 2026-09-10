@@ -668,6 +668,7 @@ function DataTableAdapter(props: Record<string, unknown>) {
   return (
     <div {...runtimeTargetIdentity(props)} aria-label="DataTable embed" aria-busy={busy} className={dimRefresh ? 'mx-busy' : undefined} style={wrapper}>
       <CellSessionsContext.Provider value={sessions}><DataTable
+        commentOwner={typeof props.id === 'string' ? props.id : undefined}
         rows={shown}
         columns={table.columns}
         spec={spec}
@@ -1075,6 +1076,7 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, t
       <RuntimeEmbedContext.Provider value={{ store, flow: store.flow, state, pending, setValue, fetchPage: store.fetchPage, refData, chrome, colorMode, managedAssets, importManagedAsset: importAsset }}>
         {renderStoryNodes(nodes, {
           values: state.values,
+          tables: state.tables,
           // Identity across an adopted document: a live update re-renders this
           // tree, and positional keys would remount everything below the edit.
           keyFor: nodeKeys.keyFor,

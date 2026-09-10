@@ -18,6 +18,7 @@
  * the only place these contracts can be checked. Exits non-zero on failure.
  */
 import { chromium } from 'playwright';
+import { expect } from 'playwright/test';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 import { startMailSink, loginViaEmail, isSignedInAs } from './lib/mail-login.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';
@@ -178,17 +179,12 @@ const plainSource = page.locator('textarea[aria-label="Markup source"]');
 await plainSource.waitFor();
 const initialSource = await plainSource.inputValue();
 check(initialSource.includes('Edited by the gate'), 'slow rich-editor download still presents the complete source');
-// Suspense can replace its initial textarea between locator resolution and
-// evaluation. A detached node has empty computed colors; reacquire the live
-// fallback rather than scoring a node the user can no longer see.
-let plainPaint = null;
-for (let attempt = 0; attempt < 20 && !plainPaint; attempt++) {
-  plainPaint = await plainSource.evaluate(el => el.isConnected
-    ? { background: getComputedStyle(el).backgroundColor, color: getComputedStyle(el).color }
-    : null);
-  if (!plainPaint) await page.waitForTimeout(50);
-}
-check(plainPaint?.background === 'rgb(30, 30, 30)' && plainPaint?.color === 'rgb(212, 212, 212)', `the immediately editable fallback uses Monaco’s dark palette (${JSON.stringify(plainPaint)})`);
+// React replaces the initial textarea when the lazy editor starts loading. A
+// one-shot evaluate can read the detached node (empty computed colours on CI).
+// Locator assertions re-resolve the mounted fallback while preserving exact paint checks.
+await expect(plainSource).toHaveCSS('background-color', 'rgb(30, 30, 30)');
+await expect(plainSource).toHaveCSS('color', 'rgb(212, 212, 212)');
+check(true, 'the immediately editable fallback uses Monaco’s dark palette');
 await plainSource.fill(initialSource.replace('Edited by the gate', 'Edited while rich editor loads'));
 releaseRichEditor();
 const mounted = await page.waitForSelector('.monaco-editor [aria-label="Markup source"]', { timeout: 30_000 }).then(() => true).catch(() => false);

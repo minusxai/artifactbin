@@ -1,5 +1,7 @@
 "use client"
 
+import { keyedRowsError, commentMetadata } from '@/lib/story/repeat-identity';
+
 /**
  * `<DataTable>` — the data-bound table of the story kit, and the ONE way to
  * show a lot of rows: virtualised (only the visible window is in the DOM),
@@ -30,6 +32,7 @@ import { AST_PATH_ATTR } from "@/lib/story-ui/ast-path"
 export interface ColumnTemplate { col: string; title?: string; props: Record<string, unknown>; nodes: JsxNode[]; path: string }
 
 export interface DataTableProps {
+  commentOwner?: string
   /** Absent (the bare registry entry, with no adapter) renders the empty state. */
   rows?: Row[]
   columns?: DatasetColumn[]
@@ -68,7 +71,7 @@ export interface DataTableProps {
   resolveSrc?: (url: string) => string | null
   rowKey?: string
   templates?: ColumnTemplate[]
-  renderCell?: (template: ColumnTemplate, row: Row) => React.ReactNode
+  renderCell?: (template: ColumnTemplate, row: Row, index?: number) => React.ReactNode
   className?: string
   /**
    * Unknown props reach the root div, like every other kit component — the
@@ -85,7 +88,7 @@ const ROW_H = 33
 
 export function DataTable({
   rows = [], columns = [], spec = null, sort: initialSort = null, height, sticky = true,
-  totalRows, truncated = false, loading = false, onSortChange, onLoadMore, resolveSrc, rowKey, templates = [], renderCell, className, ...props
+  totalRows, truncated = false, loading = false, onSortChange, onLoadMore, resolveSrc, rowKey, commentOwner, templates = [], renderCell, className, ...props
 }: DataTableProps) {
   // A CEILING, not a reserved height: a three-row table hugs its rows and a
   // long one scrolls inside the cap, because `overflow-auto` gives the
@@ -129,6 +132,19 @@ export function DataTable({
     overscan: 12,
     enabled: virtual,
   })
+  // Parent selection coordinator requests a loaded row by its durable typed key.
+  React.useEffect(() => {
+    const doc = scrollRef.current?.ownerDocument;
+    if (!doc || !rowKey || !commentOwner) return;
+    const reveal = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (!detail || detail.owner !== commentOwner || detail.target?.kind !== 'table') return;
+      const index = ordered.findIndex(row => row[rowKey] === detail.target.rowKey);
+      if (index >= 0 && virtual) virtualizer.scrollToIndex(index, {align:'center'});
+    };
+    doc.addEventListener('mx:reveal-comment-target', reveal);
+    return () => doc.removeEventListener('mx:reveal-comment-target', reveal);
+  }, [rowKey,commentOwner,ordered,virtual,virtualizer]);
   const items = virtualizer.getVirtualItems()
   const total = virtualizer.getTotalSize()
 
@@ -159,16 +175,9 @@ export function DataTable({
     : undefined
 
   const count = new Intl.NumberFormat(undefined)
-  if (rowKey) {
-    const seen = new Set<string>()
-    for (const row of rows) {
-      const value = row[rowKey]
-      if (value == null || (typeof value !== 'string' && typeof value !== 'number') || (typeof value === 'number' && !Number.isFinite(value))) return <div role="alert">rowKey must have a non-null string or number for every row</div>
-      const key = `${typeof value}:${value}`
-      if (seen.has(key)) return <div role="alert">rowKey must be unique; duplicate key {String(value)}</div>
-      seen.add(key)
-    }
-  }
+  const identityError = rowKey ? keyedRowsError(rows, rowKey) : null;
+  if (identityError) return <div role="alert">{identityError}</div>;
+
   return (
     <div data-slot="data-table" aria-label="Data grid" className={cn("flex h-full w-full flex-col overflow-hidden rounded-md border border-border bg-card text-sm", className)} {...props}>
       <div
@@ -209,6 +218,8 @@ export function DataTable({
               <DataRow
                 key={rowIdentity(ordered[index], rowKey, index)}
                 row={ordered[index]}
+                commentOwner={rowKey ? commentOwner : undefined}
+                commentRowKey={rowKey ? ordered[index][rowKey] as string | number : undefined}
                 columns={resolved}
                 style={start === null ? undefined : { ...rowGrid, position: 'absolute', top: 0, left: 0, transform: `translateY(${start}px)` }}
                 measure={virtual ? virtualizer.measureElement : undefined}
@@ -237,7 +248,9 @@ export function DataTable({
   )
 }
 
-function DataRow({ row, columns, style, measure, index, resolveSrc, templates, renderCell }: {
+function DataRow({ commentOwner, commentRowKey, row, columns, style, measure, index, resolveSrc, templates, renderCell }: {
+  commentOwner?: string
+  commentRowKey?: string | number
   row: Row
   columns: ResolvedColumn[]
   style?: React.CSSProperties
@@ -245,16 +258,17 @@ function DataRow({ row, columns, style, measure, index, resolveSrc, templates, r
   index: number
   resolveSrc?: (url: string) => string | null
   templates: ColumnTemplate[]
-  renderCell?: (template: ColumnTemplate, row: Row) => React.ReactNode
+  renderCell?: (template: ColumnTemplate, row: Row, index?: number) => React.ReactNode
 }) {
   return (
-    <tr ref={measure} data-index={index} className="border-b border-border/50 transition-colors hover:bg-muted/30" style={style}>
+    <tr {...(commentRowKey !== undefined ? commentMetadata(commentOwner,{kind:'table',rowKey:commentRowKey}) : {})} ref={measure} data-index={index} className="border-b border-border/50 transition-colors hover:bg-muted/30" style={style}>
       {columns.map((c) => {
         const value = row[c.col]
         const bar = barFraction(value, c)
         const tint = cellTint(value, c)
         return (
           <td
+            {...(commentRowKey !== undefined ? commentMetadata(commentOwner,{kind:'table',rowKey:commentRowKey,columnKey:c.col}) : {})}
             key={c.col}
             className={cn("relative whitespace-nowrap px-3 py-1.5 align-middle", c.type === 'number' && "tabular-nums")}
             style={{ textAlign: c.align, width: c.width ? `${c.width}px` : undefined, ...(tint ? { background: tint } : {}) }}
@@ -267,7 +281,7 @@ function DataRow({ row, columns, style, measure, index, resolveSrc, templates, r
                 style={{ width: `${Math.round(bar * 100)}%`, background: typeof c.bar === 'object' && c.bar.color ? c.bar.color : 'var(--chart-1)' }}
               />
             )}
-            <span className="relative">{(() => { const template = templates.find((t) => t.col === c.col); return template && template.nodes.some((n) => n.type !== 'text' || n.value.trim()) && renderCell ? renderCell(template, row) : imageCell(value, c, resolveSrc) ?? formatCell(value, c); })()}</span>
+            <span className="relative">{(() => { const template = templates.find((t) => t.col === c.col); return template && template.nodes.some((n) => n.type !== 'text' || n.value.trim()) && renderCell ? renderCell(template, row, index) : imageCell(value, c, resolveSrc) ?? formatCell(value, c); })()}</span>
           </td>
         )
       })}

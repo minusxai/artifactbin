@@ -1,3 +1,4 @@
+import {connectManagedComments} from './managed-comment-host';
 import type { DataflowStore } from './store';
 import { createAuthorScriptBridge } from './author-script-bridge';
 import { AUTHOR_SCRIPT_DOCUMENT } from './author-script-bootstrap';
@@ -51,6 +52,7 @@ export function startAuthorScript(source: string, store: DataflowStore, doc: Doc
   let disposed = false;
   let port: MessagePort | null = null;
   let unsubscribe = () => {};
+  let comments: ReturnType<typeof connectManagedComments> | null = null;
   let delivered: DataflowState | null = null;
   let deliveredPending: string[] = [];
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -83,6 +85,7 @@ export function startAuthorScript(source: string, store: DataflowStore, doc: Doc
   const dispose = () => {
     if (disposed) return;
     disposed = true;
+    comments?.dispose();
     bridge.dispose();
     assets.dispose();clearTimeout(startup);
     doc.defaultView?.removeEventListener('message',navigation);
@@ -108,6 +111,7 @@ export function startAuthorScript(source: string, store: DataflowStore, doc: Doc
         if(awaitingState) { awaitingState=false; schedule(); }
         return;
       }
+      if(typeof event.data?.type==='string' && event.data.type.startsWith('comment-')) { comments?.receive(event.data); return; }
       const requestId = Number(event.data?.id);
       if (!Number.isSafeInteger(requestId) || requestId < 1 || requestId <= lastRequestId) {
         port?.postMessage({ id: Number.isSafeInteger(requestId) ? requestId : 0, ok: false, error: 'Invalid script request' });
@@ -128,6 +132,10 @@ export function startAuthorScript(source: string, store: DataflowStore, doc: Doc
     snapshot();
     unsubscribe = store.subscribe(schedule);
     port.postMessage({ type: 'run', source, ...(visible ? {html:visible.html,scripts:visible.scripts,assetOrigin:visible.assets?.origin,managed:visible.scripts!==undefined} : {}) });
+    if(visible?.scripts!==undefined) {
+      const owner=visible.host.closest<HTMLElement>('[data-mx-managed-frame]')??visible.host;
+      comments=connectManagedComments(owner,state=>{if(!disposed)port?.postMessage(state);});
+    }
   };
   (visible?.host ?? doc.body).append(frame);
   return dispose;

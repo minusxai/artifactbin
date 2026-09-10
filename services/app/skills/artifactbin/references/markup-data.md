@@ -1,7 +1,7 @@
 ---
 name: markup-data
 description: >-
-  Explains document data.
+  Data.
 order: 1
 ---
 ## Read first
@@ -139,3 +139,6 @@ First read [chart authoring](markup-data-authoring.md).
   - `<Slider value="$min_rev" min={0} max={5000} step={100} prefix="$" format=",.0f" />`.
   - `<DatePicker value="$since" min max />` (a `date` Value), `<Switch checked="$flag" />` (a boolean).
   Dropdowns belong in a control row, never inside a `<GridItem>`.
+
+
+[Keyed templates](markup-repeat.md).

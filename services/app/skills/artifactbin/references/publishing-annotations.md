@@ -28,6 +28,10 @@ POST [[ base ]]/api/artifacts/<id>/annotations/<annotation_id>
 → 200 { "id", "status": "resolved", "thread": [ ... ] }
 ```
 
+## Contents
+
+The inline shape · Comments on dynamic content · Reply, resolve, reopen.
+
 ## The inline shape
 
 ```
@@ -57,6 +61,42 @@ as an AREA over the page has no words: `quote` is null and `range` is
 read `snippet` for what it covers. An
 `"orphaned": true` annotation's node is not in the current version — the
 snippet still says what it pointed at.
+
+## Selecting content with existing comments
+
+Saved comments do not turn the underlying text into a thread-opening button.
+Click and drag, or double-click a word, to select new text in an already-commented
+node. Open an existing conversation through its comment marker or sidebar entry.
+The explicit Select tool picks a block or dragged area; native text selection
+remains available after the pick ends. This applies to markup and managed Iframes.
+
+## Comments on dynamic content
+
+A comment on a DataTable cell, a repeated For instance, or an Iframe internal
+element keeps the persistent owner in `anchor.nodeId`. The more specific target
+lives in `range`:
+
+```json
+{
+  "v": 1,
+  "kind": "target",
+  "target": { "kind": "table", "rowKey": "order-101", "columnKey": "customer" }
+}
+```
+
+Here the owner is the DataTable node, independently of the row and column keys.
+Iframe targets carry a source ID, hierarchical `data-comment-key` path, or a
+session-only handle. Keyed For targets carry typed item keys and a template source
+ID. Without `keyBy`, a For comment retains only its source owner and optional quote;
+index-based item/text/area targets are not persisted.
+An optional nested `range` contains the selected text or area inside that target.
+
+Preserve both the owner ID and the item's semantic key when fixing feedback.
+Sorting must not change identity. A missing runtime target falls back to its owner;
+it does not make `orphaned` true while that owner survives. The stored refinement
+remains available for reconnection. Dynamic text is not reliably discoverable by
+searching static source, so `quote_found` may be null pending runtime resolution.
+See [iframe comments](markup-iframe.md) for script-created element identity.
 
 ## Reply, resolve, reopen
 

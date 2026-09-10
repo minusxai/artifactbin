@@ -327,3 +327,21 @@ describe('lifecycle', () => {
     expect((await db.query('SELECT 1 FROM annotations WHERE artifact_id = $1', [doc.id])).rows).toHaveLength(1);
   });
 });
+
+describe('runtime refinements preserve their source owner', () => {
+  it('stores dynamic iframe keys, preserves unknown quote status and rejects foreign source identities', async () => {
+    const t=await mintToken('agent');
+    const doc=await create(t.token,{markup:'<p id="outside">Other</p><Iframe id="frame"><p id="inside">Inside</p></Iframe>'});
+    const cookie=await agentCookie([t.id]);
+    const range={v:1,kind:'target',target:{kind:'iframe',node:{kind:'key',path:['order:123','customer']}},range:{v:1,parts:[{rel:'',start:0,end:5,text:'Alice'}]}};
+    const result=await annotate(doc.id,cookie,{node_id:'frame',body:'Check customer',quote:'Alice',range});
+    expect(result.status,await result.clone().text()).toBe(201);
+    expect(await result.json()).toMatchObject({anchor:{nodeId:'frame'},range,quote_found:null,orphaned:false});
+    for (const target of [{kind:'iframe',node:{kind:'source',id:'outside'}},{kind:'table',rowKey:1}]) {
+      const refused=await annotate(doc.id,cookie,{node_id:'frame',body:'Invalid',range:{v:1,kind:'target',target}});
+      expect(refused.status).toBe(400);
+    }
+    const area=await annotate(doc.id,cookie,{node_id:'frame',body:'Invalid',quote:'words',range:{v:1,kind:'target',target:range.target,range:{v:1,kind:'area',box:{x:0,y:0,w:1,h:1}}}});
+    expect(area.status).toBe(400);
+  });
+});

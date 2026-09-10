@@ -1,3 +1,4 @@
+import {bindManagedComments} from '../managed-comment-host';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createAuthorScriptSession, startAuthorScript } from '../author-script';
 import { createDataflowStore } from '../store';
@@ -83,4 +84,20 @@ describe('isolated author script host', () => {
     vi.advanceTimersByTime(15_000);
     expect(document.querySelector('iframe')).toBeNull();
   });
+});
+
+it('connects only the visible managed owner and routes comment events outside author request IDs',()=>{
+  const port={postMessage:vi.fn(),start:vi.fn(),close:vi.fn(),onmessage:null as null|((event:{data:any})=>void)};
+  vi.stubGlobal('MessageChannel',class {port1=port;port2={};});
+  document.body.innerHTML='<div id="owner" data-mx-managed-frame="" data-mx-ast="0"><div id="mount"></div></div>';
+  const owner=document.getElementById('owner')!,receive=vi.fn();
+  const binding=bindManagedComments(document,{state:()=>({enabled:true,picking:true,canComment:true,pins:[],openId:null,hoverId:null,selection:null}),receive});
+  const dispose=startAuthorScript('',createDataflowStore({flow:{values:[],queries:[]}}),document,{host:document.getElementById('mount')!,title:'Managed',html:'',scripts:[],document:AUTHOR_SCRIPT_DOCUMENT});
+  document.querySelector('iframe')!.dispatchEvent(new Event('load'));
+  const state=port.postMessage.mock.calls.find(c=>c[0].type==='comment-state')![0];
+  expect(state).toMatchObject({enabled:true,picking:true});
+  port.onmessage!({data:{type:'comment-select-mode',generation:state.generation}});
+  expect(receive).toHaveBeenCalledWith(owner,{type:'comment-select-mode',generation:state.generation});
+  expect(port.postMessage.mock.calls.some(c=>c[0].error==='Invalid script request')).toBe(false);
+  dispose();binding.dispose();expect(port.close).toHaveBeenCalledOnce();
 });

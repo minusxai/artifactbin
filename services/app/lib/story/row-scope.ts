@@ -82,11 +82,20 @@ export function analyzeRowScopes(nodes: JsxNode[], columns?: Record<string, impo
   type Scope = { table: string; key: unknown };
   const visit = (node: JsxNode, scope?: Scope, inColumn = false, parent?: string) => {
     if (node.type !== 'element') {
-      if (!inColumn && rowRefsIn([node]).length) errors.push('$_row references belong inside a DataTable Column');
+      if (!inColumn && rowRefsIn([node]).length) errors.push('$_row references belong inside a DataTable Column or For');
       if (inColumn && scope && columns?.[scope.table]) for (const field of rowRefsIn([node])) {
         if (!columns[scope.table].some((c) => c.name === field)) errors.push(`unknown row field "${field}" in $${scope.table}`);
       }
       return;
+    }
+    if (node.tag === 'For') {
+      const each = node.attributes.find(a => a.name === 'each')?.value;
+      const expression = each && !each.static ? each.reactive : undefined;
+      const table = expression?.kind === 'signal' ? expression.name : undefined;
+      scope = table ? {table,key:attr(node,'keyBy')} : undefined;
+      inColumn = !!scope;
+      const key = scope?.key;
+      if (columns && table && typeof key === 'string' && !columns[table]?.some(c=>c.name===key)) errors.push(`keyBy "${key}" is absent from $${table}`);
     }
     if (node.tag === 'DataTable') {
       const templates = node.children.filter((c) => c.type === 'element' && c.tag === 'Column');
@@ -107,7 +116,7 @@ export function analyzeRowScopes(nodes: JsxNode[], columns?: Record<string, impo
       inColumn = parent === 'DataTable' && !!scope;
     }
     const fields = rowRefsIn([{ ...node, children: [] }]);
-    if (fields.length && !inColumn) errors.push('$_row references belong inside a DataTable Column');
+    if (fields.length && !inColumn) errors.push('$_row references belong inside a DataTable Column or For');
     if (inColumn && scope && columns?.[scope.table]) for (const field of fields) {
       if (!columns[scope.table].some((c) => c.name === field)) errors.push(`unknown row field "${field}" in $${scope.table}`);
     }
