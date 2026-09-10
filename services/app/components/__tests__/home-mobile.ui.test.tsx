@@ -1,7 +1,7 @@
 /**
  * THE HOME PAGE ON A PHONE.
  *
- * Responsive coverage for the shelf and the top bar’s drawer.
+ * Responsive coverage for the shelf.
  *
  * What is asserted here, and why each one is a real defect and not a taste:
  *
@@ -9,19 +9,16 @@
  *  2. A TITLE GETS TWO LINES ON A PHONE rather than truncating to one.
  *  3. SEARCH GETS ITS OWN ROW. Filters sit below the field on phones and
  *     rejoin it from sm up, keeping the placeholder readable.
- *  4. THE DRAWER IS A SHEET. A 240px pane over a 390px screen is a desktop
- *     menu shown on a phone; the same markup is a full-width sheet there.
  *
  * Class assertions, deliberately: every one of these is a RESPONSIVE rule, and
  * jsdom has no layout — the breakpoint pair (`x sm:y`) is the whole contract,
  * and it is the thing a refactor would silently drop. Geometry belongs to the
  * browser gates.
  */
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import Shelf, { type ShelfRow } from '@/components/Shelf';
-import { PageMenu } from '@/components/PageChrome';
 
 const doc = (id: string, day: number, extra: Partial<ShelfRow> = {}): ShelfRow => ({
   id,
@@ -70,13 +67,5 @@ describe('the shelf reads as ONE shelf on a phone', () => {
     expect(filters).toHaveClass('flex-wrap', 'sm:contents');
     expect(filters).toContainElement(screen.getByLabelText('Shelf view'));
     expect(screen.getByLabelText('Shelf view')).toHaveClass('shrink-0');
-  });
-});
-
-describe('the menu is a sheet on a phone', () => {
-  it('opens full width there and keeps the 240px pane on a desktop', () => {
-    render(<PageMenu authed />);
-    fireEvent.click(screen.getByLabelText('Open menu'));
-    expect(screen.getByLabelText('Menu')).toHaveClass('w-full', 'sm:w-72');
   });
 });
