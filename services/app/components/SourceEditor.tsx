@@ -91,8 +91,11 @@ export interface SourceEditorProps {
   onChange: (next: string) => void;
   /** Preserve focus/caret when upgrading the immediately available plain editor. */
   initialSelection?: () => { start: number; end: number } | null;
+  loading?: React.ReactNode;
+  readOnly?: boolean;
+  ariaLabel?: string;
 }
-export default function SourceEditor({ value, revision, onChange, initialSelection }: SourceEditorProps) {
+export default function SourceEditor({ value, revision, onChange, initialSelection, loading, readOnly = false, ariaLabel = 'Markup source' }: SourceEditorProps) {
   const editorRef = useRef<Parameters<NonNullable<React.ComponentProps<typeof Editor>['onMount']>>[0] | null>(null);
   /** Read at replacement time, so a stale render cannot supply the text. */
   const latest = useRef(value);
@@ -119,6 +122,7 @@ export default function SourceEditor({ value, revision, onChange, initialSelecti
     <style data-source-editor-styles>{monacoStyles}</style>
     <Editor
       height="100%"
+      loading={loading}
       defaultLanguage="html"
       defaultValue={value}
       onMount={(editor) => {
@@ -137,7 +141,7 @@ export default function SourceEditor({ value, revision, onChange, initialSelecti
         scrollBeyondLastLine: false, automaticLayout: true,
         // Every interactive element gets a label (house rule); Monaco's own
         // textarea takes it from here.
-        ariaLabel: 'Markup source',
+        ariaLabel, readOnly,
       }}
     />
     </>

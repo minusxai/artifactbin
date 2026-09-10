@@ -42,7 +42,7 @@ import MarkdownLite from '@/components/MarkdownLite';
 import MobileSheet, { useIsPhoneViewport } from '@/components/MobileSheet';
 import { Tooltip } from '@/components/Tooltip';
 import { parseMarkdownLite, plainText } from '@/lib/markdown-lite';
-import { RIGHT_RAIL_W } from '@/lib/story/edit-bar';
+import { APP_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
 import {
   isEditFrameMessage, STORY_ANNOTATIONS_MESSAGE, STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE,
   STORY_SELECTION_MESSAGE, STORY_SELECT_MESSAGE, STORY_SELECTION_ACTION_MESSAGE,
@@ -1263,7 +1263,7 @@ export default function AnnotationLayer({
           role="status"
           aria-label="Select tool active"
           className={`${cardClass} fixed z-30 flex items-center gap-2 border-edge-bright px-3 py-1.5 font-mono text-[11px] text-muted shadow-xl`}
-          style={{ left: frameRect.left + frameRect.width / 2, top: frameRect.top + VIEW_COMMENT_INSET, transform: 'translateX(-50%)' }}
+          style={{ left: frameRect.left + frameRect.width / 2, top: Math.max(topOffset, frameRect.top, phoneRail ? APP_BAR_H : 0) + VIEW_COMMENT_INSET, transform: 'translateX(-50%)' }}
         >
           <SquareDashedMousePointer size={12} strokeWidth={1.8} className="shrink-0 text-accent" />
           <span className="whitespace-nowrap">tap a block or drag an area to comment</span>

@@ -150,6 +150,8 @@ const plainSource = page.locator('textarea[aria-label="Markup source"]');
 await plainSource.waitFor();
 const initialSource = await plainSource.inputValue();
 check(initialSource.includes('Edited by the gate'), 'slow rich-editor download still presents the complete source');
+const plainPaint = await plainSource.evaluate(el => ({ background: getComputedStyle(el).backgroundColor, color: getComputedStyle(el).color }));
+check(plainPaint.background === 'rgb(30, 30, 30)' && plainPaint.color === 'rgb(212, 212, 212)', 'the immediately editable fallback uses Monaco’s dark palette');
 await plainSource.fill(initialSource.replace('Edited by the gate', 'Edited while rich editor loads'));
 releaseRichEditor();
 const mounted = await page.waitForSelector('.monaco-editor [aria-label="Markup source"]', { timeout: 30_000 }).then(() => true).catch(() => false);
@@ -223,6 +225,18 @@ const paneAfter = ((await page.locator('[aria-label="Source pane"] .view-lines')
   .replace(/\u00a0/g, ' ');
 check(paneAfter.includes('Agent wrote while code was open:'), 'and the open code pane still adopts an agent edit');
 
+
+// Formatting is a read-only projection, never a source edit or a model reset.
+const beforePreview = await api(`/api/artifacts/${doc.id}`, {}, token);
+await page.locator('.monaco-editor').evaluate(el => { window.__originalSourceEditor = el; });
+await page.getByRole('button', { name: 'View formatted', exact: true }).click();
+await page.locator('.monaco-editor [aria-label="Formatted JSX"]').waitFor();
+check(await page.getByText('Formatted preview · read-only', { exact: true }).isVisible(), 'formatted source is explicitly read-only');
+check(await page.locator('.monaco-editor:visible .view-line').count() > 1, 'the preview shows formatted JSX');
+await page.getByRole('button', { name: 'Edit source', exact: true }).click();
+check(await page.locator('.monaco-editor:visible').evaluate(el => el === window.__originalSourceEditor), 'returning to source preserves the original editor and undo model');
+const afterPreview = await api(`/api/artifacts/${doc.id}`, {}, token);
+check(afterPreview.markup === beforePreview.markup && afterPreview.edit_id === beforePreview.edit_id, 'viewing formatted JSX does not write a new source or edit');
 
 // ── 5d. a token for a DIFFERENT artifact must not open a working editor ──
 // The editor is seeded from the page for speed, so `art` exists before we know

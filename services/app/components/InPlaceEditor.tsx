@@ -23,7 +23,7 @@
  */
 import { sendDocument, subscribeDocument, documentRect, documentReady, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import SourceEditor from '@/components/LazySourceEditor';
+import SourceEditor from '@/components/SourceEditorPane';
 import { Check, Code, History, Image as ImageIcon, MessageSquare, Paintbrush } from 'lucide-react';
 
 import ThemePicker, { ModeChip, TemplateChip } from '@/components/ThemePicker';

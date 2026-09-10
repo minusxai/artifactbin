@@ -798,6 +798,16 @@ describe('picking a block from the rail', () => {
     postMessage.mock.calls.map((call) => call[0]).filter((message) => message?.type === STORY_ANNOTATIONS_MESSAGE);
   const pill = () => screen.queryByRole('status', { name: 'Select tool active' });
 
+  it('keeps the Select prompt below the app and editor bars when the document starts at zero', async () => {
+    const { frame } = makeFrame();
+    frame.getBoundingClientRect = () => ({ top: 0, left: 0, width: 800, height: 600 } as DOMRect);
+    const view = render(layer(frame, { railOpen: true, topOffset: 44 }));
+    await flush();
+    expect(pill()).toHaveStyle({ top: '56px' });
+    view.rerender(layer(frame, { railOpen: true, topOffset: 88 }));
+    expect(pill()).toHaveStyle({ top: '100px' });
+  });
+
   it('the context/selection action activates Select with the rail closed', async () => {
     const { frame, postMessage, contentWindow } = makeFrame();
     render(layer(frame, { railOpen: false }));

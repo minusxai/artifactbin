@@ -773,6 +773,8 @@ async function pickLeg(browser) {
   ok(await tool.count() === 1, 'the rail header offers the pick tool');
   ok(await tool.getAttribute('aria-pressed') === 'true', 'opening the rail put the pick on: the tool reads as pressed');
   ok(await page.locator('[aria-label="Select tool active"]').isVisible(), 'a pill over the document says what to do next');
+  const promptBox = await page.locator('[aria-label="Select tool active"]').boundingBox();
+  ok(promptBox.y >= 44, 'the Select prompt sits below the app topbar');
 
   const intro = frame.locator('#intro');
   await intro.hover();
