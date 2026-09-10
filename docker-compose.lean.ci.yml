@@ -2,10 +2,8 @@
 # Actions cache backend, which does not exist on a laptop, so `docker compose -f docker-compose.lean.yml
 # up` must stay usable without it.
 #
-# This job builds the same five Dockerfiles the `image` job builds, and starts with a cold daemon, so it
-# pays for them a second time. Reading main's layers turns that into a restore for anything that has not
-# changed — proxy, sql and browser move rarely, so a PR that touches app code rebuilds one image and
-# restores four. Writing is deliberately NOT here: see docker-compose.lean.ci-write.yml.
+# The composition job builds once, runs image-checks on those images, and then boots them
+# together. Read main's layers here; writing is only enabled by the main-only override.
 services:
   proxy:
     build:

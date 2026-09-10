@@ -1,3 +1,4 @@
+import { checkTableGeometry } from './lib/table-geometry.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
 /** Full served-document test: real cell writes, two readers, conflict, portals and virtual rows. */
 import assert from 'node:assert/strict';
@@ -11,6 +12,7 @@ const browser = await chromium.launch();
 const errors = [];
 const check = (name) => console.log(`  ok ${name}`);
 try {
+  await checkTableGeometry(base, browser, (condition, label) => { assert.ok(condition, label); check(label); });
   const aPage = await browser.newPage({ viewport: { width: 1500, height: 900 } });
   const bPage = await browser.newPage({ viewport: { width: 1500, height: 900 } });
   for (const page of [aPage, bPage]) page.on('pageerror', error => errors.push(error.message));
