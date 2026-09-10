@@ -26,5 +26,5 @@ export type ManagedCommentEvent =
   | { type: 'comment-selection'; generation: string; selection: ManagedCommentSelection | null }
   | { type: 'comment-hover'; generation: string; id: string | null }
   | { type: 'comment-pin'; generation: string; id: string; rect: AnnotationRect }
-  | { type: 'comment-layout'; generation: string; selectionRect?: AnnotationRect | null; positions: Array<{ id: string; rect: AnnotationRect; status: 'exact' | 'missing' | 'ambiguous' }> }
+  | { type: 'comment-layout'; generation: string; selectionRect?: AnnotationRect | null; selectionTarget?: IframeNodeTarget | null; positions: Array<{ id: string; rect: AnnotationRect; status: 'exact' | 'missing' | 'ambiguous' }> }
   | { type: 'comment-select-mode'; generation: string };

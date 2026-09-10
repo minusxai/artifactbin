@@ -657,7 +657,7 @@ it('opens a composer for an iframe text Comment action outside Select mode witho
   const actions=()=>posted.filter((message)=>message.type==='mx:selection-action');
   expect(actions()).toHaveLength(1);
   expect(actions()[0]).toMatchObject({action:'annotate',selection:{nodeId:'frame',quote:'Static',range:{kind:'target',range}}});
-  host.receive({type:'comment-layout',generation,positions:[],selectionRect:{x:20,y:30,width:50,height:30}});
+  host.receive({type:'comment-layout',generation,positions:[],selectionTarget:{kind:'source',id:'static'},selectionRect:{x:20,y:30,width:50,height:30}});
   expect(actions()).toHaveLength(1);
   expect(posted.filter((message)=>message.type===STORY_SELECTION_MESSAGE).at(-1)).toMatchObject({selection:{rect:{x:120,y:230}}});
   session.update({...state('on'),pins:[],canComment:false});
@@ -709,5 +709,36 @@ it('keeps sidebar block picking distinct from explicit iframe Select mode', () =
   expect(states.at(-1)).toMatchObject({picking:true,blockPicking:false});
   session.update({...state('on'),pins:[],pick:null});
   expect(states.at(-1)).toMatchObject({picking:false,blockPicking:false,selection:null});
+  host.dispose();
+});
+
+it('does not let a previous iframe draft geometry finish a fresh Select or replace a second comment', () => {
+  document.body.innerHTML='<div id="frame" data-mx-ast="0" data-mx-managed-frame=""></div>';
+  const owner=document.getElementById('frame')!;rectOf(owner,{x:100,y:200,width:400,height:300});
+  const parsed=parseJsx('<Iframe id="frame"><p id="static">Static</p></Iframe>');if(!parsed.ok) throw Error('parse');session.setNodes(parsed.nodes);
+  const selected:StoryEditSelection={kind:'embed',path:'0',nodeId:'frame',tag:'Iframe',rect:{x:110,y:220,width:50,height:30},className:'',style:'',ancestors:[],range:{v:1,kind:'target',target:{kind:'iframe',node:{kind:'key',path:['first']}}}};
+  session.update({...state('on'),pins:[],selectedPath:'0',selected,pick:null});
+  const states:ManagedCommentState[]=[];const host=connectManagedComments(owner,next=>states.push(next));const generation=states.at(-1)!.generation;
+  posted=[];
+  session.update({...state('on'),pins:[],selectedPath:'0',selected,pick:'select'});
+  expect(states.at(-1)?.selection).toBeNull();
+  host.receive({type:'comment-layout',generation,positions:[],selectionTarget:{kind:'key',path:['first']},selectionRect:{x:10,y:20,width:50,height:30}});
+  expect(posted.filter(message=>message.type===STORY_SELECTION_MESSAGE)).toHaveLength(0);
+  host.receive({type:'comment-selection',generation,selection:{target:{kind:'key',path:['second']},rect:{x:50,y:60,width:50,height:30}}});
+  expect(posted.filter(message=>message.type===STORY_SELECTION_MESSAGE).at(-1)).toMatchObject({selection:{range:{target:{node:{path:['second']}}}}});
+  const second=posted.filter(message=>message.type===STORY_SELECTION_MESSAGE).at(-1)!.selection as StoryEditSelection;
+  session.update({...state('on'),pins:[],selectedPath:'0',selected:second,pick:null});
+  posted=[];
+  host.receive({type:'comment-layout',generation,positions:[],selectionTarget:{kind:'key',path:['first']},selectionRect:{x:1,y:2,width:50,height:30}});
+  expect(posted.filter(message=>message.type===STORY_SELECTION_MESSAGE)).toHaveLength(0);
+  host.receive({type:'comment-layout',generation,positions:[],selectionTarget:{kind:'key',path:['second']},selectionRect:{x:70,y:80,width:50,height:30}});
+  expect(posted.filter(message=>message.type===STORY_SELECTION_MESSAGE).at(-1)).toMatchObject({selection:{rect:{x:170,y:280},range:{target:{node:{path:['second']}}}}});
+  session.update({...state('on'),pins:[],selectedPath:null,selected:null,pick:null,openId:'saved-second'});
+  expect(states.at(-1)?.selection).toBeNull();
+  posted=[];
+  host.receive({type:'comment-layout',generation,positions:[],selectionTarget:{kind:'key',path:['first']},selectionRect:{x:10,y:20,width:50,height:30}});
+  expect(posted.filter(message=>message.type===STORY_SELECTION_MESSAGE)).toHaveLength(0);
+  host.receive({type:'comment-selection',generation,selection:{target:{kind:'key',path:['third']},rect:{x:80,y:90,width:50,height:30}}});
+  expect(posted.filter(message=>message.type==='mx:selection-action').at(-1)).toMatchObject({action:'annotate',selection:{range:{target:{node:{path:['third']}}}}});
   host.dispose();
 });

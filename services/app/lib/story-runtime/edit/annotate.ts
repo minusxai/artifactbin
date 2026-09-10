@@ -439,7 +439,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
 
   /** Keep the page-level draft popover attached while the document moves. */
   const reportSelectedGeometry = () => {
-    if (!state || state.mode === 'off' || !selectedPath || managedSelection) return;
+    if (!state || state.mode === 'off' || !selectedPath || managedSelection || pick) return;
     if (isTargetRange(state.selected?.range)) {
       const selected = state.selected!;
       const target = elementForPin({path:selected.path,key:null,nodeId:selected.nodeId,range:selected.range});
@@ -702,7 +702,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     state(host) {
       const owner = describeSelection(host, nodes);
       const ownerId = owner?.nodeId;
-      return {enabled:!!state && state.mode !== 'off',canComment:!!state && state.mode !== 'off' && state.canComment !== false,picking:!!pick,
+      return {enabled:!!state && state.mode !== 'off',canComment:!!state && state.mode !== 'off' && state.canComment !== false,picking:pick === 'select' || pick === 'area',blockPicking:pick === 'block',
         pins: (state?.pins ?? []).flatMap((pin) => pin.nodeId === ownerId && isTargetRange(pin.range) && pin.range.target.kind === 'iframe' ? [{id:pin.id,target:pin.range.target.node,range:pin.range.range}]:[]),
         openId:state?.openId ?? null,hoverId:state?.hoverId ?? null,
         selection:managedSelection?.host === host ? {...managedSelection.selection,rect:localManagedRect(host,managedSelection.selection.rect)} : null};
@@ -725,7 +725,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
         if (selection && !pick) post({type:STORY_SELECTION_ACTION_MESSAGE,action:'annotate',selection});
         else post({type:STORY_SELECTION_MESSAGE,selection});
       } else if (event.type === 'comment-layout') {
-        if (managedSelection?.host === host && event.selectionRect !== undefined) {
+        if (!pick && managedSelection?.host === host && event.selectionRect !== undefined && JSON.stringify(event.selectionTarget) === JSON.stringify(managedSelection.selection.target)) {
           managedSelection.selection.rect = event.selectionRect ?? owner.rect;
           const selected = managedSelection.selection;
           post({type:STORY_SELECTION_MESSAGE,selection:{...owner,rect:selected.rect,quote:selected.quote,range:{v:1,kind:'target',target:{kind:'iframe',node:selected.target},...(selected.range ? {range:selected.range}:{})}}});
@@ -768,11 +768,11 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
   return {
     update(message) {
       state = message;
-      setPick(message.mode === 'off' ? null : message.pick ?? null);
+      setPick(message.mode === 'off' || message.canComment === false ? null : message.pick ?? null);
       if (message.mode === 'off') selectedPath = null;
       else if (message.selectedPath !== undefined) selectedPath = message.selectedPath;
       if (message.mode === 'off') ensureCss(false);
-      if (!message.selectedPath || message.mode === 'off') managedSelection = null;
+      if (!message.selectedPath || message.mode === 'off' || pick || message.canComment === false) managedSelection = null;
       else if (isTargetRange(message.selected?.range) && message.selected.range.target.kind === 'iframe') {
         const host = elementFor(message.selectedPath);
         if (host) managedSelection = {host,selection:{target:message.selected.range.target.node,rect:message.selected.rect,quote:message.selected.quote,range:message.selected.range.range}};

@@ -66,7 +66,11 @@ export function connectManagedComments(input: HTMLElement, send: (state: Managed
           positions.push({id:item.id,rect:translateManagedRect(element,item.rect),status:item.status});
         }
         if (raw.selectionRect !== undefined && raw.selectionRect !== null && !rect(raw.selectionRect)) return;
-        event={type:raw.type,generation,positions,...(raw.selectionRect !== undefined ? {selectionRect:raw.selectionRect === null ? null : translateManagedRect(element,raw.selectionRect as AnnotationRect)}:{})};
+        const selectedTarget = raw.selectionTarget === null ? null : parseCommentTarget({kind:'iframe',node:raw.selectionTarget});
+        if (raw.selectionRect !== undefined && (raw.selectionTarget === undefined || (raw.selectionTarget !== null && (!selectedTarget || selectedTarget.kind !== 'iframe')))) return;
+        if (selectedTarget?.kind === 'iframe' && selectedTarget.node.kind === 'session' && selectedTarget.node.generation !== generation) return;
+        if (raw.selectionTarget === null && raw.selectionRect !== undefined && raw.selectionRect !== null) return;
+        event={type:raw.type,generation,positions,...(raw.selectionRect !== undefined ? {selectionRect:raw.selectionRect === null ? null : translateManagedRect(element,raw.selectionRect as AnnotationRect),selectionTarget:selectedTarget?.kind === 'iframe' ? selectedTarget.node : null}:{})};
       } else if (raw.type === 'comment-hover') {
         if (raw.id !== null && !idValid(raw.id)) return;
         event={type:raw.type,generation,id:raw.id as string|null};

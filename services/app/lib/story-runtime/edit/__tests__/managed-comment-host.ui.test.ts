@@ -42,3 +42,19 @@ it('clips child coordinates to the content viewport and reverses scale for state
   const rect={x:5,y:10,width:20,height:30};
   expect(localManagedRect(host,translateManagedRect(host,rect))).toEqual(rect);
 });
+
+it('requires a bounded matching-launch target beside composer geometry', () => {
+  const element=document.createElement('div');document.body.append(element);
+  const receive=vi.fn();const binding=bindManagedComments(document,{state:()=>({enabled:true,picking:false,canComment:true,pins:[],openId:null,hoverId:null,selection:null}),receive});
+  let generation='';const host=connectManagedComments(element,state=>{generation=state.generation;});
+  const base={type:'comment-layout',generation,positions:[],selectionRect:{x:0,y:0,width:20,height:10}};
+  host.receive(base);
+  host.receive({...base,selectionTarget:null});
+  host.receive({...base,selectionTarget:{kind:'key',path:[]}});
+  host.receive({...base,selectionTarget:{kind:'session',generation:'old',id:'node'}});
+  expect(receive).not.toHaveBeenCalled();
+  host.receive({...base,selectionTarget:{kind:'key',path:['second']}});
+  expect(receive).toHaveBeenCalledOnce();
+  expect(receive.mock.calls[0][1]).toMatchObject({selectionTarget:{kind:'key',path:['second']}});
+  binding.dispose();host.dispose();
+});
