@@ -10,8 +10,8 @@ read_first_max: 8192
 to recover from an error. With no supplied document, create a titled skeleton,
 then fill it. Datasets are separate. Follow the user's URL-sharing instructions.
 
-Use task-local scratch files or `mktemp -d`; after permission errors, change the
-parent directory. No local SDK or CLI is needed.
+Use `mktemp -d` for scratch files; change its parent on permission errors.
+No SDK or CLI is needed.
 
 For a NEW document only:
 
@@ -120,7 +120,7 @@ More under `references/` ([[ docsIndexHint ]]):
 | history — versions, revert, the trash, export options | `publishing-versions.md` |
 | design craft — hierarchy, type, spacing, color, motifs | `design.md` |
 | tag/component allowlists, `<Helmet>`, layout | `markup.md` |
-| charts, controls, data formats | `markup-data.md` |
+| data and keyed templates | `markup-data.md`, `markup-repeat.md` |
 | chart serialization and statistical meaning | `markup-data-authoring.md` |
 | conditions, Dialog and local SQL state | `markup-state.md` |
 | isolated DOM/canvas, bundled scripts and cached assets | `markup-iframe.md` |
